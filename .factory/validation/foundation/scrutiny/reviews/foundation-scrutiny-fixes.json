@@ -1,0 +1,26 @@
+{
+  "featureId": "foundation-scrutiny-fixes",
+  "reviewedAt": "2026-04-01T13:46:21Z",
+  "commitId": "f0c486cffd3d1ccb13a28fbe120095e289e09f2f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix feature addresses the two original blocking issues: all current GraphQL issue create/update paths now flow through application services that enforce team/state integrity, and TEAMKEY-N identifiers are generated transactionally in server logic without relying on a seed-installed trigger. The central auth plugin and masked-error behavior are also implemented and covered by focused integration tests. No remaining blocking or high-confidence non-blocking defects were found in the reviewed fix area.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "Shared library guidance still documents the wrong default API auth token, so manual GraphQL verification instructions can fail unless workers independently inspect `.env` or `.factory/init.sh`.",
+      "evidence": "`.factory/init.sh:65` writes `AUTH_TOKEN=changeme-set-your-token`, but `.factory/library/environment.md:23` still says the default is `involute-dev-token-001`, and `.factory/library/user-testing.md:12` tells workers to send `Authorization: Bearer involute-dev-token-001`."
+    },
+    {
+      "area": "skills",
+      "observation": "The backend/CLI skill examples still hardcode the stale auth token, so the skill procedure no longer matches the repo's actual default environment for manual verification.",
+      "evidence": "The reviewed worker reported this mismatch in `handoffs/2026-04-01T13-40-25-652Z__foundation-scrutiny-fixes__838f348a-d974-4fee-8234-7b6096e83748.json:106`, and the stale examples remain in `.factory/skills/backend-worker/SKILL.md:55`, `.factory/skills/backend-worker/SKILL.md:74`, and `.factory/skills/cli-worker/SKILL.md:58`."
+    }
+  ],
+  "addressesFailureFrom": "/Users/chris/workspace/Involute/.factory/validation/foundation/scrutiny/reviews/database-schema-and-seed.json",
+  "summary": "PASS: reviewed foundation-scrutiny-fixes at f0c486cffd3d1ccb13a28fbe120095e289e09f2f. The rerun fix closes the original database-schema-and-seed failures by enforcing same-team workflow states in issue create/update and generating identifiers in application code without any seed dependency. I found no remaining blocking or high-confidence non-blocking bugs in the fix area, but I did record shared-state documentation/skill token mismatches."
+}

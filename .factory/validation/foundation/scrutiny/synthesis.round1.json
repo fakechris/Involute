@@ -1,0 +1,69 @@
+{
+  "milestone": "foundation",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "/Users/chris/workspace/Involute/.factory/init.sh && pnpm -C /Users/chris/workspace/Involute -r test --run",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "/Users/chris/workspace/Involute/.factory/init.sh && pnpm -C /Users/chris/workspace/Involute -r typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "/Users/chris/workspace/Involute/.factory/init.sh && pnpm -C /Users/chris/workspace/Involute -r lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 3,
+    "passed": 2,
+    "failed": 1,
+    "failedFeatures": [
+      "database-schema-and-seed"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "database-schema-and-seed",
+      "severity": "blocking",
+      "description": "packages/server/prisma/schema.prisma allows Issue.stateId to reference a WorkflowState from a different team because Issue.teamId is not tied to the selected state, so team-scoped state integrity is unenforced."
+    },
+    {
+      "featureId": "database-schema-and-seed",
+      "severity": "blocking",
+      "description": "packages/server/prisma/seed-helpers.ts installs TEAMKEY-N identifier automation only during seeding; after a fresh prisma db push, Issue.identifier still defaults to an empty string until seed runs, so identifier generation is not guaranteed as core database behavior."
+    }
+  ],
+  "appliedUpdates": [
+    {
+      "target": "services.yaml",
+      "description": "Added commands.init pointing to .factory/init.sh so workers have an explicit setup command for the postgres proxy, .env refresh, and Prisma initialization steps.",
+      "sourceFeature": "monorepo-scaffold"
+    },
+    {
+      "target": "library",
+      "description": "Updated .factory/library/environment.md to document the postgres_proxy requirement on 127.0.0.1:4202, the committed packages/server/prisma/.env symlink, and the need to run init before Prisma or validator commands.",
+      "sourceFeature": "database-schema-and-seed"
+    },
+    {
+      "target": "library",
+      "description": "Updated .factory/library/architecture.md to record that auth accepts either Bearer tokens or raw Authorization header tokens for Linear-compatibility.",
+      "sourceFeature": "graphql-server-core"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Adjust backend-worker guidance so scaffold/setup features can satisfy the procedure with validator coverage and zero-test Vitest configuration, instead of requiring prewritten tests in every case.",
+      "evidence": "The monorepo-scaffold review found the feature met its explicit acceptance criteria while still needing a skillFeedback deviation because the current backend-worker procedure requires creating tests before implementation even for scaffold-only tasks.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}

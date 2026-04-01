@@ -9,7 +9,7 @@
 ### 1. GraphQL API (port 4200)
 - **Tool:** curl
 - **Setup:** Start API server (`cd packages/server && PORT=4200 node dist/index.js`)
-- **Auth:** Include `Authorization: Bearer involute-dev-token-001` header
+- **Auth:** Include `Authorization: Bearer $AUTH_TOKEN` from the repo `.env` file (`.factory/init.sh` currently writes `changeme-set-your-token` by default)
 - **Endpoint:** `POST http://localhost:4200/graphql` with `Content-Type: application/json`
 
 ### 2. Web UI (port 4201)
