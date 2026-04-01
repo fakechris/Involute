@@ -1,0 +1,34 @@
+{
+  "featureId": "graphql-server-core",
+  "reviewedAt": "2026-04-01T13:16:32.213435Z",
+  "commitId": "77e924a",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The feature delivers the requested foundation server behavior: Yoga boots on the configured port, exposes `/health`, implements the requested query subset and `{ nodes }` connection wrappers, and includes focused integration coverage for auth, error shape, nested issue/team/label data, and concurrent requests. I found two non-blocking concerns around how authentication and error exposure are wired.",
+    "issues": [
+      {
+        "file": "packages/server/src/schema.ts",
+        "line": 141,
+        "severity": "non_blocking",
+        "description": "Authentication is enforced ad hoc inside individual root resolvers instead of at the transport/middleware boundary. `createGraphQLContext` only sets `viewer` to `null` for bad tokens, and `requireAuthentication` is then called manually in `Query.issue`, `Query.teams`, and `Query.issueLabels`. That means unauthenticated GraphQL meta-fields still work and future root fields can be exposed accidentally unless every resolver remembers to add the guard."
+      },
+      {
+        "file": "packages/server/src/index.ts",
+        "line": 52,
+        "severity": "non_blocking",
+        "description": "The server opts into `maskedErrors: false`, so unexpected resolver or Prisma failures will be returned to clients unmasked. The feature only needs Linear-style GraphQL error payloads, and leaving raw internals enabled broadens the externally visible error surface and can leak implementation details during real failures."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Mission-level auth documentation still says the API uses only bearer-token authorization, but this feature intentionally accepts both `Authorization: Bearer <token>` and a raw token value for Linear compatibility. That compatibility rule should be recorded in shared docs so future workers do not narrow auth handling back to bearer-only.",
+      "evidence": "Mission AGENTS.md:32 and .factory/library/architecture.md:29 describe bearer-token auth only; packages/server/src/auth.ts:18-33 implements both bearer and raw-token parsing."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass with non-blocking review notes: the server core behavior and integration coverage match the feature scope, but auth is enforced per resolver rather than as true request middleware, and raw internal GraphQL errors are left unmasked."
+}

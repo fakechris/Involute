@@ -1,4 +1,5 @@
 commands:
+  init: /Users/chris/workspace/Involute/.factory/init.sh
   install: pnpm install
   build: pnpm -r build
   typecheck: pnpm -r typecheck

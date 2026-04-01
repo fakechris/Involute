@@ -26,7 +26,7 @@ involute/
 - **GraphQL Yoga** as the GraphQL server (lightweight, modern)
 - **Prisma** as the ORM connecting to PostgreSQL
 - **Facade pattern**: Internal domain model (Prisma) decoupled from external Linear-compatible GraphQL schema
-- **Token auth**: Simple bearer token in `Authorization` header, validated against `AUTH_TOKEN` env var
+- **Token auth**: Accepts either `Authorization: Bearer <token>` or a raw token value in the `Authorization` header, validated against `AUTH_TOKEN` for Linear-compatibility
 - Schema matches Linear's GraphQL API subset exactly (see docs/legacy/04)
 
 ## Data Model

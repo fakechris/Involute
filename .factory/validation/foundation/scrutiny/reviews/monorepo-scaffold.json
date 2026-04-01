@@ -1,0 +1,26 @@
+{
+  "featureId": "monorepo-scaffold",
+  "reviewedAt": "2026-04-01T13:07:13.722867Z",
+  "commitId": "ac737aded8fc10e23b610cfa3e2855570801b3fb",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The scaffold commit satisfies the requested monorepo structure, package manifests/configs, and clean install/typecheck/test expectations; I did not find any high-confidence correctness defects in the reviewed changes.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The backend-worker skill's mandatory TDD step does not fit scaffold-only features that explicitly require valid Vitest setup with zero tests, so correct work still shows up as a procedural deviation.",
+      "evidence": "backend-worker/SKILL.md step 2 says 'Create test files BEFORE implementation'; the handoff for monorepo-scaffold records skillFeedback.followedProcedure=false because features.json explicitly expected 'pnpm -r test --run succeeds (no tests yet, but vitest config valid)'."
+    },
+    {
+      "area": "services",
+      "observation": "Repository setup depends on running .factory/init.sh to create .env and the local Postgres proxy, but .factory/services.yaml does not expose an init/setup command, so workers must discover and invoke it ad hoc.",
+      "evidence": "The transcript skeleton for worker session 3ae24e89-431c-4509-820d-c140f2265925 shows Read and Execute calls for /Users/chris/workspace/Involute/.factory/init.sh; .factory/services.yaml only documents install/build/typecheck/test/lint and postgres/postgres_proxy/api/web services."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "PASS: reviewed monorepo-scaffold at ac737aded8fc10e23b610cfa3e2855570801b3fb. The workspace scaffold matches the feature requirements and I found no high-confidence code defects; I noted skill and setup-documentation gaps for scrutiny triage."
+}

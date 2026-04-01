@@ -1,0 +1,34 @@
+{
+  "featureId": "database-schema-and-seed",
+  "reviewedAt": "2026-04-01T13:11:13.716505Z",
+  "commitId": "69c1cbd898490c9391e4d85ba0769c0530d0b999",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature adds the requested Prisma models, seed data, and identifier trigger logic, but two blocking correctness gaps remain: the schema does not enforce that an issue's workflow state belongs to the same team, and identifier auto-generation is only installed as a side effect of running the seed instead of being part of the database setup itself.",
+    "issues": [
+      {
+        "file": "packages/server/prisma/schema.prisma",
+        "line": 52,
+        "severity": "blocking",
+        "description": "Issue rows can reference a WorkflowState from a different team because `Issue.state` only points at `WorkflowState.id` while `Issue.teamId` is an unrelated foreign key. Since workflow states are team-scoped, this lets future issue create/update paths persist inconsistent cross-team data (for example, an INV issue in a SON-only state). Add a composite uniqueness/foreign-key scheme or equivalent validation that ties `Issue.teamId` to the selected state."
+      },
+      {
+        "file": "packages/server/prisma/seed-helpers.ts",
+        "line": 23,
+        "severity": "blocking",
+        "description": "Team-scoped identifier automation is installed from `seedDatabase()` rather than from the schema/setup path. In `schema.prisma`, `Issue.identifier` still has only `@default(\"\")`, so after `npx prisma db push` on a fresh database, creating an issue before running the seed will not produce `TEAMKEY-N` identifiers and can fall into empty-string/unique-constraint behavior instead. The feature requirement describes identifier generation as core database behavior, so the trigger/default needs to be created by the database definition path, not piggybacked on seeding default data."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The repo's shared environment knowledge is still missing the Prisma-specific database access workaround introduced by this feature: local setup now depends on the `postgres_proxy` service on port 4202 plus the committed `packages/server/prisma/.env` symlink so Prisma CLI can resolve `DATABASE_URL` correctly.",
+      "evidence": "The transcript skeleton for worker session `a37a0693-7406-44cd-b68e-8eab2a320887` shows many connectivity/debugging steps (`prisma db push`, schema pull, node-postgres probes, WebSearch) before the worker added `postgres_proxy` in `.factory/services.yaml`, rewired `.factory/init.sh`, and committed `packages/server/prisma/.env`. `.factory/library/environment.md` still documents the database as `sub2api-postgres.orb.local:5432` without mentioning the required 127.0.0.1:4202 proxy or Prisma `.env` symlink."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "FAIL: reviewed database-schema-and-seed at 69c1cbd898490c9391e4d85ba0769c0530d0b999. The seed data and trigger logic are mostly in place, but the schema still permits cross-team state mismatches and identifier generation is only enabled after running the seed, so the feature does not fully satisfy the requested database behavior."
+}
