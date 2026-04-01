@@ -27,6 +27,18 @@ type IssueParent = Issue & {
   team?: Team | null;
 };
 
+interface StringComparatorInput {
+  eq?: string | null;
+}
+
+interface TeamFilterInput {
+  key?: StringComparatorInput | null;
+}
+
+interface IssueLabelFilterInput {
+  name?: StringComparatorInput | null;
+}
+
 const workflowStateOrder = new Map<string, number>(
   DEFAULT_WORKFLOW_STATE_ORDER.map((name, index) => [name, index] as const),
 );
@@ -65,8 +77,8 @@ const typeDefs = /* GraphQL */ `
 
   type Query {
     issue(id: String!): Issue
-    teams: TeamConnection!
-    issueLabels: IssueLabelConnection!
+    teams(filter: TeamFilter): TeamConnection!
+    issueLabels(filter: IssueLabelFilter): IssueLabelConnection!
   }
 
   type Mutation {
@@ -142,6 +154,18 @@ const typeDefs = /* GraphQL */ `
     nodes: [Comment!]!
   }
 
+  input StringComparator {
+    eq: String
+  }
+
+  input TeamFilter {
+    key: StringComparator
+  }
+
+  input IssueLabelFilter {
+    name: StringComparator
+  }
+
   input IssueCreateInput {
     teamId: String!
     title: String!
@@ -179,26 +203,36 @@ const resolvers = {
       }),
     teams: async (
       _parent: unknown,
-      _args: Record<string, never>,
+      args: { filter?: TeamFilterInput | null },
       context: GraphQLContext,
-    ): Promise<{ nodes: Team[] }> => ({
-      nodes: await context.prisma.team.findMany({
-        orderBy: {
-          key: 'asc',
-        },
-      }),
-    }),
+    ): Promise<{ nodes: Team[] }> => {
+      const where = buildTeamWhere(args.filter);
+
+      return {
+        nodes: await context.prisma.team.findMany({
+          ...(where ? { where } : {}),
+          orderBy: {
+            key: 'asc',
+          },
+        }),
+      };
+    },
     issueLabels: async (
       _parent: unknown,
-      _args: Record<string, never>,
+      args: { filter?: IssueLabelFilterInput | null },
       context: GraphQLContext,
-    ): Promise<{ nodes: IssueLabel[] }> => ({
-      nodes: await context.prisma.issueLabel.findMany({
-        orderBy: {
-          name: 'asc',
-        },
-      }),
-    }),
+    ): Promise<{ nodes: IssueLabel[] }> => {
+      const where = buildIssueLabelWhere(args.filter);
+
+      return {
+        nodes: await context.prisma.issueLabel.findMany({
+          ...(where ? { where } : {}),
+          orderBy: {
+            name: 'asc',
+          },
+        }),
+      };
+    },
   },
   Mutation: {
     issueCreate: async (
@@ -361,4 +395,28 @@ function orderWorkflowStates(states: WorkflowState[]): WorkflowState[] {
 
     return left.name.localeCompare(right.name);
   });
+}
+
+function buildTeamWhere(filter: TeamFilterInput | null | undefined) {
+  const key = filter?.key?.eq;
+
+  if (key === undefined || key === null) {
+    return undefined;
+  }
+
+  return {
+    key,
+  };
+}
+
+function buildIssueLabelWhere(filter: IssueLabelFilterInput | null | undefined) {
+  const name = filter?.name?.eq;
+
+  if (name === undefined || name === null) {
+    return undefined;
+  }
+
+  return {
+    name,
+  };
 }

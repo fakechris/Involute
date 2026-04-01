@@ -3,7 +3,13 @@ import type { PrismaClient, Team, User, WorkflowState, IssueLabel, Issue, Commen
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, DEFAULT_WORKFLOW_STATE_NAMES, seedDatabase } from '../prisma/seed-helpers.ts';
+import {
+  DEFAULT_ADMIN_EMAIL,
+  DEFAULT_LABEL_NAMES,
+  DEFAULT_TEAM_KEY,
+  DEFAULT_WORKFLOW_STATE_NAMES,
+  seedDatabase,
+} from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
 
@@ -203,6 +209,227 @@ describe('GraphQL server core', () => {
     expect(response.body.data.issueLabels.nodes.length).toBeGreaterThanOrEqual(10);
   });
 
+  it('filters teams by key and returns empty nodes when no team matches', async () => {
+    await createTeamWithStates(prisma, {
+      key: 'OPS',
+      name: 'Operations',
+    });
+
+    const matchingTeamResponse = await postGraphQL({
+      query: `
+        query($key: String!) {
+          teams(filter: { key: { eq: $key } }) {
+            nodes {
+              id
+              key
+              name
+            }
+          }
+        }
+      `,
+      variables: {
+        key: fixture.team.key,
+      },
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(matchingTeamResponse.status).toBe(200);
+    expect(matchingTeamResponse.body.errors).toBeUndefined();
+    expect(matchingTeamResponse.body.data.teams.nodes).toEqual([
+      {
+        id: fixture.team.id,
+        key: fixture.team.key,
+        name: fixture.team.name,
+      },
+    ]);
+
+    const missingTeamResponse = await postGraphQL({
+      query: `
+        query($key: String!) {
+          teams(filter: { key: { eq: $key } }) {
+            nodes {
+              id
+            }
+          }
+        }
+      `,
+      variables: {
+        key: 'NONEXISTENT',
+      },
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(missingTeamResponse.status).toBe(200);
+    expect(missingTeamResponse.body).toEqual({
+      data: {
+        teams: {
+          nodes: [],
+        },
+      },
+    });
+  });
+
+  it('resolves workflow states through issue.team.states', async () => {
+    const response = await postGraphQL({
+      query: `
+        query($id: String!) {
+          issue(id: $id) {
+            team {
+              id
+              key
+              states {
+                nodes {
+                  id
+                  name
+                }
+              }
+            }
+          }
+        }
+      `,
+      variables: {
+        id: fixture.issue.id,
+      },
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    const expectedStatesByName = new Map(
+      fixture.states.map((state) => [state.name, state] as const),
+    );
+    expect(response.body.data.issue.team).toEqual({
+      id: fixture.team.id,
+      key: fixture.team.key,
+      states: {
+        nodes: DEFAULT_WORKFLOW_STATE_NAMES.map((name) => ({
+          id: expectedStatesByName.get(name)?.id,
+          name,
+        })),
+      },
+    });
+  });
+
+  it('returns all teams with nested states when no filter is provided', async () => {
+    await createTeamWithStates(prisma, {
+      key: 'OPS',
+      name: 'Operations',
+    });
+
+    const response = await postGraphQL({
+      query: `
+        {
+          teams {
+            nodes {
+              key
+              name
+              states {
+                nodes {
+                  name
+                }
+              }
+            }
+          }
+        }
+      `,
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.teams.nodes).toEqual([
+      {
+        key: fixture.team.key,
+        name: fixture.team.name,
+        states: {
+          nodes: DEFAULT_WORKFLOW_STATE_NAMES.map((name) => ({ name })),
+        },
+      },
+      {
+        key: 'OPS',
+        name: 'Operations',
+        states: {
+          nodes: DEFAULT_WORKFLOW_STATE_NAMES.map((name) => ({ name })),
+        },
+      },
+    ]);
+  });
+
+  it('filters issue labels by name and returns empty nodes when no label matches', async () => {
+    const matchingLabelResponse = await postGraphQL({
+      query: `
+        query($name: String!) {
+          issueLabels(filter: { name: { eq: $name } }) {
+            nodes {
+              id
+              name
+            }
+          }
+        }
+      `,
+      variables: {
+        name: 'task',
+      },
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(matchingLabelResponse.status).toBe(200);
+    expect(matchingLabelResponse.body.errors).toBeUndefined();
+    expect(matchingLabelResponse.body.data.issueLabels.nodes).toHaveLength(1);
+    expect(matchingLabelResponse.body.data.issueLabels.nodes[0]).toMatchObject({
+      name: 'task',
+    });
+    expect(matchingLabelResponse.body.data.issueLabels.nodes[0].id).toEqual(expect.any(String));
+
+    const missingLabelResponse = await postGraphQL({
+      query: `
+        query($name: String!) {
+          issueLabels(filter: { name: { eq: $name } }) {
+            nodes {
+              id
+            }
+          }
+        }
+      `,
+      variables: {
+        name: 'nonexistent',
+      },
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(missingLabelResponse.status).toBe(200);
+    expect(missingLabelResponse.body).toEqual({
+      data: {
+        issueLabels: {
+          nodes: [],
+        },
+      },
+    });
+  });
+
+  it('returns all seeded issue labels when no filter is provided', async () => {
+    const response = await postGraphQL({
+      query: `
+        {
+          issueLabels {
+            nodes {
+              id
+              name
+            }
+          }
+        }
+      `,
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.issueLabels.nodes).toHaveLength(DEFAULT_LABEL_NAMES.length);
+    expect(response.body.data.issueLabels.nodes.map((label: { name: string }) => label.name)).toEqual(
+      expect.arrayContaining(DEFAULT_LABEL_NAMES),
+    );
+  });
+
   it('returns null for a missing issue and returns GraphQL spec errors for malformed queries', async () => {
     const missingIssueResponse = await postGraphQL({
       query: 'query($id: String!) { issue(id: $id) { id } }',
@@ -388,4 +615,31 @@ async function postGraphQL({
     status: response.status,
     body: await response.json(),
   };
+}
+
+async function createTeamWithStates(
+  prismaClient: PrismaClient,
+  {
+    key,
+    name,
+  }: {
+    key: string;
+    name: string;
+  },
+): Promise<Team> {
+  const team = await prismaClient.team.create({
+    data: {
+      key,
+      name,
+    },
+  });
+
+  await prismaClient.workflowState.createMany({
+    data: DEFAULT_WORKFLOW_STATE_NAMES.map((stateName) => ({
+      name: stateName,
+      teamId: team.id,
+    })),
+  });
+
+  return team;
 }
