@@ -1,0 +1,61 @@
+{
+  "groupId": "mutations-1",
+  "testedAt": "2026-04-01T15:25:30.000Z",
+  "isolation": {
+    "apiUrl": "http://localhost:4200/graphql",
+    "authHeader": "Authorization: Bearer changeme-set-your-token",
+    "testPrefix": "mut1-",
+    "teams": ["INV", "APP"]
+  },
+  "toolsUsed": ["curl"],
+  "assertions": {
+    "VAL-API-020": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-1/VAL-API-020-create-issue.json",
+      "reason": "issueCreate returned success: true with issue containing id (9f3163a1-c3b9-4b4d-9811-da237e70713e), identifier (INV-1), and title (mut1-test-create)"
+    },
+    "VAL-API-021": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-1/VAL-API-021-retrieve-created-issue.json",
+      "reason": "issue(id) query returned the created issue with matching id, identifier, title, description, state (Backlog), null assignee, and empty labels"
+    },
+    "VAL-API-022": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-1/VAL-API-022-invalid-teamid.json",
+      "reason": "issueCreate with nonexistent teamId (00000000-...) returned success: false, issue: null — no crash, graceful failure"
+    },
+    "VAL-API-023": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-1/VAL-API-023-update-state.json",
+      "reason": "issueUpdate with valid stateId transitioned issue from Backlog to In Progress, returned success: true with updated state { name: 'In Progress' }"
+    },
+    "VAL-API-024": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-1/VAL-API-024-invalid-stateid.json",
+      "reason": "issueUpdate with nonexistent stateId (00000000-...) returned success: false, issue: null — no crash, graceful failure"
+    },
+    "VAL-API-012": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-1/VAL-API-012-comments-ordered.json",
+      "reason": "Comments returned in chronological order: first comment (2026-04-01T15:25:02.629Z) before second (2026-04-01T15:25:03.671Z). Each has id, body, createdAt, user { id, name, email }"
+    },
+    "VAL-API-013": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-1/VAL-API-013-no-comments.json",
+      "reason": "Issue with no comments returned comments: { nodes: [] } — empty array as expected"
+    },
+    "VAL-API-041": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-1/VAL-API-041-datetime-scalar.json",
+      "reason": "createdAt values serialize as ISO 8601 strings: '2026-04-01T15:25:02.629Z' and '2026-04-01T15:25:03.671Z'"
+    },
+    "VAL-FOUND-010": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-1/VAL-FOUND-010-isMe.json",
+      "reason": "After assigning issue to admin user (e4bc841b-...), assignee.isMe resolved to true for the authenticated token owner"
+    }
+  },
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 9 assertions: all 9 passed. Mutations (create, update state, invalid inputs) work correctly with proper success/failure responses. Comments are ordered chronologically with full user fields. DateTime scalars serialize as ISO 8601. isMe resolves to true for authenticated user."
+}

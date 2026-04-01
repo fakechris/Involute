@@ -49,3 +49,20 @@
 - Auth source: read `AUTH_TOKEN` from the repo `.env` file; send it as `Authorization: Bearer <token>`.
 - Evidence: save raw request/response bodies and status codes for every assertion in the assigned evidence directory.
 - Concurrency: curl validators may run in parallel up to 5 at a time because they share only read-only seeded data.
+
+## Flow Validator Guidance: curl (api-compat)
+
+- **Surface boundary:** Use only the live API at `http://localhost:4200/graphql`.
+- **Auth:** `Authorization: Bearer changeme-set-your-token` (the AUTH_TOKEN from .env).
+- **Isolation rule for mutation tests:** Each subagent must create its own test issues/comments with UNIQUE titles (prefix with the group-id, e.g., "grp1-test-issue"). Query by returned ID, never by count. This ensures parallel validators don't interfere.
+- **Seed data available:**
+  - Teams: "INV" (Involute) and "APP" (Application Team)
+  - 6 workflow states per team: Backlog, Ready, In Progress, In Review, Done, Canceled
+  - 10+ labels: task, epic, spec, needs-clarification, blocked, agent-ready, Feature, Bug, Improvement, spec-orch
+  - 1 admin user (admin@involute.local) — this is the authenticated user (isMe=true)
+- **Creating test data:** Use `issueCreate` mutation to create issues needed for query tests. Use `issueUpdate` to set states/labels/assignees. Use `commentCreate` to add comments.
+- **Team ID resolution:** Query `teams(filter: { key: { eq: "INV" } })` to get the team ID. Then query `teams { nodes { states { nodes { id name } } } }` to get state IDs.
+- **Label ID resolution:** Query `issueLabels(filter: { name: { eq: "task" } })` to get label IDs.
+- **User ID resolution:** The admin user is the only user. Query teams or create an issue and check its fields.
+- **Evidence:** Save raw JSON request/response for every assertion in the assigned evidence directory.
+- **Concurrency:** Up to 5 concurrent curl validators. Each creates its own test data for isolation.

@@ -1,0 +1,62 @@
+{
+  "groupId": "queries-basic",
+  "testedAt": "2026-04-01T23:25:00.000Z",
+  "isolation": {
+    "apiUrl": "http://localhost:4200/graphql",
+    "authHeader": "Authorization: Bearer changeme-set-your-token",
+    "testDataPrefix": "qbasic-",
+    "testIssueId": "63e8c0c3-2612-4060-8619-b9e78f2303c6",
+    "testIssueIdentifier": "INV-5"
+  },
+  "toolsUsed": ["curl"],
+  "assertions": {
+    "VAL-API-001": {
+      "status": "pass",
+      "evidence": "api-compat/queries-basic/VAL-API-001-response.json",
+      "reason": "issue(id) returns all required fields: id, identifier, title, description, state { name }, labels { nodes { name } }, assignee (null since unassigned). Response: {data:{issue:{id:'63e8c0c3-...', identifier:'INV-5', title:'qbasic-test-issue-for-queries', description:'Test issue created for validation', state:{name:'Backlog'}, labels:{nodes:[{name:'Feature'},{name:'task'}]}, assignee:null}}}"
+    },
+    "VAL-API-002": {
+      "status": "pass",
+      "evidence": "api-compat/queries-basic/VAL-API-002-response.json",
+      "reason": "issue(id: '00000000-0000-0000-0000-000000000000') returns {data:{issue:null}} without GraphQL errors array."
+    },
+    "VAL-API-014": {
+      "status": "pass",
+      "evidence": "api-compat/queries-basic/VAL-API-014-response.json",
+      "reason": "teams(filter: { key: { eq: 'INV' } }) returns exactly one matching team: {nodes:[{id:'45f08f35-...', key:'INV', name:'Involute'}]}."
+    },
+    "VAL-API-015": {
+      "status": "pass",
+      "evidence": "api-compat/queries-basic/VAL-API-015-response.json",
+      "reason": "teams(filter: { key: { eq: 'NONEXISTENT' } }) returns {nodes:[]} as expected."
+    },
+    "VAL-API-016": {
+      "status": "pass",
+      "evidence": "api-compat/queries-basic/VAL-API-016-response.json",
+      "reason": "issue(id).team.states.nodes returns all 6 workflow states: Backlog, Ready, In Progress, In Review, Done, Canceled. Nested resolution path works correctly."
+    },
+    "VAL-API-017": {
+      "status": "pass",
+      "evidence": "api-compat/queries-basic/VAL-API-017-response.json",
+      "reason": "teams { nodes { key name states { nodes { name } } } } returns both teams (APP and INV) with their states. INV has 6 states, APP has 0 states (empty nodes array)."
+    },
+    "VAL-API-018": {
+      "status": "pass",
+      "evidence": "api-compat/queries-basic/VAL-API-018-response.json",
+      "reason": "issueLabels(filter: { name: { eq: 'task' } }) returns exactly one label: {nodes:[{id:'29703ba3-...', name:'task'}]}."
+    },
+    "VAL-API-019": {
+      "status": "pass",
+      "evidence": "api-compat/queries-basic/VAL-API-019-response.json",
+      "reason": "issueLabels(filter: { name: { eq: 'nonexistent' } }) returns {nodes:[]} as expected."
+    },
+    "VAL-API-042": {
+      "status": "pass",
+      "evidence": "api-compat/queries-basic/VAL-API-042-response.json",
+      "reason": "issueLabels (no filter) returns all 10 labels: Bug, Feature, Improvement, agent-ready, blocked, epic, needs-clarification, spec, spec-orch, task. Count >= 10 satisfied."
+    }
+  },
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 9 assertions: all 9 passed. Created test issue INV-5 (qbasic-test-issue-for-queries) with labels for query testing. All query patterns (single issue, not-found, team filter, team states, label filter, unfiltered labels) work correctly."
+}

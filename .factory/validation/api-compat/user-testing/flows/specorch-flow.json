@@ -1,0 +1,55 @@
+{
+  "groupId": "specorch-flow",
+  "testedAt": "2026-04-01T15:27:30.000Z",
+  "isolation": {
+    "apiUrl": "http://localhost:4200/graphql",
+    "authHeader": "Authorization: Bearer changeme-set-your-token",
+    "testDataPrefix": "specorch-",
+    "team": "INV",
+    "readyIssueId": "fe1de05f-72de-4124-86a7-67608310c20a",
+    "blockedIssueId": "d65b69aa-2933-4490-a728-c053532907f1"
+  },
+  "toolsUsed": ["curl"],
+  "assertions": {
+    "VAL-CROSS-010": {
+      "status": "pass",
+      "evidence": "Full GraphQL request/response logs saved in evidence/api-compat/specorch-flow/ (step1-setup-data.txt, step2-daemon-polling.txt, step3-update-state.txt, step4-post-comment.txt, step5-query-comments.txt, step2-blocked-issue-verification.txt)",
+      "reason": "All 5 SpecOrch flow steps completed successfully. Step 1: Created test data (ready issue INV-3 with 'task' label assigned to admin in 'Ready' state, blocked issue INV-16 with 'blocked' label). Step 2: Daemon polling query with compound 'and' filter (team.key.eq=INV, state.name.eq=Ready, assignee.isMe.eq=true, labels.some.name.in=['task'], labels.every.name.nin=['blocked','needs-clarification']) returned exactly the ready issue INV-3 and correctly excluded the blocked issue INV-16. Step 3: Updated picked issue to 'In Progress' state (success=true, state='In Progress'). Step 4: Posted comment 'SpecOrch processing started' (success=true). Step 5: Queried comments and confirmed 'SpecOrch processing started' comment exists with correct user (Admin, admin@involute.local) and valid ISO 8601 createdAt timestamp.",
+      "steps": [
+        {
+          "step": 1,
+          "action": "Set up test data: get team/states/labels/user IDs, create ready issue with task label + admin assignee in Ready state, create blocked issue with blocked label",
+          "expected": "Two issues created: one in Ready state with task label assigned to admin, one with blocked label",
+          "observed": "Both issues created and configured successfully. Ready issue INV-3: state=Ready, labels=[task], assignee=Admin(isMe=true). Blocked issue INV-16: labels=[blocked]"
+        },
+        {
+          "step": 2,
+          "action": "Execute daemon polling query with compound filter (team=INV, state=Ready, assignee.isMe=true, labels.some=[task], labels.every.nin=[blocked,needs-clarification])",
+          "expected": "Returns ready task-labeled issue, excludes blocked issue",
+          "observed": "Returned exactly 1 issue (INV-3, specorch-ready-task) with state=Ready, labels=[task], assignee.isMe=true. Blocked issue INV-16 was correctly excluded."
+        },
+        {
+          "step": 3,
+          "action": "Update picked issue state to 'In Progress'",
+          "expected": "success=true, state='In Progress'",
+          "observed": "success=true, issue state changed to 'In Progress'"
+        },
+        {
+          "step": 4,
+          "action": "Post comment 'SpecOrch processing started'",
+          "expected": "success=true, comment created with correct body",
+          "observed": "success=true, comment id=222349a2-66da-4a4d-882e-fae22cc102fa, body='SpecOrch processing started'"
+        },
+        {
+          "step": 5,
+          "action": "Query comments on the issue",
+          "expected": "Comment 'SpecOrch processing started' in the comments list",
+          "observed": "Comment found: body='SpecOrch processing started', user={name:'Admin', email:'admin@involute.local'}, createdAt='2026-04-01T15:27:19.816Z'"
+        }
+      ]
+    }
+  },
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 1 assertion (VAL-CROSS-010): PASSED. The complete SpecOrch daemon polling pattern works correctly — complex filter query successfully finds Ready+task-labeled+assigned issues while excluding blocked ones, state update to In Progress succeeds, comment creation succeeds, and comment query confirms the posted comment."
+}

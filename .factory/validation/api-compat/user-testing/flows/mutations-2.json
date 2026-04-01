@@ -1,0 +1,93 @@
+{
+  "groupId": "mutations-2",
+  "testedAt": "2026-04-01T12:00:00.000Z",
+  "isolation": {
+    "apiUrl": "http://localhost:4200/graphql",
+    "authHeader": "Authorization: Bearer changeme-set-your-token",
+    "testDataPrefix": "mut2-",
+    "teams": ["INV", "APP"]
+  },
+  "toolsUsed": ["curl"],
+  "assertions": {
+    "VAL-API-025": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-2/VAL-API-025-before.json, api-compat/mutations-2/VAL-API-025-after.json",
+      "reason": "issueUpdate with labelIds [Bug, Feature] replaced labels successfully. Before: labels.nodes was empty. After: labels.nodes contained Bug and Feature. success: true returned."
+    },
+    "VAL-API-026": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-2/VAL-API-026-before.json, api-compat/mutations-2/VAL-API-026-after.json",
+      "reason": "issueUpdate with labelIds: [] cleared all labels. Before: labels.nodes had [Bug, Feature]. After: labels.nodes was empty []. success: true returned."
+    },
+    "VAL-API-027": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-2/VAL-API-027-mutation.json, api-compat/mutations-2/VAL-API-027-child-labels.json, api-compat/mutations-2/VAL-API-027-parent-children.json",
+      "reason": "issueUpdate with both labelIds [task, epic] and parentId set simultaneously. Mutation returned success: true with labels [epic, task]. Verified parent issue's children.nodes contains the child issue. Both updates applied in single mutation."
+    },
+    "VAL-API-028": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-2/VAL-API-028-response.json",
+      "reason": "issueUpdate with nonexistent parentId (00000000-0000-0000-0000-000000000000) returned {success: false, issue: null}. No crash, graceful failure."
+    },
+    "VAL-API-029": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-2/VAL-API-029-response.json",
+      "reason": "commentCreate returned {success: true, comment: {id: '785a24ef-...', body: 'mut2-test-comment-body'}}. All required fields present."
+    },
+    "VAL-API-030": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-2/VAL-API-030-response.json",
+      "reason": "After commentCreate, querying issue(id).comments.nodes returned the created comment with matching id and body 'mut2-test-comment-body'."
+    },
+    "VAL-API-031": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-2/VAL-API-031-response.json",
+      "reason": "commentCreate with nonexistent issueId (00000000-0000-0000-0000-000000000000) returned {success: false, comment: null}. Graceful failure, no crash."
+    },
+    "VAL-API-032": {
+      "status": "fail",
+      "evidence": "api-compat/mutations-2/VAL-API-032-response.json, api-compat/mutations-2/VAL-API-032-uuid.json, api-compat/mutations-2/VAL-API-032-literal.json",
+      "reason": "With UUID-format nonexistent ID (00000000-...), returns {success: false, issue: null} correctly. However, with literal string 'nonexistent' as specified in the assertion, returns {errors: [{message: 'Unexpected error.'}], data: null} — an unhandled server error instead of a graceful {success: false} response. The assertion explicitly uses id: 'nonexistent' and expects failure not crash."
+    },
+    "VAL-API-033": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-2/VAL-API-033-teams.json, api-compat/mutations-2/VAL-API-033-labels.json, api-compat/mutations-2/VAL-API-033-issues.json, api-compat/mutations-2/VAL-API-033-comments.json, api-compat/mutations-2/VAL-API-033-states.json, api-compat/mutations-2/VAL-API-033-children.json, api-compat/mutations-2/VAL-API-033-issue-labels.json",
+      "reason": "All 7 connection types verified: teams.nodes, issueLabels.nodes, issues.nodes, issue.comments.nodes, team.states.nodes, issue.children.nodes, issue.labels.nodes. All return non-null arrays under 'nodes' key."
+    },
+    "VAL-API-034": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-2/VAL-API-034-issueCreate.json, api-compat/mutations-2/VAL-API-034-issueUpdate.json, api-compat/mutations-2/VAL-API-034-commentCreate.json, api-compat/mutations-2/VAL-API-034-failed.json",
+      "reason": "All mutation payloads include 'success' boolean: issueCreate (true), issueUpdate (true), commentCreate (true), failed issueUpdate (false). Non-null boolean in all cases."
+    },
+    "VAL-API-035": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-2/VAL-API-035-create.json, api-compat/mutations-2/VAL-API-035-all.json",
+      "reason": "All 18 issue identifiers match ^[A-Z]+-\\d+$ pattern: INV-1 through INV-18. New issue created as INV-18 with correct team-key prefix and auto-incrementing number."
+    },
+    "VAL-API-043": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-2/VAL-API-043-before.json, api-compat/mutations-2/VAL-API-043-after.json",
+      "reason": "issueUpdate with title: 'mut2-updated-title' returned {success: true, issue: {title: 'mut2-updated-title'}}. Before: 'mut2-update-test'. After: 'mut2-updated-title'. Title updated successfully."
+    },
+    "VAL-API-044": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-2/VAL-API-044-before.json, api-compat/mutations-2/VAL-API-044-after.json",
+      "reason": "issueUpdate with description: 'mut2-updated-description-content' returned {success: true, issue: {description: 'mut2-updated-description-content'}}. Description updated from original to new value."
+    },
+    "VAL-API-045": {
+      "status": "pass",
+      "evidence": "api-compat/mutations-2/VAL-API-045-before.json, api-compat/mutations-2/VAL-API-045-assign.json, api-compat/mutations-2/VAL-API-045-verify-assign.json, api-compat/mutations-2/VAL-API-045-unassign.json, api-compat/mutations-2/VAL-API-045-verify-unassign.json",
+      "reason": "Assign: issueUpdate with assigneeId set to admin user ID returned success: true with assignee {name: 'Admin', email: 'admin@involute.local'}. Verified isMe: true. Unassign: issueUpdate with assigneeId: null returned success: true with assignee: null. Both operations verified via subsequent queries."
+    }
+  },
+  "frictions": [
+    {
+      "description": "Issue type does not expose a 'parent' field for direct querying — must verify parent-child via parent's children.nodes instead",
+      "resolved": true,
+      "resolution": "Queried parent issue's children.nodes to verify child was added, instead of querying child's parent field",
+      "affectedAssertions": ["VAL-API-027"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 14 assertions: 13 passed, 1 failed. VAL-API-032 fails because issueUpdate with non-UUID string 'nonexistent' returns an unhandled server error ({errors: [{message: 'Unexpected error.'}]}) instead of a graceful {success: false} response. With UUID-format nonexistent IDs, graceful handling works correctly. All other mutations (label update/clear, parent+label combo, comment create/verify, title/description/assignee updates, error handling for nonexistent parentId and issueId) work as specified."
+}

@@ -1,0 +1,100 @@
+{
+  "groupId": "issues-filter",
+  "testedAt": "2026-04-01T12:00:00.000Z",
+  "isolation": {
+    "apiUrl": "http://localhost:4200/graphql",
+    "authHeader": "Authorization: Bearer changeme-set-your-token",
+    "testIssuePrefix": "filter-",
+    "teams": ["INV", "APP"],
+    "testIssuesCreated": ["INV-4", "INV-11", "INV-12", "INV-13", "INV-14", "INV-15"]
+  },
+  "toolsUsed": ["curl"],
+  "assertions": {
+    "VAL-API-003": {
+      "status": "pass",
+      "evidence": "api-compat/issues-filter/VAL-API-003-first-limit.json",
+      "reason": "issues(first: 2) returned exactly 2 nodes in { nodes: [...] } connection shape. With 18+ issues in DB, response contained only INV-1 and INV-2."
+    },
+    "VAL-API-004": {
+      "status": "pass",
+      "evidence": "api-compat/issues-filter/VAL-API-004-team-filter.json, api-compat/issues-filter/VAL-API-004-app-team-filter.json",
+      "reason": "issues(filter: { team: { key: { eq: \"INV\" } } }) returned all 18 INV-prefixed issues. Same filter with \"APP\" returned { nodes: [] } since APP team has no issues. All returned issues have INV- identifiers confirming team isolation."
+    },
+    "VAL-API-005": {
+      "status": "pass",
+      "evidence": "api-compat/issues-filter/VAL-API-005-state-filter.json",
+      "reason": "issues(filter: { state: { name: { eq: \"In Progress\" } } }) returned exactly 3 issues (INV-1, INV-3, INV-11), all with state.name: \"In Progress\". No issues in other states were included."
+    },
+    "VAL-API-006": {
+      "status": "pass",
+      "evidence": "api-compat/issues-filter/VAL-API-006-assignee-filter.json",
+      "reason": "issues(filter: { assignee: { isMe: { eq: true } } }) returned 4 issues (INV-1, INV-3, INV-4, INV-11), all with assignee.isMe: true, assignee.name: \"Admin\". No unassigned issues were included."
+    },
+    "VAL-API-007": {
+      "status": "pass",
+      "evidence": "api-compat/issues-filter/VAL-API-007-labels-some-filter.json",
+      "reason": "issues(filter: { labels: { some: { name: { in: [\"task\", \"epic\"] } } } }) returned 5 issues. Each has at least one of \"task\" or \"epic\" labels: INV-3 (task), INV-4 (task), INV-5 (Feature+task), INV-8 (epic+task), INV-11 (epic). Issues with only \"blocked\" or no labels were excluded."
+    },
+    "VAL-API-008": {
+      "status": "pass",
+      "evidence": "api-compat/issues-filter/VAL-API-008-labels-every-nin-filter.json",
+      "reason": "issues(filter: { labels: { every: { name: { nin: [\"blocked\", \"needs-clarification\"] } } } }) returned 16 issues. INV-12 (blocked label) and INV-16 (blocked label) were correctly excluded. No returned issue has \"blocked\" or \"needs-clarification\" labels."
+    },
+    "VAL-API-009": {
+      "status": "pass",
+      "evidence": "api-compat/issues-filter/VAL-API-009-compound-filter.json",
+      "reason": "Compound and filter combining team.key.eq(INV) + state.name.eq(In Progress) + assignee.isMe.eq(true) + labels.some.name.in([task,epic]) + labels.every.name.nin([blocked,needs-clarification]) returned exactly 2 issues: INV-3 (task label, In Progress, assigned to Admin) and INV-11 (epic label, In Progress, assigned to Admin). All 5 conditions are satisfied conjunctively."
+    },
+    "VAL-API-010": {
+      "status": "pass",
+      "evidence": "api-compat/issues-filter/VAL-API-010-empty-result.json",
+      "reason": "issues(filter: { state: { name: { eq: \"NonExistentState\" } } }) returned { nodes: [] } with no errors. HTTP 200, valid JSON response."
+    },
+    "VAL-API-011": {
+      "status": "pass",
+      "evidence": "api-compat/issues-filter/VAL-API-011-children-shape.json, api-compat/issues-filter/VAL-API-011-children-in-list.json",
+      "reason": "children { nodes { id } } works on both single issue queries and in issues list. INV-14 (parent) has children.nodes with 1 child (INV-15). INV-13 (no children) has children.nodes: []. Issues in list query also expose children.nodes correctly."
+    },
+    "VAL-API-036": {
+      "status": "pass",
+      "evidence": "api-compat/issues-filter/VAL-API-036-empty-in-array.json",
+      "reason": "issues(filter: { labels: { some: { name: { in: [] } } } }) returned { nodes: [] } without error. Empty in array handled gracefully - no issue can match an empty inclusion list."
+    },
+    "VAL-API-037": {
+      "status": "pass",
+      "evidence": "api-compat/issues-filter/VAL-API-037-empty-nin-array.json",
+      "reason": "issues(filter: { labels: { every: { name: { nin: [] } } } }) returned all 18 issues. Empty nin array acts as a no-op filter, excluding nothing. Count matches unfiltered query."
+    },
+    "VAL-API-038": {
+      "status": "pass",
+      "evidence": "api-compat/issues-filter/VAL-API-038-and-single-condition.json",
+      "reason": "Used GraphQL aliases to compare direct filter vs and-wrapped filter in one request. Both 'direct' and 'wrapped' returned identical 18-issue node arrays with same IDs in same order. and: [{ team: { key: { eq: \"INV\" } } }] behaves identically to direct filter."
+    },
+    "VAL-API-039": {
+      "status": "pass",
+      "evidence": "api-compat/issues-filter/VAL-API-039-no-assignee.json",
+      "reason": "issue(id: INV-13) returned assignee: null. The unassigned issue correctly resolves assignee as null, not an empty object or error."
+    },
+    "VAL-API-040": {
+      "status": "pass",
+      "evidence": "api-compat/issues-filter/VAL-API-040-no-labels.json",
+      "reason": "issue(id: INV-13) returned labels: { nodes: [] }. Issue with no labels correctly returns empty nodes array, not null or error."
+    }
+  },
+  "frictions": [
+    {
+      "description": "The `issues` query requires a `first` argument (Int!) - it is not optional. Discovered when trying issues without first parameter, which returned a validation error.",
+      "resolved": true,
+      "resolution": "Always pass first: N when querying issues.",
+      "affectedAssertions": ["VAL-API-003", "VAL-API-004", "VAL-API-005", "VAL-API-006", "VAL-API-007", "VAL-API-008", "VAL-API-009", "VAL-API-010", "VAL-API-037", "VAL-API-038"]
+    },
+    {
+      "description": "APP team has no workflow states, so issue creation in APP team fails with success: false. This limits cross-team filter testing.",
+      "resolved": true,
+      "resolution": "Verified team filter by confirming INV filter returns all INV issues and APP filter returns empty nodes. Filter correctness confirmed.",
+      "affectedAssertions": ["VAL-API-004"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 14 assertions: 14 passed, 0 failed, 0 blocked. All issue filter assertions (VAL-API-003 through VAL-API-011, VAL-API-036 through VAL-API-040) pass. The filter engine correctly handles first-limit, team/state/assignee/label filters, compound and-filters, empty arrays, children connection shape, null assignee, and empty label nodes."
+}
