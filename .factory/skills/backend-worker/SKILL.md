@@ -52,7 +52,7 @@ None.
   cd packages/server && PORT=4200 npx tsx src/index.ts &
   curl -X POST http://localhost:4200/graphql \
     -H "Content-Type: application/json" \
-    -H "Authorization: Bearer involute-dev-token-001" \
+    -H "Authorization: Bearer $(grep AUTH_TOKEN .env | cut -d= -f2)" \
     -d '{"query":"{ teams { nodes { id key name } } }"}'
   ```
 - Kill test server after verification

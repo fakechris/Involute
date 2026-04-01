@@ -55,7 +55,7 @@ None.
   # Test CLI commands
   cd /Users/chris/workspace/Involute
   node packages/cli/dist/index.js config set server-url http://localhost:4200
-  node packages/cli/dist/index.js config set token involute-dev-token-001
+  node packages/cli/dist/index.js config set token $(grep AUTH_TOKEN /Users/chris/workspace/Involute/.env | cut -d= -f2)
   node packages/cli/dist/index.js teams list
   node packages/cli/dist/index.js issues list
   node packages/cli/dist/index.js issues create --title "Test" --team INV
