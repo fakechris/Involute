@@ -1,0 +1,28 @@
+commands:
+  install: pnpm install
+  build: pnpm -r build
+  typecheck: pnpm -r typecheck
+  test: pnpm -r test --run
+  lint: pnpm -r lint
+
+services:
+  postgres:
+    start: "echo 'Using existing sub2api-postgres container on OrbStack'"
+    stop: "echo 'External postgres — not managed by Involute'"
+    healthcheck: "docker exec sub2api-postgres psql -U sub2api -d involute -c 'SELECT 1' 2>/dev/null"
+    port: 5432
+    depends_on: []
+
+  api:
+    start: "cd /Users/chris/workspace/Involute/packages/server && PORT=4200 node dist/index.js"
+    stop: "lsof -ti :4200 | xargs kill 2>/dev/null || true"
+    healthcheck: "curl -sf http://localhost:4200/health"
+    port: 4200
+    depends_on: [postgres]
+
+  web:
+    start: "cd /Users/chris/workspace/Involute/packages/web && PORT=4201 npx vite --port 4201"
+    stop: "lsof -ti :4201 | xargs kill 2>/dev/null || true"
+    healthcheck: "curl -sf http://localhost:4201"
+    port: 4201
+    depends_on: [api]
