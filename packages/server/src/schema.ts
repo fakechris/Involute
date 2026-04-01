@@ -13,7 +13,7 @@ import { makeExecutableSchema } from '@graphql-tools/schema';
 import { GraphQLScalarType, Kind } from 'graphql';
 
 import { DEFAULT_WORKFLOW_STATE_ORDER } from './constants.js';
-import { getExposedError } from './errors.js';
+import { getExposedError, isPrismaInvalidInputError } from './errors.js';
 import type {
   CreateCommentInput,
   CreateIssueInput,
@@ -246,12 +246,21 @@ const resolvers = {
       _parent: unknown,
       args: { id: string },
       context: GraphQLContext,
-    ): Promise<Issue | null> =>
-      context.prisma.issue.findUnique({
-        where: {
-          id: args.id,
-        },
-      }),
+    ): Promise<Issue | null> => {
+      try {
+        return await context.prisma.issue.findUnique({
+          where: {
+            id: args.id,
+          },
+        });
+      } catch (error) {
+        if (isPrismaInvalidInputError(error)) {
+          return null;
+        }
+
+        throw error;
+      }
+    },
     issues: async (
       _parent: unknown,
       args: { filter?: IssueFilterInput | null; first: number },
@@ -537,7 +546,7 @@ async function runIssueMutation<TResult extends { issue: Issue; success: true }>
   try {
     return await operation();
   } catch (error) {
-    if (getExposedError(error)) {
+    if (getExposedError(error) || isPrismaInvalidInputError(error)) {
       return {
         issue: null,
         success: false,
@@ -554,7 +563,7 @@ async function runCommentMutation<TResult extends { comment: Comment; success: t
   try {
     return await operation();
   } catch (error) {
-    if (getExposedError(error)) {
+    if (getExposedError(error) || isPrismaInvalidInputError(error)) {
       return {
         comment: null,
         success: false,

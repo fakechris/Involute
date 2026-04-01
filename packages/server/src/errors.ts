@@ -65,6 +65,36 @@ export function getExposedError(error: unknown): GraphQLError | null {
   return null;
 }
 
+/**
+ * Checks whether an error is a Prisma error caused by invalid input
+ * (e.g., passing a non-UUID string to a UUID column). These should be
+ * treated as graceful failures rather than server crashes.
+ *
+ * Covers:
+ * - PrismaClientValidationError (malformed input like non-UUID strings)
+ * - PrismaClientKnownRequestError with code P2023 (inconsistent column data)
+ * - PrismaClientKnownRequestError with code P2025 (record not found)
+ */
+export function isPrismaInvalidInputError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const tag = (error as { [Symbol.toStringTag]?: string })[Symbol.toStringTag];
+
+  if (tag === 'PrismaClientValidationError') {
+    return true;
+  }
+
+  if (tag === 'PrismaClientKnownRequestError') {
+    const code = (error as { code?: string }).code;
+
+    return code === 'P2023' || code === 'P2025';
+  }
+
+  return false;
+}
+
 function createExposedError(message: string): GraphQLError {
   return new GraphQLError(message, {
     extensions: {

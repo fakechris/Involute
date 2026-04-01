@@ -645,6 +645,208 @@ describe('GraphQL mutations', () => {
       comment: null,
     });
   });
+
+  it('returns success false when issueUpdate receives a non-UUID id string', async () => {
+    const response = await postGraphQL({
+      query: `
+        mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
+          issueUpdate(id: $id, input: $input) {
+            success
+            issue { id }
+          }
+        }
+      `,
+      variables: {
+        id: 'nonexistent',
+        input: {
+          stateId: fixture.states.ready.id,
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.issueUpdate).toEqual({
+      success: false,
+      issue: null,
+    });
+  });
+
+  it('returns success false when commentCreate receives a non-UUID issueId', async () => {
+    const response = await postGraphQL({
+      query: `
+        mutation CommentCreate($input: CommentCreateInput!) {
+          commentCreate(input: $input) {
+            success
+            comment { id }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          issueId: 'not-a-uuid',
+          body: 'Should fail gracefully',
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.commentCreate).toEqual({
+      success: false,
+      comment: null,
+    });
+  });
+
+  it('returns success false when issueCreate receives a non-UUID teamId', async () => {
+    const response = await postGraphQL({
+      query: `
+        mutation IssueCreate($input: IssueCreateInput!) {
+          issueCreate(input: $input) {
+            success
+            issue { id }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          teamId: 'invalid-team-id',
+          title: 'Should fail gracefully',
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.issueCreate).toEqual({
+      success: false,
+      issue: null,
+    });
+  });
+
+  it('returns null for issue query with a non-UUID id', async () => {
+    const response = await postGraphQL({
+      query: `
+        query Issue($id: String!) {
+          issue(id: $id) {
+            id
+            title
+          }
+        }
+      `,
+      variables: {
+        id: 'nonexistent',
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.issue).toBeNull();
+  });
+
+  it('returns success false when issueUpdate receives non-UUID stateId', async () => {
+    const response = await postGraphQL({
+      query: `
+        mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
+          issueUpdate(id: $id, input: $input) {
+            success
+            issue { id }
+          }
+        }
+      `,
+      variables: {
+        id: fixture.issue.id,
+        input: {
+          stateId: 'bad-state-id',
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.issueUpdate).toEqual({
+      success: false,
+      issue: null,
+    });
+  });
+
+  it('returns success false when issueUpdate receives non-UUID labelIds', async () => {
+    const response = await postGraphQL({
+      query: `
+        mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
+          issueUpdate(id: $id, input: $input) {
+            success
+            issue { id }
+          }
+        }
+      `,
+      variables: {
+        id: fixture.issue.id,
+        input: {
+          labelIds: ['not-a-uuid-label'],
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.issueUpdate).toEqual({
+      success: false,
+      issue: null,
+    });
+  });
+
+  it('returns success false when issueUpdate receives non-UUID parentId', async () => {
+    const response = await postGraphQL({
+      query: `
+        mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
+          issueUpdate(id: $id, input: $input) {
+            success
+            issue { id }
+          }
+        }
+      `,
+      variables: {
+        id: fixture.issue.id,
+        input: {
+          parentId: 'bad-parent-id',
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.issueUpdate).toEqual({
+      success: false,
+      issue: null,
+    });
+  });
+
+  it('returns success false when issueUpdate receives non-UUID assigneeId', async () => {
+    const response = await postGraphQL({
+      query: `
+        mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
+          issueUpdate(id: $id, input: $input) {
+            success
+            issue { id }
+          }
+        }
+      `,
+      variables: {
+        id: fixture.issue.id,
+        input: {
+          assigneeId: 'bad-assignee-id',
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.issueUpdate).toEqual({
+      success: false,
+      issue: null,
+    });
+  });
 });
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<MutationFixture> {
