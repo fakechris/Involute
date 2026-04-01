@@ -1,0 +1,134 @@
+{
+  "groupId": "api-seed",
+  "testedAt": "2026-04-01T13:58:10.349665+00:00",
+  "isolation": {
+    "endpoint": "http://localhost:4200/graphql",
+    "authSource": "/Users/chris/workspace/Involute/.env#AUTH_TOKEN",
+    "readOnly": true,
+    "maxParallelRequests": 5
+  },
+  "toolsUsed": [
+    "curl"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-FOUND-007",
+      "title": "Seed data \u2014 default team exists",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "POST authenticated teams query for id/key/name",
+          "expected": "At least one team with populated id, key, and name fields",
+          "observed": "Returned one team with id 457f605c-82b1-444f-bbe8-21037d92f422, key INV, and name Involute."
+        }
+      ],
+      "evidence": {
+        "request": "foundation/api-seed/VAL-FOUND-007-request.json",
+        "response": "foundation/api-seed/VAL-FOUND-007-response.json",
+        "meta": "foundation/api-seed/VAL-FOUND-007-meta.json",
+        "network": "POST /graphql -> 200"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FOUND-008",
+      "title": "Seed data \u2014 six workflow states exist",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "POST authenticated teams query for nested state names",
+          "expected": "Default team exposes exactly Backlog, Ready, In Progress, In Review, Done, and Canceled",
+          "observed": "Returned exactly 6 workflow states for INV: Backlog, Ready, In Progress, In Review, Done, Canceled."
+        }
+      ],
+      "evidence": {
+        "request": "foundation/api-seed/VAL-FOUND-008-request.json",
+        "response": "foundation/api-seed/VAL-FOUND-008-response.json",
+        "meta": "foundation/api-seed/VAL-FOUND-008-meta.json",
+        "network": "POST /graphql -> 200"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FOUND-009",
+      "title": "Seed data \u2014 at least 10 labels exist",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "POST authenticated issueLabels query for label names",
+          "expected": "At least 10 labels including task, epic, spec, needs-clarification, blocked, agent-ready, Feature, Bug, Improvement, and spec-orch",
+          "observed": "Returned 10 labels: Bug, Feature, Improvement, agent-ready, blocked, epic, needs-clarification, spec, spec-orch, task."
+        }
+      ],
+      "evidence": {
+        "request": "foundation/api-seed/VAL-FOUND-009-request.json",
+        "response": "foundation/api-seed/VAL-FOUND-009-response.json",
+        "meta": "foundation/api-seed/VAL-FOUND-009-meta.json",
+        "network": "POST /graphql -> 200"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FOUND-010",
+      "title": "Seed data \u2014 authenticated user identity resolves with isMe",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "POST authenticated introspection query for Query and User fields plus issue(id) lookup with a placeholder UUID",
+          "expected": "A read-only query path should allow observing a real User node with isMe: true for the authenticated user",
+          "observed": "Introspection showed only Query.issue(id), Query.teams, and Query.issueLabels as root fields; User exposes isMe, but issue(id) requires an opaque ID and the placeholder lookup returned null."
+        }
+      ],
+      "evidence": {
+        "request": "foundation/api-seed/VAL-FOUND-010-request.json",
+        "response": "foundation/api-seed/VAL-FOUND-010-response.json",
+        "meta": "foundation/api-seed/VAL-FOUND-010-meta.json",
+        "network": "POST /graphql -> 200"
+      },
+      "issues": "Blocked on the assigned read-only surface: there is no root query to enumerate issues or users, and issue(id) requires an undiscoverable opaque ID. Without mutating data or using out-of-band database/code knowledge, a real-surface query cannot reach a User instance to confirm isMe: true."
+    },
+    {
+      "id": "VAL-FOUND-012",
+      "title": "Server handles concurrent requests",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Launch 5 authenticated teams queries in parallel with curl",
+          "expected": "All 5 requests return valid data within 5 seconds and the server remains healthy",
+          "observed": "All 5 requests returned HTTP 200 with the seeded INV/Involute team; aggregate wall-clock time was 0.015944 seconds."
+        }
+      ],
+      "evidence": {
+        "request": "foundation/api-seed/VAL-FOUND-012-request.json",
+        "responses": [
+          "foundation/api-seed/VAL-FOUND-012-response-1.json",
+          "foundation/api-seed/VAL-FOUND-012-response-2.json",
+          "foundation/api-seed/VAL-FOUND-012-response-3.json",
+          "foundation/api-seed/VAL-FOUND-012-response-4.json",
+          "foundation/api-seed/VAL-FOUND-012-response-5.json"
+        ],
+        "metas": [
+          "foundation/api-seed/VAL-FOUND-012-meta-1.json",
+          "foundation/api-seed/VAL-FOUND-012-meta-2.json",
+          "foundation/api-seed/VAL-FOUND-012-meta-3.json",
+          "foundation/api-seed/VAL-FOUND-012-meta-4.json",
+          "foundation/api-seed/VAL-FOUND-012-meta-5.json"
+        ],
+        "summary": "foundation/api-seed/VAL-FOUND-012-summary.json",
+        "network": "5x POST /graphql -> 200"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [
+    {
+      "description": "VAL-FOUND-010 cannot be proven from the permitted read-only curl surface because no root query enumerates users or issues and issue(id) requires an opaque undiscoverable ID.",
+      "affectedAssertions": [
+        "VAL-FOUND-010"
+      ],
+      "quickFixAttempted": "Used authenticated schema introspection to confirm the available root fields and tried a non-mutating issue(id) lookup; still no user node was reachable on-surface."
+    }
+  ],
+  "summary": "Tested 5 assertions: 4 passed (VAL-FOUND-007, VAL-FOUND-008, VAL-FOUND-009, VAL-FOUND-012) and 1 was blocked (VAL-FOUND-010) because the allowed read-only API surface cannot reach a User node with isMe without an undiscoverable issue ID or a mutation."
+}

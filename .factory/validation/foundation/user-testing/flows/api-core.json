@@ -1,0 +1,161 @@
+{
+  "groupId": "api-core",
+  "testedAt": "2026-04-01T13:56:10.232129Z",
+  "isolation": {
+    "surface": "curl",
+    "baseUrls": [
+      "http://localhost:4200/health",
+      "http://localhost:4200/graphql"
+    ],
+    "authSource": "/Users/chris/workspace/Involute/.env#AUTH_TOKEN",
+    "readOnly": true
+  },
+  "toolsUsed": [
+    "curl"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-FOUND-001",
+      "title": "Server starts and listens on port 4200",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Send GET request to /graphql with a 5 second timeout.",
+          "expected": "A valid HTTP response proves the server is listening on localhost:4200.",
+          "observed": "Received HTTP 200 from /graphql, confirming the server accepted the connection on port 4200."
+        }
+      ],
+      "evidence": {
+        "request": "foundation/api-core/VAL-FOUND-001.request.txt",
+        "responseBody": "foundation/api-core/VAL-FOUND-001.response.body.txt",
+        "responseHeaders": "foundation/api-core/VAL-FOUND-001.response.headers.txt",
+        "status": "foundation/api-core/VAL-FOUND-001.status.txt",
+        "network": "GET /graphql -> 200"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FOUND-002",
+      "title": "Health check endpoint responds",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Send GET request to /health.",
+          "expected": "HTTP 200 from the health endpoint.",
+          "observed": "Received HTTP 200 with body \"OK\"."
+        }
+      ],
+      "evidence": {
+        "request": "foundation/api-core/VAL-FOUND-002.request.txt",
+        "responseBody": "foundation/api-core/VAL-FOUND-002.response.body.txt",
+        "responseHeaders": "foundation/api-core/VAL-FOUND-002.response.headers.txt",
+        "status": "foundation/api-core/VAL-FOUND-002.status.txt",
+        "network": "GET /health -> 200"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FOUND-003",
+      "title": "GraphQL endpoint accepts POST with JSON content-type",
+      "status": "fail",
+      "steps": [
+        {
+          "action": "POST {\"query\":\"{ __typename }\"} to /graphql with Content-Type: application/json and no Authorization header.",
+          "expected": "HTTP 200 with response body {\"data\":{\"__typename\":\"Query\"}}.",
+          "observed": "Received HTTP 200 with body {\"errors\":[{\"message\":\"Not authenticated\"}]}, so the endpoint rejected the unauthenticated JSON POST instead of returning Query typename."
+        }
+      ],
+      "evidence": {
+        "request": "foundation/api-core/VAL-FOUND-003.request.txt",
+        "responseBody": "foundation/api-core/VAL-FOUND-003.response.body.txt",
+        "responseHeaders": "foundation/api-core/VAL-FOUND-003.response.headers.txt",
+        "status": "foundation/api-core/VAL-FOUND-003.status.txt",
+        "network": "POST /graphql -> 200"
+      },
+      "issues": "Unauthenticated JSON POST returned a GraphQL auth error instead of data.__typename = Query."
+    },
+    {
+      "id": "VAL-FOUND-004",
+      "title": "Unauthenticated request is rejected",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "POST unauthenticated query { teams { nodes { id } } } to /graphql.",
+          "expected": "HTTP 200 with a GraphQL errors array and no meaningful data payload.",
+          "observed": "Received HTTP 200 with body {\"errors\":[{\"message\":\"Not authenticated\"}]}. No data payload was returned."
+        }
+      ],
+      "evidence": {
+        "request": "foundation/api-core/VAL-FOUND-004.request.txt",
+        "responseBody": "foundation/api-core/VAL-FOUND-004.response.body.txt",
+        "responseHeaders": "foundation/api-core/VAL-FOUND-004.response.headers.txt",
+        "status": "foundation/api-core/VAL-FOUND-004.status.txt",
+        "network": "POST /graphql unauthenticated teams query -> 200"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FOUND-005",
+      "title": "Valid token authentication succeeds",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "POST authenticated query { teams { nodes { id key name } } } to /graphql using AUTH_TOKEN from .env.",
+          "expected": "HTTP 200 with data.teams.nodes containing at least one team.",
+          "observed": "Received HTTP 200 with data.teams.nodes containing the seeded team INV / Involute."
+        }
+      ],
+      "evidence": {
+        "request": "foundation/api-core/VAL-FOUND-005.request.txt",
+        "responseBody": "foundation/api-core/VAL-FOUND-005.response.body.txt",
+        "responseHeaders": "foundation/api-core/VAL-FOUND-005.response.headers.txt",
+        "status": "foundation/api-core/VAL-FOUND-005.status.txt",
+        "network": "POST /graphql authenticated teams query -> 200"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FOUND-006",
+      "title": "Invalid token is rejected",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "POST query { teams { nodes { id } } } to /graphql with Authorization: Bearer invalid-token-xxx.",
+          "expected": "Request is rejected with an authentication error.",
+          "observed": "Received HTTP 200 with body {\"errors\":[{\"message\":\"Not authenticated\"}]}. No data payload was returned."
+        }
+      ],
+      "evidence": {
+        "request": "foundation/api-core/VAL-FOUND-006.request.txt",
+        "responseBody": "foundation/api-core/VAL-FOUND-006.response.body.txt",
+        "responseHeaders": "foundation/api-core/VAL-FOUND-006.response.headers.txt",
+        "status": "foundation/api-core/VAL-FOUND-006.status.txt",
+        "network": "POST /graphql invalid-token teams query -> 200"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-FOUND-011",
+      "title": "GraphQL error shape is standards-compliant",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "POST malformed authenticated query { nonExistentField } to /graphql.",
+          "expected": "HTTP 200 or 400 with a GraphQL errors array containing a message.",
+          "observed": "Received HTTP 200 with errors[0].message = \"Cannot query field \"nonExistentField\" on type \"Query\".\" plus locations and extensions.code."
+        }
+      ],
+      "evidence": {
+        "request": "foundation/api-core/VAL-FOUND-011.request.txt",
+        "responseBody": "foundation/api-core/VAL-FOUND-011.response.body.txt",
+        "responseHeaders": "foundation/api-core/VAL-FOUND-011.response.headers.txt",
+        "status": "foundation/api-core/VAL-FOUND-011.status.txt",
+        "network": "POST /graphql malformed authenticated query -> 200"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 7 assertions: 6 passed, 1 failed (VAL-FOUND-003 returned a Not authenticated GraphQL error instead of {\"data\":{\"__typename\":\"Query\"}} for the unauthenticated JSON POST)."
+}

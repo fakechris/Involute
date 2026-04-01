@@ -40,3 +40,12 @@
 - Seed data provides baseline (1 team, 6 states, 10+ labels, 1 user)
 - Tests should create their own issues/comments for isolation
 - Import tests need fixture data (mock Linear export files) or actual Linear API access
+- Foundation caveat: `VAL-FOUND-010` is not reachable from the read-only curl surface alone because `Query` does not expose a user or issue listing; proving `User.isMe` requires either a discoverable issue ID or a mutation-enabled path.
+
+## Flow Validator Guidance: curl
+
+- Surface boundary: use only the live API at `http://localhost:4200/graphql` and `http://localhost:4200/health`.
+- Isolation rule: foundation API assertions are read-only; do not mutate database state unless the assigned assertion explicitly requires it.
+- Auth source: read `AUTH_TOKEN` from the repo `.env` file; send it as `Authorization: Bearer <token>`.
+- Evidence: save raw request/response bodies and status codes for every assertion in the assigned evidence directory.
+- Concurrency: curl validators may run in parallel up to 5 at a time because they share only read-only seeded data.
