@@ -26,6 +26,7 @@
 ## Setup Notes
 
 - Run the `init` command from `.factory/services.yaml` (or `.factory/init.sh` directly) before Prisma or validator commands; it verifies Postgres access, starts `postgres_proxy`, updates `.env`, and runs `prisma generate` / `prisma db push` when applicable
+- Current Prisma CLI wiring still uses `packages/server/package.json#prisma`, so `prisma generate` and `prisma db push` emit Prisma 6 deprecation warnings; this is not breaking today but will need a `prisma.config.ts` migration before Prisma 7
 
 ## Node.js Toolchain
 

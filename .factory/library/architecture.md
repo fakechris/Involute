@@ -27,6 +27,7 @@ involute/
 - **Prisma** as the ORM connecting to PostgreSQL
 - **Facade pattern**: Internal domain model (Prisma) decoupled from external Linear-compatible GraphQL schema
 - **Token auth**: Accepts either `Authorization: Bearer <token>` or a raw token value in the `Authorization` header, validated against `AUTH_TOKEN` for Linear-compatibility
+- **Viewer resolution**: Authorized requests populate `context.viewer` by loading the seeded user identified by `DEFAULT_ADMIN_EMAIL`; `assignee.isMe` behavior depends on that fixed viewer mapping
 - Schema matches Linear's GraphQL API subset exactly (see docs/legacy/04)
 
 ## Data Model

@@ -1,0 +1,15 @@
+{
+  "featureId": "graphql-queries-basic",
+  "reviewedAt": "2026-04-01T15:08:51.068476Z",
+  "commitId": "5df9d20",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Commit 5df9d20 cleanly adds the missing `teams(filter)` and `issueLabels(filter)` query support, preserves non-null `{ nodes: [...] }` connection shapes, and is backed by focused integration coverage for the Q1 and Q4-Q7 behaviors listed on the feature.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the graphql-queries-basic feature via features.json, the worker handoff/transcript, the backend-worker skill, and commit 5df9d20. I found no blocking or non-blocking correctness issues within the feature scope, so the feature passes scrutiny."
+}

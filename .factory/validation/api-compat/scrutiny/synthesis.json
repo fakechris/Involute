@@ -1,0 +1,51 @@
+{
+  "milestone": "api-compat",
+  "round": 1,
+  "status": "pass",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "pnpm -C \"/Users/chris/workspace/Involute\" test",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "pnpm -C \"/Users/chris/workspace/Involute\" typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "pnpm -C \"/Users/chris/workspace/Involute\" lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "failedFeatures": []
+  },
+  "blockingIssues": [],
+  "appliedUpdates": [
+    {
+      "target": "library",
+      "description": "Updated .factory/library/architecture.md to document that authorized requests resolve `context.viewer` through the seeded `DEFAULT_ADMIN_EMAIL` user, which is the invariant behind `assignee.isMe` behavior.",
+      "sourceFeature": "graphql-issues-filter"
+    },
+    {
+      "target": "library",
+      "description": "Updated .factory/library/environment.md to record that Prisma CLI commands still use `package.json#prisma` and emit Prisma 6 deprecation warnings pending a future `prisma.config.ts` migration.",
+      "sourceFeature": "graphql-mutations"
+    }
+  ],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Update the backend-worker skill's TDD guidance to explicitly allow workers to add missing coverage first and then tighten implementation when a feature arrives partially pre-implemented, rather than requiring an artificial red phase in every case.",
+      "evidence": "The graphql-comments-query review found `.factory/skills/backend-worker/SKILL.md` currently requires a red phase, while the feature handoff documented a justified deviation because the comments query behavior already existed and the worker needed to backfill coverage before aligning implementation.",
+      "isSystemic": false
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}

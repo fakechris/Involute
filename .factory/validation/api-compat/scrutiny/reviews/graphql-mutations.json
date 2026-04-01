@@ -1,0 +1,21 @@
+{
+  "featureId": "graphql-mutations",
+  "reviewedAt": "2026-04-01T15:09:26Z",
+  "commitId": "274c532",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the feature metadata, worker handoff, transcript skeleton, commit 274c532 diff, and the current mutation implementation in `packages/server/src/schema.ts`, `packages/server/src/issue-service.ts`, `packages/server/src/errors.ts`, and `packages/server/src/graphql-mutations.test.ts`. The implementation covers the requested `issueCreate`, `issueUpdate`, and `commentCreate` behaviors, preserves Linear-compatible payload and connection shapes, and handles invalid resource/state/parent/assignee inputs with graceful `success: false` payloads rather than crashes.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "Prisma configuration still depends on `package.json#prisma`, which already emits a deprecation warning, but that upgrade requirement is not captured in the shared state docs.",
+      "evidence": "Worker handoff `discoveredIssues[0]` reports the deprecation warning; `packages/server/package.json:20-22` still defines the Prisma config there; no corresponding note appears in `.factory/library/environment.md` or `/Users/chris/.factory/missions/6774ac71-5dc9-4936-9303-c902a364ac7c/AGENTS.md`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. I reviewed the feature handoff, transcript skeleton, commit diff, and mutation code/tests for `graphql-mutations` and found no blocking or non-blocking correctness defects. The only follow-up I noted is an undocumented Prisma configuration deprecation warning that should be captured in shared state."
+}

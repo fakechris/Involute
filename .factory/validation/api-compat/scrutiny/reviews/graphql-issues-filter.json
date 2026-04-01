@@ -1,0 +1,21 @@
+{
+  "featureId": "graphql-issues-filter",
+  "reviewedAt": "2026-04-01T15:09:10Z",
+  "commitId": "e17e6c1",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Commit e17e6c1 adds the `issues(first, filter)` schema surface, a dedicated Prisma filter builder for the required `and`/team/state/assignee/label paths, and focused integration coverage for all expected behaviors and edge cases. I found no blocking or non-blocking correctness issues within the feature scope.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The shared docs describe token-based auth but do not mention that an authorized request resolves `context.viewer` by looking up the seeded `DEFAULT_ADMIN_EMAIL` user. `assignee.isMe` correctness depends on that invariant, so it is useful project knowledge for future backend work.",
+      "evidence": "packages/server/src/auth.ts:62-70 resolves `viewer` via `email: DEFAULT_ADMIN_EMAIL`; compare with .factory/library/architecture.md:29 and .factory/library/environment.md:23, which document AUTH_TOKEN validation but not the fixed viewer mapping."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed graphql-issues-filter via features.json, the worker handoff/transcript skeleton, the backend-worker skill, and commit e17e6c1. The implementation matches the feature description and expected behaviors, so the feature passes scrutiny."
+}
