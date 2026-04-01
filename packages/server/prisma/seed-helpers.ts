@@ -1,0 +1,82 @@
+import type { PrismaClient } from '@prisma/client';
+
+import {
+  DEFAULT_ADMIN_EMAIL,
+  DEFAULT_ADMIN_NAME,
+  DEFAULT_LABEL_NAMES,
+  DEFAULT_TEAM_KEY,
+  DEFAULT_TEAM_NAME,
+  DEFAULT_WORKFLOW_STATE_NAMES,
+} from './constants.ts';
+import { ensureIssueIdentifierAutomation } from './identifier.ts';
+
+export {
+  DEFAULT_ADMIN_EMAIL,
+  DEFAULT_ADMIN_NAME,
+  DEFAULT_LABEL_NAMES,
+  DEFAULT_TEAM_KEY,
+  DEFAULT_TEAM_NAME,
+  DEFAULT_WORKFLOW_STATE_NAMES,
+};
+
+export async function seedDatabase(prisma: PrismaClient): Promise<void> {
+  await ensureIssueIdentifierAutomation(prisma);
+
+  const team = await prisma.team.upsert({
+    where: {
+      key: DEFAULT_TEAM_KEY,
+    },
+    create: {
+      key: DEFAULT_TEAM_KEY,
+      name: DEFAULT_TEAM_NAME,
+    },
+    update: {
+      name: DEFAULT_TEAM_NAME,
+    },
+  });
+
+  await Promise.all(
+    DEFAULT_WORKFLOW_STATE_NAMES.map((name) =>
+      prisma.workflowState.upsert({
+        where: {
+          teamId_name: {
+            teamId: team.id,
+            name,
+          },
+        },
+        create: {
+          name,
+          teamId: team.id,
+        },
+        update: {},
+      }),
+    ),
+  );
+
+  await Promise.all(
+    DEFAULT_LABEL_NAMES.map((name) =>
+      prisma.issueLabel.upsert({
+        where: {
+          name,
+        },
+        create: {
+          name,
+        },
+        update: {},
+      }),
+    ),
+  );
+
+  await prisma.user.upsert({
+    where: {
+      email: DEFAULT_ADMIN_EMAIL,
+    },
+    create: {
+      email: DEFAULT_ADMIN_EMAIL,
+      name: DEFAULT_ADMIN_NAME,
+    },
+    update: {
+      name: DEFAULT_ADMIN_NAME,
+    },
+  });
+}

@@ -2,3 +2,4 @@ docs/legacy
 node_modules
 dist
 .env
+!packages/server/prisma/.env

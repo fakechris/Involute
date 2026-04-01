@@ -13,12 +13,19 @@ services:
     port: 5432
     depends_on: []
 
+  postgres_proxy:
+    start: "docker rm -f involute-pg-proxy >/dev/null 2>&1 || true && docker run -d --name involute-pg-proxy --network sub2api-deploy_sub2api-network -p 4202:4202 postgres:18-alpine sh -lc 'nc -lk -p 4202 -e nc sub2api-postgres 5432'"
+    stop: "docker rm -f involute-pg-proxy >/dev/null 2>&1 || true"
+    healthcheck: "python3 -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1', 4202)); s.close()\""
+    port: 4202
+    depends_on: [postgres]
+
   api:
     start: "cd /Users/chris/workspace/Involute/packages/server && PORT=4200 node dist/index.js"
     stop: "lsof -ti :4200 | xargs kill 2>/dev/null || true"
     healthcheck: "curl -sf http://localhost:4200/health"
     port: 4200
-    depends_on: [postgres]
+    depends_on: [postgres_proxy]
 
   web:
     start: "cd /Users/chris/workspace/Involute/packages/web && PORT=4201 npx vite --port 4201"

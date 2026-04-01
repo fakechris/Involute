@@ -12,10 +12,13 @@
     }
   },
   "scripts": {
-    "build": "pnpm exec tsc -p tsconfig.json",
-    "typecheck": "pnpm exec tsc -p tsconfig.json --noEmit",
-    "test": "pnpm exec vitest --config vitest.config.ts --passWithNoTests",
-    "lint": "pnpm exec tsc -p tsconfig.json --noEmit"
+    "build": "pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json",
+    "typecheck": "pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json",
+    "test": "pnpm exec prisma generate && pnpm exec prisma db push --skip-generate && pnpm exec vitest --config vitest.config.ts --passWithNoTests",
+    "lint": "pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json"
+  },
+  "prisma": {
+    "seed": "node --experimental-strip-types prisma/seed.ts"
   },
   "dependencies": {
     "@graphql-tools/schema": "^10.0.29",

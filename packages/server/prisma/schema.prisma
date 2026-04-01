@@ -1,0 +1,94 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Team {
+  id              String          @id @default(uuid()) @db.Uuid
+  key             String          @unique
+  name            String
+  nextIssueNumber Int             @default(1)
+  states          WorkflowState[]
+  issues          Issue[]
+
+  @@index([key])
+}
+
+model WorkflowState {
+  id     String  @id @default(uuid()) @db.Uuid
+  name   String
+  teamId String  @db.Uuid
+  team   Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  issues Issue[]
+
+  @@unique([teamId, name])
+  @@index([teamId])
+}
+
+model IssueLabel {
+  id     String  @id @default(uuid()) @db.Uuid
+  name   String  @unique
+  issues Issue[]
+}
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  name           String
+  email          String    @unique
+  assignedIssues Issue[]   @relation("IssueAssignee")
+  comments       Comment[]
+}
+
+model Issue {
+  id          String         @id @default(uuid()) @db.Uuid
+  identifier  String         @unique @default("")
+  title       String
+  description String?
+  stateId     String         @db.Uuid
+  state       WorkflowState  @relation(fields: [stateId], references: [id], onDelete: Restrict)
+  assigneeId  String?        @db.Uuid
+  assignee    User?          @relation("IssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  parentId    String?        @db.Uuid
+  parent      Issue?         @relation("IssueParentChild", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Issue[]        @relation("IssueParentChild")
+  teamId      String         @db.Uuid
+  team        Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  labels      IssueLabel[]
+  comments    Comment[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([teamId])
+  @@index([stateId])
+  @@index([assigneeId])
+  @@index([parentId])
+}
+
+model Comment {
+  id        String   @id @default(uuid()) @db.Uuid
+  body      String
+  createdAt DateTime @default(now())
+  issueId   String   @db.Uuid
+  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([issueId, createdAt])
+  @@index([userId])
+}
+
+model LegacyLinearMapping {
+  id         String   @id @default(uuid()) @db.Uuid
+  oldId      String
+  newId      String
+  entityType String
+  migratedAt DateTime @default(now())
+
+  @@unique([oldId, entityType])
+  @@unique([newId, entityType])
+  @@index([entityType])
+}
