@@ -1,0 +1,16 @@
+{
+  "groupId": "val-api-032-retest",
+  "assertions": ["VAL-API-032"],
+  "tool": "curl",
+  "results": [
+    {
+      "assertionId": "VAL-API-032",
+      "status": "pass",
+      "evidence": "All three test cases passed: (1) issueUpdate with non-UUID 'nonexistent' returned {success:false, issue:null}, (2) issueUpdate with UUID-format 00000000-0000-0000-0000-000000000000 returned {success:false, issue:null}, (3) issueUpdate with 'not-a-valid-uuid-at-all' returned {success:false, issue:null}. No server crashes, no unhandled errors.",
+      "evidencePath": "evidence/api-compat/val-api-032/"
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "toolsUsed": ["curl"]
+}

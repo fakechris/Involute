@@ -1,11 +1,11 @@
 {
   "milestone": "api-compat",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "assertionsSummary": {
     "total": 47,
-    "passed": 46,
-    "failed": 1,
+    "passed": 47,
+    "failed": 0,
     "blocked": 0
   },
   "passedAssertions": [
@@ -15,24 +15,13 @@
     "VAL-API-016", "VAL-API-017", "VAL-API-018", "VAL-API-019", "VAL-API-020",
     "VAL-API-021", "VAL-API-022", "VAL-API-023", "VAL-API-024", "VAL-API-025",
     "VAL-API-026", "VAL-API-027", "VAL-API-028", "VAL-API-029", "VAL-API-030",
-    "VAL-API-031", "VAL-API-033", "VAL-API-034", "VAL-API-035",
+    "VAL-API-031", "VAL-API-032", "VAL-API-033", "VAL-API-034", "VAL-API-035",
     "VAL-API-036", "VAL-API-037", "VAL-API-038", "VAL-API-039", "VAL-API-040",
     "VAL-API-041", "VAL-API-042", "VAL-API-043", "VAL-API-044", "VAL-API-045",
     "VAL-CROSS-010", "VAL-FOUND-010"
   ],
-  "failedAssertions": [
-    {
-      "id": "VAL-API-032",
-      "reason": "issueUpdate with non-UUID string id 'nonexistent' returns unhandled server error ({errors: [{message: 'Unexpected error.'}], data: null}) instead of graceful {success: false} response. UUID-format nonexistent IDs (e.g., 00000000-0000-0000-0000-000000000000) are handled gracefully. The server needs to catch Prisma's invalid UUID format error and return success: false."
-    }
-  ],
+  "failedAssertions": [],
   "blockedAssertions": [],
-  "appliedUpdates": [
-    {
-      "target": "user-testing.md",
-      "description": "Added 'Flow Validator Guidance: curl (api-compat)' section with seed data details, isolation rules, and test data creation patterns for api-compat milestone testing",
-      "source": "setup"
-    }
-  ],
-  "previousRound": null
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/api-compat/user-testing/synthesis-round1.json"
 }
