@@ -13,6 +13,7 @@ import { GraphQLScalarType, Kind } from 'graphql';
 
 import { DEFAULT_WORKFLOW_STATE_ORDER } from './constants.js';
 import type { CreateIssueInput, UpdateIssueInput } from './issue-service.js';
+import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
 
 import { type GraphQLContext } from './auth.js';
 import { createIssue, updateIssue } from './issue-service.js';
@@ -29,6 +30,8 @@ type IssueParent = Issue & {
 
 interface StringComparatorInput {
   eq?: string | null;
+  in?: string[] | null;
+  nin?: string[] | null;
 }
 
 interface TeamFilterInput {
@@ -77,6 +80,7 @@ const typeDefs = /* GraphQL */ `
 
   type Query {
     issue(id: String!): Issue
+    issues(first: Int!, filter: IssueFilter): IssueConnection!
     teams(filter: TeamFilter): TeamConnection!
     issueLabels(filter: IssueLabelFilter): IssueLabelConnection!
   }
@@ -156,10 +160,41 @@ const typeDefs = /* GraphQL */ `
 
   input StringComparator {
     eq: String
+    in: [String!]
+    nin: [String!]
+  }
+
+  input BooleanComparator {
+    eq: Boolean
   }
 
   input TeamFilter {
     key: StringComparator
+  }
+
+  input WorkflowStateFilterRef {
+    name: StringComparator
+  }
+
+  input UserFilterRef {
+    isMe: BooleanComparator
+  }
+
+  input IssueLabelFilterRef {
+    name: StringComparator
+  }
+
+  input IssueLabelRelationFilter {
+    some: IssueLabelFilterRef
+    every: IssueLabelFilterRef
+  }
+
+  input IssueFilter {
+    and: [IssueFilter!]
+    team: TeamFilter
+    state: WorkflowStateFilterRef
+    assignee: UserFilterRef
+    labels: IssueLabelRelationFilter
   }
 
   input IssueLabelFilter {
@@ -201,6 +236,21 @@ const resolvers = {
           id: args.id,
         },
       }),
+    issues: async (
+      _parent: unknown,
+      args: { filter?: IssueFilterInput | null; first: number },
+      context: GraphQLContext,
+    ): Promise<{ nodes: Issue[] }> => {
+      const where = buildIssueWhere(args.filter, context.viewer?.id ?? null);
+
+      return {
+        nodes: await context.prisma.issue.findMany({
+          ...(where ? { where } : {}),
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          take: args.first,
+        }),
+      };
+    },
     teams: async (
       _parent: unknown,
       args: { filter?: TeamFilterInput | null },
