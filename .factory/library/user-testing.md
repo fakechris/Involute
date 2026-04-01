@@ -40,7 +40,7 @@
 - Seed data provides baseline (1 team, 6 states, 10+ labels, 1 user)
 - Tests should create their own issues/comments for isolation
 - Import tests need fixture data (mock Linear export files) or actual Linear API access
-- Foundation caveat: `VAL-FOUND-010` is not reachable from the read-only curl surface alone because `Query` does not expose a user or issue listing; proving `User.isMe` requires either a discoverable issue ID or a mutation-enabled path.
+- Current scope note: `VAL-FOUND-003` now requires an authenticated `__typename` probe, and `VAL-FOUND-010` has moved to the api-compat milestone where mutation-enabled flows can verify `User.isMe` on the real surface.
 
 ## Flow Validator Guidance: curl
 

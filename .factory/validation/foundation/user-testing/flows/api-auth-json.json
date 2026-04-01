@@ -1,0 +1,41 @@
+{
+  "groupId": "api-auth-json",
+  "testedAt": "2026-04-01T14:08:32.546565+00:00",
+  "isolation": {
+    "surface": "curl",
+    "baseUrls": [
+      "http://localhost:4200/health",
+      "http://localhost:4200/graphql"
+    ],
+    "authSource": "/Users/chris/workspace/Involute/.env#AUTH_TOKEN",
+    "readOnly": true
+  },
+  "toolsUsed": [
+    "curl"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-FOUND-003",
+      "title": "GraphQL endpoint accepts POST with JSON content-type",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "POST {\"query\":\"{ __typename }\"} to /graphql with Content-Type: application/json and Authorization: Bearer <AUTH_TOKEN>.",
+          "expected": "HTTP 200 with response body {\"data\":{\"__typename\":\"Query\"}}.",
+          "observed": "Received HTTP 200 with response body {\"data\":{\"__typename\":\"Query\"}}."
+        }
+      ],
+      "evidence": {
+        "request": "foundation/api-auth-json/VAL-FOUND-003.request.txt",
+        "responseBody": "foundation/api-auth-json/VAL-FOUND-003.response.body.txt",
+        "responseHeaders": "foundation/api-auth-json/VAL-FOUND-003.response.headers.txt",
+        "status": "foundation/api-auth-json/VAL-FOUND-003.status.txt",
+        "network": "POST /graphql authenticated __typename probe -> 200"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 1 assertion: 1 passed (VAL-FOUND-003 returned HTTP 200 with body {\"data\":{\"__typename\":\"Query\"}})."
+}

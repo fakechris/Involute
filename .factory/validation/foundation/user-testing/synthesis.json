@@ -1,43 +1,34 @@
 {
   "milestone": "foundation",
-  "round": 1,
-  "status": "fail",
+  "round": 2,
+  "status": "pass",
   "assertionsSummary": {
-    "total": 12,
-    "passed": 10,
-    "failed": 1,
-    "blocked": 1
+    "total": 11,
+    "passed": 11,
+    "failed": 0,
+    "blocked": 0
   },
   "passedAssertions": [
     "VAL-FOUND-001",
     "VAL-FOUND-002",
+    "VAL-FOUND-003",
     "VAL-FOUND-004",
     "VAL-FOUND-005",
     "VAL-FOUND-006",
-    "VAL-FOUND-011",
     "VAL-FOUND-007",
     "VAL-FOUND-008",
     "VAL-FOUND-009",
+    "VAL-FOUND-011",
     "VAL-FOUND-012"
   ],
-  "failedAssertions": [
-    {
-      "id": "VAL-FOUND-003",
-      "reason": "Unauthenticated JSON POST returned a GraphQL auth error instead of data.__typename = Query."
-    }
-  ],
-  "blockedAssertions": [
-    {
-      "id": "VAL-FOUND-010",
-      "blockedBy": "Blocked on the assigned read-only surface: there is no root query to enumerate issues or users, and issue(id) requires an undiscoverable opaque ID. Without mutating data or using out-of-band database/code knowledge, a real-surface query cannot reach a User instance to confirm isMe: true."
-    }
-  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
   "appliedUpdates": [
     {
       "target": "user-testing.md",
-      "description": "Added curl flow validator isolation guidance and documented the foundation isMe validation caveat for future runs.",
+      "description": "Updated testing notes to reflect that VAL-FOUND-003 now requires authenticated __typename probing and that VAL-FOUND-010 moved out of foundation scope into api-compat.",
       "source": "flow-report"
     }
   ],
-  "previousRound": null
+  "previousRound": ".factory/validation/foundation/user-testing/synthesis.round-1.json"
 }
