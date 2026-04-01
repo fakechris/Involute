@@ -1,0 +1,33 @@
+{
+  "name": "@involute/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm exec tsc -p tsconfig.json",
+    "typecheck": "pnpm exec tsc -p tsconfig.json --noEmit",
+    "test": "pnpm exec vitest --config vitest.config.ts --passWithNoTests",
+    "lint": "pnpm exec tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@graphql-tools/schema": "^10.0.29",
+    "@prisma/client": "^6.7.0",
+    "dotenv": "^16.6.1",
+    "graphql": "^16.11.0",
+    "graphql-yoga": "^5.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "prisma": "^6.7.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8"
+  }
+}

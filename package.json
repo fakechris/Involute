@@ -1,0 +1,12 @@
+{
+  "name": "involute",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.30.1",
+  "scripts": {
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test --run",
+    "lint": "pnpm -r lint"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@involute/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec vite build",
+    "typecheck": "pnpm exec tsc -p tsconfig.json --noEmit",
+    "test": "pnpm exec vitest --config vitest.config.ts --passWithNoTests",
+    "lint": "pnpm exec tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@apollo/client": "^4.0.9",
+    "graphql": "^16.11.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.11",
+    "vitest": "^4.0.8"
+  }
+}
