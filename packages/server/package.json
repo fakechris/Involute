@@ -14,7 +14,7 @@
   "scripts": {
     "build": "pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json",
     "typecheck": "pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json",
-    "test": "pnpm exec prisma generate && pnpm exec prisma db push --skip-generate && pnpm exec vitest --config vitest.config.ts --passWithNoTests",
+    "test": "pnpm exec prisma generate && pnpm exec prisma db push --skip-generate && node scripts/run-vitest.mjs",
     "lint": "pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json"
   },
   "prisma": {
