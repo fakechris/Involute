@@ -54,6 +54,7 @@ describe('GraphQL server core', () => {
 
     const graphQlResponse = await postGraphQL({
       query: '{ __typename }',
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
     });
 
     expect(graphQlResponse.status).toBe(200);
@@ -255,6 +256,10 @@ describe('GraphQL server core', () => {
 async function resetDatabase(prismaClient: PrismaClient): Promise<TestFixture> {
   await prismaClient.comment.deleteMany();
   await prismaClient.issue.deleteMany();
+  await prismaClient.workflowState.deleteMany();
+  await prismaClient.team.deleteMany();
+  await prismaClient.issueLabel.deleteMany();
+  await prismaClient.user.deleteMany();
   await prismaClient.legacyLinearMapping.deleteMany();
 
   await seedDatabase(prismaClient);
@@ -315,6 +320,7 @@ async function resetDatabase(prismaClient: PrismaClient): Promise<TestFixture> {
 
   const issue = await prismaClient.issue.create({
     data: {
+      identifier: 'INV-1',
       teamId: refreshedTeam.id,
       stateId: readyState.id,
       assigneeId: admin.id,
@@ -328,6 +334,7 @@ async function resetDatabase(prismaClient: PrismaClient): Promise<TestFixture> {
 
   const childIssue = await prismaClient.issue.create({
     data: {
+      identifier: 'INV-2',
       teamId: refreshedTeam.id,
       stateId: backlogState.id,
       parentId: issue.id,

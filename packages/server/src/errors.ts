@@ -1,0 +1,63 @@
+import { GraphQLError } from 'graphql';
+
+export const NOT_AUTHENTICATED_MESSAGE = 'Not authenticated';
+export const TEAM_NOT_FOUND_MESSAGE = 'Team not found.';
+export const ISSUE_NOT_FOUND_MESSAGE = 'Issue not found.';
+export const WORKFLOW_STATE_NOT_FOUND_MESSAGE = 'Workflow state not found.';
+export const WORKFLOW_STATE_TEAM_CREATE_MISMATCH_MESSAGE =
+  'Workflow state does not belong to the specified team.';
+export const WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE =
+  'Workflow state does not belong to the issue team.';
+export const TEAM_HAS_NO_WORKFLOW_STATES_MESSAGE =
+  'The selected team does not have any workflow states.';
+
+const exposedErrorCodes = new Map<string, string>([
+  [NOT_AUTHENTICATED_MESSAGE, 'UNAUTHENTICATED'],
+  [TEAM_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [ISSUE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [WORKFLOW_STATE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [WORKFLOW_STATE_TEAM_CREATE_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
+  [WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
+  [TEAM_HAS_NO_WORKFLOW_STATES_MESSAGE, 'BAD_USER_INPUT'],
+]);
+
+export function createNotAuthenticatedError(): GraphQLError {
+  return createExposedError(NOT_AUTHENTICATED_MESSAGE);
+}
+
+export function createNotFoundError(message: string): GraphQLError {
+  return createExposedError(message);
+}
+
+export function createValidationError(message: string): GraphQLError {
+  return createExposedError(message);
+}
+
+export function getExposedError(error: unknown): GraphQLError | null {
+  if (error instanceof GraphQLError && exposedErrorCodes.has(error.message)) {
+    return error;
+  }
+
+  if (error instanceof Error) {
+    const cause = (error as Error & { cause?: unknown }).cause;
+    const exposedCause = cause ? getExposedError(cause) : null;
+
+    if (exposedCause) {
+      return exposedCause;
+    }
+
+    if (exposedErrorCodes.has(error.message)) {
+      return createExposedError(error.message);
+    }
+  }
+
+  return null;
+}
+
+function createExposedError(message: string): GraphQLError {
+  return new GraphQLError(message, {
+    extensions: {
+      code: exposedErrorCodes.get(message) ?? 'BAD_USER_INPUT',
+    },
+  });
+}

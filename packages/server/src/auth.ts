@@ -1,8 +1,7 @@
 import type { PrismaClient, User } from '@prisma/client';
 
-import { GraphQLError } from 'graphql';
-
 import { DEFAULT_ADMIN_EMAIL } from './constants.js';
+import { createNotAuthenticatedError, NOT_AUTHENTICATED_MESSAGE } from './errors.js';
 
 export interface GraphQLContext {
   prisma: PrismaClient;
@@ -39,14 +38,21 @@ export function extractTokenFromAuthorizationHeader(
   return trimmedHeader;
 }
 
+export function isAuthorizedRequest(
+  request: Request,
+  authToken: string,
+): boolean {
+  const token = extractTokenFromAuthorizationHeader(request.headers.get('authorization'));
+
+  return Boolean(token && authToken && token === authToken);
+}
+
 export async function createGraphQLContext({
   request,
   prisma,
   authToken,
 }: GraphQLContextOptions): Promise<GraphQLContext> {
-  const token = extractTokenFromAuthorizationHeader(request.headers.get('authorization'));
-
-  if (!token || !authToken || token !== authToken) {
+  if (!isAuthorizedRequest(request, authToken)) {
     return {
       prisma,
       viewer: null,
@@ -67,8 +73,36 @@ export async function createGraphQLContext({
 
 export function requireAuthentication(context: GraphQLContext): User {
   if (!context.viewer) {
-    throw new GraphQLError('Not authenticated');
+    throw createNotAuthenticatedError();
   }
 
   return context.viewer;
+}
+
+export function createAuthenticationPlugin(authToken: string) {
+  return {
+    onRequest({ endResponse, fetchAPI, request }: any) {
+      if (isAuthorizedRequest(request, authToken)) {
+        return;
+      }
+
+      endResponse(
+        new fetchAPI.Response(
+          JSON.stringify({
+            errors: [
+              {
+                message: NOT_AUTHENTICATED_MESSAGE,
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              'content-type': 'application/json; charset=utf-8',
+            },
+          },
+        ),
+      );
+    },
+  };
 }

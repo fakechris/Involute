@@ -8,7 +8,6 @@ import {
   DEFAULT_TEAM_NAME,
   DEFAULT_WORKFLOW_STATE_NAMES,
 } from './constants.ts';
-import { ensureIssueIdentifierAutomation } from './identifier.ts';
 
 export {
   DEFAULT_ADMIN_EMAIL,
@@ -20,8 +19,6 @@ export {
 };
 
 export async function seedDatabase(prisma: PrismaClient): Promise<void> {
-  await ensureIssueIdentifierAutomation(prisma);
-
   const team = await prisma.team.upsert({
     where: {
       key: DEFAULT_TEAM_KEY,

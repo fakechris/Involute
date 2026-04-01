@@ -5,9 +5,11 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { GraphQLError } from 'graphql';
 import { createYoga } from 'graphql-yoga';
 
-import { createGraphQLContext } from './auth.js';
+import { createAuthenticationPlugin, createGraphQLContext } from './auth.js';
+import { getExposedError } from './errors.js';
 import { createGraphQLSchema } from './schema.js';
 import { getServerEnvironment, loadServerEnvironment, type ServerEnvironment } from './environment.js';
 
@@ -49,7 +51,18 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       }),
     graphqlEndpoint: '/graphql',
     logging: false,
-    maskedErrors: false,
+    maskedErrors: {
+      maskError: (error, message) => {
+        const exposedError = getExposedError(error);
+
+        if (exposedError) {
+          return exposedError;
+        }
+
+        return new GraphQLError(message);
+      },
+    },
+    plugins: [createAuthenticationPlugin(options.authToken ?? environment.authToken)],
     schema: createGraphQLSchema(prisma),
   });
 

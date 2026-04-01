@@ -12,7 +12,10 @@ import { makeExecutableSchema } from '@graphql-tools/schema';
 import { GraphQLScalarType, Kind } from 'graphql';
 
 import { DEFAULT_WORKFLOW_STATE_ORDER } from './constants.js';
-import { requireAuthentication, type GraphQLContext } from './auth.js';
+import type { CreateIssueInput, UpdateIssueInput } from './issue-service.js';
+
+import { type GraphQLContext } from './auth.js';
+import { createIssue, updateIssue } from './issue-service.js';
 
 type TeamParent = Team & { states?: WorkflowState[] | null };
 type UserParent = User;
@@ -64,6 +67,11 @@ const typeDefs = /* GraphQL */ `
     issue(id: String!): Issue
     teams: TeamConnection!
     issueLabels: IssueLabelConnection!
+  }
+
+  type Mutation {
+    issueCreate(input: IssueCreateInput!): IssueCreatePayload!
+    issueUpdate(id: String!, input: IssueUpdateInput!): IssueUpdatePayload!
   }
 
   type Team {
@@ -133,6 +141,27 @@ const typeDefs = /* GraphQL */ `
   type CommentConnection {
     nodes: [Comment!]!
   }
+
+  input IssueCreateInput {
+    teamId: String!
+    title: String!
+    description: String
+    stateId: String
+  }
+
+  input IssueUpdateInput {
+    stateId: String
+  }
+
+  type IssueCreatePayload {
+    success: Boolean!
+    issue: Issue
+  }
+
+  type IssueUpdatePayload {
+    success: Boolean!
+    issue: Issue
+  }
 `;
 
 const resolvers = {
@@ -142,45 +171,52 @@ const resolvers = {
       _parent: unknown,
       args: { id: string },
       context: GraphQLContext,
-    ): Promise<Issue | null> => {
-      requireAuthentication(context);
-
-      return context.prisma.issue.findUnique({
+    ): Promise<Issue | null> =>
+      context.prisma.issue.findUnique({
         where: {
           id: args.id,
         },
-      });
-    },
+      }),
     teams: async (
       _parent: unknown,
       _args: Record<string, never>,
       context: GraphQLContext,
-    ): Promise<{ nodes: Team[] }> => {
-      requireAuthentication(context);
-
-      return {
-        nodes: await context.prisma.team.findMany({
-          orderBy: {
-            key: 'asc',
-          },
-        }),
-      };
-    },
+    ): Promise<{ nodes: Team[] }> => ({
+      nodes: await context.prisma.team.findMany({
+        orderBy: {
+          key: 'asc',
+        },
+      }),
+    }),
     issueLabels: async (
       _parent: unknown,
       _args: Record<string, never>,
       context: GraphQLContext,
-    ): Promise<{ nodes: IssueLabel[] }> => {
-      requireAuthentication(context);
-
-      return {
-        nodes: await context.prisma.issueLabel.findMany({
-          orderBy: {
-            name: 'asc',
-          },
-        }),
-      };
-    },
+    ): Promise<{ nodes: IssueLabel[] }> => ({
+      nodes: await context.prisma.issueLabel.findMany({
+        orderBy: {
+          name: 'asc',
+        },
+      }),
+    }),
+  },
+  Mutation: {
+    issueCreate: async (
+      _parent: unknown,
+      args: { input: CreateIssueInput },
+      context: GraphQLContext,
+    ): Promise<{ issue: Issue; success: true }> => ({
+      success: true,
+      issue: await createIssue(context.prisma, args.input),
+    }),
+    issueUpdate: async (
+      _parent: unknown,
+      args: { id: string; input: UpdateIssueInput },
+      context: GraphQLContext,
+    ): Promise<{ issue: Issue; success: true }> => ({
+      success: true,
+      issue: await updateIssue(context.prisma, args.id, args.input),
+    }),
   },
   Team: {
     states: async (
