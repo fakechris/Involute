@@ -209,6 +209,148 @@ describe('GraphQL server core', () => {
     expect(response.body.data.issueLabels.nodes.length).toBeGreaterThanOrEqual(10);
   });
 
+  it('returns issue comments in ascending createdAt order with first limits and complete fields', async () => {
+    const collaborator = await prisma.user.create({
+      data: {
+        email: 'commenter@involute.local',
+        name: 'Comment Collaborator',
+      },
+    });
+
+    const middleComment = await prisma.comment.create({
+      data: {
+        issueId: fixture.issue.id,
+        userId: collaborator.id,
+        body: 'Second seeded comment',
+        createdAt: new Date('2025-01-15T10:31:00.000Z'),
+      },
+    });
+
+    const latestComment = await prisma.comment.create({
+      data: {
+        issueId: fixture.issue.id,
+        userId: fixture.admin.id,
+        body: 'Third seeded comment',
+        createdAt: new Date('2025-01-15T10:32:00.000Z'),
+      },
+    });
+
+    const fullResponse = await postGraphQL({
+      query: `
+        query($id: String!, $first: Int!) {
+          issue(id: $id) {
+            comments(first: $first, orderBy: createdAt) {
+              nodes {
+                id
+                body
+                createdAt
+                user { id name email }
+              }
+            }
+          }
+        }
+      `,
+      variables: {
+        id: fixture.issue.id,
+        first: 10,
+      },
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(fullResponse.status).toBe(200);
+    expect(fullResponse.body.errors).toBeUndefined();
+    expect(fullResponse.body.data.issue.comments.nodes).toEqual([
+      {
+        id: fixture.comment.id,
+        body: fixture.comment.body,
+        createdAt: fixture.comment.createdAt.toISOString(),
+        user: {
+          id: fixture.admin.id,
+          name: fixture.admin.name,
+          email: fixture.admin.email,
+        },
+      },
+      {
+        id: middleComment.id,
+        body: middleComment.body,
+        createdAt: middleComment.createdAt.toISOString(),
+        user: {
+          id: collaborator.id,
+          name: collaborator.name,
+          email: collaborator.email,
+        },
+      },
+      {
+        id: latestComment.id,
+        body: latestComment.body,
+        createdAt: latestComment.createdAt.toISOString(),
+        user: {
+          id: fixture.admin.id,
+          name: fixture.admin.name,
+          email: fixture.admin.email,
+        },
+      },
+    ]);
+    expect(
+      fullResponse.body.data.issue.comments.nodes.every(
+        (comment: { createdAt: string }) =>
+          comment.createdAt === new Date(comment.createdAt).toISOString(),
+      ),
+    ).toBe(true);
+
+    const limitedResponse = await postGraphQL({
+      query: `
+        query($id: String!, $first: Int!) {
+          issue(id: $id) {
+            comments(first: $first, orderBy: createdAt) {
+              nodes {
+                id
+              }
+            }
+          }
+        }
+      `,
+      variables: {
+        id: fixture.issue.id,
+        first: 2,
+      },
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(limitedResponse.status).toBe(200);
+    expect(limitedResponse.body.errors).toBeUndefined();
+    expect(limitedResponse.body.data.issue.comments.nodes).toEqual([
+      { id: fixture.comment.id },
+      { id: middleComment.id },
+    ]);
+  });
+
+  it('returns empty comment nodes arrays for issues with no comments', async () => {
+    const response = await postGraphQL({
+      query: `
+        query($id: String!) {
+          issue(id: $id) {
+            comments(first: 5, orderBy: createdAt) {
+              nodes {
+                id
+              }
+            }
+          }
+        }
+      `,
+      variables: {
+        id: fixture.childIssue.id,
+      },
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.issue.comments).toEqual({
+      nodes: [],
+    });
+  });
+
   it('filters teams by key and returns empty nodes when no team matches', async () => {
     await createTeamWithStates(prisma, {
       key: 'OPS',

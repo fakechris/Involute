@@ -2,6 +2,7 @@ import type {
   Comment,
   Issue,
   IssueLabel,
+  Prisma,
   PrismaClient,
   Team,
   User,
@@ -42,6 +43,8 @@ interface IssueLabelFilterInput {
   name?: StringComparatorInput | null;
 }
 
+type CommentOrderByInput = 'createdAt';
+
 const workflowStateOrder = new Map<string, number>(
   DEFAULT_WORKFLOW_STATE_ORDER.map((name, index) => [name, index] as const),
 );
@@ -49,29 +52,21 @@ const workflowStateOrder = new Map<string, number>(
 const DateTimeScalar = new GraphQLScalarType({
   name: 'DateTime',
   serialize(value: unknown): string {
-    if (value instanceof Date) {
-      return value.toISOString();
-    }
-
-    if (typeof value === 'string') {
-      return new Date(value).toISOString();
-    }
-
-    throw new TypeError('DateTime values must be Date instances or ISO 8601 strings.');
+    return serializeDateTime(value);
   },
   parseValue(value: unknown): Date {
     if (typeof value !== 'string') {
       throw new TypeError('DateTime values must be provided as ISO 8601 strings.');
     }
 
-    return new Date(value);
+    return parseDateTime(value);
   },
   parseLiteral(ast): Date {
     if (ast.kind !== Kind.STRING) {
       throw new TypeError('DateTime values must be provided as ISO 8601 strings.');
     }
 
-    return new Date(ast.value);
+    return parseDateTime(ast.value);
   },
 });
 
@@ -411,16 +406,14 @@ const resolvers = {
       }),
     comments: async (
       parent: IssueParent,
-      args: { first?: number; orderBy?: 'createdAt' },
+      args: { first?: number; orderBy?: CommentOrderByInput },
       context: GraphQLContext,
     ): Promise<{ nodes: Comment[] }> => ({
       nodes: await context.prisma.comment.findMany({
         where: {
           issueId: parent.id,
         },
-        orderBy: {
-          createdAt: 'asc',
-        },
+        orderBy: buildCommentOrderBy(args.orderBy),
         ...(args.first === undefined ? {} : { take: args.first }),
       }),
     }),
@@ -469,4 +462,36 @@ function buildIssueLabelWhere(filter: IssueLabelFilterInput | null | undefined) 
   return {
     name,
   };
+}
+
+function serializeDateTime(value: unknown): string {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (typeof value === 'string') {
+    return parseDateTime(value).toISOString();
+  }
+
+  throw new TypeError('DateTime values must be Date instances or ISO 8601 strings.');
+}
+
+function parseDateTime(value: string): Date {
+  const parsedValue = new Date(value);
+
+  if (Number.isNaN(parsedValue.getTime())) {
+    throw new TypeError('DateTime values must be provided as ISO 8601 strings.');
+  }
+
+  return parsedValue;
+}
+
+function buildCommentOrderBy(
+  orderBy: CommentOrderByInput | null | undefined,
+): Prisma.CommentOrderByWithRelationInput[] {
+  if (orderBy === undefined || orderBy === null || orderBy === 'createdAt') {
+    return [{ createdAt: 'asc' }, { id: 'asc' }];
+  }
+
+  return [{ createdAt: 'asc' }, { id: 'asc' }];
 }
