@@ -61,7 +61,7 @@ describe('foundation scrutiny fixes', () => {
     findManySpy.mockRestore();
   });
 
-  it('rejects issueCreate when the provided state belongs to another team', async () => {
+  it('fails issueCreate gracefully when the provided state belongs to another team', async () => {
     const fixture = await createTwoTeamFixture(prisma);
 
     const response = await postGraphQL({
@@ -84,13 +84,14 @@ describe('foundation scrutiny fixes', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.body.data).toBeNull();
-    expect(response.body.errors?.[0]?.message).toBe(
-      'Workflow state does not belong to the specified team.',
-    );
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.issueCreate).toEqual({
+      success: false,
+      issue: null,
+    });
   });
 
-  it('rejects issueUpdate when the new state belongs to another team', async () => {
+  it('fails issueUpdate gracefully when the new state belongs to another team', async () => {
     const fixture = await createTwoTeamFixture(prisma);
 
     const issue = await prisma.issue.create({
@@ -121,10 +122,11 @@ describe('foundation scrutiny fixes', () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.body.data).toBeNull();
-    expect(response.body.errors?.[0]?.message).toBe(
-      'Workflow state does not belong to the issue team.',
-    );
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.issueUpdate).toEqual({
+      success: false,
+      issue: null,
+    });
   });
 
   it('creates TEAMKEY-N identifiers atomically without any seed-installed trigger', async () => {

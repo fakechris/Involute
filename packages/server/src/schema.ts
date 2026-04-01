@@ -13,11 +13,16 @@ import { makeExecutableSchema } from '@graphql-tools/schema';
 import { GraphQLScalarType, Kind } from 'graphql';
 
 import { DEFAULT_WORKFLOW_STATE_ORDER } from './constants.js';
-import type { CreateIssueInput, UpdateIssueInput } from './issue-service.js';
+import { getExposedError } from './errors.js';
+import type {
+  CreateCommentInput,
+  CreateIssueInput,
+  UpdateIssueInput,
+} from './issue-service.js';
 import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
 
-import { type GraphQLContext } from './auth.js';
-import { createIssue, updateIssue } from './issue-service.js';
+import { requireAuthentication, type GraphQLContext } from './auth.js';
+import { createComment, createIssue, updateIssue } from './issue-service.js';
 
 type TeamParent = Team & { states?: WorkflowState[] | null };
 type UserParent = User;
@@ -83,6 +88,7 @@ const typeDefs = /* GraphQL */ `
   type Mutation {
     issueCreate(input: IssueCreateInput!): IssueCreatePayload!
     issueUpdate(id: String!, input: IssueUpdateInput!): IssueUpdatePayload!
+    commentCreate(input: CommentCreateInput!): CommentCreatePayload!
   }
 
   type Team {
@@ -205,6 +211,16 @@ const typeDefs = /* GraphQL */ `
 
   input IssueUpdateInput {
     stateId: String
+    labelIds: [String!]
+    parentId: String
+    title: String
+    description: String
+    assigneeId: String
+  }
+
+  input CommentCreateInput {
+    issueId: String!
+    body: String!
   }
 
   type IssueCreatePayload {
@@ -215,6 +231,11 @@ const typeDefs = /* GraphQL */ `
   type IssueUpdatePayload {
     success: Boolean!
     issue: Issue
+  }
+
+  type CommentCreatePayload {
+    success: Boolean!
+    comment: Comment
   }
 `;
 
@@ -284,18 +305,32 @@ const resolvers = {
       _parent: unknown,
       args: { input: CreateIssueInput },
       context: GraphQLContext,
-    ): Promise<{ issue: Issue; success: true }> => ({
-      success: true,
-      issue: await createIssue(context.prisma, args.input),
-    }),
+    ): Promise<{ issue: Issue | null; success: boolean }> =>
+      runIssueMutation(async () => ({
+        issue: await createIssue(context.prisma, args.input),
+        success: true as const,
+      })),
     issueUpdate: async (
       _parent: unknown,
       args: { id: string; input: UpdateIssueInput },
       context: GraphQLContext,
-    ): Promise<{ issue: Issue; success: true }> => ({
-      success: true,
-      issue: await updateIssue(context.prisma, args.id, args.input),
-    }),
+    ): Promise<{ issue: Issue | null; success: boolean }> =>
+      runIssueMutation(async () => ({
+        issue: await updateIssue(context.prisma, args.id, args.input),
+        success: true as const,
+      })),
+    commentCreate: async (
+      _parent: unknown,
+      args: { input: CreateCommentInput },
+      context: GraphQLContext,
+    ): Promise<{ comment: Comment | null; success: boolean }> => {
+      const viewer = requireAuthentication(context);
+
+      return runCommentMutation(async () => ({
+        comment: await createComment(context.prisma, args.input, viewer.id),
+        success: true as const,
+      }));
+    },
   },
   Team: {
     states: async (
@@ -494,4 +529,38 @@ function buildCommentOrderBy(
   }
 
   return [{ createdAt: 'asc' }, { id: 'asc' }];
+}
+
+async function runIssueMutation<TResult extends { issue: Issue; success: true }>(
+  operation: () => Promise<TResult>,
+): Promise<TResult | { issue: null; success: false }> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (getExposedError(error)) {
+      return {
+        issue: null,
+        success: false,
+      };
+    }
+
+    throw error;
+  }
+}
+
+async function runCommentMutation<TResult extends { comment: Comment; success: true }>(
+  operation: () => Promise<TResult>,
+): Promise<TResult | { comment: null; success: false }> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (getExposedError(error)) {
+      return {
+        comment: null,
+        success: false,
+      };
+    }
+
+    throw error;
+  }
 }

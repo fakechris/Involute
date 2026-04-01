@@ -1,10 +1,15 @@
-import type { Issue, PrismaClient, WorkflowState } from '@prisma/client';
+import type { Comment, Issue, Prisma, PrismaClient, WorkflowState } from '@prisma/client';
 
 import { DEFAULT_WORKFLOW_STATE_ORDER } from './constants.js';
 import {
+  ASSIGNEE_NOT_FOUND_MESSAGE,
   createNotFoundError,
   createValidationError,
+  ISSUE_LABEL_NOT_FOUND_MESSAGE,
   ISSUE_NOT_FOUND_MESSAGE,
+  PARENT_ISSUE_NOT_FOUND_MESSAGE,
+  PARENT_ISSUE_SELF_REFERENCE_MESSAGE,
+  PARENT_ISSUE_TEAM_MISMATCH_MESSAGE,
   TEAM_HAS_NO_WORKFLOW_STATES_MESSAGE,
   TEAM_NOT_FOUND_MESSAGE,
   WORKFLOW_STATE_NOT_FOUND_MESSAGE,
@@ -20,7 +25,17 @@ export interface CreateIssueInput {
 }
 
 export interface UpdateIssueInput {
+  assigneeId?: string | null;
+  description?: string | null;
+  labelIds?: string[] | null;
+  parentId?: string | null;
   stateId?: string | null;
+  title?: string | null;
+}
+
+export interface CreateCommentInput {
+  body: string;
+  issueId: string;
 }
 
 type WorkflowStateSelection = Pick<WorkflowState, 'id' | 'name' | 'teamId'>;
@@ -81,52 +96,185 @@ export async function updateIssue(
   id: string,
   input: UpdateIssueInput,
 ): Promise<Issue> {
-  const existingIssue = await prisma.issue.findUnique({
-    where: {
-      id,
-    },
-    select: {
-      id: true,
-      teamId: true,
-    },
-  });
-
-  if (!existingIssue) {
-    throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
-  }
-
-  if (input.stateId === undefined || input.stateId === null) {
-    return prisma.issue.findUniqueOrThrow({
+  return prisma.$transaction(async (transaction) => {
+    const existingIssue = await transaction.issue.findUnique({
       where: {
         id,
       },
+      select: {
+        id: true,
+        teamId: true,
+      },
     });
-  }
 
-  const state = await prisma.workflowState.findUnique({
+    if (!existingIssue) {
+      throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+    }
+
+    const data: Prisma.IssueUpdateInput = {};
+
+    if (hasOwnProperty(input, 'stateId') && input.stateId) {
+      const state = await transaction.workflowState.findUnique({
+        where: {
+          id: input.stateId,
+        },
+        select: {
+          id: true,
+          teamId: true,
+        },
+      });
+
+      if (!state) {
+        throw createNotFoundError(WORKFLOW_STATE_NOT_FOUND_MESSAGE);
+      }
+
+      if (state.teamId !== existingIssue.teamId) {
+        throw createValidationError(WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE);
+      }
+
+      data.state = {
+        connect: {
+          id: state.id,
+        },
+      };
+    }
+
+    if (hasOwnProperty(input, 'title') && input.title !== undefined && input.title !== null) {
+      data.title = input.title;
+    }
+
+    if (hasOwnProperty(input, 'description')) {
+      data.description = input.description ?? null;
+    }
+
+    if (hasOwnProperty(input, 'assigneeId')) {
+      if (input.assigneeId === null) {
+        data.assignee = {
+          disconnect: true,
+        };
+      } else if (input.assigneeId !== undefined) {
+        const assignee = await transaction.user.findUnique({
+          where: {
+            id: input.assigneeId,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        if (!assignee) {
+          throw createNotFoundError(ASSIGNEE_NOT_FOUND_MESSAGE);
+        }
+
+        data.assignee = {
+          connect: {
+            id: assignee.id,
+          },
+        };
+      }
+    }
+
+    if (hasOwnProperty(input, 'labelIds') && input.labelIds !== null && input.labelIds !== undefined) {
+      const labelIds = [...new Set(input.labelIds)];
+
+      if (labelIds.length > 0) {
+        const labels = await transaction.issueLabel.findMany({
+          where: {
+            id: {
+              in: labelIds,
+            },
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        if (labels.length !== labelIds.length) {
+          throw createNotFoundError(ISSUE_LABEL_NOT_FOUND_MESSAGE);
+        }
+      }
+
+      data.labels = {
+        set: labelIds.map((labelId) => ({ id: labelId })),
+      };
+    }
+
+    if (hasOwnProperty(input, 'parentId')) {
+      if (input.parentId === null) {
+        data.parent = {
+          disconnect: true,
+        };
+      } else if (input.parentId !== undefined) {
+        if (input.parentId === id) {
+          throw createValidationError(PARENT_ISSUE_SELF_REFERENCE_MESSAGE);
+        }
+
+        const parentIssue = await transaction.issue.findUnique({
+          where: {
+            id: input.parentId,
+          },
+          select: {
+            id: true,
+            teamId: true,
+          },
+        });
+
+        if (!parentIssue) {
+          throw createNotFoundError(PARENT_ISSUE_NOT_FOUND_MESSAGE);
+        }
+
+        if (parentIssue.teamId !== existingIssue.teamId) {
+          throw createValidationError(PARENT_ISSUE_TEAM_MISMATCH_MESSAGE);
+        }
+
+        data.parent = {
+          connect: {
+            id: parentIssue.id,
+          },
+        };
+      }
+    }
+
+    if (Object.keys(data).length === 0) {
+      return transaction.issue.findUniqueOrThrow({
+        where: {
+          id,
+        },
+      });
+    }
+
+    return transaction.issue.update({
+      where: {
+        id,
+      },
+      data,
+    });
+  });
+}
+
+export async function createComment(
+  prisma: PrismaClient,
+  input: CreateCommentInput,
+  userId: string,
+): Promise<Comment> {
+  const issue = await prisma.issue.findUnique({
     where: {
-      id: input.stateId,
+      id: input.issueId,
     },
     select: {
       id: true,
-      teamId: true,
     },
   });
 
-  if (!state) {
-    throw createNotFoundError(WORKFLOW_STATE_NOT_FOUND_MESSAGE);
+  if (!issue) {
+    throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
   }
 
-  if (state.teamId !== existingIssue.teamId) {
-    throw createValidationError(WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE);
-  }
-
-  return prisma.issue.update({
-    where: {
-      id,
-    },
+  return prisma.comment.create({
     data: {
-      stateId: state.id,
+      body: input.body,
+      issueId: input.issueId,
+      userId,
     },
   });
 }
@@ -190,4 +338,11 @@ function orderWorkflowStates(states: WorkflowStateSelection[]): WorkflowStateSel
 
     return left.name.localeCompare(right.name);
   });
+}
+
+function hasOwnProperty<K extends PropertyKey>(
+  value: object,
+  key: K,
+): value is object & Record<K, unknown> {
+  return Object.prototype.hasOwnProperty.call(value, key);
 }

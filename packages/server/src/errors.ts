@@ -4,6 +4,12 @@ export const NOT_AUTHENTICATED_MESSAGE = 'Not authenticated';
 export const TEAM_NOT_FOUND_MESSAGE = 'Team not found.';
 export const ISSUE_NOT_FOUND_MESSAGE = 'Issue not found.';
 export const WORKFLOW_STATE_NOT_FOUND_MESSAGE = 'Workflow state not found.';
+export const ISSUE_LABEL_NOT_FOUND_MESSAGE = 'One or more issue labels were not found.';
+export const ASSIGNEE_NOT_FOUND_MESSAGE = 'Assignee not found.';
+export const PARENT_ISSUE_NOT_FOUND_MESSAGE = 'Parent issue not found.';
+export const PARENT_ISSUE_TEAM_MISMATCH_MESSAGE =
+  'Parent issue does not belong to the issue team.';
+export const PARENT_ISSUE_SELF_REFERENCE_MESSAGE = 'Issue cannot be its own parent.';
 export const WORKFLOW_STATE_TEAM_CREATE_MISMATCH_MESSAGE =
   'Workflow state does not belong to the specified team.';
 export const WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE =
@@ -16,6 +22,11 @@ const exposedErrorCodes = new Map<string, string>([
   [TEAM_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ISSUE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [WORKFLOW_STATE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [ISSUE_LABEL_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [ASSIGNEE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [PARENT_ISSUE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [PARENT_ISSUE_TEAM_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
+  [PARENT_ISSUE_SELF_REFERENCE_MESSAGE, 'BAD_USER_INPUT'],
   [WORKFLOW_STATE_TEAM_CREATE_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
   [WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
   [TEAM_HAS_NO_WORKFLOW_STATES_MESSAGE, 'BAD_USER_INPUT'],
