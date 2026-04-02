@@ -254,19 +254,20 @@ describe.runIf(hasDatabaseUrl)('verify command — integration', () => {
   it('reports all entity types as passed after successful import', async () => {
     const result = await runVerify({ file: exportDir });
 
+    expect(result.allPassed).toBe(true);
+    expect(result.entities.length).toBeGreaterThanOrEqual(5);
+
+    for (const entity of result.entities) {
+      expect(entity.passed).toBe(true);
+    }
+
     const comments = result.entities.find((entity) => entity.entity === 'Comments');
     expect(comments).toBeDefined();
     expect(comments).toMatchObject({
-      passed: false,
-      dbCount: 0,
-      details: '1 mapped comments have mismatched timestamps',
+      passed: true,
+      dbCount: 1,
+      exportCount: 1,
     });
-    expect(result.allPassed).toBe(false);
-    expect(result.entities.length).toBeGreaterThanOrEqual(5);
-
-    for (const entity of result.entities.filter((entity) => entity.entity !== 'Comments')) {
-      expect(entity.passed).toBe(true);
-    }
   });
 
   it('treats comment updatedAt normalized to the owning issue updatedAt as a valid import result', async () => {
