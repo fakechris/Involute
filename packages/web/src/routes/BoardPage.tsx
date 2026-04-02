@@ -8,11 +8,13 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { useMutation, useQuery } from '@apollo/client/react';
-import { useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
 import {
   BOARD_PAGE_QUERY,
   COMMENT_CREATE_MUTATION,
+  ISSUE_CREATE_MUTATION,
   ISSUE_UPDATE_MUTATION,
 } from '../board/queries';
 import type {
@@ -20,6 +22,8 @@ import type {
   BoardPageQueryVariables,
   CommentCreateMutationData,
   CommentCreateMutationVariables,
+  IssueCreateMutationData,
+  IssueCreateMutationVariables,
   IssueSummary,
   IssueUpdateMutationData,
   IssueUpdateMutationVariables,
@@ -34,11 +38,13 @@ import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { Column } from '../components/Column';
 import { IssueCard } from '../components/IssueCard';
 import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
+import { BacklogPage } from './BacklogPage';
 
 const ISSUE_LIMIT = 200;
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
 
 export function BoardPage() {
+  const location = useLocation();
   const { data, error, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(
     BOARD_PAGE_QUERY,
     {
@@ -49,6 +55,9 @@ export function BoardPage() {
   );
   const [runIssueUpdate] = useMutation<IssueUpdateMutationData, IssueUpdateMutationVariables>(
     ISSUE_UPDATE_MUTATION,
+  );
+  const [runIssueCreate] = useMutation<IssueCreateMutationData, IssueCreateMutationVariables>(
+    ISSUE_CREATE_MUTATION,
   );
   const [runCommentCreate] = useMutation<CommentCreateMutationData, CommentCreateMutationVariables>(
     COMMENT_CREATE_MUTATION,
@@ -62,6 +71,9 @@ export function BoardPage() {
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [isSavingState, setIsSavingState] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createTitle, setCreateTitle] = useState('');
+  const [createDescription, setCreateDescription] = useState('');
 
   useEffect(() => {
     if (!selectedTeamKey) {
@@ -238,6 +250,46 @@ export function BoardPage() {
     }
   }
 
+  async function handleCreateIssueSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextTitle = createTitle.trim();
+
+    if (!selectedTeam || !nextTitle) {
+      return;
+    }
+
+    setMutationError(null);
+    setIsSavingState(true);
+
+    try {
+      const trimmedDescription = createDescription.trim();
+      const result = await runIssueCreate({
+        variables: {
+          input: {
+            teamId: selectedTeam.id,
+            title: nextTitle,
+            ...(trimmedDescription ? { description: trimmedDescription } : {}),
+          },
+        },
+      });
+
+      if (!result.data?.issueCreate.success || !result.data.issueCreate.issue) {
+        throw new Error('Create issue mutation failed');
+      }
+
+      setLocalIssues((currentIssues) => [result.data!.issueCreate.issue!, ...currentIssues]);
+      setSelectedIssueId(result.data.issueCreate.issue.id);
+      setCreateTitle('');
+      setCreateDescription('');
+      setIsCreateOpen(false);
+    } catch {
+      setMutationError('We could not create the issue. Please try again.');
+    } finally {
+      setIsSavingState(false);
+    }
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     setActiveIssueId(null);
 
@@ -280,6 +332,86 @@ export function BoardPage() {
     );
   }
 
+  const createIssueDialog = isCreateOpen ? (
+    <aside className="issue-drawer" aria-label="Create issue drawer" aria-modal="true" role="dialog">
+      <button
+        type="button"
+        className="issue-drawer__backdrop"
+        aria-label="Close create issue drawer"
+        onClick={() => setIsCreateOpen(false)}
+      />
+      <section className="issue-drawer__panel">
+        <div className="issue-drawer__header">
+          <div>
+            <p className="app-shell__eyebrow">Involute</p>
+            <h2>Create issue</h2>
+          </div>
+          <button type="button" className="issue-drawer__close" onClick={() => setIsCreateOpen(false)}>
+            Close
+          </button>
+        </div>
+
+        <form className="issue-comment-composer" onSubmit={(event) => void handleCreateIssueSubmit(event)}>
+          <div className="issue-drawer__section">
+            <label className="issue-drawer__label" htmlFor="create-issue-title">
+              Title
+            </label>
+            <input
+              id="create-issue-title"
+              aria-label="Issue title"
+              className="issue-drawer__title-input"
+              value={createTitle}
+              disabled={isSavingState}
+              onChange={(event) => setCreateTitle(event.target.value)}
+            />
+          </div>
+
+          <div className="issue-drawer__section">
+            <label className="issue-drawer__label" htmlFor="create-issue-description">
+              Description
+            </label>
+            <textarea
+              id="create-issue-description"
+              aria-label="Issue description"
+              className="issue-drawer__textarea"
+              value={createDescription}
+              disabled={isSavingState}
+              onChange={(event) => setCreateDescription(event.target.value)}
+            />
+          </div>
+
+          {teams.length > 1 ? (
+            <div className="issue-drawer__section">
+              <label className="team-selector">
+                <span>Team</span>
+                <select
+                  aria-label="Select team"
+                  value={selectedTeam?.key ?? ''}
+                  disabled={isSavingState}
+                  onChange={(event) => setSelectedTeamKey(event.target.value)}
+                >
+                  {teams.map((team) => (
+                    <option key={team.id} value={team.key}>
+                      {team.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          ) : null}
+
+          <button
+            type="submit"
+            className="issue-comment-composer__submit"
+            disabled={isSavingState || !createTitle.trim() || !selectedTeam}
+          >
+            Create issue
+          </button>
+        </form>
+      </section>
+    </aside>
+  ) : null;
+
   return (
     <main className="board-page">
       <header className="app-shell__header">
@@ -292,6 +424,18 @@ export function BoardPage() {
         </div>
 
         <div className="board-page__controls">
+          <button
+            type="button"
+            className="issue-comment-composer__submit"
+            onClick={() => {
+              setCreateTitle('');
+              setCreateDescription('');
+              setMutationError(null);
+              setIsCreateOpen(true);
+            }}
+          >
+            Create issue
+          </button>
           {teams.length > 1 ? (
             <label className="team-selector">
               <span>Team</span>
@@ -326,6 +470,17 @@ export function BoardPage() {
         <section className="board-message" aria-live="polite">
           Loading board…
         </section>
+      ) : location.pathname === '/backlog' ? (
+        <BacklogPage
+          issues={visibleIssues}
+          selectedTeam={selectedTeam}
+          selectedTeamKey={selectedTeamKey}
+          onTeamChange={setSelectedTeamKey}
+          onSelectIssue={(issue) => {
+            setMutationError(null);
+            setSelectedIssueId(issue.id);
+          }}
+        />
       ) : (
         <DndContext
           sensors={sensors}
@@ -373,6 +528,7 @@ export function BoardPage() {
         onAssigneeChange={persistAssigneeChange}
         onCommentCreate={persistCommentCreate}
       />
+      {createIssueDialog}
     </main>
   );
 }

@@ -7,6 +7,7 @@ import { getAuthToken } from './lib/apollo';
 import type {
   BoardPageQueryData,
   CommentCreateMutationData,
+  IssueCreateMutationData,
   IssueSummary,
   IssueUpdateMutationData,
 } from './board/types';
@@ -148,7 +149,7 @@ function renderApp(queryState: {
 } = {
   data: boardQueryResult,
   loading: false,
-}) {
+}, initialEntries: string[] = ['/']) {
   apolloMocks.useQuery.mockReturnValue({
     data: queryState.data,
     error: queryState.error,
@@ -156,7 +157,7 @@ function renderApp(queryState: {
   });
 
   return render(
-    <MemoryRouter initialEntries={['/']}>
+    <MemoryRouter initialEntries={initialEntries}>
       <App />
     </MemoryRouter>,
   );
@@ -752,5 +753,106 @@ describe('App', () => {
     });
 
     expect(within(drawer).getByLabelText('Comment body')).toHaveValue('');
+  });
+
+  it('navigates between board and backlog via header links', async () => {
+    renderApp({ data: boardQueryResult, loading: false }, ['/']);
+
+    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Backlog' }));
+
+    expect(await screen.findByRole('heading', { name: 'Backlog' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Identifier' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Board' }));
+
+    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+  });
+
+  it('renders backlog list rows and opens issue details from the table', async () => {
+    renderApp({ data: boardQueryResult, loading: false }, ['/backlog']);
+
+    expect(await screen.findByRole('heading', { name: 'Backlog' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'INV-1' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'Backlog' })).toBeInTheDocument();
+    expect(screen.getByText('task')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Backlog item' }));
+
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+    expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Backlog item');
+  });
+
+  it('creates an issue from the board UI and shows it in the backlog column', async () => {
+    const createIssue = vi.fn().mockResolvedValue({
+      data: {
+        issueCreate: {
+          success: true,
+          issue: {
+            id: 'issue-3',
+            identifier: 'INV-3',
+            title: 'Created issue',
+            description: 'Created description',
+            createdAt: '2026-04-02T13:00:00.000Z',
+            updatedAt: '2026-04-02T13:00:00.000Z',
+            state: { id: 'state-backlog', name: 'Backlog' },
+            team: { id: 'team-1', key: 'INV' },
+            labels: { nodes: [] },
+            assignee: null,
+            children: { nodes: [] },
+            parent: null,
+            comments: { nodes: [] },
+          },
+        },
+      } satisfies IssueCreateMutationData,
+    });
+
+    apolloMocks.useMutation.mockImplementation((document) => {
+      const source =
+        typeof document === 'string'
+          ? document
+          : 'loc' in document && document.loc?.source.body
+            ? document.loc.source.body
+            : String(document);
+
+      if (source.includes('mutation IssueCreate')) {
+        return [createIssue];
+      }
+
+      if (source.includes('mutation CommentCreate')) {
+        return [vi.fn().mockResolvedValue({ data: { commentCreate: { success: true, comment: null } } })];
+      }
+
+      return [vi.fn()];
+    });
+
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create issue' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Create issue drawer' });
+    fireEvent.change(within(dialog).getByLabelText('Issue title'), {
+      target: { value: 'Created issue' },
+    });
+    fireEvent.change(within(dialog).getByLabelText('Issue description'), {
+      target: { value: 'Created description' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create issue' }));
+
+    await waitFor(() =>
+      expect(createIssue).toHaveBeenCalledWith({
+        variables: {
+          input: {
+            teamId: 'team-1',
+            title: 'Created issue',
+            description: 'Created description',
+          },
+        },
+      }),
+    );
+
+    expect(await within(screen.getByTestId('column-Backlog')).findByText('INV-3')).toBeInTheDocument();
+    expect(screen.getByText('Created issue')).toBeInTheDocument();
   });
 });

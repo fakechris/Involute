@@ -141,3 +141,62 @@ export const COMMENT_CREATE_MUTATION = gql`
     }
   }
 `;
+
+export const ISSUE_CREATE_MUTATION = gql`
+  mutation IssueCreate($input: IssueCreateInput!) {
+    issueCreate(input: $input) {
+      success
+      issue {
+        id
+        identifier
+        title
+        description
+        createdAt
+        updatedAt
+        state {
+          id
+          name
+        }
+        team {
+          id
+          key
+        }
+        labels {
+          nodes {
+            id
+            name
+          }
+        }
+        assignee {
+          id
+          name
+          email
+        }
+        children {
+          nodes {
+            id
+            identifier
+            title
+          }
+        }
+        parent {
+          id
+          identifier
+          title
+        }
+        comments(first: 100, orderBy: createdAt) {
+          nodes {
+            id
+            body
+            createdAt
+            user {
+              id
+              name
+              email
+            }
+          }
+        }
+      }
+    }
+  }
+`;

@@ -1,6 +1,5 @@
 import { NavLink, Route, Routes } from 'react-router-dom';
 
-import { BacklogPage } from './routes/BacklogPage';
 import { BoardPage } from './routes/BoardPage';
 import { IssuePage } from './routes/IssuePage';
 
@@ -27,7 +26,7 @@ export function App() {
       <div className="app-shell__content">
         <Routes>
           <Route path="/" element={<BoardPage />} />
-          <Route path="/backlog" element={<BacklogPage />} />
+          <Route path="/backlog" element={<BoardPage />} />
           <Route path="/issue/:id" element={<IssuePage />} />
         </Routes>
       </div>

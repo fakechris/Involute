@@ -123,6 +123,51 @@ select {
   gap: 1rem;
 }
 
+.backlog-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.backlog-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 1rem;
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.backlog-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.backlog-table th,
+.backlog-table td {
+  padding: 0.9rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.backlog-table th {
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.backlog-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.backlog-table__issue-link {
+  border: 0;
+  background: transparent;
+  color: #bfdbfe;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
 .team-selector {
   display: flex;
   min-width: 11rem;

@@ -82,6 +82,21 @@ export interface BoardPageQueryVariables {
   first: number;
 }
 
+export interface IssueCreateMutationData {
+  issueCreate: {
+    success: boolean;
+    issue: IssueSummary | null;
+  };
+}
+
+export interface IssueCreateMutationVariables {
+  input: {
+    teamId: string;
+    title: string;
+    description?: string | null;
+  };
+}
+
 export interface IssueUpdateMutationData {
   issueUpdate: {
     success: boolean;
