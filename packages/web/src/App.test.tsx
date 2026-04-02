@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
-import { getAuthToken, getAuthTokenDetails } from './lib/apollo';
+import { getAuthToken, getAuthTokenDetails, getGraphqlUrl, getGraphqlUrlDetails } from './lib/apollo';
 import { getDropTargetStateId, mergeIssueWithPreservedComments } from './routes/BoardPage';
 import type {
   BoardPageQueryData,
@@ -66,6 +66,7 @@ beforeEach(() => {
 afterEach(() => {
   document.body.innerHTML = '';
   window.localStorage.clear();
+  window.history.replaceState({}, '', '/');
 });
 
 const boardQueryResult: BoardPageQueryData = {
@@ -261,6 +262,35 @@ describe('App', () => {
     expect(getAuthTokenDetails()).toEqual({
       token: 'changeme-set-your-token',
       source: 'dev-default',
+    });
+  });
+
+  it('uses the runtime API URL override from the query param and persists it for the browser session', () => {
+    window.history.replaceState({}, '', '/?involuteApiUrl=http%3A%2F%2F127.0.0.1%3A9%2Fgraphql');
+
+    expect(getGraphqlUrl()).toBe('http://127.0.0.1:9/graphql');
+    expect(getGraphqlUrlDetails()).toEqual({
+      url: 'http://127.0.0.1:9/graphql',
+      source: 'query-param',
+    });
+    expect(window.localStorage.getItem('involute.graphqlUrl')).toBe('http://127.0.0.1:9/graphql');
+  });
+
+  it('uses the runtime API URL override from localStorage when present', () => {
+    window.localStorage.setItem('involute.graphqlUrl', 'http://127.0.0.1:19/graphql');
+
+    expect(getGraphqlUrl()).toBe('http://127.0.0.1:19/graphql');
+    expect(getGraphqlUrlDetails()).toEqual({
+      url: 'http://127.0.0.1:19/graphql',
+      source: 'localStorage',
+    });
+  });
+
+  it('keeps the normal env/default API URL path when no runtime override is set', () => {
+    expect(getGraphqlUrl()).toBe('http://localhost:4200/graphql');
+    expect(getGraphqlUrlDetails()).toEqual({
+      url: 'http://localhost:4200/graphql',
+      source: 'default',
     });
   });
 
