@@ -42,6 +42,25 @@ interface ScopedEntityVerificationStats {
   dbCount: number;
 }
 
+interface ExportedIssueForVerify {
+  id: string;
+  identifier: string;
+  updatedAt?: string;
+  parent: { id: string } | null;
+}
+
+interface ExportedCommentForVerify {
+  id: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  user: { id: string } | null;
+}
+
+function isWithinOneSecond(actual: Date, expected: string): boolean {
+  return Math.abs(actual.getTime() - new Date(expected).getTime()) < 1_000;
+}
+
 /**
  * Load project environment variables (DATABASE_URL etc.) from the repo root .env.
  */
@@ -113,8 +132,43 @@ async function verifyComments(
   prisma: InstanceType<(typeof import('@prisma/client'))['PrismaClient']>,
   exportDir: string,
 ): Promise<EntityVerification> {
-  const exportCommentIds = await collectExportCommentIds(exportDir);
-  const exportCommentCount = exportCommentIds.length;
+  const issuesFile = join(exportDir, 'issues.json');
+  const issuesFileExists = await fileExists(issuesFile);
+
+  if (!issuesFileExists) {
+    return {
+      entity: 'Comments',
+      exportCount: 0,
+      dbCount: 0,
+      passed: true,
+    };
+  }
+
+  const exportIssues = await readJsonFile<ExportedIssueForVerify[]>(issuesFile);
+  const exportCommentsByIssueId = new Map<string, ExportedCommentForVerify[]>();
+  const allExportComments: Array<{ issueId: string; comment: ExportedCommentForVerify; issueUpdatedAt: string }> = [];
+
+  if (exportIssues.length > 0) {
+    const commentsDir = join(exportDir, 'comments');
+
+    for (const issue of exportIssues) {
+      const commentsFile = join(commentsDir, `${issue.id}.json`);
+      const exists = await fileExists(commentsFile);
+
+      if (!exists) {
+        continue;
+      }
+
+      const comments = await readJsonFile<ExportedCommentForVerify[]>(commentsFile);
+      exportCommentsByIssueId.set(issue.id, comments);
+
+      for (const comment of comments) {
+        allExportComments.push({ issueId: issue.id, comment, issueUpdatedAt: issue.updatedAt ?? comment.updatedAt });
+      }
+    }
+  }
+
+  const exportCommentCount = allExportComments.length;
 
   if (exportCommentCount === 0) {
     return {
@@ -128,26 +182,122 @@ async function verifyComments(
   const commentMappings = await prisma.legacyLinearMapping.findMany({
     where: {
       entityType: 'comment',
-      oldId: { in: exportCommentIds },
+      oldId: { in: allExportComments.map(({ comment }) => comment.id) },
     },
   });
 
-  const mappedNewIds = commentMappings.map((mapping) => mapping.newId);
-  const dbCommentCount = mappedNewIds.length === 0
-    ? 0
-    : await prisma.comment.count({
-        where: { id: { in: mappedNewIds } },
+  const issueMappings = await prisma.legacyLinearMapping.findMany({
+    where: {
+      entityType: 'issue',
+      oldId: { in: exportIssues.map((issue) => issue.id) },
+    },
+  });
+
+  const userIds = allExportComments
+    .map(({ comment }) => comment.user?.id)
+    .filter((userId): userId is string => typeof userId === 'string');
+  const userMappings = userIds.length === 0
+    ? []
+    : await prisma.legacyLinearMapping.findMany({
+        where: {
+          entityType: 'user',
+          oldId: { in: userIds },
+        },
       });
+
+  const issueIdByOldId = new Map(issueMappings.map((mapping) => [mapping.oldId, mapping.newId]));
+  const userIdByOldId = new Map(userMappings.map((mapping) => [mapping.oldId, mapping.newId]));
+  const commentMappingByOldId = new Map(commentMappings.map((mapping) => [mapping.oldId, mapping]));
+  const mappedNewIds = commentMappings.map((mapping) => mapping.newId);
+
+  const dbComments = mappedNewIds.length === 0
+    ? []
+    : await prisma.comment.findMany({
+        where: { id: { in: mappedNewIds } },
+        select: {
+          id: true,
+          body: true,
+          createdAt: true,
+          updatedAt: true,
+          issueId: true,
+          userId: true,
+        },
+      });
+  const dbCommentById = new Map(dbComments.map((comment) => [comment.id, comment]));
 
   const stats: CommentVerificationStats = {
     exportCount: exportCommentCount,
     mappedCount: commentMappings.length,
-    dbCount: dbCommentCount,
+    dbCount: 0,
   };
 
-  const missingMappings = stats.exportCount - stats.mappedCount;
-  const missingDatabaseRows = stats.mappedCount - stats.dbCount;
-  const passed = missingMappings === 0 && missingDatabaseRows === 0;
+  let missingMappings = 0;
+  let missingDatabaseRows = 0;
+  let contentMismatches = 0;
+  let timestampMismatches = 0;
+  let issueLinkMismatches = 0;
+  let authorMismatches = 0;
+
+  for (const { issueId, comment, issueUpdatedAt } of allExportComments) {
+    const mapping = commentMappingByOldId.get(comment.id);
+
+    if (!mapping) {
+      missingMappings += 1;
+      continue;
+    }
+
+    const dbComment = dbCommentById.get(mapping.newId);
+
+    if (!dbComment) {
+      missingDatabaseRows += 1;
+      continue;
+    }
+
+    const expectedIssueId = issueIdByOldId.get(issueId);
+    const expectedUserId = comment.user ? userIdByOldId.get(comment.user.id) : undefined;
+    let matches = true;
+
+    if (dbComment.body !== comment.body) {
+      contentMismatches += 1;
+      matches = false;
+    }
+
+    const createdAtMatches = isWithinOneSecond(dbComment.createdAt, comment.createdAt);
+    const updatedAtMatches =
+      isWithinOneSecond(dbComment.updatedAt, comment.updatedAt) ||
+      isWithinOneSecond(dbComment.updatedAt, comment.createdAt) ||
+      isWithinOneSecond(dbComment.updatedAt, issueUpdatedAt) ||
+      dbComment.updatedAt.getTime() >= dbComment.createdAt.getTime();
+
+    if (!createdAtMatches || !updatedAtMatches) {
+      timestampMismatches += 1;
+      matches = false;
+    }
+
+    if (!expectedIssueId || dbComment.issueId !== expectedIssueId) {
+      issueLinkMismatches += 1;
+      matches = false;
+    }
+
+    if (comment.user) {
+      if (!expectedUserId || dbComment.userId !== expectedUserId) {
+        authorMismatches += 1;
+        matches = false;
+      }
+    }
+
+    if (matches) {
+      stats.dbCount += 1;
+    }
+  }
+
+  const passed =
+    missingMappings === 0 &&
+    missingDatabaseRows === 0 &&
+    contentMismatches === 0 &&
+    timestampMismatches === 0 &&
+    issueLinkMismatches === 0 &&
+    authorMismatches === 0;
 
   if (passed) {
     return {
@@ -168,10 +318,139 @@ async function verifyComments(
     details.push(`${String(missingDatabaseRows)} mapped comments missing from database`);
   }
 
+  if (contentMismatches > 0) {
+    details.push(`${String(contentMismatches)} mapped comments have mismatched body content`);
+  }
+
+  if (timestampMismatches > 0) {
+    details.push(`${String(timestampMismatches)} mapped comments have mismatched timestamps`);
+  }
+
+  if (issueLinkMismatches > 0) {
+    details.push(`${String(issueLinkMismatches)} mapped comments reference the wrong imported issue`);
+  }
+
+  if (authorMismatches > 0) {
+    details.push(`${String(authorMismatches)} mapped comments reference the wrong imported author`);
+  }
+
   return {
     entity: 'Comments',
     exportCount: stats.exportCount,
     dbCount: stats.dbCount,
+    passed: false,
+    details: details.join('; '),
+  };
+}
+
+async function verifyIssues(
+  prisma: InstanceType<(typeof import('@prisma/client'))['PrismaClient']>,
+  exportIssues: ExportedIssueForVerify[],
+): Promise<EntityVerification> {
+  if (exportIssues.length === 0) {
+    return {
+      entity: 'Issues',
+      exportCount: 0,
+      dbCount: 0,
+      passed: true,
+    };
+  }
+
+  const issueMappings = await prisma.legacyLinearMapping.findMany({
+    where: {
+      entityType: 'issue',
+      oldId: { in: exportIssues.map((issue) => issue.id) },
+    },
+  });
+
+  const issueMappingByOldId = new Map(issueMappings.map((mapping) => [mapping.oldId, mapping]));
+  const mappedIssueIds = issueMappings.map((mapping) => mapping.newId);
+  const dbIssues = mappedIssueIds.length === 0
+    ? []
+    : await prisma.issue.findMany({
+        where: { id: { in: mappedIssueIds } },
+        select: { id: true, identifier: true, parentId: true },
+      });
+  const dbIssueById = new Map(dbIssues.map((issue) => [issue.id, issue]));
+  const expectedIssueIdByOldId = new Map(issueMappings.map((mapping) => [mapping.oldId, mapping.newId]));
+
+  let missingMappings = 0;
+  let missingDatabaseRows = 0;
+  let identifierMismatches = 0;
+  let relationshipMismatches = 0;
+  let validCount = 0;
+
+  for (const exportIssue of exportIssues) {
+    const mapping = issueMappingByOldId.get(exportIssue.id);
+
+    if (!mapping) {
+      missingMappings += 1;
+      continue;
+    }
+
+    const dbIssue = dbIssueById.get(mapping.newId);
+
+    if (!dbIssue) {
+      missingDatabaseRows += 1;
+      continue;
+    }
+
+    let matches = true;
+
+    if (dbIssue.identifier !== exportIssue.identifier) {
+      identifierMismatches += 1;
+      matches = false;
+    }
+
+    const expectedParentId = exportIssue.parent ? expectedIssueIdByOldId.get(exportIssue.parent.id) : null;
+
+    if ((expectedParentId ?? null) !== (dbIssue.parentId ?? null)) {
+      relationshipMismatches += 1;
+      matches = false;
+    }
+
+    if (matches) {
+      validCount += 1;
+    }
+  }
+
+  const passed =
+    missingMappings === 0 &&
+    missingDatabaseRows === 0 &&
+    identifierMismatches === 0 &&
+    relationshipMismatches === 0;
+
+  if (passed) {
+    return {
+      entity: 'Issues',
+      exportCount: exportIssues.length,
+      dbCount: validCount,
+      passed: true,
+    };
+  }
+
+  const details: string[] = [];
+
+  if (missingMappings > 0) {
+    details.push(`${String(missingMappings)} export issues have no import mapping`);
+  }
+
+  if (missingDatabaseRows > 0) {
+    details.push(`${String(missingDatabaseRows)} mapped issues missing from database`);
+  }
+
+  if (identifierMismatches > 0) {
+    details.push(`${String(identifierMismatches)} mapped issues have mismatched identifiers`);
+  }
+
+  if (relationshipMismatches > 0) {
+    details.push(`${String(relationshipMismatches)} mapped issues have mismatched parent relationships`);
+  }
+
+  return {
+    entity: 'Issues',
+    exportCount: exportIssues.length,
+    dbCount: validCount,
     passed: false,
     details: details.join('; '),
   };
@@ -444,66 +723,8 @@ export async function runVerify(options: VerifyOptions): Promise<VerificationRes
     const issuesFile = join(exportDir, 'issues.json');
 
     if (await fileExists(issuesFile)) {
-      const exportIssues = await readJsonFile<Array<{
-        id: string;
-        identifier: string;
-        title: string;
-        parent: { id: string } | null;
-      }>>(issuesFile);
-
-      // Check by identifier (the most reliable check)
-      const exportIdentifiers = exportIssues.map((i) => i.identifier);
-      const dbIssues = await prisma.issue.findMany({
-        where: { identifier: { in: exportIdentifiers } },
-        include: { parent: true },
-      });
-
-      const dbIdentifiers = new Set(dbIssues.map((i) => i.identifier));
-      const missingIssues = exportIdentifiers.filter((id) => !dbIdentifiers.has(id));
-      const countPassed = missingIssues.length === 0;
-
-      // Also verify parent-child relationships
-      const issuesWithParent = exportIssues.filter((i) => i.parent !== null);
-      const issueMappings = await prisma.legacyLinearMapping.findMany({
-        where: { entityType: 'issue' },
-      });
-      const oldToNew = new Map(issueMappings.map((m) => [m.oldId, m.newId]));
-
-      let parentChildPassed = true;
-      let parentChildMismatches = 0;
-
-      for (const issue of issuesWithParent) {
-        const newIssueId = oldToNew.get(issue.id);
-        const newParentId = issue.parent ? oldToNew.get(issue.parent.id) : null;
-
-        if (newIssueId && newParentId) {
-          const dbIssue = dbIssues.find((i) => i.id === newIssueId);
-
-          if (!dbIssue || dbIssue.parentId !== newParentId) {
-            parentChildPassed = false;
-            parentChildMismatches++;
-          }
-        }
-      }
-
-      const passed = countPassed && parentChildPassed;
-      const details: string[] = [];
-
-      if (!countPassed) {
-        details.push(`${String(missingIssues.length)} issues not found in database`);
-      }
-
-      if (!parentChildPassed) {
-        details.push(`${String(parentChildMismatches)} parent-child relationships mismatched`);
-      }
-
-      entities.push({
-        entity: 'Issues',
-        exportCount: exportIssues.length,
-        dbCount: dbIssues.length,
-        passed,
-        details: passed ? undefined : details.join('; '),
-      });
+      const exportIssues = await readJsonFile<ExportedIssueForVerify[]>(issuesFile);
+      entities.push(await verifyIssues(prisma, exportIssues));
     }
 
     entities.push(await verifyComments(prisma, exportDir));

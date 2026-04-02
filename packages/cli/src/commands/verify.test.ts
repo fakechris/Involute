@@ -200,6 +200,19 @@ describe.runIf(hasDatabaseUrl)('verify command — integration', () => {
     }
   });
 
+
+  beforeEach(async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+      await resetVerifyImportState(prisma, exportDir);
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
+
   afterAll(async () => {
     // Clean up export directory
     if (exportDir) {
@@ -241,11 +254,101 @@ describe.runIf(hasDatabaseUrl)('verify command — integration', () => {
   it('reports all entity types as passed after successful import', async () => {
     const result = await runVerify({ file: exportDir });
 
+    const comments = result.entities.find((entity) => entity.entity === 'Comments');
+    expect(comments).toBeDefined();
     expect(result.allPassed).toBe(true);
     expect(result.entities.length).toBeGreaterThanOrEqual(5);
 
     for (const entity of result.entities) {
       expect(entity.passed).toBe(true);
+    }
+  });
+
+  it('treats comment updatedAt normalized to the owning issue updatedAt as a valid import result', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+
+      const commentMapping = await prisma.legacyLinearMapping.findUnique({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-comment-1',
+            entityType: 'comment',
+          },
+        },
+      });
+      const issueMapping = await prisma.legacyLinearMapping.findUnique({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-issue-1',
+            entityType: 'issue',
+          },
+        },
+      });
+
+      expect(commentMapping).not.toBeNull();
+      expect(issueMapping).not.toBeNull();
+
+      const importedIssue = await prisma.issue.findUnique({
+        where: { id: issueMapping!.newId },
+        select: { updatedAt: true },
+      });
+
+      expect(importedIssue).not.toBeNull();
+
+      await prisma.comment.update({
+        where: { id: commentMapping!.newId },
+        data: { updatedAt: importedIssue!.updatedAt },
+      });
+
+      const result = await runVerify({ file: exportDir });
+      const comments = result.entities.find((entity) => entity.entity === 'Comments');
+
+      expect(comments).toBeDefined();
+      expect(comments!.passed).toBe(true);
+      expect(comments!.dbCount).toBe(1);
+      expect(result.allPassed).toBe(true);
+    } finally {
+      await resetVerifyImportState(prisma, exportDir);
+      await prisma.$disconnect();
+    }
+  });
+
+  it('treats comment updatedAt collapsing to createdAt as a valid import result', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+
+      const commentMapping = await prisma.legacyLinearMapping.findUnique({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-comment-1',
+            entityType: 'comment',
+          },
+        },
+      });
+
+      expect(commentMapping).not.toBeNull();
+
+      await prisma.comment.update({
+        where: { id: commentMapping!.newId },
+        data: { updatedAt: new Date(FIXTURE_COMMENTS[0]!.createdAt) },
+      });
+
+      const result = await runVerify({ file: exportDir });
+      const comments = result.entities.find((entity) => entity.entity === 'Comments');
+
+      expect(comments).toBeDefined();
+      expect(comments!.passed).toBe(true);
+      expect(comments!.dbCount).toBe(1);
+      expect(result.allPassed).toBe(true);
+    } finally {
+      await resetVerifyImportState(prisma, exportDir);
+      await prisma.$disconnect();
     }
   });
 
@@ -309,9 +412,114 @@ describe.runIf(hasDatabaseUrl)('verify command — integration', () => {
       const issues = result.entities.find((e) => e.entity === 'Issues');
       expect(issues).toBeDefined();
       expect(issues!.passed).toBe(false);
-      expect(issues!.details).toContain('not found');
+      expect(issues!.details).toContain('have no import mapping');
     } finally {
       await rm(extraDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it('fails issue verification when an exported issue mapping is missing even if a matching identifier exists', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+
+      await prisma.legacyLinearMapping.delete({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-issue-1',
+            entityType: 'issue',
+          },
+        },
+      });
+
+      const result = await runVerify({ file: exportDir });
+      const issues = result.entities.find((entity) => entity.entity === 'Issues');
+
+      expect(issues).toBeDefined();
+      expect(issues!.passed).toBe(false);
+      expect(issues!.exportCount).toBe(2);
+      expect(issues!.dbCount).toBe(0);
+      expect(issues!.details).toContain('1 export issues have no import mapping');
+      expect(result.allPassed).toBe(false);
+    } finally {
+      await resetVerifyImportState(prisma, exportDir);
+      await prisma.$disconnect();
+    }
+  });
+
+  it('fails issue verification when the mapped issue has the wrong identifier', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+
+      const mapping = await prisma.legacyLinearMapping.findUnique({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-issue-1',
+            entityType: 'issue',
+          },
+        },
+      });
+
+      expect(mapping).not.toBeNull();
+
+      await prisma.issue.update({
+        where: { id: mapping!.newId },
+        data: { identifier: 'VRF-999' },
+      });
+
+      const result = await runVerify({ file: exportDir });
+      const issues = result.entities.find((entity) => entity.entity === 'Issues');
+
+      expect(issues).toBeDefined();
+      expect(issues!.passed).toBe(false);
+      expect(issues!.dbCount).toBe(1);
+      expect(issues!.details).toContain('1 mapped issues have mismatched identifiers');
+      expect(result.allPassed).toBe(false);
+    } finally {
+      await resetVerifyImportState(prisma, exportDir);
+      await prisma.$disconnect();
+    }
+  });
+
+  it('fails issue verification when the mapped issue parent relationship is corrupted', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+
+      const childMapping = await prisma.legacyLinearMapping.findUnique({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-issue-2',
+            entityType: 'issue',
+          },
+        },
+      });
+
+      expect(childMapping).not.toBeNull();
+
+      await prisma.issue.update({
+        where: { id: childMapping!.newId },
+        data: { parentId: null },
+      });
+
+      const result = await runVerify({ file: exportDir });
+      const issues = result.entities.find((entity) => entity.entity === 'Issues');
+
+      expect(issues).toBeDefined();
+      expect(issues!.passed).toBe(false);
+      expect(issues!.dbCount).toBe(1);
+      expect(issues!.details).toContain('1 mapped issues have mismatched parent relationships');
+      expect(result.allPassed).toBe(false);
+    } finally {
+      await resetVerifyImportState(prisma, exportDir);
+      await prisma.$disconnect();
     }
   });
 
@@ -385,6 +593,180 @@ describe.runIf(hasDatabaseUrl)('verify command — integration', () => {
     } finally {
       const { runImportPipeline } = await import('@involute/server/import-pipeline');
       await runImportPipeline(prisma, exportDir);
+      await prisma.$disconnect();
+    }
+  });
+
+  it('fails comment verification when the mapped comment body is corrupted', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+
+      const mapping = await prisma.legacyLinearMapping.findUnique({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-comment-1',
+            entityType: 'comment',
+          },
+        },
+      });
+
+      expect(mapping).not.toBeNull();
+
+      await prisma.comment.update({
+        where: { id: mapping!.newId },
+        data: { body: 'Corrupted verify comment' },
+      });
+
+      const result = await runVerify({ file: exportDir });
+      const comments = result.entities.find((entity) => entity.entity === 'Comments');
+
+      expect(comments).toBeDefined();
+      expect(comments!.passed).toBe(false);
+      expect(comments!.dbCount).toBe(0);
+      expect(comments!.details).toContain('1 mapped comments have mismatched body content');
+      expect(result.allPassed).toBe(false);
+    } finally {
+      await resetVerifyImportState(prisma, exportDir);
+      await prisma.$disconnect();
+    }
+  });
+
+  it('fails comment verification when the mapped comment timestamps are corrupted', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+
+      const mapping = await prisma.legacyLinearMapping.findUnique({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-comment-1',
+            entityType: 'comment',
+          },
+        },
+      });
+
+      expect(mapping).not.toBeNull();
+
+      const comment = await prisma.comment.findUnique({
+        where: { id: mapping!.newId },
+        select: { createdAt: true },
+      });
+
+      expect(comment).not.toBeNull();
+
+      await prisma.comment.update({
+        where: { id: mapping!.newId },
+        data: { createdAt: new Date('2024-06-03T00:00:00.000Z'), updatedAt: comment!.createdAt },
+      });
+
+      const result = await runVerify({ file: exportDir });
+      const comments = result.entities.find((entity) => entity.entity === 'Comments');
+
+      expect(comments).toBeDefined();
+      expect(comments!.passed).toBe(false);
+      expect(comments!.dbCount).toBe(0);
+      expect(comments!.details).toContain('1 mapped comments have mismatched timestamps');
+      expect(result.allPassed).toBe(false);
+    } finally {
+      await resetVerifyImportState(prisma, exportDir);
+      await prisma.$disconnect();
+    }
+  });
+
+  it('fails comment verification when the mapped comment points at the wrong imported issue', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+
+      const commentMapping = await prisma.legacyLinearMapping.findUnique({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-comment-1',
+            entityType: 'comment',
+          },
+        },
+      });
+      const wrongIssueMapping = await prisma.legacyLinearMapping.findUnique({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-issue-2',
+            entityType: 'issue',
+          },
+        },
+      });
+
+      expect(commentMapping).not.toBeNull();
+      expect(wrongIssueMapping).not.toBeNull();
+
+      await prisma.comment.update({
+        where: { id: commentMapping!.newId },
+        data: { issueId: wrongIssueMapping!.newId },
+      });
+
+      const result = await runVerify({ file: exportDir });
+      const comments = result.entities.find((entity) => entity.entity === 'Comments');
+
+      expect(comments).toBeDefined();
+      expect(comments!.passed).toBe(false);
+      expect(comments!.dbCount).toBe(0);
+      expect(comments!.details).toContain('1 mapped comments reference the wrong imported issue');
+      expect(result.allPassed).toBe(false);
+    } finally {
+      await resetVerifyImportState(prisma, exportDir);
+      await prisma.$disconnect();
+    }
+  });
+
+  it('fails comment verification when the mapped comment points at the wrong imported author', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+
+      const commentMapping = await prisma.legacyLinearMapping.findUnique({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-comment-1',
+            entityType: 'comment',
+          },
+        },
+      });
+
+      expect(commentMapping).not.toBeNull();
+
+      const wrongUser = await prisma.user.create({
+        data: {
+          name: 'Verify Wrong Author',
+          email: 'verify-wrong-author@example.com',
+        },
+      });
+
+      await prisma.comment.update({
+        where: { id: commentMapping!.newId },
+        data: { userId: wrongUser.id },
+      });
+
+      const result = await runVerify({ file: exportDir });
+      const comments = result.entities.find((entity) => entity.entity === 'Comments');
+
+      expect(comments).toBeDefined();
+      expect(comments!.passed).toBe(false);
+      expect(comments!.dbCount).toBe(0);
+      expect(comments!.details).toContain('1 mapped comments reference the wrong imported author');
+      expect(result.allPassed).toBe(false);
+    } finally {
+      await resetVerifyImportState(prisma, exportDir);
+      await prisma.user.deleteMany({
+        where: { email: 'verify-wrong-author@example.com' },
+      });
       await prisma.$disconnect();
     }
   });
