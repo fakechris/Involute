@@ -507,6 +507,116 @@ describe('filterExportDataToTeamScope', () => {
     expect(scoped.labels.map((label) => label.id)).toEqual(['lbl-1']);
     expect(scoped.labels.map((label) => label.name)).not.toContain('comment-only');
   });
+
+  it('excludes users that are only reachable through unrelated-team comments', () => {
+    const comments = new Map<string, LinearComment[]>();
+    comments.set('iss-1', [
+      {
+        id: 'com-eng-1',
+        body: 'Engineering comment',
+        createdAt: '2024-01-02T00:00:00.000Z',
+        updatedAt: '2024-01-02T00:00:00.000Z',
+        user: { id: 'usr-1', name: 'Alice', email: 'alice@example.com' },
+      },
+    ]);
+    comments.set('iss-4', [
+      {
+        id: 'com-des-1',
+        body: 'Design-only comment',
+        createdAt: '2024-01-05T00:00:00.000Z',
+        updatedAt: '2024-01-05T00:00:00.000Z',
+        user: { id: 'usr-2', name: 'Bob', email: 'bob@example.com' },
+      },
+    ]);
+
+    const scoped = filterExportDataToTeamScope('ENG', {
+      teams: mockTeams,
+      workflowStates: mockStates,
+      labels: mockLabels,
+      users: mockUsers,
+      issues: [
+        makeIssue({
+          id: 'iss-1',
+          identifier: 'ENG-1',
+          assignee: { id: 'usr-1', name: 'Alice', email: 'alice@example.com' },
+        }),
+        makeIssue({
+          id: 'iss-4',
+          identifier: 'DES-1',
+          team: { id: 'team-2', key: 'DES' },
+          state: { id: 'ws-4', name: 'Todo' },
+          assignee: null,
+        }),
+      ],
+      comments,
+      parentChildMappings: [],
+    });
+
+    expect(scoped.users).toEqual([
+      { id: 'usr-1', name: 'Alice', email: 'alice@example.com', displayName: 'Alice A.', active: true },
+    ]);
+    expect(scoped.comments.has('iss-4')).toBe(false);
+  });
+
+  it('keeps only users referenced by retained issues and retained comments for the selected team', () => {
+    const expandedUsers: LinearUser[] = [
+      ...mockUsers,
+      { id: 'usr-3', name: 'Cara', email: 'cara@example.com', displayName: 'Cara C.', active: true },
+      { id: 'usr-4', name: 'Drew', email: 'drew@example.com', displayName: 'Drew D.', active: true },
+    ];
+
+    const issues = [
+      makeIssue({
+        id: 'eng-issue-assigned',
+        identifier: 'ENG-30',
+        assignee: { id: 'usr-1', name: 'Alice', email: 'alice@example.com' },
+      }),
+      makeIssue({
+        id: 'eng-issue-commented',
+        identifier: 'ENG-31',
+      }),
+      makeIssue({
+        id: 'des-issue-commented',
+        identifier: 'DES-30',
+        team: { id: 'team-2', key: 'DES' },
+        state: { id: 'ws-4', name: 'Todo' },
+        assignee: { id: 'usr-4', name: 'Drew', email: 'drew@example.com' },
+      }),
+    ];
+
+    const comments = new Map<string, LinearComment[]>();
+    comments.set('eng-issue-commented', [
+      {
+        id: 'com-eng-2',
+        body: 'Scoped comment author',
+        createdAt: '2024-01-06T00:00:00.000Z',
+        updatedAt: '2024-01-06T00:00:00.000Z',
+        user: { id: 'usr-3', name: 'Cara', email: 'cara@example.com' },
+      },
+    ]);
+    comments.set('des-issue-commented', [
+      {
+        id: 'com-des-2',
+        body: 'Unrelated team comment author',
+        createdAt: '2024-01-07T00:00:00.000Z',
+        updatedAt: '2024-01-07T00:00:00.000Z',
+        user: { id: 'usr-4', name: 'Drew', email: 'drew@example.com' },
+      },
+    ]);
+
+    const scoped = filterExportDataToTeamScope('ENG', {
+      teams: mockTeams,
+      workflowStates: mockStates,
+      labels: mockLabels,
+      users: expandedUsers,
+      issues,
+      comments,
+      parentChildMappings: [],
+    });
+
+    expect(scoped.users.map((user) => user.id)).toEqual(['usr-1', 'usr-3']);
+    expect(scoped.users.map((user) => user.email)).not.toContain('drew@example.com');
+  });
 });
 
 describe('generateValidationReport', () => {
