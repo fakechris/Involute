@@ -285,6 +285,80 @@ describe.runIf(hasDatabaseUrl)('verify command — integration', () => {
     }
   });
 
+  it('reports actual matching database comment rows when an exported comment was never mapped', async () => {
+    const extraDir = await mkdtemp(join(tmpdir(), 'involute-verify-comments-missing-map-'));
+
+    try {
+      await writeVerifyFixtureExportDir(extraDir);
+
+      const extraComments = [
+        ...FIXTURE_COMMENTS,
+        {
+          id: 'verify-comment-unmapped',
+          body: 'Missing mapping comment',
+          createdAt: '2024-06-01T12:00:00.000Z',
+          updatedAt: '2024-06-01T12:00:00.000Z',
+          user: { id: 'verify-user-1', name: 'Verify Alice', email: 'verify-alice@example.com' },
+        },
+      ];
+
+      await writeFile(
+        join(extraDir, 'comments', 'verify-issue-1.json'),
+        JSON.stringify(extraComments, null, 2),
+      );
+
+      const result = await runVerify({ file: extraDir });
+      const comments = result.entities.find((entity) => entity.entity === 'Comments');
+
+      expect(comments).toBeDefined();
+      expect(comments!.passed).toBe(false);
+      expect(comments!.exportCount).toBe(2);
+      expect(comments!.dbCount).toBe(1);
+      expect(comments!.details).toContain('1 export comments have no import mapping');
+      expect(result.allPassed).toBe(false);
+    } finally {
+      await rm(extraDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+
+  it('reports actual matching database comment rows when a mapped comment row is missing', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+
+      const mapping = await prisma.legacyLinearMapping.findUnique({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-comment-1',
+            entityType: 'comment',
+          },
+        },
+      });
+
+      expect(mapping).not.toBeNull();
+
+      await prisma.comment.delete({
+        where: { id: mapping!.newId },
+      });
+
+      const result = await runVerify({ file: exportDir });
+      const comments = result.entities.find((entity) => entity.entity === 'Comments');
+
+      expect(comments).toBeDefined();
+      expect(comments!.passed).toBe(false);
+      expect(comments!.exportCount).toBe(1);
+      expect(comments!.dbCount).toBe(0);
+      expect(comments!.details).toContain('1 mapped comments missing from database');
+      expect(result.allPassed).toBe(false);
+    } finally {
+      const { runImportPipeline } = await import('@involute/server/import-pipeline');
+      await runImportPipeline(prisma, exportDir);
+      await prisma.$disconnect();
+    }
+  });
+
   it('returns VerificationResult with entities array and allPassed boolean', async () => {
     const result = await runVerify({ file: exportDir });
 

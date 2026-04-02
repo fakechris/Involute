@@ -30,6 +30,12 @@ interface VerificationResult {
   allPassed: boolean;
 }
 
+interface CommentVerificationStats {
+  exportCount: number;
+  mappedCount: number;
+  dbCount: number;
+}
+
 /**
  * Load project environment variables (DATABASE_URL etc.) from the repo root .env.
  */
@@ -95,6 +101,74 @@ async function collectExportCommentIds(exportDir: string): Promise<string[]> {
   }
 
   return ids;
+}
+
+async function verifyComments(
+  prisma: InstanceType<(typeof import('@prisma/client'))['PrismaClient']>,
+  exportDir: string,
+): Promise<EntityVerification> {
+  const exportCommentIds = await collectExportCommentIds(exportDir);
+  const exportCommentCount = exportCommentIds.length;
+
+  if (exportCommentCount === 0) {
+    return {
+      entity: 'Comments',
+      exportCount: 0,
+      dbCount: 0,
+      passed: true,
+    };
+  }
+
+  const commentMappings = await prisma.legacyLinearMapping.findMany({
+    where: {
+      entityType: 'comment',
+      oldId: { in: exportCommentIds },
+    },
+  });
+
+  const mappedNewIds = commentMappings.map((mapping) => mapping.newId);
+  const dbCommentCount = mappedNewIds.length === 0
+    ? 0
+    : await prisma.comment.count({
+        where: { id: { in: mappedNewIds } },
+      });
+
+  const stats: CommentVerificationStats = {
+    exportCount: exportCommentCount,
+    mappedCount: commentMappings.length,
+    dbCount: dbCommentCount,
+  };
+
+  const missingMappings = stats.exportCount - stats.mappedCount;
+  const missingDatabaseRows = stats.mappedCount - stats.dbCount;
+  const passed = missingMappings === 0 && missingDatabaseRows === 0;
+
+  if (passed) {
+    return {
+      entity: 'Comments',
+      exportCount: stats.exportCount,
+      dbCount: stats.dbCount,
+      passed: true,
+    };
+  }
+
+  const details: string[] = [];
+
+  if (missingMappings > 0) {
+    details.push(`${String(missingMappings)} export comments have no import mapping`);
+  }
+
+  if (missingDatabaseRows > 0) {
+    details.push(`${String(missingDatabaseRows)} mapped comments missing from database`);
+  }
+
+  return {
+    entity: 'Comments',
+    exportCount: stats.exportCount,
+    dbCount: stats.dbCount,
+    passed: false,
+    details: details.join('; '),
+  };
 }
 
 // Exported interface for types used by the exported `runVerify` function's return
@@ -295,49 +369,7 @@ export async function runVerify(options: VerifyOptions): Promise<VerificationRes
       });
     }
 
-    // --- Verify comments ---
-    // Collect all comment IDs from the export
-    const exportCommentIds = await collectExportCommentIds(exportDir);
-    const exportCommentCount = exportCommentIds.length;
-
-    if (exportCommentCount > 0) {
-      // Look up which export comments have been mapped (imported)
-      const commentMappings = await prisma.legacyLinearMapping.findMany({
-        where: {
-          entityType: 'comment',
-          oldId: { in: exportCommentIds },
-        },
-      });
-
-      const importedCommentCount = commentMappings.length;
-
-      // Verify the mapped comments actually exist in the database
-      const mappedNewIds = commentMappings.map((m) => m.newId);
-      const dbCommentCount = await prisma.comment.count({
-        where: { id: { in: mappedNewIds } },
-      });
-
-      // Comments might be legitimately fewer than export count (e.g., null user skipped)
-      // But mapped comments must all exist in DB
-      const passed = dbCommentCount === importedCommentCount;
-
-      entities.push({
-        entity: 'Comments',
-        exportCount: exportCommentCount,
-        dbCount: importedCommentCount,
-        passed,
-        details: passed
-          ? undefined
-          : `Expected ${String(importedCommentCount)} imported comments, found ${String(dbCommentCount)} in database`,
-      });
-    } else {
-      entities.push({
-        entity: 'Comments',
-        exportCount: 0,
-        dbCount: 0,
-        passed: true,
-      });
-    }
+    entities.push(await verifyComments(prisma, exportDir));
 
     const allPassed = entities.every((e) => e.passed);
 
