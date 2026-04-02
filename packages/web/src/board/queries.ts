@@ -114,10 +114,29 @@ export const ISSUE_UPDATE_MUTATION = gql`
           name
           email
         }
+        children {
+          nodes {
+            id
+            identifier
+            title
+          }
+        }
         parent {
           id
           identifier
           title
+        }
+        comments(first: 100, orderBy: createdAt) {
+          nodes {
+            id
+            body
+            createdAt
+            user {
+              id
+              name
+              email
+            }
+          }
         }
       }
     }

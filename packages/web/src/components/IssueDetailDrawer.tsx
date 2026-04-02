@@ -203,6 +203,9 @@ export function IssueDetailDrawer({
         <div className="issue-drawer__section">
           <span className="issue-drawer__label">Labels</span>
           <div className="issue-drawer__chips" aria-label="Issue labels">
+            {labels.length === 0 && (
+              <p className="issue-drawer__empty-hint">No labels available</p>
+            )}
             {labels.map((label) => {
               const checked = selectedLabelIds.includes(label.id);
 

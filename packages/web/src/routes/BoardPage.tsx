@@ -547,11 +547,15 @@ export function mergeIssueWithPreservedComments(
   previousIssue: IssueSummary,
   nextIssue: IssueSummary,
 ): IssueSummary {
+  const nextComments = nextIssue.comments ?? previousIssue.comments;
+  const nextChildren = nextIssue.children ?? previousIssue.children;
+
   return {
     ...nextIssue,
+    children: nextChildren,
     comments:
-      nextIssue.comments.nodes.length > 0 || previousIssue.comments.nodes.length === 0
-        ? nextIssue.comments
+      nextComments.nodes.length > 0 || previousIssue.comments.nodes.length === 0
+        ? nextComments
         : previousIssue.comments,
   };
 }

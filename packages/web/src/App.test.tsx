@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
 import { getAuthToken, getAuthTokenDetails } from './lib/apollo';
-import { getDropTargetStateId } from './routes/BoardPage';
+import { getDropTargetStateId, mergeIssueWithPreservedComments } from './routes/BoardPage';
 import type {
   BoardPageQueryData,
   CommentCreateMutationData,
@@ -1137,5 +1137,66 @@ describe('App', () => {
 
     expect(await within(screen.getByTestId('column-Backlog')).findByText('INV-3')).toBeInTheDocument();
     expect(screen.getByText('Created issue')).toBeInTheDocument();
+  });
+
+  it('mergeIssueWithPreservedComments handles undefined comments gracefully', () => {
+    const previousIssue: IssueSummary = {
+      ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+      comments: {
+        nodes: [
+          {
+            id: 'comment-1',
+            body: 'Previous comment',
+            createdAt: '2026-04-02T10:00:00.000Z',
+            user: { id: 'user-1', name: 'Admin', email: 'admin@involute.local' },
+          },
+        ],
+      },
+    };
+    const nextIssue = {
+      ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+      title: 'Updated title',
+    } as IssueSummary;
+    // Simulate mutation response that omits comments (undefined)
+    delete (nextIssue as unknown as Record<string, unknown>).comments;
+
+    const merged = mergeIssueWithPreservedComments(previousIssue, nextIssue);
+    expect(merged.comments.nodes).toHaveLength(1);
+    expect(merged.comments.nodes[0]!.body).toBe('Previous comment');
+    expect(merged.title).toBe('Updated title');
+  });
+
+  it('mergeIssueWithPreservedComments handles undefined children gracefully', () => {
+    const previousIssue: IssueSummary = {
+      ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+      children: {
+        nodes: [{ id: 'child-1', identifier: 'INV-10', title: 'Child issue' }],
+      },
+    };
+    const nextIssue = {
+      ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+      title: 'Updated title',
+    } as IssueSummary;
+    // Simulate mutation response that omits children (undefined)
+    delete (nextIssue as unknown as Record<string, unknown>).children;
+
+    const merged = mergeIssueWithPreservedComments(previousIssue, nextIssue);
+    expect(merged.children.nodes).toHaveLength(1);
+    expect(merged.children.nodes[0]!.identifier).toBe('INV-10');
+  });
+
+  it('shows "No labels available" message when labels array is empty', async () => {
+    renderApp({
+      data: {
+        ...boardQueryResult,
+        issueLabels: { nodes: [] },
+      },
+      loading: false,
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+
+    expect(within(drawer).getByText('No labels available')).toBeInTheDocument();
   });
 });
