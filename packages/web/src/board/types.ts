@@ -23,6 +23,13 @@ export interface UserSummary {
   email: string | null;
 }
 
+export interface CommentSummary {
+  id: string;
+  body: string;
+  createdAt: string;
+  user: UserSummary | null;
+}
+
 export interface IssueSummary {
   id: string;
   identifier: string;
@@ -39,6 +46,21 @@ export interface IssueSummary {
     nodes: LabelSummary[];
   };
   assignee: UserSummary | null;
+  children: {
+    nodes: Array<{
+      id: string;
+      identifier: string;
+      title: string;
+    }>;
+  };
+  parent?: {
+    id: string;
+    identifier: string;
+    title: string;
+  } | null;
+  comments: {
+    nodes: CommentSummary[];
+  };
 }
 
 export interface BoardPageQueryData {
@@ -47,6 +69,9 @@ export interface BoardPageQueryData {
   };
   users: {
     nodes: UserSummary[];
+  };
+  issueLabels: {
+    nodes: LabelSummary[];
   };
   issues: {
     nodes: IssueSummary[];
@@ -67,6 +92,24 @@ export interface IssueUpdateMutationData {
 export interface IssueUpdateMutationVariables {
   id: string;
   input: {
-    stateId: string;
+    assigneeId?: string | null;
+    description?: string | null;
+    labelIds?: string[];
+    stateId?: string;
+    title?: string;
+  };
+}
+
+export interface CommentCreateMutationData {
+  commentCreate: {
+    success: boolean;
+    comment: CommentSummary | null;
+  };
+}
+
+export interface CommentCreateMutationVariables {
+  input: {
+    issueId: string;
+    body: string;
   };
 }

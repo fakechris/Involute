@@ -1,13 +1,27 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
-import type { BoardPageQueryData, IssueSummary, IssueUpdateMutationData } from './board/types';
+import { getAuthToken } from './lib/apollo';
+import type {
+  BoardPageQueryData,
+  CommentCreateMutationData,
+  IssueSummary,
+  IssueUpdateMutationData,
+} from './board/types';
 
 const apolloMocks = vi.hoisted(() => ({
   useQuery: vi.fn(),
-  useMutation: vi.fn(),
+  useMutation: vi.fn((document) => {
+    const source = String(document);
+
+    if (source.includes('mutation CommentCreate')) {
+      return [vi.fn().mockResolvedValue({ data: { commentCreate: { success: true, comment: null } } })];
+    }
+
+    return [vi.fn()];
+  }),
 }));
 
 vi.mock('@apollo/client/react', async () => {
@@ -35,11 +49,20 @@ vi.mock('@dnd-kit/core', async () => {
 beforeEach(() => {
   apolloMocks.useQuery.mockReset();
   apolloMocks.useMutation.mockReset();
-  apolloMocks.useMutation.mockReturnValue([vi.fn()]);
+  apolloMocks.useMutation.mockImplementation((document) => {
+    const source = String(document);
+
+    if (source.includes('mutation CommentCreate')) {
+      return [vi.fn().mockResolvedValue({ data: { commentCreate: { success: true, comment: null } } })];
+    }
+
+    return [vi.fn()];
+  });
 });
 
 afterEach(() => {
   document.body.innerHTML = '';
+  window.localStorage.clear();
 });
 
 const boardQueryResult: BoardPageQueryData = {
@@ -71,6 +94,13 @@ const boardQueryResult: BoardPageQueryData = {
       },
     ],
   },
+  issueLabels: {
+    nodes: [
+      { id: 'label-task', name: 'task' },
+      { id: 'label-bug', name: 'Bug' },
+      { id: 'label-feature', name: 'Feature' },
+    ],
+  },
   issues: {
     nodes: [
       {
@@ -84,6 +114,9 @@ const boardQueryResult: BoardPageQueryData = {
         team: { id: 'team-1', key: 'INV' },
         labels: { nodes: [{ id: 'label-task', name: 'task' }] },
         assignee: { id: 'user-1', name: 'Admin', email: 'admin@involute.local' },
+        children: { nodes: [] },
+        parent: null,
+        comments: { nodes: [] },
       },
       {
         id: 'issue-2',
@@ -96,6 +129,13 @@ const boardQueryResult: BoardPageQueryData = {
         team: { id: 'team-1', key: 'INV' },
         labels: { nodes: [{ id: 'label-bug', name: 'Bug' }] },
         assignee: null,
+        children: { nodes: [] },
+        parent: {
+          id: 'issue-1',
+          identifier: 'INV-1',
+          title: 'Backlog item',
+        },
+        comments: { nodes: [] },
       },
     ],
   },
@@ -123,6 +163,15 @@ function renderApp(queryState: {
 }
 
 describe('App', () => {
+  it('prefers the runtime localStorage auth token when creating Apollo requests', async () => {
+    window.localStorage.setItem('involute.authToken', 'runtime-token');
+    expect(getAuthToken()).toBe('runtime-token');
+  });
+
+  it('falls back to the default dev auth token when no runtime token is configured', () => {
+    expect(getAuthToken()).toBe('changeme-set-your-token');
+  });
+
   it('renders all six board columns in order', async () => {
     renderApp();
 
@@ -184,6 +233,302 @@ describe('App', () => {
     expect(await within(screen.getByTestId('column-In Progress')).findByText('INV-1')).toBeInTheDocument();
   });
 
+  it('shows the clicked issue details including parent information', async () => {
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-2' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+
+    expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Ready item');
+    expect(within(drawer).getByLabelText('Issue description')).toHaveValue('Ready description');
+    expect(within(drawer).getByText('INV-1 — Backlog item')).toBeInTheDocument();
+    expect(within(drawer).getByText('No child issues.')).toBeInTheDocument();
+  });
+
+  it('renders the drawer as a modal dialog and closes from the backdrop control', async () => {
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+
+    expect(drawer).toHaveAttribute('aria-modal', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Close issue detail drawer' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Issue detail drawer' })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('shows inline title editing guidance while the title input is focused', async () => {
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+    const titleInput = within(drawer).getByLabelText('Issue title');
+
+    expect(within(drawer).getByText('Editable title')).toBeInTheDocument();
+
+    fireEvent.focus(titleInput);
+    expect(within(drawer).getByText('Press Enter or blur to save')).toBeInTheDocument();
+
+    fireEvent.blur(titleInput);
+    await waitFor(() => expect(within(drawer).getByText('Editable title')).toBeInTheDocument());
+  });
+
+  it('saves title on Enter and keeps the new value after reopening', async () => {
+    const mutate = vi.fn().mockResolvedValue({
+      data: {
+        issueUpdate: {
+          success: true,
+          issue: {
+            ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+            title: 'Enter-saved title',
+          },
+        },
+      },
+    });
+    apolloMocks.useMutation.mockReturnValue([mutate]);
+
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    let drawer = await screen.findByLabelText('Issue detail drawer');
+
+    const titleInput = within(drawer).getByLabelText('Issue title');
+    fireEvent.change(titleInput, { target: { value: 'Enter-saved title' } });
+    fireEvent.keyDown(titleInput, { key: 'Enter', code: 'Enter' });
+
+    await waitFor(() =>
+      expect(mutate).toHaveBeenCalledWith({
+        variables: {
+          id: 'issue-1',
+          input: { title: 'Enter-saved title' },
+        },
+      }),
+    );
+
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Close' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    drawer = await screen.findByLabelText('Issue detail drawer');
+
+    expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Enter-saved title');
+  });
+
+  it('edits title and saves it via issueUpdate mutation', async () => {
+    const mutate = vi.fn().mockResolvedValue({
+      data: {
+        issueUpdate: {
+          success: true,
+          issue: {
+            ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+            title: 'Updated backlog item',
+          },
+        },
+      },
+    });
+    apolloMocks.useMutation.mockReturnValue([mutate]);
+
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByLabelText('Issue detail drawer');
+
+    const titleInput = within(drawer).getByLabelText('Issue title');
+    fireEvent.change(titleInput, { target: { value: 'Updated backlog item' } });
+    fireEvent.blur(titleInput);
+
+    await waitFor(() =>
+      expect(mutate).toHaveBeenNthCalledWith(1, {
+        variables: {
+          id: 'issue-1',
+          input: { title: 'Updated backlog item' },
+        },
+      }),
+    );
+  });
+
+  it('edits description and saves it via issueUpdate mutation', async () => {
+    const mutate = vi.fn().mockResolvedValue({
+      data: {
+        issueUpdate: {
+          success: true,
+          issue: {
+            ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+            description: 'Updated description',
+          },
+        },
+      },
+    });
+    apolloMocks.useMutation.mockReturnValue([mutate]);
+
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByLabelText('Issue detail drawer');
+
+    const descriptionInput = within(drawer).getByLabelText('Issue description');
+    fireEvent.change(descriptionInput, { target: { value: 'Updated description' } });
+    fireEvent.blur(descriptionInput);
+
+    await waitFor(() =>
+      expect(mutate).toHaveBeenCalledWith({
+        variables: {
+          id: 'issue-1',
+          input: { description: 'Updated description' },
+        },
+      }),
+    );
+  });
+
+  it('adds labels and changes assignee via issueUpdate mutation', async () => {
+    const mutate = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: {
+          issueUpdate: {
+            success: true,
+            issue: {
+              ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+              labels: {
+                nodes: [
+                  { id: 'label-task', name: 'task' },
+                  { id: 'label-feature', name: 'Feature' },
+                ],
+              },
+            },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          issueUpdate: {
+            success: true,
+            issue: {
+              ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+              assignee: null,
+            },
+          },
+        },
+      });
+    apolloMocks.useMutation.mockReturnValue([mutate]);
+
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByLabelText('Issue detail drawer');
+
+    fireEvent.click(within(drawer).getByLabelText('Feature'));
+
+    await waitFor(() =>
+      expect(mutate).toHaveBeenNthCalledWith(1, {
+        variables: {
+          id: 'issue-1',
+          input: { labelIds: ['label-task', 'label-feature'] },
+        },
+      }),
+    );
+
+    fireEvent.change(within(drawer).getByLabelText('Issue assignee'), { target: { value: '' } });
+
+    await waitFor(() =>
+      expect(mutate).toHaveBeenNthCalledWith(2, {
+        variables: {
+          id: 'issue-1',
+          input: { assigneeId: null },
+        },
+      }),
+    );
+  });
+
+  it('removes an existing label via issueUpdate mutation', async () => {
+    const mutate = vi.fn().mockResolvedValue({
+      data: {
+        issueUpdate: {
+          success: true,
+          issue: {
+            ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+            labels: {
+              nodes: [],
+            },
+          },
+        },
+      },
+    });
+    apolloMocks.useMutation.mockReturnValue([mutate]);
+
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByLabelText('Issue detail drawer');
+
+    fireEvent.click(within(drawer).getByLabelText('task'));
+
+    await waitFor(() =>
+      expect(mutate).toHaveBeenCalledWith({
+        variables: {
+          id: 'issue-1',
+          input: { labelIds: [] },
+        },
+      }),
+    );
+  });
+
+  it('resets drawer state when reopening a different issue', async () => {
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const firstDrawer = await screen.findByLabelText('Issue detail drawer');
+    fireEvent.change(within(firstDrawer).getByLabelText('Issue title'), {
+      target: { value: 'Unsaved title draft' },
+    });
+    fireEvent.click(within(firstDrawer).getByRole('button', { name: 'Close' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-2' }));
+    const secondDrawer = await screen.findByLabelText('Issue detail drawer');
+
+    expect(within(secondDrawer).getByLabelText('Issue title')).toHaveValue('Ready item');
+    expect(within(secondDrawer).getByLabelText('Issue description')).toHaveValue('Ready description');
+  });
+
+  it('shows the updated title after closing and reopening the same issue', async () => {
+    const mutate = vi.fn().mockResolvedValue({
+      data: {
+        issueUpdate: {
+          success: true,
+          issue: {
+            ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+            title: 'Persisted title',
+          },
+        },
+      },
+    });
+    apolloMocks.useMutation.mockReturnValue([mutate]);
+
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    let drawer = await screen.findByLabelText('Issue detail drawer');
+
+    const titleInput = within(drawer).getByLabelText('Issue title');
+    fireEvent.change(titleInput, { target: { value: 'Persisted title' } });
+    fireEvent.blur(titleInput);
+
+    await waitFor(() =>
+      expect(mutate).toHaveBeenCalledWith({
+        variables: {
+          id: 'issue-1',
+          input: { title: 'Persisted title' },
+        },
+      }),
+    );
+
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Close' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    drawer = await screen.findByLabelText('Issue detail drawer');
+
+    expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Persisted title');
+  });
+
   it('shows an error and reverts optimistic move when state mutation fails', async () => {
     const mutate = vi.fn().mockRejectedValue(new Error('boom'));
     apolloMocks.useMutation.mockReturnValue([mutate]);
@@ -197,7 +542,7 @@ describe('App', () => {
       target: { value: 'state-progress' },
     });
 
-    expect((await screen.findAllByText('We could not save the state change. Please try again.')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('We could not save the issue changes. Please try again.')).length).toBeGreaterThan(0);
     expect(within(screen.getByTestId('column-Backlog')).getByText('INV-1')).toBeInTheDocument();
   });
 
@@ -225,5 +570,97 @@ describe('App', () => {
     expect(
       await screen.findByText('We could not load the board right now. Please confirm the API server is running and try again.'),
     ).toBeInTheDocument();
+  });
+
+  it('shows an authentication/bootstrap specific error when the board request is unauthenticated', async () => {
+    renderApp({
+      error: new Error('Not authenticated'),
+      loading: false,
+    });
+
+    expect(await screen.findByText('Authentication required')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'The board could not find a runtime auth token. Set `VITE_INVOLUTE_AUTH_TOKEN` or store the token in localStorage under `involute.authToken`, then reload.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('renders comments in chronological order with author and timestamp details', async () => {
+    renderApp({
+      data: {
+        ...boardQueryResult,
+        issues: {
+          nodes: [
+            {
+              ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+              comments: {
+                nodes: [
+                  {
+                    id: 'comment-2',
+                    body: 'Second comment',
+                    createdAt: '2026-04-02T11:00:00.000Z',
+                    user: {
+                      id: 'user-1',
+                      name: 'Admin',
+                      email: 'admin@involute.local',
+                    },
+                  },
+                  {
+                    id: 'comment-1',
+                    body: 'First comment',
+                    createdAt: '2026-04-02T10:00:00.000Z',
+                    user: {
+                      id: 'user-1',
+                      name: 'Admin',
+                      email: 'admin@involute.local',
+                    },
+                  },
+                ],
+              },
+            },
+            ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
+          ],
+        },
+      },
+      loading: false,
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+    const comments = within(drawer).getAllByRole('listitem');
+
+    expect(comments).toHaveLength(2);
+    const firstComment = comments[0]!;
+    const secondComment = comments[1]!;
+    expect(firstComment).toHaveTextContent('First comment');
+    expect(secondComment).toHaveTextContent('Second comment');
+    expect(within(firstComment).getByText('Admin')).toBeInTheDocument();
+    expect(within(firstComment).getByText(/Apr/)).toBeInTheDocument();
+  });
+
+  it('shows an empty comments message when the issue has no comments', async () => {
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+
+    expect(within(drawer).getByText('No comments yet. Start the discussion below.')).toBeInTheDocument();
+  });
+
+  it('enables comment submission only when comment body has text', async () => {
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+    const submitButton = within(drawer).getByRole('button', { name: 'Add comment' });
+
+    expect(submitButton).toBeDisabled();
+
+    fireEvent.change(within(drawer).getByLabelText('Comment body'), {
+      target: { value: 'Freshly added comment' },
+    });
+
+    expect(submitButton).toBeEnabled();
   });
 });

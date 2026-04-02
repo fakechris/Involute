@@ -22,6 +22,12 @@ export const BOARD_PAGE_QUERY = gql`
         email
       }
     }
+    issueLabels {
+      nodes {
+        id
+        name
+      }
+    }
     issues(first: $first) {
       nodes {
         id
@@ -48,6 +54,30 @@ export const BOARD_PAGE_QUERY = gql`
           id
           name
           email
+        }
+        children {
+          nodes {
+            id
+            identifier
+            title
+          }
+        }
+        parent {
+          id
+          identifier
+          title
+        }
+        comments(first: 100, orderBy: createdAt) {
+          nodes {
+            id
+            body
+            createdAt
+            user {
+              id
+              name
+              email
+            }
+          }
         }
       }
     }
@@ -80,6 +110,29 @@ export const ISSUE_UPDATE_MUTATION = gql`
           }
         }
         assignee {
+          id
+          name
+          email
+        }
+        parent {
+          id
+          identifier
+          title
+        }
+      }
+    }
+  }
+`;
+
+export const COMMENT_CREATE_MUTATION = gql`
+  mutation CommentCreate($input: CommentCreateInput!) {
+    commentCreate(input: $input) {
+      success
+      comment {
+        id
+        body
+        createdAt
+        user {
           id
           name
           email
