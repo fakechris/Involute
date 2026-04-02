@@ -180,10 +180,25 @@ function renderApp(queryState: {
   data: boardQueryResult,
   loading: false,
 }, initialEntries: string[] = ['/']) {
-  apolloMocks.useQuery.mockReturnValue({
-    data: queryState.data,
-    error: queryState.error,
-    loading: queryState.loading ?? false,
+  apolloMocks.useQuery.mockImplementation((_, options) => {
+    if (options?.variables && 'id' in options.variables) {
+      const issueId = String(options.variables.id);
+      return {
+        data: {
+          issue: queryState.data?.issues.nodes.find((issue) => issue.id === issueId) ?? null,
+          users: queryState.data?.users ?? { nodes: [] },
+          issueLabels: queryState.data?.issueLabels ?? { nodes: [] },
+        },
+        error: queryState.error,
+        loading: queryState.loading ?? false,
+      };
+    }
+
+    return {
+      data: queryState.data,
+      error: queryState.error,
+      loading: queryState.loading ?? false,
+    };
   });
 
   return render(
@@ -785,6 +800,92 @@ describe('App', () => {
     expect(within(drawer).getByLabelText('Comment body')).toHaveValue('');
   });
 
+  it('preserves locally added comments after a later issue update response omits comments', async () => {
+    const createComment = vi.fn().mockResolvedValue({
+      data: {
+        commentCreate: {
+          success: true,
+          comment: {
+            id: 'comment-3',
+            body: 'Newest comment',
+            createdAt: '2026-04-02T12:00:00.000Z',
+            user: {
+              id: 'user-1',
+              name: 'Admin',
+              email: 'admin@involute.local',
+            },
+          },
+        },
+      } satisfies CommentCreateMutationData,
+    });
+    const updateIssue = vi.fn().mockResolvedValue({
+      data: {
+        issueUpdate: {
+          success: true,
+          issue: {
+            ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+            title: 'Retitled issue',
+          },
+        },
+      } satisfies IssueUpdateMutationData,
+    });
+
+    apolloMocks.useMutation.mockImplementation((document) => {
+      const source =
+        typeof document === 'string'
+          ? document
+          : 'loc' in document && document.loc?.source.body
+            ? document.loc.source.body
+            : String(document);
+
+      if (source.includes('mutation CommentCreate')) {
+        return [createComment];
+      }
+
+      if (source.includes('mutation IssueUpdate')) {
+        return [updateIssue];
+      }
+
+      return [vi.fn()];
+    });
+
+    renderApp({
+      data: {
+        ...boardQueryResult,
+        issues: {
+          nodes: [
+            {
+              ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+              comments: {
+                nodes: [],
+              },
+            },
+            ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
+          ],
+        },
+      },
+      loading: false,
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+
+    fireEvent.change(within(drawer).getByLabelText('Comment body'), {
+      target: { value: 'Newest comment' },
+    });
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Add comment' }));
+
+    await waitFor(() => expect(within(drawer).getByText('Newest comment')).toBeInTheDocument());
+
+    const titleInput = within(drawer).getByLabelText('Issue title');
+    fireEvent.focus(titleInput);
+    fireEvent.change(titleInput, { target: { value: 'Retitled issue' } });
+    fireEvent.keyDown(titleInput, { key: 'Enter', code: 'Enter' });
+
+    await waitFor(() => expect(updateIssue).toHaveBeenCalled());
+    expect(within(drawer).getByText('Newest comment')).toBeInTheDocument();
+  });
+
   it('navigates between board and backlog via header links', async () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
@@ -798,6 +899,16 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Board' }));
 
     expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+  });
+
+  it('renders real issue details on the direct /issue/:id route', async () => {
+    renderApp({ data: boardQueryResult, loading: false }, ['/issue/issue-2']);
+
+    expect(await screen.findByRole('heading', { name: 'Issue detail' })).toBeInTheDocument();
+    expect(screen.getByText('INV-2')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Ready item')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Ready description')).toBeInTheDocument();
+    expect(screen.getByText('INV-1 — Backlog item')).toBeInTheDocument();
   });
 
   it('renders backlog list rows and opens issue details from the table', async () => {

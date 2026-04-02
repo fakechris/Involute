@@ -129,7 +129,9 @@ export function BoardPage() {
       }
 
       setLocalIssues((currentIssues) =>
-        currentIssues.map((item) => (item.id === issue.id ? result.data!.issueUpdate.issue! : item)),
+        currentIssues.map((item) =>
+          item.id === issue.id ? mergeIssueWithPreservedComments(item, result.data!.issueUpdate.issue!) : item,
+        ),
       );
     } catch (mutationIssue) {
       setLocalIssues(previousIssues);
@@ -529,4 +531,17 @@ export function BoardPage() {
       {createIssueDialog}
     </main>
   );
+}
+
+export function mergeIssueWithPreservedComments(
+  previousIssue: IssueSummary,
+  nextIssue: IssueSummary,
+): IssueSummary {
+  return {
+    ...nextIssue,
+    comments:
+      nextIssue.comments.nodes.length > 0 || previousIssue.comments.nodes.length === 0
+        ? nextIssue.comments
+        : previousIssue.comments,
+  };
 }

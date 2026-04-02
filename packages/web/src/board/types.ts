@@ -41,6 +41,10 @@ export interface IssueSummary {
   team: {
     id: string;
     key: string;
+    name?: string;
+    states?: {
+      nodes: WorkflowStateSummary[];
+    };
   };
   labels: {
     nodes: LabelSummary[];
@@ -80,6 +84,20 @@ export interface BoardPageQueryData {
 
 export interface BoardPageQueryVariables {
   first: number;
+}
+
+export interface IssuePageQueryData {
+  issue: IssueSummary | null;
+  users: {
+    nodes: UserSummary[];
+  };
+  issueLabels: {
+    nodes: LabelSummary[];
+  };
+}
+
+export interface IssuePageQueryVariables {
+  id: string;
 }
 
 export interface IssueCreateMutationData {

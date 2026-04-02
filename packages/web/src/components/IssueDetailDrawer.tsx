@@ -143,7 +143,7 @@ export function IssueDetailDrawer({
                 onChange={(event) => setTitle(event.target.value)}
                 onBlur={() => {
                   setIsEditingTitle(false);
-                  void commitTitle().catch(() => undefined);
+                  void Promise.resolve().then(() => commitTitle()).catch(() => undefined);
                 }}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {
