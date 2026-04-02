@@ -21,7 +21,10 @@
     "lint": "pnpm exec tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@involute/server": "workspace:*",
+    "@prisma/client": "^6.7.0",
     "commander": "^14.0.1",
+    "dotenv": "^16.6.1",
     "graphql": "^16.11.0",
     "graphql-request": "^7.3.1"
   },

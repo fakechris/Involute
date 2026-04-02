@@ -100,6 +100,36 @@ async function writeVerifyFixtureExportDir(dir: string): Promise<void> {
   );
 }
 
+async function resetVerifyImportState(
+  prisma: InstanceType<(typeof import('@prisma/client'))['PrismaClient']>,
+  exportDir: string,
+): Promise<void> {
+  await prisma.legacyLinearMapping.deleteMany({
+    where: { oldId: { startsWith: 'verify-' } },
+  });
+  await prisma.comment.deleteMany({
+    where: { issue: { identifier: { startsWith: 'VRF-' } } },
+  });
+  await prisma.issue.deleteMany({
+    where: { identifier: { startsWith: 'VRF-' } },
+  });
+  await prisma.workflowState.deleteMany({
+    where: { team: { key: 'VRF' } },
+  });
+  await prisma.issueLabel.deleteMany({
+    where: { name: { startsWith: 'verify-' } },
+  });
+  await prisma.team.deleteMany({
+    where: { key: 'VRF' },
+  });
+  await prisma.user.deleteMany({
+    where: { email: { startsWith: 'verify-' } },
+  });
+
+  const { runImportPipeline } = await import('@involute/server/import-pipeline');
+  await runImportPipeline(prisma, exportDir);
+}
+
 describe('verify command — error handling', () => {
   it('throws for nonexistent export directory', async () => {
     await expect(runVerify({ file: '/nonexistent/path/12345' })).rejects.toThrow(
@@ -355,6 +385,249 @@ describe.runIf(hasDatabaseUrl)('verify command — integration', () => {
     } finally {
       const { runImportPipeline } = await import('@involute/server/import-pipeline');
       await runImportPipeline(prisma, exportDir);
+      await prisma.$disconnect();
+    }
+  });
+
+  it('fails team verification when only an unrelated team exists and the export team mapping is stale', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+
+      const importedTeamMapping = await prisma.legacyLinearMapping.findUnique({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-team-1',
+            entityType: 'team',
+          },
+        },
+      });
+
+      expect(importedTeamMapping).not.toBeNull();
+
+      await prisma.team.delete({
+        where: { id: importedTeamMapping!.newId },
+      });
+
+      await prisma.team.deleteMany({
+        where: { key: 'VRX' },
+      });
+
+      await prisma.team.create({
+        data: {
+          key: 'VRX',
+          name: 'Unrelated Verify Team',
+        },
+      });
+
+      await prisma.legacyLinearMapping.update({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-team-1',
+            entityType: 'team',
+          },
+        },
+        data: { newId: importedTeamMapping!.newId },
+      });
+
+      const result = await runVerify({ file: exportDir });
+      const teams = result.entities.find((entity) => entity.entity === 'Teams');
+
+      expect(teams).toBeDefined();
+      expect(teams!.passed).toBe(false);
+      expect(teams!.exportCount).toBe(1);
+      expect(teams!.dbCount).toBe(0);
+      expect(teams!.details).toContain('1 export teams missing mapped database rows');
+      expect(result.allPassed).toBe(false);
+    } finally {
+      await resetVerifyImportState(prisma, exportDir);
+      await prisma.team.deleteMany({
+        where: { key: 'VRX' },
+      });
+      await prisma.$disconnect();
+    }
+  });
+
+  it('fails label verification when unrelated labels exist but the current export label mapping points to a missing row', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+
+      const importedLabelMapping = await prisma.legacyLinearMapping.findUnique({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-label-1',
+            entityType: 'label',
+          },
+        },
+      });
+
+      expect(importedLabelMapping).not.toBeNull();
+
+      const issue = await prisma.issue.findUnique({
+        where: { identifier: 'VRF-1' },
+      });
+
+      expect(issue).not.toBeNull();
+
+      await prisma.issue.update({
+        where: { id: issue!.id },
+        data: {
+          labels: {
+            disconnect: [{ id: importedLabelMapping!.newId }],
+          },
+        },
+      });
+
+      await prisma.issueLabel.delete({
+        where: { id: importedLabelMapping!.newId },
+      });
+
+      await prisma.issueLabel.create({
+        data: { name: 'verify-unrelated-label' },
+      });
+
+      const result = await runVerify({ file: exportDir });
+      const labels = result.entities.find((entity) => entity.entity === 'Labels');
+
+      expect(labels).toBeDefined();
+      expect(labels!.passed).toBe(false);
+      expect(labels!.exportCount).toBe(2);
+      expect(labels!.dbCount).toBe(1);
+      expect(labels!.details).toContain('1 export labels missing mapped database rows');
+      expect(result.allPassed).toBe(false);
+    } finally {
+      await resetVerifyImportState(prisma, exportDir);
+      await prisma.issueLabel.deleteMany({
+        where: { name: 'verify-unrelated-label' },
+      });
+      await prisma.$disconnect();
+    }
+  });
+
+  it('fails user verification when unrelated users exist but the export user mapping points to a missing row', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+
+      const importedUserMapping = await prisma.legacyLinearMapping.findUnique({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-user-1',
+            entityType: 'user',
+          },
+        },
+      });
+
+      expect(importedUserMapping).not.toBeNull();
+
+      await prisma.comment.deleteMany({
+        where: { userId: importedUserMapping!.newId },
+      });
+      await prisma.issue.updateMany({
+        where: { assigneeId: importedUserMapping!.newId },
+        data: { assigneeId: null },
+      });
+      await prisma.user.delete({
+        where: { id: importedUserMapping!.newId },
+      });
+
+      await prisma.user.create({
+        data: {
+          name: 'Verify Unrelated User',
+          email: 'verify-unrelated@example.com',
+        },
+      });
+
+      const result = await runVerify({ file: exportDir });
+      const users = result.entities.find((entity) => entity.entity === 'Users');
+
+      expect(users).toBeDefined();
+      expect(users!.passed).toBe(false);
+      expect(users!.exportCount).toBe(1);
+      expect(users!.dbCount).toBe(0);
+      expect(users!.details).toContain('1 export users missing mapped database rows');
+      expect(result.allPassed).toBe(false);
+    } finally {
+      await resetVerifyImportState(prisma, exportDir);
+      await prisma.user.deleteMany({
+        where: { email: 'verify-unrelated@example.com' },
+      });
+      await prisma.$disconnect();
+    }
+  });
+
+  it('fails workflow state verification when stale mappings from another import exist for the same old IDs', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+
+      const importedStateMappings = await prisma.legacyLinearMapping.findMany({
+        where: {
+          entityType: 'workflow_state',
+          oldId: { in: FIXTURE_WORKFLOW_STATES.map((state) => state.id) },
+        },
+        orderBy: { oldId: 'asc' },
+      });
+
+      expect(importedStateMappings).toHaveLength(2);
+
+      await prisma.team.deleteMany({
+        where: { key: 'VRS' },
+      });
+
+      const unrelatedTeam = await prisma.team.create({
+        data: {
+          key: 'VRS',
+          name: 'Verify Stale Mapping Team',
+        },
+      });
+
+      const unrelatedStates = await Promise.all(
+        FIXTURE_WORKFLOW_STATES.map((state) =>
+          prisma.workflowState.create({
+            data: {
+              name: state.name,
+              teamId: unrelatedTeam.id,
+            },
+          }),
+        ),
+      );
+
+      for (let index = 0; index < importedStateMappings.length; index += 1) {
+        await prisma.legacyLinearMapping.update({
+          where: {
+            oldId_entityType: {
+              oldId: importedStateMappings[index]!.oldId,
+              entityType: 'workflow_state',
+            },
+          },
+          data: { newId: unrelatedStates[index]!.id },
+        });
+      }
+
+      const result = await runVerify({ file: exportDir });
+      const states = result.entities.find((entity) => entity.entity === 'Workflow States');
+
+      expect(states).toBeDefined();
+      expect(states!.passed).toBe(false);
+      expect(states!.exportCount).toBe(2);
+      expect(states!.dbCount).toBe(0);
+      expect(states!.details).toContain('2 export workflow states mapped to the wrong team');
+      expect(result.allPassed).toBe(false);
+    } finally {
+      await resetVerifyImportState(prisma, exportDir);
+      await prisma.team.deleteMany({
+        where: { key: 'VRS' },
+      });
       await prisma.$disconnect();
     }
   });

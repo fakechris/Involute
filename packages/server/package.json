@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./import-pipeline": {
+      "types": "./dist/import-pipeline.d.ts",
+      "import": "./dist/import-pipeline.js"
     }
   },
   "scripts": {

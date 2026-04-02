@@ -36,6 +36,12 @@ interface CommentVerificationStats {
   dbCount: number;
 }
 
+interface ScopedEntityVerificationStats {
+  exportCount: number;
+  mappedCount: number;
+  dbCount: number;
+}
+
 /**
  * Load project environment variables (DATABASE_URL etc.) from the repo root .env.
  */
@@ -171,6 +177,175 @@ async function verifyComments(
   };
 }
 
+async function verifyMappedEntities(params: {
+  prisma: InstanceType<(typeof import('@prisma/client'))['PrismaClient']>;
+  entityLabel: string;
+  entityType: 'team' | 'workflow_state' | 'label' | 'user';
+  exportIds: string[];
+  countExistingRows: (mappedNewIds: string[]) => Promise<number>;
+}): Promise<EntityVerification> {
+  const { prisma, entityLabel, entityType, exportIds, countExistingRows } = params;
+
+  if (exportIds.length === 0) {
+    return {
+      entity: entityLabel,
+      exportCount: 0,
+      dbCount: 0,
+      passed: true,
+    };
+  }
+
+  const mappings = await prisma.legacyLinearMapping.findMany({
+    where: {
+      entityType,
+      oldId: { in: exportIds },
+    },
+  });
+
+  const mappedNewIds = mappings.map((mapping) => mapping.newId);
+  const dbCount = mappedNewIds.length === 0 ? 0 : await countExistingRows(mappedNewIds);
+  const stats: ScopedEntityVerificationStats = {
+    exportCount: exportIds.length,
+    mappedCount: mappings.length,
+    dbCount,
+  };
+
+  const missingMappings = stats.exportCount - stats.mappedCount;
+  const missingDatabaseRows = stats.mappedCount - stats.dbCount;
+  const passed = missingMappings === 0 && missingDatabaseRows === 0;
+
+  if (passed) {
+    return {
+      entity: entityLabel,
+      exportCount: stats.exportCount,
+      dbCount: stats.dbCount,
+      passed: true,
+    };
+  }
+
+  const details: string[] = [];
+
+  if (missingMappings > 0) {
+    details.push(`${String(missingMappings)} export ${entityLabel.toLowerCase()} have no import mapping`);
+  }
+
+  if (missingDatabaseRows > 0) {
+    details.push(`${String(missingDatabaseRows)} export ${entityLabel.toLowerCase()} missing mapped database rows`);
+  }
+
+  return {
+    entity: entityLabel,
+    exportCount: stats.exportCount,
+    dbCount: stats.dbCount,
+    passed: false,
+    details: details.join('; '),
+  };
+}
+
+async function verifyWorkflowStates(
+  prisma: InstanceType<(typeof import('@prisma/client'))['PrismaClient']>,
+  exportStates: Array<{ id: string; team: { id: string } }>,
+): Promise<EntityVerification> {
+  if (exportStates.length === 0) {
+    return {
+      entity: 'Workflow States',
+      exportCount: 0,
+      dbCount: 0,
+      passed: true,
+    };
+  }
+
+  const [stateMappings, teamMappings] = await Promise.all([
+    prisma.legacyLinearMapping.findMany({
+      where: {
+        entityType: 'workflow_state',
+        oldId: { in: exportStates.map((state) => state.id) },
+      },
+    }),
+    prisma.legacyLinearMapping.findMany({
+      where: {
+        entityType: 'team',
+        oldId: { in: exportStates.map((state) => state.team.id) },
+      },
+    }),
+  ]);
+
+  const teamIdByOldId = new Map(teamMappings.map((mapping) => [mapping.oldId, mapping.newId]));
+  const stateMappingByOldId = new Map(stateMappings.map((mapping) => [mapping.oldId, mapping.newId]));
+  const mappedStateIds = stateMappings.map((mapping) => mapping.newId);
+
+  const dbStates = mappedStateIds.length === 0
+    ? []
+    : await prisma.workflowState.findMany({
+        where: { id: { in: mappedStateIds } },
+        select: { id: true, teamId: true },
+      });
+
+  const dbStateById = new Map(dbStates.map((state) => [state.id, state]));
+  let missingMappings = 0;
+  let missingDatabaseRows = 0;
+  let wrongTeamCount = 0;
+  let validCount = 0;
+
+  for (const exportState of exportStates) {
+    const mappedStateId = stateMappingByOldId.get(exportState.id);
+
+    if (!mappedStateId) {
+      missingMappings += 1;
+      continue;
+    }
+
+    const dbState = dbStateById.get(mappedStateId);
+
+    if (!dbState) {
+      missingDatabaseRows += 1;
+      continue;
+    }
+
+    const mappedTeamId = teamIdByOldId.get(exportState.team.id);
+
+    if (!mappedTeamId || dbState.teamId !== mappedTeamId) {
+      wrongTeamCount += 1;
+      continue;
+    }
+
+    validCount += 1;
+  }
+
+  const passed = missingMappings === 0 && missingDatabaseRows === 0 && wrongTeamCount === 0;
+
+  if (passed) {
+    return {
+      entity: 'Workflow States',
+      exportCount: exportStates.length,
+      dbCount: validCount,
+      passed: true,
+    };
+  }
+
+  const details: string[] = [];
+
+  if (missingMappings > 0) {
+    details.push(`${String(missingMappings)} export workflow states have no import mapping`);
+  }
+
+  if (missingDatabaseRows > 0) {
+    details.push(`${String(missingDatabaseRows)} export workflow states missing mapped database rows`);
+  }
+
+  if (wrongTeamCount > 0) {
+    details.push(`${String(wrongTeamCount)} export workflow states mapped to the wrong team`);
+  }
+
+  return {
+    entity: 'Workflow States',
+    exportCount: exportStates.length,
+    dbCount: validCount,
+    passed: false,
+    details: details.join('; '),
+  };
+}
+
 // Exported interface for types used by the exported `runVerify` function's return
 export type { VerificationResult, EntityVerification };
 
@@ -205,24 +380,18 @@ export async function runVerify(options: VerifyOptions): Promise<VerificationRes
 
     if (await fileExists(teamsFile)) {
       const exportTeams = await readJsonFile<Array<{ id: string; key: string; name: string }>>(teamsFile);
-      const dbTeamCount = await prisma.team.count();
-      const exportKeys = exportTeams.map((t) => t.key);
-      const dbTeams = await prisma.team.findMany({
-        where: { key: { in: exportKeys } },
-      });
-
-      const matchedCount = dbTeams.length;
-      const passed = matchedCount >= exportTeams.length;
-
-      entities.push({
-        entity: 'Teams',
-        exportCount: exportTeams.length,
-        dbCount: dbTeamCount,
-        passed,
-        details: passed
-          ? undefined
-          : `${String(exportTeams.length - matchedCount)} teams not found in database`,
-      });
+      entities.push(
+        await verifyMappedEntities({
+          prisma,
+          entityLabel: 'Teams',
+          entityType: 'team',
+          exportIds: exportTeams.map((team) => team.id),
+          countExistingRows: async (mappedNewIds) =>
+            prisma.team.count({
+              where: { id: { in: mappedNewIds } },
+            }),
+        }),
+      );
     }
 
     // --- Verify workflow states ---
@@ -230,25 +399,7 @@ export async function runVerify(options: VerifyOptions): Promise<VerificationRes
 
     if (await fileExists(statesFile)) {
       const exportStates = await readJsonFile<Array<{ id: string; name: string; team: { id: string } }>>(statesFile);
-      const dbStateCount = await prisma.workflowState.count();
-
-      // Check that all exported states exist (by name per team via mappings)
-      const mappings = await prisma.legacyLinearMapping.findMany({
-        where: { entityType: 'workflow_state' },
-      });
-      const mappedOldIds = new Set(mappings.map((m) => m.oldId));
-      const missingStates = exportStates.filter((s) => !mappedOldIds.has(s.id));
-      const passed = missingStates.length === 0;
-
-      entities.push({
-        entity: 'Workflow States',
-        exportCount: exportStates.length,
-        dbCount: dbStateCount,
-        passed,
-        details: passed
-          ? undefined
-          : `${String(missingStates.length)} workflow states not found in database mappings`,
-      });
+      entities.push(await verifyWorkflowStates(prisma, exportStates));
     }
 
     // --- Verify labels ---
@@ -256,25 +407,18 @@ export async function runVerify(options: VerifyOptions): Promise<VerificationRes
 
     if (await fileExists(labelsFile)) {
       const exportLabels = await readJsonFile<Array<{ id: string; name: string }>>(labelsFile);
-      const dbLabelCount = await prisma.issueLabel.count();
-
-      const exportNames = exportLabels.map((l) => l.name);
-      const dbLabels = await prisma.issueLabel.findMany({
-        where: { name: { in: exportNames } },
-      });
-
-      const matchedCount = dbLabels.length;
-      const passed = matchedCount >= exportLabels.length;
-
-      entities.push({
-        entity: 'Labels',
-        exportCount: exportLabels.length,
-        dbCount: dbLabelCount,
-        passed,
-        details: passed
-          ? undefined
-          : `${String(exportLabels.length - matchedCount)} labels not found in database`,
-      });
+      entities.push(
+        await verifyMappedEntities({
+          prisma,
+          entityLabel: 'Labels',
+          entityType: 'label',
+          exportIds: exportLabels.map((label) => label.id),
+          countExistingRows: async (mappedNewIds) =>
+            prisma.issueLabel.count({
+              where: { id: { in: mappedNewIds } },
+            }),
+        }),
+      );
     }
 
     // --- Verify users ---
@@ -282,25 +426,18 @@ export async function runVerify(options: VerifyOptions): Promise<VerificationRes
 
     if (await fileExists(usersFile)) {
       const exportUsers = await readJsonFile<Array<{ id: string; email: string; name: string }>>(usersFile);
-      const dbUserCount = await prisma.user.count();
-
-      const exportEmails = exportUsers.map((u) => u.email);
-      const dbUsers = await prisma.user.findMany({
-        where: { email: { in: exportEmails } },
-      });
-
-      const matchedCount = dbUsers.length;
-      const passed = matchedCount >= exportUsers.length;
-
-      entities.push({
-        entity: 'Users',
-        exportCount: exportUsers.length,
-        dbCount: dbUserCount,
-        passed,
-        details: passed
-          ? undefined
-          : `${String(exportUsers.length - matchedCount)} users not found in database`,
-      });
+      entities.push(
+        await verifyMappedEntities({
+          prisma,
+          entityLabel: 'Users',
+          entityType: 'user',
+          exportIds: exportUsers.map((user) => user.id),
+          countExistingRows: async (mappedNewIds) =>
+            prisma.user.count({
+              where: { id: { in: mappedNewIds } },
+            }),
+        }),
+      );
     }
 
     // --- Verify issues ---
