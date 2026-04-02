@@ -91,7 +91,13 @@ export interface ImportResult {
     issues: number;
     comments: number;
   };
+  warnings: {
+    orphanCommentFallbacks: number;
+  };
 }
+
+const ORPHAN_COMMENT_USER_EMAIL = 'orphan-comments@involute.import';
+const ORPHAN_COMMENT_USER_NAME = 'Imported Orphan Comment User';
 
 // --- File reading helpers ---
 
@@ -383,11 +389,12 @@ async function importComments(
   issueIdMap: Map<string, string>,
   userIdMap: Map<string, string>,
   onProgress?: ProgressCallback,
-): Promise<{ imported: number; skipped: number }> {
+): Promise<{ imported: number; skipped: number; orphanCommentFallbacks: number }> {
   onProgress?.('Importing comments...');
   const existingMappings = await getExistingMappings(prisma, 'comment');
   let imported = 0;
   let skipped = 0;
+  let orphanCommentFallbacks = 0;
 
   // Collect all comments across all issues, then sort by createdAt
   const allComments: Array<{
@@ -417,6 +424,8 @@ async function importComments(
     a.comment.createdAt.localeCompare(b.comment.createdAt),
   );
 
+  let orphanFallbackUserId: string | null = null;
+
   for (const { comment, issueId } of allComments) {
     if (existingMappings.has(comment.id)) {
       skipped++;
@@ -429,12 +438,29 @@ async function importComments(
       continue;
     }
 
-    // Skip comments with null user — cannot satisfy non-nullable userId FK
-    if (!comment.user) {
-      continue;
-    }
+    let newUserId: string | null = null;
 
-    const newUserId = userIdMap.get(comment.user.id);
+    if (comment.user) {
+      newUserId = userIdMap.get(comment.user.id) ?? null;
+    } else {
+      if (!orphanFallbackUserId) {
+        const orphanUser = await prisma.user.upsert({
+          where: { email: ORPHAN_COMMENT_USER_EMAIL },
+          create: {
+            name: ORPHAN_COMMENT_USER_NAME,
+            email: ORPHAN_COMMENT_USER_EMAIL,
+          },
+          update: { name: ORPHAN_COMMENT_USER_NAME },
+        });
+        orphanFallbackUserId = orphanUser.id;
+      }
+
+      newUserId = orphanFallbackUserId;
+      orphanCommentFallbacks++;
+      onProgress?.(
+        `  Comment ${comment.id} has null user; imported with fallback user ${ORPHAN_COMMENT_USER_EMAIL}`,
+      );
+    }
 
     if (!newUserId) {
       continue;
@@ -454,8 +480,10 @@ async function importComments(
     imported++;
   }
 
-  onProgress?.(`  Comments: ${String(imported)} imported, ${String(skipped)} skipped`);
-  return { imported, skipped };
+  onProgress?.(
+    `  Comments: ${String(imported)} imported, ${String(skipped)} skipped, ${String(orphanCommentFallbacks)} via fallback user`,
+  );
+  return { imported, skipped, orphanCommentFallbacks };
 }
 
 async function updateTeamNextIssueNumbers(
@@ -576,6 +604,9 @@ export async function runImportPipeline(
       users: userResult.skipped,
       issues: issueResult.skipped,
       comments: commentResult.skipped,
+    },
+    warnings: {
+      orphanCommentFallbacks: commentResult.orphanCommentFallbacks,
     },
   };
 }

@@ -211,7 +211,10 @@ describe('import pipeline', () => {
   it('imports users with name and email preserved', async () => {
     await runImportPipeline(prisma, exportDir);
 
-    const users = await prisma.user.findMany({ orderBy: { email: 'asc' } });
+    const users = await prisma.user.findMany({
+      where: { email: { in: ['alice@example.com', 'bob@example.com'] } },
+      orderBy: { email: 'asc' },
+    });
     expect(users).toHaveLength(2);
     expect(users[0]).toMatchObject({ name: 'Alice Smith', email: 'alice@example.com' });
     expect(users[1]).toMatchObject({ name: 'Bob Jones', email: 'bob@example.com' });
@@ -314,17 +317,24 @@ describe('import pipeline', () => {
     expect(comments[1]!.user.email).toBe('bob@example.com');
   });
 
-  it('handles comments with null user by skipping them', async () => {
+  it('imports comments with null user using a deterministic fallback user', async () => {
     await runImportPipeline(prisma, exportDir);
 
     const child = await prisma.issue.findUnique({ where: { identifier: 'SON-44' } });
     expect(child).not.toBeNull();
 
-    // The comment with null user should be skipped
     const comments = await prisma.comment.findMany({
       where: { issueId: child!.id },
+      include: { user: true },
     });
-    expect(comments).toHaveLength(0);
+    expect(comments).toHaveLength(1);
+    expect(comments[0]!.body).toBe('Orphan-safe comment');
+    expect(comments[0]!.createdAt.toISOString()).toBe('2024-06-05T10:00:00.000Z');
+    expect(comments[0]!.updatedAt.toISOString()).toBe('2024-06-05T10:00:00.000Z');
+    expect(comments[0]!.user).toMatchObject({
+      name: 'Imported Orphan Comment User',
+      email: 'orphan-comments@involute.import',
+    });
   });
 
   it('writes legacy_linear_mapping entries for all entities', async () => {
@@ -350,7 +360,7 @@ describe('import pipeline', () => {
     expect(issueMappings).toHaveLength(3);
 
     const commentMappings = mappings.filter((m) => m.entityType === 'comment');
-    expect(commentMappings).toHaveLength(2);
+    expect(commentMappings).toHaveLength(3);
   });
 
   it('ID mapping is bijective — each oldId and newId is unique per entity type', async () => {
@@ -396,8 +406,20 @@ describe('import pipeline', () => {
     expect(result.counts.labels).toBe(3);
     expect(result.counts.users).toBe(2);
     expect(result.counts.issues).toBe(3);
-    expect(result.counts.comments).toBe(2);
+    expect(result.counts.comments).toBe(3);
     expect(result.counts.parentChildBackfills).toBe(1);
+  });
+
+  it('keeps null-user comment count parity and reports fallback handling in progress output', async () => {
+    const messages: string[] = [];
+
+    const result = await runImportPipeline(prisma, exportDir, (message) => {
+      messages.push(message);
+    });
+
+    expect(result.counts.comments).toBe(3);
+    expect(result.skipped.comments).toBe(0);
+    expect(messages.some((message) => message.includes('fallback user'))).toBe(true);
   });
 
   it('sets team nextIssueNumber correctly based on imported identifiers', async () => {
