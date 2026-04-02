@@ -35,7 +35,14 @@ function getLabelClassName(labelName: string): string {
 }
 
 export function IssueCard({ issue, onSelect }: IssueCardProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id: issue.id,
     data: {
       issue,
@@ -56,10 +63,19 @@ export function IssueCard({ issue, onSelect }: IssueCardProps) {
       className={`issue-card${isDragging ? ' issue-card--dragging' : ''}`}
       aria-label={`${issue.identifier} ${issue.title}`}
       data-testid={`issue-card-${issue.id}`}
+      data-issue-identifier={issue.identifier}
       data-state-name={issue.state.name}
-      {...attributes}
-      {...listeners}
     >
+      <button
+        type="button"
+        className="issue-card__drag-handle"
+        aria-label={`Drag ${issue.identifier}`}
+        data-testid={`issue-drag-handle-${issue.identifier}`}
+        {...attributes}
+        {...listeners}
+      >
+        ⋮⋮
+      </button>
       <button
         type="button"
         className="issue-card__button"

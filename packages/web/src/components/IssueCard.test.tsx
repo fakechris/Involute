@@ -107,4 +107,14 @@ describe('IssueCard', () => {
     expect(screen.getAllByText('task').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Admin').length).toBeGreaterThanOrEqual(1);
   });
+
+  it('renders a stable drag handle selector and accessible label based on the issue identifier', () => {
+    const issue = makeIssue({ identifier: 'INV-42' });
+
+    render(<IssueCard issue={issue} />);
+
+    const dragHandle = screen.getByTestId('issue-drag-handle-INV-42');
+    expect(dragHandle).toHaveAccessibleName('Drag INV-42');
+    expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('data-issue-identifier', 'INV-42');
+  });
 });

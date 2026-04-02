@@ -290,6 +290,18 @@ describe('App', () => {
     expect(screen.getByText('Ready item')).toBeInTheDocument();
   });
 
+  it('renders stable drag handles and state-id based droppable selectors for board automation', async () => {
+    renderApp();
+
+    expect(await screen.findByTestId('issue-drag-handle-INV-1')).toHaveAccessibleName('Drag INV-1');
+    expect(screen.getByTestId('issue-drag-handle-INV-2')).toHaveAccessibleName('Drag INV-2');
+
+    expect(screen.getByTestId('board-column-state-backlog')).toHaveAttribute('data-state-id', 'state-backlog');
+    expect(screen.getByTestId('board-column-state-ready')).toHaveAttribute('data-state-id', 'state-ready');
+    expect(screen.getByTestId('column-Backlog')).toHaveAttribute('data-droppable-state-id', 'state-backlog');
+    expect(screen.getByTestId('column-Ready')).toHaveAttribute('data-droppable-state-id', 'state-ready');
+  });
+
   it('opens the issue drawer and changes state via dropdown', async () => {
     const mutate = vi.fn<
       (args: { variables: { id: string; input: { stateId: string } } }) => Promise<{ data: IssueUpdateMutationData }>

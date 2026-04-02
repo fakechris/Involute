@@ -256,6 +256,7 @@ select {
 }
 
 .issue-card {
+  position: relative;
   border: 1px solid rgba(96, 165, 250, 0.16);
   border-radius: 0.95rem;
   background: rgba(30, 41, 59, 0.88);
@@ -267,9 +268,31 @@ select {
   opacity: 0.5;
 }
 
+.issue-card__drag-handle {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #cbd5f5;
+  cursor: grab;
+  z-index: 1;
+}
+
+.issue-card__drag-handle:active {
+  cursor: grabbing;
+}
+
 .issue-card__button {
   width: 100%;
   padding: 0.9rem;
+  padding-right: 3rem;
   text-align: left;
   cursor: pointer;
 }

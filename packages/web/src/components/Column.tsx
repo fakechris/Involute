@@ -25,6 +25,8 @@ export function Column({ title, stateId, issues, onSelectIssue }: ColumnProps) {
     <section
       className={`board-column${isOver ? ' board-column--active' : ''}`}
       aria-label={`${title} column`}
+      data-testid={`board-column-${stateId}`}
+      data-state-id={stateId}
     >
       <div className="board-column__header">
         <h2>{title}</h2>
@@ -32,7 +34,12 @@ export function Column({ title, stateId, issues, onSelectIssue }: ColumnProps) {
       </div>
 
       <SortableContext items={issues.map((issue) => issue.id)} strategy={verticalListSortingStrategy}>
-        <div ref={setNodeRef} className="board-column__body" data-testid={`column-${title}`}>
+        <div
+          ref={setNodeRef}
+          className="board-column__body"
+          data-testid={`column-${title}`}
+          data-droppable-state-id={stateId}
+        >
           {issues.length > 0 ? (
             issues.map((issue) =>
               onSelectIssue ? (
