@@ -107,6 +107,7 @@ export function BoardPage() {
   const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
   const [dragPreviewStateId, setDragPreviewStateId] = useState<string | null>(null);
+  const [dragOriginStateId, setDragOriginStateId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedTeamKey) {
@@ -332,9 +333,11 @@ export function BoardPage() {
   async function handleDragEnd(event: DragEndEvent) {
     const issueId = String(event.active.id);
     const targetStateId = getDropTargetStateId(event) ?? dragPreviewStateId;
+    const originStateId = dragOriginStateId;
 
     setActiveIssueId(null);
     setDragPreviewStateId(null);
+    setDragOriginStateId(null);
 
     if (!targetStateId) {
       return;
@@ -342,12 +345,27 @@ export function BoardPage() {
 
     const issue = localIssues.find((item) => item.id === issueId);
 
-    if (!issue || issue.state.id === targetStateId) {
+    // Compare against the origin state to avoid skipping the mutation after
+    // handleDragOver has already optimistically moved the card.
+    if (!issue || originStateId === targetStateId) {
+      return;
+    }
+
+    const targetState =
+      selectedTeam?.states.nodes.find((item) => item.id === targetStateId) ?? null;
+
+    if (!targetState) {
       return;
     }
 
     try {
-      await persistStateChange(issue, targetStateId);
+      // Call persistIssueUpdate directly instead of persistStateChange because
+      // handleDragOver already updated issue.state optimistically, which would
+      // cause persistStateChange to skip the mutation.
+      await persistIssueUpdate(issue, { stateId: targetStateId }, (current) => ({
+        ...current,
+        state: targetState,
+      }));
     } catch {
       // error state already handled
     }
@@ -549,7 +567,10 @@ export function BoardPage() {
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragStart={(event) => {
-            setActiveIssueId(String(event.active.id));
+            const draggedId = String(event.active.id);
+            const draggedIssue = localIssues.find((item) => item.id === draggedId);
+            setActiveIssueId(draggedId);
+            setDragOriginStateId(draggedIssue?.state.id ?? null);
             setDragPreviewStateId(null);
             setMutationError(null);
           }}
@@ -557,6 +578,7 @@ export function BoardPage() {
           onDragCancel={() => {
             setActiveIssueId(null);
             setDragPreviewStateId(null);
+            setDragOriginStateId(null);
             setLocalIssues(data?.issues.nodes ?? []);
           }}
           onDragEnd={(event) => void handleDragEnd(event)}
@@ -577,7 +599,7 @@ export function BoardPage() {
           </section>
 
           <DragOverlay>
-            {activeIssue ? <IssueCard issue={activeIssue} /> : null}
+            {activeIssue ? <IssueCard issue={activeIssue} sortable={false} /> : null}
           </DragOverlay>
         </DndContext>
       )}

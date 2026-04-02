@@ -6,6 +6,7 @@ import type { IssueSummary } from '../board/types';
 interface IssueCardProps {
   issue: IssueSummary;
   onSelect?: (issue: IssueSummary) => void;
+  sortable?: boolean;
 }
 
 function getInitials(name: string | null | undefined): string {
@@ -34,7 +35,7 @@ function getLabelClassName(labelName: string): string {
   return 'issue-card__label issue-card__label--neutral';
 }
 
-export function IssueCard({ issue, onSelect }: IssueCardProps) {
+export function IssueCard({ issue, onSelect, sortable = true }: IssueCardProps) {
   const {
     attributes,
     listeners,
@@ -50,6 +51,7 @@ export function IssueCard({ issue, onSelect }: IssueCardProps) {
       type: 'issue-card',
       stateId: issue.state.id,
     },
+    disabled: !sortable,
   });
 
   const style = {
@@ -66,18 +68,21 @@ export function IssueCard({ issue, onSelect }: IssueCardProps) {
       data-testid={`issue-card-${issue.id}`}
       data-issue-identifier={issue.identifier}
       data-state-name={issue.state.name}
+      data-sortable={sortable ? 'true' : 'false'}
     >
-      <button
-        type="button"
-        ref={setActivatorNodeRef}
-        className="issue-card__drag-handle"
-        aria-label={`Drag ${issue.identifier}`}
-        data-testid={`issue-drag-handle-${issue.identifier}`}
-        {...attributes}
-        {...listeners}
-      >
-        ⋮⋮
-      </button>
+      {sortable ? (
+        <button
+          type="button"
+          ref={setActivatorNodeRef}
+          className="issue-card__drag-handle"
+          aria-label={`Drag ${issue.identifier}`}
+          data-testid={`issue-drag-handle-${issue.identifier}`}
+          {...attributes}
+          {...listeners}
+        >
+          ⋮⋮
+        </button>
+      ) : null}
       <button
         type="button"
         className="issue-card__button"

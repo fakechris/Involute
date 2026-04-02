@@ -119,6 +119,26 @@ describe('IssueCard', () => {
     expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('data-issue-identifier', 'INV-42');
   });
 
+  it('disables sortable registration and omits the drag handle for preview cards', () => {
+    const issue = makeIssue({ identifier: 'INV-99' });
+
+    render(<IssueCard issue={issue} sortable={false} />);
+
+    expect(useSortableSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          issue,
+          stateId: 'state-backlog',
+          type: 'issue-card',
+        }),
+        disabled: true,
+        id: 'issue-1',
+      }),
+    );
+    expect(screen.queryByTestId('issue-drag-handle-INV-99')).not.toBeInTheDocument();
+    expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('data-sortable', 'false');
+  });
+
   it('wires the drag handle as the sortable activator node', () => {
     const setActivatorNodeRef = vi.fn();
     useSortableSpy.mockImplementationOnce(() => ({
