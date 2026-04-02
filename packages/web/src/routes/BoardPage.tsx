@@ -4,7 +4,9 @@ import {
   type DragOverEvent,
   DragEndEvent,
   DragOverlay,
+  MouseSensor,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -133,7 +135,11 @@ export function BoardPage() {
     [localIssues, selectedIssueId],
   );
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { distance: 5 } }),
+  );
 
   async function persistIssueUpdate(
     issue: IssueSummary,

@@ -16,7 +16,7 @@ import type {
   IssueSummary,
   IssueUpdateMutationData,
 } from './board/types';
-import type { DragEndEvent } from '@dnd-kit/core';
+import { MouseSensor, PointerSensor, TouchSensor, type DragEndEvent } from '@dnd-kit/core';
 
 const apolloMocks = vi.hoisted(() => ({
   useQuery: vi.fn(),
@@ -41,6 +41,11 @@ vi.mock('@apollo/client/react', async () => {
   };
 });
 
+const dndMocks = vi.hoisted(() => ({
+  useSensor: vi.fn(() => ({})),
+  useSensors: vi.fn(() => []),
+}));
+
 vi.mock('@dnd-kit/core', async () => {
   const actual = await vi.importActual<typeof import('@dnd-kit/core')>('@dnd-kit/core');
 
@@ -48,12 +53,14 @@ vi.mock('@dnd-kit/core', async () => {
     ...actual,
     DndContext: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
     DragOverlay: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-    useSensor: vi.fn(() => ({})),
-    useSensors: vi.fn(() => []),
+    useSensor: dndMocks.useSensor,
+    useSensors: dndMocks.useSensors,
   };
 });
 
 beforeEach(() => {
+  dndMocks.useSensor.mockClear();
+  dndMocks.useSensors.mockClear();
   apolloMocks.useQuery.mockReset();
   apolloMocks.useMutation.mockReset();
   apolloMocks.useMutation.mockImplementation((document) => {
@@ -1367,5 +1374,28 @@ describe('App', () => {
     const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
 
     expect(within(drawer).getByText('No labels available')).toBeInTheDocument();
+  });
+
+  it('registers PointerSensor, MouseSensor, and TouchSensor for drag-and-drop', () => {
+    renderApp();
+
+    const sensorTypes = (dndMocks.useSensor.mock.calls as unknown[][]).map(
+      (call) => call[0],
+    );
+
+    expect(sensorTypes).toContain(PointerSensor);
+    expect(sensorTypes).toContain(MouseSensor);
+    expect(sensorTypes).toContain(TouchSensor);
+    expect(dndMocks.useSensors).toHaveBeenCalled();
+  });
+
+  it('configures each sensor with a distance activation constraint', () => {
+    renderApp();
+
+    for (const call of dndMocks.useSensor.mock.calls as unknown as [unknown, Record<string, unknown>][]) {
+      const options = call[1];
+      expect(options).toHaveProperty('activationConstraint');
+      expect((options.activationConstraint as { distance: number }).distance).toBeLessThanOrEqual(5);
+    }
   });
 });
