@@ -444,6 +444,7 @@ async function importComments(
       data: {
         body: comment.body,
         createdAt: new Date(comment.createdAt),
+        updatedAt: new Date(comment.updatedAt),
         issueId: newIssueId,
         userId: newUserId,
       },

@@ -305,10 +305,12 @@ describe('import pipeline', () => {
     expect(comments).toHaveLength(2);
     expect(comments[0]!.body).toBe('Looking into this now');
     expect(comments[0]!.createdAt.toISOString()).toBe('2024-06-01T11:00:00.000Z');
+    expect(comments[0]!.updatedAt.toISOString()).toBe('2024-06-01T11:00:00.000Z');
     expect(comments[0]!.user.email).toBe('alice@example.com');
 
     expect(comments[1]!.body).toBe('Found the root cause');
     expect(comments[1]!.createdAt.toISOString()).toBe('2024-06-02T14:00:00.000Z');
+    expect(comments[1]!.updatedAt.toISOString()).toBe('2024-06-02T14:00:00.000Z');
     expect(comments[1]!.user.email).toBe('bob@example.com');
   });
 
