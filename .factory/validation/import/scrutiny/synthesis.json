@@ -5,17 +5,17 @@
   "validatorsRun": {
     "test": {
       "passed": true,
-      "command": "pnpm test",
+      "command": "\"/Users/chris/workspace/Involute/.factory/init.sh\" && pnpm test",
       "exitCode": 0
     },
     "typecheck": {
       "passed": true,
-      "command": "pnpm typecheck",
+      "command": "\"/Users/chris/workspace/Involute/.factory/init.sh\" && pnpm typecheck",
       "exitCode": 0
     },
     "lint": {
       "passed": true,
-      "command": "pnpm lint",
+      "command": "\"/Users/chris/workspace/Involute/.factory/init.sh\" && pnpm lint",
       "exitCode": 0
     }
   },
@@ -24,47 +24,42 @@
     "passed": 0,
     "failed": 3,
     "failedFeatures": [
-      "import-cli-commands",
+      "linear-export-client",
       "import-pipeline",
-      "linear-export-client"
+      "import-cli-commands"
     ]
   },
   "blockingIssues": [
     {
-      "featureId": "import-cli-commands",
+      "featureId": "linear-export-client",
       "severity": "blocking",
-      "description": "`involute export --team <key>` validates that the requested team exists, but still writes `teams: allTeams` to `teams.json` instead of the filtered team set. That means the exported dataset is not actually scoped to the requested team, violating the command contract and making downstream import/verify operate on unrelated teams as well."
-    },
-    {
-      "featureId": "import-cli-commands",
-      "severity": "blocking",
-      "description": "The comments verification reports `dbCount` as the number of mapped/imported comments rather than the actual number of matching comment rows found in the database. If a mapped comment row is later missing or deleted, the command can show a failing result like `(export: 5, db: 5)` while the details say fewer comments were actually found, which makes the pass/fail report inaccurate for `import verify`'s discrepancy reporting requirement."
+      "description": "`filterExportDataToTeamScope()` can retain unrelated users in scoped exports via comment-author collection, so `users.json` and validation counts can still include off-team data."
     },
     {
       "featureId": "import-pipeline",
       "severity": "blocking",
-      "description": "Comments are created with only `createdAt`; the export includes `updatedAt`, but neither the Prisma schema nor the import code stores or replays it. The feature description requires preserving timestamps, and the migration spec lists `createdAt / updatedAt` as import scope. As implemented, edited comments lose their original update time during import."
+      "description": "The import pipeline silently skips comments with `user: null`, dropping exported comments while still reporting success and breaking comment completeness/count parity."
     },
     {
-      "featureId": "linear-export-client",
+      "featureId": "import-cli-commands",
       "severity": "blocking",
-      "description": "`runExport` validates that the requested team key exists, but then exports and writes all workflow states, issues, comments, and users without filtering them to the selected team. The command signature requires `--team <key>`, and the import spec expects a team-specific export directory; as implemented, a workspace with multiple teams will produce mixed-team `issues.json`, `workflow_states.json`, comment files, and inflated validation counts."
+      "description": "`import verify` issue verification is identifier-based instead of mapping-based, so a skipped or mismapped import can still pass if another DB issue already has the same identifier."
+    },
+    {
+      "featureId": "import-cli-commands",
+      "severity": "blocking",
+      "description": "`import verify` comment verification checks mapping/count existence only and does not validate exported content, timestamps, issue association, or author linkage, allowing corrupted imports to pass."
     }
   ],
   "appliedUpdates": [],
   "suggestedGuidanceUpdates": [
     {
       "target": "skills",
-      "suggestion": "The `cli-worker` skill says to write tests first and confirm the red phase, but the transcript shows the worker began by implementing `verify.ts` and command registration before creating most of the new tests. The skill guidance may need tightening or examples that reflect the practical workflow used in this repo.",
-      "evidence": "Skill: .factory/skills/cli-worker/SKILL.md ('Create test files BEFORE implementation'). Transcript skeleton for session 2361891d-b278-4dbb-8d25-c8db6c45032d shows `Create verify.ts` and edits to `import.ts`/`index.ts` before creating `import.test.ts` and `verify.test.ts`.",
+      "suggestion": "Reinforce in `cli-worker` that import/export features must read the legacy migration spec before implementing verify semantics.",
+      "evidence": "The `import-cli-commands` review found no transcript read of `docs/legacy/05_Linear_\u5168\u91cf\u5bfc\u51fa_\u8fc1\u79fb\u4e0e\u5bfc\u5165\u65b9\u6848.md` despite the skill procedure requiring it, and the resulting verify logic missed required mapping/content checks.",
       "isSystemic": false
     }
   ],
-  "rejectedObservations": [
-    {
-      "observation": "The migration spec in `docs/legacy/05_Linear_\u5168\u91cf\u5bfc\u51fa_\u8fc1\u79fb\u4e0e\u5bfc\u5165\u65b9\u6848.md` calls out preserving `createdAt / updatedAt`, but the current Prisma `Comment` model only has `createdAt`. This makes the timestamp-preservation requirement for comments impossible to satisfy without schema changes.",
-      "reason": "already-documented in .factory/library/architecture.md data model and reflected in current schema; schema changes need orchestrator decision rather than additive factual library update"
-    }
-  ],
+  "rejectedObservations": [],
   "previousRound": null
 }

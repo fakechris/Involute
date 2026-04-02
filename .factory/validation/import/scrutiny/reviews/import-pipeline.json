@@ -1,15 +1,22 @@
 {
   "featureId": "import-pipeline",
-  "reviewedAt": "2026-04-02T04:30:08.216192+00:00",
+  "reviewedAt": "2026-04-02T04:47:45Z",
   "commitId": "5d45c7f",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
-  "status": "pass",
+  "status": "fail",
   "codeReview": {
-    "summary": "Reviewed the import pipeline implementation, transcript skeleton, handoff, skill instructions, and commit diff. The feature imports teams, workflow states, labels, users, issues, parent-child links, mappings, and comments in the required order, preserves identifiers and timestamps, and its idempotency strategy aligns with the mission requirements.",
-    "issues": []
+    "summary": "The import pipeline covers the main happy path and is well tested, but it silently drops exported comments whose authors are absent/null, which breaks import completeness and count parity against the export.",
+    "issues": [
+      {
+        "file": "packages/server/src/import-pipeline.ts",
+        "line": 428,
+        "severity": "blocking",
+        "description": "Comments with `user: null` are silently skipped instead of being imported or causing a clear failure. The feature description requires writing exported data to the database with mapping-table completeness and import count parity, and validation includes full comment completeness. As implemented, an export containing orphan comments loses data while still reporting success."
+      }
+    ]
   },
   "sharedStateObservations": [],
   "addressesFailureFrom": null,
-  "summary": "Reviewed feature `import-pipeline` via mission metadata, worker transcript skeleton, handoff, skill file, architecture docs, and commit `5d45c7f`. I did not find any high-confidence actionable correctness issues in this implementation."
+  "summary": "Reviewed handoff, transcript skeleton, skill/doc context, commit diff, and implementation/tests for `import-pipeline`. Found one blocking correctness gap: orphan/null-user comments are dropped during import, so the pipeline is not complete for all exported comment data and can fail import-verification expectations."
 }

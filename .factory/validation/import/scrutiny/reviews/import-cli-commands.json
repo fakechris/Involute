@@ -1,34 +1,34 @@
 {
   "featureId": "import-cli-commands",
-  "reviewedAt": "2026-04-02T04:30:21Z",
-  "commitId": "d84a73e",
+  "reviewedAt": "2026-04-02T04:47:37Z",
+  "commitId": "d84a73ee4f2d4dcbd3b951a92b644cea4046f3ac",
   "transcriptSkeletonReviewed": true,
   "diffReviewed": true,
   "status": "fail",
   "codeReview": {
-    "summary": "The CLI command registration and basic import/export wiring are in place, but the new verification logic is not trustworthy for scoped exports. It can report false passes by comparing export entities against unrelated database rows and global legacy mappings rather than only the rows imported from the provided export.",
+    "summary": "The CLI wiring for export/import/verify is present and the feature includes substantial test coverage, but the verify command does not fully validate import completeness for issues and comments and can report false passes.",
     "issues": [
       {
         "file": "packages/cli/src/commands/verify.ts",
-        "line": 215,
+        "line": 449,
         "severity": "blocking",
-        "description": "Team/label/user verification can incorrectly pass when the export contains entities that were never imported. The code checks `matchedCount >= exportCount` against global DB rows and reports the total DB table count, so any pre-existing row with the same key/name/email satisfies the verification even if there is no corresponding legacy mapping from this export. This violates the requirement to compare imported data against the provided export source and can hide missing imports."
+        "description": "Issue verification only checks that every exported identifier exists somewhere in the database and that mapped parent relationships line up. It never verifies that each exported issue has a legacy mapping row or that the mapped database row is the one carrying the exported identifier. If an issue with the same identifier already exists from an earlier import/manual seed while the current export issue was skipped or mapped incorrectly, `verify` will still pass, so it cannot reliably validate import completeness as required."
       },
       {
         "file": "packages/cli/src/commands/verify.ts",
-        "line": 237,
+        "line": 112,
         "severity": "blocking",
-        "description": "Workflow state verification is also global instead of export-scoped. It loads all `workflow_state` mappings in the database and treats an exported state as verified if its old ID appears anywhere in that global mapping set. When multiple imports exist, stale mappings from a previous run can make `import verify --file <dir>` pass even if the states for this specific export were never imported into the current database state."
+        "description": "Comment verification only confirms the existence of mapping rows and DB rows for exported comment IDs; it does not compare imported comment content, timestamps, issue association, or author linkage to the export source. A mismapped or corrupted imported comment with the same mapped row count still reports PASS, which falls short of the required discrepancy reporting for import verification."
       }
     ]
   },
   "sharedStateObservations": [
     {
       "area": "skills",
-      "observation": "The `cli-worker` skill says to read `docs/legacy/05_Linear_\u5168\u91cf\u5bfc\u51fa_\u8fc1\u79fb\u4e0e\u5bfc\u5165\u65b9\u6848.md` before implementing import/export features, but the transcript skeleton for this feature never shows that file being read. The worker proceeded by reverse-engineering the existing code instead.",
-      "evidence": "Skill file `.factory/skills/cli-worker/SKILL.md` step 1 requires reading the import/export spec; the reviewed transcript skeleton for worker session `2361891d-b278-4dbb-8d25-c8db6c45032d` contains reads of mission files and CLI/server sources, but no read of `docs/legacy/05_Linear_\u5168\u91cf\u5bfc\u51fa_\u8fc1\u79fb\u4e0e\u5bfc\u5165\u65b9\u6848.md`."
+      "observation": "The cli-worker skill says to read `docs/legacy/05_Linear_\u5168\u91cf\u5bfc\u51fa_\u8fc1\u79fb\u4e0e\u5bfc\u5165\u65b9\u6848.md` and to check existing CLI command patterns before implementation, but the transcript skeleton shows the worker never opened that legacy import/export spec. The skill procedure may need stronger emphasis if that spec is required for correct verify semantics.",
+      "evidence": "Worker transcript skeleton for session 2361891d-b278-4dbb-8d25-c8db6c45032d shows reads of mission files, CLI files, and import pipeline files, but no read of `docs/legacy/05_Linear_\u5168\u91cf\u5bfc\u51fa_\u8fc1\u79fb\u4e0e\u5bfc\u5165\u65b9\u6848.md`; compare with `.factory/skills/cli-worker/SKILL.md` procedure step 1."
     }
   ],
   "addressesFailureFrom": null,
-  "summary": "Reviewed commit `d84a73e` for `import-cli-commands`. Found two high-confidence blocking correctness issues in `import verify`: several entity checks are not scoped to the provided export and can produce false PASS results by matching unrelated existing rows or stale mappings elsewhere in the database. Report written for validator follow-up."
+  "summary": "Reviewed handoff, transcript skeleton, skill guidance, architecture docs, and commit `d84a73ee4f2d4dcbd3b951a92b644cea4046f3ac`. The feature adds the requested CLI commands and tests, but `import verify` is not trustworthy enough yet because issue verification is identifier-based instead of mapping-based and comment verification checks counts/existence only, not exported content or relationships."
 }
