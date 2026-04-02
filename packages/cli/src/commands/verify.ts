@@ -61,6 +61,21 @@ function isWithinOneSecond(actual: Date, expected: string): boolean {
   return Math.abs(actual.getTime() - new Date(expected).getTime()) < 1_000;
 }
 
+function commentUpdatedAtMatchesAllowedImportSemantics(params: {
+  actualUpdatedAt: Date;
+  exportedUpdatedAt: string;
+  exportedCreatedAt: string;
+  issueUpdatedAt: string;
+}): boolean {
+  const { actualUpdatedAt, exportedUpdatedAt, exportedCreatedAt, issueUpdatedAt } = params;
+
+  return (
+    isWithinOneSecond(actualUpdatedAt, exportedUpdatedAt) ||
+    isWithinOneSecond(actualUpdatedAt, exportedCreatedAt) ||
+    isWithinOneSecond(actualUpdatedAt, issueUpdatedAt)
+  );
+}
+
 /**
  * Load project environment variables (DATABASE_URL etc.) from the repo root .env.
  */
@@ -263,11 +278,12 @@ async function verifyComments(
     }
 
     const createdAtMatches = isWithinOneSecond(dbComment.createdAt, comment.createdAt);
-    const updatedAtMatches =
-      isWithinOneSecond(dbComment.updatedAt, comment.updatedAt) ||
-      isWithinOneSecond(dbComment.updatedAt, comment.createdAt) ||
-      isWithinOneSecond(dbComment.updatedAt, issueUpdatedAt) ||
-      dbComment.updatedAt.getTime() >= dbComment.createdAt.getTime();
+    const updatedAtMatches = commentUpdatedAtMatchesAllowedImportSemantics({
+      actualUpdatedAt: dbComment.updatedAt,
+      exportedUpdatedAt: comment.updatedAt,
+      exportedCreatedAt: comment.createdAt,
+      issueUpdatedAt,
+    });
 
     if (!createdAtMatches || !updatedAtMatches) {
       timestampMismatches += 1;

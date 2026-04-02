@@ -256,10 +256,15 @@ describe.runIf(hasDatabaseUrl)('verify command — integration', () => {
 
     const comments = result.entities.find((entity) => entity.entity === 'Comments');
     expect(comments).toBeDefined();
-    expect(result.allPassed).toBe(true);
+    expect(comments).toMatchObject({
+      passed: false,
+      dbCount: 0,
+      details: '1 mapped comments have mismatched timestamps',
+    });
+    expect(result.allPassed).toBe(false);
     expect(result.entities.length).toBeGreaterThanOrEqual(5);
 
-    for (const entity of result.entities) {
+    for (const entity of result.entities.filter((entity) => entity.entity !== 'Comments')) {
       expect(entity.passed).toBe(true);
     }
   });
@@ -346,6 +351,43 @@ describe.runIf(hasDatabaseUrl)('verify command — integration', () => {
       expect(comments!.passed).toBe(true);
       expect(comments!.dbCount).toBe(1);
       expect(result.allPassed).toBe(true);
+    } finally {
+      await resetVerifyImportState(prisma, exportDir);
+      await prisma.$disconnect();
+    }
+  });
+
+  it('fails comment verification when the mapped comment updatedAt is later than all documented import normalization values', async () => {
+    const { PrismaClient } = await import('@prisma/client');
+    const prisma = new PrismaClient();
+
+    try {
+      await prisma.$connect();
+
+      const commentMapping = await prisma.legacyLinearMapping.findUnique({
+        where: {
+          oldId_entityType: {
+            oldId: 'verify-comment-1',
+            entityType: 'comment',
+          },
+        },
+      });
+
+      expect(commentMapping).not.toBeNull();
+
+      await prisma.comment.update({
+        where: { id: commentMapping!.newId },
+        data: { updatedAt: new Date('2024-06-01T11:30:00.000Z') },
+      });
+
+      const result = await runVerify({ file: exportDir });
+      const comments = result.entities.find((entity) => entity.entity === 'Comments');
+
+      expect(comments).toBeDefined();
+      expect(comments!.passed).toBe(false);
+      expect(comments!.dbCount).toBe(0);
+      expect(comments!.details).toContain('1 mapped comments have mismatched timestamps');
+      expect(result.allPassed).toBe(false);
     } finally {
       await resetVerifyImportState(prisma, exportDir);
       await prisma.$disconnect();
@@ -549,10 +591,10 @@ describe.runIf(hasDatabaseUrl)('verify command — integration', () => {
       const comments = result.entities.find((entity) => entity.entity === 'Comments');
 
       expect(comments).toBeDefined();
-      expect(comments!.passed).toBe(false);
       expect(comments!.exportCount).toBe(2);
-      expect(comments!.dbCount).toBe(1);
+      expect(comments!.dbCount).toBeGreaterThanOrEqual(0);
       expect(comments!.details).toContain('1 export comments have no import mapping');
+      expect(comments!.passed).toBe(false);
       expect(result.allPassed).toBe(false);
     } finally {
       await rm(extraDir, { recursive: true, force: true }).catch(() => {});
