@@ -1,0 +1,20 @@
+{
+  "flowId": "round2-import-api-surface",
+  "milestone": "import",
+  "surface": "curl",
+  "assertions": [
+    {
+      "id": "VAL-IMP-010",
+      "status": "pass",
+      "details": "Imported issues (TST-1, TST-2) retain original createdAt/updatedAt timestamps from export fixture. TST-1: createdAt=2024-06-15T09:30:00.000Z, updatedAt=2024-07-20T14:45:00.000Z. TST-2: createdAt=2023-12-01T00:00:00.000Z, updatedAt=2025-01-15T18:30:00.000Z. All timestamps match exactly."
+    },
+    {
+      "id": "VAL-IMP-011",
+      "status": "pass",
+      "details": "Imported users (Alice Timestamp, Bob Validator) retain name and email fields. Users are queryable via the root `users` query and correctly linked as assignees to their imported issues."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "toolsUsed": ["curl", "node packages/cli/dist/index.js"]
+}

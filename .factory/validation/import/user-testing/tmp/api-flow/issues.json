@@ -1,0 +1,92 @@
+[
+  {
+    "id": "api-issue-1",
+    "identifier": "SON-42",
+    "title": "Fix login bug",
+    "description": "Users cannot log in",
+    "priority": 1,
+    "createdAt": "2024-06-01T10:00:00.000Z",
+    "updatedAt": "2024-06-02T15:00:00.000Z",
+    "state": {
+      "id": "api-ws-2",
+      "name": "In Progress"
+    },
+    "team": {
+      "id": "api-team-1",
+      "key": "SON"
+    },
+    "assignee": {
+      "id": "api-user-1",
+      "name": "Alice Smith",
+      "email": "alice@example.com"
+    },
+    "labels": {
+      "nodes": [
+        {
+          "id": "api-label-1",
+          "name": "bug"
+        },
+        {
+          "id": "api-label-3",
+          "name": "urgent"
+        }
+      ]
+    },
+    "parent": null
+  },
+  {
+    "id": "api-issue-2",
+    "identifier": "SON-43",
+    "title": "Add dashboard widget",
+    "description": null,
+    "priority": 2,
+    "createdAt": "2024-06-03T08:00:00.000Z",
+    "updatedAt": "2024-06-03T08:00:00.000Z",
+    "state": {
+      "id": "api-ws-1",
+      "name": "Backlog"
+    },
+    "team": {
+      "id": "api-team-1",
+      "key": "SON"
+    },
+    "assignee": null,
+    "labels": {
+      "nodes": []
+    },
+    "parent": null
+  },
+  {
+    "id": "api-issue-3",
+    "identifier": "SON-44",
+    "title": "Sub-task of login fix",
+    "description": "Handle OAuth redirect",
+    "priority": 1,
+    "createdAt": "2024-06-01T12:00:00.000Z",
+    "updatedAt": "2024-06-04T09:00:00.000Z",
+    "state": {
+      "id": "api-ws-1",
+      "name": "Backlog"
+    },
+    "team": {
+      "id": "api-team-1",
+      "key": "SON"
+    },
+    "assignee": {
+      "id": "api-user-2",
+      "name": "Bob Jones",
+      "email": "bob@example.com"
+    },
+    "labels": {
+      "nodes": [
+        {
+          "id": "api-label-2",
+          "name": "feature"
+        }
+      ]
+    },
+    "parent": {
+      "id": "api-issue-1"
+    }
+  }
+]

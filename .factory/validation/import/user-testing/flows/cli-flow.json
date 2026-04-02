@@ -1,0 +1,174 @@
+{
+  "groupId": "cli-flow",
+  "testedAt": "2026-04-02T05:49:09.718768+00:00",
+  "isolation": {
+    "home": "/Users/chris/workspace/Involute/.factory/validation/import/user-testing/tmp/cli-home",
+    "fixtureOutputDir": "/Users/chris/workspace/Involute/.factory/validation/import/user-testing/tmp/cli-flow",
+    "missionDir": "/Users/chris/.factory/missions/6774ac71-5dc9-4936-9303-c902a364ac7c",
+    "repoRoot": "/Users/chris/workspace/Involute"
+  },
+  "toolsUsed": [
+    "Execute"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-CLI-016",
+      "title": "Export command",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Check for Linear credentials in assigned environment",
+          "expected": "A valid token is available to run the real export CLI surface",
+          "observed": "LINEAR_API_TOKEN was unset in the environment and no valid token was provided in the assignment"
+        },
+        {
+          "action": "Run `node packages/cli/dist/index.js export --token <token> --team INV --output <isolated-dir>`",
+          "expected": "Export completes and writes the documented export directory structure",
+          "observed": "Command exited with code 1 after `Exporting teams...` and stderr `Error: Linear API HTTP error: 401 Unauthorized`"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "terminalSnapshots": [
+          "import/cli-flow/export-attempt.stdout",
+          "import/cli-flow/export-attempt.stderr",
+          "import/cli-flow/export-attempt.exitcode",
+          "import/cli-flow/blocked-export-summary.json"
+        ],
+        "consoleErrors": "n/a",
+        "network": "CLI attempted Linear GraphQL export and received 401 Unauthorized",
+        "stdoutStderr": "stdout captured export banner and `Exporting teams...`; stderr captured unauthorized error; exit code 1"
+      },
+      "issues": "Blocked by missing valid Linear API credentials required for the real export surface."
+    },
+    {
+      "id": "VAL-IMP-001",
+      "title": "Full data export from Linear",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Inspect export output directory after running the real export CLI surface",
+          "expected": "Directory contains teams.json, workflow_states.json, labels.json, users.json, issues.json, comments/, mappings/, and validation_report.json for count verification",
+          "observed": "No export directory was created because the export command failed before any files were written"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "terminalSnapshots": [
+          "import/cli-flow/export-attempt.stdout",
+          "import/cli-flow/export-attempt.stderr",
+          "import/cli-flow/export-attempt.exitcode"
+        ],
+        "consoleErrors": "n/a",
+        "network": "Blocked upstream by 401 from Linear export request",
+        "stdoutStderr": "Export did not reach file-writing stage."
+      },
+      "issues": "Cannot validate export structure or counts without a successful authenticated export."
+    },
+    {
+      "id": "VAL-CLI-017",
+      "title": "Import command",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Prepare isolated export directory from the real export command",
+          "expected": "Importable export fixture exists at the assigned isolated output directory",
+          "observed": "No importable export fixture exists because export was blocked by Linear authentication failure"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "terminalSnapshots": [
+          "import/cli-flow/export-attempt.stdout",
+          "import/cli-flow/export-attempt.stderr",
+          "import/cli-flow/export-attempt.exitcode"
+        ],
+        "consoleErrors": "n/a",
+        "network": "n/a",
+        "stdoutStderr": "Import was not runnable without the required export directory."
+      },
+      "issues": "Blocked because the assignment requires isolated export data generated from the real CLI export surface."
+    },
+    {
+      "id": "VAL-CLI-018",
+      "title": "Import verification command",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Generate export source and run import before verify",
+          "expected": "Verification command can compare imported DB rows against export source",
+          "observed": "Neither export nor import could be completed due to missing valid Linear credentials"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "terminalSnapshots": [
+          "import/cli-flow/export-attempt.stdout",
+          "import/cli-flow/export-attempt.stderr",
+          "import/cli-flow/export-attempt.exitcode"
+        ],
+        "consoleErrors": "n/a",
+        "network": "n/a",
+        "stdoutStderr": "Verify was not runnable within scope because its prerequisite export/import data was unavailable."
+      },
+      "issues": "Blocked by unmet authenticated export prerequisite."
+    },
+    {
+      "id": "VAL-IMP-009",
+      "title": "Re-import idempotency",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Run import twice on the same isolated export directory and compare issue counts before/after the second run",
+          "expected": "Second import skips or clearly rejects duplicates without creating extra records",
+          "observed": "Could not establish the initial export/import dataset because export was blocked by Linear authentication failure"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "terminalSnapshots": [
+          "import/cli-flow/export-attempt.stdout",
+          "import/cli-flow/export-attempt.stderr",
+          "import/cli-flow/export-attempt.exitcode"
+        ],
+        "consoleErrors": "n/a",
+        "network": "n/a",
+        "stdoutStderr": "Idempotency test was not reachable because the initial import prerequisite was unavailable."
+      },
+      "issues": "Blocked by missing authenticated export data."
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Export command requires a real Linear API token, but no LINEAR_API_TOKEN was available in the assigned environment and the provided placeholder token produced 401 Unauthorized before any export files were generated.",
+      "resolved": false,
+      "resolution": "Confirmed env var absence and captured blocked export attempt evidence.",
+      "affectedAssertions": [
+        "VAL-CLI-016",
+        "VAL-IMP-001",
+        "VAL-CLI-017",
+        "VAL-CLI-018",
+        "VAL-IMP-009"
+      ]
+    }
+  ],
+  "blockers": [
+    {
+      "description": "Unable to create the required export directory contents because the real CLI export against Linear failed with 401 Unauthorized and there was no valid Linear token available in the assigned isolation context.",
+      "affectedAssertions": [
+        "VAL-CLI-016",
+        "VAL-IMP-001",
+        "VAL-CLI-017",
+        "VAL-CLI-018",
+        "VAL-IMP-009"
+      ],
+      "quickFixAttempted": "Verified localhost API health, checked LINEAR_API_TOKEN presence, then ran the real export surface with an isolated HOME/output directory to capture the failure."
+    }
+  ],
+  "summary": "All 5 assigned assertions are blocked by missing Linear export credentials, so import/verify/idempotency could not be exercised through the required real CLI surface.",
+  "setupKnowledge": {
+    "apiHealth": "http://localhost:4200/health returned OK",
+    "cliSurface": "Verified help output for root and import commands on node packages/cli/dist/index.js",
+    "credentialState": "LINEAR_API_TOKEN unset; placeholder token attempt returned 401 Unauthorized"
+  }
+}

@@ -1,0 +1,9 @@
+[
+  {
+    "id": "ffffffff-0000-0000-0000-000000000001",
+    "body": "Comment to test timestamp preservation",
+    "createdAt": "2024-06-16T10:00:00.000Z",
+    "updatedAt": "2024-06-16T10:00:00.000Z",
+    "user": { "id": "dddddddd-0000-0000-0000-000000000001", "name": "Alice Timestamp", "email": "alice.timestamp@testvalidation.local" }
+  }
+]

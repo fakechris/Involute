@@ -66,3 +66,21 @@
 - **User ID resolution:** The admin user is the only user. Query teams or create an issue and check its fields.
 - **Evidence:** Save raw JSON request/response for every assertion in the assigned evidence directory.
 - **Concurrency:** Up to 5 concurrent curl validators. Each creates its own test data for isolation.
+
+## Flow Validator Guidance: CLI
+
+- Surface boundary: use only the built CLI binary at `node packages/cli/dist/index.js` against the live local API/server data.
+- Isolation rule: each validator must use its own export directory under `.factory/validation/import/user-testing/tmp/<group-id>` and its own CLI config home via `HOME=<isolated-home>` so config writes do not collide.
+- Shared database is allowed, but create/import unique fixture exports per validator and verify by identifiers from that validator's export only.
+- Real Linear export note: this environment provides `LINEAR_TOKEN` (not `LINEAR_API_TOKEN`). For real export validation, pass it explicitly to the CLI as `--token "$LINEAR_TOKEN"`.
+- Evidence: save CLI stdout/stderr, exit codes, and any generated export directory listings/files needed to prove the assertion.
+- Concurrency: limit to 2 concurrent CLI import/export validators because import and verify can be database-heavy and mutate shared mapping tables.
+
+## Flow Validator Guidance: curl (import)
+
+- Surface boundary: use only the live API at `http://localhost:4200/graphql` for post-import verification.
+- Isolation rule: query only identifiers and entities from the assigned validator's export fixture; do not mutate unrelated imported records.
+- Auth: send `Authorization: Bearer changeme-set-your-token` from the repo `.env`.
+- Evidence: save raw GraphQL request/response JSON for each checked assertion.
+- Concurrency: up to 3 concurrent validators if they verify disjoint imported fixtures.
+

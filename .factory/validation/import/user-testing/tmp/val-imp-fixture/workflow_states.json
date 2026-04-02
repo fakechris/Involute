@@ -1,0 +1,23 @@
+[
+  {
+    "id": "bbbbbbbb-0000-0000-0000-000000000001",
+    "name": "Backlog",
+    "type": "backlog",
+    "position": 0,
+    "team": { "id": "aaaaaaaa-0000-0000-0000-000000000001" }
+  },
+  {
+    "id": "bbbbbbbb-0000-0000-0000-000000000002",
+    "name": "In Progress",
+    "type": "started",
+    "position": 1,
+    "team": { "id": "aaaaaaaa-0000-0000-0000-000000000001" }
+  },
+  {
+    "id": "bbbbbbbb-0000-0000-0000-000000000003",
+    "name": "Done",
+    "type": "completed",
+    "position": 2,
+    "team": { "id": "aaaaaaaa-0000-0000-0000-000000000001" }
+  }
+]

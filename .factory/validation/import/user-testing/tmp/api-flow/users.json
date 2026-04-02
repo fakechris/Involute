@@ -1,0 +1,16 @@
+[
+  {
+    "id": "api-user-1",
+    "name": "Alice Smith",
+    "email": "alice@example.com",
+    "displayName": "Alice",
+    "active": true
+  },
+  {
+    "id": "api-user-2",
+    "name": "Bob Jones",
+    "email": "bob@example.com",
+    "displayName": "Bob",
+    "active": true
+  }
+]

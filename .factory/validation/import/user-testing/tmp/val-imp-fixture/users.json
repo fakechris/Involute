@@ -1,0 +1,16 @@
+[
+  {
+    "id": "dddddddd-0000-0000-0000-000000000001",
+    "name": "Alice Timestamp",
+    "email": "alice.timestamp@testvalidation.local",
+    "displayName": "Alice Timestamp",
+    "active": true
+  },
+  {
+    "id": "dddddddd-0000-0000-0000-000000000002",
+    "name": "Bob Validator",
+    "email": "bob.validator@testvalidation.local",
+    "displayName": "Bob Validator",
+    "active": true
+  }
+]

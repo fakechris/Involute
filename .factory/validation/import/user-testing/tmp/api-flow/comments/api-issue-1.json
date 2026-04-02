@@ -1,0 +1,24 @@
+[
+  {
+    "id": "api-comment-1",
+    "body": "Looking into this now",
+    "createdAt": "2024-06-01T11:00:00.000Z",
+    "updatedAt": "2024-06-01T11:00:00.000Z",
+    "user": {
+      "id": "api-user-1",
+      "name": "Alice Smith",
+      "email": "alice@example.com"
+    }
+  },
+  {
+    "id": "api-comment-2",
+    "body": "Found the root cause",
+    "createdAt": "2024-06-02T14:00:00.000Z",
+    "updatedAt": "2024-06-02T14:00:00.000Z",
+    "user": {
+      "id": "api-user-2",
+      "name": "Bob Jones",
+      "email": "bob@example.com"
+    }
+  }
+]

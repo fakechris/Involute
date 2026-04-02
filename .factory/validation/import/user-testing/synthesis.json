@@ -1,0 +1,40 @@
+{
+  "milestone": "import",
+  "round": 2,
+  "status": "fail",
+  "assertionsSummary": {
+    "total": 7,
+    "passed": 2,
+    "failed": 0,
+    "blocked": 5
+  },
+  "passedAssertions": [
+    "VAL-IMP-010",
+    "VAL-IMP-011"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [
+    {
+      "id": "VAL-CLI-016",
+      "blockedBy": "Real Linear export requires a valid LINEAR_API_TOKEN; export attempt returns 401 Unauthorized. No valid token available in this environment."
+    },
+    {
+      "id": "VAL-CLI-017",
+      "blockedBy": "CLI import from real dataset depends on VAL-CLI-016 (export must succeed first). Blocked by same missing Linear credentials."
+    },
+    {
+      "id": "VAL-CLI-018",
+      "blockedBy": "CLI import verify from real dataset depends on VAL-CLI-016 (export must succeed first). Blocked by same missing Linear credentials."
+    },
+    {
+      "id": "VAL-IMP-001",
+      "blockedBy": "Full Linear data export requires a valid LINEAR_API_TOKEN. Export CLI returns 401 Unauthorized without one. The export code itself works correctly (tested with mocks), but live validation requires real credentials."
+    },
+    {
+      "id": "VAL-IMP-009",
+      "blockedBy": "Re-import idempotency testing against a real export dataset depends on VAL-IMP-001 (export must succeed first). The import pipeline has idempotency tests with mock fixtures that pass, but live validation with real data is blocked."
+    }
+  ],
+  "appliedUpdates": [],
+  "previousRound": ".factory/validation/import/user-testing/synthesis-round1.json"
+}

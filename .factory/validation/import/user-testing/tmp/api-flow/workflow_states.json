@@ -1,0 +1,47 @@
+[
+  {
+    "id": "api-ws-1",
+    "name": "Backlog",
+    "type": "backlog",
+    "position": 0,
+    "team": {
+      "id": "api-team-1"
+    }
+  },
+  {
+    "id": "api-ws-2",
+    "name": "In Progress",
+    "type": "started",
+    "position": 1,
+    "team": {
+      "id": "api-team-1"
+    }
+  },
+  {
+    "id": "api-ws-3",
+    "name": "Done",
+    "type": "completed",
+    "position": 2,
+    "team": {
+      "id": "api-team-1"
+    }
+  },
+  {
+    "id": "api-ws-4",
+    "name": "Backlog",
+    "type": "backlog",
+    "position": 0,
+    "team": {
+      "id": "api-team-2"
+    }
+  },
+  {
+    "id": "api-ws-5",
+    "name": "Done",
+    "type": "completed",
+    "position": 1,
+    "team": {
+      "id": "api-team-2"
+    }
+  }
+]

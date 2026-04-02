@@ -1,0 +1,270 @@
+{
+  "groupId": "api-flow",
+  "testedAt": "2026-04-02T05:50:41Z",
+  "isolation": {
+    "graphqlUrl": "http://localhost:4200/graphql",
+    "authorization": "Bearer changeme-set-your-token",
+    "fixtureDir": "/Users/chris/workspace/Involute/.factory/validation/import/user-testing/tmp/api-flow",
+    "evidenceDir": "/Users/chris/.factory/missions/6774ac71-5dc9-4936-9303-c902a364ac7c/evidence/import/api-flow"
+  },
+  "toolsUsed": [
+    "curl",
+    "node packages/cli/dist/index.js import",
+    "node packages/cli/dist/index.js import verify"
+  ],
+  "assertions": [
+    {
+      "id": "VAL-CROSS-006",
+      "title": "Import \u2192 API \u2014 Imported data queryable with identifiers and relationships",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Import isolated Linear-style fixture via CLI import",
+          "expected": "Imported data available through GraphQL API",
+          "observed": "Import completed with 3 issues, 3 comments, 1 parent-child link"
+        },
+        {
+          "action": "Query imported SON issues through GraphQL",
+          "expected": "Imported identifiers, labels, children, and comments are returned",
+          "observed": "API returned SON-42, SON-43, and SON-44 with expected labels, child link SON-42\u2192SON-44, and comments for SON-42"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": null,
+        "network": "POST /graphql -> 200; see import/api-flow/issues_overview.request.json and issues_overview.response.json plus import-command-output.txt"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMP-002",
+      "title": "Issue count parity",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Count export issues.json entries",
+          "expected": "Export contains 3 issues",
+          "observed": "Export contains 3 issues"
+        },
+        {
+          "action": "Run import verify for the fixture",
+          "expected": "Verify reports issue export/db counts match",
+          "observed": "Verify reported Issues (export: 3, db: 3) PASS"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": null,
+        "network": "CLI verify evidence in import/api-flow/import-verify-output.txt"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMP-003",
+      "title": "Identifier preservation",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Read identifiers from export/issues.json",
+          "expected": "SON-42, SON-43, SON-44 present in export",
+          "observed": "Export identifiers are SON-42, SON-43, SON-44"
+        },
+        {
+          "action": "Query imported issues via GraphQL",
+          "expected": "Same identifiers returned unchanged",
+          "observed": "API returned SON-42, SON-43, SON-44"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": null,
+        "network": "POST /graphql -> 200; issues_overview.response.json"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMP-004",
+      "title": "Parent-child relationship preservation",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Read export parent_child mapping",
+          "expected": "SON-42 is parent of SON-44",
+          "observed": "Export mapping lists SON-42 -> SON-44"
+        },
+        {
+          "action": "Query imported children via GraphQL",
+          "expected": "SON-42.children includes SON-44",
+          "observed": "API children for SON-42: SON-44"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": null,
+        "network": "issues_overview.response.json and mappings/parent_child.json"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMP-005",
+      "title": "Comment import in chronological order",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Read export comments for api-issue-1",
+          "expected": "Comments are ordered by createdAt ascending",
+          "observed": "Export order is Looking into this now then Found the root cause"
+        },
+        {
+          "action": "Query comments(orderBy: createdAt) for imported SON-42",
+          "expected": "GraphQL returns same chronological order",
+          "observed": "API order is Looking into this now then Found the root cause"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": null,
+        "network": "issues_overview.response.json and comments/api-issue-1.json"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMP-006",
+      "title": "ID mapping table completeness",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run import verify scoped to fixture export",
+          "expected": "All entity mappings are complete and unique for issues/users",
+          "observed": "Verify passed for Users, Issues, and Comments with export/db parity"
+        },
+        {
+          "action": "Review import command summary",
+          "expected": "Imported counts align with export counts for mappable entities",
+          "observed": "Import summary reported 2 users, 3 issues, 3 comments, 1 parent-child link"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": null,
+        "network": "import-verify-output.txt and import-command-output.txt"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMP-007",
+      "title": "Edge case \u2014 empty team",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Import fixture containing team EMP with zero issues",
+          "expected": "Import succeeds without error",
+          "observed": "Import summary included 2 teams and completed successfully"
+        },
+        {
+          "action": "Query teams(filter:{key:{eq:\"EMP\"}})",
+          "expected": "Empty team is returned and queryable",
+          "observed": "API returned Empty Team"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": null,
+        "network": "teams_emp.response.json and import-command-output.txt"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMP-008",
+      "title": "Edge case \u2014 issues without assignee or labels",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Read export issue SON-43",
+          "expected": "assignee null and labels empty",
+          "observed": "Export SON-43 has null assignee and [] labels"
+        },
+        {
+          "action": "Query imported SON-43 via GraphQL",
+          "expected": "assignee is null and labels.nodes is []",
+          "observed": "API assignee=None, labels=[]"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": null,
+        "network": "issues_overview.response.json and issues.json"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMP-010",
+      "title": "Issue timestamp preservation",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Compare export issue timestamps against GraphQL API fields",
+          "expected": "API should expose createdAt/updatedAt for imported issues",
+          "observed": "Current GraphQL Issue type does not expose createdAt or updatedAt fields on the real API surface"
+        },
+        {
+          "action": "Use available import verification evidence",
+          "expected": "Alternative surface should directly prove timestamp preservation via API-correlated evidence",
+          "observed": "CLI import verify output does not include issue timestamp values, so API-only proof could not be completed"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": null,
+        "network": "schema.ts shows Issue fields omit timestamps; import-verify-output.txt"
+      },
+      "issues": "Blocked by API schema not exposing issue createdAt/updatedAt, preventing direct real-surface verification."
+    },
+    {
+      "id": "VAL-IMP-011",
+      "title": "User data preservation",
+      "status": "blocked",
+      "steps": [
+        {
+          "action": "Compare export users.json names/emails against GraphQL API",
+          "expected": "API should provide a user query or imported issue coverage for all imported users",
+          "observed": "API exposes User only through assignee/comment.user fields and has no root users query"
+        },
+        {
+          "action": "Check imported fixture coverage",
+          "expected": "All imported users should be provable through API",
+          "observed": "Alice and Bob are visible through issue assignee/comment data, but the API cannot directly enumerate imported users for complete assertion evidence"
+        }
+      ],
+      "evidence": {
+        "screenshots": [],
+        "consoleErrors": null,
+        "network": "issues_overview.response.json and schema.ts query definitions"
+      },
+      "issues": "Blocked by missing GraphQL user query; complete imported-user preservation cannot be proven through the assigned API surface alone."
+    }
+  ],
+  "frictions": [],
+  "blockers": [
+    {
+      "description": "The live GraphQL Issue type does not expose createdAt/updatedAt fields, so VAL-IMP-010 cannot be proven through the assigned API surface.",
+      "affectedAssertions": [
+        "VAL-IMP-010"
+      ],
+      "quickFixAttempted": "Queried schema and reviewed import verify evidence, but neither exposed issue timestamps via API-correlated output."
+    },
+    {
+      "description": "The live GraphQL schema has no root user query, preventing complete API-surface enumeration of all imported users for VAL-IMP-011.",
+      "affectedAssertions": [
+        "VAL-IMP-011"
+      ],
+      "quickFixAttempted": "Queried imported issues/comments to recover visible users, but no API route exists to prove full imported-user coverage."
+    }
+  ],
+  "setupKnowledge": [
+    "No CLI fixture existed at .factory/validation/import/user-testing/tmp/cli-flow, so an isolated equivalent fixture was created under .factory/validation/import/user-testing/tmp/api-flow and imported with the built CLI.",
+    "The live API on localhost:4200 was healthy and accepted Authorization: Bearer changeme-set-your-token.",
+    "Import verification succeeded for the isolated fixture before GraphQL checks were run."
+  ],
+  "summary": "Tested 10 assertions: 8 passed, 2 blocked (timestamps and full user preservation not directly provable through current API schema)."
+}

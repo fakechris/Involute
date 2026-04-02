@@ -1,0 +1,8 @@
+[
+  {
+    "parentId": "api-issue-1",
+    "childId": "api-issue-3",
+    "parentIdentifier": "SON-42",
+    "childIdentifier": "SON-44"
+  }
+]

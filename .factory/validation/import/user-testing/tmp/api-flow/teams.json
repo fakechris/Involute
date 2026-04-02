@@ -1,0 +1,12 @@
+[
+  {
+    "id": "api-team-1",
+    "key": "SON",
+    "name": "Sonata"
+  },
+  {
+    "id": "api-team-2",
+    "key": "EMP",
+    "name": "Empty Team"
+  }
+]
