@@ -17,6 +17,8 @@
 - **Setup:** Start API server first, then web dev server (`cd packages/web && PORT=4201 npx vite --port 4201`)
 - **Entry point:** `http://localhost:4201`
 - **Prerequisite:** API server must be running and healthy
+- **Preferred team for board validation:** Use the seeded `INV` team for canonical six-column workflow checks. Imported teams like `SON` are valid for import-consistency checks, but may not expose the exact six-state workflow needed for full board/dnd coverage.
+- **Validation data note:** Before manual board/dnd checks, confirm the selected team actually has visible issues. If the board is empty, switch to a team with imported issues (for example `SON`) or create a fresh issue through the UI first, then perform drag/detail/comments validation on that card.
 
 ### 3. CLI
 - **Tool:** terminal commands (Execute tool)
@@ -89,4 +91,19 @@
 - Auth: send `Authorization: Bearer changeme-set-your-token` from the repo `.env`.
 - Evidence: save raw GraphQL request/response JSON for each checked assertion.
 - Concurrency: up to 3 concurrent validators if they verify disjoint imported fixtures.
+
+## Flow Validator Guidance: Web UI
+
+- Surface boundary: use only the live browser app at `http://localhost:4201` and the paired local API at `http://localhost:4200/graphql` for cross-checks.
+- Isolation rule: each validator must use its assigned `agent-browser --session` name and avoid shared-service teardown or disruptive environment changes while other validators are running.
+- Data isolation: prefer creating uniquely prefixed issues/comments for the assigned validator (`<group>-<timestamp>`) and re-query those exact records via GraphQL instead of relying on global counts.
+- **Team selection (CRITICAL)**: Use the **INV** team (key="INV") for six-column board validation. INV has 6 workflow states: Backlog, Ready, In Progress, In Review, Done, Canceled. Do NOT use APP team which has only 2 states. Query `teams(filter: { key: { eq: "INV" } })` to resolve the INV team ID.
+- **Data seeding before board tests**: Before testing board/dnd/drawer assertions, create 3-5 test issues via `issueCreate` mutation against the INV team in various states. Use uniquely-prefixed titles like `ut2-<group>-test-1`. This ensures the board is not empty and cards are available for drag/click/edit testing.
+- **Labels are seeded**: The database contains 10+ labels (task, epic, spec, Feature, Bug, etc.). If `issueLabels` query returns empty, re-seed: `cd /Users/chris/workspace/Involute/packages/server && npx prisma db seed`.
+- **Imported team for cross-checks**: The imported team is "SON". Use the team selector in the web UI header to switch to SON for VAL-CROSS-005 import-to-web validation.
+- **Multi-team selector**: At least 3 teams should be visible (INV, APP, SON). The team selector is in the shared header.
+- **API error state (VAL-WEB-018)**: Cannot stop the shared API. Instead verify the error boundary renders by navigating to the board with an incorrect/unreachable API URL in the browser, or confirm the error UI component exists and is wired correctly.
+- Evidence: capture annotated screenshots for every UI assertion and save supporting GraphQL responses when browser network tooling does not expose enough detail.
+- Known friction: agent-browser may lose refs after drawer transitions/reloads, so re-snapshot frequently; browser network output may list URLs without GraphQL payloads, requiring curl cross-verification.
+- Concurrency: cap Web UI validators at 3 concurrent sessions on this machine because available free memory was ~2.35 GiB during this run and each browser session adds meaningful overhead.
 
