@@ -43,6 +43,16 @@ import { BacklogPage } from './BacklogPage';
 const ISSUE_LIMIT = 200;
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
 
+function getDropTargetStateId(event: DragEndEvent): string | null {
+  const overData = event.over?.data.current;
+
+  if (overData && typeof overData === 'object' && 'stateId' in overData && typeof overData.stateId === 'string') {
+    return overData.stateId;
+  }
+
+  return event.over ? String(event.over.id) : null;
+}
+
 export function BoardPage() {
   const location = useLocation();
   const { data, error, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(
@@ -296,7 +306,7 @@ export function BoardPage() {
     setActiveIssueId(null);
 
     const issueId = String(event.active.id);
-    const targetStateId = event.over ? String(event.over.id) : null;
+    const targetStateId = getDropTargetStateId(event);
 
     if (!targetStateId) {
       return;
@@ -545,3 +555,5 @@ export function mergeIssueWithPreservedComments(
         : previousIssue.comments,
   };
 }
+
+export { getDropTargetStateId };

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
 import { getAuthToken } from './lib/apollo';
+import { getDropTargetStateId } from './routes/BoardPage';
 import type {
   BoardPageQueryData,
   CommentCreateMutationData,
@@ -11,6 +12,7 @@ import type {
   IssueSummary,
   IssueUpdateMutationData,
 } from './board/types';
+import type { DragEndEvent } from '@dnd-kit/core';
 
 const apolloMocks = vi.hoisted(() => ({
   useQuery: vi.fn(),
@@ -209,6 +211,42 @@ function renderApp(queryState: {
 }
 
 describe('App', () => {
+  it('resolves a drag-end drop target from the destination card column state', () => {
+    const event = {
+      active: { id: 'issue-1' },
+      over: {
+        id: 'issue-2',
+        data: {
+          current: {
+            issue: boardQueryResult.issues.nodes[1],
+            stateId: 'state-ready',
+            type: 'issue-card',
+          },
+        },
+      },
+    } as unknown as DragEndEvent;
+
+    expect(getDropTargetStateId(event)).toBe('state-ready');
+  });
+
+  it('falls back to the droppable column id when drag-end lands on a column body', () => {
+    const event = {
+      active: { id: 'issue-1' },
+      over: {
+        id: 'state-progress',
+        data: {
+          current: {
+            stateId: 'state-progress',
+            title: 'In Progress',
+            type: 'column',
+          },
+        },
+      },
+    } as unknown as DragEndEvent;
+
+    expect(getDropTargetStateId(event)).toBe('state-progress');
+  });
+
   it('prefers the runtime localStorage auth token when creating Apollo requests', async () => {
     window.localStorage.setItem('involute.authToken', 'runtime-token');
     expect(getAuthToken()).toBe('runtime-token');
@@ -589,6 +627,23 @@ describe('App', () => {
     });
 
     expect((await screen.findAllByText('We could not save the issue changes. Please try again.')).length).toBeGreaterThan(0);
+    expect(within(screen.getByTestId('column-Backlog')).getByText('INV-1')).toBeInTheDocument();
+  });
+
+  it('keeps a within-column state change as a no-op', async () => {
+    const mutate = vi.fn();
+    apolloMocks.useMutation.mockReturnValue([mutate]);
+
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByLabelText('Issue detail drawer');
+
+    fireEvent.change(within(drawer).getByLabelText('Issue state'), {
+      target: { value: 'state-backlog' },
+    });
+
+    expect(mutate).not.toHaveBeenCalled();
     expect(within(screen.getByTestId('column-Backlog')).getByText('INV-1')).toBeInTheDocument();
   });
 
