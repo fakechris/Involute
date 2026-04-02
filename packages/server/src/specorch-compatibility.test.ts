@@ -51,6 +51,7 @@ query($first: Int!, $teamKey: String!, $filterState: String!) {
       labels { nodes { name } }
       assignee { name email }
       children { nodes { id } }
+      parent { id identifier title }
     }
   }
 }
@@ -220,6 +221,7 @@ describe('specorch GraphQL compatibility', () => {
           name: fixture.viewer.name,
           email: fixture.viewer.email,
         },
+        parent: null,
         children: {
           nodes: [{ id: fixture.pollTargetChild.id }],
         },

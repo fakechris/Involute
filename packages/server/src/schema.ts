@@ -30,6 +30,7 @@ type CommentParent = Comment & { user?: User | null };
 type IssueParent = Issue & {
   assignee?: User | null;
   comments?: Comment[] | null;
+  parent?: Issue | null;
   state?: WorkflowState | null;
   team?: Team | null;
 };
@@ -137,6 +138,7 @@ const typeDefs = /* GraphQL */ `
     state: WorkflowState!
     labels: IssueLabelConnection!
     assignee: User
+    parent: Issue
     children: IssueConnection!
     team: Team!
     comments(first: Int, orderBy: CommentOrderBy): CommentConnection!
@@ -437,6 +439,24 @@ const resolvers = {
         context.prisma.user.findUnique({
           where: {
             id: parent.assigneeId,
+          },
+        })
+      );
+    },
+    parent: async (
+      parent: IssueParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<Issue | null> => {
+      if (!parent.parentId) {
+        return null;
+      }
+
+      return (
+        parent.parent ??
+        context.prisma.issue.findUnique({
+          where: {
+            id: parent.parentId,
           },
         })
       );

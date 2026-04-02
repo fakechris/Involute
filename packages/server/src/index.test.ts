@@ -118,6 +118,7 @@ describe('GraphQL server core', () => {
             state { id name }
             labels { nodes { id name } }
             assignee { id name email isMe }
+            parent { id identifier title }
             children { nodes { id title } }
             team {
               id
@@ -172,6 +173,7 @@ describe('GraphQL server core', () => {
         key: fixture.team.key,
         name: fixture.team.name,
       },
+      parent: null,
     });
     expect(response.body.data.issue.labels.nodes).toEqual(
       fixture.labels.map((label) => ({
@@ -256,6 +258,62 @@ describe('GraphQL server core', () => {
         email: fixture.importedUser.email,
       },
     ]);
+  });
+
+  it('resolves issue parent details and returns null for top-level issues', async () => {
+    const childResponse = await postGraphQL({
+      query: `
+        query($id: String!) {
+          issue(id: $id) {
+            id
+            parent {
+              id
+              identifier
+              title
+            }
+          }
+        }
+      `,
+      variables: {
+        id: fixture.childIssue.id,
+      },
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(childResponse.status).toBe(200);
+    expect(childResponse.body.errors).toBeUndefined();
+    expect(childResponse.body.data.issue).toEqual({
+      id: fixture.childIssue.id,
+      parent: {
+        id: fixture.issue.id,
+        identifier: fixture.issue.identifier,
+        title: fixture.issue.title,
+      },
+    });
+
+    const parentResponse = await postGraphQL({
+      query: `
+        query($id: String!) {
+          issue(id: $id) {
+            id
+            parent {
+              id
+            }
+          }
+        }
+      `,
+      variables: {
+        id: fixture.issue.id,
+      },
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(parentResponse.status).toBe(200);
+    expect(parentResponse.body.errors).toBeUndefined();
+    expect(parentResponse.body.data.issue).toEqual({
+      id: fixture.issue.id,
+      parent: null,
+    });
   });
 
   it('returns issue comments in ascending createdAt order with first limits and complete fields', async () => {
