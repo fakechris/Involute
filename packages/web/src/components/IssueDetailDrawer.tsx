@@ -50,13 +50,28 @@ export function IssueDetailDrawer({
 
   useEffect(() => {
     setSelectedStateId(issue?.state.id ?? '');
+  }, [issue?.id, issue?.state.id]);
+
+  useEffect(() => {
     setTitle(issue?.title ?? '');
-    setDescription(issue?.description ?? '');
-    setSelectedLabelIds(issue?.labels.nodes.map((label) => label.id) ?? []);
-    setSelectedAssigneeId(issue?.assignee?.id ?? '');
     setIsEditingTitle(false);
+  }, [issue?.id, issue?.title]);
+
+  useEffect(() => {
+    setDescription(issue?.description ?? '');
+  }, [issue?.id, issue?.description]);
+
+  useEffect(() => {
+    setSelectedLabelIds(issue?.labels.nodes.map((label) => label.id) ?? []);
+  }, [issue?.id, issue?.labels]);
+
+  useEffect(() => {
+    setSelectedAssigneeId(issue?.assignee?.id ?? '');
+  }, [issue?.id, issue?.assignee?.id]);
+
+  useEffect(() => {
     setCommentBody('');
-  }, [issue]);
+  }, [issue?.id]);
 
   const states = useMemo(() => team?.states.nodes ?? [], [team]);
 

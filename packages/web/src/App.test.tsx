@@ -470,6 +470,49 @@ describe('App', () => {
         },
       }),
     );
+
+    await waitFor(() =>
+      expect(within(drawer).getByLabelText('Issue description')).toHaveValue('Updated description'),
+    );
+  });
+
+  it('resyncs the visible description after a successful save without closing the drawer', async () => {
+    const mutate = vi.fn().mockResolvedValue({
+      data: {
+        issueUpdate: {
+          success: true,
+          issue: {
+            ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+            description: 'Persisted description from server',
+          },
+        },
+      },
+    });
+    apolloMocks.useMutation.mockReturnValue([mutate]);
+
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByLabelText('Issue detail drawer');
+
+    const descriptionInput = within(drawer).getByLabelText('Issue description');
+    fireEvent.change(descriptionInput, { target: { value: 'Locally edited draft' } });
+    fireEvent.blur(descriptionInput);
+
+    await waitFor(() =>
+      expect(mutate).toHaveBeenCalledWith({
+        variables: {
+          id: 'issue-1',
+          input: { description: 'Locally edited draft' },
+        },
+      }),
+    );
+
+    await waitFor(() =>
+      expect(within(drawer).getByLabelText('Issue description')).toHaveValue(
+        'Persisted description from server',
+      ),
+    );
   });
 
   it('adds labels and changes assignee via issueUpdate mutation', async () => {
