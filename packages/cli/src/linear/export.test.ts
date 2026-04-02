@@ -426,7 +426,86 @@ describe('filterExportDataToTeamScope', () => {
         childIdentifier: 'ENG-3',
       },
     ]);
-    expect(scoped.labels).toEqual(mockLabels);
+    expect(scoped.labels).toEqual([{ id: 'lbl-1', name: 'bug', color: '#ff0000' }]);
+  });
+
+  it('filters labels down to only those referenced by the selected team issues', () => {
+    const scoped = filterExportDataToTeamScope('ENG', {
+      teams: mockTeams,
+      workflowStates: mockStates,
+      labels: [
+        { id: 'lbl-1', name: 'bug', color: '#ff0000' },
+        { id: 'lbl-2', name: 'feature', color: '#00ff00' },
+        { id: 'lbl-3', name: 'design-only', color: '#0000ff' },
+      ],
+      users: mockUsers,
+      issues: [
+        makeIssue({
+          id: 'eng-issue-1',
+          identifier: 'ENG-10',
+          labels: { nodes: [{ id: 'lbl-1', name: 'bug' }] },
+        }),
+        makeIssue({
+          id: 'eng-issue-2',
+          identifier: 'ENG-11',
+          labels: { nodes: [{ id: 'lbl-2', name: 'feature' }] },
+        }),
+        makeIssue({
+          id: 'des-issue-1',
+          identifier: 'DES-10',
+          team: { id: 'team-2', key: 'DES' },
+          state: { id: 'ws-4', name: 'Todo' },
+          labels: { nodes: [{ id: 'lbl-3', name: 'design-only' }] },
+        }),
+      ],
+      comments: new Map(),
+      parentChildMappings: [],
+    });
+
+    expect(scoped.labels).toEqual([
+      { id: 'lbl-1', name: 'bug', color: '#ff0000' },
+      { id: 'lbl-2', name: 'feature', color: '#00ff00' },
+    ]);
+  });
+
+  it('excludes unreferenced labels even when other teams use them', () => {
+    const designCommentOnlyLabel = { id: 'lbl-4', name: 'comment-only', color: '#123456' };
+    const comments = new Map<string, LinearComment[]>();
+    comments.set('iss-4', [
+      {
+        id: 'com-9',
+        body: 'Uses a different author only',
+        createdAt: '2024-01-04T00:00:00.000Z',
+        updatedAt: '2024-01-04T00:00:00.000Z',
+        user: { id: 'usr-2', name: 'Bob', email: 'bob@example.com' },
+      },
+    ]);
+
+    const scoped = filterExportDataToTeamScope('ENG', {
+      teams: mockTeams,
+      workflowStates: mockStates,
+      labels: [...mockLabels, designCommentOnlyLabel],
+      users: mockUsers,
+      issues: [
+        makeIssue({
+          id: 'eng-issue-1',
+          identifier: 'ENG-20',
+          labels: { nodes: [{ id: 'lbl-1', name: 'bug' }] },
+        }),
+        makeIssue({
+          id: 'des-issue-1',
+          identifier: 'DES-20',
+          team: { id: 'team-2', key: 'DES' },
+          state: { id: 'ws-4', name: 'Todo' },
+          labels: { nodes: [{ id: 'lbl-4', name: 'comment-only' }] },
+        }),
+      ],
+      comments,
+      parentChildMappings: [],
+    });
+
+    expect(scoped.labels.map((label) => label.id)).toEqual(['lbl-1']);
+    expect(scoped.labels.map((label) => label.name)).not.toContain('comment-only');
   });
 });
 

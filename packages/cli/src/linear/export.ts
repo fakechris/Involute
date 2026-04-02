@@ -197,6 +197,13 @@ export function filterExportDataToTeamScope(
 
   const issues = data.issues.filter((issue) => allowedTeamIds.has(issue.team.id));
   const allowedIssueIds = new Set(issues.map((issue) => issue.id));
+  const allowedLabelIds = new Set<string>();
+
+  for (const issue of issues) {
+    for (const label of issue.labels.nodes) {
+      allowedLabelIds.add(label.id);
+    }
+  }
 
   const comments = new Map<string, LinearComment[]>();
   for (const issue of issues) {
@@ -225,11 +232,12 @@ export function filterExportDataToTeamScope(
     (mapping) =>
       allowedIssueIds.has(mapping.parentId) && allowedIssueIds.has(mapping.childId),
   );
+  const labels = data.labels.filter((label) => allowedLabelIds.has(label.id));
 
   return {
     teams,
     workflowStates,
-    labels: data.labels,
+    labels,
     users,
     issues,
     comments,
