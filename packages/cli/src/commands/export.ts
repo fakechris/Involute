@@ -13,6 +13,7 @@ import {
   exportUsers,
   exportIssues,
   exportAllComments,
+  filterExportDataToTeamScope,
   buildParentChildMapping,
   generateValidationReport,
   writeExportData,
@@ -41,9 +42,9 @@ export async function runExport(options: ExportOptions): Promise<void> {
 
   // Export each entity type with progress
   const allTeams = await exportTeams(client, log);
-  const teamFiltered = allTeams.filter((t) => t.key === team);
+  const selectedTeams = allTeams.filter((t) => t.key === team);
 
-  if (teamFiltered.length === 0) {
+  if (selectedTeams.length === 0) {
     throw new Error(
       `Team with key "${team}" not found. Available teams: ${allTeams.map((t) => t.key).join(', ') || '(none)'}`,
     );
@@ -58,23 +59,7 @@ export async function runExport(options: ExportOptions): Promise<void> {
   log('');
   log('Building parent-child mappings...');
   const parentChildMappings = buildParentChildMapping(issues);
-  log(`  Found ${String(parentChildMappings.length)} parent-child relationships`);
-
-  log('');
-  log('Generating validation report...');
-  const validationReport = generateValidationReport(
-    teamFiltered,
-    workflowStates,
-    labels,
-    users,
-    issues,
-    comments,
-    parentChildMappings,
-  );
-
-  log('');
-  log('Writing export data...');
-  await writeExportData(output, {
+  const scopedData = filterExportDataToTeamScope(team, {
     teams: allTeams,
     workflowStates,
     labels,
@@ -82,6 +67,31 @@ export async function runExport(options: ExportOptions): Promise<void> {
     issues,
     comments,
     parentChildMappings,
+  });
+  log(`  Found ${String(scopedData.parentChildMappings.length)} parent-child relationships`);
+
+  log('');
+  log('Generating validation report...');
+  const validationReport = generateValidationReport(
+    scopedData.teams,
+    scopedData.workflowStates,
+    scopedData.labels,
+    scopedData.users,
+    scopedData.issues,
+    scopedData.comments,
+    scopedData.parentChildMappings,
+  );
+
+  log('');
+  log('Writing export data...');
+  await writeExportData(output, {
+    teams: scopedData.teams,
+    workflowStates: scopedData.workflowStates,
+    labels: scopedData.labels,
+    users: scopedData.users,
+    issues: scopedData.issues,
+    comments: scopedData.comments,
+    parentChildMappings: scopedData.parentChildMappings,
     validationReport,
   });
 

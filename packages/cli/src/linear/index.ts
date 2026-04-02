@@ -13,10 +13,11 @@ export {
   exportIssues,
   exportCommentsForIssue,
   exportAllComments,
+  filterExportDataToTeamScope,
   buildParentChildMapping,
   generateValidationReport,
 } from './export.js';
-export type { ProgressCallback } from './export.js';
+export type { ProgressCallback, TeamScopedExportData } from './export.js';
 
 export { writeExportData } from './writer.js';
 export type { ExportData } from './writer.js';

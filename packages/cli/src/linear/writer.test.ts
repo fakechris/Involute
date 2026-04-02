@@ -265,6 +265,47 @@ describe('writeExportData', () => {
     expect(reportContent).toEqual(report);
   });
 
+  it('does not write unrelated team data when given scoped export data', async () => {
+    const outputDir = join(tmpDir, 'export-scoped');
+    const commentsMap = new Map<string, LinearComment[]>();
+    commentsMap.set('iss-1', mockComments);
+
+    const data: ExportData = {
+      teams: mockTeams,
+      workflowStates: mockStates,
+      labels: mockLabels,
+      users: mockUsers,
+      issues: mockIssues,
+      comments: commentsMap,
+      parentChildMappings: [],
+      validationReport: {
+        exportedAt: '2024-01-05T00:00:00.000Z',
+        counts: {
+          teams: 1,
+          workflowStates: 2,
+          labels: 1,
+          users: 1,
+          issues: 1,
+          comments: 1,
+          parentChildRelationships: 0,
+        },
+      },
+    };
+
+    await writeExportData(outputDir, data);
+
+    const teamsContent = await readFile(join(outputDir, 'teams.json'), 'utf-8');
+    const issuesContent = await readFile(join(outputDir, 'issues.json'), 'utf-8');
+    const usersContent = await readFile(join(outputDir, 'users.json'), 'utf-8');
+    const reportContent = await readFile(join(outputDir, 'validation_report.json'), 'utf-8');
+
+    expect(teamsContent).not.toContain('Design');
+    expect(issuesContent).not.toContain('DES-1');
+    expect(usersContent).not.toContain('bob@example.com');
+    expect(reportContent).toContain('"teams": 1');
+    expect(reportContent).toContain('"issues": 1');
+  });
+
   it('handles empty data (no issues, no comments)', async () => {
     const outputDir = join(tmpDir, 'export-empty');
 

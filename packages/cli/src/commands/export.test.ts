@@ -43,6 +43,7 @@ vi.mock('../linear/index.js', () => {
       },
     ]),
     exportAllComments: vi.fn(async () => new Map()),
+    filterExportDataToTeamScope: vi.fn((_teamKey, data) => data),
     buildParentChildMapping: vi.fn(() => []),
     generateValidationReport: vi.fn(() => ({
       exportedAt: '2024-01-01T00:00:00.000Z',
@@ -113,6 +114,18 @@ describe('export command', () => {
     expect(linearMod.exportTeams).toHaveBeenCalled();
     expect(linearMod.exportIssues).toHaveBeenCalled();
     expect(linearMod.exportAllComments).toHaveBeenCalled();
+    expect(linearMod.filterExportDataToTeamScope).toHaveBeenCalledWith(
+      'TST',
+      expect.objectContaining({
+        teams: expect.any(Array),
+        workflowStates: expect.any(Array),
+        labels: expect.any(Array),
+        users: expect.any(Array),
+        issues: expect.any(Array),
+        comments: expect.any(Map),
+        parentChildMappings: expect.any(Array),
+      }),
+    );
     expect(linearMod.writeExportData).toHaveBeenCalled();
   });
 
@@ -141,5 +154,52 @@ describe('export command', () => {
     expect(output).toContain('Summary:');
     expect(output).toContain('Teams:');
     expect(output).toContain('Issues:');
+  });
+
+  it('writes only the team-scoped export artifacts', async () => {
+    const scopedComments = new Map();
+    scopedComments.set('i1', []);
+
+    vi.mocked(linearMod.filterExportDataToTeamScope).mockReturnValue({
+      teams: [{ id: 't1', key: 'TST', name: 'Test Team' }],
+      workflowStates: [{ id: 'ws1', name: 'Backlog', type: 'backlog', position: 0, team: { id: 't1' } }],
+      labels: [{ id: 'l1', name: 'bug', color: '#ff0000' }],
+      users: [{ id: 'u1', name: 'Alice', email: 'alice@test.com', displayName: 'Alice', active: true }],
+      issues: [{
+        id: 'i1',
+        identifier: 'TST-1',
+        title: 'Test Issue',
+        description: null,
+        priority: 1,
+        createdAt: '2024-01-01T00:00:00.000Z',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        state: { id: 'ws1', name: 'Backlog' },
+        team: { id: 't1', key: 'TST' },
+        assignee: null,
+        labels: { nodes: [] },
+        parent: null,
+      }],
+      comments: scopedComments,
+      parentChildMappings: [],
+    });
+
+    await runExport({ token: 'test-token', team: 'TST', output: outputDir });
+
+    expect(linearMod.writeExportData).toHaveBeenCalledWith(
+      outputDir,
+      expect.objectContaining({
+        teams: [{ id: 't1', key: 'TST', name: 'Test Team' }],
+        workflowStates: [{ id: 'ws1', name: 'Backlog', type: 'backlog', position: 0, team: { id: 't1' } }],
+        users: [{ id: 'u1', name: 'Alice', email: 'alice@test.com', displayName: 'Alice', active: true }],
+        issues: [
+          expect.objectContaining({
+            id: 'i1',
+            identifier: 'TST-1',
+            team: { id: 't1', key: 'TST' },
+          }),
+        ],
+        comments: scopedComments,
+      }),
+    );
   });
 });

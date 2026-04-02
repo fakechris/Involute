@@ -7,6 +7,7 @@ import {
   exportIssues,
   exportCommentsForIssue,
   exportAllComments,
+  filterExportDataToTeamScope,
   buildParentChildMapping,
   generateValidationReport,
 } from './export.js';
@@ -31,6 +32,7 @@ const mockStates: LinearWorkflowState[] = [
   { id: 'ws-1', name: 'Backlog', type: 'backlog', position: 0, team: { id: 'team-1' } },
   { id: 'ws-2', name: 'In Progress', type: 'started', position: 1, team: { id: 'team-1' } },
   { id: 'ws-3', name: 'Done', type: 'completed', position: 2, team: { id: 'team-1' } },
+  { id: 'ws-4', name: 'Todo', type: 'unstarted', position: 0, team: { id: 'team-2' } },
 ];
 
 const mockLabels: LinearLabel[] = [
@@ -78,6 +80,14 @@ const mockIssues: LinearIssue[] = [
     identifier: 'ENG-3',
     title: 'Sub-task',
     parent: { id: 'iss-1' },
+  }),
+  makeIssue({
+    id: 'iss-4',
+    identifier: 'DES-1',
+    title: 'Design issue',
+    team: { id: 'team-2', key: 'DES' },
+    state: { id: 'ws-4', name: 'Todo' },
+    assignee: { id: 'usr-2', name: 'Bob', email: 'bob@example.com' },
   }),
 ];
 
@@ -373,6 +383,53 @@ describe('buildParentChildMapping', () => {
   });
 });
 
+describe('filterExportDataToTeamScope', () => {
+  it('keeps only entities related to the selected team', () => {
+    const commentsMap = new Map<string, LinearComment[]>();
+    commentsMap.set('iss-1', mockComments);
+    commentsMap.set('iss-4', [
+      {
+        id: 'com-3',
+        body: 'Design comment',
+        createdAt: '2024-01-04T00:00:00.000Z',
+        updatedAt: '2024-01-04T00:00:00.000Z',
+        user: { id: 'usr-2', name: 'Bob', email: 'bob@example.com' },
+      },
+    ]);
+
+    const scoped = filterExportDataToTeamScope('ENG', {
+      teams: mockTeams,
+      workflowStates: mockStates,
+      labels: mockLabels,
+      users: mockUsers,
+      issues: mockIssues,
+      comments: commentsMap,
+      parentChildMappings: buildParentChildMapping(mockIssues),
+    });
+
+    expect(scoped.teams.map((team) => team.key)).toEqual(['ENG']);
+    expect(scoped.workflowStates.every((state) => state.team.id === 'team-1')).toBe(true);
+    expect(scoped.issues.map((issue) => issue.identifier)).toEqual(['ENG-1', 'ENG-2', 'ENG-3']);
+    expect([...scoped.comments.keys()]).toEqual(['iss-1']);
+    expect(scoped.users.map((user) => user.id)).toEqual(['usr-1', 'usr-2']);
+    expect(scoped.parentChildMappings).toEqual([
+      {
+        parentId: 'iss-1',
+        childId: 'iss-2',
+        parentIdentifier: 'ENG-1',
+        childIdentifier: 'ENG-2',
+      },
+      {
+        parentId: 'iss-1',
+        childId: 'iss-3',
+        parentIdentifier: 'ENG-1',
+        childIdentifier: 'ENG-3',
+      },
+    ]);
+    expect(scoped.labels).toEqual(mockLabels);
+  });
+});
+
 describe('generateValidationReport', () => {
   it('produces correct entity counts', () => {
     const commentsMap = new Map<string, LinearComment[]>();
@@ -391,10 +448,10 @@ describe('generateValidationReport', () => {
     );
 
     expect(report.counts.teams).toBe(2);
-    expect(report.counts.workflowStates).toBe(3);
+    expect(report.counts.workflowStates).toBe(4);
     expect(report.counts.labels).toBe(2);
     expect(report.counts.users).toBe(2);
-    expect(report.counts.issues).toBe(3);
+    expect(report.counts.issues).toBe(4);
     expect(report.counts.comments).toBe(2);
     expect(report.counts.parentChildRelationships).toBe(2);
     expect(report.exportedAt).toBeTruthy();

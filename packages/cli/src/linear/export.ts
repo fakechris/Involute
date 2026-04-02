@@ -163,6 +163,80 @@ export async function exportAllComments(
   return commentsMap;
 }
 
+export interface TeamScopedExportData {
+  teams: LinearTeam[];
+  workflowStates: LinearWorkflowState[];
+  labels: LinearLabel[];
+  users: LinearUser[];
+  issues: LinearIssue[];
+  comments: Map<string, LinearComment[]>;
+  parentChildMappings: ParentChildMapping[];
+}
+
+/**
+ * Filter exported entities down to a single team scope.
+ */
+export function filterExportDataToTeamScope(
+  teamKey: string,
+  data: {
+    teams: LinearTeam[];
+    workflowStates: LinearWorkflowState[];
+    labels: LinearLabel[];
+    users: LinearUser[];
+    issues: LinearIssue[];
+    comments: Map<string, LinearComment[]>;
+    parentChildMappings: ParentChildMapping[];
+  },
+): TeamScopedExportData {
+  const teams = data.teams.filter((team) => team.key === teamKey);
+  const allowedTeamIds = new Set(teams.map((team) => team.id));
+
+  const workflowStates = data.workflowStates.filter((state) =>
+    allowedTeamIds.has(state.team.id),
+  );
+
+  const issues = data.issues.filter((issue) => allowedTeamIds.has(issue.team.id));
+  const allowedIssueIds = new Set(issues.map((issue) => issue.id));
+
+  const comments = new Map<string, LinearComment[]>();
+  for (const issue of issues) {
+    const issueComments = data.comments.get(issue.id);
+    if (issueComments) {
+      comments.set(issue.id, issueComments);
+    }
+  }
+
+  const allowedUserIds = new Set<string>();
+  for (const issue of issues) {
+    if (issue.assignee) {
+      allowedUserIds.add(issue.assignee.id);
+    }
+  }
+  for (const issueComments of comments.values()) {
+    for (const comment of issueComments) {
+      if (comment.user) {
+        allowedUserIds.add(comment.user.id);
+      }
+    }
+  }
+  const users = data.users.filter((user) => allowedUserIds.has(user.id));
+
+  const parentChildMappings = data.parentChildMappings.filter(
+    (mapping) =>
+      allowedIssueIds.has(mapping.parentId) && allowedIssueIds.has(mapping.childId),
+  );
+
+  return {
+    teams,
+    workflowStates,
+    labels: data.labels,
+    users,
+    issues,
+    comments,
+    parentChildMappings,
+  };
+}
+
 /**
  * Build parent-child mapping from exported issues.
  */
