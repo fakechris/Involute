@@ -1,11 +1,19 @@
 import { Command } from 'commander';
 import { pathToFileURL } from 'node:url';
+import { registerExportCommand } from './commands/export.js';
+import { registerImportCommand } from './commands/import.js';
 
 export function createProgram(): Command {
-  return new Command()
+  const program = new Command()
     .name('involute')
-    .description('Involute CLI scaffold')
-    .version('0.0.0');
+    .description('Involute CLI — manage your Linear-compatible project management service')
+    .version('0.0.0')
+    .enablePositionalOptions();
+
+  registerExportCommand(program);
+  registerImportCommand(program);
+
+  return program;
 }
 
 const currentEntryPoint = process.argv[1];
