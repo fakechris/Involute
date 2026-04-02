@@ -1,0 +1,15 @@
+{
+  "featureId": "import-pipeline",
+  "reviewedAt": "2026-04-02T04:30:08.216192+00:00",
+  "commitId": "5d45c7f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the import pipeline implementation, transcript skeleton, handoff, skill instructions, and commit diff. The feature imports teams, workflow states, labels, users, issues, parent-child links, mappings, and comments in the required order, preserves identifiers and timestamps, and its idempotency strategy aligns with the mission requirements.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed feature `import-pipeline` via mission metadata, worker transcript skeleton, handoff, skill file, architecture docs, and commit `5d45c7f`. I did not find any high-confidence actionable correctness issues in this implementation."
+}

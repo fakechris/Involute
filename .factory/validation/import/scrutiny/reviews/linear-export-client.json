@@ -1,0 +1,28 @@
+{
+  "featureId": "linear-export-client",
+  "reviewedAt": "2026-04-02T04:30:26.036921+00:00",
+  "commitId": "7d968d132d06dc8b265ea93db086bc5746f9c912",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The export client covers the basic directory layout and pagination mechanics, but it does not fully meet the feature contract for preserving a complete team-scoped export shape. Team-scoped exports still write workspace-global labels, which leaks unrelated-team data into the export artifacts.",
+    "issues": [
+      {
+        "file": "packages/cli/src/linear/export.ts",
+        "line": 232,
+        "severity": "blocking",
+        "description": "`filterExportDataToTeamScope` returns `labels: data.labels` instead of filtering labels down to those actually referenced by the selected team's issues. The feature contract explicitly requires team-scoped export artifacts to contain no unrelated team data, but `involute export --team <key>` will still write every workspace label to `labels.json` via `packages/cli/src/commands/export.ts:62-90`, including labels never used by the exported team."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "The initial export client included extra source fields (`WorkflowState.type/position`, `Label.color`, `User.displayName/active`, `Issue.priority`) that are not representable in the current Prisma schema or consumed by the import pipeline, so they are silently dropped on import.",
+      "evidence": "Export types/query include these fields in `packages/cli/src/linear/types.ts` and `packages/cli/src/linear/queries.ts`, while the Prisma schema has no matching columns in `packages/server/prisma/schema.prisma` (WorkflowState at line 21, IssueLabel at line 32, User at line 38, Issue at line 46) and `packages/server/src/import-pipeline.ts` only preserves a subset of the exported fields."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed handoff, transcript skeleton, skill, architecture docs, and commit `7d968d132d06dc8b265ea93db086bc5746f9c912`. Found one blocking correctness issue: team-scoped exports still write global labels to `labels.json`, so the exported directory can contain unrelated-team data."
+}
