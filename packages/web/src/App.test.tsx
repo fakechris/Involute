@@ -4,7 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
 import { getAuthToken, getAuthTokenDetails, getGraphqlUrl, getGraphqlUrlDetails } from './lib/apollo';
-import { getDropTargetStateId, mergeIssueWithPreservedComments } from './routes/BoardPage';
+import {
+  getDropTargetStateId,
+  mergeIssueWithPreservedComments,
+  moveIssueToState,
+} from './routes/BoardPage';
 import type {
   BoardPageQueryData,
   CommentCreateMutationData,
@@ -248,6 +252,51 @@ describe('App', () => {
     expect(getDropTargetStateId(event)).toBe('state-progress');
   });
 
+  it('resolves a drag-over drop target from the hovered destination card state', () => {
+    const event = {
+      over: {
+        id: 'issue-2',
+        data: {
+          current: {
+            issue: boardQueryResult.issues.nodes[1],
+            stateId: 'state-ready',
+            type: 'issue-card',
+          },
+        },
+      },
+    } as unknown as Pick<DragEndEvent, 'over'>;
+
+    expect(getDropTargetStateId(event)).toBe('state-ready');
+  });
+
+  it('moves an issue into the destination state during cross-column drag preview', () => {
+    const nextState = { id: 'state-ready', name: 'Ready' };
+
+    const movedIssues = moveIssueToState(boardQueryResult.issues.nodes as IssueSummary[], 'issue-1', nextState);
+
+    expect(movedIssues.find((issue) => issue.id === 'issue-1')?.state).toEqual(nextState);
+    expect(movedIssues.find((issue) => issue.id === 'issue-2')?.state).toEqual(
+      boardQueryResult.issues.nodes[1]?.state,
+    );
+  });
+
+  it('shows moved issue data in the destination column grouping after a cross-column preview move', () => {
+    const movedIssues = moveIssueToState(
+      boardQueryResult.issues.nodes as IssueSummary[],
+      'issue-1',
+      { id: 'state-ready', name: 'Ready' },
+    );
+
+    const groupedIssues = movedIssues.reduce<Record<string, string[]>>((groups, issue) => {
+      const key = issue.state.name;
+      groups[key] = [...(groups[key] ?? []), issue.identifier];
+      return groups;
+    }, {});
+
+    expect(groupedIssues.Ready).toContain('INV-1');
+    expect(groupedIssues.Backlog ?? []).not.toContain('INV-1');
+  });
+
   it('prefers the runtime localStorage auth token when creating Apollo requests', async () => {
     window.localStorage.setItem('involute.authToken', 'runtime-token');
     expect(getAuthToken()).toBe('runtime-token');
@@ -365,6 +414,41 @@ describe('App', () => {
     });
 
     expect(await within(screen.getByTestId('column-In Progress')).findByText('INV-1')).toBeInTheDocument();
+  });
+
+  it('persists the final state on drag end after a cross-column preview move', async () => {
+    const mutate = vi.fn<
+      (args: { variables: { id: string; input: { stateId: string } } }) => Promise<{ data: IssueUpdateMutationData }>
+    >().mockResolvedValue({
+      data: {
+        issueUpdate: {
+          success: true,
+          issue: {
+            ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+            state: { id: 'state-ready', name: 'Ready' },
+          },
+        },
+      },
+    });
+    apolloMocks.useMutation.mockReturnValue([mutate]);
+
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+
+    fireEvent.change(within(drawer).getByLabelText('Issue state'), {
+      target: { value: 'state-ready' },
+    });
+
+    await waitFor(() =>
+      expect(mutate).toHaveBeenCalledWith({
+        variables: {
+          id: 'issue-1',
+          input: { stateId: 'state-ready' },
+        },
+      }),
+    );
   });
 
   it('shows the clicked issue details including parent information', async () => {

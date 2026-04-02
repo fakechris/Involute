@@ -1,6 +1,7 @@
 import {
   closestCenter,
   DndContext,
+  type DragOverEvent,
   DragEndEvent,
   DragOverlay,
   PointerSensor,
@@ -43,14 +44,33 @@ import { BacklogPage } from './BacklogPage';
 const ISSUE_LIMIT = 200;
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
 
-function getDropTargetStateId(event: DragEndEvent): string | null {
-  const overData = event.over?.data.current;
+function getStateIdFromData(data: unknown): string | null {
+  if (data && typeof data === 'object' && 'stateId' in data && typeof data.stateId === 'string') {
+    return data.stateId;
+  }
 
-  if (overData && typeof overData === 'object' && 'stateId' in overData && typeof overData.stateId === 'string') {
-    return overData.stateId;
+  return null;
+}
+
+function getDropTargetStateId(
+  event: Pick<DragEndEvent, 'over'> | Pick<DragOverEvent, 'over'>,
+): string | null {
+  const overData = event.over?.data.current;
+  const explicitStateId = getStateIdFromData(overData);
+
+  if (explicitStateId) {
+    return explicitStateId;
   }
 
   return event.over ? String(event.over.id) : null;
+}
+
+function moveIssueToState(
+  issues: IssueSummary[],
+  issueId: string,
+  state: IssueSummary['state'],
+): IssueSummary[] {
+  return issues.map((item) => (item.id === issueId ? { ...item, state } : item));
 }
 
 export function BoardPage() {
@@ -84,6 +104,7 @@ export function BoardPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
+  const [dragPreviewStateId, setDragPreviewStateId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedTeamKey) {
@@ -303,10 +324,11 @@ export function BoardPage() {
   }
 
   async function handleDragEnd(event: DragEndEvent) {
-    setActiveIssueId(null);
-
     const issueId = String(event.active.id);
-    const targetStateId = getDropTargetStateId(event);
+    const targetStateId = getDropTargetStateId(event) ?? dragPreviewStateId;
+
+    setActiveIssueId(null);
+    setDragPreviewStateId(null);
 
     if (!targetStateId) {
       return;
@@ -323,6 +345,31 @@ export function BoardPage() {
     } catch {
       // error state already handled
     }
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    const issueId = String(event.active.id);
+    const targetStateId = getDropTargetStateId(event);
+
+    if (!targetStateId) {
+      return;
+    }
+
+    const issue = localIssues.find((item) => item.id === issueId);
+    const targetState =
+      selectedTeam?.states.nodes.find((state) => state.id === targetStateId) ?? null;
+
+    if (!issue || !targetState) {
+      return;
+    }
+
+    setDragPreviewStateId(targetStateId);
+
+    if (issue.state.id === targetStateId) {
+      return;
+    }
+
+    setLocalIssues((currentIssues) => moveIssueToState(currentIssues, issueId, targetState));
   }
 
   if (error) {
@@ -497,9 +544,15 @@ export function BoardPage() {
           collisionDetection={closestCenter}
           onDragStart={(event) => {
             setActiveIssueId(String(event.active.id));
+            setDragPreviewStateId(null);
             setMutationError(null);
           }}
-          onDragCancel={() => setActiveIssueId(null)}
+          onDragOver={handleDragOver}
+          onDragCancel={() => {
+            setActiveIssueId(null);
+            setDragPreviewStateId(null);
+            setLocalIssues(data?.issues.nodes ?? []);
+          }}
           onDragEnd={(event) => void handleDragEnd(event)}
         >
           <section className="board-grid" aria-label="Kanban board">
@@ -561,3 +614,4 @@ export function mergeIssueWithPreservedComments(
 }
 
 export { getDropTargetStateId };
+export { moveIssueToState };
