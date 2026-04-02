@@ -84,6 +84,21 @@ const boardQueryResult: BoardPageQueryData = {
           ],
         },
       },
+      {
+        id: 'team-2',
+        key: 'SON',
+        name: 'Sonata',
+        states: {
+          nodes: [
+            { id: 'son-backlog', name: 'Backlog' },
+            { id: 'son-ready', name: 'Ready' },
+            { id: 'son-progress', name: 'In Progress' },
+            { id: 'son-review', name: 'In Review' },
+            { id: 'son-done', name: 'Done' },
+            { id: 'son-canceled', name: 'Canceled' },
+          ],
+        },
+      },
     ],
   },
   users: {
@@ -136,6 +151,21 @@ const boardQueryResult: BoardPageQueryData = {
           identifier: 'INV-1',
           title: 'Backlog item',
         },
+        comments: { nodes: [] },
+      },
+      {
+        id: 'issue-3',
+        identifier: 'SON-1',
+        title: 'Sonata backlog item',
+        description: 'Sonata description',
+        createdAt: '2026-04-02T10:00:00.000Z',
+        updatedAt: '2026-04-02T10:00:00.000Z',
+        state: { id: 'son-backlog', name: 'Backlog' },
+        team: { id: 'team-2', key: 'SON' },
+        labels: { nodes: [{ id: 'label-feature', name: 'Feature' }] },
+        assignee: null,
+        children: { nodes: [] },
+        parent: null,
         comments: { nodes: [] },
       },
     ],
@@ -782,6 +812,49 @@ describe('App', () => {
 
     const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
     expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Backlog item');
+  });
+
+  it('keeps the shared header team selector on backlog and removes the duplicate backlog-only selector', async () => {
+    renderApp({ data: boardQueryResult, loading: false }, ['/backlog']);
+
+    expect(await screen.findByRole('heading', { name: 'Backlog' })).toBeInTheDocument();
+
+    const selectors = screen.getAllByLabelText('Select team');
+    expect(selectors).toHaveLength(1);
+    const sharedSelector = selectors[0]!;
+    expect(sharedSelector).toHaveValue('INV');
+    expect(within(sharedSelector).getAllByRole('option')).toHaveLength(2);
+  });
+
+  it('switches backlog rows when changing teams from the shared header selector', async () => {
+    renderApp({ data: boardQueryResult, loading: false }, ['/backlog']);
+
+    expect(await screen.findByText('Backlog item')).toBeInTheDocument();
+    expect(screen.queryByText('Sonata backlog item')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Select team'), {
+      target: { value: 'SON' },
+    });
+
+    expect(await screen.findByText('Sonata backlog item')).toBeInTheDocument();
+    expect(screen.queryByText('Backlog item')).not.toBeInTheDocument();
+    expect(screen.getByText('List view for Sonata issues.')).toBeInTheDocument();
+  });
+
+  it('keeps board filtering in sync after changing teams and navigating from backlog', async () => {
+    renderApp({ data: boardQueryResult, loading: false }, ['/backlog']);
+
+    fireEvent.change(await screen.findByLabelText('Select team'), {
+      target: { value: 'SON' },
+    });
+
+    expect(await screen.findByText('Sonata backlog item')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Board' }));
+
+    expect(await screen.findByText('Workflow overview for Sonata.')).toBeInTheDocument();
+    expect(within(screen.getByTestId('column-Backlog')).getByText('SON-1')).toBeInTheDocument();
+    expect(screen.queryByText('INV-1')).not.toBeInTheDocument();
   });
 
   it('creates an issue from the board UI and shows it in the backlog column', async () => {

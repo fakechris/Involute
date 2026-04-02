@@ -5,16 +5,12 @@ import type { IssueSummary, TeamSummary } from '../board/types';
 interface BacklogPageProps {
   issues: IssueSummary[];
   selectedTeam: TeamSummary | null;
-  selectedTeamKey: string | null;
-  onTeamChange: (teamKey: string) => void;
   onSelectIssue: (issue: IssueSummary) => void;
 }
 
 export function BacklogPage({
   issues,
   selectedTeam,
-  selectedTeamKey,
-  onTeamChange,
   onSelectIssue,
 }: BacklogPageProps) {
   const sortedIssues = useMemo(
@@ -43,19 +39,6 @@ export function BacklogPage({
             List view for {selectedTeam?.name ?? 'your workspace'} issues.
           </p>
         </div>
-
-        {selectedTeam ? (
-          <label className="team-selector">
-            <span>Team</span>
-            <select
-              aria-label="Select team"
-              value={selectedTeamKey ?? ''}
-              onChange={(event) => onTeamChange(event.target.value)}
-            >
-              <option value={selectedTeam.key}>{selectedTeam.name}</option>
-            </select>
-          </label>
-        ) : null}
       </header>
 
       {sortedIssues.length > 0 ? (

@@ -474,8 +474,6 @@ export function BoardPage() {
         <BacklogPage
           issues={visibleIssues}
           selectedTeam={selectedTeam}
-          selectedTeamKey={selectedTeamKey}
-          onTeamChange={setSelectedTeamKey}
           onSelectIssue={(issue) => {
             setMutationError(null);
             setSelectedIssueId(issue.id);
