@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
-import { getAuthToken } from './lib/apollo';
+import { getAuthToken, getAuthTokenDetails } from './lib/apollo';
 import { getDropTargetStateId } from './routes/BoardPage';
 import type {
   BoardPageQueryData,
@@ -250,10 +250,18 @@ describe('App', () => {
   it('prefers the runtime localStorage auth token when creating Apollo requests', async () => {
     window.localStorage.setItem('involute.authToken', 'runtime-token');
     expect(getAuthToken()).toBe('runtime-token');
+    expect(getAuthTokenDetails()).toEqual({
+      token: 'runtime-token',
+      source: 'localStorage',
+    });
   });
 
   it('falls back to the default dev auth token when no runtime token is configured', () => {
     expect(getAuthToken()).toBe('changeme-set-your-token');
+    expect(getAuthTokenDetails()).toEqual({
+      token: 'changeme-set-your-token',
+      source: 'dev-default',
+    });
   });
 
   it('renders all six board columns in order', async () => {
@@ -673,16 +681,52 @@ describe('App', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows an authentication/bootstrap specific error when the board request is unauthenticated', async () => {
+  it('shows a distinct invalid-token error when the board request is unauthenticated with a configured token', async () => {
+    window.localStorage.setItem('involute.authToken', 'wrong-token');
+
     renderApp({
       error: new Error('Not authenticated'),
       loading: false,
     });
 
-    expect(await screen.findByText('Authentication required')).toBeInTheDocument();
+    expect(await screen.findByText('Authentication failed')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'The board could not find a runtime auth token. Set `VITE_INVOLUTE_AUTH_TOKEN` or store the token in localStorage under `involute.authToken`, then reload.',
+        'The board sent a runtime auth token, but the API rejected it. Confirm the configured token matches the server and reload.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('shows a missing-token bootstrap error when no runtime token exists outside dev fallback', async () => {
+    vi.stubEnv('DEV', false);
+
+    try {
+      renderApp({
+        error: new Error('Not authenticated'),
+        loading: false,
+      });
+
+      expect(await screen.findByText('Runtime auth token missing')).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          'The board could not find a runtime auth token. Set `VITE_INVOLUTE_AUTH_TOKEN` or store the token in localStorage under `involute.authToken`, then reload.',
+        ),
+      ).toBeInTheDocument();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('shows a distinct dev-default-token error when the fallback dev token is rejected', async () => {
+    renderApp({
+      error: new Error('Not authenticated'),
+      loading: false,
+    });
+
+    expect(await screen.findByText('Authentication failed')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'The board used the default development token, but the API rejected it. Set `VITE_INVOLUTE_AUTH_TOKEN` or store a valid token in localStorage under `involute.authToken`, then reload.',
       ),
     ).toBeInTheDocument();
   });

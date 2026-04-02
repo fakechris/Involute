@@ -12,11 +12,19 @@ const DEFAULT_GRAPHQL_URL = 'http://localhost:4200/graphql';
 const LOCAL_STORAGE_AUTH_KEYS = ['involute.authToken', 'involuteAuthToken'] as const;
 const DEFAULT_AUTH_TOKEN = 'changeme-set-your-token';
 
-export function getAuthToken(): string {
+export type AuthTokenSource = 'env' | 'localStorage' | 'dev-default' | 'missing';
+
+export function getAuthTokenDetails(): {
+  token: string | null;
+  source: AuthTokenSource;
+} {
   const envToken = import.meta.env.VITE_INVOLUTE_AUTH_TOKEN;
 
   if (typeof envToken === 'string' && envToken.length > 0) {
-    return envToken;
+    return {
+      token: envToken,
+      source: 'env',
+    };
   }
 
   if (typeof window !== 'undefined') {
@@ -24,12 +32,31 @@ export function getAuthToken(): string {
       const configuredToken = window.localStorage.getItem(storageKey);
 
       if (configuredToken) {
-        return configuredToken;
+        return {
+          token: configuredToken,
+          source: 'localStorage',
+        };
       }
     }
   }
 
-  return DEFAULT_AUTH_TOKEN;
+  const isDev = Boolean(import.meta.env.DEV);
+
+  if (isDev) {
+    return {
+      token: DEFAULT_AUTH_TOKEN,
+      source: 'dev-default',
+    };
+  }
+
+  return {
+    token: null,
+    source: 'missing',
+  };
+}
+
+export function getAuthToken(): string | null {
+  return getAuthTokenDetails().token;
 }
 
 export function getGraphqlUrl(): string {
@@ -69,12 +96,23 @@ export function getBoardBootstrapErrorMessage(error: Error): {
   description: string;
 } {
   const message = error.message.toLowerCase();
+  const { source } = getAuthTokenDetails();
 
   if (message.includes('not authenticated') || message.includes('unauthenticated')) {
+    if (source === 'missing') {
+      return {
+        title: 'Runtime auth token missing',
+        description:
+          'The board could not find a runtime auth token. Set `VITE_INVOLUTE_AUTH_TOKEN` or store the token in localStorage under `involute.authToken`, then reload.',
+      };
+    }
+
     return {
-      title: 'Authentication required',
+      title: 'Authentication failed',
       description:
-        'The board could not find a runtime auth token. Set `VITE_INVOLUTE_AUTH_TOKEN` or store the token in localStorage under `involute.authToken`, then reload.',
+        source === 'dev-default'
+          ? 'The board used the default development token, but the API rejected it. Set `VITE_INVOLUTE_AUTH_TOKEN` or store a valid token in localStorage under `involute.authToken`, then reload.'
+          : 'The board sent a runtime auth token, but the API rejected it. Confirm the configured token matches the server and reload.',
     };
   }
 
