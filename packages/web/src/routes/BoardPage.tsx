@@ -1,8 +1,23 @@
-import { useQuery } from '@apollo/client/react';
+import {
+  closestCenter,
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import { useMutation, useQuery } from '@apollo/client/react';
 import { useEffect, useMemo, useState } from 'react';
 
-import { BOARD_PAGE_QUERY } from '../board/queries';
-import type { BoardPageQueryData, BoardPageQueryVariables } from '../board/types';
+import { BOARD_PAGE_QUERY, ISSUE_UPDATE_MUTATION } from '../board/queries';
+import type {
+  BoardPageQueryData,
+  BoardPageQueryVariables,
+  IssueSummary,
+  IssueUpdateMutationData,
+  IssueUpdateMutationVariables,
+} from '../board/types';
 import {
   filterIssuesByTeam,
   getBoardColumns,
@@ -10,8 +25,11 @@ import {
   groupIssuesByState,
 } from '../board/utils';
 import { Column } from '../components/Column';
+import { IssueCard } from '../components/IssueCard';
+import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
 
 const ISSUE_LIMIT = 200;
+const ERROR_MESSAGE = 'We could not save the state change. Please try again.';
 
 export function BoardPage() {
   const { data, error, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(
@@ -22,8 +40,16 @@ export function BoardPage() {
       },
     },
   );
+  const [runIssueUpdate] = useMutation<IssueUpdateMutationData, IssueUpdateMutationVariables>(
+    ISSUE_UPDATE_MUTATION,
+  );
   const teams = data?.teams.nodes ?? [];
   const [selectedTeamKey, setSelectedTeamKey] = useState<string | null>(null);
+  const [localIssues, setLocalIssues] = useState<IssueSummary[]>([]);
+  const [activeIssueId, setActiveIssueId] = useState<string | null>(null);
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [isSavingState, setIsSavingState] = useState(false);
 
   useEffect(() => {
     if (!selectedTeamKey) {
@@ -31,14 +57,94 @@ export function BoardPage() {
     }
   }, [selectedTeamKey, teams]);
 
+  useEffect(() => {
+    setLocalIssues(data?.issues.nodes ?? []);
+  }, [data?.issues.nodes]);
+
   const selectedTeam =
     teams.find((team) => team.key === selectedTeamKey) ?? teams[0] ?? null;
   const columns = useMemo(() => getBoardColumns(selectedTeam), [selectedTeam]);
   const visibleIssues = useMemo(
-    () => filterIssuesByTeam(data?.issues.nodes ?? [], selectedTeam?.key ?? null),
-    [data?.issues.nodes, selectedTeam?.key],
+    () => filterIssuesByTeam(localIssues, selectedTeam?.key ?? null),
+    [localIssues, selectedTeam?.key],
   );
   const issuesByState = useMemo(() => groupIssuesByState(visibleIssues), [visibleIssues]);
+  const activeIssue = useMemo(
+    () => visibleIssues.find((issue) => issue.id === activeIssueId) ?? null,
+    [activeIssueId, visibleIssues],
+  );
+  const selectedIssue = useMemo(
+    () => localIssues.find((issue) => issue.id === selectedIssueId) ?? null,
+    [localIssues, selectedIssueId],
+  );
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
+  async function persistStateChange(issue: IssueSummary, stateId: string) {
+    const state = selectedTeam?.states.nodes.find((item) => item.id === stateId) ?? null;
+
+    if (!state || issue.state.id === stateId) {
+      return;
+    }
+
+    const previousIssues = localIssues;
+    const nextIssues = localIssues.map((item) =>
+      item.id === issue.id
+        ? {
+            ...item,
+            state,
+          }
+        : item,
+    );
+
+    setMutationError(null);
+    setIsSavingState(true);
+    setLocalIssues(nextIssues);
+
+    try {
+      const result = await runIssueUpdate({
+        variables: {
+          id: issue.id,
+          input: {
+            stateId,
+          },
+        },
+      });
+
+      if (!result.data?.issueUpdate.success) {
+        throw new Error('Mutation failed');
+      }
+    } catch (mutationIssue) {
+      setLocalIssues(previousIssues);
+      setMutationError(ERROR_MESSAGE);
+      throw mutationIssue;
+    } finally {
+      setIsSavingState(false);
+    }
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    setActiveIssueId(null);
+
+    const issueId = String(event.active.id);
+    const targetStateId = event.over ? String(event.over.id) : null;
+
+    if (!targetStateId) {
+      return;
+    }
+
+    const issue = localIssues.find((item) => item.id === issueId);
+
+    if (!issue || issue.state.id === targetStateId) {
+      return;
+    }
+
+    try {
+      await persistStateChange(issue, targetStateId);
+    } catch {
+      // error state already handled
+    }
+  }
 
   if (error) {
     return (
@@ -96,17 +202,56 @@ export function BoardPage() {
         </div>
       </header>
 
+      {mutationError ? (
+        <section className="board-message board-message--error" role="alert">
+          <p>{mutationError}</p>
+        </section>
+      ) : null}
+
       {loading && !data ? (
         <section className="board-message" aria-live="polite">
           Loading board…
         </section>
       ) : (
-        <section className="board-grid" aria-label="Kanban board">
-          {columns.map((column) => (
-            <Column key={column.name} title={column.name} issues={issuesByState[column.name]} />
-          ))}
-        </section>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={(event) => {
+            setActiveIssueId(String(event.active.id));
+            setMutationError(null);
+          }}
+          onDragCancel={() => setActiveIssueId(null)}
+          onDragEnd={(event) => void handleDragEnd(event)}
+        >
+          <section className="board-grid" aria-label="Kanban board">
+            {columns.map((column) => (
+              <Column
+                key={column.name}
+                title={column.name}
+                stateId={column.stateId}
+                issues={issuesByState[column.name]}
+                onSelectIssue={(issue) => {
+                  setMutationError(null);
+                  setSelectedIssueId(issue.id);
+                }}
+              />
+            ))}
+          </section>
+
+          <DragOverlay>
+            {activeIssue ? <IssueCard issue={activeIssue} /> : null}
+          </DragOverlay>
+        </DndContext>
       )}
+
+      <IssueDetailDrawer
+        issue={selectedIssue}
+        team={selectedTeam}
+        savingState={isSavingState}
+        errorMessage={mutationError}
+        onClose={() => setSelectedIssueId(null)}
+        onStateChange={persistStateChange}
+      />
     </main>
   );
 }

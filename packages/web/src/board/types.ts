@@ -27,6 +27,7 @@ export interface IssueSummary {
   id: string;
   identifier: string;
   title: string;
+  description?: string | null;
   createdAt: string;
   updatedAt: string;
   state: WorkflowStateSummary;
@@ -54,4 +55,18 @@ export interface BoardPageQueryData {
 
 export interface BoardPageQueryVariables {
   first: number;
+}
+
+export interface IssueUpdateMutationData {
+  issueUpdate: {
+    success: boolean;
+    issue: IssueSummary | null;
+  };
+}
+
+export interface IssueUpdateMutationVariables {
+  id: string;
+  input: {
+    stateId: string;
+  };
 }
