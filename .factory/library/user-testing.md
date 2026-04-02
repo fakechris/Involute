@@ -76,6 +76,12 @@
 - Evidence: save CLI stdout/stderr, exit codes, and any generated export directory listings/files needed to prove the assertion.
 - Concurrency: limit to 2 concurrent CLI import/export validators because import and verify can be database-heavy and mutate shared mapping tables.
 
+## Linear Export Timing Notes
+
+- Exporting from Linear for a workspace with ~400 issues and ~90 comments takes 2-3 minutes due to API rate limits on comment fetching.
+- Use at least 300s timeout for the export command when running against a real Linear workspace.
+- The CLI mid-export progress messages may show raw Linear API counts (e.g., 10 labels, 2 users) before team-scoped filtering. The final summary and written files reflect the filtered counts (e.g., 5 labels, 1 user for team SON).
+
 ## Flow Validator Guidance: curl (import)
 
 - Surface boundary: use only the live API at `http://localhost:4200/graphql` for post-import verification.

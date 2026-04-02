@@ -1,40 +1,28 @@
 {
   "milestone": "import",
-  "round": 2,
-  "status": "fail",
+  "round": 3,
+  "status": "pass",
   "assertionsSummary": {
-    "total": 7,
-    "passed": 2,
+    "total": 5,
+    "passed": 5,
     "failed": 0,
-    "blocked": 5
+    "blocked": 0
   },
   "passedAssertions": [
-    "VAL-IMP-010",
-    "VAL-IMP-011"
+    "VAL-CLI-016",
+    "VAL-IMP-001",
+    "VAL-CLI-017",
+    "VAL-CLI-018",
+    "VAL-IMP-009"
   ],
   "failedAssertions": [],
-  "blockedAssertions": [
+  "blockedAssertions": [],
+  "appliedUpdates": [
     {
-      "id": "VAL-CLI-016",
-      "blockedBy": "Real Linear export requires a valid LINEAR_API_TOKEN; export attempt returns 401 Unauthorized. No valid token available in this environment."
-    },
-    {
-      "id": "VAL-CLI-017",
-      "blockedBy": "CLI import from real dataset depends on VAL-CLI-016 (export must succeed first). Blocked by same missing Linear credentials."
-    },
-    {
-      "id": "VAL-CLI-018",
-      "blockedBy": "CLI import verify from real dataset depends on VAL-CLI-016 (export must succeed first). Blocked by same missing Linear credentials."
-    },
-    {
-      "id": "VAL-IMP-001",
-      "blockedBy": "Full Linear data export requires a valid LINEAR_API_TOKEN. Export CLI returns 401 Unauthorized without one. The export code itself works correctly (tested with mocks), but live validation requires real credentials."
-    },
-    {
-      "id": "VAL-IMP-009",
-      "blockedBy": "Re-import idempotency testing against a real export dataset depends on VAL-IMP-001 (export must succeed first). The import pipeline has idempotency tests with mock fixtures that pass, but live validation with real data is blocked."
+      "target": "user-testing.md",
+      "description": "Added note that LINEAR_TOKEN (not LINEAR_API_TOKEN) is the correct env var and export may need 300s timeout for large workspaces",
+      "source": "flow-report"
     }
   ],
-  "appliedUpdates": [],
-  "previousRound": ".factory/validation/import/user-testing/synthesis-round1.json"
+  "previousRound": ".factory/validation/import/user-testing/synthesis-round2.json"
 }

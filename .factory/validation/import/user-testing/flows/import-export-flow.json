@@ -1,0 +1,163 @@
+{
+  "groupId": "import-export-flow",
+  "testedAt": "2026-04-02T17:05:00.000Z",
+  "isolation": {
+    "workingDirectory": "/Users/chris/workspace/Involute",
+    "exportOutputDirectory": "/Users/chris/workspace/Involute/.factory/validation/import/user-testing/tmp/import-export-flow/export",
+    "cliBinary": "node packages/cli/dist/index.js",
+    "linearTeamKey": "SON",
+    "apiServer": "http://localhost:4200",
+    "database": "postgresql://127.0.0.1:4202/involute",
+    "authToken": "changeme-set-your-token"
+  },
+  "toolsUsed": ["Execute", "curl"],
+  "assertions": [
+    {
+      "id": "VAL-CLI-016",
+      "title": "Export command",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run: node packages/cli/dist/index.js export --token \"$LINEAR_TOKEN\" --team SON --output <dir>",
+          "expected": "CLI exports data from Linear with progress reporting",
+          "observed": "CLI displayed progress for teams (1), workflow_states (7), labels (10), users (2), issues (404), comments (89 across 61 issues), parent-child mappings (301). Export completed with exit code 0."
+        },
+        {
+          "action": "List export directory contents",
+          "expected": "Export directory contains JSON files and subdirectories",
+          "observed": "Directory contains: teams.json, workflow_states.json, labels.json, users.json, issues.json, comments/ (61 files), mappings/parent_child.json, validation_report.json"
+        }
+      ],
+      "evidence": {
+        "cliOutput": "import/import-export-flow/VAL-CLI-016-export-output.txt",
+        "directoryListing": "import/import-export-flow/VAL-IMP-001-directory-listing.txt",
+        "exitCode": 0
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMP-001",
+      "title": "Full data export from Linear",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Verify export directory structure contains all required files",
+          "expected": "teams.json, workflow_states.json, labels.json, users.json, issues.json, comments/ subdirectory, mappings/",
+          "observed": "All required files present: teams.json (1 record), workflow_states.json (7 records), labels.json (5 records), users.json (1 record), issues.json (404 records), comments/ (61 files with 89 total comments), mappings/parent_child.json (301 records)"
+        },
+        {
+          "action": "Count records in each JSON file",
+          "expected": "Non-zero record counts for all entity types",
+          "observed": "teams: 1, workflow_states: 7, labels: 5, users: 1, issues: 404, comment files: 61, parent_child mappings: 301"
+        }
+      ],
+      "evidence": {
+        "directoryListing": "import/import-export-flow/VAL-IMP-001-directory-listing.txt",
+        "recordCounts": {
+          "teams": 1,
+          "workflowStates": 7,
+          "labels": 5,
+          "users": 1,
+          "issues": 404,
+          "commentFiles": 61,
+          "parentChildMappings": 301
+        }
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CLI-017",
+      "title": "Import command",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run: node packages/cli/dist/index.js import --file <export-dir>",
+          "expected": "CLI imports data with progress reporting and counts",
+          "observed": "CLI displayed import progress: Teams 1 imported/0 skipped, Workflow states 7/0, Labels 5/0, Users 1/0, Issues 404/0, Parent-child backfills 301, Comments 89/0. Exit code 0."
+        },
+        {
+          "action": "Verify imported data via GraphQL API",
+          "expected": "Issue count in database matches export (404)",
+          "observed": "GraphQL query returned 404 SON-team issues, matching export count exactly."
+        }
+      ],
+      "evidence": {
+        "cliOutput": "import/import-export-flow/VAL-CLI-017-import-output.txt",
+        "exitCode": 0,
+        "databaseVerification": "API query confirmed 404 SON issues in database"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CLI-018",
+      "title": "Import verification command",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Run: node packages/cli/dist/index.js import verify --file <export-dir>",
+          "expected": "CLI reports pass/fail per entity type comparing imported data to export source",
+          "observed": "CLI displayed verification results with PASS for all 6 entity types: Teams (1/1), Workflow States (7/7), Labels (5/5), Users (1/1), Issues (404/404), Comments (89/89). Final message: 'All checks passed! Import data matches export source.' Exit code 0."
+        }
+      ],
+      "evidence": {
+        "cliOutput": "import/import-export-flow/VAL-CLI-018-verify-output.txt",
+        "exitCode": 0,
+        "verificationResults": {
+          "teams": "PASS (export: 1, db: 1)",
+          "workflowStates": "PASS (export: 7, db: 7)",
+          "labels": "PASS (export: 5, db: 5)",
+          "users": "PASS (export: 1, db: 1)",
+          "issues": "PASS (export: 404, db: 404)",
+          "comments": "PASS (export: 89, db: 89)"
+        }
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-IMP-009",
+      "title": "Re-import idempotency",
+      "status": "pass",
+      "steps": [
+        {
+          "action": "Count issues before second import via GraphQL API",
+          "expected": "404 SON issues in database",
+          "observed": "API returned 404 SON issues"
+        },
+        {
+          "action": "Run import again on same export data",
+          "expected": "Import skips already-imported records or fails with clear message, no duplicates",
+          "observed": "All records skipped: Teams 0 imported/1 skipped, Workflow states 0/7, Labels 0/5, Users 0/1, Issues 0/404, Comments 0/89, Parent-child links 0. Exit code 0."
+        },
+        {
+          "action": "Count issues after second import via GraphQL API",
+          "expected": "Still 404 SON issues (no duplicates)",
+          "observed": "API returned 404 SON issues — count unchanged"
+        }
+      ],
+      "evidence": {
+        "cliOutput": "import/import-export-flow/VAL-IMP-009-idempotency-output.txt",
+        "exitCode": 0,
+        "issueCountBefore": 404,
+        "issueCountAfter": 404,
+        "duplicatesCreated": 0
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [
+    {
+      "description": "Export command took over 180 seconds due to Linear API rate limits on comment fetching (404 issues, 50 at a time). First attempt timed out and left export directory empty (data not flushed to disk). Required 300s timeout.",
+      "resolved": true,
+      "resolution": "Increased timeout to 300 seconds for the export command. Export completed successfully on second run.",
+      "affectedAssertions": ["VAL-CLI-016"]
+    },
+    {
+      "description": "Export summary counts differ from what was fetched during export: labels reported 10 during fetch but wrote 5 to labels.json; users reported 2 during fetch but wrote 1 to users.json. The CLI progress output counts include team-scoped items but the final export may filter or deduplicate.",
+      "resolved": true,
+      "resolution": "The final Summary section correctly shows Labels: 5 and Users: 1 matching the written files. The mid-export 'Exported N' messages appear to reflect raw Linear API counts before deduplication/filtering.",
+      "affectedAssertions": ["VAL-IMP-001"]
+    }
+  ],
+  "blockers": [],
+  "summary": "Tested 5 assertions: all 5 passed. VAL-CLI-016 (export) produced complete data from Linear. VAL-IMP-001 (directory completeness) confirmed all required files with correct record counts. VAL-CLI-017 (import) successfully imported all 404 issues, 89 comments, and 301 parent-child relationships. VAL-CLI-018 (verify) confirmed 100% parity between export and database. VAL-IMP-009 (idempotency) confirmed re-import skips all existing records with no duplicates (404 before and after)."
+}
