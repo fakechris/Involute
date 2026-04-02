@@ -40,6 +40,7 @@ export function IssueCard({ issue, onSelect }: IssueCardProps) {
     data: {
       issue,
       type: 'issue-card',
+      stateId: issue.state.id,
     },
   });
 

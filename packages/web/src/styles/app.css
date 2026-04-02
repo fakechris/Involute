@@ -260,6 +260,7 @@ select {
   border-radius: 0.95rem;
   background: rgba(30, 41, 59, 0.88);
   padding: 0;
+  touch-action: none;
 }
 
 .issue-card--dragging {
