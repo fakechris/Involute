@@ -22,8 +22,10 @@ let activeServer: StartedServer;
 interface TestFixture {
   team: Team;
   admin: User;
+  importedUser: User;
   issue: Issue;
   childIssue: Issue;
+  importedIssue: Issue;
   comment: Comment;
   states: WorkflowState[];
   labels: IssueLabel[];
@@ -207,6 +209,53 @@ describe('GraphQL server core', () => {
       },
     ]);
     expect(response.body.data.issueLabels.nodes.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it('exposes imported issue timestamps and imported users through the live API surface', async () => {
+    const response = await postGraphQL({
+      query: `
+        query($id: String!) {
+          issue(id: $id) {
+            id
+            identifier
+            createdAt
+            updatedAt
+          }
+          users {
+            nodes {
+              id
+              name
+              email
+            }
+          }
+        }
+      `,
+      variables: {
+        id: fixture.importedIssue.id,
+      },
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.issue).toEqual({
+      id: fixture.importedIssue.id,
+      identifier: fixture.importedIssue.identifier,
+      createdAt: '2024-06-01T10:00:00.000Z',
+      updatedAt: '2024-06-02T15:00:00.000Z',
+    });
+    expect(response.body.data.users.nodes).toEqual([
+      {
+        id: fixture.admin.id,
+        name: fixture.admin.name,
+        email: fixture.admin.email,
+      },
+      {
+        id: fixture.importedUser.id,
+        name: fixture.importedUser.name,
+        email: fixture.importedUser.email,
+      },
+    ]);
   });
 
   it('returns issue comments in ascending createdAt order with first limits and complete fields', async () => {
@@ -660,6 +709,13 @@ async function resetDatabase(prismaClient: PrismaClient): Promise<TestFixture> {
     },
   });
 
+  const importedUser = await prismaClient.user.create({
+    data: {
+      email: 'imported.alice@example.com',
+      name: 'Imported Alice',
+    },
+  });
+
   const states = await prismaClient.workflowState.findMany({
     where: {
       teamId: refreshedTeam.id,
@@ -712,6 +768,19 @@ async function resetDatabase(prismaClient: PrismaClient): Promise<TestFixture> {
     },
   });
 
+  const importedIssue = await prismaClient.issue.create({
+    data: {
+      identifier: 'SON-42',
+      teamId: refreshedTeam.id,
+      stateId: readyState.id,
+      assigneeId: importedUser.id,
+      title: 'Imported integration issue',
+      description: 'Represents a preserved imported issue.',
+      createdAt: new Date('2024-06-01T10:00:00.000Z'),
+      updatedAt: new Date('2024-06-02T15:00:00.000Z'),
+    },
+  });
+
   const comment = await prismaClient.comment.create({
     data: {
       issueId: issue.id,
@@ -724,8 +793,10 @@ async function resetDatabase(prismaClient: PrismaClient): Promise<TestFixture> {
   return {
     team: refreshedTeam,
     admin,
+    importedUser,
     issue,
     childIssue,
+    importedIssue,
     comment,
     states,
     labels,

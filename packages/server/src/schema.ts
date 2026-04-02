@@ -83,6 +83,7 @@ const typeDefs = /* GraphQL */ `
     issues(first: Int!, filter: IssueFilter): IssueConnection!
     teams(filter: TeamFilter): TeamConnection!
     issueLabels(filter: IssueLabelFilter): IssueLabelConnection!
+    users: UserConnection!
   }
 
   type Mutation {
@@ -131,6 +132,8 @@ const typeDefs = /* GraphQL */ `
     identifier: String!
     title: String!
     description: String
+    createdAt: DateTime!
+    updatedAt: DateTime!
     state: WorkflowState!
     labels: IssueLabelConnection!
     assignee: User
@@ -153,6 +156,10 @@ const typeDefs = /* GraphQL */ `
 
   type IssueConnection {
     nodes: [Issue!]!
+  }
+
+  type UserConnection {
+    nodes: [User!]!
   }
 
   type CommentConnection {
@@ -308,6 +315,15 @@ const resolvers = {
         }),
       };
     },
+    users: async (
+      _parent: unknown,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<{ nodes: User[] }> => ({
+      nodes: await context.prisma.user.findMany({
+        orderBy: [{ email: 'asc' }, { id: 'asc' }],
+      }),
+    }),
   },
   Mutation: {
     issueCreate: async (
