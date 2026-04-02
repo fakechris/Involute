@@ -13,6 +13,7 @@ vi.mock('@dnd-kit/sortable', async () => {
     useSortable: useSortableSpy.mockImplementation(() => ({
       attributes: {},
       listeners: {},
+      setActivatorNodeRef: vi.fn(),
       setNodeRef: vi.fn(),
       transform: null,
       transition: null,
@@ -116,5 +117,24 @@ describe('IssueCard', () => {
     const dragHandle = screen.getByTestId('issue-drag-handle-INV-42');
     expect(dragHandle).toHaveAccessibleName('Drag INV-42');
     expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('data-issue-identifier', 'INV-42');
+  });
+
+  it('wires the drag handle as the sortable activator node', () => {
+    const setActivatorNodeRef = vi.fn();
+    useSortableSpy.mockImplementationOnce(() => ({
+      attributes: {},
+      listeners: {},
+      setActivatorNodeRef,
+      setNodeRef: vi.fn(),
+      transform: null,
+      transition: null,
+      isDragging: false,
+    }));
+
+    render(<IssueCard issue={makeIssue()} />);
+
+    expect(setActivatorNodeRef).toHaveBeenCalledTimes(1);
+    expect(setActivatorNodeRef.mock.calls[0]?.[0]).toBeInstanceOf(HTMLButtonElement);
+    expect(setActivatorNodeRef.mock.calls[0]?.[0]).toHaveAttribute('data-testid', 'issue-drag-handle-INV-1');
   });
 });

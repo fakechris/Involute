@@ -38,6 +38,7 @@ export function IssueCard({ issue, onSelect }: IssueCardProps) {
   const {
     attributes,
     listeners,
+    setActivatorNodeRef,
     setNodeRef,
     transform,
     transition,
@@ -68,6 +69,7 @@ export function IssueCard({ issue, onSelect }: IssueCardProps) {
     >
       <button
         type="button"
+        ref={setActivatorNodeRef}
         className="issue-card__drag-handle"
         aria-label={`Drag ${issue.identifier}`}
         data-testid={`issue-drag-handle-${issue.identifier}`}
