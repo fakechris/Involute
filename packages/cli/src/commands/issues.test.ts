@@ -130,6 +130,29 @@ describe('issue-related CLI commands', () => {
     expect(Array.isArray(teams)).toBe(true);
     expect(teams[0]).toMatchObject({ id: expect.any(String), key: expect.any(String), name: expect.any(String) });
 
+    const { stdout: topLevelTeamsOut } = await runCli(['teams', '--json'], tempDir);
+    expect(JSON.parse(topLevelTeamsOut)).toEqual(teams);
+
+    const { stdout: topLevelStatesOut } = await runCli(['states', '--json'], tempDir);
+    const states = JSON.parse(topLevelStatesOut);
+    expect(Array.isArray(states)).toBe(true);
+    expect(states).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: expect.any(String), name: 'Backlog' }),
+        expect.objectContaining({ id: expect.any(String), name: 'Ready' }),
+      ]),
+    );
+
+    const { stdout: topLevelLabelsOut } = await runCli(['labels', '--json'], tempDir);
+    const labels = JSON.parse(topLevelLabelsOut);
+    expect(Array.isArray(labels)).toBe(true);
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: expect.any(String), name: 'task' }),
+        expect.objectContaining({ id: expect.any(String), name: 'Bug' }),
+      ]),
+    );
+
     const { stdout: issuesOut } = await runCli(['issues', 'list', '--json'], tempDir);
     const issues = JSON.parse(issuesOut);
     expect(Array.isArray(issues)).toBe(true);

@@ -804,43 +804,40 @@ export function createProgram(): Command {
   registerExportCommand(program);
   registerImportCommand(program);
 
-  program
-    .command('teams')
-    .description('List teams')
-    .command('list')
-    .description('List teams')
-    .option('--json', 'Output machine-readable JSON')
-    .action(async function (this: Command, options: JsonOption) {
-      await runWithCliErrorHandling(async () => {
-        await probeConnection(createCommandContext({ json: options.json ?? getGlobalJsonOption(this) }));
-      });
+  const runTeamsCommand = async function (this: Command, options: JsonOption = {}) {
+    await runWithCliErrorHandling(async () => {
+      await probeConnection(createCommandContext({ json: options.json ?? getGlobalJsonOption(this) }));
     });
+  };
 
-  program
+  const teamsCommand = program.command('teams').description('List teams').option('--json', 'Output machine-readable JSON');
+  teamsCommand.action(runTeamsCommand);
+  teamsCommand.command('list').description('List teams').option('--json', 'Output machine-readable JSON').action(runTeamsCommand);
+
+  const runStatesCommand = async function (this: Command, options: JsonOption = {}) {
+    await runWithCliErrorHandling(async () => {
+      const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+      process.stdout.write(formatOutput(await fetchStates(), context));
+    });
+  };
+
+  const statesCommand = program
     .command('states')
     .description('List workflow states')
-    .command('list')
-    .description('List workflow states')
-    .option('--json', 'Output machine-readable JSON')
-    .action(async function (this: Command, options: JsonOption) {
-      await runWithCliErrorHandling(async () => {
-        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
-        process.stdout.write(formatOutput(await fetchStates(), context));
-      });
-    });
+    .option('--json', 'Output machine-readable JSON');
+  statesCommand.action(runStatesCommand);
+  statesCommand.command('list').description('List workflow states').option('--json', 'Output machine-readable JSON').action(runStatesCommand);
 
-  program
-    .command('labels')
-    .description('List issue labels')
-    .command('list')
-    .description('List issue labels')
-    .option('--json', 'Output machine-readable JSON')
-    .action(async function (this: Command, options: JsonOption) {
-      await runWithCliErrorHandling(async () => {
-        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
-        process.stdout.write(formatOutput(await fetchLabels(), context));
-      });
+  const runLabelsCommand = async function (this: Command, options: JsonOption = {}) {
+    await runWithCliErrorHandling(async () => {
+      const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+      process.stdout.write(formatOutput(await fetchLabels(), context));
     });
+  };
+
+  const labelsCommand = program.command('labels').description('List issue labels').option('--json', 'Output machine-readable JSON');
+  labelsCommand.action(runLabelsCommand);
+  labelsCommand.command('list').description('List issue labels').option('--json', 'Output machine-readable JSON').action(runLabelsCommand);
 
   const commentsCommand = program.command('comments').description('Manage issue comments');
 
