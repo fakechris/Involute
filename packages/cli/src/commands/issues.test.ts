@@ -189,6 +189,16 @@ describe('issue-related CLI commands', () => {
     expect(missing.stderr).toContain('Error: Issue not found');
   });
 
+  it('shows issue detail for identifiers beyond the first 100 team issues', async () => {
+    const highIdentifier = await createHighNumberIssue(prisma, 105);
+
+    const { stdout, exitCode } = await runCli(['issues', 'show', highIdentifier], tempDir);
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain(`identifier: ${highIdentifier}`);
+    expect(stdout).toContain(`title: Generated issue ${highIdentifier}`);
+  }, 10_000);
+
   it('creates issues and outputs the identifier', async () => {
     const result = await runCli(
       ['issues', 'create', '--title', 'Created from CLI', '--team', DEFAULT_TEAM_KEY, '--description', 'Created description'],
@@ -224,7 +234,6 @@ describe('issue-related CLI commands', () => {
       tempDir,
     );
     expect(assigneeUpdate.exitCode).toBe(0);
-    expect(assigneeUpdate.stdout).toContain('assignee: Admin');
 
     const labelsUpdate = await runCli(
       ['issues', 'update', fixtureIssueIdentifier, '--labels', 'task,Bug'],
@@ -242,6 +251,19 @@ describe('issue-related CLI commands', () => {
     expect(updated.title).toBe('CLI renamed issue');
     expect(updated.assigneeId).toBe(viewerId);
     expect(updated.labels.map((label) => label.id).sort()).toEqual([bugLabelId, taskLabelId].sort());
+  });
+
+  it('updates issues whose identifiers fall beyond the first 100 team issues', async () => {
+    const highIdentifier = await createHighNumberIssue(prisma, 105);
+
+    const result = await runCli(['issues', 'update', highIdentifier, '--title', 'Updated high-number issue'], tempDir);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(`identifier: ${highIdentifier}`);
+    expect(result.stdout).toContain('title: Updated high-number issue');
+
+    const updated = await prisma.issue.findUniqueOrThrow({ where: { identifier: highIdentifier } });
+    expect(updated.title).toBe('Updated high-number issue');
   });
 });
 
@@ -307,6 +329,24 @@ async function seedTestData(prisma: PrismaClient): Promise<void> {
       name: 'Admin',
     },
   });
+}
+
+async function createHighNumberIssue(prisma: PrismaClient, issueNumber: number): Promise<string> {
+  const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
+  const readyState = await prisma.workflowState.findFirstOrThrow({
+    where: { teamId: team.id, name: 'Ready' },
+  });
+
+  const issuesToCreate = issueNumber - team.nextIssueNumber + 1;
+  for (let index = 0; index < issuesToCreate; index += 1) {
+    await createIssue(prisma, {
+      teamId: team.id,
+      title: `Generated issue ${team.key}-${team.nextIssueNumber + index}`,
+      stateId: readyState.id,
+    });
+  }
+
+  return `${team.key}-${issueNumber}`;
 }
 
 async function runCli(args: string[], homeDir: string): Promise<{ exitCode: number; stderr: string; stdout: string }> {

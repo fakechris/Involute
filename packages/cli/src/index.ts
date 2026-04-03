@@ -435,61 +435,81 @@ async function fetchIssues(teamKey?: string): Promise<IssueListItem[]> {
 async function fetchIssueByIdentifier(identifier: string): Promise<IssueDetail | null> {
   const teamKey = identifier.includes('-') ? identifier.split('-')[0] ?? undefined : undefined;
   const client = await createConfiguredGraphQLClient();
-  const result = await client.request<{ issues: { nodes: IssueDetail[] } }>(
-    /* GraphQL */ `
-      query CliIssueByIdentifier($filter: IssueFilter, $first: Int!) {
-        issues(first: $first, filter: $filter) {
-          nodes {
-            id
-            identifier
-            title
-            description
-            state {
+  const filter = teamKey
+    ? {
+        team: {
+          key: {
+            eq: teamKey,
+          },
+        },
+      }
+    : undefined;
+
+  let first = 100;
+  const maxFirst = 5_000;
+
+  while (true) {
+    const result = await client.request<{ issues: { nodes: IssueDetail[] } }>(
+      /* GraphQL */ `
+        query CliIssueByIdentifier($filter: IssueFilter, $first: Int!) {
+          issues(first: $first, filter: $filter) {
+            nodes {
               id
-              name
-            }
-            labels {
-              nodes {
+              identifier
+              title
+              description
+              state {
                 id
                 name
               }
-            }
-            assignee {
-              id
-              name
-              email
-            }
-            comments(first: 100, orderBy: createdAt) {
-              nodes {
-                id
-                body
-                createdAt
-                user {
+              labels {
+                nodes {
                   id
                   name
-                  email
+                }
+              }
+              assignee {
+                id
+                name
+                email
+              }
+              comments(first: 100, orderBy: createdAt) {
+                nodes {
+                  id
+                  body
+                  createdAt
+                  user {
+                    id
+                    name
+                    email
+                  }
                 }
               }
             }
           }
         }
-      }
-    `,
-    {
-      filter: teamKey
-        ? {
-            team: {
-              key: {
-                eq: teamKey,
-              },
-            },
-          }
-        : undefined,
-      first: 100,
-    },
-  );
+      `,
+      {
+        filter,
+        first,
+      },
+    );
 
-  return result.issues.nodes.find((issue) => issue.identifier === identifier) ?? null;
+    const matchedIssue = result.issues.nodes.find((issue) => issue.identifier === identifier);
+    if (matchedIssue) {
+      return matchedIssue;
+    }
+
+    if (result.issues.nodes.length < first) {
+      return null;
+    }
+
+    if (first >= maxFirst) {
+      return null;
+    }
+
+    first = Math.min(first * 2, maxFirst);
+  }
 }
 
 async function fetchTeamByKey(teamKey: string): Promise<TeamSummary | null> {
