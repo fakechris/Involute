@@ -36,9 +36,11 @@ import type {
   IssueUpdateMutationVariables,
 } from '../board/types';
 import {
+  ACTIVE_TEAM_STORAGE_KEY,
   filterIssuesByTeam,
   getBoardColumns,
   getInitialTeamKey,
+  getStoredTeamKey,
   groupIssuesByState,
 } from '../board/utils';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
@@ -154,10 +156,38 @@ export function BoardPage() {
   const [dragOriginStateId, setDragOriginStateId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!selectedTeamKey) {
+    if (!teams.length) {
+      if (selectedTeamKey !== null) {
+        setSelectedTeamKey(null);
+      }
+      return;
+    }
+
+    const storedTeamKey = getStoredTeamKey(teams);
+    const hasSelectedTeam = selectedTeamKey ? teams.some((team) => team.key === selectedTeamKey) : false;
+
+    if (storedTeamKey && storedTeamKey !== selectedTeamKey) {
+      setSelectedTeamKey(storedTeamKey);
+      return;
+    }
+
+    if (!hasSelectedTeam) {
       setSelectedTeamKey(getInitialTeamKey(teams));
     }
   }, [selectedTeamKey, teams]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (!selectedTeamKey) {
+      window.localStorage.removeItem(ACTIVE_TEAM_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(ACTIVE_TEAM_STORAGE_KEY, selectedTeamKey);
+  }, [selectedTeamKey]);
 
   useEffect(() => {
     setLocalIssues(data?.issues.nodes ?? []);
