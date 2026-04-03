@@ -41,6 +41,7 @@ import {
   getBoardColumns,
   getInitialTeamKey,
   getStoredTeamKey,
+  readStoredTeamKey,
   groupIssuesByState,
 } from '../board/utils';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
@@ -107,7 +108,7 @@ function createHtml5BoardDragPayload(issueId: string, stateId: string): string {
 }
 
 export function BoardPage() {
-  const [selectedTeamKey, setSelectedTeamKey] = useState<string | null>(null);
+  const [selectedTeamKey, setSelectedTeamKey] = useState<string | null>(() => readStoredTeamKey());
   const boardQueryVariables = useMemo<BoardPageQueryVariables>(
     () => ({
       first: ISSUE_LIMIT,

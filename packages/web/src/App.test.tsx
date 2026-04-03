@@ -1289,6 +1289,30 @@ describe('App', () => {
     );
   });
 
+  it('hydrates the persisted team key before the initial board query runs on reload', async () => {
+    window.localStorage.setItem(ACTIVE_TEAM_STORAGE_KEY, 'SON');
+
+    renderApp({ data: boardQueryResult, loading: false }, ['/']);
+
+    expect(apolloMocks.useQuery).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        variables: {
+          first: 200,
+          filter: {
+            team: {
+              key: {
+                eq: 'SON',
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(await screen.findByText('Workflow overview for Sonata.')).toBeInTheDocument();
+  });
+
   it('stores the active team selection for future board reloads', async () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 

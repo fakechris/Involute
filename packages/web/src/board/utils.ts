@@ -3,6 +3,16 @@ import type { IssueSummary, TeamSummary } from './types';
 
 export const ACTIVE_TEAM_STORAGE_KEY = 'involute.activeTeamKey';
 
+export function readStoredTeamKey(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const storedTeamKey = window.localStorage.getItem(ACTIVE_TEAM_STORAGE_KEY)?.trim();
+
+  return storedTeamKey || null;
+}
+
 export function getBoardColumns(team: TeamSummary | null) {
   const stateIdByName = new Map<string, string>(
     (team?.states.nodes ?? []).map((state) => [state.name, state.id]),
@@ -46,11 +56,7 @@ export function getInitialTeamKey(teams: TeamSummary[]): string | null {
 }
 
 export function getStoredTeamKey(teams: TeamSummary[]): string | null {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  const storedTeamKey = window.localStorage.getItem(ACTIVE_TEAM_STORAGE_KEY)?.trim();
+  const storedTeamKey = readStoredTeamKey();
 
   if (!storedTeamKey) {
     return null;
