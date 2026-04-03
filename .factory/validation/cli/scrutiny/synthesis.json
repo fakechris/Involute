@@ -1,0 +1,78 @@
+{
+  "milestone": "cli",
+  "round": 1,
+  "status": "fail",
+  "validatorsRun": {
+    "test": {
+      "passed": true,
+      "command": "pnpm -r test --run",
+      "exitCode": 0
+    },
+    "typecheck": {
+      "passed": true,
+      "command": "pnpm -r typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "passed": true,
+      "command": "pnpm -r lint",
+      "exitCode": 0
+    }
+  },
+  "reviewsSummary": {
+    "total": 4,
+    "passed": 1,
+    "failed": 3,
+    "failedFeatures": [
+      "cli-scaffold-and-config",
+      "cli-issue-commands",
+      "cli-comment-commands"
+    ]
+  },
+  "blockingIssues": [
+    {
+      "featureId": "cli-scaffold-and-config",
+      "severity": "blocking",
+      "description": "Top-level JSON mode is incomplete: `teams`, `states`, and `labels` only register `--json` on their `list` subcommands, so `involute teams --json` is rejected by Commander even though the feature contract and handoff claimed command-level JSON support."
+    },
+    {
+      "featureId": "cli-issue-commands",
+      "severity": "blocking",
+      "description": "Identifier lookup is capped to the first 100 issues in a team because `fetchIssueByIdentifier()` queries `issues(first: 100, filter: { team.key.eq })` and filters client-side. Valid issues beyond the first page incorrectly fail with `Issue not found` in `issues show`, `issues update`, and dependent flows."
+    },
+    {
+      "featureId": "cli-comment-commands",
+      "severity": "blocking",
+      "description": "Comment commands regress valid non-UUID issue-id support. Any non-UUID argument is treated as an identifier and routed through identifier lookup instead of attempting a direct `issue(id)` query, so opaque/imported/mock issue IDs can no longer be used with `comments list` or `comments add` despite the `<issueId-or-identifier>` contract."
+    }
+  ],
+  "appliedUpdates": [],
+  "suggestedGuidanceUpdates": [
+    {
+      "target": "skills",
+      "suggestion": "Update the `cli-worker` skill to explicitly require a lint run in the completion checklist and align success criteria with scrutiny expectations.",
+      "evidence": "The `cli-scaffold-and-config` review found `.factory/skills/cli-worker/SKILL.md` requires `cd packages/cli && pnpm lint`, but the reviewed worker transcript/handoff completed without any lint command.",
+      "isSystemic": true
+    },
+    {
+      "target": "features.json",
+      "suggestion": "Correct CLI-owned feature metadata so CLI implementation/review tasks use `cli-worker` consistently instead of `backend-worker`.",
+      "evidence": "The `cli-verify-test-isolation` review found feature metadata marked a CLI-only change as `backend-worker` even though the fix and completed session were fully under `packages/cli`.",
+      "isSystemic": false
+    },
+    {
+      "target": "skills",
+      "suggestion": "Tighten worker handoff guidance to require accurate summaries of whether code was newly implemented versus already present.",
+      "evidence": "The `cli-issue-commands` review found the handoff claimed the feature was already implemented and tested, but the reviewed commit added substantial new CLI logic and tests.",
+      "isSystemic": true
+    },
+    {
+      "target": "skills",
+      "suggestion": "Refresh CLI manual-validation guidance so it accounts for missions where canonical ports are already occupied by healthy services and workers may need to validate against existing processes instead of launching fresh ones.",
+      "evidence": "The `cli-comment-commands` review recorded a skill deviation because the skill assumed fresh services on 4200/4201, while the mission state required validating against an existing API and a fallback web port.",
+      "isSystemic": true
+    }
+  ],
+  "rejectedObservations": [],
+  "previousRound": null
+}

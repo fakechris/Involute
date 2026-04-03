@@ -1,0 +1,28 @@
+{
+  "featureId": "cli-issue-commands",
+  "reviewedAt": "2026-04-03T00:00:00Z",
+  "commitId": "a99c06549ca94275d8594a1cf6491d7d28eb6d60",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The CLI command set is broadly implemented, but `issues show <identifier>` is not reliable once a team accumulates more than 100 issues because the lookup queries only the first 100 issues for that team and then filters client-side. This can incorrectly report 'Issue not found' for valid issues, so the feature does not fully satisfy the required show behavior.",
+    "issues": [
+      {
+        "file": "packages/cli/src/index.ts",
+        "line": 435,
+        "severity": "blocking",
+        "description": "`fetchIssueByIdentifier()` resolves an issue by querying `issues(first: 100, filter: { team.key.eq })` and then searching the returned page client-side (`find(...)`). For teams with more than 100 issues, any valid identifier beyond the first page is invisible to `issues show`, `issues update`, and comment commands that depend on this helper, causing false 'Issue not found' errors for existing issues."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The worker's transcript says the feature was 'already implemented and tested' before review, but the committed diff clearly adds substantial new command logic and a new test file. This suggests the skill/handoff guidance does not strongly enforce accurate reporting of what changed during the session.",
+      "evidence": "Handoff summary says 'already implemented and tested', while commit a99c065 adds 864 lines across `packages/cli/src/index.ts` and `packages/cli/src/commands/issues.test.ts`."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the mission context, handoff, transcript skeleton, skill file, and commit `a99c06549ca94275d8594a1cf6491d7d28eb6d60`. Found one high-confidence blocking bug: issue lookup is capped to the first 100 issues per team and filtered client-side, so valid identifiers can become unreachable in `issues show` and dependent update/comment flows."
+}
