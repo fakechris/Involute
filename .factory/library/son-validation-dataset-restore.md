@@ -1,9 +1,9 @@
 # SON validation dataset restore
 
 - Purpose: restore the imported `SON` dataset needed by CLI/web/API cross-surface validation (`VAL-CROSS-007`, `VAL-CROSS-015`) without disturbing the seeded `INV`/`APP`/`VAL` validation data.
-- Command: `cd /Users/chris/workspace/Involute/packages/server && pnpm setup:son-validation`
+- Command: `cd ./packages/server && pnpm setup:son-validation`
 - Equivalent manifest command: `.factory/services.yaml` → `commands.restore_son_validation_data`
-- Source export: `/Users/chris/workspace/Involute/.factory/validation/import/user-testing/tmp/import-export-flow/export`
+- Source export: `./.factory/validation/import/user-testing/tmp/import-export-flow/export`
 - What it does:
   - re-runs the import pipeline against the saved SON export fixture (idempotent),
   - then runs the existing web-ui validation setup so `INV`, `APP`, and `VAL` fixtures remain available,

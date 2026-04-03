@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { CommentSummary, IssueSummary, TeamSummary } from '../board/types';
 
@@ -47,6 +47,7 @@ export function IssueDetailDrawer({
   const [selectedAssigneeId, setSelectedAssigneeId] = useState('');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [commentBody, setCommentBody] = useState('');
+  const isSavingTitleRef = useRef(false);
 
   useEffect(() => {
     setSelectedStateId(issue?.state.id ?? '');
@@ -82,6 +83,10 @@ export function IssueDetailDrawer({
   const activeIssue = issue;
 
   async function commitTitle() {
+    if (isSavingTitleRef.current) {
+      return;
+    }
+
     const nextTitle = title.trim();
 
     if (!nextTitle || nextTitle === activeIssue.title) {
@@ -89,7 +94,13 @@ export function IssueDetailDrawer({
       return;
     }
 
-    await onTitleSave(activeIssue, nextTitle);
+    isSavingTitleRef.current = true;
+
+    try {
+      await onTitleSave(activeIssue, nextTitle);
+    } finally {
+      isSavingTitleRef.current = false;
+    }
   }
 
   async function commitDescription() {
@@ -158,7 +169,7 @@ export function IssueDetailDrawer({
                 onChange={(event) => setTitle(event.target.value)}
                 onBlur={() => {
                   setIsEditingTitle(false);
-                  void Promise.resolve().then(() => commitTitle()).catch(() => undefined);
+                  void commitTitle().catch(() => undefined);
                 }}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') {

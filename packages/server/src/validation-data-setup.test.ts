@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { fileURLToPath } from 'node:url';
 
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { runImportPipeline } from './import-pipeline.js';
@@ -92,7 +93,9 @@ describe('runValidationDataSetup', () => {
   });
 
   it('is idempotent and backfills canonical states onto imported team data', async () => {
-    const exportDir = '/Users/chris/workspace/Involute/.factory/validation/import/user-testing/tmp/val-imp-fixture';
+    const exportDir = fileURLToPath(
+      new URL('../../../.factory/validation/import/user-testing/tmp/val-imp-fixture', import.meta.url),
+    );
 
     await runImportPipeline(prisma, exportDir);
 

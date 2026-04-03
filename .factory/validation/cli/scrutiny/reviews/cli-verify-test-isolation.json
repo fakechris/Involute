@@ -13,7 +13,7 @@
     {
       "area": "skills",
       "observation": "The feature is labeled with skillName `backend-worker`, but the completed worker session used the `cli-worker` procedure and the change lives entirely under `packages/cli`. The shared mission state should reflect the CLI ownership consistently to avoid misrouting future work/reviews.",
-      "evidence": "features.json:1789-1807 lists `cli-verify-test-isolation` with `skillName: \"backend-worker\"`; the handoff file `/Users/chris/.factory/missions/6774ac71-5dc9-4936-9303-c902a364ac7c/handoffs/2026-04-03T01-35-36-511Z__cli-verify-test-isolation__6cf6ae57-6614-49f4-acf3-a1ead2aa568f.json` records a CLI-only fix in `packages/cli/*` and `skillFeedback` discusses the worker skill choice."
+      "evidence": "features.json:1789-1807 lists `cli-verify-test-isolation` with `skillName: \"backend-worker\"`; the handoff file `<REDACTED_MISSION_PATH>/handoffs/2026-04-03T01-35-36-511Z__cli-verify-test-isolation__6cf6ae57-6614-49f4-acf3-a1ead2aa568f.json` records a CLI-only fix in `packages/cli/*` and `skillFeedback` discusses the worker skill choice."
     }
   ],
   "addressesFailureFrom": null,

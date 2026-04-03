@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
@@ -163,6 +163,29 @@ describe('issue-related CLI commands', () => {
     });
   });
 
+  it('emits machine-readable JSON for config set and writes a private config file', async () => {
+    const configDir = join(tempDir, 'private-config');
+    const privateConfigPath = join(configDir, 'config.json');
+
+    const result = await setConfigValue('token', 'super-secret-token', privateConfigPath);
+
+    expect(result.token).toBe('super-secret-token');
+
+    const { stdout, exitCode } = await runCli(
+      ['config', 'set', 'server-url', server.url, '--json'],
+      tempDir,
+    );
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout)).toEqual({
+      key: 'server-url',
+      path: join(tempDir, 'config.json'),
+    });
+
+    const configStats = await stat(privateConfigPath);
+    expect(configStats.mode & 0o777).toBe(0o600);
+  });
+
   it('lists issues and filters by team', async () => {
     await createSecondaryTeamFixture(prisma);
 
@@ -173,6 +196,21 @@ describe('issue-related CLI commands', () => {
     expect(stdout).toContain('Admin');
     expect(stdout).not.toContain('OPS-1');
   });
+
+  it('lists issues whose identifiers fall beyond the first 100 team issues', async () => {
+    const highIdentifier = await createHighNumberIssue(prisma, 105);
+
+    const { stdout, exitCode } = await runCli(['issues', 'list', '--team', DEFAULT_TEAM_KEY, '--json'], tempDir);
+
+    expect(exitCode).toBe(0);
+    expect(JSON.parse(stdout)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          identifier: highIdentifier,
+        }),
+      ]),
+    );
+  }, 10_000);
 
   it('shows issue detail and returns a helpful not found error', async () => {
     const { stdout } = await runCli(['issues', 'show', fixtureIssueIdentifier], tempDir);

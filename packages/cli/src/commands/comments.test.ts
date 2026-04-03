@@ -143,6 +143,29 @@ describe('comment-related CLI commands', () => {
     });
   });
 
+  it('lists comments beyond the first 100 entries for an issue identifier', async () => {
+    const manyComments = Array.from({ length: 105 }, (_, index) => ({
+      body: `Generated comment ${index + 1}`,
+      createdAt: new Date(Date.parse('2024-01-03T00:00:00.000Z') + index * 60_000),
+      updatedAt: new Date(Date.parse('2024-01-03T00:00:00.000Z') + index * 60_000),
+      issueId: fixtureIssueId,
+      userId: viewerId,
+    }));
+
+    await prisma.comment.createMany({
+      data: manyComments,
+    });
+
+    const { stdout, exitCode } = await runCli(['comments', 'list', fixtureIssueIdentifier, '--json'], tempDir);
+    const comments = JSON.parse(stdout);
+
+    expect(exitCode).toBe(0);
+    expect(comments).toHaveLength(107);
+    expect(comments.at(-1)).toMatchObject({
+      body: 'Generated comment 105',
+    });
+  });
+
   it('shows error for nonexistent issue identifier', async () => {
     const result = await runCli(['comments', 'list', 'INV-999999'], tempDir);
     expect(result.exitCode).toBe(1);

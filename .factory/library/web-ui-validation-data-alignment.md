@@ -1,6 +1,6 @@
 # Web UI validation data alignment
 
-- Run `cd /Users/chris/workspace/Involute/packages/server && pnpm setup:web-ui-validation` before web-ui user-testing reruns.
+- Run `cd ./packages/server && pnpm setup:web-ui-validation` before web-ui user-testing reruns.
 - The setup is idempotent and backend-owned. It ensures:
   - `INV` exists with the canonical 6 workflow states.
   - `APP` exists with the canonical 6 workflow states for team-selector validation.

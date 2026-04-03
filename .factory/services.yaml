@@ -1,12 +1,12 @@
 commands:
-  init: /Users/chris/workspace/Involute/.factory/init.sh
+  init: ./.factory/init.sh
   install: pnpm install
   build: pnpm -r build
   typecheck: pnpm -r typecheck
   test: pnpm -r test --run
   lint: pnpm -r lint
-  setup_web_ui_validation_data: cd /Users/chris/workspace/Involute/packages/server && pnpm setup:web-ui-validation
-  restore_son_validation_data: cd /Users/chris/workspace/Involute/packages/server && pnpm setup:son-validation
+  setup_web_ui_validation_data: cd ./packages/server && pnpm setup:web-ui-validation
+  restore_son_validation_data: cd ./packages/server && pnpm setup:son-validation
 
 services:
   postgres:
@@ -24,14 +24,14 @@ services:
     depends_on: [postgres]
 
   api:
-    start: "cd /Users/chris/workspace/Involute/packages/server && pnpm build && PORT=4200 node dist/index.js"
+    start: "cd ./packages/server && pnpm build && PORT=4200 node dist/index.js"
     stop: "lsof -ti :4200 | xargs kill 2>/dev/null || true"
     healthcheck: "curl -sf http://localhost:4200/health"
     port: 4200
     depends_on: [postgres_proxy]
 
   web:
-    start: "cd /Users/chris/workspace/Involute/packages/web && PORT=4201 npx vite --port 4201"
+    start: "cd ./packages/web && PORT=4201 npx vite --port 4201"
     stop: "lsof -ti :4201 | xargs kill 2>/dev/null || true"
     healthcheck: "curl -sf http://localhost:4201"
     port: 4201

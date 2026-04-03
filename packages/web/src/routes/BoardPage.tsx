@@ -164,16 +164,16 @@ export function BoardPage() {
       return;
     }
 
-    const storedTeamKey = getStoredTeamKey(teams);
     const hasSelectedTeam = selectedTeamKey ? teams.some((team) => team.key === selectedTeamKey) : false;
 
-    if (storedTeamKey && storedTeamKey !== selectedTeamKey) {
-      setSelectedTeamKey(storedTeamKey);
+    if (hasSelectedTeam) {
       return;
     }
 
-    if (!hasSelectedTeam) {
-      setSelectedTeamKey(getInitialTeamKey(teams));
+    const nextTeamKey = getStoredTeamKey(teams) ?? getInitialTeamKey(teams);
+
+    if (nextTeamKey !== selectedTeamKey) {
+      setSelectedTeamKey(nextTeamKey);
     }
   }, [selectedTeamKey, teams]);
 
@@ -198,11 +198,7 @@ export function BoardPage() {
     teams.find((team) => team.key === selectedTeamKey) ?? teams[0] ?? null;
   const columns = useMemo(() => getBoardColumns(selectedTeam), [selectedTeam]);
   const visibleIssues = useMemo(() => {
-    if (selectedTeamKey) {
-      return localIssues;
-    }
-
-    return filterIssuesByTeam(localIssues, selectedTeam?.key ?? null);
+    return filterIssuesByTeam(localIssues, selectedTeamKey ?? selectedTeam?.key ?? null);
   }, [localIssues, selectedTeam?.key, selectedTeamKey]);
   const issuesByState = useMemo(() => groupIssuesByState(visibleIssues), [visibleIssues]);
   const activeIssue = useMemo(
@@ -210,8 +206,8 @@ export function BoardPage() {
     [activeIssueId, visibleIssues],
   );
   const selectedIssue = useMemo(
-    () => localIssues.find((issue) => issue.id === selectedIssueId) ?? null,
-    [localIssues, selectedIssueId],
+    () => visibleIssues.find((issue) => issue.id === selectedIssueId) ?? null,
+    [selectedIssueId, visibleIssues],
   );
 
   const sensors = useSensors(
@@ -412,6 +408,10 @@ export function BoardPage() {
     const issueId = String(event.active.id);
     const targetStateId = getDropTargetStateId(event) ?? dragPreviewStateId;
     const originStateId = dragOriginStateId;
+    const originState =
+      originStateId
+        ? selectedTeam?.states.nodes.find((item) => item.id === originStateId) ?? null
+        : null;
 
     setActiveIssueId(null);
     setDragPreviewStateId(null);
@@ -445,7 +445,9 @@ export function BoardPage() {
         state: targetState,
       }));
     } catch {
-      // error state already handled
+      if (originState) {
+        setLocalIssues((currentIssues) => moveIssueToState(currentIssues, issueId, originState));
+      }
     }
   }
 
@@ -680,9 +682,19 @@ export function BoardPage() {
           }}
           onDragOver={handleDragOver}
           onDragCancel={() => {
+            const originState =
+              dragOriginStateId
+                ? selectedTeam?.states.nodes.find((state) => state.id === dragOriginStateId) ?? null
+                : null;
+            const cancelledIssueId = activeIssueId;
             setActiveIssueId(null);
             setDragPreviewStateId(null);
             setDragOriginStateId(null);
+            if (cancelledIssueId && originState) {
+              setLocalIssues((currentIssues) => moveIssueToState(currentIssues, cancelledIssueId, originState));
+              return;
+            }
+
             setLocalIssues(data?.issues.nodes ?? []);
           }}
           onDragEnd={(event) => void handleDragEnd(event)}

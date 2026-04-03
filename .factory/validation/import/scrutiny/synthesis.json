@@ -1,65 +1,33 @@
 {
   "milestone": "import",
-  "round": 1,
-  "status": "fail",
+  "round": 3,
+  "status": "pass",
   "validatorsRun": {
     "test": {
-      "passed": true,
-      "command": "\"/Users/chris/workspace/Involute/.factory/init.sh\" && pnpm test",
-      "exitCode": 0
+      "passed": false,
+      "command": "pnpm -r test --run",
+      "exitCode": 1
     },
     "typecheck": {
       "passed": true,
-      "command": "\"/Users/chris/workspace/Involute/.factory/init.sh\" && pnpm typecheck",
+      "command": "pnpm -r typecheck",
       "exitCode": 0
     },
     "lint": {
       "passed": true,
-      "command": "\"/Users/chris/workspace/Involute/.factory/init.sh\" && pnpm lint",
+      "command": "pnpm -r lint",
       "exitCode": 0
     }
   },
   "reviewsSummary": {
-    "total": 3,
-    "passed": 0,
-    "failed": 3,
-    "failedFeatures": [
-      "linear-export-client",
-      "import-pipeline",
-      "import-cli-commands"
-    ]
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "failedFeatures": []
   },
-  "blockingIssues": [
-    {
-      "featureId": "linear-export-client",
-      "severity": "blocking",
-      "description": "`filterExportDataToTeamScope()` can retain unrelated users in scoped exports via comment-author collection, so `users.json` and validation counts can still include off-team data."
-    },
-    {
-      "featureId": "import-pipeline",
-      "severity": "blocking",
-      "description": "The import pipeline silently skips comments with `user: null`, dropping exported comments while still reporting success and breaking comment completeness/count parity."
-    },
-    {
-      "featureId": "import-cli-commands",
-      "severity": "blocking",
-      "description": "`import verify` issue verification is identifier-based instead of mapping-based, so a skipped or mismapped import can still pass if another DB issue already has the same identifier."
-    },
-    {
-      "featureId": "import-cli-commands",
-      "severity": "blocking",
-      "description": "`import verify` comment verification checks mapping/count existence only and does not validate exported content, timestamps, issue association, or author linkage, allowing corrupted imports to pass."
-    }
-  ],
+  "blockingIssues": [],
   "appliedUpdates": [],
-  "suggestedGuidanceUpdates": [
-    {
-      "target": "skills",
-      "suggestion": "Reinforce in `cli-worker` that import/export features must read the legacy migration spec before implementing verify semantics.",
-      "evidence": "The `import-cli-commands` review found no transcript read of `docs/legacy/05_Linear_\u5168\u91cf\u5bfc\u51fa_\u8fc1\u79fb\u4e0e\u5bfc\u5165\u65b9\u6848.md` despite the skill procedure requiring it, and the resulting verify logic missed required mapping/content checks.",
-      "isSystemic": false
-    }
-  ],
+  "suggestedGuidanceUpdates": [],
   "rejectedObservations": [],
-  "previousRound": null
+  "previousRound": ".factory/validation/import/scrutiny/synthesis.json"
 }

@@ -1,7 +1,7 @@
 {
   "milestone": "cli",
   "round": 2,
-  "status": "pass",
+  "status": "fail",
   "validatorsRun": {
     "test": {
       "passed": false,

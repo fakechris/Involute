@@ -417,6 +417,7 @@ describe('issues query filtering', () => {
       key: 'SON',
       name: 'Songwork',
     });
+    const baseCreatedAt = Date.parse('2025-02-01T08:00:00.000Z');
     const recentBacklog = await prisma.workflowState.findFirstOrThrow({
       where: {
         teamId: recentTeam.id,
@@ -431,8 +432,8 @@ describe('issues query filtering', () => {
         description: `Large team issue ${index + 1}`,
         teamId: recentTeam.id,
         stateId: recentBacklog.id,
-        createdAt: new Date(`2025-02-${String((index % 27) + 1).padStart(2, '0')}T08:00:00.000Z`),
-        updatedAt: new Date(`2025-02-${String((index % 27) + 1).padStart(2, '0')}T08:00:00.000Z`),
+        createdAt: new Date(baseCreatedAt + index * 60_000),
+        updatedAt: new Date(baseCreatedAt + index * 60_000),
       })),
     });
 

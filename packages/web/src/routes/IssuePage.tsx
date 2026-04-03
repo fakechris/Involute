@@ -92,7 +92,6 @@ export function IssuePage() {
     } catch (mutationIssue) {
       setLocalIssue(previousIssue);
       setMutationError(ERROR_MESSAGE);
-      throw mutationIssue;
     } finally {
       setIsSavingState(false);
     }

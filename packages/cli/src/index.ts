@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -20,6 +20,11 @@ interface JsonOption {
 
 interface CommandContext {
   json: boolean;
+}
+
+interface PageInfo {
+  endCursor: string | null;
+  hasNextPage: boolean;
 }
 
 interface TeamSummary {
@@ -66,6 +71,7 @@ interface IssueDetail {
   identifier: string;
   labels: { nodes: LabelSummary[] };
   state: { id: string; name: string };
+  team: { key: string };
   title: string;
   comments: { nodes: IssueCommentItem[] };
 }
@@ -82,14 +88,18 @@ export class CliError extends Error {
   }
 }
 
-const CONFIG_PATH = process.env.INVOLUTE_CONFIG_PATH ?? join(homedir(), '.involute', 'config.json');
 const CONFIG_KEYS: readonly ConfigKey[] = ['server-url', 'token'];
+const CLI_PAGE_SIZE = 100;
 
-export function getConfigPath(): string {
-  return CONFIG_PATH;
+function resolveConfigPath(): string {
+  return process.env.INVOLUTE_CONFIG_PATH ?? join(homedir(), '.involute', 'config.json');
 }
 
-export async function readConfig(configPath = CONFIG_PATH): Promise<CliConfig> {
+export function getConfigPath(): string {
+  return resolveConfigPath();
+}
+
+export async function readConfig(configPath = getConfigPath()): Promise<CliConfig> {
   try {
     const raw = await readFile(configPath, 'utf8');
     const parsed = JSON.parse(raw) as unknown;
@@ -112,19 +122,25 @@ export async function readConfig(configPath = CONFIG_PATH): Promise<CliConfig> {
   }
 }
 
-export async function writeConfig(config: CliConfig, configPath = CONFIG_PATH): Promise<void> {
-  await mkdir(dirname(configPath), { recursive: true });
-  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+export async function writeConfig(config: CliConfig, configPath = getConfigPath()): Promise<void> {
+  await mkdir(dirname(configPath), { recursive: true, mode: 0o700 });
+  const tempPath = `${configPath}.${process.pid}.${Date.now()}.tmp`;
+  await writeFile(tempPath, `${JSON.stringify(config, null, 2)}\n`, {
+    encoding: 'utf8',
+    mode: 0o600,
+  });
+  await rename(tempPath, configPath);
+  await chmod(configPath, 0o600);
 }
 
-export async function setConfigValue(key: ConfigKey, value: string, configPath = CONFIG_PATH): Promise<CliConfig> {
+export async function setConfigValue(key: ConfigKey, value: string, configPath = getConfigPath()): Promise<CliConfig> {
   const current = await readConfig(configPath);
   const next = { ...current, [key]: value };
   await writeConfig(next, configPath);
   return next;
 }
 
-export async function getConfigValue(key: ConfigKey, configPath = CONFIG_PATH): Promise<string | undefined> {
+export async function getConfigValue(key: ConfigKey, configPath = getConfigPath()): Promise<string | undefined> {
   const config = await readConfig(configPath);
   return config[key];
 }
@@ -232,7 +248,7 @@ function stringifyValue(value: unknown): string {
   return String(value);
 }
 
-export async function createConfiguredGraphQLClient(configPath = CONFIG_PATH): Promise<GraphQLClient> {
+export async function createConfiguredGraphQLClient(configPath = getConfigPath()): Promise<GraphQLClient> {
   const config = await readConfig(configPath);
   const serverUrl = config['server-url'];
 
@@ -297,16 +313,20 @@ function registerConfigCommands(program: Command): void {
   configCommand
     .command('set')
     .description('Persist a configuration value')
+    .option('--json', 'Output machine-readable JSON')
     .argument('<key>', 'Configuration key (server-url or token)')
     .argument('<value>', 'Configuration value')
-    .action(async (key: string, value: string) => {
+    .action(async function (this: Command, key: string, value: string, options: JsonOption) {
       await runWithCliErrorHandling(async () => {
         if (!CONFIG_KEYS.includes(key as ConfigKey)) {
           throw new CliError(`Unknown config key "${key}". Expected one of: ${CONFIG_KEYS.join(', ')}`);
         }
 
         await setConfigValue(key as ConfigKey, value);
-        process.stdout.write(`Saved ${key} to ${CONFIG_PATH}\n`);
+        const configPath = getConfigPath();
+        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+        const payload = context.json ? { key, path: configPath } : `Saved ${key} to ${configPath}`;
+        process.stdout.write(formatOutput(payload, context));
       });
     });
 
@@ -395,46 +415,6 @@ async function fetchLabels(): Promise<LabelSummary[]> {
 
 async function fetchIssues(teamKey?: string): Promise<IssueListItem[]> {
   const client = await createConfiguredGraphQLClient();
-  const result = await client.request<{ issues: { nodes: IssueListItem[] } }>(
-    /* GraphQL */ `
-      query CliIssuesList($filter: IssueFilter, $first: Int!) {
-        issues(first: $first, filter: $filter) {
-          nodes {
-            id
-            identifier
-            title
-            state {
-              id
-              name
-            }
-            assignee {
-              id
-              name
-            }
-          }
-        }
-      }
-    `,
-    {
-      filter: teamKey
-        ? {
-            team: {
-              key: {
-                eq: teamKey,
-              },
-            },
-          }
-        : undefined,
-      first: 100,
-    },
-  );
-
-  return result.issues.nodes;
-}
-
-async function fetchIssueByIdentifier(identifier: string): Promise<IssueDetail | null> {
-  const teamKey = identifier.includes('-') ? identifier.split('-')[0] ?? undefined : undefined;
-  const client = await createConfiguredGraphQLClient();
   const filter = teamKey
     ? {
         team: {
@@ -444,72 +424,168 @@ async function fetchIssueByIdentifier(identifier: string): Promise<IssueDetail |
         },
       }
     : undefined;
+  const issues: IssueListItem[] = [];
+  let after: string | null = null;
 
-  let first = 100;
-  const maxFirst = 5_000;
-
-  while (true) {
-    const result = await client.request<{ issues: { nodes: IssueDetail[] } }>(
+  do {
+    const result: { issues: { nodes: IssueListItem[]; pageInfo: PageInfo } } = await client.request(
       /* GraphQL */ `
-        query CliIssueByIdentifier($filter: IssueFilter, $first: Int!) {
-          issues(first: $first, filter: $filter) {
+        query CliIssuesList($after: String, $filter: IssueFilter, $first: Int!) {
+          issues(first: $first, after: $after, filter: $filter) {
             nodes {
               id
               identifier
               title
-              description
               state {
                 id
                 name
               }
-              labels {
-                nodes {
-                  id
-                  name
-                }
-              }
               assignee {
                 id
                 name
-                email
               }
-              comments(first: 100, orderBy: createdAt) {
-                nodes {
-                  id
-                  body
-                  createdAt
-                  user {
-                    id
-                    name
-                    email
-                  }
-                }
-              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
             }
           }
         }
       `,
       {
         filter,
-        first,
+        first: CLI_PAGE_SIZE,
+        after,
       },
     );
 
-    const matchedIssue = result.issues.nodes.find((issue) => issue.identifier === identifier);
-    if (matchedIssue) {
-      return matchedIssue;
-    }
+    issues.push(...result.issues.nodes);
+    after = result.issues.pageInfo.hasNextPage ? result.issues.pageInfo.endCursor : null;
+  } while (after);
 
-    if (result.issues.nodes.length < first) {
-      return null;
-    }
+  return issues;
+}
 
-    if (first >= maxFirst) {
-      return null;
-    }
+async function fetchIssueByIdentifier(identifier: string): Promise<IssueDetail | null> {
+  const client = await createConfiguredGraphQLClient();
+  const result = await client.request<{
+    issue:
+      | (Omit<IssueDetail, 'comments'> & {
+          comments: { nodes: IssueCommentItem[]; pageInfo: PageInfo };
+        })
+      | null;
+  }>(
+    /* GraphQL */ `
+      query CliIssueByIdentifier($after: String, $first: Int!, $id: String!) {
+        issue(id: $id) {
+          id
+          identifier
+          title
+          description
+          state {
+            id
+            name
+          }
+          labels {
+            nodes {
+              id
+              name
+            }
+          }
+          assignee {
+            id
+            name
+            email
+          }
+          team {
+            key
+          }
+          comments(first: $first, after: $after, orderBy: createdAt) {
+            nodes {
+              id
+              body
+              createdAt
+              user {
+                id
+                name
+                email
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+    `,
+    {
+      id: identifier,
+      first: CLI_PAGE_SIZE,
+      after: null,
+    },
+  );
 
-    first = Math.min(first * 2, maxFirst);
+  if (!result.issue) {
+    return null;
   }
+
+  const issue: IssueDetail = {
+    ...result.issue,
+    comments: {
+      nodes: [...result.issue.comments.nodes],
+    },
+  };
+  let after = result.issue.comments.pageInfo.hasNextPage
+    ? result.issue.comments.pageInfo.endCursor
+    : null;
+
+  while (after) {
+    const nextPage = await client.request<{
+      issue: {
+        comments: { nodes: IssueCommentItem[]; pageInfo: PageInfo };
+      } | null;
+    }>(
+      /* GraphQL */ `
+        query CliIssueCommentPage($after: String, $first: Int!, $id: String!) {
+          issue(id: $id) {
+            comments(first: $first, after: $after, orderBy: createdAt) {
+              nodes {
+                id
+                body
+                createdAt
+                user {
+                  id
+                  name
+                  email
+                }
+              }
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+            }
+          }
+        }
+      `,
+      {
+        id: issue.id,
+        first: CLI_PAGE_SIZE,
+        after,
+      },
+    );
+
+    if (!nextPage.issue) {
+      break;
+    }
+
+    issue.comments.nodes.push(...nextPage.issue.comments.nodes);
+    after = nextPage.issue.comments.pageInfo.hasNextPage
+      ? nextPage.issue.comments.pageInfo.endCursor
+      : null;
+  }
+
+  return issue;
 }
 
 async function fetchTeamByKey(teamKey: string): Promise<TeamSummary | null> {
@@ -617,7 +693,7 @@ async function updateIssueViaCli(
   const updateInput: Record<string, unknown> = {};
 
   if (input.state) {
-    const state = (await fetchTeamStates(identifier.split('-')[0] ?? 'INV')).find(
+    const state = (await fetchTeamStates(issue.team.key)).find(
       (candidate) => candidate.name === input.state,
     );
 
@@ -692,13 +768,19 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 async function fetchIssueComments(issueIdOrIdentifier: string): Promise<IssueCommentsResult> {
   const client = await createConfiguredGraphQLClient();
-  const result = await client.request<{ issue: IssueCommentsResult | null }>(
+  const result = await client.request<{
+    issue:
+      | (IssueCommentsResult & {
+          comments: { nodes: IssueCommentItem[]; pageInfo: PageInfo };
+        })
+      | null;
+  }>(
     /* GraphQL */ `
-      query CliCommentsList($id: String!) {
+      query CliCommentsList($after: String, $first: Int!, $id: String!) {
         issue(id: $id) {
           id
           identifier
-          comments(first: 100, orderBy: createdAt) {
+          comments(first: $first, after: $after, orderBy: createdAt) {
             nodes {
               id
               body
@@ -709,28 +791,84 @@ async function fetchIssueComments(issueIdOrIdentifier: string): Promise<IssueCom
                 email
               }
             }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
           }
         }
       }
     `,
-    { id: issueIdOrIdentifier },
+    {
+      id: issueIdOrIdentifier,
+      first: CLI_PAGE_SIZE,
+      after: null,
+    },
   );
 
   if (result.issue) {
-    return result.issue;
+    const issue: IssueCommentsResult = {
+      id: result.issue.id,
+      identifier: result.issue.identifier,
+      comments: {
+        nodes: [...result.issue.comments.nodes],
+      },
+    };
+    let after = result.issue.comments.pageInfo.hasNextPage
+      ? result.issue.comments.pageInfo.endCursor
+      : null;
+
+    while (after) {
+      const nextPage = await client.request<{
+        issue:
+          | {
+              comments: { nodes: IssueCommentItem[]; pageInfo: PageInfo };
+            }
+          | null;
+      }>(
+        /* GraphQL */ `
+          query CliCommentsPage($after: String, $first: Int!, $id: String!) {
+            issue(id: $id) {
+              comments(first: $first, after: $after, orderBy: createdAt) {
+                nodes {
+                  id
+                  body
+                  createdAt
+                  user {
+                    id
+                    name
+                    email
+                  }
+                }
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+              }
+            }
+          }
+        `,
+        {
+          id: issue.id,
+          first: CLI_PAGE_SIZE,
+          after,
+        },
+      );
+
+      if (!nextPage.issue) {
+        break;
+      }
+
+      issue.comments.nodes.push(...nextPage.issue.comments.nodes);
+      after = nextPage.issue.comments.pageInfo.hasNextPage
+        ? nextPage.issue.comments.pageInfo.endCursor
+        : null;
+    }
+
+    return issue;
   }
 
-  const issue = await fetchIssueByIdentifier(issueIdOrIdentifier);
-
-  if (!issue) {
-    throw new CliError(`Issue not found: ${issueIdOrIdentifier}`);
-  }
-
-  return {
-    id: issue.id,
-    identifier: issue.identifier,
-    comments: issue.comments,
-  };
+  throw new CliError(`Issue not found: ${issueIdOrIdentifier}`);
 }
 
 async function resolveIssueId(issueIdOrIdentifier: string): Promise<string> {

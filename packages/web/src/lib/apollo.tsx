@@ -13,6 +13,7 @@ const LOCAL_STORAGE_AUTH_KEYS = ['involute.authToken', 'involuteAuthToken'] as c
 const LOCAL_STORAGE_GRAPHQL_URL_KEYS = ['involute.graphqlUrl', 'involuteGraphqlUrl'] as const;
 const DEFAULT_AUTH_TOKEN = 'changeme-set-your-token';
 const GRAPHQL_URL_OVERRIDE_QUERY_PARAM = 'involuteApiUrl';
+const ALLOWED_RUNTIME_GRAPHQL_HOSTS = new Set(['127.0.0.1', 'localhost']);
 
 export type AuthTokenSource = 'env' | 'localStorage' | 'dev-default' | 'missing';
 export type GraphqlUrlSource = 'query-param' | 'localStorage' | 'env' | 'default';
@@ -171,10 +172,13 @@ function resolveRuntimeGraphqlUrlOverride(): {
   url: string;
   source: Extract<GraphqlUrlSource, 'query-param' | 'localStorage'>;
 } | null {
+  if (!import.meta.env.DEV) {
+    return null;
+  }
+
   const queryParamValue = readRuntimeGraphqlUrlQueryParam();
 
-  if (queryParamValue) {
-    window.localStorage.setItem(LOCAL_STORAGE_GRAPHQL_URL_KEYS[0], queryParamValue);
+  if (queryParamValue && isAllowedRuntimeGraphqlUrl(queryParamValue)) {
 
     return {
       url: queryParamValue,
@@ -185,7 +189,7 @@ function resolveRuntimeGraphqlUrlOverride(): {
   for (const storageKey of LOCAL_STORAGE_GRAPHQL_URL_KEYS) {
     const configuredUrl = window.localStorage.getItem(storageKey)?.trim();
 
-    if (configuredUrl) {
+    if (configuredUrl && isAllowedRuntimeGraphqlUrl(configuredUrl)) {
       return {
         url: configuredUrl,
         source: 'localStorage',
@@ -207,4 +211,15 @@ function readRuntimeGraphqlUrlQueryParam(): string | null {
   const queryParamValue = params.get(GRAPHQL_URL_OVERRIDE_QUERY_PARAM)?.trim();
 
   return queryParamValue || null;
+}
+
+function isAllowedRuntimeGraphqlUrl(candidate: string): boolean {
+  try {
+    const url = new URL(candidate);
+    const allowedHosts = new Set([window.location.hostname, ...ALLOWED_RUNTIME_GRAPHQL_HOSTS]);
+
+    return (url.protocol === 'http:' || url.protocol === 'https:') && allowedHosts.has(url.hostname);
+  } catch {
+    return false;
+  }
 }

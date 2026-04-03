@@ -1,10 +1,12 @@
 import { PrismaClient } from '@prisma/client';
+import { fileURLToPath } from 'node:url';
 
 import { runImportPipeline } from './import-pipeline.js';
 import { runValidationDataSetup } from './validation-data-setup.js';
 
-export const DEFAULT_SON_EXPORT_DIR =
-  '/Users/chris/workspace/Involute/.factory/validation/import/user-testing/tmp/import-export-flow/export';
+export const DEFAULT_SON_EXPORT_DIR = fileURLToPath(
+  new URL('../../../.factory/validation/import/user-testing/tmp/import-export-flow/export', import.meta.url),
+);
 
 export interface SonValidationRestoreSummary {
   importResult: Awaited<ReturnType<typeof runImportPipeline>>;
