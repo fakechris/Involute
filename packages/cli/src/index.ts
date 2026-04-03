@@ -691,36 +691,32 @@ async function updateIssueViaCli(
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function fetchIssueComments(issueIdOrIdentifier: string): Promise<IssueCommentsResult> {
-  if (UUID_PATTERN.test(issueIdOrIdentifier)) {
-    const client = await createConfiguredGraphQLClient();
-    const result = await client.request<{ issue: IssueCommentsResult | null }>(
-      /* GraphQL */ `
-        query CliCommentsList($id: String!) {
-          issue(id: $id) {
-            id
-            identifier
-            comments(first: 100, orderBy: createdAt) {
-              nodes {
+  const client = await createConfiguredGraphQLClient();
+  const result = await client.request<{ issue: IssueCommentsResult | null }>(
+    /* GraphQL */ `
+      query CliCommentsList($id: String!) {
+        issue(id: $id) {
+          id
+          identifier
+          comments(first: 100, orderBy: createdAt) {
+            nodes {
+              id
+              body
+              createdAt
+              user {
                 id
-                body
-                createdAt
-                user {
-                  id
-                  name
-                  email
-                }
+                name
+                email
               }
             }
           }
         }
-      `,
-      { id: issueIdOrIdentifier },
-    );
+      }
+    `,
+    { id: issueIdOrIdentifier },
+  );
 
-    if (!result.issue) {
-      throw new CliError(`Issue not found: ${issueIdOrIdentifier}`);
-    }
-
+  if (result.issue) {
     return result.issue;
   }
 

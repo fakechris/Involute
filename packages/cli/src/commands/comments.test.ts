@@ -157,6 +157,44 @@ describe('comment-related CLI commands', () => {
     expect(stdout).toContain('Second comment body');
   });
 
+  it('treats opaque non-UUID issue ids as direct issue lookups before identifier fallback', async () => {
+    const client = await createConfiguredGraphQLClient(configPath);
+    const directIssue = await client.request<{
+      issue: {
+        id: string;
+        identifier: string;
+        comments: { nodes: Array<{ body: string }> };
+      } | null;
+    }>(
+      /* GraphQL */ `
+        query CliDirectIssueLookup($id: String!) {
+          issue(id: $id) {
+            id
+            identifier
+            comments(first: 100, orderBy: createdAt) {
+              nodes {
+                body
+              }
+            }
+          }
+        }
+      `,
+      { id: 'opaque-non-uuid-issue-id' },
+    );
+
+    expect(directIssue.issue).toBeNull();
+
+    const { stdout, exitCode } = await runCli(['comments', 'list', 'opaque-non-uuid-issue-id'], tempDir);
+    expect(exitCode).toBe(1);
+    expect(stdout).toBe('');
+  });
+
+  it('lists comments by identifier when direct issue-id lookup misses', async () => {
+    const { stdout, exitCode } = await runCli(['comments', 'list', fixtureIssueIdentifier], tempDir);
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('First comment body');
+  });
+
   it('uses issue lookup by identifier before listing comments', async () => {
     const client = await createConfiguredGraphQLClient(configPath);
     const issueByIdentifier = await client.request<{
@@ -238,6 +276,43 @@ describe('comment-related CLI commands', () => {
 
     const comments = await prisma.comment.findMany({
       where: { issueId: fixtureIssueId, body: 'Comment by UUID' },
+    });
+    expect(comments).toHaveLength(1);
+  });
+
+  it('tries direct issue lookup for opaque non-UUID ids before add comment identifier fallback', async () => {
+    const client = await createConfiguredGraphQLClient(configPath);
+    const directIssue = await client.request<{ issue: { id: string } | null }>(
+      /* GraphQL */ `
+        query CliDirectIssueLookup($id: String!) {
+          issue(id: $id) {
+            id
+          }
+        }
+      `,
+      { id: 'opaque-non-uuid-issue-id' },
+    );
+
+    expect(directIssue.issue).toBeNull();
+
+    const result = await runCli(
+      ['comments', 'add', 'opaque-non-uuid-issue-id', '--body', 'Comment by opaque issue id'],
+      tempDir,
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toBe('');
+  });
+
+  it('adds a comment by identifier when direct issue-id lookup misses', async () => {
+    const { stdout, exitCode } = await runCli(
+      ['comments', 'add', fixtureIssueIdentifier, '--body', 'Comment by identifier fallback'],
+      tempDir,
+    );
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('id:');
+
+    const comments = await prisma.comment.findMany({
+      where: { issueId: fixtureIssueId, body: 'Comment by identifier fallback' },
     });
     expect(comments).toHaveLength(1);
   });
