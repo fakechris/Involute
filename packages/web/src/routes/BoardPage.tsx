@@ -1,5 +1,5 @@
 import {
-  closestCenter,
+  closestCorners,
   DndContext,
   type DragOverEvent,
   DragEndEvent,
@@ -7,6 +7,9 @@ import {
   MouseSensor,
   PointerSensor,
   TouchSensor,
+  pointerWithin,
+  rectIntersection,
+  type CollisionDetection,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -25,6 +28,7 @@ import type {
   BoardPageQueryVariables,
   CommentCreateMutationData,
   CommentCreateMutationVariables,
+  Html5BoardDragPayload,
   IssueCreateMutationData,
   IssueCreateMutationVariables,
   IssueSummary,
@@ -45,6 +49,7 @@ import { BacklogPage } from './BacklogPage';
 
 const ISSUE_LIMIT = 200;
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
+const DND_ACTIVATION_DISTANCE = 1;
 
 function getStateIdFromData(data: unknown): string | null {
   if (data && typeof data === 'object' && 'stateId' in data && typeof data.stateId === 'string') {
@@ -73,6 +78,30 @@ function moveIssueToState(
   state: IssueSummary['state'],
 ): IssueSummary[] {
   return issues.map((item) => (item.id === issueId ? { ...item, state } : item));
+}
+
+function parseHtml5DragPayload(rawPayload: string): Html5BoardDragPayload | null {
+  try {
+    const payload = JSON.parse(rawPayload) as Partial<Html5BoardDragPayload>;
+
+    if (typeof payload.issueId !== 'string' || typeof payload.stateId !== 'string') {
+      return null;
+    }
+
+    return {
+      issueId: payload.issueId,
+      stateId: payload.stateId,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function createHtml5BoardDragPayload(issueId: string, stateId: string): string {
+  return JSON.stringify({
+    issueId,
+    stateId,
+  } satisfies Html5BoardDragPayload);
 }
 
 export function BoardPage() {
@@ -137,9 +166,9 @@ export function BoardPage() {
   );
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: DND_ACTIVATION_DISTANCE } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: DND_ACTIVATION_DISTANCE } }),
+    useSensor(TouchSensor, { activationConstraint: { distance: DND_ACTIVATION_DISTANCE } }),
   );
 
   async function persistIssueUpdate(
@@ -371,6 +400,32 @@ export function BoardPage() {
     }
   }
 
+  async function handleNativeDropIssue(payload: Html5BoardDragPayload, targetStateId: string) {
+    const issue = localIssues.find((item) => item.id === payload.issueId);
+    const targetState =
+      selectedTeam?.states.nodes.find((state) => state.id === targetStateId) ?? null;
+
+    setActiveIssueId(null);
+    setDragPreviewStateId(null);
+    setDragOriginStateId(null);
+
+    if (!issue || !targetState || payload.stateId === targetStateId) {
+      return;
+    }
+
+    const previousIssues = localIssues;
+    setLocalIssues(moveIssueToState(localIssues, payload.issueId, targetState));
+
+    try {
+      await persistIssueUpdate(issue, { stateId: targetStateId }, (current) => ({
+        ...current,
+        state: targetState,
+      }));
+    } catch {
+      setLocalIssues(previousIssues);
+    }
+  }
+
   function handleDragOver(event: DragOverEvent) {
     const issueId = String(event.active.id);
     const targetStateId = getDropTargetStateId(event);
@@ -565,7 +620,7 @@ export function BoardPage() {
       ) : (
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCenter}
+          collisionDetection={kanbanCollisionDetection}
           onDragStart={(event) => {
             const draggedId = String(event.active.id);
             const draggedIssue = localIssues.find((item) => item.id === draggedId);
@@ -590,6 +645,20 @@ export function BoardPage() {
                 title={column.name}
                 stateId={column.stateId}
                 issues={issuesByState[column.name]}
+                onNativeDragStart={(payload) => {
+                  setActiveIssueId(payload.issueId);
+                  setDragOriginStateId(payload.stateId);
+                  setDragPreviewStateId(payload.stateId);
+                  setMutationError(null);
+                }}
+                onNativeDragEnd={() => {
+                  setActiveIssueId(null);
+                  setDragPreviewStateId(null);
+                  setDragOriginStateId(null);
+                }}
+                onNativeDropIssue={(payload, targetStateId) => {
+                  void handleNativeDropIssue(payload, targetStateId);
+                }}
                 onSelectIssue={(issue) => {
                   setMutationError(null);
                   setSelectedIssueId(issue.id);
@@ -643,3 +712,22 @@ export function mergeIssueWithPreservedComments(
 
 export { getDropTargetStateId };
 export { moveIssueToState };
+export { DND_ACTIVATION_DISTANCE };
+export { parseHtml5DragPayload };
+export { createHtml5BoardDragPayload };
+
+export const kanbanCollisionDetection: CollisionDetection = (args) => {
+  const pointerMatches = pointerWithin(args);
+
+  if (pointerMatches.length > 0) {
+    return pointerMatches;
+  }
+
+  const rectMatches = rectIntersection(args);
+
+  if (rectMatches.length > 0) {
+    return rectMatches;
+  }
+
+  return closestCorners(args);
+};

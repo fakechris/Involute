@@ -133,6 +133,11 @@ export interface IssueUpdateMutationVariables {
   };
 }
 
+export interface Html5BoardDragPayload {
+  issueId: string;
+  stateId: string;
+}
+
 export interface CommentCreateMutationData {
   commentCreate: {
     success: boolean;

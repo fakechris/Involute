@@ -5,9 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { getAuthToken, getAuthTokenDetails, getGraphqlUrl, getGraphqlUrlDetails } from './lib/apollo';
 import {
+  createHtml5BoardDragPayload,
+  DND_ACTIVATION_DISTANCE,
   getDropTargetStateId,
+  kanbanCollisionDetection,
   mergeIssueWithPreservedComments,
   moveIssueToState,
+  parseHtml5DragPayload,
 } from './routes/BoardPage';
 import type {
   BoardPageQueryData,
@@ -287,6 +291,24 @@ describe('App', () => {
     );
   });
 
+  it('parses a valid html5 board drag payload', () => {
+    expect(parseHtml5DragPayload(JSON.stringify({ issueId: 'issue-1', stateId: 'state-ready' }))).toEqual({
+      issueId: 'issue-1',
+      stateId: 'state-ready',
+    });
+  });
+
+  it('creates a stable html5 board drag payload string', () => {
+    expect(createHtml5BoardDragPayload('issue-1', 'state-ready')).toBe(
+      '{"issueId":"issue-1","stateId":"state-ready"}',
+    );
+  });
+
+  it('rejects malformed html5 board drag payloads', () => {
+    expect(parseHtml5DragPayload('not-json')).toBeNull();
+    expect(parseHtml5DragPayload(JSON.stringify({ issueId: 'issue-1' }))).toBeNull();
+  });
+
   it('shows moved issue data in the destination column grouping after a cross-column preview move', () => {
     const movedIssues = moveIssueToState(
       boardQueryResult.issues.nodes as IssueSummary[],
@@ -386,6 +408,7 @@ describe('App', () => {
     expect(screen.getByTestId('board-column-state-ready')).toHaveAttribute('data-state-id', 'state-ready');
     expect(screen.getByTestId('column-Backlog')).toHaveAttribute('data-droppable-state-id', 'state-backlog');
     expect(screen.getByTestId('column-Ready')).toHaveAttribute('data-droppable-state-id', 'state-ready');
+    expect(screen.getByTestId('issue-drag-handle-INV-1')).toHaveAttribute('draggable', 'true');
   });
 
   it('opens the issue drawer and changes state via dropdown', async () => {
@@ -1395,7 +1418,64 @@ describe('App', () => {
     for (const call of dndMocks.useSensor.mock.calls as unknown as [unknown, Record<string, unknown>][]) {
       const options = call[1];
       expect(options).toHaveProperty('activationConstraint');
-      expect((options.activationConstraint as { distance: number }).distance).toBeLessThanOrEqual(5);
+      expect((options.activationConstraint as { distance: number }).distance).toBe(DND_ACTIVATION_DISTANCE);
     }
+  });
+
+  it('prefers pointerWithin collisions for live kanban dragging', async () => {
+    const core = await import('@dnd-kit/core');
+    const args = {} as Parameters<typeof kanbanCollisionDetection>[0];
+    const pointerMatch = [{ id: 'state-ready' }];
+    const rectMatch = [{ id: 'state-progress' }];
+    const closestMatch = [{ id: 'state-done' }];
+    const pointerWithinSpy = vi.spyOn(core, 'pointerWithin');
+    const rectIntersectionSpy = vi.spyOn(core, 'rectIntersection');
+    const closestCornersSpy = vi.spyOn(core, 'closestCorners');
+
+    pointerWithinSpy.mockReturnValue(pointerMatch as never);
+    rectIntersectionSpy.mockReturnValue(rectMatch as never);
+    closestCornersSpy.mockReturnValue(closestMatch as never);
+
+    expect(kanbanCollisionDetection(args)).toEqual(pointerMatch);
+    expect(pointerWithinSpy).toHaveBeenCalledWith(args);
+    expect(rectIntersectionSpy).not.toHaveBeenCalled();
+    expect(closestCornersSpy).not.toHaveBeenCalled();
+  });
+
+  it('falls back to rectIntersection before closestCorners when no pointer collision exists', async () => {
+    const core = await import('@dnd-kit/core');
+    const args = {} as Parameters<typeof kanbanCollisionDetection>[0];
+    const rectMatch = [{ id: 'state-progress' }];
+    const closestMatch = [{ id: 'state-done' }];
+    const pointerWithinSpy = vi.spyOn(core, 'pointerWithin');
+    const rectIntersectionSpy = vi.spyOn(core, 'rectIntersection');
+    const closestCornersSpy = vi.spyOn(core, 'closestCorners');
+
+    pointerWithinSpy.mockReturnValue([] as never);
+    rectIntersectionSpy.mockReturnValue(rectMatch as never);
+    closestCornersSpy.mockReturnValue(closestMatch as never);
+
+    expect(kanbanCollisionDetection(args)).toEqual(rectMatch);
+    expect(pointerWithinSpy).toHaveBeenCalledWith(args);
+    expect(rectIntersectionSpy).toHaveBeenCalledWith(args);
+    expect(closestCornersSpy).not.toHaveBeenCalled();
+  });
+
+  it('uses closestCorners as the final collision fallback', async () => {
+    const core = await import('@dnd-kit/core');
+    const args = {} as Parameters<typeof kanbanCollisionDetection>[0];
+    const closestMatch = [{ id: 'state-done' }];
+    const pointerWithinSpy = vi.spyOn(core, 'pointerWithin');
+    const rectIntersectionSpy = vi.spyOn(core, 'rectIntersection');
+    const closestCornersSpy = vi.spyOn(core, 'closestCorners');
+
+    pointerWithinSpy.mockReturnValue([] as never);
+    rectIntersectionSpy.mockReturnValue([] as never);
+    closestCornersSpy.mockReturnValue(closestMatch as never);
+
+    expect(kanbanCollisionDetection(args)).toEqual(closestMatch);
+    expect(pointerWithinSpy).toHaveBeenCalledWith(args);
+    expect(rectIntersectionSpy).toHaveBeenCalledWith(args);
+    expect(closestCornersSpy).toHaveBeenCalledWith(args);
   });
 });

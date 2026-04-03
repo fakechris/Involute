@@ -283,6 +283,10 @@ select {
   color: #cbd5f5;
   cursor: grab;
   z-index: 1;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .issue-card__drag-handle:active {

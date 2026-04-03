@@ -1,12 +1,15 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-import type { IssueSummary } from '../board/types';
+import type { Html5BoardDragPayload, IssueSummary } from '../board/types';
+import { createHtml5BoardDragPayload } from '../routes/BoardPage';
 
 interface IssueCardProps {
   issue: IssueSummary;
   onSelect?: (issue: IssueSummary) => void;
   sortable?: boolean;
+  onNativeDragStart?: (payload: Html5BoardDragPayload) => void;
+  onNativeDragEnd?: () => void;
 }
 
 function getInitials(name: string | null | undefined): string {
@@ -35,7 +38,13 @@ function getLabelClassName(labelName: string): string {
   return 'issue-card__label issue-card__label--neutral';
 }
 
-export function IssueCard({ issue, onSelect, sortable = true }: IssueCardProps) {
+export function IssueCard({
+  issue,
+  onSelect,
+  sortable = true,
+  onNativeDragEnd,
+  onNativeDragStart,
+}: IssueCardProps) {
   const {
     attributes,
     listeners,
@@ -77,6 +86,22 @@ export function IssueCard({ issue, onSelect, sortable = true }: IssueCardProps) 
           className="issue-card__drag-handle"
           aria-label={`Drag ${issue.identifier}`}
           data-testid={`issue-drag-handle-${issue.identifier}`}
+          draggable
+          onDragStart={(event) => {
+            const payload: Html5BoardDragPayload = {
+              issueId: issue.id,
+              stateId: issue.state.id,
+            };
+
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData(
+              'application/x-involute-issue',
+              createHtml5BoardDragPayload(payload.issueId, payload.stateId),
+            );
+            event.dataTransfer.setData('text/plain', issue.id);
+            onNativeDragStart?.(payload);
+          }}
+          onDragEnd={() => onNativeDragEnd?.()}
           {...attributes}
           {...listeners}
         >
