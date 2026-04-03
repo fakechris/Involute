@@ -53,6 +53,12 @@ interface IssueCommentItem {
   user: { email: string | null; id: string; name: string | null } | null;
 }
 
+interface IssueCommentsResult {
+  comments: { nodes: IssueCommentItem[] };
+  id: string;
+  identifier: string;
+}
+
 interface IssueDetail {
   assignee: { email: string | null; id: string; name: string | null } | null;
   description: string | null;
@@ -662,6 +668,120 @@ async function updateIssueViaCli(
   return updatedIssue;
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function fetchIssueComments(issueIdOrIdentifier: string): Promise<IssueCommentsResult> {
+  if (UUID_PATTERN.test(issueIdOrIdentifier)) {
+    const client = await createConfiguredGraphQLClient();
+    const result = await client.request<{ issue: IssueCommentsResult | null }>(
+      /* GraphQL */ `
+        query CliCommentsList($id: String!) {
+          issue(id: $id) {
+            id
+            identifier
+            comments(first: 100, orderBy: createdAt) {
+              nodes {
+                id
+                body
+                createdAt
+                user {
+                  id
+                  name
+                  email
+                }
+              }
+            }
+          }
+        }
+      `,
+      { id: issueIdOrIdentifier },
+    );
+
+    if (!result.issue) {
+      throw new CliError(`Issue not found: ${issueIdOrIdentifier}`);
+    }
+
+    return result.issue;
+  }
+
+  const issue = await fetchIssueByIdentifier(issueIdOrIdentifier);
+
+  if (!issue) {
+    throw new CliError(`Issue not found: ${issueIdOrIdentifier}`);
+  }
+
+  return {
+    id: issue.id,
+    identifier: issue.identifier,
+    comments: issue.comments,
+  };
+}
+
+async function resolveIssueId(issueIdOrIdentifier: string): Promise<string> {
+  return (await fetchIssueComments(issueIdOrIdentifier)).id;
+}
+
+async function fetchComments(issueIdOrIdentifier: string): Promise<IssueCommentItem[]> {
+  return (await fetchIssueComments(issueIdOrIdentifier)).comments.nodes;
+}
+
+async function createCommentViaCli(
+  issueIdOrIdentifier: string,
+  body: string,
+): Promise<{ body: string; id: string }> {
+  const issueId = await resolveIssueId(issueIdOrIdentifier);
+  const client = await createConfiguredGraphQLClient();
+
+  const result = await client.request<{
+    commentCreate: {
+      success: boolean;
+      comment: { body: string; id: string } | null;
+    };
+  }>(
+    /* GraphQL */ `
+      mutation CliCommentCreate($input: CommentCreateInput!) {
+        commentCreate(input: $input) {
+          success
+          comment {
+            id
+            body
+          }
+        }
+      }
+    `,
+    {
+      input: {
+        issueId,
+        body,
+      },
+    },
+  );
+
+  if (!result.commentCreate.success || !result.commentCreate.comment) {
+    throw new CliError('Comment creation failed.');
+  }
+
+  return result.commentCreate.comment;
+}
+
+const COMMENT_BODY_TRUNCATE_LENGTH = 80;
+
+function truncateBody(body: string): string {
+  if (body.length <= COMMENT_BODY_TRUNCATE_LENGTH) {
+    return body;
+  }
+
+  return `${body.slice(0, COMMENT_BODY_TRUNCATE_LENGTH)}…`;
+}
+
+function toCommentListRows(comments: IssueCommentItem[]): Array<Record<string, unknown>> {
+  return comments.map((comment) => ({
+    body: truncateBody(comment.body),
+    author: comment.user?.name ?? comment.user?.email ?? 'Unknown',
+    timestamp: comment.createdAt,
+  }));
+}
+
 function toIssueListRows(issues: IssueListItem[]): Array<Record<string, unknown>> {
   return issues.map((issue) => ({
     identifier: issue.identifier,
@@ -719,6 +839,37 @@ export function createProgram(): Command {
       await runWithCliErrorHandling(async () => {
         const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
         process.stdout.write(formatOutput(await fetchLabels(), context));
+      });
+    });
+
+  const commentsCommand = program.command('comments').description('Manage issue comments');
+
+  commentsCommand
+    .command('list')
+    .description('List comments for an issue')
+    .argument('<issueId>', 'Issue identifier (e.g., INV-1) or UUID')
+    .option('--json', 'Output machine-readable JSON')
+    .action(async function (this: Command, issueId: string, options: JsonOption) {
+      await runWithCliErrorHandling(async () => {
+        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+        const issue = await fetchIssueComments(issueId);
+        process.stdout.write(
+          formatOutput(context.json ? issue.comments.nodes : toCommentListRows(issue.comments.nodes), context),
+        );
+      });
+    });
+
+  commentsCommand
+    .command('add')
+    .description('Add a comment to an issue')
+    .argument('<issueId>', 'Issue identifier (e.g., INV-1) or UUID')
+    .requiredOption('--body <text>', 'Comment body text')
+    .option('--json', 'Output machine-readable JSON')
+    .action(async function (this: Command, issueId: string, options: JsonOption & { body: string }) {
+      await runWithCliErrorHandling(async () => {
+        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+        const comment = await createCommentViaCli(issueId, options.body);
+        process.stdout.write(formatOutput(context.json ? comment : { id: comment.id }, context));
       });
     });
 
