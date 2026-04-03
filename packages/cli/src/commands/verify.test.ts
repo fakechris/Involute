@@ -104,9 +104,13 @@ async function resetVerifyImportState(
   prisma: InstanceType<(typeof import('@prisma/client'))['PrismaClient']>,
   exportDir: string,
 ): Promise<void> {
-  await prisma.legacyLinearMapping.deleteMany({
-    where: { oldId: { startsWith: 'verify-' } },
-  });
+  // Delete ALL legacy mappings — not just verify-prefixed ones.
+  // Other test suites (e.g. issues.test.ts) may leave stale mappings whose
+  // newId points to a row that was already deleted.  The import pipeline's
+  // idempotency path reads *all* mappings per entity type, so any stale
+  // entry causes it to skip re-creating prerequisite rows, leading to FK
+  // violations when downstream entities reference the missing rows.
+  await prisma.legacyLinearMapping.deleteMany();
   await prisma.comment.deleteMany({
     where: { issue: { identifier: { startsWith: 'VRF-' } } },
   });
@@ -165,10 +169,10 @@ describe.runIf(hasDatabaseUrl)('verify command — integration', () => {
     try {
       await prisma.$connect();
 
-      // Clean up verify-specific data if it exists
-      await prisma.legacyLinearMapping.deleteMany({
-        where: { oldId: { startsWith: 'verify-' } },
-      });
+      // Clear ALL legacy mappings to avoid stale newId references left by
+      // other test suites that share the same database.
+      await prisma.legacyLinearMapping.deleteMany();
+      // Clean up verify-specific data rows if they exist
       await prisma.comment.deleteMany({
         where: { issue: { identifier: { startsWith: 'VRF-' } } },
       });
