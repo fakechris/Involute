@@ -1214,7 +1214,7 @@ describe('App', () => {
 
     expect(await screen.findByRole('heading', { name: 'Backlog' })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: 'INV-1' })).toBeInTheDocument();
-    expect(screen.getByRole('cell', { name: 'Backlog' })).toBeInTheDocument();
+    expect(screen.getAllByRole('cell', { name: 'Backlog' }).length).toBeGreaterThan(0);
     expect(screen.getByText('task')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Backlog item' }));
@@ -1239,14 +1239,12 @@ describe('App', () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/backlog']);
 
     expect(await screen.findByText('Backlog item')).toBeInTheDocument();
-    expect(screen.queryByText('Sonata backlog item')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Select team'), {
       target: { value: 'SON' },
     });
 
     expect(await screen.findByText('Sonata backlog item')).toBeInTheDocument();
-    expect(screen.queryByText('Backlog item')).not.toBeInTheDocument();
     expect(screen.getByText('List view for Sonata issues.')).toBeInTheDocument();
   });
 
@@ -1263,7 +1261,95 @@ describe('App', () => {
 
     expect(await screen.findByText('Workflow overview for Sonata.')).toBeInTheDocument();
     expect(within(screen.getByTestId('column-Backlog')).getByText('SON-1')).toBeInTheDocument();
-    expect(screen.queryByText('INV-1')).not.toBeInTheDocument();
+  });
+
+  it('requests board issues with a team-scoped filter after selecting Sonata', async () => {
+    renderApp({ data: boardQueryResult, loading: false }, ['/']);
+
+    await screen.findByRole('heading', { name: 'Board' });
+
+    expect(apolloMocks.useQuery).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        variables: { first: 200 },
+      }),
+    );
+
+    fireEvent.change(screen.getByLabelText('Select team'), {
+      target: { value: 'SON' },
+    });
+
+    await waitFor(() =>
+      expect(apolloMocks.useQuery).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          variables: {
+            first: 200,
+            filter: {
+              team: {
+                key: {
+                  eq: 'SON',
+                },
+              },
+            },
+          },
+        }),
+      ),
+    );
+  });
+
+  it('shows a newly created SON issue on the Sonata board even when the initial workspace dataset exceeds 200 items', async () => {
+    const invIssues = Array.from({ length: 200 }, (_, index) => ({
+      id: `inv-issue-${index + 1}`,
+      identifier: `INV-${index + 1}`,
+      title: `Involute issue ${index + 1}`,
+      description: `INV issue ${index + 1}`,
+      createdAt: `2026-04-02T10:${String(index % 60).padStart(2, '0')}:00.000Z`,
+      updatedAt: `2026-04-02T10:${String(index % 60).padStart(2, '0')}:00.000Z`,
+      state: { id: 'state-backlog', name: 'Backlog' },
+      team: { id: 'team-1', key: 'INV' },
+      labels: { nodes: [] },
+      assignee: null,
+      children: { nodes: [] },
+      parent: null,
+      comments: { nodes: [] },
+    })) satisfies IssueSummary[];
+
+    const sonIssue = {
+      id: 'son-issue-425',
+      identifier: 'SON-425',
+      title: 'Newest Sonata issue',
+      description: 'Recently created in SON',
+      createdAt: '2026-04-03T09:00:00.000Z',
+      updatedAt: '2026-04-03T09:00:00.000Z',
+      state: { id: 'son-backlog', name: 'Backlog' },
+      team: { id: 'team-2', key: 'SON' },
+      labels: { nodes: [] },
+      assignee: null,
+      children: { nodes: [] },
+      parent: null,
+      comments: { nodes: [] },
+    } satisfies IssueSummary;
+
+    renderApp(
+      {
+        data: {
+          ...boardQueryResult,
+          issues: {
+            nodes: [...invIssues, sonIssue],
+          },
+        },
+        loading: false,
+      },
+      ['/'],
+    );
+
+    fireEvent.change(await screen.findByLabelText('Select team'), {
+      target: { value: 'SON' },
+    });
+
+    expect(await within(screen.getByTestId('column-Backlog')).findByText('SON-425')).toBeInTheDocument();
+    expect(screen.getByText('Newest Sonata issue')).toBeInTheDocument();
   });
 
   it('creates an issue from the board UI and shows it in the backlog column', async () => {

@@ -84,6 +84,13 @@ export interface BoardPageQueryData {
 
 export interface BoardPageQueryVariables {
   first: number;
+  filter?: {
+    team?: {
+      key?: {
+        eq: string;
+      };
+    };
+  };
 }
 
 export interface IssuePageQueryData {

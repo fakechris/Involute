@@ -105,13 +105,29 @@ function createHtml5BoardDragPayload(issueId: string, stateId: string): string {
 }
 
 export function BoardPage() {
+  const [selectedTeamKey, setSelectedTeamKey] = useState<string | null>(null);
+  const boardQueryVariables = useMemo<BoardPageQueryVariables>(
+    () => ({
+      first: ISSUE_LIMIT,
+      ...(selectedTeamKey
+        ? {
+            filter: {
+              team: {
+                key: {
+                  eq: selectedTeamKey,
+                },
+              },
+            },
+          }
+        : {}),
+    }),
+    [selectedTeamKey],
+  );
   const location = useLocation();
   const { data, error, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(
     BOARD_PAGE_QUERY,
     {
-      variables: {
-        first: ISSUE_LIMIT,
-      },
+      variables: boardQueryVariables,
     },
   );
   const [runIssueUpdate] = useMutation<IssueUpdateMutationData, IssueUpdateMutationVariables>(
@@ -126,7 +142,6 @@ export function BoardPage() {
   const teams = data?.teams.nodes ?? [];
   const users = data?.users.nodes ?? [];
   const labels = data?.issueLabels.nodes ?? [];
-  const [selectedTeamKey, setSelectedTeamKey] = useState<string | null>(null);
   const [localIssues, setLocalIssues] = useState<IssueSummary[]>([]);
   const [activeIssueId, setActiveIssueId] = useState<string | null>(null);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
@@ -151,10 +166,13 @@ export function BoardPage() {
   const selectedTeam =
     teams.find((team) => team.key === selectedTeamKey) ?? teams[0] ?? null;
   const columns = useMemo(() => getBoardColumns(selectedTeam), [selectedTeam]);
-  const visibleIssues = useMemo(
-    () => filterIssuesByTeam(localIssues, selectedTeam?.key ?? null),
-    [localIssues, selectedTeam?.key],
-  );
+  const visibleIssues = useMemo(() => {
+    if (selectedTeamKey) {
+      return localIssues;
+    }
+
+    return filterIssuesByTeam(localIssues, selectedTeam?.key ?? null);
+  }, [localIssues, selectedTeam?.key, selectedTeamKey]);
   const issuesByState = useMemo(() => groupIssuesByState(visibleIssues), [visibleIssues]);
   const activeIssue = useMemo(
     () => visibleIssues.find((issue) => issue.id === activeIssueId) ?? null,

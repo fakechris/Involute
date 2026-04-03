@@ -1,7 +1,7 @@
 import { gql } from '@apollo/client';
 
 export const BOARD_PAGE_QUERY = gql`
-  query BoardPage($first: Int!) {
+  query BoardPage($first: Int!, $filter: IssueFilter) {
     teams {
       nodes {
         id
@@ -28,7 +28,7 @@ export const BOARD_PAGE_QUERY = gql`
         name
       }
     }
-    issues(first: $first) {
+    issues(first: $first, filter: $filter) {
       nodes {
         id
         identifier
