@@ -9,7 +9,15 @@ import { mkdtemp, mkdir, writeFile, rm, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { createProgram } from '../index.js';
+import {
+  CliError,
+  createConfiguredGraphQLClient,
+  createProgram,
+  getConfigPath,
+  getConfigValue,
+  normalizeGraphQLErrorMessage,
+  setConfigValue,
+} from '../index.js';
 import { runImport, validateExportDir, loadEnv } from './import.js';
 
 // --- Fixture data matching Linear export format ---
@@ -160,5 +168,61 @@ describe('loadEnv', () => {
   it('loads environment variables without throwing', () => {
     // loadEnv should not throw even if .env doesn't exist in current path
     expect(() => loadEnv()).not.toThrow();
+  });
+});
+
+describe('CLI config helpers', () => {
+  let tempDir: string;
+  let configPath: string;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'involute-cli-config-'));
+    configPath = join(tempDir, 'config.json');
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('persists server-url and token in ~/.involute/config.json format', async () => {
+    await setConfigValue('server-url', 'http://localhost:4200', configPath);
+    await setConfigValue('token', 'secret-token', configPath);
+
+    await expect(access(configPath)).resolves.toBeUndefined();
+    await expect(getConfigValue('server-url', configPath)).resolves.toBe('http://localhost:4200');
+    await expect(getConfigValue('token', configPath)).resolves.toBe('secret-token');
+  });
+
+  it('creates a graphql client using configured server-url and token', async () => {
+    await setConfigValue('server-url', 'http://localhost:4200', configPath);
+    await setConfigValue('token', 'secret-token', configPath);
+
+    const client = await createConfiguredGraphQLClient(configPath);
+
+    expect(client).toBeInstanceOf(Object);
+  });
+
+  it('throws a helpful error when server-url is missing', async () => {
+    await expect(createConfiguredGraphQLClient(configPath)).rejects.toThrow(
+      'Missing required config "server-url". Run `involute config set server-url <url>` first.',
+    );
+  });
+
+  it('normalizes not authenticated GraphQL errors with config guidance', () => {
+    const message = normalizeGraphQLErrorMessage({
+      response: {
+        errors: [{ message: 'Not authenticated' }],
+      },
+    });
+
+    expect(message).toContain('config set token');
+  });
+
+  it('exposes the default config path under ~/.involute', () => {
+    expect(getConfigPath()).toContain('.involute/config.json');
+  });
+
+  it('preserves explicit CliError messages', () => {
+    expect(normalizeGraphQLErrorMessage(new CliError('boom'))).toBe('boom');
   });
 });
