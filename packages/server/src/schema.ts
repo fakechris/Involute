@@ -280,7 +280,7 @@ const resolvers = {
       return {
         nodes: await context.prisma.issue.findMany({
           ...(where ? { where } : {}),
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           take: args.first,
         }),
       };
@@ -470,7 +470,7 @@ const resolvers = {
         where: {
           parentId: parent.id,
         },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       }),
     }),
     team: async (
