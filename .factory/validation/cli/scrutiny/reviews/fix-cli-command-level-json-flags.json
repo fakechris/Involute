@@ -1,0 +1,15 @@
+{
+  "featureId": "fix-cli-command-level-json-flags",
+  "reviewedAt": "2026-04-03T05:04:55Z",
+  "commitId": "5482b04",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Reviewed the original failing CLI scaffold commit and the follow-up fix commit against current HEAD. The fix correctly wires `teams`, `states`, and `labels` so top-level `--json` works while preserving the existing `list` subcommands, and the regression coverage in `issues.test.ts` exercises all three top-level JSON paths. I did not find any new high-confidence in-scope bugs in this fix.",
+    "issues": []
+  },
+  "sharedStateObservations": [],
+  "addressesFailureFrom": "cli-scaffold-and-config",
+  "summary": "Pass. Commit `5482b04` resolves the prior blocking scrutiny finding from `cli-scaffold-and-config`: `teams --json`, `states --json`, and `labels --json` are now accepted at the resource-command level on current HEAD, with matching regression tests and no new in-scope defects found."
+}
