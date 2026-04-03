@@ -1,0 +1,28 @@
+{
+  "featureId": "cli-comment-commands",
+  "reviewedAt": "2026-04-03T02:02:23.412578+00:00",
+  "commitId": "b9a286c2827eb67fc04ad313677aaf33e9635b26",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The CLI comment commands and identifier lookup are mostly implemented, but the feature does not fully preserve issue-id support promised by the command contract for non-UUID issue IDs, and the added tests miss that regression.",
+    "issues": [
+      {
+        "file": "packages/cli/src/index.ts",
+        "line": 571,
+        "severity": "blocking",
+        "description": "`comments list`/`comments add` now treat the argument as either a UUID or an identifier and otherwise route through `fetchIssueByIdentifier()`. That means previously supported opaque issue IDs that are not UUID-shaped (for example imported or mocked issue IDs accepted by the GraphQL `issue(id)` field) are now incorrectly looked up as identifiers and fail with 'Issue not found'. The feature requirement and command name both promise `<issueId-or-identifier>`, so this is a behavior regression for valid issue IDs outside the UUID format."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The CLI worker skill's manual verification step assumes workers can start fresh services on ports 4200/4201, but this session had to validate against an already-running API and a Vite fallback port. The worker documented this as a procedure deviation, suggesting the skill does not reflect current mission constraints around occupied but healthy ports.",
+      "evidence": "Handoff skillFeedback.deviations for worker session 22eb4598-c9f0-4d15-9c1f-a2186c1af7b7; AGENTS.md fixes API/Web ports to 4200/4201 while the handoff reports validation on existing 4200 and fallback 4217."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed the feature handoff, transcript skeleton, cli-worker skill, shared-state docs, and commit `b9a286c2827eb67fc04ad313677aaf33e9635b26`. Found one blocking regression: the new identifier-resolution path no longer honors non-UUID issue IDs even though the command contract accepts issue IDs or identifiers."
+}

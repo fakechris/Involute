@@ -50,6 +50,10 @@ interface IssueLabelFilterInput {
 }
 
 type CommentOrderByInput = 'createdAt';
+interface CursorPayload {
+  createdAt: string;
+  id: string;
+}
 
 const workflowStateOrder = new Map<string, number>(
   DEFAULT_WORKFLOW_STATE_ORDER.map((name, index) => [name, index] as const),
@@ -81,7 +85,7 @@ const typeDefs = /* GraphQL */ `
 
   type Query {
     issue(id: String!): Issue
-    issues(first: Int!, filter: IssueFilter): IssueConnection!
+    issues(first: Int!, after: String, filter: IssueFilter): IssueConnection!
     teams(filter: TeamFilter): TeamConnection!
     issueLabels(filter: IssueLabelFilter): IssueLabelConnection!
     users: UserConnection!
@@ -141,7 +145,7 @@ const typeDefs = /* GraphQL */ `
     parent: Issue
     children: IssueConnection!
     team: Team!
-    comments(first: Int, orderBy: CommentOrderBy): CommentConnection!
+    comments(first: Int, after: String, orderBy: CommentOrderBy): CommentConnection!
   }
 
   type TeamConnection {
@@ -158,6 +162,7 @@ const typeDefs = /* GraphQL */ `
 
   type IssueConnection {
     nodes: [Issue!]!
+    pageInfo: PageInfo!
   }
 
   type UserConnection {
@@ -166,6 +171,12 @@ const typeDefs = /* GraphQL */ `
 
   type CommentConnection {
     nodes: [Comment!]!
+    pageInfo: PageInfo!
+  }
+
+  type PageInfo {
+    hasNextPage: Boolean!
+    endCursor: String
   }
 
   input StringComparator {
@@ -257,32 +268,46 @@ const resolvers = {
       context: GraphQLContext,
     ): Promise<Issue | null> => {
       try {
-        return await context.prisma.issue.findUnique({
+        const issue = await context.prisma.issue.findUnique({
           where: {
             id: args.id,
           },
         });
-      } catch (error) {
-        if (isPrismaInvalidInputError(error)) {
-          return null;
-        }
 
-        throw error;
+        if (issue) {
+          return issue;
+        }
+      } catch (error) {
+        if (!isPrismaInvalidInputError(error)) {
+          throw error;
+        }
       }
+
+      return context.prisma.issue.findUnique({
+        where: {
+          identifier: args.id,
+        },
+      });
     },
     issues: async (
       _parent: unknown,
-      args: { filter?: IssueFilterInput | null; first: number },
+      args: { after?: string | null; filter?: IssueFilterInput | null; first: number },
       context: GraphQLContext,
-    ): Promise<{ nodes: Issue[] }> => {
-      const where = buildIssueWhere(args.filter, context.viewer?.id ?? null);
+    ): Promise<{ nodes: Issue[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
+      const where = combineIssueWhere(
+        buildIssueWhere(args.filter, context.viewer?.id ?? null),
+        buildIssueCursorWhere(args.after),
+      );
+      const issues = await context.prisma.issue.findMany({
+        ...(where ? { where } : {}),
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: args.first + 1,
+      });
+      const nodes = issues.slice(0, args.first);
 
       return {
-        nodes: await context.prisma.issue.findMany({
-          ...(where ? { where } : {}),
-          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-          take: args.first,
-        }),
+        nodes,
+        pageInfo: buildPageInfo(nodes, issues.length > args.first),
       };
     },
     teams: async (
@@ -465,14 +490,19 @@ const resolvers = {
       parent: IssueParent,
       _args: Record<string, never>,
       context: GraphQLContext,
-    ): Promise<{ nodes: Issue[] }> => ({
-      nodes: await context.prisma.issue.findMany({
+    ): Promise<{ nodes: Issue[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
+      const nodes = await context.prisma.issue.findMany({
         where: {
           parentId: parent.id,
         },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      }),
-    }),
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+
+      return {
+        nodes,
+        pageInfo: buildPageInfo(nodes, false),
+      };
+    },
     team: async (
       parent: IssueParent,
       _args: Record<string, never>,
@@ -486,17 +516,21 @@ const resolvers = {
       }),
     comments: async (
       parent: IssueParent,
-      args: { first?: number; orderBy?: CommentOrderByInput },
+      args: { after?: string | null; first?: number; orderBy?: CommentOrderByInput },
       context: GraphQLContext,
-    ): Promise<{ nodes: Comment[] }> => ({
-      nodes: await context.prisma.comment.findMany({
-        where: {
-          issueId: parent.id,
-        },
+    ): Promise<{ nodes: Comment[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
+      const comments = await context.prisma.comment.findMany({
+        where: buildCommentWhere(parent.id, args.after),
         orderBy: buildCommentOrderBy(args.orderBy),
-        ...(args.first === undefined ? {} : { take: args.first }),
-      }),
-    }),
+        ...(args.first === undefined ? {} : { take: args.first + 1 }),
+      });
+      const nodes = args.first === undefined ? comments : comments.slice(0, args.first);
+
+      return {
+        nodes,
+        pageInfo: buildPageInfo(nodes, args.first !== undefined && comments.length > args.first),
+      };
+    },
   },
 };
 
@@ -574,6 +608,114 @@ function buildCommentOrderBy(
   }
 
   return [{ createdAt: 'asc' }, { id: 'asc' }];
+}
+
+function encodeCursor(entity: { createdAt: Date; id: string }): string {
+  return Buffer.from(
+    JSON.stringify({
+      createdAt: entity.createdAt.toISOString(),
+      id: entity.id,
+    } satisfies CursorPayload),
+    'utf8',
+  ).toString('base64url');
+}
+
+function decodeCursor(after: string): CursorPayload {
+  const parsed = JSON.parse(Buffer.from(after, 'base64url').toString('utf8')) as Partial<CursorPayload>;
+
+  if (typeof parsed.createdAt !== 'string' || typeof parsed.id !== 'string') {
+    throw new TypeError('Invalid cursor payload.');
+  }
+
+  return {
+    createdAt: parsed.createdAt,
+    id: parsed.id,
+  };
+}
+
+function buildPageInfo(
+  nodes: Array<{ createdAt: Date; id: string }>,
+  hasNextPage: boolean,
+): { endCursor: string | null; hasNextPage: boolean } {
+  const lastNode = nodes[nodes.length - 1];
+
+  return {
+    hasNextPage,
+    endCursor: lastNode ? encodeCursor(lastNode) : null,
+  };
+}
+
+function combineIssueWhere(
+  left: Prisma.IssueWhereInput | undefined,
+  right: Prisma.IssueWhereInput | undefined,
+): Prisma.IssueWhereInput | undefined {
+  if (!left) {
+    return right;
+  }
+
+  if (!right) {
+    return left;
+  }
+
+  return {
+    AND: [left, right],
+  };
+}
+
+function buildIssueCursorWhere(after: string | null | undefined): Prisma.IssueWhereInput | undefined {
+  if (!after) {
+    return undefined;
+  }
+
+  const cursor = decodeCursor(after);
+  const createdAt = parseDateTime(cursor.createdAt);
+
+  return {
+    OR: [
+      {
+        createdAt: {
+          lt: createdAt,
+        },
+      },
+      {
+        createdAt,
+        id: {
+          lt: cursor.id,
+        },
+      },
+    ],
+  };
+}
+
+function buildCommentWhere(
+  issueId: string,
+  after: string | null | undefined,
+): Prisma.CommentWhereInput {
+  if (!after) {
+    return {
+      issueId,
+    };
+  }
+
+  const cursor = decodeCursor(after);
+  const createdAt = parseDateTime(cursor.createdAt);
+
+  return {
+    issueId,
+    OR: [
+      {
+        createdAt: {
+          gt: createdAt,
+        },
+      },
+      {
+        createdAt,
+        id: {
+          gt: cursor.id,
+        },
+      },
+    ],
+  };
 }
 
 async function runIssueMutation<TResult extends { issue: Issue; success: true }>(

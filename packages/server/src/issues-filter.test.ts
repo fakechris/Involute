@@ -69,15 +69,15 @@ describe('issues query filtering', () => {
     expect(response.body.data.issues.nodes).toHaveLength(2);
     expect(response.body.data.issues.nodes).toEqual([
       expect.objectContaining({
-        id: fixture.issues.parentTask.id,
-        identifier: fixture.issues.parentTask.identifier,
+        id: fixture.issues.viewerEpic.id,
+        identifier: fixture.issues.viewerEpic.identifier,
         children: {
-          nodes: [{ id: fixture.issues.child.id }],
+          nodes: [],
         },
       }),
       expect.objectContaining({
-        id: fixture.issues.child.id,
-        identifier: fixture.issues.child.identifier,
+        id: fixture.issues.otherTeamTask.id,
+        identifier: fixture.issues.otherTeamTask.identifier,
         children: {
           nodes: [],
         },
@@ -151,12 +151,12 @@ describe('issues query filtering', () => {
     );
 
     expect(identifiers).toEqual([
-      fixture.issues.parentTask.identifier,
-      fixture.issues.blockedTask.identifier,
-      fixture.issues.noLabels.identifier,
-      fixture.issues.inProgressTask.identifier,
-      fixture.issues.otherTeamTask.identifier,
       fixture.issues.viewerEpic.identifier,
+      fixture.issues.otherTeamTask.identifier,
+      fixture.issues.inProgressTask.identifier,
+      fixture.issues.noLabels.identifier,
+      fixture.issues.blockedTask.identifier,
+      fixture.issues.parentTask.identifier,
     ]);
     expect(identifiers).not.toContain(fixture.issues.unassignedTask.identifier);
     expect(identifiers).not.toContain(fixture.issues.otherUserTask.identifier);
@@ -182,13 +182,13 @@ describe('issues query filtering', () => {
     expect(response.status).toBe(200);
     expect(response.body.errors).toBeUndefined();
     expect(response.body.data.issues.nodes.map((issue: { identifier: string }) => issue.identifier)).toEqual([
-      fixture.issues.parentTask.identifier,
-      fixture.issues.blockedTask.identifier,
-      fixture.issues.unassignedTask.identifier,
-      fixture.issues.otherUserTask.identifier,
-      fixture.issues.inProgressTask.identifier,
-      fixture.issues.otherTeamTask.identifier,
       fixture.issues.viewerEpic.identifier,
+      fixture.issues.otherTeamTask.identifier,
+      fixture.issues.inProgressTask.identifier,
+      fixture.issues.otherUserTask.identifier,
+      fixture.issues.unassignedTask.identifier,
+      fixture.issues.blockedTask.identifier,
+      fixture.issues.parentTask.identifier,
     ]);
   });
 
@@ -410,6 +410,73 @@ describe('issues query filtering', () => {
       identifier: fixture.issues.unassignedTask.identifier,
       assignee: null,
     });
+  });
+
+  it('returns newest matching team issues first so fresh large-team items are not hidden behind take limits', async () => {
+    const recentTeam = await createTeamWithStates(prisma, {
+      key: 'SON',
+      name: 'Songwork',
+    });
+    const baseCreatedAt = Date.parse('2025-02-01T08:00:00.000Z');
+    const recentBacklog = await prisma.workflowState.findFirstOrThrow({
+      where: {
+        teamId: recentTeam.id,
+        name: 'Backlog',
+      },
+    });
+
+    await prisma.issue.createMany({
+      data: Array.from({ length: 205 }, (_, index) => ({
+        identifier: `SON-${index + 1}`,
+        title: `Songwork issue ${index + 1}`,
+        description: `Large team issue ${index + 1}`,
+        teamId: recentTeam.id,
+        stateId: recentBacklog.id,
+        createdAt: new Date(baseCreatedAt + index * 60_000),
+        updatedAt: new Date(baseCreatedAt + index * 60_000),
+      })),
+    });
+
+    const newestIssue = await prisma.issue.create({
+      data: {
+        identifier: 'SON-206',
+        title: 'Newest Songwork issue',
+        description: 'Should remain visible within first 200 team results.',
+        teamId: recentTeam.id,
+        stateId: recentBacklog.id,
+        createdAt: new Date('2025-03-31T12:00:00.000Z'),
+        updatedAt: new Date('2025-03-31T12:00:00.000Z'),
+      },
+    });
+
+    const response = await queryIssues({
+      first: 200,
+      filter: {
+        team: {
+          key: {
+            eq: recentTeam.key,
+          },
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.issues.nodes).toHaveLength(200);
+    expect(response.body.data.issues.nodes[0]).toMatchObject({
+      id: newestIssue.id,
+      identifier: newestIssue.identifier,
+    });
+    expect(
+      response.body.data.issues.nodes.some(
+        (issue: { identifier: string }) => issue.identifier === newestIssue.identifier,
+      ),
+    ).toBe(true);
+    expect(
+      response.body.data.issues.nodes.some(
+        (issue: { identifier: string }) => issue.identifier === 'SON-1',
+      ),
+    ).toBe(false);
   });
 });
 

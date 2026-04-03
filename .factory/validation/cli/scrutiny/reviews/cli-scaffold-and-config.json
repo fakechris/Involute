@@ -1,0 +1,28 @@
+{
+  "featureId": "cli-scaffold-and-config",
+  "reviewedAt": "2026-04-03T00:00:00Z",
+  "commitId": "943b59c",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature adds the expected config storage, GraphQL client bootstrap, help output, build target, and error normalization, but it does not actually make the documented top-level `--json` flag work for commands like `teams`, so requirement (7) is not fully implemented.",
+    "issues": [
+      {
+        "file": "packages/cli/src/index.ts",
+        "line": 806,
+        "severity": "blocking",
+        "description": "Requirement (7) says all commands support a `--json` flag, but the command tree is defined as `teams -> list` / `states -> list` / `labels -> list` while `--json` is only registered on the subcommands. Commander rejects `involute teams --json` with `unknown option '--json'`, so the advertised global `involute --json` / per-command JSON mode does not work for these commands as implemented. This is user-visible and contradicts both the feature spec and the handoff's manual verification claim that `node packages/cli/dist/index.js teams --json` succeeds."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `cli-worker` skill's verification checklist tells workers to run `pnpm lint`, but this worker's transcript and handoff only show tests, typecheck, and build. The procedure and what scrutiny expects are out of sync enough that a worker skipped lint while still marking the feature complete.",
+      "evidence": ".factory/skills/cli-worker/SKILL.md step 4 requires `cd packages/cli && pnpm lint`; transcript skeleton for session 6e838de0-a239-448d-9a3c-ec54762e5764 and the handoff verification list contain no lint command."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Reviewed feature `cli-scaffold-and-config` via mission metadata, handoff, transcript skeleton, skill instructions, and commit `943b59c`. The implementation mostly matches the scaffold/config requirements, but it fails the `--json` support requirement because `teams --json` is rejected by Commander, so the feature should not pass scrutiny in its current form."
+}

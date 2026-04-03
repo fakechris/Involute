@@ -1,0 +1,21 @@
+{
+  "featureId": "fix-cli-comment-nonuuid-issue-id-resolution",
+  "reviewedAt": "2026-04-03T05:05:10.700671+00:00",
+  "commitId": "2ddcb75f7c62ddde2e01b4a82ea5a30e18f50e81",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix restores the promised `<issueId-or-identifier>` behavior for comment commands by always trying `issue(id)` first and only falling back to identifier lookup when the direct lookup misses. I did not find any new high-confidence bugs in scope from the original failure or the follow-up change.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The cli-worker skill still mandates manual verification against a separately started API server for every CLI change, but this fix feature was fully and appropriately verified through the existing in-process CLI integration harness; the worker explicitly skipped extra manual runs for that reason.",
+      "evidence": "`.factory/skills/cli-worker/SKILL.md` step 4 requires manual server startup and CLI runs, while the fix handoff for worker session `7583a2b1-2efa-4f68-bbbf-8856ecbaf15d` notes the automated comment-command tests already boot a real test server and thoroughly cover the changed resolution path."
+    }
+  ],
+  "addressesFailureFrom": "cli-comment-commands",
+  "summary": "Reviewed the prior failing feature `cli-comment-commands`, the fix feature handoff/transcript, and both commits `b9a286c2827eb67fc04ad313677aaf33e9635b26` and `2ddcb75f7c62ddde2e01b4a82ea5a30e18f50e81`. The fix adequately addresses the original regression by restoring opaque non-UUID issue-id support while preserving identifier fallback behavior, and I found no new actionable issues in scope."
+}

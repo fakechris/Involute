@@ -123,6 +123,51 @@ select {
   gap: 1rem;
 }
 
+.backlog-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.backlog-table-wrapper {
+  overflow-x: auto;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 1rem;
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.backlog-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.backlog-table th,
+.backlog-table td {
+  padding: 0.9rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.backlog-table th {
+  color: #cbd5e1;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.backlog-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.backlog-table__issue-link {
+  border: 0;
+  background: transparent;
+  color: #bfdbfe;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
 .team-selector {
   display: flex;
   min-width: 11rem;
@@ -211,19 +256,47 @@ select {
 }
 
 .issue-card {
+  position: relative;
   border: 1px solid rgba(96, 165, 250, 0.16);
   border-radius: 0.95rem;
   background: rgba(30, 41, 59, 0.88);
   padding: 0;
+  touch-action: none;
 }
 
 .issue-card--dragging {
   opacity: 0.5;
 }
 
+.issue-card__drag-handle {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #cbd5f5;
+  cursor: grab;
+  z-index: 1;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.issue-card__drag-handle:active {
+  cursor: grabbing;
+}
+
 .issue-card__button {
   width: 100%;
   padding: 0.9rem;
+  padding-right: 3rem;
   text-align: left;
   cursor: pointer;
 }
@@ -317,7 +390,10 @@ select {
 
 .issue-drawer__backdrop {
   flex: 1;
+  border: 0;
   background: rgba(2, 6, 23, 0.64);
+  padding: 0;
+  cursor: pointer;
 }
 
 .issue-drawer__panel {
@@ -338,6 +414,17 @@ select {
   margin-bottom: 1.5rem;
 }
 
+.issue-drawer__title-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.issue-drawer__inline-hint {
+  color: #94a3b8;
+  font-size: 0.8rem;
+}
+
 .issue-drawer__close {
   cursor: pointer;
 }
@@ -349,8 +436,115 @@ select {
   margin-bottom: 1rem;
 }
 
+.issue-drawer__label {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+}
+
+.issue-drawer__title-input,
+.issue-drawer__textarea,
+.issue-drawer select,
+.issue-drawer__close {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 0.75rem;
+  background: rgba(15, 23, 42, 0.92);
+  color: #f8fafc;
+}
+
+.issue-drawer__title-input,
+.issue-drawer__textarea,
+.issue-drawer select {
+  width: 100%;
+  padding: 0.75rem 0.85rem;
+  font: inherit;
+}
+
+.issue-drawer__title-input {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.issue-drawer__textarea {
+  min-height: 8rem;
+  resize: vertical;
+}
+
+.issue-drawer__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.issue-drawer__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #e2e8f0;
+}
+
 .issue-drawer__error {
   color: #fecaca;
+}
+
+.issue-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.issue-comment {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 0.9rem;
+  background: rgba(30, 41, 59, 0.6);
+  padding: 0.9rem;
+}
+
+.issue-comment__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+  color: #cbd5e1;
+  font-size: 0.85rem;
+}
+
+.issue-comment__body {
+  margin: 0;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+}
+
+.issue-comments__empty {
+  margin: 0;
+}
+
+.issue-comment-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.issue-comment-composer__input {
+  min-height: 6rem;
+}
+
+.issue-comment-composer__submit {
+  align-self: flex-start;
+  border: 1px solid rgba(96, 165, 250, 0.4);
+  border-radius: 0.8rem;
+  background: rgba(59, 130, 246, 0.18);
+  color: #eff6ff;
+  padding: 0.65rem 0.95rem;
+  cursor: pointer;
+}
+
+.issue-comment-composer__submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 @media (max-width: 1100px) {

@@ -81,6 +81,16 @@ describe('export command', () => {
     expect(exportCmd).toBeDefined();
   });
 
+  it('registers config commands and global json option on the program', () => {
+    const program = createProgram();
+    const configCmd = program.commands.find((c) => c.name() === 'config');
+    const jsonOpt = program.options.find((option) => option.long === '--json');
+
+    expect(configCmd).toBeDefined();
+    expect(configCmd?.commands.map((command) => command.name())).toEqual(['set', 'get']);
+    expect(jsonOpt).toBeDefined();
+  });
+
   it('requires --token option', () => {
     const program = createProgram();
     const exportCmd = program.commands.find((c) => c.name() === 'export');

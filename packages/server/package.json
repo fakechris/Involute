@@ -18,6 +18,8 @@
   "scripts": {
     "build": "pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json",
     "typecheck": "pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json",
+    "setup:web-ui-validation": "pnpm exec tsx src/validation-data-setup.ts",
+    "setup:son-validation": "pnpm exec tsx src/son-validation-restore.ts",
     "test": "pnpm exec prisma generate && pnpm exec prisma db push --skip-generate && node scripts/run-vitest.mjs",
     "lint": "pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json"
   },
@@ -34,6 +36,7 @@
   "devDependencies": {
     "@types/node": "^24.7.2",
     "prisma": "^6.7.0",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vitest": "^4.0.8"
   }
