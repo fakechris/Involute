@@ -43,6 +43,7 @@ import {
   getStoredTeamKey,
   readStoredTeamKey,
   groupIssuesByState,
+  writeStoredTeamKey,
 } from '../board/utils';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { Column } from '../components/Column';
@@ -53,6 +54,7 @@ import { BacklogPage } from './BacklogPage';
 const ISSUE_LIMIT = 200;
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
 const DND_ACTIVATION_DISTANCE = 1;
+const EMPTY_ISSUES: IssueSummary[] = [];
 
 function getStateIdFromData(data: unknown): string | null {
   if (data && typeof data === 'object' && 'stateId' in data && typeof data.stateId === 'string') {
@@ -145,7 +147,9 @@ export function BoardPage() {
   const teams = data?.teams.nodes ?? [];
   const users = data?.users.nodes ?? [];
   const labels = data?.issueLabels.nodes ?? [];
-  const [localIssues, setLocalIssues] = useState<IssueSummary[]>([]);
+  const baseIssues = data?.issues.nodes ?? EMPTY_ISSUES;
+  const [createdIssues, setCreatedIssues] = useState<IssueSummary[]>([]);
+  const [issueOverrides, setIssueOverrides] = useState<Record<string, IssueSummary>>({});
   const [activeIssueId, setActiveIssueId] = useState<string | null>(null);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -178,28 +182,24 @@ export function BoardPage() {
   }, [selectedTeamKey, teams]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    if (!selectedTeamKey) {
-      window.localStorage.removeItem(ACTIVE_TEAM_STORAGE_KEY);
-      return;
-    }
-
-    window.localStorage.setItem(ACTIVE_TEAM_STORAGE_KEY, selectedTeamKey);
+    writeStoredTeamKey(selectedTeamKey);
   }, [selectedTeamKey]);
 
   useEffect(() => {
-    setLocalIssues(data?.issues.nodes ?? []);
-  }, [data?.issues.nodes]);
+    setIssueOverrides((currentOverrides) => reconcileIssueOverrides(baseIssues, currentOverrides));
+    setCreatedIssues((currentIssues) => reconcileCreatedIssues(baseIssues, currentIssues));
+  }, [baseIssues]);
 
   const selectedTeam =
     teams.find((team) => team.key === selectedTeamKey) ?? teams[0] ?? null;
+  const allIssues = useMemo(
+    () => mergeBoardIssues(baseIssues, issueOverrides, createdIssues),
+    [baseIssues, createdIssues, issueOverrides],
+  );
   const columns = useMemo(() => getBoardColumns(selectedTeam), [selectedTeam]);
   const visibleIssues = useMemo(() => {
-    return filterIssuesByTeam(localIssues, selectedTeamKey ?? selectedTeam?.key ?? null);
-  }, [localIssues, selectedTeam?.key, selectedTeamKey]);
+    return filterIssuesByTeam(allIssues, selectedTeamKey ?? selectedTeam?.key ?? null);
+  }, [allIssues, selectedTeam?.key, selectedTeamKey]);
   const issuesByState = useMemo(() => groupIssuesByState(visibleIssues), [visibleIssues]);
   const activeIssue = useMemo(
     () => visibleIssues.find((issue) => issue.id === activeIssueId) ?? null,
@@ -221,12 +221,14 @@ export function BoardPage() {
     input: IssueUpdateMutationVariables['input'],
     applyOptimisticIssue: (current: IssueSummary) => IssueSummary,
   ) {
-    const previousIssues = localIssues;
-    const nextIssues = localIssues.map((item) => (item.id === issue.id ? applyOptimisticIssue(item) : item));
+    const previousOverride = issueOverrides[issue.id];
+    const optimisticIssue = applyOptimisticIssue(issue);
 
     setMutationError(null);
     setIsSavingState(true);
-    setLocalIssues(nextIssues);
+    setIssueOverrides((currentOverrides) =>
+      replaceIssueOverride(currentOverrides, issue.id, optimisticIssue),
+    );
 
     try {
       const result = await runIssueUpdate({
@@ -240,13 +242,17 @@ export function BoardPage() {
         throw new Error('Mutation failed');
       }
 
-      setLocalIssues((currentIssues) =>
-        currentIssues.map((item) =>
-          item.id === issue.id ? mergeIssueWithPreservedComments(item, result.data!.issueUpdate.issue!) : item,
+      setIssueOverrides((currentOverrides) =>
+        replaceIssueOverride(
+          currentOverrides,
+          issue.id,
+          mergeIssueWithPreservedComments(optimisticIssue, result.data!.issueUpdate.issue!),
         ),
       );
     } catch (mutationIssue) {
-      setLocalIssues(previousIssues);
+      setIssueOverrides((currentOverrides) =>
+        replaceIssueOverride(currentOverrides, issue.id, previousOverride ?? null),
+      );
       setMutationError(ERROR_MESSAGE);
       throw mutationIssue;
     } finally {
@@ -319,6 +325,7 @@ export function BoardPage() {
 
   async function persistCommentCreate(issue: IssueSummary, body: string) {
     const trimmedBody = body.trim();
+    const previousOverride = issueOverrides[issue.id];
 
     if (!trimmedBody) {
       return;
@@ -341,22 +348,21 @@ export function BoardPage() {
         throw new Error('Comment mutation failed');
       }
 
-      setLocalIssues((currentIssues) =>
-        currentIssues.map((item) =>
-          item.id === issue.id
-            ? {
-                ...item,
-                comments: {
-                  nodes: [...item.comments.nodes, result.data!.commentCreate.comment!].sort(
-                    (left, right) =>
-                      new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
-                  ),
-                },
-              }
-            : item,
-        ),
+      setIssueOverrides((currentOverrides) =>
+        replaceIssueOverride(currentOverrides, issue.id, {
+          ...issue,
+          comments: {
+            nodes: [...issue.comments.nodes, result.data!.commentCreate.comment!].sort(
+              (left, right) =>
+                new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+            ),
+          },
+        }),
       );
     } catch (mutationIssue) {
+      setIssueOverrides((currentOverrides) =>
+        replaceIssueOverride(currentOverrides, issue.id, previousOverride ?? null),
+      );
       setMutationError(ERROR_MESSAGE);
       throw mutationIssue;
     } finally {
@@ -392,7 +398,13 @@ export function BoardPage() {
         throw new Error('Create issue mutation failed');
       }
 
-      setLocalIssues((currentIssues) => [result.data!.issueCreate.issue!, ...currentIssues]);
+      setIssueOverrides((currentOverrides) =>
+        replaceIssueOverride(currentOverrides, result.data!.issueCreate.issue!.id, result.data!.issueCreate.issue!),
+      );
+      setCreatedIssues((currentIssues) => [
+        result.data!.issueCreate.issue!,
+        ...currentIssues.filter((issue) => issue.id !== result.data!.issueCreate.issue!.id),
+      ]);
       setSelectedIssueId(result.data.issueCreate.issue.id);
       setCreateTitle('');
       setCreateDescription('');
@@ -417,11 +429,19 @@ export function BoardPage() {
     setDragPreviewStateId(null);
     setDragOriginStateId(null);
 
+    const issue = visibleIssues.find((item) => item.id === issueId);
+
     if (!targetStateId) {
+      if (issue && originState && issue.state.id !== originState.id) {
+        setIssueOverrides((currentOverrides) =>
+          replaceIssueOverride(currentOverrides, issueId, {
+            ...issue,
+            state: originState,
+          }),
+        );
+      }
       return;
     }
-
-    const issue = localIssues.find((item) => item.id === issueId);
 
     // Compare against the origin state to avoid skipping the mutation after
     // handleDragOver has already optimistically moved the card.
@@ -446,13 +466,18 @@ export function BoardPage() {
       }));
     } catch {
       if (originState) {
-        setLocalIssues((currentIssues) => moveIssueToState(currentIssues, issueId, originState));
+        setIssueOverrides((currentOverrides) =>
+          replaceIssueOverride(currentOverrides, issueId, {
+            ...issue,
+            state: originState,
+          }),
+        );
       }
     }
   }
 
   async function handleNativeDropIssue(payload: Html5BoardDragPayload, targetStateId: string) {
-    const issue = localIssues.find((item) => item.id === payload.issueId);
+    const issue = visibleIssues.find((item) => item.id === payload.issueId);
     const targetState =
       selectedTeam?.states.nodes.find((state) => state.id === targetStateId) ?? null;
 
@@ -464,16 +489,13 @@ export function BoardPage() {
       return;
     }
 
-    const previousIssues = localIssues;
-    setLocalIssues(moveIssueToState(localIssues, payload.issueId, targetState));
-
     try {
       await persistIssueUpdate(issue, { stateId: targetStateId }, (current) => ({
         ...current,
         state: targetState,
       }));
     } catch {
-      setLocalIssues(previousIssues);
+      // persistIssueUpdate already restored the previous issue override.
     }
   }
 
@@ -485,7 +507,7 @@ export function BoardPage() {
       return;
     }
 
-    const issue = localIssues.find((item) => item.id === issueId);
+    const issue = visibleIssues.find((item) => item.id === issueId);
     const targetState =
       selectedTeam?.states.nodes.find((state) => state.id === targetStateId) ?? null;
 
@@ -499,7 +521,12 @@ export function BoardPage() {
       return;
     }
 
-    setLocalIssues((currentIssues) => moveIssueToState(currentIssues, issueId, targetState));
+    setIssueOverrides((currentOverrides) =>
+      replaceIssueOverride(currentOverrides, issueId, {
+        ...issue,
+        state: targetState,
+      }),
+    );
   }
 
   if (error) {
@@ -674,7 +701,7 @@ export function BoardPage() {
           collisionDetection={kanbanCollisionDetection}
           onDragStart={(event) => {
             const draggedId = String(event.active.id);
-            const draggedIssue = localIssues.find((item) => item.id === draggedId);
+            const draggedIssue = visibleIssues.find((item) => item.id === draggedId);
             setActiveIssueId(draggedId);
             setDragOriginStateId(draggedIssue?.state.id ?? null);
             setDragPreviewStateId(null);
@@ -691,11 +718,19 @@ export function BoardPage() {
             setDragPreviewStateId(null);
             setDragOriginStateId(null);
             if (cancelledIssueId && originState) {
-              setLocalIssues((currentIssues) => moveIssueToState(currentIssues, cancelledIssueId, originState));
+              const cancelledIssue =
+                visibleIssues.find((issue) => issue.id === cancelledIssueId) ?? null;
+
+              if (cancelledIssue) {
+                setIssueOverrides((currentOverrides) =>
+                  replaceIssueOverride(currentOverrides, cancelledIssueId, {
+                    ...cancelledIssue,
+                    state: originState,
+                  }),
+                );
+              }
               return;
             }
-
-            setLocalIssues(data?.issues.nodes ?? []);
           }}
           onDragEnd={(event) => void handleDragEnd(event)}
         >
@@ -768,6 +803,109 @@ export function mergeIssueWithPreservedComments(
       nextComments.nodes.length > 0 || previousIssue.comments.nodes.length === 0
         ? nextComments
         : previousIssue.comments,
+  };
+}
+
+function mergeBoardIssues(
+  baseIssues: IssueSummary[],
+  issueOverrides: Record<string, IssueSummary>,
+  createdIssues: IssueSummary[],
+): IssueSummary[] {
+  const baseIssueIds = new Set(baseIssues.map((issue) => issue.id));
+  const nextCreatedIssues = createdIssues
+    .filter((issue) => !baseIssueIds.has(issue.id))
+    .map((issue) => issueOverrides[issue.id] ?? issue);
+  const nextBaseIssues = baseIssues.map((issue) => issueOverrides[issue.id] ?? issue);
+  const seenIssueIds = new Set([
+    ...baseIssues.map((issue) => issue.id),
+    ...nextCreatedIssues.map((issue) => issue.id),
+  ]);
+  const nextOrphanOverrides = Object.values(issueOverrides).filter((issue) => !seenIssueIds.has(issue.id));
+
+  return [...nextCreatedIssues, ...nextOrphanOverrides, ...nextBaseIssues];
+}
+
+function reconcileIssueOverrides(
+  baseIssues: IssueSummary[],
+  issueOverrides: Record<string, IssueSummary>,
+): Record<string, IssueSummary> {
+  const baseIssuesById = new Map(baseIssues.map((issue) => [issue.id, issue]));
+  let changed = false;
+  const nextOverrides: Record<string, IssueSummary> = {};
+
+  for (const [issueId, override] of Object.entries(issueOverrides)) {
+    const baseIssue = baseIssuesById.get(issueId);
+
+    if (baseIssue && areIssuesEquivalent(baseIssue, override)) {
+      changed = true;
+      continue;
+    }
+
+    nextOverrides[issueId] = override;
+  }
+
+  return changed ? nextOverrides : issueOverrides;
+}
+
+function reconcileCreatedIssues(
+  baseIssues: IssueSummary[],
+  createdIssues: IssueSummary[],
+): IssueSummary[] {
+  const nextCreatedIssues = createdIssues.filter(
+    (issue) => !baseIssues.some((baseIssue) => baseIssue.id === issue.id),
+  );
+
+  return nextCreatedIssues.length === createdIssues.length ? createdIssues : nextCreatedIssues;
+}
+
+function replaceIssueOverride(
+  issueOverrides: Record<string, IssueSummary>,
+  issueId: string,
+  issue: IssueSummary | null,
+): Record<string, IssueSummary> {
+  if (!issue) {
+    if (!(issueId in issueOverrides)) {
+      return issueOverrides;
+    }
+
+    const nextOverrides = { ...issueOverrides };
+    delete nextOverrides[issueId];
+    return nextOverrides;
+  }
+
+  if (issueOverrides[issueId] === issue) {
+    return issueOverrides;
+  }
+
+  return {
+    ...issueOverrides,
+    [issueId]: issue,
+  };
+}
+
+function areIssuesEquivalent(left: IssueSummary, right: IssueSummary): boolean {
+  return JSON.stringify(toComparableIssue(left)) === JSON.stringify(toComparableIssue(right));
+}
+
+function toComparableIssue(issue: IssueSummary) {
+  return {
+    id: issue.id,
+    identifier: issue.identifier,
+    title: issue.title,
+    description: issue.description ?? null,
+    updatedAt: issue.updatedAt,
+    stateId: issue.state.id,
+    teamKey: issue.team.key,
+    assigneeId: issue.assignee?.id ?? null,
+    labelIds: issue.labels.nodes.map((label) => label.id),
+    childIds: issue.children.nodes.map((child) => child.id),
+    parentId: issue.parent?.id ?? null,
+    comments: issue.comments.nodes.map((comment) => ({
+      id: comment.id,
+      body: comment.body,
+      createdAt: comment.createdAt,
+      userId: comment.user?.id ?? null,
+    })),
   };
 }
 

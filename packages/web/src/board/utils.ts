@@ -8,9 +8,26 @@ export function readStoredTeamKey(): string | null {
     return null;
   }
 
-  const storedTeamKey = window.localStorage.getItem(ACTIVE_TEAM_STORAGE_KEY)?.trim();
+  const storedTeamKey = readLocalStorageValue(ACTIVE_TEAM_STORAGE_KEY)?.trim();
 
   return storedTeamKey || null;
+}
+
+export function writeStoredTeamKey(teamKey: string | null): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    if (!teamKey) {
+      window.localStorage.removeItem(ACTIVE_TEAM_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(ACTIVE_TEAM_STORAGE_KEY, teamKey);
+  } catch {
+    // Ignore storage failures in restricted browser contexts.
+  }
 }
 
 export function getBoardColumns(team: TeamSummary | null) {
@@ -63,4 +80,12 @@ export function getStoredTeamKey(teams: TeamSummary[]): string | null {
   }
 
   return teams.some((team) => team.key === storedTeamKey) ? storedTeamKey : null;
+}
+
+function readLocalStorageValue(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
 }

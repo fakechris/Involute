@@ -7,11 +7,13 @@ import { GraphQLClient } from 'graphql-request';
 import { registerExportCommand } from './commands/export.js';
 import { registerImportCommand } from './commands/import.js';
 
-type ConfigKey = 'server-url' | 'token';
+type ConfigKey = 'server-url' | 'token' | 'viewer-email' | 'viewer-id';
 
 interface CliConfig {
   'server-url'?: string;
   token?: string;
+  'viewer-email'?: string;
+  'viewer-id'?: string;
 }
 
 interface JsonOption {
@@ -88,7 +90,7 @@ export class CliError extends Error {
   }
 }
 
-const CONFIG_KEYS: readonly ConfigKey[] = ['server-url', 'token'];
+const CONFIG_KEYS: readonly ConfigKey[] = ['server-url', 'token', 'viewer-email', 'viewer-id'];
 const CLI_PAGE_SIZE = 100;
 
 function resolveConfigPath(): string {
@@ -259,9 +261,15 @@ export async function createConfiguredGraphQLClient(configPath = getConfigPath()
   }
 
   const token = config.token;
+  const viewerId = config['viewer-id'] ?? process.env.INVOLUTE_VIEWER_ID;
+  const viewerEmail = config['viewer-email'] ?? process.env.INVOLUTE_VIEWER_EMAIL;
 
   return new GraphQLClient(joinGraphqlEndpoint(serverUrl), {
-    headers: token ? { authorization: `Bearer ${token}` } : undefined,
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(viewerId ? { 'x-involute-user-id': viewerId } : {}),
+      ...(viewerEmail ? { 'x-involute-user-email': viewerEmail } : {}),
+    },
   });
 }
 
@@ -314,7 +322,7 @@ function registerConfigCommands(program: Command): void {
     .command('set')
     .description('Persist a configuration value')
     .option('--json', 'Output machine-readable JSON')
-    .argument('<key>', 'Configuration key (server-url or token)')
+    .argument('<key>', 'Configuration key (server-url, token, viewer-email, or viewer-id)')
     .argument('<value>', 'Configuration value')
     .action(async function (this: Command, key: string, value: string, options: JsonOption) {
       await runWithCliErrorHandling(async () => {
@@ -333,7 +341,7 @@ function registerConfigCommands(program: Command): void {
   configCommand
     .command('get')
     .description('Read a configuration value')
-    .argument('<key>', 'Configuration key (server-url or token)')
+    .argument('<key>', 'Configuration key (server-url, token, viewer-email, or viewer-id)')
     .option('--json', 'Output machine-readable JSON')
     .action(async (key: string, options: JsonOption) => {
       await runWithCliErrorHandling(async () => {

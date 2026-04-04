@@ -7,31 +7,13 @@
  */
 
 import type { Command } from 'commander';
-import { config as loadDotenv } from 'dotenv';
 import { access } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { registerVerifyCommand } from './verify.js';
+import { ensureDatabaseUrl, loadEnv } from './shared.js';
 
 export interface ImportOptions {
   file: string;
-}
-
-/**
- * Load project environment variables (DATABASE_URL etc.) from the repo root .env.
- */
-export function loadEnv(): void {
-  // Try multiple potential locations for the .env file
-  const paths = [
-    join(process.cwd(), '.env'),
-    join(process.cwd(), '../../.env'), // When run from packages/cli
-  ];
-
-  for (const envPath of paths) {
-    const result = loadDotenv({ path: envPath });
-    if (!result.error) {
-      return;
-    }
-  }
 }
 
 /**
@@ -58,15 +40,6 @@ export async function validateExportDir(exportDir: string): Promise<void> {
     } catch {
       throw new Error(`Missing required file in export directory: ${file}`);
     }
-  }
-}
-
-function ensureDatabaseUrl(): void {
-  if (!process.env['DATABASE_URL']) {
-    throw new Error(
-      'DATABASE_URL environment variable is not set. ' +
-      'Run the project init script or set DATABASE_URL in your .env file.',
-    );
   }
 }
 

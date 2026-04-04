@@ -161,6 +161,20 @@ describe('App drag utils', () => {
     });
   });
 
+  it('falls back safely when localStorage access throws in restricted contexts', () => {
+    const originalGetItem = window.localStorage.getItem;
+    window.localStorage.getItem = () => {
+      throw new DOMException('Access denied', 'SecurityError');
+    };
+
+    try {
+      expect(getAuthToken()).toBe('changeme-set-your-token');
+      expect(getGraphqlUrl()).toBe('http://localhost:4200/graphql');
+    } finally {
+      window.localStorage.getItem = originalGetItem;
+    }
+  });
+
   it('ignores disallowed runtime API URL overrides from the query param', () => {
     window.history.replaceState({}, '', '/?involuteApiUrl=https%3A%2F%2Fevil.example%2Fgraphql');
 
