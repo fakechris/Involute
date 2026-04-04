@@ -242,13 +242,15 @@ export function BoardPage() {
         throw new Error('Mutation failed');
       }
 
-      setIssueOverrides((currentOverrides) =>
-        replaceIssueOverride(
+      setIssueOverrides((currentOverrides) => {
+        const currentIssue = currentOverrides[issue.id] ?? optimisticIssue;
+
+        return replaceIssueOverride(
           currentOverrides,
           issue.id,
-          mergeIssueWithPreservedComments(optimisticIssue, result.data!.issueUpdate.issue!),
-        ),
-      );
+          mergeIssueWithPreservedComments(currentIssue, result.data!.issueUpdate.issue!),
+        );
+      });
     } catch (mutationIssue) {
       setIssueOverrides((currentOverrides) =>
         replaceIssueOverride(currentOverrides, issue.id, previousOverride ?? null),
