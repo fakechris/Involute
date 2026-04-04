@@ -16,18 +16,19 @@
     }
   },
   "scripts": {
-    "build": "pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json",
-    "typecheck": "pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json",
+    "build": "pnpm --filter @involute/shared build && pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json",
+    "typecheck": "pnpm --filter @involute/shared build && pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json",
     "setup:web-ui-validation": "pnpm exec tsx src/validation-data-setup.ts",
     "setup:son-validation": "pnpm exec tsx src/son-validation-restore.ts",
-    "test": "pnpm exec prisma generate && pnpm exec prisma db push --skip-generate && node scripts/run-vitest.mjs",
-    "lint": "pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json"
+    "test": "pnpm --filter @involute/shared build && pnpm exec prisma generate && pnpm exec prisma db push --skip-generate && node scripts/run-vitest.mjs",
+    "lint": "pnpm --filter @involute/shared build && pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json"
   },
   "prisma": {
     "seed": "node --experimental-strip-types prisma/seed.ts"
   },
   "dependencies": {
     "@graphql-tools/schema": "^10.0.29",
+    "@involute/shared": "workspace:*",
     "@prisma/client": "^6.7.0",
     "dotenv": "^16.6.1",
     "graphql": "^16.11.0",

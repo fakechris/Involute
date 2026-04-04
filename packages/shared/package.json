@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./viewer-assertion": {
+      "types": "./dist/viewer-assertion.d.ts",
+      "import": "./dist/viewer-assertion.js"
     }
   },
   "scripts": {

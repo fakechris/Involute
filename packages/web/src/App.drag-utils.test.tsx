@@ -19,6 +19,7 @@ import {
 import {
   getAuthToken,
   getAuthTokenDetails,
+  getConfiguredViewerAssertion,
   getGraphqlUrl,
   getGraphqlUrlDetails,
 } from './lib/apollo';
@@ -173,6 +174,12 @@ describe('App drag utils', () => {
     } finally {
       window.localStorage.getItem = originalGetItem;
     }
+  });
+
+  it('reads the runtime viewer assertion from localStorage when configured', () => {
+    window.localStorage.setItem('involute.viewerAssertion', 'signed-viewer-assertion');
+
+    expect(getConfiguredViewerAssertion()).toBe('signed-viewer-assertion');
   });
 
   it('ignores disallowed runtime API URL overrides from the query param', () => {

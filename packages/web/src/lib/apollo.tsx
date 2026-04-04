@@ -7,13 +7,16 @@ import { ApolloProvider } from '@apollo/client/react';
 import { setContext } from '@apollo/client/link/context';
 import type { PropsWithChildren } from 'react';
 import { useMemo } from 'react';
+import { VIEWER_ASSERTION_HEADER } from '@involute/shared';
 import { readLocalStorageValue } from './storage';
 
 const DEFAULT_GRAPHQL_URL = 'http://localhost:4200/graphql';
 const LOCAL_STORAGE_AUTH_KEYS = ['involute.authToken', 'involuteAuthToken'] as const;
 const LOCAL_STORAGE_GRAPHQL_URL_KEYS = ['involute.graphqlUrl', 'involuteGraphqlUrl'] as const;
-const LOCAL_STORAGE_VIEWER_EMAIL_KEYS = ['involute.viewerEmail', 'involuteViewerEmail'] as const;
-const LOCAL_STORAGE_VIEWER_ID_KEYS = ['involute.viewerId', 'involuteViewerId'] as const;
+const LOCAL_STORAGE_VIEWER_ASSERTION_KEYS = [
+  'involute.viewerAssertion',
+  'involuteViewerAssertion',
+] as const;
 const DEFAULT_AUTH_TOKEN = 'changeme-set-your-token';
 const GRAPHQL_URL_OVERRIDE_QUERY_PARAM = 'involuteApiUrl';
 const ALLOWED_RUNTIME_GRAPHQL_HOSTS = new Set(['127.0.0.1', 'localhost']);
@@ -230,53 +233,29 @@ function isAllowedRuntimeGraphqlUrl(candidate: string): boolean {
 }
 
 function getViewerHeaders(): Record<string, string> {
-  const viewerId = getConfiguredViewerId();
-  const viewerEmail = getConfiguredViewerEmail();
+  const viewerAssertion = getConfiguredViewerAssertion();
 
   return {
-    ...(viewerId ? { 'x-involute-user-id': viewerId } : {}),
-    ...(viewerEmail ? { 'x-involute-user-email': viewerEmail } : {}),
+    ...(viewerAssertion ? { [VIEWER_ASSERTION_HEADER]: viewerAssertion } : {}),
   };
 }
 
-function getConfiguredViewerId(): string | null {
-  const envViewerId = import.meta.env.VITE_INVOLUTE_VIEWER_ID;
+export function getConfiguredViewerAssertion(): string | null {
+  const envViewerAssertion = import.meta.env.VITE_INVOLUTE_VIEWER_ASSERTION;
 
-  if (typeof envViewerId === 'string' && envViewerId.length > 0) {
-    return envViewerId;
+  if (typeof envViewerAssertion === 'string' && envViewerAssertion.length > 0) {
+    return envViewerAssertion;
   }
 
   if (typeof window === 'undefined') {
     return null;
   }
 
-  for (const storageKey of LOCAL_STORAGE_VIEWER_ID_KEYS) {
-    const viewerId = readLocalStorageValue(storageKey)?.trim();
+  for (const storageKey of LOCAL_STORAGE_VIEWER_ASSERTION_KEYS) {
+    const viewerAssertion = readLocalStorageValue(storageKey)?.trim();
 
-    if (viewerId) {
-      return viewerId;
-    }
-  }
-
-  return null;
-}
-
-function getConfiguredViewerEmail(): string | null {
-  const envViewerEmail = import.meta.env.VITE_INVOLUTE_VIEWER_EMAIL;
-
-  if (typeof envViewerEmail === 'string' && envViewerEmail.length > 0) {
-    return envViewerEmail;
-  }
-
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  for (const storageKey of LOCAL_STORAGE_VIEWER_EMAIL_KEYS) {
-    const viewerEmail = readLocalStorageValue(storageKey)?.trim();
-
-    if (viewerEmail) {
-      return viewerEmail;
+    if (viewerAssertion) {
+      return viewerAssertion;
     }
   }
 

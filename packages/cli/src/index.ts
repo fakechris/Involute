@@ -4,16 +4,20 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { GraphQLClient } from 'graphql-request';
+import {
+  type ViewerAssertionSubjectType,
+  VIEWER_ASSERTION_HEADER,
+} from '@involute/shared';
+import { createViewerAssertion } from '@involute/shared/viewer-assertion';
 import { registerExportCommand } from './commands/export.js';
 import { registerImportCommand } from './commands/import.js';
 
-type ConfigKey = 'server-url' | 'token' | 'viewer-email' | 'viewer-id';
+type ConfigKey = 'server-url' | 'token' | 'viewer-assertion';
 
 interface CliConfig {
   'server-url'?: string;
   token?: string;
-  'viewer-email'?: string;
-  'viewer-id'?: string;
+  'viewer-assertion'?: string;
 }
 
 interface JsonOption {
@@ -90,7 +94,7 @@ export class CliError extends Error {
   }
 }
 
-const CONFIG_KEYS: readonly ConfigKey[] = ['server-url', 'token', 'viewer-email', 'viewer-id'];
+const CONFIG_KEYS: readonly ConfigKey[] = ['server-url', 'token', 'viewer-assertion'];
 const CLI_PAGE_SIZE = 100;
 
 function resolveConfigPath(): string {
@@ -261,14 +265,12 @@ export async function createConfiguredGraphQLClient(configPath = getConfigPath()
   }
 
   const token = config.token;
-  const viewerId = process.env.INVOLUTE_VIEWER_ID ?? config['viewer-id'];
-  const viewerEmail = process.env.INVOLUTE_VIEWER_EMAIL ?? config['viewer-email'];
+  const viewerAssertion = process.env.INVOLUTE_VIEWER_ASSERTION ?? config['viewer-assertion'];
 
   return new GraphQLClient(joinGraphqlEndpoint(serverUrl), {
     headers: {
       ...(token ? { authorization: `Bearer ${token}` } : {}),
-      ...(viewerId ? { 'x-involute-user-id': viewerId } : {}),
-      ...(viewerEmail ? { 'x-involute-user-email': viewerEmail } : {}),
+      ...(viewerAssertion ? { [VIEWER_ASSERTION_HEADER]: viewerAssertion } : {}),
     },
   });
 }
@@ -322,7 +324,7 @@ function registerConfigCommands(program: Command): void {
     .command('set')
     .description('Persist a configuration value')
     .option('--json', 'Output machine-readable JSON')
-    .argument('<key>', 'Configuration key (server-url, token, viewer-email, or viewer-id)')
+    .argument('<key>', 'Configuration key (server-url, token, or viewer-assertion)')
     .argument('<value>', 'Configuration value')
     .action(async function (this: Command, key: string, value: string, options: JsonOption) {
       await runWithCliErrorHandling(async () => {
@@ -341,7 +343,7 @@ function registerConfigCommands(program: Command): void {
   configCommand
     .command('get')
     .description('Read a configuration value')
-    .argument('<key>', 'Configuration key (server-url, token, viewer-email, or viewer-id)')
+    .argument('<key>', 'Configuration key (server-url, token, or viewer-assertion)')
     .option('--json', 'Output machine-readable JSON')
     .action(async function (this: Command, key: string, options: JsonOption) {
       await runWithCliErrorHandling(async () => {
@@ -355,6 +357,61 @@ function registerConfigCommands(program: Command): void {
         process.stdout.write(formatOutput(payload, context));
       });
     });
+}
+
+function registerAuthCommands(program: Command): void {
+  const authCommand = program.command('auth').description('Manage local authentication helpers');
+  const viewerAssertionCommand = authCommand
+    .command('viewer-assertion')
+    .description('Create signed viewer assertions for trusted impersonation');
+
+  viewerAssertionCommand
+    .command('create')
+    .description('Create a signed viewer assertion for a user ID or email')
+    .argument('<subject>', 'User UUID or email address')
+    .option('--json', 'Output machine-readable JSON')
+    .option('--secret <secret>', 'Override INVOLUTE_VIEWER_ASSERTION_SECRET for this command')
+    .option('--ttl <seconds>', 'Assertion lifetime in seconds', '3600')
+    .action(
+      async function (
+        this: Command,
+        subject: string,
+        options: JsonOption & { secret?: string; ttl: string },
+      ) {
+        await runWithCliErrorHandling(async () => {
+          const ttlSeconds = parseTtlSeconds(options.ttl);
+          const secret = options.secret ?? process.env.INVOLUTE_VIEWER_ASSERTION_SECRET;
+
+          if (!secret) {
+            throw new CliError(
+              'Missing viewer assertion secret. Set INVOLUTE_VIEWER_ASSERTION_SECRET or pass --secret.',
+            );
+          }
+
+          const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
+          const subjectType = inferViewerAssertionSubjectType(subject);
+          const assertion = createViewerAssertion(
+            {
+              exp: Math.floor(expiresAt.getTime() / 1000),
+              sub: subject,
+              subType: subjectType,
+            },
+            secret,
+          );
+          const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+          const payload = context.json
+            ? {
+                assertion,
+                expiresAt: expiresAt.toISOString(),
+                subject,
+                subjectType,
+              }
+            : assertion;
+
+          process.stdout.write(formatOutput(payload, context));
+        });
+      },
+    );
 }
 
 async function probeConnection(context: CommandContext): Promise<void> {
@@ -962,6 +1019,7 @@ export function createProgram(): Command {
 
   registerGlobalOptions(program);
   registerConfigCommands(program);
+  registerAuthCommands(program);
 
   registerExportCommand(program);
   registerImportCommand(program);
@@ -1141,4 +1199,18 @@ const currentEntryPoint = process.argv[1];
 
 if (currentEntryPoint && import.meta.url === pathToFileURL(currentEntryPoint).href) {
   createProgram().parse(process.argv);
+}
+
+function inferViewerAssertionSubjectType(subject: string): ViewerAssertionSubjectType {
+  return subject.includes('@') ? 'email' : 'id';
+}
+
+function parseTtlSeconds(value: string): number {
+  const parsedValue = Number(value);
+
+  if (!Number.isInteger(parsedValue) || parsedValue <= 0) {
+    throw new CliError(`Invalid --ttl value "${value}". Expected a positive integer number of seconds.`);
+  }
+
+  return parsedValue;
 }
