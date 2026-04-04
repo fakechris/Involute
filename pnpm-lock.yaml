@@ -13,6 +13,9 @@ importers:
       '@involute/server':
         specifier: workspace:*
         version: link:../server
+      '@involute/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@prisma/client':
         specifier: ^6.7.0
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
@@ -44,6 +47,9 @@ importers:
       '@graphql-tools/schema':
         specifier: ^10.0.29
         version: 10.0.31(graphql@16.13.2)
+      '@involute/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@prisma/client':
         specifier: ^6.7.0
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
@@ -99,6 +105,9 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.4)
+      '@involute/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@testing-library/jest-dom':
         specifier: ^6.9.1
         version: 6.9.1

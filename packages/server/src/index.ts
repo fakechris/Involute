@@ -21,6 +21,7 @@ export interface StartServerOptions {
   authToken?: string;
   port?: number;
   prisma?: PrismaClient;
+  viewerAssertionSecret?: string | null;
 }
 
 export interface StartedServer {
@@ -48,6 +49,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
         request,
         prisma,
         authToken: options.authToken ?? environment.authToken,
+        viewerAssertionSecret: options.viewerAssertionSecret ?? environment.viewerAssertionSecret,
       }),
     graphqlEndpoint: '/graphql',
     logging: false,

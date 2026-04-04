@@ -11,6 +11,7 @@ export interface ServerEnvironment {
   databaseUrl: string;
   authToken: string;
   port: number;
+  viewerAssertionSecret: string | null;
 }
 
 export function getProjectEnvPath(): string {
@@ -34,5 +35,6 @@ export function getServerEnvironment(env: NodeJS.ProcessEnv = process.env): Serv
     databaseUrl: env.DATABASE_URL ?? '',
     authToken: env.AUTH_TOKEN ?? '',
     port: Number.isFinite(port) && port > 0 ? port : DEFAULT_PORT,
+    viewerAssertionSecret: env.VIEWER_ASSERTION_SECRET?.trim() || null,
   };
 }

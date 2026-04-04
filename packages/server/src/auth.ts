@@ -1,13 +1,12 @@
 import { timingSafeEqual } from 'node:crypto';
 
 import type { PrismaClient, User } from '@prisma/client';
+import { VIEWER_ASSERTION_HEADER } from '@involute/shared';
+import { verifyViewerAssertion } from '@involute/shared/viewer-assertion';
 import type { Plugin } from 'graphql-yoga';
 
 import { DEFAULT_ADMIN_EMAIL } from './constants.js';
 import { createNotAuthenticatedError, NOT_AUTHENTICATED_MESSAGE } from './errors.js';
-
-const VIEWER_ID_HEADER = 'x-involute-user-id';
-const VIEWER_EMAIL_HEADER = 'x-involute-user-email';
 
 export interface GraphQLContext {
   prisma: PrismaClient;
@@ -18,6 +17,7 @@ export interface GraphQLContextOptions {
   request: Request;
   prisma: PrismaClient;
   authToken: string;
+  viewerAssertionSecret?: string | null;
 }
 
 export function extractTokenFromAuthorizationHeader(
@@ -57,6 +57,7 @@ export async function createGraphQLContext({
   request,
   prisma,
   authToken,
+  viewerAssertionSecret,
 }: GraphQLContextOptions): Promise<GraphQLContext> {
   if (!isAuthorizedRequest(request, authToken)) {
     return {
@@ -65,7 +66,7 @@ export async function createGraphQLContext({
     };
   }
 
-  const viewerLookup = getViewerLookup(request);
+  const viewerLookup = getViewerLookup(request, viewerAssertionSecret);
   const viewer = await prisma.user.findUnique({
     where: viewerLookup,
   });
@@ -123,17 +124,19 @@ function tokensMatch(left: string, right: string): boolean {
   return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-function getViewerLookup(request: Request): { email: string } | { id: string } {
-  const viewerId = request.headers.get(VIEWER_ID_HEADER)?.trim();
+function getViewerLookup(
+  request: Request,
+  viewerAssertionSecret: string | null | undefined,
+): { email: string } | { id: string } {
+  const viewerAssertion = verifyViewerAssertion(
+    request.headers.get(VIEWER_ASSERTION_HEADER)?.trim(),
+    viewerAssertionSecret,
+  );
 
-  if (viewerId) {
-    return { id: viewerId };
-  }
-
-  const viewerEmail = request.headers.get(VIEWER_EMAIL_HEADER)?.trim();
-
-  if (viewerEmail) {
-    return { email: viewerEmail };
+  if (viewerAssertion) {
+    return viewerAssertion.subType === 'id'
+      ? { id: viewerAssertion.sub }
+      : { email: viewerAssertion.sub };
   }
 
   return { email: DEFAULT_ADMIN_EMAIL };

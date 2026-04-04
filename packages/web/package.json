@@ -4,13 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec vite build",
-    "typecheck": "pnpm exec tsc -p tsconfig.json --noEmit",
-    "test": "pnpm exec vitest --config vitest.config.ts --passWithNoTests",
-    "lint": "pnpm exec tsc -p tsconfig.json --noEmit"
+    "build": "pnpm --filter @involute/shared build && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec vite build",
+    "typecheck": "pnpm --filter @involute/shared build && pnpm exec tsc -p tsconfig.json --noEmit",
+    "test": "pnpm --filter @involute/shared build && pnpm exec vitest --config vitest.config.ts --passWithNoTests",
+    "lint": "pnpm --filter @involute/shared build && pnpm exec tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@apollo/client": "^4.0.9",
+    "@involute/shared": "workspace:*",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "graphql": "^16.11.0",

@@ -4,3 +4,16 @@ dist
 .env
 .DS_Store
 !packages/server/prisma/.env
+.factory/library/
+.factory/validation/cli/user-testing/
+.factory/validation/import/scrutiny/reviews/
+.factory/validation/import/user-testing/tmp/
+.factory/validation/web-ui/
+packages/server/src/*.js
+packages/server/src/*.js.map
+packages/server/src/*.d.ts
+packages/server/src/*.d.ts.map
+packages/server/prisma/*.js
+packages/server/prisma/*.js.map
+packages/server/prisma/*.d.ts
+packages/server/prisma/*.d.ts.map

@@ -10,7 +10,14 @@ import type {
 } from '@prisma/client';
 
 import { makeExecutableSchema } from '@graphql-tools/schema';
-import { GraphQLScalarType, Kind } from 'graphql';
+import {
+  GraphQLScalarType,
+  Kind,
+  type FieldNode,
+  type FragmentDefinitionNode,
+  type GraphQLResolveInfo,
+  type SelectionSetNode,
+} from 'graphql';
 
 import { DEFAULT_WORKFLOW_STATE_ORDER } from './constants.js';
 import { getExposedError, isPrismaInvalidInputError } from './errors.js';
@@ -66,8 +73,10 @@ const COMMENT_ORDER_BY: Prisma.CommentOrderByWithRelationInput[] = [
   { id: 'asc' },
 ];
 
-function buildIssueListInclude(): Prisma.IssueInclude {
-  return {
+function buildIssueListInclude(
+  options: { includeChildren?: boolean; includeComments?: boolean } = {},
+): Prisma.IssueInclude {
+  const include: Prisma.IssueInclude = {
     assignee: true,
     labels: {
       orderBy: {
@@ -82,18 +91,30 @@ function buildIssueListInclude(): Prisma.IssueInclude {
       },
     },
   };
-}
 
-function buildIssueDetailInclude(): Prisma.IssueInclude {
-  return {
-    ...buildIssueListInclude(),
-    comments: {
+  if (options.includeChildren) {
+    include.children = {
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    };
+  }
+
+  if (options.includeComments) {
+    include.comments = {
       include: {
         user: true,
       },
       orderBy: COMMENT_ORDER_BY.slice(),
-    },
-  };
+    };
+  }
+
+  return include;
+}
+
+function buildIssueDetailInclude(): Prisma.IssueInclude {
+  return buildIssueListInclude({
+    includeChildren: true,
+    includeComments: true,
+  });
 }
 
 const DateTimeScalar = new GraphQLScalarType({
@@ -332,14 +353,19 @@ const resolvers = {
       _parent: unknown,
       args: { after?: string | null; filter?: IssueFilterInput | null; first: number },
       context: GraphQLContext,
+      info: GraphQLResolveInfo,
     ): Promise<{ nodes: IssueParent[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
       const where = combineIssueWhere(
         buildIssueWhere(args.filter, context.viewer?.id ?? null),
         buildIssueCursorWhere(args.after),
       );
+      const requestedIssueFields = getRequestedIssueConnectionFields(info);
       const issues = await context.prisma.issue.findMany({
         ...(where ? { where } : {}),
-        include: buildIssueListInclude(),
+        include: buildIssueListInclude({
+          includeChildren: requestedIssueFields.has('children'),
+          includeComments: requestedIssueFields.has('comments'),
+        }),
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: args.first + 1,
       });
@@ -618,7 +644,7 @@ async function getIssueById(prisma: PrismaClient, id: string): Promise<IssuePare
     where: {
       id,
     },
-    include: buildIssueListInclude(),
+    include: buildIssueDetailInclude(),
   });
 }
 
@@ -835,4 +861,65 @@ async function runCommentMutation<TResult extends { comment: Comment; success: t
 
     throw error;
   }
+}
+
+function getRequestedIssueConnectionFields(info: GraphQLResolveInfo): Set<string> {
+  const fieldNames = new Set<string>();
+
+  for (const fieldNode of info.fieldNodes) {
+    collectIssueConnectionFieldNames(fieldNode.selectionSet, info.fragments, fieldNames, false);
+  }
+
+  return fieldNames;
+}
+
+function collectIssueConnectionFieldNames(
+  selectionSet: SelectionSetNode | undefined,
+  fragments: Record<string, FragmentDefinitionNode>,
+  fieldNames: Set<string>,
+  insideNodes: boolean,
+): void {
+  if (!selectionSet) {
+    return;
+  }
+
+  for (const selection of selectionSet.selections) {
+    if (selection.kind === Kind.FIELD) {
+      collectIssueConnectionFieldName(selection, fragments, fieldNames, insideNodes);
+      continue;
+    }
+
+    if (selection.kind === Kind.INLINE_FRAGMENT) {
+      collectIssueConnectionFieldNames(selection.selectionSet, fragments, fieldNames, insideNodes);
+      continue;
+    }
+
+    if (selection.kind === Kind.FRAGMENT_SPREAD) {
+      collectIssueConnectionFieldNames(
+        fragments[selection.name.value]?.selectionSet,
+        fragments,
+        fieldNames,
+        insideNodes,
+      );
+    }
+  }
+}
+
+function collectIssueConnectionFieldName(
+  field: FieldNode,
+  fragments: Record<string, FragmentDefinitionNode>,
+  fieldNames: Set<string>,
+  insideNodes: boolean,
+): void {
+  if (insideNodes) {
+    fieldNames.add(field.name.value);
+    return;
+  }
+
+  if (field.name.value === 'nodes') {
+    collectIssueConnectionFieldNames(field.selectionSet, fragments, fieldNames, true);
+    return;
+  }
+
+  collectIssueConnectionFieldNames(field.selectionSet, fragments, fieldNames, false);
 }

@@ -1,9 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createViewerAssertion } from '@involute/shared/viewer-assertion';
 
 import { DEFAULT_ADMIN_EMAIL } from './constants.js';
 import { createGraphQLContext, extractTokenFromAuthorizationHeader, isAuthorizedRequest } from './auth.js';
 
 describe('auth', () => {
+  const futureExpiry = () => Math.floor((Date.now() + 60_000) / 1000);
+
   it('extracts bearer tokens from the authorization header', () => {
     expect(extractTokenFromAuthorizationHeader('Bearer test-token')).toBe('test-token');
     expect(extractTokenFromAuthorizationHeader('  bearer   test-token  ')).toBe('test-token');
@@ -21,8 +24,16 @@ describe('auth', () => {
     expect(isAuthorizedRequest(request, 'shared-secreu')).toBe(false);
   });
 
-  it('resolves the viewer from the request email header when provided', async () => {
+  it('resolves the viewer from a signed email assertion when provided', async () => {
     const findUnique = vi.fn().mockResolvedValue({ id: 'user-1', email: 'person@example.com' });
+    const viewerAssertion = createViewerAssertion(
+      {
+        exp: futureExpiry(),
+        sub: 'person@example.com',
+        subType: 'email',
+      },
+      'viewer-secret',
+    );
 
     const context = await createGraphQLContext({
       authToken: 'shared-secret',
@@ -31,10 +42,11 @@ describe('auth', () => {
           findUnique,
         },
       } as never,
+      viewerAssertionSecret: 'viewer-secret',
       request: new Request('http://localhost/graphql', {
         headers: {
           authorization: 'Bearer shared-secret',
-          'x-involute-user-email': 'person@example.com',
+          'x-involute-viewer-assertion': viewerAssertion,
         },
       }),
     });
@@ -47,8 +59,16 @@ describe('auth', () => {
     expect(context.viewer).toEqual({ id: 'user-1', email: 'person@example.com' });
   });
 
-  it('resolves the viewer from the request user ID header when provided', async () => {
+  it('resolves the viewer from a signed user ID assertion when provided', async () => {
     const findUnique = vi.fn().mockResolvedValue({ id: 'user-1', email: 'person@example.com' });
+    const viewerAssertion = createViewerAssertion(
+      {
+        exp: futureExpiry(),
+        sub: 'user-1',
+        subType: 'id',
+      },
+      'viewer-secret',
+    );
 
     const context = await createGraphQLContext({
       authToken: 'shared-secret',
@@ -57,11 +77,11 @@ describe('auth', () => {
           findUnique,
         },
       } as never,
+      viewerAssertionSecret: 'viewer-secret',
       request: new Request('http://localhost/graphql', {
         headers: {
           authorization: 'Bearer shared-secret',
-          'x-involute-user-id': 'user-1',
-          'x-involute-user-email': 'ignored@example.com',
+          'x-involute-viewer-assertion': viewerAssertion,
         },
       }),
     });
@@ -74,7 +94,7 @@ describe('auth', () => {
     expect(context.viewer).toEqual({ id: 'user-1', email: 'person@example.com' });
   });
 
-  it('falls back to the default admin viewer when no explicit viewer header is present', async () => {
+  it('falls back to the default admin viewer when no trusted viewer assertion is present', async () => {
     const findUnique = vi.fn().mockResolvedValue({ id: 'admin-1', email: DEFAULT_ADMIN_EMAIL });
 
     await createGraphQLContext({
@@ -87,6 +107,32 @@ describe('auth', () => {
       request: new Request('http://localhost/graphql', {
         headers: {
           authorization: 'Bearer shared-secret',
+        },
+      }),
+    });
+
+    expect(findUnique).toHaveBeenCalledWith({
+      where: {
+        email: DEFAULT_ADMIN_EMAIL,
+      },
+    });
+  });
+
+  it('ignores invalid viewer assertions and keeps the default admin viewer', async () => {
+    const findUnique = vi.fn().mockResolvedValue({ id: 'admin-1', email: DEFAULT_ADMIN_EMAIL });
+
+    await createGraphQLContext({
+      authToken: 'shared-secret',
+      prisma: {
+        user: {
+          findUnique,
+        },
+      } as never,
+      viewerAssertionSecret: 'viewer-secret',
+      request: new Request('http://localhost/graphql', {
+        headers: {
+          authorization: 'Bearer shared-secret',
+          'x-involute-viewer-assertion': 'definitely.invalid',
         },
       }),
     });
