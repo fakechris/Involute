@@ -2,7 +2,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
 import type { Html5BoardDragPayload, IssueSummary } from '../board/types';
-import { createHtml5BoardDragPayload } from '../routes/BoardPage';
+import { createHtml5BoardDragPayload } from '../board/utils';
 
 interface IssueCardProps {
   issue: IssueSummary;

@@ -344,7 +344,7 @@ export function IssueDetailDrawer({
                           void onCommentDelete(activeIssue, comment.id).catch(() => undefined);
                         }}
                       >
-                        Delete
+                        Delete comment
                       </button>
                     </div>
                   </div>

@@ -6,7 +6,7 @@
   "scripts": {
     "build": "pnpm --filter @involute/shared build && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec vite build",
     "typecheck": "pnpm --filter @involute/shared build && pnpm exec tsc -p tsconfig.json --noEmit",
-    "test": "pnpm --filter @involute/shared build && pnpm exec vitest --config vitest.config.ts --passWithNoTests",
+    "test": "sh -c 'pnpm --filter @involute/shared build && export NODE_OPTIONS=--max-old-space-size=8192; for file in $(find src -type f \\( -name \"*.test.ts\" -o -name \"*.test.tsx\" \\) | sort); do pnpm exec vitest --config vitest.config.ts --reporter=verbose --passWithNoTests --run \"$file\" || exit $?; done'",
     "lint": "pnpm --filter @involute/shared build && pnpm exec tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

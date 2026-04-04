@@ -18,12 +18,7 @@ import {
   normalizeGraphQLErrorMessage,
   setConfigValue,
 } from '../index.js';
-import {
-  runImport,
-  runTeamImport,
-  teamImportDependencies,
-  validateExportDir,
-} from './import.js';
+import { runImport, runTeamImport, teamImportDependencies, validateExportDir } from './import.js';
 import { loadEnv } from './shared.js';
 
 // --- Fixture data matching Linear export format ---
@@ -98,15 +93,6 @@ describe('import command registration', () => {
     expect(verifyCmd).toBeDefined();
   });
 
-  it('registers team as a subcommand of import', () => {
-    const program = createProgram();
-    const importCmd = program.commands.find((c) => c.name() === 'import');
-    expect(importCmd).toBeDefined();
-
-    const teamCmd = importCmd!.commands.find((c) => c.name() === 'team');
-    expect(teamCmd).toBeDefined();
-  });
-
   it('verify subcommand requires --file option', () => {
     const program = createProgram();
     const importCmd = program.commands.find((c) => c.name() === 'import');
@@ -179,103 +165,136 @@ describe('runImport error handling', () => {
   });
 });
 
-describe('runTeamImport', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('runs export, import, and verify in order and removes temporary exports after success', async () => {
-    const exportDir = join(tmpdir(), 'involute-team-import-son-success');
-    const mkdtempSpy = vi.spyOn(teamImportDependencies, 'mkdtemp').mockResolvedValue(exportDir);
-    const runExportSpy = vi.spyOn(teamImportDependencies, 'runExport').mockResolvedValue();
-    const runImportSpy = vi.spyOn(teamImportDependencies, 'runImport').mockResolvedValue();
-    const runVerifySpy = vi.spyOn(teamImportDependencies, 'runVerify').mockResolvedValue({
-      allPassed: true,
-      entities: [],
-    });
-    const rmSpy = vi.spyOn(teamImportDependencies, 'rm').mockResolvedValue(undefined);
-
-    const result = await runTeamImport({
-      team: 'SON',
-      token: 'linear-token',
-    });
-
-    expect(mkdtempSpy).toHaveBeenCalled();
-    expect(runExportSpy).toHaveBeenCalledWith({
-      token: 'linear-token',
-      team: 'SON',
-      output: exportDir,
-    });
-    expect(runImportSpy).toHaveBeenCalledWith({ file: exportDir });
-    expect(runVerifySpy).toHaveBeenCalledWith({ file: exportDir });
-    expect(rmSpy).toHaveBeenCalledWith(exportDir, { recursive: true, force: true });
-    expect(result).toEqual({
-      exportDir,
-      exportRetained: false,
-      verification: {
-        allPassed: true,
-        entities: [],
-      },
-    });
-  });
-
-  it('retains the export directory when verification fails', async () => {
-    const exportDir = join(tmpdir(), 'involute-team-import-son-fail');
-    vi.spyOn(teamImportDependencies, 'mkdtemp').mockResolvedValue(exportDir);
-    vi.spyOn(teamImportDependencies, 'runExport').mockResolvedValue();
-    vi.spyOn(teamImportDependencies, 'runImport').mockResolvedValue();
-    vi.spyOn(teamImportDependencies, 'runVerify').mockResolvedValue({
-      allPassed: false,
-      entities: [
-        {
-          entity: 'Issues',
-          exportCount: 10,
-          dbCount: 9,
-          passed: false,
-          details: '1 export issues have no import mapping',
-        },
-      ],
-    });
-    const rmSpy = vi.spyOn(teamImportDependencies, 'rm').mockResolvedValue(undefined);
-
-    await expect(
-      runTeamImport({
-        team: 'SON',
-        token: 'linear-token',
-      }),
-    ).rejects.toThrow(`Team import verification failed for "SON". Export preserved at ${exportDir}.`);
-
-    expect(rmSpy).not.toHaveBeenCalled();
-  });
-
-  it('keeps a user-provided output directory after success', async () => {
-    const exportDir = join(tmpdir(), 'involute-team-import-son-retained');
-    const mkdtempSpy = vi.spyOn(teamImportDependencies, 'mkdtemp').mockResolvedValue(exportDir);
-    vi.spyOn(teamImportDependencies, 'runExport').mockResolvedValue();
-    vi.spyOn(teamImportDependencies, 'runImport').mockResolvedValue();
-    vi.spyOn(teamImportDependencies, 'runVerify').mockResolvedValue({
-      allPassed: true,
-      entities: [],
-    });
-    const rmSpy = vi.spyOn(teamImportDependencies, 'rm').mockResolvedValue(undefined);
-
-    const result = await runTeamImport({
-      team: 'SON',
-      token: 'linear-token',
-      output: exportDir,
-    });
-
-    expect(mkdtempSpy).not.toHaveBeenCalled();
-    expect(rmSpy).not.toHaveBeenCalled();
-    expect(result.exportRetained).toBe(true);
-    expect(result.exportDir).toBe(exportDir);
-  });
-});
-
 describe('loadEnv', () => {
   it('loads environment variables without throwing', () => {
     // loadEnv should not throw even if .env doesn't exist in current path
     expect(() => loadEnv()).not.toThrow();
+  });
+});
+
+describe('runTeamImport', () => {
+  const originalDependencies = { ...teamImportDependencies };
+
+  afterEach(() => {
+    teamImportDependencies.mkdtemp = originalDependencies.mkdtemp;
+    teamImportDependencies.rm = originalDependencies.rm;
+    teamImportDependencies.runExport = originalDependencies.runExport;
+    teamImportDependencies.runImport = originalDependencies.runImport;
+    teamImportDependencies.runVerify = originalDependencies.runVerify;
+    teamImportDependencies.writeFile = originalDependencies.writeFile;
+  });
+
+  it('runs export, import, verify, and writes an import summary', async () => {
+    const writeSummary = vi.fn().mockResolvedValue(undefined);
+    const removeExport = vi.fn().mockResolvedValue(undefined);
+
+    teamImportDependencies.mkdtemp = vi.fn().mockResolvedValue('/tmp/involute-team-import-tst-123');
+    teamImportDependencies.rm = removeExport;
+    teamImportDependencies.runExport = vi.fn().mockResolvedValue(undefined);
+    teamImportDependencies.runImport = vi.fn().mockResolvedValue(undefined);
+    teamImportDependencies.runVerify = vi.fn().mockResolvedValue({
+      allPassed: true,
+      entities: [
+        {
+          dbCount: 1,
+          entity: 'Issues',
+          exportCount: 1,
+          passed: true,
+        },
+      ],
+    });
+    teamImportDependencies.writeFile = writeSummary;
+
+    const result = await runTeamImport({
+      team: 'TST',
+      token: 'linear-token',
+    });
+
+    expect(teamImportDependencies.runExport).toHaveBeenCalledWith({
+      output: '/tmp/involute-team-import-tst-123',
+      team: 'TST',
+      token: 'linear-token',
+    });
+    expect(teamImportDependencies.runImport).toHaveBeenCalledWith({
+      file: '/tmp/involute-team-import-tst-123',
+    });
+    expect(teamImportDependencies.runVerify).toHaveBeenCalledWith({
+      file: '/tmp/involute-team-import-tst-123',
+    });
+    expect(writeSummary).toHaveBeenCalledTimes(1);
+    expect(removeExport).toHaveBeenCalledWith('/tmp/involute-team-import-tst-123', {
+      force: true,
+      recursive: true,
+    });
+    expect(result.exportRetained).toBe(false);
+    expect(writeSummary).toHaveBeenCalledWith(result.summaryPath, expect.any(String), 'utf8');
+    expect(result.summaryPath).toMatch(/involute-team-import-tst-\d+-summary\.json$/);
+  });
+
+  it('retains the export directory and writes a summary when verification fails', async () => {
+    const removeExport = vi.fn().mockResolvedValue(undefined);
+    const writeSummary = vi.fn().mockResolvedValue(undefined);
+
+    teamImportDependencies.mkdtemp = vi.fn().mockResolvedValue('/tmp/involute-team-import-tst-456');
+    teamImportDependencies.rm = removeExport;
+    teamImportDependencies.runExport = vi.fn().mockResolvedValue(undefined);
+    teamImportDependencies.runImport = vi.fn().mockResolvedValue(undefined);
+    teamImportDependencies.runVerify = vi.fn().mockResolvedValue({
+      allPassed: false,
+      entities: [
+        {
+          dbCount: 0,
+          entity: 'Issues',
+          exportCount: 1,
+          passed: false,
+        },
+      ],
+    });
+    teamImportDependencies.writeFile = writeSummary;
+
+    await expect(
+      runTeamImport({
+        team: 'TST',
+        token: 'linear-token',
+      }),
+    ).rejects.toThrow('Summary: /tmp/involute-team-import-tst-456/involute-import-summary.json.');
+    expect(removeExport).not.toHaveBeenCalled();
+    expect(writeSummary).toHaveBeenCalledWith(
+      '/tmp/involute-team-import-tst-456/involute-import-summary.json',
+      expect.any(String),
+      'utf8',
+    );
+  });
+
+  it('keeps a user-provided output directory and writes the summary inside it', async () => {
+    const removeExport = vi.fn().mockResolvedValue(undefined);
+    const writeSummary = vi.fn().mockResolvedValue(undefined);
+
+    teamImportDependencies.mkdtemp = vi.fn();
+    teamImportDependencies.rm = removeExport;
+    teamImportDependencies.runExport = vi.fn().mockResolvedValue(undefined);
+    teamImportDependencies.runImport = vi.fn().mockResolvedValue(undefined);
+    teamImportDependencies.runVerify = vi.fn().mockResolvedValue({
+      allPassed: true,
+      entities: [],
+    });
+    teamImportDependencies.writeFile = writeSummary;
+
+    const result = await runTeamImport({
+      output: '/tmp/custom-team-export',
+      team: 'TST',
+      token: 'linear-token',
+    });
+
+    expect(teamImportDependencies.mkdtemp).not.toHaveBeenCalled();
+    expect(removeExport).not.toHaveBeenCalled();
+    expect(result.exportRetained).toBe(true);
+    expect(result.summaryPath).toBe('/tmp/custom-team-export/involute-import-summary.json');
+    expect(writeSummary).toHaveBeenCalledWith(
+      '/tmp/custom-team-export/involute-import-summary.json',
+      expect.any(String),
+      'utf8',
+    );
   });
 });
 

@@ -17,7 +17,7 @@ interface VerifyOptions {
   file: string;
 }
 
-interface EntityVerification {
+export interface EntityVerification {
   entity: string;
   exportCount: number;
   dbCount: number;
@@ -25,7 +25,7 @@ interface EntityVerification {
   details?: string | undefined;
 }
 
-interface VerificationResult {
+export interface VerificationResult {
   entities: EntityVerification[];
   allPassed: boolean;
 }
@@ -74,33 +74,6 @@ function commentUpdatedAtMatchesAllowedImportSemantics(params: {
     isWithinOneSecond(actualUpdatedAt, exportedCreatedAt) ||
     isWithinOneSecond(actualUpdatedAt, issueUpdatedAt)
   );
-}
-
-/**
- * Collect all comment IDs from the export comments directory.
- */
-async function collectExportCommentIds(exportDir: string): Promise<string[]> {
-  const commentsDir = join(exportDir, 'comments');
-  const exists = await fileExists(commentsDir);
-
-  if (!exists) {
-    return [];
-  }
-
-  const files = await readdir(commentsDir);
-  const ids: string[] = [];
-
-  for (const file of files) {
-    if (file.endsWith('.json')) {
-      const comments = await readJsonFile<Array<{ id: string }>>(join(commentsDir, file));
-
-      for (const comment of comments) {
-        ids.push(comment.id);
-      }
-    }
-  }
-
-  return ids;
 }
 
 async function verifyComments(
@@ -600,9 +573,6 @@ async function verifyWorkflowStates(
     details: details.join('; '),
   };
 }
-
-// Exported interface for types used by the exported `runVerify` function's return
-export type { VerificationResult, EntityVerification };
 
 /**
  * Run the verification pipeline — extracted for testability.

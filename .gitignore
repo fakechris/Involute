@@ -9,6 +9,10 @@ dist
 .factory/validation/import/scrutiny/reviews/
 .factory/validation/import/user-testing/tmp/
 .factory/validation/web-ui/
+.tmp/*
+!.tmp/.gitkeep
+playwright-report
+test-results
 packages/server/src/*.js
 packages/server/src/*.js.map
 packages/server/src/*.d.ts
@@ -17,4 +21,3 @@ packages/server/prisma/*.js
 packages/server/prisma/*.js.map
 packages/server/prisma/*.d.ts
 packages/server/prisma/*.d.ts.map
-.tmp/

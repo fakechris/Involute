@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { cleanup, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, vi } from 'vitest';
@@ -244,15 +244,32 @@ export const boardQueryResult: BoardPageQueryData = {
   },
 };
 
-export function renderApp(queryState: {
+type QueryState = {
   data?: BoardPageQueryData;
   error?: Error;
   fetchMore?: ReturnType<typeof vi.fn>;
   loading?: boolean;
-} = {
-  data: boardQueryResult,
-  loading: false,
-}, initialEntries: string[] = ['/']): ReturnType<typeof render> {
+};
+
+export function renderApp(
+  componentOrQueryState: ComponentType | QueryState = {
+    data: boardQueryResult,
+    loading: false,
+  },
+  queryStateOrInitialEntries: QueryState | string[] = ['/'],
+  maybeInitialEntries: string[] = ['/'],
+): ReturnType<typeof render> {
+  const AppComponent = typeof componentOrQueryState === 'function' ? componentOrQueryState : App;
+  const queryState =
+    typeof componentOrQueryState === 'function'
+      ? ((Array.isArray(queryStateOrInitialEntries)
+          ? { data: boardQueryResult, loading: false }
+          : queryStateOrInitialEntries) as QueryState)
+      : componentOrQueryState;
+  const initialEntries = Array.isArray(queryStateOrInitialEntries)
+    ? queryStateOrInitialEntries
+    : maybeInitialEntries;
+
   apolloMocks.useQuery.mockImplementation((_, options) => {
     if (options?.variables && 'id' in options.variables) {
       const issueId = String(options.variables.id);
@@ -277,7 +294,17 @@ export function renderApp(queryState: {
 
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <App />
+      <AppComponent />
     </MemoryRouter>,
   );
+}
+
+export function getIssue(issueId: string): IssueSummary {
+  const issue = boardQueryResult.issues.nodes.find((candidate) => candidate.id === issueId);
+
+  if (!issue) {
+    throw new Error(`Issue with id ${issueId} not found`);
+  }
+
+  return issue;
 }

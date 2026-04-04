@@ -50,6 +50,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -57,7 +60,13 @@ jobs:
         run: pnpm lint
 
       - name: Test
-        run: pnpm test --run
+        run: pnpm test
+
+      - name: End-to-end tests
+        run: pnpm e2e
 
       - name: Build
         run: pnpm build
+
+      - name: Docker Compose build
+        run: docker compose build

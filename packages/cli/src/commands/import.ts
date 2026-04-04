@@ -2,13 +2,13 @@
  * CLI import command — imports exported Linear data into Involute database.
  *
  * Usage:
- *   involute import --file <export-dir>           — Run the import pipeline
+ *   involute import --file <export-dir>            — Run the import pipeline
  *   involute import verify --file <export-dir>     — Verify imported data against export
  *   involute import team --token ... --team ...    — Export, import, and verify one Linear team
  */
 
 import type { Command } from 'commander';
-import { access, mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { runExport } from './export.js';
@@ -27,10 +27,16 @@ export interface TeamImportOptions {
   token: string;
 }
 
-export interface TeamImportResult {
+export interface TeamImportSummary {
   exportDir: string;
   exportRetained: boolean;
+  generatedAt: string;
+  team: string;
   verification: VerificationResult;
+}
+
+export interface TeamImportResult extends TeamImportSummary {
+  summaryPath: string;
 }
 
 export const teamImportDependencies = {
@@ -39,6 +45,7 @@ export const teamImportDependencies = {
   runExport,
   runImport,
   runVerify,
+  writeFile,
 };
 
 /**
@@ -78,17 +85,13 @@ export async function runImport(options: ImportOptions): Promise<void> {
     process.stdout.write(msg + '\n');
   };
 
-  // Validate export directory
   await validateExportDir(exportDir);
-
-  // Load environment for database connection
   loadEnv();
   ensureDatabaseUrl();
 
   log(`Importing data from ${exportDir}...`);
   log('');
 
-  // Dynamic import to avoid loading Prisma at module-level
   const { PrismaClient } = await import('@prisma/client');
   const { runImportPipeline } = await import('@involute/server/import-pipeline');
 
@@ -116,6 +119,7 @@ export async function runImport(options: ImportOptions): Promise<void> {
         'Could not connect to the database. Ensure PostgreSQL is running and DATABASE_URL is correct.',
       );
     }
+
     throw error;
   } finally {
     await prisma.$disconnect();
@@ -149,7 +153,9 @@ export async function runTeamImport(options: TeamImportOptions): Promise<TeamImp
   const usingProvidedOutput = Boolean(options.output);
   const exportDir = options.output
     ? resolve(options.output)
-    : await teamImportDependencies.mkdtemp(join(tmpdir(), `involute-team-import-${options.team.toLowerCase()}-`));
+    : await teamImportDependencies.mkdtemp(
+        join(tmpdir(), `involute-team-import-${options.team.toLowerCase()}-`),
+      );
   let shouldRetainExport = usingProvidedOutput || Boolean(options.keepExport);
 
   const log = (message: string): void => {
@@ -175,14 +181,35 @@ export async function runTeamImport(options: TeamImportOptions): Promise<TeamImp
 
     log('Step 3/3: Verifying imported data');
     const verification = await teamImportDependencies.runVerify({ file: exportDir });
+    const verificationPassed = verification.allPassed;
 
     for (const line of formatVerificationResult(verification)) {
       log(line);
     }
 
-    if (!verification.allPassed) {
+    if (!verificationPassed) {
       shouldRetainExport = true;
-      throw new Error(`Team import verification failed for "${options.team}". Export preserved at ${exportDir}.`);
+    }
+
+    const defaultSummaryPath = join(
+      tmpdir(),
+      `involute-team-import-${options.team.toLowerCase()}-${Date.now()}-summary.json`,
+    );
+    const summaryPath = shouldRetainExport ? join(exportDir, 'involute-import-summary.json') : defaultSummaryPath;
+    const summary: TeamImportSummary = {
+      exportDir,
+      exportRetained: shouldRetainExport,
+      generatedAt: new Date().toISOString(),
+      team: options.team,
+      verification,
+    };
+
+    await teamImportDependencies.writeFile(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
+
+    if (!verificationPassed) {
+      throw new Error(
+        `Team import verification failed for "${options.team}". Export preserved at ${exportDir}. Summary: ${summaryPath}.`,
+      );
     }
 
     if (!shouldRetainExport) {
@@ -198,12 +225,11 @@ export async function runTeamImport(options: TeamImportOptions): Promise<TeamImp
     );
 
     return {
-      exportDir,
+      ...summary,
       exportRetained: shouldRetainExport,
-      verification,
+      summaryPath,
     };
   } catch (error) {
-    shouldRetainExport = true;
     log('');
     log(`Team import aborted. Export preserved at ${exportDir}.`);
     throw error;
@@ -253,6 +279,5 @@ export function registerImportCommand(program: Command): void {
       }
     });
 
-  // Register verify subcommand
   registerVerifyCommand(importCmd);
 }
