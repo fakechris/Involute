@@ -556,6 +556,33 @@ describe('App board', () => {
     expect(screen.getByText('No issues in Canceled yet.')).toBeInTheDocument();
   });
 
+  it('stops retrying pagination when fetchMore fails', async () => {
+    const fetchMore = vi.fn().mockRejectedValue(new Error('network failed'));
+
+    renderApp({
+      data: {
+        ...boardQueryResult,
+        issues: {
+          nodes: boardQueryResult.issues.nodes.slice(0, 2),
+          pageInfo: {
+            endCursor: 'cursor-2',
+            hasNextPage: true,
+          },
+        },
+      },
+      fetchMore,
+      loading: false,
+    });
+
+    await waitFor(() => expect(fetchMore).toHaveBeenCalledTimes(1));
+    expect(
+      await screen.findByText('We could not load the remaining issues. Showing the first page only.'),
+    ).toBeInTheDocument();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(fetchMore).toHaveBeenCalledTimes(1);
+  });
+
   it('shows a user-friendly error state when the API request fails', async () => {
     renderApp({
       error: new Error('connect ECONNREFUSED 127.0.0.1:4200'),

@@ -120,6 +120,7 @@ function createHtml5BoardDragPayload(issueId: string, stateId: string): string {
 export function BoardPage() {
   const [selectedTeamKey, setSelectedTeamKey] = useState<string | null>(() => readStoredTeamKey());
   const [isHydratingAllIssues, setIsHydratingAllIssues] = useState(false);
+  const [hydrationFailed, setHydrationFailed] = useState(false);
   const boardQueryVariables = useMemo<BoardPageQueryVariables>(
     () => ({
       first: ISSUE_PAGE_SIZE,
@@ -208,9 +209,13 @@ export function BoardPage() {
   }, [baseIssues]);
 
   useEffect(() => {
+    setHydrationFailed(false);
+  }, [boardQueryVariables]);
+
+  useEffect(() => {
     const pageInfo = data?.issues.pageInfo;
 
-    if (!pageInfo?.hasNextPage || !pageInfo.endCursor || isHydratingAllIssues) {
+    if (!pageInfo?.hasNextPage || !pageInfo.endCursor || hydrationFailed || isHydratingAllIssues) {
       return;
     }
 
@@ -223,14 +228,19 @@ export function BoardPage() {
       },
       updateQuery: (previousResult, { fetchMoreResult }) =>
         mergeBoardPageQueryResults(previousResult, fetchMoreResult),
-    }).finally(() => {
-      setIsHydratingAllIssues(false);
-    });
+    })
+      .catch(() => {
+        setHydrationFailed(true);
+      })
+      .finally(() => {
+        setIsHydratingAllIssues(false);
+      });
   }, [
     boardQueryVariables,
     data?.issues.pageInfo.endCursor,
     data?.issues.pageInfo.hasNextPage,
     fetchMore,
+    hydrationFailed,
     isHydratingAllIssues,
   ]);
 
@@ -798,6 +808,12 @@ export function BoardPage() {
       {isHydratingAllIssues ? (
         <section className="board-message" aria-live="polite">
           Loading remaining issues…
+        </section>
+      ) : null}
+
+      {hydrationFailed ? (
+        <section className="board-message board-message--error" role="alert">
+          <p>We could not load the remaining issues. Showing the first page only.</p>
         </section>
       ) : null}
 

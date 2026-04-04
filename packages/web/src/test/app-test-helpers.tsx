@@ -247,6 +247,7 @@ export const boardQueryResult: BoardPageQueryData = {
 export function renderApp(queryState: {
   data?: BoardPageQueryData;
   error?: Error;
+  fetchMore?: ReturnType<typeof vi.fn>;
   loading?: boolean;
 } = {
   data: boardQueryResult,
@@ -269,6 +270,7 @@ export function renderApp(queryState: {
     return {
       data: queryState.data,
       error: queryState.error,
+      fetchMore: queryState.fetchMore ?? vi.fn().mockResolvedValue(undefined),
       loading: queryState.loading ?? false,
     };
   });
