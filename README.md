@@ -48,6 +48,28 @@ The local service wiring used in this repo expects:
 - API on `http://localhost:4200`
 - Web UI on `http://localhost:4201`
 
+## Run with Docker Compose
+
+The quickest local acceptance setup is Docker Compose. It starts PostgreSQL, the API, the web app, and a reusable CLI container.
+
+```bash
+# From the repository root
+mkdir -p .tmp
+docker compose up --build -d db server web
+```
+
+Smoke checks:
+
+```bash
+curl http://localhost:4200/health
+curl http://localhost:4201
+```
+
+To stop the stack:
+
+```bash
+docker compose down
+```
 ## Run the API
 
 ```bash
@@ -107,8 +129,52 @@ node dist/index.js comments add INV-1 --body "Hello from Involute"
 node dist/index.js export --token YOUR_LINEAR_API_TOKEN --team SON --output ./export
 node dist/index.js import --file ./export
 node dist/index.js import verify --file ./export
+node dist/index.js import team --token YOUR_LINEAR_API_TOKEN --team SON
 ```
 
+## Single-Team import acceptance
+
+The fastest real acceptance path is to run the end-to-end team import command, then inspect the board UI.
+
+1. Start the API:
+
+```bash
+cd packages/server
+PORT=4200 node dist/index.js
+```
+
+2. Start the web app:
+
+```bash
+cd packages/web
+VITE_INVOLUTE_AUTH_TOKEN="$AUTH_TOKEN" npx vite --port 4201
+```
+
+3. Export your Linear token in the shell:
+
+```bash
+export LINEAR_API_TOKEN='lin_api_xxx'
+```
+
+4. Run the end-to-end team import:
+
+```bash
+docker compose run --rm cli import team --token "$LINEAR_API_TOKEN" --team SON --keep-export --output /exports/son-export
+```
+
+This command will:
+
+- export the selected Linear team to `.tmp/son-export` on the host
+- import the exported artifacts into Involute
+- run `import verify` against the same export
+
+5. Open `http://localhost:4201` and validate:
+
+- the imported team appears in the team selector
+- the board shows every imported issue for that team, not just the first page
+- spot-check identifiers, states, labels, assignees, parent-child links, and comments
+
+The board now hydrates issue pages until the selected team has been loaded completely, so large teams are no longer truncated at the first `200` issues during visual acceptance.
 ## Validation
 
 Run workspace checks from the repository root:

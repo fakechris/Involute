@@ -5,6 +5,7 @@ import {
   apolloMocks,
   boardQueryResult,
   renderApp,
+  type IssueDeleteMutationData,
   type IssueSummary,
   type IssueUpdateMutationData,
 } from './test/app-test-helpers';
@@ -458,6 +459,53 @@ describe('App board', () => {
     expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Persisted title');
   });
 
+  it('deletes an issue and removes it from the board without a reload', async () => {
+    const deleteIssue = vi.fn().mockResolvedValue({
+      data: {
+        issueDelete: {
+          success: true,
+          issueId: 'issue-1',
+        },
+      } satisfies IssueDeleteMutationData,
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    apolloMocks.useMutation.mockImplementation((document) => {
+      const source =
+        typeof document === 'string'
+          ? document
+          : 'loc' in document && document.loc?.source.body
+            ? document.loc.source.body
+            : String(document);
+
+      if (source.includes('mutation IssueDelete')) {
+        return [deleteIssue];
+      }
+
+      return [vi.fn()];
+    });
+
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Delete issue' }));
+
+    await waitFor(() =>
+      expect(deleteIssue).toHaveBeenCalledWith({
+        variables: {
+          id: 'issue-1',
+        },
+      }),
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Issue detail drawer' })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText('INV-1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Backlog item')).not.toBeInTheDocument();
+  });
+
   it('shows an error and reverts optimistic move when state mutation fails', async () => {
     const mutate = vi.fn().mockRejectedValue(new Error('boom'));
     apolloMocks.useMutation.mockReturnValue([mutate]);
@@ -498,6 +546,7 @@ describe('App board', () => {
         ...boardQueryResult,
         issues: {
           nodes: [],
+          pageInfo: boardQueryResult.issues.pageInfo,
         },
       },
       loading: false,
@@ -505,6 +554,33 @@ describe('App board', () => {
 
     expect(await screen.findByText('No issues in Backlog yet.')).toBeInTheDocument();
     expect(screen.getByText('No issues in Canceled yet.')).toBeInTheDocument();
+  });
+
+  it('stops retrying pagination when fetchMore fails', async () => {
+    const fetchMore = vi.fn().mockRejectedValue(new Error('network failed'));
+
+    renderApp({
+      data: {
+        ...boardQueryResult,
+        issues: {
+          nodes: boardQueryResult.issues.nodes.slice(0, 2),
+          pageInfo: {
+            endCursor: 'cursor-2',
+            hasNextPage: true,
+          },
+        },
+      },
+      fetchMore,
+      loading: false,
+    });
+
+    await waitFor(() => expect(fetchMore).toHaveBeenCalledTimes(1));
+    expect(
+      await screen.findByText('We could not load the remaining issues. Showing the first page only.'),
+    ).toBeInTheDocument();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(fetchMore).toHaveBeenCalledTimes(1);
   });
 
   it('shows a user-friendly error state when the API request fails', async () => {

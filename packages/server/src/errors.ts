@@ -3,6 +3,7 @@ import { GraphQLError } from 'graphql';
 export const NOT_AUTHENTICATED_MESSAGE = 'Not authenticated';
 export const TEAM_NOT_FOUND_MESSAGE = 'Team not found.';
 export const ISSUE_NOT_FOUND_MESSAGE = 'Issue not found.';
+export const COMMENT_NOT_FOUND_MESSAGE = 'Comment not found.';
 export const WORKFLOW_STATE_NOT_FOUND_MESSAGE = 'Workflow state not found.';
 export const ISSUE_LABEL_NOT_FOUND_MESSAGE = 'One or more issue labels were not found.';
 export const ASSIGNEE_NOT_FOUND_MESSAGE = 'Assignee not found.';
@@ -21,6 +22,7 @@ const exposedErrorCodes = new Map<string, string>([
   [NOT_AUTHENTICATED_MESSAGE, 'UNAUTHENTICATED'],
   [TEAM_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ISSUE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [COMMENT_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [WORKFLOW_STATE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ISSUE_LABEL_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ASSIGNEE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],

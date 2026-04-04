@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   apolloMocks,
   boardQueryResult,
+  type CommentDeleteMutationData,
   renderApp,
   type CommentCreateMutationData,
   type IssueSummary,
@@ -47,6 +48,7 @@ describe('App comments', () => {
             },
             ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
           ],
+          pageInfo: boardQueryResult.issues.pageInfo,
         },
       },
       loading: false,
@@ -147,6 +149,7 @@ describe('App comments', () => {
             },
             ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
           ],
+          pageInfo: boardQueryResult.issues.pageInfo,
         },
       },
       loading: false,
@@ -178,6 +181,88 @@ describe('App comments', () => {
     });
 
     expect(within(drawer).getByLabelText('Comment body')).toHaveValue('');
+  });
+
+  it('deletes a comment and removes it from the drawer without a reload', async () => {
+    const deleteComment = vi.fn().mockResolvedValue({
+      data: {
+        commentDelete: {
+          success: true,
+          commentId: 'comment-1',
+        },
+      } satisfies CommentDeleteMutationData,
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    apolloMocks.useMutation.mockImplementation((document) => {
+      const source =
+        typeof document === 'string'
+          ? document
+          : 'loc' in document && document.loc?.source.body
+            ? document.loc.source.body
+            : String(document);
+
+      if (source.includes('mutation CommentDelete')) {
+        return [deleteComment];
+      }
+
+      return [vi.fn()];
+    });
+
+    renderApp({
+      data: {
+        ...boardQueryResult,
+        issues: {
+          nodes: [
+            {
+              ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+              comments: {
+                nodes: [
+                  {
+                    id: 'comment-1',
+                    body: 'Delete me',
+                    createdAt: '2026-04-02T10:00:00.000Z',
+                    user: {
+                      id: 'user-1',
+                      name: 'Admin',
+                      email: 'admin@involute.local',
+                    },
+                  },
+                  {
+                    id: 'comment-2',
+                    body: 'Keep me',
+                    createdAt: '2026-04-02T11:00:00.000Z',
+                    user: {
+                      id: 'user-1',
+                      name: 'Admin',
+                      email: 'admin@involute.local',
+                    },
+                  },
+                ],
+              },
+            },
+            ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
+          ],
+          pageInfo: boardQueryResult.issues.pageInfo,
+        },
+      },
+      loading: false,
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+
+    fireEvent.click(within(drawer).getAllByRole('button', { name: 'Delete comment' })[0]!);
+
+    await waitFor(() =>
+      expect(deleteComment).toHaveBeenCalledWith({
+        variables: {
+          id: 'comment-1',
+        },
+      }),
+    );
+
+    await waitFor(() => expect(within(drawer).queryByText('Delete me')).not.toBeInTheDocument());
+    expect(within(drawer).getByText('Keep me')).toBeInTheDocument();
   });
 
   it('preserves locally added comments after a later issue update response omits comments', async () => {
@@ -242,6 +327,7 @@ describe('App comments', () => {
             },
             ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
           ],
+          pageInfo: boardQueryResult.issues.pageInfo,
         },
       },
       loading: false,

@@ -29,7 +29,7 @@ import type {
 import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
 
 import { requireAuthentication, type GraphQLContext } from './auth.js';
-import { createComment, createIssue, updateIssue } from './issue-service.js';
+import { createComment, createIssue, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
 
 type TeamParent = Team & { states?: WorkflowState[] | null };
 type UserParent = User;
@@ -152,7 +152,9 @@ const typeDefs = /* GraphQL */ `
   type Mutation {
     issueCreate(input: IssueCreateInput!): IssueCreatePayload!
     issueUpdate(id: String!, input: IssueUpdateInput!): IssueUpdatePayload!
+    issueDelete(id: String!): IssueDeletePayload!
     commentCreate(input: CommentCreateInput!): CommentCreatePayload!
+    commentDelete(id: String!): CommentDeletePayload!
   }
 
   type Team {
@@ -311,9 +313,19 @@ const typeDefs = /* GraphQL */ `
     issue: Issue
   }
 
+  type IssueDeletePayload {
+    success: Boolean!
+    issueId: ID
+  }
+
   type CommentCreatePayload {
     success: Boolean!
     comment: Comment
+  }
+
+  type CommentDeletePayload {
+    success: Boolean!
+    commentId: ID
   }
 `;
 
@@ -445,6 +457,19 @@ const resolvers = {
           success: true as const,
         };
       }),
+    issueDelete: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<{ issueId: string | null; success: boolean }> =>
+      runIssueDeleteMutation(async () => {
+        const issue = await deleteIssue(context.prisma, args.id);
+
+        return {
+          issueId: issue.id,
+          success: true as const,
+        };
+      }),
     commentCreate: async (
       _parent: unknown,
       args: { input: CreateCommentInput },
@@ -464,6 +489,19 @@ const resolvers = {
         };
       });
     },
+    commentDelete: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<{ commentId: string | null; success: boolean }> =>
+      runCommentDeleteMutation(async () => {
+        const comment = await deleteComment(context.prisma, args.id);
+
+        return {
+          commentId: comment.id,
+          success: true as const,
+        };
+      }),
   },
   Team: {
     states: async (
@@ -863,6 +901,39 @@ async function runCommentMutation<TResult extends { comment: Comment; success: t
   }
 }
 
+async function runIssueDeleteMutation<TResult extends { issueId: string; success: true }>(
+  operation: () => Promise<TResult>,
+): Promise<TResult | { issueId: null; success: false }> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (getExposedError(error) || isPrismaInvalidInputError(error)) {
+      return {
+        issueId: null,
+        success: false,
+      };
+    }
+
+    throw error;
+  }
+}
+
+async function runCommentDeleteMutation<TResult extends { commentId: string; success: true }>(
+  operation: () => Promise<TResult>,
+): Promise<TResult | { commentId: null; success: false }> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (getExposedError(error) || isPrismaInvalidInputError(error)) {
+      return {
+        commentId: null,
+        success: false,
+      };
+    }
+
+    throw error;
+  }
+}
 function getRequestedIssueConnectionFields(info: GraphQLResolveInfo): Set<string> {
   const fieldNames = new Set<string>();
 

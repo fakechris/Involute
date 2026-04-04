@@ -79,11 +79,16 @@ export interface BoardPageQueryData {
   };
   issues: {
     nodes: IssueSummary[];
+    pageInfo: {
+      endCursor: string | null;
+      hasNextPage: boolean;
+    };
   };
 }
 
 export interface BoardPageQueryVariables {
   first: number;
+  after?: string;
   filter?: {
     team?: {
       key?: {
@@ -157,4 +162,26 @@ export interface CommentCreateMutationVariables {
     issueId: string;
     body: string;
   };
+}
+
+export interface IssueDeleteMutationData {
+  issueDelete: {
+    success: boolean;
+    issueId: string | null;
+  };
+}
+
+export interface IssueDeleteMutationVariables {
+  id: string;
+}
+
+export interface CommentDeleteMutationData {
+  commentDelete: {
+    success: boolean;
+    commentId: string | null;
+  };
+}
+
+export interface CommentDeleteMutationVariables {
+  id: string;
 }

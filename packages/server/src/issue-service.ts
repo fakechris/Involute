@@ -3,6 +3,7 @@ import type { Comment, Issue, Prisma, PrismaClient, WorkflowState } from '@prism
 import { DEFAULT_WORKFLOW_STATE_ORDER } from './constants.js';
 import {
   ASSIGNEE_NOT_FOUND_MESSAGE,
+  COMMENT_NOT_FOUND_MESSAGE,
   createNotFoundError,
   createValidationError,
   ISSUE_LABEL_NOT_FOUND_MESSAGE,
@@ -277,6 +278,58 @@ export async function createComment(
       userId,
     },
   });
+}
+
+export async function deleteIssue(
+  prisma: PrismaClient,
+  id: string,
+): Promise<Pick<Issue, 'id'>> {
+  const issue = await prisma.issue.findUnique({
+    where: {
+      id,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!issue) {
+    throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+  }
+
+  await prisma.issue.delete({
+    where: {
+      id,
+    },
+  });
+
+  return issue;
+}
+
+export async function deleteComment(
+  prisma: PrismaClient,
+  id: string,
+): Promise<Pick<Comment, 'id'>> {
+  const comment = await prisma.comment.findUnique({
+    where: {
+      id,
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  if (!comment) {
+    throw createNotFoundError(COMMENT_NOT_FOUND_MESSAGE);
+  }
+
+  await prisma.comment.delete({
+    where: {
+      id,
+    },
+  });
+
+  return comment;
 }
 
 async function resolveCreateState(

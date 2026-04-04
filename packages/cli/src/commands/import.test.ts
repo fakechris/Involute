@@ -18,7 +18,12 @@ import {
   normalizeGraphQLErrorMessage,
   setConfigValue,
 } from '../index.js';
-import { runImport, validateExportDir } from './import.js';
+import {
+  runImport,
+  runTeamImport,
+  teamImportDependencies,
+  validateExportDir,
+} from './import.js';
 import { loadEnv } from './shared.js';
 
 // --- Fixture data matching Linear export format ---
@@ -93,6 +98,15 @@ describe('import command registration', () => {
     expect(verifyCmd).toBeDefined();
   });
 
+  it('registers team as a subcommand of import', () => {
+    const program = createProgram();
+    const importCmd = program.commands.find((c) => c.name() === 'import');
+    expect(importCmd).toBeDefined();
+
+    const teamCmd = importCmd!.commands.find((c) => c.name() === 'team');
+    expect(teamCmd).toBeDefined();
+  });
+
   it('verify subcommand requires --file option', () => {
     const program = createProgram();
     const importCmd = program.commands.find((c) => c.name() === 'import');
@@ -162,6 +176,99 @@ describe('runImport error handling', () => {
     } finally {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
+  });
+});
+
+describe('runTeamImport', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('runs export, import, and verify in order and removes temporary exports after success', async () => {
+    const exportDir = join(tmpdir(), 'involute-team-import-son-success');
+    const mkdtempSpy = vi.spyOn(teamImportDependencies, 'mkdtemp').mockResolvedValue(exportDir);
+    const runExportSpy = vi.spyOn(teamImportDependencies, 'runExport').mockResolvedValue();
+    const runImportSpy = vi.spyOn(teamImportDependencies, 'runImport').mockResolvedValue();
+    const runVerifySpy = vi.spyOn(teamImportDependencies, 'runVerify').mockResolvedValue({
+      allPassed: true,
+      entities: [],
+    });
+    const rmSpy = vi.spyOn(teamImportDependencies, 'rm').mockResolvedValue(undefined);
+
+    const result = await runTeamImport({
+      team: 'SON',
+      token: 'linear-token',
+    });
+
+    expect(mkdtempSpy).toHaveBeenCalled();
+    expect(runExportSpy).toHaveBeenCalledWith({
+      token: 'linear-token',
+      team: 'SON',
+      output: exportDir,
+    });
+    expect(runImportSpy).toHaveBeenCalledWith({ file: exportDir });
+    expect(runVerifySpy).toHaveBeenCalledWith({ file: exportDir });
+    expect(rmSpy).toHaveBeenCalledWith(exportDir, { recursive: true, force: true });
+    expect(result).toEqual({
+      exportDir,
+      exportRetained: false,
+      verification: {
+        allPassed: true,
+        entities: [],
+      },
+    });
+  });
+
+  it('retains the export directory when verification fails', async () => {
+    const exportDir = join(tmpdir(), 'involute-team-import-son-fail');
+    vi.spyOn(teamImportDependencies, 'mkdtemp').mockResolvedValue(exportDir);
+    vi.spyOn(teamImportDependencies, 'runExport').mockResolvedValue();
+    vi.spyOn(teamImportDependencies, 'runImport').mockResolvedValue();
+    vi.spyOn(teamImportDependencies, 'runVerify').mockResolvedValue({
+      allPassed: false,
+      entities: [
+        {
+          entity: 'Issues',
+          exportCount: 10,
+          dbCount: 9,
+          passed: false,
+          details: '1 export issues have no import mapping',
+        },
+      ],
+    });
+    const rmSpy = vi.spyOn(teamImportDependencies, 'rm').mockResolvedValue(undefined);
+
+    await expect(
+      runTeamImport({
+        team: 'SON',
+        token: 'linear-token',
+      }),
+    ).rejects.toThrow(`Team import verification failed for "SON". Export preserved at ${exportDir}.`);
+
+    expect(rmSpy).not.toHaveBeenCalled();
+  });
+
+  it('keeps a user-provided output directory after success', async () => {
+    const exportDir = join(tmpdir(), 'involute-team-import-son-retained');
+    const mkdtempSpy = vi.spyOn(teamImportDependencies, 'mkdtemp').mockResolvedValue(exportDir);
+    vi.spyOn(teamImportDependencies, 'runExport').mockResolvedValue();
+    vi.spyOn(teamImportDependencies, 'runImport').mockResolvedValue();
+    vi.spyOn(teamImportDependencies, 'runVerify').mockResolvedValue({
+      allPassed: true,
+      entities: [],
+    });
+    const rmSpy = vi.spyOn(teamImportDependencies, 'rm').mockResolvedValue(undefined);
+
+    const result = await runTeamImport({
+      team: 'SON',
+      token: 'linear-token',
+      output: exportDir,
+    });
+
+    expect(mkdtempSpy).not.toHaveBeenCalled();
+    expect(rmSpy).not.toHaveBeenCalled();
+    expect(result.exportRetained).toBe(true);
+    expect(result.exportDir).toBe(exportDir);
   });
 });
 

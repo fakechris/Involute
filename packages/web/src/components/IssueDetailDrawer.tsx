@@ -23,6 +23,8 @@ interface IssueDetailDrawerProps {
   onLabelsChange: (issue: IssueSummary, labelIds: string[]) => Promise<void>;
   onAssigneeChange: (issue: IssueSummary, assigneeId: string | null) => Promise<void>;
   onCommentCreate: (issue: IssueSummary, body: string) => Promise<void>;
+  onCommentDelete: (issue: IssueSummary, commentId: string) => Promise<void>;
+  onIssueDelete: (issue: IssueSummary) => Promise<void>;
 }
 
 export function IssueDetailDrawer({
@@ -39,6 +41,8 @@ export function IssueDetailDrawer({
   onLabelsChange,
   onAssigneeChange,
   onCommentCreate,
+  onCommentDelete,
+  onIssueDelete,
 }: IssueDetailDrawerProps) {
   const [selectedStateId, setSelectedStateId] = useState<string>('');
   const [title, setTitle] = useState('');
@@ -142,6 +146,14 @@ export function IssueDetailDrawer({
     return comment.user?.name ?? comment.user?.email ?? 'Unknown author';
   }
 
+  function confirmIssueDelete(): boolean {
+    return window.confirm(`Delete ${activeIssue.identifier}? This cannot be undone.`);
+  }
+
+  function confirmCommentDelete(): boolean {
+    return window.confirm('Delete this comment? This cannot be undone.');
+  }
+
   return (
     <aside
       className="issue-drawer"
@@ -184,9 +196,25 @@ export function IssueDetailDrawer({
               </span>
             </div>
           </div>
-          <button type="button" className="issue-drawer__close" onClick={onClose}>
-            Close
-          </button>
+          <div className="issue-drawer__header-actions">
+            <button
+              type="button"
+              className="issue-drawer__delete"
+              disabled={savingState}
+              onClick={() => {
+                if (!confirmIssueDelete()) {
+                  return;
+                }
+
+                void onIssueDelete(activeIssue).catch(() => undefined);
+              }}
+            >
+              Delete issue
+            </button>
+            <button type="button" className="issue-drawer__close" onClick={onClose}>
+              Close
+            </button>
+          </div>
         </div>
 
         <div className="issue-drawer__section">
@@ -299,9 +327,26 @@ export function IssueDetailDrawer({
                 <li key={comment.id} className="issue-comment">
                   <div className="issue-comment__meta">
                     <strong>{renderCommentAuthor(comment)}</strong>
-                    <time dateTime={comment.createdAt}>
-                      {formatCommentTimestamp(comment.createdAt)}
-                    </time>
+                    <div className="issue-comment__meta-actions">
+                      <time dateTime={comment.createdAt}>
+                        {formatCommentTimestamp(comment.createdAt)}
+                      </time>
+                      <button
+                        type="button"
+                        className="issue-comment__delete"
+                        aria-label="Delete comment"
+                        disabled={savingState}
+                        onClick={() => {
+                          if (!confirmCommentDelete()) {
+                            return;
+                          }
+
+                          void onCommentDelete(activeIssue, comment.id).catch(() => undefined);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                   <p className="issue-comment__body">{comment.body}</p>
                 </li>

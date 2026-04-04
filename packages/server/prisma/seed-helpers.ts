@@ -32,37 +32,33 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
     },
   });
 
-  await Promise.all(
-    DEFAULT_WORKFLOW_STATE_NAMES.map((name) =>
-      prisma.workflowState.upsert({
-        where: {
-          teamId_name: {
-            teamId: team.id,
-            name,
-          },
-        },
-        create: {
-          name,
+  for (const name of DEFAULT_WORKFLOW_STATE_NAMES) {
+    await prisma.workflowState.upsert({
+      where: {
+        teamId_name: {
           teamId: team.id,
+          name,
         },
-        update: {},
-      }),
-    ),
-  );
+      },
+      create: {
+        name,
+        teamId: team.id,
+      },
+      update: {},
+    });
+  }
 
-  await Promise.all(
-    DEFAULT_LABEL_NAMES.map((name) =>
-      prisma.issueLabel.upsert({
-        where: {
-          name,
-        },
-        create: {
-          name,
-        },
-        update: {},
-      }),
-    ),
-  );
+  for (const name of DEFAULT_LABEL_NAMES) {
+    await prisma.issueLabel.upsert({
+      where: {
+        name,
+      },
+      create: {
+        name,
+      },
+      update: {},
+    });
+  }
 
   await prisma.user.upsert({
     where: {

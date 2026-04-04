@@ -6,14 +6,18 @@ import { afterEach, beforeEach, vi } from 'vitest';
 import { App } from '../App';
 import type {
   BoardPageQueryData,
+  CommentDeleteMutationData,
   CommentCreateMutationData,
+  IssueDeleteMutationData,
   IssueCreateMutationData,
   IssueSummary,
   IssueUpdateMutationData,
 } from '../board/types';
 export type {
   BoardPageQueryData,
+  CommentDeleteMutationData,
   CommentCreateMutationData,
+  IssueDeleteMutationData,
   IssueCreateMutationData,
   IssueSummary,
   IssueUpdateMutationData,
@@ -36,6 +40,14 @@ const hoistedApolloMocks = vi.hoisted<ApolloMockSet>(() => ({
 
     if (source.includes('mutation CommentCreate')) {
       return [vi.fn().mockResolvedValue({ data: { commentCreate: { success: true, comment: null } } })];
+    }
+
+    if (source.includes('mutation CommentDelete')) {
+      return [vi.fn().mockResolvedValue({ data: { commentDelete: { success: true, commentId: 'comment-1' } } })];
+    }
+
+    if (source.includes('mutation IssueDelete')) {
+      return [vi.fn().mockResolvedValue({ data: { issueDelete: { success: true, issueId: 'issue-1' } } })];
     }
 
     return [vi.fn()];
@@ -100,6 +112,14 @@ beforeEach(() => {
 
     if (source.includes('mutation CommentCreate')) {
       return [vi.fn().mockResolvedValue({ data: { commentCreate: { success: true, comment: null } } })];
+    }
+
+    if (source.includes('mutation CommentDelete')) {
+      return [vi.fn().mockResolvedValue({ data: { commentDelete: { success: true, commentId: 'comment-1' } } })];
+    }
+
+    if (source.includes('mutation IssueDelete')) {
+      return [vi.fn().mockResolvedValue({ data: { issueDelete: { success: true, issueId: 'issue-1' } } })];
     }
 
     return [vi.fn()];
@@ -217,12 +237,17 @@ export const boardQueryResult: BoardPageQueryData = {
         comments: { nodes: [] },
       },
     ],
+    pageInfo: {
+      endCursor: null,
+      hasNextPage: false,
+    },
   },
 };
 
 export function renderApp(queryState: {
   data?: BoardPageQueryData;
   error?: Error;
+  fetchMore?: ReturnType<typeof vi.fn>;
   loading?: boolean;
 } = {
   data: boardQueryResult,
@@ -245,6 +270,7 @@ export function renderApp(queryState: {
     return {
       data: queryState.data,
       error: queryState.error,
+      fetchMore: queryState.fetchMore ?? vi.fn().mockResolvedValue(undefined),
       loading: queryState.loading ?? false,
     };
   });
