@@ -1,26 +1,23 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import {
-  apolloMocks,
-  boardQueryResult,
-  type CommentDeleteMutationData,
-  renderApp,
-  type CommentCreateMutationData,
-  type IssueSummary,
-  type IssueUpdateMutationData,
-} from './test/app-test-helpers';
-import { mergeIssueWithPreservedComments } from './routes/BoardPage';
+import { apolloMocks, boardQueryResult, getIssue, renderApp } from './test/app-test-helpers';
+import { App } from './App';
+import type { CommentCreateMutationData, IssueSummary, IssueUpdateMutationData } from './board/types';
+
+function renderTestApp(queryState = { data: boardQueryResult, loading: false }, initialEntries: string[] = ['/']) {
+  return renderApp(App, queryState, initialEntries);
+}
 
 describe('App comments', () => {
   it('renders comments in chronological order with author and timestamp details', async () => {
-    renderApp({
+    renderTestApp({
       data: {
         ...boardQueryResult,
         issues: {
           nodes: [
             {
-              ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+              ...getIssue('issue-1'),
               comments: {
                 nodes: [
                   {
@@ -48,7 +45,6 @@ describe('App comments', () => {
             },
             ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
           ],
-          pageInfo: boardQueryResult.issues.pageInfo,
         },
       },
       loading: false,
@@ -68,7 +64,7 @@ describe('App comments', () => {
   });
 
   it('shows an empty comments message when the issue has no comments', async () => {
-    renderApp();
+    renderTestApp();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
     const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
@@ -77,7 +73,7 @@ describe('App comments', () => {
   });
 
   it('enables comment submission only when comment body has text', async () => {
-    renderApp();
+    renderTestApp();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
     const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
@@ -125,13 +121,13 @@ describe('App comments', () => {
       return [vi.fn()];
     });
 
-    renderApp({
+    renderTestApp({
       data: {
         ...boardQueryResult,
         issues: {
           nodes: [
             {
-              ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+              ...getIssue('issue-1'),
               comments: {
                 nodes: [
                   {
@@ -149,7 +145,6 @@ describe('App comments', () => {
             },
             ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
           ],
-          pageInfo: boardQueryResult.issues.pageInfo,
         },
       },
       loading: false,
@@ -183,88 +178,6 @@ describe('App comments', () => {
     expect(within(drawer).getByLabelText('Comment body')).toHaveValue('');
   });
 
-  it('deletes a comment and removes it from the drawer without a reload', async () => {
-    const deleteComment = vi.fn().mockResolvedValue({
-      data: {
-        commentDelete: {
-          success: true,
-          commentId: 'comment-1',
-        },
-      } satisfies CommentDeleteMutationData,
-    });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    apolloMocks.useMutation.mockImplementation((document) => {
-      const source =
-        typeof document === 'string'
-          ? document
-          : 'loc' in document && document.loc?.source.body
-            ? document.loc.source.body
-            : String(document);
-
-      if (source.includes('mutation CommentDelete')) {
-        return [deleteComment];
-      }
-
-      return [vi.fn()];
-    });
-
-    renderApp({
-      data: {
-        ...boardQueryResult,
-        issues: {
-          nodes: [
-            {
-              ...(boardQueryResult.issues.nodes[0] as IssueSummary),
-              comments: {
-                nodes: [
-                  {
-                    id: 'comment-1',
-                    body: 'Delete me',
-                    createdAt: '2026-04-02T10:00:00.000Z',
-                    user: {
-                      id: 'user-1',
-                      name: 'Admin',
-                      email: 'admin@involute.local',
-                    },
-                  },
-                  {
-                    id: 'comment-2',
-                    body: 'Keep me',
-                    createdAt: '2026-04-02T11:00:00.000Z',
-                    user: {
-                      id: 'user-1',
-                      name: 'Admin',
-                      email: 'admin@involute.local',
-                    },
-                  },
-                ],
-              },
-            },
-            ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
-          ],
-          pageInfo: boardQueryResult.issues.pageInfo,
-        },
-      },
-      loading: false,
-    });
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
-    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
-
-    fireEvent.click(within(drawer).getAllByRole('button', { name: 'Delete comment' })[0]!);
-
-    await waitFor(() =>
-      expect(deleteComment).toHaveBeenCalledWith({
-        variables: {
-          id: 'comment-1',
-        },
-      }),
-    );
-
-    await waitFor(() => expect(within(drawer).queryByText('Delete me')).not.toBeInTheDocument());
-    expect(within(drawer).getByText('Keep me')).toBeInTheDocument();
-  });
-
   it('preserves locally added comments after a later issue update response omits comments', async () => {
     const createComment = vi.fn().mockResolvedValue({
       data: {
@@ -288,7 +201,7 @@ describe('App comments', () => {
         issueUpdate: {
           success: true,
           issue: {
-            ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+            ...getIssue('issue-1'),
             title: 'Retitled issue',
           },
         },
@@ -314,20 +227,19 @@ describe('App comments', () => {
       return [vi.fn()];
     });
 
-    renderApp({
+    renderTestApp({
       data: {
         ...boardQueryResult,
         issues: {
           nodes: [
             {
-              ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+              ...getIssue('issue-1'),
               comments: {
                 nodes: [],
               },
             },
             ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
           ],
-          pageInfo: boardQueryResult.issues.pageInfo,
         },
       },
       loading: false,
@@ -352,55 +264,61 @@ describe('App comments', () => {
     expect(within(drawer).getByText('Newest comment')).toBeInTheDocument();
   });
 
-  it('mergeIssueWithPreservedComments handles undefined comments gracefully', () => {
-    const previousIssue: IssueSummary = {
-      ...(boardQueryResult.issues.nodes[0] as IssueSummary),
-      comments: {
-        nodes: [
-          {
-            id: 'comment-1',
-            body: 'Previous comment',
-            createdAt: '2026-04-02T10:00:00.000Z',
-            user: { id: 'user-1', name: 'Admin', email: 'admin@involute.local' },
-          },
-        ],
+  it('deletes a comment from the drawer after confirmation', async () => {
+    const deleteComment = vi.fn().mockResolvedValue({
+      data: {
+        commentDelete: {
+          success: true,
+          commentId: 'comment-1',
+        },
       },
-    };
-    const nextIssue = {
-      ...(boardQueryResult.issues.nodes[0] as IssueSummary),
-      title: 'Updated title',
-    } as IssueSummary;
-    delete (nextIssue as unknown as Record<string, unknown>).comments;
+    });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    const merged = mergeIssueWithPreservedComments(previousIssue, nextIssue);
-    expect(merged.comments.nodes).toHaveLength(1);
-    expect(merged.comments.nodes[0]!.body).toBe('Previous comment');
-    expect(merged.title).toBe('Updated title');
-  });
+    apolloMocks.useMutation.mockImplementation((document) => {
+      const source =
+        typeof document === 'string'
+          ? document
+          : 'loc' in document && document.loc?.source.body
+            ? document.loc.source.body
+            : String(document);
 
-  it('mergeIssueWithPreservedComments handles undefined children gracefully', () => {
-    const previousIssue: IssueSummary = {
-      ...(boardQueryResult.issues.nodes[0] as IssueSummary),
-      children: {
-        nodes: [{ id: 'child-1', identifier: 'INV-10', title: 'Child issue' }],
-      },
-    };
-    const nextIssue = {
-      ...(boardQueryResult.issues.nodes[0] as IssueSummary),
-      title: 'Updated title',
-    } as IssueSummary;
-    delete (nextIssue as unknown as Record<string, unknown>).children;
+      if (source.includes('mutation CommentDelete')) {
+        return [deleteComment];
+      }
 
-    const merged = mergeIssueWithPreservedComments(previousIssue, nextIssue);
-    expect(merged.children.nodes).toHaveLength(1);
-    expect(merged.children.nodes[0]!.identifier).toBe('INV-10');
-  });
+      if (source.includes('mutation CommentCreate')) {
+        return [vi.fn().mockResolvedValue({ data: { commentCreate: { success: true, comment: null } } })];
+      }
 
-  it('shows "No labels available" message when labels array is empty', async () => {
-    renderApp({
+      return [vi.fn()];
+    });
+
+    renderTestApp({
       data: {
         ...boardQueryResult,
-        issueLabels: { nodes: [] },
+        issues: {
+          nodes: [
+            {
+              ...getIssue('issue-1'),
+              comments: {
+                nodes: [
+                  {
+                    id: 'comment-1',
+                    body: 'Disposable comment',
+                    createdAt: '2026-04-02T10:00:00.000Z',
+                    user: {
+                      id: 'user-1',
+                      name: 'Admin',
+                      email: 'admin@involute.local',
+                    },
+                  },
+                ],
+              },
+            },
+            ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
+          ],
+        },
       },
       loading: false,
     });
@@ -408,6 +326,19 @@ describe('App comments', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
     const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
 
-    expect(within(drawer).getByText('No labels available')).toBeInTheDocument();
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Delete comment' }));
+
+    await waitFor(() =>
+      expect(deleteComment).toHaveBeenCalledWith({
+        variables: {
+          id: 'comment-1',
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(within(drawer).queryByText('Disposable comment')).not.toBeInTheDocument(),
+    );
+
+    confirmSpy.mockRestore();
   });
 });

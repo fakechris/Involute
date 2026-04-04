@@ -52,7 +52,7 @@ curl http://localhost:4200/health
 curl http://localhost:4201
 ```
 
-Then open `http://localhost:4201`.
+Then open `http://localhost:4201` in your browser.
 
 Compose defaults:
 

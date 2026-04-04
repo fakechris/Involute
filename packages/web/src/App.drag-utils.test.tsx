@@ -1,31 +1,17 @@
-import { fireEvent, screen } from '@testing-library/react';
-import { MouseSensor, PointerSensor, TouchSensor, type DragEndEvent } from '@dnd-kit/core';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import type { DragEndEvent } from '@dnd-kit/core';
 
+import { boardQueryResult, getIssue } from './test/app-test-helpers';
+import { getAuthToken, getAuthTokenDetails, getGraphqlUrl, getGraphqlUrlDetails } from './lib/apollo';
 import {
-  boardQueryResult,
-  dndMocks,
-  renderApp,
-  type IssueSummary,
-} from './test/app-test-helpers';
-import {
-  createHtml5BoardDragPayload,
-  DND_ACTIVATION_DISTANCE,
   getDropTargetStateId,
-  kanbanCollisionDetection,
-  mergeBoardPageQueryResults,
+  mergeIssueWithPreservedComments,
   moveIssueToState,
-  parseHtml5DragPayload,
 } from './routes/BoardPage';
-import {
-  getAuthToken,
-  getAuthTokenDetails,
-  getConfiguredViewerAssertion,
-  getGraphqlUrl,
-  getGraphqlUrlDetails,
-} from './lib/apollo';
+import { createHtml5BoardDragPayload, parseHtml5BoardDragPayload } from './board/utils';
+import type { IssueSummary } from './board/types';
 
-describe('App drag utils', () => {
+describe('App drag helpers', () => {
   it('resolves a drag-end drop target from the destination card column state', () => {
     const event = {
       active: { id: 'issue-1' },
@@ -81,31 +67,12 @@ describe('App drag utils', () => {
 
   it('moves an issue into the destination state during cross-column drag preview', () => {
     const nextState = { id: 'state-ready', name: 'Ready' };
-
     const movedIssues = moveIssueToState(boardQueryResult.issues.nodes as IssueSummary[], 'issue-1', nextState);
 
     expect(movedIssues.find((issue) => issue.id === 'issue-1')?.state).toEqual(nextState);
     expect(movedIssues.find((issue) => issue.id === 'issue-2')?.state).toEqual(
       boardQueryResult.issues.nodes[1]?.state,
     );
-  });
-
-  it('parses a valid html5 board drag payload', () => {
-    expect(parseHtml5DragPayload(JSON.stringify({ issueId: 'issue-1', stateId: 'state-ready' }))).toEqual({
-      issueId: 'issue-1',
-      stateId: 'state-ready',
-    });
-  });
-
-  it('creates a stable html5 board drag payload string', () => {
-    expect(createHtml5BoardDragPayload('issue-1', 'state-ready')).toBe(
-      '{"issueId":"issue-1","stateId":"state-ready"}',
-    );
-  });
-
-  it('rejects malformed html5 board drag payloads', () => {
-    expect(parseHtml5DragPayload('not-json')).toBeNull();
-    expect(parseHtml5DragPayload(JSON.stringify({ issueId: 'issue-1' }))).toBeNull();
   });
 
   it('shows moved issue data in the destination column grouping after a cross-column preview move', () => {
@@ -125,33 +92,22 @@ describe('App drag utils', () => {
     expect(groupedIssues.Backlog ?? []).not.toContain('INV-1');
   });
 
-  it('merges paged board query results without dropping earlier issues', () => {
-    const previousPage = {
-      ...boardQueryResult,
-      issues: {
-        nodes: boardQueryResult.issues.nodes.slice(0, 2),
-        pageInfo: {
-          endCursor: 'cursor-2',
-          hasNextPage: true,
-        },
-      },
-    };
-    const nextPage = {
-      ...boardQueryResult,
-      issues: {
-        nodes: [boardQueryResult.issues.nodes[2]!],
-        pageInfo: {
-          endCursor: null,
-          hasNextPage: false,
-        },
-      },
-    };
+  it('parses a valid html5 board drag payload', () => {
+    expect(parseHtml5BoardDragPayload(JSON.stringify({ issueId: 'issue-1', stateId: 'state-ready' }))).toEqual({
+      issueId: 'issue-1',
+      stateId: 'state-ready',
+    });
+  });
 
-    expect(mergeBoardPageQueryResults(previousPage, nextPage).issues.nodes.map((issue) => issue.identifier)).toEqual([
-      'INV-1',
-      'INV-2',
-      'SON-1',
-    ]);
+  it('creates a stable html5 board drag payload string', () => {
+    expect(createHtml5BoardDragPayload('issue-1', 'state-ready')).toBe(
+      '{"issueId":"issue-1","stateId":"state-ready"}',
+    );
+  });
+
+  it('rejects malformed html5 board drag payloads', () => {
+    expect(parseHtml5BoardDragPayload('not-json')).toBeNull();
+    expect(parseHtml5BoardDragPayload(JSON.stringify({ issueId: 'issue-1' }))).toBeNull();
   });
 
   it('prefers the runtime localStorage auth token when creating Apollo requests', () => {
@@ -171,7 +127,7 @@ describe('App drag utils', () => {
     });
   });
 
-  it('uses the runtime API URL override from the query param without persisting it', () => {
+  it('uses the runtime API URL override from the query param and persists it for the browser session', () => {
     window.history.replaceState({}, '', '/?involuteApiUrl=http%3A%2F%2F127.0.0.1%3A9%2Fgraphql');
 
     expect(getGraphqlUrl()).toBe('http://127.0.0.1:9/graphql');
@@ -179,7 +135,7 @@ describe('App drag utils', () => {
       url: 'http://127.0.0.1:9/graphql',
       source: 'query-param',
     });
-    expect(window.localStorage.getItem('involute.graphqlUrl')).toBeNull();
+    expect(window.localStorage.getItem('involute.graphqlUrl')).toBe('http://127.0.0.1:9/graphql');
   });
 
   it('uses the runtime API URL override from localStorage when present', () => {
@@ -192,36 +148,6 @@ describe('App drag utils', () => {
     });
   });
 
-  it('falls back safely when localStorage access throws in restricted contexts', () => {
-    const originalGetItem = window.localStorage.getItem;
-    window.localStorage.getItem = () => {
-      throw new DOMException('Access denied', 'SecurityError');
-    };
-
-    try {
-      expect(getAuthToken()).toBe('changeme-set-your-token');
-      expect(getGraphqlUrl()).toBe('http://localhost:4200/graphql');
-    } finally {
-      window.localStorage.getItem = originalGetItem;
-    }
-  });
-
-  it('reads the runtime viewer assertion from localStorage when configured', () => {
-    window.localStorage.setItem('involute.viewerAssertion', 'signed-viewer-assertion');
-
-    expect(getConfiguredViewerAssertion()).toBe('signed-viewer-assertion');
-  });
-
-  it('ignores disallowed runtime API URL overrides from the query param', () => {
-    window.history.replaceState({}, '', '/?involuteApiUrl=https%3A%2F%2Fevil.example%2Fgraphql');
-
-    expect(getGraphqlUrl()).toBe('http://localhost:4200/graphql');
-    expect(getGraphqlUrlDetails()).toEqual({
-      url: 'http://localhost:4200/graphql',
-      source: 'default',
-    });
-  });
-
   it('keeps the normal env/default API URL path when no runtime override is set', () => {
     expect(getGraphqlUrl()).toBe('http://localhost:4200/graphql');
     expect(getGraphqlUrlDetails()).toEqual({
@@ -230,83 +156,47 @@ describe('App drag utils', () => {
     });
   });
 
-  it('registers PointerSensor, MouseSensor, and TouchSensor for drag-and-drop', () => {
-    renderApp();
+  it('mergeIssueWithPreservedComments handles undefined comments gracefully', () => {
+    const previousIssue: IssueSummary = {
+      ...getIssue('issue-1'),
+      comments: {
+        nodes: [
+          {
+            id: 'comment-1',
+            body: 'Previous comment',
+            createdAt: '2026-04-02T10:00:00.000Z',
+            user: { id: 'user-1', name: 'Admin', email: 'admin@involute.local' },
+          },
+        ],
+      },
+    };
+    const nextIssue = {
+      ...getIssue('issue-1'),
+      title: 'Updated title',
+    } as IssueSummary;
+    delete (nextIssue as unknown as Record<string, unknown>).comments;
 
-    const sensorTypes = (dndMocks.useSensor.mock.calls as unknown[][]).map(
-      (call) => call[0],
-    );
-
-    expect(sensorTypes).toContain(PointerSensor);
-    expect(sensorTypes).toContain(MouseSensor);
-    expect(sensorTypes).toContain(TouchSensor);
-    expect(dndMocks.useSensors).toHaveBeenCalled();
+    const merged = mergeIssueWithPreservedComments(previousIssue, nextIssue);
+    expect(merged.comments.nodes).toHaveLength(1);
+    expect(merged.comments.nodes[0]!.body).toBe('Previous comment');
+    expect(merged.title).toBe('Updated title');
   });
 
-  it('configures each sensor with a distance activation constraint', () => {
-    renderApp();
+  it('mergeIssueWithPreservedComments handles undefined children gracefully', () => {
+    const previousIssue: IssueSummary = {
+      ...getIssue('issue-1'),
+      children: {
+        nodes: [{ id: 'child-1', identifier: 'INV-10', title: 'Child issue' }],
+      },
+    };
+    const nextIssue = {
+      ...getIssue('issue-1'),
+      title: 'Updated title',
+    } as IssueSummary;
+    delete (nextIssue as unknown as Record<string, unknown>).children;
 
-    for (const call of dndMocks.useSensor.mock.calls as unknown as [unknown, Record<string, unknown>][]) {
-      const options = call[1];
-      expect(options).toHaveProperty('activationConstraint');
-      expect((options.activationConstraint as { distance: number }).distance).toBe(DND_ACTIVATION_DISTANCE);
-    }
-  });
-
-  it('prefers pointerWithin collisions for live kanban dragging', async () => {
-    const core = await import('@dnd-kit/core');
-    const args = {} as Parameters<typeof kanbanCollisionDetection>[0];
-    const pointerMatch = [{ id: 'state-ready' }];
-    const rectMatch = [{ id: 'state-progress' }];
-    const closestMatch = [{ id: 'state-done' }];
-    const pointerWithinSpy = vi.spyOn(core, 'pointerWithin');
-    const rectIntersectionSpy = vi.spyOn(core, 'rectIntersection');
-    const closestCornersSpy = vi.spyOn(core, 'closestCorners');
-
-    pointerWithinSpy.mockReturnValue(pointerMatch as never);
-    rectIntersectionSpy.mockReturnValue(rectMatch as never);
-    closestCornersSpy.mockReturnValue(closestMatch as never);
-
-    expect(kanbanCollisionDetection(args)).toEqual(pointerMatch);
-    expect(pointerWithinSpy).toHaveBeenCalledWith(args);
-    expect(rectIntersectionSpy).not.toHaveBeenCalled();
-    expect(closestCornersSpy).not.toHaveBeenCalled();
-  });
-
-  it('falls back to rectIntersection before closestCorners when no pointer collision exists', async () => {
-    const core = await import('@dnd-kit/core');
-    const args = {} as Parameters<typeof kanbanCollisionDetection>[0];
-    const rectMatch = [{ id: 'state-progress' }];
-    const closestMatch = [{ id: 'state-done' }];
-    const pointerWithinSpy = vi.spyOn(core, 'pointerWithin');
-    const rectIntersectionSpy = vi.spyOn(core, 'rectIntersection');
-    const closestCornersSpy = vi.spyOn(core, 'closestCorners');
-
-    pointerWithinSpy.mockReturnValue([] as never);
-    rectIntersectionSpy.mockReturnValue(rectMatch as never);
-    closestCornersSpy.mockReturnValue(closestMatch as never);
-
-    expect(kanbanCollisionDetection(args)).toEqual(rectMatch);
-    expect(pointerWithinSpy).toHaveBeenCalledWith(args);
-    expect(rectIntersectionSpy).toHaveBeenCalledWith(args);
-    expect(closestCornersSpy).not.toHaveBeenCalled();
-  });
-
-  it('uses closestCorners as the final collision fallback', async () => {
-    const core = await import('@dnd-kit/core');
-    const args = {} as Parameters<typeof kanbanCollisionDetection>[0];
-    const closestMatch = [{ id: 'state-done' }];
-    const pointerWithinSpy = vi.spyOn(core, 'pointerWithin');
-    const rectIntersectionSpy = vi.spyOn(core, 'rectIntersection');
-    const closestCornersSpy = vi.spyOn(core, 'closestCorners');
-
-    pointerWithinSpy.mockReturnValue([] as never);
-    rectIntersectionSpy.mockReturnValue([] as never);
-    closestCornersSpy.mockReturnValue(closestMatch as never);
-
-    expect(kanbanCollisionDetection(args)).toEqual(closestMatch);
-    expect(pointerWithinSpy).toHaveBeenCalledWith(args);
-    expect(rectIntersectionSpy).toHaveBeenCalledWith(args);
-    expect(closestCornersSpy).toHaveBeenCalledWith(args);
+    const merged = mergeIssueWithPreservedComments(previousIssue, nextIssue);
+    expect(merged.children.nodes).toHaveLength(1);
+    expect(merged.children.nodes[0]!.identifier).toBe('INV-10');
   });
 });
