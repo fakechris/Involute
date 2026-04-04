@@ -5,6 +5,8 @@ import { DEFAULT_ADMIN_EMAIL } from './constants.js';
 import { createGraphQLContext, extractTokenFromAuthorizationHeader, isAuthorizedRequest } from './auth.js';
 
 describe('auth', () => {
+  const futureExpiry = () => Math.floor((Date.now() + 60_000) / 1000);
+
   it('extracts bearer tokens from the authorization header', () => {
     expect(extractTokenFromAuthorizationHeader('Bearer test-token')).toBe('test-token');
     expect(extractTokenFromAuthorizationHeader('  bearer   test-token  ')).toBe('test-token');
@@ -26,7 +28,7 @@ describe('auth', () => {
     const findUnique = vi.fn().mockResolvedValue({ id: 'user-1', email: 'person@example.com' });
     const viewerAssertion = createViewerAssertion(
       {
-        exp: Math.floor(new Date('2026-04-04T03:00:00.000Z').getTime() / 1000),
+        exp: futureExpiry(),
         sub: 'person@example.com',
         subType: 'email',
       },
@@ -61,7 +63,7 @@ describe('auth', () => {
     const findUnique = vi.fn().mockResolvedValue({ id: 'user-1', email: 'person@example.com' });
     const viewerAssertion = createViewerAssertion(
       {
-        exp: Math.floor(new Date('2026-04-04T03:00:00.000Z').getTime() / 1000),
+        exp: futureExpiry(),
         sub: 'user-1',
         subType: 'id',
       },

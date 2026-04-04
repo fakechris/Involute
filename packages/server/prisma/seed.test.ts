@@ -13,6 +13,8 @@ import {
 loadProjectEnvironment();
 
 const prisma = new PrismaClient();
+const compareLabelNames = (left: string, right: string) =>
+  left.localeCompare(right, 'en', { sensitivity: 'base' }) || left.localeCompare(right);
 
 describe('seedDatabase', () => {
   beforeAll(async () => {
@@ -80,7 +82,9 @@ describe('seedDatabase', () => {
       },
     });
 
-    expect(labels.map((label) => label.name)).toEqual([...DEFAULT_LABEL_NAMES].sort());
+    expect(labels.map((label) => label.name).sort(compareLabelNames)).toEqual(
+      [...DEFAULT_LABEL_NAMES].sort(compareLabelNames),
+    );
 
     const adminUsers = await prisma.user.findMany({
       where: {
