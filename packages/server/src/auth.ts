@@ -14,6 +14,7 @@ export interface GraphQLContext {
 }
 
 export interface GraphQLContextOptions {
+  allowAdminFallback?: boolean;
   request: Request;
   prisma: PrismaClient;
   authToken: string;
@@ -54,6 +55,7 @@ export function isAuthorizedRequest(
 }
 
 export async function createGraphQLContext({
+  allowAdminFallback = false,
   request,
   prisma,
   authToken,
@@ -66,10 +68,12 @@ export async function createGraphQLContext({
     };
   }
 
-  const viewerLookup = getViewerLookup(request, viewerAssertionSecret);
-  const viewer = await prisma.user.findUnique({
-    where: viewerLookup,
-  });
+  const viewerLookup = getViewerLookup(request, viewerAssertionSecret, allowAdminFallback);
+  const viewer = viewerLookup
+    ? await prisma.user.findUnique({
+        where: viewerLookup,
+      })
+    : null;
 
   return {
     prisma,
@@ -127,7 +131,8 @@ function tokensMatch(left: string, right: string): boolean {
 function getViewerLookup(
   request: Request,
   viewerAssertionSecret: string | null | undefined,
-): { email: string } | { id: string } {
+  allowAdminFallback: boolean,
+): { email: string } | { id: string } | null {
   const viewerAssertion = verifyViewerAssertion(
     request.headers.get(VIEWER_ASSERTION_HEADER)?.trim(),
     viewerAssertionSecret,
@@ -137,6 +142,10 @@ function getViewerLookup(
     return viewerAssertion.subType === 'id'
       ? { id: viewerAssertion.sub }
       : { email: viewerAssertion.sub };
+  }
+
+  if (!allowAdminFallback) {
+    return null;
   }
 
   return { email: DEFAULT_ADMIN_EMAIL };

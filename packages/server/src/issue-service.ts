@@ -8,6 +8,7 @@ import {
   createValidationError,
   ISSUE_LABEL_NOT_FOUND_MESSAGE,
   ISSUE_NOT_FOUND_MESSAGE,
+  PARENT_ISSUE_CYCLE_MESSAGE,
   PARENT_ISSUE_NOT_FOUND_MESSAGE,
   PARENT_ISSUE_SELF_REFERENCE_MESSAGE,
   PARENT_ISSUE_TEAM_MISMATCH_MESSAGE,
@@ -228,6 +229,8 @@ export async function updateIssue(
           throw createValidationError(PARENT_ISSUE_TEAM_MISMATCH_MESSAGE);
         }
 
+        await assertNoParentCycle(transaction, id, parentIssue.id);
+
         data.parent = {
           connect: {
             id: parentIssue.id,
@@ -251,6 +254,34 @@ export async function updateIssue(
       data,
     });
   });
+}
+
+async function assertNoParentCycle(
+  prisma: Prisma.TransactionClient,
+  issueId: string,
+  parentIssueId: string,
+): Promise<void> {
+  let currentParentId: string | null = parentIssueId;
+  const visitedIssueIds = new Set<string>();
+
+  while (currentParentId) {
+    if (currentParentId === issueId || visitedIssueIds.has(currentParentId)) {
+      throw createValidationError(PARENT_ISSUE_CYCLE_MESSAGE);
+    }
+
+    visitedIssueIds.add(currentParentId);
+
+    const currentParent: { parentId: string | null } | null = await prisma.issue.findUnique({
+      where: {
+        id: currentParentId,
+      },
+      select: {
+        parentId: true,
+      },
+    });
+
+    currentParentId = currentParent?.parentId ?? null;
+  }
 }
 
 export async function createComment(

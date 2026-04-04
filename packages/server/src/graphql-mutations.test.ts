@@ -1,7 +1,7 @@
 import type { PrismaClient, Team, User, WorkflowState } from '@prisma/client';
 
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   DEFAULT_ADMIN_EMAIL,
@@ -39,20 +39,24 @@ describe('GraphQL mutations', () => {
 
   beforeAll(async () => {
     await prisma.$connect();
+  });
+
+  beforeEach(async () => {
+    fixture = await resetDatabase(prisma);
     server = await startServer({
+      allowAdminFallback: true,
       prisma,
       authToken: TEST_AUTH_TOKEN,
       port: 0,
     });
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await server.stop();
-    await prisma.$disconnect();
   });
 
-  beforeEach(async () => {
-    fixture = await resetDatabase(prisma);
+  afterAll(async () => {
+    await prisma.$disconnect();
   });
 
   it('creates an issue with a generated identifier, Backlog state, and retrievable connection fields', async () => {

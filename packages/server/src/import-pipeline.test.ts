@@ -236,13 +236,19 @@ describe('import pipeline', () => {
     expect(issues.map((i) => i.identifier)).toEqual(['SON-42', 'SON-43', 'SON-44']);
   });
 
-  it('preserves issue createdAt and updatedAt timestamps from source', async () => {
+  it('preserves issue createdAt and updatedAt timestamps from source, including parent-linked issues', async () => {
     await runImportPipeline(prisma, exportDir);
 
-    const issue = await prisma.issue.findUnique({ where: { identifier: 'SON-42' } });
-    expect(issue).not.toBeNull();
-    expect(issue!.createdAt.toISOString()).toBe('2024-06-01T10:00:00.000Z');
-    expect(issue!.updatedAt.toISOString()).toBe('2024-06-02T15:00:00.000Z');
+    const parentIssue = await prisma.issue.findUnique({ where: { identifier: 'SON-42' } });
+    const childIssue = await prisma.issue.findUnique({ where: { identifier: 'SON-44' } });
+
+    expect(parentIssue).not.toBeNull();
+    expect(parentIssue!.createdAt.toISOString()).toBe('2024-06-01T10:00:00.000Z');
+    expect(parentIssue!.updatedAt.toISOString()).toBe('2024-06-02T15:00:00.000Z');
+
+    expect(childIssue).not.toBeNull();
+    expect(childIssue!.createdAt.toISOString()).toBe('2024-06-01T12:00:00.000Z');
+    expect(childIssue!.updatedAt.toISOString()).toBe('2024-06-04T09:00:00.000Z');
   });
 
   it('preserves parent-child relationships via ID mapping', async () => {
@@ -408,6 +414,7 @@ describe('import pipeline', () => {
     expect(result.counts.issues).toBe(3);
     expect(result.counts.comments).toBe(3);
     expect(result.counts.parentChildBackfills).toBe(1);
+    expect(result.warnings.skippedRecords).toEqual([]);
   });
 
   it('keeps null-user comment count parity and reports fallback handling in progress output', async () => {
@@ -478,5 +485,67 @@ describe('import pipeline', () => {
     expect(messages.some((m) => m.toLowerCase().includes('team'))).toBe(true);
     expect(messages.some((m) => m.toLowerCase().includes('issue'))).toBe(true);
     expect(messages.some((m) => m.toLowerCase().includes('comment'))).toBe(true);
+  });
+
+  it('records skipped issue and comment mappings instead of silently continuing', async () => {
+    const issuesWithMissingState = FIXTURE_ISSUES.map((issue) =>
+      issue.id === 'linear-issue-3'
+        ? {
+            ...issue,
+            state: {
+              id: 'missing-workflow-state',
+              name: 'Missing',
+            },
+          }
+        : issue,
+    );
+
+    await writeFile(join(exportDir, 'issues.json'), JSON.stringify(issuesWithMissingState, null, 2));
+
+    const result = await runImportPipeline(prisma, exportDir);
+
+    expect(result.skipped.issues).toBe(1);
+    expect(result.skipped.comments).toBe(1);
+    expect(result.warnings.skippedRecords).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entityType: 'issue',
+          legacyId: 'linear-issue-3',
+          identifier: 'SON-44',
+        }),
+        expect.objectContaining({
+          entityType: 'comment',
+          legacyId: 'linear-comment-3',
+        }),
+      ]),
+    );
+  });
+
+  it('fails with an explicit import conflict before relying on the identifier unique constraint', async () => {
+    const team = await prisma.team.create({
+      data: {
+        key: 'SON',
+        name: 'Sonata',
+      },
+    });
+    const state = await prisma.workflowState.create({
+      data: {
+        teamId: team.id,
+        name: 'In Progress',
+      },
+    });
+
+    await prisma.issue.create({
+      data: {
+        identifier: 'SON-42',
+        title: 'Locally created conflicting issue',
+        stateId: state.id,
+        teamId: team.id,
+      },
+    });
+
+    await expect(runImportPipeline(prisma, exportDir)).rejects.toThrow(
+      'Import conflict for issue SON-42 (linear-issue-1)',
+    );
   });
 });

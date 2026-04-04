@@ -43,6 +43,7 @@ describe('issues query filtering', () => {
   beforeAll(async () => {
     await prisma.$connect();
     server = await startServer({
+      allowAdminFallback: true,
       prisma,
       authToken: TEST_AUTH_TOKEN,
       port: 0,
@@ -310,6 +311,10 @@ describe('issues query filtering', () => {
       data: {
         issues: {
           nodes: [],
+          pageInfo: {
+            endCursor: null,
+            hasNextPage: false,
+          },
         },
       },
     });
@@ -384,6 +389,10 @@ describe('issues query filtering', () => {
       data: {
         issues: {
           nodes: [],
+          pageInfo: {
+            endCursor: null,
+            hasNextPage: false,
+          },
         },
       },
     });
@@ -412,7 +421,7 @@ describe('issues query filtering', () => {
     });
   });
 
-  it('returns newest matching team issues first so fresh large-team items are not hidden behind take limits', async () => {
+  it('caps large issue pages while still returning the newest matching team issues first', async () => {
     const recentTeam = await createTeamWithStates(prisma, {
       key: 'SON',
       name: 'Songwork',
@@ -450,7 +459,7 @@ describe('issues query filtering', () => {
     });
 
     const response = await queryIssues({
-      first: 200,
+      first: 500,
       filter: {
         team: {
           key: {
@@ -463,6 +472,7 @@ describe('issues query filtering', () => {
     expect(response.status).toBe(200);
     expect(response.body.errors).toBeUndefined();
     expect(response.body.data.issues.nodes).toHaveLength(200);
+    expect(response.body.data.issues.pageInfo.hasNextPage).toBe(true);
     expect(response.body.data.issues.nodes[0]).toMatchObject({
       id: newestIssue.id,
       identifier: newestIssue.identifier,
@@ -730,6 +740,10 @@ async function queryIssues({
             assignee { id isMe }
             labels { nodes { name } }
             children { nodes { id } }
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
           }
         }
       }

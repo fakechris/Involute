@@ -8,6 +8,7 @@ import { normalizeDatabaseUrl } from './database-url.js';
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 
 export interface ServerEnvironment {
+  allowAdminFallback: boolean;
   databaseUrl: string;
   authToken: string;
   port: number;
@@ -32,6 +33,7 @@ export function getServerEnvironment(env: NodeJS.ProcessEnv = process.env): Serv
   const port = Number(env.PORT ?? DEFAULT_PORT);
 
   return {
+    allowAdminFallback: env.ALLOW_ADMIN_FALLBACK === 'true',
     databaseUrl: env.DATABASE_URL ?? '',
     authToken: env.AUTH_TOKEN ?? '',
     port: Number.isFinite(port) && port > 0 ? port : DEFAULT_PORT,

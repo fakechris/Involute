@@ -61,6 +61,7 @@ const ISSUE_PAGE_SIZE = 200;
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
 const ISSUE_DELETE_ERROR_MESSAGE = 'We could not delete the issue. Please try again.';
 const COMMENT_DELETE_ERROR_MESSAGE = 'We could not delete the comment. Please try again.';
+const LOAD_MORE_ISSUES_ERROR_MESSAGE = 'We could not load more issues. Please try again.';
 const DND_ACTIVATION_DISTANCE = 1;
 const EMPTY_ISSUES: IssueSummary[] = [];
 
@@ -95,8 +96,8 @@ function moveIssueToState(
 
 export function BoardPage() {
   const [selectedTeamKey, setSelectedTeamKey] = useState<string | null>(() => readStoredTeamKey());
-  const [isHydratingAllIssues, setIsHydratingAllIssues] = useState(false);
-  const [hydrationFailed, setHydrationFailed] = useState(false);
+  const [isLoadingMoreIssues, setIsLoadingMoreIssues] = useState(false);
+  const [loadMoreIssuesError, setLoadMoreIssuesError] = useState<string | null>(null);
   const boardQueryVariables = useMemo<BoardPageQueryVariables>(
     () => ({
       first: ISSUE_PAGE_SIZE,
@@ -185,40 +186,8 @@ export function BoardPage() {
   }, [baseIssues]);
 
   useEffect(() => {
-    setHydrationFailed(false);
+    setLoadMoreIssuesError(null);
   }, [boardQueryVariables]);
-
-  useEffect(() => {
-    const pageInfo = data?.issues.pageInfo;
-
-    if (!pageInfo?.hasNextPage || !pageInfo.endCursor || hydrationFailed || isHydratingAllIssues) {
-      return;
-    }
-
-    setIsHydratingAllIssues(true);
-
-    void fetchMore({
-      variables: {
-        ...boardQueryVariables,
-        after: pageInfo.endCursor,
-      },
-      updateQuery: (previousResult, { fetchMoreResult }) =>
-        mergeBoardPageQueryResults(previousResult, fetchMoreResult),
-    })
-      .catch(() => {
-        setHydrationFailed(true);
-      })
-      .finally(() => {
-        setIsHydratingAllIssues(false);
-      });
-  }, [
-    boardQueryVariables,
-    data?.issues.pageInfo.endCursor,
-    data?.issues.pageInfo.hasNextPage,
-    fetchMore,
-    hydrationFailed,
-    isHydratingAllIssues,
-  ]);
 
   const selectedTeam =
     teams.find((team) => team.key === selectedTeamKey) ?? teams[0] ?? null;
@@ -226,11 +195,11 @@ export function BoardPage() {
     () => mergeBoardIssues(baseIssues, issueOverrides, createdIssues, deletedIssueIds),
     [baseIssues, createdIssues, deletedIssueIds, issueOverrides],
   );
-  const columns = useMemo(() => getBoardColumns(selectedTeam), [selectedTeam]);
   const visibleIssues = useMemo(() => {
     return filterIssuesByTeam(allIssues, selectedTeamKey ?? selectedTeam?.key ?? null);
   }, [allIssues, selectedTeam?.key, selectedTeamKey]);
-  const issuesByState = useMemo(() => groupIssuesByState(visibleIssues), [visibleIssues]);
+  const columns = useMemo(() => getBoardColumns(selectedTeam, visibleIssues), [selectedTeam, visibleIssues]);
+  const issuesByState = useMemo(() => groupIssuesByState(visibleIssues, columns), [columns, visibleIssues]);
   const activeIssue = useMemo(
     () => visibleIssues.find((issue) => issue.id === activeIssueId) ?? null,
     [activeIssueId, visibleIssues],
@@ -239,12 +208,39 @@ export function BoardPage() {
     () => visibleIssues.find((issue) => issue.id === selectedIssueId) ?? null,
     [selectedIssueId, visibleIssues],
   );
+  const hasMoreIssues = data?.issues.pageInfo.hasNextPage ?? false;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: DND_ACTIVATION_DISTANCE } }),
     useSensor(MouseSensor, { activationConstraint: { distance: DND_ACTIVATION_DISTANCE } }),
     useSensor(TouchSensor, { activationConstraint: { distance: DND_ACTIVATION_DISTANCE } }),
   );
+
+  async function handleLoadMoreIssues() {
+    const pageInfo = data?.issues.pageInfo;
+
+    if (!pageInfo?.hasNextPage || !pageInfo.endCursor || isLoadingMoreIssues) {
+      return;
+    }
+
+    setLoadMoreIssuesError(null);
+    setIsLoadingMoreIssues(true);
+
+    try {
+      await fetchMore({
+        variables: {
+          ...boardQueryVariables,
+          after: pageInfo.endCursor,
+        },
+        updateQuery: (previousResult, { fetchMoreResult }) =>
+          mergeBoardPageQueryResults(previousResult, fetchMoreResult),
+      });
+    } catch {
+      setLoadMoreIssuesError(LOAD_MORE_ISSUES_ERROR_MESSAGE);
+    } finally {
+      setIsLoadingMoreIssues(false);
+    }
+  }
 
   async function persistIssueUpdate(
     issue: IssueSummary,
@@ -517,7 +513,7 @@ export function BoardPage() {
 
   async function handleDragEnd(event: DragEndEvent) {
     const issueId = String(event.active.id);
-    const targetStateId = getDropTargetStateId(event) ?? dragPreviewStateId;
+    const targetStateId = getDropTargetStateId(event);
     const originStateId = dragOriginStateId;
     const originState =
       originStateId
@@ -781,15 +777,25 @@ export function BoardPage() {
         </section>
       ) : null}
 
-      {isHydratingAllIssues ? (
-        <section className="board-message" aria-live="polite">
-          Loading remaining issues…
-        </section>
-      ) : null}
-
-      {hydrationFailed ? (
-        <section className="board-message board-message--error" role="alert">
-          <p>We could not load the remaining issues. Showing the first page only.</p>
+      {hasMoreIssues || loadMoreIssuesError ? (
+        <section
+          className={`board-message${loadMoreIssuesError ? ' board-message--error' : ''}`}
+          role={loadMoreIssuesError ? 'alert' : undefined}
+        >
+          <p>
+            {loadMoreIssuesError ??
+              'Showing the current page of issues. Load more to continue browsing this team.'}
+          </p>
+          {hasMoreIssues ? (
+            <button
+              type="button"
+              className="issue-comment-composer__submit"
+              disabled={isLoadingMoreIssues}
+              onClick={() => void handleLoadMoreIssues()}
+            >
+              {isLoadingMoreIssues ? 'Loading more issues…' : 'Load more issues'}
+            </button>
+          ) : null}
         </section>
       ) : null}
 
@@ -851,7 +857,7 @@ export function BoardPage() {
                 key={column.name}
                 title={column.name}
                 stateId={column.stateId}
-                issues={issuesByState[column.name]}
+                issues={issuesByState[column.stateId] ?? EMPTY_ISSUES}
                 onNativeDragStart={(payload) => {
                   setActiveIssueId(payload.issueId);
                   setDragOriginStateId(payload.stateId);

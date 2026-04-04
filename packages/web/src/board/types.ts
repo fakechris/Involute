@@ -12,6 +12,11 @@ export interface WorkflowStateSummary {
   name: string;
 }
 
+export interface BoardColumn {
+  name: string;
+  stateId: string;
+}
+
 export interface LabelSummary {
   id: string;
   name: string;

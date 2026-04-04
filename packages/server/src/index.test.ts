@@ -38,6 +38,7 @@ describe('GraphQL server core', () => {
   beforeAll(async () => {
     await prisma.$connect();
     server = await startServer({
+      allowAdminFallback: true,
       prisma,
       authToken: TEST_AUTH_TOKEN,
       port: 0,

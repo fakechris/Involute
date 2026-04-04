@@ -72,6 +72,7 @@ const COMMENT_ORDER_BY: Prisma.CommentOrderByWithRelationInput[] = [
   { createdAt: 'asc' },
   { id: 'asc' },
 ];
+const MAX_ISSUES_CONNECTION_FIRST = 200;
 
 function buildIssueListInclude(
   options: { includeChildren?: boolean; includeComments?: boolean } = {},
@@ -367,6 +368,7 @@ const resolvers = {
       context: GraphQLContext,
       info: GraphQLResolveInfo,
     ): Promise<{ nodes: IssueParent[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
+      const first = clampConnectionFirst(args.first, MAX_ISSUES_CONNECTION_FIRST);
       const where = combineIssueWhere(
         buildIssueWhere(args.filter, context.viewer?.id ?? null),
         buildIssueCursorWhere(args.after),
@@ -379,13 +381,13 @@ const resolvers = {
           includeComments: requestedIssueFields.has('comments'),
         }),
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        take: args.first + 1,
+        take: first + 1,
       });
-      const nodes = issues.slice(0, args.first);
+      const nodes = issues.slice(0, first);
 
       return {
         nodes,
-        pageInfo: buildPageInfo(nodes, issues.length > args.first),
+        pageInfo: buildPageInfo(nodes, issues.length > first),
       };
     },
     teams: async (
@@ -733,6 +735,14 @@ function serializeDateTime(value: unknown): string {
   }
 
   throw new TypeError('DateTime values must be Date instances or ISO 8601 strings.');
+}
+
+function clampConnectionFirst(requestedFirst: number, maxFirst: number): number {
+  if (!Number.isFinite(requestedFirst) || requestedFirst < 1) {
+    return 1;
+  }
+
+  return Math.min(Math.trunc(requestedFirst), maxFirst);
 }
 
 function parseDateTime(value: string): Date {
