@@ -1,22 +1,26 @@
 # Involute
 
-Involute is a self-hosted, Linear-compatible project management service. It includes a GraphQL API, a Linear import/export pipeline, a web kanban UI, and a CLI for workspace and issue operations.
+一人团队的 Linear 式项目管理系统开源实现。
+
+Involute bundles a GraphQL API, a kanban web app, and a CLI that can export one Linear team, import it into Involute, verify the result, and then let you visually accept it in the board UI.
 
 ## Workspace layout
 
-- `packages/server` — GraphQL API, Prisma-backed data model, import pipeline, validation data helpers
-- `packages/web` — React + Vite kanban web UI
+- `packages/server` — GraphQL API, Prisma-backed data model, import pipeline, validation helpers
+- `packages/web` — React + Vite kanban UI
 - `packages/cli` — `involute` CLI for config, import/export, teams, issues, labels, and comments
 - `packages/shared` — shared TypeScript utilities
+- `docs/vision.md` — current product vision
+- `docs/milestones.md` — active milestones and sequencing
 
 ## Environment
 
 Create a repo-root `.env` file based on `.env.example`:
 
 ```env
-DATABASE_URL=YOUR_DATABASE_URL_HERE
-AUTH_TOKEN=YOUR_AUTH_TOKEN_HERE
-VIEWER_ASSERTION_SECRET=YOUR_VIEWER_ASSERTION_SECRET_HERE
+DATABASE_URL=postgresql://involute:involute@127.0.0.1:5434/involute?schema=public
+AUTH_TOKEN=changeme-set-your-token
+VIEWER_ASSERTION_SECRET=compose-viewer-secret
 PORT=4200
 ```
 
@@ -33,156 +37,148 @@ Optional web runtime variables:
 - `VITE_INVOLUTE_AUTH_TOKEN` — provide the web app bearer token at build/dev time
 - `VITE_INVOLUTE_VIEWER_ASSERTION` — signed viewer assertion to act as a specific user without exposing the server secret
 
-## Install and setup
+## Quick start
 
 ```bash
 pnpm install
 cp .env.example .env
+pnpm compose:up
 ```
 
-Then update `.env` with your PostgreSQL connection string and auth token.
-
-The local service wiring used in this repo expects:
-
-- PostgreSQL reachable for the API
-- API on `http://localhost:4200`
-- Web UI on `http://localhost:4201`
-
-## Run with Docker Compose
-
-The quickest local acceptance setup is Docker Compose. It starts PostgreSQL, the API, the web app, and a reusable CLI container.
-
-```bash
-# From the repository root
-mkdir -p .tmp
-docker compose up --build -d db server web
-```
-
-Smoke checks:
+Smoke check:
 
 ```bash
 curl http://localhost:4200/health
 curl http://localhost:4201
 ```
 
-To stop the stack:
+Then open `http://localhost:4201`.
+
+Compose defaults:
+
+- API: `http://localhost:4200`
+- Web: `http://localhost:4201`
+- Postgres: `127.0.0.1:5434`
+- CLI export mount: host `.tmp/` is available as `/exports` inside the `cli` container
+- Compose uses the `web-dev` Docker target for the live Vite UI; the published web image uses the production `web` target
+
+Stop the stack with:
 
 ```bash
-docker compose down
-```
-## Run the API
-
-```bash
-cd packages/server
-pnpm build
-PORT=4200 node dist/index.js
-```
-
-Health check:
-
-```bash
-curl http://localhost:4200/health
+pnpm compose:down
 ```
 
-## Run the web app
+## Manual single-team import
+
+Set your Linear token in the shell:
 
 ```bash
-cd packages/web
-PORT=4201 npx vite --port 4201
+export LINEAR_TOKEN='lin_api_xxx'
 ```
 
-By default the web app talks to `http://localhost:4200/graphql`.
-
-## CLI usage
-
-Build the CLI package first:
+Run the end-to-end team import inside the compose CLI container:
 
 ```bash
-cd packages/cli
-pnpm build
+docker compose run --rm cli import team --token "$LINEAR_TOKEN" --team SON --keep-export --output /exports/son-export
 ```
 
-Configure the CLI against your running API:
+What this does:
+
+- exports one Linear team into `.tmp/son-export`
+- imports the exported data into Involute
+- runs `import verify`
+- writes `.tmp/son-export/involute-import-summary.json`
+
+After it completes, open `http://localhost:4201` and visually check the imported team in the board.
+
+Recommended acceptance checks:
+
+- the target team appears in the board
+- issue count looks complete for that team
+- a few issues have the expected state, labels, assignee, and comments
+- the latest imported issues are visible in the board, not hidden behind the first page
+
+## Local development without Docker
+
+Start the API:
 
 ```bash
-node dist/index.js config set server-url http://localhost:4200
-node dist/index.js config set token YOUR_AUTH_TOKEN_HERE
+DATABASE_URL="postgresql://involute:involute@127.0.0.1:5434/involute?schema=public" AUTH_TOKEN="changeme-set-your-token" VIEWER_ASSERTION_SECRET="compose-viewer-secret" pnpm --filter @involute/server exec tsx src/index.ts
+```
+
+Start the web app:
+
+```bash
+VITE_INVOLUTE_AUTH_TOKEN="changeme-set-your-token" VITE_INVOLUTE_GRAPHQL_URL="http://127.0.0.1:4200/graphql" pnpm --filter @involute/web exec vite --host 127.0.0.1 --port 4201
+```
+
+Run the CLI against that local API:
+
+```bash
+pnpm --filter @involute/cli exec node dist/index.js import team --token "$LINEAR_TOKEN" --team SON --keep-export --output .tmp/son-export
 ```
 
 If you need the CLI or web UI to act as a specific user, mint a short-lived viewer assertion with a trusted secret and persist it:
 
 ```bash
-export INVOLUTE_VIEWER_ASSERTION_SECRET=YOUR_VIEWER_ASSERTION_SECRET_HERE
-node dist/index.js auth viewer-assertion create user@example.com --ttl 3600
-node dist/index.js config set viewer-assertion SIGNED_ASSERTION_HERE
+export INVOLUTE_VIEWER_ASSERTION_SECRET=compose-viewer-secret
+pnpm --filter @involute/cli exec node dist/index.js auth viewer-assertion create user@example.com --ttl 3600
+pnpm --filter @involute/cli exec node dist/index.js config set viewer-assertion SIGNED_ASSERTION_HERE
 ```
 
 The web UI can use the same signed assertion via `VITE_INVOLUTE_VIEWER_ASSERTION` or localStorage key `involute.viewerAssertion`.
 
-Common commands:
+## Quality gates
 
-```bash
-node dist/index.js teams list
-node dist/index.js issues list --team INV
-node dist/index.js issues create --team INV --title "My issue"
-node dist/index.js comments add INV-1 --body "Hello from Involute"
-node dist/index.js export --token YOUR_LINEAR_API_TOKEN --team SON --output ./export
-node dist/index.js import --file ./export
-node dist/index.js import verify --file ./export
-node dist/index.js import team --token YOUR_LINEAR_API_TOKEN --team SON
-```
-
-## Single-Team import acceptance
-
-The fastest real acceptance path is to run the end-to-end team import command, then inspect the board UI.
-
-1. Start the API:
-
-```bash
-cd packages/server
-PORT=4200 node dist/index.js
-```
-
-2. Start the web app:
-
-```bash
-cd packages/web
-VITE_INVOLUTE_AUTH_TOKEN="$AUTH_TOKEN" npx vite --port 4201
-```
-
-3. Export your Linear token in the shell:
-
-```bash
-export LINEAR_API_TOKEN='lin_api_xxx'
-```
-
-4. Run the end-to-end team import:
-
-```bash
-docker compose run --rm cli import team --token "$LINEAR_API_TOKEN" --team SON --keep-export --output /exports/son-export
-```
-
-This command will:
-
-- export the selected Linear team to `.tmp/son-export` on the host
-- import the exported artifacts into Involute
-- run `import verify` against the same export
-
-5. Open `http://localhost:4201` and validate:
-
-- the imported team appears in the team selector
-- the board shows every imported issue for that team, not just the first page
-- spot-check identifiers, states, labels, assignees, parent-child links, and comments
-
-The board now hydrates issue pages until the selected team has been loaded completely, so large teams are no longer truncated at the first `200` issues during visual acceptance.
-## Validation
-
-Run workspace checks from the repository root:
+Unit and integration checks:
 
 ```bash
 pnpm typecheck
-pnpm test
 pnpm lint
+pnpm test
+pnpm build
 ```
 
-GitHub Actions now runs the same `typecheck`, `lint`, `test`, and `build` gates on pull requests and pushes to `main`.
+Browser E2E:
+
+```bash
+pnpm e2e
+```
+
+The Playwright suite verifies the core board lifecycle: create, update, comment, delete comment, and delete issue.
+
+## Docker images
+
+This repo ships one multi-target `Dockerfile` with `server`, `web-dev`, `web`, and `cli` targets. The Docker Hub publish workflow expects these secrets:
+
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN`
+
+When they are set, `.github/workflows/docker-publish.yml` pushes:
+
+- `${DOCKERHUB_USERNAME}/involute-server`
+- `${DOCKERHUB_USERNAME}/involute-web`
+- `${DOCKERHUB_USERNAME}/involute-cli`
+
+The published `involute-web` image is a static production build. It bakes `VITE_INVOLUTE_GRAPHQL_URL` at build time, but it does not bake an auth token into the image. The compose stack remains the reference runtime path for local acceptance and should stay green before publishing.
+
+## Common CLI commands
+
+```bash
+pnpm --filter @involute/cli exec node dist/index.js teams list
+pnpm --filter @involute/cli exec node dist/index.js issues list --team SON
+pnpm --filter @involute/cli exec node dist/index.js issues create --team SON --title "My issue"
+pnpm --filter @involute/cli exec node dist/index.js comments add SON-1 --body "Hello from Involute"
+pnpm --filter @involute/cli exec node dist/index.js export --token "$LINEAR_TOKEN" --team SON --output .tmp/son-export
+pnpm --filter @involute/cli exec node dist/index.js import --file .tmp/son-export
+pnpm --filter @involute/cli exec node dist/index.js import verify --file .tmp/son-export
+pnpm --filter @involute/cli exec node dist/index.js import team --token "$LINEAR_TOKEN" --team SON
+```
+
+## Current focus
+
+- Make single-team import a repeatable acceptance loop
+- Keep the compose stack and CI reproducible
+- Lock the core board lifecycle down with E2E before the larger UI/UX redesign
+
+See [docs/vision.md](docs/vision.md) and [docs/milestones.md](docs/milestones.md) for the product direction.

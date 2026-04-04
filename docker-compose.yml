@@ -11,7 +11,7 @@ services:
       timeout: 5s
       retries: 20
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
@@ -27,6 +27,7 @@ services:
       AUTH_TOKEN: ${AUTH_TOKEN:-changeme-set-your-token}
       VIEWER_ASSERTION_SECRET: ${VIEWER_ASSERTION_SECRET:-compose-viewer-secret}
       PORT: 4200
+      SEED_DATABASE: ${SEED_DATABASE:-true}
     healthcheck:
       test:
         [
@@ -45,14 +46,13 @@ services:
   web:
     build:
       context: .
-      target: web
+      target: web-dev
     depends_on:
       server:
         condition: service_healthy
     environment:
-      PORT: 4201
       VITE_INVOLUTE_AUTH_TOKEN: ${AUTH_TOKEN:-changeme-set-your-token}
-      VITE_INVOLUTE_GRAPHQL_URL: http://localhost:4200/graphql
+      VITE_INVOLUTE_GRAPHQL_URL: ${VITE_INVOLUTE_GRAPHQL_URL:-http://localhost:4200/graphql}
     healthcheck:
       test:
         [

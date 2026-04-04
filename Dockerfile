@@ -23,28 +23,38 @@ COPY . .
 FROM base AS server
 
 RUN pnpm --filter @involute/server build
-
-WORKDIR /app/packages/server
+COPY packages/server/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 4200
 
-CMD ["sh", "-lc", "pnpm exec prisma db push --skip-generate && node dist/index.js"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
-FROM base AS web
-
-RUN pnpm --filter @involute/shared build
-
-WORKDIR /app/packages/web
+FROM base AS web-dev
 
 EXPOSE 4201
 
-CMD ["sh", "-lc", "pnpm exec vite --host 0.0.0.0 --port 4201"]
+CMD ["pnpm", "--filter", "@involute/web", "exec", "vite", "--host", "0.0.0.0", "--port", "4201"]
+
+FROM base AS web-build
+
+ARG VITE_INVOLUTE_GRAPHQL_URL=http://localhost:4200/graphql
+ENV VITE_INVOLUTE_GRAPHQL_URL=$VITE_INVOLUTE_GRAPHQL_URL
+
+RUN pnpm --filter @involute/web build
+
+FROM nginx:1.27-alpine AS web
+
+COPY packages/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=web-build /app/packages/web/dist /usr/share/nginx/html
+
+EXPOSE 4201
+
+CMD ["nginx", "-g", "daemon off;"]
 
 FROM base AS cli
 
-RUN pnpm --filter @involute/cli build
+RUN pnpm --filter @involute/server build && pnpm --filter @involute/cli build
 
-WORKDIR /app/packages/cli
-
-ENTRYPOINT ["node", "dist/index.js"]
+ENTRYPOINT ["node", "packages/cli/dist/index.js"]
 CMD ["--help"]

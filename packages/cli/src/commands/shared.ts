@@ -10,6 +10,7 @@ export function loadEnv(): void {
 
   for (const envPath of paths) {
     const result = loadDotenv({ path: envPath });
+
     if (!result.error) {
       return;
     }

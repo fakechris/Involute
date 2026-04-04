@@ -17,7 +17,7 @@ interface VerifyOptions {
   file: string;
 }
 
-interface EntityVerification {
+export interface EntityVerification {
   entity: string;
   exportCount: number;
   dbCount: number;
@@ -25,7 +25,7 @@ interface EntityVerification {
   details?: string | undefined;
 }
 
-interface VerificationResult {
+export interface VerificationResult {
   entities: EntityVerification[];
   allPassed: boolean;
 }
@@ -600,9 +600,6 @@ async function verifyWorkflowStates(
     details: details.join('; '),
   };
 }
-
-// Exported interface for types used by the exported `runVerify` function's return
-export type { VerificationResult, EntityVerification };
 
 /**
  * Run the verification pipeline — extracted for testability.
