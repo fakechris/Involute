@@ -145,6 +145,7 @@ describe('App issue metadata flows', () => {
         ...boardQueryResult,
         issues: {
           nodes: [],
+          pageInfo: boardQueryResult.issues.pageInfo,
         },
       },
       loading: false,

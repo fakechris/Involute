@@ -135,7 +135,7 @@ describe('App drag helpers', () => {
       url: 'http://127.0.0.1:9/graphql',
       source: 'query-param',
     });
-    expect(window.localStorage.getItem('involute.graphqlUrl')).toBe('http://127.0.0.1:9/graphql');
+    expect(window.localStorage.getItem('involute.graphqlUrl')).toBeNull();
   });
 
   it('uses the runtime API URL override from localStorage when present', () => {

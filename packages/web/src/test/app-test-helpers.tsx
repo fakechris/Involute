@@ -1,62 +1,75 @@
-import { cleanup, render, type RenderResult } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
 import type { ComponentType, ReactNode } from 'react';
+import { cleanup, render } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, vi } from 'vitest';
 
-import type { BoardPageQueryData, IssueSummary } from '../board/types';
-
-function buildDefaultUseMutationMock(document: unknown) {
-  const source = String(document);
-
-  if (source.includes('mutation CommentCreate')) {
-    return [vi.fn().mockResolvedValue({ data: { commentCreate: { success: true, comment: null } } })];
-  }
-
-  if (source.includes('mutation CommentDelete')) {
-    return [vi.fn().mockResolvedValue({ data: { commentDelete: { success: true, commentId: 'comment-1' } } })];
-  }
-
-  if (source.includes('mutation IssueDelete')) {
-    return [vi.fn().mockResolvedValue({ data: { issueDelete: { success: true, issueId: 'issue-1' } } })];
-  }
-
-  return [vi.fn()];
-}
-
-type MockFn = ReturnType<typeof vi.fn>;
-type ApolloMocks = {
-  useQuery: MockFn;
-  useMutation: MockFn;
-};
-type DndMocks = {
-  useSensor: MockFn;
-  useSensors: MockFn;
+import { App } from '../App';
+import type {
+  BoardPageQueryData,
+  CommentDeleteMutationData,
+  CommentCreateMutationData,
+  IssueDeleteMutationData,
+  IssueCreateMutationData,
+  IssueSummary,
+  IssueUpdateMutationData,
+} from '../board/types';
+export type {
+  BoardPageQueryData,
+  CommentDeleteMutationData,
+  CommentCreateMutationData,
+  IssueDeleteMutationData,
+  IssueCreateMutationData,
+  IssueSummary,
+  IssueUpdateMutationData,
 };
 
-const hoistedMocks = vi.hoisted(() => ({
-  apollo: {
-    useQuery: vi.fn(),
-    useMutation: vi.fn(),
-  },
-  dnd: {
-    useSensor: vi.fn(() => ({})),
-    useSensors: vi.fn(() => []),
-  },
+type ApolloMockSet = {
+  useMutation: ReturnType<typeof vi.fn>;
+  useQuery: ReturnType<typeof vi.fn>;
+};
+
+type DndMockSet = {
+  useSensor: ReturnType<typeof vi.fn>;
+  useSensors: ReturnType<typeof vi.fn>;
+};
+
+const hoistedApolloMocks = vi.hoisted<ApolloMockSet>(() => ({
+  useQuery: vi.fn(),
+  useMutation: vi.fn((document) => {
+    const source = String(document);
+
+    if (source.includes('mutation CommentCreate')) {
+      return [vi.fn().mockResolvedValue({ data: { commentCreate: { success: true, comment: null } } })];
+    }
+
+    if (source.includes('mutation CommentDelete')) {
+      return [vi.fn().mockResolvedValue({ data: { commentDelete: { success: true, commentId: 'comment-1' } } })];
+    }
+
+    if (source.includes('mutation IssueDelete')) {
+      return [vi.fn().mockResolvedValue({ data: { issueDelete: { success: true, issueId: 'issue-1' } } })];
+    }
+
+    return [vi.fn()];
+  }),
 }));
-
-export const apolloMocks: ApolloMocks = hoistedMocks.apollo;
+export const apolloMocks: ApolloMockSet = hoistedApolloMocks;
 
 vi.mock('@apollo/client/react', async () => {
   const actual = await vi.importActual<typeof import('@apollo/client/react')>('@apollo/client/react');
 
   return {
     ...actual,
-    useQuery: hoistedMocks.apollo.useQuery,
-    useMutation: hoistedMocks.apollo.useMutation,
+    useQuery: hoistedApolloMocks.useQuery,
+    useMutation: hoistedApolloMocks.useMutation,
   };
 });
 
-export const dndMocks: DndMocks = hoistedMocks.dnd;
+const hoistedDndMocks = vi.hoisted<DndMockSet>(() => ({
+  useSensor: vi.fn(() => ({})),
+  useSensors: vi.fn(() => []),
+}));
+export const dndMocks: DndMockSet = hoistedDndMocks;
 
 vi.mock('@dnd-kit/core', async () => {
   const actual = await vi.importActual<typeof import('@dnd-kit/core')>('@dnd-kit/core');
@@ -65,25 +78,60 @@ vi.mock('@dnd-kit/core', async () => {
     ...actual,
     DndContext: ({ children }: { children: ReactNode }) => <div>{children}</div>,
     DragOverlay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-    useSensor: hoistedMocks.dnd.useSensor,
-    useSensors: hoistedMocks.dnd.useSensors,
+    useSensor: hoistedDndMocks.useSensor,
+    useSensors: hoistedDndMocks.useSensors,
   };
 });
 
 beforeEach(() => {
-  hoistedMocks.dnd.useSensor.mockClear();
-  hoistedMocks.dnd.useSensors.mockClear();
-  hoistedMocks.apollo.useQuery.mockReset();
-  hoistedMocks.apollo.useMutation.mockReset();
-  hoistedMocks.apollo.useMutation.mockImplementation(buildDefaultUseMutationMock);
+  const storage = new Map<string, string>();
+
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: {
+      clear: () => storage.clear(),
+      getItem: (key: string) => storage.get(key) ?? null,
+      key: (index: number) => Array.from(storage.keys())[index] ?? null,
+      removeItem: (key: string) => {
+        storage.delete(key);
+      },
+      setItem: (key: string, value: string) => {
+        storage.set(key, value);
+      },
+      get length() {
+        return storage.size;
+      },
+    },
+  });
+  dndMocks.useSensor.mockClear();
+  dndMocks.useSensors.mockClear();
+  apolloMocks.useQuery.mockReset();
+  apolloMocks.useMutation.mockReset();
+  apolloMocks.useMutation.mockImplementation((document) => {
+    const source = String(document);
+
+    if (source.includes('mutation CommentCreate')) {
+      return [vi.fn().mockResolvedValue({ data: { commentCreate: { success: true, comment: null } } })];
+    }
+
+    if (source.includes('mutation CommentDelete')) {
+      return [vi.fn().mockResolvedValue({ data: { commentDelete: { success: true, commentId: 'comment-1' } } })];
+    }
+
+    if (source.includes('mutation IssueDelete')) {
+      return [vi.fn().mockResolvedValue({ data: { issueDelete: { success: true, issueId: 'issue-1' } } })];
+    }
+
+    return [vi.fn()];
+  });
 });
 
 afterEach(() => {
   cleanup();
-  document.body.innerHTML = '';
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   window.localStorage.clear();
   window.history.replaceState({}, '', '/');
-  vi.unstubAllEnvs();
 });
 
 export const boardQueryResult: BoardPageQueryData = {
@@ -189,17 +237,39 @@ export const boardQueryResult: BoardPageQueryData = {
         comments: { nodes: [] },
       },
     ],
+    pageInfo: {
+      endCursor: null,
+      hasNextPage: false,
+    },
   },
 };
 
-export function renderApp(AppComponent: ComponentType, queryState: {
+type QueryState = {
   data?: BoardPageQueryData;
   error?: Error;
+  fetchMore?: ReturnType<typeof vi.fn>;
   loading?: boolean;
-} = {
-  data: boardQueryResult,
-  loading: false,
-}, initialEntries: string[] = ['/']): RenderResult {
+};
+
+export function renderApp(
+  componentOrQueryState: ComponentType | QueryState = {
+    data: boardQueryResult,
+    loading: false,
+  },
+  queryStateOrInitialEntries: QueryState | string[] = ['/'],
+  maybeInitialEntries: string[] = ['/'],
+): ReturnType<typeof render> {
+  const AppComponent = typeof componentOrQueryState === 'function' ? componentOrQueryState : App;
+  const queryState =
+    typeof componentOrQueryState === 'function'
+      ? ((Array.isArray(queryStateOrInitialEntries)
+          ? { data: boardQueryResult, loading: false }
+          : queryStateOrInitialEntries) as QueryState)
+      : componentOrQueryState;
+  const initialEntries = Array.isArray(queryStateOrInitialEntries)
+    ? queryStateOrInitialEntries
+    : maybeInitialEntries;
+
   apolloMocks.useQuery.mockImplementation((_, options) => {
     if (options?.variables && 'id' in options.variables) {
       const issueId = String(options.variables.id);
@@ -217,6 +287,7 @@ export function renderApp(AppComponent: ComponentType, queryState: {
     return {
       data: queryState.data,
       error: queryState.error,
+      fetchMore: queryState.fetchMore ?? vi.fn().mockResolvedValue(undefined),
       loading: queryState.loading ?? false,
     };
   });

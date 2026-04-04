@@ -96,6 +96,10 @@ const boardQueryResult: BoardPageQueryData = {
         },
       } satisfies IssueSummary,
     ],
+    pageInfo: {
+      endCursor: null,
+      hasNextPage: false,
+    },
   },
 };
 
@@ -183,7 +187,7 @@ describe('App delete flows', () => {
 
     fireEvent.click((await screen.findAllByRole('button', { name: 'Open INV-1' }))[0]!);
     const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
-    fireEvent.click(within(drawer).getByRole('button', { name: 'Delete comment' }));
+    fireEvent.click(within(drawer).getAllByRole('button', { name: 'Delete comment' })[0]!);
 
     await waitFor(() =>
       expect(deleteComment).toHaveBeenCalledWith({

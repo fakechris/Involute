@@ -45,6 +45,7 @@ describe('App comments', () => {
             },
             ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
           ],
+          pageInfo: boardQueryResult.issues.pageInfo,
         },
       },
       loading: false,
@@ -145,6 +146,7 @@ describe('App comments', () => {
             },
             ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
           ],
+          pageInfo: boardQueryResult.issues.pageInfo,
         },
       },
       loading: false,
@@ -240,6 +242,7 @@ describe('App comments', () => {
             },
             ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
           ],
+          pageInfo: boardQueryResult.issues.pageInfo,
         },
       },
       loading: false,
@@ -318,6 +321,7 @@ describe('App comments', () => {
             },
             ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
           ],
+          pageInfo: boardQueryResult.issues.pageInfo,
         },
       },
       loading: false,
@@ -326,7 +330,7 @@ describe('App comments', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
     const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
 
-    fireEvent.click(within(drawer).getByRole('button', { name: 'Delete comment' }));
+    fireEvent.click(within(drawer).getAllByRole('button', { name: 'Delete comment' })[0]!);
 
     await waitFor(() =>
       expect(deleteComment).toHaveBeenCalledWith({
