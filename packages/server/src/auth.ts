@@ -1,7 +1,13 @@
+import { timingSafeEqual } from 'node:crypto';
+
 import type { PrismaClient, User } from '@prisma/client';
+import type { Plugin } from 'graphql-yoga';
 
 import { DEFAULT_ADMIN_EMAIL } from './constants.js';
 import { createNotAuthenticatedError, NOT_AUTHENTICATED_MESSAGE } from './errors.js';
+
+const VIEWER_ID_HEADER = 'x-involute-user-id';
+const VIEWER_EMAIL_HEADER = 'x-involute-user-email';
 
 export interface GraphQLContext {
   prisma: PrismaClient;
@@ -44,7 +50,7 @@ export function isAuthorizedRequest(
 ): boolean {
   const token = extractTokenFromAuthorizationHeader(request.headers.get('authorization'));
 
-  return Boolean(token && authToken && token === authToken);
+  return Boolean(token && authToken && tokensMatch(token, authToken));
 }
 
 export async function createGraphQLContext({
@@ -59,10 +65,9 @@ export async function createGraphQLContext({
     };
   }
 
+  const viewerLookup = getViewerLookup(request);
   const viewer = await prisma.user.findUnique({
-    where: {
-      email: DEFAULT_ADMIN_EMAIL,
-    },
+    where: viewerLookup,
   });
 
   return {
@@ -79,9 +84,9 @@ export function requireAuthentication(context: GraphQLContext): User {
   return context.viewer;
 }
 
-export function createAuthenticationPlugin(authToken: string) {
+export function createAuthenticationPlugin(authToken: string): Plugin {
   return {
-    onRequest({ endResponse, fetchAPI, request }: any) {
+    onRequest({ endResponse, fetchAPI, request }) {
       if (isAuthorizedRequest(request, authToken)) {
         return;
       }
@@ -105,4 +110,31 @@ export function createAuthenticationPlugin(authToken: string) {
       );
     },
   };
+}
+
+function tokensMatch(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left, 'utf8');
+  const rightBuffer = Buffer.from(right, 'utf8');
+
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function getViewerLookup(request: Request): { email: string } | { id: string } {
+  const viewerId = request.headers.get(VIEWER_ID_HEADER)?.trim();
+
+  if (viewerId) {
+    return { id: viewerId };
+  }
+
+  const viewerEmail = request.headers.get(VIEWER_EMAIL_HEADER)?.trim();
+
+  if (viewerEmail) {
+    return { email: viewerEmail };
+  }
+
+  return { email: DEFAULT_ADMIN_EMAIL };
 }

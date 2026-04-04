@@ -29,10 +29,12 @@ type UserParent = User;
 type CommentParent = Comment & { user?: User | null };
 type IssueParent = Issue & {
   assignee?: User | null;
-  comments?: Comment[] | null;
+  comments?: CommentParent[] | null;
+  children?: Issue[] | null;
+  labels?: IssueLabel[] | null;
   parent?: Issue | null;
   state?: WorkflowState | null;
-  team?: Team | null;
+  team?: TeamParent | null;
 };
 
 interface StringComparatorInput {
@@ -58,6 +60,41 @@ interface CursorPayload {
 const workflowStateOrder = new Map<string, number>(
   DEFAULT_WORKFLOW_STATE_ORDER.map((name, index) => [name, index] as const),
 );
+
+const COMMENT_ORDER_BY: Prisma.CommentOrderByWithRelationInput[] = [
+  { createdAt: 'asc' },
+  { id: 'asc' },
+];
+
+function buildIssueListInclude(): Prisma.IssueInclude {
+  return {
+    assignee: true,
+    labels: {
+      orderBy: {
+        name: 'asc',
+      },
+    },
+    parent: true,
+    state: true,
+    team: {
+      include: {
+        states: true,
+      },
+    },
+  };
+}
+
+function buildIssueDetailInclude(): Prisma.IssueInclude {
+  return {
+    ...buildIssueListInclude(),
+    comments: {
+      include: {
+        user: true,
+      },
+      orderBy: COMMENT_ORDER_BY.slice(),
+    },
+  };
+}
 
 const DateTimeScalar = new GraphQLScalarType({
   name: 'DateTime',
@@ -266,12 +303,13 @@ const resolvers = {
       _parent: unknown,
       args: { id: string },
       context: GraphQLContext,
-    ): Promise<Issue | null> => {
+    ): Promise<IssueParent | null> => {
       try {
         const issue = await context.prisma.issue.findUnique({
           where: {
             id: args.id,
           },
+          include: buildIssueDetailInclude(),
         });
 
         if (issue) {
@@ -287,19 +325,21 @@ const resolvers = {
         where: {
           identifier: args.id,
         },
+        include: buildIssueDetailInclude(),
       });
     },
     issues: async (
       _parent: unknown,
       args: { after?: string | null; filter?: IssueFilterInput | null; first: number },
       context: GraphQLContext,
-    ): Promise<{ nodes: Issue[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
+    ): Promise<{ nodes: IssueParent[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
       const where = combineIssueWhere(
         buildIssueWhere(args.filter, context.viewer?.id ?? null),
         buildIssueCursorWhere(args.after),
       );
       const issues = await context.prisma.issue.findMany({
         ...(where ? { where } : {}),
+        include: buildIssueListInclude(),
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: args.first + 1,
       });
@@ -357,31 +397,46 @@ const resolvers = {
       _parent: unknown,
       args: { input: CreateIssueInput },
       context: GraphQLContext,
-    ): Promise<{ issue: Issue | null; success: boolean }> =>
-      runIssueMutation(async () => ({
-        issue: await createIssue(context.prisma, args.input),
-        success: true as const,
-      })),
+    ): Promise<{ issue: IssueParent | null; success: boolean }> =>
+      runIssueMutation(async () => {
+        const issue = await createIssue(context.prisma, args.input);
+
+        return {
+          issue: await getIssueById(context.prisma, issue.id),
+          success: true as const,
+        };
+      }),
     issueUpdate: async (
       _parent: unknown,
       args: { id: string; input: UpdateIssueInput },
       context: GraphQLContext,
-    ): Promise<{ issue: Issue | null; success: boolean }> =>
-      runIssueMutation(async () => ({
-        issue: await updateIssue(context.prisma, args.id, args.input),
-        success: true as const,
-      })),
+    ): Promise<{ issue: IssueParent | null; success: boolean }> =>
+      runIssueMutation(async () => {
+        const issue = await updateIssue(context.prisma, args.id, args.input);
+
+        return {
+          issue: await getIssueById(context.prisma, issue.id),
+          success: true as const,
+        };
+      }),
     commentCreate: async (
       _parent: unknown,
       args: { input: CreateCommentInput },
       context: GraphQLContext,
-    ): Promise<{ comment: Comment | null; success: boolean }> => {
+    ): Promise<{ comment: CommentParent | null; success: boolean }> => {
       const viewer = requireAuthentication(context);
 
-      return runCommentMutation(async () => ({
-        comment: await createComment(context.prisma, args.input, viewer.id),
-        success: true as const,
-      }));
+      return runCommentMutation(async () => {
+        const createdComment = await createComment(context.prisma, args.input, viewer.id);
+
+        return {
+          comment: {
+            ...createdComment,
+            user: viewer,
+          },
+          success: true as const,
+        };
+      });
     },
   },
   Team: {
@@ -437,18 +492,20 @@ const resolvers = {
       _args: Record<string, never>,
       context: GraphQLContext,
     ): Promise<{ nodes: IssueLabel[] }> => ({
-      nodes: await context.prisma.issueLabel.findMany({
-        where: {
-          issues: {
-            some: {
-              id: parent.id,
+      nodes:
+        parent.labels ??
+        (await context.prisma.issueLabel.findMany({
+          where: {
+            issues: {
+              some: {
+                id: parent.id,
+              },
             },
           },
-        },
-        orderBy: {
-          name: 'asc',
-        },
-      }),
+          orderBy: {
+            name: 'asc',
+          },
+        })),
     }),
     assignee: async (
       parent: IssueParent,
@@ -491,12 +548,14 @@ const resolvers = {
       _args: Record<string, never>,
       context: GraphQLContext,
     ): Promise<{ nodes: Issue[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
-      const nodes = await context.prisma.issue.findMany({
-        where: {
-          parentId: parent.id,
-        },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      });
+      const nodes =
+        parent.children ??
+        (await context.prisma.issue.findMany({
+          where: {
+            parentId: parent.id,
+          },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        }));
 
       return {
         nodes,
@@ -519,6 +578,19 @@ const resolvers = {
       args: { after?: string | null; first?: number; orderBy?: CommentOrderByInput },
       context: GraphQLContext,
     ): Promise<{ nodes: Comment[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
+      if (
+        parent.comments &&
+        (args.after === undefined || args.after === null) &&
+        isDefaultCommentOrder(args.orderBy)
+      ) {
+        const nodes = args.first === undefined ? parent.comments : parent.comments.slice(0, args.first);
+
+        return {
+          nodes,
+          pageInfo: buildPageInfo(nodes, args.first !== undefined && parent.comments.length > args.first),
+        };
+      }
+
       const comments = await context.prisma.comment.findMany({
         where: buildCommentWhere(parent.id, args.after),
         orderBy: buildCommentOrderBy(args.orderBy),
@@ -538,6 +610,15 @@ export function createGraphQLSchema(_prisma: PrismaClient) {
   return makeExecutableSchema({
     typeDefs,
     resolvers,
+  });
+}
+
+async function getIssueById(prisma: PrismaClient, id: string): Promise<IssueParent> {
+  return prisma.issue.findUniqueOrThrow({
+    where: {
+      id,
+    },
+    include: buildIssueListInclude(),
   });
 }
 
@@ -604,10 +685,14 @@ function buildCommentOrderBy(
   orderBy: CommentOrderByInput | null | undefined,
 ): Prisma.CommentOrderByWithRelationInput[] {
   if (orderBy === undefined || orderBy === null || orderBy === 'createdAt') {
-    return [{ createdAt: 'asc' }, { id: 'asc' }];
+    return COMMENT_ORDER_BY.slice();
   }
 
-  return [{ createdAt: 'asc' }, { id: 'asc' }];
+  return COMMENT_ORDER_BY.slice();
+}
+
+function isDefaultCommentOrder(orderBy: CommentOrderByInput | null | undefined): boolean {
+  return orderBy === undefined || orderBy === null || orderBy === 'createdAt';
 }
 
 function encodeCursor(entity: { createdAt: Date; id: string }): string {

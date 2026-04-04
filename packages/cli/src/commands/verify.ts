@@ -9,9 +9,9 @@
  */
 
 import type { Command } from 'commander';
-import { config as loadDotenv } from 'dotenv';
-import { readFile, readdir, access } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { ensureDatabaseUrl, fileExists, loadEnv, readJsonFile } from './shared.js';
 
 interface VerifyOptions {
   file: string;
@@ -74,46 +74,6 @@ function commentUpdatedAtMatchesAllowedImportSemantics(params: {
     isWithinOneSecond(actualUpdatedAt, exportedCreatedAt) ||
     isWithinOneSecond(actualUpdatedAt, issueUpdatedAt)
   );
-}
-
-/**
- * Load project environment variables (DATABASE_URL etc.) from the repo root .env.
- */
-function loadEnv(): void {
-  const paths = [
-    join(process.cwd(), '.env'),
-    join(process.cwd(), '../../.env'),
-  ];
-
-  for (const envPath of paths) {
-    const result = loadDotenv({ path: envPath });
-    if (!result.error) {
-      return;
-    }
-  }
-}
-
-function ensureDatabaseUrl(): void {
-  if (!process.env['DATABASE_URL']) {
-    throw new Error(
-      'DATABASE_URL environment variable is not set. ' +
-        'Run the project init script or set DATABASE_URL in your .env file.',
-    );
-  }
-}
-
-async function readJsonFile<T>(filePath: string): Promise<T> {
-  const content = await readFile(filePath, 'utf-8');
-  return JSON.parse(content) as T;
-}
-
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**

@@ -7,11 +7,13 @@ import { GraphQLClient } from 'graphql-request';
 import { registerExportCommand } from './commands/export.js';
 import { registerImportCommand } from './commands/import.js';
 
-type ConfigKey = 'server-url' | 'token';
+type ConfigKey = 'server-url' | 'token' | 'viewer-email' | 'viewer-id';
 
 interface CliConfig {
   'server-url'?: string;
   token?: string;
+  'viewer-email'?: string;
+  'viewer-id'?: string;
 }
 
 interface JsonOption {
@@ -88,7 +90,7 @@ export class CliError extends Error {
   }
 }
 
-const CONFIG_KEYS: readonly ConfigKey[] = ['server-url', 'token'];
+const CONFIG_KEYS: readonly ConfigKey[] = ['server-url', 'token', 'viewer-email', 'viewer-id'];
 const CLI_PAGE_SIZE = 100;
 
 function resolveConfigPath(): string {
@@ -259,9 +261,15 @@ export async function createConfiguredGraphQLClient(configPath = getConfigPath()
   }
 
   const token = config.token;
+  const viewerId = process.env.INVOLUTE_VIEWER_ID ?? config['viewer-id'];
+  const viewerEmail = process.env.INVOLUTE_VIEWER_EMAIL ?? config['viewer-email'];
 
   return new GraphQLClient(joinGraphqlEndpoint(serverUrl), {
-    headers: token ? { authorization: `Bearer ${token}` } : undefined,
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(viewerId ? { 'x-involute-user-id': viewerId } : {}),
+      ...(viewerEmail ? { 'x-involute-user-email': viewerEmail } : {}),
+    },
   });
 }
 
@@ -314,7 +322,7 @@ function registerConfigCommands(program: Command): void {
     .command('set')
     .description('Persist a configuration value')
     .option('--json', 'Output machine-readable JSON')
-    .argument('<key>', 'Configuration key (server-url or token)')
+    .argument('<key>', 'Configuration key (server-url, token, viewer-email, or viewer-id)')
     .argument('<value>', 'Configuration value')
     .action(async function (this: Command, key: string, value: string, options: JsonOption) {
       await runWithCliErrorHandling(async () => {
@@ -333,16 +341,16 @@ function registerConfigCommands(program: Command): void {
   configCommand
     .command('get')
     .description('Read a configuration value')
-    .argument('<key>', 'Configuration key (server-url or token)')
+    .argument('<key>', 'Configuration key (server-url, token, viewer-email, or viewer-id)')
     .option('--json', 'Output machine-readable JSON')
-    .action(async (key: string, options: JsonOption) => {
+    .action(async function (this: Command, key: string, options: JsonOption) {
       await runWithCliErrorHandling(async () => {
         if (!CONFIG_KEYS.includes(key as ConfigKey)) {
           throw new CliError(`Unknown config key "${key}". Expected one of: ${CONFIG_KEYS.join(', ')}`);
         }
 
         const value = await getConfigValue(key as ConfigKey);
-        const context = createCommandContext(options);
+        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
         const payload = context.json ? { key, value: value ?? null } : value ?? '';
         process.stdout.write(formatOutput(payload, context));
       });

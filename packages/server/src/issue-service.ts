@@ -113,7 +113,7 @@ export async function updateIssue(
 
     const data: Prisma.IssueUpdateInput = {};
 
-    if (hasOwnProperty(input, 'stateId') && input.stateId) {
+    if ('stateId' in input && input.stateId) {
       const state = await transaction.workflowState.findUnique({
         where: {
           id: input.stateId,
@@ -139,15 +139,15 @@ export async function updateIssue(
       };
     }
 
-    if (hasOwnProperty(input, 'title') && input.title !== undefined && input.title !== null) {
+    if ('title' in input && input.title !== undefined && input.title !== null) {
       data.title = input.title;
     }
 
-    if (hasOwnProperty(input, 'description')) {
+    if ('description' in input) {
       data.description = input.description ?? null;
     }
 
-    if (hasOwnProperty(input, 'assigneeId')) {
+    if ('assigneeId' in input) {
       if (input.assigneeId === null) {
         data.assignee = {
           disconnect: true,
@@ -174,7 +174,7 @@ export async function updateIssue(
       }
     }
 
-    if (hasOwnProperty(input, 'labelIds') && input.labelIds !== null && input.labelIds !== undefined) {
+    if ('labelIds' in input && input.labelIds !== null && input.labelIds !== undefined) {
       const labelIds = [...new Set(input.labelIds)];
 
       if (labelIds.length > 0) {
@@ -199,7 +199,7 @@ export async function updateIssue(
       };
     }
 
-    if (hasOwnProperty(input, 'parentId')) {
+    if ('parentId' in input) {
       if (input.parentId === null) {
         data.parent = {
           disconnect: true,
@@ -338,11 +338,4 @@ function orderWorkflowStates(states: WorkflowStateSelection[]): WorkflowStateSel
 
     return left.name.localeCompare(right.name);
   });
-}
-
-function hasOwnProperty<K extends PropertyKey>(
-  value: object,
-  key: K,
-): value is object & Record<K, unknown> {
-  return Object.prototype.hasOwnProperty.call(value, key);
 }

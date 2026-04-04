@@ -18,7 +18,8 @@ import {
   normalizeGraphQLErrorMessage,
   setConfigValue,
 } from '../index.js';
-import { runImport, validateExportDir, loadEnv } from './import.js';
+import { runImport, validateExportDir } from './import.js';
+import { loadEnv } from './shared.js';
 
 // --- Fixture data matching Linear export format ---
 
