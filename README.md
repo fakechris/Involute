@@ -53,7 +53,7 @@ The local service wiring used in this repo expects:
 The quickest local acceptance setup is Docker Compose. It starts PostgreSQL, the API, the web app, and a reusable CLI container.
 
 ```bash
-cd /Users/chris/workspace/Involute
+# From the repository root
 mkdir -p .tmp
 docker compose up --build -d db server web
 ```
@@ -70,7 +70,6 @@ To stop the stack:
 ```bash
 docker compose down
 ```
-
 ## Run the API
 
 ```bash
@@ -176,14 +175,13 @@ This command will:
 - spot-check identifiers, states, labels, assignees, parent-child links, and comments
 
 The board now hydrates issue pages until the selected team has been loaded completely, so large teams are no longer truncated at the first `200` issues during visual acceptance.
-
 ## Validation
 
 Run workspace checks from the repository root:
 
 ```bash
 pnpm typecheck
-pnpm test --run
+pnpm test
 pnpm lint
 ```
 

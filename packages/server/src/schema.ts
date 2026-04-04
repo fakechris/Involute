@@ -934,7 +934,6 @@ async function runCommentDeleteMutation<TResult extends { commentId: string; suc
     throw error;
   }
 }
-
 function getRequestedIssueConnectionFields(info: GraphQLResolveInfo): Set<string> {
   const fieldNames = new Set<string>();
 
