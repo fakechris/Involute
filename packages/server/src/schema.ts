@@ -66,15 +66,9 @@ const COMMENT_ORDER_BY: Prisma.CommentOrderByWithRelationInput[] = [
   { id: 'asc' },
 ];
 
-function buildIssueRelationInclude(): Prisma.IssueInclude {
+function buildIssueListInclude(): Prisma.IssueInclude {
   return {
     assignee: true,
-    comments: {
-      include: {
-        user: true,
-      },
-      orderBy: COMMENT_ORDER_BY.slice(),
-    },
     labels: {
       orderBy: {
         name: 'asc',
@@ -86,6 +80,18 @@ function buildIssueRelationInclude(): Prisma.IssueInclude {
       include: {
         states: true,
       },
+    },
+  };
+}
+
+function buildIssueDetailInclude(): Prisma.IssueInclude {
+  return {
+    ...buildIssueListInclude(),
+    comments: {
+      include: {
+        user: true,
+      },
+      orderBy: COMMENT_ORDER_BY.slice(),
     },
   };
 }
@@ -303,7 +309,7 @@ const resolvers = {
           where: {
             id: args.id,
           },
-          include: buildIssueRelationInclude(),
+          include: buildIssueDetailInclude(),
         });
 
         if (issue) {
@@ -319,7 +325,7 @@ const resolvers = {
         where: {
           identifier: args.id,
         },
-        include: buildIssueRelationInclude(),
+        include: buildIssueDetailInclude(),
       });
     },
     issues: async (
@@ -333,7 +339,7 @@ const resolvers = {
       );
       const issues = await context.prisma.issue.findMany({
         ...(where ? { where } : {}),
-        include: buildIssueRelationInclude(),
+        include: buildIssueListInclude(),
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: args.first + 1,
       });
@@ -424,14 +430,10 @@ const resolvers = {
         const createdComment = await createComment(context.prisma, args.input, viewer.id);
 
         return {
-          comment: await context.prisma.comment.findUniqueOrThrow({
-            where: {
-              id: createdComment.id,
-            },
-            include: {
-              user: true,
-            },
-          }),
+          comment: {
+            ...createdComment,
+            user: viewer,
+          },
           success: true as const,
         };
       });
@@ -616,7 +618,7 @@ async function getIssueById(prisma: PrismaClient, id: string): Promise<IssuePare
     where: {
       id,
     },
-    include: buildIssueRelationInclude(),
+    include: buildIssueListInclude(),
   });
 }
 

@@ -348,17 +348,19 @@ export function BoardPage() {
         throw new Error('Comment mutation failed');
       }
 
-      setIssueOverrides((currentOverrides) =>
-        replaceIssueOverride(currentOverrides, issue.id, {
-          ...issue,
+      setIssueOverrides((currentOverrides) => {
+        const currentIssue = currentOverrides[issue.id] ?? issue;
+
+        return replaceIssueOverride(currentOverrides, issue.id, {
+          ...currentIssue,
           comments: {
-            nodes: [...issue.comments.nodes, result.data!.commentCreate.comment!].sort(
+            nodes: [...currentIssue.comments.nodes, result.data!.commentCreate.comment!].sort(
               (left, right) =>
                 new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
             ),
           },
-        }),
-      );
+        });
+      });
     } catch (mutationIssue) {
       setIssueOverrides((currentOverrides) =>
         replaceIssueOverride(currentOverrides, issue.id, previousOverride ?? null),
@@ -897,15 +899,26 @@ function toComparableIssue(issue: IssueSummary) {
     stateId: issue.state.id,
     teamKey: issue.team.key,
     assigneeId: issue.assignee?.id ?? null,
-    labelIds: issue.labels.nodes.map((label) => label.id),
-    childIds: issue.children.nodes.map((child) => child.id),
+    labelIds: issue.labels.nodes.map((label) => label.id).sort(),
+    childIds: issue.children.nodes.map((child) => child.id).sort(),
     parentId: issue.parent?.id ?? null,
-    comments: issue.comments.nodes.map((comment) => ({
-      id: comment.id,
-      body: comment.body,
-      createdAt: comment.createdAt,
-      userId: comment.user?.id ?? null,
-    })),
+    comments: [...issue.comments.nodes]
+      .sort((left, right) => {
+        const createdAtComparison =
+          new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+
+        if (createdAtComparison !== 0) {
+          return createdAtComparison;
+        }
+
+        return left.id.localeCompare(right.id);
+      })
+      .map((comment) => ({
+        id: comment.id,
+        body: comment.body,
+        createdAt: comment.createdAt,
+        userId: comment.user?.id ?? null,
+      })),
   };
 }
 

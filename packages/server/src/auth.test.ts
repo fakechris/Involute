@@ -47,6 +47,33 @@ describe('auth', () => {
     expect(context.viewer).toEqual({ id: 'user-1', email: 'person@example.com' });
   });
 
+  it('resolves the viewer from the request user ID header when provided', async () => {
+    const findUnique = vi.fn().mockResolvedValue({ id: 'user-1', email: 'person@example.com' });
+
+    const context = await createGraphQLContext({
+      authToken: 'shared-secret',
+      prisma: {
+        user: {
+          findUnique,
+        },
+      } as never,
+      request: new Request('http://localhost/graphql', {
+        headers: {
+          authorization: 'Bearer shared-secret',
+          'x-involute-user-id': 'user-1',
+          'x-involute-user-email': 'ignored@example.com',
+        },
+      }),
+    });
+
+    expect(findUnique).toHaveBeenCalledWith({
+      where: {
+        id: 'user-1',
+      },
+    });
+    expect(context.viewer).toEqual({ id: 'user-1', email: 'person@example.com' });
+  });
+
   it('falls back to the default admin viewer when no explicit viewer header is present', async () => {
     const findUnique = vi.fn().mockResolvedValue({ id: 'admin-1', email: DEFAULT_ADMIN_EMAIL });
 

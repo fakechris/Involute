@@ -1,5 +1,6 @@
 import { BOARD_COLUMN_ORDER, type BoardColumnName } from './constants';
 import type { IssueSummary, TeamSummary } from './types';
+import { readLocalStorageValue } from '../lib/storage';
 
 export const ACTIVE_TEAM_STORAGE_KEY = 'involute.activeTeamKey';
 
@@ -80,12 +81,4 @@ export function getStoredTeamKey(teams: TeamSummary[]): string | null {
   }
 
   return teams.some((team) => team.key === storedTeamKey) ? storedTeamKey : null;
-}
-
-function readLocalStorageValue(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
 }

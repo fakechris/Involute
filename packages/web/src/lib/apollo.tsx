@@ -7,6 +7,7 @@ import { ApolloProvider } from '@apollo/client/react';
 import { setContext } from '@apollo/client/link/context';
 import type { PropsWithChildren } from 'react';
 import { useMemo } from 'react';
+import { readLocalStorageValue } from './storage';
 
 const DEFAULT_GRAPHQL_URL = 'http://localhost:4200/graphql';
 const LOCAL_STORAGE_AUTH_KEYS = ['involute.authToken', 'involuteAuthToken'] as const;
@@ -225,14 +226,6 @@ function isAllowedRuntimeGraphqlUrl(candidate: string): boolean {
     return (url.protocol === 'http:' || url.protocol === 'https:') && allowedHosts.has(url.hostname);
   } catch {
     return false;
-  }
-}
-
-function readLocalStorageValue(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
   }
 }
 

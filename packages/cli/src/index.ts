@@ -261,8 +261,8 @@ export async function createConfiguredGraphQLClient(configPath = getConfigPath()
   }
 
   const token = config.token;
-  const viewerId = config['viewer-id'] ?? process.env.INVOLUTE_VIEWER_ID;
-  const viewerEmail = config['viewer-email'] ?? process.env.INVOLUTE_VIEWER_EMAIL;
+  const viewerId = process.env.INVOLUTE_VIEWER_ID ?? config['viewer-id'];
+  const viewerEmail = process.env.INVOLUTE_VIEWER_EMAIL ?? config['viewer-email'];
 
   return new GraphQLClient(joinGraphqlEndpoint(serverUrl), {
     headers: {
@@ -343,14 +343,14 @@ function registerConfigCommands(program: Command): void {
     .description('Read a configuration value')
     .argument('<key>', 'Configuration key (server-url, token, viewer-email, or viewer-id)')
     .option('--json', 'Output machine-readable JSON')
-    .action(async (key: string, options: JsonOption) => {
+    .action(async function (this: Command, key: string, options: JsonOption) {
       await runWithCliErrorHandling(async () => {
         if (!CONFIG_KEYS.includes(key as ConfigKey)) {
           throw new CliError(`Unknown config key "${key}". Expected one of: ${CONFIG_KEYS.join(', ')}`);
         }
 
         const value = await getConfigValue(key as ConfigKey);
-        const context = createCommandContext(options);
+        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
         const payload = context.json ? { key, value: value ?? null } : value ?? '';
         process.stdout.write(formatOutput(payload, context));
       });
