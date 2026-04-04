@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { boardQueryResult, renderApp } from './test/app-test-helpers';
@@ -27,12 +27,15 @@ describe('App board UI', () => {
   it('renders issue cards in the matching board columns', async () => {
     renderTestApp();
 
-    expect(await screen.findByText('INV-1')).toBeInTheDocument();
-    expect(screen.getByText('Backlog item')).toBeInTheDocument();
-    expect(screen.getByText('task')).toBeInTheDocument();
-    expect(screen.getByText('Admin')).toBeInTheDocument();
-    expect(screen.getByText('INV-2')).toBeInTheDocument();
-    expect(screen.getByText('Ready item')).toBeInTheDocument();
+    const backlogColumn = await screen.findByTestId('column-Backlog');
+    const readyColumn = screen.getByTestId('column-Ready');
+
+    expect(within(backlogColumn).getByText('INV-1')).toBeInTheDocument();
+    expect(within(backlogColumn).getByText('Backlog item')).toBeInTheDocument();
+    expect(within(backlogColumn).getByText('task')).toBeInTheDocument();
+    expect(within(backlogColumn).getByText('Admin')).toBeInTheDocument();
+    expect(within(readyColumn).getByText('INV-2')).toBeInTheDocument();
+    expect(within(readyColumn).getByText('Ready item')).toBeInTheDocument();
   });
 
   it('renders stable drag handles and state-id based droppable selectors for board automation', async () => {

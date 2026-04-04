@@ -24,7 +24,7 @@ test.describe('board flow', () => {
     const issueDrawer = page.getByRole('dialog', { name: 'Issue detail drawer' });
     await expect(issueDrawer).toBeVisible();
     await expect(issueDrawer.getByLabel('Issue title')).toHaveValue(createdTitle);
-    await expect(page.getByText(createdTitle)).toBeVisible();
+    await expect(page.getByText(createdTitle, { exact: true })).toBeVisible();
 
     const titleInput = issueDrawer.getByLabel('Issue title');
     await titleInput.fill(updatedTitle);
@@ -39,11 +39,13 @@ test.describe('board flow', () => {
     await issueDrawer.getByLabel('Issue state').selectOption({ label: 'Done' });
     await expect(page.locator('[data-testid="column-Done"]')).toContainText(updatedTitle);
 
-    await issueDrawer.getByRole('checkbox', { name: 'Feature' }).check();
-    await expect(issueDrawer.getByLabel('Issue labels')).toContainText('Feature');
+    const featureCheckbox = issueDrawer.getByRole('checkbox', { name: 'Feature' });
+    await featureCheckbox.check();
+    await expect(featureCheckbox).toBeChecked();
 
-    await issueDrawer.getByLabel('Issue assignee').selectOption({ label: 'Admin' });
-    await expect(issueDrawer.getByLabel('Issue assignee')).toHaveValue(/.+/);
+    const assigneeSelect = issueDrawer.getByLabel('Issue assignee');
+    await assigneeSelect.selectOption({ label: 'Admin' });
+    await expect(assigneeSelect.locator('option:checked')).toHaveText('Admin');
 
     await issueDrawer.getByLabel('Comment body').fill('Playwright comment');
     await issueDrawer.getByRole('button', { name: 'Add comment' }).click();

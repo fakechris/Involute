@@ -76,33 +76,6 @@ function commentUpdatedAtMatchesAllowedImportSemantics(params: {
   );
 }
 
-/**
- * Collect all comment IDs from the export comments directory.
- */
-async function collectExportCommentIds(exportDir: string): Promise<string[]> {
-  const commentsDir = join(exportDir, 'comments');
-  const exists = await fileExists(commentsDir);
-
-  if (!exists) {
-    return [];
-  }
-
-  const files = await readdir(commentsDir);
-  const ids: string[] = [];
-
-  for (const file of files) {
-    if (file.endsWith('.json')) {
-      const comments = await readJsonFile<Array<{ id: string }>>(join(commentsDir, file));
-
-      for (const comment of comments) {
-        ids.push(comment.id);
-      }
-    }
-  }
-
-  return ids;
-}
-
 async function verifyComments(
   prisma: InstanceType<(typeof import('@prisma/client'))['PrismaClient']>,
   exportDir: string,

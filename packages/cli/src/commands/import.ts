@@ -181,16 +181,21 @@ export async function runTeamImport(options: TeamImportOptions): Promise<TeamImp
 
     log('Step 3/3: Verifying imported data');
     const verification = await teamImportDependencies.runVerify({ file: exportDir });
+    const verificationPassed = verification.allPassed;
 
     for (const line of formatVerificationResult(verification)) {
       log(line);
     }
 
-    if (!verification.allPassed) {
+    if (!verificationPassed) {
       shouldRetainExport = true;
-      throw new Error(`Team import verification failed for "${options.team}". Export preserved at ${exportDir}.`);
     }
 
+    const defaultSummaryPath = join(
+      tmpdir(),
+      `involute-team-import-${options.team.toLowerCase()}-${Date.now()}-summary.json`,
+    );
+    const summaryPath = shouldRetainExport ? join(exportDir, 'involute-import-summary.json') : defaultSummaryPath;
     const summary: TeamImportSummary = {
       exportDir,
       exportRetained: shouldRetainExport,
@@ -198,9 +203,14 @@ export async function runTeamImport(options: TeamImportOptions): Promise<TeamImp
       team: options.team,
       verification,
     };
-    const summaryPath = join(exportDir, 'involute-import-summary.json');
 
     await teamImportDependencies.writeFile(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
+
+    if (!verificationPassed) {
+      throw new Error(
+        `Team import verification failed for "${options.team}". Export preserved at ${exportDir}. Summary: ${summaryPath}.`,
+      );
+    }
 
     if (!shouldRetainExport) {
       await teamImportDependencies.rm(exportDir, { recursive: true, force: true });

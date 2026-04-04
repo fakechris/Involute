@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import type { DragEndEvent } from '@dnd-kit/core';
 
 import { boardQueryResult, getIssue } from './test/app-test-helpers';
@@ -12,6 +12,12 @@ import { createHtml5BoardDragPayload, parseHtml5BoardDragPayload } from './board
 import type { IssueSummary } from './board/types';
 
 describe('App drag helpers', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    window.history.replaceState({}, '', '/');
+  });
+
   it('resolves a drag-end drop target from the destination card column state', () => {
     const event = {
       active: { id: 'issue-1' },

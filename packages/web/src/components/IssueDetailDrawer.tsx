@@ -344,25 +344,11 @@ export function IssueDetailDrawer({
                           void onCommentDelete(activeIssue, comment.id).catch(() => undefined);
                         }}
                       >
-                        Delete
+                        Delete comment
                       </button>
                     </div>
                   </div>
                   <p className="issue-comment__body">{comment.body}</p>
-                  <button
-                    type="button"
-                    className="issue-comment__delete"
-                    disabled={savingState}
-                    onClick={() => {
-                      if (!confirmCommentDelete()) {
-                        return;
-                      }
-
-                      void onCommentDelete(activeIssue, comment.id).catch(() => undefined);
-                    }}
-                  >
-                    Delete comment
-                  </button>
                 </li>
               ))}
             </ol>

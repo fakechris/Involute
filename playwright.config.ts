@@ -1,7 +1,15 @@
 import { defineConfig } from '@playwright/test';
 
-const databaseUrl = 'postgresql://involute:involute@127.0.0.1:5434/involute?schema=public';
-const authToken = 'e2e-auth-token';
+const composeProject = process.env.E2E_COMPOSE_PROJECT ?? 'involute-e2e';
+const databasePort = process.env.E2E_DB_PORT ?? '5544';
+const serverPort = process.env.E2E_SERVER_PORT ?? '4300';
+const webPort = process.env.E2E_WEB_PORT ?? '4301';
+const databaseUrl =
+  process.env.E2E_DATABASE_URL ??
+  `postgresql://involute:involute@127.0.0.1:${databasePort}/involute?schema=public`;
+const authToken = process.env.E2E_AUTH_TOKEN ?? 'e2e-auth-token';
+const viewerAssertionSecret = process.env.E2E_VIEWER_ASSERTION_SECRET ?? 'e2e-viewer-assertion-secret';
+const reuseCompose = process.env.E2E_REUSE_COMPOSE === 'true';
 
 export default defineConfig({
   testDir: './e2e',
@@ -10,7 +18,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
-    baseURL: 'http://127.0.0.1:4201',
+    baseURL: `http://127.0.0.1:${webPort}`,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
@@ -18,22 +26,25 @@ export default defineConfig({
   webServer: [
     {
       command:
-        `docker compose up -d db && ` +
-        `for attempt in $(seq 1 20); do ` +
-        `DATABASE_URL="${databaseUrl}" pnpm --filter @involute/server exec prisma db push --force-reset --skip-generate && break; ` +
-        `if [ "$attempt" = "20" ]; then exit 1; fi; ` +
-        `sleep 3; ` +
-        `done && ` +
-        `DATABASE_URL="${databaseUrl}" pnpm --filter @involute/server exec prisma db seed && ` +
-        `DATABASE_URL="${databaseUrl}" AUTH_TOKEN="${authToken}" PORT=4200 pnpm --filter @involute/server exec tsx src/index.ts`,
-      url: 'http://127.0.0.1:4200/health',
-      reuseExistingServer: !process.env.CI,
+        `E2E_COMPOSE_PROJECT="${composeProject}" ` +
+        `E2E_DB_PORT="${databasePort}" ` +
+        `E2E_DATABASE_URL="${databaseUrl}" ` +
+        `E2E_AUTH_TOKEN="${authToken}" ` +
+        `E2E_VIEWER_ASSERTION_SECRET="${viewerAssertionSecret}" ` +
+        `E2E_SERVER_PORT="${serverPort}" ` +
+        `sh ./e2e/setup-backend.sh`,
+      url: `http://127.0.0.1:${serverPort}/health`,
+      reuseExistingServer: reuseCompose,
       timeout: 120_000,
     },
     {
-      command: `VITE_INVOLUTE_AUTH_TOKEN="${authToken}" VITE_INVOLUTE_GRAPHQL_URL="http://127.0.0.1:4200/graphql" pnpm --filter @involute/web exec vite --host 127.0.0.1 --port 4201`,
-      url: 'http://127.0.0.1:4201',
-      reuseExistingServer: !process.env.CI,
+      command:
+        `E2E_AUTH_TOKEN="${authToken}" ` +
+        `E2E_SERVER_PORT="${serverPort}" ` +
+        `E2E_WEB_PORT="${webPort}" ` +
+        `sh ./e2e/setup-frontend.sh`,
+      url: `http://127.0.0.1:${webPort}`,
+      reuseExistingServer: reuseCompose,
       timeout: 120_000,
     },
   ],

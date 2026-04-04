@@ -38,8 +38,8 @@ CMD ["pnpm", "--filter", "@involute/web", "exec", "vite", "--host", "0.0.0.0", "
 
 FROM base AS web-build
 
-ARG VITE_INVOLUTE_GRAPHQL_URL=http://localhost:4200/graphql
-ENV VITE_INVOLUTE_GRAPHQL_URL=$VITE_INVOLUTE_GRAPHQL_URL
+ARG VITE_INVOLUTE_GRAPHQL_URL
+ENV VITE_INVOLUTE_GRAPHQL_URL=${VITE_INVOLUTE_GRAPHQL_URL:-/graphql}
 
 RUN pnpm --filter @involute/web build
 

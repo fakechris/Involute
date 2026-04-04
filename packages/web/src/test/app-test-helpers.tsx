@@ -300,5 +300,11 @@ export function renderApp(
 }
 
 export function getIssue(issueId: string): IssueSummary {
-  return boardQueryResult.issues.nodes.find((issue) => issue.id === issueId) as IssueSummary;
+  const issue = boardQueryResult.issues.nodes.find((candidate) => candidate.id === issueId);
+
+  if (!issue) {
+    throw new Error(`Issue with id ${issueId} not found`);
+  }
+
+  return issue;
 }

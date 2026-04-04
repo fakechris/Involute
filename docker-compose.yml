@@ -11,9 +11,29 @@ services:
       timeout: 5s
       retries: 20
     ports:
-      - "5434:5432"
+      - "${DB_PORT:-5434}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+
+  server-init:
+    build:
+      context: .
+      target: server
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -lc
+    command: >
+      pnpm --filter @involute/server exec prisma db push --skip-generate &&
+      if [ "${SEED_DATABASE:-true}" = "true" ]; then
+        pnpm --filter @involute/server exec prisma db seed;
+      fi
+    environment:
+      DATABASE_URL: postgresql://involute:involute@db:5432/involute?schema=public
+      SEED_DATABASE: ${SEED_DATABASE:-true}
+    restart: "no"
 
   server:
     build:
@@ -22,12 +42,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      server-init:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql://involute:involute@db:5432/involute?schema=public
       AUTH_TOKEN: ${AUTH_TOKEN:-changeme-set-your-token}
       VIEWER_ASSERTION_SECRET: ${VIEWER_ASSERTION_SECRET:-compose-viewer-secret}
       PORT: 4200
-      SEED_DATABASE: ${SEED_DATABASE:-true}
     healthcheck:
       test:
         [

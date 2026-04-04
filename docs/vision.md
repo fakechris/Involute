@@ -6,7 +6,7 @@
 
 ## Product intent
 
-Involute is a focused, self-hostable project management system for a small team, especially a one-person team that still wants Linear-style structure: issues, workflows, labels, comments, and fast keyboard-and-board driven operations.
+Involute is a focused, self-hostable project management system for a small team, especially a one-person team that still wants Linear-style structure: issues, workflows, labels, comments, and fast keyboard-and-board-driven operations.
 
 ## Current north star
 

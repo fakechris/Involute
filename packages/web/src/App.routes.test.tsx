@@ -18,7 +18,8 @@ describe('App routes and team flows', () => {
     expect(await screen.findByText('Workflow overview for Sonata.')).toBeInTheDocument();
     expect(screen.getByLabelText('Select team')).toHaveValue('SON');
     expect(within(screen.getByTestId('column-Backlog')).getByText('SON-1')).toBeInTheDocument();
-    expect(apolloMocks.useQuery).toHaveBeenLastCalledWith(
+    expect(apolloMocks.useQuery).toHaveBeenNthCalledWith(
+      1,
       expect.anything(),
       expect.objectContaining({
         variables: {
@@ -40,7 +41,8 @@ describe('App routes and team flows', () => {
 
     renderTestApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(apolloMocks.useQuery).toHaveBeenCalledWith(
+    expect(apolloMocks.useQuery).toHaveBeenNthCalledWith(
+      1,
       expect.anything(),
       expect.objectContaining({
         variables: {

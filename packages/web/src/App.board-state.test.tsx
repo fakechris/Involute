@@ -43,7 +43,7 @@ describe('App board state flows', () => {
     expect(await within(screen.getByTestId('column-In Progress')).findByText('INV-1')).toBeInTheDocument();
   });
 
-  it('persists the final state on drag end after a cross-column preview move', async () => {
+  it('persists the final state when changed via the drawer dropdown', async () => {
     const mutate = vi.fn().mockResolvedValue({
       data: {
         issueUpdate: {
