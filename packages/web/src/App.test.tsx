@@ -5,13 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { getAuthToken, getAuthTokenDetails, getGraphqlUrl, getGraphqlUrlDetails } from './lib/apollo';
 import {
-  createHtml5BoardDragPayload,
   DND_ACTIVATION_DISTANCE,
   getDropTargetStateId,
   kanbanCollisionDetection,
   mergeIssueWithPreservedComments,
   moveIssueToState,
-  parseHtml5DragPayload,
 } from './routes/BoardPage';
 import type {
   BoardPageQueryData,
@@ -20,7 +18,11 @@ import type {
   IssueSummary,
   IssueUpdateMutationData,
 } from './board/types';
-import { ACTIVE_TEAM_STORAGE_KEY } from './board/utils';
+import {
+  ACTIVE_TEAM_STORAGE_KEY,
+  createHtml5BoardDragPayload,
+  parseHtml5BoardDragPayload,
+} from './board/utils';
 import { MouseSensor, PointerSensor, TouchSensor, type DragEndEvent } from '@dnd-kit/core';
 
 const apolloMocks = vi.hoisted(() => ({
@@ -309,7 +311,7 @@ describe('App', () => {
   });
 
   it('parses a valid html5 board drag payload', () => {
-    expect(parseHtml5DragPayload(JSON.stringify({ issueId: 'issue-1', stateId: 'state-ready' }))).toEqual({
+    expect(parseHtml5BoardDragPayload(JSON.stringify({ issueId: 'issue-1', stateId: 'state-ready' }))).toEqual({
       issueId: 'issue-1',
       stateId: 'state-ready',
     });
@@ -322,8 +324,8 @@ describe('App', () => {
   });
 
   it('rejects malformed html5 board drag payloads', () => {
-    expect(parseHtml5DragPayload('not-json')).toBeNull();
-    expect(parseHtml5DragPayload(JSON.stringify({ issueId: 'issue-1' }))).toBeNull();
+    expect(parseHtml5BoardDragPayload('not-json')).toBeNull();
+    expect(parseHtml5BoardDragPayload(JSON.stringify({ issueId: 'issue-1' }))).toBeNull();
   });
 
   it('shows moved issue data in the destination column grouping after a cross-column preview move', () => {

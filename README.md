@@ -41,7 +41,8 @@ Compose defaults:
 - API: `http://localhost:4200`
 - Web: `http://localhost:4201`
 - Postgres: `127.0.0.1:5434`
-- CLI export mount: `.tmp/` on the host is available as `/exports` in the `cli` container
+- CLI export mount: tracked `.tmp/` on the host is available as `/exports` in the `cli` container
+- Compose uses the `web-dev` Docker target for the live Vite UI; the published `involute-web` image uses the production `web` target
 
 Stop the stack with:
 
@@ -130,7 +131,7 @@ When they are set, `.github/workflows/docker-publish.yml` pushes:
 - `${DOCKERHUB_USERNAME}/involute-web`
 - `${DOCKERHUB_USERNAME}/involute-cli`
 
-If you want to use the published images directly, tag and push them from `main` through the workflow instead of building ad hoc local variants. The compose stack is the reference runtime path and should stay green before publishing.
+The published `involute-web` image is a static production build. It bakes `VITE_INVOLUTE_GRAPHQL_URL` at build time, but it does not bake an auth token into the image. For local development and acceptance, the compose stack remains the reference runtime path and should stay green before publishing.
 
 ## Current focus
 

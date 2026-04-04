@@ -1,7 +1,8 @@
 {
   "milestone": "cli",
   "round": 2,
-  "status": "pass",
+  "status": "partial",
+  "statusReason": "The CLI review round passed, but the recorded monorepo test validator still failed in this workspace and remains documented as a non-green validator result.",
   "validatorsRun": {
     "test": {
       "passed": false,

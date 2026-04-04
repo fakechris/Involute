@@ -23,16 +23,34 @@ COPY . .
 FROM base AS server
 
 RUN pnpm --filter @involute/server build
+COPY packages/server/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 EXPOSE 4200
 
-CMD ["sh", "-lc", "pnpm --filter @involute/server exec prisma db push --skip-generate && if [ \"${SEED_DATABASE:-false}\" = \"true\" ]; then pnpm --filter @involute/server exec prisma db seed; fi && node packages/server/dist/index.js"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
-FROM base AS web
+FROM base AS web-dev
 
 EXPOSE 4201
 
 CMD ["pnpm", "--filter", "@involute/web", "exec", "vite", "--host", "0.0.0.0", "--port", "4201"]
+
+FROM base AS web-build
+
+ARG VITE_INVOLUTE_GRAPHQL_URL=http://localhost:4200/graphql
+ENV VITE_INVOLUTE_GRAPHQL_URL=$VITE_INVOLUTE_GRAPHQL_URL
+
+RUN pnpm --filter @involute/web build
+
+FROM nginx:1.27-alpine AS web
+
+COPY packages/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=web-build /app/packages/web/dist /usr/share/nginx/html
+
+EXPOSE 4201
+
+CMD ["nginx", "-g", "daemon off;"]
 
 FROM base AS cli
 

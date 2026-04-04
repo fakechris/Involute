@@ -4,7 +4,8 @@ dist
 .env
 .DS_Store
 !packages/server/prisma/.env
-.tmp
+.tmp/*
+!.tmp/.gitkeep
 playwright-report
 test-results
 packages/server/src/*.js

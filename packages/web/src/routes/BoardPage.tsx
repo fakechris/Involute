@@ -91,30 +91,6 @@ function moveIssueToState(
   return issues.map((item) => (item.id === issueId ? { ...item, state } : item));
 }
 
-function parseHtml5DragPayload(rawPayload: string): Html5BoardDragPayload | null {
-  try {
-    const payload = JSON.parse(rawPayload) as Partial<Html5BoardDragPayload>;
-
-    if (typeof payload.issueId !== 'string' || typeof payload.stateId !== 'string') {
-      return null;
-    }
-
-    return {
-      issueId: payload.issueId,
-      stateId: payload.stateId,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function createHtml5BoardDragPayload(issueId: string, stateId: string): string {
-  return JSON.stringify({
-    issueId,
-    stateId,
-  } satisfies Html5BoardDragPayload);
-}
-
 export function BoardPage() {
   const [selectedTeamKey, setSelectedTeamKey] = useState<string | null>(() => readStoredTeamKey());
   const boardQueryVariables = useMemo<BoardPageQueryVariables>(
@@ -838,9 +814,6 @@ export function mergeIssueWithPreservedComments(
 export { getDropTargetStateId };
 export { moveIssueToState };
 export { DND_ACTIVATION_DISTANCE };
-export { parseHtml5DragPayload };
-export { createHtml5BoardDragPayload };
-
 export const kanbanCollisionDetection: CollisionDetection = (args) => {
   const pointerMatches = pointerWithin(args);
 

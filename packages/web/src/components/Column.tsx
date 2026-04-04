@@ -2,7 +2,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
 import type { Html5BoardDragPayload, IssueSummary } from '../board/types';
-import { parseHtml5DragPayload } from '../routes/BoardPage';
+import { parseHtml5BoardDragPayload } from '../board/utils';
 import { IssueCard } from './IssueCard';
 
 interface ColumnProps {
@@ -65,7 +65,7 @@ export function Column({
             }
           }}
           onDrop={(event) => {
-            const payload = parseHtml5DragPayload(
+            const payload = parseHtml5BoardDragPayload(
               event.dataTransfer.getData('application/x-involute-issue'),
             );
 
