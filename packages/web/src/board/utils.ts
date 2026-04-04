@@ -1,6 +1,7 @@
 import { BOARD_COLUMN_ORDER, type BoardColumnName } from './constants';
 import type { IssueSummary, TeamSummary } from './types';
 import { readLocalStorageValue } from '../lib/storage';
+import type { Html5BoardDragPayload, IssueSummary, TeamSummary } from './types';
 
 export const ACTIVE_TEAM_STORAGE_KEY = 'involute.activeTeamKey';
 
@@ -31,6 +32,29 @@ export function writeStoredTeamKey(teamKey: string | null): void {
   }
 }
 
+export function parseHtml5BoardDragPayload(rawPayload: string): Html5BoardDragPayload | null {
+  try {
+    const payload = JSON.parse(rawPayload) as Partial<Html5BoardDragPayload>;
+
+    if (typeof payload.issueId !== 'string' || typeof payload.stateId !== 'string') {
+      return null;
+    }
+
+    return {
+      issueId: payload.issueId,
+      stateId: payload.stateId,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function createHtml5BoardDragPayload(issueId: string, stateId: string): string {
+  return JSON.stringify({
+    issueId,
+    stateId,
+  } satisfies Html5BoardDragPayload);
+}
 export function getBoardColumns(team: TeamSummary | null) {
   const stateIdByName = new Map<string, string>(
     (team?.states.nodes ?? []).map((state) => [state.name, state.id]),
