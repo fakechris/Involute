@@ -32,6 +32,8 @@ ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 FROM base AS web-dev
 
+RUN pnpm --filter @involute/shared build
+
 EXPOSE 4201
 
 CMD ["pnpm", "--filter", "@involute/web", "exec", "vite", "--host", "0.0.0.0", "--port", "4201"]
