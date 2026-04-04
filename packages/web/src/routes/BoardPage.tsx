@@ -19,16 +19,22 @@ import { useLocation } from 'react-router-dom';
 
 import {
   BOARD_PAGE_QUERY,
+  COMMENT_DELETE_MUTATION,
   COMMENT_CREATE_MUTATION,
+  ISSUE_DELETE_MUTATION,
   ISSUE_CREATE_MUTATION,
   ISSUE_UPDATE_MUTATION,
 } from '../board/queries';
 import type {
   BoardPageQueryData,
   BoardPageQueryVariables,
+  CommentDeleteMutationData,
+  CommentDeleteMutationVariables,
   CommentCreateMutationData,
   CommentCreateMutationVariables,
   Html5BoardDragPayload,
+  IssueDeleteMutationData,
+  IssueDeleteMutationVariables,
   IssueCreateMutationData,
   IssueCreateMutationVariables,
   IssueSummary,
@@ -51,8 +57,10 @@ import { IssueCard } from '../components/IssueCard';
 import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
 import { BacklogPage } from './BacklogPage';
 
-const ISSUE_LIMIT = 200;
+const ISSUE_PAGE_SIZE = 200;
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
+const ISSUE_DELETE_ERROR_MESSAGE = 'We could not delete the issue. Please try again.';
+const COMMENT_DELETE_ERROR_MESSAGE = 'We could not delete the comment. Please try again.';
 const DND_ACTIVATION_DISTANCE = 1;
 const EMPTY_ISSUES: IssueSummary[] = [];
 
@@ -111,9 +119,10 @@ function createHtml5BoardDragPayload(issueId: string, stateId: string): string {
 
 export function BoardPage() {
   const [selectedTeamKey, setSelectedTeamKey] = useState<string | null>(() => readStoredTeamKey());
+  const [isHydratingAllIssues, setIsHydratingAllIssues] = useState(false);
   const boardQueryVariables = useMemo<BoardPageQueryVariables>(
     () => ({
-      first: ISSUE_LIMIT,
+      first: ISSUE_PAGE_SIZE,
       ...(selectedTeamKey
         ? {
             filter: {
@@ -129,10 +138,11 @@ export function BoardPage() {
     [selectedTeamKey],
   );
   const location = useLocation();
-  const { data, error, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(
+  const { data, error, fetchMore, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(
     BOARD_PAGE_QUERY,
     {
       variables: boardQueryVariables,
+      notifyOnNetworkStatusChange: true,
     },
   );
   const [runIssueUpdate] = useMutation<IssueUpdateMutationData, IssueUpdateMutationVariables>(
@@ -144,12 +154,19 @@ export function BoardPage() {
   const [runCommentCreate] = useMutation<CommentCreateMutationData, CommentCreateMutationVariables>(
     COMMENT_CREATE_MUTATION,
   );
+  const [runIssueDelete] = useMutation<IssueDeleteMutationData, IssueDeleteMutationVariables>(
+    ISSUE_DELETE_MUTATION,
+  );
+  const [runCommentDelete] = useMutation<CommentDeleteMutationData, CommentDeleteMutationVariables>(
+    COMMENT_DELETE_MUTATION,
+  );
   const teams = data?.teams.nodes ?? [];
   const users = data?.users.nodes ?? [];
   const labels = data?.issueLabels.nodes ?? [];
   const baseIssues = data?.issues.nodes ?? EMPTY_ISSUES;
   const [createdIssues, setCreatedIssues] = useState<IssueSummary[]>([]);
   const [issueOverrides, setIssueOverrides] = useState<Record<string, IssueSummary>>({});
+  const [deletedIssueIds, setDeletedIssueIds] = useState<string[]>([]);
   const [activeIssueId, setActiveIssueId] = useState<string | null>(null);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
@@ -190,11 +207,38 @@ export function BoardPage() {
     setCreatedIssues((currentIssues) => reconcileCreatedIssues(baseIssues, currentIssues));
   }, [baseIssues]);
 
+  useEffect(() => {
+    const pageInfo = data?.issues.pageInfo;
+
+    if (!pageInfo?.hasNextPage || !pageInfo.endCursor || isHydratingAllIssues) {
+      return;
+    }
+
+    setIsHydratingAllIssues(true);
+
+    void fetchMore({
+      variables: {
+        ...boardQueryVariables,
+        after: pageInfo.endCursor,
+      },
+      updateQuery: (previousResult, { fetchMoreResult }) =>
+        mergeBoardPageQueryResults(previousResult, fetchMoreResult),
+    }).finally(() => {
+      setIsHydratingAllIssues(false);
+    });
+  }, [
+    boardQueryVariables,
+    data?.issues.pageInfo.endCursor,
+    data?.issues.pageInfo.hasNextPage,
+    fetchMore,
+    isHydratingAllIssues,
+  ]);
+
   const selectedTeam =
     teams.find((team) => team.key === selectedTeamKey) ?? teams[0] ?? null;
   const allIssues = useMemo(
-    () => mergeBoardIssues(baseIssues, issueOverrides, createdIssues),
-    [baseIssues, createdIssues, issueOverrides],
+    () => mergeBoardIssues(baseIssues, issueOverrides, createdIssues, deletedIssueIds),
+    [baseIssues, createdIssues, deletedIssueIds, issueOverrides],
   );
   const columns = useMemo(() => getBoardColumns(selectedTeam), [selectedTeam]);
   const visibleIssues = useMemo(() => {
@@ -369,6 +413,71 @@ export function BoardPage() {
       );
       setMutationError(ERROR_MESSAGE);
       throw mutationIssue;
+    } finally {
+      setIsSavingState(false);
+    }
+  }
+
+  async function persistIssueDelete(issue: IssueSummary) {
+    setMutationError(null);
+    setIsSavingState(true);
+
+    try {
+      const result = await runIssueDelete({
+        variables: {
+          id: issue.id,
+        },
+      });
+
+      if (!result.data?.issueDelete.success || !result.data.issueDelete.issueId) {
+        throw new Error('Delete issue mutation failed');
+      }
+
+      setDeletedIssueIds((currentIssueIds) =>
+        currentIssueIds.includes(issue.id) ? currentIssueIds : [...currentIssueIds, issue.id],
+      );
+      setIssueOverrides((currentOverrides) => replaceIssueOverride(currentOverrides, issue.id, null));
+      setCreatedIssues((currentIssues) => currentIssues.filter((currentIssue) => currentIssue.id !== issue.id));
+      setSelectedIssueId((currentIssueId) => (currentIssueId === issue.id ? null : currentIssueId));
+      setActiveIssueId((currentIssueId) => (currentIssueId === issue.id ? null : currentIssueId));
+      setDragPreviewStateId(null);
+      setDragOriginStateId(null);
+    } catch {
+      setMutationError(ISSUE_DELETE_ERROR_MESSAGE);
+      throw new Error(ISSUE_DELETE_ERROR_MESSAGE);
+    } finally {
+      setIsSavingState(false);
+    }
+  }
+
+  async function persistCommentDelete(issue: IssueSummary, commentId: string) {
+    setMutationError(null);
+    setIsSavingState(true);
+
+    try {
+      const result = await runCommentDelete({
+        variables: {
+          id: commentId,
+        },
+      });
+
+      if (!result.data?.commentDelete.success || !result.data.commentDelete.commentId) {
+        throw new Error('Delete comment mutation failed');
+      }
+
+      setIssueOverrides((currentOverrides) => {
+        const currentIssue = currentOverrides[issue.id] ?? issue;
+
+        return replaceIssueOverride(currentOverrides, issue.id, {
+          ...currentIssue,
+          comments: {
+            nodes: currentIssue.comments.nodes.filter((comment) => comment.id !== commentId),
+          },
+        });
+      });
+    } catch {
+      setMutationError(COMMENT_DELETE_ERROR_MESSAGE);
+      throw new Error(COMMENT_DELETE_ERROR_MESSAGE);
     } finally {
       setIsSavingState(false);
     }
@@ -686,6 +795,12 @@ export function BoardPage() {
         </section>
       ) : null}
 
+      {isHydratingAllIssues ? (
+        <section className="board-message" aria-live="polite">
+          Loading remaining issues…
+        </section>
+      ) : null}
+
       {loading && !data ? (
         <section className="board-message" aria-live="polite">
           Loading board…
@@ -787,6 +902,8 @@ export function BoardPage() {
         onLabelsChange={persistLabelsChange}
         onAssigneeChange={persistAssigneeChange}
         onCommentCreate={persistCommentCreate}
+        onCommentDelete={persistCommentDelete}
+        onIssueDelete={persistIssueDelete}
       />
       {createIssueDialog}
     </main>
@@ -810,21 +927,50 @@ export function mergeIssueWithPreservedComments(
   };
 }
 
+export function mergeBoardPageQueryResults(
+  previousResult: BoardPageQueryData,
+  fetchMoreResult: BoardPageQueryData | undefined,
+): BoardPageQueryData {
+  if (!fetchMoreResult) {
+    return previousResult;
+  }
+
+  const issueById = new Map(previousResult.issues.nodes.map((issue) => [issue.id, issue]));
+
+  for (const issue of fetchMoreResult.issues.nodes) {
+    issueById.set(issue.id, issue);
+  }
+
+  return {
+    ...fetchMoreResult,
+    issues: {
+      nodes: [...issueById.values()],
+      pageInfo: fetchMoreResult.issues.pageInfo,
+    },
+  };
+}
+
 function mergeBoardIssues(
   baseIssues: IssueSummary[],
   issueOverrides: Record<string, IssueSummary>,
   createdIssues: IssueSummary[],
+  deletedIssueIds: string[],
 ): IssueSummary[] {
+  const deletedIssueIdSet = new Set(deletedIssueIds);
   const baseIssueIds = new Set(baseIssues.map((issue) => issue.id));
   const nextCreatedIssues = createdIssues
-    .filter((issue) => !baseIssueIds.has(issue.id))
+    .filter((issue) => !baseIssueIds.has(issue.id) && !deletedIssueIdSet.has(issue.id))
     .map((issue) => issueOverrides[issue.id] ?? issue);
-  const nextBaseIssues = baseIssues.map((issue) => issueOverrides[issue.id] ?? issue);
+  const nextBaseIssues = baseIssues
+    .filter((issue) => !deletedIssueIdSet.has(issue.id))
+    .map((issue) => issueOverrides[issue.id] ?? issue);
   const seenIssueIds = new Set([
-    ...baseIssues.map((issue) => issue.id),
+    ...nextBaseIssues.map((issue) => issue.id),
     ...nextCreatedIssues.map((issue) => issue.id),
   ]);
-  const nextOrphanOverrides = Object.values(issueOverrides).filter((issue) => !seenIssueIds.has(issue.id));
+  const nextOrphanOverrides = Object.values(issueOverrides).filter(
+    (issue) => !seenIssueIds.has(issue.id) && !deletedIssueIdSet.has(issue.id),
+  );
 
   return [...nextCreatedIssues, ...nextOrphanOverrides, ...nextBaseIssues];
 }

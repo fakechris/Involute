@@ -420,12 +420,27 @@ select {
   gap: 0.35rem;
 }
 
+.issue-drawer__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .issue-drawer__inline-hint {
   color: #94a3b8;
   font-size: 0.8rem;
 }
 
 .issue-drawer__close {
+  cursor: pointer;
+}
+
+.issue-drawer__delete {
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  border-radius: 0.75rem;
+  background: rgba(127, 29, 29, 0.38);
+  color: #fee2e2;
+  padding: 0.7rem 0.95rem;
   cursor: pointer;
 }
 
@@ -512,10 +527,25 @@ select {
   font-size: 0.85rem;
 }
 
+.issue-comment__meta-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
 .issue-comment__body {
   margin: 0;
   color: #e2e8f0;
   white-space: pre-wrap;
+}
+
+.issue-comment__delete {
+  border: 0;
+  background: transparent;
+  color: #fca5a5;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
 }
 
 .issue-comments__empty {

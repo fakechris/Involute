@@ -1,7 +1,7 @@
 import { gql } from '@apollo/client';
 
 export const BOARD_PAGE_QUERY = gql`
-  query BoardPage($first: Int!, $filter: IssueFilter) {
+  query BoardPage($first: Int!, $after: String, $filter: IssueFilter) {
     teams {
       nodes {
         id
@@ -28,7 +28,7 @@ export const BOARD_PAGE_QUERY = gql`
         name
       }
     }
-    issues(first: $first, filter: $filter) {
+    issues(first: $first, after: $after, filter: $filter) {
       nodes {
         id
         identifier
@@ -79,6 +79,10 @@ export const BOARD_PAGE_QUERY = gql`
             }
           }
         }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
   }
@@ -157,6 +161,24 @@ export const COMMENT_CREATE_MUTATION = gql`
           email
         }
       }
+    }
+  }
+`;
+
+export const ISSUE_DELETE_MUTATION = gql`
+  mutation IssueDelete($id: String!) {
+    issueDelete(id: $id) {
+      success
+      issueId
+    }
+  }
+`;
+
+export const COMMENT_DELETE_MUTATION = gql`
+  mutation CommentDelete($id: String!) {
+    commentDelete(id: $id) {
+      success
+      commentId
     }
   }
 `;

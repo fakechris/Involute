@@ -5,6 +5,7 @@ import {
   apolloMocks,
   boardQueryResult,
   renderApp,
+  type IssueDeleteMutationData,
   type IssueSummary,
   type IssueUpdateMutationData,
 } from './test/app-test-helpers';
@@ -458,6 +459,53 @@ describe('App board', () => {
     expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Persisted title');
   });
 
+  it('deletes an issue and removes it from the board without a reload', async () => {
+    const deleteIssue = vi.fn().mockResolvedValue({
+      data: {
+        issueDelete: {
+          success: true,
+          issueId: 'issue-1',
+        },
+      } satisfies IssueDeleteMutationData,
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    apolloMocks.useMutation.mockImplementation((document) => {
+      const source =
+        typeof document === 'string'
+          ? document
+          : 'loc' in document && document.loc?.source.body
+            ? document.loc.source.body
+            : String(document);
+
+      if (source.includes('mutation IssueDelete')) {
+        return [deleteIssue];
+      }
+
+      return [vi.fn()];
+    });
+
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Delete issue' }));
+
+    await waitFor(() =>
+      expect(deleteIssue).toHaveBeenCalledWith({
+        variables: {
+          id: 'issue-1',
+        },
+      }),
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Issue detail drawer' })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText('INV-1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Backlog item')).not.toBeInTheDocument();
+  });
+
   it('shows an error and reverts optimistic move when state mutation fails', async () => {
     const mutate = vi.fn().mockRejectedValue(new Error('boom'));
     apolloMocks.useMutation.mockReturnValue([mutate]);
@@ -498,6 +546,7 @@ describe('App board', () => {
         ...boardQueryResult,
         issues: {
           nodes: [],
+          pageInfo: boardQueryResult.issues.pageInfo,
         },
       },
       loading: false,

@@ -1,14 +1,10 @@
-docs/legacy
 node_modules
-dist
-.env
+.git
 .DS_Store
-!packages/server/prisma/.env
-.factory/library/
-.factory/validation/cli/user-testing/
-.factory/validation/import/scrutiny/reviews/
-.factory/validation/import/user-testing/tmp/
-.factory/validation/web-ui/
+.env
+.factory
+dist
+packages/*/dist
 packages/server/src/*.js
 packages/server/src/*.js.map
 packages/server/src/*.d.ts
@@ -17,4 +13,4 @@ packages/server/prisma/*.js
 packages/server/prisma/*.js.map
 packages/server/prisma/*.d.ts
 packages/server/prisma/*.d.ts.map
-.tmp/
+.tmp

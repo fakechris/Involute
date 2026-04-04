@@ -49,6 +49,7 @@ describe('App issue creation', () => {
           ...boardQueryResult,
           issues: {
             nodes: [...invIssues, sonIssue],
+            pageInfo: boardQueryResult.issues.pageInfo,
           },
         },
         loading: false,

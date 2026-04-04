@@ -4,17 +4,42 @@
  * Usage:
  *   involute import --file <export-dir>           — Run the import pipeline
  *   involute import verify --file <export-dir>     — Verify imported data against export
+ *   involute import team --token ... --team ...    — Export, import, and verify one Linear team
  */
 
 import type { Command } from 'commander';
-import { access } from 'node:fs/promises';
+import { access, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { runExport } from './export.js';
 import { registerVerifyCommand } from './verify.js';
+import { runVerify, type VerificationResult } from './verify.js';
 import { ensureDatabaseUrl, loadEnv } from './shared.js';
 
 export interface ImportOptions {
   file: string;
 }
+
+export interface TeamImportOptions {
+  keepExport?: boolean;
+  output?: string;
+  team: string;
+  token: string;
+}
+
+export interface TeamImportResult {
+  exportDir: string;
+  exportRetained: boolean;
+  verification: VerificationResult;
+}
+
+export const teamImportDependencies = {
+  mkdtemp,
+  rm,
+  runExport,
+  runImport,
+  runVerify,
+};
 
 /**
  * Validate that the export directory exists and contains required files.
@@ -97,6 +122,94 @@ export async function runImport(options: ImportOptions): Promise<void> {
   }
 }
 
+function formatVerificationResult(result: VerificationResult): string[] {
+  const lines = ['Verification Results:', '─'.repeat(60)];
+
+  for (const entity of result.entities) {
+    const status = entity.passed ? 'PASS' : 'FAIL';
+    const countInfo = `(export: ${String(entity.exportCount)}, db: ${String(entity.dbCount)})`;
+    lines.push(`  ${status}  ${entity.entity} ${countInfo}`);
+
+    if (entity.details) {
+      lines.push(`        ${entity.details}`);
+    }
+  }
+
+  lines.push('─'.repeat(60));
+  lines.push(
+    result.allPassed
+      ? 'All checks passed! Import data matches export source.'
+      : 'Some checks failed. Review discrepancies above.',
+  );
+
+  return lines;
+}
+
+export async function runTeamImport(options: TeamImportOptions): Promise<TeamImportResult> {
+  const usingProvidedOutput = Boolean(options.output);
+  const exportDir = options.output
+    ? resolve(options.output)
+    : await teamImportDependencies.mkdtemp(join(tmpdir(), `involute-team-import-${options.team.toLowerCase()}-`));
+  let shouldRetainExport = usingProvidedOutput || Boolean(options.keepExport);
+
+  const log = (message: string): void => {
+    process.stdout.write(message + '\n');
+  };
+
+  try {
+    log(`Starting Linear team import for "${options.team}"...`);
+    log(`Working export directory: ${exportDir}`);
+    log('');
+
+    log('Step 1/3: Exporting Linear team data');
+    await teamImportDependencies.runExport({
+      token: options.token,
+      team: options.team,
+      output: exportDir,
+    });
+    log('');
+
+    log('Step 2/3: Importing exported data into Involute');
+    await teamImportDependencies.runImport({ file: exportDir });
+    log('');
+
+    log('Step 3/3: Verifying imported data');
+    const verification = await teamImportDependencies.runVerify({ file: exportDir });
+
+    for (const line of formatVerificationResult(verification)) {
+      log(line);
+    }
+
+    if (!verification.allPassed) {
+      shouldRetainExport = true;
+      throw new Error(`Team import verification failed for "${options.team}". Export preserved at ${exportDir}.`);
+    }
+
+    if (!shouldRetainExport) {
+      await teamImportDependencies.rm(exportDir, { recursive: true, force: true });
+    }
+
+    log('');
+    log(`Team import complete for "${options.team}".`);
+    log(
+      shouldRetainExport
+        ? `Export retained at ${exportDir}.`
+        : 'Temporary export artifacts were removed after successful verification.',
+    );
+
+    return {
+      exportDir,
+      exportRetained: shouldRetainExport,
+      verification,
+    };
+  } catch (error) {
+    shouldRetainExport = true;
+    log('');
+    log(`Team import aborted. Export preserved at ${exportDir}.`);
+    throw error;
+  }
+}
+
 /**
  * Register the `import` command (with `verify` subcommand) on the Commander program.
  */
@@ -116,6 +229,23 @@ export function registerImportCommand(program: Command): void {
 
       try {
         await runImport({ file: opts.file });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`Error: ${message}\n`);
+        process.exitCode = 1;
+      }
+    });
+
+  importCmd
+    .command('team')
+    .description('Export, import, and verify a single Linear team end-to-end')
+    .requiredOption('--token <linear-token>', 'Linear API token')
+    .requiredOption('--team <key>', 'Team key to import (for example SON)')
+    .option('--output <export-dir>', 'Retain the exported artifacts at this path')
+    .option('--keep-export', 'Retain the export directory after a successful import')
+    .action(async (opts: TeamImportOptions) => {
+      try {
+        await runTeamImport(opts);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         process.stderr.write(`Error: ${message}\n`);

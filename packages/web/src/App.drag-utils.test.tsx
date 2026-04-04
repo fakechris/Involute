@@ -13,6 +13,7 @@ import {
   DND_ACTIVATION_DISTANCE,
   getDropTargetStateId,
   kanbanCollisionDetection,
+  mergeBoardPageQueryResults,
   moveIssueToState,
   parseHtml5DragPayload,
 } from './routes/BoardPage';
@@ -122,6 +123,35 @@ describe('App drag utils', () => {
 
     expect(groupedIssues.Ready).toContain('INV-1');
     expect(groupedIssues.Backlog ?? []).not.toContain('INV-1');
+  });
+
+  it('merges paged board query results without dropping earlier issues', () => {
+    const previousPage = {
+      ...boardQueryResult,
+      issues: {
+        nodes: boardQueryResult.issues.nodes.slice(0, 2),
+        pageInfo: {
+          endCursor: 'cursor-2',
+          hasNextPage: true,
+        },
+      },
+    };
+    const nextPage = {
+      ...boardQueryResult,
+      issues: {
+        nodes: [boardQueryResult.issues.nodes[2]!],
+        pageInfo: {
+          endCursor: null,
+          hasNextPage: false,
+        },
+      },
+    };
+
+    expect(mergeBoardPageQueryResults(previousPage, nextPage).issues.nodes.map((issue) => issue.identifier)).toEqual([
+      'INV-1',
+      'INV-2',
+      'SON-1',
+    ]);
   });
 
   it('prefers the runtime localStorage auth token when creating Apollo requests', () => {
