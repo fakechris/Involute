@@ -1,5 +1,12 @@
 import { BOARD_COLUMN_ORDER } from './constants';
-import type { BoardColumn, Html5BoardDragPayload, IssueSummary, TeamSummary, WorkflowStateSummary } from './types';
+import type {
+  BoardColumn,
+  BoardPageQueryData,
+  Html5BoardDragPayload,
+  IssueSummary,
+  TeamSummary,
+  WorkflowStateSummary,
+} from './types';
 import { readLocalStorageValue } from '../lib/storage';
 
 export const ACTIVE_TEAM_STORAGE_KEY = 'involute.activeTeamKey';
@@ -105,6 +112,129 @@ export function groupIssuesByState(
   return groups;
 }
 
+export function mergeIssueWithPreservedComments(
+  previousIssue: IssueSummary,
+  nextIssue: IssueSummary,
+): IssueSummary {
+  const nextComments = nextIssue.comments ?? previousIssue.comments;
+  const nextChildren = nextIssue.children ?? previousIssue.children;
+
+  return {
+    ...nextIssue,
+    children: nextChildren,
+    comments:
+      nextComments.nodes.length > 0 || previousIssue.comments.nodes.length === 0
+        ? nextComments
+        : previousIssue.comments,
+  };
+}
+
+export function mergeBoardPageQueryResults(
+  previousResult: BoardPageQueryData,
+  fetchMoreResult: BoardPageQueryData | undefined,
+): BoardPageQueryData {
+  if (!fetchMoreResult) {
+    return previousResult;
+  }
+
+  const issueById = new Map(previousResult.issues.nodes.map((issue) => [issue.id, issue]));
+
+  for (const issue of fetchMoreResult.issues.nodes) {
+    issueById.set(issue.id, issue);
+  }
+
+  return {
+    ...fetchMoreResult,
+    issues: {
+      nodes: [...issueById.values()],
+      pageInfo: fetchMoreResult.issues.pageInfo,
+    },
+  };
+}
+
+export function mergeBoardIssues(
+  baseIssues: IssueSummary[],
+  issueOverrides: Record<string, IssueSummary>,
+  createdIssues: IssueSummary[],
+  deletedIssueIds: string[],
+): IssueSummary[] {
+  const deletedIssueIdSet = new Set(deletedIssueIds);
+  const baseIssueIds = new Set(baseIssues.map((issue) => issue.id));
+  const nextCreatedIssues = createdIssues
+    .filter((issue) => !baseIssueIds.has(issue.id) && !deletedIssueIdSet.has(issue.id))
+    .map((issue) => issueOverrides[issue.id] ?? issue);
+  const nextBaseIssues = baseIssues
+    .filter((issue) => !deletedIssueIdSet.has(issue.id))
+    .map((issue) => issueOverrides[issue.id] ?? issue);
+  const seenIssueIds = new Set([
+    ...nextBaseIssues.map((issue) => issue.id),
+    ...nextCreatedIssues.map((issue) => issue.id),
+  ]);
+  const nextOrphanOverrides = Object.values(issueOverrides).filter(
+    (issue) => !seenIssueIds.has(issue.id) && !deletedIssueIdSet.has(issue.id),
+  );
+
+  return [...nextCreatedIssues, ...nextOrphanOverrides, ...nextBaseIssues];
+}
+
+export function reconcileIssueOverrides(
+  baseIssues: IssueSummary[],
+  issueOverrides: Record<string, IssueSummary>,
+): Record<string, IssueSummary> {
+  const baseIssuesById = new Map(baseIssues.map((issue) => [issue.id, issue]));
+  let changed = false;
+  const nextOverrides: Record<string, IssueSummary> = {};
+
+  for (const [issueId, override] of Object.entries(issueOverrides)) {
+    const baseIssue = baseIssuesById.get(issueId);
+
+    if (baseIssue && areIssuesEquivalent(baseIssue, override)) {
+      changed = true;
+      continue;
+    }
+
+    nextOverrides[issueId] = override;
+  }
+
+  return changed ? nextOverrides : issueOverrides;
+}
+
+export function reconcileCreatedIssues(
+  baseIssues: IssueSummary[],
+  createdIssues: IssueSummary[],
+): IssueSummary[] {
+  const nextCreatedIssues = createdIssues.filter(
+    (issue) => !baseIssues.some((baseIssue) => baseIssue.id === issue.id),
+  );
+
+  return nextCreatedIssues.length === createdIssues.length ? createdIssues : nextCreatedIssues;
+}
+
+export function replaceIssueOverride(
+  issueOverrides: Record<string, IssueSummary>,
+  issueId: string,
+  issue: IssueSummary | null,
+): Record<string, IssueSummary> {
+  if (!issue) {
+    if (!(issueId in issueOverrides)) {
+      return issueOverrides;
+    }
+
+    const nextOverrides = { ...issueOverrides };
+    delete nextOverrides[issueId];
+    return nextOverrides;
+  }
+
+  if (issueOverrides[issueId] === issue) {
+    return issueOverrides;
+  }
+
+  return {
+    ...issueOverrides,
+    [issueId]: issue,
+  };
+}
+
 export function getInitialTeamKey(teams: TeamSummary[]): string | null {
   return teams[0]?.key ?? null;
 }
@@ -131,4 +261,89 @@ function compareBoardStates(leftName: string, rightName: string): number {
   }
 
   return leftName.localeCompare(rightName);
+}
+
+function areIssuesEquivalent(left: IssueSummary, right: IssueSummary): boolean {
+  return (
+    left.id === right.id &&
+    left.identifier === right.identifier &&
+    left.title === right.title &&
+    (left.description ?? null) === (right.description ?? null) &&
+    left.updatedAt === right.updatedAt &&
+    left.state.id === right.state.id &&
+    left.team.key === right.team.key &&
+    (left.assignee?.id ?? null) === (right.assignee?.id ?? null) &&
+    areSortedArraysEqual(
+      left.labels.nodes.map((label) => label.id),
+      right.labels.nodes.map((label) => label.id),
+    ) &&
+    areSortedArraysEqual(
+      left.children.nodes.map((child) => child.id),
+      right.children.nodes.map((child) => child.id),
+    ) &&
+    (left.parent?.id ?? null) === (right.parent?.id ?? null) &&
+    areCommentsEquivalent(left.comments.nodes, right.comments.nodes)
+  );
+}
+
+function areCommentsEquivalent(
+  leftComments: IssueSummary['comments']['nodes'],
+  rightComments: IssueSummary['comments']['nodes'],
+): boolean {
+  const leftComparable = [...leftComments]
+    .sort(compareIssueComments)
+    .map((comment) => ({
+      body: comment.body,
+      createdAt: comment.createdAt,
+      id: comment.id,
+      userId: comment.user?.id ?? null,
+    }));
+  const rightComparable = [...rightComments]
+    .sort(compareIssueComments)
+    .map((comment) => ({
+      body: comment.body,
+      createdAt: comment.createdAt,
+      id: comment.id,
+      userId: comment.user?.id ?? null,
+    }));
+
+  if (leftComparable.length !== rightComparable.length) {
+    return false;
+  }
+
+  return leftComparable.every((comment, index) => {
+    const otherComment = rightComparable[index];
+
+    return (
+      otherComment !== undefined &&
+      comment.id === otherComment.id &&
+      comment.body === otherComment.body &&
+      comment.createdAt === otherComment.createdAt &&
+      comment.userId === otherComment.userId
+    );
+  });
+}
+
+function compareIssueComments(
+  left: IssueSummary['comments']['nodes'][number],
+  right: IssueSummary['comments']['nodes'][number],
+): number {
+  const createdAtComparison = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+
+  if (createdAtComparison !== 0) {
+    return createdAtComparison;
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
+function areSortedArraysEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  const sortedLeft = [...left].sort();
+  const sortedRight = [...right].sort();
+
+  return sortedLeft.every((value, index) => value === sortedRight[index]);
 }

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { execFileSync } from 'node:child_process';
 
 test.describe('board flow', () => {
   test('creates, updates, comments, deletes comment, and deletes issue from the board', async ({ page }) => {
@@ -51,11 +52,48 @@ test.describe('board flow', () => {
     await issueDrawer.getByRole('button', { name: 'Add comment' }).click();
     await expect(issueDrawer.getByText('Playwright comment')).toBeVisible();
 
-    await issueDrawer.getByRole('button', { name: 'Delete comment' }).click();
+    await issueDrawer.getByRole('button', { name: 'Delete comment' }).last().click();
     await expect(issueDrawer.getByText('Playwright comment')).toHaveCount(0);
 
     await issueDrawer.getByRole('button', { name: 'Delete issue' }).click();
     await expect(page.getByRole('dialog', { name: 'Issue detail drawer' })).toHaveCount(0);
     await expect(page.getByText(updatedTitle)).toHaveCount(0);
   });
+
+  test('renders imported workflow states and issues on the board for visual acceptance', async ({ page }) => {
+    try {
+      runBoardFixtureCommand('seed');
+
+      await page.goto('/');
+      await expect(page.getByRole('heading', { name: 'Board' })).toBeVisible();
+
+      await page.getByLabel('Select team').selectOption({ label: 'Imported Acceptance Team' });
+
+      await expect(page.getByTestId('column-Triage')).toContainText('E2E-42');
+      await expect(page.getByTestId('column-Triage')).toContainText('Imported triage issue');
+      await expect(page.getByTestId('column-Todo')).toContainText('E2E-43');
+      await expect(page.getByTestId('column-Done')).toContainText('E2E-44');
+
+      await page.getByText('Imported triage issue', { exact: true }).click();
+
+      const issueDrawer = page.getByRole('dialog', { name: 'Issue detail drawer' });
+      await expect(issueDrawer).toBeVisible();
+      await expect(issueDrawer.getByLabel('Issue title')).toHaveValue('Imported triage issue');
+      await expect(issueDrawer.getByText('Imported comment from fixture.')).toBeVisible();
+    } finally {
+      runBoardFixtureCommand('cleanup');
+    }
+  });
 });
+
+function runBoardFixtureCommand(command: 'seed' | 'cleanup'): void {
+  execFileSync(
+    'pnpm',
+    ['--filter', '@involute/server', 'exec', 'tsx', 'scripts/import-board-fixture.ts', command],
+    {
+      cwd: process.cwd(),
+      env: process.env,
+      stdio: 'inherit',
+    },
+  );
+}

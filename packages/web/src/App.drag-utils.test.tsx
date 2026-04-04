@@ -3,12 +3,11 @@ import type { DragEndEvent } from '@dnd-kit/core';
 
 import { boardQueryResult, getIssue } from './test/app-test-helpers';
 import { getAuthToken, getAuthTokenDetails, getGraphqlUrl, getGraphqlUrlDetails } from './lib/apollo';
+import { createHtml5BoardDragPayload, mergeIssueWithPreservedComments, parseHtml5BoardDragPayload } from './board/utils';
 import {
   getDropTargetStateId,
-  mergeIssueWithPreservedComments,
   moveIssueToState,
 } from './routes/BoardPage';
-import { createHtml5BoardDragPayload, parseHtml5BoardDragPayload } from './board/utils';
 import type { IssueSummary } from './board/types';
 
 describe('App drag helpers', () => {

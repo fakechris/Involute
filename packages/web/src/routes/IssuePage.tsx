@@ -22,9 +22,9 @@ import type {
   IssueUpdateMutationData,
   IssueUpdateMutationVariables,
 } from '../board/types';
+import { mergeIssueWithPreservedComments } from '../board/utils';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
-import { mergeIssueWithPreservedComments } from './BoardPage';
 
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
 const ISSUE_DELETE_ERROR_MESSAGE = 'We could not delete the issue. Please try again.';

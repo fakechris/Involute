@@ -1,6 +1,5 @@
 import type { Comment, Issue, Prisma, PrismaClient, WorkflowState } from '@prisma/client';
 
-import { DEFAULT_WORKFLOW_STATE_ORDER } from './constants.js';
 import {
   ASSIGNEE_NOT_FOUND_MESSAGE,
   COMMENT_NOT_FOUND_MESSAGE,
@@ -18,6 +17,7 @@ import {
   WORKFLOW_STATE_TEAM_CREATE_MISMATCH_MESSAGE,
   WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE,
 } from './errors.js';
+import { orderWorkflowStates } from './workflow-state-order.js';
 
 export interface CreateIssueInput {
   description?: string | null;
@@ -41,10 +41,6 @@ export interface CreateCommentInput {
 }
 
 type WorkflowStateSelection = Pick<WorkflowState, 'id' | 'name' | 'teamId'>;
-
-const workflowStateOrder = new Map<string, number>(
-  DEFAULT_WORKFLOW_STATE_ORDER.map((name, index) => [name, index] as const),
-);
 
 export async function createIssue(
   prisma: PrismaClient,
@@ -409,17 +405,4 @@ async function resolveCreateState(
   }
 
   return initialState;
-}
-
-function orderWorkflowStates(states: WorkflowStateSelection[]): WorkflowStateSelection[] {
-  return [...states].sort((left, right) => {
-    const leftOrder = workflowStateOrder.get(left.name) ?? Number.MAX_SAFE_INTEGER;
-    const rightOrder = workflowStateOrder.get(right.name) ?? Number.MAX_SAFE_INTEGER;
-
-    if (leftOrder !== rightOrder) {
-      return leftOrder - rightOrder;
-    }
-
-    return left.name.localeCompare(right.name);
-  });
 }

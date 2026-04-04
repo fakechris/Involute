@@ -47,11 +47,19 @@ import {
   getBoardColumns,
   getInitialTeamKey,
   getStoredTeamKey,
+  mergeBoardIssues,
+  mergeBoardPageQueryResults,
+  mergeIssueWithPreservedComments,
   readStoredTeamKey,
+  reconcileCreatedIssues,
+  reconcileIssueOverrides,
+  replaceIssueOverride,
   groupIssuesByState,
   writeStoredTeamKey,
 } from '../board/utils';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
+import { BoardCreateIssueDialog } from '../components/BoardCreateIssueDialog';
+import { BoardLoadMoreNotice } from '../components/BoardLoadMoreNotice';
 import { Column } from '../components/Column';
 import { IssueCard } from '../components/IssueCard';
 import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
@@ -643,86 +651,6 @@ export function BoardPage() {
     );
   }
 
-  const createIssueDialog = isCreateOpen ? (
-    <aside className="issue-drawer" aria-label="Create issue drawer" aria-modal="true" role="dialog">
-      <button
-        type="button"
-        className="issue-drawer__backdrop"
-        aria-label="Close create issue drawer"
-        onClick={() => setIsCreateOpen(false)}
-      />
-      <section className="issue-drawer__panel">
-        <div className="issue-drawer__header">
-          <div>
-            <p className="app-shell__eyebrow">Involute</p>
-            <h2>Create issue</h2>
-          </div>
-          <button type="button" className="issue-drawer__close" onClick={() => setIsCreateOpen(false)}>
-            Close
-          </button>
-        </div>
-
-        <form className="issue-comment-composer" onSubmit={(event) => void handleCreateIssueSubmit(event)}>
-          <div className="issue-drawer__section">
-            <label className="issue-drawer__label" htmlFor="create-issue-title">
-              Title
-            </label>
-            <input
-              id="create-issue-title"
-              aria-label="Issue title"
-              className="issue-drawer__title-input"
-              value={createTitle}
-              disabled={isSavingState}
-              onChange={(event) => setCreateTitle(event.target.value)}
-            />
-          </div>
-
-          <div className="issue-drawer__section">
-            <label className="issue-drawer__label" htmlFor="create-issue-description">
-              Description
-            </label>
-            <textarea
-              id="create-issue-description"
-              aria-label="Issue description"
-              className="issue-drawer__textarea"
-              value={createDescription}
-              disabled={isSavingState}
-              onChange={(event) => setCreateDescription(event.target.value)}
-            />
-          </div>
-
-          {teams.length > 1 ? (
-            <div className="issue-drawer__section">
-              <label className="team-selector">
-                <span>Team</span>
-                <select
-                  aria-label="Select team"
-                  value={selectedTeam?.key ?? ''}
-                  disabled={isSavingState}
-                  onChange={(event) => setSelectedTeamKey(event.target.value)}
-                >
-                  {teams.map((team) => (
-                    <option key={team.id} value={team.key}>
-                      {team.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          ) : null}
-
-          <button
-            type="submit"
-            className="issue-comment-composer__submit"
-            disabled={isSavingState || !createTitle.trim() || !selectedTeam}
-          >
-            Create issue
-          </button>
-        </form>
-      </section>
-    </aside>
-  ) : null;
-
   return (
     <main className="board-page">
       <header className="app-shell__header">
@@ -777,27 +705,12 @@ export function BoardPage() {
         </section>
       ) : null}
 
-      {hasMoreIssues || loadMoreIssuesError ? (
-        <section
-          className={`board-message${loadMoreIssuesError ? ' board-message--error' : ''}`}
-          role={loadMoreIssuesError ? 'alert' : undefined}
-        >
-          <p>
-            {loadMoreIssuesError ??
-              'Showing the current page of issues. Load more to continue browsing this team.'}
-          </p>
-          {hasMoreIssues ? (
-            <button
-              type="button"
-              className="issue-comment-composer__submit"
-              disabled={isLoadingMoreIssues}
-              onClick={() => void handleLoadMoreIssues()}
-            >
-              {isLoadingMoreIssues ? 'Loading more issues…' : 'Load more issues'}
-            </button>
-          ) : null}
-        </section>
-      ) : null}
+      <BoardLoadMoreNotice
+        errorMessage={loadMoreIssuesError}
+        hasMoreIssues={hasMoreIssues}
+        isLoadingMoreIssues={isLoadingMoreIssues}
+        onLoadMore={() => void handleLoadMoreIssues()}
+      />
 
       {loading && !data ? (
         <section className="board-message" aria-live="polite">
@@ -903,169 +816,21 @@ export function BoardPage() {
         onCommentDelete={persistCommentDelete}
         onIssueDelete={persistIssueDelete}
       />
-      {createIssueDialog}
+      <BoardCreateIssueDialog
+        isOpen={isCreateOpen}
+        isSaving={isSavingState}
+        teams={teams}
+        selectedTeam={selectedTeam}
+        createTitle={createTitle}
+        createDescription={createDescription}
+        onClose={() => setIsCreateOpen(false)}
+        onSubmit={(event) => void handleCreateIssueSubmit(event)}
+        onTitleChange={setCreateTitle}
+        onDescriptionChange={setCreateDescription}
+        onTeamChange={setSelectedTeamKey}
+      />
     </main>
   );
-}
-
-export function mergeIssueWithPreservedComments(
-  previousIssue: IssueSummary,
-  nextIssue: IssueSummary,
-): IssueSummary {
-  const nextComments = nextIssue.comments ?? previousIssue.comments;
-  const nextChildren = nextIssue.children ?? previousIssue.children;
-
-  return {
-    ...nextIssue,
-    children: nextChildren,
-    comments:
-      nextComments.nodes.length > 0 || previousIssue.comments.nodes.length === 0
-        ? nextComments
-        : previousIssue.comments,
-  };
-}
-
-export function mergeBoardPageQueryResults(
-  previousResult: BoardPageQueryData,
-  fetchMoreResult: BoardPageQueryData | undefined,
-): BoardPageQueryData {
-  if (!fetchMoreResult) {
-    return previousResult;
-  }
-
-  const issueById = new Map(previousResult.issues.nodes.map((issue) => [issue.id, issue]));
-
-  for (const issue of fetchMoreResult.issues.nodes) {
-    issueById.set(issue.id, issue);
-  }
-
-  return {
-    ...fetchMoreResult,
-    issues: {
-      nodes: [...issueById.values()],
-      pageInfo: fetchMoreResult.issues.pageInfo,
-    },
-  };
-}
-
-function mergeBoardIssues(
-  baseIssues: IssueSummary[],
-  issueOverrides: Record<string, IssueSummary>,
-  createdIssues: IssueSummary[],
-  deletedIssueIds: string[],
-): IssueSummary[] {
-  const deletedIssueIdSet = new Set(deletedIssueIds);
-  const baseIssueIds = new Set(baseIssues.map((issue) => issue.id));
-  const nextCreatedIssues = createdIssues
-    .filter((issue) => !baseIssueIds.has(issue.id) && !deletedIssueIdSet.has(issue.id))
-    .map((issue) => issueOverrides[issue.id] ?? issue);
-  const nextBaseIssues = baseIssues
-    .filter((issue) => !deletedIssueIdSet.has(issue.id))
-    .map((issue) => issueOverrides[issue.id] ?? issue);
-  const seenIssueIds = new Set([
-    ...nextBaseIssues.map((issue) => issue.id),
-    ...nextCreatedIssues.map((issue) => issue.id),
-  ]);
-  const nextOrphanOverrides = Object.values(issueOverrides).filter(
-    (issue) => !seenIssueIds.has(issue.id) && !deletedIssueIdSet.has(issue.id),
-  );
-
-  return [...nextCreatedIssues, ...nextOrphanOverrides, ...nextBaseIssues];
-}
-
-function reconcileIssueOverrides(
-  baseIssues: IssueSummary[],
-  issueOverrides: Record<string, IssueSummary>,
-): Record<string, IssueSummary> {
-  const baseIssuesById = new Map(baseIssues.map((issue) => [issue.id, issue]));
-  let changed = false;
-  const nextOverrides: Record<string, IssueSummary> = {};
-
-  for (const [issueId, override] of Object.entries(issueOverrides)) {
-    const baseIssue = baseIssuesById.get(issueId);
-
-    if (baseIssue && areIssuesEquivalent(baseIssue, override)) {
-      changed = true;
-      continue;
-    }
-
-    nextOverrides[issueId] = override;
-  }
-
-  return changed ? nextOverrides : issueOverrides;
-}
-
-function reconcileCreatedIssues(
-  baseIssues: IssueSummary[],
-  createdIssues: IssueSummary[],
-): IssueSummary[] {
-  const nextCreatedIssues = createdIssues.filter(
-    (issue) => !baseIssues.some((baseIssue) => baseIssue.id === issue.id),
-  );
-
-  return nextCreatedIssues.length === createdIssues.length ? createdIssues : nextCreatedIssues;
-}
-
-function replaceIssueOverride(
-  issueOverrides: Record<string, IssueSummary>,
-  issueId: string,
-  issue: IssueSummary | null,
-): Record<string, IssueSummary> {
-  if (!issue) {
-    if (!(issueId in issueOverrides)) {
-      return issueOverrides;
-    }
-
-    const nextOverrides = { ...issueOverrides };
-    delete nextOverrides[issueId];
-    return nextOverrides;
-  }
-
-  if (issueOverrides[issueId] === issue) {
-    return issueOverrides;
-  }
-
-  return {
-    ...issueOverrides,
-    [issueId]: issue,
-  };
-}
-
-function areIssuesEquivalent(left: IssueSummary, right: IssueSummary): boolean {
-  return JSON.stringify(toComparableIssue(left)) === JSON.stringify(toComparableIssue(right));
-}
-
-function toComparableIssue(issue: IssueSummary) {
-  return {
-    id: issue.id,
-    identifier: issue.identifier,
-    title: issue.title,
-    description: issue.description ?? null,
-    updatedAt: issue.updatedAt,
-    stateId: issue.state.id,
-    teamKey: issue.team.key,
-    assigneeId: issue.assignee?.id ?? null,
-    labelIds: issue.labels.nodes.map((label) => label.id).sort(),
-    childIds: issue.children.nodes.map((child) => child.id).sort(),
-    parentId: issue.parent?.id ?? null,
-    comments: [...issue.comments.nodes]
-      .sort((left, right) => {
-        const createdAtComparison =
-          new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
-
-        if (createdAtComparison !== 0) {
-          return createdAtComparison;
-        }
-
-        return left.id.localeCompare(right.id);
-      })
-      .map((comment) => ({
-        id: comment.id,
-        body: comment.body,
-        createdAt: comment.createdAt,
-        userId: comment.user?.id ?? null,
-      })),
-  };
 }
 
 export { getDropTargetStateId };

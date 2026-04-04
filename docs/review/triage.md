@@ -4,6 +4,18 @@
 范围：`docs/review/` 下 4 份 review 文档的逐条 triage。  
 方法：不是复述原文，而是把每条 review item 和当前 `main` 分支代码逐条对照，区分 `仍然成立`、`部分成立`、`已修复/已过期`、`当前非缺陷/延期`，再做去重归并。
 
+## 2026-04-05 收尾结论
+
+以下结论基于当前工作区尚未提交的修复后代码，而不是 2026-04-04 的旧主线快照。
+
+- 已修复：`G1`、`G2`、`G3`、`G4`、`G5`、`G6`、`G7`、`G8`、`G9`、`G11`、`G12`
+- 已降级为维护性债务：`G10`
+- 当前没有剩余的 review-derived correctness blocker。
+- 这轮最后补齐的点：
+  - `G7`：[`packages/server/src/schema.ts`](/Users/chris/workspace/Involute/packages/server/src/schema.ts) 的 `Issue.comments(first)` 已加服务端上限钳制。
+  - `G9`：[`e2e/board-flow.spec.ts`](/Users/chris/workspace/Involute/e2e/board-flow.spec.ts) 已补“导入后看板展示正确”的 Playwright 验收；fixture 脚本在 [`packages/server/scripts/import-board-fixture.ts`](/Users/chris/workspace/Involute/packages/server/scripts/import-board-fixture.ts)。
+  - `G10`：[`packages/web/src/routes/BoardPage.tsx`](/Users/chris/workspace/Involute/packages/web/src/routes/BoardPage.tsx) 继续拆出 [`BoardCreateIssueDialog.tsx`](/Users/chris/workspace/Involute/packages/web/src/components/BoardCreateIssueDialog.tsx) 和 [`BoardLoadMoreNotice.tsx`](/Users/chris/workspace/Involute/packages/web/src/components/BoardLoadMoreNotice.tsx)，已不再属于当前 bug 清单。
+
 ## 判定口径
 
 - `成立`：当前主线代码中仍然存在，且原 review 的问题表述基本准确。

@@ -31,6 +31,28 @@ export async function readJsonFile<T>(filePath: string): Promise<T> {
   return JSON.parse(content) as T;
 }
 
+export async function readValidatedJsonFile<T>(
+  filePath: string,
+  parser: (value: unknown) => T,
+): Promise<T> {
+  const content = await readFile(filePath, 'utf-8');
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(content);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid JSON in ${filePath}: ${message}`);
+  }
+
+  try {
+    return parser(parsed);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid export data in ${filePath}: ${message}`);
+  }
+}
+
 export async function fileExists(filePath: string): Promise<boolean> {
   try {
     await access(filePath);

@@ -19,7 +19,6 @@ import {
   type SelectionSetNode,
 } from 'graphql';
 
-import { DEFAULT_WORKFLOW_STATE_ORDER } from './constants.js';
 import { getExposedError, isPrismaInvalidInputError } from './errors.js';
 import type {
   CreateCommentInput,
@@ -30,6 +29,7 @@ import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
 
 import { requireAuthentication, type GraphQLContext } from './auth.js';
 import { createComment, createIssue, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
+import { orderWorkflowStates } from './workflow-state-order.js';
 
 type TeamParent = Team & { states?: WorkflowState[] | null };
 type UserParent = User;
@@ -64,14 +64,11 @@ interface CursorPayload {
   id: string;
 }
 
-const workflowStateOrder = new Map<string, number>(
-  DEFAULT_WORKFLOW_STATE_ORDER.map((name, index) => [name, index] as const),
-);
-
 const COMMENT_ORDER_BY: Prisma.CommentOrderByWithRelationInput[] = [
   { createdAt: 'asc' },
   { id: 'asc' },
 ];
+const MAX_COMMENTS_CONNECTION_FIRST = 100;
 const MAX_ISSUES_CONNECTION_FIRST = 200;
 
 function buildIssueListInclude(
@@ -438,39 +435,48 @@ const resolvers = {
       args: { input: CreateIssueInput },
       context: GraphQLContext,
     ): Promise<{ issue: IssueParent | null; success: boolean }> =>
-      runIssueMutation(async () => {
+      runMutation(async () => {
         const issue = await createIssue(context.prisma, args.input);
 
         return {
           issue: await getIssueById(context.prisma, issue.id),
           success: true as const,
         };
+      }, {
+        issue: null,
+        success: false as const,
       }),
     issueUpdate: async (
       _parent: unknown,
       args: { id: string; input: UpdateIssueInput },
       context: GraphQLContext,
     ): Promise<{ issue: IssueParent | null; success: boolean }> =>
-      runIssueMutation(async () => {
+      runMutation(async () => {
         const issue = await updateIssue(context.prisma, args.id, args.input);
 
         return {
           issue: await getIssueById(context.prisma, issue.id),
           success: true as const,
         };
+      }, {
+        issue: null,
+        success: false as const,
       }),
     issueDelete: async (
       _parent: unknown,
       args: { id: string },
       context: GraphQLContext,
     ): Promise<{ issueId: string | null; success: boolean }> =>
-      runIssueDeleteMutation(async () => {
+      runMutation(async () => {
         const issue = await deleteIssue(context.prisma, args.id);
 
         return {
           issueId: issue.id,
           success: true as const,
         };
+      }, {
+        issueId: null,
+        success: false as const,
       }),
     commentCreate: async (
       _parent: unknown,
@@ -479,7 +485,7 @@ const resolvers = {
     ): Promise<{ comment: CommentParent | null; success: boolean }> => {
       const viewer = requireAuthentication(context);
 
-      return runCommentMutation(async () => {
+      return runMutation(async () => {
         const createdComment = await createComment(context.prisma, args.input, viewer.id);
 
         return {
@@ -489,6 +495,9 @@ const resolvers = {
           },
           success: true as const,
         };
+      }, {
+        comment: null,
+        success: false as const,
       });
     },
     commentDelete: async (
@@ -496,13 +505,16 @@ const resolvers = {
       args: { id: string },
       context: GraphQLContext,
     ): Promise<{ commentId: string | null; success: boolean }> =>
-      runCommentDeleteMutation(async () => {
+      runMutation(async () => {
         const comment = await deleteComment(context.prisma, args.id);
 
         return {
           commentId: comment.id,
           success: true as const,
         };
+      }, {
+        commentId: null,
+        success: false as const,
       }),
   },
   Team: {
@@ -644,29 +656,33 @@ const resolvers = {
       args: { after?: string | null; first?: number; orderBy?: CommentOrderByInput },
       context: GraphQLContext,
     ): Promise<{ nodes: Comment[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
+      const first = args.first === undefined
+        ? undefined
+        : clampConnectionFirst(args.first, MAX_COMMENTS_CONNECTION_FIRST);
+
       if (
         parent.comments &&
         (args.after === undefined || args.after === null) &&
         isDefaultCommentOrder(args.orderBy)
       ) {
-        const nodes = args.first === undefined ? parent.comments : parent.comments.slice(0, args.first);
+        const nodes = first === undefined ? parent.comments : parent.comments.slice(0, first);
 
         return {
           nodes,
-          pageInfo: buildPageInfo(nodes, args.first !== undefined && parent.comments.length > args.first),
+          pageInfo: buildPageInfo(nodes, first !== undefined && parent.comments.length > first),
         };
       }
 
       const comments = await context.prisma.comment.findMany({
         where: buildCommentWhere(parent.id, args.after),
         orderBy: buildCommentOrderBy(args.orderBy),
-        ...(args.first === undefined ? {} : { take: args.first + 1 }),
+        ...(first === undefined ? {} : { take: first + 1 }),
       });
-      const nodes = args.first === undefined ? comments : comments.slice(0, args.first);
+      const nodes = first === undefined ? comments : comments.slice(0, first);
 
       return {
         nodes,
-        pageInfo: buildPageInfo(nodes, args.first !== undefined && comments.length > args.first),
+        pageInfo: buildPageInfo(nodes, first !== undefined && comments.length > first),
       };
     },
   },
@@ -685,19 +701,6 @@ async function getIssueById(prisma: PrismaClient, id: string): Promise<IssuePare
       id,
     },
     include: buildIssueDetailInclude(),
-  });
-}
-
-function orderWorkflowStates(states: WorkflowState[]): WorkflowState[] {
-  return [...states].sort((left, right) => {
-    const leftOrder = workflowStateOrder.get(left.name) ?? Number.MAX_SAFE_INTEGER;
-    const rightOrder = workflowStateOrder.get(right.name) ?? Number.MAX_SAFE_INTEGER;
-
-    if (leftOrder !== rightOrder) {
-      return leftOrder - rightOrder;
-    }
-
-    return left.name.localeCompare(right.name);
   });
 }
 
@@ -877,68 +880,15 @@ function buildCommentWhere(
   };
 }
 
-async function runIssueMutation<TResult extends { issue: Issue; success: true }>(
+async function runMutation<TResult extends { success: true }, TFallback extends { success: false }>(
   operation: () => Promise<TResult>,
-): Promise<TResult | { issue: null; success: false }> {
+  fallback: TFallback,
+): Promise<TResult | TFallback> {
   try {
     return await operation();
   } catch (error) {
     if (getExposedError(error) || isPrismaInvalidInputError(error)) {
-      return {
-        issue: null,
-        success: false,
-      };
-    }
-
-    throw error;
-  }
-}
-
-async function runCommentMutation<TResult extends { comment: Comment; success: true }>(
-  operation: () => Promise<TResult>,
-): Promise<TResult | { comment: null; success: false }> {
-  try {
-    return await operation();
-  } catch (error) {
-    if (getExposedError(error) || isPrismaInvalidInputError(error)) {
-      return {
-        comment: null,
-        success: false,
-      };
-    }
-
-    throw error;
-  }
-}
-
-async function runIssueDeleteMutation<TResult extends { issueId: string; success: true }>(
-  operation: () => Promise<TResult>,
-): Promise<TResult | { issueId: null; success: false }> {
-  try {
-    return await operation();
-  } catch (error) {
-    if (getExposedError(error) || isPrismaInvalidInputError(error)) {
-      return {
-        issueId: null,
-        success: false,
-      };
-    }
-
-    throw error;
-  }
-}
-
-async function runCommentDeleteMutation<TResult extends { commentId: string; success: true }>(
-  operation: () => Promise<TResult>,
-): Promise<TResult | { commentId: null; success: false }> {
-  try {
-    return await operation();
-  } catch (error) {
-    if (getExposedError(error) || isPrismaInvalidInputError(error)) {
-      return {
-        commentId: null,
-        success: false,
-      };
+      return fallback;
     }
 
     throw error;

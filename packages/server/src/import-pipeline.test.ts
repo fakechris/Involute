@@ -208,6 +208,52 @@ describe('import pipeline', () => {
     expect(labels.map((l) => l.name)).toEqual(['bug', 'feature', 'urgent']);
   });
 
+  it('allows multiple imported labels to share the same name without collapsing them', async () => {
+    const duplicateNameLabels = [
+      ...FIXTURE_LABELS,
+      { id: 'linear-label-4', name: 'bug', color: '#0000ff' },
+    ];
+    const issuesWithDuplicateNamedLabel = FIXTURE_ISSUES.map((issue) =>
+      issue.id === 'linear-issue-2'
+        ? {
+            ...issue,
+            labels: {
+              nodes: [{ id: 'linear-label-4', name: 'bug' }],
+            },
+          }
+        : issue,
+    );
+
+    await writeFile(join(exportDir, 'labels.json'), JSON.stringify(duplicateNameLabels, null, 2));
+    await writeFile(join(exportDir, 'issues.json'), JSON.stringify(issuesWithDuplicateNamedLabel, null, 2));
+
+    await runImportPipeline(prisma, exportDir);
+
+    const labels = await prisma.issueLabel.findMany({
+      where: { name: 'bug' },
+      orderBy: { id: 'asc' },
+    });
+    expect(labels).toHaveLength(2);
+
+    const importedIssue = await prisma.issue.findUnique({
+      where: { identifier: 'SON-43' },
+      include: { labels: true },
+    });
+    expect(importedIssue).not.toBeNull();
+    expect(importedIssue!.labels).toHaveLength(1);
+    expect(importedIssue!.labels[0]!.name).toBe('bug');
+
+    const labelMappings = await prisma.legacyLinearMapping.findMany({
+      where: {
+        entityType: 'label',
+        oldId: { in: ['linear-label-1', 'linear-label-4'] },
+      },
+      orderBy: { oldId: 'asc' },
+    });
+    expect(labelMappings).toHaveLength(2);
+    expect(new Set(labelMappings.map((mapping) => mapping.newId)).size).toBe(2);
+  });
+
   it('imports users with name and email preserved', async () => {
     await runImportPipeline(prisma, exportDir);
 
@@ -518,6 +564,17 @@ describe('import pipeline', () => {
           legacyId: 'linear-comment-3',
         }),
       ]),
+    );
+  });
+
+  it('fails fast with a file-specific error when exported issues.json has an invalid runtime shape', async () => {
+    await writeFile(
+      join(exportDir, 'issues.json'),
+      JSON.stringify([{ ...FIXTURE_ISSUES[0], id: 123 }], null, 2),
+    );
+
+    await expect(runImportPipeline(prisma, exportDir)).rejects.toThrow(
+      /Invalid export data in .*issues\.json: issues\.json\[0\]\.id must be a string\./,
     );
   });
 

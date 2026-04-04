@@ -155,6 +155,24 @@ describe('verify command — error handling', () => {
       await rm(tempDir, { recursive: true, force: true }).catch(() => {});
     }
   });
+
+  it('throws a file-specific error when issues.json has an invalid runtime shape', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'involute-verify-invalid-issues-'));
+
+    try {
+      await writeVerifyFixtureExportDir(tempDir);
+      await writeFile(
+        join(tempDir, 'issues.json'),
+        JSON.stringify([{ ...FIXTURE_ISSUES[0], id: 123 }], null, 2),
+      );
+
+      await expect(runVerify({ file: tempDir })).rejects.toThrow(
+        /Invalid export data in .*issues\.json: issues\.json\[0\]\.id must be a string\./,
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  });
 });
 
 // Integration tests that require a database connection

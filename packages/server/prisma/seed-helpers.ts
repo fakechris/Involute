@@ -49,15 +49,22 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
   }
 
   for (const name of DEFAULT_LABEL_NAMES) {
-    await prisma.issueLabel.upsert({
+    const existingLabel = await prisma.issueLabel.findFirst({
       where: {
         name,
       },
-      create: {
-        name,
+      select: {
+        id: true,
       },
-      update: {},
     });
+
+    if (!existingLabel) {
+      await prisma.issueLabel.create({
+        data: {
+          name,
+        },
+      });
+    }
   }
 
   await prisma.user.upsert({

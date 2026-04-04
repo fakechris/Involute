@@ -5,7 +5,7 @@
  * 1. Read export directory (teams.json, workflow_states.json, labels.json, users.json, issues.json, comments/)
  * 2. Import teams — upsert by key
  * 3. Import workflow states — upsert per team
- * 4. Import labels — upsert by name
+ * 4. Import labels — create mapped label rows
  * 5. Import users — upsert by email
  * 6. Import issues WITHOUT parentId first — preserve identifier and timestamps. Build old_id→new_id mapping.
  * 7. Backfill parentId using mapping
@@ -15,61 +15,24 @@
  */
 
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { readFile, readdir, access } from 'node:fs/promises';
+import type {
+  ExportedComment,
+  ExportedIssue,
+  ExportedLabel,
+  ExportedTeam,
+  ExportedUser,
+  ExportedWorkflowState,
+} from '@involute/shared/import-format';
+import {
+  parseExportedComments,
+  parseExportedIssues,
+  parseExportedLabels,
+  parseExportedTeams,
+  parseExportedUsers,
+  parseExportedWorkflowStates,
+} from '@involute/shared/import-format';
+import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-
-// --- Types matching the Linear export format ---
-
-interface ExportedTeam {
-  id: string;
-  key: string;
-  name: string;
-}
-
-interface ExportedWorkflowState {
-  id: string;
-  name: string;
-  type: string;
-  position: number;
-  team: { id: string };
-}
-
-interface ExportedLabel {
-  id: string;
-  name: string;
-  color: string;
-}
-
-interface ExportedUser {
-  id: string;
-  name: string;
-  email: string;
-  displayName: string;
-  active: boolean;
-}
-
-interface ExportedIssue {
-  id: string;
-  identifier: string;
-  title: string;
-  description: string | null;
-  priority: number;
-  createdAt: string;
-  updatedAt: string;
-  state: { id: string; name: string };
-  team: { id: string; key: string };
-  assignee: { id: string; name: string; email: string } | null;
-  labels: { nodes: Array<{ id: string; name: string }> };
-  parent: { id: string } | null;
-}
-
-interface ExportedComment {
-  id: string;
-  body: string;
-  createdAt: string;
-  updatedAt: string;
-  user: { id: string; name: string; email: string } | null;
-}
 
 export type ProgressCallback = (message: string) => void;
 
@@ -111,9 +74,25 @@ const ORPHAN_COMMENT_USER_NAME = 'Imported Orphan Comment User';
 
 // --- File reading helpers ---
 
-async function readJsonFile<T>(filePath: string): Promise<T> {
+async function readValidatedJsonFile<T>(
+  filePath: string,
+  parser: (value: unknown) => T,
+): Promise<T> {
   const content = await readFile(filePath, 'utf-8');
-  return JSON.parse(content) as T;
+
+  let parsedJson: unknown;
+
+  try {
+    parsedJson = JSON.parse(content) as unknown;
+  } catch (error) {
+    throw new Error(`Invalid JSON in ${filePath}: ${(error as Error).message}`);
+  }
+
+  try {
+    return parser(parsedJson);
+  } catch (error) {
+    throw new Error(`Invalid export data in ${filePath}: ${(error as Error).message}`);
+  }
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -303,10 +282,8 @@ async function importLabels(
     }
 
     const created = await prisma.$transaction(async (transaction) => {
-      const nextLabel = await transaction.issueLabel.upsert({
-        where: { name: label.name },
-        create: { name: label.name },
-        update: {},
+      const nextLabel = await transaction.issueLabel.create({
+        data: { name: label.name },
       });
 
       await createMapping(transaction, label.id, nextLabel.id, 'label');
@@ -526,7 +503,9 @@ async function loadExportedComments(
       continue;
     }
 
-    const comments = await readJsonFile<ExportedComment[]>(commentsFile);
+    const comments = await readValidatedJsonFile(commentsFile, (value) =>
+      parseExportedComments(value, commentsFile),
+    );
 
     for (const comment of comments) {
       commentEntries.push({
@@ -702,13 +681,14 @@ export async function runImportPipeline(
   onProgress?.(`Reading export data from ${exportDir}...`);
 
   // Step 1: Read exported data
-  const teams = await readJsonFile<ExportedTeam[]>(join(exportDir, 'teams.json'));
-  const workflowStates = await readJsonFile<ExportedWorkflowState[]>(
+  const teams = await readValidatedJsonFile(join(exportDir, 'teams.json'), parseExportedTeams);
+  const workflowStates = await readValidatedJsonFile(
     join(exportDir, 'workflow_states.json'),
+    parseExportedWorkflowStates,
   );
-  const labels = await readJsonFile<ExportedLabel[]>(join(exportDir, 'labels.json'));
-  const users = await readJsonFile<ExportedUser[]>(join(exportDir, 'users.json'));
-  const issues = await readJsonFile<ExportedIssue[]>(join(exportDir, 'issues.json'));
+  const labels = await readValidatedJsonFile(join(exportDir, 'labels.json'), parseExportedLabels);
+  const users = await readValidatedJsonFile(join(exportDir, 'users.json'), parseExportedUsers);
+  const issues = await readValidatedJsonFile(join(exportDir, 'issues.json'), parseExportedIssues);
 
   // Step 2: Import teams
   const teamResult = await importTeams(prisma, teams, onProgress);
