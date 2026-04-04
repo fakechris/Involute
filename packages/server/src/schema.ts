@@ -22,7 +22,7 @@ import type {
 import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
 
 import { requireAuthentication, type GraphQLContext } from './auth.js';
-import { createComment, createIssue, updateIssue } from './issue-service.js';
+import { createComment, createIssue, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
 
 type TeamParent = Team & { states?: WorkflowState[] | null };
 type UserParent = User;
@@ -54,6 +54,7 @@ type CommentOrderByInput = 'createdAt';
 const workflowStateOrder = new Map<string, number>(
   DEFAULT_WORKFLOW_STATE_ORDER.map((name, index) => [name, index] as const),
 );
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const DateTimeScalar = new GraphQLScalarType({
   name: 'DateTime',
@@ -90,7 +91,9 @@ const typeDefs = /* GraphQL */ `
   type Mutation {
     issueCreate(input: IssueCreateInput!): IssueCreatePayload!
     issueUpdate(id: String!, input: IssueUpdateInput!): IssueUpdatePayload!
+    issueDelete(id: String!): IssueDeletePayload!
     commentCreate(input: CommentCreateInput!): CommentCreatePayload!
+    commentDelete(id: String!): CommentDeletePayload!
   }
 
   type Team {
@@ -242,9 +245,19 @@ const typeDefs = /* GraphQL */ `
     issue: Issue
   }
 
+  type IssueDeletePayload {
+    success: Boolean!
+    issueId: ID
+  }
+
   type CommentCreatePayload {
     success: Boolean!
     comment: Comment
+  }
+
+  type CommentDeletePayload {
+    success: Boolean!
+    commentId: ID
   }
 `;
 
@@ -256,19 +269,19 @@ const resolvers = {
       args: { id: string },
       context: GraphQLContext,
     ): Promise<Issue | null> => {
-      try {
-        return await context.prisma.issue.findUnique({
+      if (UUID_PATTERN.test(args.id)) {
+        return context.prisma.issue.findUnique({
           where: {
             id: args.id,
           },
         });
-      } catch (error) {
-        if (isPrismaInvalidInputError(error)) {
-          return null;
-        }
-
-        throw error;
       }
+
+      return context.prisma.issue.findUnique({
+        where: {
+          identifier: args.id,
+        },
+      });
     },
     issues: async (
       _parent: unknown,
@@ -280,7 +293,7 @@ const resolvers = {
       return {
         nodes: await context.prisma.issue.findMany({
           ...(where ? { where } : {}),
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          orderBy: [{ createdAt: 'desc' }, { identifier: 'desc' }],
           take: args.first,
         }),
       };
@@ -346,6 +359,15 @@ const resolvers = {
         issue: await updateIssue(context.prisma, args.id, args.input),
         success: true as const,
       })),
+    issueDelete: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<{ issueId: string | null; success: boolean }> =>
+      runIssueDeleteMutation(async () => ({
+        issueId: (await deleteIssue(context.prisma, args.id)).id,
+        success: true as const,
+      })),
     commentCreate: async (
       _parent: unknown,
       args: { input: CreateCommentInput },
@@ -358,6 +380,15 @@ const resolvers = {
         success: true as const,
       }));
     },
+    commentDelete: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<{ commentId: string | null; success: boolean }> =>
+      runCommentDeleteMutation(async () => ({
+        commentId: (await deleteComment(context.prisma, args.id)).id,
+        success: true as const,
+      })),
   },
   Team: {
     states: async (
@@ -602,6 +633,40 @@ async function runCommentMutation<TResult extends { comment: Comment; success: t
     if (getExposedError(error) || isPrismaInvalidInputError(error)) {
       return {
         comment: null,
+        success: false,
+      };
+    }
+
+    throw error;
+  }
+}
+
+async function runIssueDeleteMutation<TResult extends { issueId: string; success: true }>(
+  operation: () => Promise<TResult>,
+): Promise<TResult | { issueId: null; success: false }> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (getExposedError(error) || isPrismaInvalidInputError(error)) {
+      return {
+        issueId: null,
+        success: false,
+      };
+    }
+
+    throw error;
+  }
+}
+
+async function runCommentDeleteMutation<TResult extends { commentId: string; success: true }>(
+  operation: () => Promise<TResult>,
+): Promise<TResult | { commentId: null; success: false }> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (getExposedError(error) || isPrismaInvalidInputError(error)) {
+      return {
+        commentId: null,
         success: false,
       };
     }

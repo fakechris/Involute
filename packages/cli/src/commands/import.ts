@@ -2,37 +2,51 @@
  * CLI import command — imports exported Linear data into Involute database.
  *
  * Usage:
- *   involute import --file <export-dir>           — Run the import pipeline
+ *   involute import --file <export-dir>            — Run the import pipeline
  *   involute import verify --file <export-dir>     — Verify imported data against export
+ *   involute import team --token ... --team ...    — Export, import, and verify one Linear team
  */
 
 import type { Command } from 'commander';
-import { config as loadDotenv } from 'dotenv';
-import { access } from 'node:fs/promises';
+import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { runExport } from './export.js';
 import { registerVerifyCommand } from './verify.js';
+import { runVerify, type VerificationResult } from './verify.js';
+import { ensureDatabaseUrl, loadEnv } from './shared.js';
 
 export interface ImportOptions {
   file: string;
 }
 
-/**
- * Load project environment variables (DATABASE_URL etc.) from the repo root .env.
- */
-export function loadEnv(): void {
-  // Try multiple potential locations for the .env file
-  const paths = [
-    join(process.cwd(), '.env'),
-    join(process.cwd(), '../../.env'), // When run from packages/cli
-  ];
-
-  for (const envPath of paths) {
-    const result = loadDotenv({ path: envPath });
-    if (!result.error) {
-      return;
-    }
-  }
+export interface TeamImportOptions {
+  keepExport?: boolean;
+  output?: string;
+  team: string;
+  token: string;
 }
+
+export interface TeamImportSummary {
+  exportDir: string;
+  exportRetained: boolean;
+  generatedAt: string;
+  team: string;
+  verification: VerificationResult;
+}
+
+export interface TeamImportResult extends TeamImportSummary {
+  summaryPath: string;
+}
+
+export const teamImportDependencies = {
+  mkdtemp,
+  rm,
+  runExport,
+  runImport,
+  runVerify,
+  writeFile,
+};
 
 /**
  * Validate that the export directory exists and contains required files.
@@ -61,15 +75,6 @@ export async function validateExportDir(exportDir: string): Promise<void> {
   }
 }
 
-function ensureDatabaseUrl(): void {
-  if (!process.env['DATABASE_URL']) {
-    throw new Error(
-      'DATABASE_URL environment variable is not set. ' +
-      'Run the project init script or set DATABASE_URL in your .env file.',
-    );
-  }
-}
-
 /**
  * Run the import pipeline — extracted for testability.
  */
@@ -80,17 +85,13 @@ export async function runImport(options: ImportOptions): Promise<void> {
     process.stdout.write(msg + '\n');
   };
 
-  // Validate export directory
   await validateExportDir(exportDir);
-
-  // Load environment for database connection
   loadEnv();
   ensureDatabaseUrl();
 
   log(`Importing data from ${exportDir}...`);
   log('');
 
-  // Dynamic import to avoid loading Prisma at module-level
   const { PrismaClient } = await import('@prisma/client');
   const { runImportPipeline } = await import('@involute/server/import-pipeline');
 
@@ -118,9 +119,110 @@ export async function runImport(options: ImportOptions): Promise<void> {
         'Could not connect to the database. Ensure PostgreSQL is running and DATABASE_URL is correct.',
       );
     }
+
     throw error;
   } finally {
     await prisma.$disconnect();
+  }
+}
+
+function formatVerificationResult(result: VerificationResult): string[] {
+  const lines = ['Verification Results:', '─'.repeat(60)];
+
+  for (const entity of result.entities) {
+    const status = entity.passed ? 'PASS' : 'FAIL';
+    const countInfo = `(export: ${String(entity.exportCount)}, db: ${String(entity.dbCount)})`;
+    lines.push(`  ${status}  ${entity.entity} ${countInfo}`);
+
+    if (entity.details) {
+      lines.push(`        ${entity.details}`);
+    }
+  }
+
+  lines.push('─'.repeat(60));
+  lines.push(
+    result.allPassed
+      ? 'All checks passed! Import data matches export source.'
+      : 'Some checks failed. Review discrepancies above.',
+  );
+
+  return lines;
+}
+
+export async function runTeamImport(options: TeamImportOptions): Promise<TeamImportResult> {
+  const usingProvidedOutput = Boolean(options.output);
+  const exportDir = options.output
+    ? resolve(options.output)
+    : await teamImportDependencies.mkdtemp(
+        join(tmpdir(), `involute-team-import-${options.team.toLowerCase()}-`),
+      );
+  let shouldRetainExport = usingProvidedOutput || Boolean(options.keepExport);
+
+  const log = (message: string): void => {
+    process.stdout.write(message + '\n');
+  };
+
+  try {
+    log(`Starting Linear team import for "${options.team}"...`);
+    log(`Working export directory: ${exportDir}`);
+    log('');
+
+    log('Step 1/3: Exporting Linear team data');
+    await teamImportDependencies.runExport({
+      token: options.token,
+      team: options.team,
+      output: exportDir,
+    });
+    log('');
+
+    log('Step 2/3: Importing exported data into Involute');
+    await teamImportDependencies.runImport({ file: exportDir });
+    log('');
+
+    log('Step 3/3: Verifying imported data');
+    const verification = await teamImportDependencies.runVerify({ file: exportDir });
+
+    for (const line of formatVerificationResult(verification)) {
+      log(line);
+    }
+
+    if (!verification.allPassed) {
+      shouldRetainExport = true;
+      throw new Error(`Team import verification failed for "${options.team}". Export preserved at ${exportDir}.`);
+    }
+
+    const summary: TeamImportSummary = {
+      exportDir,
+      exportRetained: shouldRetainExport,
+      generatedAt: new Date().toISOString(),
+      team: options.team,
+      verification,
+    };
+    const summaryPath = join(exportDir, 'involute-import-summary.json');
+
+    await teamImportDependencies.writeFile(summaryPath, `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
+
+    if (!shouldRetainExport) {
+      await teamImportDependencies.rm(exportDir, { recursive: true, force: true });
+    }
+
+    log('');
+    log(`Team import complete for "${options.team}".`);
+    log(
+      shouldRetainExport
+        ? `Export retained at ${exportDir}.`
+        : 'Temporary export artifacts were removed after successful verification.',
+    );
+
+    return {
+      ...summary,
+      exportRetained: shouldRetainExport,
+      summaryPath,
+    };
+  } catch (error) {
+    log('');
+    log(`Team import aborted. Export preserved at ${exportDir}.`);
+    throw error;
   }
 }
 
@@ -150,6 +252,22 @@ export function registerImportCommand(program: Command): void {
       }
     });
 
-  // Register verify subcommand
+  importCmd
+    .command('team')
+    .description('Export, import, and verify a single Linear team end-to-end')
+    .requiredOption('--token <linear-token>', 'Linear API token')
+    .requiredOption('--team <key>', 'Team key to import (for example SON)')
+    .option('--output <export-dir>', 'Retain the exported artifacts at this path')
+    .option('--keep-export', 'Retain the export directory after a successful import')
+    .action(async (opts: TeamImportOptions) => {
+      try {
+        await runTeamImport(opts);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`Error: ${message}\n`);
+        process.exitCode = 1;
+      }
+    });
+
   registerVerifyCommand(importCmd);
 }

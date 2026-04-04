@@ -19,16 +19,22 @@ import { useLocation } from 'react-router-dom';
 
 import {
   BOARD_PAGE_QUERY,
+  COMMENT_DELETE_MUTATION,
   COMMENT_CREATE_MUTATION,
+  ISSUE_DELETE_MUTATION,
   ISSUE_CREATE_MUTATION,
   ISSUE_UPDATE_MUTATION,
 } from '../board/queries';
 import type {
   BoardPageQueryData,
   BoardPageQueryVariables,
+  CommentDeleteMutationData,
+  CommentDeleteMutationVariables,
   CommentCreateMutationData,
   CommentCreateMutationVariables,
   Html5BoardDragPayload,
+  IssueDeleteMutationData,
+  IssueDeleteMutationVariables,
   IssueCreateMutationData,
   IssueCreateMutationVariables,
   IssueSummary,
@@ -52,6 +58,8 @@ import { BacklogPage } from './BacklogPage';
 
 const ISSUE_LIMIT = 200;
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
+const ISSUE_DELETE_ERROR_MESSAGE = 'We could not delete the issue. Please try again.';
+const COMMENT_DELETE_ERROR_MESSAGE = 'We could not delete the comment. Please try again.';
 const DND_ACTIVATION_DISTANCE = 1;
 
 function getStateIdFromData(data: unknown): string | null {
@@ -141,6 +149,12 @@ export function BoardPage() {
   );
   const [runCommentCreate] = useMutation<CommentCreateMutationData, CommentCreateMutationVariables>(
     COMMENT_CREATE_MUTATION,
+  );
+  const [runIssueDelete] = useMutation<IssueDeleteMutationData, IssueDeleteMutationVariables>(
+    ISSUE_DELETE_MUTATION,
+  );
+  const [runCommentDelete] = useMutation<CommentDeleteMutationData, CommentDeleteMutationVariables>(
+    COMMENT_DELETE_MUTATION,
   );
   const teams = data?.teams.nodes ?? [];
   const users = data?.users.nodes ?? [];
@@ -363,6 +377,66 @@ export function BoardPage() {
     } catch (mutationIssue) {
       setMutationError(ERROR_MESSAGE);
       throw mutationIssue;
+    } finally {
+      setIsSavingState(false);
+    }
+  }
+
+  async function persistIssueDelete(issue: IssueSummary) {
+    setMutationError(null);
+    setIsSavingState(true);
+
+    try {
+      const result = await runIssueDelete({
+        variables: {
+          id: issue.id,
+        },
+      });
+
+      if (!result.data?.issueDelete.success || !result.data.issueDelete.issueId) {
+        throw new Error('Delete issue mutation failed');
+      }
+
+      setLocalIssues((currentIssues) => currentIssues.filter((item) => item.id !== issue.id));
+      setSelectedIssueId((currentIssueId) => (currentIssueId === issue.id ? null : currentIssueId));
+    } catch {
+      setMutationError(ISSUE_DELETE_ERROR_MESSAGE);
+      throw new Error(ISSUE_DELETE_ERROR_MESSAGE);
+    } finally {
+      setIsSavingState(false);
+    }
+  }
+
+  async function persistCommentDelete(issue: IssueSummary, commentId: string) {
+    setMutationError(null);
+    setIsSavingState(true);
+
+    try {
+      const result = await runCommentDelete({
+        variables: {
+          id: commentId,
+        },
+      });
+
+      if (!result.data?.commentDelete.success || !result.data.commentDelete.commentId) {
+        throw new Error('Delete comment mutation failed');
+      }
+
+      setLocalIssues((currentIssues) =>
+        currentIssues.map((item) =>
+          item.id === issue.id
+            ? {
+                ...item,
+                comments: {
+                  nodes: item.comments.nodes.filter((comment) => comment.id !== commentId),
+                },
+              }
+            : item,
+        ),
+      );
+    } catch {
+      setMutationError(COMMENT_DELETE_ERROR_MESSAGE);
+      throw new Error(COMMENT_DELETE_ERROR_MESSAGE);
     } finally {
       setIsSavingState(false);
     }
@@ -736,6 +810,8 @@ export function BoardPage() {
         onLabelsChange={persistLabelsChange}
         onAssigneeChange={persistAssigneeChange}
         onCommentCreate={persistCommentCreate}
+        onCommentDelete={persistCommentDelete}
+        onIssueDelete={persistIssueDelete}
       />
       {createIssueDialog}
     </main>

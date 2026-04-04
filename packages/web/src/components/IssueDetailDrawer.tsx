@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { CommentSummary, IssueSummary, TeamSummary } from '../board/types';
 
@@ -23,6 +23,8 @@ interface IssueDetailDrawerProps {
   onLabelsChange: (issue: IssueSummary, labelIds: string[]) => Promise<void>;
   onAssigneeChange: (issue: IssueSummary, assigneeId: string | null) => Promise<void>;
   onCommentCreate: (issue: IssueSummary, body: string) => Promise<void>;
+  onCommentDelete: (issue: IssueSummary, commentId: string) => Promise<void>;
+  onIssueDelete: (issue: IssueSummary) => Promise<void>;
 }
 
 export function IssueDetailDrawer({
@@ -39,6 +41,8 @@ export function IssueDetailDrawer({
   onLabelsChange,
   onAssigneeChange,
   onCommentCreate,
+  onCommentDelete,
+  onIssueDelete,
 }: IssueDetailDrawerProps) {
   const [selectedStateId, setSelectedStateId] = useState<string>('');
   const [title, setTitle] = useState('');
@@ -47,6 +51,7 @@ export function IssueDetailDrawer({
   const [selectedAssigneeId, setSelectedAssigneeId] = useState('');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [commentBody, setCommentBody] = useState('');
+  const isSavingTitleRef = useRef(false);
 
   useEffect(() => {
     setSelectedStateId(issue?.state.id ?? '');
@@ -82,6 +87,10 @@ export function IssueDetailDrawer({
   const activeIssue = issue;
 
   async function commitTitle() {
+    if (isSavingTitleRef.current) {
+      return;
+    }
+
     const nextTitle = title.trim();
 
     if (!nextTitle || nextTitle === activeIssue.title) {
@@ -89,7 +98,13 @@ export function IssueDetailDrawer({
       return;
     }
 
-    await onTitleSave(activeIssue, nextTitle);
+    isSavingTitleRef.current = true;
+
+    try {
+      await onTitleSave(activeIssue, nextTitle);
+    } finally {
+      isSavingTitleRef.current = false;
+    }
   }
 
   async function commitDescription() {
@@ -129,6 +144,14 @@ export function IssueDetailDrawer({
 
   function renderCommentAuthor(comment: CommentSummary) {
     return comment.user?.name ?? comment.user?.email ?? 'Unknown author';
+  }
+
+  function confirmIssueDelete(): boolean {
+    return window.confirm(`Delete ${activeIssue.identifier}? This cannot be undone.`);
+  }
+
+  function confirmCommentDelete(): boolean {
+    return window.confirm('Delete this comment? This cannot be undone.');
   }
 
   return (
@@ -173,9 +196,25 @@ export function IssueDetailDrawer({
               </span>
             </div>
           </div>
-          <button type="button" className="issue-drawer__close" onClick={onClose}>
-            Close
-          </button>
+          <div className="issue-drawer__header-actions">
+            <button
+              type="button"
+              className="issue-drawer__delete"
+              disabled={savingState}
+              onClick={() => {
+                if (!confirmIssueDelete()) {
+                  return;
+                }
+
+                void onIssueDelete(activeIssue).catch(() => undefined);
+              }}
+            >
+              Delete issue
+            </button>
+            <button type="button" className="issue-drawer__close" onClick={onClose}>
+              Close
+            </button>
+          </div>
         </div>
 
         <div className="issue-drawer__section">
@@ -293,6 +332,20 @@ export function IssueDetailDrawer({
                     </time>
                   </div>
                   <p className="issue-comment__body">{comment.body}</p>
+                  <button
+                    type="button"
+                    className="issue-comment__delete"
+                    disabled={savingState}
+                    onClick={() => {
+                      if (!confirmCommentDelete()) {
+                        return;
+                      }
+
+                      void onCommentDelete(activeIssue, comment.id).catch(() => undefined);
+                    }}
+                  >
+                    Delete comment
+                  </button>
                 </li>
               ))}
             </ol>

@@ -158,3 +158,25 @@ export interface CommentCreateMutationVariables {
     body: string;
   };
 }
+
+export interface IssueDeleteMutationData {
+  issueDelete: {
+    success: boolean;
+    issueId: string | null;
+  };
+}
+
+export interface IssueDeleteMutationVariables {
+  id: string;
+}
+
+export interface CommentDeleteMutationData {
+  commentDelete: {
+    success: boolean;
+    commentId: string | null;
+  };
+}
+
+export interface CommentDeleteMutationVariables {
+  id: string;
+}

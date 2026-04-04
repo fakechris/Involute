@@ -429,6 +429,12 @@ select {
   cursor: pointer;
 }
 
+.issue-drawer__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .issue-drawer__section {
   display: flex;
   flex-direction: column;
@@ -444,7 +450,9 @@ select {
 .issue-drawer__title-input,
 .issue-drawer__textarea,
 .issue-drawer select,
-.issue-drawer__close {
+.issue-drawer__close,
+.issue-drawer__delete,
+.issue-comment__delete {
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 0.75rem;
   background: rgba(15, 23, 42, 0.92);
@@ -486,6 +494,18 @@ select {
   color: #fecaca;
 }
 
+.issue-drawer__delete,
+.issue-comment__delete {
+  cursor: pointer;
+  padding: 0.55rem 0.8rem;
+}
+
+.issue-drawer__delete {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(127, 29, 29, 0.18);
+  color: #fecaca;
+}
+
 .issue-comments {
   display: flex;
   flex-direction: column;
@@ -516,6 +536,13 @@ select {
   margin: 0;
   color: #e2e8f0;
   white-space: pre-wrap;
+}
+
+.issue-comment__delete {
+  margin-top: 0.75rem;
+  border-color: rgba(248, 113, 113, 0.35);
+  background: rgba(127, 29, 29, 0.14);
+  color: #fecaca;
 }
 
 .issue-comments__empty {

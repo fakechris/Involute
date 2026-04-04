@@ -32,6 +32,14 @@ const apolloMocks = vi.hoisted(() => ({
       return [vi.fn().mockResolvedValue({ data: { commentCreate: { success: true, comment: null } } })];
     }
 
+    if (source.includes('mutation CommentDelete')) {
+      return [vi.fn().mockResolvedValue({ data: { commentDelete: { success: true, commentId: 'comment-1' } } })];
+    }
+
+    if (source.includes('mutation IssueDelete')) {
+      return [vi.fn().mockResolvedValue({ data: { issueDelete: { success: true, issueId: 'issue-1' } } })];
+    }
+
     return [vi.fn()];
   }),
 }));
@@ -73,6 +81,14 @@ beforeEach(() => {
 
     if (source.includes('mutation CommentCreate')) {
       return [vi.fn().mockResolvedValue({ data: { commentCreate: { success: true, comment: null } } })];
+    }
+
+    if (source.includes('mutation CommentDelete')) {
+      return [vi.fn().mockResolvedValue({ data: { commentDelete: { success: true, commentId: 'comment-1' } } })];
+    }
+
+    if (source.includes('mutation IssueDelete')) {
+      return [vi.fn().mockResolvedValue({ data: { issueDelete: { success: true, issueId: 'issue-1' } } })];
     }
 
     return [vi.fn()];
@@ -1183,6 +1199,135 @@ describe('App', () => {
 
     await waitFor(() => expect(updateIssue).toHaveBeenCalled());
     expect(within(drawer).getByText('Newest comment')).toBeInTheDocument();
+  });
+
+  it('deletes a comment from the drawer after confirmation', async () => {
+    const deleteComment = vi.fn().mockResolvedValue({
+      data: {
+        commentDelete: {
+          success: true,
+          commentId: 'comment-1',
+        },
+      },
+    });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    apolloMocks.useMutation.mockImplementation((document) => {
+      const source =
+        typeof document === 'string'
+          ? document
+          : 'loc' in document && document.loc?.source.body
+            ? document.loc.source.body
+            : String(document);
+
+      if (source.includes('mutation CommentDelete')) {
+        return [deleteComment];
+      }
+
+      if (source.includes('mutation CommentCreate')) {
+        return [vi.fn().mockResolvedValue({ data: { commentCreate: { success: true, comment: null } } })];
+      }
+
+      return [vi.fn()];
+    });
+
+    renderApp({
+      data: {
+        ...boardQueryResult,
+        issues: {
+          nodes: [
+            {
+              ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+              comments: {
+                nodes: [
+                  {
+                    id: 'comment-1',
+                    body: 'Disposable comment',
+                    createdAt: '2026-04-02T10:00:00.000Z',
+                    user: {
+                      id: 'user-1',
+                      name: 'Admin',
+                      email: 'admin@involute.local',
+                    },
+                  },
+                ],
+              },
+            },
+            ...(boardQueryResult.issues.nodes.slice(1) as IssueSummary[]),
+          ],
+        },
+      },
+      loading: false,
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Delete comment' }));
+
+    await waitFor(() =>
+      expect(deleteComment).toHaveBeenCalledWith({
+        variables: {
+          id: 'comment-1',
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(within(drawer).queryByText('Disposable comment')).not.toBeInTheDocument(),
+    );
+
+    confirmSpy.mockRestore();
+  });
+
+  it('deletes an issue from the board after confirmation', async () => {
+    const deleteIssue = vi.fn().mockResolvedValue({
+      data: {
+        issueDelete: {
+          success: true,
+          issueId: 'issue-1',
+        },
+      },
+    });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    apolloMocks.useMutation.mockImplementation((document) => {
+      const source =
+        typeof document === 'string'
+          ? document
+          : 'loc' in document && document.loc?.source.body
+            ? document.loc.source.body
+            : String(document);
+
+      if (source.includes('mutation IssueDelete')) {
+        return [deleteIssue];
+      }
+
+      if (source.includes('mutation CommentCreate')) {
+        return [vi.fn().mockResolvedValue({ data: { commentCreate: { success: true, comment: null } } })];
+      }
+
+      return [vi.fn()];
+    });
+
+    renderApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Delete issue' }));
+
+    await waitFor(() =>
+      expect(deleteIssue).toHaveBeenCalledWith({
+        variables: {
+          id: 'issue-1',
+        },
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Issue detail drawer' })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Backlog item')).not.toBeInTheDocument();
+
+    confirmSpy.mockRestore();
   });
 
   it('navigates between board and backlog via header links', async () => {

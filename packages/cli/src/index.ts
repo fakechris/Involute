@@ -82,14 +82,13 @@ export class CliError extends Error {
   }
 }
 
-const CONFIG_PATH = process.env.INVOLUTE_CONFIG_PATH ?? join(homedir(), '.involute', 'config.json');
 const CONFIG_KEYS: readonly ConfigKey[] = ['server-url', 'token'];
 
 export function getConfigPath(): string {
-  return CONFIG_PATH;
+  return process.env.INVOLUTE_CONFIG_PATH ?? join(homedir(), '.involute', 'config.json');
 }
 
-export async function readConfig(configPath = CONFIG_PATH): Promise<CliConfig> {
+export async function readConfig(configPath = getConfigPath()): Promise<CliConfig> {
   try {
     const raw = await readFile(configPath, 'utf8');
     const parsed = JSON.parse(raw) as unknown;
@@ -112,19 +111,19 @@ export async function readConfig(configPath = CONFIG_PATH): Promise<CliConfig> {
   }
 }
 
-export async function writeConfig(config: CliConfig, configPath = CONFIG_PATH): Promise<void> {
+export async function writeConfig(config: CliConfig, configPath = getConfigPath()): Promise<void> {
   await mkdir(dirname(configPath), { recursive: true });
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
 }
 
-export async function setConfigValue(key: ConfigKey, value: string, configPath = CONFIG_PATH): Promise<CliConfig> {
+export async function setConfigValue(key: ConfigKey, value: string, configPath = getConfigPath()): Promise<CliConfig> {
   const current = await readConfig(configPath);
   const next = { ...current, [key]: value };
   await writeConfig(next, configPath);
   return next;
 }
 
-export async function getConfigValue(key: ConfigKey, configPath = CONFIG_PATH): Promise<string | undefined> {
+export async function getConfigValue(key: ConfigKey, configPath = getConfigPath()): Promise<string | undefined> {
   const config = await readConfig(configPath);
   return config[key];
 }
@@ -232,7 +231,7 @@ function stringifyValue(value: unknown): string {
   return String(value);
 }
 
-export async function createConfiguredGraphQLClient(configPath = CONFIG_PATH): Promise<GraphQLClient> {
+export async function createConfiguredGraphQLClient(configPath = getConfigPath()): Promise<GraphQLClient> {
   const config = await readConfig(configPath);
   const serverUrl = config['server-url'];
 
@@ -244,9 +243,10 @@ export async function createConfiguredGraphQLClient(configPath = CONFIG_PATH): P
 
   const token = config.token;
 
-  return new GraphQLClient(joinGraphqlEndpoint(serverUrl), {
-    headers: token ? { authorization: `Bearer ${token}` } : undefined,
-  });
+  return new GraphQLClient(
+    joinGraphqlEndpoint(serverUrl),
+    token ? { headers: { authorization: `Bearer ${token}` } } : {},
+  );
 }
 
 function joinGraphqlEndpoint(serverUrl: string): string {
@@ -306,7 +306,7 @@ function registerConfigCommands(program: Command): void {
         }
 
         await setConfigValue(key as ConfigKey, value);
-        process.stdout.write(`Saved ${key} to ${CONFIG_PATH}\n`);
+        process.stdout.write(`Saved ${key} to ${getConfigPath()}\n`);
       });
     });
 
@@ -433,83 +433,49 @@ async function fetchIssues(teamKey?: string): Promise<IssueListItem[]> {
 }
 
 async function fetchIssueByIdentifier(identifier: string): Promise<IssueDetail | null> {
-  const teamKey = identifier.includes('-') ? identifier.split('-')[0] ?? undefined : undefined;
   const client = await createConfiguredGraphQLClient();
-  const filter = teamKey
-    ? {
-        team: {
-          key: {
-            eq: teamKey,
-          },
-        },
-      }
-    : undefined;
-
-  let first = 100;
-  const maxFirst = 5_000;
-
-  while (true) {
-    const result = await client.request<{ issues: { nodes: IssueDetail[] } }>(
-      /* GraphQL */ `
-        query CliIssueByIdentifier($filter: IssueFilter, $first: Int!) {
-          issues(first: $first, filter: $filter) {
+  const result = await client.request<{ issue: IssueDetail | null }>(
+    /* GraphQL */ `
+      query CliIssueByIdentifier($id: String!) {
+        issue(id: $id) {
+          id
+          identifier
+          title
+          description
+          state {
+            id
+            name
+          }
+          labels {
             nodes {
               id
-              identifier
-              title
-              description
-              state {
-                id
-                name
-              }
-              labels {
-                nodes {
-                  id
-                  name
-                }
-              }
-              assignee {
+              name
+            }
+          }
+          assignee {
+            id
+            name
+            email
+          }
+          comments(first: 100, orderBy: createdAt) {
+            nodes {
+              id
+              body
+              createdAt
+              user {
                 id
                 name
                 email
               }
-              comments(first: 100, orderBy: createdAt) {
-                nodes {
-                  id
-                  body
-                  createdAt
-                  user {
-                    id
-                    name
-                    email
-                  }
-                }
-              }
             }
           }
         }
-      `,
-      {
-        filter,
-        first,
-      },
-    );
+      }
+    `,
+    { id: identifier },
+  );
 
-    const matchedIssue = result.issues.nodes.find((issue) => issue.identifier === identifier);
-    if (matchedIssue) {
-      return matchedIssue;
-    }
-
-    if (result.issues.nodes.length < first) {
-      return null;
-    }
-
-    if (first >= maxFirst) {
-      return null;
-    }
-
-    first = Math.min(first * 2, maxFirst);
-  }
+  return result.issue;
 }
 
 async function fetchTeamByKey(teamKey: string): Promise<TeamSummary | null> {

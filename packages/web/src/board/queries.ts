@@ -161,6 +161,24 @@ export const COMMENT_CREATE_MUTATION = gql`
   }
 `;
 
+export const ISSUE_DELETE_MUTATION = gql`
+  mutation IssueDelete($id: String!) {
+    issueDelete(id: $id) {
+      success
+      issueId
+    }
+  }
+`;
+
+export const COMMENT_DELETE_MUTATION = gql`
+  mutation CommentDelete($id: String!) {
+    commentDelete(id: $id) {
+      success
+      commentId
+    }
+  }
+`;
+
 export const ISSUE_PAGE_QUERY = gql`
   query IssuePage($id: String!) {
     issue(id: $id) {

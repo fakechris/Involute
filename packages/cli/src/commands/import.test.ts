@@ -18,7 +18,8 @@ import {
   normalizeGraphQLErrorMessage,
   setConfigValue,
 } from '../index.js';
-import { runImport, validateExportDir, loadEnv } from './import.js';
+import { runImport, runTeamImport, teamImportDependencies, validateExportDir } from './import.js';
+import { loadEnv } from './shared.js';
 
 // --- Fixture data matching Linear export format ---
 
@@ -168,6 +169,94 @@ describe('loadEnv', () => {
   it('loads environment variables without throwing', () => {
     // loadEnv should not throw even if .env doesn't exist in current path
     expect(() => loadEnv()).not.toThrow();
+  });
+});
+
+describe('runTeamImport', () => {
+  const originalDependencies = { ...teamImportDependencies };
+
+  afterEach(() => {
+    teamImportDependencies.mkdtemp = originalDependencies.mkdtemp;
+    teamImportDependencies.rm = originalDependencies.rm;
+    teamImportDependencies.runExport = originalDependencies.runExport;
+    teamImportDependencies.runImport = originalDependencies.runImport;
+    teamImportDependencies.runVerify = originalDependencies.runVerify;
+    teamImportDependencies.writeFile = originalDependencies.writeFile;
+  });
+
+  it('runs export, import, verify, and writes an import summary', async () => {
+    const writeSummary = vi.fn().mockResolvedValue(undefined);
+    const removeExport = vi.fn().mockResolvedValue(undefined);
+
+    teamImportDependencies.mkdtemp = vi.fn().mockResolvedValue('/tmp/involute-team-import-tst-123');
+    teamImportDependencies.rm = removeExport;
+    teamImportDependencies.runExport = vi.fn().mockResolvedValue(undefined);
+    teamImportDependencies.runImport = vi.fn().mockResolvedValue(undefined);
+    teamImportDependencies.runVerify = vi.fn().mockResolvedValue({
+      allPassed: true,
+      entities: [
+        {
+          dbCount: 1,
+          entity: 'Issues',
+          exportCount: 1,
+          passed: true,
+        },
+      ],
+    });
+    teamImportDependencies.writeFile = writeSummary;
+
+    const result = await runTeamImport({
+      team: 'TST',
+      token: 'linear-token',
+    });
+
+    expect(teamImportDependencies.runExport).toHaveBeenCalledWith({
+      output: '/tmp/involute-team-import-tst-123',
+      team: 'TST',
+      token: 'linear-token',
+    });
+    expect(teamImportDependencies.runImport).toHaveBeenCalledWith({
+      file: '/tmp/involute-team-import-tst-123',
+    });
+    expect(teamImportDependencies.runVerify).toHaveBeenCalledWith({
+      file: '/tmp/involute-team-import-tst-123',
+    });
+    expect(writeSummary).toHaveBeenCalledTimes(1);
+    expect(removeExport).toHaveBeenCalledWith('/tmp/involute-team-import-tst-123', {
+      force: true,
+      recursive: true,
+    });
+    expect(result.exportRetained).toBe(false);
+    expect(result.summaryPath).toBe('/tmp/involute-team-import-tst-123/involute-import-summary.json');
+  });
+
+  it('retains the export directory when verification fails', async () => {
+    const removeExport = vi.fn().mockResolvedValue(undefined);
+
+    teamImportDependencies.mkdtemp = vi.fn().mockResolvedValue('/tmp/involute-team-import-tst-456');
+    teamImportDependencies.rm = removeExport;
+    teamImportDependencies.runExport = vi.fn().mockResolvedValue(undefined);
+    teamImportDependencies.runImport = vi.fn().mockResolvedValue(undefined);
+    teamImportDependencies.runVerify = vi.fn().mockResolvedValue({
+      allPassed: false,
+      entities: [
+        {
+          dbCount: 0,
+          entity: 'Issues',
+          exportCount: 1,
+          passed: false,
+        },
+      ],
+    });
+    teamImportDependencies.writeFile = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      runTeamImport({
+        team: 'TST',
+        token: 'linear-token',
+      }),
+    ).rejects.toThrow('Team import verification failed');
+    expect(removeExport).not.toHaveBeenCalled();
   });
 });
 

@@ -10,6 +10,7 @@ import {
 } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
+import { deleteComment, deleteIssue } from './issue-service.ts';
 
 loadProjectEnvironment();
 
@@ -222,6 +223,38 @@ describe('GraphQL mutations', () => {
     });
 
     expect(updatedIssue.state.name).toBe('In Progress');
+  });
+
+  it('deletes a comment and then deletes its issue', async () => {
+    const comment = await prisma.comment.create({
+      data: {
+        body: 'Delete me',
+        issueId: fixture.issue.id,
+        userId: fixture.viewer.id,
+      },
+    });
+
+    await expect(deleteComment(prisma, comment.id)).resolves.toEqual({
+      id: comment.id,
+    });
+    await expect(
+      prisma.comment.findUnique({
+        where: {
+          id: comment.id,
+        },
+      }),
+    ).resolves.toBeNull();
+
+    await expect(deleteIssue(prisma, fixture.issue.id)).resolves.toEqual({
+      id: fixture.issue.id,
+    });
+    await expect(
+      prisma.issue.findUnique({
+        where: {
+          id: fixture.issue.id,
+        },
+      }),
+    ).resolves.toBeNull();
   });
 
   it('returns success false for invalid or nonexistent issue state transitions', async () => {
@@ -1003,7 +1036,17 @@ async function postGraphQL({
   query: string;
   variables?: Record<string, unknown>;
 }): Promise<{ body: any; status: number }> {
-  const response = await fetch(`${server.url}/graphql`, {
+  return postGraphQLToUrl(server.url, { query, variables });
+}
+
+async function postGraphQLToUrl(serverUrl: string, {
+  query,
+  variables,
+}: {
+  query: string;
+  variables?: Record<string, unknown>;
+}): Promise<{ body: any; status: number }> {
+  const response = await fetch(`${serverUrl}/graphql`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${TEST_AUTH_TOKEN}`,

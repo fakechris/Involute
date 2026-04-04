@@ -6,7 +6,7 @@
   "scripts": {
     "build": "pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec vite build",
     "typecheck": "pnpm exec tsc -p tsconfig.json --noEmit",
-    "test": "pnpm exec vitest --config vitest.config.ts --passWithNoTests",
+    "test": "NODE_OPTIONS=--max-old-space-size=8192 pnpm exec vitest --config vitest.config.ts --passWithNoTests",
     "lint": "pnpm exec tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
