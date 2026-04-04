@@ -33,8 +33,9 @@ pnpm compose:up
 
 ```bash
 curl http://localhost:4200/health
-open http://localhost:4201
 ```
+
+Then open `http://localhost:4201` in your browser.
 
 Compose defaults:
 
@@ -139,4 +140,4 @@ The published `involute-web` image is a static production build. It bakes `VITE_
 - Keep the compose stack and CI reproducible
 - Lock the core board lifecycle down with E2E before the larger UI/UX redesign
 
-See [docs/vision.md](/Users/chris/workspace/Involute/docs/vision.md) and [docs/milestones.md](/Users/chris/workspace/Involute/docs/milestones.md) for the product direction.
+See [docs/vision.md](docs/vision.md) and [docs/milestones.md](docs/milestones.md) for the product direction.
