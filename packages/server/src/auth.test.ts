@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createViewerAssertion } from '@involute/shared/viewer-assertion';
 
-import { DEFAULT_ADMIN_EMAIL } from './constants.js';
 import { createGraphQLContext, extractTokenFromAuthorizationHeader, isAuthorizedRequest } from './auth.js';
 
 describe('auth', () => {
@@ -94,10 +93,10 @@ describe('auth', () => {
     expect(context.viewer).toEqual({ id: 'user-1', email: 'person@example.com' });
   });
 
-  it('falls back to the default admin viewer when no trusted viewer assertion is present', async () => {
-    const findUnique = vi.fn().mockResolvedValue({ id: 'admin-1', email: DEFAULT_ADMIN_EMAIL });
+  it('returns a null viewer when no trusted viewer assertion is present', async () => {
+    const findUnique = vi.fn();
 
-    await createGraphQLContext({
+    const context = await createGraphQLContext({
       authToken: 'shared-secret',
       prisma: {
         user: {
@@ -111,17 +110,14 @@ describe('auth', () => {
       }),
     });
 
-    expect(findUnique).toHaveBeenCalledWith({
-      where: {
-        email: DEFAULT_ADMIN_EMAIL,
-      },
-    });
+    expect(findUnique).not.toHaveBeenCalled();
+    expect(context.viewer).toBeNull();
   });
 
-  it('ignores invalid viewer assertions and keeps the default admin viewer', async () => {
-    const findUnique = vi.fn().mockResolvedValue({ id: 'admin-1', email: DEFAULT_ADMIN_EMAIL });
+  it('ignores invalid viewer assertions instead of silently falling back to admin', async () => {
+    const findUnique = vi.fn();
 
-    await createGraphQLContext({
+    const context = await createGraphQLContext({
       authToken: 'shared-secret',
       prisma: {
         user: {
@@ -137,9 +133,31 @@ describe('auth', () => {
       }),
     });
 
+    expect(findUnique).not.toHaveBeenCalled();
+    expect(context.viewer).toBeNull();
+  });
+
+  it('only falls back to the default admin viewer when explicitly allowed', async () => {
+    const findUnique = vi.fn().mockResolvedValue({ id: 'admin-1', email: 'admin@involute.local' });
+
+    await createGraphQLContext({
+      allowAdminFallback: true,
+      authToken: 'shared-secret',
+      prisma: {
+        user: {
+          findUnique,
+        },
+      } as never,
+      request: new Request('http://localhost/graphql', {
+        headers: {
+          authorization: 'Bearer shared-secret',
+        },
+      }),
+    });
+
     expect(findUnique).toHaveBeenCalledWith({
       where: {
-        email: DEFAULT_ADMIN_EMAIL,
+        email: 'admin@involute.local',
       },
     });
   });

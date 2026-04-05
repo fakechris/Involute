@@ -38,6 +38,7 @@ describe('GraphQL server core', () => {
   beforeAll(async () => {
     await prisma.$connect();
     server = await startServer({
+      allowAdminFallback: true,
       prisma,
       authToken: TEST_AUTH_TOKEN,
       port: 0,
@@ -430,6 +431,50 @@ describe('GraphQL server core', () => {
       { id: fixture.comment.id },
       { id: middleComment.id },
     ]);
+
+    await prisma.comment.createMany({
+      data: Array.from({ length: 110 }, (_, index) => ({
+        issueId: fixture.issue.id,
+        userId: fixture.admin.id,
+        body: `Overflow comment ${String(index + 1)}`,
+        createdAt: new Date(
+          new Date('2025-01-15T10:40:00.000Z').getTime() + index * 60_000,
+        ),
+      })),
+    });
+
+    const clampedResponse = await postGraphQL({
+      query: `
+        query($id: String!, $first: Int!) {
+          issue(id: $id) {
+            comments(first: $first, orderBy: createdAt) {
+              nodes {
+                id
+                body
+              }
+              pageInfo {
+                hasNextPage
+              }
+            }
+          }
+        }
+      `,
+      variables: {
+        id: fixture.issue.id,
+        first: 999,
+      },
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(clampedResponse.status).toBe(200);
+    expect(clampedResponse.body.errors).toBeUndefined();
+    expect(clampedResponse.body.data.issue.comments.nodes).toHaveLength(100);
+    expect(clampedResponse.body.data.issue.comments.pageInfo).toEqual({
+      hasNextPage: true,
+    });
+    expect(clampedResponse.body.data.issue.comments.nodes.at(-1)).toMatchObject({
+      body: 'Overflow comment 97',
+    });
   });
 
   it('returns empty comment nodes arrays for issues with no comments', async () => {

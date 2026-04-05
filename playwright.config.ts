@@ -40,6 +40,7 @@ export default defineConfig({
     {
       command:
         `E2E_AUTH_TOKEN="${authToken}" ` +
+        `E2E_VIEWER_ASSERTION_SECRET="${viewerAssertionSecret}" ` +
         `E2E_SERVER_PORT="${serverPort}" ` +
         `E2E_WEB_PORT="${webPort}" ` +
         `sh ./e2e/setup-frontend.sh`,

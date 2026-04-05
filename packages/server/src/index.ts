@@ -18,6 +18,7 @@ loadServerEnvironment();
 export type { ServerEnvironment };
 
 export interface StartServerOptions {
+  allowAdminFallback?: boolean;
   authToken?: string;
   port?: number;
   prisma?: PrismaClient;
@@ -46,6 +47,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   const yoga = createYoga({
     context: async ({ request }) =>
       createGraphQLContext({
+        allowAdminFallback: options.allowAdminFallback ?? environment.allowAdminFallback,
         request,
         prisma,
         authToken: options.authToken ?? environment.authToken,
@@ -128,6 +130,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
 async function main(): Promise<void> {
   const environment = getServerEnvironment();
   const startedServer = await startServer({
+    allowAdminFallback: environment.allowAdminFallback,
     authToken: environment.authToken,
     port: environment.port,
   });

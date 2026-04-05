@@ -159,10 +159,18 @@ async function ensureTeamWithStates(
 
 async function ensureCanonicalLabels(prisma: PrismaClient): Promise<void> {
   for (const labelName of CANONICAL_LABEL_NAMES) {
-    await prisma.issueLabel.upsert({
-      where: { name: labelName },
-      create: { name: labelName },
-      update: {},
+    await prisma.$transaction(async (transaction) => {
+      const existingLabel = await transaction.issueLabel.findFirst({
+        where: { name: labelName },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      });
+
+      if (!existingLabel) {
+        await transaction.issueLabel.create({
+          data: { name: labelName },
+        });
+      }
     });
   }
 }

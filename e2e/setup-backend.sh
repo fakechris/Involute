@@ -37,6 +37,7 @@ DATABASE_URL="$DATABASE_URL" pnpm --filter @involute/server exec prisma db seed
 exec env \
   DATABASE_URL="$DATABASE_URL" \
   AUTH_TOKEN="$AUTH_TOKEN" \
+  ALLOW_ADMIN_FALLBACK="false" \
   VIEWER_ASSERTION_SECRET="$VIEWER_ASSERTION_SECRET" \
   PORT="$SERVER_PORT" \
   pnpm --filter @involute/server exec tsx src/index.ts

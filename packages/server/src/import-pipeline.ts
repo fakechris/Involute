@@ -5,7 +5,7 @@
  * 1. Read export directory (teams.json, workflow_states.json, labels.json, users.json, issues.json, comments/)
  * 2. Import teams — upsert by key
  * 3. Import workflow states — upsert per team
- * 4. Import labels — upsert by name
+ * 4. Import labels — create mapped label rows
  * 5. Import users — upsert by email
  * 6. Import issues WITHOUT parentId first — preserve identifier and timestamps. Build old_id→new_id mapping.
  * 7. Backfill parentId using mapping
@@ -14,62 +14,25 @@
  * 10. Idempotent: re-import skips already-imported records (check mapping table)
  */
 
-import type { PrismaClient } from '@prisma/client';
-import { readFile, readdir, access } from 'node:fs/promises';
+import type { Prisma, PrismaClient } from '@prisma/client';
+import type {
+  ExportedComment,
+  ExportedIssue,
+  ExportedLabel,
+  ExportedTeam,
+  ExportedUser,
+  ExportedWorkflowState,
+} from '@involute/shared/import-format';
+import {
+  parseExportedComments,
+  parseExportedIssues,
+  parseExportedLabels,
+  parseExportedTeams,
+  parseExportedUsers,
+  parseExportedWorkflowStates,
+} from '@involute/shared/import-format';
+import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-
-// --- Types matching the Linear export format ---
-
-interface ExportedTeam {
-  id: string;
-  key: string;
-  name: string;
-}
-
-interface ExportedWorkflowState {
-  id: string;
-  name: string;
-  type: string;
-  position: number;
-  team: { id: string };
-}
-
-interface ExportedLabel {
-  id: string;
-  name: string;
-  color: string;
-}
-
-interface ExportedUser {
-  id: string;
-  name: string;
-  email: string;
-  displayName: string;
-  active: boolean;
-}
-
-interface ExportedIssue {
-  id: string;
-  identifier: string;
-  title: string;
-  description: string | null;
-  priority: number;
-  createdAt: string;
-  updatedAt: string;
-  state: { id: string; name: string };
-  team: { id: string; key: string };
-  assignee: { id: string; name: string; email: string } | null;
-  labels: { nodes: Array<{ id: string; name: string }> };
-  parent: { id: string } | null;
-}
-
-interface ExportedComment {
-  id: string;
-  body: string;
-  createdAt: string;
-  updatedAt: string;
-  user: { id: string; name: string; email: string } | null;
-}
 
 export type ProgressCallback = (message: string) => void;
 
@@ -93,17 +56,43 @@ export interface ImportResult {
   };
   warnings: {
     orphanCommentFallbacks: number;
+    skippedRecords: ImportWarningRecord[];
   };
 }
+
+export interface ImportWarningRecord {
+  entityType: 'workflow_state' | 'issue' | 'comment';
+  legacyId: string;
+  identifier?: string;
+  reason: string;
+}
+
+type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
 const ORPHAN_COMMENT_USER_EMAIL = 'orphan-comments@involute.import';
 const ORPHAN_COMMENT_USER_NAME = 'Imported Orphan Comment User';
 
 // --- File reading helpers ---
 
-async function readJsonFile<T>(filePath: string): Promise<T> {
+async function readValidatedJsonFile<T>(
+  filePath: string,
+  parser: (value: unknown) => T,
+): Promise<T> {
   const content = await readFile(filePath, 'utf-8');
-  return JSON.parse(content) as T;
+
+  let parsedJson: unknown;
+
+  try {
+    parsedJson = JSON.parse(content) as unknown;
+  } catch (error) {
+    throw new Error(`Invalid JSON in ${filePath}: ${(error as Error).message}`);
+  }
+
+  try {
+    return parser(parsedJson);
+  } catch (error) {
+    throw new Error(`Invalid export data in ${filePath}: ${(error as Error).message}`);
+  }
 }
 
 async function fileExists(filePath: string): Promise<boolean> {
@@ -118,17 +107,27 @@ async function fileExists(filePath: string): Promise<boolean> {
 // --- ID mapping helpers ---
 
 async function getExistingMappings(
-  prisma: PrismaClient,
+  prisma: DatabaseClient,
   entityType: string,
+  oldIds?: Iterable<string>,
 ): Promise<Map<string, string>> {
+  const uniqueOldIds = oldIds ? [...new Set(oldIds)] : null;
+
+  if (uniqueOldIds && uniqueOldIds.length === 0) {
+    return new Map();
+  }
+
   const mappings = await prisma.legacyLinearMapping.findMany({
-    where: { entityType },
+    where: {
+      entityType,
+      ...(uniqueOldIds ? { oldId: { in: uniqueOldIds } } : {}),
+    },
   });
   return new Map(mappings.map((m) => [m.oldId, m.newId]));
 }
 
 async function createMapping(
-  prisma: PrismaClient,
+  prisma: DatabaseClient,
   oldId: string,
   newId: string,
   entityType: string,
@@ -142,6 +141,17 @@ async function createMapping(
   });
 }
 
+function recordSkippedImport(
+  warnings: ImportWarningRecord[],
+  warning: ImportWarningRecord,
+  onProgress?: ProgressCallback,
+): void {
+  warnings.push(warning);
+  onProgress?.(
+    `  Skipped ${warning.entityType} ${warning.identifier ? `${warning.identifier} ` : ''}(${warning.legacyId}): ${warning.reason}`,
+  );
+}
+
 // --- Import steps ---
 
 async function importTeams(
@@ -150,7 +160,11 @@ async function importTeams(
   onProgress?: ProgressCallback,
 ): Promise<{ idMap: Map<string, string>; imported: number; skipped: number }> {
   onProgress?.(`Importing ${String(teams.length)} teams...`);
-  const existingMappings = await getExistingMappings(prisma, 'team');
+  const existingMappings = await getExistingMappings(
+    prisma,
+    'team',
+    teams.map((team) => team.id),
+  );
   const idMap = new Map<string, string>(existingMappings);
   let imported = 0;
   let skipped = 0;
@@ -161,14 +175,18 @@ async function importTeams(
       continue;
     }
 
-    const created = await prisma.team.upsert({
-      where: { key: team.key },
-      create: { key: team.key, name: team.name },
-      update: { name: team.name },
+    const created = await prisma.$transaction(async (transaction) => {
+      const nextTeam = await transaction.team.upsert({
+        where: { key: team.key },
+        create: { key: team.key, name: team.name },
+        update: { name: team.name },
+      });
+
+      await createMapping(transaction, team.id, nextTeam.id, 'team');
+      return nextTeam;
     });
 
     idMap.set(team.id, created.id);
-    await createMapping(prisma, team.id, created.id, 'team');
     imported++;
   }
 
@@ -181,12 +199,22 @@ async function importWorkflowStates(
   states: ExportedWorkflowState[],
   teamIdMap: Map<string, string>,
   onProgress?: ProgressCallback,
-): Promise<{ idMap: Map<string, string>; imported: number; skipped: number }> {
+): Promise<{
+  idMap: Map<string, string>;
+  imported: number;
+  skipped: number;
+  warnings: ImportWarningRecord[];
+}> {
   onProgress?.(`Importing ${String(states.length)} workflow states...`);
-  const existingMappings = await getExistingMappings(prisma, 'workflow_state');
+  const existingMappings = await getExistingMappings(
+    prisma,
+    'workflow_state',
+    states.map((state) => state.id),
+  );
   const idMap = new Map<string, string>(existingMappings);
   let imported = 0;
   let skipped = 0;
+  const warnings: ImportWarningRecord[] = [];
 
   for (const state of states) {
     if (existingMappings.has(state.id)) {
@@ -197,24 +225,39 @@ async function importWorkflowStates(
     const newTeamId = teamIdMap.get(state.team.id);
 
     if (!newTeamId) {
+      skipped++;
+      recordSkippedImport(
+        warnings,
+        {
+          entityType: 'workflow_state',
+          legacyId: state.id,
+          identifier: state.name,
+          reason: `team mapping not found for legacy team ${state.team.id}`,
+        },
+        onProgress,
+      );
       continue;
     }
 
-    const created = await prisma.workflowState.upsert({
-      where: {
-        teamId_name: { teamId: newTeamId, name: state.name },
-      },
-      create: { name: state.name, teamId: newTeamId },
-      update: {},
+    const created = await prisma.$transaction(async (transaction) => {
+      const nextState = await transaction.workflowState.upsert({
+        where: {
+          teamId_name: { teamId: newTeamId, name: state.name },
+        },
+        create: { name: state.name, teamId: newTeamId },
+        update: {},
+      });
+
+      await createMapping(transaction, state.id, nextState.id, 'workflow_state');
+      return nextState;
     });
 
     idMap.set(state.id, created.id);
-    await createMapping(prisma, state.id, created.id, 'workflow_state');
     imported++;
   }
 
   onProgress?.(`  Workflow states: ${String(imported)} imported, ${String(skipped)} skipped`);
-  return { idMap, imported, skipped };
+  return { idMap, imported, skipped, warnings };
 }
 
 async function importLabels(
@@ -223,7 +266,11 @@ async function importLabels(
   onProgress?: ProgressCallback,
 ): Promise<{ idMap: Map<string, string>; imported: number; skipped: number }> {
   onProgress?.(`Importing ${String(labels.length)} labels...`);
-  const existingMappings = await getExistingMappings(prisma, 'label');
+  const existingMappings = await getExistingMappings(
+    prisma,
+    'label',
+    labels.map((label) => label.id),
+  );
   const idMap = new Map<string, string>(existingMappings);
   let imported = 0;
   let skipped = 0;
@@ -234,14 +281,16 @@ async function importLabels(
       continue;
     }
 
-    const created = await prisma.issueLabel.upsert({
-      where: { name: label.name },
-      create: { name: label.name },
-      update: {},
+    const created = await prisma.$transaction(async (transaction) => {
+      const nextLabel = await transaction.issueLabel.create({
+        data: { name: label.name },
+      });
+
+      await createMapping(transaction, label.id, nextLabel.id, 'label');
+      return nextLabel;
     });
 
     idMap.set(label.id, created.id);
-    await createMapping(prisma, label.id, created.id, 'label');
     imported++;
   }
 
@@ -255,7 +304,11 @@ async function importUsers(
   onProgress?: ProgressCallback,
 ): Promise<{ idMap: Map<string, string>; imported: number; skipped: number }> {
   onProgress?.(`Importing ${String(users.length)} users...`);
-  const existingMappings = await getExistingMappings(prisma, 'user');
+  const existingMappings = await getExistingMappings(
+    prisma,
+    'user',
+    users.map((user) => user.id),
+  );
   const idMap = new Map<string, string>(existingMappings);
   let imported = 0;
   let skipped = 0;
@@ -266,14 +319,18 @@ async function importUsers(
       continue;
     }
 
-    const created = await prisma.user.upsert({
-      where: { email: user.email },
-      create: { name: user.name, email: user.email },
-      update: { name: user.name },
+    const created = await prisma.$transaction(async (transaction) => {
+      const nextUser = await transaction.user.upsert({
+        where: { email: user.email },
+        create: { name: user.name, email: user.email },
+        update: { name: user.name },
+      });
+
+      await createMapping(transaction, user.id, nextUser.id, 'user');
+      return nextUser;
     });
 
     idMap.set(user.id, created.id);
-    await createMapping(prisma, user.id, created.id, 'user');
     imported++;
   }
 
@@ -289,12 +346,22 @@ async function importIssues(
   userIdMap: Map<string, string>,
   labelIdMap: Map<string, string>,
   onProgress?: ProgressCallback,
-): Promise<{ idMap: Map<string, string>; imported: number; skipped: number }> {
+): Promise<{
+  idMap: Map<string, string>;
+  imported: number;
+  skipped: number;
+  warnings: ImportWarningRecord[];
+}> {
   onProgress?.(`Importing ${String(issues.length)} issues (without parent references)...`);
-  const existingMappings = await getExistingMappings(prisma, 'issue');
+  const existingMappings = await getExistingMappings(
+    prisma,
+    'issue',
+    issues.map((issue) => issue.id),
+  );
   const idMap = new Map<string, string>(existingMappings);
   let imported = 0;
   let skipped = 0;
+  const warnings: ImportWarningRecord[] = [];
 
   for (const issue of issues) {
     if (existingMappings.has(issue.id)) {
@@ -306,6 +373,19 @@ async function importIssues(
     const newStateId = stateIdMap.get(issue.state.id);
 
     if (!newTeamId || !newStateId) {
+      skipped++;
+      recordSkippedImport(
+        warnings,
+        {
+          entityType: 'issue',
+          legacyId: issue.id,
+          identifier: issue.identifier,
+          reason: !newTeamId
+            ? `team mapping not found for legacy team ${issue.team.id}`
+            : `workflow state mapping not found for legacy state ${issue.state.id}`,
+        },
+        onProgress,
+      );
       continue;
     }
 
@@ -331,15 +411,33 @@ async function importIssues(
       data.labels = { connect: labelConnections };
     }
 
-    const created = await prisma.issue.create({ data });
+    const created = await prisma.$transaction(async (transaction) => {
+      const conflictingIssue = await transaction.issue.findUnique({
+        where: {
+          identifier: issue.identifier,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (conflictingIssue) {
+        throw new Error(
+          `Import conflict for issue ${issue.identifier} (${issue.id}): an issue with the same identifier already exists (${conflictingIssue.id}) without a legacy mapping. Resolve the collision before retrying the import.`,
+        );
+      }
+
+      const nextIssue = await transaction.issue.create({ data });
+      await createMapping(transaction, issue.id, nextIssue.id, 'issue');
+      return nextIssue;
+    });
 
     idMap.set(issue.id, created.id);
-    await createMapping(prisma, issue.id, created.id, 'issue');
     imported++;
   }
 
   onProgress?.(`  Issues: ${String(imported)} imported, ${String(skipped)} skipped`);
-  return { idMap, imported, skipped };
+  return { idMap, imported, skipped, warnings };
 }
 
 async function backfillParentIds(
@@ -371,15 +469,62 @@ async function backfillParentIds(
     }
 
     await prisma.issue.update({
-      where: { id: newChildId },
-      data: { parentId: newParentId },
+      where: {
+        id: newChildId,
+      },
+      data: {
+        parentId: newParentId,
+      },
     });
+    await prisma.$executeRaw`
+      UPDATE "Issue"
+      SET "updatedAt" = CAST(${issue.updatedAt} AS TIMESTAMPTZ) AT TIME ZONE 'UTC'
+      WHERE "id" = CAST(${newChildId} AS UUID)
+    `;
 
     backfilled++;
   }
 
   onProgress?.(`  Parent-child backfills: ${String(backfilled)}`);
   return backfilled;
+}
+
+interface ExportedCommentEntry {
+  comment: ExportedComment;
+  issueId: string;
+}
+
+async function loadExportedComments(
+  exportDir: string,
+  issues: ExportedIssue[],
+): Promise<ExportedCommentEntry[]> {
+  const commentEntries: ExportedCommentEntry[] = [];
+
+  for (const issue of issues) {
+    const commentsFile = join(exportDir, 'comments', `${issue.id}.json`);
+
+    if (!(await fileExists(commentsFile))) {
+      continue;
+    }
+
+    const comments = await readValidatedJsonFile(commentsFile, (value) =>
+      parseExportedComments(value, commentsFile),
+    );
+
+    for (const comment of comments) {
+      commentEntries.push({
+        comment,
+        issueId: issue.id,
+      });
+    }
+  }
+
+  commentEntries.sort(
+    (left, right) =>
+      new Date(left.comment.createdAt).getTime() - new Date(right.comment.createdAt).getTime(),
+  );
+
+  return commentEntries;
 }
 
 async function importComments(
@@ -389,44 +534,29 @@ async function importComments(
   issueIdMap: Map<string, string>,
   userIdMap: Map<string, string>,
   onProgress?: ProgressCallback,
-): Promise<{ imported: number; skipped: number; orphanCommentFallbacks: number }> {
+): Promise<{
+  imported: number;
+  skipped: number;
+  orphanCommentFallbacks: number;
+  warnings: ImportWarningRecord[];
+}> {
   onProgress?.('Importing comments...');
-  const existingMappings = await getExistingMappings(prisma, 'comment');
+  const commentEntries = await loadExportedComments(exportDir, issues);
+  const existingMappings = await getExistingMappings(
+    prisma,
+    'comment',
+    commentEntries.map(({ comment }) => comment.id),
+  );
   let imported = 0;
   let skipped = 0;
   let orphanCommentFallbacks = 0;
+  const warnings: ImportWarningRecord[] = [];
 
-  // Collect all comments across all issues, then sort by createdAt
-  const allComments: Array<{
-    comment: ExportedComment;
-    issueId: string;
-  }> = [];
-
-  const commentsDir = join(exportDir, 'comments');
-
-  for (const issue of issues) {
-    const commentsFile = join(commentsDir, `${issue.id}.json`);
-    const exists = await fileExists(commentsFile);
-
-    if (!exists) {
-      continue;
-    }
-
-    const comments = await readJsonFile<ExportedComment[]>(commentsFile);
-
-    for (const comment of comments) {
-      allComments.push({ comment, issueId: issue.id });
-    }
-  }
-
-  // Sort all comments by createdAt for chronological import
-  allComments.sort((a, b) =>
-    a.comment.createdAt.localeCompare(b.comment.createdAt),
-  );
+  onProgress?.(`  Found ${String(commentEntries.length)} comments to import`);
 
   let orphanFallbackUserId: string | null = null;
 
-  for (const { comment, issueId } of allComments) {
+  for (const { comment, issueId } of commentEntries) {
     if (existingMappings.has(comment.id)) {
       skipped++;
       continue;
@@ -435,6 +565,16 @@ async function importComments(
     const newIssueId = issueIdMap.get(issueId);
 
     if (!newIssueId) {
+      skipped++;
+      recordSkippedImport(
+        warnings,
+        {
+          entityType: 'comment',
+          legacyId: comment.id,
+          reason: `issue mapping not found for legacy issue ${issueId}`,
+        },
+        onProgress,
+      );
       continue;
     }
 
@@ -463,27 +603,41 @@ async function importComments(
     }
 
     if (!newUserId) {
+      skipped++;
+      recordSkippedImport(
+        warnings,
+        {
+          entityType: 'comment',
+          legacyId: comment.id,
+          reason: `user mapping not found for legacy user ${comment.user?.id ?? 'unknown'}`,
+        },
+        onProgress,
+      );
       continue;
     }
 
-    const created = await prisma.comment.create({
-      data: {
-        body: comment.body,
-        createdAt: new Date(comment.createdAt),
-        updatedAt: new Date(comment.updatedAt),
-        issueId: newIssueId,
-        userId: newUserId,
-      },
+    const created = await prisma.$transaction(async (transaction) => {
+      const nextComment = await transaction.comment.create({
+        data: {
+          body: comment.body,
+          createdAt: new Date(comment.createdAt),
+          updatedAt: new Date(comment.updatedAt),
+          issueId: newIssueId,
+          userId: newUserId,
+        },
+      });
+
+      await createMapping(transaction, comment.id, nextComment.id, 'comment');
+      return nextComment;
     });
 
-    await createMapping(prisma, comment.id, created.id, 'comment');
     imported++;
   }
 
   onProgress?.(
     `  Comments: ${String(imported)} imported, ${String(skipped)} skipped, ${String(orphanCommentFallbacks)} via fallback user`,
   );
-  return { imported, skipped, orphanCommentFallbacks };
+  return { imported, skipped, orphanCommentFallbacks, warnings };
 }
 
 async function updateTeamNextIssueNumbers(
@@ -492,19 +646,22 @@ async function updateTeamNextIssueNumbers(
   issues: ExportedIssue[],
   teamIdMap: Map<string, string>,
 ): Promise<void> {
+  const maxIssueNumberByTeam = new Map<string, number>();
+
+  for (const issue of issues) {
+    const match = issue.identifier.match(/-(\d+)$/);
+
+    if (!match) {
+      continue;
+    }
+
+    const issueNumber = parseInt(match[1]!, 10);
+    const currentMax = maxIssueNumberByTeam.get(issue.team.id) ?? 0;
+    maxIssueNumberByTeam.set(issue.team.id, Math.max(currentMax, issueNumber));
+  }
+
   for (const team of teams) {
-    const teamIssues = issues.filter((i) => i.team.id === team.id);
-    const maxNumber = teamIssues.reduce((max, issue) => {
-      const match = issue.identifier.match(/-(\d+)$/);
-
-      if (match) {
-        const num = parseInt(match[1]!, 10);
-        return Math.max(max, num);
-      }
-
-      return max;
-    }, 0);
-
+    const maxNumber = maxIssueNumberByTeam.get(team.id) ?? 0;
     if (maxNumber > 0) {
       const newTeamId = teamIdMap.get(team.id);
 
@@ -528,13 +685,14 @@ export async function runImportPipeline(
   onProgress?.(`Reading export data from ${exportDir}...`);
 
   // Step 1: Read exported data
-  const teams = await readJsonFile<ExportedTeam[]>(join(exportDir, 'teams.json'));
-  const workflowStates = await readJsonFile<ExportedWorkflowState[]>(
+  const teams = await readValidatedJsonFile(join(exportDir, 'teams.json'), parseExportedTeams);
+  const workflowStates = await readValidatedJsonFile(
     join(exportDir, 'workflow_states.json'),
+    parseExportedWorkflowStates,
   );
-  const labels = await readJsonFile<ExportedLabel[]>(join(exportDir, 'labels.json'));
-  const users = await readJsonFile<ExportedUser[]>(join(exportDir, 'users.json'));
-  const issues = await readJsonFile<ExportedIssue[]>(join(exportDir, 'issues.json'));
+  const labels = await readValidatedJsonFile(join(exportDir, 'labels.json'), parseExportedLabels);
+  const users = await readValidatedJsonFile(join(exportDir, 'users.json'), parseExportedUsers);
+  const issues = await readValidatedJsonFile(join(exportDir, 'issues.json'), parseExportedIssues);
 
   // Step 2: Import teams
   const teamResult = await importTeams(prisma, teams, onProgress);
@@ -607,6 +765,7 @@ export async function runImportPipeline(
     },
     warnings: {
       orphanCommentFallbacks: commentResult.orphanCommentFallbacks,
+      skippedRecords: [...stateResult.warnings, ...issueResult.warnings, ...commentResult.warnings],
     },
   };
 }

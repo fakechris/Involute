@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
+import { createViewerAssertion } from '@involute/shared/viewer-assertion';
 
 import { createConfiguredGraphQLClient, setConfigValue } from '../index.js';
 import { startServer, type StartedServer } from '@involute/server';
@@ -12,6 +13,7 @@ const DEFAULT_ADMIN_EMAIL = 'admin@involute.local';
 const DEFAULT_TEAM_KEY = 'INV';
 
 const TEST_AUTH_TOKEN = 'cli-comments-test-token';
+const TEST_VIEWER_ASSERTION_SECRET = 'cli-comments-viewer-secret';
 
 describe('comment-related CLI commands', () => {
   let prisma: PrismaClient;
@@ -25,7 +27,12 @@ describe('comment-related CLI commands', () => {
   beforeAll(async () => {
     prisma = new PrismaClient();
     await prisma.$connect();
-    server = await startServer({ authToken: TEST_AUTH_TOKEN, port: 0, prisma });
+    server = await startServer({
+      authToken: TEST_AUTH_TOKEN,
+      port: 0,
+      prisma,
+      viewerAssertionSecret: TEST_VIEWER_ASSERTION_SECRET,
+    });
   });
 
   afterAll(async () => {
@@ -54,6 +61,18 @@ describe('comment-related CLI commands', () => {
     });
     const viewer = await prisma.user.findUniqueOrThrow({ where: { email: DEFAULT_ADMIN_EMAIL } });
     viewerId = viewer.id;
+    await setConfigValue(
+      'viewer-assertion',
+      createViewerAssertion(
+        {
+          exp: Math.floor(Date.now() / 1000) + 60 * 60,
+          sub: viewer.id,
+          subType: 'id',
+        },
+        TEST_VIEWER_ASSERTION_SECRET,
+      ),
+      configPath,
+    );
 
     const issue = await createIssue(prisma, {
       teamId: team.id,

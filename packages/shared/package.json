@@ -8,11 +8,18 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./import-format": {
+      "types": "./dist/import-format.d.ts",
+      "import": "./dist/import-format.js",
+      "default": "./dist/import-format.js"
     },
     "./viewer-assertion": {
       "types": "./dist/viewer-assertion.d.ts",
-      "import": "./dist/viewer-assertion.js"
+      "import": "./dist/viewer-assertion.js",
+      "default": "./dist/viewer-assertion.js"
     }
   },
   "scripts": {

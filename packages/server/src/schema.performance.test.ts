@@ -26,6 +26,7 @@ describe('schema query performance', () => {
 
     await prisma.$connect();
     server = await startServer({
+      allowAdminFallback: true,
       authToken: TEST_AUTH_TOKEN,
       port: 0,
       prisma,

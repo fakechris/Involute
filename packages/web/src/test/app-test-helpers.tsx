@@ -29,6 +29,7 @@ type ApolloMockSet = {
 };
 
 type DndMockSet = {
+  lastContextProps: Record<string, unknown> | null;
   useSensor: ReturnType<typeof vi.fn>;
   useSensors: ReturnType<typeof vi.fn>;
 };
@@ -66,6 +67,7 @@ vi.mock('@apollo/client/react', async () => {
 });
 
 const hoistedDndMocks = vi.hoisted<DndMockSet>(() => ({
+  lastContextProps: null,
   useSensor: vi.fn(() => ({})),
   useSensors: vi.fn(() => []),
 }));
@@ -76,7 +78,10 @@ vi.mock('@dnd-kit/core', async () => {
 
   return {
     ...actual,
-    DndContext: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    DndContext: ({ children, ...props }: { children: ReactNode }) => {
+      hoistedDndMocks.lastContextProps = props;
+      return <div>{children}</div>;
+    },
     DragOverlay: ({ children }: { children: ReactNode }) => <div>{children}</div>,
     useSensor: hoistedDndMocks.useSensor,
     useSensors: hoistedDndMocks.useSensors,
@@ -103,6 +108,7 @@ beforeEach(() => {
       },
     },
   });
+  dndMocks.lastContextProps = null;
   dndMocks.useSensor.mockClear();
   dndMocks.useSensors.mockClear();
   apolloMocks.useQuery.mockReset();

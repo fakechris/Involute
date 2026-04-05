@@ -9,9 +9,25 @@
  */
 
 import type { Command } from 'commander';
+import type {
+  ExportedComment,
+  ExportedIssue,
+  ExportedLabel,
+  ExportedTeam,
+  ExportedUser,
+  ExportedWorkflowState,
+} from '@involute/shared/import-format';
+import {
+  parseExportedComments,
+  parseExportedIssues,
+  parseExportedLabels,
+  parseExportedTeams,
+  parseExportedUsers,
+  parseExportedWorkflowStates,
+} from '@involute/shared/import-format';
 import { readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { ensureDatabaseUrl, fileExists, loadEnv, readJsonFile } from './shared.js';
+import { ensureDatabaseUrl, fileExists, loadEnv, readValidatedJsonFile } from './shared.js';
 
 interface VerifyOptions {
   file: string;
@@ -40,21 +56,6 @@ interface ScopedEntityVerificationStats {
   exportCount: number;
   mappedCount: number;
   dbCount: number;
-}
-
-interface ExportedIssueForVerify {
-  id: string;
-  identifier: string;
-  updatedAt?: string;
-  parent: { id: string } | null;
-}
-
-interface ExportedCommentForVerify {
-  id: string;
-  body: string;
-  createdAt: string;
-  updatedAt: string;
-  user: { id: string } | null;
 }
 
 function isWithinOneSecond(actual: Date, expected: string): boolean {
@@ -92,9 +93,9 @@ async function verifyComments(
     };
   }
 
-  const exportIssues = await readJsonFile<ExportedIssueForVerify[]>(issuesFile);
-  const exportCommentsByIssueId = new Map<string, ExportedCommentForVerify[]>();
-  const allExportComments: Array<{ issueId: string; comment: ExportedCommentForVerify; issueUpdatedAt: string }> = [];
+  const exportIssues = await readValidatedJsonFile(issuesFile, parseExportedIssues);
+  const exportCommentsByIssueId = new Map<string, ExportedComment[]>();
+  const allExportComments: Array<{ issueId: string; comment: ExportedComment; issueUpdatedAt: string }> = [];
 
   if (exportIssues.length > 0) {
     const commentsDir = join(exportDir, 'comments');
@@ -107,7 +108,10 @@ async function verifyComments(
         continue;
       }
 
-      const comments = await readJsonFile<ExportedCommentForVerify[]>(commentsFile);
+      const comments = await readValidatedJsonFile(
+        commentsFile,
+        (value) => parseExportedComments(value, commentsFile),
+      );
       exportCommentsByIssueId.set(issue.id, comments);
 
       for (const comment of comments) {
@@ -294,7 +298,7 @@ async function verifyComments(
 
 async function verifyIssues(
   prisma: InstanceType<(typeof import('@prisma/client'))['PrismaClient']>,
-  exportIssues: ExportedIssueForVerify[],
+  exportIssues: ExportedIssue[],
 ): Promise<EntityVerification> {
   if (exportIssues.length === 0) {
     return {
@@ -472,7 +476,7 @@ async function verifyMappedEntities(params: {
 
 async function verifyWorkflowStates(
   prisma: InstanceType<(typeof import('@prisma/client'))['PrismaClient']>,
-  exportStates: Array<{ id: string; team: { id: string } }>,
+  exportStates: ExportedWorkflowState[],
 ): Promise<EntityVerification> {
   if (exportStates.length === 0) {
     return {
@@ -604,7 +608,7 @@ export async function runVerify(options: VerifyOptions): Promise<VerificationRes
     const teamsFile = join(exportDir, 'teams.json');
 
     if (await fileExists(teamsFile)) {
-      const exportTeams = await readJsonFile<Array<{ id: string; key: string; name: string }>>(teamsFile);
+      const exportTeams = await readValidatedJsonFile<ExportedTeam[]>(teamsFile, parseExportedTeams);
       entities.push(
         await verifyMappedEntities({
           prisma,
@@ -623,7 +627,10 @@ export async function runVerify(options: VerifyOptions): Promise<VerificationRes
     const statesFile = join(exportDir, 'workflow_states.json');
 
     if (await fileExists(statesFile)) {
-      const exportStates = await readJsonFile<Array<{ id: string; name: string; team: { id: string } }>>(statesFile);
+      const exportStates = await readValidatedJsonFile<ExportedWorkflowState[]>(
+        statesFile,
+        parseExportedWorkflowStates,
+      );
       entities.push(await verifyWorkflowStates(prisma, exportStates));
     }
 
@@ -631,7 +638,7 @@ export async function runVerify(options: VerifyOptions): Promise<VerificationRes
     const labelsFile = join(exportDir, 'labels.json');
 
     if (await fileExists(labelsFile)) {
-      const exportLabels = await readJsonFile<Array<{ id: string; name: string }>>(labelsFile);
+      const exportLabels = await readValidatedJsonFile<ExportedLabel[]>(labelsFile, parseExportedLabels);
       entities.push(
         await verifyMappedEntities({
           prisma,
@@ -650,7 +657,7 @@ export async function runVerify(options: VerifyOptions): Promise<VerificationRes
     const usersFile = join(exportDir, 'users.json');
 
     if (await fileExists(usersFile)) {
-      const exportUsers = await readJsonFile<Array<{ id: string; email: string; name: string }>>(usersFile);
+      const exportUsers = await readValidatedJsonFile<ExportedUser[]>(usersFile, parseExportedUsers);
       entities.push(
         await verifyMappedEntities({
           prisma,
@@ -669,7 +676,7 @@ export async function runVerify(options: VerifyOptions): Promise<VerificationRes
     const issuesFile = join(exportDir, 'issues.json');
 
     if (await fileExists(issuesFile)) {
-      const exportIssues = await readJsonFile<ExportedIssueForVerify[]>(issuesFile);
+      const exportIssues = await readValidatedJsonFile<ExportedIssue[]>(issuesFile, parseExportedIssues);
       entities.push(await verifyIssues(prisma, exportIssues));
     }
 

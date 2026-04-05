@@ -11,6 +11,7 @@ export const PARENT_ISSUE_NOT_FOUND_MESSAGE = 'Parent issue not found.';
 export const PARENT_ISSUE_TEAM_MISMATCH_MESSAGE =
   'Parent issue does not belong to the issue team.';
 export const PARENT_ISSUE_SELF_REFERENCE_MESSAGE = 'Issue cannot be its own parent.';
+export const PARENT_ISSUE_CYCLE_MESSAGE = 'Issue parent relationship cannot create a cycle.';
 export const WORKFLOW_STATE_TEAM_CREATE_MISMATCH_MESSAGE =
   'Workflow state does not belong to the specified team.';
 export const WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE =
@@ -29,6 +30,7 @@ const exposedErrorCodes = new Map<string, string>([
   [PARENT_ISSUE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [PARENT_ISSUE_TEAM_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
   [PARENT_ISSUE_SELF_REFERENCE_MESSAGE, 'BAD_USER_INPUT'],
+  [PARENT_ISSUE_CYCLE_MESSAGE, 'BAD_USER_INPUT'],
   [WORKFLOW_STATE_TEAM_CREATE_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
   [WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
   [TEAM_HAS_NO_WORKFLOW_STATES_MESSAGE, 'BAD_USER_INPUT'],
