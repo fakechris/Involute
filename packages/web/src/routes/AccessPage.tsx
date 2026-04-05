@@ -125,7 +125,7 @@ export function AccessPage() {
     );
   }
 
-  async function updateSelectedTeam(updater: (team: TeamSummary) => TeamSummary) {
+  function updateSelectedTeam(updater: (team: TeamSummary) => TeamSummary) {
     if (!selectedTeam) {
       return;
     }
@@ -142,7 +142,7 @@ export function AccessPage() {
     setIsSaving(true);
 
     const previousVisibility = selectedTeam.visibility ?? 'PRIVATE';
-    await updateSelectedTeam((team) => ({
+    updateSelectedTeam((team) => ({
       ...team,
       visibility: nextVisibility,
     }));
@@ -167,7 +167,7 @@ export function AccessPage() {
         ),
       );
     } catch {
-      await updateSelectedTeam((team) => ({
+      updateSelectedTeam((team) => ({
         ...team,
         visibility: previousVisibility,
       }));
@@ -208,7 +208,7 @@ export function AccessPage() {
       }
 
       const membership = result.data.teamMembershipUpsert.membership;
-      await updateSelectedTeam((team) => ({
+      updateSelectedTeam((team) => ({
         ...team,
         memberships: {
           nodes: sortMemberships([
@@ -250,7 +250,7 @@ export function AccessPage() {
         throw new Error('Membership remove failed');
       }
 
-      await updateSelectedTeam((team) => ({
+      updateSelectedTeam((team) => ({
         ...team,
         memberships: {
           nodes: team.memberships?.nodes.filter((membership) => membership.user.id !== userId) ?? [],

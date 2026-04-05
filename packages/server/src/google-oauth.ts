@@ -36,6 +36,8 @@ interface GoogleUserInfoResponse {
 const GOOGLE_AUTH_BASE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USER_INFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
+const GOOGLE_FETCH_TIMEOUT_MS = 10_000;
+const GOOGLE_ACCOUNT_CONFLICT_MESSAGE = 'Google account conflicts with an existing user record.';
 
 export function isGoogleOAuthConfigured(configuration: GoogleOAuthConfiguration): boolean {
   return Boolean(
@@ -74,6 +76,7 @@ export async function exchangeGoogleCodeForUserProfile(
   }
 
   const tokenResponse = await fetch(GOOGLE_TOKEN_URL, {
+    signal: AbortSignal.timeout(GOOGLE_FETCH_TIMEOUT_MS),
     method: 'POST',
     headers: {
       'content-type': 'application/x-www-form-urlencoded',
@@ -98,6 +101,7 @@ export async function exchangeGoogleCodeForUserProfile(
   }
 
   const userInfoResponse = await fetch(GOOGLE_USER_INFO_URL, {
+    signal: AbortSignal.timeout(GOOGLE_FETCH_TIMEOUT_MS),
     headers: {
       authorization: `Bearer ${tokenPayload.access_token}`,
     },
@@ -137,6 +141,19 @@ export async function upsertGoogleOAuthUser(
       googleSubject: profile.subject,
     },
   });
+  const existingByEmail = await prisma.user.findUnique({
+    where: {
+      email: profile.email,
+    },
+  });
+
+  if (existingBySubject && existingByEmail && existingBySubject.id !== existingByEmail.id) {
+    throw new Error(GOOGLE_ACCOUNT_CONFLICT_MESSAGE);
+  }
+
+  if (existingByEmail?.googleSubject && existingByEmail.googleSubject !== profile.subject) {
+    throw new Error(GOOGLE_ACCOUNT_CONFLICT_MESSAGE);
+  }
 
   if (existingBySubject) {
     return prisma.user.update({
@@ -156,12 +173,6 @@ export async function upsertGoogleOAuthUser(
       },
     });
   }
-
-  const existingByEmail = await prisma.user.findUnique({
-    where: {
-      email: profile.email,
-    },
-  });
 
   if (existingByEmail) {
     return prisma.user.update({

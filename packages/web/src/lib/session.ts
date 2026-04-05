@@ -15,12 +15,26 @@ export interface SessionState {
 }
 
 export async function fetchSessionState(): Promise<SessionState> {
-  const response = await fetch(`${getServerBaseUrl()}/auth/session`, {
-    credentials: 'include',
-  });
+  try {
+    const response = await fetch(`${getServerBaseUrl()}/auth/session`, {
+      credentials: 'include',
+    });
 
-  const payload = (await response.json()) as SessionState;
-  return payload;
+    if (!response.ok && response.status !== 401) {
+      throw new Error(`Session request failed with status ${response.status}.`);
+    }
+
+    const payload = (await response.json()) as SessionState;
+    return payload;
+  } catch (error) {
+    console.error('Failed to fetch session state.', error);
+    return {
+      authMode: 'none',
+      authenticated: false,
+      googleOAuthConfigured: false,
+      viewer: null,
+    };
+  }
 }
 
 export function getGoogleLoginUrl(): string {

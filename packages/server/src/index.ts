@@ -118,10 +118,15 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
 
       yoga(request, response);
     }).catch((error: unknown) => {
+      const exposedError = getExposedError(error);
+
+      console.error('Failed to handle auth route request.');
+      console.error(error);
+
       response.statusCode = 500;
       response.setHeader('content-type', 'application/json; charset=utf-8');
       response.end(JSON.stringify({
-        error: error instanceof Error ? error.message : 'Internal server error',
+        error: exposedError?.message ?? 'Internal server error',
       }));
     });
 

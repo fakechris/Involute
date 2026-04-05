@@ -48,7 +48,11 @@ export function parseCookieHeader(cookieHeader: string | null): Record<string, s
         return cookies;
       }
 
-      cookies[key] = decodeURIComponent(value);
+      try {
+        cookies[key] = decodeURIComponent(value);
+      } catch {
+        return cookies;
+      }
       return cookies;
     }, {});
 }

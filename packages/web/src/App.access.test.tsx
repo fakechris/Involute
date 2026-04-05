@@ -105,6 +105,14 @@ describe('App access management', () => {
     await waitFor(() => {
       expect(teamUpdateAccess).toHaveBeenCalled();
     });
+    expect(teamUpdateAccess).toHaveBeenCalledWith({
+      variables: {
+        input: {
+          teamId: 'team-1',
+          visibility: 'PUBLIC',
+        },
+      },
+    });
     expect(screen.getByLabelText('Team visibility')).toHaveValue('PUBLIC');
 
     fireEvent.change(screen.getByLabelText('Member email'), {
@@ -121,12 +129,33 @@ describe('App access management', () => {
     await waitFor(() => {
       expect(teamMembershipUpsert).toHaveBeenCalled();
     });
+    expect(teamMembershipUpsert).toHaveBeenCalledWith({
+      variables: {
+        input: {
+          email: 'editor@example.com',
+          name: 'Editor User',
+          role: 'EDITOR',
+          teamId: 'team-1',
+        },
+      },
+    });
     expect(screen.getByText('EDITOR · USER')).toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[1]!);
+    const editorCard = screen.getByText('Editor User').closest('.access-member-card');
+
+    expect(editorCard).not.toBeNull();
+    fireEvent.click(editorCard!.querySelector('button')!);
 
     await waitFor(() => {
       expect(teamMembershipRemove).toHaveBeenCalled();
+    });
+    expect(teamMembershipRemove).toHaveBeenCalledWith({
+      variables: {
+        input: {
+          teamId: 'team-1',
+          userId: 'user-2',
+        },
+      },
     });
   });
 });

@@ -5,11 +5,13 @@ import { TEAM_WRITE_FORBIDDEN_MESSAGE } from './errors.js';
 
 describe('access control', () => {
   it('allows trusted system requests to bypass team write membership checks', async () => {
+    const findUnique = vi.fn();
+
     await expect(
       assertCanWriteTeam(
         {
           teamMembership: {
-            findUnique: vi.fn(),
+            findUnique,
           },
         } as never,
         {
@@ -21,14 +23,17 @@ describe('access control', () => {
         'team-1',
       ),
     ).resolves.toBeUndefined();
+    expect(findUnique).not.toHaveBeenCalled();
   });
 
   it('allows admins to bypass team write membership checks', async () => {
+    const findUnique = vi.fn();
+
     await expect(
       assertCanWriteTeam(
         {
           teamMembership: {
-            findUnique: vi.fn(),
+            findUnique,
           },
         } as never,
         {
@@ -45,6 +50,7 @@ describe('access control', () => {
         'team-1',
       ),
     ).resolves.toBeUndefined();
+    expect(findUnique).not.toHaveBeenCalled();
   });
 
   it('rejects non-members without editor access', async () => {

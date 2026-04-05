@@ -23,7 +23,13 @@ import {
   type SelectionSetNode,
 } from 'graphql';
 
-import { createNotFoundError, getExposedError, isPrismaInvalidInputError, TEAM_NOT_FOUND_MESSAGE } from './errors.js';
+import {
+  createNotFoundError,
+  getExposedError,
+  isPrismaInvalidInputError,
+  MEMBERSHIP_NOT_FOUND_MESSAGE,
+  TEAM_NOT_FOUND_MESSAGE,
+} from './errors.js';
 import {
   assertCanDeleteComment,
   assertCanManageTeam,
@@ -698,7 +704,7 @@ const resolvers = {
         });
 
         if (!membership) {
-          throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
+          throw createNotFoundError(MEMBERSHIP_NOT_FOUND_MESSAGE);
         }
 
         await context.prisma.teamMembership.delete({
@@ -1137,7 +1143,7 @@ async function runMutation<TResult extends { success: true }, TFallback extends 
   try {
     return await operation();
   } catch (error) {
-    if (error instanceof GraphQLError || getExposedError(error) || isPrismaInvalidInputError(error)) {
+    if (getExposedError(error) || isPrismaInvalidInputError(error)) {
       return fallback;
     }
 

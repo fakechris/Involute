@@ -4,6 +4,7 @@ export const NOT_AUTHENTICATED_MESSAGE = 'Not authenticated';
 export const TEAM_NOT_FOUND_MESSAGE = 'Team not found.';
 export const ISSUE_NOT_FOUND_MESSAGE = 'Issue not found.';
 export const COMMENT_NOT_FOUND_MESSAGE = 'Comment not found.';
+export const MEMBERSHIP_NOT_FOUND_MESSAGE = 'Team membership not found.';
 export const WORKFLOW_STATE_NOT_FOUND_MESSAGE = 'Workflow state not found.';
 export const ISSUE_LABEL_NOT_FOUND_MESSAGE = 'One or more issue labels were not found.';
 export const ASSIGNEE_NOT_FOUND_MESSAGE = 'Assignee not found.';
@@ -26,6 +27,7 @@ const exposedErrorCodes = new Map<string, string>([
   [TEAM_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ISSUE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [COMMENT_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [MEMBERSHIP_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [WORKFLOW_STATE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ISSUE_LABEL_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ASSIGNEE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
@@ -56,9 +58,9 @@ export function getExposedError(error: unknown): GraphQLError | null {
   if (
     error instanceof GraphQLError &&
     typeof error.extensions?.code === 'string' &&
-    error.extensions.code.length > 0
+    exposedErrorCodes.get(error.message) === error.extensions.code
   ) {
-    return error;
+    return createExposedError(error.message);
   }
 
   if (error instanceof Error) {

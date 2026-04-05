@@ -11,7 +11,8 @@ function getNavLinkClassName({ isActive }: { isActive: boolean }) {
 }
 
 export function App() {
-  const [session, setSession] = useState<SessionState | null>(null);
+  const [session, setSession] = useState<SessionState | null | undefined>(undefined);
+  const [isSessionLoaded, setIsSessionLoaded] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -24,13 +25,17 @@ export function App() {
         }
 
         setSession(nextSession);
+        setIsSessionLoaded(true);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (cancelled) {
           return;
         }
 
+        console.error('Could not load session state.', error);
+        setSession(null);
         setSessionError('Could not load session state.');
+        setIsSessionLoaded(true);
       });
 
     return () => {
@@ -81,6 +86,8 @@ export function App() {
                 Sign out
               </button>
             </>
+          ) : !isSessionLoaded ? (
+            <span className="app-shell__session-status">Loading session…</span>
           ) : session?.googleOAuthConfigured ? (
             <a className="app-shell__session-action" href={getGoogleLoginUrl()}>
               Sign in with Google

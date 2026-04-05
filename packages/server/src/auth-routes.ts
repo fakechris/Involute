@@ -242,6 +242,8 @@ function respondJson(
 ): void {
   response.statusCode = statusCode;
   response.setHeader('content-type', 'application/json; charset=utf-8');
+  response.setHeader('Cache-Control', 'no-store');
+  response.setHeader('Pragma', 'no-cache');
 
   applyCorsHeaders(response, options.appOrigin, options.requestOrigin);
 
