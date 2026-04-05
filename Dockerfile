@@ -2,6 +2,8 @@ FROM node:22-bookworm-slim AS base
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
+ARG DATABASE_URL=postgresql://involute:involute@127.0.0.1:5434/involute?schema=public
+ENV DATABASE_URL=$DATABASE_URL
 
 WORKDIR /app
 

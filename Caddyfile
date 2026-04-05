@@ -1,0 +1,8 @@
+{$APP_DOMAIN} {
+  encode zstd gzip
+
+  @api path /graphql /graphql/* /auth/* /health
+
+  reverse_proxy @api server:4200
+  reverse_proxy web:4201
+}

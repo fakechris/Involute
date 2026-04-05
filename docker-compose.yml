@@ -11,7 +11,7 @@ services:
       timeout: 5s
       retries: 20
     ports:
-      - "${DB_PORT:-5434}:5432"
+      - "${DB_BIND_ADDRESS:-127.0.0.1}:${DB_PORT:-5434}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
@@ -26,19 +26,34 @@ services:
       - /bin/sh
       - -lc
     command: >
-      if [ "${PRISMA_ALLOW_DATA_LOSS:-false}" = "true" ]; then
-        pnpm --filter @involute/server exec prisma db push --accept-data-loss --skip-generate;
-      else
-        pnpm --filter @involute/server exec prisma db push --skip-generate ||
-        pnpm --filter @involute/server exec prisma migrate deploy;
-      fi &&
+      set -e;
+      if [ "${PRISMA_BASELINE_EXISTING_SCHEMA:-false}" = "true" ]; then
+        baseline_output="";
+        baseline_status=0;
+        baseline_output="$$(pnpm --filter @involute/server exec prisma migrate resolve --applied 20260405093000_init 2>&1)" || baseline_status=$$?;
+        if [ "$$baseline_status" -ne 0 ]; then
+          printf '%s\n' "$$baseline_output" >&2;
+          case "$$baseline_output" in
+            *"already recorded as applied"*|*"already applied"*) ;;
+            *) exit "$$baseline_status" ;;
+          esac;
+        else
+          printf '%s\n' "$$baseline_output";
+        fi;
+      fi;
+      pnpm --filter @involute/server exec prisma migrate deploy;
       if [ "${SEED_DATABASE:-true}" = "true" ]; then
         pnpm --filter @involute/server exec prisma db seed;
+      fi;
+      if [ -n "${ADMIN_EMAIL_ALLOWLIST:-}" ]; then
+        pnpm --filter @involute/server exec tsx prisma/bootstrap-admin.ts;
       fi
     environment:
+      ADMIN_EMAIL_ALLOWLIST: ${ADMIN_EMAIL_ALLOWLIST:-}
       DATABASE_URL: postgresql://involute:involute@db:5432/involute?schema=public
-      PRISMA_ALLOW_DATA_LOSS: ${PRISMA_ALLOW_DATA_LOSS:-false}
+      PRISMA_BASELINE_EXISTING_SCHEMA: ${PRISMA_BASELINE_EXISTING_SCHEMA:-false}
       SEED_DATABASE: ${SEED_DATABASE:-true}
+      SEED_DEFAULT_ADMIN: ${SEED_DEFAULT_ADMIN:-false}
     restart: "no"
 
   server:
@@ -51,10 +66,16 @@ services:
       server-init:
         condition: service_completed_successfully
     environment:
+      ADMIN_EMAIL_ALLOWLIST: ${ADMIN_EMAIL_ALLOWLIST:-}
       ALLOW_ADMIN_FALLBACK: ${ALLOW_ADMIN_FALLBACK:-false}
       DATABASE_URL: postgresql://involute:involute@db:5432/involute?schema=public
       AUTH_TOKEN: ${AUTH_TOKEN:-changeme-set-your-token}
       VIEWER_ASSERTION_SECRET: ${VIEWER_ASSERTION_SECRET:-compose-viewer-secret}
+      GOOGLE_OAUTH_ADMIN_EMAILS: ${GOOGLE_OAUTH_ADMIN_EMAILS:-}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:4200/auth/google/callback}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:4201}
       PORT: 4200
     healthcheck:
       test:
@@ -69,7 +90,7 @@ services:
       retries: 20
       start_period: 10s
     ports:
-      - "4200:4200"
+      - "${SERVER_BIND_ADDRESS:-0.0.0.0}:4200:4200"
 
   web:
     build:
@@ -94,7 +115,7 @@ services:
       retries: 20
       start_period: 10s
     ports:
-      - "4201:4201"
+      - "${WEB_BIND_ADDRESS:-0.0.0.0}:4201:4201"
 
   cli:
     build:

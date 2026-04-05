@@ -16,15 +16,19 @@
     }
   },
   "scripts": {
-    "build": "pnpm --filter @involute/shared build && pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json",
-    "typecheck": "pnpm --filter @involute/shared build && pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json",
+    "admin:bootstrap": "pnpm exec tsx prisma/bootstrap-admin.ts",
+    "build": "pnpm --filter @involute/shared build && pnpm run prisma:generate && pnpm exec tsc -p tsconfig.json",
+    "prisma:db:push": "pnpm exec prisma db push --skip-generate",
+    "prisma:generate": "pnpm exec prisma generate",
+    "prisma:migrate:baseline": "pnpm exec prisma migrate resolve --applied 20260405093000_init",
+    "prisma:migrate:deploy": "pnpm exec prisma migrate deploy",
+    "prisma:migrate:dev": "pnpm exec prisma migrate dev",
+    "prisma:migrate:reset": "pnpm exec prisma migrate reset --force --skip-generate --skip-seed",
+    "typecheck": "pnpm --filter @involute/shared build && pnpm run prisma:generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json",
     "setup:web-ui-validation": "pnpm exec tsx src/validation-data-setup.ts",
     "setup:son-validation": "pnpm exec tsx src/son-validation-restore.ts",
-    "test": "pnpm --filter @involute/shared build && pnpm exec prisma generate && sh -c 'if [ \"${PRISMA_ALLOW_DATA_LOSS:-false}\" = \"true\" ]; then pnpm exec prisma db push --accept-data-loss --skip-generate; else pnpm exec prisma db push --skip-generate || pnpm exec prisma migrate deploy; fi' && node scripts/run-vitest.mjs",
-    "lint": "pnpm --filter @involute/shared build && pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json"
-  },
-  "prisma": {
-    "seed": "node --experimental-strip-types prisma/seed.ts"
+    "test": "pnpm --filter @involute/shared build && pnpm run prisma:generate && pnpm run prisma:migrate:reset && node scripts/run-vitest.mjs",
+    "lint": "pnpm --filter @involute/shared build && pnpm run prisma:generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json"
   },
   "dependencies": {
     "@graphql-tools/schema": "^10.0.29",

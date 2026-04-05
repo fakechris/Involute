@@ -1,0 +1,137 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Deployment profile
+        required: true
+        default: tailscale
+        type: choice
+        options:
+          - tailscale
+          - production
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: deploy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.INVOLUTE_DEPLOY_ON_MAIN == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_PROFILE: ${{ inputs.profile || vars.INVOLUTE_DEPLOY_PROFILE || 'tailscale' }}
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+      INVOLUTE_BIND_ADDRESS: ${{ secrets.INVOLUTE_BIND_ADDRESS }}
+      INVOLUTE_APP_ORIGIN: ${{ secrets.INVOLUTE_APP_ORIGIN }}
+      INVOLUTE_AUTH_TOKEN: ${{ secrets.INVOLUTE_AUTH_TOKEN }}
+      INVOLUTE_VIEWER_ASSERTION_SECRET: ${{ secrets.INVOLUTE_VIEWER_ASSERTION_SECRET }}
+      INVOLUTE_ADMIN_EMAIL_ALLOWLIST: ${{ secrets.INVOLUTE_ADMIN_EMAIL_ALLOWLIST }}
+      INVOLUTE_SEED_DATABASE: ${{ vars.INVOLUTE_SEED_DATABASE || 'false' }}
+      INVOLUTE_APP_DOMAIN: ${{ secrets.INVOLUTE_APP_DOMAIN }}
+      INVOLUTE_POSTGRES_PASSWORD: ${{ secrets.INVOLUTE_POSTGRES_PASSWORD }}
+      INVOLUTE_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.INVOLUTE_GOOGLE_OAUTH_CLIENT_ID }}
+      INVOLUTE_GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.INVOLUTE_GOOGLE_OAUTH_CLIENT_SECRET }}
+      INVOLUTE_GOOGLE_OAUTH_REDIRECT_URI: ${{ secrets.INVOLUTE_GOOGLE_OAUTH_REDIRECT_URI }}
+    steps:
+      - name: Validate required deployment secrets
+        run: |
+          set -eu
+          case "${DEPLOY_PROFILE:-}" in
+            tailscale|production) ;;
+            *)
+              echo "Invalid DEPLOY_PROFILE: ${DEPLOY_PROFILE:-<unset>}" >&2
+              exit 1
+              ;;
+          esac
+          for var in DEPLOY_HOST DEPLOY_KNOWN_HOSTS DEPLOY_USER DEPLOY_SSH_PRIVATE_KEY INVOLUTE_APP_ORIGIN INVOLUTE_AUTH_TOKEN INVOLUTE_VIEWER_ASSERTION_SECRET; do
+            if [ -z "$(printenv "$var")" ]; then
+              echo "Missing required secret: $var" >&2
+              exit 1
+            fi
+          done
+          if [ "$DEPLOY_PROFILE" = "tailscale" ] && [ -z "${INVOLUTE_BIND_ADDRESS}" ]; then
+            echo "Missing required secret: INVOLUTE_BIND_ADDRESS" >&2
+            exit 1
+          fi
+          if [ "$DEPLOY_PROFILE" = "production" ]; then
+            for var in INVOLUTE_APP_DOMAIN INVOLUTE_POSTGRES_PASSWORD; do
+              if [ -z "$(printenv "$var")" ]; then
+                echo "Missing required secret: $var" >&2
+                exit 1
+              fi
+            done
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible
+        run: |
+          python -m venv .venv-ansible
+          .venv-ansible/bin/pip install --upgrade pip
+          .venv-ansible/bin/pip install "ansible-core>=2.18,<2.20"
+
+      - name: Configure SSH
+        run: |
+          set -eu
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Render inventory
+        run: |
+          set -eu
+          .venv-ansible/bin/python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          inventory = {
+              "all": {
+                  "hosts": {
+                      "deploy_target": {
+                          "ansible_host": os.environ.get("DEPLOY_HOST", ""),
+                          "ansible_user": os.environ.get("DEPLOY_USER", ""),
+                          "involute_stack_profile": os.environ.get("DEPLOY_PROFILE", ""),
+                          "involute_bind_address": os.environ.get("INVOLUTE_BIND_ADDRESS", ""),
+                          "involute_app_origin": os.environ.get("INVOLUTE_APP_ORIGIN", ""),
+                          "involute_seed_database": os.environ.get("INVOLUTE_SEED_DATABASE", "false"),
+                          "involute_admin_email_allowlist": os.environ.get("INVOLUTE_ADMIN_EMAIL_ALLOWLIST", ""),
+                          "involute_auth_token": os.environ.get("INVOLUTE_AUTH_TOKEN", ""),
+                          "involute_viewer_assertion_secret": os.environ.get("INVOLUTE_VIEWER_ASSERTION_SECRET", ""),
+                          "involute_app_domain": os.environ.get("INVOLUTE_APP_DOMAIN", ""),
+                          "involute_postgres_password": os.environ.get("INVOLUTE_POSTGRES_PASSWORD", ""),
+                          "involute_google_oauth_client_id": os.environ.get("INVOLUTE_GOOGLE_OAUTH_CLIENT_ID", ""),
+                          "involute_google_oauth_client_secret": os.environ.get("INVOLUTE_GOOGLE_OAUTH_CLIENT_SECRET", ""),
+                          "involute_google_oauth_redirect_uri": os.environ.get("INVOLUTE_GOOGLE_OAUTH_REDIRECT_URI", ""),
+                      }
+                  }
+              }
+          }
+
+          Path("ops/ansible/inventory/hosts.yml").write_text(
+              json.dumps(inventory, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Bootstrap host
+        run: .venv-ansible/bin/ansible-playbook ops/ansible/playbooks/bootstrap-host.yml
+
+      - name: Deploy stack
+        run: .venv-ansible/bin/ansible-playbook -e "involute_stack_profile=${DEPLOY_PROFILE}" ops/ansible/playbooks/deploy.yml

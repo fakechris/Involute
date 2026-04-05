@@ -6,7 +6,13 @@
   "scripts": {
     "build": "pnpm -r build",
     "compose:down": "docker compose down --remove-orphans",
+    "deploy:bootstrap": "sh scripts/ansible-playbook.sh ops/ansible/playbooks/bootstrap-host.yml",
+    "deploy:prod": "INVOLUTE_STACK_PROFILE=production sh scripts/ansible-playbook.sh ops/ansible/playbooks/deploy.yml",
+    "deploy:tailscale": "INVOLUTE_STACK_PROFILE=tailscale sh scripts/ansible-playbook.sh ops/ansible/playbooks/deploy.yml",
     "compose:up": "docker compose up --build -d db server web",
+    "compose:prod:build": "docker compose --env-file .env.production -f docker-compose.prod.yml build",
+    "compose:prod:down": "docker compose --env-file .env.production -f docker-compose.prod.yml down --remove-orphans",
+    "compose:prod:up": "docker compose --env-file .env.production -f docker-compose.prod.yml up --build -d",
     "docker:build": "docker compose build",
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",

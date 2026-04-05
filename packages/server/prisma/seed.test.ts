@@ -96,4 +96,18 @@ describe('seedDatabase', () => {
     expect(adminUsers[0]?.name).toBe('Admin');
   });
 
+  it('can seed the baseline catalog without creating a default admin user', async () => {
+    await seedDatabase(prisma, {
+      includeDefaultAdmin: false,
+    });
+
+    const adminUsers = await prisma.user.findMany({
+      where: {
+        email: DEFAULT_ADMIN_EMAIL,
+      },
+    });
+
+    expect(adminUsers).toHaveLength(0);
+  });
+
 });

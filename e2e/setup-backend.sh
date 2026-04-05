@@ -33,8 +33,8 @@ while [ "$attempt" -le 30 ]; do
   sleep 2
 done
 
-DATABASE_URL="$DATABASE_URL" pnpm --filter @involute/server exec prisma db push --force-reset --skip-generate
-DATABASE_URL="$DATABASE_URL" pnpm --filter @involute/server exec prisma db seed
+DATABASE_URL="$DATABASE_URL" pnpm --filter @involute/server exec prisma migrate reset --force --skip-generate --skip-seed
+DATABASE_URL="$DATABASE_URL" SEED_DEFAULT_ADMIN="true" pnpm --filter @involute/server exec prisma db seed
 
 exec env \
   APP_ORIGIN="$APP_ORIGIN" \

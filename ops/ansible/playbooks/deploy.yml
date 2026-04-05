@@ -1,0 +1,174 @@
+---
+- name: Deploy Involute with Docker Compose
+  hosts: all
+  become: true
+  vars:
+    involute_default_deploy_path: /opt/involute
+    involute_default_stack_profile: tailscale
+    involute_default_seed_database: true
+    involute_compose_files: >-
+      {{
+        ['docker-compose.yml']
+        if (involute_stack_profile | default(involute_default_stack_profile)) == 'tailscale'
+        else ['docker-compose.prod.yml']
+      }}
+    involute_compose_services: >-
+      {{
+        ['db', 'server', 'web']
+        if (involute_stack_profile | default(involute_default_stack_profile)) == 'tailscale'
+        else []
+      }}
+    involute_compose_file_args: "{{ involute_compose_files | map('regex_replace', '^', '-f ') | join(' ') }}"
+    involute_env_target: >-
+      {{
+        '.env'
+        if (involute_stack_profile | default(involute_default_stack_profile)) == 'tailscale'
+        else '.env.production'
+      }}
+    involute_env_template: >-
+      {{
+        'env.tailscale.j2'
+        if (involute_stack_profile | default(involute_default_stack_profile)) == 'tailscale'
+        else 'env.production.j2'
+      }}
+    involute_api_health_url: >-
+      {{
+        'http://' ~ (involute_bind_address | default('127.0.0.1')) ~ ':4200/health'
+        if (involute_stack_profile | default(involute_default_stack_profile)) == 'tailscale'
+        else 'http://127.0.0.1/health'
+      }}
+    involute_web_health_url: >-
+      {{
+        'http://' ~ (involute_bind_address | default('127.0.0.1')) ~ ':4201/'
+        if (involute_stack_profile | default(involute_default_stack_profile)) == 'tailscale'
+        else 'http://127.0.0.1/'
+      }}
+    involute_rsync_excludes:
+      - ".git"
+      - "node_modules"
+      - "dist"
+      - ".env"
+      - ".env.production"
+      - "ops/ansible/inventory/hosts.yml"
+      - ".tmp"
+      - "playwright-report"
+      - "test-results"
+  tasks:
+    - name: Validate required deployment variables
+      ansible.builtin.assert:
+        that:
+          - (involute_stack_profile | default(involute_default_stack_profile)) in ['tailscale', 'production']
+          - involute_auth_token is defined
+          - involute_auth_token | length > 0
+          - involute_viewer_assertion_secret is defined
+          - involute_viewer_assertion_secret | length > 0
+          - involute_app_origin is defined
+          - involute_app_origin | length > 0
+          - >-
+            (
+              (involute_stack_profile | default(involute_default_stack_profile)) != 'tailscale'
+            ) or (
+              involute_bind_address is defined and involute_bind_address | length > 0
+            )
+          - >-
+            (
+              (involute_stack_profile | default(involute_default_stack_profile)) != 'tailscale'
+            ) or (
+              (involute_admin_email_allowlist | default('') | trim | length > 0)
+              or (involute_seed_default_admin | default(false) | bool)
+              or (involute_allow_admin_fallback | default(false) | bool)
+            )
+
+    - name: Ensure deploy directory exists
+      ansible.builtin.file:
+        path: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+        state: directory
+        mode: "0755"
+
+    - name: Synchronize repository to target
+      ansible.builtin.shell: >
+        rsync -az --delete
+        {{ involute_rsync_excludes | map('regex_replace', '^(.*)$', '--exclude=\\1') | join(' ') }}
+        {{ (playbook_dir ~ '/../../../') | quote }}
+        {{
+          (
+            (ansible_user | default('root')) ~ '@' ~
+            (ansible_host | default(inventory_hostname)) ~ ':' ~
+            (involute_deploy_path | default(involute_default_deploy_path)) ~ '/'
+          ) | quote
+        }}
+      delegate_to: localhost
+      become: false
+
+    - name: Render stack environment file
+      ansible.builtin.template:
+        src: "../templates/{{ involute_env_template }}"
+        dest: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}"
+        mode: "0600"
+
+    - name: Stop existing stack
+      ansible.builtin.shell: >
+        docker compose
+        {{ involute_compose_file_args }}
+        down --remove-orphans
+      args:
+        chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+
+    - name: Wait for previous ports to be released
+      ansible.builtin.shell: >
+        for port in 5434 4200 4201; do
+          for attempt in $(seq 1 30); do
+            if ! ss -ltn | grep -q ":${port} "; then
+              break;
+            fi;
+            sleep 1;
+            if [ "${attempt}" -eq 30 ]; then
+              exit 1;
+            fi;
+          done;
+        done
+      args:
+        chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+
+    - name: Start stack
+      ansible.builtin.shell: >
+        docker compose
+        {{ involute_compose_file_args }}
+        up --build -d
+        {{ involute_compose_services | join(' ') }}
+      args:
+        chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+
+    - name: Wait for API health check
+      ansible.builtin.shell: >
+        for attempt in $(seq 1 60); do
+          curl --connect-timeout 2 --max-time 5 -sf {{ involute_api_health_url | quote }} && exit 0;
+          sleep 2;
+        done;
+        exit 1
+      args:
+        chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+
+    - name: Wait for web health check
+      ansible.builtin.shell: >
+        for attempt in $(seq 1 60); do
+          curl --connect-timeout 2 --max-time 5 -sfI {{ involute_web_health_url | quote }} >/dev/null && exit 0;
+          sleep 2;
+        done;
+        exit 1
+      args:
+        chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+
+    - name: Show compose status
+      ansible.builtin.shell: >
+        docker compose
+        {{ involute_compose_file_args }}
+        ps
+      args:
+        chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+      register: involute_compose_ps
+      changed_when: false
+
+    - name: Print compose status
+      ansible.builtin.debug:
+        var: involute_compose_ps.stdout_lines

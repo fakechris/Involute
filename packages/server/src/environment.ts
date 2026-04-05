@@ -8,11 +8,11 @@ import { normalizeDatabaseUrl } from './database-url.js';
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 
 export interface ServerEnvironment {
+  adminEmailAllowlist: string[];
   appOrigin: string;
   allowAdminFallback: boolean;
   databaseUrl: string;
   authToken: string;
-  googleOAuthAdminEmails: string[];
   googleOAuthClientId: string | null;
   googleOAuthClientSecret: string | null;
   googleOAuthRedirectUri: string | null;
@@ -40,7 +40,7 @@ export function getServerEnvironment(env: NodeJS.ProcessEnv = process.env): Serv
   const allowAdminFallback = env.ALLOW_ADMIN_FALLBACK === 'true';
   const nodeEnvironment = env.NODE_ENV ?? 'development';
   const sessionTtlSeconds = Number(env.SESSION_TTL_SECONDS ?? 60 * 60 * 24 * 30);
-  const googleOAuthAdminEmails = (env.GOOGLE_OAUTH_ADMIN_EMAILS ?? '')
+  const adminEmailAllowlist = (env.ADMIN_EMAIL_ALLOWLIST ?? env.GOOGLE_OAUTH_ADMIN_EMAILS ?? '')
     .split(',')
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean);
@@ -50,11 +50,11 @@ export function getServerEnvironment(env: NodeJS.ProcessEnv = process.env): Serv
   }
 
   return {
+    adminEmailAllowlist,
     appOrigin: env.APP_ORIGIN?.trim() || 'http://localhost:4201',
     allowAdminFallback,
     databaseUrl: env.DATABASE_URL ?? '',
     authToken: env.AUTH_TOKEN ?? '',
-    googleOAuthAdminEmails,
     googleOAuthClientId: env.GOOGLE_OAUTH_CLIENT_ID?.trim() || null,
     googleOAuthClientSecret: env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() || null,
     googleOAuthRedirectUri: env.GOOGLE_OAUTH_REDIRECT_URI?.trim() || null,

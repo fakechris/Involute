@@ -22,8 +22,9 @@ If this path is stable, the product is already useful for migration rehearsal, a
 ## What we are optimizing for now
 
 - Stable self-hosted deployment on VPS or Railway
-- Simple multi-user access with Google OAuth and session auth
+- Stable Google OAuth sign-in, admin bootstrap, and session auth
 - Team-level visibility and edit permissions
+- Migration-driven database changes that are safe to deploy repeatedly
 - Keep the single-team import and issue lifecycle green while the product boundary hardens
 
 ## Explicitly not optimizing for yet
