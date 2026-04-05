@@ -141,10 +141,7 @@ describe('App access management', () => {
     });
     expect(screen.getByText('EDITOR · USER')).toBeInTheDocument();
 
-    const editorCard = screen.getByText('Editor User').closest('.access-member-card');
-
-    expect(editorCard).not.toBeNull();
-    fireEvent.click(editorCard!.querySelector('button')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Remove editor@example.com from Involute' }));
 
     await waitFor(() => {
       expect(teamMembershipRemove).toHaveBeenCalled();

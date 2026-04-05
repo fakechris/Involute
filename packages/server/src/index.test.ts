@@ -820,6 +820,46 @@ describe('GraphQL server core', () => {
     ]);
   });
 
+  it('hides team membership details from readable teams when the viewer lacks manage access', async () => {
+    const publicTeam = await createTeamWithStates(prisma, {
+      key: 'PUB',
+      name: 'Public Team',
+    });
+
+    await prisma.team.update({
+      where: {
+        id: publicTeam.id,
+      },
+      data: {
+        visibility: 'PUBLIC',
+      },
+    });
+    await prisma.teamMembership.create({
+      data: {
+        role: 'OWNER',
+        teamId: publicTeam.id,
+        userId: fixture.admin.id,
+      },
+    });
+
+    const session = await createSession(prisma, fixture.importedUser.id, 60 * 60);
+    const response = await postGraphQL({
+      cookie: `involute_session=${encodeURIComponent(session.token)}`,
+      query: '{ teams { nodes { key memberships { nodes { id user { email globalRole } } } } } }',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.teams.nodes).toEqual([
+      {
+        key: 'PUB',
+        memberships: {
+          nodes: [],
+        },
+      },
+    ]);
+  });
+
 });
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<TestFixture> {

@@ -26,7 +26,7 @@ services:
       - /bin/sh
       - -lc
     command: >
-      pnpm --filter @involute/server exec prisma db push --skip-generate &&
+      pnpm --filter @involute/server exec prisma db push --accept-data-loss --skip-generate &&
       if [ "${SEED_DATABASE:-true}" = "true" ]; then
         pnpm --filter @involute/server exec prisma db seed;
       fi

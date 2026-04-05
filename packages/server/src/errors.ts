@@ -8,6 +8,7 @@ export const MEMBERSHIP_NOT_FOUND_MESSAGE = 'Team membership not found.';
 export const WORKFLOW_STATE_NOT_FOUND_MESSAGE = 'Workflow state not found.';
 export const ISSUE_LABEL_NOT_FOUND_MESSAGE = 'One or more issue labels were not found.';
 export const ASSIGNEE_NOT_FOUND_MESSAGE = 'Assignee not found.';
+export const TEAM_OWNER_REQUIRED_MESSAGE = 'Each team must retain at least one owner.';
 export const PARENT_ISSUE_NOT_FOUND_MESSAGE = 'Parent issue not found.';
 export const PARENT_ISSUE_TEAM_MISMATCH_MESSAGE =
   'Parent issue does not belong to the issue team.';
@@ -31,6 +32,7 @@ const exposedErrorCodes = new Map<string, string>([
   [WORKFLOW_STATE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ISSUE_LABEL_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ASSIGNEE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [TEAM_OWNER_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [PARENT_ISSUE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [PARENT_ISSUE_TEAM_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
   [PARENT_ISSUE_SELF_REFERENCE_MESSAGE, 'BAD_USER_INPUT'],

@@ -334,6 +334,7 @@ export function AccessPage() {
                       <button
                         type="button"
                         className="app-shell__session-action"
+                        aria-label={`Remove ${membership.user.email ?? membership.user.name ?? 'member'} from ${selectedTeam.name}`}
                         disabled={!isManageable || isSaving}
                         onClick={() => handleMembershipRemove(membership.user.id)}
                       >

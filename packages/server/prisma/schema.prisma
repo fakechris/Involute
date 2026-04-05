@@ -60,14 +60,12 @@ model User {
   name           String
   email          String    @unique
   avatarUrl      String?
-  googleSubject  String?
+  googleSubject  String?   @unique
   globalRole     GlobalRole @default(USER)
   assignedIssues Issue[]   @relation("IssueAssignee")
   comments       Comment[]
   memberships    TeamMembership[]
   sessions       Session[]
-
-  @@index([googleSubject])
 }
 
 model Session {

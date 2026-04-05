@@ -25,10 +25,11 @@ import {
 
 import {
   createNotFoundError,
+  createValidationError,
   getExposedError,
   isPrismaInvalidInputError,
   MEMBERSHIP_NOT_FOUND_MESSAGE,
-  TEAM_NOT_FOUND_MESSAGE,
+  TEAM_OWNER_REQUIRED_MESSAGE,
 } from './errors.js';
 import {
   assertCanDeleteComment,
@@ -55,6 +56,7 @@ type TeamParent = Team & { memberships?: TeamMembershipParent[] | null; states?:
 type TeamMembershipParent = TeamMembership & { user?: User | null };
 type UserParent = User;
 type CommentParent = Comment & { user?: User | null };
+type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 type IssueParent = Issue & {
   assignee?: User | null;
   comments?: CommentParent[] | null;
@@ -655,25 +657,47 @@ const resolvers = {
     ): Promise<{ membership: TeamMembershipParent | null; success: boolean }> =>
       runMutation(async () => {
         await assertCanManageTeam(context.prisma, context, args.input.teamId);
-        const user = await upsertTeamMemberUser(context.prisma, args.input.email, args.input.name ?? null);
-        const membership = await context.prisma.teamMembership.upsert({
-          where: {
-            teamId_userId: {
+        const membership = await context.prisma.$transaction(async (transaction) => {
+          const user = await upsertTeamMemberUser(transaction, args.input.email, args.input.name ?? null);
+          const existingMembership = await transaction.teamMembership.findUnique({
+            where: {
+              teamId_userId: {
+                teamId: args.input.teamId,
+                userId: user.id,
+              },
+            },
+            select: {
+              role: true,
+              userId: true,
+            },
+          });
+
+          if (existingMembership?.role === 'OWNER' && args.input.role !== 'OWNER') {
+            await assertTeamRetainsOwner(transaction, args.input.teamId, {
+              excludedUserId: existingMembership.userId,
+              nextRole: args.input.role,
+            });
+          }
+
+          return transaction.teamMembership.upsert({
+            where: {
+              teamId_userId: {
+                teamId: args.input.teamId,
+                userId: user.id,
+              },
+            },
+            create: {
+              role: args.input.role,
               teamId: args.input.teamId,
               userId: user.id,
             },
-          },
-          create: {
-            role: args.input.role,
-            teamId: args.input.teamId,
-            userId: user.id,
-          },
-          update: {
-            role: args.input.role,
-          },
-          include: {
-            user: true,
-          },
+            update: {
+              role: args.input.role,
+            },
+            include: {
+              user: true,
+            },
+          });
         });
 
         return {
@@ -691,33 +715,46 @@ const resolvers = {
     ): Promise<{ membershipId: string | null; success: boolean }> =>
       runMutation(async () => {
         await assertCanManageTeam(context.prisma, context, args.input.teamId);
-        const membership = await context.prisma.teamMembership.findUnique({
-          where: {
-            teamId_userId: {
-              teamId: args.input.teamId,
-              userId: args.input.userId,
+        const membershipId = await context.prisma.$transaction(async (transaction) => {
+          const membership = await transaction.teamMembership.findUnique({
+            where: {
+              teamId_userId: {
+                teamId: args.input.teamId,
+                userId: args.input.userId,
+              },
             },
-          },
-          select: {
-            id: true,
-          },
-        });
-
-        if (!membership) {
-          throw createNotFoundError(MEMBERSHIP_NOT_FOUND_MESSAGE);
-        }
-
-        await context.prisma.teamMembership.delete({
-          where: {
-            teamId_userId: {
-              teamId: args.input.teamId,
-              userId: args.input.userId,
+            select: {
+              id: true,
+              role: true,
+              userId: true,
             },
-          },
+          });
+
+          if (!membership) {
+            throw createNotFoundError(MEMBERSHIP_NOT_FOUND_MESSAGE);
+          }
+
+          if (membership.role === 'OWNER') {
+            await assertTeamRetainsOwner(transaction, args.input.teamId, {
+              excludedUserId: membership.userId,
+              nextRole: null,
+            });
+          }
+
+          await transaction.teamMembership.delete({
+            where: {
+              teamId_userId: {
+                teamId: args.input.teamId,
+                userId: args.input.userId,
+              },
+            },
+          });
+
+          return membership.id;
         });
 
         return {
-          membershipId: membership.id,
+          membershipId,
           success: true as const,
         };
       }, {
@@ -747,19 +784,29 @@ const resolvers = {
       parent: TeamParent,
       _args: Record<string, never>,
       context: GraphQLContext,
-    ): Promise<{ nodes: TeamMembershipParent[] }> => ({
-      nodes:
-        parent.memberships ??
-        (await context.prisma.teamMembership.findMany({
-          where: {
-            teamId: parent.id,
-          },
-          include: {
-            user: true,
-          },
-          orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
-        })),
-    }),
+    ): Promise<{ nodes: TeamMembershipParent[] }> => {
+      const canManage = await canManageTeamMemberships(context.prisma, context, parent.id);
+
+      if (!canManage) {
+        return {
+          nodes: [],
+        };
+      }
+
+      return {
+        nodes:
+          parent.memberships ??
+          (await context.prisma.teamMembership.findMany({
+            where: {
+              teamId: parent.id,
+            },
+            include: {
+              user: true,
+            },
+            orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+          })),
+      };
+    },
   },
   User: {
     isMe: (parent: UserParent, _args: Record<string, never>, context: GraphQLContext): boolean =>
@@ -1143,7 +1190,13 @@ async function runMutation<TResult extends { success: true }, TFallback extends 
   try {
     return await operation();
   } catch (error) {
-    if (getExposedError(error) || isPrismaInvalidInputError(error)) {
+    const exposedError = getExposedError(error);
+
+    if (exposedError?.extensions.code === 'FORBIDDEN') {
+      throw exposedError;
+    }
+
+    if (exposedError || isPrismaInvalidInputError(error)) {
       return fallback;
     }
 
@@ -1152,7 +1205,7 @@ async function runMutation<TResult extends { success: true }, TFallback extends 
 }
 
 async function upsertTeamMemberUser(
-  prisma: PrismaClient,
+  prisma: DatabaseClient,
   email: string,
   name: string | null,
 ): Promise<User> {
@@ -1166,12 +1219,56 @@ async function upsertTeamMemberUser(
       email: normalizedEmail,
       name: name?.trim() || fallbackUserName(normalizedEmail),
     },
-    update: name?.trim()
-      ? {
-          name: name.trim(),
-        }
-      : {},
+    update: {},
   });
+}
+
+async function canManageTeamMemberships(
+  prisma: DatabaseClient,
+  context: GraphQLContext,
+  teamId: string,
+): Promise<boolean> {
+  if (context.isTrustedSystem || context.viewer?.globalRole === 'ADMIN') {
+    return true;
+  }
+
+  if (!context.viewer) {
+    return false;
+  }
+
+  const membership = await prisma.teamMembership.findUnique({
+    where: {
+      teamId_userId: {
+        teamId,
+        userId: context.viewer.id,
+      },
+    },
+    select: {
+      role: true,
+    },
+  });
+
+  return membership?.role === 'OWNER';
+}
+
+async function assertTeamRetainsOwner(
+  prisma: DatabaseClient,
+  teamId: string,
+  options: { excludedUserId?: string; nextRole?: TeamMembershipRole | null },
+): Promise<void> {
+  const ownerCount = await prisma.teamMembership.count({
+    where: {
+      teamId,
+      role: 'OWNER',
+      ...(options.excludedUserId ? { userId: { not: options.excludedUserId } } : {}),
+    },
+  });
+
+  if (ownerCount > 0 || options.nextRole === 'OWNER') {
+    return;
+  }
+
+  throw createValidationError(TEAM_OWNER_REQUIRED_MESSAGE);
 }
 
 function fallbackUserName(email: string): string {

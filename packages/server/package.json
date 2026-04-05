@@ -20,7 +20,7 @@
     "typecheck": "pnpm --filter @involute/shared build && pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json",
     "setup:web-ui-validation": "pnpm exec tsx src/validation-data-setup.ts",
     "setup:son-validation": "pnpm exec tsx src/son-validation-restore.ts",
-    "test": "pnpm --filter @involute/shared build && pnpm exec prisma generate && pnpm exec prisma db push --skip-generate && node scripts/run-vitest.mjs",
+    "test": "pnpm --filter @involute/shared build && pnpm exec prisma generate && pnpm exec prisma db push --accept-data-loss --skip-generate && node scripts/run-vitest.mjs",
     "lint": "pnpm --filter @involute/shared build && pnpm exec prisma generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json"
   },
   "prisma": {

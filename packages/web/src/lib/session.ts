@@ -41,9 +41,15 @@ export function getGoogleLoginUrl(): string {
   return `${getServerBaseUrl()}/auth/google/start`;
 }
 
-export async function logoutSession(): Promise<void> {
-  await fetch(`${getServerBaseUrl()}/auth/logout`, {
+export async function logoutSession(): Promise<boolean> {
+  const response = await fetch(`${getServerBaseUrl()}/auth/logout`, {
     credentials: 'include',
     method: 'POST',
   });
+
+  if (!response.ok) {
+    throw new Error(`Logout failed with status ${response.status}.`);
+  }
+
+  return true;
 }

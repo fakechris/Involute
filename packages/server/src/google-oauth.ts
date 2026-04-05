@@ -136,7 +136,7 @@ export async function upsertGoogleOAuthUser(
   }
 
   const isAdminEmail = configuration.adminEmails.includes(profile.email);
-  const existingBySubject = await prisma.user.findFirst({
+  const existingBySubject = await prisma.user.findUnique({
     where: {
       googleSubject: profile.subject,
     },

@@ -77,9 +77,19 @@ export function App() {
                 className="app-shell__session-action"
                 onClick={() => {
                   logoutSession()
-                    .catch(() => undefined)
-                    .finally(() => {
-                      window.location.reload();
+                    .then((didLogout) => {
+                      if (didLogout) {
+                        setSessionError(null);
+                        setSession(null);
+                        setIsSessionLoaded(true);
+                        setTimeout(() => {
+                          window.location.reload();
+                        }, 0);
+                      }
+                    })
+                    .catch((error: unknown) => {
+                      console.error('Could not sign out.', error);
+                      setSessionError('Could not sign out.');
                     });
                 }}
               >

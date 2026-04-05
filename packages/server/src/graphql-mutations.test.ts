@@ -10,6 +10,7 @@ import {
 } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
+import { createSession } from './session.js';
 import { deleteComment, deleteIssue } from './issue-service.ts';
 
 loadProjectEnvironment();
@@ -259,6 +260,161 @@ describe('GraphQL mutations', () => {
         },
       }),
     ).resolves.toBeNull();
+  });
+
+  it('returns a FORBIDDEN GraphQL error instead of silently swallowing team access denials', async () => {
+    const outsider = await prisma.user.create({
+      data: {
+        email: 'outsider@example.com',
+        name: 'Outsider',
+      },
+    });
+    const outsiderSession = await createSession(prisma, outsider.id, 60 * 60);
+
+    const response = await postGraphQL({
+      cookie: `involute_session=${encodeURIComponent(outsiderSession.token)}`,
+      query: `
+        mutation TeamUpdateAccess($input: TeamUpdateAccessInput!) {
+          teamUpdateAccess(input: $input) {
+            success
+            team { id }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          teamId: fixture.team.id,
+          visibility: 'PUBLIC',
+        },
+      },
+      token: null,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toBeNull();
+    expect(response.body.errors?.[0]).toMatchObject({
+      extensions: {
+        code: 'FORBIDDEN',
+      },
+      message: 'You do not have access to manage this team.',
+    });
+  });
+
+  it('does not let team access changes remove the last owner', async () => {
+    const ownerMembership = await prisma.teamMembership.create({
+      data: {
+        role: 'OWNER',
+        teamId: fixture.team.id,
+        userId: fixture.viewer.id,
+      },
+    });
+
+    const removeResponse = await postGraphQL({
+      query: `
+        mutation TeamMembershipRemove($input: TeamMembershipRemoveInput!) {
+          teamMembershipRemove(input: $input) {
+            success
+            membershipId
+          }
+        }
+      `,
+      variables: {
+        input: {
+          teamId: fixture.team.id,
+          userId: fixture.viewer.id,
+        },
+      },
+    });
+
+    expect(removeResponse.status).toBe(200);
+    expect(removeResponse.body.errors).toBeUndefined();
+    expect(removeResponse.body.data.teamMembershipRemove).toEqual({
+      success: false,
+      membershipId: null,
+    });
+    await expect(
+      prisma.teamMembership.findUnique({
+        where: {
+          id: ownerMembership.id,
+        },
+      }),
+    ).resolves.toBeTruthy();
+
+    const downgradeResponse = await postGraphQL({
+      query: `
+        mutation TeamMembershipUpsert($input: TeamMembershipUpsertInput!) {
+          teamMembershipUpsert(input: $input) {
+            success
+            membership { id role }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          email: fixture.viewer.email,
+          name: 'Changed Name',
+          role: 'VIEWER',
+          teamId: fixture.team.id,
+        },
+      },
+    });
+
+    expect(downgradeResponse.status).toBe(200);
+    expect(downgradeResponse.body.errors).toBeUndefined();
+    expect(downgradeResponse.body.data.teamMembershipUpsert).toEqual({
+      success: false,
+      membership: null,
+    });
+    await expect(
+      prisma.teamMembership.findUnique({
+        where: {
+          id: ownerMembership.id,
+        },
+      }),
+    ).resolves.toMatchObject({
+      role: 'OWNER',
+    });
+  });
+
+  it('does not overwrite an existing user name when access management upserts by email', async () => {
+    const existingUser = await prisma.user.create({
+      data: {
+        email: 'member@example.com',
+        name: 'Existing Name',
+      },
+    });
+
+    const response = await postGraphQL({
+      query: `
+        mutation TeamMembershipUpsert($input: TeamMembershipUpsertInput!) {
+          teamMembershipUpsert(input: $input) {
+            success
+            membership {
+              id
+              role
+              user { id name email }
+            }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          email: existingUser.email,
+          name: 'Replacement Name',
+          role: 'EDITOR',
+          teamId: fixture.team.id,
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.teamMembershipUpsert.success).toBe(true);
+    expect(response.body.data.teamMembershipUpsert.membership.user).toEqual({
+      id: existingUser.id,
+      name: 'Existing Name',
+      email: existingUser.email,
+    });
   });
 
   it('returns success false for invalid or nonexistent issue state transitions', async () => {
@@ -1034,27 +1190,36 @@ async function createTeamWithStates(
 }
 
 async function postGraphQL({
+  cookie,
   query,
+  token,
   variables,
 }: {
+  cookie?: string;
   query: string;
+  token?: string | null;
   variables?: Record<string, unknown>;
 }): Promise<{ body: any; status: number }> {
-  return postGraphQLToUrl(server.url, { query, variables });
+  return postGraphQLToUrl(server.url, { cookie, query, token, variables });
 }
 
 async function postGraphQLToUrl(serverUrl: string, {
+  cookie,
   query,
+  token,
   variables,
 }: {
+  cookie?: string;
   query: string;
+  token?: string | null;
   variables?: Record<string, unknown>;
 }): Promise<{ body: any; status: number }> {
   const response = await fetch(`${serverUrl}/graphql`, {
     method: 'POST',
     headers: {
-      authorization: `Bearer ${TEST_AUTH_TOKEN}`,
       'content-type': 'application/json',
+      ...(cookie ? { cookie } : {}),
+      ...(token === null ? {} : { authorization: token ?? `Bearer ${TEST_AUTH_TOKEN}` }),
     },
     body: JSON.stringify({
       query,
