@@ -272,6 +272,10 @@ export function AccessPage() {
           <p className="app-shell__subtext">
             Manage team visibility and editor access with the current RBAC model.
           </p>
+          <p className="app-shell__subtext">
+            System admins are bootstrapped separately through `ADMIN_EMAIL_ALLOWLIST` or
+            `pnpm --filter @involute/server admin:bootstrap`.
+          </p>
         </div>
       </header>
 
@@ -352,7 +356,7 @@ export function AccessPage() {
               <div>
                 <h2>Add or update member</h2>
                 <p className="app-shell__subtext">
-                  This is the minimal management UI. It upserts by email.
+                  This upserts a team member by email and leaves global admin bootstrapping to the server runtime.
                 </p>
               </div>
               <div className="access-form">

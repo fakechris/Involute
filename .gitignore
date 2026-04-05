@@ -2,6 +2,7 @@ docs/legacy
 node_modules
 dist
 .env
+.env.production
 .DS_Store
 !packages/server/prisma/.env
 .factory/library/
@@ -11,6 +12,7 @@ dist
 .factory/validation/web-ui/
 .tmp/*
 !.tmp/.gitkeep
+.backups/
 playwright-report
 test-results
 packages/server/src/*.js

@@ -37,7 +37,7 @@ Exit criteria:
 
 ## M2: Auth and team permissions
 
-Status: next, after deployment is pinned down.
+Status: done.
 
 Scope:
 
@@ -45,6 +45,7 @@ Scope:
 - add a real session-backed viewer model
 - start with Google OAuth rather than magic-link email
 - add `admin`, `team visibility`, and `team membership` edit boundaries
+- add a bootstrap path for the first admin without touching raw headers
 
 Exit criteria:
 

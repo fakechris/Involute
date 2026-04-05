@@ -26,19 +26,22 @@ services:
       - /bin/sh
       - -lc
     command: >
-      if [ "${PRISMA_ALLOW_DATA_LOSS:-false}" = "true" ]; then
-        pnpm --filter @involute/server exec prisma db push --accept-data-loss --skip-generate;
-      else
-        pnpm --filter @involute/server exec prisma db push --skip-generate ||
-        pnpm --filter @involute/server exec prisma migrate deploy;
+      if [ "${PRISMA_BASELINE_EXISTING_SCHEMA:-false}" = "true" ]; then
+        pnpm --filter @involute/server exec prisma migrate resolve --applied 20260405093000_init || true;
       fi &&
+      pnpm --filter @involute/server exec prisma migrate deploy &&
       if [ "${SEED_DATABASE:-true}" = "true" ]; then
         pnpm --filter @involute/server exec prisma db seed;
+      fi &&
+      if [ -n "${ADMIN_EMAIL_ALLOWLIST:-}" ]; then
+        pnpm --filter @involute/server exec tsx prisma/bootstrap-admin.ts;
       fi
     environment:
+      ADMIN_EMAIL_ALLOWLIST: ${ADMIN_EMAIL_ALLOWLIST:-}
       DATABASE_URL: postgresql://involute:involute@db:5432/involute?schema=public
-      PRISMA_ALLOW_DATA_LOSS: ${PRISMA_ALLOW_DATA_LOSS:-false}
+      PRISMA_BASELINE_EXISTING_SCHEMA: ${PRISMA_BASELINE_EXISTING_SCHEMA:-false}
       SEED_DATABASE: ${SEED_DATABASE:-true}
+      SEED_DEFAULT_ADMIN: ${SEED_DEFAULT_ADMIN:-false}
     restart: "no"
 
   server:
@@ -51,10 +54,16 @@ services:
       server-init:
         condition: service_completed_successfully
     environment:
+      ADMIN_EMAIL_ALLOWLIST: ${ADMIN_EMAIL_ALLOWLIST:-}
       ALLOW_ADMIN_FALLBACK: ${ALLOW_ADMIN_FALLBACK:-false}
       DATABASE_URL: postgresql://involute:involute@db:5432/involute?schema=public
       AUTH_TOKEN: ${AUTH_TOKEN:-changeme-set-your-token}
       VIEWER_ASSERTION_SECRET: ${VIEWER_ASSERTION_SECRET:-compose-viewer-secret}
+      GOOGLE_OAUTH_ADMIN_EMAILS: ${GOOGLE_OAUTH_ADMIN_EMAILS:-}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:4200/auth/google/callback}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:4201}
       PORT: 4200
     healthcheck:
       test:

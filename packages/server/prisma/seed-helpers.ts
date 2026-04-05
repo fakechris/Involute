@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 
+import { ensureAdminUsers } from './admin-helpers.ts';
 import {
   DEFAULT_ADMIN_EMAIL,
   DEFAULT_ADMIN_NAME,
@@ -18,7 +19,15 @@ export {
   DEFAULT_WORKFLOW_STATE_NAMES,
 };
 
-export async function seedDatabase(prisma: PrismaClient): Promise<void> {
+export interface SeedDatabaseOptions {
+  includeDefaultAdmin?: boolean;
+}
+
+export async function seedDatabase(
+  prisma: PrismaClient,
+  options: SeedDatabaseOptions = {},
+): Promise<void> {
+  const includeDefaultAdmin = options.includeDefaultAdmin ?? true;
   const team = await prisma.team.upsert({
     where: {
       key: DEFAULT_TEAM_KEY,
@@ -67,18 +76,9 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
     }
   }
 
-  await prisma.user.upsert({
-    where: {
-      email: DEFAULT_ADMIN_EMAIL,
-    },
-    create: {
-      email: DEFAULT_ADMIN_EMAIL,
-      globalRole: 'ADMIN',
-      name: DEFAULT_ADMIN_NAME,
-    },
-    update: {
-      globalRole: 'ADMIN',
-      name: DEFAULT_ADMIN_NAME,
-    },
-  });
+  if (includeDefaultAdmin) {
+    await ensureAdminUsers(prisma, [DEFAULT_ADMIN_EMAIL], {
+      defaultName: DEFAULT_ADMIN_NAME,
+    });
+  }
 }

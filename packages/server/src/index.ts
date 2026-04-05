@@ -85,7 +85,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   });
 
   const googleOAuth = {
-    adminEmails: options.googleOAuth?.adminEmails ?? environment.googleOAuthAdminEmails,
+    adminEmails: options.googleOAuth?.adminEmails ?? environment.adminEmailAllowlist,
     appOrigin: options.googleOAuth?.appOrigin ?? options.appOrigin ?? environment.appOrigin,
     clientId: options.googleOAuth?.clientId ?? environment.googleOAuthClientId,
     clientSecret: options.googleOAuth?.clientSecret ?? environment.googleOAuthClientSecret,

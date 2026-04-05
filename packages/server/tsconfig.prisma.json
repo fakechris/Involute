@@ -13,6 +13,7 @@
     "allowImportingTsExtensions": true
   },
   "include": [
-    "prisma/**/*.ts"
+    "prisma/**/*.ts",
+    "prisma.config.ts"
   ]
 }

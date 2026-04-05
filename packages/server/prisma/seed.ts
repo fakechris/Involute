@@ -8,7 +8,9 @@ loadProjectEnvironment();
 const prisma = new PrismaClient();
 
 async function main(): Promise<void> {
-  await seedDatabase(prisma);
+  await seedDatabase(prisma, {
+    includeDefaultAdmin: process.env.SEED_DEFAULT_ADMIN === 'true',
+  });
 }
 
 main()
