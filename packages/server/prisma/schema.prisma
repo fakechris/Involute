@@ -7,13 +7,31 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum GlobalRole {
+  ADMIN
+  USER
+}
+
+enum TeamVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+enum TeamMembershipRole {
+  VIEWER
+  EDITOR
+  OWNER
+}
+
 model Team {
   id              String          @id @default(uuid()) @db.Uuid
   key             String          @unique
   name            String
+  visibility      TeamVisibility  @default(PRIVATE)
   nextIssueNumber Int             @default(1)
   states          WorkflowState[]
   issues          Issue[]
+  memberships     TeamMembership[]
 
   @@index([key])
 }
@@ -41,8 +59,41 @@ model User {
   id             String    @id @default(uuid()) @db.Uuid
   name           String
   email          String    @unique
+  avatarUrl      String?
+  googleSubject  String?
+  globalRole     GlobalRole @default(USER)
   assignedIssues Issue[]   @relation("IssueAssignee")
   comments       Comment[]
+  memberships    TeamMembership[]
+  sessions       Session[]
+
+  @@index([googleSubject])
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model TeamMembership {
+  id        String             @id @default(uuid()) @db.Uuid
+  teamId    String             @db.Uuid
+  userId    String             @db.Uuid
+  role      TeamMembershipRole
+  createdAt DateTime           @default(now())
+  team      Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([teamId])
+  @@index([userId])
 }
 
 model Issue {

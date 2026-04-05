@@ -12,6 +12,7 @@ import {
 } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
+import { createSession } from './session.js';
 
 loadProjectEnvironment();
 
@@ -772,6 +773,53 @@ describe('GraphQL server core', () => {
       ]);
     }
   });
+
+  it('shows public teams and joined private teams to session users while hiding unrelated private teams', async () => {
+    const publicTeam = await createTeamWithStates(prisma, {
+      key: 'PUB',
+      name: 'Public Team',
+    });
+    const privateTeam = await createTeamWithStates(prisma, {
+      key: 'PRI',
+      name: 'Private Team',
+    });
+
+    await prisma.team.update({
+      where: {
+        id: publicTeam.id,
+      },
+      data: {
+        visibility: 'PUBLIC',
+      },
+    });
+    await prisma.teamMembership.create({
+      data: {
+        role: 'VIEWER',
+        teamId: privateTeam.id,
+        userId: fixture.importedUser.id,
+      },
+    });
+
+    const session = await createSession(prisma, fixture.importedUser.id, 60 * 60);
+    const response = await postGraphQL({
+      cookie: `involute_session=${encodeURIComponent(session.token)}`,
+      query: '{ teams { nodes { key visibility } } }',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.teams.nodes).toEqual([
+      {
+        key: 'PRI',
+        visibility: 'PRIVATE',
+      },
+      {
+        key: 'PUB',
+        visibility: 'PUBLIC',
+      },
+    ]);
+  });
+
 });
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<TestFixture> {
@@ -907,10 +955,12 @@ async function resetDatabase(prismaClient: PrismaClient): Promise<TestFixture> {
 }
 
 async function postGraphQL({
+  cookie,
   query,
   variables,
   token,
 }: {
+  cookie?: string;
   query: string;
   variables?: Record<string, unknown>;
   token?: string;
@@ -919,6 +969,7 @@ async function postGraphQL({
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      ...(cookie ? { cookie } : {}),
       ...(token ? { authorization: token } : {}),
     },
     body: JSON.stringify({

@@ -21,20 +21,34 @@ Create a repo-root `.env` file based on `.env.example`:
 DATABASE_URL=postgresql://involute:involute@127.0.0.1:5434/involute?schema=public
 AUTH_TOKEN=changeme-set-your-token
 VIEWER_ASSERTION_SECRET=compose-viewer-secret
+APP_ORIGIN=http://localhost:4201
+GOOGLE_OAUTH_CLIENT_ID=...
+GOOGLE_OAUTH_CLIENT_SECRET=...
+GOOGLE_OAUTH_REDIRECT_URI=http://localhost:4200/auth/google/callback
+GOOGLE_OAUTH_ADMIN_EMAILS=you@example.com
 PORT=4200
 ```
 
 Required server variables:
 
 - `DATABASE_URL` — PostgreSQL connection string
-- `AUTH_TOKEN` — bearer token expected by the API and CLI clients
-- `VIEWER_ASSERTION_SECRET` — HMAC secret used to verify signed viewer assertions for trusted impersonation
+- `APP_ORIGIN` — browser origin used for cookie/CORS handling and post-login redirects
 - `PORT` — API port (defaults to `4200`)
+
+Optional but recommended server variables:
+
+- `AUTH_TOKEN` — trusted bearer token used by the CLI and local/dev bootstrap flows
+- `VIEWER_ASSERTION_SECRET` — HMAC secret used to verify signed viewer assertions for trusted impersonation
+- `GOOGLE_OAUTH_CLIENT_ID` — Google OAuth client id for browser sign-in
+- `GOOGLE_OAUTH_CLIENT_SECRET` — Google OAuth client secret
+- `GOOGLE_OAUTH_REDIRECT_URI` — Google callback URL handled by the API server
+- `GOOGLE_OAUTH_ADMIN_EMAILS` — comma-separated allowlist of emails that should become `ADMIN`
+- `SESSION_TTL_SECONDS` — browser session lifetime in seconds
 
 Optional web runtime variables:
 
 - `VITE_INVOLUTE_GRAPHQL_URL` — override the web app GraphQL endpoint (default: `http://localhost:4200/graphql`)
-- `VITE_INVOLUTE_AUTH_TOKEN` — provide the web app bearer token at build/dev time
+- `VITE_INVOLUTE_AUTH_TOKEN` — trusted local/dev bearer token for bypassing browser login
 - `VITE_INVOLUTE_VIEWER_ASSERTION` — signed viewer assertion to act as a specific user without exposing the server secret
 
 ## Quick start
@@ -53,6 +67,8 @@ curl http://localhost:4201
 ```
 
 Then open `http://localhost:4201` in your browser.
+
+If Google OAuth is configured, the web nav will expose `Sign in with Google` and use session cookies. If it is not configured, the browser can still talk to the API with `VITE_INVOLUTE_AUTH_TOKEN` for trusted local development.
 
 Compose defaults:
 
@@ -103,7 +119,7 @@ Recommended acceptance checks:
 Start the API:
 
 ```bash
-DATABASE_URL="postgresql://involute:involute@127.0.0.1:5434/involute?schema=public" AUTH_TOKEN="changeme-set-your-token" VIEWER_ASSERTION_SECRET="compose-viewer-secret" pnpm --filter @involute/server exec tsx src/index.ts
+DATABASE_URL="postgresql://involute:involute@127.0.0.1:5434/involute?schema=public" AUTH_TOKEN="changeme-set-your-token" VIEWER_ASSERTION_SECRET="compose-viewer-secret" APP_ORIGIN="http://127.0.0.1:4201" GOOGLE_OAUTH_REDIRECT_URI="http://127.0.0.1:4200/auth/google/callback" pnpm --filter @involute/server exec tsx src/index.ts
 ```
 
 Start the web app:
@@ -127,6 +143,15 @@ pnpm --filter @involute/cli exec node dist/index.js config set viewer-assertion 
 ```
 
 The web UI can use the same signed assertion via `VITE_INVOLUTE_VIEWER_ASSERTION` or localStorage key `involute.viewerAssertion`.
+
+## Auth and permissions
+
+- Browser auth now supports Google OAuth plus session cookies.
+- `AUTH_TOKEN` and viewer assertions remain available for trusted CLI/dev flows.
+- Teams now have `PUBLIC` / `PRIVATE` visibility.
+- Team edits are gated by membership role: `EDITOR` or `OWNER`.
+- Team access management is currently exposed through GraphQL mutations: `teamUpdateAccess`, `teamMembershipUpsert`, and `teamMembershipRemove`.
+- A dedicated team-admin UI is still pending; this is the backend and runtime foundation.
 
 ## Quality gates
 
@@ -177,8 +202,9 @@ pnpm --filter @involute/cli exec node dist/index.js import team --token "$LINEAR
 
 ## Current focus
 
-- Make single-team import a repeatable acceptance loop
-- Keep the compose stack and CI reproducible
-- Lock the core board lifecycle down with E2E before the larger UI/UX redesign
+- Make the current stack deployable on VPS and Railway
+- Replace the shared-token-only model with Google OAuth plus sessions
+- Add team visibility and edit permissions without regressing the single-team import loop
+- Keep the compose stack and CI reproducible while the product boundary hardens
 
 See [docs/vision.md](docs/vision.md) and [docs/milestones.md](docs/milestones.md) for the product direction.

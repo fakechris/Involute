@@ -18,6 +18,8 @@ export const WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE =
   'Workflow state does not belong to the issue team.';
 export const TEAM_HAS_NO_WORKFLOW_STATES_MESSAGE =
   'The selected team does not have any workflow states.';
+export const TEAM_WRITE_FORBIDDEN_MESSAGE = 'You do not have edit access to this team.';
+export const TEAM_MANAGE_FORBIDDEN_MESSAGE = 'You do not have access to manage this team.';
 
 const exposedErrorCodes = new Map<string, string>([
   [NOT_AUTHENTICATED_MESSAGE, 'UNAUTHENTICATED'],
@@ -34,6 +36,8 @@ const exposedErrorCodes = new Map<string, string>([
   [WORKFLOW_STATE_TEAM_CREATE_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
   [WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
   [TEAM_HAS_NO_WORKFLOW_STATES_MESSAGE, 'BAD_USER_INPUT'],
+  [TEAM_WRITE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
+  [TEAM_MANAGE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
 ]);
 
 export function createNotAuthenticatedError(): GraphQLError {
@@ -49,7 +53,11 @@ export function createValidationError(message: string): GraphQLError {
 }
 
 export function getExposedError(error: unknown): GraphQLError | null {
-  if (error instanceof GraphQLError && exposedErrorCodes.has(error.message)) {
+  if (
+    error instanceof GraphQLError &&
+    typeof error.extensions?.code === 'string' &&
+    error.extensions.code.length > 0
+  ) {
     return error;
   }
 

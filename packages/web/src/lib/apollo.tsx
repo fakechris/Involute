@@ -116,6 +116,7 @@ export function getGraphqlUrlDetails(): {
 
 export function createApolloClient() {
   const httpLink = new HttpLink({
+    credentials: 'include',
     uri: getGraphqlUrl(),
   });
 
@@ -148,9 +149,9 @@ export function getBoardBootstrapErrorMessage(error: Error): {
   if (message.includes('not authenticated') || message.includes('unauthenticated')) {
     if (source === 'missing') {
       return {
-        title: 'Runtime auth token missing',
+        title: 'Authentication required',
         description:
-          'The board could not find a runtime auth token. Set `VITE_INVOLUTE_AUTH_TOKEN` or store the token in localStorage under `involute.authToken`, then reload.',
+          'Sign in with Google to use the board, or set `VITE_INVOLUTE_AUTH_TOKEN` / localStorage `involute.authToken` for trusted local development.',
       };
     }
 
@@ -168,6 +169,12 @@ export function getBoardBootstrapErrorMessage(error: Error): {
     description:
       'We could not load the board right now. Please confirm the API server is running and try again.',
   };
+}
+
+export function getServerBaseUrl(): string {
+  const graphqlUrl = new URL(getGraphqlUrl());
+
+  return graphqlUrl.origin;
 }
 
 export function AppApolloProvider({ children }: PropsWithChildren) {

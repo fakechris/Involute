@@ -5,21 +5,29 @@ import { afterEach, beforeEach, vi } from 'vitest';
 
 import { App } from '../App';
 import type {
+  AccessPageQueryData,
   BoardPageQueryData,
   CommentDeleteMutationData,
   CommentCreateMutationData,
   IssueDeleteMutationData,
   IssueCreateMutationData,
   IssueSummary,
+  TeamMembershipRemoveMutationData,
+  TeamMembershipUpsertMutationData,
+  TeamUpdateAccessMutationData,
   IssueUpdateMutationData,
 } from '../board/types';
 export type {
+  AccessPageQueryData,
   BoardPageQueryData,
   CommentDeleteMutationData,
   CommentCreateMutationData,
   IssueDeleteMutationData,
   IssueCreateMutationData,
   IssueSummary,
+  TeamMembershipRemoveMutationData,
+  TeamMembershipUpsertMutationData,
+  TeamUpdateAccessMutationData,
   IssueUpdateMutationData,
 };
 
@@ -34,10 +42,26 @@ type DndMockSet = {
   useSensors: ReturnType<typeof vi.fn>;
 };
 
+function getDocumentSource(document: unknown): string {
+  if (typeof document === 'string') {
+    return document;
+  }
+
+  if (document && typeof document === 'object') {
+    const locSource = (document as { loc?: { source?: { body?: string } } }).loc?.source?.body;
+
+    if (typeof locSource === 'string') {
+      return locSource;
+    }
+  }
+
+  return String(document);
+}
+
 const hoistedApolloMocks = vi.hoisted<ApolloMockSet>(() => ({
   useQuery: vi.fn(),
   useMutation: vi.fn((document) => {
-    const source = String(document);
+    const source = getDocumentSource(document);
 
     if (source.includes('mutation CommentCreate')) {
       return [vi.fn().mockResolvedValue({ data: { commentCreate: { success: true, comment: null } } })];
@@ -49,6 +73,18 @@ const hoistedApolloMocks = vi.hoisted<ApolloMockSet>(() => ({
 
     if (source.includes('mutation IssueDelete')) {
       return [vi.fn().mockResolvedValue({ data: { issueDelete: { success: true, issueId: 'issue-1' } } })];
+    }
+
+    if (source.includes('mutation TeamUpdateAccess')) {
+      return [vi.fn().mockResolvedValue({ data: { teamUpdateAccess: { success: true, team: null } } })];
+    }
+
+    if (source.includes('mutation TeamMembershipUpsert')) {
+      return [vi.fn().mockResolvedValue({ data: { teamMembershipUpsert: { success: true, membership: null } } })];
+    }
+
+    if (source.includes('mutation TeamMembershipRemove')) {
+      return [vi.fn().mockResolvedValue({ data: { teamMembershipRemove: { success: true, membershipId: 'membership-1' } } })];
     }
 
     return [vi.fn()];
@@ -111,10 +147,29 @@ beforeEach(() => {
   dndMocks.lastContextProps = null;
   dndMocks.useSensor.mockClear();
   dndMocks.useSensors.mockClear();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          authMode: 'none',
+          authenticated: false,
+          googleOAuthConfigured: false,
+          viewer: null,
+        }),
+        {
+          headers: {
+            'content-type': 'application/json; charset=utf-8',
+          },
+          status: 401,
+        },
+      ),
+    ),
+  );
   apolloMocks.useQuery.mockReset();
   apolloMocks.useMutation.mockReset();
   apolloMocks.useMutation.mockImplementation((document) => {
-    const source = String(document);
+    const source = getDocumentSource(document);
 
     if (source.includes('mutation CommentCreate')) {
       return [vi.fn().mockResolvedValue({ data: { commentCreate: { success: true, comment: null } } })];
@@ -128,6 +183,18 @@ beforeEach(() => {
       return [vi.fn().mockResolvedValue({ data: { issueDelete: { success: true, issueId: 'issue-1' } } })];
     }
 
+    if (source.includes('mutation TeamUpdateAccess')) {
+      return [vi.fn().mockResolvedValue({ data: { teamUpdateAccess: { success: true, team: null } } })];
+    }
+
+    if (source.includes('mutation TeamMembershipUpsert')) {
+      return [vi.fn().mockResolvedValue({ data: { teamMembershipUpsert: { success: true, membership: null } } })];
+    }
+
+    if (source.includes('mutation TeamMembershipRemove')) {
+      return [vi.fn().mockResolvedValue({ data: { teamMembershipRemove: { success: true, membershipId: 'membership-1' } } })];
+    }
+
     return [vi.fn()];
   });
 });
@@ -136,9 +203,39 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   window.localStorage.clear();
   window.history.replaceState({}, '', '/');
 });
+
+export function mockSessionState(
+  state: {
+    authMode?: 'none' | 'session' | 'token';
+    authenticated?: boolean;
+    googleOAuthConfigured?: boolean;
+    viewer?: { email: string; globalRole: 'ADMIN' | 'USER'; id: string; name: string } | null;
+  },
+) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          authMode: state.authMode ?? 'none',
+          authenticated: state.authenticated ?? false,
+          googleOAuthConfigured: state.googleOAuthConfigured ?? false,
+          viewer: state.viewer ?? null,
+        }),
+        {
+          headers: {
+            'content-type': 'application/json; charset=utf-8',
+          },
+          status: state.authenticated ? 200 : 401,
+        },
+      ),
+    ),
+  );
+}
 
 export const boardQueryResult: BoardPageQueryData = {
   teams: {
@@ -250,7 +347,46 @@ export const boardQueryResult: BoardPageQueryData = {
   },
 };
 
+export const accessQueryResult: AccessPageQueryData = {
+  viewer: {
+    email: 'admin@involute.local',
+    globalRole: 'ADMIN',
+    id: 'user-1',
+    name: 'Admin',
+  },
+  teams: {
+    nodes: [
+      {
+        ...boardQueryResult.teams.nodes[0]!,
+        memberships: {
+          nodes: [
+            {
+              id: 'membership-1',
+              role: 'OWNER',
+              user: {
+                email: 'admin@involute.local',
+                globalRole: 'ADMIN',
+                id: 'user-1',
+                name: 'Admin',
+              },
+            },
+          ],
+        },
+        visibility: 'PRIVATE',
+      },
+      {
+        ...boardQueryResult.teams.nodes[1]!,
+        memberships: {
+          nodes: [],
+        },
+        visibility: 'PUBLIC',
+      },
+    ],
+  },
+};
+
 type QueryState = {
+  accessData?: AccessPageQueryData;
   data?: BoardPageQueryData;
   error?: Error;
   fetchMore?: ReturnType<typeof vi.fn>;
@@ -277,6 +413,16 @@ export function renderApp(
     : maybeInitialEntries;
 
   apolloMocks.useQuery.mockImplementation((_, options) => {
+    const source = getDocumentSource(_);
+
+    if (source.includes('query AccessPage')) {
+      return {
+        data: queryState.accessData ?? accessQueryResult,
+        error: queryState.error,
+        loading: queryState.loading ?? false,
+      };
+    }
+
     if (options?.variables && 'id' in options.variables) {
       const issueId = String(options.variables.id);
       return {

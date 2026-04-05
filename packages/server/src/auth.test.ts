@@ -114,6 +114,38 @@ describe('auth', () => {
     expect(context.viewer).toBeNull();
   });
 
+  it('resolves the viewer from a valid session cookie without requiring a bearer token', async () => {
+    const context = await createGraphQLContext({
+      authToken: 'shared-secret',
+      prisma: {
+        session: {
+          findUnique: vi.fn().mockResolvedValue({
+            expiresAt: new Date(Date.now() + 60_000),
+            id: 'session-1',
+            user: {
+              email: 'person@example.com',
+              globalRole: 'USER',
+              id: 'user-1',
+              name: 'Person',
+            },
+          }),
+        },
+      } as never,
+      request: new Request('http://localhost/graphql', {
+        headers: {
+          cookie: 'involute_session=session-token',
+        },
+      }),
+    });
+
+    expect(context.authMode).toBe('session');
+    expect(context.isTrustedSystem).toBe(false);
+    expect(context.viewer).toMatchObject({
+      email: 'person@example.com',
+      id: 'user-1',
+    });
+  });
+
   it('ignores invalid viewer assertions instead of silently falling back to admin', async () => {
     const findUnique = vi.fn();
 

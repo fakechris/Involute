@@ -73,9 +73,11 @@ export async function seedDatabase(prisma: PrismaClient): Promise<void> {
     },
     create: {
       email: DEFAULT_ADMIN_EMAIL,
+      globalRole: 'ADMIN',
       name: DEFAULT_ADMIN_NAME,
     },
     update: {
+      globalRole: 'ADMIN',
       name: DEFAULT_ADMIN_NAME,
     },
   });

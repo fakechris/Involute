@@ -62,9 +62,35 @@ select {
   font-weight: 700;
 }
 
+.app-shell__brand-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
 .app-shell__links {
   display: flex;
   gap: 0.75rem;
+}
+
+.app-shell__session {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.app-shell__session-status {
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.app-shell__session-action {
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.82);
+  padding: 0.45rem 0.85rem;
+  color: #e2e8f0;
+  cursor: pointer;
 }
 
 .app-shell__link {
@@ -127,6 +153,70 @@ select {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.access-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.access-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 1rem;
+  background: rgba(15, 23, 42, 0.78);
+  padding: 1rem;
+}
+
+.access-panel__section {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  padding-top: 1rem;
+}
+
+.access-panel__section:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.access-panel__section h2 {
+  margin: 0 0 0.35rem;
+}
+
+.access-member-list {
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.access-member-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 0.85rem;
+  background: rgba(2, 6, 23, 0.35);
+  padding: 0.85rem 1rem;
+}
+
+.access-member-card p {
+  margin: 0.2rem 0 0;
+  color: #94a3b8;
+}
+
+.access-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  width: 100%;
 }
 
 .backlog-table-wrapper {

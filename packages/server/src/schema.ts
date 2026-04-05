@@ -5,12 +5,16 @@ import type {
   Prisma,
   PrismaClient,
   Team,
+  TeamMembership,
+  TeamMembershipRole,
+  TeamVisibility,
   User,
   WorkflowState,
 } from '@prisma/client';
 
 import { makeExecutableSchema } from '@graphql-tools/schema';
 import {
+  GraphQLError,
   GraphQLScalarType,
   Kind,
   type FieldNode,
@@ -19,7 +23,17 @@ import {
   type SelectionSetNode,
 } from 'graphql';
 
-import { getExposedError, isPrismaInvalidInputError } from './errors.js';
+import { createNotFoundError, getExposedError, isPrismaInvalidInputError, TEAM_NOT_FOUND_MESSAGE } from './errors.js';
+import {
+  assertCanDeleteComment,
+  assertCanManageTeam,
+  assertCanReadTeam,
+  assertCanWriteIssue,
+  assertCanWriteTeam,
+  buildReadableIssueWhere,
+  buildReadableTeamWhere,
+  buildVisibleUsersWhere,
+} from './access-control.js';
 import type {
   CreateCommentInput,
   CreateIssueInput,
@@ -31,7 +45,8 @@ import { requireAuthentication, type GraphQLContext } from './auth.js';
 import { createComment, createIssue, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
 
-type TeamParent = Team & { states?: WorkflowState[] | null };
+type TeamParent = Team & { memberships?: TeamMembershipParent[] | null; states?: WorkflowState[] | null };
+type TeamMembershipParent = TeamMembership & { user?: User | null };
 type UserParent = User;
 type CommentParent = Comment & { user?: User | null };
 type IssueParent = Issue & {
@@ -140,6 +155,7 @@ const typeDefs = /* GraphQL */ `
   scalar DateTime
 
   type Query {
+    viewer: User
     issue(id: String!): Issue
     issues(first: Int!, after: String, filter: IssueFilter): IssueConnection!
     teams(filter: TeamFilter): TeamConnection!
@@ -153,13 +169,35 @@ const typeDefs = /* GraphQL */ `
     issueDelete(id: String!): IssueDeletePayload!
     commentCreate(input: CommentCreateInput!): CommentCreatePayload!
     commentDelete(id: String!): CommentDeletePayload!
+    teamUpdateAccess(input: TeamUpdateAccessInput!): TeamUpdateAccessPayload!
+    teamMembershipUpsert(input: TeamMembershipUpsertInput!): TeamMembershipUpsertPayload!
+    teamMembershipRemove(input: TeamMembershipRemoveInput!): TeamMembershipRemovePayload!
   }
 
   type Team {
     id: ID!
     key: String!
     name: String!
+    visibility: TeamVisibility!
     states: WorkflowStateConnection!
+    memberships: TeamMembershipConnection!
+  }
+
+  enum TeamVisibility {
+    PRIVATE
+    PUBLIC
+  }
+
+  enum TeamMembershipRole {
+    VIEWER
+    EDITOR
+    OWNER
+  }
+
+  type TeamMembership {
+    id: ID!
+    role: TeamMembershipRole!
+    user: User!
   }
 
   type WorkflowState {
@@ -177,6 +215,12 @@ const typeDefs = /* GraphQL */ `
     name: String
     email: String
     isMe: Boolean
+    globalRole: GlobalRole!
+  }
+
+  enum GlobalRole {
+    ADMIN
+    USER
   }
 
   type Comment {
@@ -225,6 +269,10 @@ const typeDefs = /* GraphQL */ `
 
   type UserConnection {
     nodes: [User!]!
+  }
+
+  type TeamMembershipConnection {
+    nodes: [TeamMembership!]!
   }
 
   type CommentConnection {
@@ -301,6 +349,23 @@ const typeDefs = /* GraphQL */ `
     body: String!
   }
 
+  input TeamUpdateAccessInput {
+    teamId: String!
+    visibility: TeamVisibility!
+  }
+
+  input TeamMembershipUpsertInput {
+    teamId: String!
+    email: String!
+    name: String
+    role: TeamMembershipRole!
+  }
+
+  input TeamMembershipRemoveInput {
+    teamId: String!
+    userId: String!
+  }
+
   type IssueCreatePayload {
     success: Boolean!
     issue: Issue
@@ -325,11 +390,28 @@ const typeDefs = /* GraphQL */ `
     success: Boolean!
     commentId: ID
   }
+
+  type TeamUpdateAccessPayload {
+    success: Boolean!
+    team: Team
+  }
+
+  type TeamMembershipUpsertPayload {
+    success: Boolean!
+    membership: TeamMembership
+  }
+
+  type TeamMembershipRemovePayload {
+    success: Boolean!
+    membershipId: ID
+  }
 `;
 
 const resolvers = {
   DateTime: DateTimeScalar,
   Query: {
+    viewer: (_parent: unknown, _args: Record<string, never>, context: GraphQLContext): User | null =>
+      context.viewer,
     issue: async (
       _parent: unknown,
       args: { id: string },
@@ -344,6 +426,7 @@ const resolvers = {
         });
 
         if (issue) {
+          await assertCanReadTeam(context.prisma, context, issue.teamId);
           return issue;
         }
       } catch (error) {
@@ -352,12 +435,18 @@ const resolvers = {
         }
       }
 
-      return context.prisma.issue.findUnique({
+      const issue = await context.prisma.issue.findUnique({
         where: {
           identifier: args.id,
         },
         include: buildIssueDetailInclude(),
       });
+
+      if (issue) {
+        await assertCanReadTeam(context.prisma, context, issue.teamId);
+      }
+
+      return issue;
     },
     issues: async (
       _parent: unknown,
@@ -367,7 +456,10 @@ const resolvers = {
     ): Promise<{ nodes: IssueParent[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
       const first = clampConnectionFirst(args.first, MAX_ISSUES_CONNECTION_FIRST);
       const where = combineIssueWhere(
-        buildIssueWhere(args.filter, context.viewer?.id ?? null),
+        combineIssueWhere(
+          buildIssueWhere(args.filter, context.viewer?.id ?? null),
+          buildReadableIssueWhere(context),
+        ),
         buildIssueCursorWhere(args.after),
       );
       const requestedIssueFields = getRequestedIssueConnectionFields(info);
@@ -392,7 +484,7 @@ const resolvers = {
       args: { filter?: TeamFilterInput | null },
       context: GraphQLContext,
     ): Promise<{ nodes: Team[] }> => {
-      const where = buildTeamWhere(args.filter);
+      const where = combineTeamWhere(buildTeamWhere(args.filter), buildReadableTeamWhere(context));
 
       return {
         nodes: await context.prisma.team.findMany({
@@ -423,11 +515,16 @@ const resolvers = {
       _parent: unknown,
       _args: Record<string, never>,
       context: GraphQLContext,
-    ): Promise<{ nodes: User[] }> => ({
-      nodes: await context.prisma.user.findMany({
-        orderBy: [{ email: 'asc' }, { id: 'asc' }],
-      }),
-    }),
+    ): Promise<{ nodes: User[] }> => {
+      const where = buildVisibleUsersWhere(context);
+
+      return {
+        nodes: await context.prisma.user.findMany({
+          ...(where ? { where } : {}),
+          orderBy: [{ email: 'asc' }, { id: 'asc' }],
+        }),
+      };
+    },
   },
   Mutation: {
     issueCreate: async (
@@ -436,6 +533,7 @@ const resolvers = {
       context: GraphQLContext,
     ): Promise<{ issue: IssueParent | null; success: boolean }> =>
       runMutation(async () => {
+        await assertCanWriteTeam(context.prisma, context, args.input.teamId);
         const issue = await createIssue(context.prisma, args.input);
 
         return {
@@ -452,6 +550,7 @@ const resolvers = {
       context: GraphQLContext,
     ): Promise<{ issue: IssueParent | null; success: boolean }> =>
       runMutation(async () => {
+        await assertCanWriteIssue(context.prisma, context, args.id);
         const issue = await updateIssue(context.prisma, args.id, args.input);
 
         return {
@@ -468,6 +567,7 @@ const resolvers = {
       context: GraphQLContext,
     ): Promise<{ issueId: string | null; success: boolean }> =>
       runMutation(async () => {
+        await assertCanWriteIssue(context.prisma, context, args.id);
         const issue = await deleteIssue(context.prisma, args.id);
 
         return {
@@ -486,6 +586,7 @@ const resolvers = {
       const viewer = requireAuthentication(context);
 
       return runMutation(async () => {
+        await assertCanWriteIssue(context.prisma, context, args.input.issueId);
         const createdComment = await createComment(context.prisma, args.input, viewer.id);
 
         return {
@@ -506,6 +607,7 @@ const resolvers = {
       context: GraphQLContext,
     ): Promise<{ commentId: string | null; success: boolean }> =>
       runMutation(async () => {
+        await assertCanDeleteComment(context.prisma, context, args.id);
         const comment = await deleteComment(context.prisma, args.id);
 
         return {
@@ -514,6 +616,106 @@ const resolvers = {
         };
       }, {
         commentId: null,
+        success: false as const,
+      }),
+    teamUpdateAccess: async (
+      _parent: unknown,
+      args: { input: { teamId: string; visibility: TeamVisibility } },
+      context: GraphQLContext,
+    ): Promise<{ success: boolean; team: TeamParent | null }> =>
+      runMutation(async () => {
+        await assertCanManageTeam(context.prisma, context, args.input.teamId);
+        const team = await context.prisma.team.update({
+          where: {
+            id: args.input.teamId,
+          },
+          data: {
+            visibility: args.input.visibility,
+          },
+        });
+
+        return {
+          success: true as const,
+          team,
+        };
+      }, {
+        success: false as const,
+        team: null,
+      }),
+    teamMembershipUpsert: async (
+      _parent: unknown,
+      args: { input: { email: string; name?: string | null; role: TeamMembershipRole; teamId: string } },
+      context: GraphQLContext,
+    ): Promise<{ membership: TeamMembershipParent | null; success: boolean }> =>
+      runMutation(async () => {
+        await assertCanManageTeam(context.prisma, context, args.input.teamId);
+        const user = await upsertTeamMemberUser(context.prisma, args.input.email, args.input.name ?? null);
+        const membership = await context.prisma.teamMembership.upsert({
+          where: {
+            teamId_userId: {
+              teamId: args.input.teamId,
+              userId: user.id,
+            },
+          },
+          create: {
+            role: args.input.role,
+            teamId: args.input.teamId,
+            userId: user.id,
+          },
+          update: {
+            role: args.input.role,
+          },
+          include: {
+            user: true,
+          },
+        });
+
+        return {
+          membership,
+          success: true as const,
+        };
+      }, {
+        membership: null,
+        success: false as const,
+      }),
+    teamMembershipRemove: async (
+      _parent: unknown,
+      args: { input: { teamId: string; userId: string } },
+      context: GraphQLContext,
+    ): Promise<{ membershipId: string | null; success: boolean }> =>
+      runMutation(async () => {
+        await assertCanManageTeam(context.prisma, context, args.input.teamId);
+        const membership = await context.prisma.teamMembership.findUnique({
+          where: {
+            teamId_userId: {
+              teamId: args.input.teamId,
+              userId: args.input.userId,
+            },
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        if (!membership) {
+          throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
+        }
+
+        await context.prisma.teamMembership.delete({
+          where: {
+            teamId_userId: {
+              teamId: args.input.teamId,
+              userId: args.input.userId,
+            },
+          },
+        });
+
+        return {
+          membershipId: membership.id,
+          success: true as const,
+        };
+      }, {
+        membershipId: null,
         success: false as const,
       }),
   },
@@ -535,10 +737,41 @@ const resolvers = {
         nodes: orderWorkflowStates(states),
       };
     },
+    memberships: async (
+      parent: TeamParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<{ nodes: TeamMembershipParent[] }> => ({
+      nodes:
+        parent.memberships ??
+        (await context.prisma.teamMembership.findMany({
+          where: {
+            teamId: parent.id,
+          },
+          include: {
+            user: true,
+          },
+          orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
+        })),
+    }),
   },
   User: {
     isMe: (parent: UserParent, _args: Record<string, never>, context: GraphQLContext): boolean =>
       context.viewer?.id === parent.id,
+    globalRole: (parent: UserParent): User['globalRole'] => parent.globalRole,
+  },
+  TeamMembership: {
+    user: async (
+      parent: TeamMembershipParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<User> =>
+      parent.user ??
+      context.prisma.user.findUniqueOrThrow({
+        where: {
+          id: parent.userId,
+        },
+      }),
   },
   Comment: {
     user: async (
@@ -728,6 +961,23 @@ function buildIssueLabelWhere(filter: IssueLabelFilterInput | null | undefined) 
   };
 }
 
+function combineTeamWhere(
+  left: Prisma.TeamWhereInput | undefined,
+  right: Prisma.TeamWhereInput | undefined,
+): Prisma.TeamWhereInput | undefined {
+  if (!left) {
+    return right;
+  }
+
+  if (!right) {
+    return left;
+  }
+
+  return {
+    AND: [left, right],
+  };
+}
+
 function serializeDateTime(value: unknown): string {
   if (value instanceof Date) {
     return value.toISOString();
@@ -887,13 +1137,43 @@ async function runMutation<TResult extends { success: true }, TFallback extends 
   try {
     return await operation();
   } catch (error) {
-    if (getExposedError(error) || isPrismaInvalidInputError(error)) {
+    if (error instanceof GraphQLError || getExposedError(error) || isPrismaInvalidInputError(error)) {
       return fallback;
     }
 
     throw error;
   }
 }
+
+async function upsertTeamMemberUser(
+  prisma: PrismaClient,
+  email: string,
+  name: string | null,
+): Promise<User> {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  return prisma.user.upsert({
+    where: {
+      email: normalizedEmail,
+    },
+    create: {
+      email: normalizedEmail,
+      name: name?.trim() || fallbackUserName(normalizedEmail),
+    },
+    update: name?.trim()
+      ? {
+          name: name.trim(),
+        }
+      : {},
+  });
+}
+
+function fallbackUserName(email: string): string {
+  const localPart = email.split('@')[0]?.trim();
+
+  return localPart || email;
+}
+
 function getRequestedIssueConnectionFields(info: GraphQLResolveInfo): Set<string> {
   const fieldNames = new Set<string>();
 

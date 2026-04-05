@@ -9,7 +9,9 @@ import { GraphQLError } from 'graphql';
 import { createYoga } from 'graphql-yoga';
 
 import { createAuthenticationPlugin, createGraphQLContext } from './auth.js';
+import { getAllowedBrowserOrigins, handleAuthRoutes } from './auth-routes.js';
 import { getExposedError } from './errors.js';
+import type { GoogleOAuthConfiguration } from './google-oauth.js';
 import { createGraphQLSchema } from './schema.js';
 import { getServerEnvironment, loadServerEnvironment, type ServerEnvironment } from './environment.js';
 
@@ -18,10 +20,13 @@ loadServerEnvironment();
 export type { ServerEnvironment };
 
 export interface StartServerOptions {
+  appOrigin?: string;
   allowAdminFallback?: boolean;
   authToken?: string;
+  googleOAuth?: Partial<GoogleOAuthConfiguration>;
   port?: number;
   prisma?: PrismaClient;
+  sessionTtlSeconds?: number;
   viewerAssertionSecret?: string | null;
 }
 
@@ -45,6 +50,10 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   }
 
   const yoga = createYoga({
+    cors: {
+      credentials: true,
+      origin: getAllowedBrowserOrigins(options.appOrigin ?? environment.appOrigin),
+    },
     context: async ({ request }) =>
       createGraphQLContext({
         allowAdminFallback: options.allowAdminFallback ?? environment.allowAdminFallback,
@@ -66,9 +75,23 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
         return new GraphQLError(message);
       },
     },
-    plugins: [createAuthenticationPlugin(options.authToken ?? environment.authToken)],
+    plugins: [createAuthenticationPlugin({
+      allowAdminFallback: options.allowAdminFallback ?? environment.allowAdminFallback,
+      authToken: options.authToken ?? environment.authToken,
+      prisma,
+      viewerAssertionSecret: options.viewerAssertionSecret ?? environment.viewerAssertionSecret,
+    })],
     schema: createGraphQLSchema(prisma),
   });
+
+  const googleOAuth = {
+    adminEmails: options.googleOAuth?.adminEmails ?? environment.googleOAuthAdminEmails,
+    appOrigin: options.googleOAuth?.appOrigin ?? options.appOrigin ?? environment.appOrigin,
+    clientId: options.googleOAuth?.clientId ?? environment.googleOAuthClientId,
+    clientSecret: options.googleOAuth?.clientSecret ?? environment.googleOAuthClientSecret,
+    redirectUri: options.googleOAuth?.redirectUri ?? environment.googleOAuthRedirectUri,
+    scopes: options.googleOAuth?.scopes ?? ['openid', 'email', 'profile'],
+  } satisfies GoogleOAuthConfiguration;
 
   const httpServer = createServer((request, response) => {
     if (request.method === 'GET' && getPathname(request.url) === '/health') {
@@ -78,7 +101,30 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       return;
     }
 
-    yoga(request, response);
+    handleAuthRoutes({
+      allowAdminFallback: options.allowAdminFallback ?? environment.allowAdminFallback,
+      appOrigin: options.appOrigin ?? environment.appOrigin,
+      authToken: options.authToken ?? environment.authToken,
+      googleOAuth,
+      prisma,
+      request,
+      response,
+      sessionTtlSeconds: options.sessionTtlSeconds ?? environment.sessionTtlSeconds,
+      viewerAssertionSecret: options.viewerAssertionSecret ?? environment.viewerAssertionSecret,
+    }).then((handled) => {
+      if (handled) {
+        return;
+      }
+
+      yoga(request, response);
+    }).catch((error: unknown) => {
+      response.statusCode = 500;
+      response.setHeader('content-type', 'application/json; charset=utf-8');
+      response.end(JSON.stringify({
+        error: error instanceof Error ? error.message : 'Internal server error',
+      }));
+    });
+
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -130,6 +176,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
 async function main(): Promise<void> {
   const environment = getServerEnvironment();
   const startedServer = await startServer({
+    appOrigin: environment.appOrigin,
     allowAdminFallback: environment.allowAdminFallback,
     authToken: environment.authToken,
     port: environment.port,

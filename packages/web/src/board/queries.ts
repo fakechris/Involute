@@ -259,6 +259,102 @@ export const ISSUE_PAGE_QUERY = gql`
   }
 `;
 
+export const ACCESS_PAGE_QUERY = gql`
+  query AccessPage {
+    viewer {
+      id
+      name
+      email
+      globalRole
+    }
+    teams {
+      nodes {
+        id
+        key
+        name
+        visibility
+        memberships {
+          nodes {
+            id
+            role
+            user {
+              id
+              name
+              email
+              globalRole
+            }
+          }
+        }
+        states {
+          nodes {
+            id
+            name
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const TEAM_UPDATE_ACCESS_MUTATION = gql`
+  mutation TeamUpdateAccess($input: TeamUpdateAccessInput!) {
+    teamUpdateAccess(input: $input) {
+      success
+      team {
+        id
+        key
+        name
+        visibility
+        memberships {
+          nodes {
+            id
+            role
+            user {
+              id
+              name
+              email
+              globalRole
+            }
+          }
+        }
+        states {
+          nodes {
+            id
+            name
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const TEAM_MEMBERSHIP_UPSERT_MUTATION = gql`
+  mutation TeamMembershipUpsert($input: TeamMembershipUpsertInput!) {
+    teamMembershipUpsert(input: $input) {
+      success
+      membership {
+        id
+        role
+        user {
+          id
+          name
+          email
+          globalRole
+        }
+      }
+    }
+  }
+`;
+
+export const TEAM_MEMBERSHIP_REMOVE_MUTATION = gql`
+  mutation TeamMembershipRemove($input: TeamMembershipRemoveInput!) {
+    teamMembershipRemove(input: $input) {
+      success
+      membershipId
+    }
+  }
+`;
+
 export const ISSUE_CREATE_MUTATION = gql`
   mutation IssueCreate($input: IssueCreateInput!) {
     issueCreate(input: $input) {
