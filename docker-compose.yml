@@ -26,12 +26,18 @@ services:
       - /bin/sh
       - -lc
     command: >
-      pnpm --filter @involute/server exec prisma db push --accept-data-loss --skip-generate &&
+      if [ "${PRISMA_ALLOW_DATA_LOSS:-false}" = "true" ]; then
+        pnpm --filter @involute/server exec prisma db push --accept-data-loss --skip-generate;
+      else
+        pnpm --filter @involute/server exec prisma db push --skip-generate ||
+        pnpm --filter @involute/server exec prisma migrate deploy;
+      fi &&
       if [ "${SEED_DATABASE:-true}" = "true" ]; then
         pnpm --filter @involute/server exec prisma db seed;
       fi
     environment:
       DATABASE_URL: postgresql://involute:involute@db:5432/involute?schema=public
+      PRISMA_ALLOW_DATA_LOSS: ${PRISMA_ALLOW_DATA_LOSS:-false}
       SEED_DATABASE: ${SEED_DATABASE:-true}
     restart: "no"
 
