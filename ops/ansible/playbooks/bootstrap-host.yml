@@ -1,0 +1,30 @@
+---
+- name: Prepare an Involute host
+  hosts: all
+  become: true
+  vars:
+    involute_apt_packages:
+      - curl
+      - docker.io
+      - docker-compose-v2
+      - git
+      - python3
+      - rsync
+  tasks:
+    - name: Install base packages
+      ansible.builtin.apt:
+        update_cache: true
+        name: "{{ involute_apt_packages }}"
+        state: present
+
+    - name: Ensure Docker service is enabled
+      ansible.builtin.systemd:
+        enabled: true
+        name: docker
+        state: started
+
+    - name: Ensure deploy directory exists
+      ansible.builtin.file:
+        path: "{{ involute_deploy_path | default('/opt/involute') }}"
+        state: directory
+        mode: "0755"

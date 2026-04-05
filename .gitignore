@@ -3,6 +3,8 @@ node_modules
 dist
 .env
 .env.production
+ops/ansible/inventory/hosts.yml
+.venv-ansible/
 .DS_Store
 !packages/server/prisma/.env
 .factory/library/

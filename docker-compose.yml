@@ -11,7 +11,7 @@ services:
       timeout: 5s
       retries: 20
     ports:
-      - "${DB_PORT:-5434}:5432"
+      - "${DB_BIND_ADDRESS:-127.0.0.1}:${DB_PORT:-5434}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
@@ -26,13 +26,14 @@ services:
       - /bin/sh
       - -lc
     command: >
+      set -e;
       if [ "${PRISMA_BASELINE_EXISTING_SCHEMA:-false}" = "true" ]; then
         pnpm --filter @involute/server exec prisma migrate resolve --applied 20260405093000_init || true;
-      fi &&
-      pnpm --filter @involute/server exec prisma migrate deploy &&
+      fi;
+      pnpm --filter @involute/server exec prisma migrate deploy;
       if [ "${SEED_DATABASE:-true}" = "true" ]; then
         pnpm --filter @involute/server exec prisma db seed;
-      fi &&
+      fi;
       if [ -n "${ADMIN_EMAIL_ALLOWLIST:-}" ]; then
         pnpm --filter @involute/server exec tsx prisma/bootstrap-admin.ts;
       fi
@@ -78,7 +79,7 @@ services:
       retries: 20
       start_period: 10s
     ports:
-      - "4200:4200"
+      - "${SERVER_BIND_ADDRESS:-0.0.0.0}:4200:4200"
 
   web:
     build:
@@ -103,7 +104,7 @@ services:
       retries: 20
       start_period: 10s
     ports:
-      - "4201:4201"
+      - "${WEB_BIND_ADDRESS:-0.0.0.0}:4201:4201"
 
   cli:
     build:

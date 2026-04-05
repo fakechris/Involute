@@ -26,10 +26,11 @@ services:
       - /bin/sh
       - -lc
     command: >
-      pnpm --filter @involute/server exec prisma migrate deploy &&
+      set -e;
+      pnpm --filter @involute/server exec prisma migrate deploy;
       if [ "${SEED_DATABASE:-false}" = "true" ]; then
         pnpm --filter @involute/server exec prisma db seed;
-      fi &&
+      fi;
       if [ -n "${ADMIN_EMAIL_ALLOWLIST:-}" ]; then
         pnpm --filter @involute/server exec tsx prisma/bootstrap-admin.ts;
       fi

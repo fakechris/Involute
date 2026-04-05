@@ -165,6 +165,64 @@ sh scripts/postgres-backup.sh
 
 This writes a gzipped SQL dump to `.backups/`.
 
+## Automated deployment with Ansible
+
+Manual SSH deployment is no longer the intended path. The repo now includes an Ansible workflow under [`ops/ansible`](./ops/ansible).
+
+Available playbooks:
+
+- [`ops/ansible/playbooks/bootstrap-host.yml`](./ops/ansible/playbooks/bootstrap-host.yml) — install Docker/Compose and prepare the host
+- [`ops/ansible/playbooks/deploy.yml`](./ops/ansible/playbooks/deploy.yml) — sync the repo, render env, run compose, and verify health
+
+Tailscale-specific deployment reuses [`docker-compose.yml`](./docker-compose.yml) and drives bind addresses through the rendered env file. Only `4200` and `4201` bind to the Tailscale IP; Postgres stays on `127.0.0.1`.
+
+Typical flow:
+
+1. Copy the example inventory:
+
+```bash
+cp ops/ansible/inventory/hosts.yml.example ops/ansible/inventory/hosts.yml
+```
+
+2. Fill the target host, bind address, and secrets.
+
+3. Prepare the host:
+
+```bash
+pnpm deploy:bootstrap
+```
+
+4. Deploy the Tailscale stack:
+
+```bash
+pnpm deploy:tailscale
+```
+
+For the current Tailscale-only test phase, use:
+
+- `involute_stack_profile: tailscale`
+- `involute_bind_address: <tailscale-ip>`
+- `involute_app_origin: http://<tailscale-ip>:4201`
+
+When the public domain and OAuth are ready, switch the inventory to `production` and use [`docker-compose.prod.yml`](./docker-compose.prod.yml).
+
+GitHub Actions can run the same deployment path from [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml). Configure these repository secrets before enabling it:
+
+- `DEPLOY_HOST`
+- `DEPLOY_USER`
+- `DEPLOY_SSH_PRIVATE_KEY`
+- `INVOLUTE_APP_ORIGIN`
+- `INVOLUTE_AUTH_TOKEN`
+- `INVOLUTE_VIEWER_ASSERTION_SECRET`
+- `INVOLUTE_BIND_ADDRESS` for `tailscale`
+- `INVOLUTE_APP_DOMAIN` and `INVOLUTE_POSTGRES_PASSWORD` for `production`
+- optional: `INVOLUTE_ADMIN_EMAIL_ALLOWLIST`, `INVOLUTE_GOOGLE_OAUTH_CLIENT_ID`, `INVOLUTE_GOOGLE_OAUTH_CLIENT_SECRET`, `INVOLUTE_GOOGLE_OAUTH_REDIRECT_URI`
+
+Recommended repository variables:
+
+- `INVOLUTE_DEPLOY_ON_MAIN=false` to keep deploy manual by default
+- `INVOLUTE_DEPLOY_PROFILE=tailscale` for the current private test phase
+
 ## Manual single-team import
 
 Set your Linear token in the shell:
