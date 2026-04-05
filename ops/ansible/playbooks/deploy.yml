@@ -57,14 +57,27 @@
     - name: Validate required deployment variables
       ansible.builtin.assert:
         that:
+          - (involute_stack_profile | default(involute_default_stack_profile)) in ['tailscale', 'production']
           - involute_auth_token is defined
           - involute_auth_token | length > 0
           - involute_viewer_assertion_secret is defined
           - involute_viewer_assertion_secret | length > 0
-          - involute_bind_address is defined
-          - involute_bind_address | length > 0
           - involute_app_origin is defined
           - involute_app_origin | length > 0
+          - >-
+            (
+              (involute_stack_profile | default(involute_default_stack_profile)) != 'tailscale'
+            ) or (
+              involute_bind_address is defined and involute_bind_address | length > 0
+            )
+          - >-
+            (
+              (involute_stack_profile | default(involute_default_stack_profile)) != 'tailscale'
+            ) or (
+              (involute_admin_email_allowlist | default('') | trim | length > 0)
+              or (involute_seed_default_admin | default(false) | bool)
+              or (involute_allow_admin_fallback | default(false) | bool)
+            )
 
     - name: Ensure deploy directory exists
       ansible.builtin.file:
@@ -129,7 +142,7 @@
     - name: Wait for API health check
       ansible.builtin.shell: >
         for attempt in $(seq 1 60); do
-          curl -sf {{ involute_api_health_url | quote }} && exit 0;
+          curl --connect-timeout 2 --max-time 5 -sf {{ involute_api_health_url | quote }} && exit 0;
           sleep 2;
         done;
         exit 1
@@ -139,7 +152,7 @@
     - name: Wait for web health check
       ansible.builtin.shell: >
         for attempt in $(seq 1 60); do
-          curl -sfI {{ involute_web_health_url | quote }} >/dev/null && exit 0;
+          curl --connect-timeout 2 --max-time 5 -sfI {{ involute_web_health_url | quote }} >/dev/null && exit 0;
           sleep 2;
         done;
         exit 1

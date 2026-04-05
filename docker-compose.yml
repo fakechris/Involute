@@ -28,7 +28,18 @@ services:
     command: >
       set -e;
       if [ "${PRISMA_BASELINE_EXISTING_SCHEMA:-false}" = "true" ]; then
-        pnpm --filter @involute/server exec prisma migrate resolve --applied 20260405093000_init || true;
+        baseline_output="";
+        baseline_status=0;
+        baseline_output="$$(pnpm --filter @involute/server exec prisma migrate resolve --applied 20260405093000_init 2>&1)" || baseline_status=$$?;
+        if [ "$$baseline_status" -ne 0 ]; then
+          printf '%s\n' "$$baseline_output" >&2;
+          case "$$baseline_output" in
+            *"already recorded as applied"*|*"already applied"*) ;;
+            *) exit "$$baseline_status" ;;
+          esac;
+        else
+          printf '%s\n' "$$baseline_output";
+        fi;
       fi;
       pnpm --filter @involute/server exec prisma migrate deploy;
       if [ "${SEED_DATABASE:-true}" = "true" ]; then

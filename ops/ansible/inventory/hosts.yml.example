@@ -7,6 +7,6 @@ all:
       involute_stack_profile: tailscale
       involute_app_origin: http://100.x.y.z:4201
       involute_seed_database: true
-      involute_admin_email_allowlist: ""
+      involute_admin_email_allowlist: "first-admin@example.com"
       involute_auth_token: change-me
       involute_viewer_assertion_secret: change-me

@@ -22,4 +22,12 @@ describe('server environment', () => {
 
     expect(environment.adminEmailAllowlist).toEqual(['legacy@example.com']);
   });
+
+  it('normalizes email addresses to lowercase', () => {
+    const environment = getServerEnvironment({
+      ADMIN_EMAIL_ALLOWLIST: 'Admin@Example.COM',
+    });
+
+    expect(environment.adminEmailAllowlist).toEqual(['admin@example.com']);
+  });
 });

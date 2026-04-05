@@ -7,10 +7,28 @@ import { ensureAdminUsers, normalizeAdminEmails } from './admin-helpers.ts';
 
 loadProjectEnvironment();
 
+function assertSafeTestDatabase(): void {
+  const databaseUrl = process.env.DATABASE_URL ?? '';
+  const nodeEnvironment = process.env.NODE_ENV ?? 'test';
+  const isTestRuntime = nodeEnvironment === 'test' || process.env.VITEST === 'true' || process.env.CI === 'true';
+  const isLocalDatabase = databaseUrl.includes('127.0.0.1')
+    || databaseUrl.includes('localhost')
+    || databaseUrl.includes('@db:')
+    || databaseUrl.includes('/involute')
+    || databaseUrl.includes('_test');
+
+  if (!isTestRuntime || !isLocalDatabase) {
+    throw new Error(
+      'admin-helpers.test.ts requires a local test runtime and a local/test DATABASE_URL before destructive cleanup runs.',
+    );
+  }
+}
+
 const prisma = new PrismaClient();
 
 describe('admin bootstrap helpers', () => {
   beforeAll(async () => {
+    assertSafeTestDatabase();
     await prisma.$connect();
   });
 

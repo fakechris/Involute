@@ -36,6 +36,7 @@ services:
       fi
     environment:
       ADMIN_EMAIL_ALLOWLIST: ${ADMIN_EMAIL_ALLOWLIST:-}
+      GOOGLE_OAUTH_ADMIN_EMAILS: ${ADMIN_EMAIL_ALLOWLIST:-${GOOGLE_OAUTH_ADMIN_EMAILS:-}}
       DATABASE_URL: postgresql://${POSTGRES_USER:-involute}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-involute}?schema=public
       SEED_DATABASE: ${SEED_DATABASE:-false}
       SEED_DEFAULT_ADMIN: "false"
@@ -52,6 +53,7 @@ services:
         condition: service_completed_successfully
     environment:
       ADMIN_EMAIL_ALLOWLIST: ${ADMIN_EMAIL_ALLOWLIST:-}
+      GOOGLE_OAUTH_ADMIN_EMAILS: ${ADMIN_EMAIL_ALLOWLIST:-${GOOGLE_OAUTH_ADMIN_EMAILS:-}}
       ALLOW_ADMIN_FALLBACK: "false"
       APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN in .env.production}
       AUTH_TOKEN: ${AUTH_TOKEN:?Set AUTH_TOKEN in .env.production}

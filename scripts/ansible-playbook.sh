@@ -14,6 +14,7 @@ fi
 ANSIBLE_PLAYBOOK=$(sh "$SCRIPT_DIR/ensure-ansible.sh")
 export ANSIBLE_CONFIG="$REPO_ROOT/ops/ansible/ansible.cfg"
 STACK_PROFILE=${INVOLUTE_STACK_PROFILE:-}
+cd "$REPO_ROOT"
 
 if [ -n "$STACK_PROFILE" ]; then
   exec "$ANSIBLE_PLAYBOOK" -e "involute_stack_profile=$STACK_PROFILE" "$PLAYBOOK" "$@"

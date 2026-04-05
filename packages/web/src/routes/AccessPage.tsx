@@ -273,8 +273,8 @@ export function AccessPage() {
             Manage team visibility and editor access with the current RBAC model.
           </p>
           <p className="app-shell__subtext">
-            System admins are bootstrapped separately through `ADMIN_EMAIL_ALLOWLIST` or
-            `pnpm --filter @involute/server admin:bootstrap`.
+            System admins are bootstrapped separately through <code>ADMIN_EMAIL_ALLOWLIST</code> or{' '}
+            <code>pnpm --filter @involute/server admin:bootstrap</code>.
           </p>
         </div>
       </header>
@@ -301,7 +301,8 @@ export function AccessPage() {
               <div>
                 <h2>Visibility</h2>
                 <p className="app-shell__subtext">
-                  `PUBLIC` teams are readable by all signed-in users. Only members with edit access can write.
+                  <code>PUBLIC</code> teams are readable by all signed-in users. Only members with
+                  edit access can write.
                 </p>
               </div>
               <select

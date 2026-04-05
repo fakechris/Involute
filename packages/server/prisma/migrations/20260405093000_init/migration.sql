@@ -129,6 +129,9 @@ CREATE INDEX "Team_key_idx" ON "Team"("key");
 CREATE INDEX "WorkflowState_teamId_idx" ON "WorkflowState"("teamId");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "WorkflowState_id_teamId_key" ON "WorkflowState"("id", "teamId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "WorkflowState_teamId_name_key" ON "WorkflowState"("teamId", "name");
 
 -- CreateIndex
@@ -163,6 +166,9 @@ CREATE UNIQUE INDEX "Issue_identifier_key" ON "Issue"("identifier");
 
 -- CreateIndex
 CREATE INDEX "Issue_teamId_idx" ON "Issue"("teamId");
+
+-- CreateIndex
+CREATE INDEX "Issue_stateId_teamId_idx" ON "Issue"("stateId", "teamId");
 
 -- CreateIndex
 CREATE INDEX "Issue_stateId_idx" ON "Issue"("stateId");
@@ -204,7 +210,7 @@ ALTER TABLE "TeamMembership" ADD CONSTRAINT "TeamMembership_teamId_fkey" FOREIGN
 ALTER TABLE "TeamMembership" ADD CONSTRAINT "TeamMembership_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Issue" ADD CONSTRAINT "Issue_stateId_fkey" FOREIGN KEY ("stateId") REFERENCES "WorkflowState"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Issue" ADD CONSTRAINT "Issue_stateId_teamId_fkey" FOREIGN KEY ("stateId", "teamId") REFERENCES "WorkflowState"("id", "teamId") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Issue" ADD CONSTRAINT "Issue_assigneeId_fkey" FOREIGN KEY ("assigneeId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -226,4 +232,3 @@ ALTER TABLE "_IssueToIssueLabel" ADD CONSTRAINT "_IssueToIssueLabel_A_fkey" FORE
 
 -- AddForeignKey
 ALTER TABLE "_IssueToIssueLabel" ADD CONSTRAINT "_IssueToIssueLabel_B_fkey" FOREIGN KEY ("B") REFERENCES "IssueLabel"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-

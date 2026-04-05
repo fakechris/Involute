@@ -43,6 +43,7 @@ model WorkflowState {
   team   Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
   issues Issue[]
 
+  @@unique([id, teamId])
   @@unique([teamId, name])
   @@index([teamId])
 }
@@ -100,7 +101,7 @@ model Issue {
   title       String
   description String?
   stateId     String         @db.Uuid
-  state       WorkflowState  @relation(fields: [stateId], references: [id], onDelete: Restrict)
+  state       WorkflowState  @relation(fields: [stateId, teamId], references: [id, teamId], onDelete: Restrict)
   assigneeId  String?        @db.Uuid
   assignee    User?          @relation("IssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   parentId    String?        @db.Uuid
@@ -114,6 +115,7 @@ model Issue {
   updatedAt   DateTime       @updatedAt
 
   @@index([teamId])
+  @@index([stateId, teamId])
   @@index([stateId])
   @@index([assigneeId])
   @@index([parentId])

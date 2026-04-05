@@ -209,6 +209,7 @@ When the public domain and OAuth are ready, switch the inventory to `production`
 GitHub Actions can run the same deployment path from [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml). Configure these repository secrets before enabling it:
 
 - `DEPLOY_HOST`
+- `DEPLOY_KNOWN_HOSTS`
 - `DEPLOY_USER`
 - `DEPLOY_SSH_PRIVATE_KEY`
 - `INVOLUTE_APP_ORIGIN`

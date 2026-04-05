@@ -3,6 +3,7 @@
   hosts: all
   become: true
   vars:
+    involute_default_deploy_path: /opt/involute
     involute_apt_packages:
       - curl
       - docker.io
@@ -25,6 +26,6 @@
 
     - name: Ensure deploy directory exists
       ansible.builtin.file:
-        path: "{{ involute_deploy_path | default('/opt/involute') }}"
+        path: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
         state: directory
         mode: "0755"
