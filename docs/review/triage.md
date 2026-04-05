@@ -12,9 +12,9 @@
 - 已降级为维护性债务：`G10`
 - 当前没有剩余的 review-derived correctness blocker。
 - 这轮最后补齐的点：
-  - `G7`：[`packages/server/src/schema.ts`](/Users/chris/workspace/Involute/packages/server/src/schema.ts) 的 `Issue.comments(first)` 已加服务端上限钳制。
-  - `G9`：[`e2e/board-flow.spec.ts`](/Users/chris/workspace/Involute/e2e/board-flow.spec.ts) 已补“导入后看板展示正确”的 Playwright 验收；fixture 脚本在 [`packages/server/scripts/import-board-fixture.ts`](/Users/chris/workspace/Involute/packages/server/scripts/import-board-fixture.ts)。
-  - `G10`：[`packages/web/src/routes/BoardPage.tsx`](/Users/chris/workspace/Involute/packages/web/src/routes/BoardPage.tsx) 继续拆出 [`BoardCreateIssueDialog.tsx`](/Users/chris/workspace/Involute/packages/web/src/components/BoardCreateIssueDialog.tsx) 和 [`BoardLoadMoreNotice.tsx`](/Users/chris/workspace/Involute/packages/web/src/components/BoardLoadMoreNotice.tsx)，已不再属于当前 bug 清单。
+  - `G7`：[`packages/server/src/schema.ts`](packages/server/src/schema.ts) 的 `Issue.comments(first)` 已加服务端上限钳制。
+  - `G9`：[`e2e/board-flow.spec.ts`](e2e/board-flow.spec.ts) 已补“导入后看板展示正确”的 Playwright 验收；fixture 脚本在 [`packages/server/scripts/import-board-fixture.ts`](packages/server/scripts/import-board-fixture.ts)。
+  - `G10`：[`packages/web/src/routes/BoardPage.tsx`](packages/web/src/routes/BoardPage.tsx) 继续拆出 [`BoardCreateIssueDialog.tsx`](packages/web/src/components/BoardCreateIssueDialog.tsx) 和 [`BoardLoadMoreNotice.tsx`](packages/web/src/components/BoardLoadMoreNotice.tsx)，已不再属于当前 bug 清单。
 
 ## 判定口径
 

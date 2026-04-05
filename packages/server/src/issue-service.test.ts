@@ -35,15 +35,23 @@ describe('issue service', () => {
         teamId: team.id,
       },
     });
-    const backlogStateId = states.find((state) => state.name === 'Backlog')!.id;
-    const readyStateId = states.find((state) => state.name === 'Ready')!.id;
+    const backlogState = states.find((state) => state.name === 'Backlog');
+    const readyState = states.find((state) => state.name === 'Ready');
+
+    if (!backlogState) {
+      throw new Error("Missing seeded workflow state 'Backlog'");
+    }
+
+    if (!readyState) {
+      throw new Error("Missing seeded workflow state 'Ready'");
+    }
 
     const rootIssue = await prisma.issue.create({
       data: {
         identifier: 'INV-1',
         title: 'Root issue',
         teamId: team.id,
-        stateId: backlogStateId,
+        stateId: backlogState.id,
       },
     });
     const middleIssue = await prisma.issue.create({
@@ -51,7 +59,7 @@ describe('issue service', () => {
         identifier: 'INV-2',
         title: 'Middle issue',
         teamId: team.id,
-        stateId: readyStateId,
+        stateId: readyState.id,
         parentId: rootIssue.id,
       },
     });
@@ -60,22 +68,15 @@ describe('issue service', () => {
         identifier: 'INV-3',
         title: 'Leaf issue',
         teamId: team.id,
-        stateId: readyStateId,
+        stateId: readyState.id,
         parentId: middleIssue.id,
       },
     });
-
-    let didReject = false;
-
-    try {
-      await updateIssue(prisma, rootIssue.id, {
+    await expect(
+      updateIssue(prisma, rootIssue.id, {
         parentId: leafIssue.id,
-      });
-    } catch {
-      didReject = true;
-    }
-
-    expect(didReject).toBe(true);
+      }),
+    ).rejects.toThrow();
 
     const persistedRoot = await prisma.issue.findUniqueOrThrow({
       where: {

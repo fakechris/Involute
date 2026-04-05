@@ -405,7 +405,7 @@ headers: {
 },
 ```
 
-**评价：正确。** Linear API 的认证不使用 `Bearer ` 前缀——直接传递 API token。这与 Linear 的官方文档一致。
+**评价：正确。** Linear API 的认证不使用 `Bearer` 前缀——直接传递 API token。这与 Linear 的官方文档一致。
 
 ---
 

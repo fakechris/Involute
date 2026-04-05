@@ -273,11 +273,11 @@ function areIssuesEquivalent(left: IssueSummary, right: IssueSummary): boolean {
     left.state.id === right.state.id &&
     left.team.key === right.team.key &&
     (left.assignee?.id ?? null) === (right.assignee?.id ?? null) &&
-    areSortedArraysEqual(
+    areArraysEqualIgnoringOrder(
       left.labels.nodes.map((label) => label.id),
       right.labels.nodes.map((label) => label.id),
     ) &&
-    areSortedArraysEqual(
+    areArraysEqualIgnoringOrder(
       left.children.nodes.map((child) => child.id),
       right.children.nodes.map((child) => child.id),
     ) &&
@@ -337,7 +337,7 @@ function compareIssueComments(
   return left.id.localeCompare(right.id);
 }
 
-function areSortedArraysEqual(left: string[], right: string[]): boolean {
+function areArraysEqualIgnoringOrder(left: string[], right: string[]): boolean {
   if (left.length !== right.length) {
     return false;
   }

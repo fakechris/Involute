@@ -31,9 +31,15 @@ export function loadServerEnvironment(): void {
 
 export function getServerEnvironment(env: NodeJS.ProcessEnv = process.env): ServerEnvironment {
   const port = Number(env.PORT ?? DEFAULT_PORT);
+  const allowAdminFallback = env.ALLOW_ADMIN_FALLBACK === 'true';
+  const nodeEnvironment = env.NODE_ENV ?? 'development';
+
+  if (allowAdminFallback && nodeEnvironment !== 'development' && nodeEnvironment !== 'test') {
+    throw new Error('ALLOW_ADMIN_FALLBACK=true is only supported in development or test environments.');
+  }
 
   return {
-    allowAdminFallback: env.ALLOW_ADMIN_FALLBACK === 'true',
+    allowAdminFallback,
     databaseUrl: env.DATABASE_URL ?? '',
     authToken: env.AUTH_TOKEN ?? '',
     port: Number.isFinite(port) && port > 0 ? port : DEFAULT_PORT,

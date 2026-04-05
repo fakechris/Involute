@@ -474,9 +474,13 @@ async function backfillParentIds(
       },
       data: {
         parentId: newParentId,
-        updatedAt: new Date(issue.updatedAt),
       },
     });
+    await prisma.$executeRaw`
+      UPDATE "Issue"
+      SET "updatedAt" = CAST(${issue.updatedAt} AS TIMESTAMPTZ) AT TIME ZONE 'UTC'
+      WHERE "id" = CAST(${newChildId} AS UUID)
+    `;
 
     backfilled++;
   }

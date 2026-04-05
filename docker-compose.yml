@@ -45,7 +45,7 @@ services:
       server-init:
         condition: service_completed_successfully
     environment:
-      ALLOW_ADMIN_FALLBACK: ${ALLOW_ADMIN_FALLBACK:-true}
+      ALLOW_ADMIN_FALLBACK: ${ALLOW_ADMIN_FALLBACK:-false}
       DATABASE_URL: postgresql://involute:involute@db:5432/involute?schema=public
       AUTH_TOKEN: ${AUTH_TOKEN:-changeme-set-your-token}
       VIEWER_ASSERTION_SECRET: ${VIEWER_ASSERTION_SECRET:-compose-viewer-secret}

@@ -94,6 +94,7 @@ function runBoardFixtureCommand(command: 'seed' | 'cleanup'): void {
       cwd: process.cwd(),
       env: process.env,
       stdio: 'inherit',
+      timeout: 60_000,
     },
   );
 }

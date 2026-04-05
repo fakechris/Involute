@@ -27,7 +27,7 @@ export function BoardLoadMoreNotice({
       {hasMoreIssues ? (
         <button
           type="button"
-          className="issue-comment-composer__submit"
+          className="board-load-more__button"
           disabled={isLoadingMoreIssues}
           onClick={onLoadMore}
         >

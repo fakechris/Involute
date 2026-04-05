@@ -1,4 +1,4 @@
-import type { FormEvent } from 'react';
+import { useEffect, useRef, type FormEvent } from 'react';
 
 import type { TeamSummary } from '../board/types';
 
@@ -29,6 +29,12 @@ export function BoardCreateIssueDialog({
   onTeamChange,
   onTitleChange,
 }: BoardCreateIssueDialogProps) {
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    titleInputRef.current?.focus();
+  }, []);
+
   if (!isOpen) {
     return null;
   }
@@ -59,6 +65,7 @@ export function BoardCreateIssueDialog({
             </label>
             <input
               id="create-issue-title"
+              ref={titleInputRef}
               aria-label="Issue title"
               className="issue-drawer__title-input"
               value={createTitle}
