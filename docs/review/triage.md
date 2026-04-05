@@ -16,6 +16,13 @@
   - `G9`：[`e2e/board-flow.spec.ts`](e2e/board-flow.spec.ts) 已补“导入后看板展示正确”的 Playwright 验收；fixture 脚本在 [`packages/server/scripts/import-board-fixture.ts`](packages/server/scripts/import-board-fixture.ts)。
   - `G10`：[`packages/web/src/routes/BoardPage.tsx`](packages/web/src/routes/BoardPage.tsx) 继续拆出 [`BoardCreateIssueDialog.tsx`](packages/web/src/components/BoardCreateIssueDialog.tsx) 和 [`BoardLoadMoreNotice.tsx`](packages/web/src/components/BoardLoadMoreNotice.tsx)，已不再属于当前 bug 清单。
 
+## 当前状态说明
+
+- 本文后续的 `G1-G12` 详细条目和逐条矩阵，保留的是 2026-04-04 做 triage 时的历史证据快照。
+- 它们的价值在于说明“这些问题最初是怎么被发现和归并的”，不是当前 `main` 的开放缺陷列表。
+- 判断当前状态时，应以上面的 `2026-04-05 收尾结论` 为准。
+- 当前主线下一阶段工作已从 review 修 bug 转向部署、身份体系、权限边界和后续 UI/UX 迭代。
+
 ## 判定口径
 
 - `成立`：当前主线代码中仍然存在，且原 review 的问题表述基本准确。
@@ -23,7 +30,7 @@
 - `已修复/已过期`：review 当时可能成立，但当前主线代码已不再成立。
 - `当前非缺陷/延期`：这是产品缺口、范围取舍或后续里程碑工作，不计入当前缺陷清单。
 
-## Canonical 问题清单（已去重，按重要性排序）
+## Canonical 问题清单（历史快照，非当前开放问题）
 
 ### G1 [P0] 看板列仍然硬编码 6 个 workflow state，非标准状态的 issue 会在 Board 中“消失”
 

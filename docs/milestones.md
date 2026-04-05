@@ -2,7 +2,7 @@
 
 ## M0: Single-team migration acceptance
 
-Status: in progress, core path now implemented.
+Status: done.
 
 Done:
 
@@ -18,9 +18,44 @@ Exit criteria:
 - `pnpm e2e` is green locally and in CI
 - `docker compose up --build -d db server web` is a stable demo path
 
-## M1: UI/UX redesign
+## M1: Deployable self-hosting
 
-Status: queued behind stability.
+Status: next.
+
+Scope:
+
+- ship a production deployment path for VPS and Railway
+- define `.env.production` expectations and runtime secrets
+- add reverse proxy / TLS guidance and database backup guidance
+- keep Docker images and compose-based demo/runtime aligned
+
+Exit criteria:
+
+- a fresh host can run Involute with Postgres, API, and web using documented steps
+- deployment docs are specific enough to reproduce without reading the source
+- image publishing and runtime config are consistent with the supported hosting path
+
+## M2: Auth and team permissions
+
+Status: next, after deployment is pinned down.
+
+Scope:
+
+- move away from the current shared-token simplification
+- add a real session-backed viewer model
+- start with Google OAuth rather than magic-link email
+- add `admin`, `team visibility`, and `team membership` edit boundaries
+
+Exit criteria:
+
+- an admin can sign in and manage access without touching raw headers
+- public teams are readable but not writable by non-members
+- private teams are only visible to members and admins
+- team members can be granted viewer/editor-style access explicitly
+
+## M3: UI/UX redesign
+
+Status: later, after M1 and M2.
 
 Scope:
 
@@ -31,9 +66,9 @@ Scope:
 Exit criteria:
 
 - visual direction is intentional and no longer feels placeholder-like
-- redesign does not regress the M0 lifecycle and import flow
+- redesign does not regress the M0 lifecycle, deployment path, or team permission model
 
-## M2: Multi-team workspace import
+## M4: Multi-team workspace import
 
 Status: later.
 
@@ -47,13 +82,3 @@ Exit criteria:
 
 - multiple Linear teams can be brought in predictably
 - repeated imports have explicit behavior and reporting
-
-## M3: Auth and multi-user hardening
-
-Status: later.
-
-Scope:
-
-- move away from the current shared-token simplification
-- define a real viewer identity model
-- add clearer trust boundaries for API and UI clients

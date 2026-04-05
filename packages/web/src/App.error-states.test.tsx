@@ -53,10 +53,10 @@ describe('App error states', () => {
       loading: false,
     });
 
-    expect(await screen.findByText('Runtime auth token missing')).toBeInTheDocument();
+    expect(await screen.findByText('Authentication required')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'The board could not find a runtime auth token. Set `VITE_INVOLUTE_AUTH_TOKEN` or store the token in localStorage under `involute.authToken`, then reload.',
+        'Sign in with Google to use the board, or set `VITE_INVOLUTE_AUTH_TOKEN` / localStorage `involute.authToken` for trusted local development.',
       ),
     ).toBeInTheDocument();
   });

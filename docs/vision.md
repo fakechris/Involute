@@ -21,10 +21,10 @@ If this path is stable, the product is already useful for migration rehearsal, a
 
 ## What we are optimizing for now
 
-- Reliable single-team import and verification
-- Reproducible local stack through Docker Compose
-- Stable issue lifecycle in the UI: create, edit, comment, delete
-- Automated end-to-end acceptance coverage before a larger UI/UX rewrite
+- Stable self-hosted deployment on VPS or Railway
+- Simple multi-user access with Google OAuth and session auth
+- Team-level visibility and edit permissions
+- Keep the single-team import and issue lifecycle green while the product boundary hardens
 
 ## Explicitly not optimizing for yet
 
@@ -32,3 +32,4 @@ If this path is stable, the product is already useful for migration rehearsal, a
 - Large-scale performance work
 - Final visual design language
 - Enterprise auth and permission boundaries
+- Magic-link email auth and provider sprawl

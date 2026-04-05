@@ -8,6 +8,8 @@ DATABASE_URL="${E2E_DATABASE_URL:-postgresql://involute:involute@127.0.0.1:${DB_
 AUTH_TOKEN="${E2E_AUTH_TOKEN:-e2e-auth-token}"
 VIEWER_ASSERTION_SECRET="${E2E_VIEWER_ASSERTION_SECRET:-e2e-viewer-assertion-secret}"
 SERVER_PORT="${E2E_SERVER_PORT:-4300}"
+WEB_PORT="${E2E_WEB_PORT:-4301}"
+APP_ORIGIN="${E2E_APP_ORIGIN:-http://127.0.0.1:${WEB_PORT}}"
 
 export COMPOSE_PROJECT_NAME
 export DB_PORT
@@ -35,6 +37,7 @@ DATABASE_URL="$DATABASE_URL" pnpm --filter @involute/server exec prisma db push 
 DATABASE_URL="$DATABASE_URL" pnpm --filter @involute/server exec prisma db seed
 
 exec env \
+  APP_ORIGIN="$APP_ORIGIN" \
   DATABASE_URL="$DATABASE_URL" \
   AUTH_TOKEN="$AUTH_TOKEN" \
   ALLOW_ADMIN_FALLBACK="false" \

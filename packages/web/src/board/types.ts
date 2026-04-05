@@ -2,9 +2,19 @@ export interface TeamSummary {
   id: string;
   key: string;
   name: string;
+  visibility?: 'PRIVATE' | 'PUBLIC';
+  memberships?: {
+    nodes: TeamMembershipSummary[];
+  };
   states: {
     nodes: WorkflowStateSummary[];
   };
+}
+
+export interface TeamMembershipSummary {
+  id: string;
+  role: 'VIEWER' | 'EDITOR' | 'OWNER';
+  user: AccessUserSummary;
 }
 
 export interface WorkflowStateSummary {
@@ -26,6 +36,10 @@ export interface UserSummary {
   id: string;
   name: string | null;
   email: string | null;
+}
+
+export interface AccessUserSummary extends UserSummary {
+  globalRole: 'ADMIN' | 'USER';
 }
 
 export interface CommentSummary {
@@ -88,6 +102,57 @@ export interface BoardPageQueryData {
       endCursor: string | null;
       hasNextPage: boolean;
     };
+  };
+}
+
+export interface AccessPageQueryData {
+  viewer: AccessUserSummary | null;
+  teams: {
+    nodes: TeamSummary[];
+  };
+}
+
+export interface TeamUpdateAccessMutationData {
+  teamUpdateAccess: {
+    success: boolean;
+    team: TeamSummary | null;
+  };
+}
+
+export interface TeamUpdateAccessMutationVariables {
+  input: {
+    teamId: string;
+    visibility: 'PRIVATE' | 'PUBLIC';
+  };
+}
+
+export interface TeamMembershipUpsertMutationData {
+  teamMembershipUpsert: {
+    success: boolean;
+    membership: TeamMembershipSummary | null;
+  };
+}
+
+export interface TeamMembershipUpsertMutationVariables {
+  input: {
+    teamId: string;
+    email: string;
+    name?: string | null;
+    role: 'VIEWER' | 'EDITOR' | 'OWNER';
+  };
+}
+
+export interface TeamMembershipRemoveMutationData {
+  teamMembershipRemove: {
+    success: boolean;
+    membershipId: string | null;
+  };
+}
+
+export interface TeamMembershipRemoveMutationVariables {
+  input: {
+    teamId: string;
+    userId: string;
   };
 }
 
