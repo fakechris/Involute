@@ -21,6 +21,8 @@ describe('App access management', () => {
 
     expect(await screen.findByRole('heading', { name: 'Access' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Access' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Current viewer' })).toBeInTheDocument();
+    expect(screen.getByText('Allowed')).toBeInTheDocument();
     expect(screen.getByLabelText('Team visibility')).toHaveValue('PRIVATE');
     expect(screen.getByText('OWNER · ADMIN')).toBeInTheDocument();
   });
@@ -113,6 +115,7 @@ describe('App access management', () => {
         },
       },
     });
+    expect(await screen.findByText('Involute is now PUBLIC.')).toBeInTheDocument();
     expect(screen.getByLabelText('Team visibility')).toHaveValue('PUBLIC');
 
     fireEvent.change(screen.getByLabelText('Member email'), {
@@ -139,6 +142,7 @@ describe('App access management', () => {
         },
       },
     });
+    expect(await screen.findByText('Saved editor@example.com as EDITOR.')).toBeInTheDocument();
     expect(screen.getByText('EDITOR · USER')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove editor@example.com from Involute' }));
@@ -154,5 +158,127 @@ describe('App access management', () => {
         },
       },
     });
+    expect(await screen.findByText('Removed editor@example.com from Involute.')).toBeInTheDocument();
+  });
+
+  it('disables team switching while an access mutation is pending', async () => {
+    mockSessionState({
+      authMode: 'session',
+      authenticated: true,
+      googleOAuthConfigured: true,
+      viewer: {
+        email: 'admin@involute.local',
+        globalRole: 'ADMIN',
+        id: 'user-1',
+        name: 'Admin',
+      },
+    });
+
+    const deferredMutation: { resolve: null | (() => void) } = { resolve: null };
+    const teamUpdateAccess = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          deferredMutation.resolve = () =>
+            resolve({
+              data: {
+                teamUpdateAccess: {
+                  success: true,
+                  team: {
+                    ...accessQueryResult.teams.nodes[0],
+                    visibility: 'PUBLIC',
+                  },
+                },
+              },
+            });
+        }),
+    );
+
+    apolloMocks.useMutation.mockImplementation((document) => {
+      const source =
+        typeof document === 'string'
+          ? document
+          : (document as { loc?: { source?: { body?: string } } }).loc?.source?.body ?? String(document);
+
+      if (source.includes('mutation TeamUpdateAccess')) {
+        return [teamUpdateAccess];
+      }
+
+      return [vi.fn()];
+    });
+
+    renderApp({ accessData: accessQueryResult, data: boardQueryResult, loading: false }, ['/settings/access']);
+
+    fireEvent.change(await screen.findByLabelText('Team visibility'), {
+      target: { value: 'PUBLIC' },
+    });
+
+    await waitFor(() => {
+      expect(teamUpdateAccess).toHaveBeenCalled();
+    });
+    expect(screen.getByLabelText('Select access team')).toBeDisabled();
+
+    if (!deferredMutation.resolve) {
+      throw new Error('Expected pending access mutation resolver.');
+    }
+
+    deferredMutation.resolve();
+
+    expect(await screen.findByText('Involute is now PUBLIC.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Select access team')).not.toBeDisabled();
+  });
+
+  it('shows a read-only access state for viewers who cannot manage the selected team', async () => {
+    mockSessionState({
+      authMode: 'session',
+      authenticated: true,
+      googleOAuthConfigured: true,
+      viewer: {
+        email: 'viewer@involute.local',
+        globalRole: 'USER',
+        id: 'user-9',
+        name: 'Viewer',
+      },
+    });
+
+    renderApp(
+      {
+        accessData: {
+          viewer: {
+            email: 'viewer@involute.local',
+            globalRole: 'USER',
+            id: 'user-9',
+            name: 'Viewer',
+          },
+          teams: {
+            nodes: [
+              {
+                ...accessQueryResult.teams.nodes[0]!,
+                memberships: {
+                  nodes: [],
+                },
+                visibility: 'PUBLIC',
+              },
+            ],
+          },
+        },
+        data: boardQueryResult,
+        loading: false,
+      },
+      ['/settings/access'],
+    );
+
+    expect(await screen.findByText('Read-only')).toBeInTheDocument();
+    expect(screen.getByLabelText('Team visibility')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Save member' })).toBeDisabled();
+    expect(
+      screen.getByText(
+        'Membership details are only shown to owners and admins for this team.',
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        'Access changes are disabled for you on this team. Only a team `OWNER` or global `ADMIN` can manage visibility and memberships.',
+      ),
+    ).toHaveLength(2);
   });
 });

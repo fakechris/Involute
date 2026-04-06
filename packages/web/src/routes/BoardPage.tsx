@@ -103,34 +103,40 @@ function moveIssueToState(
 }
 
 export function BoardPage() {
-  const [selectedTeamKey, setSelectedTeamKey] = useState<string | null>(() => readStoredTeamKey());
+  const [activeTeamKey, setActiveTeamKey] = useState<string | null>(() => readStoredTeamKey());
+  const [pendingTeamKey, setPendingTeamKey] = useState<string | null>(null);
   const [isLoadingMoreIssues, setIsLoadingMoreIssues] = useState(false);
   const [loadMoreIssuesError, setLoadMoreIssuesError] = useState<string | null>(null);
+  const queryTeamKey = pendingTeamKey ?? activeTeamKey;
   const boardQueryVariables = useMemo<BoardPageQueryVariables>(
     () => ({
       first: ISSUE_PAGE_SIZE,
-      ...(selectedTeamKey
+      ...(queryTeamKey
         ? {
             filter: {
               team: {
                 key: {
-                  eq: selectedTeamKey,
+                  eq: queryTeamKey,
                 },
               },
             },
           }
         : {}),
     }),
-    [selectedTeamKey],
+    [queryTeamKey],
   );
   const location = useLocation();
-  const { data, error, fetchMore, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(
+  const { data, previousData, error, fetchMore, loading } = useQuery<
+    BoardPageQueryData,
+    BoardPageQueryVariables
+  >(
     BOARD_PAGE_QUERY,
     {
       variables: boardQueryVariables,
       notifyOnNetworkStatusChange: true,
     },
   );
+  const queryData = data ?? previousData;
   const [runIssueUpdate] = useMutation<IssueUpdateMutationData, IssueUpdateMutationVariables>(
     ISSUE_UPDATE_MUTATION,
   );
@@ -146,10 +152,10 @@ export function BoardPage() {
   const [runCommentDelete] = useMutation<CommentDeleteMutationData, CommentDeleteMutationVariables>(
     COMMENT_DELETE_MUTATION,
   );
-  const teams = data?.teams.nodes ?? [];
-  const users = data?.users.nodes ?? [];
-  const labels = data?.issueLabels.nodes ?? [];
-  const baseIssues = data?.issues.nodes ?? EMPTY_ISSUES;
+  const teams = queryData?.teams.nodes ?? [];
+  const users = queryData?.users.nodes ?? [];
+  const labels = queryData?.issueLabels.nodes ?? [];
+  const baseIssues = queryData?.issues.nodes ?? EMPTY_ISSUES;
   const [createdIssues, setCreatedIssues] = useState<IssueSummary[]>([]);
   const [issueOverrides, setIssueOverrides] = useState<Record<string, IssueSummary>>({});
   const [deletedIssueIds, setDeletedIssueIds] = useState<string[]>([]);
@@ -164,14 +170,22 @@ export function BoardPage() {
   const [dragOriginStateId, setDragOriginStateId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (loading && !queryData) {
+      return;
+    }
+
     if (!teams.length) {
-      if (selectedTeamKey !== null) {
-        setSelectedTeamKey(null);
+      if (activeTeamKey !== null) {
+        setActiveTeamKey(null);
+      }
+      if (pendingTeamKey !== null) {
+        setPendingTeamKey(null);
       }
       return;
     }
 
-    const hasSelectedTeam = selectedTeamKey ? teams.some((team) => team.key === selectedTeamKey) : false;
+    const currentTeamKey = pendingTeamKey ?? activeTeamKey;
+    const hasSelectedTeam = currentTeamKey ? teams.some((team) => team.key === currentTeamKey) : false;
 
     if (hasSelectedTeam) {
       return;
@@ -179,14 +193,32 @@ export function BoardPage() {
 
     const nextTeamKey = getStoredTeamKey(teams) ?? getInitialTeamKey(teams);
 
-    if (nextTeamKey !== selectedTeamKey) {
-      setSelectedTeamKey(nextTeamKey);
+    if (pendingTeamKey !== null) {
+      setPendingTeamKey(null);
     }
-  }, [selectedTeamKey, teams]);
+
+    if (nextTeamKey !== activeTeamKey) {
+      setActiveTeamKey(nextTeamKey);
+    }
+  }, [activeTeamKey, loading, pendingTeamKey, queryData, teams]);
 
   useEffect(() => {
-    writeStoredTeamKey(selectedTeamKey);
-  }, [selectedTeamKey]);
+    if (!pendingTeamKey || loading) {
+      return;
+    }
+
+    if (!teams.some((team) => team.key === pendingTeamKey)) {
+      setPendingTeamKey(null);
+      return;
+    }
+
+    setActiveTeamKey(pendingTeamKey);
+    setPendingTeamKey(null);
+  }, [loading, pendingTeamKey, teams]);
+
+  useEffect(() => {
+    writeStoredTeamKey(activeTeamKey);
+  }, [activeTeamKey]);
 
   useEffect(() => {
     setIssueOverrides((currentOverrides) => reconcileIssueOverrides(baseIssues, currentOverrides));
@@ -198,14 +230,31 @@ export function BoardPage() {
   }, [boardQueryVariables]);
 
   const selectedTeam =
-    teams.find((team) => team.key === selectedTeamKey) ?? teams[0] ?? null;
+    teams.find((team) => team.key === activeTeamKey) ??
+    teams.find((team) => team.key === queryTeamKey) ??
+    teams[0] ??
+    null;
+  const isTeamSwitching = Boolean(pendingTeamKey && pendingTeamKey !== activeTeamKey);
   const allIssues = useMemo(
     () => mergeBoardIssues(baseIssues, issueOverrides, createdIssues, deletedIssueIds),
     [baseIssues, createdIssues, deletedIssueIds, issueOverrides],
   );
   const visibleIssues = useMemo(() => {
-    return filterIssuesByTeam(allIssues, selectedTeamKey ?? selectedTeam?.key ?? null);
-  }, [allIssues, selectedTeam?.key, selectedTeamKey]);
+    return filterIssuesByTeam(allIssues, activeTeamKey ?? selectedTeam?.key ?? null);
+  }, [activeTeamKey, allIssues, selectedTeam?.key]);
+
+  useEffect(() => {
+    if (!isTeamSwitching) {
+      return;
+    }
+
+    setSelectedIssueId(null);
+    setActiveIssueId(null);
+    setIsCreateOpen(false);
+    setDragPreviewStateId(null);
+    setDragOriginStateId(null);
+    setMutationError(null);
+  }, [isTeamSwitching]);
   const columns = useMemo(() => getBoardColumns(selectedTeam, visibleIssues), [selectedTeam, visibleIssues]);
   const issuesByState = useMemo(() => groupIssuesByState(visibleIssues, columns), [columns, visibleIssues]);
   const activeIssue = useMemo(
@@ -216,7 +265,7 @@ export function BoardPage() {
     () => visibleIssues.find((issue) => issue.id === selectedIssueId) ?? null,
     [selectedIssueId, visibleIssues],
   );
-  const hasMoreIssues = data?.issues.pageInfo.hasNextPage ?? false;
+  const hasMoreIssues = !isTeamSwitching && (queryData?.issues.pageInfo.hasNextPage ?? false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: DND_ACTIVATION_DISTANCE } }),
@@ -225,7 +274,11 @@ export function BoardPage() {
   );
 
   async function handleLoadMoreIssues() {
-    const pageInfo = data?.issues.pageInfo;
+    if (isTeamSwitching) {
+      return;
+    }
+
+    const pageInfo = queryData?.issues.pageInfo;
 
     if (!pageInfo?.hasNextPage || !pageInfo.endCursor || isLoadingMoreIssues) {
       return;
@@ -660,12 +713,18 @@ export function BoardPage() {
           <p className="app-shell__subtext">
             Workflow overview for {selectedTeam?.name ?? 'your workspace'}.
           </p>
+          {isTeamSwitching ? (
+            <p className="app-shell__subtext" aria-live="polite">
+              Switching to {teams.find((team) => team.key === pendingTeamKey)?.name ?? pendingTeamKey}…
+            </p>
+          ) : null}
         </div>
 
         <div className="board-page__controls">
           <button
             type="button"
             className="issue-comment-composer__submit"
+            disabled={isTeamSwitching}
             onClick={() => {
               setCreateTitle('');
               setCreateDescription('');
@@ -680,8 +739,17 @@ export function BoardPage() {
               <span>Team</span>
               <select
                 aria-label="Select team"
-                value={selectedTeam?.key ?? ''}
-                onChange={(event) => setSelectedTeamKey(event.target.value)}
+                value={pendingTeamKey ?? activeTeamKey ?? selectedTeam?.key ?? ''}
+                onChange={(event) => {
+                  const nextTeamKey = event.target.value;
+
+                  if (nextTeamKey === activeTeamKey) {
+                    setPendingTeamKey(null);
+                    return;
+                  }
+
+                  setPendingTeamKey(nextTeamKey);
+                }}
               >
                 {teams.map((team) => (
                   <option key={team.id} value={team.key}>
@@ -712,7 +780,7 @@ export function BoardPage() {
         onLoadMore={() => void handleLoadMoreIssues()}
       />
 
-      {loading && !data ? (
+      {loading && !queryData ? (
         <section className="board-message" aria-live="polite">
           Loading board…
         </section>
@@ -827,7 +895,7 @@ export function BoardPage() {
         onSubmit={(event) => void handleCreateIssueSubmit(event)}
         onTitleChange={setCreateTitle}
         onDescriptionChange={setCreateDescription}
-        onTeamChange={setSelectedTeamKey}
+        onTeamChange={(teamKey) => setPendingTeamKey(teamKey === activeTeamKey ? null : teamKey)}
       />
     </main>
   );

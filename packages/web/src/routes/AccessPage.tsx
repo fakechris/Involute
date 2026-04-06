@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@apollo/client/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   ACCESS_PAGE_QUERY,
@@ -21,6 +21,13 @@ import type {
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 
 const ACCESS_ERROR_MESSAGE = 'We could not update team access right now. Please try again.';
+const ACCESS_STATUS_MESSAGE =
+  'Access changes are disabled for you on this team. Only a team `OWNER` or global `ADMIN` can manage visibility and memberships.';
+
+interface AccessNotice {
+  message: string;
+  tone: 'error' | 'success';
+}
 
 function sortMemberships(memberships: TeamMembershipSummary[]) {
   return [...memberships].sort((left, right) => {
@@ -67,8 +74,9 @@ export function AccessPage() {
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberRole, setNewMemberRole] = useState<'VIEWER' | 'EDITOR' | 'OWNER'>('VIEWER');
-  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<AccessNotice | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const selectedTeamIdRef = useRef(selectedTeamId);
 
   useEffect(() => {
     const nextTeams = data?.teams.nodes ?? [];
@@ -78,6 +86,14 @@ export function AccessPage() {
       setSelectedTeamId(nextTeams[0]?.id ?? '');
     }
   }, [data?.teams.nodes, selectedTeamId]);
+
+  useEffect(() => {
+    setNotice(null);
+  }, [selectedTeamId]);
+
+  useEffect(() => {
+    selectedTeamIdRef.current = selectedTeamId;
+  }, [selectedTeamId]);
 
   const viewer = data?.viewer ?? null;
   const selectedTeam = useMemo(
@@ -89,6 +105,7 @@ export function AccessPage() {
     [selectedTeam],
   );
   const isManageable = canManageTeam(selectedTeam, viewer);
+  const isMemberSaveDisabled = !selectedTeam || !isManageable || isSaving || newMemberEmail.trim().length === 0;
 
   if (error) {
     const errorState = getBoardBootstrapErrorMessage(error);
@@ -125,12 +142,8 @@ export function AccessPage() {
     );
   }
 
-  function updateSelectedTeam(updater: (team: TeamSummary) => TeamSummary) {
-    if (!selectedTeam) {
-      return;
-    }
-
-    setTeams((currentTeams) => currentTeams.map((team) => (team.id === selectedTeam.id ? updater(team) : team)));
+  function updateTeamById(teamId: string, updater: (team: TeamSummary) => TeamSummary) {
+    setTeams((currentTeams) => currentTeams.map((team) => (team.id === teamId ? updater(team) : team)));
   }
 
   async function handleVisibilityChange(nextVisibility: 'PRIVATE' | 'PUBLIC') {
@@ -138,11 +151,13 @@ export function AccessPage() {
       return;
     }
 
-    setMutationError(null);
+    setNotice(null);
     setIsSaving(true);
 
+    const pendingTeamId = selectedTeam.id;
     const previousVisibility = selectedTeam.visibility ?? 'PRIVATE';
-    updateSelectedTeam((team) => ({
+    const teamName = selectedTeam.name;
+    updateTeamById(pendingTeamId, (team) => ({
       ...team,
       visibility: nextVisibility,
     }));
@@ -151,7 +166,7 @@ export function AccessPage() {
       const result = await runTeamUpdateAccess({
         variables: {
           input: {
-            teamId: selectedTeam.id,
+            teamId: pendingTeamId,
             visibility: nextVisibility,
           },
         },
@@ -163,15 +178,26 @@ export function AccessPage() {
 
       setTeams((currentTeams) =>
         currentTeams.map((team) =>
-          team.id === selectedTeam.id ? result.data!.teamUpdateAccess.team! : team,
+          team.id === pendingTeamId ? result.data!.teamUpdateAccess.team! : team,
         ),
       );
+      if (selectedTeamIdRef.current === pendingTeamId) {
+        setNotice({
+          message: `${teamName} is now ${nextVisibility}.`,
+          tone: 'success',
+        });
+      }
     } catch {
-      updateSelectedTeam((team) => ({
+      updateTeamById(pendingTeamId, (team) => ({
         ...team,
         visibility: previousVisibility,
       }));
-      setMutationError(ACCESS_ERROR_MESSAGE);
+      if (selectedTeamIdRef.current === pendingTeamId) {
+        setNotice({
+          message: ACCESS_ERROR_MESSAGE,
+          tone: 'error',
+        });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -188,8 +214,10 @@ export function AccessPage() {
       return;
     }
 
-    setMutationError(null);
+    setNotice(null);
     setIsSaving(true);
+    const pendingTeamId = selectedTeam.id;
+    const role = newMemberRole;
 
     try {
       const result = await runTeamMembershipUpsert({
@@ -197,8 +225,8 @@ export function AccessPage() {
           input: {
             email,
             name: newMemberName.trim() || null,
-            role: newMemberRole,
-            teamId: selectedTeam.id,
+            role,
+            teamId: pendingTeamId,
           },
         },
       });
@@ -208,7 +236,7 @@ export function AccessPage() {
       }
 
       const membership = result.data.teamMembershipUpsert.membership;
-      updateSelectedTeam((team) => ({
+      updateTeamById(pendingTeamId, (team) => ({
         ...team,
         memberships: {
           nodes: sortMemberships([
@@ -221,8 +249,19 @@ export function AccessPage() {
       setNewMemberEmail('');
       setNewMemberName('');
       setNewMemberRole('VIEWER');
+      if (selectedTeamIdRef.current === pendingTeamId) {
+        setNotice({
+          message: `Saved ${email} as ${role}.`,
+          tone: 'success',
+        });
+      }
     } catch {
-      setMutationError(ACCESS_ERROR_MESSAGE);
+      if (selectedTeamIdRef.current === pendingTeamId) {
+        setNotice({
+          message: ACCESS_ERROR_MESSAGE,
+          tone: 'error',
+        });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -233,14 +272,18 @@ export function AccessPage() {
       return;
     }
 
-    setMutationError(null);
+    setNotice(null);
     setIsSaving(true);
+    const pendingTeamId = selectedTeam.id;
+    const membership = selectedTeam.memberships?.nodes.find((candidate) => candidate.user.id === userId) ?? null;
+    const removedMemberLabel = membership?.user.email ?? membership?.user.name ?? 'member';
+    const teamName = selectedTeam.name;
 
     try {
       const result = await runTeamMembershipRemove({
         variables: {
           input: {
-            teamId: selectedTeam.id,
+            teamId: pendingTeamId,
             userId,
           },
         },
@@ -250,14 +293,25 @@ export function AccessPage() {
         throw new Error('Membership remove failed');
       }
 
-      updateSelectedTeam((team) => ({
+      updateTeamById(pendingTeamId, (team) => ({
         ...team,
         memberships: {
           nodes: team.memberships?.nodes.filter((membership) => membership.user.id !== userId) ?? [],
         },
       }));
+      if (selectedTeamIdRef.current === pendingTeamId) {
+        setNotice({
+          message: `Removed ${removedMemberLabel} from ${teamName}.`,
+          tone: 'success',
+        });
+      }
     } catch {
-      setMutationError(ACCESS_ERROR_MESSAGE);
+      if (selectedTeamIdRef.current === pendingTeamId) {
+        setNotice({
+          message: ACCESS_ERROR_MESSAGE,
+          tone: 'error',
+        });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -284,6 +338,7 @@ export function AccessPage() {
           <span>Team</span>
           <select
             aria-label="Select access team"
+            disabled={teams.length === 0 || isSaving}
             value={selectedTeam?.id ?? ''}
             onChange={(event) => setSelectedTeamId(event.target.value)}
           >
@@ -295,6 +350,43 @@ export function AccessPage() {
           </select>
         </label>
 
+        <div className="access-status-grid">
+          <article className="access-status-card">
+            <h2>Current viewer</h2>
+            <strong>{viewer?.name ?? viewer?.email ?? 'Unknown viewer'}</strong>
+            <p>{viewer ? `${viewer.globalRole} · ${viewer.email ?? 'No email on profile'}` : 'No viewer loaded.'}</p>
+          </article>
+          <article className="access-status-card">
+            <h2>Selected team</h2>
+            <strong>{selectedTeam?.name ?? 'No visible team selected'}</strong>
+            <p>
+              {selectedTeam
+                ? `${selectedTeam.visibility ?? 'PRIVATE'} · ${memberships.length} visible member${memberships.length === 1 ? '' : 's'}`
+                : 'Choose a visible team to inspect its access posture.'}
+            </p>
+          </article>
+          <article className="access-status-card">
+            <h2>Manage access</h2>
+            <strong>{isManageable ? 'Allowed' : 'Read-only'}</strong>
+            <p>
+              {selectedTeam
+                ? isManageable
+                  ? 'You can change visibility and memberships for this team.'
+                  : 'You can read this team, but access controls stay locked.'
+                : 'No team selected yet.'}
+            </p>
+          </article>
+        </div>
+
+        {notice ? (
+          <p
+            className={`board-message ${notice.tone === 'error' ? 'board-message--error' : 'board-message--success'}`}
+            role="status"
+          >
+            {notice.message}
+          </p>
+        ) : null}
+
         {selectedTeam ? (
           <>
             <div className="access-panel__section">
@@ -303,6 +395,9 @@ export function AccessPage() {
                 <p className="app-shell__subtext">
                   <code>PUBLIC</code> teams are readable by all signed-in users. Only members with
                   edit access can write.
+                </p>
+                <p className="app-shell__subtext">
+                  Current setting: <strong>{selectedTeam.visibility ?? 'PRIVATE'}</strong>
                 </p>
               </div>
               <select
@@ -348,7 +443,11 @@ export function AccessPage() {
                     </div>
                   ))
                 ) : (
-                  <p className="app-shell__subtext">No explicit team members yet.</p>
+                  <p className="app-shell__subtext">
+                    {isManageable
+                      ? 'No explicit team members yet. Add the first owner, editor, or viewer below.'
+                      : 'Membership details are only shown to owners and admins for this team.'}
+                  </p>
                 )}
               </div>
             </div>
@@ -390,26 +489,26 @@ export function AccessPage() {
                 <button
                   type="button"
                   className="issue-comment-composer__submit"
-                  disabled={!isManageable || isSaving}
+                  disabled={isMemberSaveDisabled}
                   onClick={() => void handleMembershipUpsert()}
                 >
                   Save member
                 </button>
               </div>
+              {!isManageable ? <p className="app-shell__subtext">{ACCESS_STATUS_MESSAGE}</p> : null}
             </div>
           </>
         ) : (
           <section className="board-message">
-            <p>No visible teams available for access management.</p>
+            <p>No visible teams available. Join a public team or ask an owner to grant access first.</p>
           </section>
         )}
 
         {!isManageable && selectedTeam ? (
-          <p className="board-message board-message--error">
-            You can view this team, but only an `OWNER` or `ADMIN` can change its access settings.
+          <p className="board-message" role="status">
+            {ACCESS_STATUS_MESSAGE}
           </p>
         ) : null}
-        {mutationError ? <p className="board-message board-message--error">{mutationError}</p> : null}
       </section>
     </main>
   );

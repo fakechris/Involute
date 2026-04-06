@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DragEndEvent } from '@dnd-kit/core';
 
 import { boardQueryResult, getIssue } from './test/app-test-helpers';
-import { getAuthToken, getAuthTokenDetails, getGraphqlUrl, getGraphqlUrlDetails } from './lib/apollo';
+import { getAuthToken, getAuthTokenDetails, getGraphqlUrl, getGraphqlUrlDetails, getServerBaseUrl } from './lib/apollo';
 import { createHtml5BoardDragPayload, mergeIssueWithPreservedComments, parseHtml5BoardDragPayload } from './board/utils';
 import {
   getDropTargetStateId,
@@ -159,6 +159,14 @@ describe('App drag helpers', () => {
       url: 'http://localhost:4200/graphql',
       source: 'default',
     });
+  });
+
+  it('resolves a relative GraphQL URL against the current browser origin for session routes', async () => {
+    vi.stubEnv('DEV', false);
+    vi.stubEnv('VITE_INVOLUTE_GRAPHQL_URL', '/graphql');
+
+    expect(getGraphqlUrl()).toBe('/graphql');
+    expect(getServerBaseUrl()).toBe('http://localhost:3000');
   });
 
   it('mergeIssueWithPreservedComments handles undefined comments gracefully', () => {
