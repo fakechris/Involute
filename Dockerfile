@@ -9,10 +9,11 @@ WORKDIR /app
 
 RUN corepack enable
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates openssl \
+  && apt-get install -y --no-install-recommends ca-certificates curl openssl \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/server/package.json packages/server/package.json
 COPY packages/cli/package.json packages/cli/package.json
@@ -50,6 +51,8 @@ ENV VITE_INVOLUTE_GRAPHQL_URL=${VITE_INVOLUTE_GRAPHQL_URL:-/graphql}
 RUN pnpm --filter @involute/web build
 
 FROM nginx:1.27-alpine AS web
+
+RUN apk add --no-cache curl
 
 COPY packages/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=web-build /app/packages/web/dist /usr/share/nginx/html

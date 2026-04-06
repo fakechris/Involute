@@ -126,13 +126,17 @@ export function BoardPage() {
     [queryTeamKey],
   );
   const location = useLocation();
-  const { data, error, fetchMore, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(
+  const { data, previousData, error, fetchMore, loading } = useQuery<
+    BoardPageQueryData,
+    BoardPageQueryVariables
+  >(
     BOARD_PAGE_QUERY,
     {
       variables: boardQueryVariables,
       notifyOnNetworkStatusChange: true,
     },
   );
+  const queryData = data ?? previousData;
   const [runIssueUpdate] = useMutation<IssueUpdateMutationData, IssueUpdateMutationVariables>(
     ISSUE_UPDATE_MUTATION,
   );
@@ -148,10 +152,10 @@ export function BoardPage() {
   const [runCommentDelete] = useMutation<CommentDeleteMutationData, CommentDeleteMutationVariables>(
     COMMENT_DELETE_MUTATION,
   );
-  const teams = data?.teams.nodes ?? [];
-  const users = data?.users.nodes ?? [];
-  const labels = data?.issueLabels.nodes ?? [];
-  const baseIssues = data?.issues.nodes ?? EMPTY_ISSUES;
+  const teams = queryData?.teams.nodes ?? [];
+  const users = queryData?.users.nodes ?? [];
+  const labels = queryData?.issueLabels.nodes ?? [];
+  const baseIssues = queryData?.issues.nodes ?? EMPTY_ISSUES;
   const [createdIssues, setCreatedIssues] = useState<IssueSummary[]>([]);
   const [issueOverrides, setIssueOverrides] = useState<Record<string, IssueSummary>>({});
   const [deletedIssueIds, setDeletedIssueIds] = useState<string[]>([]);
@@ -257,7 +261,7 @@ export function BoardPage() {
     () => visibleIssues.find((issue) => issue.id === selectedIssueId) ?? null,
     [selectedIssueId, visibleIssues],
   );
-  const hasMoreIssues = data?.issues.pageInfo.hasNextPage ?? false;
+  const hasMoreIssues = queryData?.issues.pageInfo.hasNextPage ?? false;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: DND_ACTIVATION_DISTANCE } }),
@@ -266,7 +270,7 @@ export function BoardPage() {
   );
 
   async function handleLoadMoreIssues() {
-    const pageInfo = data?.issues.pageInfo;
+    const pageInfo = queryData?.issues.pageInfo;
 
     if (!pageInfo?.hasNextPage || !pageInfo.endCursor || isLoadingMoreIssues) {
       return;
@@ -768,7 +772,7 @@ export function BoardPage() {
         onLoadMore={() => void handleLoadMoreIssues()}
       />
 
-      {loading && !data ? (
+      {loading && !queryData ? (
         <section className="board-message" aria-live="polite">
           Loading board…
         </section>

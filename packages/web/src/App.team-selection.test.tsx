@@ -1,6 +1,6 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { describe, expect, it, vi } from 'vitest';
 import {
   apolloMocks,
   boardQueryResult,
@@ -118,5 +118,67 @@ describe('App team selection', () => {
         }),
       ),
     );
+  });
+
+  it('keeps the current board visible while the next team is still loading', async () => {
+    const { App } = await import('./App');
+    let shouldDelaySonataResult = false;
+    const fetchMore = vi.fn().mockResolvedValue(undefined);
+
+    apolloMocks.useQuery.mockImplementation((document, options) => {
+      const source =
+        typeof document === 'string'
+          ? document
+          : ((document as { loc?: { source?: { body?: string } } }).loc?.source?.body ?? String(document));
+
+      if (source.includes('query AccessPage')) {
+        return {
+          data: boardQueryResult,
+          loading: false,
+        };
+      }
+
+      const selectedTeamKey =
+        options?.variables &&
+        'filter' in options.variables &&
+        options.variables.filter?.team?.key?.eq
+          ? options.variables.filter.team.key.eq
+          : null;
+
+      if (selectedTeamKey === 'SON' && shouldDelaySonataResult) {
+        return {
+          data: undefined,
+          previousData: boardQueryResult,
+          error: undefined,
+          fetchMore,
+          loading: true,
+        };
+      }
+
+      return {
+        data: boardQueryResult,
+        error: undefined,
+        fetchMore,
+        loading: false,
+      };
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText('Workflow overview for Involute.');
+
+    shouldDelaySonataResult = true;
+
+    fireEvent.change(screen.getByLabelText('Select team'), {
+      target: { value: 'SON' },
+    });
+
+    expect(await screen.findByText('Switching to Sonata…')).toBeInTheDocument();
+    expect(within(screen.getByTestId('column-Backlog')).getByText('INV-1')).toBeInTheDocument();
+    expect(screen.getByLabelText('Select team')).toHaveValue('SON');
   });
 });
