@@ -9,6 +9,11 @@ import {
   seedDatabase,
 } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
+import {
+  TEAM_MANAGE_FORBIDDEN_MESSAGE,
+  TEAM_NOT_FOUND_MESSAGE,
+  TEAM_WRITE_FORBIDDEN_MESSAGE,
+} from './errors.js';
 import { startServer, type StartedServer } from './index.ts';
 import { createSession } from './session.js';
 import { deleteComment, deleteIssue } from './issue-service.ts';
@@ -297,6 +302,250 @@ describe('GraphQL mutations', () => {
         code: 'FORBIDDEN',
       },
       message: 'You do not have access to manage this team.',
+    });
+  });
+
+  it('lets owner sessions manage team access and blocks editor membership changes', async () => {
+    const owner = await prisma.user.create({
+      data: {
+        email: 'owner@example.com',
+        name: 'Owner',
+      },
+    });
+    const editor = await prisma.user.create({
+      data: {
+        email: 'editor@example.com',
+        name: 'Editor',
+      },
+    });
+
+    await prisma.teamMembership.createMany({
+      data: [
+        {
+          role: 'OWNER',
+          teamId: fixture.team.id,
+          userId: owner.id,
+        },
+        {
+          role: 'EDITOR',
+          teamId: fixture.team.id,
+          userId: editor.id,
+        },
+      ],
+    });
+
+    const ownerSession = await createSession(prisma, owner.id, 60 * 60);
+    const ownerResponse = await postGraphQL({
+      cookie: `involute_session=${encodeURIComponent(ownerSession.token)}`,
+      query: `
+        mutation TeamUpdateAccess($input: TeamUpdateAccessInput!) {
+          teamUpdateAccess(input: $input) {
+            success
+            team { id visibility }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          teamId: fixture.team.id,
+          visibility: 'PUBLIC',
+        },
+      },
+      token: null,
+    });
+
+    expect(ownerResponse.status).toBe(200);
+    expect(ownerResponse.body.errors).toBeUndefined();
+    expect(ownerResponse.body.data.teamUpdateAccess).toEqual({
+      success: true,
+      team: {
+        id: fixture.team.id,
+        visibility: 'PUBLIC',
+      },
+    });
+    await expect(
+      prisma.team.findUniqueOrThrow({
+        where: {
+          id: fixture.team.id,
+        },
+      }),
+    ).resolves.toMatchObject({
+      visibility: 'PUBLIC',
+    });
+
+    const editorSession = await createSession(prisma, editor.id, 60 * 60);
+    const editorResponse = await postGraphQL({
+      cookie: `involute_session=${encodeURIComponent(editorSession.token)}`,
+      query: `
+        mutation TeamMembershipUpsert($input: TeamMembershipUpsertInput!) {
+          teamMembershipUpsert(input: $input) {
+            success
+            membership { id }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          email: 'new.member@example.com',
+          name: 'New Member',
+          role: 'VIEWER',
+          teamId: fixture.team.id,
+        },
+      },
+      token: null,
+    });
+
+    expect(editorResponse.status).toBe(200);
+    expect(editorResponse.body.data).toBeNull();
+    expect(editorResponse.body.errors?.[0]).toMatchObject({
+      extensions: {
+        code: 'FORBIDDEN',
+      },
+      message: TEAM_MANAGE_FORBIDDEN_MESSAGE,
+    });
+    await expect(
+      prisma.user.findUnique({
+        where: {
+          email: 'new.member@example.com',
+        },
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it('lets session outsiders read public teams while blocking writes and hiding private teams', async () => {
+    const publicTeam = await createTeamWithStates(prisma, {
+      key: 'PUB',
+      name: 'Public Team',
+    });
+
+    await prisma.team.update({
+      where: {
+        id: publicTeam.id,
+      },
+      data: {
+        visibility: 'PUBLIC',
+      },
+    });
+
+    const publicTeamStates = await prisma.workflowState.findMany({
+      where: {
+        teamId: publicTeam.id,
+      },
+    });
+    const publicIssue = await prisma.issue.create({
+      data: {
+        identifier: 'PUB-1',
+        teamId: publicTeam.id,
+        stateId: findStateByName(publicTeamStates, 'Ready').id,
+        title: 'Readable public issue',
+      },
+    });
+    const outsider = await prisma.user.create({
+      data: {
+        email: 'outsider@example.com',
+        name: 'Outsider',
+      },
+    });
+    const outsiderSession = await createSession(prisma, outsider.id, 60 * 60);
+    const sessionCookie = `involute_session=${encodeURIComponent(outsiderSession.token)}`;
+
+    const teamsResponse = await postGraphQL({
+      cookie: sessionCookie,
+      query: '{ teams { nodes { key visibility } } }',
+      token: null,
+    });
+
+    expect(teamsResponse.status).toBe(200);
+    expect(teamsResponse.body.errors).toBeUndefined();
+    expect(teamsResponse.body.data.teams.nodes).toEqual([
+      {
+        key: 'PUB',
+        visibility: 'PUBLIC',
+      },
+    ]);
+
+    const publicReadResponse = await postGraphQL({
+      cookie: sessionCookie,
+      query: `
+        query Issue($id: String!) {
+          issue(id: $id) {
+            id
+            identifier
+            title
+            team { key visibility }
+          }
+        }
+      `,
+      variables: {
+        id: publicIssue.id,
+      },
+      token: null,
+    });
+
+    expect(publicReadResponse.status).toBe(200);
+    expect(publicReadResponse.body.errors).toBeUndefined();
+    expect(publicReadResponse.body.data.issue).toEqual({
+      id: publicIssue.id,
+      identifier: 'PUB-1',
+      title: 'Readable public issue',
+      team: {
+        key: 'PUB',
+        visibility: 'PUBLIC',
+      },
+    });
+
+    const privateReadResponse = await postGraphQL({
+      cookie: sessionCookie,
+      query: `
+        query Issue($id: String!) {
+          issue(id: $id) {
+            id
+          }
+        }
+      `,
+      variables: {
+        id: fixture.issue.id,
+      },
+      token: null,
+    });
+
+    expect(privateReadResponse.status).toBe(200);
+    expect(privateReadResponse.body.data).toEqual({
+      issue: null,
+    });
+    expect(privateReadResponse.body.errors?.[0]).toMatchObject({
+      extensions: {
+        code: 'NOT_FOUND',
+      },
+      message: TEAM_NOT_FOUND_MESSAGE,
+    });
+
+    const writeResponse = await postGraphQL({
+      cookie: sessionCookie,
+      query: `
+        mutation CommentCreate($input: CommentCreateInput!) {
+          commentCreate(input: $input) {
+            success
+            comment { id }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          body: 'Blocked outsider write',
+          issueId: publicIssue.id,
+        },
+      },
+      token: null,
+    });
+
+    expect(writeResponse.status).toBe(200);
+    expect(writeResponse.body.data).toBeNull();
+    expect(writeResponse.body.errors?.[0]).toMatchObject({
+      extensions: {
+        code: 'FORBIDDEN',
+      },
+      message: TEAM_WRITE_FORBIDDEN_MESSAGE,
     });
   });
 
