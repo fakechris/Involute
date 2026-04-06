@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@apollo/client/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   ACCESS_PAGE_QUERY,
@@ -76,6 +76,7 @@ export function AccessPage() {
   const [newMemberRole, setNewMemberRole] = useState<'VIEWER' | 'EDITOR' | 'OWNER'>('VIEWER');
   const [notice, setNotice] = useState<AccessNotice | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const selectedTeamIdRef = useRef(selectedTeamId);
 
   useEffect(() => {
     const nextTeams = data?.teams.nodes ?? [];
@@ -88,6 +89,10 @@ export function AccessPage() {
 
   useEffect(() => {
     setNotice(null);
+  }, [selectedTeamId]);
+
+  useEffect(() => {
+    selectedTeamIdRef.current = selectedTeamId;
   }, [selectedTeamId]);
 
   const viewer = data?.viewer ?? null;
@@ -137,12 +142,8 @@ export function AccessPage() {
     );
   }
 
-  function updateSelectedTeam(updater: (team: TeamSummary) => TeamSummary) {
-    if (!selectedTeam) {
-      return;
-    }
-
-    setTeams((currentTeams) => currentTeams.map((team) => (team.id === selectedTeam.id ? updater(team) : team)));
+  function updateTeamById(teamId: string, updater: (team: TeamSummary) => TeamSummary) {
+    setTeams((currentTeams) => currentTeams.map((team) => (team.id === teamId ? updater(team) : team)));
   }
 
   async function handleVisibilityChange(nextVisibility: 'PRIVATE' | 'PUBLIC') {
@@ -153,9 +154,10 @@ export function AccessPage() {
     setNotice(null);
     setIsSaving(true);
 
+    const pendingTeamId = selectedTeam.id;
     const previousVisibility = selectedTeam.visibility ?? 'PRIVATE';
     const teamName = selectedTeam.name;
-    updateSelectedTeam((team) => ({
+    updateTeamById(pendingTeamId, (team) => ({
       ...team,
       visibility: nextVisibility,
     }));
@@ -164,7 +166,7 @@ export function AccessPage() {
       const result = await runTeamUpdateAccess({
         variables: {
           input: {
-            teamId: selectedTeam.id,
+            teamId: pendingTeamId,
             visibility: nextVisibility,
           },
         },
@@ -176,22 +178,26 @@ export function AccessPage() {
 
       setTeams((currentTeams) =>
         currentTeams.map((team) =>
-          team.id === selectedTeam.id ? result.data!.teamUpdateAccess.team! : team,
+          team.id === pendingTeamId ? result.data!.teamUpdateAccess.team! : team,
         ),
       );
-      setNotice({
-        message: `${teamName} is now ${nextVisibility}.`,
-        tone: 'success',
-      });
+      if (selectedTeamIdRef.current === pendingTeamId) {
+        setNotice({
+          message: `${teamName} is now ${nextVisibility}.`,
+          tone: 'success',
+        });
+      }
     } catch {
-      updateSelectedTeam((team) => ({
+      updateTeamById(pendingTeamId, (team) => ({
         ...team,
         visibility: previousVisibility,
       }));
-      setNotice({
-        message: ACCESS_ERROR_MESSAGE,
-        tone: 'error',
-      });
+      if (selectedTeamIdRef.current === pendingTeamId) {
+        setNotice({
+          message: ACCESS_ERROR_MESSAGE,
+          tone: 'error',
+        });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -210,6 +216,7 @@ export function AccessPage() {
 
     setNotice(null);
     setIsSaving(true);
+    const pendingTeamId = selectedTeam.id;
     const role = newMemberRole;
 
     try {
@@ -219,7 +226,7 @@ export function AccessPage() {
             email,
             name: newMemberName.trim() || null,
             role,
-            teamId: selectedTeam.id,
+            teamId: pendingTeamId,
           },
         },
       });
@@ -229,7 +236,7 @@ export function AccessPage() {
       }
 
       const membership = result.data.teamMembershipUpsert.membership;
-      updateSelectedTeam((team) => ({
+      updateTeamById(pendingTeamId, (team) => ({
         ...team,
         memberships: {
           nodes: sortMemberships([
@@ -242,15 +249,19 @@ export function AccessPage() {
       setNewMemberEmail('');
       setNewMemberName('');
       setNewMemberRole('VIEWER');
-      setNotice({
-        message: `Saved ${email} as ${role}.`,
-        tone: 'success',
-      });
+      if (selectedTeamIdRef.current === pendingTeamId) {
+        setNotice({
+          message: `Saved ${email} as ${role}.`,
+          tone: 'success',
+        });
+      }
     } catch {
-      setNotice({
-        message: ACCESS_ERROR_MESSAGE,
-        tone: 'error',
-      });
+      if (selectedTeamIdRef.current === pendingTeamId) {
+        setNotice({
+          message: ACCESS_ERROR_MESSAGE,
+          tone: 'error',
+        });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -263,6 +274,7 @@ export function AccessPage() {
 
     setNotice(null);
     setIsSaving(true);
+    const pendingTeamId = selectedTeam.id;
     const membership = selectedTeam.memberships?.nodes.find((candidate) => candidate.user.id === userId) ?? null;
     const removedMemberLabel = membership?.user.email ?? membership?.user.name ?? 'member';
     const teamName = selectedTeam.name;
@@ -271,7 +283,7 @@ export function AccessPage() {
       const result = await runTeamMembershipRemove({
         variables: {
           input: {
-            teamId: selectedTeam.id,
+            teamId: pendingTeamId,
             userId,
           },
         },
@@ -281,21 +293,25 @@ export function AccessPage() {
         throw new Error('Membership remove failed');
       }
 
-      updateSelectedTeam((team) => ({
+      updateTeamById(pendingTeamId, (team) => ({
         ...team,
         memberships: {
           nodes: team.memberships?.nodes.filter((membership) => membership.user.id !== userId) ?? [],
         },
       }));
-      setNotice({
-        message: `Removed ${removedMemberLabel} from ${teamName}.`,
-        tone: 'success',
-      });
+      if (selectedTeamIdRef.current === pendingTeamId) {
+        setNotice({
+          message: `Removed ${removedMemberLabel} from ${teamName}.`,
+          tone: 'success',
+        });
+      }
     } catch {
-      setNotice({
-        message: ACCESS_ERROR_MESSAGE,
-        tone: 'error',
-      });
+      if (selectedTeamIdRef.current === pendingTeamId) {
+        setNotice({
+          message: ACCESS_ERROR_MESSAGE,
+          tone: 'error',
+        });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -322,7 +338,7 @@ export function AccessPage() {
           <span>Team</span>
           <select
             aria-label="Select access team"
-            disabled={teams.length === 0}
+            disabled={teams.length === 0 || isSaving}
             value={selectedTeam?.id ?? ''}
             onChange={(event) => setSelectedTeamId(event.target.value)}
           >

@@ -172,7 +172,7 @@ export function getBoardBootstrapErrorMessage(error: Error): {
 }
 
 export function getServerBaseUrl(): string {
-  const graphqlUrl = new URL(getGraphqlUrl());
+  const graphqlUrl = toAbsoluteUrl(getGraphqlUrl());
 
   return graphqlUrl.origin;
 }
@@ -230,13 +230,21 @@ function readRuntimeGraphqlUrlQueryParam(): string | null {
 
 function isAllowedRuntimeGraphqlUrl(candidate: string): boolean {
   try {
-    const url = new URL(candidate);
+    const url = toAbsoluteUrl(candidate);
     const allowedHosts = new Set([window.location.hostname, ...ALLOWED_RUNTIME_GRAPHQL_HOSTS]);
 
     return (url.protocol === 'http:' || url.protocol === 'https:') && allowedHosts.has(url.hostname);
   } catch {
     return false;
   }
+}
+
+function toAbsoluteUrl(candidate: string): URL {
+  if (typeof window !== 'undefined') {
+    return new URL(candidate, window.location.origin);
+  }
+
+  return new URL(candidate);
 }
 
 function getViewerHeaders(): Record<string, string> {

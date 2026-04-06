@@ -170,6 +170,10 @@ export function BoardPage() {
   const [dragOriginStateId, setDragOriginStateId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (loading && !queryData) {
+      return;
+    }
+
     if (!teams.length) {
       if (activeTeamKey !== null) {
         setActiveTeamKey(null);
@@ -196,7 +200,7 @@ export function BoardPage() {
     if (nextTeamKey !== activeTeamKey) {
       setActiveTeamKey(nextTeamKey);
     }
-  }, [activeTeamKey, pendingTeamKey, teams]);
+  }, [activeTeamKey, loading, pendingTeamKey, queryData, teams]);
 
   useEffect(() => {
     if (!pendingTeamKey || loading) {
@@ -261,7 +265,7 @@ export function BoardPage() {
     () => visibleIssues.find((issue) => issue.id === selectedIssueId) ?? null,
     [selectedIssueId, visibleIssues],
   );
-  const hasMoreIssues = queryData?.issues.pageInfo.hasNextPage ?? false;
+  const hasMoreIssues = !isTeamSwitching && (queryData?.issues.pageInfo.hasNextPage ?? false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: DND_ACTIVATION_DISTANCE } }),
@@ -270,6 +274,10 @@ export function BoardPage() {
   );
 
   async function handleLoadMoreIssues() {
+    if (isTeamSwitching) {
+      return;
+    }
+
     const pageInfo = queryData?.issues.pageInfo;
 
     if (!pageInfo?.hasNextPage || !pageInfo.endCursor || isLoadingMoreIssues) {

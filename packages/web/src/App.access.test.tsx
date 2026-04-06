@@ -161,6 +161,72 @@ describe('App access management', () => {
     expect(await screen.findByText('Removed editor@example.com from Involute.')).toBeInTheDocument();
   });
 
+  it('disables team switching while an access mutation is pending', async () => {
+    mockSessionState({
+      authMode: 'session',
+      authenticated: true,
+      googleOAuthConfigured: true,
+      viewer: {
+        email: 'admin@involute.local',
+        globalRole: 'ADMIN',
+        id: 'user-1',
+        name: 'Admin',
+      },
+    });
+
+    const deferredMutation: { resolve: null | (() => void) } = { resolve: null };
+    const teamUpdateAccess = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          deferredMutation.resolve = () =>
+            resolve({
+              data: {
+                teamUpdateAccess: {
+                  success: true,
+                  team: {
+                    ...accessQueryResult.teams.nodes[0],
+                    visibility: 'PUBLIC',
+                  },
+                },
+              },
+            });
+        }),
+    );
+
+    apolloMocks.useMutation.mockImplementation((document) => {
+      const source =
+        typeof document === 'string'
+          ? document
+          : (document as { loc?: { source?: { body?: string } } }).loc?.source?.body ?? String(document);
+
+      if (source.includes('mutation TeamUpdateAccess')) {
+        return [teamUpdateAccess];
+      }
+
+      return [vi.fn()];
+    });
+
+    renderApp({ accessData: accessQueryResult, data: boardQueryResult, loading: false }, ['/settings/access']);
+
+    fireEvent.change(await screen.findByLabelText('Team visibility'), {
+      target: { value: 'PUBLIC' },
+    });
+
+    await waitFor(() => {
+      expect(teamUpdateAccess).toHaveBeenCalled();
+    });
+    expect(screen.getByLabelText('Select access team')).toBeDisabled();
+
+    if (!deferredMutation.resolve) {
+      throw new Error('Expected pending access mutation resolver.');
+    }
+
+    deferredMutation.resolve();
+
+    expect(await screen.findByText('Involute is now PUBLIC.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Select access team')).not.toBeDisabled();
+  });
+
   it('shows a read-only access state for viewers who cannot manage the selected team', async () => {
     mockSessionState({
       authMode: 'session',

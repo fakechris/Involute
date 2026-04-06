@@ -43,9 +43,7 @@ CMD ["pnpm", "--filter", "@involute/web", "exec", "vite", "--host", "0.0.0.0", "
 
 FROM base AS web-build
 
-ARG VITE_INVOLUTE_AUTH_TOKEN
 ARG VITE_INVOLUTE_GRAPHQL_URL
-ENV VITE_INVOLUTE_AUTH_TOKEN=${VITE_INVOLUTE_AUTH_TOKEN:-}
 ENV VITE_INVOLUTE_GRAPHQL_URL=${VITE_INVOLUTE_GRAPHQL_URL:-/graphql}
 
 RUN pnpm --filter @involute/web build
@@ -54,7 +52,7 @@ FROM nginx:1.27-alpine AS web
 
 RUN apk add --no-cache curl
 
-COPY packages/web/nginx.conf /etc/nginx/conf.d/default.conf
+COPY packages/web/nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=web-build /app/packages/web/dist /usr/share/nginx/html
 
 EXPOSE 4201

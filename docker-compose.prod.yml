@@ -84,6 +84,9 @@ services:
       target: web
       args:
         VITE_INVOLUTE_GRAPHQL_URL: /graphql
+    environment:
+      INTERNAL_SERVER_ORIGIN: http://server:4200
+      WEB_PROXY_AUTHORIZATION: ""
     restart: unless-stopped
     depends_on:
       server:
