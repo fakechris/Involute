@@ -42,7 +42,9 @@ CMD ["pnpm", "--filter", "@involute/web", "exec", "vite", "--host", "0.0.0.0", "
 
 FROM base AS web-build
 
+ARG VITE_INVOLUTE_AUTH_TOKEN
 ARG VITE_INVOLUTE_GRAPHQL_URL
+ENV VITE_INVOLUTE_AUTH_TOKEN=${VITE_INVOLUTE_AUTH_TOKEN:-}
 ENV VITE_INVOLUTE_GRAPHQL_URL=${VITE_INVOLUTE_GRAPHQL_URL:-/graphql}
 
 RUN pnpm --filter @involute/web build

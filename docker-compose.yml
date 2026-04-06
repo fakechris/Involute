@@ -25,29 +25,30 @@ services:
     entrypoint:
       - /bin/sh
       - -lc
-    command: >
-      set -e;
-      if [ "${PRISMA_BASELINE_EXISTING_SCHEMA:-false}" = "true" ]; then
-        baseline_output="";
-        baseline_status=0;
-        baseline_output="$$(pnpm --filter @involute/server exec prisma migrate resolve --applied 20260405093000_init 2>&1)" || baseline_status=$$?;
-        if [ "$$baseline_status" -ne 0 ]; then
-          printf '%s\n' "$$baseline_output" >&2;
-          case "$$baseline_output" in
-            *"already recorded as applied"*|*"already applied"*) ;;
-            *) exit "$$baseline_status" ;;
-          esac;
-        else
-          printf '%s\n' "$$baseline_output";
+    command:
+      - >
+        set -e;
+        if [ "${PRISMA_BASELINE_EXISTING_SCHEMA:-false}" = "true" ]; then
+          baseline_output="";
+          baseline_status=0;
+          baseline_output="$$(pnpm --filter @involute/server exec prisma migrate resolve --applied 20260405093000_init 2>&1)" || baseline_status=$$?;
+          if [ "$$baseline_status" -ne 0 ]; then
+            printf '%s\n' "$$baseline_output" >&2;
+            case "$$baseline_output" in
+              *"already recorded as applied"*|*"already applied"*) ;;
+              *) exit "$$baseline_status" ;;
+            esac;
+          else
+            printf '%s\n' "$$baseline_output";
+          fi;
         fi;
-      fi;
-      pnpm --filter @involute/server exec prisma migrate deploy;
-      if [ "${SEED_DATABASE:-true}" = "true" ]; then
-        pnpm --filter @involute/server exec prisma db seed;
-      fi;
-      if [ -n "${ADMIN_EMAIL_ALLOWLIST:-}" ]; then
-        pnpm --filter @involute/server exec tsx prisma/bootstrap-admin.ts;
-      fi
+        pnpm --filter @involute/server exec prisma migrate deploy;
+        if [ "${SEED_DATABASE:-true}" = "true" ]; then
+          pnpm --filter @involute/server exec prisma db seed;
+        fi;
+        if [ -n "${ADMIN_EMAIL_ALLOWLIST:-}" ]; then
+          pnpm --filter @involute/server exec tsx prisma/bootstrap-admin.ts;
+        fi
     environment:
       ADMIN_EMAIL_ALLOWLIST: ${ADMIN_EMAIL_ALLOWLIST:-}
       DATABASE_URL: postgresql://involute:involute@db:5432/involute?schema=public
@@ -95,7 +96,10 @@ services:
   web:
     build:
       context: .
-      target: web-dev
+      target: ${INVOLUTE_WEB_BUILD_TARGET:-web-dev}
+      args:
+        VITE_INVOLUTE_AUTH_TOKEN: ${VITE_INVOLUTE_AUTH_TOKEN:-${AUTH_TOKEN:-changeme-set-your-token}}
+        VITE_INVOLUTE_GRAPHQL_URL: ${VITE_INVOLUTE_GRAPHQL_URL:-http://localhost:4200/graphql}
     depends_on:
       server:
         condition: service_healthy

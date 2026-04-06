@@ -25,15 +25,16 @@ services:
     entrypoint:
       - /bin/sh
       - -lc
-    command: >
-      set -e;
-      pnpm --filter @involute/server exec prisma migrate deploy;
-      if [ "${SEED_DATABASE:-false}" = "true" ]; then
-        pnpm --filter @involute/server exec prisma db seed;
-      fi;
-      if [ -n "${ADMIN_EMAIL_ALLOWLIST:-}" ]; then
-        pnpm --filter @involute/server exec tsx prisma/bootstrap-admin.ts;
-      fi
+    command:
+      - >
+        set -e;
+        pnpm --filter @involute/server exec prisma migrate deploy;
+        if [ "${SEED_DATABASE:-false}" = "true" ]; then
+          pnpm --filter @involute/server exec prisma db seed;
+        fi;
+        if [ -n "${ADMIN_EMAIL_ALLOWLIST:-}" ]; then
+          pnpm --filter @involute/server exec tsx prisma/bootstrap-admin.ts;
+        fi
     environment:
       ADMIN_EMAIL_ALLOWLIST: ${ADMIN_EMAIL_ALLOWLIST:-}
       GOOGLE_OAUTH_ADMIN_EMAILS: ${ADMIN_EMAIL_ALLOWLIST:-${GOOGLE_OAUTH_ADMIN_EMAILS:-}}
