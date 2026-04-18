@@ -105,6 +105,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build server package
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/involute_publish
         run: pnpm --filter @turnkeyai/involute-server build
 
       - name: Prepare server manifest
@@ -159,6 +161,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build CLI package
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/involute_publish
         run: pnpm --filter @turnkeyai/involute build
 
       - name: Prepare CLI manifest
