@@ -2,6 +2,14 @@
   "name": "@turnkeyai/involute-shared",
   "version": "0.0.0",
   "private": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fakechris/Involute"
+  },
+  "homepage": "https://github.com/fakechris/Involute",
+  "bugs": {
+    "url": "https://github.com/fakechris/Involute/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
