@@ -22,9 +22,11 @@ describe('App access management', () => {
     expect(await screen.findByRole('heading', { name: 'Access' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Access' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Current viewer' })).toBeInTheDocument();
-    expect(screen.getByText('Allowed')).toBeInTheDocument();
-    expect(screen.getByLabelText('Team visibility')).toHaveValue('PRIVATE');
-    expect(screen.getByText('OWNER · ADMIN')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Allowed')).toBeInTheDocument();
+      expect(screen.getByLabelText('Team visibility')).toHaveValue('PRIVATE');
+      expect(screen.getByText('OWNER · ADMIN')).toBeInTheDocument();
+    });
   });
 
   it('updates visibility and membership entries from the minimal access UI', async () => {
