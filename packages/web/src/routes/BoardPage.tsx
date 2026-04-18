@@ -361,12 +361,26 @@ export function BoardPage() {
       setIsCreateOpen(true);
     }
 
+    if (
+      !isBacklogView &&
+      location.state &&
+      typeof location.state === 'object' &&
+      'openCreateIssue' in location.state &&
+      location.state.openCreateIssue
+    ) {
+      handleOpenCreateIssue();
+      navigate(location.pathname, {
+        replace: true,
+        state: {},
+      });
+    }
+
     window.addEventListener(OPEN_CREATE_ISSUE_EVENT, handleOpenCreateIssue as EventListener);
 
     return () => {
       window.removeEventListener(OPEN_CREATE_ISSUE_EVENT, handleOpenCreateIssue as EventListener);
     };
-  }, []);
+  }, [isBacklogView, location.pathname, location.state, navigate]);
 
   useEffect(() => {
     const visibleIssueIds = new Set(boardVisibleIssues.map((issue) => issue.id));

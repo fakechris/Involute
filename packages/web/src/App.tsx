@@ -135,16 +135,20 @@ function persistSidebarWidth(nextSidebarWidth: number) {
   }
 }
 
-function openCreateIssueSurface(navigate: ReturnType<typeof useNavigate>, pathname: string) {
+function openCreateIssueSurface(
+  navigate: ReturnType<typeof useNavigate>,
+  pathname: string,
+) {
   if (pathname === '/' || pathname === '/backlog') {
     window.dispatchEvent(new Event(OPEN_CREATE_ISSUE_EVENT));
     return;
   }
 
-  navigate('/');
-  window.setTimeout(() => {
-    window.dispatchEvent(new Event(OPEN_CREATE_ISSUE_EVENT));
-  }, 0);
+  navigate('/', {
+    state: {
+      openCreateIssue: true,
+    },
+  });
 }
 
 function CommandPalette({

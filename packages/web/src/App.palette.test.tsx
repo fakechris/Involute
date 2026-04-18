@@ -18,6 +18,20 @@ describe('App command palette', () => {
     expect(await screen.findByRole('dialog', { name: 'Create issue drawer' })).toBeInTheDocument();
   });
 
+  it('opens the create issue dialog after navigating back from a non-board route', async () => {
+    renderApp({ data: boardQueryResult, loading: false }, ['/issue/issue-1']);
+
+    expect(await screen.findByRole('heading', { name: 'Issue detail' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Search issues and commands/i }));
+
+    const palette = await screen.findByRole('dialog', { name: 'Command palette' });
+    fireEvent.click(within(palette).getByRole('button', { name: /Create issue/i }));
+
+    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Create issue drawer' })).toBeInTheDocument();
+  });
+
   it('searches across the full shell issue list instead of only a short recent subset', async () => {
     const expandedData: BoardPageQueryData = {
       ...boardQueryResult,
