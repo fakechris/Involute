@@ -25,6 +25,16 @@ export interface SavedBacklogView {
   state: BacklogViewState;
 }
 
+export interface ApplyBacklogViewDetail {
+  state: BacklogViewState;
+  viewId?: string;
+}
+
+export interface SavedBacklogViewsEventDetail {
+  teamKey: string | null;
+  views: SavedBacklogView[];
+}
+
 const DEFAULT_BACKLOG_VIEW_STATE: BacklogViewState = {
   assigneeIds: [],
   labelIds: [],
@@ -33,6 +43,9 @@ const DEFAULT_BACKLOG_VIEW_STATE: BacklogViewState = {
   sortField: 'identifier',
   stateIds: [],
 };
+
+export const APPLY_BACKLOG_VIEW_EVENT = 'involute:apply-backlog-view';
+export const BACKLOG_SAVED_VIEWS_EVENT = 'involute:backlog-saved-views';
 
 function getBacklogViewStateStorageKey(teamKey: string) {
   return `involute.backlog.viewState.${teamKey}`;
@@ -180,6 +193,27 @@ export function writeSavedBacklogViews(teamKey: string | null, views: SavedBackl
   } catch {
     // Ignore storage failures in restricted browser contexts.
   }
+
+  window.dispatchEvent(
+    new CustomEvent<SavedBacklogViewsEventDetail>(BACKLOG_SAVED_VIEWS_EVENT, {
+      detail: {
+        teamKey,
+        views,
+      },
+    }),
+  );
+}
+
+export function dispatchApplyBacklogView(detail: ApplyBacklogViewDetail): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent<ApplyBacklogViewDetail>(APPLY_BACKLOG_VIEW_EVENT, {
+      detail,
+    }),
+  );
 }
 
 export function applyBacklogViewState(

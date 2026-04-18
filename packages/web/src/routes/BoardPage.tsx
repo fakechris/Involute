@@ -60,11 +60,13 @@ import {
 } from '../board/utils';
 import {
   applyBoardViewState,
+  APPLY_BOARD_VIEW_EVENT,
   buildBoardViewSummary,
   createSavedBoardViewId,
   getDefaultBoardViewState,
   readSavedBoardViews,
   readStoredBoardViewState,
+  type ApplyBoardViewDetail,
   type BoardViewState,
   type SavedBoardView,
   writeSavedBoardViews,
@@ -185,6 +187,7 @@ export function BoardPage() {
   const [bulkTargetStateId, setBulkTargetStateId] = useState('');
   const [bulkAssigneeId, setBulkAssigneeId] = useState('');
   const [bulkLabelId, setBulkLabelId] = useState('');
+  const [bulkRemoveLabelId, setBulkRemoveLabelId] = useState('');
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [isSavingState, setIsSavingState] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -276,6 +279,28 @@ export function BoardPage() {
   }, [activeTeamKey]);
 
   useEffect(() => {
+    function handleApplyBoardView(event: Event) {
+      const detail =
+        event instanceof CustomEvent && event.detail
+          ? (event.detail as ApplyBoardViewDetail)
+          : null;
+
+      if (!detail) {
+        return;
+      }
+
+      setBoardViewState(detail.state);
+      setActiveSavedBoardViewId(detail.viewId ?? '');
+    }
+
+    window.addEventListener(APPLY_BOARD_VIEW_EVENT, handleApplyBoardView as EventListener);
+
+    return () => {
+      window.removeEventListener(APPLY_BOARD_VIEW_EVENT, handleApplyBoardView as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
     writeStoredBoardViewState(activeTeamKey, boardViewState);
   }, [activeTeamKey, boardViewState]);
 
@@ -320,6 +345,7 @@ export function BoardPage() {
     setBulkTargetStateId('');
     setBulkAssigneeId('');
     setBulkLabelId('');
+    setBulkRemoveLabelId('');
     setActiveIssueId(null);
     setIsCreateOpen(false);
     setDragPreviewStateId(null);
@@ -799,6 +825,111 @@ export function BoardPage() {
 
     if (hadFailure) {
       setMutationError('We could not add the label to some selected issues. Please try again.');
+    }
+  }
+
+  async function applyBulkLabelRemove() {
+    if (!bulkRemoveLabelId) {
+      return;
+    }
+
+    const selectedIssueIdSet = new Set(selectedIssueIds);
+    const issuesToUpdate = boardVisibleIssues.filter(
+      (issue) =>
+        selectedIssueIdSet.has(issue.id) &&
+        issue.labels.nodes.some((label) => label.id === bulkRemoveLabelId),
+    );
+
+    if (issuesToUpdate.length === 0) {
+      return;
+    }
+
+    const previousIssuesById = new Map(
+      issuesToUpdate.map((issue) => [issue.id, issueOverrides[issue.id] ?? issue]),
+    );
+    const optimisticIssuesById = new Map(
+      issuesToUpdate.map((issue) => {
+        const currentIssue = issueOverrides[issue.id] ?? issue;
+
+        return [
+          issue.id,
+          {
+            ...currentIssue,
+            labels: {
+              nodes: currentIssue.labels.nodes.filter((label) => label.id !== bulkRemoveLabelId),
+            },
+          },
+        ];
+      }),
+    );
+
+    setMutationError(null);
+    setIsSavingState(true);
+
+    setIssueOverrides((currentOverrides) => {
+      let nextOverrides = currentOverrides;
+
+      for (const [issueId, optimisticIssue] of optimisticIssuesById) {
+        nextOverrides = replaceIssueOverride(nextOverrides, issueId, optimisticIssue);
+      }
+
+      return nextOverrides;
+    });
+
+    const results = await Promise.allSettled(
+      issuesToUpdate.map((issue) => {
+        const labelIds = issue.labels.nodes
+          .map((label) => label.id)
+          .filter((labelId) => labelId !== bulkRemoveLabelId)
+          .sort();
+
+        return runIssueUpdate({
+          variables: {
+            id: issue.id,
+            input: {
+              labelIds,
+            },
+          },
+        });
+      }),
+    );
+
+    let hadFailure = false;
+
+    setIssueOverrides((currentOverrides) => {
+      let nextOverrides = currentOverrides;
+
+      results.forEach((result, index) => {
+        const issue = issuesToUpdate[index]!;
+        const previousIssue = previousIssuesById.get(issue.id) ?? issue;
+        const optimisticIssue = optimisticIssuesById.get(issue.id) ?? issue;
+
+        if (
+          result.status === 'fulfilled' &&
+          result.value.data?.issueUpdate.success &&
+          result.value.data.issueUpdate.issue
+        ) {
+          const currentIssue = nextOverrides[issue.id] ?? optimisticIssue;
+          nextOverrides = replaceIssueOverride(
+            nextOverrides,
+            issue.id,
+            mergeIssueWithPreservedComments(currentIssue, result.value.data.issueUpdate.issue),
+          );
+          return;
+        }
+
+        hadFailure = true;
+        nextOverrides = replaceIssueOverride(nextOverrides, issue.id, previousIssue);
+      });
+
+      return nextOverrides;
+    });
+
+    setIsSavingState(false);
+    setBulkRemoveLabelId('');
+
+    if (hadFailure) {
+      setMutationError('We could not remove the label from some selected issues. Please try again.');
     }
   }
 
@@ -1306,6 +1437,12 @@ export function BoardPage() {
         return;
       }
 
+      if (event.key === 'X' && event.shiftKey) {
+        event.preventDefault();
+        setSelectedIssueIds([]);
+        return;
+      }
+
       if ((event.key === 'Enter' || event.key === 'o') && focusedIssueId) {
         event.preventDefault();
         const focusedIssue = boardVisibleIssues.find((issue) => issue.id === focusedIssueId);
@@ -1709,7 +1846,7 @@ export function BoardPage() {
               <span>
                 {selectedIssueIds.length > 0
                   ? 'Apply actions to the current filtered board selection.'
-                  : 'Use x to select the focused issue, Shift+A to select all visible, Enter to open.'}
+                  : 'Use x to select the focused issue, Shift+A to select all visible, Shift+X to clear, Enter to open.'}
               </span>
             </div>
             <div className="issue-bulkbar__actions">
@@ -1793,6 +1930,29 @@ export function BoardPage() {
                 onClick={() => void applyBulkLabelAdd()}
               >
                 Add label
+              </button>
+              <label className="field-stack">
+                <span>Remove label</span>
+                <select
+                  aria-label="Bulk remove label from selected issues"
+                  value={bulkRemoveLabelId}
+                  onChange={(event) => setBulkRemoveLabelId(event.target.value)}
+                >
+                  <option value="">Choose label</option>
+                  {labels.map((label) => (
+                    <option key={label.id} value={label.id}>
+                      {label.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="ui-action ui-action--subtle"
+                disabled={selectedIssueIds.length === 0 || !bulkRemoveLabelId || isSavingState}
+                onClick={() => void applyBulkLabelRemove()}
+              >
+                Remove label
               </button>
             </div>
           </section>

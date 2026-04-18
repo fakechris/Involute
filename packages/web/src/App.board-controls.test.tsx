@@ -197,6 +197,20 @@ describe('App board controls', () => {
             },
           },
         } satisfies IssueUpdateMutationData,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          issueUpdate: {
+            success: true,
+            issue: {
+              ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+              assignee: null,
+              labels: {
+                nodes: [{ id: 'label-bug', name: 'Bug' }],
+              },
+            },
+          },
+        } satisfies IssueUpdateMutationData,
       });
 
     apolloMocks.useMutation.mockImplementation((document) => {
@@ -247,6 +261,22 @@ describe('App board controls', () => {
           id: 'issue-1',
           input: {
             labelIds: ['label-bug', 'label-task'],
+          },
+        },
+      }),
+    );
+
+    fireEvent.change(screen.getByLabelText('Bulk remove label from selected issues'), {
+      target: { value: 'label-task' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove label' }));
+
+    await waitFor(() =>
+      expect(updateIssue).toHaveBeenNthCalledWith(3, {
+        variables: {
+          id: 'issue-1',
+          input: {
+            labelIds: ['label-bug'],
           },
         },
       }),

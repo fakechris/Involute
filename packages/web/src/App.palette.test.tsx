@@ -1,7 +1,7 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { boardQueryResult, renderApp } from './test/app-test-helpers';
+import { boardQueryResult, mockSessionState, renderApp } from './test/app-test-helpers';
 import type { BoardPageQueryData, IssueSummary } from './board/types';
 
 describe('App command palette', () => {
@@ -45,5 +45,62 @@ describe('App command palette', () => {
     });
 
     expect(await within(palette).findByRole('button', { name: /INV-14 · Needle issue thirteen/i })).toBeInTheDocument();
+  });
+
+  it('loads a saved board view directly from the command palette', async () => {
+    window.prompt = () => 'Bug queue';
+
+    renderApp({ data: boardQueryResult, loading: false }, ['/']);
+
+    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+
+    const filters = screen.getByLabelText('Board filters');
+    fireEvent.click(within(filters).getByText('Labels'));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Bug' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+
+    await waitFor(() => {
+      expect(within(screen.getByTestId('column-Backlog')).getByText('Backlog item')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Search issues and commands/i }));
+    const palette = await screen.findByRole('dialog', { name: 'Command palette' });
+    fireEvent.click(within(palette).getByRole('button', { name: /Load board view · Bug queue/i }));
+
+    await waitFor(() => {
+      expect(within(screen.getByTestId('column-Backlog')).queryByTestId('issue-card-issue-1')).not.toBeInTheDocument();
+      expect(screen.getByText(/Loaded view: Bug queue/i)).toBeInTheDocument();
+    });
+  });
+
+  it('supports g-prefixed navigation shortcuts across board, backlog, and access', async () => {
+    mockSessionState({
+      authMode: 'session',
+      authenticated: true,
+      googleOAuthConfigured: true,
+      viewer: {
+        id: 'viewer-1',
+        email: 'admin@example.com',
+        name: 'Admin',
+        globalRole: 'ADMIN',
+      },
+    });
+
+    renderApp({ data: boardQueryResult, loading: false }, ['/']);
+
+    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'g' });
+    fireEvent.keyDown(window, { key: 'l' });
+    expect(await screen.findByRole('heading', { name: 'Backlog' })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'g' });
+    fireEvent.keyDown(window, { key: 'a' });
+    expect(await screen.findByRole('heading', { name: 'Access' })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'g' });
+    fireEvent.keyDown(window, { key: 'b' });
+    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
   });
 });

@@ -8,6 +8,22 @@ import {
   writeStoredTeamKey,
 } from './board/utils';
 import {
+  BOARD_SAVED_VIEWS_EVENT,
+  dispatchApplyBoardView,
+  readSavedBoardViews,
+  writeStoredBoardViewState,
+  type SavedBoardView,
+  type SavedBoardViewsEventDetail,
+} from './board/views';
+import {
+  BACKLOG_SAVED_VIEWS_EVENT,
+  dispatchApplyBacklogView,
+  readSavedBacklogViews,
+  writeStoredBacklogViewState,
+  type SavedBacklogView,
+  type SavedBacklogViewsEventDetail,
+} from './backlog/views';
+import {
   APP_SHELL_ISSUES_EVENT,
   APP_SHELL_ISSUES_STORAGE_KEY,
   APP_SHELL_TEAMS_EVENT,
@@ -404,7 +420,14 @@ export function App() {
   const [shellTeams, setShellTeams] = useState<AppShellTeamSummary[]>(() => readStoredShellTeams());
   const [shellIssues, setShellIssues] = useState<AppShellIssueSummary[]>(() => readStoredShellIssues());
   const [activeTeamKey, setActiveTeamKey] = useState<string | null>(() => readStoredTeamKey());
+  const [savedBoardViews, setSavedBoardViews] = useState<SavedBoardView[]>(() =>
+    readSavedBoardViews(readStoredTeamKey()),
+  );
+  const [savedBacklogViews, setSavedBacklogViews] = useState<SavedBacklogView[]>(() =>
+    readSavedBacklogViews(readStoredTeamKey()),
+  );
   const [expandedTeamKey, setExpandedTeamKey] = useState<string | null>(() => readStoredTeamKey());
+  const gotoPrefixTimeoutRef = useRef<number | null>(null);
   const issuesByTeamKey = useMemo(() => {
     const nextMap = new Map<string, AppShellIssueSummary[]>();
 
@@ -462,6 +485,11 @@ export function App() {
   }, [sidebarWidth]);
 
   useEffect(() => {
+    setSavedBoardViews(readSavedBoardViews(activeTeamKey));
+    setSavedBacklogViews(readSavedBacklogViews(activeTeamKey));
+  }, [activeTeamKey]);
+
+  useEffect(() => {
     function handleTeamsUpdate(event: Event) {
       const nextTeams =
         event instanceof CustomEvent && Array.isArray(event.detail)
@@ -506,18 +534,44 @@ export function App() {
       }
     }
 
+    function handleBoardSavedViewsUpdate(event: Event) {
+      const detail =
+        event instanceof CustomEvent && event.detail
+          ? (event.detail as SavedBoardViewsEventDetail)
+          : null;
+
+      if (detail?.teamKey === activeTeamKey) {
+        setSavedBoardViews(detail.views);
+      }
+    }
+
+    function handleBacklogSavedViewsUpdate(event: Event) {
+      const detail =
+        event instanceof CustomEvent && event.detail
+          ? (event.detail as SavedBacklogViewsEventDetail)
+          : null;
+
+      if (detail?.teamKey === activeTeamKey) {
+        setSavedBacklogViews(detail.views);
+      }
+    }
+
     window.addEventListener(APP_SHELL_TEAMS_EVENT, handleTeamsUpdate as EventListener);
     window.addEventListener(APP_SHELL_ISSUES_EVENT, handleIssuesUpdate as EventListener);
     window.addEventListener('involute:active-team-key', handleActiveTeamUpdate as EventListener);
+    window.addEventListener(BOARD_SAVED_VIEWS_EVENT, handleBoardSavedViewsUpdate as EventListener);
+    window.addEventListener(BACKLOG_SAVED_VIEWS_EVENT, handleBacklogSavedViewsUpdate as EventListener);
     window.addEventListener('storage', handleStorage);
 
     return () => {
       window.removeEventListener(APP_SHELL_TEAMS_EVENT, handleTeamsUpdate as EventListener);
       window.removeEventListener(APP_SHELL_ISSUES_EVENT, handleIssuesUpdate as EventListener);
       window.removeEventListener('involute:active-team-key', handleActiveTeamUpdate as EventListener);
+      window.removeEventListener(BOARD_SAVED_VIEWS_EVENT, handleBoardSavedViewsUpdate as EventListener);
+      window.removeEventListener(BACKLOG_SAVED_VIEWS_EVENT, handleBacklogSavedViewsUpdate as EventListener);
       window.removeEventListener('storage', handleStorage);
     };
-  }, []);
+  }, [activeTeamKey]);
 
   useEffect(() => {
     function handleGlobalKeyDown(event: KeyboardEvent) {
@@ -536,13 +590,42 @@ export function App() {
         return;
       }
 
-      if (isTypingField) {
+      if (isTypingField || isPaletteOpen) {
         return;
       }
 
-      if (event.key.toLowerCase() === 'g' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (gotoPrefixTimeoutRef.current !== null) {
+        window.clearTimeout(gotoPrefixTimeoutRef.current);
+        gotoPrefixTimeoutRef.current = null;
+
+        if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+          const shortcutKey = event.key.toLowerCase();
+
+          if (shortcutKey === 'b') {
+            event.preventDefault();
+            navigate('/');
+            return;
+          }
+
+          if (shortcutKey === 'l') {
+            event.preventDefault();
+            navigate('/backlog');
+            return;
+          }
+
+          if (shortcutKey === 'a' && session?.authenticated) {
+            event.preventDefault();
+            navigate('/settings/access');
+            return;
+          }
+        }
+      }
+
+      if (event.key.toLowerCase() === 'g' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
         event.preventDefault();
-        navigate('/');
+        gotoPrefixTimeoutRef.current = window.setTimeout(() => {
+          gotoPrefixTimeoutRef.current = null;
+        }, 1200);
         return;
       }
 
@@ -555,9 +638,13 @@ export function App() {
     window.addEventListener('keydown', handleGlobalKeyDown);
 
     return () => {
+      if (gotoPrefixTimeoutRef.current !== null) {
+        window.clearTimeout(gotoPrefixTimeoutRef.current);
+        gotoPrefixTimeoutRef.current = null;
+      }
       window.removeEventListener('keydown', handleGlobalKeyDown);
     };
-  }, [location.pathname, navigate]);
+  }, [isPaletteOpen, location.pathname, navigate, session?.authenticated]);
 
   const paletteActions = useMemo<PaletteAction[]>(() => {
     const actions: PaletteAction[] = [
@@ -574,6 +661,7 @@ export function App() {
         label: 'Go to backlog',
         description: 'Open the linear-style list view',
         group: 'Navigation',
+        shortcut: 'G L',
         run: () => navigate('/backlog'),
       },
       {
@@ -607,8 +695,41 @@ export function App() {
         label: 'Open access settings',
         description: 'Manage team visibility and memberships',
         group: 'Navigation',
+        shortcut: 'G A',
         run: () => navigate('/settings/access'),
       });
+    }
+
+    if (activeTeamKey) {
+      for (const view of savedBoardViews) {
+        actions.push({
+          id: `board-view-${view.id}`,
+          label: `Load board view · ${view.name}`,
+          description: `Apply saved board filters for ${activeTeamKey}`,
+          group: 'Views',
+          hint: 'Board',
+          run: () => {
+            writeStoredBoardViewState(activeTeamKey, view.state);
+            dispatchApplyBoardView({ state: view.state, viewId: view.id });
+            navigate('/');
+          },
+        });
+      }
+
+      for (const view of savedBacklogViews) {
+        actions.push({
+          id: `backlog-view-${view.id}`,
+          label: `Load backlog view · ${view.name}`,
+          description: `Apply saved backlog filters for ${activeTeamKey}`,
+          group: 'Views',
+          hint: 'Backlog',
+          run: () => {
+            writeStoredBacklogViewState(activeTeamKey, view.state);
+            dispatchApplyBacklogView({ state: view.state, viewId: view.id });
+            navigate('/backlog');
+          },
+        });
+      }
     }
 
     for (const team of shellTeams) {
@@ -639,7 +760,17 @@ export function App() {
     }
 
     return actions;
-  }, [location.pathname, navigate, session?.authenticated, shellIssues, shellTeams, theme]);
+  }, [
+    activeTeamKey,
+    location.pathname,
+    navigate,
+    savedBacklogViews,
+    savedBoardViews,
+    session?.authenticated,
+    shellIssues,
+    shellTeams,
+    theme,
+  ]);
 
   return (
     <div className="app-shell">

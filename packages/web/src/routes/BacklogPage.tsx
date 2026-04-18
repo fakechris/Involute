@@ -3,10 +3,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { IssueSummary, TeamSummary, UserSummary } from '../board/types';
 import {
   applyBacklogViewState,
+  APPLY_BACKLOG_VIEW_EVENT,
   buildBacklogViewSummary,
   getDefaultBacklogViewState,
   readSavedBacklogViews,
   readStoredBacklogViewState,
+  type ApplyBacklogViewDetail,
   type BacklogViewState,
   type SavedBacklogView,
   writeSavedBacklogViews,
@@ -42,6 +44,28 @@ export function BacklogPage({
     setSavedViews(readSavedBacklogViews(teamKey));
     setActiveSavedViewId('');
   }, [teamKey]);
+
+  useEffect(() => {
+    function handleApplyBacklogView(event: Event) {
+      const detail =
+        event instanceof CustomEvent && event.detail
+          ? (event.detail as ApplyBacklogViewDetail)
+          : null;
+
+      if (!detail) {
+        return;
+      }
+
+      setViewState(detail.state);
+      setActiveSavedViewId(detail.viewId ?? '');
+    }
+
+    window.addEventListener(APPLY_BACKLOG_VIEW_EVENT, handleApplyBacklogView as EventListener);
+
+    return () => {
+      window.removeEventListener(APPLY_BACKLOG_VIEW_EVENT, handleApplyBacklogView as EventListener);
+    };
+  }, []);
 
   useEffect(() => {
     writeStoredBacklogViewState(teamKey, viewState);

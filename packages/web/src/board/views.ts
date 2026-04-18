@@ -19,6 +19,16 @@ export interface SavedBoardView {
   state: BoardViewState;
 }
 
+export interface ApplyBoardViewDetail {
+  state: BoardViewState;
+  viewId?: string;
+}
+
+export interface SavedBoardViewsEventDetail {
+  teamKey: string | null;
+  views: SavedBoardView[];
+}
+
 const DEFAULT_BOARD_VIEW_STATE: BoardViewState = {
   assigneeIds: [],
   labelIds: [],
@@ -27,6 +37,9 @@ const DEFAULT_BOARD_VIEW_STATE: BoardViewState = {
   sortField: 'updatedAt',
   stateIds: [],
 };
+
+export const APPLY_BOARD_VIEW_EVENT = 'involute:apply-board-view';
+export const BOARD_SAVED_VIEWS_EVENT = 'involute:board-saved-views';
 
 function getBoardViewStateStorageKey(teamKey: string) {
   return `involute.board.viewState.${teamKey}`;
@@ -161,6 +174,27 @@ export function writeSavedBoardViews(teamKey: string | null, views: SavedBoardVi
   } catch {
     // Ignore storage failures in restricted browser contexts.
   }
+
+  window.dispatchEvent(
+    new CustomEvent<SavedBoardViewsEventDetail>(BOARD_SAVED_VIEWS_EVENT, {
+      detail: {
+        teamKey,
+        views,
+      },
+    }),
+  );
+}
+
+export function dispatchApplyBoardView(detail: ApplyBoardViewDetail): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.dispatchEvent(
+    new CustomEvent<ApplyBoardViewDetail>(APPLY_BOARD_VIEW_EVENT, {
+      detail,
+    }),
+  );
 }
 
 export function applyBoardViewState(
