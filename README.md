@@ -8,8 +8,10 @@ Involute bundles a GraphQL API, a kanban web app, and a CLI that can export one 
 
 - `M0` single-team migration acceptance is done.
 - `M2` Google OAuth, session auth, admin bootstrap, and team RBAC are done.
+- `M3` web shell redesign and keyboard-first board workflows are materially in progress and already landed on `main`.
 - `M1` deployable self-hosting is in progress.
-- The current highest-priority gap is not local functionality; it is public production confidence on a VPS: public-domain deploy, Google OAuth callback validation, and backup/restore rehearsal.
+- The latest `main` is already deployed to the Tailscale VPS, backup/restore has been rehearsed once, and the canonical `SON` team has been refreshed from Linear into the VPS stack.
+- The current highest-priority gap is now production sign-in confidence on the VPS: real Google OAuth callback validation and a tighter operator runbook.
 
 See [docs/current-status.md](docs/current-status.md), [docs/milestones.md](docs/milestones.md), and [docs/vision.md](docs/vision.md) for the current product state.
 
@@ -108,7 +110,8 @@ Status:
 
 - the deployment files and automation are in place
 - the Tailscale-only path has already been exercised
-- the remaining production work is to validate the same stack on a public domain with real Google OAuth callback and one backup/restore drill
+- the public domain is already serving the current stack over HTTPS
+- the remaining production work is to validate real Google OAuth callback handling and tighten the operator runbook
 
 Files involved:
 

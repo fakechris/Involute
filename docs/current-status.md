@@ -1,12 +1,12 @@
 # Current Status
 
-Last updated against `main` at `fc0b7ed`.
+Last updated against `main` at `351fd06`.
 
 ## Summary
 
-Involute is past the local prototype stage. The single-team Linear migration loop is stable, the issue lifecycle is covered in browser E2E, Google OAuth plus session auth is in place, and team-level RBAC exists in both API and web UI.
+Involute is past the local prototype stage. The single-team Linear migration loop is stable, the issue lifecycle is covered in browser E2E, Google OAuth plus session auth is in place, team-level RBAC exists in both API and web UI, and the web client has already moved onto the new shell and keyboard-first interaction model.
 
-The main remaining milestone is not feature breadth. It is production confidence: public-domain deployment, backup/restore validation, and operator-facing polish around auth and access.
+The main remaining milestone is not feature breadth. It is production sign-in confidence and operator confidence: validating Google OAuth on the real public callback, then tightening operator-facing polish around auth and access.
 
 ## What is done
 
@@ -19,6 +19,7 @@ Done:
 - the board supports create, update, comment, delete comment, and delete issue
 - Playwright covers the core board lifecycle
 - Docker Compose provides a stable local demo path
+- the canonical `SON` team has been re-exported from Linear, re-imported into the VPS, and verified there
 
 ### M2: Auth and team permissions
 
@@ -32,6 +33,22 @@ Done:
 - minimal team access management exists in the web UI at `/settings/access`
 - admin bootstrap exists through `ADMIN_EMAIL_ALLOWLIST` and `admin:bootstrap`
 
+### M3: Web UX redesign
+
+Substantially in progress:
+
+- the old web shell has been replaced with the new app shell
+- board, backlog, access, and issue detail all run inside the redesigned surface system
+- keyboard-first navigation now includes command palette actions, board/backlog search focus, drawer previous/next navigation, and `g`-prefixed route shortcuts
+- board and backlog now support filtering, sorting, saved views, and persisted local view state
+- board bulk actions support state, assignee, and label changes
+
+Not finished yet:
+
+- deeper command-palette issue actions
+- denser issue detail information layout
+- final visual/interaction polish after deployment hardening
+
 ### Deployment tooling foundation
 
 Done:
@@ -40,8 +57,9 @@ Done:
 - Caddy-based reverse proxy config exists
 - Ansible bootstrap and deploy playbooks exist
 - GitHub Actions deploy workflow exists
-- Tailscale-only VPS deployment has already been exercised successfully
-- Postgres backup script exists
+- the latest `main` has been deployed to the VPS successfully and is reachable on the public domain
+- a Postgres backup and restore drill has been executed successfully against the VPS stack
+- the VPS dataset is now the active source of truth for `SON`
 
 ## What is not done yet
 
@@ -49,9 +67,9 @@ Done:
 
 In progress:
 
-- the VPS deployment path exists, but public-domain deployment has not yet been fully validated end-to-end
+- the VPS deployment path exists and has been exercised successfully on both Tailscale and the public domain
 - Google OAuth on the real public callback URL still needs to be exercised in production
-- backup exists, but restore still needs a real drill
+- operator runbook polish is still thinner than the deployment automation itself
 
 ### Auth/access product polish
 
@@ -64,10 +82,10 @@ Not blocking for engineering correctness, but still needed before broader operat
 
 ## Current recommended priority
 
-1. Finish public production deployment on VPS.
-2. Run one real backup and restore drill.
+1. Validate Google OAuth against the real public callback URL.
+2. Tighten the operator runbook around deploy, rollback, logs, and restore.
 3. Polish access-management UX and tighten auth/RBAC regression coverage.
-4. Add an operator runbook for deploy, rollback, logs, and restore.
+4. Continue product polish on the redesigned web shell after deployment hardening.
 
 ## Deliberately not next
 

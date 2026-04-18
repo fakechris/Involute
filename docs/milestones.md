@@ -28,8 +28,16 @@ Scope:
 - keep Railway as a possible later hosting target, not the current blocking path
 - define `.env.production` expectations and runtime secrets
 - add reverse proxy / TLS guidance and database backup guidance
-- exercise public-domain deployment, OAuth callback, and backup/restore once
+- exercise public-domain deployment once and OAuth callback once
+- keep the VPS-hosted `SON` dataset as the active source of truth after the final Linear refresh
 - keep Docker images and compose-based demo/runtime aligned
+
+Done inside M1 already:
+
+- the Tailscale VPS deployment path has been exercised successfully against the latest mainline build
+- the public-domain deployment path is serving the latest mainline build over HTTPS
+- one backup and restore drill has been executed successfully
+- the canonical `SON` dataset has been refreshed from Linear into the VPS stack
 
 Exit criteria:
 
@@ -60,18 +68,20 @@ Exit criteria:
 
 ## M3: UI/UX redesign
 
-Status: later, after M1 and M2.
+Status: in progress, but not the current release gate.
 
 Scope:
 
-- replace the current generic look with a sharper visual system
-- improve typography, spacing, and hierarchy
-- revisit issue detail and board density
+- replace the old generic shell with the new visual system
+- improve keyboard-first navigation, palette actions, filters, sorting, and saved views
+- revisit issue detail and board density after production deployment stabilizes
 
 Exit criteria:
 
-- visual direction is intentional and no longer feels placeholder-like
+- the old shell and compatibility layer are gone from the shipped routes
+- board, backlog, access, and issue detail all use the new shell and interaction model
 - redesign does not regress the M0 lifecycle, deployment path, or team permission model
+- remaining UI work is polish, not structural replacement
 
 ## M4: Multi-team workspace import
 

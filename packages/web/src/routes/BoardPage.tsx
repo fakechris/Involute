@@ -1616,7 +1616,7 @@ export function BoardPage() {
             Create issue
           </button>
           {teams.length > 1 ? (
-            <label className="field-stack">
+            <label className="field-stack field-stack--toolbar field-stack--header">
               <span>Team</span>
               <select
                 aria-label="Select team"
@@ -1658,7 +1658,7 @@ export function BoardPage() {
         <>
           <section className="board-viewbar">
             <div className="board-viewbar__primary">
-              <label className="field-stack board-viewbar__search">
+              <label className="field-stack field-stack--toolbar board-viewbar__search">
                 <span>Search</span>
                 <input
                   ref={boardSearchInputRef}
@@ -1690,7 +1690,7 @@ export function BoardPage() {
                 </button>
               ) : null}
 
-              <label className="field-stack">
+              <label className="field-stack field-stack--toolbar">
                 <span>Sort</span>
                 <select
                   aria-label="Sort board by"
@@ -1710,7 +1710,7 @@ export function BoardPage() {
                 </select>
               </label>
 
-              <label className="field-stack">
+              <label className="field-stack field-stack--toolbar">
                 <span>Direction</span>
                 <select
                   aria-label="Sort board direction"
@@ -1730,7 +1730,7 @@ export function BoardPage() {
             </div>
 
             <div className="board-viewbar__secondary">
-              <label className="field-stack">
+              <label className="field-stack field-stack--toolbar">
                 <span>Saved view</span>
                 <select
                   aria-label="Load saved board view"
@@ -1875,7 +1875,7 @@ export function BoardPage() {
               >
                 Clear selection
               </button>
-              <label className="field-stack">
+              <label className="field-stack field-stack--toolbar">
                 <span>Move to</span>
                 <select
                   aria-label="Bulk move selected issues to state"
@@ -1898,7 +1898,7 @@ export function BoardPage() {
               >
                 Apply to selected
               </button>
-              <label className="field-stack">
+              <label className="field-stack field-stack--toolbar">
                 <span>Assign to</span>
                 <select
                   aria-label="Bulk assign selected issues"
@@ -1922,7 +1922,7 @@ export function BoardPage() {
               >
                 Apply assignee
               </button>
-              <label className="field-stack">
+              <label className="field-stack field-stack--toolbar">
                 <span>Add label</span>
                 <select
                   aria-label="Bulk add label to selected issues"
@@ -1945,7 +1945,7 @@ export function BoardPage() {
               >
                 Add label
               </button>
-              <label className="field-stack">
+              <label className="field-stack field-stack--toolbar">
                 <span>Remove label</span>
                 <select
                   aria-label="Bulk remove label from selected issues"

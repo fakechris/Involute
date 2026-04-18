@@ -24,9 +24,12 @@ If this path is stable, the product is already useful for migration rehearsal, a
 - Stable self-hosted deployment on a VPS with documented production steps
 - Stable Google OAuth sign-in, admin bootstrap, and session auth
 - Team-level visibility and edit permissions
+- The redesigned web shell and keyboard-first issue workflows
 - Migration-driven database changes that are safe to deploy repeatedly
 - Backup and restore confidence for a self-hosted operator
+- A public HTTPS entrypoint that serves the current VPS-hosted stack
 - Keep the single-team import and issue lifecycle green while deployment hardens
+- Treat the VPS-hosted `SON` dataset as the live source of truth now that the final Linear refresh has been imported
 
 ## Explicitly not optimizing for yet
 
