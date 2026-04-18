@@ -20,18 +20,22 @@ Exit criteria:
 
 ## M1: Deployable self-hosting
 
-Status: next.
+Status: in progress.
 
 Scope:
 
-- ship a production deployment path for VPS and Railway
+- ship and validate a production deployment path for VPS first
+- keep Railway as a possible later hosting target, not the current blocking path
 - define `.env.production` expectations and runtime secrets
 - add reverse proxy / TLS guidance and database backup guidance
+- exercise public-domain deployment, OAuth callback, and backup/restore once
 - keep Docker images and compose-based demo/runtime aligned
 
 Exit criteria:
 
 - a fresh host can run Involute with Postgres, API, and web using documented steps
+- a public-domain deployment has been smoke-tested with Google OAuth and session cookies
+- backup and restore have both been exercised once
 - deployment docs are specific enough to reproduce without reading the source
 - image publishing and runtime config are consistent with the supported hosting path
 
