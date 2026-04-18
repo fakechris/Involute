@@ -1,0 +1,110 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: involute
+      POSTGRES_PASSWORD: involute
+      POSTGRES_USER: involute
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U involute -d involute"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "${DB_BIND_ADDRESS:-127.0.0.1}:${DB_PORT:-5434}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  server-init:
+    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-turnkeyai}/involute-server:${INVOLUTE_IMAGE_TAG:-latest}
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -lc
+    command:
+      - >
+        set -e;
+        pnpm --filter @turnkeyai/involute-server exec prisma migrate deploy;
+        if [ "${SEED_DATABASE:-true}" = "true" ]; then
+          pnpm --filter @turnkeyai/involute-server exec prisma db seed;
+        fi;
+        if [ -n "${ADMIN_EMAIL_ALLOWLIST:-}" ]; then
+          pnpm --filter @turnkeyai/involute-server exec tsx prisma/bootstrap-admin.ts;
+        fi
+    environment:
+      ADMIN_EMAIL_ALLOWLIST: ${ADMIN_EMAIL_ALLOWLIST:-}
+      DATABASE_URL: postgresql://involute:involute@db:5432/involute?schema=public
+      SEED_DATABASE: ${SEED_DATABASE:-true}
+      SEED_DEFAULT_ADMIN: ${SEED_DEFAULT_ADMIN:-false}
+    restart: "no"
+
+  server:
+    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-turnkeyai}/involute-server:${INVOLUTE_IMAGE_TAG:-latest}
+    depends_on:
+      db:
+        condition: service_healthy
+      server-init:
+        condition: service_completed_successfully
+    environment:
+      ADMIN_EMAIL_ALLOWLIST: ${ADMIN_EMAIL_ALLOWLIST:-}
+      ALLOW_ADMIN_FALLBACK: ${ALLOW_ADMIN_FALLBACK:-false}
+      DATABASE_URL: postgresql://involute:involute@db:5432/involute?schema=public
+      AUTH_TOKEN: ${AUTH_TOKEN:-changeme-set-your-token}
+      VIEWER_ASSERTION_SECRET: ${VIEWER_ASSERTION_SECRET:-compose-viewer-secret}
+      GOOGLE_OAUTH_ADMIN_EMAILS: ${GOOGLE_OAUTH_ADMIN_EMAILS:-}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:4200/auth/google/callback}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:4201}
+      PORT: 4200
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4200/health').then((response)=>process.exit(response.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    ports:
+      - "${SERVER_BIND_ADDRESS:-0.0.0.0}:4200:4200"
+
+  web:
+    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-turnkeyai}/involute-web:${INVOLUTE_IMAGE_TAG:-latest}
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      INTERNAL_SERVER_ORIGIN: ${INTERNAL_SERVER_ORIGIN:-http://server:4200}
+      WEB_PROXY_AUTHORIZATION: ${WEB_PROXY_AUTHORIZATION:-}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4201 >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    ports:
+      - "${WEB_BIND_ADDRESS:-0.0.0.0}:4201:4201"
+
+  cli:
+    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-turnkeyai}/involute-cli:${INVOLUTE_IMAGE_TAG:-latest}
+    depends_on:
+      db:
+        condition: service_healthy
+      server:
+        condition: service_healthy
+    environment:
+      AUTH_TOKEN: ${AUTH_TOKEN:-changeme-set-your-token}
+      DATABASE_URL: postgresql://involute:involute@db:5432/involute?schema=public
+      INVOLUTE_CONFIG_PATH: /tmp/involute-config.json
+      VIEWER_ASSERTION_SECRET: ${VIEWER_ASSERTION_SECRET:-compose-viewer-secret}
+    volumes:
+      - ./.tmp:/exports
+
+volumes:
+  postgres-data:
