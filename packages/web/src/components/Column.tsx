@@ -9,7 +9,10 @@ interface ColumnProps {
   title: string;
   stateId: string;
   issues: IssueSummary[];
+  focusedIssueId?: string | null;
   onSelectIssue?: (issue: IssueSummary) => void;
+  onToggleIssueSelection?: (issue: IssueSummary) => void;
+  selectedIssueIds?: string[];
   onNativeDropIssue?: (payload: Html5BoardDragPayload, targetStateId: string) => void;
   onNativeDragStart?: (payload: Html5BoardDragPayload) => void;
   onNativeDragEnd?: () => void;
@@ -19,7 +22,10 @@ export function Column({
   title,
   stateId,
   issues,
+  focusedIssueId,
   onSelectIssue,
+  onToggleIssueSelection,
+  selectedIssueIds = [],
   onNativeDropIssue,
   onNativeDragStart,
   onNativeDragEnd,
@@ -83,13 +89,19 @@ export function Column({
                 <IssueCard
                   key={issue.id}
                   issue={issue}
+                  isFocused={focusedIssueId === issue.id}
+                  isSelected={selectedIssueIds.includes(issue.id)}
                   onSelect={onSelectIssue}
+                  {...(onToggleIssueSelection ? { onToggleSelected: onToggleIssueSelection } : {})}
                   {...getIssueCardNativeDragProps()}
                 />
               ) : (
                 <IssueCard
                   key={issue.id}
                   issue={issue}
+                  isFocused={focusedIssueId === issue.id}
+                  isSelected={selectedIssueIds.includes(issue.id)}
+                  {...(onToggleIssueSelection ? { onToggleSelected: onToggleIssueSelection } : {})}
                   {...getIssueCardNativeDragProps()}
                 />
               ),

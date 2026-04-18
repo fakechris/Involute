@@ -179,17 +179,17 @@ describe('App board UI', () => {
     expect(updateIssue).not.toHaveBeenCalled();
   });
 
-  it('renders stable drag handles and state-id based droppable selectors for board automation', async () => {
+  it('renders stable drag surfaces and state-id based droppable selectors for board automation', async () => {
     renderTestApp();
 
-    expect(await screen.findByTestId('issue-drag-handle-INV-1')).toHaveAccessibleName('Drag INV-1');
-    expect(screen.getByTestId('issue-drag-handle-INV-2')).toHaveAccessibleName('Drag INV-2');
+    expect(await screen.findByTestId('issue-drag-surface-INV-1')).toBeInTheDocument();
+    expect(screen.getByTestId('issue-drag-surface-INV-2')).toBeInTheDocument();
 
     expect(screen.getByTestId('board-column-state-backlog')).toHaveAttribute('data-state-id', 'state-backlog');
     expect(screen.getByTestId('board-column-state-ready')).toHaveAttribute('data-state-id', 'state-ready');
     expect(screen.getByTestId('column-Backlog')).toHaveAttribute('data-droppable-state-id', 'state-backlog');
     expect(screen.getByTestId('column-Ready')).toHaveAttribute('data-droppable-state-id', 'state-ready');
-    expect(screen.getByTestId('issue-drag-handle-INV-1')).toHaveAttribute('draggable', 'true');
+    expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('draggable', 'true');
   });
 
   it('loads the next page only when the user explicitly asks for more issues', async () => {

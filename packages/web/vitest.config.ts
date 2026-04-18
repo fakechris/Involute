@@ -6,7 +6,7 @@ export default defineConfig({
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     maxWorkers: 1,
     passWithNoTests: true,
-    pool: 'threads',
+    pool: 'forks',
     setupFiles: './src/test/setup.ts',
   },
 });

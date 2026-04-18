@@ -34,4 +34,24 @@ describe('App board drawer flows', () => {
       expect(screen.queryByRole('dialog', { name: 'Issue detail drawer' })).not.toBeInTheDocument(),
     );
   });
+
+  it('navigates between visible board issues from the drawer controls and keyboard shortcuts', async () => {
+    renderTestApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+
+    expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Backlog item');
+    expect(within(drawer).getByRole('button', { name: 'Previous issue' })).toBeDisabled();
+
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Next issue' }));
+    await waitFor(() =>
+      expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Ready item'),
+    );
+
+    fireEvent.keyDown(window, { key: '[' });
+    await waitFor(() =>
+      expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Backlog item'),
+    );
+  });
 });

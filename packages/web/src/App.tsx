@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
-import { ACTIVE_TEAM_STORAGE_KEY, readStoredTeamKey, writeStoredTeamKey } from './board/utils';
-import { AccessPage } from './routes/AccessPage';
-import { BoardPage } from './routes/BoardPage';
-import { IssuePage } from './routes/IssuePage';
+import {
+  ACTIVE_TEAM_STORAGE_KEY,
+  OPEN_CREATE_ISSUE_EVENT,
+  readStoredTeamKey,
+  writeStoredTeamKey,
+} from './board/utils';
 import {
   APP_SHELL_ISSUES_EVENT,
   APP_SHELL_ISSUES_STORAGE_KEY,
@@ -16,6 +18,19 @@ import {
   type AppShellTeamSummary,
 } from './lib/app-shell-state';
 import { fetchSessionState, getGoogleLoginUrl, logoutSession, type SessionState } from './lib/session';
+
+const AccessPage = lazy(async () => {
+  const module = await import('./routes/AccessPage');
+  return { default: module.AccessPage };
+});
+const BoardPage = lazy(async () => {
+  const module = await import('./routes/BoardPage');
+  return { default: module.BoardPage };
+});
+const IssuePage = lazy(async () => {
+  const module = await import('./routes/IssuePage');
+  return { default: module.IssuePage };
+});
 
 const THEME_STORAGE_KEY = 'involute.theme';
 const DENSITY_STORAGE_KEY = 'involute.density';
@@ -102,6 +117,18 @@ function persistSidebarWidth(nextSidebarWidth: number) {
   } catch {
     // Ignore localStorage failures.
   }
+}
+
+function openCreateIssueSurface(navigate: ReturnType<typeof useNavigate>, pathname: string) {
+  if (pathname === '/' || pathname === '/backlog') {
+    window.dispatchEvent(new Event(OPEN_CREATE_ISSUE_EVENT));
+    return;
+  }
+
+  navigate('/');
+  window.setTimeout(() => {
+    window.dispatchEvent(new Event(OPEN_CREATE_ISSUE_EVENT));
+  }, 0);
 }
 
 function CommandPalette({
@@ -494,13 +521,14 @@ export function App() {
 
   useEffect(() => {
     function handleGlobalKeyDown(event: KeyboardEvent) {
-      const target = event.target as HTMLElement | null;
-      const tagName = target?.tagName;
+      const target = event.target;
+      const isElementTarget = target instanceof HTMLElement;
+      const tagName = isElementTarget ? target.tagName : null;
       const isTypingField =
         tagName === 'INPUT' ||
         tagName === 'TEXTAREA' ||
         tagName === 'SELECT' ||
-        target?.getAttribute('contenteditable') === 'true';
+        (isElementTarget && target.getAttribute('contenteditable') === 'true');
 
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
@@ -513,7 +541,14 @@ export function App() {
       }
 
       if (event.key.toLowerCase() === 'g' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
         navigate('/');
+        return;
+      }
+
+      if (event.key.toLowerCase() === 'c' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+        event.preventDefault();
+        openCreateIssueSurface(navigate, location.pathname);
       }
     }
 
@@ -522,7 +557,7 @@ export function App() {
     return () => {
       window.removeEventListener('keydown', handleGlobalKeyDown);
     };
-  }, [navigate]);
+  }, [location.pathname, navigate]);
 
   const paletteActions = useMemo<PaletteAction[]>(() => {
     const actions: PaletteAction[] = [
@@ -540,6 +575,14 @@ export function App() {
         description: 'Open the linear-style list view',
         group: 'Navigation',
         run: () => navigate('/backlog'),
+      },
+      {
+        id: 'create-issue',
+        label: 'Create issue',
+        description: 'Open the quick issue composer on the active team',
+        group: 'Actions',
+        shortcut: 'C',
+        run: () => openCreateIssueSurface(navigate, location.pathname),
       },
       {
         id: 'toggle-theme',
@@ -584,7 +627,7 @@ export function App() {
       });
     }
 
-    for (const issue of shellIssues.slice(0, 12)) {
+    for (const issue of shellIssues) {
       actions.push({
         id: `issue-${issue.id}`,
         label: `${issue.identifier} · ${issue.title}`,
@@ -596,7 +639,7 @@ export function App() {
     }
 
     return actions;
-  }, [navigate, session?.authenticated, shellIssues, shellTeams, theme]);
+  }, [location.pathname, navigate, session?.authenticated, shellIssues, shellTeams, theme]);
 
   return (
     <div className="app-shell">
@@ -811,12 +854,22 @@ export function App() {
         </header>
 
         <div className="app-shell__content" data-route={location.pathname}>
-          <Routes>
-            <Route path="/" element={<BoardPage />} />
-            <Route path="/backlog" element={<BoardPage />} />
-            <Route path="/settings/access" element={<AccessPage />} />
-            <Route path="/issue/:id" element={<IssuePage />} />
-          </Routes>
+          <Suspense
+            fallback={
+              <main className="board-page board-page--state">
+                <section className="shell-notice">
+                  <p>Loading view…</p>
+                </section>
+              </main>
+            }
+          >
+            <Routes>
+              <Route path="/" element={<BoardPage />} />
+              <Route path="/backlog" element={<BoardPage />} />
+              <Route path="/settings/access" element={<AccessPage />} />
+              <Route path="/issue/:id" element={<IssuePage />} />
+            </Routes>
+          </Suspense>
         </div>
       </div>
 

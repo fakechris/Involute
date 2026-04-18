@@ -133,7 +133,8 @@ describe('App issue creation', () => {
       }),
     );
 
-    expect(await within(screen.getByTestId('column-Backlog')).findByText('INV-3')).toBeInTheDocument();
-    expect(screen.getByText('Created issue')).toBeInTheDocument();
+    const backlogColumn = screen.getByTestId('column-Backlog');
+    expect(await within(backlogColumn).findByText('INV-3')).toBeInTheDocument();
+    expect(within(backlogColumn).getByText('Created issue')).toBeInTheDocument();
   });
 });

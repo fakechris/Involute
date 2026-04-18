@@ -13,7 +13,6 @@ vi.mock('@dnd-kit/sortable', async () => {
     useSortable: useSortableSpy.mockImplementation(() => ({
       attributes: {},
       listeners: {},
-      setActivatorNodeRef: vi.fn(),
       setNodeRef: vi.fn(),
       transform: null,
       transition: null,
@@ -109,17 +108,17 @@ describe('IssueCard', () => {
     expect(screen.getAllByText('Admin').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders a stable drag handle selector and accessible label based on the issue identifier', () => {
+  it('renders a stable drag surface selector on the whole card based on the issue identifier', () => {
     const issue = makeIssue({ identifier: 'INV-42' });
 
     render(<IssueCard issue={issue} />);
 
-    const dragHandle = screen.getByTestId('issue-drag-handle-INV-42');
-    expect(dragHandle).toHaveAccessibleName('Drag INV-42');
+    expect(screen.getByTestId('issue-drag-surface-INV-42')).toBeInTheDocument();
     expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('data-issue-identifier', 'INV-42');
+    expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('draggable', 'true');
   });
 
-  it('disables sortable registration and omits the drag handle for preview cards', () => {
+  it('disables sortable registration and omits the drag affordance for preview cards', () => {
     const issue = makeIssue({ identifier: 'INV-99' });
 
     render(<IssueCard issue={issue} sortable={false} />);
@@ -135,17 +134,17 @@ describe('IssueCard', () => {
         id: 'issue-1',
       }),
     );
-    expect(screen.queryByTestId('issue-drag-handle-INV-99')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('issue-drag-surface-INV-99')).not.toBeInTheDocument();
     expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('data-sortable', 'false');
+    expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('draggable', 'false');
   });
 
-  it('wires the drag handle as the sortable activator node', () => {
-    const setActivatorNodeRef = vi.fn();
+  it('wires the sortable node ref to the card root', () => {
+    const setNodeRef = vi.fn();
     useSortableSpy.mockImplementationOnce(() => ({
       attributes: {},
       listeners: {},
-      setActivatorNodeRef,
-      setNodeRef: vi.fn(),
+      setNodeRef,
       transform: null,
       transition: null,
       isDragging: false,
@@ -153,8 +152,8 @@ describe('IssueCard', () => {
 
     render(<IssueCard issue={makeIssue()} />);
 
-    expect(setActivatorNodeRef).toHaveBeenCalledTimes(1);
-    expect(setActivatorNodeRef.mock.calls[0]?.[0]).toBeInstanceOf(HTMLButtonElement);
-    expect(setActivatorNodeRef.mock.calls[0]?.[0]).toHaveAttribute('data-testid', 'issue-drag-handle-INV-1');
+    expect(setNodeRef).toHaveBeenCalledTimes(1);
+    expect(setNodeRef.mock.calls[0]?.[0]).toBeInstanceOf(HTMLElement);
+    expect(setNodeRef.mock.calls[0]?.[0]).toHaveAttribute('data-testid', 'issue-card-issue-1');
   });
 });
