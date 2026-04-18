@@ -24,6 +24,37 @@ See [docs/current-status.md](docs/current-status.md), [docs/milestones.md](docs/
 - `docs/vision.md` — current product vision
 - `docs/milestones.md` — active milestones and sequencing
 
+## Install the CLI
+
+The published CLI is the fastest way to use Involute against an existing server:
+
+```bash
+npm install -g @turnkeyai/involute
+involute --help
+```
+
+Or install it project-locally:
+
+```bash
+npm install @turnkeyai/involute
+npx involute --help
+```
+
+Point the CLI at your Involute API:
+
+```bash
+involute config set server-url https://involute.example.com/graphql
+involute config set token YOUR_AUTH_TOKEN
+involute teams list
+```
+
+Import and verify one team snapshot:
+
+```bash
+export SOURCE_API_TOKEN='src_api_xxx'
+involute import team --token "$SOURCE_API_TOKEN" --team SON --keep-export --output ./son-export
+```
+
 ## Environment
 
 Create a repo-root `.env` file based on `.env.example`:
@@ -68,7 +99,9 @@ Optional web runtime variables:
 - `VITE_INVOLUTE_AUTH_TOKEN` — trusted local/dev bearer token for bypassing browser login
 - `VITE_INVOLUTE_VIEWER_ASSERTION` — signed viewer assertion to act as a specific user without exposing the server secret
 
-## Quick start
+## Local stack quick start
+
+Use this path when you want to run the API, web app, and Postgres locally.
 
 ```bash
 pnpm install
@@ -249,7 +282,13 @@ Set your source-system API token in the shell:
 export SOURCE_API_TOKEN='src_api_xxx'
 ```
 
-Run the end-to-end team import inside the compose CLI container:
+If you installed the published CLI:
+
+```bash
+involute import team --token "$SOURCE_API_TOKEN" --team SON --keep-export --output ./son-export
+```
+
+If you are using the local compose stack, you can also run the import inside the compose CLI container:
 
 ```bash
 docker compose run --rm cli import team --token "$SOURCE_API_TOKEN" --team SON --keep-export --output /exports/son-export
