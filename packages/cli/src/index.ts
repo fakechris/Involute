@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
+import { realpathSync } from 'node:fs';
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { GraphQLClient } from 'graphql-request';
 import {
   type ViewerAssertionSubjectType,
@@ -1199,7 +1200,19 @@ export function createProgram(): Command {
 
 const currentEntryPoint = process.argv[1];
 
-if (currentEntryPoint && import.meta.url === pathToFileURL(currentEntryPoint).href) {
+function isCliEntrypoint(entryPoint: string | undefined): boolean {
+  if (!entryPoint) {
+    return false;
+  }
+
+  try {
+    return realpathSync(entryPoint) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return import.meta.url === pathToFileURL(entryPoint).href;
+  }
+}
+
+if (isCliEntrypoint(currentEntryPoint)) {
   createProgram().parse(process.argv);
 }
 
