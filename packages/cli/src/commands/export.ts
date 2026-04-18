@@ -1,7 +1,7 @@
 /**
- * CLI export command — exports data from Linear workspace to a local directory.
+ * CLI export command — exports source workspace data to a local directory.
  *
- * Usage: involute export --token <linear-token> --team <key> --output <dir>
+ * Usage: involute export --token <source-token> --team <key> --output <dir>
  */
 
 import type { Command } from 'commander';
@@ -37,7 +37,7 @@ export async function runExport(options: ExportOptions): Promise<void> {
     process.stdout.write(msg + '\n');
   };
 
-  log(`Exporting data from Linear for team "${team}" to ${output}...`);
+  log(`Exporting source data for team "${team}" to ${output}...`);
   log('');
 
   // Export each entity type with progress
@@ -116,8 +116,8 @@ export async function runExport(options: ExportOptions): Promise<void> {
 export function registerExportCommand(program: Command): void {
   program
     .command('export')
-    .description('Export data from Linear workspace to a local directory')
-    .requiredOption('--token <linear-token>', 'Linear API token')
+    .description('Export source workspace data to a local directory')
+    .requiredOption('--token <source-token>', 'Source workspace API token')
     .requiredOption('--team <key>', 'Team key to export (e.g., SON)')
     .requiredOption('--output <dir>', 'Output directory for export data')
     .action(async (opts: ExportOptions) => {

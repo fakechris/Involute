@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
 
 import { setConfigValue } from '../index.js';
-import { startServer, type StartedServer } from '@involute/server';
+import { startServer, type StartedServer } from '@turnkeyai/involute-server';
 import { createIssue } from '../../../server/dist/issue-service.js';
 const DEFAULT_ADMIN_EMAIL = 'admin@involute.local';
 const DEFAULT_TEAM_KEY = 'INV';

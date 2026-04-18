@@ -1,8 +1,8 @@
 import { timingSafeEqual } from 'node:crypto';
 
 import type { PrismaClient, User } from '@prisma/client';
-import { VIEWER_ASSERTION_HEADER } from '@involute/shared';
-import { verifyViewerAssertion } from '@involute/shared/viewer-assertion';
+import { VIEWER_ASSERTION_HEADER } from '@turnkeyai/involute-shared';
+import { verifyViewerAssertion } from '@turnkeyai/involute-shared/viewer-assertion';
 import type { Plugin } from 'graphql-yoga';
 
 import { DEFAULT_ADMIN_EMAIL } from './constants.js';

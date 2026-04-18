@@ -1,0 +1,192 @@
+name: npm Publish
+
+on:
+  push:
+    tags:
+      - 'npm-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version without the leading v
+        required: true
+        type: string
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+
+jobs:
+  resolve-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+    steps:
+      - id: version
+        run: |
+          set -eu
+          raw="${RELEASE_VERSION}"
+          version="${raw#npm-v}"
+          version="${version#v}"
+          if [ -z "$version" ]; then
+            echo "Could not resolve release version from: $raw" >&2
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+  publish-shared:
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @turnkeyai/involute-shared build
+
+      - name: Prepare shared manifest
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'packages/shared/package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          pkg.version = process.env.VERSION;
+          pkg.private = false;
+          pkg.publishConfig = { ...(pkg.publishConfig || {}), access: 'public' };
+          fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+
+      - name: Publish shared package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: cd packages/shared && npm publish --access public --provenance
+
+  publish-server:
+    needs:
+      - resolve-version
+      - publish-shared
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build server package
+        run: pnpm --filter @turnkeyai/involute-server build
+
+      - name: Prepare server manifest
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'packages/server/package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          pkg.version = process.env.VERSION;
+          pkg.private = false;
+          pkg.publishConfig = { ...(pkg.publishConfig || {}), access: 'public' };
+          for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+            if (!pkg[field]) continue;
+            for (const [name, value] of Object.entries(pkg[field])) {
+              if (value === 'workspace:*' && name === '@turnkeyai/involute-shared') {
+                pkg[field][name] = process.env.VERSION;
+              }
+            }
+          }
+          fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+
+      - name: Publish server package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: cd packages/server && npm publish --access public --provenance
+
+  publish-cli:
+    needs:
+      - resolve-version
+      - publish-server
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build CLI package
+        run: pnpm --filter @turnkeyai/involute build
+
+      - name: Prepare CLI manifest
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = 'packages/cli/package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          pkg.version = process.env.VERSION;
+          pkg.private = false;
+          pkg.publishConfig = { ...(pkg.publishConfig || {}), access: 'public' };
+          for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+            if (!pkg[field]) continue;
+            for (const [name, value] of Object.entries(pkg[field])) {
+              if (
+                value === 'workspace:*' &&
+                (name === '@turnkeyai/involute-shared' || name === '@turnkeyai/involute-server')
+              ) {
+                pkg[field][name] = process.env.VERSION;
+              }
+            }
+          }
+          fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+
+      - name: Publish CLI package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: cd packages/cli && npm publish --access public --provenance

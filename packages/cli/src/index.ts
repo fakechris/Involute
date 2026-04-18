@@ -7,8 +7,8 @@ import { GraphQLClient } from 'graphql-request';
 import {
   type ViewerAssertionSubjectType,
   VIEWER_ASSERTION_HEADER,
-} from '@involute/shared';
-import { createViewerAssertion } from '@involute/shared/viewer-assertion';
+} from '@turnkeyai/involute-shared';
+import { createViewerAssertion } from '@turnkeyai/involute-shared/viewer-assertion';
 import { registerExportCommand } from './commands/export.js';
 import { registerImportCommand } from './commands/import.js';
 
@@ -1013,7 +1013,7 @@ function toIssueListRows(issues: IssueListItem[]): Array<Record<string, unknown>
 export function createProgram(): Command {
   const program = new Command()
     .name('involute')
-    .description('Involute CLI — manage your Linear-compatible project management service')
+    .description('Involute CLI — manage your issue, team, and workspace service')
     .version('0.0.0')
     .enablePositionalOptions();
 

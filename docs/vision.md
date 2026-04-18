@@ -2,17 +2,17 @@
 
 ## Slogan
 
-一人团队的 Linear 式项目管理系统开源实现。
+一人团队的 epic / issue / team / workspace 项目管理系统开源实现。
 
 ## Product intent
 
-Involute is a focused, self-hostable project management system for a small team, especially a one-person team that still wants Linear-style structure: issues, workflows, labels, comments, and fast keyboard-and-board-driven operations.
+Involute is a focused, self-hostable project management system for a small team, especially a one-person team that still wants clear issue workflows, labels, comments, and fast keyboard-and-board-driven operations.
 
 ## Current north star
 
 The shortest path to value is:
 
-1. Export one Linear team.
+1. Export one source team snapshot.
 2. Import it into Involute.
 3. Verify the import result.
 4. Open the board and visually accept the data.
@@ -27,6 +27,7 @@ If this path is stable, the product is already useful for migration rehearsal, a
 - Migration-driven database changes that are safe to deploy repeatedly
 - Backup and restore confidence for a self-hosted operator
 - Keep the single-team import and issue lifecycle green while deployment hardens
+- Treat the VPS-hosted `SON` dataset as the live source of truth now that the final source refresh has been imported
 
 ## Explicitly not optimizing for yet
 

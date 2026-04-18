@@ -663,7 +663,7 @@ export function App() {
       {
         id: 'go-backlog',
         label: 'Go to backlog',
-        description: 'Open the linear-style list view',
+        description: 'Open the list view',
         group: 'Navigation',
         shortcut: 'G L',
         run: () => navigate('/backlog'),
@@ -784,7 +784,7 @@ export function App() {
             <div className="app-shell__workspace-mark">I</div>
             <div className="app-shell__workspace-copy">
               <strong>Involute</strong>
-              <span>Self-hosted Linear-style tracker</span>
+              <span>Self-hosted issue tracker</span>
             </div>
           </div>
 

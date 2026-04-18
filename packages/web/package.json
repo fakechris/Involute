@@ -1,17 +1,17 @@
 {
-  "name": "@involute/web",
+  "name": "@turnkeyai/involute-web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter @involute/shared build && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec vite build",
-    "typecheck": "pnpm --filter @involute/shared build && pnpm exec tsc -p tsconfig.json --noEmit",
-    "test": "sh -c 'pnpm --filter @involute/shared build && export NODE_OPTIONS=--max-old-space-size=8192; for file in $(find src -type f \\( -name \"*.test.ts\" -o -name \"*.test.tsx\" \\) | sort); do pnpm exec vitest --config vitest.config.ts --reporter=verbose --passWithNoTests --run \"$file\" || exit $?; done'",
-    "lint": "pnpm --filter @involute/shared build && pnpm exec tsc -p tsconfig.json --noEmit"
+    "build": "pnpm --filter @turnkeyai/involute-shared build && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec vite build",
+    "typecheck": "pnpm --filter @turnkeyai/involute-shared build && pnpm exec tsc -p tsconfig.json --noEmit",
+    "test": "sh -c 'pnpm --filter @turnkeyai/involute-shared build && export NODE_OPTIONS=--max-old-space-size=8192; for file in $(find src -type f \\( -name \"*.test.ts\" -o -name \"*.test.tsx\" \\) | sort); do pnpm exec vitest --config vitest.config.ts --reporter=verbose --passWithNoTests --run \"$file\" || exit $?; done'",
+    "lint": "pnpm --filter @turnkeyai/involute-shared build && pnpm exec tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@apollo/client": "^4.0.9",
-    "@involute/shared": "workspace:*",
+    "@turnkeyai/involute-shared": "workspace:*",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "graphql": "^16.11.0",

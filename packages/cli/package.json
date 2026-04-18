@@ -1,5 +1,5 @@
 {
-  "name": "@involute/cli",
+  "name": "@turnkeyai/involute",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -15,14 +15,14 @@
     }
   },
   "scripts": {
-    "build": "pnpm --filter @involute/shared build && pnpm --filter @involute/server build && pnpm exec tsc -p tsconfig.json",
-    "typecheck": "pnpm --filter @involute/shared build && pnpm --filter @involute/server build && pnpm exec tsc -p tsconfig.json --noEmit",
-    "test": "pnpm --filter @involute/shared build && pnpm --filter @involute/server build && pnpm exec vitest --config vitest.config.ts --passWithNoTests",
-    "lint": "pnpm --filter @involute/shared build && pnpm --filter @involute/server build && pnpm exec tsc -p tsconfig.json --noEmit"
+    "build": "pnpm --filter @turnkeyai/involute-shared build && pnpm --filter @turnkeyai/involute-server build && pnpm exec tsc -p tsconfig.json",
+    "typecheck": "pnpm --filter @turnkeyai/involute-shared build && pnpm --filter @turnkeyai/involute-server build && pnpm exec tsc -p tsconfig.json --noEmit",
+    "test": "pnpm --filter @turnkeyai/involute-shared build && pnpm --filter @turnkeyai/involute-server build && pnpm exec vitest --config vitest.config.ts --passWithNoTests",
+    "lint": "pnpm --filter @turnkeyai/involute-shared build && pnpm --filter @turnkeyai/involute-server build && pnpm exec tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@involute/shared": "workspace:*",
-    "@involute/server": "workspace:*",
+    "@turnkeyai/involute-shared": "workspace:*",
+    "@turnkeyai/involute-server": "workspace:*",
     "@prisma/client": "^6.7.0",
     "commander": "^14.0.1",
     "dotenv": "^16.6.1",

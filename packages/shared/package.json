@@ -1,5 +1,5 @@
 {
-  "name": "@involute/shared",
+  "name": "@turnkeyai/involute-shared",
   "version": "0.0.0",
   "private": true,
   "type": "module",

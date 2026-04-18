@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createViewerAssertion } from '@involute/shared/viewer-assertion';
+import { createViewerAssertion } from '@turnkeyai/involute-shared/viewer-assertion';
 
 import { createGraphQLContext, extractTokenFromAuthorizationHeader, isAuthorizedRequest } from './auth.js';
 

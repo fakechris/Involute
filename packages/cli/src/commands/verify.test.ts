@@ -130,7 +130,7 @@ async function resetVerifyImportState(
     where: { email: { startsWith: 'verify-' } },
   });
 
-  const { runImportPipeline } = await import('@involute/server/import-pipeline');
+  const { runImportPipeline } = await import('@turnkeyai/involute-server/import-pipeline');
   await runImportPipeline(prisma, exportDir);
 }
 
@@ -215,7 +215,7 @@ describe.runIf(hasDatabaseUrl)('verify command — integration', () => {
       await writeVerifyFixtureExportDir(exportDir);
 
       // Run the import pipeline
-      const { runImportPipeline } = await import('@involute/server/import-pipeline');
+      const { runImportPipeline } = await import('@turnkeyai/involute-server/import-pipeline');
       await runImportPipeline(prisma, exportDir);
     } finally {
       await prisma.$disconnect();
@@ -656,7 +656,7 @@ describe.runIf(hasDatabaseUrl)('verify command — integration', () => {
       expect(comments!.details).toContain('1 mapped comments missing from database');
       expect(result.allPassed).toBe(false);
     } finally {
-      const { runImportPipeline } = await import('@involute/server/import-pipeline');
+      const { runImportPipeline } = await import('@turnkeyai/involute-server/import-pipeline');
       await runImportPipeline(prisma, exportDir);
       await prisma.$disconnect();
     }

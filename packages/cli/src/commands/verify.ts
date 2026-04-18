@@ -16,7 +16,7 @@ import type {
   ExportedTeam,
   ExportedUser,
   ExportedWorkflowState,
-} from '@involute/shared/import-format';
+} from '@turnkeyai/involute-shared/import-format';
 import {
   parseExportedComments,
   parseExportedIssues,
@@ -24,7 +24,7 @@ import {
   parseExportedTeams,
   parseExportedUsers,
   parseExportedWorkflowStates,
-} from '@involute/shared/import-format';
+} from '@turnkeyai/involute-shared/import-format';
 import { readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { ensureDatabaseUrl, fileExists, loadEnv, readValidatedJsonFile } from './shared.js';

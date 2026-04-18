@@ -3,10 +3,10 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
-import { createViewerAssertion } from '@involute/shared/viewer-assertion';
+import { createViewerAssertion } from '@turnkeyai/involute-shared/viewer-assertion';
 
 import { createConfiguredGraphQLClient, setConfigValue } from '../index.js';
-import { startServer, type StartedServer } from '@involute/server';
+import { startServer, type StartedServer } from '@turnkeyai/involute-server';
 import { createIssue } from '../../../server/dist/issue-service.js';
 
 const DEFAULT_ADMIN_EMAIL = 'admin@involute.local';

@@ -7,7 +7,7 @@ import { ApolloProvider } from '@apollo/client/react';
 import { setContext } from '@apollo/client/link/context';
 import type { PropsWithChildren } from 'react';
 import { useMemo } from 'react';
-import { VIEWER_ASSERTION_HEADER } from '@involute/shared';
+import { VIEWER_ASSERTION_HEADER } from '@turnkeyai/involute-shared';
 import { readLocalStorageValue } from './storage';
 
 const DEFAULT_GRAPHQL_URL = 'http://localhost:4200/graphql';
