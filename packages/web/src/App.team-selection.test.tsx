@@ -7,6 +7,7 @@ import {
   renderApp,
 } from './test/app-test-helpers';
 import { ACTIVE_TEAM_STORAGE_KEY } from './board/utils';
+import { APP_SHELL_ISSUES_STORAGE_KEY, APP_SHELL_TEAMS_STORAGE_KEY } from './lib/app-shell-state';
 
 describe('App team selection', () => {
   it('keeps board filtering in sync after changing teams and navigating from backlog', async () => {
@@ -83,6 +84,50 @@ describe('App team selection', () => {
     await waitFor(() =>
       expect(window.localStorage.getItem(ACTIVE_TEAM_STORAGE_KEY)).toBe('SON'),
     );
+  });
+
+  it('allows collapsing an expanded team section from the sidebar without resetting it open', async () => {
+    window.localStorage.setItem(
+      APP_SHELL_TEAMS_STORAGE_KEY,
+      JSON.stringify(
+        boardQueryResult.teams.nodes.map((team) => ({
+          id: team.id,
+          key: team.key,
+          name: team.name,
+        })),
+      ),
+    );
+    window.localStorage.setItem(
+      APP_SHELL_ISSUES_STORAGE_KEY,
+      JSON.stringify(
+        boardQueryResult.issues.nodes.map((issue) => ({
+          id: issue.id,
+          identifier: issue.identifier,
+          stateName: issue.state.name,
+          teamKey: issue.team.key,
+          title: issue.title,
+        })),
+      ),
+    );
+
+    renderApp({ data: boardQueryResult, loading: false }, ['/']);
+
+    await screen.findByRole('heading', { name: 'Board' });
+    const sonataTeamButton = Array.from(document.querySelectorAll<HTMLButtonElement>('.app-shell__team-link')).find(
+      (button) => button.textContent?.includes('SON') && button.textContent?.includes('Sonata'),
+    );
+
+    expect(sonataTeamButton).toBeTruthy();
+
+    fireEvent.click(sonataTeamButton!);
+
+    expect(await screen.findByRole('button', { name: 'Issues' })).toBeInTheDocument();
+
+    fireEvent.click(sonataTeamButton!);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Issues' })).not.toBeInTheDocument();
+    });
   });
 
   it('requests board issues with a team-scoped filter after selecting Sonata', async () => {

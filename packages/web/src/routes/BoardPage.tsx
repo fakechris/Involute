@@ -15,7 +15,7 @@ import {
 } from '@dnd-kit/core';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import {
   BOARD_PAGE_QUERY,
@@ -58,6 +58,7 @@ import {
   writeStoredTeamKey,
 } from '../board/utils';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
+import { writeStoredShellIssues, writeStoredShellTeams } from '../lib/app-shell-state';
 import { BoardCreateIssueDialog } from '../components/BoardCreateIssueDialog';
 import { BoardLoadMoreNotice } from '../components/BoardLoadMoreNotice';
 import { Column } from '../components/Column';
@@ -103,6 +104,7 @@ function moveIssueToState(
 }
 
 export function BoardPage() {
+  const navigate = useNavigate();
   const [activeTeamKey, setActiveTeamKey] = useState<string | null>(() => readStoredTeamKey());
   const [pendingTeamKey, setPendingTeamKey] = useState<string | null>(null);
   const [isLoadingMoreIssues, setIsLoadingMoreIssues] = useState(false);
@@ -221,6 +223,14 @@ export function BoardPage() {
   }, [activeTeamKey]);
 
   useEffect(() => {
+    if (teams.length === 0) {
+      return;
+    }
+
+    writeStoredShellTeams(teams);
+  }, [teams]);
+
+  useEffect(() => {
     setIssueOverrides((currentOverrides) => reconcileIssueOverrides(baseIssues, currentOverrides));
     setCreatedIssues((currentIssues) => reconcileCreatedIssues(baseIssues, currentIssues));
   }, [baseIssues]);
@@ -242,6 +252,14 @@ export function BoardPage() {
   const visibleIssues = useMemo(() => {
     return filterIssuesByTeam(allIssues, activeTeamKey ?? selectedTeam?.key ?? null);
   }, [activeTeamKey, allIssues, selectedTeam?.key]);
+
+  useEffect(() => {
+    if (visibleIssues.length === 0) {
+      return;
+    }
+
+    writeStoredShellIssues(visibleIssues);
+  }, [visibleIssues]);
 
   useEffect(() => {
     if (!isTeamSwitching) {
@@ -266,6 +284,7 @@ export function BoardPage() {
     [selectedIssueId, visibleIssues],
   );
   const hasMoreIssues = !isTeamSwitching && (queryData?.issues.pageInfo.hasNextPage ?? false);
+  const isBacklogView = location.pathname === '/backlog';
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: DND_ACTIVATION_DISTANCE } }),
@@ -696,7 +715,7 @@ export function BoardPage() {
             <h1>Board</h1>
           </div>
         </header>
-        <section className="board-message board-message--error" role="alert">
+        <section className="shell-notice shell-notice--error" role="alert">
           <h2>{errorState.title}</h2>
           <p>{errorState.description}</p>
         </section>
@@ -707,11 +726,21 @@ export function BoardPage() {
   return (
     <main className="board-page">
       <header className="app-shell__header">
-        <div>
+        <div className="app-shell__header-copy">
           <p className="app-shell__eyebrow">Involute</p>
-          <h1>Board</h1>
+          <div className="app-shell__header-inline-meta">
+            {selectedTeam ? (
+              <span className="context-chip context-chip--team">
+                {selectedTeam.key}
+              </span>
+            ) : null}
+            <span className="context-chip">{isBacklogView ? 'Backlog' : 'Board'}</span>
+          </div>
+          <h1>{isBacklogView ? 'Backlog' : 'Board'}</h1>
           <p className="app-shell__subtext">
-            Workflow overview for {selectedTeam?.name ?? 'your workspace'}.
+            {isBacklogView
+              ? `List view for ${selectedTeam?.name ?? 'your workspace'} issues.`
+              : `Workflow overview for ${selectedTeam?.name ?? 'your workspace'}.`}
           </p>
           {isTeamSwitching ? (
             <p className="app-shell__subtext" aria-live="polite">
@@ -721,9 +750,28 @@ export function BoardPage() {
         </div>
 
         <div className="board-page__controls">
+          <div className="board-page__mode-toggle" aria-label="View mode">
+            <button
+              type="button"
+              className={`board-page__mode-button${!isBacklogView ? ' board-page__mode-button--active' : ''}`}
+              onClick={() => navigate('/')}
+            >
+              Board
+            </button>
+            <button
+              type="button"
+              className={`board-page__mode-button${isBacklogView ? ' board-page__mode-button--active' : ''}`}
+              onClick={() => navigate('/backlog')}
+            >
+              Backlog
+            </button>
+          </div>
+          <button type="button" className="board-page__ghost-action" disabled>
+            Filter
+          </button>
           <button
             type="button"
-            className="issue-comment-composer__submit"
+            className="ui-action ui-action--accent"
             disabled={isTeamSwitching}
             onClick={() => {
               setCreateTitle('');
@@ -735,7 +783,7 @@ export function BoardPage() {
             Create issue
           </button>
           {teams.length > 1 ? (
-            <label className="team-selector">
+            <label className="field-stack">
               <span>Team</span>
               <select
                 aria-label="Select team"
@@ -759,7 +807,7 @@ export function BoardPage() {
               </select>
             </label>
           ) : selectedTeam ? (
-            <div className="team-selector team-selector--readonly">
+            <div className="field-stack field-stack--readonly">
               <span>Team</span>
               <strong>{selectedTeam.name}</strong>
             </div>
@@ -768,7 +816,7 @@ export function BoardPage() {
       </header>
 
       {mutationError ? (
-        <section className="board-message board-message--error" role="alert">
+        <section className="shell-notice shell-notice--error" role="alert">
           <p>{mutationError}</p>
         </section>
       ) : null}
@@ -781,10 +829,10 @@ export function BoardPage() {
       />
 
       {loading && !queryData ? (
-        <section className="board-message" aria-live="polite">
+        <section className="shell-notice" aria-live="polite">
           Loading board…
         </section>
-      ) : location.pathname === '/backlog' ? (
+      ) : isBacklogView ? (
         <BacklogPage
           issues={visibleIssues}
           selectedTeam={selectedTeam}

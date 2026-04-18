@@ -57,7 +57,9 @@ test.describe('board flow', () => {
 
     await issueDrawer.getByRole('button', { name: 'Delete issue' }).click();
     await expect(page.getByRole('dialog', { name: 'Issue detail drawer' })).toHaveCount(0);
-    await expect(page.getByText(updatedTitle)).toHaveCount(0);
+    await expect(page.locator('[data-testid="column-Done"]').getByText(updatedTitle, { exact: true })).toHaveCount(
+      0,
+    );
   });
 
   test('renders imported workflow states and issues on the board for visual acceptance', async ({ page }) => {

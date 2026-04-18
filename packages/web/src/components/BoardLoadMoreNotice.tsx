@@ -17,7 +17,7 @@ export function BoardLoadMoreNotice({
 
   return (
     <section
-      className={`board-message${errorMessage ? ' board-message--error' : ''}`}
+      className={`shell-notice${errorMessage ? ' shell-notice--error' : ''}`}
       role={errorMessage ? 'alert' : undefined}
     >
       <p>

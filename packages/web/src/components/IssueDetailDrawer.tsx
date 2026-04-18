@@ -25,6 +25,7 @@ interface IssueDetailDrawerProps {
   onCommentCreate: (issue: IssueSummary, body: string) => Promise<void>;
   onCommentDelete: (issue: IssueSummary, commentId: string) => Promise<void>;
   onIssueDelete: (issue: IssueSummary) => Promise<void>;
+  layout?: 'drawer' | 'page';
 }
 
 export function IssueDetailDrawer({
@@ -43,6 +44,7 @@ export function IssueDetailDrawer({
   onCommentCreate,
   onCommentDelete,
   onIssueDelete,
+  layout = 'drawer',
 }: IssueDetailDrawerProps) {
   const [selectedStateId, setSelectedStateId] = useState<string>('');
   const [title, setTitle] = useState('');
@@ -79,6 +81,68 @@ export function IssueDetailDrawer({
   }, [issue?.id]);
 
   const states = useMemo(() => team?.states.nodes ?? [], [team]);
+  const comments = useMemo(
+    () =>
+      issue
+        ? [...issue.comments.nodes].sort(
+            (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
+          )
+        : [],
+    [issue],
+  );
+  const activityEntries = useMemo(() => {
+    if (!issue) {
+      return [];
+    }
+
+    const entries: Array<{
+      body?: string;
+      id: string;
+      meta: string;
+      title: string;
+    }> = [
+      {
+        id: `${issue.id}-created`,
+        meta: issue.createdAt,
+        title: `${issue.identifier} was created`,
+      },
+      {
+        id: `${issue.id}-state`,
+        meta: issue.updatedAt,
+        title: `Current state is ${issue.state.name}`,
+      },
+    ];
+
+    if (issue.assignee) {
+      entries.push({
+        id: `${issue.id}-assignee`,
+        meta: issue.updatedAt,
+        title: `Assigned to ${issue.assignee.name ?? issue.assignee.email ?? 'Unknown assignee'}`,
+      });
+    }
+
+    if (issue.labels.nodes.length > 0) {
+      entries.push({
+        id: `${issue.id}-labels`,
+        meta: issue.updatedAt,
+        title: 'Labels updated',
+        body: issue.labels.nodes.map((label) => label.name).join(', '),
+      });
+    }
+
+    comments.forEach((comment) => {
+      entries.push({
+        id: comment.id,
+        meta: comment.createdAt,
+        title: `${renderCommentAuthor(comment)} commented`,
+      });
+    });
+
+    return entries.sort((left, right) => new Date(left.meta).getTime() - new Date(right.meta).getTime());
+  }, [
+    comments,
+    issue,
+  ]);
 
   if (!issue) {
     return null;
@@ -118,9 +182,6 @@ export function IssueDetailDrawer({
   const parentSummary = activeIssue.parent
     ? `${activeIssue.parent.identifier} — ${activeIssue.parent.title}`
     : 'No parent issue.';
-  const comments = [...activeIssue.comments.nodes].sort(
-    (left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime(),
-  );
 
   function formatCommentTimestamp(createdAt: string) {
     return new Intl.DateTimeFormat(undefined, {
@@ -156,25 +217,27 @@ export function IssueDetailDrawer({
 
   return (
     <aside
-      className="issue-drawer"
-      aria-label="Issue detail drawer"
-      aria-modal="true"
-      role="dialog"
+      className={`issue-panel${layout === 'page' ? ' issue-panel--page' : ''}`}
+      aria-label={layout === 'page' ? 'Issue detail page' : 'Issue detail drawer'}
+      aria-modal={layout === 'drawer' ? 'true' : undefined}
+      role={layout === 'drawer' ? 'dialog' : undefined}
     >
-      <button
-        type="button"
-        className="issue-drawer__backdrop"
-        aria-label="Close issue detail drawer"
-        onClick={onClose}
-      />
-      <section className="issue-drawer__panel">
-        <div className="issue-drawer__header">
+      {layout === 'drawer' ? (
+        <button
+          type="button"
+          className="issue-panel__backdrop"
+          aria-label="Close issue detail drawer"
+          onClick={onClose}
+        />
+      ) : null}
+      <section className={`issue-panel__frame${layout === 'page' ? ' issue-panel__frame--page' : ''}`}>
+        <div className="issue-panel__header">
           <div>
             <p className="app-shell__eyebrow">{activeIssue.identifier}</p>
-            <div className="issue-drawer__title-row">
+            <div className="issue-panel__title-row">
               <input
                 aria-label="Issue title"
-                className="issue-drawer__title-input"
+                className="issue-panel__title-input"
                 value={title}
                 disabled={savingState}
                 onFocus={() => setIsEditingTitle(true)}
@@ -191,15 +254,15 @@ export function IssueDetailDrawer({
                   }
                 }}
               />
-              <span className="issue-drawer__inline-hint" aria-live="polite">
+              <span className="issue-panel__inline-hint" aria-live="polite">
                 {isEditingTitle ? 'Press Enter or blur to save' : 'Editable title'}
               </span>
             </div>
           </div>
-          <div className="issue-drawer__header-actions">
+          <div className="issue-panel__header-actions">
             <button
               type="button"
-              className="issue-drawer__delete"
+              className="issue-panel__delete"
               disabled={savingState}
               onClick={() => {
                 if (!confirmIssueDelete()) {
@@ -211,175 +274,201 @@ export function IssueDetailDrawer({
             >
               Delete issue
             </button>
-            <button type="button" className="issue-drawer__close" onClick={onClose}>
+            <button type="button" className="issue-panel__close" onClick={onClose}>
               Close
             </button>
           </div>
         </div>
 
-        <div className="issue-drawer__section">
-          <label className="issue-drawer__label" htmlFor="issue-description">
-            Description
-          </label>
-          <textarea
-            id="issue-description"
-            aria-label="Issue description"
-            className="issue-drawer__textarea"
-            value={description}
-            disabled={savingState}
-            onChange={(event) => setDescription(event.target.value)}
-            onBlur={() => void commitDescription().catch(() => undefined)}
-          />
-        </div>
+        <div className="issue-panel__body">
+          <div className="issue-panel__main">
+            <div className="issue-panel__section">
+              <label className="issue-panel__label" htmlFor="issue-description">
+                Description
+              </label>
+              <textarea
+                id="issue-description"
+                aria-label="Issue description"
+                className="issue-panel__textarea"
+                value={description}
+                disabled={savingState}
+                onChange={(event) => setDescription(event.target.value)}
+                onBlur={() => void commitDescription().catch(() => undefined)}
+              />
+            </div>
 
-        <div className="issue-drawer__section">
-          <label className="team-selector">
-            <span>State</span>
-            <select
-              aria-label="Issue state"
-              value={selectedStateId}
-              disabled={savingState}
-              onChange={(event) => {
-                const nextStateId = event.target.value;
-                setSelectedStateId(nextStateId);
-                void onStateChange(activeIssue, nextStateId).catch(() => undefined);
-              }}
-            >
-              {states.map((state) => (
-                <option key={state.id} value={state.id}>
-                  {state.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+            <div className="issue-panel__section">
+              <span className="issue-panel__label">Activity</span>
+              <div className="issue-activity" aria-label="Issue activity">
+                {activityEntries.map((entry) => (
+                  <article key={entry.id} className="issue-activity__item">
+                    <div className="issue-activity__meta">
+                      <strong>{entry.title}</strong>
+                      <time dateTime={entry.meta}>{formatCommentTimestamp(entry.meta)}</time>
+                    </div>
+                    {entry.body ? <p className="issue-activity__body">{entry.body}</p> : null}
+                  </article>
+                ))}
+              </div>
+            </div>
 
-        <div className="issue-drawer__section">
-          <span className="issue-drawer__label">Labels</span>
-          <div className="issue-drawer__chips" aria-label="Issue labels">
-            {labels.length === 0 && (
-              <p className="issue-drawer__empty-hint">No labels available</p>
-            )}
-            {labels.map((label) => {
-              const checked = selectedLabelIds.includes(label.id);
+            <div className="issue-panel__section">
+              <span className="issue-panel__label">Comments</span>
+              {comments.length > 0 ? (
+                <ol className="discussion-list" aria-label="Issue comments">
+                  {comments.map((comment) => (
+                    <li key={comment.id} className="discussion-entry">
+                      <div className="discussion-entry__meta">
+                        <strong>{renderCommentAuthor(comment)}</strong>
+                        <div className="discussion-entry__actions">
+                          <time dateTime={comment.createdAt}>
+                            {formatCommentTimestamp(comment.createdAt)}
+                          </time>
+                          <button
+                            type="button"
+                            className="discussion-entry__delete"
+                            aria-label="Delete comment"
+                            disabled={savingState}
+                            onClick={() => {
+                              if (!confirmCommentDelete()) {
+                                return;
+                              }
 
-              return (
-                <label key={label.id} className="issue-drawer__checkbox">
-                  <input
-                    type="checkbox"
-                    checked={checked}
+                              void onCommentDelete(activeIssue, comment.id).catch(() => undefined);
+                            }}
+                          >
+                            Delete comment
+                          </button>
+                        </div>
+                      </div>
+                      <p className="discussion-entry__body">{comment.body}</p>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="discussion-empty">No comments yet. Start the discussion below.</p>
+              )}
+
+              <form className="discussion-form" onSubmit={(event) => void handleCommentSubmit(event)}>
+                <label className="issue-panel__label" htmlFor="discussion-body">
+                  Add comment
+                </label>
+                <textarea
+                  id="discussion-body"
+                  aria-label="Comment body"
+                  className="issue-panel__textarea discussion-form__input"
+                  value={commentBody}
+                  disabled={savingState}
+                  onChange={(event) => setCommentBody(event.target.value)}
+                />
+                <button
+                  type="submit"
+                  className="ui-action ui-action--accent"
+                  disabled={savingState || commentBody.trim().length === 0}
+                >
+                  Add comment
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <aside className="issue-panel__rail" aria-label="Issue properties">
+            <div className="issue-panel__properties">
+              <div className="issue-panel__property-group">
+                <label className="field-stack">
+                  <span>State</span>
+                  <select
+                    aria-label="Issue state"
+                    value={selectedStateId}
                     disabled={savingState}
                     onChange={(event) => {
-                      const nextLabelIds = event.target.checked
-                        ? [...selectedLabelIds, label.id]
-                        : selectedLabelIds.filter((id) => id !== label.id);
-
-                      setSelectedLabelIds(nextLabelIds);
-                      void onLabelsChange(activeIssue, nextLabelIds).catch(() => undefined);
+                      const nextStateId = event.target.value;
+                      setSelectedStateId(nextStateId);
+                      void onStateChange(activeIssue, nextStateId).catch(() => undefined);
                     }}
-                  />
-                  <span>{label.name}</span>
+                  >
+                    {states.map((state) => (
+                      <option key={state.id} value={state.id}>
+                        {state.name}
+                      </option>
+                    ))}
+                  </select>
                 </label>
-              );
-            })}
-          </div>
-        </div>
+              </div>
 
-        <div className="issue-drawer__section">
-          <label className="team-selector">
-            <span>Assignee</span>
-            <select
-              aria-label="Issue assignee"
-              value={selectedAssigneeId}
-              disabled={savingState}
-              onChange={(event) => {
-                const nextAssigneeId = event.target.value;
-                setSelectedAssigneeId(nextAssigneeId);
-                void onAssigneeChange(activeIssue, nextAssigneeId || null).catch(() => undefined);
-              }}
-            >
-              <option value="">Unassigned</option>
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name ?? user.email ?? user.id}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+              <div className="issue-panel__property-group">
+                <label className="field-stack">
+                  <span>Assignee</span>
+                  <select
+                    aria-label="Issue assignee"
+                    value={selectedAssigneeId}
+                    disabled={savingState}
+                    onChange={(event) => {
+                      const nextAssigneeId = event.target.value;
+                      setSelectedAssigneeId(nextAssigneeId);
+                      void onAssigneeChange(activeIssue, nextAssigneeId || null).catch(() => undefined);
+                    }}
+                  >
+                    <option value="">Unassigned</option>
+                    {users.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name ?? user.email ?? user.id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
 
-        <div className="issue-drawer__section">
-          <span className="issue-drawer__label">Parent</span>
-          <p>{parentSummary}</p>
-          <span className="issue-drawer__label">Children</span>
-          <p>
-            {activeIssue.children.nodes.length > 0
-              ? activeIssue.children.nodes.map((child) => `${child.identifier} — ${child.title}`).join(', ')
-              : 'No child issues.'}
-          </p>
-        </div>
+              <div className="issue-panel__property-group">
+                <span className="issue-panel__label">Labels</span>
+                <div className="issue-panel__chips" aria-label="Issue labels">
+                  {labels.length === 0 && (
+                    <p className="issue-panel__empty-hint">No labels available</p>
+                  )}
+                  {labels.map((label) => {
+                    const checked = selectedLabelIds.includes(label.id);
 
-        <div className="issue-drawer__section">
-          <span className="issue-drawer__label">Comments</span>
-          {comments.length > 0 ? (
-            <ol className="issue-comments" aria-label="Issue comments">
-              {comments.map((comment) => (
-                <li key={comment.id} className="issue-comment">
-                  <div className="issue-comment__meta">
-                    <strong>{renderCommentAuthor(comment)}</strong>
-                    <div className="issue-comment__meta-actions">
-                      <time dateTime={comment.createdAt}>
-                        {formatCommentTimestamp(comment.createdAt)}
-                      </time>
-                      <button
-                        type="button"
-                        className="issue-comment__delete"
-                        aria-label="Delete comment"
-                        disabled={savingState}
-                        onClick={() => {
-                          if (!confirmCommentDelete()) {
-                            return;
-                          }
+                    return (
+                      <label key={label.id} className="issue-panel__checkbox">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={savingState}
+                          onChange={(event) => {
+                            const nextLabelIds = event.target.checked
+                              ? [...selectedLabelIds, label.id]
+                              : selectedLabelIds.filter((id) => id !== label.id);
 
-                          void onCommentDelete(activeIssue, comment.id).catch(() => undefined);
-                        }}
-                      >
-                        Delete comment
-                      </button>
-                    </div>
-                  </div>
-                  <p className="issue-comment__body">{comment.body}</p>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="issue-comments__empty">No comments yet. Start the discussion below.</p>
-          )}
+                            setSelectedLabelIds(nextLabelIds);
+                            void onLabelsChange(activeIssue, nextLabelIds).catch(() => undefined);
+                          }}
+                        />
+                        <span>{label.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
 
-          <form className="issue-comment-composer" onSubmit={(event) => void handleCommentSubmit(event)}>
-            <label className="issue-drawer__label" htmlFor="issue-comment-body">
-              Add comment
-            </label>
-            <textarea
-              id="issue-comment-body"
-              aria-label="Comment body"
-              className="issue-drawer__textarea issue-comment-composer__input"
-              value={commentBody}
-              disabled={savingState}
-              onChange={(event) => setCommentBody(event.target.value)}
-            />
-            <button
-              type="submit"
-              className="issue-comment-composer__submit"
-              disabled={savingState || commentBody.trim().length === 0}
-            >
-              Add comment
-            </button>
-          </form>
+              <div className="issue-panel__property-group">
+                <span className="issue-panel__label">Parent</span>
+                <p>{parentSummary}</p>
+              </div>
+
+              <div className="issue-panel__property-group">
+                <span className="issue-panel__label">Children</span>
+                <p>
+                  {activeIssue.children.nodes.length > 0
+                    ? activeIssue.children.nodes.map((child) => `${child.identifier} — ${child.title}`).join(', ')
+                    : 'No child issues.'}
+                </p>
+              </div>
+            </div>
+          </aside>
         </div>
 
         {errorMessage ? (
-          <p className="issue-drawer__error" role="alert">
+          <p className="issue-panel__error" role="alert">
             {errorMessage}
           </p>
         ) : null}

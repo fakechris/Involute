@@ -24,6 +24,7 @@ import type {
 } from '../board/types';
 import { mergeIssueWithPreservedComments } from '../board/utils';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
+import { writeStoredShellIssue } from '../lib/app-shell-state';
 import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
 
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
@@ -58,6 +59,14 @@ export function IssuePage() {
   useEffect(() => {
     setLocalIssue(data?.issue ?? null);
   }, [data?.issue]);
+
+  useEffect(() => {
+    if (!localIssue) {
+      return;
+    }
+
+    writeStoredShellIssue(localIssue);
+  }, [localIssue]);
 
   const selectedTeam = useMemo(() => {
     if (!localIssue) {
@@ -290,7 +299,7 @@ export function IssuePage() {
             <h1>Issue detail</h1>
           </div>
         </header>
-        <section className="board-message board-message--error" role="alert">
+        <section className="shell-notice shell-notice--error" role="alert">
           <h2>{errorState.title}</h2>
           <p>{errorState.description}</p>
         </section>
@@ -307,7 +316,7 @@ export function IssuePage() {
             <h1>Issue detail</h1>
           </div>
         </header>
-        <section className="board-message" aria-live="polite">
+        <section className="shell-notice" aria-live="polite">
           Loading issue…
         </section>
       </main>
@@ -323,7 +332,7 @@ export function IssuePage() {
             <h1>Issue detail</h1>
           </div>
         </header>
-        <section className="board-message">
+        <section className="shell-notice">
           <p>Issue not found.</p>
         </section>
       </main>
@@ -333,8 +342,14 @@ export function IssuePage() {
   return (
     <main className="board-page">
       <header className="app-shell__header">
-        <div>
+        <div className="app-shell__header-copy">
           <p className="app-shell__eyebrow">Involute</p>
+          <div className="app-shell__header-inline-meta">
+            <span className="context-chip">
+              {selectedTeam.key}
+            </span>
+            <span className="context-chip">Issue</span>
+          </div>
           <h1>Issue detail</h1>
         </div>
       </header>
@@ -355,6 +370,7 @@ export function IssuePage() {
         onCommentCreate={persistCommentCreate}
         onCommentDelete={persistCommentDelete}
         onIssueDelete={persistIssueDelete}
+        layout="page"
       />
     </main>
   );
