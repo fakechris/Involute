@@ -19,6 +19,7 @@ import type {
   TeamUpdateAccessMutationVariables,
 } from '../board/types';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
+import { writeStoredShellTeams } from '../lib/app-shell-state';
 
 const ACCESS_ERROR_MESSAGE = 'We could not update team access right now. Please try again.';
 const ACCESS_STATUS_MESSAGE =
@@ -95,6 +96,14 @@ export function AccessPage() {
     selectedTeamIdRef.current = selectedTeamId;
   }, [selectedTeamId]);
 
+  useEffect(() => {
+    if (teams.length === 0) {
+      return;
+    }
+
+    writeStoredShellTeams(teams);
+  }, [teams]);
+
   const viewer = data?.viewer ?? null;
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === selectedTeamId) ?? null,
@@ -118,7 +127,7 @@ export function AccessPage() {
             <h1>Access</h1>
           </div>
         </header>
-        <section className="board-message board-message--error" role="alert">
+        <section className="shell-notice shell-notice--error" role="alert">
           <h2>{errorState.title}</h2>
           <p>{errorState.description}</p>
         </section>
@@ -135,7 +144,7 @@ export function AccessPage() {
             <h1>Access</h1>
           </div>
         </header>
-        <section className="board-message">
+        <section className="shell-notice">
           <p>Loading team access settings…</p>
         </section>
       </main>
@@ -320,8 +329,12 @@ export function AccessPage() {
   return (
     <main className="access-page">
       <header className="app-shell__header">
-        <div>
+        <div className="app-shell__header-copy">
           <p className="app-shell__eyebrow">Involute</p>
+          <div className="app-shell__header-inline-meta">
+            <span className="context-chip">Settings</span>
+            <span className="context-chip">Access</span>
+          </div>
           <h1>Access</h1>
           <p className="app-shell__subtext">
             Manage team visibility and editor access with the current RBAC model.
@@ -333,8 +346,8 @@ export function AccessPage() {
         </div>
       </header>
 
-      <section className="access-panel">
-        <label className="team-selector">
+      <section className="access-stage">
+        <label className="field-stack">
           <span>Team</span>
           <select
             aria-label="Select access team"
@@ -380,7 +393,7 @@ export function AccessPage() {
 
         {notice ? (
           <p
-            className={`board-message ${notice.tone === 'error' ? 'board-message--error' : 'board-message--success'}`}
+            className={`shell-notice ${notice.tone === 'error' ? 'shell-notice--error' : 'shell-notice--success'}`}
             role="status"
           >
             {notice.message}
@@ -389,7 +402,7 @@ export function AccessPage() {
 
         {selectedTeam ? (
           <>
-            <div className="access-panel__section">
+            <div className="access-stage__section">
               <div>
                 <h2>Visibility</h2>
                 <p className="app-shell__subtext">
@@ -411,7 +424,7 @@ export function AccessPage() {
               </select>
             </div>
 
-            <div className="access-panel__section">
+            <div className="access-stage__section">
               <div>
                 <h2>Members</h2>
                 <p className="app-shell__subtext">
@@ -433,7 +446,7 @@ export function AccessPage() {
                       </div>
                       <button
                         type="button"
-                        className="app-shell__session-action"
+                        className="ui-action ui-action--subtle"
                         aria-label={`Remove ${membership.user.email ?? membership.user.name ?? 'member'} from ${selectedTeam.name}`}
                         disabled={!isManageable || isSaving}
                         onClick={() => handleMembershipRemove(membership.user.id)}
@@ -452,7 +465,7 @@ export function AccessPage() {
               </div>
             </div>
 
-            <div className="access-panel__section">
+            <div className="access-stage__section">
               <div>
                 <h2>Add or update member</h2>
                 <p className="app-shell__subtext">
@@ -462,7 +475,6 @@ export function AccessPage() {
               <div className="access-form">
                 <input
                   aria-label="Member email"
-                  className="issue-detail-drawer__title-input"
                   disabled={!isManageable || isSaving}
                   placeholder="person@example.com"
                   value={newMemberEmail}
@@ -470,7 +482,6 @@ export function AccessPage() {
                 />
                 <input
                   aria-label="Member name"
-                  className="issue-detail-drawer__title-input"
                   disabled={!isManageable || isSaving}
                   placeholder="Optional name"
                   value={newMemberName}
@@ -488,7 +499,7 @@ export function AccessPage() {
                 </select>
                 <button
                   type="button"
-                  className="issue-comment-composer__submit"
+                  className="ui-action ui-action--accent"
                   disabled={isMemberSaveDisabled}
                   onClick={() => void handleMembershipUpsert()}
                 >
@@ -499,13 +510,13 @@ export function AccessPage() {
             </div>
           </>
         ) : (
-          <section className="board-message">
+          <section className="shell-notice">
             <p>No visible teams available. Join a public team or ask an owner to grant access first.</p>
           </section>
         )}
 
         {!isManageable && selectedTeam ? (
-          <p className="board-message" role="status">
+          <p className="shell-notice" role="status">
             {ACCESS_STATUS_MESSAGE}
           </p>
         ) : null}

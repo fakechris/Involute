@@ -40,48 +40,48 @@ export function BoardCreateIssueDialog({
   }
 
   return (
-    <aside className="issue-drawer" aria-label="Create issue drawer" aria-modal="true" role="dialog">
+    <aside className="issue-panel" aria-label="Create issue drawer" aria-modal="true" role="dialog">
       <button
         type="button"
-        className="issue-drawer__backdrop"
+        className="issue-panel__backdrop"
         aria-label="Close create issue drawer"
         onClick={onClose}
       />
-      <section className="issue-drawer__panel">
-        <div className="issue-drawer__header">
+      <section className="issue-panel__frame">
+        <div className="issue-panel__header">
           <div>
             <p className="app-shell__eyebrow">Involute</p>
             <h2>Create issue</h2>
           </div>
-          <button type="button" className="issue-drawer__close" onClick={onClose}>
+          <button type="button" className="issue-panel__close" onClick={onClose}>
             Close
           </button>
         </div>
 
-        <form className="issue-comment-composer" onSubmit={onSubmit}>
-          <div className="issue-drawer__section">
-            <label className="issue-drawer__label" htmlFor="create-issue-title">
+        <form className="discussion-form" onSubmit={onSubmit}>
+          <div className="issue-panel__section">
+            <label className="issue-panel__label" htmlFor="create-issue-title">
               Title
             </label>
             <input
               id="create-issue-title"
               ref={titleInputRef}
               aria-label="Issue title"
-              className="issue-drawer__title-input"
+              className="issue-panel__title-input"
               value={createTitle}
               disabled={isSaving}
               onChange={(event) => onTitleChange(event.target.value)}
             />
           </div>
 
-          <div className="issue-drawer__section">
-            <label className="issue-drawer__label" htmlFor="create-issue-description">
+          <div className="issue-panel__section">
+            <label className="issue-panel__label" htmlFor="create-issue-description">
               Description
             </label>
             <textarea
               id="create-issue-description"
               aria-label="Issue description"
-              className="issue-drawer__textarea"
+              className="issue-panel__textarea"
               value={createDescription}
               disabled={isSaving}
               onChange={(event) => onDescriptionChange(event.target.value)}
@@ -89,8 +89,8 @@ export function BoardCreateIssueDialog({
           </div>
 
           {teams.length > 1 ? (
-            <div className="issue-drawer__section">
-              <label className="team-selector">
+            <div className="issue-panel__section">
+              <label className="field-stack">
                 <span>Team</span>
                 <select
                   aria-label="Select team"
@@ -110,7 +110,7 @@ export function BoardCreateIssueDialog({
 
           <button
             type="submit"
-            className="issue-comment-composer__submit"
+            className="ui-action ui-action--accent"
             disabled={isSaving || !createTitle.trim() || !selectedTeam}
           >
             Create issue

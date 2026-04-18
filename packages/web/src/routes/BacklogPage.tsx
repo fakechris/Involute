@@ -31,18 +31,8 @@ export function BacklogPage({
 
   return (
     <main className="backlog-page">
-      <header className="app-shell__header">
-        <div>
-          <p className="app-shell__eyebrow">Involute</p>
-          <h1>Backlog</h1>
-          <p className="app-shell__subtext">
-            List view for {selectedTeam?.name ?? 'your workspace'} issues.
-          </p>
-        </div>
-      </header>
-
       {sortedIssues.length > 0 ? (
-        <div className="backlog-table-wrapper">
+        <div className="backlog-surface">
           <table className="backlog-table">
             <thead>
               <tr>
@@ -79,7 +69,7 @@ export function BacklogPage({
           </table>
         </div>
       ) : (
-        <section className="board-message">
+        <section className="shell-notice">
           <p>No issues in the backlog for this team yet.</p>
         </section>
       )}

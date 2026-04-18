@@ -3,7 +3,12 @@ import type { DragEndEvent } from '@dnd-kit/core';
 
 import { boardQueryResult, getIssue } from './test/app-test-helpers';
 import { getAuthToken, getAuthTokenDetails, getGraphqlUrl, getGraphqlUrlDetails, getServerBaseUrl } from './lib/apollo';
-import { createHtml5BoardDragPayload, mergeIssueWithPreservedComments, parseHtml5BoardDragPayload } from './board/utils';
+import {
+  createHtml5BoardDragPayload,
+  mergeIssueWithPreservedComments,
+  parseHtml5BoardDragPayload,
+  writeStoredTeamKey,
+} from './board/utils';
 import {
   getDropTargetStateId,
   moveIssueToState,
@@ -113,6 +118,19 @@ describe('App drag helpers', () => {
   it('rejects malformed html5 board drag payloads', () => {
     expect(parseHtml5BoardDragPayload('not-json')).toBeNull();
     expect(parseHtml5BoardDragPayload(JSON.stringify({ issueId: 'issue-1' }))).toBeNull();
+  });
+
+  it('dispatches the active-team-key event even when clearing the stored team key', () => {
+    const handleActiveTeamChange = vi.fn();
+
+    window.addEventListener('involute:active-team-key', handleActiveTeamChange as EventListener);
+    writeStoredTeamKey(null);
+
+    expect(handleActiveTeamChange).toHaveBeenCalledTimes(1);
+    expect((handleActiveTeamChange.mock.calls[0]?.[0] as CustomEvent<string | null>).detail).toBeNull();
+    expect(window.localStorage.getItem('involute.activeTeamKey')).toBeNull();
+
+    window.removeEventListener('involute:active-team-key', handleActiveTeamChange as EventListener);
   });
 
   it('prefers the runtime localStorage auth token when creating Apollo requests', () => {

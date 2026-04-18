@@ -29,13 +29,18 @@ export function writeStoredTeamKey(teamKey: string | null): void {
   try {
     if (!teamKey) {
       window.localStorage.removeItem(ACTIVE_TEAM_STORAGE_KEY);
-      return;
+    } else {
+      window.localStorage.setItem(ACTIVE_TEAM_STORAGE_KEY, teamKey);
     }
-
-    window.localStorage.setItem(ACTIVE_TEAM_STORAGE_KEY, teamKey);
   } catch {
     // Ignore storage failures in restricted browser contexts.
   }
+
+  window.dispatchEvent(
+    new CustomEvent<string | null>('involute:active-team-key', {
+      detail: teamKey,
+    }),
+  );
 }
 
 export function parseHtml5BoardDragPayload(rawPayload: string): Html5BoardDragPayload | null {
