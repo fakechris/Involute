@@ -1,5 +1,9 @@
 # Involute
 
+[![npm version](https://img.shields.io/npm/v/@turnkeyai/involute?label=npm)](https://www.npmjs.com/package/@turnkeyai/involute)
+[![CI](https://github.com/fakechris/Involute/actions/workflows/ci.yml/badge.svg)](https://github.com/fakechris/Involute/actions/workflows/ci.yml)
+[![Docker Publish](https://github.com/fakechris/Involute/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/fakechris/Involute/actions/workflows/docker-publish.yml)
+
 一人团队的 epic / issue / team / workspace 项目管理系统开源实现。
 
 Involute bundles a GraphQL API, a kanban web app, and a CLI that can export one team snapshot, import it into Involute, verify the result, and then let you visually accept it in the board UI.
@@ -133,6 +137,13 @@ Stop the stack with:
 
 ```bash
 pnpm compose:down
+```
+
+If you want to run the published Docker Hub images instead of building from source, use:
+
+```bash
+INVOLUTE_IMAGE_NAMESPACE=turnkeyai INVOLUTE_IMAGE_TAG=latest pnpm compose:pull
+INVOLUTE_IMAGE_NAMESPACE=turnkeyai INVOLUTE_IMAGE_TAG=latest pnpm compose:pull:up
 ```
 
 ## VPS deployment (fresh install)
@@ -426,16 +437,48 @@ The Playwright suite verifies the core board lifecycle: create, update, comment,
 
 ## Docker images
 
-This repo ships one multi-target `Dockerfile` with `server`, `web-dev`, `web`, and `cli` targets. The Docker Hub publish workflow expects these secrets:
+This repo ships one multi-target `Dockerfile` with `server`, `web-dev`, `web`, and `cli` targets.
+
+Published images:
+
+```bash
+docker pull turnkeyai/involute-server:latest
+docker pull turnkeyai/involute-web:latest
+docker pull turnkeyai/involute-cli:latest
+```
+
+Run the compose stack from published images:
+
+```bash
+INVOLUTE_IMAGE_NAMESPACE=turnkeyai INVOLUTE_IMAGE_TAG=latest \
+  docker compose -f docker-compose.images.yml up -d db server web
+```
+
+Production compose can use the same published images:
+
+```bash
+INVOLUTE_IMAGE_NAMESPACE=turnkeyai INVOLUTE_IMAGE_TAG=latest \
+  docker compose --env-file .env.production \
+  -f docker-compose.prod.images.yml up -d
+```
+
+Image tags:
+
+- `latest` — latest successful push from `main`
+- `sha-<short-sha>` — immutable commit image
+- `<version>` — pushed from `docker-v<version>` tags or `workflow_dispatch` input
+
+The Docker Hub publish workflow expects these secrets:
 
 - `DOCKERHUB_USERNAME`
 - `DOCKERHUB_TOKEN`
+- `DOCKERHUB_NAMESPACE` — optional; defaults to `DOCKERHUB_USERNAME`
 
 When they are set, `.github/workflows/docker-publish.yml` pushes:
 
-- `${DOCKERHUB_USERNAME}/involute-server`
-- `${DOCKERHUB_USERNAME}/involute-web`
-- `${DOCKERHUB_USERNAME}/involute-cli`
+- `${DOCKERHUB_NAMESPACE}/involute-server`
+- `${DOCKERHUB_NAMESPACE}/involute-web`
+- `${DOCKERHUB_NAMESPACE}/involute-cli`
 
 The published `involute-web` image is a static production build. It bakes `VITE_INVOLUTE_GRAPHQL_URL` at build time, but it does not bake an auth token into the image. For local development and acceptance, the compose stack remains the reference runtime path and should stay green before publishing.
 
