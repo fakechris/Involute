@@ -33,8 +33,8 @@ while [ "$attempt" -le 30 ]; do
   sleep 2
 done
 
-DATABASE_URL="$DATABASE_URL" pnpm --filter @involute/server exec prisma migrate reset --force --skip-generate --skip-seed
-DATABASE_URL="$DATABASE_URL" SEED_DEFAULT_ADMIN="true" pnpm --filter @involute/server exec prisma db seed
+DATABASE_URL="$DATABASE_URL" pnpm --filter @turnkeyai/involute-server exec prisma migrate reset --force --skip-generate --skip-seed
+DATABASE_URL="$DATABASE_URL" SEED_DEFAULT_ADMIN="true" pnpm --filter @turnkeyai/involute-server exec prisma db seed
 
 exec env \
   APP_ORIGIN="$APP_ORIGIN" \
@@ -43,4 +43,4 @@ exec env \
   ALLOW_ADMIN_FALLBACK="false" \
   VIEWER_ASSERTION_SECRET="$VIEWER_ASSERTION_SECRET" \
   PORT="$SERVER_PORT" \
-  pnpm --filter @involute/server exec tsx src/index.ts
+  pnpm --filter @turnkeyai/involute-server exec tsx src/index.ts

@@ -1,17 +1,18 @@
 # Involute
 
-一人团队的 Linear 式项目管理系统开源实现。
+一人团队的 epic / issue / team / workspace 项目管理系统开源实现。
 
-Involute bundles a GraphQL API, a kanban web app, and a CLI that can export one Linear team, import it into Involute, verify the result, and then let you visually accept it in the board UI.
+Involute bundles a GraphQL API, a kanban web app, and a CLI that can export one team snapshot, import it into Involute, verify the result, and then let you visually accept it in the board UI.
 
 ## Current status
 
 - `M0` single-team migration acceptance is done.
 - `M2` Google OAuth, session auth, admin bootstrap, and team RBAC are done.
 - `M1` deployable self-hosting is in progress.
-- The current highest-priority gap is not local functionality; it is public production confidence on a VPS: public-domain deploy, Google OAuth callback validation, and backup/restore rehearsal.
+- The latest `main` is already live on the VPS, backup/restore has been rehearsed once, Google OAuth is configured on the public domain, and the canonical `SON` team snapshot has been refreshed into the VPS stack.
+- The current highest-priority gap is operator confidence on the VPS: a tighter runbook for deploy, rollback, logs, and restore.
 
-See [docs/current-status.md](docs/current-status.md), [docs/milestones.md](docs/milestones.md), and [docs/vision.md](docs/vision.md) for the current product state.
+See [docs/current-status.md](docs/current-status.md), [docs/milestones.md](docs/milestones.md), [docs/vision.md](docs/vision.md), and [docs/api.md](docs/api.md) for the current product state and API surface.
 
 ## Workspace layout
 
@@ -19,6 +20,7 @@ See [docs/current-status.md](docs/current-status.md), [docs/milestones.md](docs/
 - `packages/web` — React + Vite kanban UI
 - `packages/cli` — `involute` CLI for config, import/export, teams, issues, labels, and comments
 - `packages/shared` — shared TypeScript utilities
+- `docs/api.md` — HTTP and GraphQL API reference
 - `docs/vision.md` — current product vision
 - `docs/milestones.md` — active milestones and sequencing
 
@@ -162,7 +164,7 @@ curl https://involute.example.com/health
 ```bash
 docker compose --env-file .env.production -f docker-compose.prod.yml run --rm \
   --entrypoint /bin/sh server -lc \
-  'pnpm --filter @involute/server run admin:bootstrap you@example.com'
+  'pnpm --filter @turnkeyai/involute-server run admin:bootstrap you@example.com'
 ```
 
 Operational notes:
@@ -241,21 +243,21 @@ Recommended repository variables:
 
 ## Manual single-team import
 
-Set your Linear token in the shell:
+Set your source-system API token in the shell:
 
 ```bash
-export LINEAR_TOKEN='lin_api_xxx'
+export SOURCE_API_TOKEN='src_api_xxx'
 ```
 
 Run the end-to-end team import inside the compose CLI container:
 
 ```bash
-docker compose run --rm cli import team --token "$LINEAR_TOKEN" --team SON --keep-export --output /exports/son-export
+docker compose run --rm cli import team --token "$SOURCE_API_TOKEN" --team SON --keep-export --output /exports/son-export
 ```
 
 What this does:
 
-- exports one Linear team into `.tmp/son-export`
+- exports one team snapshot into `.tmp/son-export`
 - imports the exported data into Involute
 - runs `import verify`
 - writes `.tmp/son-export/involute-import-summary.json`
@@ -274,27 +276,27 @@ Recommended acceptance checks:
 Start the API:
 
 ```bash
-DATABASE_URL="postgresql://involute:involute@127.0.0.1:5434/involute?schema=public" AUTH_TOKEN="changeme-set-your-token" VIEWER_ASSERTION_SECRET="compose-viewer-secret" APP_ORIGIN="http://127.0.0.1:4201" GOOGLE_OAUTH_REDIRECT_URI="http://127.0.0.1:4200/auth/google/callback" pnpm --filter @involute/server exec tsx src/index.ts
+DATABASE_URL="postgresql://involute:involute@127.0.0.1:5434/involute?schema=public" AUTH_TOKEN="changeme-set-your-token" VIEWER_ASSERTION_SECRET="compose-viewer-secret" APP_ORIGIN="http://127.0.0.1:4201" GOOGLE_OAUTH_REDIRECT_URI="http://127.0.0.1:4200/auth/google/callback" pnpm --filter @turnkeyai/involute-server exec tsx src/index.ts
 ```
 
 Start the web app:
 
 ```bash
-VITE_INVOLUTE_AUTH_TOKEN="changeme-set-your-token" VITE_INVOLUTE_GRAPHQL_URL="http://127.0.0.1:4200/graphql" pnpm --filter @involute/web exec vite --host 127.0.0.1 --port 4201
+VITE_INVOLUTE_AUTH_TOKEN="changeme-set-your-token" VITE_INVOLUTE_GRAPHQL_URL="http://127.0.0.1:4200/graphql" pnpm --filter @turnkeyai/involute-web exec vite --host 127.0.0.1 --port 4201
 ```
 
 Run the CLI against that local API:
 
 ```bash
-pnpm --filter @involute/cli exec node dist/index.js import team --token "$LINEAR_TOKEN" --team SON --keep-export --output .tmp/son-export
+pnpm --filter @turnkeyai/involute exec node dist/index.js import team --token "$SOURCE_API_TOKEN" --team SON --keep-export --output .tmp/son-export
 ```
 
 If you need the CLI or web UI to act as a specific user, mint a short-lived viewer assertion with a trusted secret and persist it:
 
 ```bash
 export INVOLUTE_VIEWER_ASSERTION_SECRET=compose-viewer-secret
-pnpm --filter @involute/cli exec node dist/index.js auth viewer-assertion create user@example.com --ttl 3600
-pnpm --filter @involute/cli exec node dist/index.js config set viewer-assertion SIGNED_ASSERTION_HERE
+pnpm --filter @turnkeyai/involute exec node dist/index.js auth viewer-assertion create user@example.com --ttl 3600
+pnpm --filter @turnkeyai/involute exec node dist/index.js config set viewer-assertion SIGNED_ASSERTION_HERE
 ```
 
 The web UI can use the same signed assertion via `VITE_INVOLUTE_VIEWER_ASSERTION` or localStorage key `involute.viewerAssertion`.
@@ -303,7 +305,7 @@ The web UI can use the same signed assertion via `VITE_INVOLUTE_VIEWER_ASSERTION
 
 - Browser auth now supports Google OAuth plus session cookies.
 - `AUTH_TOKEN` and viewer assertions remain available for trusted CLI/dev flows.
-- System admins can be bootstrapped through `ADMIN_EMAIL_ALLOWLIST` or `pnpm --filter @involute/server admin:bootstrap user@example.com`.
+- System admins can be bootstrapped through `ADMIN_EMAIL_ALLOWLIST` or `pnpm --filter @turnkeyai/involute-server admin:bootstrap user@example.com`.
 - Teams now have `PUBLIC` / `PRIVATE` visibility.
 - Team edits are gated by membership role: `EDITOR` or `OWNER`.
 - Team access management is available in the web UI at `/settings/access` and through GraphQL mutations: `teamUpdateAccess`, `teamMembershipUpsert`, and `teamMembershipRemove`.
@@ -313,17 +315,48 @@ The web UI can use the same signed assertion via `VITE_INVOLUTE_VIEWER_ASSERTION
 Use Prisma migrations as the default schema workflow:
 
 ```bash
-pnpm --filter @involute/server prisma:migrate:dev -- --name your_change
-pnpm --filter @involute/server prisma:migrate:deploy
+pnpm --filter @turnkeyai/involute-server prisma:migrate:dev -- --name your_change
+pnpm --filter @turnkeyai/involute-server prisma:migrate:deploy
 ```
+
+## API reference
+
+The current HTTP and GraphQL surface is documented in [docs/api.md](docs/api.md).
+
+## npm release flow
+
+Tag-driven npm publishing is wired through [`.github/workflows/npm-publish.yml`](.github/workflows/npm-publish.yml).
+
+Release tags use this format:
+
+```bash
+git tag npm-v1.0.0
+git push origin npm-v1.0.0
+```
+
+That workflow publishes the current package set in version lockstep:
+
+- `@turnkeyai/involute-shared`
+- `@turnkeyai/involute-server`
+- `@turnkeyai/involute`
+
+Repository setup required before enabling it:
+
+- add `NPM_TOKEN` as a GitHub Actions secret
+- ensure the npm account behind that token can publish the current `@turnkeyai/*` scope
+- after first publish, grant package access to the npm developers team in your org settings
+
+Team access page for the current npm org setup:
+
+- <https://www.npmjs.com/settings/turnkeyai/teams/team/developers/access>
 
 Useful admin/database commands:
 
 ```bash
-pnpm --filter @involute/server admin:bootstrap you@example.com
-pnpm --filter @involute/server prisma:migrate:baseline
-pnpm --filter @involute/server prisma:migrate:reset
-pnpm --filter @involute/server prisma:db:push
+pnpm --filter @turnkeyai/involute-server admin:bootstrap you@example.com
+pnpm --filter @turnkeyai/involute-server prisma:migrate:baseline
+pnpm --filter @turnkeyai/involute-server prisma:migrate:reset
+pnpm --filter @turnkeyai/involute-server prisma:db:push
 ```
 
 Guidance:
@@ -370,14 +403,14 @@ The published `involute-web` image is a static production build. It bakes `VITE_
 ## Common CLI commands
 
 ```bash
-pnpm --filter @involute/cli exec node dist/index.js teams list
-pnpm --filter @involute/cli exec node dist/index.js issues list --team SON
-pnpm --filter @involute/cli exec node dist/index.js issues create --team SON --title "My issue"
-pnpm --filter @involute/cli exec node dist/index.js comments add SON-1 --body "Hello from Involute"
-pnpm --filter @involute/cli exec node dist/index.js export --token "$LINEAR_TOKEN" --team SON --output .tmp/son-export
-pnpm --filter @involute/cli exec node dist/index.js import --file .tmp/son-export
-pnpm --filter @involute/cli exec node dist/index.js import verify --file .tmp/son-export
-pnpm --filter @involute/cli exec node dist/index.js import team --token "$LINEAR_TOKEN" --team SON
+pnpm --filter @turnkeyai/involute exec node dist/index.js teams list
+pnpm --filter @turnkeyai/involute exec node dist/index.js issues list --team SON
+pnpm --filter @turnkeyai/involute exec node dist/index.js issues create --team SON --title "My issue"
+pnpm --filter @turnkeyai/involute exec node dist/index.js comments add SON-1 --body "Hello from Involute"
+pnpm --filter @turnkeyai/involute exec node dist/index.js export --token "$SOURCE_API_TOKEN" --team SON --output .tmp/son-export
+pnpm --filter @turnkeyai/involute exec node dist/index.js import --file .tmp/son-export
+pnpm --filter @turnkeyai/involute exec node dist/index.js import verify --file .tmp/son-export
+pnpm --filter @turnkeyai/involute exec node dist/index.js import team --token "$SOURCE_API_TOKEN" --team SON
 ```
 
 ## Current focus

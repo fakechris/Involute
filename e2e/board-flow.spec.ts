@@ -91,7 +91,7 @@ test.describe('board flow', () => {
 function runBoardFixtureCommand(command: 'seed' | 'cleanup'): void {
   execFileSync(
     'pnpm',
-    ['--filter', '@involute/server', 'exec', 'tsx', 'scripts/import-board-fixture.ts', command],
+    ['--filter', '@turnkeyai/involute-server', 'exec', 'tsx', 'scripts/import-board-fixture.ts', command],
     {
       cwd: process.cwd(),
       env: process.env,

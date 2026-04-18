@@ -341,7 +341,7 @@ export function AccessPage() {
           </p>
           <p className="app-shell__subtext">
             System admins are bootstrapped separately through <code>ADMIN_EMAIL_ALLOWLIST</code> or{' '}
-            <code>pnpm --filter @involute/server admin:bootstrap</code>.
+            <code>pnpm --filter @turnkeyai/involute-server admin:bootstrap</code>.
           </p>
         </div>
       </header>

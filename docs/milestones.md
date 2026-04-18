@@ -14,7 +14,7 @@ Done:
 
 Exit criteria:
 
-- A real Linear team can be imported and visually accepted from the board
+- A real team snapshot can be imported and visually accepted from the board
 - `pnpm e2e` is green locally and in CI
 - `docker compose up --build -d db server web` is a stable demo path
 
@@ -28,8 +28,16 @@ Scope:
 - keep Railway as a possible later hosting target, not the current blocking path
 - define `.env.production` expectations and runtime secrets
 - add reverse proxy / TLS guidance and database backup guidance
-- exercise public-domain deployment, OAuth callback, and backup/restore once
+- exercise public-domain deployment once and OAuth callback once
+- keep the VPS-hosted `SON` dataset as the active source of truth after the final source refresh
 - keep Docker images and compose-based demo/runtime aligned
+
+Done inside M1 already:
+
+- the Tailscale VPS deployment path has been exercised successfully against the latest mainline build
+- the public-domain deployment path is serving the latest mainline build over HTTPS
+- one backup and restore drill has been executed successfully
+- the canonical `SON` dataset has been refreshed from the source system into the VPS stack
 
 Exit criteria:
 
@@ -60,13 +68,19 @@ Exit criteria:
 
 ## M3: UI/UX redesign
 
-Status: later, after M1 and M2.
+Status: in progress.
 
 Scope:
 
-- replace the current generic look with a sharper visual system
-- improve typography, spacing, and hierarchy
-- revisit issue detail and board density
+- replace the old generic shell with a keyboard-first app shell
+- tighten board and backlog workflows around filters, views, bulk actions, and shortcuts
+- improve issue detail density and editing flow
+
+Done inside M3 already:
+
+- the new app shell, board, backlog, access, and issue surfaces are live
+- saved views, command palette navigation, and keyboard-first board workflows are in place
+- the public VPS deployment is already serving the redesigned web client
 
 Exit criteria:
 
@@ -85,5 +99,5 @@ Scope:
 
 Exit criteria:
 
-- multiple Linear teams can be brought in predictably
+- multiple teams can be brought in predictably
 - repeated imports have explicit behavior and reporting

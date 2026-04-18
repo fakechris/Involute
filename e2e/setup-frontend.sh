@@ -37,4 +37,4 @@ exec env \
   VITE_INVOLUTE_AUTH_TOKEN="$AUTH_TOKEN" \
   VITE_INVOLUTE_GRAPHQL_URL="http://127.0.0.1:${SERVER_PORT}/graphql" \
   VITE_INVOLUTE_VIEWER_ASSERTION="$VIEWER_ASSERTION" \
-  pnpm --filter @involute/web exec vite --host 127.0.0.1 --port "$WEB_PORT"
+  pnpm --filter @turnkeyai/involute-web exec vite --host 127.0.0.1 --port "$WEB_PORT"

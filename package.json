@@ -17,7 +17,7 @@
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm --filter @involute/shared test --run && pnpm --filter @involute/server test --run && pnpm --filter @involute/cli test --run && pnpm --filter @involute/web test --run",
+    "test": "pnpm --filter @turnkeyai/involute-shared test --run && pnpm --filter @turnkeyai/involute-server test --run && pnpm --filter @turnkeyai/involute test --run && pnpm --filter @turnkeyai/involute-web test --run",
     "lint": "pnpm -r lint"
   },
   "devDependencies": {

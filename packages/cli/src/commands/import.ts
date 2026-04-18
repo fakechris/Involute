@@ -1,10 +1,10 @@
 /**
- * CLI import command — imports exported Linear data into Involute database.
+ * CLI import command — imports exported source data into Involute database.
  *
  * Usage:
  *   involute import --file <export-dir>            — Run the import pipeline
  *   involute import verify --file <export-dir>     — Verify imported data against export
- *   involute import team --token ... --team ...    — Export, import, and verify one Linear team
+ *   involute import team --token ... --team ...    — Export, import, and verify one team snapshot
  */
 
 import type { Command } from 'commander';
@@ -93,7 +93,7 @@ export async function runImport(options: ImportOptions): Promise<void> {
   log('');
 
   const { PrismaClient } = await import('@prisma/client');
-  const { runImportPipeline } = await import('@involute/server/import-pipeline');
+  const { runImportPipeline } = await import('@turnkeyai/involute-server/import-pipeline');
 
   const prisma = new PrismaClient();
 
@@ -163,11 +163,11 @@ export async function runTeamImport(options: TeamImportOptions): Promise<TeamImp
   };
 
   try {
-    log(`Starting Linear team import for "${options.team}"...`);
+    log(`Starting source team import for "${options.team}"...`);
     log(`Working export directory: ${exportDir}`);
     log('');
 
-    log('Step 1/3: Exporting Linear team data');
+    log('Step 1/3: Exporting source team data');
     await teamImportDependencies.runExport({
       token: options.token,
       team: options.team,
@@ -242,7 +242,7 @@ export async function runTeamImport(options: TeamImportOptions): Promise<TeamImp
 export function registerImportCommand(program: Command): void {
   const importCmd = program
     .command('import')
-    .description('Import exported Linear data into Involute database')
+    .description('Import exported source data into Involute database')
     .enablePositionalOptions()
     .passThroughOptions()
     .option('--file <export-dir>', 'Path to the export directory')
@@ -264,8 +264,8 @@ export function registerImportCommand(program: Command): void {
 
   importCmd
     .command('team')
-    .description('Export, import, and verify a single Linear team end-to-end')
-    .requiredOption('--token <linear-token>', 'Linear API token')
+    .description('Export, import, and verify a single team snapshot end-to-end')
+    .requiredOption('--token <source-token>', 'Source workspace API token')
     .requiredOption('--team <key>', 'Team key to import (for example SON)')
     .option('--output <export-dir>', 'Retain the exported artifacts at this path')
     .option('--keep-export', 'Retain the export directory after a successful import')
