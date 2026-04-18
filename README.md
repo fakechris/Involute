@@ -4,6 +4,15 @@
 
 Involute bundles a GraphQL API, a kanban web app, and a CLI that can export one Linear team, import it into Involute, verify the result, and then let you visually accept it in the board UI.
 
+## Current status
+
+- `M0` single-team migration acceptance is done.
+- `M2` Google OAuth, session auth, admin bootstrap, and team RBAC are done.
+- `M1` deployable self-hosting is in progress.
+- The current highest-priority gap is not local functionality; it is public production confidence on a VPS: public-domain deploy, Google OAuth callback validation, and backup/restore rehearsal.
+
+See [docs/current-status.md](docs/current-status.md), [docs/milestones.md](docs/milestones.md), and [docs/vision.md](docs/vision.md) for the current product state.
+
 ## Workspace layout
 
 - `packages/server` — GraphQL API, Prisma-backed data model, import pipeline, validation helpers
@@ -94,6 +103,12 @@ pnpm compose:down
 ## VPS deployment (fresh install)
 
 This is the recommended first production path: one VPS, Docker Compose, Postgres, the Node API, the static web container, and Caddy terminating HTTPS on a single domain.
+
+Status:
+
+- the deployment files and automation are in place
+- the Tailscale-only path has already been exercised
+- the remaining production work is to validate the same stack on a public domain with real Google OAuth callback and one backup/restore drill
 
 Files involved:
 
@@ -367,9 +382,10 @@ pnpm --filter @involute/cli exec node dist/index.js import team --token "$LINEAR
 
 ## Current focus
 
-- Make the current stack deployable on VPS and Railway
+- Finish public-domain VPS deployment and validate Google OAuth callback plus session flow
+- Run one real Postgres backup and restore drill
 - Keep Google OAuth, admin bootstrap, and team RBAC stable while deployment hardens
 - Move database changes through Prisma migrations instead of schema push shortcuts
-- Keep the compose stack and CI reproducible while the product boundary hardens
+- Keep the compose stack, CI, and deploy automation reproducible while the product boundary hardens
 
-See [docs/vision.md](docs/vision.md) and [docs/milestones.md](docs/milestones.md) for the product direction.
+Railway remains a possible later hosting path, but it is not the current blocking milestone. See [docs/current-status.md](docs/current-status.md), [docs/vision.md](docs/vision.md), and [docs/milestones.md](docs/milestones.md) for the current direction.
