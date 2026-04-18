@@ -180,7 +180,7 @@ export function BacklogPage({
     <main className="backlog-page">
       <section className="backlog-toolbar">
         <div className="backlog-toolbar__primary">
-          <label className="field-stack backlog-toolbar__search">
+          <label className="field-stack field-stack--toolbar backlog-toolbar__search">
             <span>Search</span>
             <input
               ref={searchInputRef}
@@ -207,7 +207,7 @@ export function BacklogPage({
             />
           </label>
 
-          <label className="field-stack">
+          <label className="field-stack field-stack--toolbar">
             <span>Sort</span>
             <select
               aria-label="Sort backlog by"
@@ -229,7 +229,7 @@ export function BacklogPage({
             </select>
           </label>
 
-          <label className="field-stack">
+          <label className="field-stack field-stack--toolbar">
             <span>Direction</span>
             <select
               aria-label="Sort backlog direction"
@@ -249,7 +249,7 @@ export function BacklogPage({
         </div>
 
         <div className="backlog-toolbar__secondary">
-          <label className="field-stack">
+          <label className="field-stack field-stack--toolbar">
             <span>Saved view</span>
             <select
               aria-label="Load saved backlog view"
