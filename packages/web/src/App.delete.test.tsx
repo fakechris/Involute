@@ -136,6 +136,25 @@ function renderApp() {
 beforeEach(() => {
   apolloMocks.useQuery.mockReset();
   apolloMocks.useMutation.mockReset();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          authMode: 'none',
+          authenticated: false,
+          googleOAuthConfigured: false,
+          viewer: null,
+        }),
+        {
+          headers: {
+            'content-type': 'application/json; charset=utf-8',
+          },
+          status: 401,
+        },
+      ),
+    ),
+  );
   apolloMocks.useMutation.mockImplementation((document) => {
     if (document === COMMENT_DELETE_MUTATION) {
       return [vi.fn().mockResolvedValue({ data: { commentDelete: { success: true, commentId: 'comment-1' } } })];
@@ -155,6 +174,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   window.localStorage.clear();
 });
 

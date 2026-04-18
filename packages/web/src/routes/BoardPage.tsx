@@ -14,7 +14,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { useMutation, useQuery } from '@apollo/client/react';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import {
@@ -55,8 +55,23 @@ import {
   reconcileIssueOverrides,
   replaceIssueOverride,
   groupIssuesByState,
+  OPEN_CREATE_ISSUE_EVENT,
   writeStoredTeamKey,
 } from '../board/utils';
+import {
+  applyBoardViewState,
+  APPLY_BOARD_VIEW_EVENT,
+  buildBoardViewSummary,
+  createSavedBoardViewId,
+  getDefaultBoardViewState,
+  readSavedBoardViews,
+  readStoredBoardViewState,
+  type ApplyBoardViewDetail,
+  type BoardViewState,
+  type SavedBoardView,
+  writeSavedBoardViews,
+  writeStoredBoardViewState,
+} from '../board/views';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { writeStoredShellIssues, writeStoredShellTeams } from '../lib/app-shell-state';
 import { BoardCreateIssueDialog } from '../components/BoardCreateIssueDialog';
@@ -72,7 +87,10 @@ const ISSUE_DELETE_ERROR_MESSAGE = 'We could not delete the issue. Please try ag
 const COMMENT_DELETE_ERROR_MESSAGE = 'We could not delete the comment. Please try again.';
 const LOAD_MORE_ISSUES_ERROR_MESSAGE = 'We could not load more issues. Please try again.';
 const DND_ACTIVATION_DISTANCE = 1;
+const EMPTY_LABELS: BoardPageQueryData['issueLabels']['nodes'] = [];
 const EMPTY_ISSUES: IssueSummary[] = [];
+const EMPTY_TEAMS: BoardPageQueryData['teams']['nodes'] = [];
+const EMPTY_USERS: BoardPageQueryData['users']['nodes'] = [];
 
 function getStateIdFromData(data: unknown): string | null {
   if (data && typeof data === 'object' && 'stateId' in data && typeof data.stateId === 'string') {
@@ -128,6 +146,7 @@ export function BoardPage() {
     [queryTeamKey],
   );
   const location = useLocation();
+  const isBacklogView = location.pathname === '/backlog';
   const { data, previousData, error, fetchMore, loading } = useQuery<
     BoardPageQueryData,
     BoardPageQueryVariables
@@ -154,15 +173,21 @@ export function BoardPage() {
   const [runCommentDelete] = useMutation<CommentDeleteMutationData, CommentDeleteMutationVariables>(
     COMMENT_DELETE_MUTATION,
   );
-  const teams = queryData?.teams.nodes ?? [];
-  const users = queryData?.users.nodes ?? [];
-  const labels = queryData?.issueLabels.nodes ?? [];
+  const teams = queryData?.teams.nodes ?? EMPTY_TEAMS;
+  const users = queryData?.users.nodes ?? EMPTY_USERS;
+  const labels = queryData?.issueLabels.nodes ?? EMPTY_LABELS;
   const baseIssues = queryData?.issues.nodes ?? EMPTY_ISSUES;
   const [createdIssues, setCreatedIssues] = useState<IssueSummary[]>([]);
   const [issueOverrides, setIssueOverrides] = useState<Record<string, IssueSummary>>({});
   const [deletedIssueIds, setDeletedIssueIds] = useState<string[]>([]);
   const [activeIssueId, setActiveIssueId] = useState<string | null>(null);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [focusedIssueId, setFocusedIssueId] = useState<string | null>(null);
+  const [selectedIssueIds, setSelectedIssueIds] = useState<string[]>([]);
+  const [bulkTargetStateId, setBulkTargetStateId] = useState('');
+  const [bulkAssigneeId, setBulkAssigneeId] = useState('');
+  const [bulkLabelId, setBulkLabelId] = useState('');
+  const [bulkRemoveLabelId, setBulkRemoveLabelId] = useState('');
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [isSavingState, setIsSavingState] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -170,8 +195,16 @@ export function BoardPage() {
   const [createDescription, setCreateDescription] = useState('');
   const [dragPreviewStateId, setDragPreviewStateId] = useState<string | null>(null);
   const [dragOriginStateId, setDragOriginStateId] = useState<string | null>(null);
+  const [boardViewState, setBoardViewState] = useState<BoardViewState>(() =>
+    readStoredBoardViewState(activeTeamKey),
+  );
+  const [savedBoardViews, setSavedBoardViews] = useState<SavedBoardView[]>(() =>
+    readSavedBoardViews(activeTeamKey),
+  );
+  const [activeSavedBoardViewId, setActiveSavedBoardViewId] = useState('');
+  const boardSearchInputRef = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (loading && !queryData) {
       return;
     }
@@ -204,7 +237,7 @@ export function BoardPage() {
     }
   }, [activeTeamKey, loading, pendingTeamKey, queryData, teams]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!pendingTeamKey || loading) {
       return;
     }
@@ -239,6 +272,38 @@ export function BoardPage() {
     setLoadMoreIssuesError(null);
   }, [boardQueryVariables]);
 
+  useLayoutEffect(() => {
+    setBoardViewState(readStoredBoardViewState(activeTeamKey));
+    setSavedBoardViews(readSavedBoardViews(activeTeamKey));
+    setActiveSavedBoardViewId('');
+  }, [activeTeamKey]);
+
+  useEffect(() => {
+    function handleApplyBoardView(event: Event) {
+      const detail =
+        event instanceof CustomEvent && event.detail
+          ? (event.detail as ApplyBoardViewDetail)
+          : null;
+
+      if (!detail) {
+        return;
+      }
+
+      setBoardViewState(detail.state);
+      setActiveSavedBoardViewId(detail.viewId ?? '');
+    }
+
+    window.addEventListener(APPLY_BOARD_VIEW_EVENT, handleApplyBoardView as EventListener);
+
+    return () => {
+      window.removeEventListener(APPLY_BOARD_VIEW_EVENT, handleApplyBoardView as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    writeStoredBoardViewState(activeTeamKey, boardViewState);
+  }, [activeTeamKey, boardViewState]);
+
   const selectedTeam =
     teams.find((team) => team.key === activeTeamKey) ??
     teams.find((team) => team.key === queryTeamKey) ??
@@ -252,6 +317,14 @@ export function BoardPage() {
   const visibleIssues = useMemo(() => {
     return filterIssuesByTeam(allIssues, activeTeamKey ?? selectedTeam?.key ?? null);
   }, [activeTeamKey, allIssues, selectedTeam?.key]);
+  const boardVisibleIssues = useMemo(
+    () => applyBoardViewState(visibleIssues, boardViewState, users),
+    [boardViewState, users, visibleIssues],
+  );
+  const boardViewTokens = useMemo(
+    () => buildBoardViewSummary(boardViewState, selectedTeam, users, labels),
+    [boardViewState, labels, selectedTeam, users],
+  );
 
   useEffect(() => {
     if (visibleIssues.length === 0) {
@@ -267,14 +340,104 @@ export function BoardPage() {
     }
 
     setSelectedIssueId(null);
+    setFocusedIssueId(null);
+    setSelectedIssueIds([]);
+    setBulkTargetStateId('');
+    setBulkAssigneeId('');
+    setBulkLabelId('');
+    setBulkRemoveLabelId('');
     setActiveIssueId(null);
     setIsCreateOpen(false);
     setDragPreviewStateId(null);
     setDragOriginStateId(null);
     setMutationError(null);
   }, [isTeamSwitching]);
+
+  useEffect(() => {
+    function handleOpenCreateIssue() {
+      setCreateTitle('');
+      setCreateDescription('');
+      setMutationError(null);
+      setIsCreateOpen(true);
+    }
+
+    if (
+      !isBacklogView &&
+      location.state &&
+      typeof location.state === 'object' &&
+      'openCreateIssue' in location.state &&
+      location.state.openCreateIssue
+    ) {
+      handleOpenCreateIssue();
+      navigate(location.pathname, {
+        replace: true,
+        state: {},
+      });
+    }
+
+    window.addEventListener(OPEN_CREATE_ISSUE_EVENT, handleOpenCreateIssue as EventListener);
+
+    return () => {
+      window.removeEventListener(OPEN_CREATE_ISSUE_EVENT, handleOpenCreateIssue as EventListener);
+    };
+  }, [isBacklogView, location.pathname, location.state, navigate]);
+
+  useEffect(() => {
+    const visibleIssueIds = new Set(boardVisibleIssues.map((issue) => issue.id));
+
+    setSelectedIssueIds((currentIssueIds) =>
+      {
+        const nextIssueIds = currentIssueIds.filter((issueId) => visibleIssueIds.has(issueId));
+
+        return nextIssueIds.length === currentIssueIds.length &&
+          nextIssueIds.every((issueId, index) => issueId === currentIssueIds[index])
+          ? currentIssueIds
+          : nextIssueIds;
+      },
+    );
+    setFocusedIssueId((currentIssueId) =>
+      {
+        const nextIssueId =
+          currentIssueId && visibleIssueIds.has(currentIssueId)
+            ? currentIssueId
+            : boardVisibleIssues[0]?.id ?? null;
+
+        return currentIssueId === nextIssueId ? currentIssueId : nextIssueId;
+      },
+    );
+  }, [boardVisibleIssues]);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target;
+
+      const isTypingField =
+        target instanceof HTMLElement &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.getAttribute('contenteditable') === 'true');
+
+      if (isTypingField || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      if (event.key === '/') {
+        event.preventDefault();
+        boardSearchInputRef.current?.focus();
+        boardSearchInputRef.current?.select();
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
   const columns = useMemo(() => getBoardColumns(selectedTeam, visibleIssues), [selectedTeam, visibleIssues]);
-  const issuesByState = useMemo(() => groupIssuesByState(visibleIssues, columns), [columns, visibleIssues]);
+  const issuesByState = useMemo(() => groupIssuesByState(boardVisibleIssues, columns), [boardVisibleIssues, columns]);
   const activeIssue = useMemo(
     () => visibleIssues.find((issue) => issue.id === activeIssueId) ?? null,
     [activeIssueId, visibleIssues],
@@ -283,8 +446,53 @@ export function BoardPage() {
     () => visibleIssues.find((issue) => issue.id === selectedIssueId) ?? null,
     [selectedIssueId, visibleIssues],
   );
+  const selectedBoardIssueIndex = useMemo(
+    () => boardVisibleIssues.findIndex((issue) => issue.id === selectedIssueId),
+    [boardVisibleIssues, selectedIssueId],
+  );
+  const previousBoardIssue =
+    selectedBoardIssueIndex > 0 ? boardVisibleIssues[selectedBoardIssueIndex - 1] ?? null : null;
+  const nextBoardIssue =
+    selectedBoardIssueIndex >= 0 ? boardVisibleIssues[selectedBoardIssueIndex + 1] ?? null : null;
   const hasMoreIssues = !isTeamSwitching && (queryData?.issues.pageInfo.hasNextPage ?? false);
-  const isBacklogView = location.pathname === '/backlog';
+
+  useEffect(() => {
+    if (!selectedIssueId || isBacklogView) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target;
+
+      const isTypingField =
+        target instanceof HTMLElement &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.getAttribute('contenteditable') === 'true');
+
+      if (isTypingField || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      if ((event.key === '[' || event.key === 'ArrowLeft') && previousBoardIssue) {
+        event.preventDefault();
+        openIssue(previousBoardIssue);
+        return;
+      }
+
+      if ((event.key === ']' || event.key === 'ArrowRight') && nextBoardIssue) {
+        event.preventDefault();
+        openIssue(nextBoardIssue);
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isBacklogView, nextBoardIssue, previousBoardIssue, selectedIssueId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: DND_ACTIVATION_DISTANCE } }),
@@ -320,6 +528,551 @@ export function BoardPage() {
     } finally {
       setIsLoadingMoreIssues(false);
     }
+  }
+
+  function toggleIssueSelection(issue: IssueSummary) {
+    setFocusedIssueId(issue.id);
+    setSelectedIssueIds((currentIssueIds) =>
+      currentIssueIds.includes(issue.id)
+        ? currentIssueIds.filter((issueId) => issueId !== issue.id)
+        : [...currentIssueIds, issue.id],
+    );
+  }
+
+  function openIssue(issue: IssueSummary) {
+    setMutationError(null);
+    setFocusedIssueId(issue.id);
+    setSelectedIssueId(issue.id);
+  }
+
+  function selectAllVisibleIssues() {
+    setSelectedIssueIds(boardVisibleIssues.map((issue) => issue.id));
+  }
+
+  async function applyBulkStateChange() {
+    if (!bulkTargetStateId) {
+      return;
+    }
+
+    const targetState =
+      selectedTeam?.states.nodes.find((state) => state.id === bulkTargetStateId) ?? null;
+
+    if (!targetState) {
+      return;
+    }
+
+    const selectedIssueIdSet = new Set(selectedIssueIds);
+    const issuesToUpdate = boardVisibleIssues.filter(
+      (issue) => selectedIssueIdSet.has(issue.id) && issue.state.id !== bulkTargetStateId,
+    );
+
+    if (issuesToUpdate.length === 0) {
+      return;
+    }
+
+    const previousIssuesById = new Map(
+      issuesToUpdate.map((issue) => [issue.id, issueOverrides[issue.id] ?? issue]),
+    );
+    const optimisticIssuesById = new Map(
+      issuesToUpdate.map((issue) => [issue.id, { ...(issueOverrides[issue.id] ?? issue), state: targetState }]),
+    );
+
+    setMutationError(null);
+    setIsSavingState(true);
+
+    setIssueOverrides((currentOverrides) => {
+      let nextOverrides = currentOverrides;
+
+      for (const [issueId, optimisticIssue] of optimisticIssuesById) {
+        nextOverrides = replaceIssueOverride(nextOverrides, issueId, optimisticIssue);
+      }
+
+      return nextOverrides;
+    });
+
+    const results = await Promise.allSettled(
+      issuesToUpdate.map((issue) =>
+        runIssueUpdate({
+          variables: {
+            id: issue.id,
+            input: {
+              stateId: bulkTargetStateId,
+            },
+          },
+        }),
+      ),
+    );
+
+    let hadFailure = false;
+
+    setIssueOverrides((currentOverrides) => {
+      let nextOverrides = currentOverrides;
+
+      results.forEach((result, index) => {
+        const issue = issuesToUpdate[index]!;
+        const previousIssue = previousIssuesById.get(issue.id) ?? issue;
+        const optimisticIssue = optimisticIssuesById.get(issue.id) ?? issue;
+
+        if (
+          result.status === 'fulfilled' &&
+          result.value.data?.issueUpdate.success &&
+          result.value.data.issueUpdate.issue
+        ) {
+          const currentIssue = nextOverrides[issue.id] ?? optimisticIssue;
+          nextOverrides = replaceIssueOverride(
+            nextOverrides,
+            issue.id,
+            mergeIssueWithPreservedComments(currentIssue, result.value.data.issueUpdate.issue),
+          );
+          return;
+        }
+
+        hadFailure = true;
+        nextOverrides = replaceIssueOverride(nextOverrides, issue.id, previousIssue);
+      });
+
+      return nextOverrides;
+    });
+
+    setIsSavingState(false);
+    setSelectedIssueIds([]);
+    setBulkTargetStateId('');
+
+    if (hadFailure) {
+      setMutationError('We could not update some selected issues. Please try again.');
+    }
+  }
+
+  async function applyBulkAssigneeChange() {
+    if (!bulkAssigneeId) {
+      return;
+    }
+
+    const nextAssigneeId = bulkAssigneeId === 'unassigned' ? null : bulkAssigneeId;
+    const nextAssignee = nextAssigneeId ? users.find((user) => user.id === nextAssigneeId) ?? null : null;
+    const selectedIssueIdSet = new Set(selectedIssueIds);
+    const issuesToUpdate = boardVisibleIssues.filter(
+      (issue) => selectedIssueIdSet.has(issue.id) && (issue.assignee?.id ?? null) !== nextAssigneeId,
+    );
+
+    if (issuesToUpdate.length === 0) {
+      return;
+    }
+
+    const previousIssuesById = new Map(
+      issuesToUpdate.map((issue) => [issue.id, issueOverrides[issue.id] ?? issue]),
+    );
+    const optimisticIssuesById = new Map(
+      issuesToUpdate.map((issue) => [
+        issue.id,
+        { ...(issueOverrides[issue.id] ?? issue), assignee: nextAssignee },
+      ]),
+    );
+
+    setMutationError(null);
+    setIsSavingState(true);
+
+    setIssueOverrides((currentOverrides) => {
+      let nextOverrides = currentOverrides;
+
+      for (const [issueId, optimisticIssue] of optimisticIssuesById) {
+        nextOverrides = replaceIssueOverride(nextOverrides, issueId, optimisticIssue);
+      }
+
+      return nextOverrides;
+    });
+
+    const results = await Promise.allSettled(
+      issuesToUpdate.map((issue) =>
+        runIssueUpdate({
+          variables: {
+            id: issue.id,
+            input: {
+              assigneeId: nextAssigneeId,
+            },
+          },
+        }),
+      ),
+    );
+
+    let hadFailure = false;
+
+    setIssueOverrides((currentOverrides) => {
+      let nextOverrides = currentOverrides;
+
+      results.forEach((result, index) => {
+        const issue = issuesToUpdate[index]!;
+        const previousIssue = previousIssuesById.get(issue.id) ?? issue;
+        const optimisticIssue = optimisticIssuesById.get(issue.id) ?? issue;
+
+        if (
+          result.status === 'fulfilled' &&
+          result.value.data?.issueUpdate.success &&
+          result.value.data.issueUpdate.issue
+        ) {
+          const currentIssue = nextOverrides[issue.id] ?? optimisticIssue;
+          nextOverrides = replaceIssueOverride(
+            nextOverrides,
+            issue.id,
+            mergeIssueWithPreservedComments(currentIssue, result.value.data.issueUpdate.issue),
+          );
+          return;
+        }
+
+        hadFailure = true;
+        nextOverrides = replaceIssueOverride(nextOverrides, issue.id, previousIssue);
+      });
+
+      return nextOverrides;
+    });
+
+    setIsSavingState(false);
+    setBulkAssigneeId('');
+
+    if (hadFailure) {
+      setMutationError('We could not update some assignees. Please try again.');
+    }
+  }
+
+  async function applyBulkLabelAdd() {
+    if (!bulkLabelId) {
+      return;
+    }
+
+    const labelToAdd = labels.find((label) => label.id === bulkLabelId) ?? null;
+
+    if (!labelToAdd) {
+      return;
+    }
+
+    const selectedIssueIdSet = new Set(selectedIssueIds);
+    const issuesToUpdate = boardVisibleIssues.filter(
+      (issue) =>
+        selectedIssueIdSet.has(issue.id) &&
+        !issue.labels.nodes.some((label) => label.id === bulkLabelId),
+    );
+
+    if (issuesToUpdate.length === 0) {
+      return;
+    }
+
+    const previousIssuesById = new Map(
+      issuesToUpdate.map((issue) => [issue.id, issueOverrides[issue.id] ?? issue]),
+    );
+    const optimisticIssuesById = new Map(
+      issuesToUpdate.map((issue) => {
+        const currentIssue = issueOverrides[issue.id] ?? issue;
+
+        return [
+          issue.id,
+          {
+            ...currentIssue,
+            labels: {
+              nodes: [...currentIssue.labels.nodes, labelToAdd],
+            },
+          },
+        ];
+      }),
+    );
+
+    setMutationError(null);
+    setIsSavingState(true);
+
+    setIssueOverrides((currentOverrides) => {
+      let nextOverrides = currentOverrides;
+
+      for (const [issueId, optimisticIssue] of optimisticIssuesById) {
+        nextOverrides = replaceIssueOverride(nextOverrides, issueId, optimisticIssue);
+      }
+
+      return nextOverrides;
+    });
+
+    const results = await Promise.allSettled(
+      issuesToUpdate.map((issue) => {
+        const labelIds = [...issue.labels.nodes.map((label) => label.id), bulkLabelId].sort();
+
+        return runIssueUpdate({
+          variables: {
+            id: issue.id,
+            input: {
+              labelIds,
+            },
+          },
+        });
+      }),
+    );
+
+    let hadFailure = false;
+
+    setIssueOverrides((currentOverrides) => {
+      let nextOverrides = currentOverrides;
+
+      results.forEach((result, index) => {
+        const issue = issuesToUpdate[index]!;
+        const previousIssue = previousIssuesById.get(issue.id) ?? issue;
+        const optimisticIssue = optimisticIssuesById.get(issue.id) ?? issue;
+
+        if (
+          result.status === 'fulfilled' &&
+          result.value.data?.issueUpdate.success &&
+          result.value.data.issueUpdate.issue
+        ) {
+          const currentIssue = nextOverrides[issue.id] ?? optimisticIssue;
+          nextOverrides = replaceIssueOverride(
+            nextOverrides,
+            issue.id,
+            mergeIssueWithPreservedComments(currentIssue, result.value.data.issueUpdate.issue),
+          );
+          return;
+        }
+
+        hadFailure = true;
+        nextOverrides = replaceIssueOverride(nextOverrides, issue.id, previousIssue);
+      });
+
+      return nextOverrides;
+    });
+
+    setIsSavingState(false);
+    setBulkLabelId('');
+
+    if (hadFailure) {
+      setMutationError('We could not add the label to some selected issues. Please try again.');
+    }
+  }
+
+  async function applyBulkLabelRemove() {
+    if (!bulkRemoveLabelId) {
+      return;
+    }
+
+    const selectedIssueIdSet = new Set(selectedIssueIds);
+    const issuesToUpdate = boardVisibleIssues.filter(
+      (issue) =>
+        selectedIssueIdSet.has(issue.id) &&
+        issue.labels.nodes.some((label) => label.id === bulkRemoveLabelId),
+    );
+
+    if (issuesToUpdate.length === 0) {
+      return;
+    }
+
+    const previousIssuesById = new Map(
+      issuesToUpdate.map((issue) => [issue.id, issueOverrides[issue.id] ?? issue]),
+    );
+    const optimisticIssuesById = new Map(
+      issuesToUpdate.map((issue) => {
+        const currentIssue = issueOverrides[issue.id] ?? issue;
+
+        return [
+          issue.id,
+          {
+            ...currentIssue,
+            labels: {
+              nodes: currentIssue.labels.nodes.filter((label) => label.id !== bulkRemoveLabelId),
+            },
+          },
+        ];
+      }),
+    );
+
+    setMutationError(null);
+    setIsSavingState(true);
+
+    setIssueOverrides((currentOverrides) => {
+      let nextOverrides = currentOverrides;
+
+      for (const [issueId, optimisticIssue] of optimisticIssuesById) {
+        nextOverrides = replaceIssueOverride(nextOverrides, issueId, optimisticIssue);
+      }
+
+      return nextOverrides;
+    });
+
+    const results = await Promise.allSettled(
+      issuesToUpdate.map((issue) => {
+        const labelIds = issue.labels.nodes
+          .map((label) => label.id)
+          .filter((labelId) => labelId !== bulkRemoveLabelId)
+          .sort();
+
+        return runIssueUpdate({
+          variables: {
+            id: issue.id,
+            input: {
+              labelIds,
+            },
+          },
+        });
+      }),
+    );
+
+    let hadFailure = false;
+
+    setIssueOverrides((currentOverrides) => {
+      let nextOverrides = currentOverrides;
+
+      results.forEach((result, index) => {
+        const issue = issuesToUpdate[index]!;
+        const previousIssue = previousIssuesById.get(issue.id) ?? issue;
+        const optimisticIssue = optimisticIssuesById.get(issue.id) ?? issue;
+
+        if (
+          result.status === 'fulfilled' &&
+          result.value.data?.issueUpdate.success &&
+          result.value.data.issueUpdate.issue
+        ) {
+          const currentIssue = nextOverrides[issue.id] ?? optimisticIssue;
+          nextOverrides = replaceIssueOverride(
+            nextOverrides,
+            issue.id,
+            mergeIssueWithPreservedComments(currentIssue, result.value.data.issueUpdate.issue),
+          );
+          return;
+        }
+
+        hadFailure = true;
+        nextOverrides = replaceIssueOverride(nextOverrides, issue.id, previousIssue);
+      });
+
+      return nextOverrides;
+    });
+
+    setIsSavingState(false);
+    setBulkRemoveLabelId('');
+
+    if (hadFailure) {
+      setMutationError('We could not remove the label from some selected issues. Please try again.');
+    }
+  }
+
+  function toggleBoardFilterValue(key: 'assigneeIds' | 'labelIds' | 'stateIds', value: string) {
+    setBoardViewState((currentState) => {
+      const currentValues = currentState[key];
+
+      return {
+        ...currentState,
+        [key]: currentValues.includes(value)
+          ? currentValues.filter((entry) => entry !== value)
+          : [...currentValues, value],
+      };
+    });
+    setActiveSavedBoardViewId('');
+  }
+
+  function resetBoardViewState() {
+    setBoardViewState(getDefaultBoardViewState());
+    setActiveSavedBoardViewId('');
+  }
+
+  function clearBoardQuery() {
+    setBoardViewState((currentState) => ({
+      ...currentState,
+      query: '',
+    }));
+    setActiveSavedBoardViewId('');
+  }
+
+  function removeBoardFilterToken(token: string) {
+    if (token.startsWith('Query: ')) {
+      clearBoardQuery();
+      return;
+    }
+
+    if (token.startsWith('Assignee: ')) {
+      const targetLabel = token.slice('Assignee: '.length);
+
+      setBoardViewState((currentState) => ({
+        ...currentState,
+        assigneeIds: currentState.assigneeIds.filter((assigneeId) => {
+          if (targetLabel === 'Unassigned') {
+            return assigneeId !== 'unassigned';
+          }
+
+          const user = users.find((candidate) => candidate.id === assigneeId);
+          return (user?.name ?? user?.email ?? assigneeId) !== targetLabel;
+        }),
+      }));
+      setActiveSavedBoardViewId('');
+      return;
+    }
+
+    if (token.startsWith('State: ')) {
+      const targetStateName = token.slice('State: '.length);
+
+      setBoardViewState((currentState) => ({
+        ...currentState,
+        stateIds: currentState.stateIds.filter((stateId) => {
+          const state = selectedTeam?.states.nodes.find((candidate) => candidate.id === stateId);
+          return (state?.name ?? stateId) !== targetStateName;
+        }),
+      }));
+      setActiveSavedBoardViewId('');
+      return;
+    }
+
+    if (token.startsWith('Label: ')) {
+      const targetLabelName = token.slice('Label: '.length);
+
+      setBoardViewState((currentState) => ({
+        ...currentState,
+        labelIds: currentState.labelIds.filter((labelId) => {
+          const label = labels.find((candidate) => candidate.id === labelId);
+          return (label?.name ?? labelId) !== targetLabelName;
+        }),
+      }));
+      setActiveSavedBoardViewId('');
+    }
+  }
+
+  function saveBoardView() {
+    if (!activeTeamKey) {
+      return;
+    }
+
+    const viewName = window.prompt('Save board view as', selectedTeam ? `${selectedTeam.name} board view` : 'Board view');
+    const trimmedName = viewName?.trim();
+
+    if (!trimmedName) {
+      return;
+    }
+
+    const nextView: SavedBoardView = {
+      id: createSavedBoardViewId(),
+      name: trimmedName,
+      state: boardViewState,
+    };
+    const nextSavedViews = [nextView, ...savedBoardViews].slice(0, 12);
+    setSavedBoardViews(nextSavedViews);
+    setActiveSavedBoardViewId(nextView.id);
+    writeSavedBoardViews(activeTeamKey, nextSavedViews);
+  }
+
+  function loadBoardView(nextViewId: string) {
+    setActiveSavedBoardViewId(nextViewId);
+
+    if (!nextViewId) {
+      setBoardViewState(readStoredBoardViewState(activeTeamKey));
+      return;
+    }
+
+    const nextView = savedBoardViews.find((view) => view.id === nextViewId);
+
+    if (nextView) {
+      setBoardViewState(nextView.state);
+    }
+  }
+
+  function deleteBoardView() {
+    if (!activeTeamKey || !activeSavedBoardViewId) {
+      return;
+    }
+
+    const nextSavedViews = savedBoardViews.filter((view) => view.id !== activeSavedBoardViewId);
+    setSavedBoardViews(nextSavedViews);
+    setActiveSavedBoardViewId('');
+    writeSavedBoardViews(activeTeamKey, nextSavedViews);
   }
 
   async function persistIssueUpdate(
@@ -580,6 +1333,7 @@ export function BoardPage() {
         result.data!.issueCreate.issue!,
         ...currentIssues.filter((issue) => issue.id !== result.data!.issueCreate.issue!.id),
       ]);
+      setFocusedIssueId(result.data.issueCreate.issue.id);
       setSelectedIssueId(result.data.issueCreate.issue.id);
       setCreateTitle('');
       setCreateDescription('');
@@ -650,6 +1404,81 @@ export function BoardPage() {
       }
     }
   }
+
+  useEffect(() => {
+    if (isBacklogView || boardVisibleIssues.length === 0) {
+      return;
+    }
+
+    function handleBoardKeyboardShortcuts(event: KeyboardEvent) {
+      const target = event.target;
+      const isElementTarget = target instanceof HTMLElement;
+      const tagName = isElementTarget ? target.tagName : null;
+      const isTypingField =
+        tagName === 'INPUT' ||
+        tagName === 'TEXTAREA' ||
+        tagName === 'SELECT' ||
+        (isElementTarget && target.getAttribute('contenteditable') === 'true');
+
+      if (isTypingField || selectedIssueId || isCreateOpen) {
+        return;
+      }
+
+      const currentIndex = boardVisibleIssues.findIndex((issue) => issue.id === focusedIssueId);
+      const safeIndex = currentIndex >= 0 ? currentIndex : 0;
+
+      if (event.key === 'j' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        const nextIssue = boardVisibleIssues[Math.min(boardVisibleIssues.length - 1, safeIndex + 1)];
+        setFocusedIssueId(nextIssue?.id ?? focusedIssueId);
+        return;
+      }
+
+      if (event.key === 'k' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const nextIssue = boardVisibleIssues[Math.max(0, safeIndex - 1)];
+        setFocusedIssueId(nextIssue?.id ?? focusedIssueId);
+        return;
+      }
+
+      if (event.key === 'x' && focusedIssueId) {
+        event.preventDefault();
+        const focusedIssue = boardVisibleIssues.find((issue) => issue.id === focusedIssueId);
+
+        if (focusedIssue) {
+          toggleIssueSelection(focusedIssue);
+        }
+        return;
+      }
+
+      if (event.key === 'X' && event.shiftKey) {
+        event.preventDefault();
+        setSelectedIssueIds([]);
+        return;
+      }
+
+      if ((event.key === 'Enter' || event.key === 'o') && focusedIssueId) {
+        event.preventDefault();
+        const focusedIssue = boardVisibleIssues.find((issue) => issue.id === focusedIssueId);
+
+        if (focusedIssue) {
+          openIssue(focusedIssue);
+        }
+        return;
+      }
+
+      if (event.key === 'A' && event.shiftKey) {
+        event.preventDefault();
+        selectAllVisibleIssues();
+      }
+    }
+
+    window.addEventListener('keydown', handleBoardKeyboardShortcuts);
+
+    return () => {
+      window.removeEventListener('keydown', handleBoardKeyboardShortcuts);
+    };
+  }, [boardVisibleIssues, focusedIssueId, isBacklogView, isCreateOpen, selectedIssueId]);
 
   async function handleNativeDropIssue(payload: Html5BoardDragPayload, targetStateId: string) {
     const issue = visibleIssues.find((item) => item.id === payload.issueId);
@@ -766,8 +1595,12 @@ export function BoardPage() {
               Backlog
             </button>
           </div>
-          <button type="button" className="board-page__ghost-action" disabled>
-            Filter
+          <button
+            type="button"
+            className="board-page__ghost-action"
+            onClick={() => navigate('/backlog')}
+          >
+            Views
           </button>
           <button
             type="button"
@@ -821,6 +1654,325 @@ export function BoardPage() {
         </section>
       ) : null}
 
+      {!isBacklogView ? (
+        <>
+          <section className="board-viewbar">
+            <div className="board-viewbar__primary">
+              <label className="field-stack board-viewbar__search">
+                <span>Search</span>
+                <input
+                  ref={boardSearchInputRef}
+                  aria-label="Search board issues"
+                  placeholder="Filter by identifier, title, or description"
+                  value={boardViewState.query}
+                  onChange={(event) => {
+                    setBoardViewState((currentState) => ({
+                      ...currentState,
+                      query: event.target.value,
+                    }));
+                    setActiveSavedBoardViewId('');
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape' && boardViewState.query) {
+                      event.preventDefault();
+                      setBoardViewState((currentState) => ({
+                        ...currentState,
+                        query: '',
+                      }));
+                      setActiveSavedBoardViewId('');
+                    }
+                  }}
+                />
+              </label>
+              {boardViewState.query ? (
+                <button type="button" className="ui-action ui-action--subtle" onClick={clearBoardQuery}>
+                  Clear search
+                </button>
+              ) : null}
+
+              <label className="field-stack">
+                <span>Sort</span>
+                <select
+                  aria-label="Sort board by"
+                  value={boardViewState.sortField}
+                  onChange={(event) => {
+                    setBoardViewState((currentState) => ({
+                      ...currentState,
+                      sortField: event.target.value as BoardViewState['sortField'],
+                    }));
+                    setActiveSavedBoardViewId('');
+                  }}
+                >
+                  <option value="updatedAt">Updated</option>
+                  <option value="createdAt">Created</option>
+                  <option value="identifier">Identifier</option>
+                  <option value="title">Title</option>
+                </select>
+              </label>
+
+              <label className="field-stack">
+                <span>Direction</span>
+                <select
+                  aria-label="Sort board direction"
+                  value={boardViewState.sortDirection}
+                  onChange={(event) => {
+                    setBoardViewState((currentState) => ({
+                      ...currentState,
+                      sortDirection: event.target.value as BoardViewState['sortDirection'],
+                    }));
+                    setActiveSavedBoardViewId('');
+                  }}
+                >
+                  <option value="desc">Descending</option>
+                  <option value="asc">Ascending</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="board-viewbar__secondary">
+              <label className="field-stack">
+                <span>Saved view</span>
+                <select
+                  aria-label="Load saved board view"
+                  value={activeSavedBoardViewId}
+                  onChange={(event) => loadBoardView(event.target.value)}
+                >
+                  <option value="">Current board view</option>
+                  {savedBoardViews.map((view) => (
+                    <option key={view.id} value={view.id}>
+                      {view.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <button type="button" className="ui-action ui-action--subtle" onClick={saveBoardView}>
+                Save view
+              </button>
+              <button
+                type="button"
+                className="ui-action ui-action--subtle"
+                disabled={!activeSavedBoardViewId}
+                onClick={deleteBoardView}
+              >
+                Delete view
+              </button>
+              <button type="button" className="ui-action ui-action--subtle" onClick={resetBoardViewState}>
+                Clear
+              </button>
+            </div>
+          </section>
+
+          <section className="board-filter-row" aria-label="Board filters">
+            <details className="board-filter">
+              <summary>States {boardViewState.stateIds.length > 0 ? `(${boardViewState.stateIds.length})` : ''}</summary>
+              <div className="board-filter__menu">
+                {selectedTeam?.states.nodes.map((state) => (
+                  <label key={state.id} className="board-filter__option">
+                    <input
+                      type="checkbox"
+                      checked={boardViewState.stateIds.includes(state.id)}
+                      onChange={() => toggleBoardFilterValue('stateIds', state.id)}
+                    />
+                    <span>{state.name}</span>
+                  </label>
+                ))}
+              </div>
+            </details>
+
+            <details className="board-filter">
+              <summary>Assignees {boardViewState.assigneeIds.length > 0 ? `(${boardViewState.assigneeIds.length})` : ''}</summary>
+              <div className="board-filter__menu">
+                <label className="board-filter__option">
+                  <input
+                    type="checkbox"
+                    checked={boardViewState.assigneeIds.includes('unassigned')}
+                    onChange={() => toggleBoardFilterValue('assigneeIds', 'unassigned')}
+                  />
+                  <span>Unassigned</span>
+                </label>
+                {users.map((user) => (
+                  <label key={user.id} className="board-filter__option">
+                    <input
+                      type="checkbox"
+                      checked={boardViewState.assigneeIds.includes(user.id)}
+                      onChange={() => toggleBoardFilterValue('assigneeIds', user.id)}
+                    />
+                    <span>{user.name ?? user.email ?? user.id}</span>
+                  </label>
+                ))}
+              </div>
+            </details>
+
+            <details className="board-filter">
+              <summary>Labels {boardViewState.labelIds.length > 0 ? `(${boardViewState.labelIds.length})` : ''}</summary>
+              <div className="board-filter__menu">
+                {labels.map((label) => (
+                  <label key={label.id} className="board-filter__option">
+                    <input
+                      type="checkbox"
+                      checked={boardViewState.labelIds.includes(label.id)}
+                      onChange={() => toggleBoardFilterValue('labelIds', label.id)}
+                    />
+                    <span>{label.name}</span>
+                  </label>
+                ))}
+              </div>
+            </details>
+          </section>
+
+          <section className="board-active-view" aria-label="Active board view">
+            <div className="board-active-view__meta">
+              <strong>{boardVisibleIssues.length} visible issues</strong>
+              <span>
+                {activeSavedBoardViewId
+                  ? `Loaded view: ${savedBoardViews.find((view) => view.id === activeSavedBoardViewId)?.name ?? 'Unknown'}`
+                  : 'Unsaved working view'}
+              </span>
+            </div>
+            <div className="board-active-view__tokens">
+              {boardViewTokens.map((token) => (
+                <button
+                  key={token}
+                  type="button"
+                  className="context-chip context-chip--interactive"
+                  onClick={() => removeBoardFilterToken(token)}
+                  disabled={token.startsWith('Sort: ')}
+                  aria-label={token.startsWith('Sort: ') ? token : `Remove ${token}`}
+                >
+                  {token}
+                </button>
+              ))}
+              {(boardViewState.query ||
+                boardViewState.assigneeIds.length > 0 ||
+                boardViewState.stateIds.length > 0 ||
+                boardViewState.labelIds.length > 0) ? (
+                <button type="button" className="ui-action ui-action--subtle" onClick={resetBoardViewState}>
+                  Clear filters
+                </button>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="issue-bulkbar" aria-label="Bulk actions">
+            <div className="issue-bulkbar__meta">
+              <strong>{selectedIssueIds.length} selected</strong>
+              <span>
+                {selectedIssueIds.length > 0
+                  ? 'Apply actions to the current filtered board selection.'
+                  : 'Use x to select the focused issue, Shift+A to select all visible, Shift+X to clear, Enter to open.'}
+              </span>
+            </div>
+            <div className="issue-bulkbar__actions">
+              <button type="button" className="ui-action ui-action--subtle" onClick={selectAllVisibleIssues}>
+                Select all visible
+              </button>
+              <button
+                type="button"
+                className="ui-action ui-action--subtle"
+                disabled={selectedIssueIds.length === 0}
+                onClick={() => setSelectedIssueIds([])}
+              >
+                Clear selection
+              </button>
+              <label className="field-stack">
+                <span>Move to</span>
+                <select
+                  aria-label="Bulk move selected issues to state"
+                  value={bulkTargetStateId}
+                  onChange={(event) => setBulkTargetStateId(event.target.value)}
+                >
+                  <option value="">Choose state</option>
+                  {selectedTeam?.states.nodes.map((state) => (
+                    <option key={state.id} value={state.id}>
+                      {state.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="ui-action ui-action--accent"
+                disabled={selectedIssueIds.length === 0 || !bulkTargetStateId || isSavingState}
+                onClick={() => void applyBulkStateChange()}
+              >
+                Apply to selected
+              </button>
+              <label className="field-stack">
+                <span>Assign to</span>
+                <select
+                  aria-label="Bulk assign selected issues"
+                  value={bulkAssigneeId}
+                  onChange={(event) => setBulkAssigneeId(event.target.value)}
+                >
+                  <option value="">Choose assignee</option>
+                  <option value="unassigned">Unassigned</option>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name ?? user.email ?? user.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="ui-action ui-action--subtle"
+                disabled={selectedIssueIds.length === 0 || !bulkAssigneeId || isSavingState}
+                onClick={() => void applyBulkAssigneeChange()}
+              >
+                Apply assignee
+              </button>
+              <label className="field-stack">
+                <span>Add label</span>
+                <select
+                  aria-label="Bulk add label to selected issues"
+                  value={bulkLabelId}
+                  onChange={(event) => setBulkLabelId(event.target.value)}
+                >
+                  <option value="">Choose label</option>
+                  {labels.map((label) => (
+                    <option key={label.id} value={label.id}>
+                      {label.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="ui-action ui-action--subtle"
+                disabled={selectedIssueIds.length === 0 || !bulkLabelId || isSavingState}
+                onClick={() => void applyBulkLabelAdd()}
+              >
+                Add label
+              </button>
+              <label className="field-stack">
+                <span>Remove label</span>
+                <select
+                  aria-label="Bulk remove label from selected issues"
+                  value={bulkRemoveLabelId}
+                  onChange={(event) => setBulkRemoveLabelId(event.target.value)}
+                >
+                  <option value="">Choose label</option>
+                  {labels.map((label) => (
+                    <option key={label.id} value={label.id}>
+                      {label.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="ui-action ui-action--subtle"
+                disabled={selectedIssueIds.length === 0 || !bulkRemoveLabelId || isSavingState}
+                onClick={() => void applyBulkLabelRemove()}
+              >
+                Remove label
+              </button>
+            </div>
+          </section>
+        </>
+      ) : null}
+
       <BoardLoadMoreNotice
         errorMessage={loadMoreIssuesError}
         hasMoreIssues={hasMoreIssues}
@@ -835,11 +1987,10 @@ export function BoardPage() {
       ) : isBacklogView ? (
         <BacklogPage
           issues={visibleIssues}
+          labels={labels}
           selectedTeam={selectedTeam}
-          onSelectIssue={(issue) => {
-            setMutationError(null);
-            setSelectedIssueId(issue.id);
-          }}
+          users={users}
+          onSelectIssue={openIssue}
         />
       ) : (
         <DndContext
@@ -886,7 +2037,10 @@ export function BoardPage() {
                 key={column.name}
                 title={column.name}
                 stateId={column.stateId}
+                focusedIssueId={focusedIssueId}
                 issues={issuesByState[column.stateId] ?? EMPTY_ISSUES}
+                onToggleIssueSelection={toggleIssueSelection}
+                selectedIssueIds={selectedIssueIds}
                 onNativeDragStart={(payload) => {
                   setActiveIssueId(payload.issueId);
                   setDragOriginStateId(payload.stateId);
@@ -901,10 +2055,7 @@ export function BoardPage() {
                 onNativeDropIssue={(payload, targetStateId) => {
                   void handleNativeDropIssue(payload, targetStateId);
                 }}
-                onSelectIssue={(issue) => {
-                  setMutationError(null);
-                  setSelectedIssueId(issue.id);
-                }}
+                onSelectIssue={openIssue}
               />
             ))}
           </section>
@@ -931,6 +2082,10 @@ export function BoardPage() {
         onCommentCreate={persistCommentCreate}
         onCommentDelete={persistCommentDelete}
         onIssueDelete={persistIssueDelete}
+        {...(!isBacklogView ? { previousIssue: previousBoardIssue } : {})}
+        {...(previousBoardIssue ? { onPreviousIssue: () => openIssue(previousBoardIssue) } : {})}
+        {...(!isBacklogView ? { nextIssue: nextBoardIssue } : {})}
+        {...(nextBoardIssue ? { onNextIssue: () => openIssue(nextBoardIssue) } : {})}
       />
       <BoardCreateIssueDialog
         isOpen={isCreateOpen}

@@ -1,4 +1,5 @@
 import { MouseSensor, PointerSensor, TouchSensor } from '@dnd-kit/core';
+import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { dndMocks, renderApp } from './test/app-test-helpers';
@@ -10,8 +11,9 @@ function renderTestApp() {
 }
 
 describe('App board sensors', () => {
-  it('registers PointerSensor, MouseSensor, and TouchSensor for drag-and-drop', () => {
+  it('registers PointerSensor, MouseSensor, and TouchSensor for drag-and-drop', async () => {
     renderTestApp();
+    await screen.findByRole('heading', { name: 'Board' });
 
     const sensorTypes = (dndMocks.useSensor.mock.calls as unknown[][]).map((call) => call[0]);
 
@@ -21,8 +23,9 @@ describe('App board sensors', () => {
     expect(dndMocks.useSensors).toHaveBeenCalled();
   });
 
-  it('configures each sensor with a distance activation constraint', () => {
+  it('configures each sensor with a distance activation constraint', async () => {
     renderTestApp();
+    await screen.findByRole('heading', { name: 'Board' });
 
     for (const call of dndMocks.useSensor.mock.calls as unknown as [unknown, Record<string, unknown>][]) {
       const options = call[1];

@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
@@ -6,7 +7,10 @@ import { createHtml5BoardDragPayload } from '../board/utils';
 
 interface IssueCardProps {
   issue: IssueSummary;
+  isFocused?: boolean;
+  isSelected?: boolean;
   onSelect?: (issue: IssueSummary) => void;
+  onToggleSelected?: (issue: IssueSummary) => void;
   sortable?: boolean;
   onNativeDragStart?: (payload: Html5BoardDragPayload) => void;
   onNativeDragEnd?: () => void;
@@ -40,15 +44,18 @@ function getLabelClassName(labelName: string): string {
 
 export function IssueCard({
   issue,
+  isFocused = false,
+  isSelected = false,
   onSelect,
+  onToggleSelected,
   sortable = true,
   onNativeDragEnd,
   onNativeDragStart,
 }: IssueCardProps) {
+  const suppressNextSelectRef = useRef(false);
   const {
     attributes,
     listeners,
-    setActivatorNodeRef,
     setNodeRef,
     transform,
     transition,
@@ -72,46 +79,73 @@ export function IssueCard({
     <article
       ref={setNodeRef}
       style={style}
-      className={`issue-card${isDragging ? ' issue-card--dragging' : ''}`}
+      className={`issue-card${isDragging ? ' issue-card--dragging' : ''}${isSelected ? ' issue-card--selected' : ''}${isFocused ? ' issue-card--focused' : ''}`}
       aria-label={`${issue.identifier} ${issue.title}`}
       data-testid={`issue-card-${issue.id}`}
       data-issue-identifier={issue.identifier}
       data-state-name={issue.state.name}
+      data-focused={isFocused ? 'true' : 'false'}
+      data-selected={isSelected ? 'true' : 'false'}
       data-sortable={sortable ? 'true' : 'false'}
-    >
-      {sortable ? (
-        <button
-          type="button"
-          ref={setActivatorNodeRef}
-          className="issue-card__drag-handle"
-          aria-label={`Drag ${issue.identifier}`}
-          data-testid={`issue-drag-handle-${issue.identifier}`}
-          draggable
-          onDragStart={(event) => {
-            const payload: Html5BoardDragPayload = {
-              issueId: issue.id,
-              stateId: issue.state.id,
-            };
+      draggable={sortable}
+      onDragStart={(event) => {
+        const payload: Html5BoardDragPayload = {
+          issueId: issue.id,
+          stateId: issue.state.id,
+        };
 
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData(
-              'application/x-involute-issue',
-              createHtml5BoardDragPayload(payload.issueId, payload.stateId),
-            );
-            event.dataTransfer.setData('text/plain', issue.id);
-            onNativeDragStart?.(payload);
-          }}
-          onDragEnd={() => onNativeDragEnd?.()}
-          {...attributes}
-          {...listeners}
+        suppressNextSelectRef.current = true;
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData(
+          'application/x-involute-issue',
+          createHtml5BoardDragPayload(payload.issueId, payload.stateId),
+        );
+        event.dataTransfer.setData('text/plain', issue.id);
+        onNativeDragStart?.(payload);
+      }}
+      onDragEnd={() => {
+        window.setTimeout(() => {
+          suppressNextSelectRef.current = false;
+        }, 0);
+        onNativeDragEnd?.();
+      }}
+      {...(sortable ? attributes : {})}
+      {...(sortable ? listeners : {})}
+      >
+      {onToggleSelected ? (
+        <label
+          className="issue-card__selection"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <input
+            type="checkbox"
+            aria-label={`Select ${issue.identifier}`}
+            checked={isSelected}
+            onChange={() => onToggleSelected(issue)}
+          />
+        </label>
+      ) : null}
+      {sortable ? (
+        <span
+          className="issue-card__drag-handle"
+          aria-hidden="true"
+          data-testid={`issue-drag-surface-${issue.identifier}`}
         >
           ⋮⋮
-        </button>
+        </span>
       ) : null}
       <button
         type="button"
         className="issue-card__button"
-        onClick={() => onSelect?.(issue)}
+        onClick={() => {
+          if (suppressNextSelectRef.current) {
+            suppressNextSelectRef.current = false;
+            return;
+          }
+
+          onSelect?.(issue);
+        }}
         aria-label={`Open ${issue.identifier}`}
       >
         <div className="issue-card__header">

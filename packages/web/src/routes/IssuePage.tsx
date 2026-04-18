@@ -55,33 +55,34 @@ export function IssuePage() {
   const [localIssue, setLocalIssue] = useState<IssueSummary | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [isSavingState, setIsSavingState] = useState(false);
+  const issueSnapshot = localIssue ?? data?.issue ?? null;
 
   useEffect(() => {
     setLocalIssue(data?.issue ?? null);
   }, [data?.issue]);
 
   useEffect(() => {
-    if (!localIssue) {
+    if (!issueSnapshot) {
       return;
     }
 
-    writeStoredShellIssue(localIssue);
-  }, [localIssue]);
+    writeStoredShellIssue(issueSnapshot);
+  }, [issueSnapshot]);
 
   const selectedTeam = useMemo(() => {
-    if (!localIssue) {
+    if (!issueSnapshot) {
       return null;
     }
 
-    const teamStates = localIssue.team.states ?? { nodes: [] };
+    const teamStates = issueSnapshot.team.states ?? { nodes: [] };
 
     return {
-      id: localIssue.team.id,
-      key: localIssue.team.key,
-      name: localIssue.team.name ?? localIssue.team.key,
+      id: issueSnapshot.team.id,
+      key: issueSnapshot.team.key,
+      name: issueSnapshot.team.name ?? issueSnapshot.team.key,
       states: teamStates,
     };
-  }, [localIssue]);
+  }, [issueSnapshot]);
 
   async function persistIssueUpdate(
     issue: IssueSummary,
@@ -323,7 +324,7 @@ export function IssuePage() {
     );
   }
 
-  if (!localIssue || !selectedTeam) {
+  if (!issueSnapshot || !selectedTeam) {
     return (
       <main className="board-page board-page--state">
         <header className="app-shell__header">
@@ -355,7 +356,7 @@ export function IssuePage() {
       </header>
 
       <IssueDetailDrawer
-        issue={localIssue}
+        issue={issueSnapshot}
         team={selectedTeam}
         labels={data?.issueLabels.nodes ?? []}
         users={data?.users.nodes ?? []}

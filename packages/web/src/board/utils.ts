@@ -10,6 +10,7 @@ import type {
 import { readLocalStorageValue } from '../lib/storage';
 
 export const ACTIVE_TEAM_STORAGE_KEY = 'involute.activeTeamKey';
+export const OPEN_CREATE_ISSUE_EVENT = 'involute:open-create-issue';
 
 export function readStoredTeamKey(): string | null {
   if (typeof window === 'undefined') {

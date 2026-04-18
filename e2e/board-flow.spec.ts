@@ -25,7 +25,7 @@ test.describe('board flow', () => {
     const issueDrawer = page.getByRole('dialog', { name: 'Issue detail drawer' });
     await expect(issueDrawer).toBeVisible();
     await expect(issueDrawer.getByLabel('Issue title')).toHaveValue(createdTitle);
-    await expect(page.getByText(createdTitle, { exact: true })).toBeVisible();
+    await expect(page.getByTestId('column-Backlog').getByText(createdTitle, { exact: true })).toBeVisible();
 
     const titleInput = issueDrawer.getByLabel('Issue title');
     await titleInput.fill(updatedTitle);

@@ -26,6 +26,10 @@ interface IssueDetailDrawerProps {
   onCommentDelete: (issue: IssueSummary, commentId: string) => Promise<void>;
   onIssueDelete: (issue: IssueSummary) => Promise<void>;
   layout?: 'drawer' | 'page';
+  nextIssue?: IssueSummary | null;
+  onNextIssue?: () => void;
+  onPreviousIssue?: () => void;
+  previousIssue?: IssueSummary | null;
 }
 
 export function IssueDetailDrawer({
@@ -45,6 +49,10 @@ export function IssueDetailDrawer({
   onCommentDelete,
   onIssueDelete,
   layout = 'drawer',
+  nextIssue = null,
+  onNextIssue,
+  onPreviousIssue,
+  previousIssue = null,
 }: IssueDetailDrawerProps) {
   const [selectedStateId, setSelectedStateId] = useState<string>('');
   const [title, setTitle] = useState('');
@@ -54,6 +62,7 @@ export function IssueDetailDrawer({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [commentBody, setCommentBody] = useState('');
   const isSavingTitleRef = useRef(false);
+  const titleTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     setSelectedStateId(issue?.state.id ?? '');
@@ -63,6 +72,17 @@ export function IssueDetailDrawer({
     setTitle(issue?.title ?? '');
     setIsEditingTitle(false);
   }, [issue?.id, issue?.title]);
+
+  useEffect(() => {
+    const titleTextarea = titleTextareaRef.current;
+
+    if (!titleTextarea) {
+      return;
+    }
+
+    titleTextarea.style.height = '0px';
+    titleTextarea.style.height = `${Math.max(titleTextarea.scrollHeight, 64)}px`;
+  }, [title, issue?.id]);
 
   useEffect(() => {
     setDescription(issue?.description ?? '');
@@ -235,10 +255,12 @@ export function IssueDetailDrawer({
           <div>
             <p className="app-shell__eyebrow">{activeIssue.identifier}</p>
             <div className="issue-panel__title-row">
-              <input
+              <textarea
+                ref={titleTextareaRef}
                 aria-label="Issue title"
                 className="issue-panel__title-input"
                 value={title}
+                rows={1}
                 disabled={savingState}
                 onFocus={() => setIsEditingTitle(true)}
                 onChange={(event) => setTitle(event.target.value)}
@@ -247,7 +269,7 @@ export function IssueDetailDrawer({
                   void commitTitle().catch(() => undefined);
                 }}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
+                  if (event.key === 'Enter' && !event.shiftKey) {
                     event.preventDefault();
                     setIsEditingTitle(false);
                     void commitTitle().catch(() => undefined);
@@ -260,6 +282,28 @@ export function IssueDetailDrawer({
             </div>
           </div>
           <div className="issue-panel__header-actions">
+            {layout === 'drawer' && (previousIssue || nextIssue) ? (
+              <div className="issue-panel__nav-actions" aria-label="Issue navigation">
+                <button
+                  type="button"
+                  className="ui-action ui-action--subtle"
+                  aria-label="Previous issue"
+                  disabled={!previousIssue || savingState}
+                  onClick={onPreviousIssue}
+                >
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  className="ui-action ui-action--subtle"
+                  aria-label="Next issue"
+                  disabled={!nextIssue || savingState}
+                  onClick={onNextIssue}
+                >
+                  Next
+                </button>
+              </div>
+            ) : null}
             <button
               type="button"
               className="issue-panel__delete"
