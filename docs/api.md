@@ -15,9 +15,9 @@ Default local endpoints:
 
 Production example:
 
-- `https://involute.edai100.com/health`
-- `https://involute.edai100.com/auth/*`
-- `https://involute.edai100.com/graphql`
+- `https://involute.example.com/health`
+- `https://involute.example.com/auth/*`
+- `https://involute.example.com/graphql`
 
 ## Authentication model
 
@@ -125,7 +125,7 @@ The GraphQL API uses a single endpoint.
 Example:
 
 ```bash
-curl https://involute.edai100.com/graphql \
+curl https://involute.example.com/graphql \
   -H 'content-type: application/json' \
   -H 'authorization: Bearer YOUR_AUTH_TOKEN' \
   --data '{"query":"query { teams { nodes { id key name visibility } } }"}'

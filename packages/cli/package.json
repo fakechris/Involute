@@ -1,7 +1,7 @@
 {
   "name": "@turnkeyai/involute",
   "version": "0.0.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "bin": {
     "involute": "./dist/index.js"

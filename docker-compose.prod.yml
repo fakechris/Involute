@@ -28,12 +28,12 @@ services:
     command:
       - >
         set -e;
-        pnpm --filter @involute/server exec prisma migrate deploy;
+        pnpm --filter @turnkeyai/involute-server exec prisma migrate deploy;
         if [ "${SEED_DATABASE:-false}" = "true" ]; then
-          pnpm --filter @involute/server exec prisma db seed;
+          pnpm --filter @turnkeyai/involute-server exec prisma db seed;
         fi;
         if [ -n "${ADMIN_EMAIL_ALLOWLIST:-}" ]; then
-          pnpm --filter @involute/server exec tsx prisma/bootstrap-admin.ts;
+          pnpm --filter @turnkeyai/involute-server exec tsx prisma/bootstrap-admin.ts;
         fi
     environment:
       ADMIN_EMAIL_ALLOWLIST: ${ADMIN_EMAIL_ALLOWLIST:-}

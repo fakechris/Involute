@@ -31,7 +31,7 @@ services:
         if [ "${PRISMA_BASELINE_EXISTING_SCHEMA:-false}" = "true" ]; then
           baseline_output="";
           baseline_status=0;
-          baseline_output="$$(pnpm --filter @involute/server exec prisma migrate resolve --applied ${PRISMA_BASELINE_MIGRATION:-20260405093000_init} 2>&1)" || baseline_status=$$?;
+          baseline_output="$$(pnpm --filter @turnkeyai/involute-server exec prisma migrate resolve --applied ${PRISMA_BASELINE_MIGRATION:-20260405093000_init} 2>&1)" || baseline_status=$$?;
           if [ "$$baseline_status" -ne 0 ]; then
             printf '%s\n' "$$baseline_output" >&2;
             case "$$baseline_output" in
@@ -42,12 +42,12 @@ services:
             printf '%s\n' "$$baseline_output";
           fi;
         fi;
-        pnpm --filter @involute/server exec prisma migrate deploy;
+        pnpm --filter @turnkeyai/involute-server exec prisma migrate deploy;
         if [ "${SEED_DATABASE:-true}" = "true" ]; then
-          pnpm --filter @involute/server exec prisma db seed;
+          pnpm --filter @turnkeyai/involute-server exec prisma db seed;
         fi;
         if [ -n "${ADMIN_EMAIL_ALLOWLIST:-}" ]; then
-          pnpm --filter @involute/server exec tsx prisma/bootstrap-admin.ts;
+          pnpm --filter @turnkeyai/involute-server exec tsx prisma/bootstrap-admin.ts;
         fi
     environment:
       ADMIN_EMAIL_ALLOWLIST: ${ADMIN_EMAIL_ALLOWLIST:-}
