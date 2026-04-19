@@ -16,7 +16,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
 
   server-init:
-    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-turnkeyai}/involute-server:${INVOLUTE_IMAGE_TAG:-latest}
+    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-fakechris}/involute-server:${INVOLUTE_IMAGE_TAG:-latest}
     depends_on:
       db:
         condition: service_healthy
@@ -41,7 +41,7 @@ services:
     restart: "no"
 
   server:
-    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-turnkeyai}/involute-server:${INVOLUTE_IMAGE_TAG:-latest}
+    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-fakechris}/involute-server:${INVOLUTE_IMAGE_TAG:-latest}
     depends_on:
       db:
         condition: service_healthy
@@ -75,7 +75,7 @@ services:
       - "${SERVER_BIND_ADDRESS:-0.0.0.0}:4200:4200"
 
   web:
-    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-turnkeyai}/involute-web:${INVOLUTE_IMAGE_TAG:-latest}
+    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-fakechris}/involute-web:${INVOLUTE_IMAGE_TAG:-latest}
     depends_on:
       server:
         condition: service_healthy
@@ -92,7 +92,7 @@ services:
       - "${WEB_BIND_ADDRESS:-0.0.0.0}:4201:4201"
 
   cli:
-    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-turnkeyai}/involute-cli:${INVOLUTE_IMAGE_TAG:-latest}
+    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-fakechris}/involute-cli:${INVOLUTE_IMAGE_TAG:-latest}
     depends_on:
       db:
         condition: service_healthy

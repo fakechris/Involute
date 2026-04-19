@@ -15,7 +15,7 @@ services:
       - postgres-prod-data:/var/lib/postgresql/data
 
   server-init:
-    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-turnkeyai}/involute-server:${INVOLUTE_IMAGE_TAG:-latest}
+    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-fakechris}/involute-server:${INVOLUTE_IMAGE_TAG:-latest}
     restart: "no"
     depends_on:
       db:
@@ -41,7 +41,7 @@ services:
       SEED_DEFAULT_ADMIN: "false"
 
   server:
-    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-turnkeyai}/involute-server:${INVOLUTE_IMAGE_TAG:-latest}
+    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-fakechris}/involute-server:${INVOLUTE_IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
       db:
@@ -75,7 +75,7 @@ services:
       start_period: 10s
 
   web:
-    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-turnkeyai}/involute-web:${INVOLUTE_IMAGE_TAG:-latest}
+    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-fakechris}/involute-web:${INVOLUTE_IMAGE_TAG:-latest}
     environment:
       INTERNAL_SERVER_ORIGIN: http://server:4200
       WEB_PROXY_AUTHORIZATION: ""
@@ -103,7 +103,7 @@ services:
       - caddy-config:/config
 
   cli:
-    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-turnkeyai}/involute-cli:${INVOLUTE_IMAGE_TAG:-latest}
+    image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-fakechris}/involute-cli:${INVOLUTE_IMAGE_TAG:-latest}
     profiles: ["tools"]
     depends_on:
       db:
