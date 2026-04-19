@@ -142,8 +142,8 @@ pnpm compose:down
 If you want to run the published Docker Hub images instead of building from source, use:
 
 ```bash
-INVOLUTE_IMAGE_NAMESPACE=turnkeyai INVOLUTE_IMAGE_TAG=latest pnpm compose:pull
-INVOLUTE_IMAGE_NAMESPACE=turnkeyai INVOLUTE_IMAGE_TAG=latest pnpm compose:pull:up
+INVOLUTE_IMAGE_NAMESPACE=fakechris INVOLUTE_IMAGE_TAG=latest pnpm compose:pull
+INVOLUTE_IMAGE_NAMESPACE=fakechris INVOLUTE_IMAGE_TAG=latest pnpm compose:pull:up
 ```
 
 ## VPS deployment (fresh install)
@@ -442,22 +442,22 @@ This repo ships one multi-target `Dockerfile` with `server`, `web-dev`, `web`, a
 Published images:
 
 ```bash
-docker pull turnkeyai/involute-server:latest
-docker pull turnkeyai/involute-web:latest
-docker pull turnkeyai/involute-cli:latest
+docker pull fakechris/involute-server:latest
+docker pull fakechris/involute-web:latest
+docker pull fakechris/involute-cli:latest
 ```
 
 Run the compose stack from published images:
 
 ```bash
-INVOLUTE_IMAGE_NAMESPACE=turnkeyai INVOLUTE_IMAGE_TAG=latest \
+INVOLUTE_IMAGE_NAMESPACE=fakechris INVOLUTE_IMAGE_TAG=latest \
   docker compose -f docker-compose.images.yml up -d db server web
 ```
 
 Production compose can use the same published images:
 
 ```bash
-INVOLUTE_IMAGE_NAMESPACE=turnkeyai INVOLUTE_IMAGE_TAG=latest \
+INVOLUTE_IMAGE_NAMESPACE=fakechris INVOLUTE_IMAGE_TAG=latest \
   docker compose --env-file .env.production \
   -f docker-compose.prod.images.yml up -d
 ```
