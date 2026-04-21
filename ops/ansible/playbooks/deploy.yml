@@ -112,6 +112,13 @@
               or (involute_seed_default_admin | default(false) | bool)
               or (involute_allow_admin_fallback | default(false) | bool)
             )
+        fail_msg: >-
+          Missing or invalid deploy variables. Production requires a URL-safe
+          involute_postgres_password matching ^[A-Za-z0-9._~-]+$ because it is
+          used in DATABASE_URL. Production also requires Google OAuth client ID,
+          client secret, and redirect URI when involute_require_google_oauth is
+          true. Tailscale deployments require involute_bind_address and either
+          an admin allowlist, seeded default admin, or admin fallback.
 
     - name: Ensure deploy directory exists
       ansible.builtin.file:
@@ -140,23 +147,35 @@
         dest: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}"
         mode: "0600"
 
+    - name: Check for legacy source-build compose file
+      ansible.builtin.stat:
+        path: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/docker-compose.yml"
+      register: involute_legacy_compose
+
+    - name: Check for legacy production source-build compose file
+      ansible.builtin.stat:
+        path: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/docker-compose.prod.yml"
+      register: involute_legacy_prod_compose
+
     - name: Stop legacy source-build stack if present
       ansible.builtin.shell: >
         docker compose
         --env-file .env
         -f docker-compose.yml
-        down --remove-orphans || true
+        down --remove-orphans
       args:
         chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+      when: involute_legacy_compose.stat.exists
 
     - name: Stop legacy production source-build stack if present
       ansible.builtin.shell: >
         docker compose
         --env-file .env.production
         -f docker-compose.prod.yml
-        down --remove-orphans || true
+        down --remove-orphans
       args:
         chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+      when: involute_legacy_prod_compose.stat.exists
 
     - name: Stop existing standardized stack
       ansible.builtin.shell: >
