@@ -4,6 +4,7 @@ import { CSS } from '@dnd-kit/utilities';
 
 import type { Html5BoardDragPayload, IssueSummary } from '../board/types';
 import { createHtml5BoardDragPayload } from '../board/utils';
+import { StatusIcon } from './StatusIcon';
 
 interface IssueCardProps {
   issue: IssueSummary;
@@ -149,7 +150,10 @@ export function IssueCard({
         aria-label={`Open ${issue.identifier}`}
       >
         <div className="issue-card__header">
-          <span className="issue-card__identifier">{issue.identifier}</span>
+          <span className="issue-card__identifier">
+            <StatusIcon stateName={issue.state.name} size={12} />
+            {issue.identifier}
+          </span>
         </div>
 
         <h3 className="issue-card__title">{issue.title}</h3>
