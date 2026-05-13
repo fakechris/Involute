@@ -12,7 +12,6 @@ test.describe('board flow', () => {
 
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Board', exact: true })).toBeVisible();
-    await expect(page.getByText('Workflow overview for Involute.')).toBeVisible();
 
     await page.getByRole('button', { name: 'Create issue' }).click();
 

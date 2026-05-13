@@ -11,6 +11,7 @@ type InboxFilter = 'all' | 'unread';
 interface InboxEntry {
   id: string;
   ago: string;
+  at: string;
   body: string;
   fromInitials: string;
   fromName: string;
@@ -61,6 +62,7 @@ function deriveEntries(issues: IssueSummary[]): InboxEntry[] {
       entries.push({
         id: `cmt-${comment.id}`,
         ago: formatRelative(comment.createdAt),
+        at: comment.createdAt,
         body: comment.body,
         fromInitials: getInitials(comment.user?.name ?? comment.user?.email ?? null),
         fromName: comment.user?.name ?? comment.user?.email ?? 'Someone',
@@ -74,6 +76,7 @@ function deriveEntries(issues: IssueSummary[]): InboxEntry[] {
       entries.push({
         id: `asn-${issue.id}`,
         ago: formatRelative(issue.updatedAt),
+        at: issue.updatedAt,
         body: 'assigned this to you',
         fromInitials: getInitials(issue.assignee.name ?? issue.assignee.email ?? null),
         fromName: issue.assignee.name ?? issue.assignee.email ?? 'Someone',
@@ -88,7 +91,7 @@ function deriveEntries(issues: IssueSummary[]): InboxEntry[] {
     if (left.unread !== right.unread) {
       return left.unread ? -1 : 1;
     }
-    return new Date(right.issue.updatedAt).getTime() - new Date(left.issue.updatedAt).getTime();
+    return new Date(right.at).getTime() - new Date(left.at).getTime();
   });
 
   return entries.slice(0, 24);

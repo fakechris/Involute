@@ -621,6 +621,12 @@ export function App() {
             return;
           }
 
+          if (shortcutKey === 'i') {
+            event.preventDefault();
+            navigate('/inbox');
+            return;
+          }
+
           if (shortcutKey === 'a' && session?.authenticated) {
             event.preventDefault();
             navigate('/settings/access');

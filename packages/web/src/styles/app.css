@@ -158,7 +158,17 @@ textarea {
   color: inherit;
   background: none;
   border: none;
-  outline: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: var(--r-2);
 }
 
 button {

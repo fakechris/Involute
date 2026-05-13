@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import type { CommentSummary, IssueSummary, TeamSummary } from '../board/types';
 
@@ -54,6 +55,7 @@ export function IssueDetailDrawer({
   onPreviousIssue,
   previousIssue = null,
 }: IssueDetailDrawerProps) {
+  const navigate = useNavigate();
   const [selectedStateId, setSelectedStateId] = useState<string>('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -353,11 +355,7 @@ export function IssueDetailDrawer({
                       type="button"
                       role="listitem"
                       className="issue-children__row"
-                      onClick={() => {
-                        if (typeof window !== 'undefined') {
-                          window.location.assign(`/issue/${child.id}`);
-                        }
-                      }}
+                      onClick={() => navigate(`/issue/${child.id}`)}
                     >
                       <span className="issue-children__id">{child.identifier}</span>
                       <span aria-hidden="true" />
