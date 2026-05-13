@@ -342,19 +342,21 @@ export function IssuePage() {
 
   return (
     <main className="board-page">
-      <header className="app-shell__header">
-        <div className="app-shell__header-copy">
-          <p className="app-shell__eyebrow">Involute</p>
-          <div className="app-shell__header-inline-meta">
-            <span className="context-chip">
-              {selectedTeam.key}
-            </span>
-            <span className="context-chip">Issue</span>
-          </div>
-          <h1>Issue detail</h1>
-        </div>
-      </header>
-
+      <h1
+        style={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          padding: 0,
+          margin: -1,
+          overflow: 'hidden',
+          clip: 'rect(0, 0, 0, 0)',
+          whiteSpace: 'nowrap',
+          border: 0,
+        }}
+      >
+        Issue detail
+      </h1>
       <IssueDetailDrawer
         issue={issueSnapshot}
         team={selectedTeam}

@@ -25,3 +25,4 @@ packages/server/prisma/*.js
 packages/server/prisma/*.js.map
 packages/server/prisma/*.d.ts
 packages/server/prisma/*.d.ts.map
+.gstack/

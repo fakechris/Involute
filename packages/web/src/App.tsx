@@ -43,6 +43,10 @@ const BoardPage = lazy(async () => {
   const module = await import('./routes/BoardPage');
   return { default: module.BoardPage };
 });
+const InboxPage = lazy(async () => {
+  const module = await import('./routes/InboxPage');
+  return { default: module.InboxPage };
+});
 const IssuePage = lazy(async () => {
   const module = await import('./routes/IssuePage');
   return { default: module.IssuePage };
@@ -617,6 +621,12 @@ export function App() {
             return;
           }
 
+          if (shortcutKey === 'i') {
+            event.preventDefault();
+            navigate('/inbox');
+            return;
+          }
+
           if (shortcutKey === 'a' && session?.authenticated) {
             event.preventDefault();
             navigate('/settings/access');
@@ -652,6 +662,14 @@ export function App() {
 
   const paletteActions = useMemo<PaletteAction[]>(() => {
     const actions: PaletteAction[] = [
+      {
+        id: 'go-inbox',
+        label: 'Go to inbox',
+        description: 'Open notifications and activity',
+        group: 'Navigation',
+        shortcut: 'G I',
+        run: () => navigate('/inbox'),
+      },
       {
         id: 'go-board',
         label: 'Go to board',
@@ -798,6 +816,9 @@ export function App() {
           </button>
 
           <nav className="app-shell__nav-section">
+            <NavLink to="/inbox" className={getNavLinkClassName}>
+              Inbox
+            </NavLink>
             <NavLink to="/" end className={getNavLinkClassName}>
               Board
             </NavLink>
@@ -1001,6 +1022,7 @@ export function App() {
             <Routes>
               <Route path="/" element={<BoardPage />} />
               <Route path="/backlog" element={<BoardPage />} />
+              <Route path="/inbox" element={<InboxPage />} />
               <Route path="/settings/access" element={<AccessPage />} />
               <Route path="/issue/:id" element={<IssuePage />} />
             </Routes>

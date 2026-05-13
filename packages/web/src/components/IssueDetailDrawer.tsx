@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import type { CommentSummary, IssueSummary, TeamSummary } from '../board/types';
 
@@ -54,6 +55,7 @@ export function IssueDetailDrawer({
   onPreviousIssue,
   previousIssue = null,
 }: IssueDetailDrawerProps) {
+  const navigate = useNavigate();
   const [selectedStateId, setSelectedStateId] = useState<string>('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -252,34 +254,11 @@ export function IssueDetailDrawer({
       ) : null}
       <section className={`issue-panel__frame${layout === 'page' ? ' issue-panel__frame--page' : ''}`}>
         <div className="issue-panel__header">
-          <div>
-            <p className="app-shell__eyebrow">{activeIssue.identifier}</p>
-            <div className="issue-panel__title-row">
-              <textarea
-                ref={titleTextareaRef}
-                aria-label="Issue title"
-                className="issue-panel__title-input"
-                value={title}
-                rows={1}
-                disabled={savingState}
-                onFocus={() => setIsEditingTitle(true)}
-                onChange={(event) => setTitle(event.target.value)}
-                onBlur={() => {
-                  setIsEditingTitle(false);
-                  void commitTitle().catch(() => undefined);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    setIsEditingTitle(false);
-                    void commitTitle().catch(() => undefined);
-                  }
-                }}
-              />
-              <span className="issue-panel__inline-hint" aria-live="polite">
-                {isEditingTitle ? 'Press Enter or blur to save' : 'Editable title'}
-              </span>
-            </div>
+          <div className="issue-panel__title-row">
+            {team ? <span className="context-chip context-chip--team">{team.key}</span> : null}
+            <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
+              {activeIssue.identifier}
+            </span>
           </div>
           <div className="issue-panel__header-actions">
             {layout === 'drawer' && (previousIssue || nextIssue) ? (
@@ -326,6 +305,31 @@ export function IssueDetailDrawer({
 
         <div className="issue-panel__body">
           <div className="issue-panel__main">
+            <textarea
+              ref={titleTextareaRef}
+              aria-label="Issue title"
+              className="issue-panel__title-input"
+              value={title}
+              rows={1}
+              disabled={savingState}
+              onFocus={() => setIsEditingTitle(true)}
+              onChange={(event) => setTitle(event.target.value)}
+              onBlur={() => {
+                setIsEditingTitle(false);
+                void commitTitle().catch(() => undefined);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  setIsEditingTitle(false);
+                  void commitTitle().catch(() => undefined);
+                }
+              }}
+            />
+            <span className="issue-panel__inline-hint" aria-live="polite">
+              {isEditingTitle ? 'Press Enter or blur to save' : 'Editable title'}
+            </span>
+
             <div className="issue-panel__section">
               <label className="issue-panel__label" htmlFor="issue-description">
                 Description
@@ -340,6 +344,27 @@ export function IssueDetailDrawer({
                 onBlur={() => void commitDescription().catch(() => undefined)}
               />
             </div>
+
+            {activeIssue.children.nodes.length > 0 ? (
+              <div className="issue-panel__section">
+                <h2>Sub-issues · {activeIssue.children.nodes.length}</h2>
+                <div className="issue-children" role="list">
+                  {activeIssue.children.nodes.map((child) => (
+                    <button
+                      key={child.id}
+                      type="button"
+                      role="listitem"
+                      className="issue-children__row"
+                      onClick={() => navigate(`/issue/${child.id}`)}
+                    >
+                      <span className="issue-children__id">{child.identifier}</span>
+                      <span aria-hidden="true" />
+                      <span className="issue-children__title">{child.title}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <div className="issue-panel__section">
               <span className="issue-panel__label">Activity</span>
@@ -500,10 +525,10 @@ export function IssueDetailDrawer({
               </div>
 
               <div className="issue-panel__property-group">
-                <span className="issue-panel__label">Children</span>
+                <span className="issue-panel__label">Sub-issues</span>
                 <p>
                   {activeIssue.children.nodes.length > 0
-                    ? activeIssue.children.nodes.map((child) => `${child.identifier} — ${child.title}`).join(', ')
+                    ? `${activeIssue.children.nodes.length} child${activeIssue.children.nodes.length === 1 ? '' : 'ren'}`
                     : 'No child issues.'}
                 </p>
               </div>
