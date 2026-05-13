@@ -94,23 +94,26 @@ function deriveEntries(issues: IssueSummary[]): InboxEntry[] {
     return new Date(right.at).getTime() - new Date(left.at).getTime();
   });
 
-  return entries.slice(0, 24);
+  return entries;
 }
+
+const INBOX_DISPLAY_LIMIT = 24;
 
 export function InboxPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<InboxFilter>('all');
-  const { data, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
-    fetchPolicy: 'cache-and-network',
-    variables: { first: 60 },
-  });
+  const { data, loading, error } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(
+    BOARD_PAGE_QUERY,
+    {
+      fetchPolicy: 'cache-and-network',
+      variables: { first: 60 },
+    },
+  );
 
   const entries = useMemo(() => deriveEntries(data?.issues.nodes ?? []), [data?.issues.nodes]);
   const visibleEntries = useMemo(() => {
-    if (filter === 'unread') {
-      return entries.filter((entry) => entry.unread);
-    }
-    return entries;
+    const filtered = filter === 'unread' ? entries.filter((entry) => entry.unread) : entries;
+    return filtered.slice(0, INBOX_DISPLAY_LIMIT);
   }, [entries, filter]);
 
   const unreadCount = entries.filter((entry) => entry.unread).length;
@@ -149,7 +152,11 @@ export function InboxPage() {
       </div>
 
       <div className="inbox-page__list">
-        {loading && entries.length === 0 ? (
+        {error && entries.length === 0 ? (
+          <p className="inbox-page__empty" role="alert">
+            Could not load inbox updates. Confirm the API server is running and try again.
+          </p>
+        ) : loading && entries.length === 0 ? (
           <p className="inbox-page__empty">Loading…</p>
         ) : visibleEntries.length === 0 ? (
           <p className="inbox-page__empty">
