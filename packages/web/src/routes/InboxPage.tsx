@@ -4,7 +4,8 @@ import { useQuery } from '@apollo/client/react';
 
 import { BOARD_PAGE_QUERY } from '../board/queries';
 import type { BoardPageQueryData, BoardPageQueryVariables, IssueSummary } from '../board/types';
-import { StatusIcon } from '../components/StatusIcon';
+import { IcoInbox } from '../components/Icons';
+import { Avatar } from '../components/Primitives';
 
 type InboxFilter = 'all' | 'unread';
 
@@ -118,24 +119,25 @@ export function InboxPage() {
 
   const unreadCount = entries.filter((entry) => entry.unread).length;
 
-  return (
-    <main className="board-page inbox-page" aria-label="Inbox">
-      <header className="app-shell__header">
-        <div className="app-shell__header-copy">
-          <div className="app-shell__header-inline-meta">
-            <span className="context-chip">Inbox</span>
-          </div>
-          <h1>Inbox</h1>
-        </div>
-        <div className="board-page__controls">
-          <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
-            {unreadCount} unread
-          </span>
-        </div>
-      </header>
+  const actionVerb = (kind: InboxEntry['kind']): string => {
+    switch (kind) {
+      case 'comment': return 'commented on';
+      case 'assigned': return 'assigned you';
+      case 'status': return 'changed status of';
+      default: return 'updated';
+    }
+  };
 
-      <div className="inbox-page__toolbar">
-        <div className="inbox-page__toolbar-toggle" role="tablist" aria-label="Inbox filter">
+  return (
+    <main className="inbox-page" aria-label="Inbox">
+      <header className="inbox-page__header">
+        <IcoInbox size={14} style={{ color: 'var(--fg-dim)' }} />
+        <span className="inbox-page__title">Inbox</span>
+        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
+          {unreadCount}
+        </span>
+        <div style={{ flex: 1 }} />
+        <div className="inbox-page__toggle" role="tablist" aria-label="Inbox filter">
           {(['all', 'unread'] as const).map((key) => (
             <button
               key={key}
@@ -149,7 +151,7 @@ export function InboxPage() {
             </button>
           ))}
         </div>
-      </div>
+      </header>
 
       <div className="inbox-page__list">
         {error && entries.length === 0 ? (
@@ -164,36 +166,29 @@ export function InboxPage() {
           </p>
         ) : (
           visibleEntries.map((entry) => (
-            <button
+            <div
               key={entry.id}
-              type="button"
-              className={`inbox-page__item${entry.unread ? ' inbox-page__item--unread' : ''}`}
+              className={`inbox-item${entry.unread ? ' inbox-item--unread' : ''}`}
               onClick={() => navigate(`/issue/${entry.issue.id}`)}
             >
-              <span className="inbox-page__item-avatar" aria-hidden="true">
-                {entry.fromInitials}
-                {entry.unread ? <span className="inbox-page__item-dot" /> : null}
-              </span>
-              <span className="inbox-page__item-copy">
-                <span className="inbox-page__item-line">
-                  <strong>{entry.fromName}</strong>{' '}
-                  <span>
-                    {entry.kind === 'comment'
-                      ? 'commented on'
-                      : entry.kind === 'assigned'
-                        ? 'is assigned to'
-                        : 'updated'}
-                  </span>{' '}
+              <div className="inbox-avatar-wrap">
+                <Avatar user={{ name: entry.fromName }} size={24} />
+                {entry.unread && <span className="inbox-unread-dot" />}
+              </div>
+              <div className="inbox-item__content">
+                <div className="inbox-item__line">
+                  <strong>{entry.fromName}</strong>
+                  <span style={{ color: 'var(--fg-dim)' }}> {actionVerb(entry.kind)} </span>
                   <span className="mono" style={{ color: 'var(--fg-muted)' }}>
                     {entry.issue.identifier}
                   </span>
-                </span>
-                <span className="inbox-page__item-issue">
-                  <StatusIcon stateName={entry.issue.state.name} size={11} /> {entry.issue.title}
-                </span>
-              </span>
-              <span className="inbox-page__item-time">{entry.ago}</span>
-            </button>
+                </div>
+                <div className="inbox-item__issue truncate">
+                  {entry.issue.title}
+                </div>
+              </div>
+              <span className="inbox-item__time">{entry.ago}</span>
+            </div>
           ))
         )}
       </div>

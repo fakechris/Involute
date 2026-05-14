@@ -1,6 +1,9 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
+import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle } from './components/Icons';
+import { Avatar } from './components/Primitives';
+
 import {
   ACTIVE_TEAM_STORAGE_KEY,
   OPEN_CREATE_ISSUE_EVENT,
@@ -50,6 +53,30 @@ const InboxPage = lazy(async () => {
 const IssuePage = lazy(async () => {
   const module = await import('./routes/IssuePage');
   return { default: module.IssuePage };
+});
+const MyIssuesPage = lazy(async () => {
+  const module = await import('./routes/MyIssuesPage');
+  return { default: module.MyIssuesPage };
+});
+const ViewsPage = lazy(async () => {
+  const module = await import('./routes/ViewsPage');
+  return { default: module.ViewsPage };
+});
+const ProjectsPage = lazy(async () => {
+  const module = await import('./routes/ProjectsPage');
+  return { default: module.ProjectsPage };
+});
+const MembersPage = lazy(async () => {
+  const module = await import('./routes/MembersPage');
+  return { default: module.MembersPage };
+});
+const SettingsPage = lazy(async () => {
+  const module = await import('./routes/SettingsPage');
+  return { default: module.SettingsPage };
+});
+const CyclesPage = lazy(async () => {
+  const module = await import('./routes/CyclesPage');
+  return { default: module.CyclesPage };
 });
 
 const THEME_STORAGE_KEY = 'involute.theme';
@@ -447,7 +474,6 @@ export function App() {
 
     return nextMap;
   }, [shellIssues]);
-  const recentIssues = useMemo(() => shellIssues.slice(0, 8), [shellIssues]);
 
   useEffect(() => {
     let cancelled = false;
@@ -632,6 +658,42 @@ export function App() {
             navigate('/settings/access');
             return;
           }
+
+          if (shortcutKey === 'm') {
+            event.preventDefault();
+            navigate('/my-issues');
+            return;
+          }
+
+          if (shortcutKey === 'p') {
+            event.preventDefault();
+            navigate('/projects');
+            return;
+          }
+
+          if (shortcutKey === 'v') {
+            event.preventDefault();
+            navigate('/cycles');
+            return;
+          }
+
+          if (shortcutKey === 'w') {
+            event.preventDefault();
+            navigate('/views');
+            return;
+          }
+
+          if (shortcutKey === 'e') {
+            event.preventDefault();
+            navigate('/members');
+            return;
+          }
+
+          if (shortcutKey === 's') {
+            event.preventDefault();
+            navigate('/settings');
+            return;
+          }
         }
       }
 
@@ -685,6 +747,54 @@ export function App() {
         group: 'Navigation',
         shortcut: 'G L',
         run: () => navigate('/backlog'),
+      },
+      {
+        id: 'go-my-issues',
+        label: 'Go to my issues',
+        description: 'Open your assigned issues',
+        group: 'Navigation',
+        shortcut: 'G M',
+        run: () => navigate('/my-issues'),
+      },
+      {
+        id: 'go-projects',
+        label: 'Go to projects',
+        description: 'Open the projects list',
+        group: 'Navigation',
+        shortcut: 'G P',
+        run: () => navigate('/projects'),
+      },
+      {
+        id: 'go-cycles',
+        label: 'Go to cycles',
+        description: 'Open the cycles view',
+        group: 'Navigation',
+        shortcut: 'G V',
+        run: () => navigate('/cycles'),
+      },
+      {
+        id: 'go-views',
+        label: 'Go to views',
+        description: 'Open saved views',
+        group: 'Navigation',
+        shortcut: 'G W',
+        run: () => navigate('/views'),
+      },
+      {
+        id: 'go-members',
+        label: 'Go to members',
+        description: 'Open workspace members',
+        group: 'Navigation',
+        shortcut: 'G E',
+        run: () => navigate('/members'),
+      },
+      {
+        id: 'go-settings',
+        label: 'Go to settings',
+        description: 'Open workspace settings',
+        group: 'Navigation',
+        shortcut: 'G S',
+        run: () => navigate('/settings'),
       },
       {
         id: 'create-issue',
@@ -811,26 +921,39 @@ export function App() {
             className="app-shell__search-trigger"
             onClick={() => setIsPaletteOpen(true)}
           >
-            <span>Search issues and commands</span>
+            <span className="app-shell__nav-icon"><IcoSearch size={14} /></span>
+            <span style={{ flex: 1, textAlign: 'left' }}>Search</span>
             <kbd>⌘K</kbd>
           </button>
 
           <nav className="app-shell__nav-section">
             <NavLink to="/inbox" className={getNavLinkClassName}>
-              Inbox
+              <span className="app-shell__nav-icon"><IcoInbox size={14} /></span>
+              <span className="app-shell__link-label">Inbox</span>
             </NavLink>
-            <NavLink to="/" end className={getNavLinkClassName}>
-              Board
+            <NavLink to="/my-issues" className={getNavLinkClassName}>
+              <span className="app-shell__nav-icon"><IcoIssues size={14} /></span>
+              <span className="app-shell__link-label">My Issues</span>
             </NavLink>
-            <NavLink to="/backlog" className={getNavLinkClassName}>
-              Backlog
+            <NavLink to="/views" className={getNavLinkClassName}>
+              <span className="app-shell__nav-icon"><IcoViews size={14} /></span>
+              <span className="app-shell__link-label">Views</span>
             </NavLink>
-            {session?.authenticated ? (
-              <NavLink to="/settings/access" className={getNavLinkClassName}>
-                Access
-              </NavLink>
-            ) : null}
           </nav>
+
+          <div className="app-shell__team-section">
+            <div className="app-shell__section-label">Workspace</div>
+            <nav className="app-shell__nav-section">
+              <NavLink to="/projects" className={getNavLinkClassName}>
+                <span className="app-shell__nav-icon"><IcoProject size={14} /></span>
+                <span className="app-shell__link-label">Projects</span>
+              </NavLink>
+              <NavLink to="/members" className={getNavLinkClassName}>
+                <span className="app-shell__nav-icon"><IcoTeam size={14} /></span>
+                <span className="app-shell__link-label">Members</span>
+              </NavLink>
+            </nav>
+          </div>
 
           {shellTeams.length > 0 ? (
             <div className="app-shell__team-section">
@@ -855,7 +978,7 @@ export function App() {
                         }}
                       >
                         <span className={`app-shell__team-caret${isExpanded ? ' app-shell__team-caret--expanded' : ''}`}>
-                          ▾
+                          <IcoChevD size={12} />
                         </span>
                         <span className="app-shell__team-key">{team.key}</span>
                         <span className="app-shell__team-name">{team.name}</span>
@@ -865,13 +988,14 @@ export function App() {
                         <div className="app-shell__team-subnav">
                           <button
                             type="button"
-                            className={`app-shell__team-subnav-link${location.pathname !== '/backlog' && isActive ? ' app-shell__team-subnav-link--active' : ''}`}
+                            className={`app-shell__team-subnav-link${location.pathname !== '/backlog' && location.pathname !== '/cycles' && isActive ? ' app-shell__team-subnav-link--active' : ''}`}
                             onClick={() => {
                               writeStoredTeamKey(team.key);
                               setActiveTeamKey(team.key);
                               navigate('/');
                             }}
                           >
+                            <span className="app-shell__subnav-icon"><IcoIssues size={12} /></span>
                             Issues
                           </button>
                           <button
@@ -883,19 +1007,21 @@ export function App() {
                               navigate('/backlog');
                             }}
                           >
+                            <span className="app-shell__subnav-icon"><IcoIssues size={12} /></span>
                             Backlog
                           </button>
-                          {teamIssues.slice(0, 3).map((issue) => (
-                            <button
-                              key={issue.id}
-                              type="button"
-                              className="app-shell__team-subnav-issue"
-                              onClick={() => navigate(`/issue/${issue.id}`)}
-                            >
-                              <span className="app-shell__team-subnav-issue-key">#{issue.identifier}</span>
-                              <span className="app-shell__team-subnav-issue-title">Open {issue.title}</span>
-                            </button>
-                          ))}
+                          <button
+                            type="button"
+                            className={`app-shell__team-subnav-link${location.pathname === '/cycles' && isActive ? ' app-shell__team-subnav-link--active' : ''}`}
+                            onClick={() => {
+                              writeStoredTeamKey(team.key);
+                              setActiveTeamKey(team.key);
+                              navigate('/cycles');
+                            }}
+                          >
+                            <span className="app-shell__subnav-icon"><IcoCycle size={12} /></span>
+                            Cycles
+                          </button>
                         </div>
                       ) : null}
                     </div>
@@ -905,63 +1031,38 @@ export function App() {
             </div>
           ) : null}
 
-          {recentIssues.length > 0 ? (
-            <div className="app-shell__team-section">
-              <div className="app-shell__section-label">Recent issues</div>
-              <div className="app-shell__recent-list">
-                {recentIssues.map((issue) => (
-                  <button
-                    key={issue.id}
-                    type="button"
-                    className={`app-shell__recent-link${location.pathname === `/issue/${issue.id}` ? ' app-shell__recent-link--active' : ''}`}
-                    onClick={() => navigate(`/issue/${issue.id}`)}
-                  >
-                    <span className="app-shell__recent-link-key">#{issue.identifier}</span>
-                    <span className="app-shell__recent-link-title">Recent {issue.title}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
 
         <div className="app-shell__sidebar-footer">
-          <div className="app-shell__sidebar-meta">
-            {sessionError ? <span className="app-shell__session-status">{sessionError}</span> : null}
-            {session?.authenticated && session.viewer ? (
-              <>
-                <strong>{session.viewer.name ?? session.viewer.email ?? 'Signed-in viewer'}</strong>
-                <span>
-                  {session.viewer.globalRole}
-                  {session.viewer.email ? ` · ${session.viewer.email}` : ''}
-                </span>
-              </>
-            ) : !isSessionLoaded ? (
+          {sessionError ? (
+            <div className="app-shell__sidebar-meta">
+              <span className="app-shell__session-status">{sessionError}</span>
+            </div>
+          ) : null}
+
+          {session?.authenticated && session.viewer ? (
+            <div className="app-shell__sidebar-footer-row">
+              <Avatar user={session.viewer.name ? { name: session.viewer.name } : null} size={22} />
+              <div className="app-shell__footer-user">
+                <div className="app-shell__footer-name">{session.viewer.name ?? session.viewer.email ?? 'Signed-in viewer'}</div>
+                <div className="app-shell__footer-role">{session.viewer.globalRole}</div>
+              </div>
+              <button
+                type="button"
+                className="app-shell__footer-settings"
+                title="Settings"
+                onClick={() => navigate('/settings')}
+              >
+                <IcoSettings size={14} />
+              </button>
+            </div>
+          ) : !isSessionLoaded ? (
+            <div className="app-shell__sidebar-meta">
               <span className="app-shell__session-status">Loading session…</span>
-            ) : session?.googleOAuthConfigured ? (
-              <span className="app-shell__session-status">Session ready for Google sign-in</span>
-            ) : (
-              <span className="app-shell__session-status">Google OAuth not configured</span>
-            )}
-          </div>
+            </div>
+          ) : null}
 
           <div className="app-shell__sidebar-actions">
-            <button
-              type="button"
-              className="app-shell__session-action"
-              onClick={() => setIsTweaksOpen((currentValue) => !currentValue)}
-            >
-              Interface tweaks
-            </button>
-
-            <button
-              type="button"
-              className="app-shell__session-action"
-              onClick={() => setTheme((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark'))}
-            >
-              {theme === 'dark' ? 'Light mode' : 'Dark mode'}
-            </button>
-
             {session?.authenticated && session.viewer ? (
               <button
                 type="button"
@@ -1023,7 +1124,14 @@ export function App() {
               <Route path="/" element={<BoardPage />} />
               <Route path="/backlog" element={<BoardPage />} />
               <Route path="/inbox" element={<InboxPage />} />
+              <Route path="/my-issues" element={<MyIssuesPage />} />
+              <Route path="/views" element={<ViewsPage />} />
+              <Route path="/projects" element={<ProjectsPage />} />
+              <Route path="/members" element={<MembersPage />} />
               <Route path="/settings/access" element={<AccessPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/settings/*" element={<SettingsPage />} />
+              <Route path="/cycles" element={<CyclesPage />} />
               <Route path="/issue/:id" element={<IssuePage />} />
             </Routes>
           </Suspense>
