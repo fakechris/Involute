@@ -148,19 +148,21 @@ INVOLUTE_IMAGE_NAMESPACE=fakechris INVOLUTE_IMAGE_TAG=latest pnpm compose:pull:u
 
 ## VPS deployment (fresh install)
 
-This is the recommended first production path: one VPS, Docker Compose, Postgres, the Node API, the static web container, and Caddy terminating HTTPS on a single domain.
+This is the recommended first production path: one VPS, Docker Compose, Postgres, the Node API, and the static web container from published Docker Hub images. Terminate HTTPS with either the host reverse proxy or the optional compose Caddy profile, but keep one env file: `.env.production`.
 
 Status:
 
 - the deployment files and automation are in place
-- the Tailscale-only path has already been exercised
-- the remaining production work is to validate the same stack on a public domain with real Google OAuth callback and one backup/restore drill
+- production should run through `.env.production` and `docker-compose.prod.images.yml`
+- deployments should use Ansible Vault for secrets, not hand-edited env files
+- every deploy runs smoke checks for `/health`, `/auth/session`, and `/auth/google/start`
 
 Files involved:
 
-- [`docker-compose.prod.yml`](./docker-compose.prod.yml)
+- [`docker-compose.prod.images.yml`](./docker-compose.prod.images.yml)
 - [`Caddyfile`](./Caddyfile)
 - [`.env.production.example`](./.env.production.example)
+- [`scripts/prod-smoke.sh`](./scripts/prod-smoke.sh)
 - [`scripts/postgres-backup.sh`](./scripts/postgres-backup.sh)
 
 Assumptions:
@@ -181,8 +183,10 @@ cp .env.production.example .env.production
 APP_DOMAIN=involute.example.com
 APP_ORIGIN=https://involute.example.com
 POSTGRES_PASSWORD=...
+DATABASE_URL=postgresql://involute:<same-url-safe-password>@db:5432/involute?schema=public
 AUTH_TOKEN=...
 VIEWER_ASSERTION_SECRET=...
+REQUIRE_GOOGLE_OAUTH=true
 ADMIN_EMAIL_ALLOWLIST=you@example.com
 GOOGLE_OAUTH_CLIENT_ID=...
 GOOGLE_OAUTH_CLIENT_SECRET=...
@@ -198,22 +202,24 @@ pnpm compose:prod:up
 4. Smoke check it:
 
 ```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml ps
-curl -I https://involute.example.com
-curl https://involute.example.com/health
+docker compose --env-file .env.production -f docker-compose.prod.images.yml ps
+pnpm smoke:prod https://involute.example.com
 ```
 
 5. If you need to re-assert the first admin explicitly:
 
 ```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml run --rm \
+docker compose --env-file .env.production -f docker-compose.prod.images.yml run --rm \
   --entrypoint /bin/sh server -lc \
   'pnpm --filter @turnkeyai/involute-server run admin:bootstrap you@example.com'
 ```
 
 Operational notes:
 
-- production compose keeps Postgres internal; only Caddy exposes `80/443`
+- production compose passes `DATABASE_URL` directly to the API and migration containers; do not rely on ad-hoc URL concatenation
+- use a URL-safe Postgres password so `DATABASE_URL` and `POSTGRES_PASSWORD` stay identical
+- by default, `docker-compose.prod.images.yml` exposes API/web on `SERVER_BIND_ADDRESS:4200` and `WEB_BIND_ADDRESS:4201` for a host reverse proxy
+- to let compose Caddy own `80/443`, run with the `caddy` profile and ensure host nginx/apache is not bound to those ports
 - `server-init` runs `prisma migrate deploy` before the API starts
 - `SEED_DATABASE` defaults to `false` in production; turn it on only for a fresh demo seed
 - the web container is the static production build, not the Vite dev server
@@ -265,7 +271,17 @@ For the current Tailscale-only test phase, use:
 - `involute_bind_address: <tailscale-ip>`
 - `involute_app_origin: http://<tailscale-ip>:4201`
 
-When the public domain and OAuth are ready, switch the inventory to `production` and use [`docker-compose.prod.yml`](./docker-compose.prod.yml).
+When the public domain and OAuth are ready, switch the inventory to `production` and use [`docker-compose.prod.images.yml`](./docker-compose.prod.images.yml).
+
+For local Ansible deploys, keep secrets in an encrypted vault file:
+
+```bash
+cp ops/ansible/group_vars/all/vault.yml.example ops/ansible/group_vars/all/vault.yml
+ansible-vault encrypt ops/ansible/group_vars/all/vault.yml
+ANSIBLE_VAULT_PASSWORD_FILE=ops/ansible/vault-password.txt pnpm deploy:prod
+```
+
+`ops/ansible/group_vars/all/vault.yml` and `ops/ansible/vault-password.txt` are ignored by git.
 
 GitHub Actions can run the same deployment path from [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml). Configure these repository secrets before enabling it:
 
@@ -278,7 +294,8 @@ GitHub Actions can run the same deployment path from [`.github/workflows/deploy.
 - `INVOLUTE_VIEWER_ASSERTION_SECRET`
 - `INVOLUTE_BIND_ADDRESS` for `tailscale`
 - `INVOLUTE_APP_DOMAIN` and `INVOLUTE_POSTGRES_PASSWORD` for `production`
-- optional: `INVOLUTE_ADMIN_EMAIL_ALLOWLIST`, `INVOLUTE_GOOGLE_OAUTH_CLIENT_ID`, `INVOLUTE_GOOGLE_OAUTH_CLIENT_SECRET`, `INVOLUTE_GOOGLE_OAUTH_REDIRECT_URI`
+- `INVOLUTE_GOOGLE_OAUTH_CLIENT_ID`, `INVOLUTE_GOOGLE_OAUTH_CLIENT_SECRET`, `INVOLUTE_GOOGLE_OAUTH_REDIRECT_URI` when `REQUIRE_GOOGLE_OAUTH=true`
+- optional: `INVOLUTE_ADMIN_EMAIL_ALLOWLIST`, `INVOLUTE_IMAGE_TAG`
 
 Recommended repository variables:
 

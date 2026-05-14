@@ -4,21 +4,34 @@
   become: true
   vars:
     involute_default_deploy_path: /opt/involute
-    involute_default_stack_profile: tailscale
-    involute_default_seed_database: true
+    involute_default_stack_profile: production
+    involute_default_seed_database: false
     involute_compose_files: >-
       {{
-        ['docker-compose.yml']
+        ['docker-compose.images.yml']
         if (involute_stack_profile | default(involute_default_stack_profile)) == 'tailscale'
-        else ['docker-compose.prod.yml']
+        else ['docker-compose.prod.images.yml']
       }}
     involute_compose_services: >-
       {{
         ['db', 'server', 'web']
-        if (involute_stack_profile | default(involute_default_stack_profile)) == 'tailscale'
+        if (
+          (involute_stack_profile | default(involute_default_stack_profile)) == 'tailscale'
+          or not (involute_enable_caddy | default(false) | bool)
+        )
         else []
       }}
     involute_compose_file_args: "{{ involute_compose_files | map('regex_replace', '^', '-f ') | join(' ') }}"
+    involute_compose_env_file_args: "--env-file {{ involute_env_target }}"
+    involute_compose_profile_args: >-
+      {{
+        '--profile caddy'
+        if (
+          (involute_stack_profile | default(involute_default_stack_profile)) == 'production'
+          and (involute_enable_caddy | default(false) | bool)
+        )
+        else ''
+      }}
     involute_env_target: >-
       {{
         '.env'
@@ -35,14 +48,15 @@
       {{
         'http://' ~ (involute_bind_address | default('127.0.0.1')) ~ ':4200/health'
         if (involute_stack_profile | default(involute_default_stack_profile)) == 'tailscale'
-        else 'http://127.0.0.1/health'
+        else 'http://' ~ (involute_server_bind_address | default(involute_bind_address | default('127.0.0.1'))) ~ ':4200/health'
       }}
     involute_web_health_url: >-
       {{
         'http://' ~ (involute_bind_address | default('127.0.0.1')) ~ ':4201/'
         if (involute_stack_profile | default(involute_default_stack_profile)) == 'tailscale'
-        else 'http://127.0.0.1/'
+        else 'http://' ~ (involute_web_bind_address | default(involute_bind_address | default('127.0.0.1'))) ~ ':4201/'
       }}
+    involute_smoke_base_url: "{{ involute_app_origin }}"
     involute_rsync_excludes:
       - ".git"
       - "node_modules"
@@ -66,6 +80,26 @@
           - involute_app_origin | length > 0
           - >-
             (
+              (involute_stack_profile | default(involute_default_stack_profile)) != 'production'
+            ) or (
+              involute_postgres_password is defined
+              and involute_postgres_password | length > 0
+              and (involute_postgres_password is match('^[A-Za-z0-9._~-]+$'))
+            )
+          - >-
+            (
+              (involute_stack_profile | default(involute_default_stack_profile)) != 'production'
+              or not (involute_require_google_oauth | default(true) | bool)
+            ) or (
+              involute_google_oauth_client_id is defined
+              and involute_google_oauth_client_id | length > 0
+              and involute_google_oauth_client_secret is defined
+              and involute_google_oauth_client_secret | length > 0
+              and involute_google_oauth_redirect_uri is defined
+              and involute_google_oauth_redirect_uri | length > 0
+            )
+          - >-
+            (
               (involute_stack_profile | default(involute_default_stack_profile)) != 'tailscale'
             ) or (
               involute_bind_address is defined and involute_bind_address | length > 0
@@ -78,6 +112,13 @@
               or (involute_seed_default_admin | default(false) | bool)
               or (involute_allow_admin_fallback | default(false) | bool)
             )
+        fail_msg: >-
+          Missing or invalid deploy variables. Production requires a URL-safe
+          involute_postgres_password matching ^[A-Za-z0-9._~-]+$ because it is
+          used in DATABASE_URL. Production also requires Google OAuth client ID,
+          client secret, and redirect URI when involute_require_google_oauth is
+          true. Tailscale deployments require involute_bind_address and either
+          an admin allowlist, seeded default admin, or admin fallback.
 
     - name: Ensure deploy directory exists
       ansible.builtin.file:
@@ -88,7 +129,7 @@
     - name: Synchronize repository to target
       ansible.builtin.shell: >
         rsync -az --delete
-        {{ involute_rsync_excludes | map('regex_replace', '^(.*)$', '--exclude=\\1') | join(' ') }}
+        {% for excl in involute_rsync_excludes %}--exclude={{ excl | quote }} {% endfor %}
         {{ (playbook_dir ~ '/../../../') | quote }}
         {{
           (
@@ -106,9 +147,41 @@
         dest: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}"
         mode: "0600"
 
-    - name: Stop existing stack
+    - name: Check for legacy source-build compose file
+      ansible.builtin.stat:
+        path: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/docker-compose.yml"
+      register: involute_legacy_compose
+
+    - name: Check for legacy production source-build compose file
+      ansible.builtin.stat:
+        path: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/docker-compose.prod.yml"
+      register: involute_legacy_prod_compose
+
+    - name: Stop legacy source-build stack if present
       ansible.builtin.shell: >
         docker compose
+        --env-file .env
+        -f docker-compose.yml
+        down --remove-orphans
+      args:
+        chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+      when: involute_legacy_compose.stat.exists
+
+    - name: Stop legacy production source-build stack if present
+      ansible.builtin.shell: >
+        docker compose
+        --env-file .env.production
+        -f docker-compose.prod.yml
+        down --remove-orphans
+      args:
+        chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+      when: involute_legacy_prod_compose.stat.exists
+
+    - name: Stop existing standardized stack
+      ansible.builtin.shell: >
+        docker compose
+        {{ involute_compose_env_file_args }}
+        {{ involute_compose_profile_args }}
         {{ involute_compose_file_args }}
         down --remove-orphans
       args:
@@ -133,8 +206,10 @@
     - name: Start stack
       ansible.builtin.shell: >
         docker compose
+        {{ involute_compose_env_file_args }}
+        {{ involute_compose_profile_args }}
         {{ involute_compose_file_args }}
-        up --build -d
+        up -d
         {{ involute_compose_services | join(' ') }}
       args:
         chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
@@ -159,9 +234,31 @@
       args:
         chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
 
+    - name: Verify auth session reports Google OAuth configured
+      ansible.builtin.uri:
+        url: "{{ involute_smoke_base_url }}/auth/session"
+        method: GET
+        return_content: true
+        status_code:
+          - 200
+          - 401
+      register: involute_auth_session_smoke
+      failed_when: not (involute_auth_session_smoke.json.googleOAuthConfigured | default(false) | bool)
+
+    - name: Verify Google OAuth start redirects to Google
+      ansible.builtin.uri:
+        url: "{{ involute_smoke_base_url }}/auth/google/start"
+        method: GET
+        follow_redirects: none
+        status_code: 302
+      register: involute_google_start_smoke
+      failed_when: "'accounts.google.com' not in (involute_google_start_smoke.location | default(''))"
+
     - name: Show compose status
       ansible.builtin.shell: >
         docker compose
+        {{ involute_compose_env_file_args }}
+        {{ involute_compose_profile_args }}
         {{ involute_compose_file_args }}
         ps
       args:
