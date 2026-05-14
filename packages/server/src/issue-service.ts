@@ -21,6 +21,7 @@ import { orderWorkflowStates } from './workflow-state-order.js';
 
 export interface CreateIssueInput {
   description?: string | null;
+  priority?: number | null;
   stateId?: string | null;
   teamId: string;
   title: string;
@@ -31,6 +32,7 @@ export interface UpdateIssueInput {
   description?: string | null;
   labelIds?: string[] | null;
   parentId?: string | null;
+  priority?: number | null;
   stateId?: string | null;
   title?: string | null;
 }
@@ -82,6 +84,7 @@ export async function createIssue(
         identifier: `${updatedTeam.key.toUpperCase()}-${updatedTeam.nextIssueNumber - 1}`,
         title: input.title,
         description: input.description ?? null,
+        priority: input.priority ?? 0,
         stateId: state.id,
         teamId: input.teamId,
       },
@@ -143,6 +146,10 @@ export async function updateIssue(
 
     if ('description' in input) {
       data.description = input.description ?? null;
+    }
+
+    if ('priority' in input && input.priority !== undefined && input.priority !== null) {
+      data.priority = input.priority;
     }
 
     if ('assigneeId' in input) {

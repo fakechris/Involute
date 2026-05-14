@@ -23,6 +23,14 @@ enum TeamMembershipRole {
   OWNER
 }
 
+enum WorkflowStateType {
+  BACKLOG
+  UNSTARTED
+  STARTED
+  COMPLETED
+  CANCELED
+}
+
 model Team {
   id              String          @id @default(uuid()) @db.Uuid
   key             String          @unique
@@ -37,11 +45,13 @@ model Team {
 }
 
 model WorkflowState {
-  id     String  @id @default(uuid()) @db.Uuid
-  name   String
-  teamId String  @db.Uuid
-  team   Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  issues Issue[]
+  id       String            @id @default(uuid()) @db.Uuid
+  name     String
+  type     WorkflowStateType @default(UNSTARTED)
+  position Int               @default(0)
+  teamId   String            @db.Uuid
+  team     Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  issues   Issue[]
 
   @@unique([id, teamId])
   @@unique([teamId, name])
@@ -109,6 +119,7 @@ model Issue {
   children    Issue[]        @relation("IssueParentChild")
   teamId      String         @db.Uuid
   team        Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  priority    Int            @default(0)
   labels      IssueLabel[]
   comments    Comment[]
   createdAt   DateTime       @default(now())

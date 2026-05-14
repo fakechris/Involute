@@ -7,10 +7,24 @@ export const BOARD_PAGE_QUERY = gql`
         id
         key
         name
+        memberships {
+          nodes {
+            id
+            role
+            user {
+              id
+              name
+              email
+              globalRole
+            }
+          }
+        }
         states {
           nodes {
             id
             name
+            type
+            position
           }
         }
       }
@@ -34,11 +48,14 @@ export const BOARD_PAGE_QUERY = gql`
         identifier
         title
         description
+        priority
         createdAt
         updatedAt
         state {
           id
           name
+          type
+          position
         }
         team {
           id
@@ -97,11 +114,14 @@ export const ISSUE_UPDATE_MUTATION = gql`
         identifier
         title
         description
+        priority
         createdAt
         updatedAt
         state {
           id
           name
+          type
+          position
         }
         team {
           id
@@ -190,11 +210,14 @@ export const ISSUE_PAGE_QUERY = gql`
       identifier
       title
       description
+      priority
       createdAt
       updatedAt
       state {
         id
         name
+        type
+        position
       }
       team {
         id
@@ -204,6 +227,8 @@ export const ISSUE_PAGE_QUERY = gql`
           nodes {
             id
             name
+            type
+            position
           }
         }
       }
@@ -289,6 +314,8 @@ export const ACCESS_PAGE_QUERY = gql`
           nodes {
             id
             name
+            type
+            position
           }
         }
       }
@@ -321,6 +348,8 @@ export const TEAM_UPDATE_ACCESS_MUTATION = gql`
           nodes {
             id
             name
+            type
+            position
           }
         }
       }
@@ -364,11 +393,14 @@ export const ISSUE_CREATE_MUTATION = gql`
         identifier
         title
         description
+        priority
         createdAt
         updatedAt
         state {
           id
           name
+          type
+          position
         }
         team {
           id
