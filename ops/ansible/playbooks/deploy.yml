@@ -129,7 +129,7 @@
     - name: Synchronize repository to target
       ansible.builtin.shell: >
         rsync -az --delete
-        {{ involute_rsync_excludes | map('regex_replace', '^(.*)$', '--exclude=\\1') | join(' ') }}
+        {% for excl in involute_rsync_excludes %}--exclude={{ excl | quote }} {% endfor %}
         {{ (playbook_dir ~ '/../../../') | quote }}
         {{
           (
