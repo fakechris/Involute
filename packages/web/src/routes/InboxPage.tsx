@@ -166,7 +166,8 @@ export function InboxPage() {
           </p>
         ) : (
           visibleEntries.map((entry) => (
-            <div
+            <button
+              type="button"
               key={entry.id}
               className={`inbox-item${entry.unread ? ' inbox-item--unread' : ''}`}
               onClick={() => navigate(`/issue/${entry.issue.id}`)}
@@ -188,7 +189,7 @@ export function InboxPage() {
                 </div>
               </div>
               <span className="inbox-item__time">{entry.ago}</span>
-            </div>
+            </button>
           ))
         )}
       </div>

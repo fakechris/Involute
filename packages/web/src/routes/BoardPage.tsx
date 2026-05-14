@@ -81,7 +81,7 @@ import { Column } from '../components/Column';
 import { IssueCard } from '../components/IssueCard';
 import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
 import { BacklogPage } from './BacklogPage';
-import { IcoFilter, IcoSort, IcoPlus, IcoList, IcoBoard, IcoClose } from '../components/Icons';
+import { IcoFilter, IcoSort, IcoPlus, IcoList, IcoBoard, IcoClose, IcoChevR } from '../components/Icons';
 import { Btn, PriorityIcon } from '../components/Primitives';
 
 const ISSUE_PAGE_SIZE = 200;
@@ -1573,7 +1573,7 @@ export function BoardPage() {
             {selectedTeam?.name ?? 'Involute'}
           </span>
           <span style={{ color: 'var(--fg-faint)', display: 'inline-flex' }}>
-            <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="m6 3 4 4-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <IcoChevR size={12} />
           </span>
           <h1 style={{ fontSize: 13, fontWeight: 400, color: 'var(--fg-muted)', margin: 0 }}>{isBacklogView ? 'Backlog' : 'All issues'}</h1>
           <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)', marginLeft: 4 }}>{visibleIssues.length}</span>
@@ -1718,7 +1718,7 @@ export function BoardPage() {
             {boardViewState.stateIds.map((stateId) => {
               const state = selectedTeam?.states.nodes.find((s) => s.id === stateId);
               return (
-                <button key={stateId} type="button" onClick={() => toggleBoardFilterValue('stateIds', stateId)} style={{
+                <button key={stateId} type="button" aria-label={`Remove State: ${state?.name ?? stateId}`} onClick={() => toggleBoardFilterValue('stateIds', stateId)} style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
                   fontSize: 11, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
                   background: 'var(--bg-active)', color: 'var(--fg)', cursor: 'pointer',
@@ -1732,7 +1732,7 @@ export function BoardPage() {
             {boardViewState.assigneeIds.map((assigneeId) => {
               const user = users.find((u) => u.id === assigneeId);
               return (
-                <button key={assigneeId} type="button" onClick={() => toggleBoardFilterValue('assigneeIds', assigneeId)} style={{
+                <button key={assigneeId} type="button" aria-label={`Remove Assignee: ${assigneeId === 'unassigned' ? 'Unassigned' : (user?.name ?? user?.email ?? assigneeId)}`} onClick={() => toggleBoardFilterValue('assigneeIds', assigneeId)} style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
                   fontSize: 11, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
                   background: 'var(--bg-active)', color: 'var(--fg)', cursor: 'pointer',

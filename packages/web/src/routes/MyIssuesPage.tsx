@@ -11,7 +11,9 @@ import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { useEffect, useState } from 'react';
 
 function formatTimeAgo(date: string): string {
-  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  const parsed = new Date(date).getTime();
+  if (Number.isNaN(parsed)) return '—';
+  const seconds = Math.floor((Date.now() - parsed) / 1000);
   if (seconds < 60) return 'just now';
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m`;
@@ -133,9 +135,11 @@ export function MyIssuesPage() {
                   <span className="issue-group-header__count">{g.items.length}</span>
                 </div>
                 {g.items.map((issue) => (
-                  <div
+                  <button
+                    type="button"
                     key={issue.id}
                     onClick={() => navigate(`/issue/${issue.id}`)}
+                    aria-label={`Open issue ${issue.identifier}`}
                     style={{
                       display: 'grid',
                       gridTemplateColumns: '64px 14px 14px 1fr auto auto',
@@ -147,6 +151,11 @@ export function MyIssuesPage() {
                       cursor: 'pointer',
                       fontSize: 13,
                       transition: 'background var(--dur-1) var(--ease)',
+                      background: 'transparent',
+                      border: 'none',
+                      width: '100%',
+                      textAlign: 'left',
+                      color: 'inherit',
                     }}
                     onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
@@ -154,7 +163,7 @@ export function MyIssuesPage() {
                     <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
                       {issue.identifier}
                     </span>
-                    <PriorityIcon level={0} size={14} />
+                    <PriorityIcon level={(issue as unknown as { priority?: number }).priority ?? 0} size={14} />
                     <StatusIconPrimitive
                       stateType={getStateType(issue.state.name)}
                       stateColor={getStateColor(issue.state.name)}
@@ -174,7 +183,7 @@ export function MyIssuesPage() {
                     <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
                       {formatTimeAgo(issue.updatedAt)}
                     </span>
-                  </div>
+                  </button>
                 ))}
               </div>
             ),

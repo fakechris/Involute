@@ -19,7 +19,7 @@ export function Avatar({ user, size = 20 }: { user?: AvatarUser | null | undefin
       }}>?</div>
     );
   }
-  const initials = user.avatar ?? (user.name ? user.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() : '?');
+  const initials = user.avatar ?? (user.name ? user.name.trim().split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() : '?');
   return (
     <div title={user.name} style={{
       width: size, height: size, borderRadius: '50%',

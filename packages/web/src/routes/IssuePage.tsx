@@ -687,8 +687,8 @@ export function IssuePage() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                     e.preventDefault();
-                    if (commentBody.trim()) {
-                      void handleCommentSubmit(e as unknown as FormEvent<HTMLFormElement>);
+                    if (commentBody.trim() && issueSnapshot) {
+                      void persistCommentCreate(issueSnapshot, commentBody.trim());
                     }
                   }
                 }}

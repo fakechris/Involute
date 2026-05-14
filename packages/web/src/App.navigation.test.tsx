@@ -9,7 +9,7 @@ function renderTestApp(queryState = { data: boardQueryResult, loading: false }, 
 }
 
 describe('App navigation and backlog flows', () => {
-  it('navigates between board and backlog via header links', async () => {
+  it('navigates between board and backlog via keyboard shortcuts', async () => {
     renderTestApp({ data: boardQueryResult, loading: false }, ['/']);
 
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();

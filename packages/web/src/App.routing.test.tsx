@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { boardQueryResult, renderApp } from './test/app-test-helpers';
 
 describe('App routing', () => {
-  it('navigates between board and backlog via header links', async () => {
+  it('navigates between board and backlog via keyboard shortcuts', async () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();

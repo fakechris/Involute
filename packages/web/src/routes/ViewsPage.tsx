@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { readSavedBoardViews, BOARD_SAVED_VIEWS_EVENT, type SavedBoardView } from '../board/views';
-import { readSavedBacklogViews, BACKLOG_SAVED_VIEWS_EVENT, type SavedBacklogView } from '../backlog/views';
+import { readSavedBoardViews, BOARD_SAVED_VIEWS_EVENT, dispatchApplyBoardView, type SavedBoardView } from '../board/views';
+import { readSavedBacklogViews, BACKLOG_SAVED_VIEWS_EVENT, dispatchApplyBacklogView, type SavedBacklogView } from '../backlog/views';
 import { readStoredTeamKey } from '../board/utils';
 import { IcoPlus, IcoViews } from '../components/Icons';
 import { Btn } from '../components/Primitives';
@@ -12,6 +12,7 @@ interface ViewEntry {
   name: string;
   kind: 'Board' | 'Backlog';
   route: string;
+  view: SavedBoardView | SavedBacklogView;
 }
 
 export function ViewsPage() {
@@ -44,10 +45,10 @@ export function ViewsPage() {
   const views = useMemo<ViewEntry[]>(() => {
     const entries: ViewEntry[] = [];
     for (const v of boardViews) {
-      entries.push({ id: v.id, name: v.name, kind: 'Board', route: '/' });
+      entries.push({ id: v.id, name: v.name, kind: 'Board', route: '/', view: v });
     }
     for (const v of backlogViews) {
-      entries.push({ id: v.id, name: v.name, kind: 'Backlog', route: '/backlog' });
+      entries.push({ id: v.id, name: v.name, kind: 'Backlog', route: '/backlog', view: v });
     }
     return entries;
   }, [boardViews, backlogViews]);
@@ -90,7 +91,14 @@ export function ViewsPage() {
                 <button
                   key={v.id}
                   type="button"
-                  onClick={() => navigate(v.route)}
+                  onClick={() => {
+                    if (v.kind === 'Board') {
+                      dispatchApplyBoardView({ state: (v.view as SavedBoardView).state, viewId: v.id });
+                    } else {
+                      dispatchApplyBacklogView({ state: (v.view as SavedBacklogView).state, viewId: v.id });
+                    }
+                    navigate(v.route);
+                  }}
                   style={{
                     border: '1px solid var(--border)',
                     borderRadius: 'var(--r-3)',

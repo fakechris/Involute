@@ -61,7 +61,7 @@ export function MembersPage() {
                   key={user.id}
                   user={user}
                   issueCount={issueCountByUser.get(user.id) ?? 0}
-                  role={i === 0 ? 'Admin' : i < 3 ? 'Editor' : 'Viewer'}
+                  role="Member"
                 />
               ))}
             </div>
