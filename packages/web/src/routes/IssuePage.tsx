@@ -520,6 +520,7 @@ export function IssuePage() {
 
   return (
     <main className="issue-panel issue-panel--page" aria-label="Issue detail page">
+      <h1 className="sr-only" style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0 }}>Issue detail</h1>
       {/* ── Header ── */}
       <div className="issue-panel__header">
         <div className="issue-panel__title-row">
@@ -577,6 +578,21 @@ export function IssuePage() {
               onChange={(e) => setDescription(e.target.value)}
               onBlur={() => void commitDescription().catch(() => undefined)}
             />
+
+            {/* Parent issue */}
+            {activeIssue.parent ? (
+              <div className="issue-panel__section">
+                <h2>Parent issue</h2>
+                <button
+                  type="button"
+                  className="issue-children__row"
+                  onClick={() => navigate(`/issue/${activeIssue.parent!.id}`)}
+                  style={{ display: 'flex', gap: 6, padding: '4px 0', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg)', fontSize: 13 }}
+                >
+                  {activeIssue.parent.identifier} — {activeIssue.parent.title}
+                </button>
+              </div>
+            ) : null}
 
             {/* Sub-issues */}
             {activeIssue.children.nodes.length > 0 ? (

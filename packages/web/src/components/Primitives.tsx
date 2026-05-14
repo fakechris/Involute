@@ -120,7 +120,7 @@ export function Btn({
     >
       {icon}
       {children ? <span>{children}</span> : null}
-      {kbd ? <span style={{ marginLeft: 4, opacity: 0.7 }}><Kbd keys={kbd} /></span> : null}
+      {kbd ? <span aria-hidden="true" style={{ marginLeft: 4, opacity: 0.7 }}><Kbd keys={kbd} /></span> : null}
     </button>
   );
 }

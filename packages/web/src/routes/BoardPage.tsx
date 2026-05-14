@@ -65,6 +65,7 @@ import {
   createSavedBoardViewId,
   getDefaultBoardViewState,
   readSavedBoardViews,
+  dispatchApplyBoardView,
   readStoredBoardViewState,
   type ApplyBoardViewDetail,
   type BoardViewState,
@@ -1574,9 +1575,14 @@ export function BoardPage() {
           <span style={{ color: 'var(--fg-faint)', display: 'inline-flex' }}>
             <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="m6 3 4 4-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </span>
-          <span style={{ fontSize: 13, color: 'var(--fg-muted)' }}>{isBacklogView ? 'Backlog' : 'All issues'}</span>
+          <h1 style={{ fontSize: 13, fontWeight: 400, color: 'var(--fg-muted)', margin: 0 }}>{isBacklogView ? 'Backlog' : 'All issues'}</h1>
           <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)', marginLeft: 4 }}>{visibleIssues.length}</span>
         </div>
+        <p className="app-shell__subtext" style={{ fontSize: 11, color: 'var(--fg-dim)', margin: 0 }}>
+          {isBacklogView
+            ? `List view for ${selectedTeam?.name ?? 'your workspace'} issues.`
+            : `Workflow overview for ${selectedTeam?.name ?? 'your workspace'}.`}
+        </p>
         {isTeamSwitching ? (
           <span style={{ fontSize: 11, color: 'var(--fg-dim)' }} aria-live="polite">
             Switching to {teams.find((team) => team.key === pendingTeamKey)?.name ?? pendingTeamKey}…
@@ -1620,7 +1626,7 @@ export function BoardPage() {
             setMutationError(null);
             setIsCreateOpen(true);
           }}
-        >New issue</Btn>
+        >Create issue</Btn>
       </header>
 
       {mutationError ? (
@@ -1669,6 +1675,46 @@ export function BoardPage() {
               <kbd>/</kbd>
             </div>
 
+            <details style={{ position: 'relative', fontSize: 11 }}>
+              <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>States</summary>
+              <fieldset style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140 }}>
+                {(selectedTeam?.states.nodes ?? []).map((state) => (
+                  <label key={state.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={boardViewState.stateIds.includes(state.id)} onChange={() => toggleBoardFilterValue('stateIds', state.id)} aria-label={state.name} />
+                    {state.name}
+                  </label>
+                ))}
+              </fieldset>
+            </details>
+
+            <details style={{ position: 'relative', fontSize: 11 }}>
+              <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>Labels</summary>
+              <fieldset style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140 }}>
+                {labels.map((label) => (
+                  <label key={label.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={boardViewState.labelIds.includes(label.id)} onChange={() => toggleBoardFilterValue('labelIds', label.id)} aria-label={label.name} />
+                    {label.name}
+                  </label>
+                ))}
+              </fieldset>
+            </details>
+
+            <details style={{ position: 'relative', fontSize: 11 }}>
+              <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>Assignees</summary>
+              <fieldset style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={boardViewState.assigneeIds.includes('unassigned')} onChange={() => toggleBoardFilterValue('assigneeIds', 'unassigned')} aria-label="Unassigned" />
+                  Unassigned
+                </label>
+                {users.map((user) => (
+                  <label key={user.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={boardViewState.assigneeIds.includes(user.id)} onChange={() => toggleBoardFilterValue('assigneeIds', user.id)} aria-label={user.name ?? user.email ?? user.id} />
+                    {user.name ?? user.email}
+                  </label>
+                ))}
+              </fieldset>
+            </details>
+
             {boardViewState.stateIds.map((stateId) => {
               const state = selectedTeam?.states.nodes.find((s) => s.id === stateId);
               return (
@@ -1700,7 +1746,7 @@ export function BoardPage() {
             {boardViewState.labelIds.map((labelId) => {
               const label = labels.find((l) => l.id === labelId);
               return (
-                <button key={labelId} type="button" onClick={() => toggleBoardFilterValue('labelIds', labelId)} style={{
+                <button key={labelId} type="button" aria-label={`Remove Label: ${label?.name ?? labelId}`} onClick={() => toggleBoardFilterValue('labelIds', labelId)} style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
                   fontSize: 11, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
                   background: 'var(--bg-active)', color: 'var(--fg)', cursor: 'pointer',
@@ -1717,6 +1763,12 @@ export function BoardPage() {
                 fontSize: 11, fontWeight: 500, color: 'var(--fg-dim)', cursor: 'pointer',
                 background: 'transparent', border: 'none',
               }}>Clear all</button>
+            ) : null}
+
+            {activeSavedBoardViewId ? (
+              <span style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
+                Loaded view: {savedBoardViews.find((v) => v.id === activeSavedBoardViewId)?.name ?? 'Unknown'}
+              </span>
             ) : null}
 
             <div style={{ flex: 1 }} />
@@ -1740,23 +1792,42 @@ export function BoardPage() {
                 <option value="identifier">ID</option>
                 <option value="title">Title</option>
               </select>
-              <button type="button" onClick={() => {
-                setBoardViewState((currentState) => ({
-                  ...currentState,
-                  sortDirection: currentState.sortDirection === 'asc' ? 'desc' : 'asc',
-                }));
-                setActiveSavedBoardViewId('');
-              }} title={boardViewState.sortDirection === 'asc' ? 'Ascending' : 'Descending'} style={{
-                width: 22, height: 22, borderRadius: 'var(--r-2)', border: '1px solid var(--border)',
-                color: 'var(--fg-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'transparent', cursor: 'pointer',
-              }}>
-                {boardViewState.sortDirection === 'asc' ? (
-                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 11V3m0 0-3 3m3-3 3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                ) : (
-                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 3v8m0 0 3-3m-3 3-3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                )}
-              </button>
+              <select
+                aria-label="Sort board direction"
+                value={boardViewState.sortDirection}
+                onChange={(event) => {
+                  setBoardViewState((currentState) => ({
+                    ...currentState,
+                    sortDirection: event.target.value as 'asc' | 'desc',
+                  }));
+                  setActiveSavedBoardViewId('');
+                }}
+                style={{ height: 22, padding: '0 6px', fontSize: 11, fontWeight: 500, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
+              >
+                <option value="asc">Asc</option>
+                <option value="desc">Desc</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
+              <button type="button" onClick={() => { const name = window.prompt('View name'); if (name) { const nextView: SavedBoardView = { id: crypto.randomUUID(), name, state: { ...boardViewState } }; const nextViews = [...savedBoardViews, nextView]; setSavedBoardViews(nextViews); writeSavedBoardViews(activeTeamKey, nextViews); setActiveSavedBoardViewId(nextView.id); } }} style={{ height: 22, padding: '0 6px', fontSize: 11, border: '1px solid var(--border)', borderRadius: 'var(--r-2)', background: 'transparent', color: 'var(--fg-muted)', cursor: 'pointer' }}>Save view</button>
+              <button type="button" onClick={() => { resetBoardViewState(); setActiveSavedBoardViewId(''); }} style={{ height: 22, padding: '0 6px', fontSize: 11, border: 'none', background: 'transparent', color: 'var(--fg-dim)', cursor: 'pointer' }}>Clear</button>
+              <select
+                aria-label="Load saved board view"
+                value={activeSavedBoardViewId}
+                onChange={(event) => {
+                  const viewId = event.target.value;
+                  setActiveSavedBoardViewId(viewId);
+                  const view = savedBoardViews.find((v) => v.id === viewId);
+                  if (view) { dispatchApplyBoardView({ state: view.state, viewId: view.id }); }
+                }}
+                style={{ height: 22, padding: '0 6px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
+              >
+                <option value="">Views</option>
+                {savedBoardViews.map((view) => (
+                  <option key={view.id} value={view.id}>{view.name}</option>
+                ))}
+              </select>
             </div>
 
             <div style={{
@@ -1792,22 +1863,38 @@ export function BoardPage() {
               <strong style={{ fontSize: 12 }}>{selectedIssueIds.length} selected</strong>
               <button type="button" className="ui-action ui-action--subtle" onClick={selectAllVisibleIssues}>Select all</button>
               <button type="button" className="ui-action ui-action--subtle" onClick={() => setSelectedIssueIds([])}>Clear</button>
-              <select aria-label="Bulk move" value={bulkTargetStateId} onChange={(event) => setBulkTargetStateId(event.target.value)}
+              <select aria-label="Bulk move selected issues to state" value={bulkTargetStateId} onChange={(event) => setBulkTargetStateId(event.target.value)}
                 style={{ height: 24, padding: '0 6px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
                 <option value="">Move to…</option>
                 {selectedTeam?.states.nodes.map((state) => (<option key={state.id} value={state.id}>{state.name}</option>))}
               </select>
               {bulkTargetStateId ? (
-                <button type="button" className="ui-action ui-action--accent" disabled={isSavingState} onClick={() => void applyBulkStateChange()}>Apply</button>
+                <button type="button" className="ui-action ui-action--accent" disabled={isSavingState} onClick={() => void applyBulkStateChange()}>Apply to selected</button>
               ) : null}
-              <select aria-label="Bulk assign" value={bulkAssigneeId} onChange={(event) => setBulkAssigneeId(event.target.value)}
+              <select aria-label="Bulk assign selected issues" value={bulkAssigneeId} onChange={(event) => setBulkAssigneeId(event.target.value)}
                 style={{ height: 24, padding: '0 6px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
                 <option value="">Assign to…</option>
                 <option value="unassigned">Unassigned</option>
                 {users.map((user) => (<option key={user.id} value={user.id}>{user.name ?? user.email ?? user.id}</option>))}
               </select>
               {bulkAssigneeId ? (
-                <button type="button" className="ui-action ui-action--subtle" disabled={isSavingState} onClick={() => void applyBulkAssigneeChange()}>Apply</button>
+                <button type="button" className="ui-action ui-action--subtle" disabled={isSavingState} onClick={() => void applyBulkAssigneeChange()}>Apply assignee</button>
+              ) : null}
+              <select aria-label="Bulk add label to selected issues" value={bulkLabelId} onChange={(event) => setBulkLabelId(event.target.value)}
+                style={{ height: 24, padding: '0 6px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
+                <option value="">Add label…</option>
+                {labels.map((label) => (<option key={label.id} value={label.id}>{label.name}</option>))}
+              </select>
+              {bulkLabelId ? (
+                <button type="button" className="ui-action ui-action--subtle" disabled={isSavingState} onClick={() => void applyBulkLabelAdd()}>Add label</button>
+              ) : null}
+              <select aria-label="Bulk remove label from selected issues" value={bulkRemoveLabelId} onChange={(event) => setBulkRemoveLabelId(event.target.value)}
+                style={{ height: 24, padding: '0 6px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
+                <option value="">Remove label…</option>
+                {labels.map((label) => (<option key={label.id} value={label.id}>{label.name}</option>))}
+              </select>
+              {bulkRemoveLabelId ? (
+                <button type="button" className="ui-action ui-action--subtle" disabled={isSavingState} onClick={() => void applyBulkLabelRemove()}>Remove label</button>
               ) : null}
             </section>
           ) : null}

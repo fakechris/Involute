@@ -19,7 +19,8 @@ describe('App team selection', () => {
 
     expect(await screen.findByText('Sonata backlog item')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('link', { name: 'Board' }));
+    fireEvent.keyDown(window, { key: 'g' });
+    fireEvent.keyDown(window, { key: 'b' });
 
     expect(await screen.findByText('Workflow overview for Sonata.')).toBeInTheDocument();
     expect(within(screen.getByTestId('column-Backlog')).getByText('SON-1')).toBeInTheDocument();
@@ -112,7 +113,7 @@ describe('App team selection', () => {
 
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    await screen.findByRole('heading', { name: 'Board' });
+    await screen.findByRole('heading', { name: 'All issues' });
     const sonataTeamButton = Array.from(document.querySelectorAll<HTMLButtonElement>('.app-shell__team-link')).find(
       (button) => button.textContent?.includes('SON') && button.textContent?.includes('Sonata'),
     );
@@ -133,7 +134,7 @@ describe('App team selection', () => {
   it('requests board issues with a team-scoped filter after selecting Sonata', async () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    await screen.findByRole('heading', { name: 'Board' });
+    await screen.findByRole('heading', { name: 'All issues' });
 
     expect(apolloMocks.useQuery).toHaveBeenCalledWith(
       expect.anything(),

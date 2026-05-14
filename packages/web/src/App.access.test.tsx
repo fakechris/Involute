@@ -20,7 +20,6 @@ describe('App access management', () => {
     renderApp({ accessData: accessQueryResult, data: boardQueryResult, loading: false }, ['/settings/access']);
 
     expect(await screen.findByRole('heading', { name: 'Access' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Access' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Current viewer' })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText('Allowed')).toBeInTheDocument();

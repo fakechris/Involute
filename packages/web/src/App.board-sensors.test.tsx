@@ -13,7 +13,7 @@ function renderTestApp() {
 describe('App board sensors', () => {
   it('registers PointerSensor, MouseSensor, and TouchSensor for drag-and-drop', async () => {
     renderTestApp();
-    await screen.findByRole('heading', { name: 'Board' });
+    await screen.findByRole('heading', { name: 'All issues' });
 
     const sensorTypes = (dndMocks.useSensor.mock.calls as unknown[][]).map((call) => call[0]);
 
@@ -25,7 +25,7 @@ describe('App board sensors', () => {
 
   it('configures each sensor with a distance activation constraint', async () => {
     renderTestApp();
-    await screen.findByRole('heading', { name: 'Board' });
+    await screen.findByRole('heading', { name: 'All issues' });
 
     for (const call of dndMocks.useSensor.mock.calls as unknown as [unknown, Record<string, unknown>][]) {
       const options = call[1];

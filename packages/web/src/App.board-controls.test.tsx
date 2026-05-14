@@ -14,7 +14,7 @@ describe('App board controls', () => {
 
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
     const filters = screen.getByLabelText('Board filters');
     fireEvent.click(within(filters).getByText('Labels'));
@@ -82,7 +82,7 @@ describe('App board controls', () => {
 
     renderApp({ data: customData, loading: false }, ['/']);
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Sort board by'), {
       target: { value: 'title' },
@@ -128,7 +128,7 @@ describe('App board controls', () => {
 
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
     expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('data-focused', 'true');
 
     fireEvent.keyDown(window, { key: 'x' });
@@ -230,7 +230,7 @@ describe('App board controls', () => {
 
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: 'x' });
 
@@ -286,7 +286,7 @@ describe('App board controls', () => {
   it('lets the user remove active board filters from the summary tokens', async () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
     const filters = screen.getByLabelText('Board filters');
     fireEvent.click(within(filters).getByText('Labels'));
