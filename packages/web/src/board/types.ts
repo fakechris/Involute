@@ -53,6 +53,30 @@ export interface CommentSummary {
   user: UserSummary | null;
 }
 
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  description?: string | null;
+  color: string;
+  status: string;
+  targetDate?: string | null;
+  lead?: UserSummary | null;
+  issues?: { nodes: Array<{ id: string; identifier: string; title: string }> };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CycleSummary {
+  id: string;
+  name: string;
+  number: number;
+  startsAt: string;
+  endsAt: string;
+  issues?: { nodes: Array<{ id: string; identifier: string; title: string; state: WorkflowStateSummary }> };
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface IssueSummary {
   id: string;
   identifier: string;
@@ -89,6 +113,10 @@ export interface IssueSummary {
   comments: {
     nodes: CommentSummary[];
   };
+  projectId?: string | null;
+  cycleId?: string | null;
+  project?: { id: string; name: string; color: string } | null;
+  cycle?: { id: string; name: string; number: number } | null;
 }
 
 export interface BoardPageQueryData {
@@ -204,7 +232,24 @@ export interface IssueCreateMutationVariables {
     teamId: string;
     title: string;
     description?: string | null;
+    stateId?: string;
     priority?: number;
+    projectId?: string;
+    cycleId?: string;
+  };
+}
+
+export type BoardGroupBy = 'none' | 'status' | 'priority' | 'assignee' | 'label';
+
+export interface BoardIssueGroup {
+  id: string;
+  label: string;
+  issues: IssueSummary[];
+  meta?: {
+    stateId?: string;
+    priority?: number;
+    assigneeId?: string | null;
+    labelId?: string;
   };
 }
 
@@ -224,6 +269,8 @@ export interface IssueUpdateMutationVariables {
     priority?: number;
     stateId?: string;
     title?: string;
+    projectId?: string | null;
+    cycleId?: string | null;
   };
 }
 
@@ -266,4 +313,135 @@ export interface CommentDeleteMutationData {
 
 export interface CommentDeleteMutationVariables {
   id: string;
+}
+
+export interface FileUploadInput {
+  filename: string;
+  mimeType: string;
+  content: string;
+}
+
+export interface AttachmentSummary {
+  id: string;
+  filename: string;
+  url: string;
+  mimeType: string;
+  size: number;
+}
+
+export interface FileUploadMutationData {
+  fileUpload: {
+    success: boolean;
+    attachment: AttachmentSummary | null;
+  };
+}
+
+export interface FileUploadMutationVariables {
+  input: FileUploadInput;
+}
+
+export interface ProjectsQueryData {
+  projects: { nodes: ProjectSummary[] };
+}
+
+export interface ProjectsQueryVariables {
+  teamId: string;
+}
+
+export interface ProjectQueryData {
+  project: ProjectSummary | null;
+}
+
+export interface ProjectQueryVariables {
+  id: string;
+}
+
+export interface ProjectCreateMutationData {
+  projectCreate: { success: boolean; project: ProjectSummary | null };
+}
+
+export interface ProjectCreateMutationVariables {
+  input: {
+    teamId: string;
+    name: string;
+    description?: string | null;
+    color?: string;
+    status?: string;
+    targetDate?: string | null;
+    leadId?: string | null;
+  };
+}
+
+export interface ProjectUpdateMutationData {
+  projectUpdate: { success: boolean; project: ProjectSummary | null };
+}
+
+export interface ProjectUpdateMutationVariables {
+  id: string;
+  input: {
+    name?: string;
+    description?: string | null;
+    color?: string;
+    status?: string;
+    targetDate?: string | null;
+    leadId?: string | null;
+  };
+}
+
+export interface ProjectDeleteMutationData {
+  projectDelete: { success: boolean; projectId: string | null };
+}
+
+export interface ProjectDeleteMutationVariables {
+  id: string;
+}
+
+export interface CyclesQueryData {
+  cycles: { nodes: CycleSummary[] };
+}
+
+export interface CyclesQueryVariables {
+  teamId: string;
+}
+
+export interface CycleCreateMutationData {
+  cycleCreate: { success: boolean; cycle: CycleSummary | null };
+}
+
+export interface CycleCreateMutationVariables {
+  input: {
+    teamId: string;
+    name: string;
+    startsAt: string;
+    endsAt: string;
+  };
+}
+
+export interface CycleUpdateMutationData {
+  cycleUpdate: { success: boolean; cycle: CycleSummary | null };
+}
+
+export interface CycleUpdateMutationVariables {
+  id: string;
+  input: {
+    name?: string;
+    startsAt?: string;
+    endsAt?: string;
+  };
+}
+
+export interface CycleDeleteMutationData {
+  cycleDelete: { success: boolean; cycleId: string | null };
+}
+
+export interface CycleDeleteMutationVariables {
+  id: string;
+}
+
+export interface UserUpdateMutationData {
+  userUpdate: { success: boolean; user: UserSummary | null };
+}
+
+export interface UserUpdateMutationVariables {
+  input: { name?: string; email?: string };
 }

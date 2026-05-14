@@ -26,6 +26,8 @@ import {
   ISSUE_UPDATE_MUTATION,
 } from '../board/queries';
 import type {
+  BoardGroupBy,
+  BoardIssueGroup,
   BoardPageQueryData,
   BoardPageQueryVariables,
   CommentDeleteMutationData,
@@ -64,10 +66,12 @@ import {
   buildBoardViewSummary,
   createSavedBoardViewId,
   getDefaultBoardViewState,
+  groupIssuesBy,
   readSavedBoardViews,
   dispatchApplyBoardView,
   readStoredBoardViewState,
   type ApplyBoardViewDetail,
+  type BoardViewMode,
   type BoardViewState,
   type SavedBoardView,
   writeSavedBoardViews,
@@ -78,8 +82,10 @@ import { writeStoredShellIssues, writeStoredShellTeams } from '../lib/app-shell-
 import { BoardCreateIssueDialog } from '../components/BoardCreateIssueDialog';
 import { BoardLoadMoreNotice } from '../components/BoardLoadMoreNotice';
 import { Column } from '../components/Column';
+import { InlineCreate } from '../components/InlineCreate';
 import { IssueCard } from '../components/IssueCard';
 import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
+import { KanbanView } from '../components/KanbanView';
 import { BacklogPage } from './BacklogPage';
 import { IcoFilter, IcoSort, IcoPlus, IcoList, IcoBoard, IcoClose, IcoChevR } from '../components/Icons';
 import { Btn, PriorityIcon } from '../components/Primitives';
@@ -206,6 +212,7 @@ export function BoardPage() {
   );
   const [activeSavedBoardViewId, setActiveSavedBoardViewId] = useState('');
   const boardSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const [inlineCreateGroupId, setInlineCreateGroupId] = useState<string | null>(null);
 
   useLayoutEffect(() => {
     if (loading && !queryData) {
@@ -441,6 +448,10 @@ export function BoardPage() {
 
   const columns = useMemo(() => getBoardColumns(selectedTeam, visibleIssues), [selectedTeam, visibleIssues]);
   const issuesByState = useMemo(() => groupIssuesByState(boardVisibleIssues, columns), [boardVisibleIssues, columns]);
+  const issueGroups = useMemo(
+    () => groupIssuesBy(boardVisibleIssues, boardViewState.groupBy, selectedTeam, users, labels),
+    [boardVisibleIssues, boardViewState.groupBy, selectedTeam, users, labels],
+  );
   const activeIssue = useMemo(
     () => visibleIssues.find((issue) => issue.id === activeIssueId) ?? null,
     [activeIssueId, visibleIssues],
@@ -1348,6 +1359,47 @@ export function BoardPage() {
     }
   }
 
+  async function handleInlineCreate(title: string, groupMeta?: BoardIssueGroup['meta']) {
+    if (!selectedTeam || !title.trim()) {
+      return;
+    }
+
+    setMutationError(null);
+    setIsSavingState(true);
+
+    try {
+      const result = await runIssueCreate({
+        variables: {
+          input: {
+            teamId: selectedTeam.id,
+            title: title.trim(),
+            ...(groupMeta?.stateId ? { stateId: groupMeta.stateId } : {}),
+            ...(groupMeta?.priority !== undefined ? { priority: groupMeta.priority } : {}),
+          },
+        },
+      });
+
+      if (!result.data?.issueCreate.success || !result.data.issueCreate.issue) {
+        throw new Error('Create issue mutation failed');
+      }
+
+      const newIssue = result.data.issueCreate.issue;
+
+      setIssueOverrides((currentOverrides) =>
+        replaceIssueOverride(currentOverrides, newIssue.id, newIssue),
+      );
+      setCreatedIssues((currentIssues) => [
+        newIssue,
+        ...currentIssues.filter((issue) => issue.id !== newIssue.id),
+      ]);
+      setFocusedIssueId(newIssue.id);
+    } catch {
+      setMutationError('We could not create the issue. Please try again.');
+    } finally {
+      setIsSavingState(false);
+    }
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     const issueId = String(event.active.id);
     const targetStateId = getDropTargetStateId(event);
@@ -1809,6 +1861,29 @@ export function BoardPage() {
               </select>
             </div>
 
+            <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: 'var(--fg-dim)', marginRight: 4 }}>Group</span>
+              <select
+                aria-label="Group board by"
+                value={boardViewState.groupBy}
+                onChange={(event) => {
+                  setBoardViewState((currentState) => ({
+                    ...currentState,
+                    groupBy: event.target.value as BoardGroupBy,
+                  }));
+                  setActiveSavedBoardViewId('');
+                  setInlineCreateGroupId(null);
+                }}
+                style={{ height: 22, padding: '0 6px', fontSize: 11, fontWeight: 500, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
+              >
+                <option value="status">Status</option>
+                <option value="priority">Priority</option>
+                <option value="assignee">Assignee</option>
+                <option value="label">Label</option>
+                <option value="none">None</option>
+              </select>
+            </div>
+
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
               <button type="button" onClick={() => { const name = window.prompt('View name'); if (name) { const nextView: SavedBoardView = { id: crypto.randomUUID(), name, state: { ...boardViewState } }; const nextViews = [...savedBoardViews, nextView]; setSavedBoardViews(nextViews); writeSavedBoardViews(activeTeamKey, nextViews); setActiveSavedBoardViewId(nextView.id); } }} style={{ height: 22, padding: '0 6px', fontSize: 11, border: '1px solid var(--border)', borderRadius: 'var(--r-2)', background: 'transparent', color: 'var(--fg-muted)', cursor: 'pointer' }}>Save view</button>
               <button type="button" onClick={() => { resetBoardViewState(); setActiveSavedBoardViewId(''); }} style={{ height: 22, padding: '0 6px', fontSize: 11, border: 'none', background: 'transparent', color: 'var(--fg-dim)', cursor: 'pointer' }}>Clear</button>
@@ -1834,21 +1909,27 @@ export function BoardPage() {
               display: 'flex', alignItems: 'center',
               border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 1, marginLeft: 4,
             }}>
-              <button type="button" onClick={() => navigate('/')} style={{
+              <button type="button" onClick={() => {
+                setBoardViewState((s) => ({ ...s, viewMode: 'list' as BoardViewMode }));
+                setInlineCreateGroupId(null);
+              }} style={{
                 height: 20, padding: '0 6px', display: 'inline-flex', alignItems: 'center', gap: 4,
                 fontSize: 11, fontWeight: 500, borderRadius: 'var(--r-1)', border: 'none', cursor: 'pointer',
-                color: !isBacklogView ? 'var(--fg)' : 'var(--fg-muted)',
-                background: !isBacklogView ? 'var(--bg-active)' : 'transparent',
-              }}>
-                <IcoBoard size={12} /> Board
-              </button>
-              <button type="button" onClick={() => navigate('/backlog')} style={{
-                height: 20, padding: '0 6px', display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontSize: 11, fontWeight: 500, borderRadius: 'var(--r-1)', border: 'none', cursor: 'pointer',
-                color: isBacklogView ? 'var(--fg)' : 'var(--fg-muted)',
-                background: isBacklogView ? 'var(--bg-active)' : 'transparent',
+                color: boardViewState.viewMode === 'list' ? 'var(--fg)' : 'var(--fg-muted)',
+                background: boardViewState.viewMode === 'list' ? 'var(--bg-active)' : 'transparent',
               }}>
                 <IcoList size={12} /> List
+              </button>
+              <button type="button" onClick={() => {
+                setBoardViewState((s) => ({ ...s, viewMode: 'board' as BoardViewMode }));
+                setInlineCreateGroupId(null);
+              }} style={{
+                height: 20, padding: '0 6px', display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: 11, fontWeight: 500, borderRadius: 'var(--r-1)', border: 'none', cursor: 'pointer',
+                color: boardViewState.viewMode === 'board' ? 'var(--fg)' : 'var(--fg-muted)',
+                background: boardViewState.viewMode === 'board' ? 'var(--bg-active)' : 'transparent',
+              }}>
+                <IcoBoard size={12} /> Board
               </button>
             </div>
           </section>
@@ -1959,34 +2040,123 @@ export function BoardPage() {
           }}
           onDragEnd={(event) => void handleDragEnd(event)}
         >
-          <section className="board-grid" aria-label="Kanban board">
-            {columns.map((column) => (
-              <Column
-                key={column.name}
-                title={column.name}
-                stateId={column.stateId}
-                focusedIssueId={focusedIssueId}
-                issues={issuesByState[column.stateId] ?? EMPTY_ISSUES}
-                onToggleIssueSelection={toggleIssueSelection}
-                selectedIssueIds={selectedIssueIds}
-                onNativeDragStart={(payload) => {
-                  setActiveIssueId(payload.issueId);
-                  setDragOriginStateId(payload.stateId);
-                  setDragPreviewStateId(payload.stateId);
-                  setMutationError(null);
-                }}
-                onNativeDragEnd={() => {
-                  setActiveIssueId(null);
-                  setDragPreviewStateId(null);
-                  setDragOriginStateId(null);
-                }}
-                onNativeDropIssue={(payload, targetStateId) => {
-                  void handleNativeDropIssue(payload, targetStateId);
-                }}
-                onSelectIssue={openIssue}
-              />
-            ))}
-          </section>
+          {boardViewState.viewMode === 'board' && boardViewState.groupBy === 'status' ? (
+            <section className="board-grid" aria-label="Kanban board">
+              {columns.map((column) => (
+                <Column
+                  key={column.name}
+                  title={column.name}
+                  stateId={column.stateId}
+                  focusedIssueId={focusedIssueId}
+                  issues={issuesByState[column.stateId] ?? EMPTY_ISSUES}
+                  onToggleIssueSelection={toggleIssueSelection}
+                  selectedIssueIds={selectedIssueIds}
+                  onNativeDragStart={(payload) => {
+                    setActiveIssueId(payload.issueId);
+                    setDragOriginStateId(payload.stateId);
+                    setDragPreviewStateId(payload.stateId);
+                    setMutationError(null);
+                  }}
+                  onNativeDragEnd={() => {
+                    setActiveIssueId(null);
+                    setDragPreviewStateId(null);
+                    setDragOriginStateId(null);
+                  }}
+                  onNativeDropIssue={(payload, targetStateId) => {
+                    void handleNativeDropIssue(payload, targetStateId);
+                  }}
+                  onSelectIssue={openIssue}
+                />
+              ))}
+            </section>
+          ) : boardViewState.viewMode === 'board' ? (
+            <KanbanView
+              groups={issueGroups}
+              focusedIssueId={focusedIssueId}
+              selectedIssueIds={selectedIssueIds}
+              onSelectIssue={openIssue}
+              onToggleIssueSelection={toggleIssueSelection}
+              onInlineCreate={(title, meta) => void handleInlineCreate(title, meta)}
+              onNativeDragStart={(payload) => {
+                setActiveIssueId(payload.issueId);
+                setDragOriginStateId(payload.stateId);
+                setDragPreviewStateId(payload.stateId);
+                setMutationError(null);
+              }}
+              onNativeDragEnd={() => {
+                setActiveIssueId(null);
+                setDragPreviewStateId(null);
+                setDragOriginStateId(null);
+              }}
+              onNativeDropIssue={(payload, targetStateId) => {
+                void handleNativeDropIssue(payload, targetStateId);
+              }}
+            />
+          ) : (
+            <section style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }} aria-label="Issue list">
+              {issueGroups.map((group: BoardIssueGroup) => (
+                <div key={group.id}>
+                  {boardViewState.groupBy !== 'none' && (
+                    <div className="issue-group-header">
+                      {group.meta?.priority !== undefined && (
+                        <PriorityIcon level={group.meta.priority} size={13} />
+                      )}
+                      <span className="issue-group-header__label">{group.label}</span>
+                      <span className="issue-group-header__count">{group.issues.length}</span>
+                      <div style={{ flex: 1 }} />
+                      <button
+                        type="button"
+                        className="issue-group-header__create"
+                        onClick={() => setInlineCreateGroupId(
+                          inlineCreateGroupId === group.id ? null : group.id,
+                        )}
+                        title="Create issue in this group"
+                      >
+                        <IcoPlus size={12} />
+                      </button>
+                    </div>
+                  )}
+                  {inlineCreateGroupId === group.id && (
+                    <InlineCreate
+                      contextLabel={group.label}
+                      onSubmit={(title) => void handleInlineCreate(title, group.meta)}
+                      onCancel={() => setInlineCreateGroupId(null)}
+                    />
+                  )}
+                  {group.issues.map((issue: IssueSummary) => (
+                    <IssueCard
+                      key={issue.id}
+                      issue={issue}
+                      isFocused={focusedIssueId === issue.id}
+                      isSelected={selectedIssueIds.includes(issue.id)}
+                      onSelect={openIssue}
+                      onToggleSelected={toggleIssueSelection}
+                      onNativeDragStart={(payload) => {
+                        setActiveIssueId(payload.issueId);
+                        setDragOriginStateId(payload.stateId);
+                        setDragPreviewStateId(payload.stateId);
+                        setMutationError(null);
+                      }}
+                      onNativeDragEnd={() => {
+                        setActiveIssueId(null);
+                        setDragPreviewStateId(null);
+                        setDragOriginStateId(null);
+                      }}
+                    />
+                  ))}
+                  {group.issues.length === 0 && boardViewState.groupBy !== 'none' && inlineCreateGroupId !== group.id && (
+                    <div style={{
+                      padding: '10px var(--content-gutter)',
+                      fontSize: 12, color: 'var(--fg-faint)',
+                      borderBottom: '1px solid var(--border-subtle)',
+                    }}>
+                      No issues
+                    </div>
+                  )}
+                </div>
+              ))}
+            </section>
+          )}
 
           <DragOverlay>
             {activeIssue ? <IssueCard issue={activeIssue} sortable={false} /> : null}

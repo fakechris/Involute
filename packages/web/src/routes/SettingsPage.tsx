@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { IcoPlus, IcoTeam } from '../components/Icons';
 import { Avatar, Btn } from '../components/Primitives';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
-import { useQuery } from '@apollo/client/react';
-import { BOARD_PAGE_QUERY } from '../board/queries';
-import type { BoardPageQueryData, BoardPageQueryVariables } from '../board/types';
+import { useMutation, useQuery } from '@apollo/client/react';
+import { BOARD_PAGE_QUERY, USER_UPDATE_MUTATION, FILE_UPLOAD_MUTATION } from '../board/queries';
+import type { BoardPageQueryData, BoardPageQueryVariables, UserUpdateMutationData, UserUpdateMutationVariables, FileUploadMutationData, FileUploadMutationVariables } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 
 type SettingsTab = 'profile' | 'preferences' | 'access';
@@ -127,16 +127,52 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 
 function ProfileTab() {
   const [viewer, setViewer] = useState<SessionViewer | null>(null);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [runUserUpdate] = useMutation<UserUpdateMutationData, UserUpdateMutationVariables>(USER_UPDATE_MUTATION);
+  const [runFileUpload] = useMutation<FileUploadMutationData, FileUploadMutationVariables>(FILE_UPLOAD_MUTATION);
 
   useEffect(() => {
     fetchSessionState().then((session) => {
-      if (session.viewer) setViewer(session.viewer);
+      if (session.viewer) {
+        setViewer(session.viewer);
+        setName(session.viewer.name ?? '');
+        setEmail(session.viewer.email ?? '');
+      }
     });
   }, []);
 
   const initials = viewer?.name
     ? viewer.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
     : '?';
+
+  async function handleNameBlur() {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === viewer?.name) return;
+    await runUserUpdate({ variables: { input: { name: trimmed } } });
+  }
+
+  async function handleEmailBlur() {
+    const trimmed = email.trim();
+    if (!trimmed || trimmed === viewer?.email) return;
+    await runUserUpdate({ variables: { input: { email: trimmed } } });
+  }
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = (reader.result as string).split(',')[1];
+      if (!base64) return;
+      await runFileUpload({
+        variables: { input: { filename: file.name, mimeType: file.type, content: base64 } },
+      });
+    };
+    reader.readAsDataURL(file);
+  }
 
   return (
     <>
@@ -152,14 +188,31 @@ function ProfileTab() {
           }}>
             {initials}
           </div>
-          <Btn variant="subtle" size="md">Change</Btn>
+          <Btn variant="subtle" size="md" onClick={() => fileInputRef.current?.click()}>Change</Btn>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleAvatarChange}
+          />
         </div>
       </Field>
       <Field label="Full name">
-        <input style={inputStyle} defaultValue={viewer?.name ?? ''} />
+        <input
+          style={inputStyle}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={handleNameBlur}
+        />
       </Field>
       <Field label="Email" hint="Used for sign-in and notifications.">
-        <input style={inputStyle} defaultValue={viewer?.email ?? ''} />
+        <input
+          style={inputStyle}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onBlur={handleEmailBlur}
+        />
       </Field>
     </>
   );
@@ -168,11 +221,33 @@ function ProfileTab() {
 function PreferencesTab() {
   const [theme, setTheme] = useState<ThemeMode>(() => getStoredTheme());
   const [density, setDensity] = useState<DensityMode>(() => getStoredDensity());
+  const [useSystemTheme, setUseSystemTheme] = useState<boolean>(() => {
+    try { return window.localStorage.getItem('involute.system-theme') === 'true'; } catch { return false; }
+  });
+  const [shortcutsEnabled, setShortcutsEnabled] = useState<boolean>(() => {
+    try { return window.localStorage.getItem('involute.shortcuts') !== 'false'; } catch { return true; }
+  });
 
   function handleThemeChange(nextTheme: ThemeMode) {
     setTheme(nextTheme);
+    setUseSystemTheme(false);
     document.documentElement.setAttribute('data-theme', nextTheme);
-    try { window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme); } catch { /* ignore */ }
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+      window.localStorage.setItem('involute.system-theme', 'false');
+    } catch { /* ignore */ }
+  }
+
+  function handleSystemTheme() {
+    setUseSystemTheme(true);
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const resolved = prefersDark ? 'dark' : 'light';
+    setTheme(resolved);
+    document.documentElement.setAttribute('data-theme', resolved);
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, resolved);
+      window.localStorage.setItem('involute.system-theme', 'true');
+    } catch { /* ignore */ }
   }
 
   function handleDensityChange(nextDensity: DensityMode) {
@@ -181,24 +256,29 @@ function PreferencesTab() {
     try { window.localStorage.setItem(DENSITY_STORAGE_KEY, nextDensity); } catch { /* ignore */ }
   }
 
+  function handleShortcutsToggle(enabled: boolean) {
+    setShortcutsEnabled(enabled);
+    try { window.localStorage.setItem('involute.shortcuts', String(enabled)); } catch { /* ignore */ }
+  }
+
   return (
     <>
       <SectionHeading>Preferences</SectionHeading>
       <SectionSub>Customize how Involute feels.</SectionSub>
-      <Field label="Theme" hint="Light or dark. Controls all surfaces.">
+      <Field label="Theme" hint="Light, dark, or follow system.">
         <div style={{ display: 'flex', gap: 8 }}>
-          {(['Light', 'Dark'] as const).map((t) => {
-            const value = t.toLowerCase() as ThemeMode;
+          {(['Light', 'Dark', 'System'] as const).map((t) => {
+            const isActive = t === 'System' ? useSystemTheme : (!useSystemTheme && theme === t.toLowerCase());
             return (
               <button
                 key={t}
                 type="button"
-                onClick={() => handleThemeChange(value)}
+                onClick={() => t === 'System' ? handleSystemTheme() : handleThemeChange(t.toLowerCase() as ThemeMode)}
                 style={{
                   padding: '6px 12px', fontSize: 12,
                   border: '1px solid var(--border)',
                   borderRadius: 'var(--r-2)',
-                  background: theme === value ? 'var(--bg-active)' : 'transparent',
+                  background: isActive ? 'var(--bg-active)' : 'transparent',
                   color: 'var(--fg)',
                   cursor: 'pointer',
                 }}
@@ -232,6 +312,16 @@ function PreferencesTab() {
             );
           })}
         </div>
+      </Field>
+      <Field label="Keyboard shortcuts" hint="Enable single-key navigation shortcuts.">
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={shortcutsEnabled}
+            onChange={(e) => handleShortcutsToggle(e.target.checked)}
+          />
+          <span style={{ fontSize: 12.5 }}>{shortcutsEnabled ? 'Enabled' : 'Disabled'}</span>
+        </label>
       </Field>
     </>
   );

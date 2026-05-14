@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { readSavedBoardViews, BOARD_SAVED_VIEWS_EVENT, dispatchApplyBoardView, type SavedBoardView } from '../board/views';
-import { readSavedBacklogViews, BACKLOG_SAVED_VIEWS_EVENT, dispatchApplyBacklogView, type SavedBacklogView } from '../backlog/views';
+import { readSavedBoardViews, writeSavedBoardViews, BOARD_SAVED_VIEWS_EVENT, dispatchApplyBoardView, type SavedBoardView } from '../board/views';
+import { readSavedBacklogViews, writeSavedBacklogViews, BACKLOG_SAVED_VIEWS_EVENT, dispatchApplyBacklogView, type SavedBacklogView } from '../backlog/views';
 import { readStoredTeamKey } from '../board/utils';
 import { IcoPlus, IcoViews } from '../components/Icons';
 import { Btn } from '../components/Primitives';
@@ -20,6 +20,9 @@ export function ViewsPage() {
   const teamKey = readStoredTeamKey();
   const [boardViews, setBoardViews] = useState<SavedBoardView[]>(() => readSavedBoardViews(teamKey));
   const [backlogViews, setBacklogViews] = useState<SavedBacklogView[]>(() => readSavedBacklogViews(teamKey));
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [newViewName, setNewViewName] = useState('');
+  const [newViewKind, setNewViewKind] = useState<'Board' | 'Backlog'>('Board');
 
   useEffect(() => {
     setBoardViews(readSavedBoardViews(teamKey));
@@ -60,7 +63,11 @@ export function ViewsPage() {
         <span style={{ fontSize: 13, fontWeight: 500 }}>Views</span>
         <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>{views.length}</span>
         <div style={{ flex: 1 }} />
-        <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm">New view</Btn>
+        <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={() => {
+          setNewViewName('');
+          setNewViewKind('Board');
+          dialogRef.current?.showModal();
+        }}>New view</Btn>
       </div>
 
       <div className="page-content">
@@ -135,6 +142,55 @@ export function ViewsPage() {
           </div>
         )}
       </div>
+
+      <dialog ref={dialogRef} className="dialog-modal" onClick={(e) => { if (e.target === dialogRef.current) dialogRef.current?.close(); }}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!newViewName.trim() || !teamKey) return;
+            const id = `view-${Date.now()}`;
+            if (newViewKind === 'Board') {
+              const next: SavedBoardView[] = [...boardViews, { id, name: newViewName.trim(), state: { groupBy: 'status', sortField: 'updatedAt', sortDirection: 'asc', query: '', assigneeIds: [], labelIds: [], stateIds: [], viewMode: 'board' } }];
+              writeSavedBoardViews(teamKey, next);
+              setBoardViews(next);
+            } else {
+              const next: SavedBacklogView[] = [...backlogViews, { id, name: newViewName.trim(), state: { sortField: 'identifier', sortDirection: 'desc', query: '', assigneeIds: [], labelIds: [], stateIds: [] } }];
+              writeSavedBacklogViews(teamKey, next);
+              setBacklogViews(next);
+            }
+            dialogRef.current?.close();
+            navigate(newViewKind === 'Board' ? '/' : '/backlog');
+          }}
+          style={{ padding: 20, minWidth: 300 }}
+        >
+          <h3 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 500 }}>New view</h3>
+          <label style={{ display: 'block', marginBottom: 12 }}>
+            <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Name</span>
+            <input
+              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 12.5, color: 'var(--fg)' }}
+              value={newViewName}
+              onChange={(e) => setNewViewName(e.target.value)}
+              placeholder="View name"
+              required
+            />
+          </label>
+          <label style={{ display: 'block', marginBottom: 16 }}>
+            <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Type</span>
+            <select
+              style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 12, color: 'var(--fg)' }}
+              value={newViewKind}
+              onChange={(e) => setNewViewKind(e.target.value as 'Board' | 'Backlog')}
+            >
+              <option value="Board">Board</option>
+              <option value="Backlog">Backlog</option>
+            </select>
+          </label>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn--subtle btn--md" onClick={() => dialogRef.current?.close()}>Cancel</button>
+            <button type="submit" className="btn btn--accent btn--md">Create</button>
+          </div>
+        </form>
+      </dialog>
     </div>
   );
 }
