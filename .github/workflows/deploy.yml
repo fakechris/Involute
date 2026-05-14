@@ -40,6 +40,8 @@ jobs:
       INVOLUTE_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.INVOLUTE_GOOGLE_OAUTH_CLIENT_ID }}
       INVOLUTE_GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.INVOLUTE_GOOGLE_OAUTH_CLIENT_SECRET }}
       INVOLUTE_GOOGLE_OAUTH_REDIRECT_URI: ${{ secrets.INVOLUTE_GOOGLE_OAUTH_REDIRECT_URI }}
+      INVOLUTE_IMAGE_TAG: ${{ vars.INVOLUTE_IMAGE_TAG || 'latest' }}
+      INVOLUTE_REQUIRE_GOOGLE_OAUTH: ${{ vars.INVOLUTE_REQUIRE_GOOGLE_OAUTH || 'true' }}
     steps:
       - name: Validate required deployment secrets
         run: |
@@ -68,6 +70,14 @@ jobs:
                 exit 1
               fi
             done
+            if [ "$INVOLUTE_REQUIRE_GOOGLE_OAUTH" = "true" ]; then
+              for var in INVOLUTE_GOOGLE_OAUTH_CLIENT_ID INVOLUTE_GOOGLE_OAUTH_CLIENT_SECRET INVOLUTE_GOOGLE_OAUTH_REDIRECT_URI; do
+                if [ -z "$(printenv "$var")" ]; then
+                  echo "Missing required secret: $var" >&2
+                  exit 1
+                fi
+              done
+            fi
           fi
 
       - name: Checkout
@@ -119,6 +129,8 @@ jobs:
                           "involute_google_oauth_client_id": os.environ.get("INVOLUTE_GOOGLE_OAUTH_CLIENT_ID", ""),
                           "involute_google_oauth_client_secret": os.environ.get("INVOLUTE_GOOGLE_OAUTH_CLIENT_SECRET", ""),
                           "involute_google_oauth_redirect_uri": os.environ.get("INVOLUTE_GOOGLE_OAUTH_REDIRECT_URI", ""),
+                          "involute_image_tag": os.environ.get("INVOLUTE_IMAGE_TAG", "latest"),
+                          "involute_require_google_oauth": os.environ.get("INVOLUTE_REQUIRE_GOOGLE_OAUTH", "true"),
                       }
                   }
               }
