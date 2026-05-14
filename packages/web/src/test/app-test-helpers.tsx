@@ -87,6 +87,10 @@ const hoistedApolloMocks = vi.hoisted<ApolloMockSet>(() => ({
       return [vi.fn().mockResolvedValue({ data: { teamMembershipRemove: { success: true, membershipId: 'membership-1' } } })];
     }
 
+    if (source.includes('mutation FileUpload')) {
+      return [vi.fn().mockResolvedValue({ data: { fileUpload: { success: true, attachment: null } } })];
+    }
+
     return [vi.fn()];
   }),
 }));
@@ -193,6 +197,10 @@ beforeEach(() => {
 
     if (source.includes('mutation TeamMembershipRemove')) {
       return [vi.fn().mockResolvedValue({ data: { teamMembershipRemove: { success: true, membershipId: 'membership-1' } } })];
+    }
+
+    if (source.includes('mutation FileUpload')) {
+      return [vi.fn().mockResolvedValue({ data: { fileUpload: { success: true, attachment: null } } })];
     }
 
     return [vi.fn()];

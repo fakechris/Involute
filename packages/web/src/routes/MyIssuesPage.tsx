@@ -1,5 +1,5 @@
 import { useQuery } from '@apollo/client/react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { BOARD_PAGE_QUERY } from '../board/queries';
@@ -63,6 +63,9 @@ interface IssueGroup {
 export function MyIssuesPage() {
   const navigate = useNavigate();
   const teamKey = readStoredTeamKey();
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterStateType, setFilterStateType] = useState<WorkflowStateType | ''>('');
+  const [filterPriority, setFilterPriority] = useState<number | ''>('');
 
   const { data, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
     variables: {
@@ -74,7 +77,17 @@ export function MyIssuesPage() {
     },
   });
 
-  const myIssues = data?.issues.nodes ?? [];
+  const allIssues = data?.issues.nodes ?? [];
+  const myIssues = useMemo(() => {
+    let issues = allIssues;
+    if (filterStateType) {
+      issues = issues.filter((i) => i.state.type === filterStateType);
+    }
+    if (filterPriority !== '') {
+      issues = issues.filter((i) => i.priority === filterPriority);
+    }
+    return issues;
+  }, [allIssues, filterStateType, filterPriority]);
 
   const groups = useMemo<IssueGroup[]>(() => {
     const progress: IssueSummary[] = [];
@@ -110,8 +123,45 @@ export function MyIssuesPage() {
           {myIssues.length}
         </span>
         <div style={{ flex: 1 }} />
-        <Btn variant="ghost" icon={<IcoFilter size={12} />} size="sm">Filter</Btn>
+        <Btn variant="ghost" icon={<IcoFilter size={12} />} size="sm" onClick={() => setFilterOpen(!filterOpen)}>Filter</Btn>
       </div>
+      {filterOpen && (
+        <div style={{ display: 'flex', gap: 12, padding: '8px var(--pad-x)', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-sunken)' }}>
+          <select
+            style={{ height: 26, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 11, color: 'var(--fg)' }}
+            value={filterStateType}
+            onChange={(e) => setFilterStateType(e.target.value as WorkflowStateType | '')}
+          >
+            <option value="">All states</option>
+            <option value="BACKLOG">Backlog</option>
+            <option value="UNSTARTED">Unstarted</option>
+            <option value="STARTED">Started</option>
+            <option value="COMPLETED">Completed</option>
+            <option value="CANCELED">Canceled</option>
+          </select>
+          <select
+            style={{ height: 26, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 11, color: 'var(--fg)' }}
+            value={filterPriority}
+            onChange={(e) => setFilterPriority(e.target.value === '' ? '' : Number(e.target.value))}
+          >
+            <option value="">All priorities</option>
+            <option value="0">No priority</option>
+            <option value="1">Urgent</option>
+            <option value="2">High</option>
+            <option value="3">Medium</option>
+            <option value="4">Low</option>
+          </select>
+          {(filterStateType || filterPriority !== '') && (
+            <button
+              type="button"
+              style={{ fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}
+              onClick={() => { setFilterStateType(''); setFilterPriority(''); }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="page-content">
         {loading ? (

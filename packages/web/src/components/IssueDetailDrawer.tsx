@@ -1,7 +1,9 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import type { CommentSummary, IssueSummary, TeamSummary } from '../board/types';
+import { MarkdownRenderer } from './MarkdownRenderer';
+import { RichTextEditor } from './RichTextEditor';
 
 interface IssueDetailDrawerProps {
   issue: IssueSummary | null;
@@ -212,19 +214,6 @@ export function IssueDetailDrawer({
     }).format(new Date(createdAt));
   }
 
-  async function handleCommentSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const nextBody = commentBody.trim();
-
-    if (!nextBody) {
-      return;
-    }
-
-    await onCommentCreate(activeIssue, nextBody);
-    setCommentBody('');
-  }
-
   function renderCommentAuthor(comment: CommentSummary) {
     return comment.user?.name ?? comment.user?.email ?? 'Unknown author';
   }
@@ -410,7 +399,7 @@ export function IssueDetailDrawer({
                           </button>
                         </div>
                       </div>
-                      <p className="discussion-entry__body">{comment.body}</p>
+                      <MarkdownRenderer content={comment.body} className="discussion-entry__body" />
                     </li>
                   ))}
                 </ol>
@@ -418,26 +407,19 @@ export function IssueDetailDrawer({
                 <p className="discussion-empty">No comments yet. Start the discussion below.</p>
               )}
 
-              <form className="discussion-form" onSubmit={(event) => void handleCommentSubmit(event)}>
-                <label className="issue-panel__label" htmlFor="discussion-body">
-                  Add comment
-                </label>
-                <textarea
-                  id="discussion-body"
-                  aria-label="Comment body"
-                  className="issue-panel__textarea discussion-form__input"
-                  value={commentBody}
-                  disabled={savingState}
-                  onChange={(event) => setCommentBody(event.target.value)}
-                />
-                <button
-                  type="submit"
-                  className="ui-action ui-action--accent"
-                  disabled={savingState || commentBody.trim().length === 0}
-                >
-                  Add comment
-                </button>
-              </form>
+              <RichTextEditor
+                value={commentBody}
+                onChange={setCommentBody}
+                placeholder="Add a comment…"
+                ariaLabel="Comment body"
+                submitLabel="Add comment"
+                disabled={savingState}
+                onSubmit={() => {
+                  const nextBody = commentBody.trim();
+                  if (!nextBody) return;
+                  void onCommentCreate(activeIssue, nextBody).then(() => setCommentBody('')).catch(() => undefined);
+                }}
+              />
             </div>
           </div>
 

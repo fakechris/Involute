@@ -25,6 +25,8 @@ export interface CreateIssueInput {
   stateId?: string | null;
   teamId: string;
   title: string;
+  projectId?: string | null;
+  cycleId?: string | null;
 }
 
 export interface UpdateIssueInput {
@@ -35,6 +37,8 @@ export interface UpdateIssueInput {
   priority?: number | null;
   stateId?: string | null;
   title?: string | null;
+  projectId?: string | null;
+  cycleId?: string | null;
 }
 
 export interface CreateCommentInput {
@@ -87,6 +91,8 @@ export async function createIssue(
         priority: input.priority ?? 0,
         stateId: state.id,
         teamId: input.teamId,
+        projectId: input.projectId ?? null,
+        cycleId: input.cycleId ?? null,
       },
     });
   });
@@ -239,6 +245,22 @@ export async function updateIssue(
             id: parentIssue.id,
           },
         };
+      }
+    }
+
+    if ('projectId' in input) {
+      if (input.projectId === null) {
+        data.project = { disconnect: true };
+      } else if (input.projectId !== undefined) {
+        data.project = { connect: { id: input.projectId } };
+      }
+    }
+
+    if ('cycleId' in input) {
+      if (input.cycleId === null) {
+        data.cycle = { disconnect: true };
+      } else if (input.cycleId !== undefined) {
+        data.cycle = { connect: { id: input.cycleId } };
       }
     }
 

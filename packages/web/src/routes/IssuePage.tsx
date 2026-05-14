@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@apollo/client/react';
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import {
@@ -8,6 +8,8 @@ import {
   ISSUE_DELETE_MUTATION,
   ISSUE_PAGE_QUERY,
   ISSUE_UPDATE_MUTATION,
+  PROJECTS_QUERY,
+  CYCLES_QUERY,
 } from '../board/queries';
 import type {
   CommentDeleteMutationData,
@@ -22,12 +24,18 @@ import type {
   IssueUpdateMutationData,
   IssueUpdateMutationVariables,
   CommentSummary,
+  ProjectsQueryData,
+  ProjectsQueryVariables,
+  CyclesQueryData,
+  CyclesQueryVariables,
 } from '../board/types';
 import { mergeIssueWithPreservedComments } from '../board/utils';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { writeStoredShellIssue } from '../lib/app-shell-state';
 import { IcoChevL, IcoChevR, IcoCopy, IcoMore, IcoLink, IcoClose, IcoLabel } from '../components/Icons';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { Avatar, Btn, Kbd } from '../components/Primitives';
+import { RichTextEditor } from '../components/RichTextEditor';
 
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
 const ISSUE_DELETE_ERROR_MESSAGE = 'We could not delete the issue. Please try again.';
@@ -54,9 +62,21 @@ export function IssuePage() {
   const [runCommentDelete] = useMutation<CommentDeleteMutationData, CommentDeleteMutationVariables>(
     COMMENT_DELETE_MUTATION,
   );
+
+  const teamId = data?.issue?.team.id ?? '';
+  const { data: projectsData } = useQuery<ProjectsQueryData, ProjectsQueryVariables>(PROJECTS_QUERY, {
+    skip: !teamId,
+    variables: { teamId },
+  });
+  const { data: cyclesData } = useQuery<CyclesQueryData, CyclesQueryVariables>(CYCLES_QUERY, {
+    skip: !teamId,
+    variables: { teamId },
+  });
+
   const [localIssue, setLocalIssue] = useState<IssueSummary | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [isSavingState, setIsSavingState] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const issueSnapshot = localIssue ?? data?.issue ?? null;
 
   // Local UI state (previously in IssueDetailDrawer)
@@ -442,15 +462,6 @@ export function IssuePage() {
     void navigator.clipboard.writeText(window.location.href);
   }
 
-  async function handleCommentSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!issueSnapshot) return;
-    const next = commentBody.trim();
-    if (!next) return;
-    await persistCommentCreate(issueSnapshot, next);
-    setCommentBody('');
-  }
-
   function confirmIssueDelete(): boolean {
     return window.confirm(`Delete ${issueSnapshot?.identifier}? This cannot be undone.`);
   }
@@ -533,10 +544,42 @@ export function IssuePage() {
         </div>
         <div style={{ flex: 1 }} />
         <div className="issue-panel__header-actions">
-          <Btn variant="ghost" icon={<IcoCopy />} title="Copy link" onClick={handleCopyLink} />
-          <Btn variant="ghost" icon={<IcoChevL />} title="Previous issue" />
-          <Btn variant="ghost" icon={<IcoChevR />} title="Next issue" />
-          <Btn variant="ghost" icon={<IcoMore />} title="More" />
+          <Btn variant="ghost" icon={<IcoChevL />} title="Previous issue" onClick={() => navigate(-1)} />
+          <Btn variant="ghost" icon={<IcoChevR />} title="Next issue" onClick={() => navigate(1)} />
+          <div style={{ position: 'relative' }}>
+            <Btn variant="ghost" icon={<IcoMore />} title="More" onClick={() => setMoreMenuOpen(!moreMenuOpen)} />
+            {moreMenuOpen && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 10,
+                background: 'var(--bg-raised)', border: '1px solid var(--border)',
+                borderRadius: 'var(--r-2)', padding: 4, minWidth: 140,
+              }}>
+                <button
+                  type="button"
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 10px', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg)', borderRadius: 'var(--r-1)' }}
+                  onClick={() => { setMoreMenuOpen(false); handleCopyLink(); }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
+                >
+                  <IcoCopy size={12} /> Copy link
+                </button>
+                <button
+                  type="button"
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 10px', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', borderRadius: 'var(--r-1)' }}
+                  onClick={() => {
+                    setMoreMenuOpen(false);
+                    if (confirmIssueDelete()) {
+                      void persistIssueDelete(activeIssue).catch(() => undefined);
+                    }
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
+                >
+                  <IcoClose size={12} /> Delete issue
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -645,9 +688,7 @@ export function IssuePage() {
                             Delete
                           </button>
                         </div>
-                        <div style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--fg-muted)', whiteSpace: 'pre-wrap' }}>
-                          {entry.comment.body}
-                        </div>
+                        <MarkdownRenderer content={entry.comment.body} />
                       </div>
                     </div>
                   ) : (
@@ -673,47 +714,17 @@ export function IssuePage() {
             </div>
 
             {/* Comment box */}
-            <form
-              className="issue-panel__comment-box"
-              onSubmit={(e) => void handleCommentSubmit(e)}
-            >
-              <textarea
-                aria-label="Leave a comment"
-                className="issue-panel__comment-input"
-                value={commentBody}
-                placeholder="Leave a comment…"
-                disabled={isSavingState}
-                onChange={(e) => setCommentBody(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                    e.preventDefault();
-                    if (commentBody.trim() && issueSnapshot) {
-                      void persistCommentCreate(issueSnapshot, commentBody.trim());
-                    }
-                  }
-                }}
-              />
-              <div className="issue-panel__comment-toolbar">
-                <Btn variant="ghost" size="sm">B</Btn>
-                <Btn variant="ghost" size="sm" style={{ fontStyle: 'italic' }}>I</Btn>
-                <Btn variant="ghost" size="sm">Code</Btn>
-                <Btn variant="ghost" size="sm" icon={<IcoLink size={12} />} />
-                <div style={{ flex: 1 }} />
-                <span style={{ fontSize: 10, color: 'var(--fg-dim)', marginRight: 4 }}>
-                  <Kbd keys={['⌘', '↵']} /> to submit
-                </span>
-                <Btn
-                  variant={commentBody.trim() ? 'accent' : 'subtle'}
-                  size="sm"
-                  onClick={() => {
-                    if (!commentBody.trim() || !issueSnapshot) return;
-                    void persistCommentCreate(issueSnapshot, commentBody.trim()).then(() => setCommentBody(''));
-                  }}
-                >
-                  Comment
-                </Btn>
-              </div>
-            </form>
+            <RichTextEditor
+              value={commentBody}
+              onChange={setCommentBody}
+              placeholder="Leave a comment…"
+              submitLabel="Comment"
+              disabled={isSavingState}
+              onSubmit={() => {
+                if (!commentBody.trim() || !issueSnapshot) return;
+                void persistCommentCreate(issueSnapshot, commentBody.trim()).then(() => setCommentBody(''));
+              }}
+            />
           </div>
         </div>
 
@@ -807,7 +818,49 @@ export function IssuePage() {
           <div className="issue-panel__prop-row">
             <div className="issue-panel__prop-label">Project</div>
             <div className="issue-panel__prop-value">
-              <span style={{ color: 'var(--fg-dim)' }}>No project</span>
+              <select
+                aria-label="Issue project"
+                className="issue-panel__prop-select"
+                value={activeIssue.projectId ?? ''}
+                disabled={isSavingState}
+                onChange={(e) => {
+                  const val = e.target.value || null;
+                  void persistIssueUpdate(activeIssue, { projectId: val }, (current) => ({
+                    ...current,
+                    projectId: val,
+                  })).catch(() => undefined);
+                }}
+              >
+                <option value="">No project</option>
+                {(projectsData?.projects?.nodes ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Cycle */}
+          <div className="issue-panel__prop-row">
+            <div className="issue-panel__prop-label">Cycle</div>
+            <div className="issue-panel__prop-value">
+              <select
+                aria-label="Issue cycle"
+                className="issue-panel__prop-select"
+                value={activeIssue.cycleId ?? ''}
+                disabled={isSavingState}
+                onChange={(e) => {
+                  const val = e.target.value || null;
+                  void persistIssueUpdate(activeIssue, { cycleId: val }, (current) => ({
+                    ...current,
+                    cycleId: val,
+                  })).catch(() => undefined);
+                }}
+              >
+                <option value="">No cycle</option>
+                {(cyclesData?.cycles?.nodes ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
             </div>
           </div>
 

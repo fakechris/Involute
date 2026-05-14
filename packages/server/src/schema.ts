@@ -1,9 +1,12 @@
 import type {
+  Attachment,
   Comment,
+  Cycle,
   Issue,
   IssueLabel,
   Prisma,
   PrismaClient,
+  Project,
   Team,
   TeamMembership,
   TeamMembershipRole,
@@ -50,13 +53,22 @@ import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
 
 import { requireAuthentication, type GraphQLContext } from './auth.js';
 import { createComment, createIssue, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
+import { createProject, updateProject, deleteProject, type CreateProjectInput, type UpdateProjectInput } from './project-service.js';
+import { createCycle, updateCycle, deleteCycle, type CreateCycleInput, type UpdateCycleInput } from './cycle-service.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
+
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 
 type TeamParent = Team & { memberships?: TeamMembershipParent[] | null; states?: WorkflowState[] | null };
 type TeamMembershipParent = TeamMembership & { user?: User | null };
 type UserParent = User;
 type CommentParent = Comment & { user?: User | null };
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
+type ProjectParent = Project & { lead?: User | null; team?: Team | null; issues?: Issue[] | null };
+type CycleParent = Cycle & { team?: Team | null; issues?: Issue[] | null };
 type IssueParent = Issue & {
   assignee?: User | null;
   comments?: CommentParent[] | null;
@@ -65,6 +77,8 @@ type IssueParent = Issue & {
   parent?: Issue | null;
   state?: WorkflowState | null;
   team?: TeamParent | null;
+  project?: Project | null;
+  cycle?: Cycle | null;
 };
 
 interface StringComparatorInput {
@@ -169,6 +183,10 @@ const typeDefs = /* GraphQL */ `
     teams(filter: TeamFilter): TeamConnection!
     issueLabels(filter: IssueLabelFilter): IssueLabelConnection!
     users: UserConnection!
+    projects(teamId: String!): ProjectConnection!
+    project(id: String!): Project
+    cycles(teamId: String!): CycleConnection!
+    cycle(id: String!): Cycle
   }
 
   type Mutation {
@@ -180,6 +198,14 @@ const typeDefs = /* GraphQL */ `
     teamUpdateAccess(input: TeamUpdateAccessInput!): TeamUpdateAccessPayload!
     teamMembershipUpsert(input: TeamMembershipUpsertInput!): TeamMembershipUpsertPayload!
     teamMembershipRemove(input: TeamMembershipRemoveInput!): TeamMembershipRemovePayload!
+    projectCreate(input: ProjectCreateInput!): ProjectCreatePayload!
+    projectUpdate(id: String!, input: ProjectUpdateInput!): ProjectUpdatePayload!
+    projectDelete(id: String!): ProjectDeletePayload!
+    cycleCreate(input: CycleCreateInput!): CycleCreatePayload!
+    cycleUpdate(id: String!, input: CycleUpdateInput!): CycleUpdatePayload!
+    cycleDelete(id: String!): CycleDeletePayload!
+    userUpdate(input: UserUpdateInput!): UserUpdatePayload!
+    fileUpload(input: FileUploadInput!): FileUploadPayload!
   }
 
   type Team {
@@ -266,7 +292,46 @@ const typeDefs = /* GraphQL */ `
     parent: Issue
     children: IssueConnection!
     team: Team!
+    project: Project
+    cycle: Cycle
+    projectId: String
+    cycleId: String
     comments(first: Int, after: String, orderBy: CommentOrderBy): CommentConnection!
+  }
+
+  type Project {
+    id: ID!
+    name: String!
+    description: String
+    color: String!
+    status: String!
+    targetDate: DateTime
+    team: Team!
+    lead: User
+    issues: IssueConnection!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  type Cycle {
+    id: ID!
+    name: String!
+    number: Int!
+    startsAt: DateTime!
+    endsAt: DateTime!
+    team: Team!
+    issues: IssueConnection!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  type Attachment {
+    id: ID!
+    filename: String!
+    mimeType: String!
+    size: Int!
+    url: String!
+    createdAt: DateTime!
   }
 
   type TeamConnection {
@@ -292,6 +357,14 @@ const typeDefs = /* GraphQL */ `
 
   type TeamMembershipConnection {
     nodes: [TeamMembership!]!
+  }
+
+  type ProjectConnection {
+    nodes: [Project!]!
+  }
+
+  type CycleConnection {
+    nodes: [Cycle!]!
   }
 
   type CommentConnection {
@@ -353,6 +426,8 @@ const typeDefs = /* GraphQL */ `
     description: String
     stateId: String
     priority: Int
+    projectId: String
+    cycleId: String
   }
 
   input IssueUpdateInput {
@@ -363,6 +438,51 @@ const typeDefs = /* GraphQL */ `
     description: String
     assigneeId: String
     priority: Int
+    projectId: String
+    cycleId: String
+  }
+
+  input ProjectCreateInput {
+    teamId: String!
+    name: String!
+    description: String
+    color: String
+    status: String
+    targetDate: String
+    leadId: String
+  }
+
+  input ProjectUpdateInput {
+    name: String
+    description: String
+    color: String
+    status: String
+    targetDate: String
+    leadId: String
+  }
+
+  input CycleCreateInput {
+    teamId: String!
+    name: String!
+    startsAt: String!
+    endsAt: String!
+  }
+
+  input CycleUpdateInput {
+    name: String
+    startsAt: String
+    endsAt: String
+  }
+
+  input UserUpdateInput {
+    name: String
+    email: String
+  }
+
+  input FileUploadInput {
+    filename: String!
+    mimeType: String!
+    content: String!
   }
 
   input CommentCreateInput {
@@ -425,6 +545,46 @@ const typeDefs = /* GraphQL */ `
   type TeamMembershipRemovePayload {
     success: Boolean!
     membershipId: ID
+  }
+
+  type ProjectCreatePayload {
+    success: Boolean!
+    project: Project
+  }
+
+  type ProjectUpdatePayload {
+    success: Boolean!
+    project: Project
+  }
+
+  type ProjectDeletePayload {
+    success: Boolean!
+    projectId: ID
+  }
+
+  type CycleCreatePayload {
+    success: Boolean!
+    cycle: Cycle
+  }
+
+  type CycleUpdatePayload {
+    success: Boolean!
+    cycle: Cycle
+  }
+
+  type CycleDeletePayload {
+    success: Boolean!
+    cycleId: ID
+  }
+
+  type UserUpdatePayload {
+    success: Boolean!
+    user: User
+  }
+
+  type FileUploadPayload {
+    success: Boolean!
+    attachment: Attachment
   }
 `;
 
@@ -545,6 +705,62 @@ const resolvers = {
           orderBy: [{ email: 'asc' }, { id: 'asc' }],
         }),
       };
+    },
+    projects: async (
+      _parent: unknown,
+      args: { teamId: string },
+      context: GraphQLContext,
+    ): Promise<{ nodes: ProjectParent[] }> => {
+      await assertCanReadTeam(context.prisma, context, args.teamId);
+      return {
+        nodes: await context.prisma.project.findMany({
+          where: { teamId: args.teamId },
+          include: { lead: true, issues: true },
+          orderBy: { createdAt: 'desc' },
+        }),
+      };
+    },
+    project: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<ProjectParent | null> => {
+      const project = await context.prisma.project.findUnique({
+        where: { id: args.id },
+        include: { lead: true, issues: true, team: true },
+      });
+      if (project) {
+        await assertCanReadTeam(context.prisma, context, project.teamId);
+      }
+      return project;
+    },
+    cycles: async (
+      _parent: unknown,
+      args: { teamId: string },
+      context: GraphQLContext,
+    ): Promise<{ nodes: CycleParent[] }> => {
+      await assertCanReadTeam(context.prisma, context, args.teamId);
+      return {
+        nodes: await context.prisma.cycle.findMany({
+          where: { teamId: args.teamId },
+          include: { issues: true },
+          orderBy: { number: 'desc' },
+        }),
+      };
+    },
+    cycle: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<CycleParent | null> => {
+      const cycle = await context.prisma.cycle.findUnique({
+        where: { id: args.id },
+        include: { issues: true, team: true },
+      });
+      if (cycle) {
+        await assertCanReadTeam(context.prisma, context, cycle.teamId);
+      }
+      return cycle;
     },
   },
   Mutation: {
@@ -774,6 +990,132 @@ const resolvers = {
         membershipId: null,
         success: false as const,
       }),
+    projectCreate: async (
+      _parent: unknown,
+      args: { input: CreateProjectInput },
+      context: GraphQLContext,
+    ): Promise<{ project: ProjectParent | null; success: boolean }> =>
+      runMutation(async () => {
+        await assertCanWriteTeam(context.prisma, context, args.input.teamId);
+        const project = await createProject(context.prisma, args.input);
+        const full = await context.prisma.project.findUniqueOrThrow({
+          where: { id: project.id },
+          include: { lead: true, issues: true },
+        });
+        return { project: full, success: true as const };
+      }, { project: null, success: false as const }),
+    projectUpdate: async (
+      _parent: unknown,
+      args: { id: string; input: UpdateProjectInput },
+      context: GraphQLContext,
+    ): Promise<{ project: ProjectParent | null; success: boolean }> =>
+      runMutation(async () => {
+        const existing = await context.prisma.project.findUnique({ where: { id: args.id }, select: { teamId: true } });
+        if (!existing) throw createNotFoundError('Project not found.');
+        await assertCanWriteTeam(context.prisma, context, existing.teamId);
+        await updateProject(context.prisma, args.id, args.input);
+        const full = await context.prisma.project.findUniqueOrThrow({
+          where: { id: args.id },
+          include: { lead: true, issues: true },
+        });
+        return { project: full, success: true as const };
+      }, { project: null, success: false as const }),
+    projectDelete: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<{ projectId: string | null; success: boolean }> =>
+      runMutation(async () => {
+        const existing = await context.prisma.project.findUnique({ where: { id: args.id }, select: { teamId: true } });
+        if (!existing) throw createNotFoundError('Project not found.');
+        await assertCanWriteTeam(context.prisma, context, existing.teamId);
+        const result = await deleteProject(context.prisma, args.id);
+        return { projectId: result.id, success: true as const };
+      }, { projectId: null, success: false as const }),
+    cycleCreate: async (
+      _parent: unknown,
+      args: { input: CreateCycleInput },
+      context: GraphQLContext,
+    ): Promise<{ cycle: CycleParent | null; success: boolean }> =>
+      runMutation(async () => {
+        await assertCanWriteTeam(context.prisma, context, args.input.teamId);
+        const cycle = await createCycle(context.prisma, args.input);
+        const full = await context.prisma.cycle.findUniqueOrThrow({
+          where: { id: cycle.id },
+          include: { issues: true },
+        });
+        return { cycle: full, success: true as const };
+      }, { cycle: null, success: false as const }),
+    cycleUpdate: async (
+      _parent: unknown,
+      args: { id: string; input: UpdateCycleInput },
+      context: GraphQLContext,
+    ): Promise<{ cycle: CycleParent | null; success: boolean }> =>
+      runMutation(async () => {
+        const existing = await context.prisma.cycle.findUnique({ where: { id: args.id }, select: { teamId: true } });
+        if (!existing) throw createNotFoundError('Cycle not found.');
+        await assertCanWriteTeam(context.prisma, context, existing.teamId);
+        await updateCycle(context.prisma, args.id, args.input);
+        const full = await context.prisma.cycle.findUniqueOrThrow({
+          where: { id: args.id },
+          include: { issues: true },
+        });
+        return { cycle: full, success: true as const };
+      }, { cycle: null, success: false as const }),
+    cycleDelete: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<{ cycleId: string | null; success: boolean }> =>
+      runMutation(async () => {
+        const existing = await context.prisma.cycle.findUnique({ where: { id: args.id }, select: { teamId: true } });
+        if (!existing) throw createNotFoundError('Cycle not found.');
+        await assertCanWriteTeam(context.prisma, context, existing.teamId);
+        const result = await deleteCycle(context.prisma, args.id);
+        return { cycleId: result.id, success: true as const };
+      }, { cycleId: null, success: false as const }),
+    userUpdate: async (
+      _parent: unknown,
+      args: { input: { name?: string | null; email?: string | null } },
+      context: GraphQLContext,
+    ): Promise<{ user: User | null; success: boolean }> => {
+      const viewer = requireAuthentication(context);
+      return runMutation(async () => {
+        const data: Prisma.UserUpdateInput = {};
+        if (args.input.name !== undefined && args.input.name !== null) data.name = args.input.name;
+        if (args.input.email !== undefined && args.input.email !== null) data.email = args.input.email.trim().toLowerCase();
+        const user = await context.prisma.user.update({ where: { id: viewer.id }, data });
+        return { user, success: true as const };
+      }, { user: null, success: false as const });
+    },
+    fileUpload: async (
+      _parent: unknown,
+      args: { input: { filename: string; mimeType: string; content: string } },
+      context: GraphQLContext,
+    ): Promise<{ attachment: Attachment | null; success: boolean }> => {
+      const viewer = requireAuthentication(context);
+      return runMutation(async () => {
+        const uploadsDir = resolve(fileURLToPath(import.meta.url), '../../uploads');
+        if (!existsSync(uploadsDir)) {
+          mkdirSync(uploadsDir, { recursive: true });
+        }
+        const ext = args.input.filename.includes('.') ? args.input.filename.slice(args.input.filename.lastIndexOf('.')) : '';
+        const storedName = `${randomUUID()}${ext}`;
+        const buffer = Buffer.from(args.input.content, 'base64');
+        writeFileSync(join(uploadsDir, storedName), buffer);
+        const url = `/uploads/${storedName}`;
+        const attachment = await context.prisma.attachment.create({
+          data: {
+            filename: args.input.filename,
+            mimeType: args.input.mimeType,
+            size: buffer.length,
+            url,
+            uploaderId: viewer.id,
+          },
+        });
+        return { attachment, success: true as const };
+      }, { attachment: null, success: false as const });
+    },
   },
   Team: {
     states: async (
@@ -951,6 +1293,24 @@ const resolvers = {
           id: parent.teamId,
         },
       }),
+    project: async (
+      parent: IssueParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<Project | null> => {
+      if (!parent.projectId) return null;
+      return parent.project ?? context.prisma.project.findUnique({ where: { id: parent.projectId } });
+    },
+    cycle: async (
+      parent: IssueParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<Cycle | null> => {
+      if (!parent.cycleId) return null;
+      return parent.cycle ?? context.prisma.cycle.findUnique({ where: { id: parent.cycleId } });
+    },
+    projectId: (parent: IssueParent): string | null => parent.projectId,
+    cycleId: (parent: IssueParent): string | null => parent.cycleId,
     comments: async (
       parent: IssueParent,
       args: { after?: string | null; first?: number; orderBy?: CommentOrderByInput },
@@ -984,6 +1344,52 @@ const resolvers = {
         nodes,
         pageInfo: buildPageInfo(nodes, first !== undefined && comments.length > first),
       };
+    },
+  },
+  Project: {
+    lead: async (
+      parent: ProjectParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<User | null> => {
+      if (!parent.leadId) return null;
+      return parent.lead ?? context.prisma.user.findUnique({ where: { id: parent.leadId } });
+    },
+    team: async (
+      parent: ProjectParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<Team> =>
+      parent.team ?? context.prisma.team.findUniqueOrThrow({ where: { id: parent.teamId } }),
+    issues: async (
+      parent: ProjectParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<{ nodes: Issue[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
+      const nodes = parent.issues ?? await context.prisma.issue.findMany({
+        where: { projectId: parent.id },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+      return { nodes, pageInfo: buildPageInfo(nodes, false) };
+    },
+  },
+  Cycle: {
+    team: async (
+      parent: CycleParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<Team> =>
+      parent.team ?? context.prisma.team.findUniqueOrThrow({ where: { id: parent.teamId } }),
+    issues: async (
+      parent: CycleParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<{ nodes: Issue[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
+      const nodes = parent.issues ?? await context.prisma.issue.findMany({
+        where: { cycleId: parent.id },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+      return { nodes, pageInfo: buildPageInfo(nodes, false) };
     },
   },
 };
