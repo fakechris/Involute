@@ -1,6 +1,21 @@
 #!/bin/sh
 set -eu
 
+# ---------- Build-artifact safety check ----------
+# Scan built JS bundles to ensure no localhost:4200 leaked into production.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+WEB_DIST="${SCRIPT_DIR}/../packages/web/dist"
+
+if [ -d "$WEB_DIST" ]; then
+  if grep -r 'localhost:4200' "$WEB_DIST" --include='*.js' -l 2>/dev/null; then
+    echo "ERROR: Production JS bundles contain 'localhost:4200'." >&2
+    echo "This means VITE_INVOLUTE_GRAPHQL_URL was not set or the build picked up a dev default." >&2
+    exit 1
+  fi
+  echo "Build-artifact check passed: no localhost:4200 found in JS bundles."
+fi
+
+# ---------- Live endpoint smoke tests ----------
 BASE_URL="${1:-${INVOLUTE_SMOKE_BASE_URL:-}}"
 
 if [ -z "$BASE_URL" ]; then
