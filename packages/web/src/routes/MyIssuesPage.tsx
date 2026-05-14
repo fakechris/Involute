@@ -3,12 +3,10 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { BOARD_PAGE_QUERY } from '../board/queries';
-import type { BoardPageQueryData, BoardPageQueryVariables, IssueSummary } from '../board/types';
+import type { BoardPageQueryData, BoardPageQueryVariables, IssueSummary, WorkflowStateType } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 import { IcoFilter } from '../components/Icons';
 import { Avatar, Btn, PriorityIcon, StatusIconPrimitive } from '../components/Primitives';
-import { fetchSessionState, type SessionViewer } from '../lib/session';
-import { useEffect, useState } from 'react';
 
 function formatTimeAgo(date: string): string {
   const parsed = new Date(date).getTime();
@@ -24,25 +22,30 @@ function formatTimeAgo(date: string): string {
   return `${Math.floor(days / 30)}mo`;
 }
 
-function classifyState(stateName: string): 'progress' | 'todo' | 'backlog' | 'completed' {
-  const lower = stateName.toLowerCase();
-  if (lower.includes('progress') || lower.includes('review') || lower.includes('started')) return 'progress';
-  if (lower.includes('done') || lower.includes('complete') || lower.includes('cancel')) return 'completed';
-  if (lower.includes('backlog') || lower.includes('triage')) return 'backlog';
-  return 'todo';
+function classifyState(stateType: WorkflowStateType): 'progress' | 'todo' | 'backlog' | 'completed' {
+  switch (stateType) {
+    case 'STARTED': return 'progress';
+    case 'COMPLETED':
+    case 'CANCELED': return 'completed';
+    case 'BACKLOG': return 'backlog';
+    case 'UNSTARTED':
+    default: return 'todo';
+  }
 }
 
-function getStateType(stateName: string): string {
-  const lower = stateName.toLowerCase();
-  if (lower.includes('done') || lower.includes('complete')) return 'completed';
-  if (lower.includes('cancel')) return 'canceled';
-  if (lower.includes('progress') || lower.includes('review') || lower.includes('started')) return 'started';
-  if (lower.includes('backlog') || lower.includes('triage')) return 'backlog';
-  return 'unstarted';
+function getStateType(stateType: WorkflowStateType): string {
+  switch (stateType) {
+    case 'COMPLETED': return 'completed';
+    case 'CANCELED': return 'canceled';
+    case 'STARTED': return 'started';
+    case 'BACKLOG': return 'backlog';
+    case 'UNSTARTED':
+    default: return 'unstarted';
+  }
 }
 
-function getStateColor(stateName: string): string {
-  const type = getStateType(stateName);
+function getStateColor(stateType: WorkflowStateType): string {
+  const type = getStateType(stateType);
   switch (type) {
     case 'completed': return 'var(--success)';
     case 'canceled': return 'var(--fg-dim)';
@@ -60,25 +63,18 @@ interface IssueGroup {
 export function MyIssuesPage() {
   const navigate = useNavigate();
   const teamKey = readStoredTeamKey();
-  const [viewer, setViewer] = useState<SessionViewer | null>(null);
-
-  useEffect(() => {
-    fetchSessionState().then((session) => {
-      if (session.viewer) setViewer(session.viewer);
-    });
-  }, []);
 
   const { data, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
     variables: {
       first: 500,
-      ...(teamKey ? { filter: { team: { key: { eq: teamKey } } } } : {}),
+      filter: {
+        ...(teamKey ? { team: { key: { eq: teamKey } } } : {}),
+        assignee: { isMe: { eq: true } },
+      },
     },
   });
 
-  const myIssues = useMemo(() => {
-    if (!data?.issues.nodes || !viewer) return [];
-    return data.issues.nodes.filter((issue) => issue.assignee?.id === viewer.id);
-  }, [data, viewer]);
+  const myIssues = data?.issues.nodes ?? [];
 
   const groups = useMemo<IssueGroup[]>(() => {
     const progress: IssueSummary[] = [];
@@ -87,7 +83,7 @@ export function MyIssuesPage() {
     const completed: IssueSummary[] = [];
 
     for (const issue of myIssues) {
-      const group = classifyState(issue.state.name);
+      const group = classifyState(issue.state.type);
       if (group === 'progress') progress.push(issue);
       else if (group === 'completed') completed.push(issue);
       else if (group === 'backlog') backlog.push(issue);
@@ -102,7 +98,8 @@ export function MyIssuesPage() {
     ];
   }, [myIssues]);
 
-  const viewerUser = viewer ? { name: viewer.name, email: viewer.email } : null;
+  const firstAssignee = myIssues[0]?.assignee ?? null;
+  const viewerUser = firstAssignee ? { name: firstAssignee.name ?? undefined, email: firstAssignee.email ?? undefined } : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
@@ -163,10 +160,10 @@ export function MyIssuesPage() {
                     <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
                       {issue.identifier}
                     </span>
-                    <PriorityIcon level={(issue as unknown as { priority?: number }).priority ?? 0} size={14} />
+                    <PriorityIcon level={issue.priority} size={14} />
                     <StatusIconPrimitive
-                      stateType={getStateType(issue.state.name)}
-                      stateColor={getStateColor(issue.state.name)}
+                      stateType={getStateType(issue.state.type)}
+                      stateColor={getStateColor(issue.state.type)}
                       size={14}
                     />
                     <span

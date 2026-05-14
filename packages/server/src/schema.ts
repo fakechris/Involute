@@ -208,9 +208,19 @@ const typeDefs = /* GraphQL */ `
     user: User!
   }
 
+  enum WorkflowStateType {
+    BACKLOG
+    UNSTARTED
+    STARTED
+    COMPLETED
+    CANCELED
+  }
+
   type WorkflowState {
     id: ID!
     name: String!
+    type: WorkflowStateType!
+    position: Int!
   }
 
   type IssueLabel {
@@ -247,6 +257,7 @@ const typeDefs = /* GraphQL */ `
     identifier: String!
     title: String!
     description: String
+    priority: Int!
     createdAt: DateTime!
     updatedAt: DateTime!
     state: WorkflowState!
@@ -341,6 +352,7 @@ const typeDefs = /* GraphQL */ `
     title: String!
     description: String
     stateId: String
+    priority: Int
   }
 
   input IssueUpdateInput {
@@ -350,6 +362,7 @@ const typeDefs = /* GraphQL */ `
     title: String
     description: String
     assigneeId: String
+    priority: Int
   }
 
   input CommentCreateInput {
@@ -840,6 +853,7 @@ const resolvers = {
       }),
   },
   Issue: {
+    priority: (parent: IssueParent): number => parent.priority,
     state: async (
       parent: IssueParent,
       _args: Record<string, never>,

@@ -7,6 +7,24 @@ import { readStoredTeamKey } from '../board/utils';
 import { IcoPlus, IcoTeam } from '../components/Icons';
 import { Avatar, Btn } from '../components/Primitives';
 
+function roleRank(role: string | undefined): number {
+  switch (role) {
+    case 'OWNER': return 3;
+    case 'EDITOR': return 2;
+    case 'VIEWER': return 1;
+    default: return 0;
+  }
+}
+
+function formatRole(role: string | undefined): string {
+  switch (role) {
+    case 'OWNER': return 'Owner';
+    case 'EDITOR': return 'Editor';
+    case 'VIEWER': return 'Viewer';
+    default: return 'Member';
+  }
+}
+
 export function MembersPage() {
   const teamKey = readStoredTeamKey();
   const { data, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
@@ -18,6 +36,7 @@ export function MembersPage() {
 
   const users = data?.users.nodes ?? [];
   const issues = data?.issues.nodes ?? [];
+  const teams = data?.teams.nodes ?? [];
 
   const issueCountByUser = useMemo(() => {
     const map = new Map<string, number>();
@@ -28,6 +47,20 @@ export function MembersPage() {
     }
     return map;
   }, [issues]);
+
+  const roleByUser = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const team of teams) {
+      if (!team.memberships) continue;
+      for (const m of team.memberships.nodes) {
+        const existing = map.get(m.user.id);
+        if (!existing || roleRank(m.role) > roleRank(existing)) {
+          map.set(m.user.id, m.role);
+        }
+      }
+    }
+    return map;
+  }, [teams]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
@@ -61,7 +94,7 @@ export function MembersPage() {
                   key={user.id}
                   user={user}
                   issueCount={issueCountByUser.get(user.id) ?? 0}
-                  role="Member"
+                  role={formatRole(roleByUser.get(user.id))}
                 />
               ))}
             </div>

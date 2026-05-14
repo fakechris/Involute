@@ -17,9 +17,13 @@ export interface TeamMembershipSummary {
   user: AccessUserSummary;
 }
 
+export type WorkflowStateType = 'BACKLOG' | 'UNSTARTED' | 'STARTED' | 'COMPLETED' | 'CANCELED';
+
 export interface WorkflowStateSummary {
   id: string;
   name: string;
+  type: WorkflowStateType;
+  position: number;
 }
 
 export interface BoardColumn {
@@ -54,6 +58,7 @@ export interface IssueSummary {
   identifier: string;
   title: string;
   description?: string | null;
+  priority: number;
   createdAt: string;
   updatedAt: string;
   state: WorkflowStateSummary;
@@ -165,6 +170,11 @@ export interface BoardPageQueryVariables {
         eq: string;
       };
     };
+    assignee?: {
+      isMe?: {
+        eq: boolean;
+      };
+    };
   };
 }
 
@@ -194,6 +204,7 @@ export interface IssueCreateMutationVariables {
     teamId: string;
     title: string;
     description?: string | null;
+    priority?: number;
   };
 }
 
@@ -210,6 +221,7 @@ export interface IssueUpdateMutationVariables {
     assigneeId?: string | null;
     description?: string | null;
     labelIds?: string[];
+    priority?: number;
     stateId?: string;
     title?: string;
   };

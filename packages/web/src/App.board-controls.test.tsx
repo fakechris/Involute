@@ -105,7 +105,7 @@ describe('App board controls', () => {
           success: true,
           issue: {
             ...(boardQueryResult.issues.nodes[0] as IssueSummary),
-            state: { id: 'state-ready', name: 'Ready' },
+            state: { id: 'state-ready', name: 'Ready', type: 'UNSTARTED', position: 1 },
           },
         },
       } satisfies IssueUpdateMutationData,
