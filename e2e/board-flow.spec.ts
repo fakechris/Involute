@@ -11,7 +11,7 @@ test.describe('board flow', () => {
     page.on('dialog', (dialog) => dialog.accept());
 
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Board', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'All issues', exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Create issue' }).click();
 
@@ -66,7 +66,7 @@ test.describe('board flow', () => {
       runBoardFixtureCommand('seed');
 
       await page.goto('/');
-      await expect(page.getByRole('heading', { name: 'Board', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'All issues', exact: true })).toBeVisible();
 
       await page.getByLabel('Select team').selectOption({ label: 'Imported Acceptance Team' });
 

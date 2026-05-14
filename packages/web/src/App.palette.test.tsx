@@ -8,9 +8,9 @@ describe('App command palette', () => {
   it('opens the create issue dialog from the command palette action', async () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Search issues and commands/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Search.*⌘K/i }));
 
     const palette = await screen.findByRole('dialog', { name: 'Command palette' });
     fireEvent.click(within(palette).getByRole('button', { name: /Create issue/i }));
@@ -23,12 +23,12 @@ describe('App command palette', () => {
 
     expect(await screen.findByRole('heading', { name: 'Issue detail' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Search issues and commands/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Search.*⌘K/i }));
 
     const palette = await screen.findByRole('dialog', { name: 'Command palette' });
     fireEvent.click(within(palette).getByRole('button', { name: /Create issue/i }));
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
     expect(await screen.findByRole('dialog', { name: 'Create issue drawer' })).toBeInTheDocument();
   });
 
@@ -49,9 +49,9 @@ describe('App command palette', () => {
 
     renderApp({ data: expandedData, loading: false }, ['/']);
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Search issues and commands/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Search.*⌘K/i }));
 
     const palette = await screen.findByRole('dialog', { name: 'Command palette' });
     fireEvent.change(within(palette).getByLabelText('Search commands'), {
@@ -66,7 +66,7 @@ describe('App command palette', () => {
 
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
     const filters = screen.getByLabelText('Board filters');
     fireEvent.click(within(filters).getByText('Labels'));
@@ -78,7 +78,7 @@ describe('App command palette', () => {
       expect(within(screen.getByTestId('column-Backlog')).getByText('Backlog item')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Search issues and commands/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Search.*⌘K/i }));
     const palette = await screen.findByRole('dialog', { name: 'Command palette' });
     fireEvent.click(within(palette).getByRole('button', { name: /Load board view · Bug queue/i }));
 
@@ -103,7 +103,7 @@ describe('App command palette', () => {
 
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: 'g' });
     fireEvent.keyDown(window, { key: 'l' });
@@ -115,6 +115,6 @@ describe('App command palette', () => {
 
     fireEvent.keyDown(window, { key: 'g' });
     fireEvent.keyDown(window, { key: 'b' });
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
   });
 });

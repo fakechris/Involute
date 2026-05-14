@@ -65,6 +65,7 @@ import {
   createSavedBoardViewId,
   getDefaultBoardViewState,
   readSavedBoardViews,
+  dispatchApplyBoardView,
   readStoredBoardViewState,
   type ApplyBoardViewDetail,
   type BoardViewState,
@@ -80,6 +81,8 @@ import { Column } from '../components/Column';
 import { IssueCard } from '../components/IssueCard';
 import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
 import { BacklogPage } from './BacklogPage';
+import { IcoFilter, IcoSort, IcoPlus, IcoList, IcoBoard, IcoClose, IcoChevR } from '../components/Icons';
+import { Btn, PriorityIcon } from '../components/Primitives';
 
 const ISSUE_PAGE_SIZE = 200;
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
@@ -1554,98 +1557,76 @@ export function BoardPage() {
 
   return (
     <main className="board-page">
-      <header className="app-shell__header">
-        <div className="app-shell__header-copy">
-          <p className="app-shell__eyebrow">Involute</p>
-          <div className="app-shell__header-inline-meta">
-            {selectedTeam ? (
-              <span className="context-chip context-chip--team">
-                {selectedTeam.key}
-              </span>
-            ) : null}
-            <span className="context-chip">{isBacklogView ? 'Backlog' : 'Board'}</span>
-          </div>
-          <h1>{isBacklogView ? 'Backlog' : 'Board'}</h1>
-          <p className="app-shell__subtext">
-            {isBacklogView
-              ? `List view for ${selectedTeam?.name ?? 'your workspace'} issues.`
-              : `Workflow overview for ${selectedTeam?.name ?? 'your workspace'}.`}
-          </p>
-          {isTeamSwitching ? (
-            <p className="app-shell__subtext" aria-live="polite">
-              Switching to {teams.find((team) => team.key === pendingTeamKey)?.name ?? pendingTeamKey}…
-            </p>
+      <header className="board-page__header" style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        height: 44, padding: '0 var(--pad-x, var(--content-gutter))',
+        borderBottom: '1px solid var(--border-subtle)', flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, whiteSpace: 'nowrap' }}>
+          {selectedTeam ? (
+            <span className="mono" style={{
+              fontSize: 10, fontWeight: 500, padding: '1px 5px', borderRadius: 3,
+              background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-muted)',
+            }}>{selectedTeam.key}</span>
           ) : null}
+          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg)' }}>
+            {selectedTeam?.name ?? 'Involute'}
+          </span>
+          <span style={{ color: 'var(--fg-faint)', display: 'inline-flex' }}>
+            <IcoChevR size={12} />
+          </span>
+          <h1 style={{ fontSize: 13, fontWeight: 400, color: 'var(--fg-muted)', margin: 0 }}>{isBacklogView ? 'Backlog' : 'All issues'}</h1>
+          <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)', marginLeft: 4 }}>{visibleIssues.length}</span>
         </div>
-
-        <div className="board-page__controls">
-          <div className="board-page__mode-toggle" aria-label="View mode">
-            <button
-              type="button"
-              className={`board-page__mode-button${!isBacklogView ? ' board-page__mode-button--active' : ''}`}
-              onClick={() => navigate('/')}
-            >
-              Board
-            </button>
-            <button
-              type="button"
-              className={`board-page__mode-button${isBacklogView ? ' board-page__mode-button--active' : ''}`}
-              onClick={() => navigate('/backlog')}
-            >
-              Backlog
-            </button>
-          </div>
-          <button
-            type="button"
-            className="board-page__ghost-action"
-            onClick={() => navigate('/backlog')}
-          >
-            Views
-          </button>
-          <button
-            type="button"
-            className="ui-action ui-action--accent"
-            disabled={isTeamSwitching}
-            onClick={() => {
-              setCreateTitle('');
-              setCreateDescription('');
-              setMutationError(null);
-              setIsCreateOpen(true);
+        <p className="app-shell__subtext" style={{ fontSize: 11, color: 'var(--fg-dim)', margin: 0 }}>
+          {isBacklogView
+            ? `List view for ${selectedTeam?.name ?? 'your workspace'} issues.`
+            : `Workflow overview for ${selectedTeam?.name ?? 'your workspace'}.`}
+        </p>
+        {isTeamSwitching ? (
+          <span style={{ fontSize: 11, color: 'var(--fg-dim)' }} aria-live="polite">
+            Switching to {teams.find((team) => team.key === pendingTeamKey)?.name ?? pendingTeamKey}…
+          </span>
+        ) : null}
+        <div style={{ flex: 1 }} />
+        {teams.length > 1 ? (
+          <select
+            aria-label="Select team"
+            value={pendingTeamKey ?? activeTeamKey ?? selectedTeam?.key ?? ''}
+            onChange={(event) => {
+              const nextTeamKey = event.target.value;
+              if (nextTeamKey === activeTeamKey) {
+                setPendingTeamKey(null);
+                return;
+              }
+              setPendingTeamKey(nextTeamKey);
+            }}
+            style={{
+              height: 24, padding: '0 8px', fontSize: 11.5,
+              background: 'transparent', border: '1px solid var(--border)',
+              borderRadius: 'var(--r-2)', color: 'var(--fg)',
             }}
           >
-            Create issue
-          </button>
-          {teams.length > 1 ? (
-            <label className="field-stack">
-              <span>Team</span>
-              <select
-                aria-label="Select team"
-                value={pendingTeamKey ?? activeTeamKey ?? selectedTeam?.key ?? ''}
-                onChange={(event) => {
-                  const nextTeamKey = event.target.value;
-
-                  if (nextTeamKey === activeTeamKey) {
-                    setPendingTeamKey(null);
-                    return;
-                  }
-
-                  setPendingTeamKey(nextTeamKey);
-                }}
-              >
-                {teams.map((team) => (
-                  <option key={team.id} value={team.key}>
-                    {team.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : selectedTeam ? (
-            <div className="field-stack field-stack--readonly">
-              <span>Team</span>
-              <strong>{selectedTeam.name}</strong>
-            </div>
-          ) : null}
-        </div>
+            {teams.map((team) => (
+              <option key={team.id} value={team.key}>{team.name}</option>
+            ))}
+          </select>
+        ) : null}
+        <Btn variant="ghost" icon={<IcoFilter size={14} />} size="sm">Filter</Btn>
+        <Btn variant="ghost" icon={<IcoSort size={14} />} size="sm">Sort</Btn>
+        <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
+        <Btn
+          variant="subtle"
+          icon={<IcoPlus size={12} />}
+          kbd="C"
+          size="sm"
+          onClick={() => {
+            setCreateTitle('');
+            setCreateDescription('');
+            setMutationError(null);
+            setIsCreateOpen(true);
+          }}
+        >Create issue</Btn>
       </header>
 
       {mutationError ? (
@@ -1656,320 +1637,267 @@ export function BoardPage() {
 
       {!isBacklogView ? (
         <>
-          <section className="board-viewbar">
-            <div className="board-viewbar__primary">
-              <label className="field-stack board-viewbar__search">
-                <span>Search</span>
-                <input
-                  ref={boardSearchInputRef}
-                  aria-label="Search board issues"
-                  placeholder="Filter by identifier, title, or description"
-                  value={boardViewState.query}
-                  onChange={(event) => {
-                    setBoardViewState((currentState) => ({
-                      ...currentState,
-                      query: event.target.value,
-                    }));
+          <section style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '8px var(--pad-x, var(--content-gutter))',
+            borderBottom: '1px solid var(--border-subtle)',
+            flexWrap: 'wrap', background: 'var(--bg)',
+          }} aria-label="Board filters">
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '0 8px', height: 24, minWidth: 220,
+              border: '1px solid var(--border)', borderRadius: 'var(--r-2)',
+            }}>
+              <span style={{ color: 'var(--fg-dim)', display: 'inline-flex' }}>
+                <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.3"/><path d="m9 9 3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+              </span>
+              <input
+                ref={boardSearchInputRef}
+                aria-label="Search board issues"
+                placeholder="Filter by identifier, title…"
+                value={boardViewState.query}
+                onChange={(event) => {
+                  setBoardViewState((currentState) => ({
+                    ...currentState,
+                    query: event.target.value,
+                  }));
+                  setActiveSavedBoardViewId('');
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape' && boardViewState.query) {
+                    event.preventDefault();
+                    setBoardViewState((currentState) => ({ ...currentState, query: '' }));
                     setActiveSavedBoardViewId('');
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Escape' && boardViewState.query) {
-                      event.preventDefault();
-                      setBoardViewState((currentState) => ({
-                        ...currentState,
-                        query: '',
-                      }));
-                      setActiveSavedBoardViewId('');
-                    }
-                  }}
-                />
-              </label>
-              {boardViewState.query ? (
-                <button type="button" className="ui-action ui-action--subtle" onClick={clearBoardQuery}>
-                  Clear search
-                </button>
-              ) : null}
-
-              <label className="field-stack">
-                <span>Sort</span>
-                <select
-                  aria-label="Sort board by"
-                  value={boardViewState.sortField}
-                  onChange={(event) => {
-                    setBoardViewState((currentState) => ({
-                      ...currentState,
-                      sortField: event.target.value as BoardViewState['sortField'],
-                    }));
-                    setActiveSavedBoardViewId('');
-                  }}
-                >
-                  <option value="updatedAt">Updated</option>
-                  <option value="createdAt">Created</option>
-                  <option value="identifier">Identifier</option>
-                  <option value="title">Title</option>
-                </select>
-              </label>
-
-              <label className="field-stack">
-                <span>Direction</span>
-                <select
-                  aria-label="Sort board direction"
-                  value={boardViewState.sortDirection}
-                  onChange={(event) => {
-                    setBoardViewState((currentState) => ({
-                      ...currentState,
-                      sortDirection: event.target.value as BoardViewState['sortDirection'],
-                    }));
-                    setActiveSavedBoardViewId('');
-                  }}
-                >
-                  <option value="desc">Descending</option>
-                  <option value="asc">Ascending</option>
-                </select>
-              </label>
+                  }
+                }}
+                style={{ flex: 1, fontSize: 12, color: 'var(--fg)', background: 'transparent', height: 22, border: 'none', outline: 'none' }}
+              />
+              <kbd>/</kbd>
             </div>
 
-            <div className="board-viewbar__secondary">
-              <label className="field-stack">
-                <span>Saved view</span>
-                <select
-                  aria-label="Load saved board view"
-                  value={activeSavedBoardViewId}
-                  onChange={(event) => loadBoardView(event.target.value)}
-                >
-                  <option value="">Current board view</option>
-                  {savedBoardViews.map((view) => (
-                    <option key={view.id} value={view.id}>
-                      {view.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <button type="button" className="ui-action ui-action--subtle" onClick={saveBoardView}>
-                Save view
-              </button>
-              <button
-                type="button"
-                className="ui-action ui-action--subtle"
-                disabled={!activeSavedBoardViewId}
-                onClick={deleteBoardView}
-              >
-                Delete view
-              </button>
-              <button type="button" className="ui-action ui-action--subtle" onClick={resetBoardViewState}>
-                Clear
-              </button>
-            </div>
-          </section>
-
-          <section className="board-filter-row" aria-label="Board filters">
-            <details className="board-filter">
-              <summary>States {boardViewState.stateIds.length > 0 ? `(${boardViewState.stateIds.length})` : ''}</summary>
-              <div className="board-filter__menu">
-                {selectedTeam?.states.nodes.map((state) => (
-                  <label key={state.id} className="board-filter__option">
-                    <input
-                      type="checkbox"
-                      checked={boardViewState.stateIds.includes(state.id)}
-                      onChange={() => toggleBoardFilterValue('stateIds', state.id)}
-                    />
-                    <span>{state.name}</span>
+            <details style={{ position: 'relative', fontSize: 11 }}>
+              <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>States</summary>
+              <fieldset style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140 }}>
+                {(selectedTeam?.states.nodes ?? []).map((state) => (
+                  <label key={state.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={boardViewState.stateIds.includes(state.id)} onChange={() => toggleBoardFilterValue('stateIds', state.id)} aria-label={state.name} />
+                    {state.name}
                   </label>
                 ))}
-              </div>
+              </fieldset>
             </details>
 
-            <details className="board-filter">
-              <summary>Assignees {boardViewState.assigneeIds.length > 0 ? `(${boardViewState.assigneeIds.length})` : ''}</summary>
-              <div className="board-filter__menu">
-                <label className="board-filter__option">
-                  <input
-                    type="checkbox"
-                    checked={boardViewState.assigneeIds.includes('unassigned')}
-                    onChange={() => toggleBoardFilterValue('assigneeIds', 'unassigned')}
-                  />
-                  <span>Unassigned</span>
+            <details style={{ position: 'relative', fontSize: 11 }}>
+              <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>Labels</summary>
+              <fieldset style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140 }}>
+                {labels.map((label) => (
+                  <label key={label.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={boardViewState.labelIds.includes(label.id)} onChange={() => toggleBoardFilterValue('labelIds', label.id)} aria-label={label.name} />
+                    {label.name}
+                  </label>
+                ))}
+              </fieldset>
+            </details>
+
+            <details style={{ position: 'relative', fontSize: 11 }}>
+              <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>Assignees</summary>
+              <fieldset style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={boardViewState.assigneeIds.includes('unassigned')} onChange={() => toggleBoardFilterValue('assigneeIds', 'unassigned')} aria-label="Unassigned" />
+                  Unassigned
                 </label>
                 {users.map((user) => (
-                  <label key={user.id} className="board-filter__option">
-                    <input
-                      type="checkbox"
-                      checked={boardViewState.assigneeIds.includes(user.id)}
-                      onChange={() => toggleBoardFilterValue('assigneeIds', user.id)}
-                    />
-                    <span>{user.name ?? user.email ?? user.id}</span>
+                  <label key={user.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={boardViewState.assigneeIds.includes(user.id)} onChange={() => toggleBoardFilterValue('assigneeIds', user.id)} aria-label={user.name ?? user.email ?? user.id} />
+                    {user.name ?? user.email}
                   </label>
                 ))}
-              </div>
+              </fieldset>
             </details>
 
-            <details className="board-filter">
-              <summary>Labels {boardViewState.labelIds.length > 0 ? `(${boardViewState.labelIds.length})` : ''}</summary>
-              <div className="board-filter__menu">
-                {labels.map((label) => (
-                  <label key={label.id} className="board-filter__option">
-                    <input
-                      type="checkbox"
-                      checked={boardViewState.labelIds.includes(label.id)}
-                      onChange={() => toggleBoardFilterValue('labelIds', label.id)}
-                    />
-                    <span>{label.name}</span>
-                  </label>
+            {boardViewState.stateIds.map((stateId) => {
+              const state = selectedTeam?.states.nodes.find((s) => s.id === stateId);
+              return (
+                <button key={stateId} type="button" aria-label={`Remove State: ${state?.name ?? stateId}`} onClick={() => toggleBoardFilterValue('stateIds', stateId)} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
+                  fontSize: 11, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
+                  background: 'var(--bg-active)', color: 'var(--fg)', cursor: 'pointer',
+                }}>
+                  State: {state?.name ?? stateId}
+                  <span style={{ color: 'var(--fg-dim)', display: 'inline-flex', marginLeft: 2 }}><IcoClose size={10} /></span>
+                </button>
+              );
+            })}
+
+            {boardViewState.assigneeIds.map((assigneeId) => {
+              const user = users.find((u) => u.id === assigneeId);
+              return (
+                <button key={assigneeId} type="button" aria-label={`Remove Assignee: ${assigneeId === 'unassigned' ? 'Unassigned' : (user?.name ?? user?.email ?? assigneeId)}`} onClick={() => toggleBoardFilterValue('assigneeIds', assigneeId)} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
+                  fontSize: 11, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
+                  background: 'var(--bg-active)', color: 'var(--fg)', cursor: 'pointer',
+                }}>
+                  Assignee: {assigneeId === 'unassigned' ? 'Unassigned' : (user?.name ?? user?.email ?? assigneeId)}
+                  <span style={{ color: 'var(--fg-dim)', display: 'inline-flex', marginLeft: 2 }}><IcoClose size={10} /></span>
+                </button>
+              );
+            })}
+
+            {boardViewState.labelIds.map((labelId) => {
+              const label = labels.find((l) => l.id === labelId);
+              return (
+                <button key={labelId} type="button" aria-label={`Remove Label: ${label?.name ?? labelId}`} onClick={() => toggleBoardFilterValue('labelIds', labelId)} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
+                  fontSize: 11, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
+                  background: 'var(--bg-active)', color: 'var(--fg)', cursor: 'pointer',
+                }}>
+                  Label: {label?.name ?? labelId}
+                  <span style={{ color: 'var(--fg-dim)', display: 'inline-flex', marginLeft: 2 }}><IcoClose size={10} /></span>
+                </button>
+              );
+            })}
+
+            {(boardViewState.query || boardViewState.assigneeIds.length > 0 || boardViewState.stateIds.length > 0 || boardViewState.labelIds.length > 0) ? (
+              <button type="button" onClick={resetBoardViewState} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4, height: 22, padding: '0 8px',
+                fontSize: 11, fontWeight: 500, color: 'var(--fg-dim)', cursor: 'pointer',
+                background: 'transparent', border: 'none',
+              }}>Clear all</button>
+            ) : null}
+
+            {activeSavedBoardViewId ? (
+              <span style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
+                Loaded view: {savedBoardViews.find((v) => v.id === activeSavedBoardViewId)?.name ?? 'Unknown'}
+              </span>
+            ) : null}
+
+            <div style={{ flex: 1 }} />
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 11, color: 'var(--fg-dim)' }}>Sort</span>
+              <select
+                aria-label="Sort board by"
+                value={boardViewState.sortField}
+                onChange={(event) => {
+                  setBoardViewState((currentState) => ({
+                    ...currentState,
+                    sortField: event.target.value as BoardViewState['sortField'],
+                  }));
+                  setActiveSavedBoardViewId('');
+                }}
+                style={{ height: 22, padding: '0 6px', fontSize: 11, fontWeight: 500, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
+              >
+                <option value="updatedAt">Updated</option>
+                <option value="createdAt">Created</option>
+                <option value="identifier">ID</option>
+                <option value="title">Title</option>
+              </select>
+              <select
+                aria-label="Sort board direction"
+                value={boardViewState.sortDirection}
+                onChange={(event) => {
+                  setBoardViewState((currentState) => ({
+                    ...currentState,
+                    sortDirection: event.target.value as 'asc' | 'desc',
+                  }));
+                  setActiveSavedBoardViewId('');
+                }}
+                style={{ height: 22, padding: '0 6px', fontSize: 11, fontWeight: 500, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
+              >
+                <option value="asc">Asc</option>
+                <option value="desc">Desc</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
+              <button type="button" onClick={() => { const name = window.prompt('View name'); if (name) { const nextView: SavedBoardView = { id: crypto.randomUUID(), name, state: { ...boardViewState } }; const nextViews = [...savedBoardViews, nextView]; setSavedBoardViews(nextViews); writeSavedBoardViews(activeTeamKey, nextViews); setActiveSavedBoardViewId(nextView.id); } }} style={{ height: 22, padding: '0 6px', fontSize: 11, border: '1px solid var(--border)', borderRadius: 'var(--r-2)', background: 'transparent', color: 'var(--fg-muted)', cursor: 'pointer' }}>Save view</button>
+              <button type="button" onClick={() => { resetBoardViewState(); setActiveSavedBoardViewId(''); }} style={{ height: 22, padding: '0 6px', fontSize: 11, border: 'none', background: 'transparent', color: 'var(--fg-dim)', cursor: 'pointer' }}>Clear</button>
+              <select
+                aria-label="Load saved board view"
+                value={activeSavedBoardViewId}
+                onChange={(event) => {
+                  const viewId = event.target.value;
+                  setActiveSavedBoardViewId(viewId);
+                  const view = savedBoardViews.find((v) => v.id === viewId);
+                  if (view) { dispatchApplyBoardView({ state: view.state, viewId: view.id }); }
+                }}
+                style={{ height: 22, padding: '0 6px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
+              >
+                <option value="">Views</option>
+                {savedBoardViews.map((view) => (
+                  <option key={view.id} value={view.id}>{view.name}</option>
                 ))}
-              </div>
-            </details>
+              </select>
+            </div>
+
+            <div style={{
+              display: 'flex', alignItems: 'center',
+              border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 1, marginLeft: 4,
+            }}>
+              <button type="button" onClick={() => navigate('/')} style={{
+                height: 20, padding: '0 6px', display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: 11, fontWeight: 500, borderRadius: 'var(--r-1)', border: 'none', cursor: 'pointer',
+                color: !isBacklogView ? 'var(--fg)' : 'var(--fg-muted)',
+                background: !isBacklogView ? 'var(--bg-active)' : 'transparent',
+              }}>
+                <IcoBoard size={12} /> Board
+              </button>
+              <button type="button" onClick={() => navigate('/backlog')} style={{
+                height: 20, padding: '0 6px', display: 'inline-flex', alignItems: 'center', gap: 4,
+                fontSize: 11, fontWeight: 500, borderRadius: 'var(--r-1)', border: 'none', cursor: 'pointer',
+                color: isBacklogView ? 'var(--fg)' : 'var(--fg-muted)',
+                background: isBacklogView ? 'var(--bg-active)' : 'transparent',
+              }}>
+                <IcoList size={12} /> List
+              </button>
+            </div>
           </section>
 
-          <section className="board-active-view" aria-label="Active board view">
-            <div className="board-active-view__meta">
-              <strong>{boardVisibleIssues.length} visible issues</strong>
-              <span>
-                {activeSavedBoardViewId
-                  ? `Loaded view: ${savedBoardViews.find((view) => view.id === activeSavedBoardViewId)?.name ?? 'Unknown'}`
-                  : 'Unsaved working view'}
-              </span>
-            </div>
-            <div className="board-active-view__tokens">
-              {boardViewTokens.map((token) => (
-                <button
-                  key={token}
-                  type="button"
-                  className="context-chip context-chip--interactive"
-                  onClick={() => removeBoardFilterToken(token)}
-                  disabled={token.startsWith('Sort: ')}
-                  aria-label={token.startsWith('Sort: ') ? token : `Remove ${token}`}
-                >
-                  {token}
-                </button>
-              ))}
-              {(boardViewState.query ||
-                boardViewState.assigneeIds.length > 0 ||
-                boardViewState.stateIds.length > 0 ||
-                boardViewState.labelIds.length > 0) ? (
-                <button type="button" className="ui-action ui-action--subtle" onClick={resetBoardViewState}>
-                  Clear filters
-                </button>
+          {selectedIssueIds.length > 0 ? (
+            <section style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '6px var(--pad-x, var(--content-gutter))',
+              borderBottom: '1px solid var(--border-subtle)',
+              background: 'var(--bg-sunken)', fontSize: 12,
+            }} aria-label="Bulk actions">
+              <strong style={{ fontSize: 12 }}>{selectedIssueIds.length} selected</strong>
+              <button type="button" className="ui-action ui-action--subtle" onClick={selectAllVisibleIssues}>Select all</button>
+              <button type="button" className="ui-action ui-action--subtle" onClick={() => setSelectedIssueIds([])}>Clear</button>
+              <select aria-label="Bulk move selected issues to state" value={bulkTargetStateId} onChange={(event) => setBulkTargetStateId(event.target.value)}
+                style={{ height: 24, padding: '0 6px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
+                <option value="">Move to…</option>
+                {selectedTeam?.states.nodes.map((state) => (<option key={state.id} value={state.id}>{state.name}</option>))}
+              </select>
+              {bulkTargetStateId ? (
+                <button type="button" className="ui-action ui-action--accent" disabled={isSavingState} onClick={() => void applyBulkStateChange()}>Apply to selected</button>
               ) : null}
-            </div>
-          </section>
-
-          <section className="issue-bulkbar" aria-label="Bulk actions">
-            <div className="issue-bulkbar__meta">
-              <strong>{selectedIssueIds.length} selected</strong>
-              <span>
-                {selectedIssueIds.length > 0
-                  ? 'Apply actions to the current filtered board selection.'
-                  : 'Use x to select the focused issue, Shift+A to select all visible, Shift+X to clear, Enter to open.'}
-              </span>
-            </div>
-            <div className="issue-bulkbar__actions">
-              <button type="button" className="ui-action ui-action--subtle" onClick={selectAllVisibleIssues}>
-                Select all visible
-              </button>
-              <button
-                type="button"
-                className="ui-action ui-action--subtle"
-                disabled={selectedIssueIds.length === 0}
-                onClick={() => setSelectedIssueIds([])}
-              >
-                Clear selection
-              </button>
-              <label className="field-stack">
-                <span>Move to</span>
-                <select
-                  aria-label="Bulk move selected issues to state"
-                  value={bulkTargetStateId}
-                  onChange={(event) => setBulkTargetStateId(event.target.value)}
-                >
-                  <option value="">Choose state</option>
-                  {selectedTeam?.states.nodes.map((state) => (
-                    <option key={state.id} value={state.id}>
-                      {state.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                className="ui-action ui-action--accent"
-                disabled={selectedIssueIds.length === 0 || !bulkTargetStateId || isSavingState}
-                onClick={() => void applyBulkStateChange()}
-              >
-                Apply to selected
-              </button>
-              <label className="field-stack">
-                <span>Assign to</span>
-                <select
-                  aria-label="Bulk assign selected issues"
-                  value={bulkAssigneeId}
-                  onChange={(event) => setBulkAssigneeId(event.target.value)}
-                >
-                  <option value="">Choose assignee</option>
-                  <option value="unassigned">Unassigned</option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name ?? user.email ?? user.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                className="ui-action ui-action--subtle"
-                disabled={selectedIssueIds.length === 0 || !bulkAssigneeId || isSavingState}
-                onClick={() => void applyBulkAssigneeChange()}
-              >
-                Apply assignee
-              </button>
-              <label className="field-stack">
-                <span>Add label</span>
-                <select
-                  aria-label="Bulk add label to selected issues"
-                  value={bulkLabelId}
-                  onChange={(event) => setBulkLabelId(event.target.value)}
-                >
-                  <option value="">Choose label</option>
-                  {labels.map((label) => (
-                    <option key={label.id} value={label.id}>
-                      {label.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                className="ui-action ui-action--subtle"
-                disabled={selectedIssueIds.length === 0 || !bulkLabelId || isSavingState}
-                onClick={() => void applyBulkLabelAdd()}
-              >
-                Add label
-              </button>
-              <label className="field-stack">
-                <span>Remove label</span>
-                <select
-                  aria-label="Bulk remove label from selected issues"
-                  value={bulkRemoveLabelId}
-                  onChange={(event) => setBulkRemoveLabelId(event.target.value)}
-                >
-                  <option value="">Choose label</option>
-                  {labels.map((label) => (
-                    <option key={label.id} value={label.id}>
-                      {label.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                className="ui-action ui-action--subtle"
-                disabled={selectedIssueIds.length === 0 || !bulkRemoveLabelId || isSavingState}
-                onClick={() => void applyBulkLabelRemove()}
-              >
-                Remove label
-              </button>
-            </div>
-          </section>
+              <select aria-label="Bulk assign selected issues" value={bulkAssigneeId} onChange={(event) => setBulkAssigneeId(event.target.value)}
+                style={{ height: 24, padding: '0 6px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
+                <option value="">Assign to…</option>
+                <option value="unassigned">Unassigned</option>
+                {users.map((user) => (<option key={user.id} value={user.id}>{user.name ?? user.email ?? user.id}</option>))}
+              </select>
+              {bulkAssigneeId ? (
+                <button type="button" className="ui-action ui-action--subtle" disabled={isSavingState} onClick={() => void applyBulkAssigneeChange()}>Apply assignee</button>
+              ) : null}
+              <select aria-label="Bulk add label to selected issues" value={bulkLabelId} onChange={(event) => setBulkLabelId(event.target.value)}
+                style={{ height: 24, padding: '0 6px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
+                <option value="">Add label…</option>
+                {labels.map((label) => (<option key={label.id} value={label.id}>{label.name}</option>))}
+              </select>
+              {bulkLabelId ? (
+                <button type="button" className="ui-action ui-action--subtle" disabled={isSavingState} onClick={() => void applyBulkLabelAdd()}>Add label</button>
+              ) : null}
+              <select aria-label="Bulk remove label from selected issues" value={bulkRemoveLabelId} onChange={(event) => setBulkRemoveLabelId(event.target.value)}
+                style={{ height: 24, padding: '0 6px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
+                <option value="">Remove label…</option>
+                {labels.map((label) => (<option key={label.id} value={label.id}>{label.name}</option>))}
+              </select>
+              {bulkRemoveLabelId ? (
+                <button type="button" className="ui-action ui-action--subtle" disabled={isSavingState} onClick={() => void applyBulkLabelRemove()}>Remove label</button>
+              ) : null}
+            </section>
+          ) : null}
         </>
       ) : null}
 
