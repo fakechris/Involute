@@ -106,6 +106,14 @@ export function IcoGoogle({ size = 14 }: IconProps) {
   return (<svg width={size} height={size} viewBox="0 0 14 14"><path d="M13.7 7.2c0-.5 0-.9-.1-1.3H7v2.5h3.8a3.2 3.2 0 0 1-1.4 2.1v1.7h2.3c1.3-1.2 2-3 2-5Z" fill="#4285F4"/><path d="M7 14c1.9 0 3.5-.6 4.7-1.7l-2.3-1.7c-.6.4-1.4.7-2.4.7-1.8 0-3.4-1.2-4-2.9H.6v1.8A7 7 0 0 0 7 14Z" fill="#34A853"/><path d="M3 8.4a4.2 4.2 0 0 1 0-2.7V3.9H.6a7 7 0 0 0 0 6.2L3 8.4Z" fill="#FBBC04"/><path d="M7 2.8c1 0 1.9.3 2.6 1l2-2A7 7 0 0 0 .6 3.9L3 5.7c.6-1.7 2.2-2.9 4-2.9Z" fill="#EA4335"/></svg>);
 }
 
+export function IcoSun({ size = 14, ...rest }: IconProps) {
+  return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><circle cx="7" cy="7" r="2.5" stroke="currentColor" strokeWidth="1.2"/><path d="M7 1.5v1.5M7 11v1.5M1.5 7H3M11 7h1.5M3.2 3.2l1 1M9.8 9.8l1 1M10.8 3.2l-1 1M4.2 9.8l-1 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>);
+}
+
+export function IcoMoon({ size = 14, ...rest }: IconProps) {
+  return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><path d="M12 8.5A5.5 5.5 0 0 1 5.5 2a4.5 4.5 0 1 0 6.5 6.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>);
+}
+
 export function IcoPrio({ level, size = 14 }: { level: number; size?: number }) {
   if (level === 0) {
     return (

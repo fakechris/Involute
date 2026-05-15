@@ -24,16 +24,20 @@ export function getStatusKind(stateName: string): StatusKind {
 
 function getStatusColorVar(kind: StatusKind): string {
   switch (kind) {
-    case 'completed':
-      return 'var(--success)';
-    case 'canceled':
-      return 'var(--fg-dim)';
+    case 'backlog':
+      return '#6b7280';
+    case 'unstarted':
+      return '#64748b';
     case 'started':
-      return 'var(--warn)';
+      return '#f59e0b';
     case 'review':
-      return 'var(--info)';
+      return '#7c88ff';
+    case 'completed':
+      return '#10b981';
+    case 'canceled':
+      return '#ef4444';
     default:
-      return 'var(--fg-dim)';
+      return '#6b7280';
   }
 }
 

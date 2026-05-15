@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
-import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle } from './components/Icons';
+import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon } from './components/Icons';
 import { Avatar } from './components/Primitives';
 
 import {
@@ -1047,6 +1047,14 @@ export function App() {
                 <div className="app-shell__footer-name">{session.viewer.name ?? session.viewer.email ?? 'Signed-in viewer'}</div>
                 <div className="app-shell__footer-role">{session.viewer.globalRole}</div>
               </div>
+              <button
+                type="button"
+                className="app-shell__footer-settings"
+                title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+              >
+                {theme === 'dark' ? <IcoSun size={14} /> : <IcoMoon size={14} />}
+              </button>
               <button
                 type="button"
                 className="app-shell__footer-settings"

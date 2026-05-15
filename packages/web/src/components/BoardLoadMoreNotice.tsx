@@ -19,8 +19,9 @@ export function BoardLoadMoreNotice({
     <section
       className={`shell-notice${errorMessage ? ' shell-notice--error' : ''}`}
       role={errorMessage ? 'alert' : undefined}
+      style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}
     >
-      <p>
+      <p style={{ margin: 0 }}>
         {errorMessage ??
           'Showing the current page of issues. Load more to continue browsing this team.'}
       </p>

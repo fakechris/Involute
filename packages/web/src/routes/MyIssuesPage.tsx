@@ -47,11 +47,11 @@ function getStateType(stateType: WorkflowStateType): string {
 function getStateColor(stateType: WorkflowStateType): string {
   const type = getStateType(stateType);
   switch (type) {
-    case 'completed': return 'var(--success)';
-    case 'canceled': return 'var(--fg-dim)';
-    case 'started': return 'var(--warn)';
-    case 'backlog': return 'var(--fg-faint)';
-    default: return 'var(--fg-dim)';
+    case 'completed': return '#10b981';
+    case 'canceled': return '#ef4444';
+    case 'started': return '#f59e0b';
+    case 'backlog': return '#6b7280';
+    default: return '#64748b';
   }
 }
 
