@@ -134,6 +134,27 @@ export function BoardPage() {
   const navigate = useNavigate();
   const [activeTeamKey, setActiveTeamKey] = useState<string | null>(() => readStoredTeamKey());
   const [pendingTeamKey, setPendingTeamKey] = useState<string | null>(null);
+  const activeTeamKeyRef = useRef(activeTeamKey);
+  activeTeamKeyRef.current = activeTeamKey;
+
+  useEffect(() => {
+    function handleActiveTeamKeyChange(event: Event) {
+      const nextTeamKey =
+        event instanceof CustomEvent && (typeof event.detail === 'string' || event.detail === null)
+          ? (event.detail as string | null)
+          : readStoredTeamKey();
+
+      if (nextTeamKey !== activeTeamKeyRef.current) {
+        setPendingTeamKey(nextTeamKey);
+      }
+    }
+
+    window.addEventListener('involute:active-team-key', handleActiveTeamKeyChange as EventListener);
+
+    return () => {
+      window.removeEventListener('involute:active-team-key', handleActiveTeamKeyChange as EventListener);
+    };
+  }, []);
   const [isLoadingMoreIssues, setIsLoadingMoreIssues] = useState(false);
   const [loadMoreIssuesError, setLoadMoreIssuesError] = useState<string | null>(null);
   const queryTeamKey = pendingTeamKey ?? activeTeamKey;
