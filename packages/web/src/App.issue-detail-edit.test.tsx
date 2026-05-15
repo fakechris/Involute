@@ -117,9 +117,10 @@ describe('App issue detail editing', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
     const drawer = await screen.findByLabelText('Issue detail drawer');
 
+    fireEvent.click(within(drawer).getByLabelText('Edit description'));
     const descriptionInput = within(drawer).getByLabelText('Issue description');
     fireEvent.change(descriptionInput, { target: { value: 'Updated description' } });
-    fireEvent.blur(descriptionInput);
+    fireEvent.click(within(drawer).getByText('Save'));
 
     await waitFor(() =>
       expect(mutate).toHaveBeenCalledWith({
@@ -131,7 +132,7 @@ describe('App issue detail editing', () => {
     );
 
     await waitFor(() =>
-      expect(within(drawer).getByLabelText('Issue description')).toHaveValue('Updated description'),
+      expect(within(drawer).getByText('Updated description')).toBeInTheDocument(),
     );
   });
 
@@ -154,9 +155,10 @@ describe('App issue detail editing', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
     const drawer = await screen.findByLabelText('Issue detail drawer');
 
+    fireEvent.click(within(drawer).getByLabelText('Edit description'));
     const descriptionInput = within(drawer).getByLabelText('Issue description');
     fireEvent.change(descriptionInput, { target: { value: 'Locally edited draft' } });
-    fireEvent.blur(descriptionInput);
+    fireEvent.click(within(drawer).getByText('Save'));
 
     await waitFor(() =>
       expect(mutate).toHaveBeenCalledWith({
@@ -168,9 +170,7 @@ describe('App issue detail editing', () => {
     );
 
     await waitFor(() =>
-      expect(within(drawer).getByLabelText('Issue description')).toHaveValue(
-        'Persisted description from server',
-      ),
+      expect(within(drawer).getByText('Persisted description from server')).toBeInTheDocument(),
     );
   });
 
@@ -188,7 +188,7 @@ describe('App issue detail editing', () => {
     const secondDrawer = await screen.findByLabelText('Issue detail drawer');
 
     expect(within(secondDrawer).getByLabelText('Issue title')).toHaveValue('Ready item');
-    expect(within(secondDrawer).getByLabelText('Issue description')).toHaveValue('Ready description');
+    expect(within(secondDrawer).getByText('Ready description')).toBeInTheDocument();
   });
 
   it('shows the updated title after closing and reopening the same issue', async () => {

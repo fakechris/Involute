@@ -167,9 +167,11 @@ export function IssueCard({
         </div>
 
         <div className="issue-card__footer">
-          <div className="issue-card__avatar" aria-hidden="true">
-            {getInitials(issue.assignee?.name)}
-          </div>
+          {issue.assignee ? (
+            <div className="issue-card__avatar" aria-hidden="true">
+              {getInitials(issue.assignee.name)}
+            </div>
+          ) : null}
           <span className="issue-card__assignee">{issue.assignee?.name ?? 'Unassigned'}</span>
         </div>
       </button>

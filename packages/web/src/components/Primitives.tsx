@@ -16,7 +16,12 @@ export function Avatar({ user, size = 20 }: { user?: AvatarUser | null | undefin
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--fg-faint)', fontSize: size * 0.5,
         flexShrink: 0,
-      }}>?</div>
+      }}>
+        <svg width={size * 0.55} height={size * 0.55} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="8" cy="5.5" r="2.5" />
+          <path d="M2.5 14.5c0-3 2.5-4.5 5.5-4.5s5.5 1.5 5.5 4.5" />
+        </svg>
+      </div>
     );
   }
   const initials = user.avatar ?? (user.name ? user.name.trim().split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase() : '?');

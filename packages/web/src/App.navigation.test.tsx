@@ -32,7 +32,7 @@ describe('App navigation and backlog flows', () => {
     expect(await screen.findByRole('heading', { name: 'Issue detail' })).toBeInTheDocument();
     expect(screen.getByText('INV-2')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText('Issue title')).toHaveValue('Ready item'));
-    await waitFor(() => expect(screen.getByLabelText('Issue description')).toHaveValue('Ready description'));
+    await waitFor(() => expect(screen.getByText('Ready description')).toBeInTheDocument());
     expect(screen.getByText('INV-1 — Backlog item')).toBeInTheDocument();
   });
 
