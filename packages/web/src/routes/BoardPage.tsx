@@ -14,7 +14,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { useMutation, useQuery } from '@apollo/client/react';
-import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import {
@@ -213,6 +213,15 @@ export function BoardPage() {
   const [activeSavedBoardViewId, setActiveSavedBoardViewId] = useState('');
   const boardSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [inlineCreateGroupId, setInlineCreateGroupId] = useState<string | null>(null);
+  const [collapsedColumns, setCollapsedColumns] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem('involute:collapsed-columns');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+  const collapsedColumnsInitialized = useRef(false);
 
   useLayoutEffect(() => {
     if (loading && !queryData) {
@@ -444,6 +453,37 @@ export function BoardPage() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedTeam || collapsedColumnsInitialized.current) {
+      return;
+    }
+    collapsedColumnsInitialized.current = true;
+    const stored = collapsedColumns;
+    const hasAnyStored = selectedTeam.states.nodes.some((s) => s.id in stored);
+    if (hasAnyStored) {
+      return;
+    }
+    const defaults: Record<string, boolean> = {};
+    for (const state of selectedTeam.states.nodes) {
+      if (state.type === 'COMPLETED' || state.type === 'CANCELED') {
+        defaults[state.id] = true;
+      }
+    }
+    if (Object.keys(defaults).length > 0) {
+      setCollapsedColumns((prev) => ({ ...prev, ...defaults }));
+    }
+  }, [selectedTeam, collapsedColumns]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('involute:collapsed-columns', JSON.stringify(collapsedColumns));
+    } catch { /* ignore */ }
+  }, [collapsedColumns]);
+
+  const toggleColumnCollapse = useCallback((stateId: string) => {
+    setCollapsedColumns((prev) => ({ ...prev, [stateId]: !prev[stateId] }));
   }, []);
 
   const columns = useMemo(() => getBoardColumns(selectedTeam, visibleIssues), [selectedTeam, visibleIssues]);
@@ -1691,9 +1731,9 @@ export function BoardPage() {
         <>
           <section style={{
             display: 'flex', alignItems: 'center', gap: 6,
-            padding: '8px var(--pad-x, var(--content-gutter))',
+            padding: '4px var(--pad-x, var(--content-gutter))',
             borderBottom: '1px solid var(--border-subtle)',
-            flexWrap: 'wrap', background: 'var(--bg)',
+            flexWrap: 'wrap', background: 'var(--bg)', flexShrink: 0,
           }} aria-label="Board filters">
             <div style={{
               display: 'flex', alignItems: 'center', gap: 6,
@@ -2048,6 +2088,8 @@ export function BoardPage() {
                   title={column.name}
                   stateId={column.stateId}
                   focusedIssueId={focusedIssueId}
+                  collapsed={!!collapsedColumns[column.stateId]}
+                  onToggleCollapse={() => toggleColumnCollapse(column.stateId)}
                   issues={issuesByState[column.stateId] ?? EMPTY_ISSUES}
                   onToggleIssueSelection={toggleIssueSelection}
                   selectedIssueIds={selectedIssueIds}
