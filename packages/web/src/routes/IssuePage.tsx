@@ -659,19 +659,6 @@ export function IssuePage() {
                     type="button"
                     style={{
                       height: 26, padding: '0 12px', fontSize: 12, fontWeight: 500,
-                      borderRadius: 'var(--r-2)', border: '1px solid transparent', cursor: 'pointer',
-                      background: 'var(--accent)', color: 'var(--accent-fg)',
-                    }}
-                    disabled={isSavingState}
-                    onClick={() => {
-                      setIsEditingDescription(false);
-                      void commitDescription().catch(() => undefined);
-                    }}
-                  >Save</button>
-                  <button
-                    type="button"
-                    style={{
-                      height: 26, padding: '0 12px', fontSize: 12, fontWeight: 500,
                       borderRadius: 'var(--r-2)', border: '1px solid var(--border)', cursor: 'pointer',
                       background: 'transparent', color: 'var(--fg-muted)',
                     }}

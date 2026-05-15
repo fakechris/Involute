@@ -16,7 +16,7 @@ describe('App board drawer flows', () => {
     const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
 
     expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Ready item');
-    expect(within(drawer).getByLabelText('Issue description')).toHaveValue('Ready description');
+    expect(within(drawer).getByText('Ready description')).toBeInTheDocument();
     expect(within(drawer).getByText('INV-1 — Backlog item')).toBeInTheDocument();
     expect(within(drawer).getByText('No child issues.')).toBeInTheDocument();
   });

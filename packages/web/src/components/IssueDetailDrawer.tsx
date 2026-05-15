@@ -64,6 +64,7 @@ export function IssueDetailDrawer({
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [selectedAssigneeId, setSelectedAssigneeId] = useState('');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [commentBody, setCommentBody] = useState('');
   const isSavingTitleRef = useRef(false);
   const titleTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -320,18 +321,48 @@ export function IssueDetailDrawer({
             </span>
 
             <div className="issue-panel__section">
-              <label className="issue-panel__label" htmlFor="issue-description">
-                Description
-              </label>
-              <textarea
-                id="issue-description"
-                aria-label="Issue description"
-                className="issue-panel__textarea"
-                value={description}
-                disabled={savingState}
-                onChange={(event) => setDescription(event.target.value)}
-                onBlur={() => void commitDescription().catch(() => undefined)}
-              />
+              <label className="issue-panel__label">Description</label>
+              {isEditingDescription ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <RichTextEditor
+                    value={description}
+                    onChange={setDescription}
+                    placeholder="Add a description…"
+                    submitLabel="Save"
+                    disabled={savingState}
+                    ariaLabel="Issue description"
+                    onSubmit={() => {
+                      setIsEditingDescription(false);
+                      void commitDescription().catch(() => undefined);
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      type="button"
+                      className="ui-action ui-action--subtle"
+                      onClick={() => {
+                        setDescription(activeIssue.description ?? '');
+                        setIsEditingDescription(false);
+                      }}
+                    >Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  style={{ position: 'relative', cursor: 'pointer', minHeight: 32 }}
+                  onClick={() => setIsEditingDescription(true)}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Edit description"
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsEditingDescription(true); }}
+                >
+                  {description ? (
+                    <MarkdownRenderer content={description} />
+                  ) : (
+                    <span style={{ color: 'var(--fg-dim)', fontSize: 13 }}>Add a description…</span>
+                  )}
+                </div>
+              )}
             </div>
 
             {activeIssue.children.nodes.length > 0 ? (
