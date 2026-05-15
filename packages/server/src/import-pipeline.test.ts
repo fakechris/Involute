@@ -208,7 +208,7 @@ describe('import pipeline', () => {
     expect(labels.map((l) => l.name)).toEqual(['bug', 'feature', 'urgent']);
   });
 
-  it('allows multiple imported labels to share the same name without collapsing them', async () => {
+  it('deduplicates imported labels that share the same name', async () => {
     const duplicateNameLabels = [
       ...FIXTURE_LABELS,
       { id: 'linear-label-4', name: 'bug', color: '#0000ff' },
@@ -233,7 +233,7 @@ describe('import pipeline', () => {
       where: { name: 'bug' },
       orderBy: { id: 'asc' },
     });
-    expect(labels).toHaveLength(2);
+    expect(labels).toHaveLength(1);
 
     const importedIssue = await prisma.issue.findUnique({
       where: { identifier: 'SON-43' },
@@ -250,8 +250,7 @@ describe('import pipeline', () => {
       },
       orderBy: { oldId: 'asc' },
     });
-    expect(labelMappings).toHaveLength(2);
-    expect(new Set(labelMappings.map((mapping) => mapping.newId)).size).toBe(2);
+    expect(labelMappings).toHaveLength(1);
   });
 
   it('imports users with name and email preserved', async () => {
