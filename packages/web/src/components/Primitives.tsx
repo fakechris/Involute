@@ -127,8 +127,8 @@ export function Btn({
 
 export function PriorityIcon({ level, size = 14 }: { level: number; size?: number }) {
   const colors: Record<number, string> = {
-    0: 'var(--prio-none)', 1: 'var(--prio-urgent)', 2: 'var(--prio-high)',
-    3: 'var(--prio-med)', 4: 'var(--prio-low)',
+    0: '#6b7280', 1: '#ef4444', 2: '#f97316',
+    3: '#eab308', 4: '#3b82f6',
   };
   return <span style={{ color: colors[level], display: 'inline-flex' }}><IcoPrio level={level} size={size} /></span>;
 }
