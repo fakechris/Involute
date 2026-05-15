@@ -86,6 +86,7 @@ export function IssuePage() {
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [selectedAssigneeId, setSelectedAssigneeId] = useState('');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
   const [commentBody, setCommentBody] = useState('');
   const isSavingTitleRef = useRef(false);
   const titleTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -524,7 +525,9 @@ export function IssuePage() {
   }
 
   const activeIssue = issueSnapshot;
-  const allLabels = data?.issueLabels.nodes ?? [];
+  const allLabels = Array.from(
+    new Map((data?.issueLabels.nodes ?? []).map(l => [l.id, l])).values()
+  );
   const allUsers = data?.users.nodes ?? [];
 
   // --- Render ---
@@ -538,6 +541,31 @@ export function IssuePage() {
           <Btn variant="ghost" icon={<IcoChevL size={12} />} onClick={() => navigate(-1)}>
             {selectedTeam.key}
           </Btn>
+          {activeIssue.parent ? (
+            <>
+              <span style={{ color: 'var(--fg-faint)', display: 'inline-flex' }}>
+                <IcoChevR size={10} />
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate(`/issue/${activeIssue.parent!.id}`)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  fontSize: 11, color: 'var(--fg-muted)', padding: '2px 4px',
+                  borderRadius: 'var(--r-1)',
+                }}
+                className="mono"
+                title={activeIssue.parent.title}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
+              >
+                {activeIssue.parent.identifier}
+              </button>
+            </>
+          ) : null}
+          <span style={{ color: 'var(--fg-faint)', display: 'inline-flex' }}>
+            <IcoChevR size={10} />
+          </span>
           <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
             {activeIssue.identifier}
           </span>
@@ -612,15 +640,75 @@ export function IssuePage() {
             />
 
             {/* Description */}
-            <textarea
-              aria-label="Issue description"
-              className="issue-panel__description-input"
-              value={description}
-              placeholder="Add a description…"
-              disabled={isSavingState}
-              onChange={(e) => setDescription(e.target.value)}
-              onBlur={() => void commitDescription().catch(() => undefined)}
-            />
+            {isEditingDescription ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <RichTextEditor
+                  value={description}
+                  onChange={setDescription}
+                  placeholder="Add a description…"
+                  submitLabel="Save"
+                  disabled={isSavingState}
+                  ariaLabel="Issue description"
+                  onSubmit={() => {
+                    setIsEditingDescription(false);
+                    void commitDescription().catch(() => undefined);
+                  }}
+                />
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    type="button"
+                    style={{
+                      height: 26, padding: '0 12px', fontSize: 12, fontWeight: 500,
+                      borderRadius: 'var(--r-2)', border: '1px solid transparent', cursor: 'pointer',
+                      background: 'var(--accent)', color: 'var(--accent-fg)',
+                    }}
+                    disabled={isSavingState}
+                    onClick={() => {
+                      setIsEditingDescription(false);
+                      void commitDescription().catch(() => undefined);
+                    }}
+                  >Save</button>
+                  <button
+                    type="button"
+                    style={{
+                      height: 26, padding: '0 12px', fontSize: 12, fontWeight: 500,
+                      borderRadius: 'var(--r-2)', border: '1px solid var(--border)', cursor: 'pointer',
+                      background: 'transparent', color: 'var(--fg-muted)',
+                    }}
+                    onClick={() => {
+                      setDescription(issueSnapshot?.description ?? '');
+                      setIsEditingDescription(false);
+                    }}
+                  >Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div
+                style={{ position: 'relative', cursor: 'pointer', minHeight: 32 }}
+                onClick={() => setIsEditingDescription(true)}
+                role="button"
+                tabIndex={0}
+                aria-label="Edit description"
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsEditingDescription(true); }}
+              >
+                {description ? (
+                  <MarkdownRenderer content={description} />
+                ) : (
+                  <span style={{ color: 'var(--fg-dim)', fontSize: 13 }}>Add a description…</span>
+                )}
+                <button
+                  type="button"
+                  style={{
+                    position: 'absolute', top: 0, right: 0,
+                    height: 22, padding: '0 8px', fontSize: 11, fontWeight: 500,
+                    borderRadius: 'var(--r-2)', border: '1px solid var(--border)', cursor: 'pointer',
+                    background: 'var(--bg-hover)', color: 'var(--fg-muted)',
+                    opacity: 0.7,
+                  }}
+                  onClick={(e) => { e.stopPropagation(); setIsEditingDescription(true); }}
+                >Edit</button>
+              </div>
+            )}
 
             {/* Parent issue */}
             {activeIssue.parent ? (

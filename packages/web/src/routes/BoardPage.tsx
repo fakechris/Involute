@@ -184,7 +184,9 @@ export function BoardPage() {
   );
   const teams = queryData?.teams.nodes ?? EMPTY_TEAMS;
   const users = queryData?.users.nodes ?? EMPTY_USERS;
-  const labels = queryData?.issueLabels.nodes ?? EMPTY_LABELS;
+  const labels = useMemo(() => Array.from(
+    new Map((queryData?.issueLabels.nodes ?? EMPTY_LABELS).map(l => [l.id, l])).values()
+  ), [queryData?.issueLabels.nodes]);
   const baseIssues = queryData?.issues.nodes ?? EMPTY_ISSUES;
   const [createdIssues, setCreatedIssues] = useState<IssueSummary[]>([]);
   const [issueOverrides, setIssueOverrides] = useState<Record<string, IssueSummary>>({});
@@ -1923,6 +1925,18 @@ export function BoardPage() {
                 <option value="none">None</option>
               </select>
             </div>
+
+            <details style={{ position: 'relative', fontSize: 11 }}>
+              <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>Columns</summary>
+              <fieldset style={{ position: 'absolute', top: '100%', right: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 160 }}>
+                {(selectedTeam?.states.nodes ?? []).map((state) => (
+                  <label key={state.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={!collapsedColumns[state.id]} onChange={() => toggleColumnCollapse(state.id)} aria-label={`Toggle ${state.name} column`} />
+                    {state.name}
+                  </label>
+                ))}
+              </fieldset>
+            </details>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
               <button type="button" onClick={() => { const name = window.prompt('View name'); if (name) { const nextView: SavedBoardView = { id: crypto.randomUUID(), name, state: { ...boardViewState } }; const nextViews = [...savedBoardViews, nextView]; setSavedBoardViews(nextViews); writeSavedBoardViews(activeTeamKey, nextViews); setActiveSavedBoardViewId(nextView.id); } }} style={{ height: 22, padding: '0 6px', fontSize: 11, border: '1px solid var(--border)', borderRadius: 'var(--r-2)', background: 'transparent', color: 'var(--fg-muted)', cursor: 'pointer' }}>Save view</button>
