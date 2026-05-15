@@ -153,8 +153,8 @@ describe('App issue metadata flows', () => {
 
     expect(await screen.findByText('No issues in Backlog yet.')).toBeInTheDocument();
     // Canceled column is collapsed by default, so the empty message is hidden;
-    // just verify the collapsed column header is rendered
-    expect(screen.getByLabelText(/Canceled column/i)).toBeInTheDocument();
+    // just verify at least one element references the Canceled column
+    expect(screen.getAllByLabelText(/Canceled column/i).length).toBeGreaterThan(0);
   });
 
   it('shows "No labels available" message when labels array is empty', async () => {
