@@ -132,13 +132,21 @@ async function createMapping(
   newId: string,
   entityType: string,
 ): Promise<void> {
-  await prisma.legacyLinearMapping.upsert({
-    where: {
-      oldId_entityType: { oldId, entityType },
-    },
-    create: { oldId, newId, entityType },
-    update: {},
-  });
+  try {
+    await prisma.legacyLinearMapping.upsert({
+      where: {
+        oldId_entityType: { oldId, entityType },
+      },
+      create: { oldId, newId, entityType },
+      update: {},
+    });
+  } catch (error: unknown) {
+    const prismaError = error as { code?: string };
+    if (prismaError.code === 'P2002') {
+      return;
+    }
+    throw error;
+  }
 }
 
 function recordSkippedImport(
