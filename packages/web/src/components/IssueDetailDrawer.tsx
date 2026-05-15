@@ -151,7 +151,7 @@ export function IssueDetailDrawer({
         id: `${issue.id}-labels`,
         meta: issue.updatedAt,
         title: 'Labels updated',
-        body: issue.labels.nodes.map((label) => label.name).join(', '),
+        body: [...new Set(issue.labels.nodes.map((label) => label.name))].join(', '),
       });
     }
 

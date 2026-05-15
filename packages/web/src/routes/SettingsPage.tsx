@@ -328,6 +328,7 @@ function PreferencesTab() {
 }
 
 function AccessTab() {
+  const navigate = useNavigate();
   const teamKey = readStoredTeamKey();
   const { data, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
     variables: {
@@ -388,7 +389,7 @@ function AccessTab() {
       )}
 
       <div style={{ marginTop: 16 }}>
-        <Btn variant="subtle" icon={<IcoPlus />} size="md">Invite members</Btn>
+        <Btn variant="subtle" icon={<IcoPlus />} size="md" onClick={() => navigate('/members')}>Invite members</Btn>
       </div>
     </>
   );
