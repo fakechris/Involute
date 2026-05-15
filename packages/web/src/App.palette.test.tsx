@@ -68,6 +68,8 @@ describe('App command palette', () => {
 
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: /Filter/ }));
+
     const filters = screen.getByLabelText('Board filters');
     fireEvent.click(within(filters).getByText('Labels'));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Bug' }));
