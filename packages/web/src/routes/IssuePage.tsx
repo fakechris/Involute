@@ -203,7 +203,7 @@ export function IssuePage() {
         id: `${issueSnapshot.id}-labels`,
         timestamp: issueSnapshot.updatedAt,
         title: 'Labels updated',
-        body: issueSnapshot.labels.nodes.map((l) => l.name).join(', '),
+        body: [...new Set(issueSnapshot.labels.nodes.map((l) => l.name))].join(', '),
       });
     }
 
@@ -525,9 +525,15 @@ export function IssuePage() {
   }
 
   const activeIssue = issueSnapshot;
-  const allLabels = Array.from(
-    new Map((data?.issueLabels.nodes ?? []).map(l => [l.id, l])).values()
-  );
+  const allLabels = (() => {
+    const raw = data?.issueLabels.nodes ?? [];
+    const namesSeen = new Set<string>();
+    return raw.filter((l) => {
+      if (namesSeen.has(l.name)) return false;
+      namesSeen.add(l.name);
+      return true;
+    });
+  })();
   const allUsers = data?.users.nodes ?? [];
 
   // --- Render ---
@@ -968,9 +974,16 @@ export function IssuePage() {
             <Kbd keys={['⌘', 'L']} />
           </button>
 
-          <button type="button" className="issue-panel__action-btn">
+          <button
+            type="button"
+            className="issue-panel__action-btn"
+            onClick={() => {
+              const link = `[${activeIssue.identifier}](${window.location.href})`;
+              void navigator.clipboard.writeText(link);
+            }}
+          >
             <span style={{ color: 'var(--fg-dim)', display: 'inline-flex' }}><IcoLink size={13} /></span>
-            <span>Link to issue</span>
+            <span>Copy markdown link</span>
           </button>
 
           <button

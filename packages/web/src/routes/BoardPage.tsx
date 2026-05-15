@@ -87,7 +87,7 @@ import { IssueCard } from '../components/IssueCard';
 import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
 import { KanbanView } from '../components/KanbanView';
 import { BacklogPage } from './BacklogPage';
-import { IcoFilter, IcoSort, IcoPlus, IcoList, IcoBoard, IcoClose, IcoChevR } from '../components/Icons';
+import { IcoFilter, IcoPlus, IcoList, IcoBoard, IcoClose, IcoChevR } from '../components/Icons';
 import { Btn, PriorityIcon } from '../components/Primitives';
 
 const ISSUE_PAGE_SIZE = 200;
@@ -205,9 +205,13 @@ export function BoardPage() {
   );
   const teams = queryData?.teams.nodes ?? EMPTY_TEAMS;
   const users = queryData?.users.nodes ?? EMPTY_USERS;
-  const labels = useMemo(() => Array.from(
-    new Map((queryData?.issueLabels.nodes ?? EMPTY_LABELS).map(l => [l.id, l])).values()
-  ), [queryData?.issueLabels.nodes]);
+  const labels = useMemo(() => {
+    const seen = new Map<string, (typeof EMPTY_LABELS)[number]>();
+    for (const l of queryData?.issueLabels.nodes ?? EMPTY_LABELS) {
+      if (!seen.has(l.name)) seen.set(l.name, l);
+    }
+    return Array.from(seen.values());
+  }, [queryData?.issueLabels.nodes]);
   const baseIssues = queryData?.issues.nodes ?? EMPTY_ISSUES;
   const [createdIssues, setCreatedIssues] = useState<IssueSummary[]>([]);
   const [issueOverrides, setIssueOverrides] = useState<Record<string, IssueSummary>>({});
@@ -236,6 +240,7 @@ export function BoardPage() {
   const [activeSavedBoardViewId, setActiveSavedBoardViewId] = useState('');
   const boardSearchInputRef = useRef<HTMLInputElement | null>(null);
   const [inlineCreateGroupId, setInlineCreateGroupId] = useState<string | null>(null);
+  const [filterBarVisible, setFilterBarVisible] = useState(false);
   const [collapsedColumns, setCollapsedColumns] = useState<Record<string, boolean>>(() => {
     try {
       const stored = localStorage.getItem('involute:collapsed-columns');
@@ -1727,8 +1732,7 @@ export function BoardPage() {
             ))}
           </select>
         ) : null}
-        <Btn variant="ghost" icon={<IcoFilter size={14} />} size="sm">Filter</Btn>
-        <Btn variant="ghost" icon={<IcoSort size={14} />} size="sm">Sort</Btn>
+        <Btn variant="ghost" icon={<IcoFilter size={14} />} size="sm" onClick={() => setFilterBarVisible((v) => !v)}>{filterBarVisible ? 'Hide filters' : 'Filter'}</Btn>
         <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
         <Btn
           variant="subtle"
@@ -1750,7 +1754,7 @@ export function BoardPage() {
         </section>
       ) : null}
 
-      {!isBacklogView ? (
+      {!isBacklogView && filterBarVisible ? (
         <>
           <section style={{
             display: 'flex', alignItems: 'center', gap: 6,

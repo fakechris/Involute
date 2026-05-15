@@ -399,7 +399,7 @@ export function BacklogPage({
                   <td>{issue.state.name}</td>
                   <td>
                     {issue.labels.nodes.length > 0
-                      ? issue.labels.nodes.map((label) => label.name).join(', ')
+                      ? [...new Set(issue.labels.nodes.map((label) => label.name))].join(', ')
                       : '—'}
                   </td>
                   <td>{issue.assignee?.name ?? issue.assignee?.email ?? 'Unassigned'}</td>
