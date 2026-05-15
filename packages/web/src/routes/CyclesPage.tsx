@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@apollo/client/react';
-import { useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { BOARD_PAGE_QUERY, CYCLES_QUERY, CYCLE_CREATE_MUTATION, CYCLE_UPDATE_MUTATION, CYCLE_DELETE_MUTATION } from '../board/queries';
@@ -56,8 +56,24 @@ function isCycleCompleted(cycle: CycleSummary): boolean {
 
 export function CyclesPage() {
   const navigate = useNavigate();
-  const teamKey = readStoredTeamKey();
+  const [teamKey, setTeamKey] = useState<string | null>(() => readStoredTeamKey());
   const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    function handleActiveTeamKeyChange(event: Event) {
+      const nextTeamKey =
+        event instanceof CustomEvent && (typeof event.detail === 'string' || event.detail === null)
+          ? (event.detail as string | null)
+          : readStoredTeamKey();
+      setTeamKey(nextTeamKey);
+    }
+
+    window.addEventListener('involute:active-team-key', handleActiveTeamKeyChange as EventListener);
+
+    return () => {
+      window.removeEventListener('involute:active-team-key', handleActiveTeamKeyChange as EventListener);
+    };
+  }, []);
   const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create');
   const [editingCycleId, setEditingCycleId] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
