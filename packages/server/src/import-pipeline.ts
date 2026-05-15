@@ -282,9 +282,15 @@ async function importLabels(
     }
 
     const created = await prisma.$transaction(async (transaction) => {
-      const nextLabel = await transaction.issueLabel.create({
-        data: { name: label.name },
+      let nextLabel = await transaction.issueLabel.findFirst({
+        where: { name: label.name },
       });
+
+      if (!nextLabel) {
+        nextLabel = await transaction.issueLabel.create({
+          data: { name: label.name },
+        });
+      }
 
       await createMapping(transaction, label.id, nextLabel.id, 'label');
       return nextLabel;

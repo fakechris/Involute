@@ -62,10 +62,8 @@ model WorkflowState {
 
 model IssueLabel {
   id     String  @id @default(uuid()) @db.Uuid
-  name   String
+  name   String  @unique
   issues Issue[]
-
-  @@index([name])
 }
 
 model User {
