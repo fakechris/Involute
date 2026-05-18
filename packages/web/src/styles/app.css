@@ -411,6 +411,17 @@ kbd {
   flex: 1;
 }
 
+.app-shell__link-kbd {
+  opacity: 0.5;
+  transition: opacity var(--dur-1) var(--ease);
+}
+
+.app-shell__link:hover .app-shell__link-kbd,
+.app-shell__link--active .app-shell__link-kbd,
+.app-shell__link:focus-visible .app-shell__link-kbd {
+  opacity: 1;
+}
+
 .app-shell__sidebar-footer-row {
   display: flex;
   align-items: center;

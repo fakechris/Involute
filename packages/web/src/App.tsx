@@ -708,6 +708,12 @@ export function App() {
       if (event.key.toLowerCase() === 'c' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
         event.preventDefault();
         openCreateIssueSurface(navigate, location.pathname);
+        return;
+      }
+
+      if (event.key.toLowerCase() === 't' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+        event.preventDefault();
+        setTheme((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark'));
       }
     }
 
@@ -927,30 +933,35 @@ export function App() {
           </button>
 
           <nav className="app-shell__nav-section">
-            <NavLink to="/inbox" className={getNavLinkClassName}>
+            <NavLink to="/inbox" className={getNavLinkClassName} title="Go to Inbox · G I">
               <span className="app-shell__nav-icon"><IcoInbox size={14} /></span>
               <span className="app-shell__link-label">Inbox</span>
+              <kbd className="app-shell__link-kbd" aria-hidden="true">I</kbd>
             </NavLink>
-            <NavLink to="/my-issues" className={getNavLinkClassName}>
+            <NavLink to="/my-issues" className={getNavLinkClassName} title="Go to My Issues · G M">
               <span className="app-shell__nav-icon"><IcoIssues size={14} /></span>
               <span className="app-shell__link-label">My Issues</span>
+              <kbd className="app-shell__link-kbd" aria-hidden="true">M</kbd>
             </NavLink>
-            <NavLink to="/views" className={getNavLinkClassName}>
+            <NavLink to="/views" className={getNavLinkClassName} title="Go to Views · G W">
               <span className="app-shell__nav-icon"><IcoViews size={14} /></span>
               <span className="app-shell__link-label">Views</span>
+              <kbd className="app-shell__link-kbd" aria-hidden="true">W</kbd>
             </NavLink>
           </nav>
 
           <div className="app-shell__team-section">
             <div className="app-shell__section-label">Workspace</div>
             <nav className="app-shell__nav-section">
-              <NavLink to="/projects" className={getNavLinkClassName}>
+              <NavLink to="/projects" className={getNavLinkClassName} title="Go to Projects · G P">
                 <span className="app-shell__nav-icon"><IcoProject size={14} /></span>
                 <span className="app-shell__link-label">Projects</span>
+                <kbd className="app-shell__link-kbd" aria-hidden="true">P</kbd>
               </NavLink>
-              <NavLink to="/members" className={getNavLinkClassName}>
+              <NavLink to="/members" className={getNavLinkClassName} title="Go to Members · G E">
                 <span className="app-shell__nav-icon"><IcoTeam size={14} /></span>
                 <span className="app-shell__link-label">Members</span>
+                <kbd className="app-shell__link-kbd" aria-hidden="true">E</kbd>
               </NavLink>
             </nav>
           </div>
