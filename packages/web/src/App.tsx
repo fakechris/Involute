@@ -714,6 +714,7 @@ export function App() {
       if (event.key.toLowerCase() === 't' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
         event.preventDefault();
         setTheme((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark'));
+        return;
       }
     }
 
