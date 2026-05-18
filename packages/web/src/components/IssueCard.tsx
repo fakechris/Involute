@@ -159,11 +159,22 @@ export function IssueCard({
         <h3 className="issue-card__title">{issue.title}</h3>
 
         <div className="issue-card__labels">
-          {issue.labels.nodes.map((label) => (
+          {issue.labels.nodes.slice(0, 2).map((label) => (
             <span key={label.id} className={getLabelClassName(label.name)}>
               {label.name}
             </span>
           ))}
+          {issue.labels.nodes.length > 2 ? (
+            <span
+              className="issue-card__label issue-card__label--neutral"
+              title={issue.labels.nodes
+                .slice(2)
+                .map((label) => label.name)
+                .join(', ')}
+            >
+              +{issue.labels.nodes.length - 2}
+            </span>
+          ) : null}
         </div>
 
         <div className="issue-card__footer">
