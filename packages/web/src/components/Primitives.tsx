@@ -87,7 +87,7 @@ export function Btn({
     padding: icon && !children ? 0 : (size === 'md' ? '0 10px' : '0 8px'),
     width: icon && !children ? (size === 'md' ? 28 : 24) : undefined,
     justifyContent: 'center',
-    fontSize: 12, fontWeight: 500,
+    fontSize: 14, fontWeight: 500,
     borderRadius: 'var(--r-2)',
     transition: 'background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease)',
     border: '1px solid transparent',

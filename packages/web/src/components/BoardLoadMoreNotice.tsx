@@ -21,7 +21,7 @@ export function BoardLoadMoreNotice({
       role={errorMessage ? 'alert' : undefined}
       style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '6px 14px', margin: '0 var(--content-gutter)', flexShrink: 0 }}
     >
-      <p style={{ margin: 0, fontSize: 11 }}>
+      <p style={{ margin: 0, fontSize: 13 }}>
         {errorMessage ??
           'Showing the current page of issues. Load more to continue browsing this team.'}
       </p>

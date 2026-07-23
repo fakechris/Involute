@@ -286,7 +286,7 @@ export function RichTextEditor({
           title="Code (`code`)"
           disabled={disabled}
           onClick={handleCode}
-          style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}
+          style={{ fontFamily: 'var(--font-mono)', fontSize: 14 }}
         >
           {'</>'}
         </button>
@@ -354,7 +354,7 @@ export function RichTextEditor({
             ↑ Uploading {uploadingCount} file{uploadingCount > 1 ? 's' : ''}…
           </span>
         ) : null}
-        <span style={{ fontSize: 10, color: 'var(--fg-dim)', marginRight: 4 }}>
+        <span style={{ fontSize: 12, color: 'var(--fg-dim)', marginRight: 4 }}>
           <Kbd keys={['⌘', '↵']} /> to submit
         </span>
         <button
@@ -364,7 +364,7 @@ export function RichTextEditor({
           onClick={() => onSubmit?.()}
           style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            height: 24, padding: '0 10px', fontSize: 12, fontWeight: 500,
+            height: 24, padding: '0 10px', fontSize: 14, fontWeight: 500,
             borderRadius: 'var(--r-2)', border: '1px solid transparent', cursor: 'pointer',
             whiteSpace: 'nowrap',
             ...(value.trim()

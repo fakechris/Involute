@@ -118,8 +118,8 @@ export function MyIssuesPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
       <div className="page-header">
         <Avatar user={viewerUser} size={20} />
-        <span style={{ fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>My Issues</span>
-        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)', whiteSpace: 'nowrap' }}>
+        <span style={{ fontSize: 15, fontWeight: 500, whiteSpace: 'nowrap' }}>My Issues</span>
+        <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)', whiteSpace: 'nowrap' }}>
           {myIssues.length}
         </span>
         <div style={{ flex: 1 }} />
@@ -128,7 +128,7 @@ export function MyIssuesPage() {
       {filterOpen && (
         <div style={{ display: 'flex', gap: 12, padding: '8px var(--pad-x)', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-sunken)' }}>
           <select
-            style={{ height: 26, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 11, color: 'var(--fg)' }}
+            style={{ height: 26, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 13, color: 'var(--fg)' }}
             value={filterStateType}
             onChange={(e) => setFilterStateType(e.target.value as WorkflowStateType | '')}
           >
@@ -140,7 +140,7 @@ export function MyIssuesPage() {
             <option value="CANCELED">Canceled</option>
           </select>
           <select
-            style={{ height: 26, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 11, color: 'var(--fg)' }}
+            style={{ height: 26, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 13, color: 'var(--fg)' }}
             value={filterPriority}
             onChange={(e) => setFilterPriority(e.target.value === '' ? '' : Number(e.target.value))}
           >
@@ -154,7 +154,7 @@ export function MyIssuesPage() {
           {(filterStateType || filterPriority !== '') && (
             <button
               type="button"
-              style={{ fontSize: 11, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}
+              style={{ fontSize: 13, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}
               onClick={() => { setFilterStateType(''); setFilterPriority(''); }}
             >
               Clear
@@ -165,7 +165,7 @@ export function MyIssuesPage() {
 
       <div className="page-content">
         {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 12 }}>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 14 }}>
             Loading issues…
           </div>
         ) : myIssues.length === 0 ? (
@@ -196,7 +196,7 @@ export function MyIssuesPage() {
                       padding: '0 var(--pad-x)',
                       borderBottom: '1px solid var(--border-subtle)',
                       cursor: 'pointer',
-                      fontSize: 13,
+                      fontSize: 15,
                       transition: 'background var(--dur-1) var(--ease)',
                       background: 'transparent',
                       border: 'none',
@@ -207,7 +207,7 @@ export function MyIssuesPage() {
                     onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
                   >
-                    <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
+                    <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
                       {issue.identifier}
                     </span>
                     <PriorityIcon level={issue.priority} size={14} />
@@ -226,8 +226,8 @@ export function MyIssuesPage() {
                     >
                       {issue.title}
                     </span>
-                    <span style={{ fontSize: 11, color: 'var(--fg-muted)' }}>{issue.state.name}</span>
-                    <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
+                    <span style={{ fontSize: 13, color: 'var(--fg-muted)' }}>{issue.state.name}</span>
+                    <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
                       {formatTimeAgo(issue.updatedAt)}
                     </span>
                   </button>

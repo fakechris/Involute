@@ -246,7 +246,7 @@ export function IssueDetailDrawer({
         <div className="issue-panel__header">
           <div className="issue-panel__title-row">
             {team ? <span className="context-chip context-chip--team">{team.key}</span> : null}
-            <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
+            <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
               {activeIssue.identifier}
             </span>
           </div>
@@ -359,7 +359,7 @@ export function IssueDetailDrawer({
                   {description ? (
                     <MarkdownRenderer content={description} />
                   ) : (
-                    <span style={{ color: 'var(--fg-dim)', fontSize: 13 }}>Add a description…</span>
+                    <span style={{ color: 'var(--fg-dim)', fontSize: 15 }}>Add a description…</span>
                   )}
                 </div>
               )}

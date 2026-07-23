@@ -179,7 +179,7 @@ export function CyclesPage() {
         }}>
           <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
         </div>
-        <span style={{ fontSize: 11, color: 'var(--fg-dim)' }}>{pct}%</span>
+        <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{pct}%</span>
       </div>
     );
   }
@@ -188,12 +188,12 @@ export function CyclesPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
       <div className="page-header">
         <span style={{ color: 'var(--fg-dim)', display: 'inline-flex' }}><IcoCycle /></span>
-        <span style={{ fontSize: 13, fontWeight: 500 }}>Cycles</span>
+        <span style={{ fontSize: 15, fontWeight: 500 }}>Cycles</span>
         {teamKey && (
           <>
-            <span style={{ color: 'var(--fg-faint)', fontSize: 12 }}>·</span>
+            <span style={{ color: 'var(--fg-faint)', fontSize: 14 }}>·</span>
             <span className="mono" style={{
-              fontSize: 10, padding: '1px 5px', borderRadius: 3,
+              fontSize: 12, padding: '1px 5px', borderRadius: 3,
               background: 'var(--bg-hover)', border: '1px solid var(--border)',
               color: 'var(--fg-muted)',
             }}>
@@ -209,7 +209,7 @@ export function CyclesPage() {
 
       <div className="page-content">
         {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 12 }}>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 14 }}>
             Loading cycles…
           </div>
         ) : cycles.length === 0 ? (
@@ -231,7 +231,7 @@ export function CyclesPage() {
           <div style={{ padding: '20px var(--pad-x)' }}>
             {activeCycle && (
               <section style={{ marginBottom: 32 }}>
-                <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
                   ACTIVE CYCLE
                 </div>
                 <div style={{
@@ -239,8 +239,8 @@ export function CyclesPage() {
                   padding: 16, background: 'var(--bg-raised)',
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 14, fontWeight: 500 }}>{activeCycle.name}</span>
-                    <span style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
+                    <span style={{ fontSize: 15, fontWeight: 500 }}>{activeCycle.name}</span>
+                    <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
                       {formatDate(activeCycle.startsAt)} – {formatDate(activeCycle.endsAt)}
                     </span>
                     <div style={{ flex: 1 }} />
@@ -259,11 +259,11 @@ export function CyclesPage() {
                           style={{
                             display: 'flex', alignItems: 'center', gap: 8,
                             width: '100%', padding: '6px 0', background: 'none', border: 'none',
-                            cursor: 'pointer', fontSize: 12.5, color: 'var(--fg)', textAlign: 'left',
+                            cursor: 'pointer', fontSize: 14.5, color: 'var(--fg)', textAlign: 'left',
                           }}
                         >
                           <StatusIconPrimitive stateType={getStateType(issue.state.type)} stateColor={getStateColor(issue.state.type)} size={14} />
-                          <span className="mono" style={{ fontSize: 10, color: 'var(--fg-dim)' }}>{issue.identifier}</span>
+                          <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>{issue.identifier}</span>
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.title}</span>
                         </button>
                       ))}
@@ -275,7 +275,7 @@ export function CyclesPage() {
 
             {upcomingCycles.length > 0 && (
               <section style={{ marginBottom: 32 }}>
-                <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
                   UPCOMING
                 </div>
                 {upcomingCycles.map((cycle) => (
@@ -286,7 +286,7 @@ export function CyclesPage() {
 
             {completedCycles.length > 0 && (
               <section>
-                <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
                   COMPLETED
                 </div>
                 {completedCycles.map((cycle) => (
@@ -300,13 +300,13 @@ export function CyclesPage() {
 
       <dialog ref={dialogRef} className="dialog-modal" onClick={(e) => { if (e.target === dialogRef.current) dialogRef.current?.close(); }}>
         <form onSubmit={handleSubmit} style={{ padding: 20, minWidth: 340 }}>
-          <h3 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 500 }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 500 }}>
             {dialogMode === 'create' ? 'New cycle' : 'Edit cycle'}
           </h3>
           <label style={{ display: 'block', marginBottom: 12 }}>
-            <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Name</span>
+            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Name</span>
             <input
-              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 12.5, color: 'var(--fg)' }}
+              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)' }}
               value={formName}
               onChange={(e) => setFormName(e.target.value)}
               placeholder="e.g. Sprint 1"
@@ -315,20 +315,20 @@ export function CyclesPage() {
           </label>
           <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
             <label style={{ flex: 1 }}>
-              <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Start date</span>
+              <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Start date</span>
               <input
                 type="date"
-                style={{ width: '100%', height: 30, padding: '0 8px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 12, color: 'var(--fg)' }}
+                style={{ width: '100%', height: 30, padding: '0 8px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
                 value={formStartsAt}
                 onChange={(e) => setFormStartsAt(e.target.value)}
                 required
               />
             </label>
             <label style={{ flex: 1 }}>
-              <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>End date</span>
+              <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>End date</span>
               <input
                 type="date"
-                style={{ width: '100%', height: 30, padding: '0 8px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 12, color: 'var(--fg)' }}
+                style={{ width: '100%', height: 30, padding: '0 8px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
                 value={formEndsAt}
                 onChange={(e) => setFormEndsAt(e.target.value)}
                 required
@@ -356,11 +356,11 @@ function CycleRow({ cycle, onEdit, onDelete }: { cycle: CycleSummary; onEdit: ()
       border: '1px solid var(--border)', marginBottom: 6, background: 'var(--bg-raised)',
     }}>
       <IcoCycle size={14} style={{ color: 'var(--fg-dim)' }} />
-      <span style={{ fontSize: 13, fontWeight: 500, flex: 1 }}>{cycle.name}</span>
-      <span style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
+      <span style={{ fontSize: 15, fontWeight: 500, flex: 1 }}>{cycle.name}</span>
+      <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
         {formatDate(cycle.startsAt)} – {formatDate(cycle.endsAt)}
       </span>
-      <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>{issueCount} issues</span>
+      <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{issueCount} issues</span>
       <Btn variant="ghost" size="sm" onClick={onEdit}>Edit</Btn>
       <Btn variant="ghost" size="sm" onClick={onDelete} style={{ color: 'var(--danger)' }}>Delete</Btn>
     </div>

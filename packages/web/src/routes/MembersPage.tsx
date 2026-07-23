@@ -83,8 +83,8 @@ export function MembersPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
       <div className="page-header">
         <span style={{ color: 'var(--fg-dim)', display: 'inline-flex' }}><IcoTeam /></span>
-        <span style={{ fontSize: 13, fontWeight: 500 }}>Members</span>
-        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>{users.length}</span>
+        <span style={{ fontSize: 15, fontWeight: 500 }}>Members</span>
+        <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{users.length}</span>
         <div style={{ flex: 1 }} />
         <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={() => {
           setInviteEmail('');
@@ -96,7 +96,7 @@ export function MembersPage() {
 
       <div className="page-content">
         {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 12 }}>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 14 }}>
             Loading members…
           </div>
         ) : users.length === 0 ? (
@@ -151,12 +151,12 @@ export function MembersPage() {
           }}
           style={{ padding: 20, minWidth: 340 }}
         >
-          <h3 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 500 }}>Invite member</h3>
+          <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 500 }}>Invite member</h3>
           <label style={{ display: 'block', marginBottom: 12 }}>
-            <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Email</span>
+            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Email</span>
             <input
               type="email"
-              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 12.5, color: 'var(--fg)' }}
+              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)' }}
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
               placeholder="colleague@company.com"
@@ -164,18 +164,18 @@ export function MembersPage() {
             />
           </label>
           <label style={{ display: 'block', marginBottom: 12 }}>
-            <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Name (optional)</span>
+            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Name (optional)</span>
             <input
-              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 12.5, color: 'var(--fg)' }}
+              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)' }}
               value={inviteName}
               onChange={(e) => setInviteName(e.target.value)}
               placeholder="Full name"
             />
           </label>
           <label style={{ display: 'block', marginBottom: 16 }}>
-            <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Role</span>
+            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Role</span>
             <select
-              style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 12, color: 'var(--fg)' }}
+              style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value as 'VIEWER' | 'EDITOR' | 'OWNER')}
             >
@@ -222,13 +222,13 @@ function MemberCard({
         <Avatar user={{ name: user.name ?? undefined }} size={32} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            fontSize: 13, fontWeight: 500,
+            fontSize: 15, fontWeight: 500,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
             {user.name ?? 'Unknown'}
           </div>
           <div style={{
-            fontSize: 11, color: 'var(--fg-dim)',
+            fontSize: 13, color: 'var(--fg-dim)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
             {user.email ?? '—'}
@@ -251,7 +251,7 @@ function MemberCard({
               <button
                 key={r}
                 type="button"
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 10px', fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg)', borderRadius: 'var(--r-1)' }}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 10px', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg)', borderRadius: 'var(--r-1)' }}
                 onClick={() => { setMenuOpen(false); onChangeRole(user.id, r); }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
@@ -262,7 +262,7 @@ function MemberCard({
             <div style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 0' }} />
             <button
               type="button"
-              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 10px', fontSize: 11, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', borderRadius: 'var(--r-1)' }}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '5px 10px', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', borderRadius: 'var(--r-1)' }}
               onClick={() => { setMenuOpen(false); onRemove(user.id); }}
               onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
@@ -272,7 +272,7 @@ function MemberCard({
           </div>
         )}
       </div>
-      <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--fg-dim)', whiteSpace: 'nowrap' }}>
+      <div style={{ display: 'flex', gap: 12, fontSize: 13, color: 'var(--fg-dim)', whiteSpace: 'nowrap' }}>
         <span>
           <span className="mono" style={{ color: 'var(--fg)' }}>{issueCount}</span> open
         </span>

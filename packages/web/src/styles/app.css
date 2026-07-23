@@ -162,7 +162,7 @@ html,
 body {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.45;
   background: var(--bg);
   color: var(--fg);
@@ -231,7 +231,7 @@ kbd {
   border-radius: var(--r-1);
   background: var(--bg-hover);
   padding: 0 4px;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--fg-dim);
   font-feature-settings: "zero";
 }
@@ -318,7 +318,7 @@ kbd {
   background: var(--accent);
   color: var(--accent-fg);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   flex-shrink: 0;
 }
@@ -331,12 +331,12 @@ kbd {
 }
 
 .app-shell__workspace-copy strong {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
 }
 
 .app-shell__workspace-copy span {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--fg-dim);
 }
 
@@ -351,7 +351,7 @@ kbd {
   background: transparent;
   padding: 0 8px;
   color: var(--fg-dim);
-  font-size: 13px;
+  font-size: 15px;
   transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
 
@@ -373,7 +373,7 @@ kbd {
   gap: 8px;
   height: 26px;
   padding: 0 8px;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--fg-muted);
   border-radius: var(--r-2);
   transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
@@ -401,7 +401,7 @@ kbd {
   align-items: center;
   justify-content: space-between;
   padding: 6px 10px 4px;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.02em;
   color: var(--fg-dim);
@@ -419,7 +419,7 @@ kbd {
 }
 
 .app-shell__badge {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   font-family: var(--font-mono);
   padding: 0 5px;
@@ -461,7 +461,7 @@ kbd {
 }
 
 .app-shell__footer-name {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--fg);
   font-weight: 500;
   overflow: hidden;
@@ -470,7 +470,7 @@ kbd {
 }
 
 .app-shell__footer-role {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--fg-dim);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -530,7 +530,7 @@ kbd {
   color: var(--fg-dim);
   transform: rotate(-90deg);
   transition: transform var(--dur-1) var(--ease);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .app-shell__team-caret--expanded {
@@ -548,7 +548,7 @@ kbd {
   background: var(--bg-hover);
   padding: 0 5px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--fg-muted);
   letter-spacing: 0.02em;
 }
@@ -565,7 +565,7 @@ kbd {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .app-shell__team-count {
@@ -577,7 +577,7 @@ kbd {
   background: transparent;
   padding: 0 4px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--fg-dim);
 }
 
@@ -610,7 +610,7 @@ kbd {
   border-radius: var(--r-2);
   background: transparent;
   padding: 0 8px;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--fg-dim);
   text-align: left;
   transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
@@ -639,7 +639,7 @@ kbd {
 .app-shell__recent-link-key {
   flex-shrink: 0;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--fg-dim);
 }
 
@@ -667,14 +667,14 @@ kbd {
 }
 
 .app-shell__sidebar-meta strong {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--fg);
 }
 
 .app-shell__sidebar-meta span,
 .app-shell__session-status {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--fg-dim);
 }
 
@@ -695,7 +695,7 @@ kbd {
   background: transparent;
   padding: 0 10px;
   color: var(--fg-muted);
-  font-size: 12px;
+  font-size: 14px;
   transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
 
@@ -751,7 +751,7 @@ kbd {
 
 .app-shell__header h1 {
   margin: 0;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
   color: var(--fg);
   letter-spacing: 0;
@@ -775,7 +775,7 @@ kbd {
   background: var(--bg-hover);
   padding: 0 5px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--fg-muted);
   letter-spacing: 0.02em;
 }
@@ -811,7 +811,7 @@ kbd {
 }
 
 .app-shell__mobile-brand {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
 }
 
@@ -857,7 +857,7 @@ kbd {
   border-radius: var(--r-1);
   background: transparent;
   padding: 0 8px;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--fg-muted);
   transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
@@ -936,7 +936,7 @@ kbd {
   cursor: pointer;
   list-style: none;
   padding: 6px 10px;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--fg-muted);
 }
@@ -964,7 +964,7 @@ kbd {
   gap: 6px;
   min-height: 22px;
   color: var(--fg-muted);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .board-active-view,
@@ -985,14 +985,14 @@ kbd {
 .issue-bulkbar__meta strong,
 .board-active-view__meta strong,
 .backlog-active-view__meta strong {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
 }
 
 .issue-bulkbar__meta span,
 .board-active-view__meta span,
 .backlog-active-view__meta span {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--fg-dim);
 }
 
@@ -1013,7 +1013,7 @@ kbd {
 
 .field-stack span,
 .issue-panel__label {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--fg-dim);
 }
 
@@ -1042,20 +1042,20 @@ kbd {
 .access-stage__section > select {
   height: 26px;
   padding: 0 8px;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .command-palette__input {
   flex: 1;
   height: 32px;
   padding: 0 10px;
-  font-size: 13px;
+  font-size: 15px;
   border: 0;
   background: transparent;
 }
 
 .field-stack--readonly strong {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
 }
 
@@ -1071,13 +1071,13 @@ kbd {
 
 .shell-notice h2 {
   margin: 0 0 4px;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
 }
 
 .shell-notice p {
   margin: 0;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--fg-dim);
 }
 
@@ -1103,7 +1103,7 @@ kbd {
   background: var(--accent);
   padding: 0 10px;
   color: var(--accent-fg);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   transition: filter var(--dur-1) var(--ease), opacity var(--dur-1) var(--ease);
 }
@@ -1130,7 +1130,7 @@ kbd {
   background: transparent;
   padding: 0 10px;
   color: var(--fg-muted);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
@@ -1175,7 +1175,7 @@ kbd {
 }
 
 .backlog-table th {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1250,7 +1250,7 @@ kbd {
 
 .access-status-card h2 {
   margin: 0 0 4px;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
 }
 
@@ -1258,14 +1258,14 @@ kbd {
 .access-member-card strong {
   display: block;
   margin-bottom: 4px;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
 }
 
 .access-status-card p,
 .access-member-card p {
   margin: 4px 0 0;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--fg-dim);
 }
 
@@ -1286,7 +1286,7 @@ kbd {
 
 .access-stage__section h2 {
   margin: 0 0 6px;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
 }
 
@@ -1361,7 +1361,7 @@ kbd {
 
 .board-column__header h2 {
   margin: 0;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -1377,7 +1377,7 @@ kbd {
   background: transparent;
   padding: 0 4px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--fg-dim);
 }
 
@@ -1394,7 +1394,7 @@ kbd {
 .board-column__empty {
   margin: 0;
   padding: 6px 4px;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--fg-dim);
 }
 
@@ -1489,7 +1489,7 @@ kbd {
   border-radius: var(--r-1);
   background: transparent;
   color: var(--fg-faint);
-  font-size: 11px;
+  font-size: 13px;
   padding: 0;
   pointer-events: none;
   opacity: 0;
@@ -1549,7 +1549,7 @@ kbd {
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.02em;
   color: var(--fg-dim);
@@ -1581,7 +1581,7 @@ kbd {
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 0 6px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   background: var(--bg-hover);
   color: var(--fg-muted);
@@ -1620,13 +1620,13 @@ kbd {
   border-radius: 999px;
   background: var(--accent);
   color: var(--accent-fg);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   flex-shrink: 0;
 }
 
 .issue-card__assignee {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--fg-dim);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1647,7 +1647,7 @@ kbd {
   border-bottom: 1px solid var(--border-subtle);
   background: transparent;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 15px;
   transition: background var(--dur-1) var(--ease);
 }
 
@@ -1681,7 +1681,7 @@ kbd {
 
 .issue-row__id {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--fg-dim);
   letter-spacing: 0.02em;
@@ -1695,7 +1695,7 @@ kbd {
 
 .issue-row__title {
   color: var(--fg);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 400;
   min-width: 0;
   overflow: hidden;
@@ -1711,7 +1711,7 @@ kbd {
 
 .issue-row__updated {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--fg-dim);
   min-width: 32px;
   text-align: right;
@@ -1726,7 +1726,7 @@ kbd {
   border-radius: 999px;
   background: var(--accent);
   color: var(--accent-fg);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -1752,14 +1752,14 @@ kbd {
 }
 
 .issue-group-header__label {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--fg);
 }
 
 .issue-group-header__count {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--fg-dim);
 }
 
@@ -1875,7 +1875,7 @@ kbd {
   border-radius: var(--r-2);
   background: transparent;
   padding: 0 10px;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--fg-muted);
 }
 
@@ -1915,7 +1915,7 @@ kbd {
   border-left: 1px solid var(--border-subtle);
   background: var(--bg-sunken);
   overflow-y: auto;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .issue-panel__properties {
@@ -1931,7 +1931,7 @@ kbd {
 }
 
 .issue-panel__label {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1946,7 +1946,7 @@ kbd {
   padding: 0;
   box-shadow: none;
   overflow: hidden;
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 500;
   line-height: 1.25;
   letter-spacing: -0.015em;
@@ -1956,7 +1956,7 @@ kbd {
 }
 
 .issue-panel__inline-hint {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--fg-dim);
 }
 
@@ -1969,7 +1969,7 @@ kbd {
 
 .issue-panel__section > h2 {
   margin: 0;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1982,7 +1982,7 @@ kbd {
   min-height: 96px;
   resize: vertical;
   padding: 10px 12px;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.55;
 }
 
@@ -1998,12 +1998,12 @@ kbd {
   gap: 6px;
   min-height: 18px;
   color: var(--fg-muted);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .issue-panel__error {
   color: var(--danger);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 /* Description textarea (page mode) */
@@ -2035,7 +2035,7 @@ kbd {
 }
 
 .issue-panel__activity-header {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--fg-dim);
   letter-spacing: 0.04em;
@@ -2060,7 +2060,7 @@ kbd {
   display: flex;
   gap: 10px;
   align-items: center;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--fg-dim);
 }
 
@@ -2092,7 +2092,7 @@ kbd {
   padding: 12px;
   border: 0;
   background: transparent;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.55;
   color: var(--fg);
   resize: vertical;
@@ -2113,7 +2113,7 @@ kbd {
 
 /* Property rows (right rail) */
 .issue-panel__section-title {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--fg-dim);
   letter-spacing: 0.06em;
@@ -2126,7 +2126,7 @@ kbd {
   align-items: center;
   gap: 8px;
   min-height: 26px;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .issue-panel__prop-label {
@@ -2151,7 +2151,7 @@ kbd {
   border: 1px solid transparent;
   border-radius: var(--r-1);
   background: transparent;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--fg);
   cursor: pointer;
   transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
@@ -2183,7 +2183,7 @@ kbd {
   height: 26px;
   padding: 0 6px;
   width: 100%;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--fg-muted);
   text-align: left;
   border: 0;
@@ -2248,7 +2248,7 @@ kbd {
 
 .issue-children__id {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--fg-dim);
 }
 
@@ -2280,7 +2280,7 @@ kbd {
   border: 0;
   background: transparent;
   padding: 0;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--fg-dim);
 }
 
@@ -2290,7 +2290,7 @@ kbd {
   justify-content: space-between;
   gap: 6px;
   margin-bottom: 2px;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--fg-dim);
 }
 
@@ -2299,7 +2299,7 @@ kbd {
   color: var(--fg-muted);
   line-height: 1.55;
   white-space: pre-wrap;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .discussion-entry {
@@ -2317,7 +2317,7 @@ kbd {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 6px;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--fg-dim);
 }
 
@@ -2331,7 +2331,7 @@ kbd {
   margin: 0;
   color: var(--fg);
   white-space: pre-wrap;
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.55;
 }
 
@@ -2340,7 +2340,7 @@ kbd {
   background: transparent;
   padding: 0;
   color: var(--danger);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .discussion-form {
@@ -2364,12 +2364,12 @@ kbd {
 
 .discussion-empty {
   color: var(--fg-dim);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .issue-panel__empty-hint {
   color: var(--fg-dim);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 /* ============================================================== */
@@ -2418,7 +2418,7 @@ kbd {
 
 .command-palette__hint {
   color: var(--fg-dim);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .command-palette__results {
@@ -2438,7 +2438,7 @@ kbd {
 .command-palette__group-label {
   padding: 6px 8px 2px;
   color: var(--fg-dim);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -2478,13 +2478,13 @@ kbd {
 }
 
 .command-palette__item-label {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
   color: var(--fg);
 }
 
 .command-palette__item-description {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--fg-dim);
 }
 
@@ -2495,14 +2495,14 @@ kbd {
   padding: 0;
   color: var(--fg-dim);
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .command-palette__empty {
   margin: 0;
   padding: 14px 10px;
   color: var(--fg-dim);
-  font-size: 12px;
+  font-size: 14px;
   text-align: center;
 }
 
@@ -2515,7 +2515,7 @@ kbd {
   background: var(--bg-sunken);
   padding: 6px 10px;
   color: var(--fg-dim);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .command-palette__footer span {
@@ -2557,7 +2557,7 @@ kbd {
 }
 
 .tweaks-panel__header strong {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
 }
 
@@ -2568,7 +2568,7 @@ kbd {
   border-radius: var(--r-2);
   background: transparent;
   color: var(--fg-muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .tweaks-panel__close:hover {
@@ -2585,7 +2585,7 @@ kbd {
 .tweaks-panel__label,
 .tweaks-panel__value {
   color: var(--fg-dim);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .tweaks-panel__options {
@@ -2601,7 +2601,7 @@ kbd {
   border-radius: var(--r-2);
   background: transparent;
   color: var(--fg-muted);
-  font-size: 11px;
+  font-size: 13px;
   text-transform: capitalize;
 }
 
@@ -2643,7 +2643,7 @@ kbd {
 }
 
 .inbox-page__title {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
 }
 
@@ -2661,7 +2661,7 @@ kbd {
   border-radius: var(--r-1);
   background: transparent;
   color: var(--fg-muted);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   text-transform: capitalize;
 }
@@ -2730,13 +2730,13 @@ kbd {
 }
 
 .inbox-item__issue {
-  font-size: 12px;
+  font-size: 14px;
   color: var(--fg-muted);
 }
 
 .inbox-item__time {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--fg-dim);
   flex-shrink: 0;
   margin-top: 4px;
@@ -2746,7 +2746,7 @@ kbd {
   padding: 60px var(--content-gutter);
   text-align: center;
   color: var(--fg-dim);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 /* ============================================================== */
@@ -2824,14 +2824,14 @@ kbd {
 }
 
 .empty-state h3 {
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 500;
   color: var(--fg);
   margin: 0 0 8px;
 }
 
 .empty-state p {
-  font-size: 13px;
+  font-size: 15px;
   margin: 0;
   max-width: 360px;
   line-height: 1.5;
@@ -2931,14 +2931,14 @@ kbd {
 
 .inline-create__input {
   flex: 1;
-  font-size: 13px;
+  font-size: 15px;
   color: var(--fg);
   background: transparent;
   min-width: 0;
 }
 
 .inline-create__hint {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--fg-dim);
   display: flex;
   align-items: center;
@@ -3037,7 +3037,7 @@ kbd {
 .rich-text-toolbar button {
   padding: 4px 8px;
   border-radius: var(--r-1);
-  font-size: 13px;
+  font-size: 15px;
   cursor: pointer;
   background: transparent;
   border: none;
@@ -3070,7 +3070,7 @@ kbd {
   background: transparent;
   color: var(--fg);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.55;
 }
 
@@ -3103,7 +3103,7 @@ kbd {
   flex: 1;
   height: 24px;
   padding: 0 8px;
-  font-size: 12px;
+  font-size: 14px;
   border: 1px solid var(--border);
   border-radius: var(--r-1);
   background: var(--bg);
@@ -3121,7 +3121,7 @@ kbd {
 /* ============================================================== */
 
 .markdown-content {
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.6;
 }
 
@@ -3138,7 +3138,7 @@ kbd {
   padding: 2px 6px;
   border-radius: 3px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 14px;
   border: 1px solid var(--border);
   color: var(--fg-muted);
 }
@@ -3156,7 +3156,7 @@ kbd {
   background: transparent;
   padding: 0;
   border: none;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--fg);
 }
 
@@ -3182,7 +3182,7 @@ kbd {
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--fg-dim);
   animation: upload-pulse 1.5s ease-in-out infinite;
 }
