@@ -64,8 +64,8 @@ function KanbanColumn({
           {group.meta?.priority !== undefined && (
             <PriorityIcon level={group.meta.priority} size={12} />
           )}
-          <span style={{ fontSize: 12, fontWeight: 600 }}>{group.label}</span>
-          <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>{group.label}</span>
+          <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
             {group.issues.length}
           </span>
         </div>

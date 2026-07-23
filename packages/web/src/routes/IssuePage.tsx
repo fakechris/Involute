@@ -557,7 +557,7 @@ export function IssuePage() {
                 onClick={() => navigate(`/issue/${activeIssue.parent!.id}`)}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
-                  fontSize: 11, color: 'var(--fg-muted)', padding: '2px 4px',
+                  fontSize: 13, color: 'var(--fg-muted)', padding: '2px 4px',
                   borderRadius: 'var(--r-1)',
                 }}
                 className="mono"
@@ -572,7 +572,7 @@ export function IssuePage() {
           <span style={{ color: 'var(--fg-faint)', display: 'inline-flex' }}>
             <IcoChevR size={10} />
           </span>
-          <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
+          <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
             {activeIssue.identifier}
           </span>
         </div>
@@ -590,7 +590,7 @@ export function IssuePage() {
               }}>
                 <button
                   type="button"
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 10px', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg)', borderRadius: 'var(--r-1)' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 10px', fontSize: 14, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg)', borderRadius: 'var(--r-1)' }}
                   onClick={() => { setMoreMenuOpen(false); handleCopyLink(); }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
@@ -599,7 +599,7 @@ export function IssuePage() {
                 </button>
                 <button
                   type="button"
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 10px', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', borderRadius: 'var(--r-1)' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 10px', fontSize: 14, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', borderRadius: 'var(--r-1)' }}
                   onClick={() => {
                     setMoreMenuOpen(false);
                     if (confirmIssueDelete()) {
@@ -664,7 +664,7 @@ export function IssuePage() {
                   <button
                     type="button"
                     style={{
-                      height: 26, padding: '0 12px', fontSize: 12, fontWeight: 500,
+                      height: 26, padding: '0 12px', fontSize: 14, fontWeight: 500,
                       borderRadius: 'var(--r-2)', border: '1px solid var(--border)', cursor: 'pointer',
                       background: 'transparent', color: 'var(--fg-muted)',
                     }}
@@ -687,13 +687,13 @@ export function IssuePage() {
                 {description ? (
                   <MarkdownRenderer content={description} />
                 ) : (
-                  <span style={{ color: 'var(--fg-dim)', fontSize: 13 }}>Add a description…</span>
+                  <span style={{ color: 'var(--fg-dim)', fontSize: 15 }}>Add a description…</span>
                 )}
                 <button
                   type="button"
                   style={{
                     position: 'absolute', top: 0, right: 0,
-                    height: 22, padding: '0 8px', fontSize: 11, fontWeight: 500,
+                    height: 22, padding: '0 8px', fontSize: 13, fontWeight: 500,
                     borderRadius: 'var(--r-2)', border: '1px solid var(--border)', cursor: 'pointer',
                     background: 'var(--bg-hover)', color: 'var(--fg-muted)',
                     opacity: 0.7,
@@ -711,7 +711,7 @@ export function IssuePage() {
                   type="button"
                   className="issue-children__row"
                   onClick={() => navigate(`/issue/${activeIssue.parent!.id}`)}
-                  style={{ display: 'flex', gap: 6, padding: '4px 0', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg)', fontSize: 13 }}
+                  style={{ display: 'flex', gap: 6, padding: '4px 0', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg)', fontSize: 15 }}
                 >
                   {activeIssue.parent.identifier} — {activeIssue.parent.title}
                 </button>
@@ -750,10 +750,10 @@ export function IssuePage() {
                       <Avatar user={{ name: renderCommentAuthor(entry.comment) }} size={22} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="issue-activity__comment-meta">
-                          <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--fg)' }}>
+                          <span style={{ fontSize: 14.5, fontWeight: 500, color: 'var(--fg)' }}>
                             {renderCommentAuthor(entry.comment)}
                           </span>
-                          <span style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
+                          <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
                             {formatTimestamp(entry.timestamp)}
                           </span>
                           <button
@@ -785,7 +785,7 @@ export function IssuePage() {
                       {entry.body ? (
                         <span style={{ color: 'var(--fg-muted)' }}>{entry.body}</span>
                       ) : null}
-                      <span style={{ marginLeft: 'auto', fontSize: 11 }}>
+                      <span style={{ marginLeft: 'auto', fontSize: 13 }}>
                         {formatTimestamp(entry.timestamp)}
                       </span>
                     </div>
@@ -950,7 +950,7 @@ export function IssuePage() {
             <div className="issue-panel__prop-label">Team</div>
             <div className="issue-panel__prop-value">
               <span className="mono" style={{
-                fontSize: 10, padding: '1px 5px', borderRadius: 3,
+                fontSize: 12, padding: '1px 5px', borderRadius: 3,
                 background: 'var(--bg-hover)', border: '1px solid var(--border)',
                 color: 'var(--fg-muted)',
               }}>

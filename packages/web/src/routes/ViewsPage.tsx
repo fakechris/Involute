@@ -60,8 +60,8 @@ export function ViewsPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
       <div className="page-header">
         <span style={{ color: 'var(--fg-dim)', display: 'inline-flex' }}><IcoViews /></span>
-        <span style={{ fontSize: 13, fontWeight: 500 }}>Views</span>
-        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>{views.length}</span>
+        <span style={{ fontSize: 15, fontWeight: 500 }}>Views</span>
+        <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{views.length}</span>
         <div style={{ flex: 1 }} />
         <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={() => {
           setNewViewName('');
@@ -121,14 +121,14 @@ export function ViewsPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     <span style={{ color: 'var(--accent)', display: 'inline-flex' }}><IcoViews size={14} /></span>
                     <span style={{
-                      fontSize: 13, fontWeight: 500, flex: 1,
+                      fontSize: 15, fontWeight: 500, flex: 1,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                     }}>
                       {v.name}
                     </span>
                   </div>
                   <span style={{
-                    fontSize: 10, padding: '2px 7px', borderRadius: 10,
+                    fontSize: 12, padding: '2px 7px', borderRadius: 10,
                     background: v.kind === 'Board' ? 'var(--accent-weak)' : 'var(--bg-hover)',
                     color: v.kind === 'Board' ? 'var(--accent)' : 'var(--fg-muted)',
                     border: `1px solid ${v.kind === 'Board' ? 'var(--accent-border)' : 'var(--border)'}`,
@@ -163,11 +163,11 @@ export function ViewsPage() {
           }}
           style={{ padding: 20, minWidth: 300 }}
         >
-          <h3 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 500 }}>New view</h3>
+          <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 500 }}>New view</h3>
           <label style={{ display: 'block', marginBottom: 12 }}>
-            <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Name</span>
+            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Name</span>
             <input
-              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 12.5, color: 'var(--fg)' }}
+              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)' }}
               value={newViewName}
               onChange={(e) => setNewViewName(e.target.value)}
               placeholder="View name"
@@ -175,9 +175,9 @@ export function ViewsPage() {
             />
           </label>
           <label style={{ display: 'block', marginBottom: 16 }}>
-            <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Type</span>
+            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Type</span>
             <select
-              style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 12, color: 'var(--fg)' }}
+              style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
               value={newViewKind}
               onChange={(e) => setNewViewKind(e.target.value as 'Board' | 'Backlog')}
             >

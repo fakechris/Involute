@@ -1685,26 +1685,26 @@ export function BoardPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, whiteSpace: 'nowrap' }}>
           {selectedTeam ? (
             <span className="mono" style={{
-              fontSize: 10, fontWeight: 500, padding: '1px 5px', borderRadius: 3,
+              fontSize: 12, fontWeight: 500, padding: '1px 5px', borderRadius: 3,
               background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-muted)',
             }}>{selectedTeam.key}</span>
           ) : null}
-          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg)' }}>
+          <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--fg)' }}>
             {selectedTeam?.name ?? 'Involute'}
           </span>
           <span style={{ color: 'var(--fg-faint)', display: 'inline-flex' }}>
             <IcoChevR size={12} />
           </span>
-          <h1 style={{ fontSize: 13, fontWeight: 400, color: 'var(--fg-muted)', margin: 0 }}>{isBacklogView ? 'Backlog' : 'All issues'}</h1>
-          <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)', marginLeft: 4 }}>{visibleIssues.length}</span>
+          <h1 style={{ fontSize: 15, fontWeight: 400, color: 'var(--fg-muted)', margin: 0 }}>{isBacklogView ? 'Backlog' : 'All issues'}</h1>
+          <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)', marginLeft: 4 }}>{visibleIssues.length}</span>
         </div>
-        <p className="app-shell__subtext" style={{ fontSize: 11, color: 'var(--fg-dim)', margin: 0 }}>
+        <p className="app-shell__subtext" style={{ fontSize: 13, color: 'var(--fg-dim)', margin: 0 }}>
           {isBacklogView
             ? `List view for ${selectedTeam?.name ?? 'your workspace'} issues.`
             : `Workflow overview for ${selectedTeam?.name ?? 'your workspace'}.`}
         </p>
         {isTeamSwitching ? (
-          <span style={{ fontSize: 11, color: 'var(--fg-dim)' }} aria-live="polite">
+          <span style={{ fontSize: 13, color: 'var(--fg-dim)' }} aria-live="polite">
             Switching to {teams.find((team) => team.key === pendingTeamKey)?.name ?? pendingTeamKey}…
           </span>
         ) : null}
@@ -1722,7 +1722,7 @@ export function BoardPage() {
               setPendingTeamKey(nextTeamKey);
             }}
             style={{
-              height: 24, padding: '0 8px', fontSize: 11.5,
+              height: 24, padding: '0 8px', fontSize: 13.5,
               background: 'transparent', border: '1px solid var(--border)',
               borderRadius: 'var(--r-2)', color: 'var(--fg)',
             }}
@@ -1789,16 +1789,16 @@ export function BoardPage() {
                     setActiveSavedBoardViewId('');
                   }
                 }}
-                style={{ flex: 1, fontSize: 12, color: 'var(--fg)', background: 'transparent', height: 22, border: 'none', outline: 'none' }}
+                style={{ flex: 1, fontSize: 14, color: 'var(--fg)', background: 'transparent', height: 22, border: 'none', outline: 'none' }}
               />
               <kbd>/</kbd>
             </div>
 
-            <details style={{ position: 'relative', fontSize: 11 }}>
+            <details style={{ position: 'relative', fontSize: 13 }}>
               <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>States</summary>
               <fieldset style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140 }}>
                 {(selectedTeam?.states.nodes ?? []).map((state) => (
-                  <label key={state.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                  <label key={state.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
                     <input type="checkbox" checked={boardViewState.stateIds.includes(state.id)} onChange={() => toggleBoardFilterValue('stateIds', state.id)} aria-label={state.name} />
                     {state.name}
                   </label>
@@ -1806,11 +1806,11 @@ export function BoardPage() {
               </fieldset>
             </details>
 
-            <details style={{ position: 'relative', fontSize: 11 }}>
+            <details style={{ position: 'relative', fontSize: 13 }}>
               <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>Labels</summary>
               <fieldset style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140 }}>
                 {labels.map((label) => (
-                  <label key={label.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                  <label key={label.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
                     <input type="checkbox" checked={boardViewState.labelIds.includes(label.id)} onChange={() => toggleBoardFilterValue('labelIds', label.id)} aria-label={label.name} />
                     {label.name}
                   </label>
@@ -1818,15 +1818,15 @@ export function BoardPage() {
               </fieldset>
             </details>
 
-            <details style={{ position: 'relative', fontSize: 11 }}>
+            <details style={{ position: 'relative', fontSize: 13 }}>
               <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>Assignees</summary>
               <fieldset style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
                   <input type="checkbox" checked={boardViewState.assigneeIds.includes('unassigned')} onChange={() => toggleBoardFilterValue('assigneeIds', 'unassigned')} aria-label="Unassigned" />
                   Unassigned
                 </label>
                 {users.map((user) => (
-                  <label key={user.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                  <label key={user.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
                     <input type="checkbox" checked={boardViewState.assigneeIds.includes(user.id)} onChange={() => toggleBoardFilterValue('assigneeIds', user.id)} aria-label={user.name ?? user.email ?? user.id} />
                     {user.name ?? user.email}
                   </label>
@@ -1839,7 +1839,7 @@ export function BoardPage() {
               return (
                 <button key={stateId} type="button" aria-label={`Remove State: ${state?.name ?? stateId}`} onClick={() => toggleBoardFilterValue('stateIds', stateId)} style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
-                  fontSize: 11, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
+                  fontSize: 13, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
                   background: 'var(--bg-active)', color: 'var(--fg)', cursor: 'pointer',
                 }}>
                   State: {state?.name ?? stateId}
@@ -1853,7 +1853,7 @@ export function BoardPage() {
               return (
                 <button key={assigneeId} type="button" aria-label={`Remove Assignee: ${assigneeId === 'unassigned' ? 'Unassigned' : (user?.name ?? user?.email ?? assigneeId)}`} onClick={() => toggleBoardFilterValue('assigneeIds', assigneeId)} style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
-                  fontSize: 11, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
+                  fontSize: 13, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
                   background: 'var(--bg-active)', color: 'var(--fg)', cursor: 'pointer',
                 }}>
                   Assignee: {assigneeId === 'unassigned' ? 'Unassigned' : (user?.name ?? user?.email ?? assigneeId)}
@@ -1867,7 +1867,7 @@ export function BoardPage() {
               return (
                 <button key={labelId} type="button" aria-label={`Remove Label: ${label?.name ?? labelId}`} onClick={() => toggleBoardFilterValue('labelIds', labelId)} style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
-                  fontSize: 11, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
+                  fontSize: 13, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
                   background: 'var(--bg-active)', color: 'var(--fg)', cursor: 'pointer',
                 }}>
                   Label: {label?.name ?? labelId}
@@ -1879,13 +1879,13 @@ export function BoardPage() {
             {(boardViewState.query || boardViewState.assigneeIds.length > 0 || boardViewState.stateIds.length > 0 || boardViewState.labelIds.length > 0) ? (
               <button type="button" onClick={resetBoardViewState} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4, height: 22, padding: '0 8px',
-                fontSize: 11, fontWeight: 500, color: 'var(--fg-dim)', cursor: 'pointer',
+                fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', cursor: 'pointer',
                 background: 'transparent', border: 'none',
               }}>Clear all</button>
             ) : null}
 
             {activeSavedBoardViewId ? (
-              <span style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
+              <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
                 Loaded view: {savedBoardViews.find((v) => v.id === activeSavedBoardViewId)?.name ?? 'Unknown'}
               </span>
             ) : null}
@@ -1893,7 +1893,7 @@ export function BoardPage() {
             <div style={{ flex: 1 }} />
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 11, color: 'var(--fg-dim)' }}>Sort</span>
+              <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>Sort</span>
               <select
                 aria-label="Sort board by"
                 value={boardViewState.sortField}
@@ -1904,7 +1904,7 @@ export function BoardPage() {
                   }));
                   setActiveSavedBoardViewId('');
                 }}
-                style={{ height: 22, padding: '0 6px', fontSize: 11, fontWeight: 500, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
+                style={{ height: 22, padding: '0 6px', fontSize: 13, fontWeight: 500, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
               >
                 <option value="updatedAt">Updated</option>
                 <option value="createdAt">Created</option>
@@ -1921,7 +1921,7 @@ export function BoardPage() {
                   }));
                   setActiveSavedBoardViewId('');
                 }}
-                style={{ height: 22, padding: '0 6px', fontSize: 11, fontWeight: 500, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
+                style={{ height: 22, padding: '0 6px', fontSize: 13, fontWeight: 500, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
               >
                 <option value="asc">Asc</option>
                 <option value="desc">Desc</option>
@@ -1929,7 +1929,7 @@ export function BoardPage() {
             </div>
 
             <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-              <span style={{ fontSize: 11, color: 'var(--fg-dim)', marginRight: 4 }}>Group</span>
+              <span style={{ fontSize: 13, color: 'var(--fg-dim)', marginRight: 4 }}>Group</span>
               <select
                 aria-label="Group board by"
                 value={boardViewState.groupBy}
@@ -1941,7 +1941,7 @@ export function BoardPage() {
                   setActiveSavedBoardViewId('');
                   setInlineCreateGroupId(null);
                 }}
-                style={{ height: 22, padding: '0 6px', fontSize: 11, fontWeight: 500, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
+                style={{ height: 22, padding: '0 6px', fontSize: 13, fontWeight: 500, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
               >
                 <option value="status">Status</option>
                 <option value="priority">Priority</option>
@@ -1951,11 +1951,11 @@ export function BoardPage() {
               </select>
             </div>
 
-            <details style={{ position: 'relative', fontSize: 11 }}>
+            <details style={{ position: 'relative', fontSize: 13 }}>
               <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>Columns</summary>
               <fieldset style={{ position: 'absolute', top: '100%', right: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 160 }}>
                 {(selectedTeam?.states.nodes ?? []).map((state) => (
-                  <label key={state.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, cursor: 'pointer' }}>
+                  <label key={state.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
                     <input type="checkbox" checked={!collapsedColumns[state.id]} onChange={() => toggleColumnCollapse(state.id)} aria-label={`Toggle ${state.name} column`} />
                     {state.name}
                   </label>
@@ -1964,8 +1964,8 @@ export function BoardPage() {
             </details>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
-              <button type="button" onClick={() => { const name = window.prompt('View name'); if (name) { const nextView: SavedBoardView = { id: crypto.randomUUID(), name, state: { ...boardViewState } }; const nextViews = [...savedBoardViews, nextView]; setSavedBoardViews(nextViews); writeSavedBoardViews(activeTeamKey, nextViews); setActiveSavedBoardViewId(nextView.id); } }} style={{ height: 22, padding: '0 6px', fontSize: 11, border: '1px solid var(--border)', borderRadius: 'var(--r-2)', background: 'transparent', color: 'var(--fg-muted)', cursor: 'pointer' }}>Save view</button>
-              <button type="button" onClick={() => { resetBoardViewState(); setActiveSavedBoardViewId(''); }} style={{ height: 22, padding: '0 6px', fontSize: 11, border: 'none', background: 'transparent', color: 'var(--fg-dim)', cursor: 'pointer' }}>Clear</button>
+              <button type="button" onClick={() => { const name = window.prompt('View name'); if (name) { const nextView: SavedBoardView = { id: crypto.randomUUID(), name, state: { ...boardViewState } }; const nextViews = [...savedBoardViews, nextView]; setSavedBoardViews(nextViews); writeSavedBoardViews(activeTeamKey, nextViews); setActiveSavedBoardViewId(nextView.id); } }} style={{ height: 22, padding: '0 6px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 'var(--r-2)', background: 'transparent', color: 'var(--fg-muted)', cursor: 'pointer' }}>Save view</button>
+              <button type="button" onClick={() => { resetBoardViewState(); setActiveSavedBoardViewId(''); }} style={{ height: 22, padding: '0 6px', fontSize: 13, border: 'none', background: 'transparent', color: 'var(--fg-dim)', cursor: 'pointer' }}>Clear</button>
               <select
                 aria-label="Load saved board view"
                 value={activeSavedBoardViewId}
@@ -1975,7 +1975,7 @@ export function BoardPage() {
                   const view = savedBoardViews.find((v) => v.id === viewId);
                   if (view) { dispatchApplyBoardView({ state: view.state, viewId: view.id }); }
                 }}
-                style={{ height: 22, padding: '0 6px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
+                style={{ height: 22, padding: '0 6px', fontSize: 13, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
               >
                 <option value="">Views</option>
                 {savedBoardViews.map((view) => (
@@ -1993,7 +1993,7 @@ export function BoardPage() {
                 setInlineCreateGroupId(null);
               }} style={{
                 height: 20, padding: '0 6px', display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontSize: 11, fontWeight: 500, borderRadius: 'var(--r-1)', border: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 500, borderRadius: 'var(--r-1)', border: 'none', cursor: 'pointer',
                 color: boardViewState.viewMode === 'list' ? 'var(--fg)' : 'var(--fg-muted)',
                 background: boardViewState.viewMode === 'list' ? 'var(--bg-active)' : 'transparent',
               }}>
@@ -2004,7 +2004,7 @@ export function BoardPage() {
                 setInlineCreateGroupId(null);
               }} style={{
                 height: 20, padding: '0 6px', display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontSize: 11, fontWeight: 500, borderRadius: 'var(--r-1)', border: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 500, borderRadius: 'var(--r-1)', border: 'none', cursor: 'pointer',
                 color: boardViewState.viewMode === 'board' ? 'var(--fg)' : 'var(--fg-muted)',
                 background: boardViewState.viewMode === 'board' ? 'var(--bg-active)' : 'transparent',
               }}>
@@ -2018,13 +2018,13 @@ export function BoardPage() {
               display: 'flex', alignItems: 'center', gap: 8,
               padding: '6px var(--pad-x, var(--content-gutter))',
               borderBottom: '1px solid var(--border-subtle)',
-              background: 'var(--bg-sunken)', fontSize: 12,
+              background: 'var(--bg-sunken)', fontSize: 14,
             }} aria-label="Bulk actions">
-              <strong style={{ fontSize: 12 }}>{selectedIssueIds.length} selected</strong>
+              <strong style={{ fontSize: 14 }}>{selectedIssueIds.length} selected</strong>
               <button type="button" className="ui-action ui-action--subtle" onClick={selectAllVisibleIssues}>Select all</button>
               <button type="button" className="ui-action ui-action--subtle" onClick={() => setSelectedIssueIds([])}>Clear</button>
               <select aria-label="Bulk move selected issues to state" value={bulkTargetStateId} onChange={(event) => setBulkTargetStateId(event.target.value)}
-                style={{ height: 24, padding: '0 6px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
+                style={{ height: 24, padding: '0 6px', fontSize: 13, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
                 <option value="">Move to…</option>
                 {selectedTeam?.states.nodes.map((state) => (<option key={state.id} value={state.id}>{state.name}</option>))}
               </select>
@@ -2032,7 +2032,7 @@ export function BoardPage() {
                 <button type="button" className="ui-action ui-action--accent" disabled={isSavingState} onClick={() => void applyBulkStateChange()}>Apply to selected</button>
               ) : null}
               <select aria-label="Bulk assign selected issues" value={bulkAssigneeId} onChange={(event) => setBulkAssigneeId(event.target.value)}
-                style={{ height: 24, padding: '0 6px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
+                style={{ height: 24, padding: '0 6px', fontSize: 13, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
                 <option value="">Assign to…</option>
                 <option value="unassigned">Unassigned</option>
                 {users.map((user) => (<option key={user.id} value={user.id}>{user.name ?? user.email ?? user.id}</option>))}
@@ -2041,7 +2041,7 @@ export function BoardPage() {
                 <button type="button" className="ui-action ui-action--subtle" disabled={isSavingState} onClick={() => void applyBulkAssigneeChange()}>Apply assignee</button>
               ) : null}
               <select aria-label="Bulk add label to selected issues" value={bulkLabelId} onChange={(event) => setBulkLabelId(event.target.value)}
-                style={{ height: 24, padding: '0 6px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
+                style={{ height: 24, padding: '0 6px', fontSize: 13, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
                 <option value="">Add label…</option>
                 {labels.map((label) => (<option key={label.id} value={label.id}>{label.name}</option>))}
               </select>
@@ -2049,7 +2049,7 @@ export function BoardPage() {
                 <button type="button" className="ui-action ui-action--subtle" disabled={isSavingState} onClick={() => void applyBulkLabelAdd()}>Add label</button>
               ) : null}
               <select aria-label="Bulk remove label from selected issues" value={bulkRemoveLabelId} onChange={(event) => setBulkRemoveLabelId(event.target.value)}
-                style={{ height: 24, padding: '0 6px', fontSize: 11, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
+                style={{ height: 24, padding: '0 6px', fontSize: 13, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
                 <option value="">Remove label…</option>
                 {labels.map((label) => (<option key={label.id} value={label.id}>{label.name}</option>))}
               </select>
@@ -2228,7 +2228,7 @@ export function BoardPage() {
                   {group.issues.length === 0 && boardViewState.groupBy !== 'none' && inlineCreateGroupId !== group.id && (
                     <div style={{
                       padding: '10px var(--content-gutter)',
-                      fontSize: 12, color: 'var(--fg-faint)',
+                      fontSize: 14, color: 'var(--fg-faint)',
                       borderBottom: '1px solid var(--border-subtle)',
                     }}>
                       No issues

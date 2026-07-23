@@ -133,7 +133,7 @@ export function InboxPage() {
       <header className="inbox-page__header">
         <IcoInbox size={14} style={{ color: 'var(--fg-dim)' }} />
         <span className="inbox-page__title">Inbox</span>
-        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>
+        <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
           {unreadCount}
         </span>
         <div style={{ flex: 1 }} />

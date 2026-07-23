@@ -169,15 +169,15 @@ export function ProjectsPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
       <div className="page-header">
         <span style={{ color: 'var(--fg-dim)', display: 'inline-flex' }}><IcoProject /></span>
-        <span style={{ fontSize: 13, fontWeight: 500 }}>Projects</span>
-        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)' }}>{projects.length}</span>
+        <span style={{ fontSize: 15, fontWeight: 500 }}>Projects</span>
+        <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{projects.length}</span>
         <div style={{ flex: 1 }} />
         <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={openCreateDialog}>New project</Btn>
       </div>
 
       <div className="page-content">
         {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 12 }}>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 14 }}>
             Loading projects…
           </div>
         ) : projects.length === 0 ? (
@@ -213,25 +213,25 @@ export function ProjectsPage() {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     <span style={{ width: 10, height: 10, borderRadius: '50%', background: project.color, flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 15, fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {project.name}
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{
-                      fontSize: 10, padding: '2px 7px', borderRadius: 10,
+                      fontSize: 12, padding: '2px 7px', borderRadius: 10,
                       background: 'var(--bg-hover)', color: statusBadgeColor(project.status),
                       border: '1px solid var(--border)', fontWeight: 500,
                     }}>
                       {statusLabel(project.status)}
                     </span>
                     {project.lead && (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--fg-dim)' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: 'var(--fg-dim)' }}>
                         <Avatar user={{ name: project.lead.name ?? undefined }} size={14} />
                         {project.lead.name}
                       </span>
                     )}
-                    <span className="mono" style={{ fontSize: 11, color: 'var(--fg-dim)', marginLeft: 'auto' }}>
+                    <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)', marginLeft: 'auto' }}>
                       {project.issues?.nodes.length ?? 0} issues
                     </span>
                   </div>
@@ -244,13 +244,13 @@ export function ProjectsPage() {
 
       <dialog ref={dialogRef} className="dialog-modal" onClick={(e) => { if (e.target === dialogRef.current) dialogRef.current?.close(); }}>
         <form onSubmit={handleSubmit} style={{ padding: 20, minWidth: 380 }}>
-          <h3 style={{ margin: '0 0 16px', fontSize: 14, fontWeight: 500 }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 500 }}>
             {dialogMode === 'create' ? 'New project' : 'Edit project'}
           </h3>
           <label style={{ display: 'block', marginBottom: 12 }}>
-            <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Name</span>
+            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Name</span>
             <input
-              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 12.5, color: 'var(--fg)' }}
+              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)' }}
               value={formName}
               onChange={(e) => setFormName(e.target.value)}
               placeholder="Project name"
@@ -258,9 +258,9 @@ export function ProjectsPage() {
             />
           </label>
           <label style={{ display: 'block', marginBottom: 12 }}>
-            <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Description</span>
+            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Description</span>
             <textarea
-              style={{ width: '100%', height: 60, padding: '6px 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 12.5, color: 'var(--fg)', resize: 'vertical' }}
+              style={{ width: '100%', height: 60, padding: '6px 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)', resize: 'vertical' }}
               value={formDesc}
               onChange={(e) => setFormDesc(e.target.value)}
               placeholder="Optional description"
@@ -268,7 +268,7 @@ export function ProjectsPage() {
           </label>
           <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
             <label style={{ flex: 1 }}>
-              <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Color</span>
+              <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Color</span>
               <div style={{ display: 'flex', gap: 4 }}>
                 {COLOR_PALETTE.map((c) => (
                   <button
@@ -284,9 +284,9 @@ export function ProjectsPage() {
               </div>
             </label>
             <label style={{ width: 130 }}>
-              <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Status</span>
+              <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Status</span>
               <select
-                style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 12, color: 'var(--fg)' }}
+                style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
                 value={formStatus}
                 onChange={(e) => setFormStatus(e.target.value)}
               >
@@ -296,9 +296,9 @@ export function ProjectsPage() {
           </div>
           <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
             <label style={{ flex: 1 }}>
-              <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Lead</span>
+              <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Lead</span>
               <select
-                style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 12, color: 'var(--fg)' }}
+                style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
                 value={formLeadId}
                 onChange={(e) => setFormLeadId(e.target.value)}
               >
@@ -307,10 +307,10 @@ export function ProjectsPage() {
               </select>
             </label>
             <label style={{ flex: 1 }}>
-              <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Target date</span>
+              <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Target date</span>
               <input
                 type="date"
-                style={{ width: '100%', height: 30, padding: '0 8px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 12, color: 'var(--fg)' }}
+                style={{ width: '100%', height: 30, padding: '0 8px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
                 value={formTargetDate}
                 onChange={(e) => setFormTargetDate(e.target.value)}
               />
@@ -349,9 +349,9 @@ function ProjectDetailView({
       <div className="page-header">
         <Btn variant="ghost" icon={<IcoChevL size={12} />} size="sm" onClick={onBack}>Projects</Btn>
         <span style={{ width: 10, height: 10, borderRadius: '50%', background: project.color }} />
-        <span style={{ fontSize: 13, fontWeight: 500 }}>{project.name}</span>
+        <span style={{ fontSize: 15, fontWeight: 500 }}>{project.name}</span>
         <span style={{
-          fontSize: 10, padding: '2px 7px', borderRadius: 10,
+          fontSize: 12, padding: '2px 7px', borderRadius: 10,
           background: 'var(--bg-hover)', color: statusBadgeColor(project.status),
           border: '1px solid var(--border)', fontWeight: 500,
         }}>
@@ -368,7 +368,7 @@ function ProjectDetailView({
             }}>
               <button
                 type="button"
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg)', borderRadius: 'var(--r-1)' }}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', fontSize: 14, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg)', borderRadius: 'var(--r-1)' }}
                 onClick={() => { setMenuOpen(false); onEdit(); }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
@@ -377,7 +377,7 @@ function ProjectDetailView({
               </button>
               <button
                 type="button"
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', fontSize: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', borderRadius: 'var(--r-1)' }}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', fontSize: 14, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', borderRadius: 'var(--r-1)' }}
                 onClick={() => { setMenuOpen(false); onDelete(); }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
@@ -391,12 +391,12 @@ function ProjectDetailView({
 
       <div className="page-content" style={{ padding: '20px var(--pad-x)' }}>
         {project.description && (
-          <p style={{ fontSize: 13, color: 'var(--fg-muted)', marginBottom: 20, lineHeight: 1.5 }}>
+          <p style={{ fontSize: 15, color: 'var(--fg-muted)', marginBottom: 20, lineHeight: 1.5 }}>
             {project.description}
           </p>
         )}
 
-        <div style={{ display: 'flex', gap: 24, marginBottom: 20, fontSize: 12, color: 'var(--fg-dim)' }}>
+        <div style={{ display: 'flex', gap: 24, marginBottom: 20, fontSize: 14, color: 'var(--fg-dim)' }}>
           {project.lead && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <Avatar user={{ name: project.lead.name ?? undefined }} size={18} />
@@ -420,18 +420,18 @@ function ProjectDetailView({
                   display: 'flex', alignItems: 'center', gap: 10,
                   width: '100%', padding: '10px 12px', background: 'none', border: 'none',
                   borderBottom: i < issues.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-                  cursor: 'pointer', textAlign: 'left', color: 'var(--fg)', fontSize: 12.5,
+                  cursor: 'pointer', textAlign: 'left', color: 'var(--fg)', fontSize: 14.5,
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
                 onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
               >
-                <span className="mono" style={{ fontSize: 10, color: 'var(--fg-dim)', width: 60 }}>{issue.identifier}</span>
+                <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)', width: 60 }}>{issue.identifier}</span>
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.title}</span>
               </button>
             ))}
           </div>
         ) : (
-          <div style={{ padding: 20, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 12 }}>
+          <div style={{ padding: 20, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 14 }}>
             No issues linked to this project yet.
           </div>
         )}
