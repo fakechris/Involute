@@ -108,10 +108,10 @@ function getStoredTheme(): ThemeMode {
       return storedTheme;
     }
   } catch {
-    // Ignore localStorage failures and fall back to dark.
+    // Ignore localStorage failures and fall back to the Atelier light default.
   }
 
-  return 'dark';
+  return 'light';
 }
 
 function persistTheme(nextTheme: ThemeMode) {

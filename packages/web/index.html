@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Involute</title>
+    <script>
+      // No-flash theme boot: set data-theme before first paint.
+      // Atelier light is the default (Lumen "warm light" identity).
+      (function () {
+        try {
+          var stored = localStorage.getItem('involute.theme');
+          document.documentElement.setAttribute(
+            'data-theme',
+            stored === 'dark' || stored === 'light' ? stored : 'light',
+          );
+        } catch (error) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

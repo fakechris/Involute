@@ -1,15 +1,25 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+/* ============================================================
+   Involute UI — aligned to the Lumen Design System.
+   Warm "Atelier" light (default) + "Vault" dark, IBM Plex, and the
+   quiet-utility ethos: flat backgrounds, 1px hairline borders doing
+   the structural work, shadows only on the outer shell + popovers,
+   no gradients / blur / emoji, hover = tint not movement.
+   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+SC:wght@400;500;600;700&display=swap');
 
 :root {
-  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: "IBM Plex Sans", "IBM Plex Sans SC", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-serif: "Iowan Old Style", "Songti SC", "Source Han Serif SC", Georgia, "Times New Roman", serif;
 
-  --r-1: 3px;
-  --r-2: 4px;
-  --r-3: 6px;
-  --r-4: 8px;
-  --r-5: 8px;
-  --r-6: 8px;
+  /* radius scale — Lumen: controls 10, panels 12, cards 16, shell 20, pill 999.
+     Micro elements (code, keycaps) stay tighter. */
+  --r-1: 6px;
+  --r-2: 8px;
+  --r-3: 10px;
+  --r-4: 12px;
+  --r-5: 16px;
+  --r-6: 20px;
 
   --sidebar-w: 224px;
   --content-gutter: 16px;
@@ -17,9 +27,10 @@
   --pad-y: 8px;
   --row-h: 32px;
 
-  --ease: cubic-bezier(0.2, 0, 0, 1);
-  --dur-1: 80ms;
-  --dur-2: 120ms;
+  /* motion — restrained; 120–180ms, color/opacity/width only */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-1: 120ms;
+  --dur-2: 150ms;
   --dur-3: 180ms;
 }
 
@@ -44,89 +55,96 @@
   --row-h: 36px;
 }
 
+/* ===== LIGHT (default) — "Atelier": warm parchment + terracotta ===== */
 :root,
-[data-theme="dark"] {
-  --bg: #1a1a2e;
-  --bg-raised: #1e1e34;
-  --bg-hover: #25253d;
-  --bg-active: #2c2c46;
-  --bg-sunken: #151528;
-  --bg-overlay: rgba(0, 0, 0, 0.55);
+[data-theme="light"] {
+  color-scheme: light;
 
-  --border: #334155;
-  --border-strong: #3e4c63;
-  --border-subtle: #252540;
+  --bg: #f7f6f2;
+  --bg-raised: #fffdfa;
+  --bg-hover: #f2ede4;
+  --bg-active: #eae3d7;
+  --bg-sunken: #efece5;
+  --bg-overlay: rgba(31, 26, 23, 0.24);
 
-  --fg: #e2e8f0;
-  --fg-muted: #94a3b8;
-  --fg-dim: #64748b;
-  --fg-faint: #475569;
+  --border: #e7e1d8;
+  --border-strong: #cdc4b6;
+  --border-subtle: #efece5;
 
-  --accent: #d4c5a0;
-  --accent-fg: #0f0f1a;
-  --accent-weak: rgba(212, 197, 160, 0.1);
-  --accent-border: rgba(212, 197, 160, 0.2);
+  --fg: #1f1a17;
+  --fg-muted: #443a32;
+  --fg-dim: #71675d;
+  --fg-faint: #b0a89d;
 
-  --danger: #e5484d;
-  --danger-weak: rgba(229, 72, 77, 0.12);
-  --success: #65b881;
-  --success-weak: rgba(101, 184, 129, 0.12);
-  --warn: #f5a524;
-  --info: #7c88ff;
+  --accent: #9f4f24;
+  --accent-fg: #fffdfa;
+  --accent-weak: rgba(159, 79, 36, 0.1);
+  --accent-border: rgba(159, 79, 36, 0.24);
 
-  --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3), 0 0 0 1px var(--border);
-  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border);
+  --danger: #b04545;
+  --danger-weak: rgba(176, 69, 69, 0.1);
+  --success: #2f7d52;
+  --success-weak: rgba(47, 125, 82, 0.1);
+  --warn: #a85e10;
+  --info: #2563bb;
 
-  --selection: rgba(212, 197, 160, 0.2);
+  /* elevation — only shell + pop; inline cards carry none */
+  --shadow-sm: none;
+  --shadow-md: 0 12px 36px rgba(31, 26, 23, 0.06);
+  --shadow-lg: 0 16px 48px rgba(31, 26, 23, 0.12);
 
-  --prio-urgent: #ef4444;
-  --prio-high: #f97316;
-  --prio-med: #eab308;
-  --prio-low: #3b82f6;
-  --prio-none: #475569;
+  --selection: rgba(159, 79, 36, 0.14);
+
+  --prio-urgent: #b04545;
+  --prio-high: #a85e10;
+  --prio-med: #71675d;
+  --prio-low: #a99f93;
+  --prio-none: #cdc4b6;
 }
 
-[data-theme="light"] {
-  --bg: #fbfbfa;
-  --bg-raised: #ffffff;
-  --bg-hover: #f3f3f1;
-  --bg-active: #ebeae7;
-  --bg-sunken: #f6f5f3;
-  --bg-overlay: rgba(18, 18, 18, 0.24);
+/* ===== DARK — "Vault": near-black + deep blue + cyan ===== */
+[data-theme="dark"] {
+  color-scheme: dark;
 
-  --border: #e5e3df;
-  --border-strong: #d4d2cd;
-  --border-subtle: #efeeea;
+  --bg: #0a0e16;
+  --bg-raised: #11161f;
+  --bg-hover: #1c2432;
+  --bg-active: #161c27;
+  --bg-sunken: #0c1119;
+  --bg-overlay: rgba(0, 0, 0, 0.58);
 
-  --fg: #1a1a1a;
-  --fg-muted: #5a5a5a;
-  --fg-dim: #8a8a8a;
-  --fg-faint: #bcbcbc;
+  --border: #1f2937;
+  --border-strong: #2c3a4f;
+  --border-subtle: #161c27;
 
-  --accent: #8b7a52;
+  --fg: #e6edf5;
+  --fg-muted: #c2cfde;
+  --fg-dim: #7d8aa0;
+  --fg-faint: #55606f;
+
+  --accent: #3b82f6;
   --accent-fg: #ffffff;
-  --accent-weak: rgba(139, 122, 82, 0.08);
-  --accent-border: rgba(139, 122, 82, 0.25);
+  --accent-weak: rgba(59, 130, 246, 0.16);
+  --accent-border: rgba(59, 130, 246, 0.3);
 
-  --danger: #d42d35;
-  --danger-weak: rgba(212, 45, 53, 0.1);
-  --success: #3f8d5a;
-  --success-weak: rgba(63, 141, 90, 0.12);
-  --warn: #c47609;
-  --info: #4f5bd5;
+  --danger: #f472b6;
+  --danger-weak: rgba(244, 114, 182, 0.14);
+  --success: #22c55e;
+  --success-weak: rgba(34, 197, 94, 0.15);
+  --warn: #fbbf24;
+  --info: #06b6d4;
 
-  --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06), 0 0 0 1px var(--border);
-  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.08), 0 0 0 1px var(--border);
+  --shadow-sm: none;
+  --shadow-md: 0 12px 36px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 18px 52px rgba(0, 0, 0, 0.7);
 
-  --selection: rgba(139, 122, 82, 0.18);
+  --selection: rgba(59, 130, 246, 0.22);
 
-  --prio-urgent: #d42d35;
-  --prio-high: #c47609;
-  --prio-med: #5a5a5a;
-  --prio-low: #8a8a8a;
-  --prio-none: #bcbcbc;
+  --prio-urgent: #f472b6;
+  --prio-high: #fbbf24;
+  --prio-med: #7d8aa0;
+  --prio-low: #55606f;
+  --prio-none: #2c3a4f;
 }
 
 * {
@@ -151,11 +169,18 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   font-feature-settings: "ss01", "cv11";
+  /* Flat warm background — no gradients, no imagery, no grid texture. */
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/* Focus — 3px accent outline at 2px offset (Lumen :focus-visible). */
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  outline-offset: 2px;
 }
 
 button,
@@ -254,7 +279,7 @@ kbd {
   height: 100vh;
   flex-direction: column;
   justify-content: space-between;
-  border-right: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border);
   background: var(--bg-sunken);
   padding: 10px 8px 8px;
 }
@@ -1427,7 +1452,6 @@ kbd {
   box-shadow: none;
   cursor: grab;
   transition:
-    transform var(--dur-2) var(--ease),
     border-color var(--dur-2) var(--ease),
     background var(--dur-2) var(--ease);
   touch-action: none;
@@ -2743,7 +2767,7 @@ kbd {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    border-bottom: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border);
     background: var(--bg-sunken);
     padding: 10px var(--content-gutter);
   }
@@ -3181,6 +3205,5 @@ kbd {
 }
 
 .dialog-modal::backdrop {
-  background: rgba(0,0,0,0.5);
-  backdrop-filter: blur(2px);
+  background: var(--bg-overlay);
 }
