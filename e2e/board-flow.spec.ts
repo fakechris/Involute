@@ -11,8 +11,7 @@ test.describe('board flow', () => {
     page.on('dialog', (dialog) => dialog.accept());
 
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Board', exact: true })).toBeVisible();
-    await expect(page.getByText('Workflow overview for Involute.')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'All issues', exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Create issue' }).click();
 
@@ -32,10 +31,11 @@ test.describe('board flow', () => {
     await titleInput.press('Enter');
     await expect(issueDrawer.getByLabel('Issue title')).toHaveValue(updatedTitle);
 
+    await issueDrawer.getByLabel('Edit description').click();
     const descriptionInput = issueDrawer.getByLabel('Issue description');
     await descriptionInput.fill(updatedDescription);
-    await descriptionInput.blur();
-    await expect(issueDrawer.getByLabel('Issue description')).toHaveValue(updatedDescription);
+    await issueDrawer.getByRole('button', { name: 'Save' }).click();
+    await expect(issueDrawer.getByText(updatedDescription)).toBeVisible();
 
     await issueDrawer.getByLabel('Issue state').selectOption({ label: 'Done' });
     await expect(page.locator('[data-testid="column-Done"]')).toContainText(updatedTitle);
@@ -67,7 +67,7 @@ test.describe('board flow', () => {
       runBoardFixtureCommand('seed');
 
       await page.goto('/');
-      await expect(page.getByRole('heading', { name: 'Board', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'All issues', exact: true })).toBeVisible();
 
       await page.getByLabel('Select team').selectOption({ label: 'Imported Acceptance Team' });
 

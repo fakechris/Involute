@@ -14,7 +14,9 @@ describe('App board controls', () => {
 
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Filter/ }));
 
     const filters = screen.getByLabelText('Board filters');
     fireEvent.click(within(filters).getByText('Labels'));
@@ -82,7 +84,9 @@ describe('App board controls', () => {
 
     renderApp({ data: customData, loading: false }, ['/']);
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Filter/ }));
 
     fireEvent.change(screen.getByLabelText('Sort board by'), {
       target: { value: 'title' },
@@ -105,7 +109,7 @@ describe('App board controls', () => {
           success: true,
           issue: {
             ...(boardQueryResult.issues.nodes[0] as IssueSummary),
-            state: { id: 'state-ready', name: 'Ready' },
+            state: { id: 'state-ready', name: 'Ready', type: 'UNSTARTED', position: 1 },
           },
         },
       } satisfies IssueUpdateMutationData,
@@ -128,7 +132,10 @@ describe('App board controls', () => {
 
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Filter/ }));
+
     expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('data-focused', 'true');
 
     fireEvent.keyDown(window, { key: 'x' });
@@ -154,7 +161,11 @@ describe('App board controls', () => {
   it('focuses board search with slash and clears it with Escape', async () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    const searchInput = await screen.findByLabelText('Search board issues');
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Filter/ }));
+
+    const searchInput = screen.getByLabelText('Search board issues');
     fireEvent.keyDown(window, { key: '/' });
     expect(searchInput).toHaveFocus();
 
@@ -230,7 +241,9 @@ describe('App board controls', () => {
 
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Filter/ }));
 
     fireEvent.keyDown(window, { key: 'x' });
 
@@ -286,7 +299,9 @@ describe('App board controls', () => {
   it('lets the user remove active board filters from the summary tokens', async () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Filter/ }));
 
     const filters = screen.getByLabelText('Board filters');
     fireEvent.click(within(filters).getByText('Labels'));

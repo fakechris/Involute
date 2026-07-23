@@ -21,9 +21,12 @@ import { orderWorkflowStates } from './workflow-state-order.js';
 
 export interface CreateIssueInput {
   description?: string | null;
+  priority?: number | null;
   stateId?: string | null;
   teamId: string;
   title: string;
+  projectId?: string | null;
+  cycleId?: string | null;
 }
 
 export interface UpdateIssueInput {
@@ -31,8 +34,11 @@ export interface UpdateIssueInput {
   description?: string | null;
   labelIds?: string[] | null;
   parentId?: string | null;
+  priority?: number | null;
   stateId?: string | null;
   title?: string | null;
+  projectId?: string | null;
+  cycleId?: string | null;
 }
 
 export interface CreateCommentInput {
@@ -82,8 +88,11 @@ export async function createIssue(
         identifier: `${updatedTeam.key.toUpperCase()}-${updatedTeam.nextIssueNumber - 1}`,
         title: input.title,
         description: input.description ?? null,
+        priority: input.priority ?? 0,
         stateId: state.id,
         teamId: input.teamId,
+        projectId: input.projectId ?? null,
+        cycleId: input.cycleId ?? null,
       },
     });
   });
@@ -143,6 +152,10 @@ export async function updateIssue(
 
     if ('description' in input) {
       data.description = input.description ?? null;
+    }
+
+    if ('priority' in input && input.priority !== undefined && input.priority !== null) {
+      data.priority = input.priority;
     }
 
     if ('assigneeId' in input) {
@@ -232,6 +245,22 @@ export async function updateIssue(
             id: parentIssue.id,
           },
         };
+      }
+    }
+
+    if ('projectId' in input) {
+      if (input.projectId === null) {
+        data.project = { disconnect: true };
+      } else if (input.projectId !== undefined) {
+        data.project = { connect: { id: input.projectId } };
+      }
+    }
+
+    if ('cycleId' in input) {
+      if (input.cycleId === null) {
+        data.cycle = { disconnect: true };
+      } else if (input.cycleId !== undefined) {
+        data.cycle = { connect: { id: input.cycleId } };
       }
     }
 

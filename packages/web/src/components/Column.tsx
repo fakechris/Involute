@@ -10,6 +10,8 @@ interface ColumnProps {
   stateId: string;
   issues: IssueSummary[];
   focusedIssueId?: string | null;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
   onSelectIssue?: (issue: IssueSummary) => void;
   onToggleIssueSelection?: (issue: IssueSummary) => void;
   selectedIssueIds?: string[];
@@ -23,6 +25,8 @@ export function Column({
   stateId,
   issues,
   focusedIssueId,
+  collapsed = false,
+  onToggleCollapse,
   onSelectIssue,
   onToggleIssueSelection,
   selectedIssueIds = [],
@@ -46,9 +50,32 @@ export function Column({
     };
   }
 
+  const classNames = [
+    'board-column',
+    isOver ? 'board-column--active' : '',
+    collapsed ? 'board-column--collapsed' : '',
+  ].filter(Boolean).join(' ');
+
+  if (collapsed) {
+    return (
+      <section
+        className={classNames}
+        aria-label={`${title} column (collapsed)`}
+        data-testid={`board-column-${stateId}`}
+        data-state-id={stateId}
+        onClick={onToggleCollapse}
+      >
+        <div className="board-column__header">
+          <h2>{title}</h2>
+          <span className="board-column__count">{issues.length}</span>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section
-      className={`board-column${isOver ? ' board-column--active' : ''}`}
+      className={classNames}
       aria-label={`${title} column`}
       data-testid={`board-column-${stateId}`}
       data-state-id={stateId}
@@ -56,6 +83,19 @@ export function Column({
       <div className="board-column__header">
         <h2>{title}</h2>
         <span className="board-column__count">{issues.length}</span>
+        {onToggleCollapse ? (
+          <button
+            type="button"
+            className="board-column__collapse-toggle"
+            onClick={onToggleCollapse}
+            aria-label={`Collapse ${title} column`}
+            title="Collapse column"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 4L6 8L10 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" transform="rotate(-90 6 6)" />
+            </svg>
+          </button>
+        ) : null}
       </div>
 
       <SortableContext items={issues.map((issue) => issue.id)} strategy={verticalListSortingStrategy}>

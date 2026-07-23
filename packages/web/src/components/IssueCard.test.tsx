@@ -36,9 +36,10 @@ const makeIssue = (overrides: Partial<IssueSummary> = {}): IssueSummary => ({
   identifier: 'INV-1',
   title: 'Test issue',
   description: 'Test description',
+  priority: 0,
   createdAt: '2026-04-02T10:00:00.000Z',
   updatedAt: '2026-04-02T10:00:00.000Z',
-  state: { id: 'state-backlog', name: 'Backlog' },
+  state: { id: 'state-backlog', name: 'Backlog', type: 'BACKLOG', position: 0 },
   team: { id: 'team-1', key: 'INV' },
   labels: { nodes: [{ id: 'label-task', name: 'task' }] },
   assignee: { id: 'user-1', name: 'Admin', email: 'admin@involute.local' },
@@ -50,7 +51,7 @@ const makeIssue = (overrides: Partial<IssueSummary> = {}): IssueSummary => ({
 
 describe('IssueCard', () => {
   it('passes stateId from issue.state.id to useSortable data', () => {
-    const issue = makeIssue({ state: { id: 'state-progress', name: 'In Progress' } });
+    const issue = makeIssue({ state: { id: 'state-progress', name: 'In Progress', type: 'STARTED', position: 2 } });
 
     render(<IssueCard issue={issue} />);
 
@@ -78,7 +79,7 @@ describe('IssueCard', () => {
   });
 
   it('updates useSortable stateId when issue state changes across renders', () => {
-    const issue = makeIssue({ state: { id: 'state-backlog', name: 'Backlog' } });
+    const issue = makeIssue({ state: { id: 'state-backlog', name: 'Backlog', type: 'BACKLOG', position: 0 } });
     const { rerender } = render(<IssueCard issue={issue} />);
 
     expect(useSortableSpy).toHaveBeenLastCalledWith(
@@ -87,7 +88,7 @@ describe('IssueCard', () => {
       }),
     );
 
-    const updatedIssue = makeIssue({ state: { id: 'state-done', name: 'Done' } });
+    const updatedIssue = makeIssue({ state: { id: 'state-done', name: 'Done', type: 'COMPLETED', position: 4 } });
     rerender(<IssueCard issue={updatedIssue} />);
 
     expect(useSortableSpy).toHaveBeenLastCalledWith(

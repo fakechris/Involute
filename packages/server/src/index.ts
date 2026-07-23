@@ -2,8 +2,9 @@ import type { PrismaClient } from '@prisma/client';
 
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
 import { createServer, type Server as HttpServer } from 'node:http';
-import { resolve } from 'node:path';
+import { resolve, join, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { existsSync, createReadStream, statSync } from 'node:fs';
 
 import { GraphQLError } from 'graphql';
 import { createYoga } from 'graphql-yoga';
@@ -93,11 +94,40 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     scopes: options.googleOAuth?.scopes ?? ['openid', 'email', 'profile'],
   } satisfies GoogleOAuthConfiguration;
 
+  const uploadsDir = resolve(fileURLToPath(import.meta.url), '../../uploads');
+
   const httpServer = createServer((request, response) => {
     if (request.method === 'GET' && getPathname(request.url) === '/health') {
       response.statusCode = 200;
       response.setHeader('content-type', 'text/plain; charset=utf-8');
       response.end('OK');
+      return;
+    }
+
+    const pathname = getPathname(request.url);
+    if (request.method === 'GET' && pathname.startsWith('/uploads/')) {
+      const filename = pathname.slice('/uploads/'.length);
+      if (filename.includes('..') || filename.includes('/')) {
+        response.statusCode = 400;
+        response.end('Bad request');
+        return;
+      }
+      const filePath = join(uploadsDir, filename);
+      if (!existsSync(filePath)) {
+        response.statusCode = 404;
+        response.end('Not found');
+        return;
+      }
+      const stat = statSync(filePath);
+      const mimeTypes: Record<string, string> = {
+        '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+        '.pdf': 'application/pdf',
+      };
+      const ext = extname(filename).toLowerCase();
+      response.setHeader('content-type', mimeTypes[ext] ?? 'application/octet-stream');
+      response.setHeader('content-length', stat.size);
+      createReadStream(filePath).pipe(response);
       return;
     }
 

@@ -48,8 +48,8 @@ const boardQueryResult: BoardPageQueryData = {
         name: 'Involute',
         states: {
           nodes: [
-            { id: 'state-backlog', name: 'Backlog' },
-            { id: 'state-done', name: 'Done' },
+            { id: 'state-backlog', name: 'Backlog', type: 'BACKLOG', position: 0 },
+            { id: 'state-done', name: 'Done', type: 'COMPLETED', position: 1 },
           ],
         },
       },
@@ -76,9 +76,10 @@ const boardQueryResult: BoardPageQueryData = {
         identifier: 'INV-1',
         title: 'Mutable issue',
         description: 'Initial description',
+        priority: 0,
         createdAt: '2026-04-02T10:00:00.000Z',
         updatedAt: '2026-04-02T10:00:00.000Z',
-        state: { id: 'state-backlog', name: 'Backlog' },
+        state: { id: 'state-backlog', name: 'Backlog', type: 'BACKLOG', position: 0 },
         team: { id: 'team-1', key: 'INV' },
         labels: { nodes: [{ id: 'label-feature', name: 'Feature' }] },
         assignee: { id: 'user-1', name: 'Admin', email: 'admin@involute.local' },

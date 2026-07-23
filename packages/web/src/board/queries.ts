@@ -7,10 +7,24 @@ export const BOARD_PAGE_QUERY = gql`
         id
         key
         name
+        memberships {
+          nodes {
+            id
+            role
+            user {
+              id
+              name
+              email
+              globalRole
+            }
+          }
+        }
         states {
           nodes {
             id
             name
+            type
+            position
           }
         }
       }
@@ -34,11 +48,14 @@ export const BOARD_PAGE_QUERY = gql`
         identifier
         title
         description
+        priority
         createdAt
         updatedAt
         state {
           id
           name
+          type
+          position
         }
         team {
           id
@@ -97,11 +114,14 @@ export const ISSUE_UPDATE_MUTATION = gql`
         identifier
         title
         description
+        priority
         createdAt
         updatedAt
         state {
           id
           name
+          type
+          position
         }
         team {
           id
@@ -130,6 +150,8 @@ export const ISSUE_UPDATE_MUTATION = gql`
           identifier
           title
         }
+        projectId
+        cycleId
         comments(first: 100, orderBy: createdAt) {
           nodes {
             id
@@ -190,11 +212,14 @@ export const ISSUE_PAGE_QUERY = gql`
       identifier
       title
       description
+      priority
       createdAt
       updatedAt
       state {
         id
         name
+        type
+        position
       }
       team {
         id
@@ -204,6 +229,8 @@ export const ISSUE_PAGE_QUERY = gql`
           nodes {
             id
             name
+            type
+            position
           }
         }
       }
@@ -230,6 +257,10 @@ export const ISSUE_PAGE_QUERY = gql`
         identifier
         title
       }
+      projectId
+      cycleId
+      project { id name color }
+      cycle { id name number }
       comments(first: 100, orderBy: createdAt) {
         nodes {
           id
@@ -289,6 +320,8 @@ export const ACCESS_PAGE_QUERY = gql`
           nodes {
             id
             name
+            type
+            position
           }
         }
       }
@@ -321,6 +354,8 @@ export const TEAM_UPDATE_ACCESS_MUTATION = gql`
           nodes {
             id
             name
+            type
+            position
           }
         }
       }
@@ -364,11 +399,14 @@ export const ISSUE_CREATE_MUTATION = gql`
         identifier
         title
         description
+        priority
         createdAt
         updatedAt
         state {
           id
           name
+          type
+          position
         }
         team {
           id
@@ -397,6 +435,8 @@ export const ISSUE_CREATE_MUTATION = gql`
           identifier
           title
         }
+        projectId
+        cycleId
         comments(first: 100, orderBy: createdAt) {
           nodes {
             id
@@ -409,6 +449,177 @@ export const ISSUE_CREATE_MUTATION = gql`
             }
           }
         }
+      }
+    }
+  }
+`;
+
+export const PROJECTS_QUERY = gql`
+  query Projects($teamId: String!) {
+    projects(teamId: $teamId) {
+      nodes {
+        id
+        name
+        description
+        color
+        status
+        targetDate
+        lead {
+          id
+          name
+          email
+        }
+        issues {
+          nodes {
+            id
+            identifier
+            title
+          }
+        }
+        createdAt
+        updatedAt
+      }
+    }
+  }
+`;
+
+export const PROJECT_CREATE_MUTATION = gql`
+  mutation ProjectCreate($input: ProjectCreateInput!) {
+    projectCreate(input: $input) {
+      success
+      project {
+        id
+        name
+        description
+        color
+        status
+        targetDate
+        lead { id name email }
+        issues { nodes { id identifier title } }
+        createdAt
+        updatedAt
+      }
+    }
+  }
+`;
+
+export const PROJECT_UPDATE_MUTATION = gql`
+  mutation ProjectUpdate($id: String!, $input: ProjectUpdateInput!) {
+    projectUpdate(id: $id, input: $input) {
+      success
+      project {
+        id
+        name
+        description
+        color
+        status
+        targetDate
+        lead { id name email }
+        issues { nodes { id identifier title } }
+        createdAt
+        updatedAt
+      }
+    }
+  }
+`;
+
+export const PROJECT_DELETE_MUTATION = gql`
+  mutation ProjectDelete($id: String!) {
+    projectDelete(id: $id) {
+      success
+      projectId
+    }
+  }
+`;
+
+export const CYCLES_QUERY = gql`
+  query Cycles($teamId: String!) {
+    cycles(teamId: $teamId) {
+      nodes {
+        id
+        name
+        number
+        startsAt
+        endsAt
+        issues {
+          nodes {
+            id
+            identifier
+            title
+            state { id name type position }
+          }
+        }
+        createdAt
+        updatedAt
+      }
+    }
+  }
+`;
+
+export const CYCLE_CREATE_MUTATION = gql`
+  mutation CycleCreate($input: CycleCreateInput!) {
+    cycleCreate(input: $input) {
+      success
+      cycle {
+        id
+        name
+        number
+        startsAt
+        endsAt
+        issues { nodes { id identifier title state { id name type position } } }
+        createdAt
+        updatedAt
+      }
+    }
+  }
+`;
+
+export const CYCLE_UPDATE_MUTATION = gql`
+  mutation CycleUpdate($id: String!, $input: CycleUpdateInput!) {
+    cycleUpdate(id: $id, input: $input) {
+      success
+      cycle {
+        id
+        name
+        number
+        startsAt
+        endsAt
+        issues { nodes { id identifier title state { id name type position } } }
+        createdAt
+        updatedAt
+      }
+    }
+  }
+`;
+
+export const CYCLE_DELETE_MUTATION = gql`
+  mutation CycleDelete($id: String!) {
+    cycleDelete(id: $id) {
+      success
+      cycleId
+    }
+  }
+`;
+
+export const USER_UPDATE_MUTATION = gql`
+  mutation UserUpdate($input: UserUpdateInput!) {
+    userUpdate(input: $input) {
+      success
+      user { id name email }
+    }
+  }
+`;
+
+export const FILE_UPLOAD_MUTATION = gql`
+  mutation FileUpload($input: FileUploadInput!) {
+    fileUpload(input: $input) {
+      success
+      attachment {
+        id
+        filename
+        url
+        mimeType
+        size
       }
     }
   }

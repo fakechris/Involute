@@ -57,10 +57,10 @@ describe('App board UI', () => {
             name: 'Involute',
             states: {
               nodes: [
-                { id: 'state-triage', name: 'Triage' },
-                { id: 'state-todo', name: 'Todo' },
-                { id: 'state-progress', name: 'In Progress' },
-                { id: 'state-done', name: 'Done' },
+                { id: 'state-triage', name: 'Triage', type: 'BACKLOG', position: 0 },
+                { id: 'state-todo', name: 'Todo', type: 'UNSTARTED', position: 1 },
+                { id: 'state-progress', name: 'In Progress', type: 'STARTED', position: 2 },
+                { id: 'state-done', name: 'Done', type: 'COMPLETED', position: 3 },
               ],
             },
           },
@@ -73,7 +73,7 @@ describe('App board UI', () => {
             id: 'issue-triage',
             identifier: 'INV-10',
             title: 'Triage item',
-            state: { id: 'state-triage', name: 'Triage' },
+            state: { id: 'state-triage', name: 'Triage', type: 'BACKLOG', position: 0 },
             team: { id: 'team-1', key: 'INV' },
           },
           {
@@ -81,7 +81,7 @@ describe('App board UI', () => {
             id: 'issue-todo',
             identifier: 'INV-11',
             title: 'Todo item',
-            state: { id: 'state-todo', name: 'Todo' },
+            state: { id: 'state-todo', name: 'Todo', type: 'UNSTARTED', position: 1 },
             team: { id: 'team-1', key: 'INV' },
           },
         ],
@@ -104,7 +104,7 @@ describe('App board UI', () => {
           success: true,
           issue: {
             ...(boardQueryResult.issues.nodes[0] as IssueSummary),
-            state: { id: 'state-ready', name: 'Ready' },
+            state: { id: 'state-ready', name: 'Ready', type: 'UNSTARTED', position: 1 },
           },
         },
       } satisfies IssueUpdateMutationData,

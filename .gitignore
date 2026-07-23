@@ -4,6 +4,8 @@ dist
 .env
 .env.production
 ops/ansible/inventory/hosts.yml
+ops/ansible/group_vars/**/*.yml
+ops/ansible/vault-password.txt
 .venv-ansible/
 .DS_Store
 !packages/server/prisma/.env
@@ -25,3 +27,4 @@ packages/server/prisma/*.js
 packages/server/prisma/*.js.map
 packages/server/prisma/*.d.ts
 packages/server/prisma/*.d.ts.map
+.gstack/

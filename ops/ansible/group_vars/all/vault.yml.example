@@ -1,0 +1,16 @@
+# Copy this file to vault.yml, replace values, then encrypt it:
+#
+#   ansible-vault encrypt ops/ansible/group_vars/all/vault.yml
+#
+# Keep vault.yml and the vault password file out of git.
+
+involute_auth_token: replace-with-a-long-random-token
+involute_viewer_assertion_secret: replace-with-a-long-random-secret
+involute_admin_email_allowlist: you@example.com
+
+# Use a URL-safe password because DATABASE_URL is built from this value.
+involute_postgres_password: replace-with-a-long-url-safe-random-password
+
+involute_google_oauth_client_id: replace-with-google-client-id
+involute_google_oauth_client_secret: replace-with-google-client-secret
+involute_google_oauth_redirect_uri: https://involute.example.com/auth/google/callback

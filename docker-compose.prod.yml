@@ -38,7 +38,7 @@ services:
     environment:
       ADMIN_EMAIL_ALLOWLIST: ${ADMIN_EMAIL_ALLOWLIST:-}
       GOOGLE_OAUTH_ADMIN_EMAILS: ${ADMIN_EMAIL_ALLOWLIST:-${GOOGLE_OAUTH_ADMIN_EMAILS:-}}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-involute}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-involute}?schema=public
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.production}
       SEED_DATABASE: ${SEED_DATABASE:-false}
       SEED_DEFAULT_ADMIN: "false"
 
@@ -58,11 +58,12 @@ services:
       ALLOW_ADMIN_FALLBACK: "false"
       APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN in .env.production}
       AUTH_TOKEN: ${AUTH_TOKEN:?Set AUTH_TOKEN in .env.production}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-involute}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-involute}?schema=public
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.production}
       GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
       GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
       GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}
       PORT: 4200
+      REQUIRE_GOOGLE_OAUTH: ${REQUIRE_GOOGLE_OAUTH:-true}
       SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-2592000}
       VIEWER_ASSERTION_SECRET: ${VIEWER_ASSERTION_SECRET:?Set VIEWER_ASSERTION_SECRET in .env.production}
     healthcheck:
@@ -122,7 +123,7 @@ services:
         condition: service_healthy
     environment:
       AUTH_TOKEN: ${AUTH_TOKEN:?Set AUTH_TOKEN in .env.production}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-involute}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-involute}?schema=public
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.production}
       INVOLUTE_CONFIG_PATH: /tmp/involute-config.json
       VIEWER_ASSERTION_SECRET: ${VIEWER_ASSERTION_SECRET:?Set VIEWER_ASSERTION_SECRET in .env.production}
     volumes:

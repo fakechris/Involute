@@ -10,7 +10,9 @@ import { useMemo } from 'react';
 import { VIEWER_ASSERTION_HEADER } from '@turnkeyai/involute-shared';
 import { readLocalStorageValue } from './storage';
 
-const DEFAULT_GRAPHQL_URL = 'http://localhost:4200/graphql';
+const DEFAULT_GRAPHQL_URL = import.meta.env.DEV
+  ? 'http://localhost:4200/graphql'
+  : '/graphql';
 const LOCAL_STORAGE_AUTH_KEYS = ['involute.authToken', 'involuteAuthToken'] as const;
 const LOCAL_STORAGE_GRAPHQL_URL_KEYS = ['involute.graphqlUrl', 'involuteGraphqlUrl'] as const;
 const LOCAL_STORAGE_VIEWER_ASSERTION_KEYS = [

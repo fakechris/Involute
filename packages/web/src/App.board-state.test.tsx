@@ -17,7 +17,7 @@ describe('App board state flows', () => {
           success: true,
           issue: {
             ...getIssue('issue-1'),
-            state: { id: 'state-progress', name: 'In Progress' },
+            state: { id: 'state-progress', name: 'In Progress', type: 'STARTED', position: 2 },
           },
         },
       } satisfies IssueUpdateMutationData,
@@ -50,7 +50,7 @@ describe('App board state flows', () => {
           success: true,
           issue: {
             ...getIssue('issue-1'),
-            state: { id: 'state-ready', name: 'Ready' },
+            state: { id: 'state-ready', name: 'Ready', type: 'UNSTARTED', position: 1 },
           },
         },
       } satisfies IssueUpdateMutationData,

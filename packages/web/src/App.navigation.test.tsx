@@ -9,19 +9,21 @@ function renderTestApp(queryState = { data: boardQueryResult, loading: false }, 
 }
 
 describe('App navigation and backlog flows', () => {
-  it('navigates between board and backlog via header links', async () => {
+  it('navigates between board and backlog via keyboard shortcuts', async () => {
     renderTestApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('link', { name: 'Backlog' }));
+    fireEvent.keyDown(window, { key: 'g' });
+    fireEvent.keyDown(window, { key: 'l' });
 
     expect(await screen.findByRole('heading', { name: 'Backlog' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Identifier' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('link', { name: 'Board' }));
+    fireEvent.keyDown(window, { key: 'g' });
+    fireEvent.keyDown(window, { key: 'b' });
 
-    expect(await screen.findByRole('heading', { name: 'Board' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
   });
 
   it('renders real issue details on the direct /issue/:id route', async () => {
@@ -30,7 +32,7 @@ describe('App navigation and backlog flows', () => {
     expect(await screen.findByRole('heading', { name: 'Issue detail' })).toBeInTheDocument();
     expect(screen.getByText('INV-2')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText('Issue title')).toHaveValue('Ready item'));
-    await waitFor(() => expect(screen.getByLabelText('Issue description')).toHaveValue('Ready description'));
+    await waitFor(() => expect(screen.getByText('Ready description')).toBeInTheDocument());
     expect(screen.getByText('INV-1 — Backlog item')).toBeInTheDocument();
   });
 

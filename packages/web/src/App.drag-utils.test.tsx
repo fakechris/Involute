@@ -76,7 +76,7 @@ describe('App drag helpers', () => {
   });
 
   it('moves an issue into the destination state during cross-column drag preview', () => {
-    const nextState = { id: 'state-ready', name: 'Ready' };
+    const nextState = { id: 'state-ready', name: 'Ready', type: 'UNSTARTED' as const, position: 1 };
     const movedIssues = moveIssueToState(boardQueryResult.issues.nodes as IssueSummary[], 'issue-1', nextState);
 
     expect(movedIssues.find((issue) => issue.id === 'issue-1')?.state).toEqual(nextState);
@@ -89,7 +89,7 @@ describe('App drag helpers', () => {
     const movedIssues = moveIssueToState(
       boardQueryResult.issues.nodes as IssueSummary[],
       'issue-1',
-      { id: 'state-ready', name: 'Ready' },
+      { id: 'state-ready', name: 'Ready', type: 'UNSTARTED' as const, position: 1 },
     );
 
     const groupedIssues = movedIssues.reduce<Record<string, string[]>>((groups, issue) => {

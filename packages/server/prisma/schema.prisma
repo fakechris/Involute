@@ -23,6 +23,14 @@ enum TeamMembershipRole {
   OWNER
 }
 
+enum WorkflowStateType {
+  BACKLOG
+  UNSTARTED
+  STARTED
+  COMPLETED
+  CANCELED
+}
+
 model Team {
   id              String          @id @default(uuid()) @db.Uuid
   key             String          @unique
@@ -32,16 +40,20 @@ model Team {
   states          WorkflowState[]
   issues          Issue[]
   memberships     TeamMembership[]
+  projects        Project[]
+  cycles          Cycle[]
 
   @@index([key])
 }
 
 model WorkflowState {
-  id     String  @id @default(uuid()) @db.Uuid
-  name   String
-  teamId String  @db.Uuid
-  team   Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  issues Issue[]
+  id       String            @id @default(uuid()) @db.Uuid
+  name     String
+  type     WorkflowStateType @default(UNSTARTED)
+  position Int               @default(0)
+  teamId   String            @db.Uuid
+  team     Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  issues   Issue[]
 
   @@unique([id, teamId])
   @@unique([teamId, name])
@@ -50,10 +62,8 @@ model WorkflowState {
 
 model IssueLabel {
   id     String  @id @default(uuid()) @db.Uuid
-  name   String
+  name   String  @unique
   issues Issue[]
-
-  @@index([name])
 }
 
 model User {
@@ -67,6 +77,8 @@ model User {
   comments       Comment[]
   memberships    TeamMembership[]
   sessions       Session[]
+  ledProjects    Project[] @relation("ProjectLead")
+  uploads        Attachment[] @relation("Uploads")
 }
 
 model Session {
@@ -109,8 +121,14 @@ model Issue {
   children    Issue[]        @relation("IssueParentChild")
   teamId      String         @db.Uuid
   team        Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  priority    Int            @default(0)
   labels      IssueLabel[]
   comments    Comment[]
+  projectId   String?        @db.Uuid
+  project     Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  cycleId     String?        @db.Uuid
+  cycle       Cycle?         @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  attachments Attachment[]
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
@@ -119,20 +137,75 @@ model Issue {
   @@index([stateId])
   @@index([assigneeId])
   @@index([parentId])
+  @@index([projectId])
+  @@index([cycleId])
 }
 
 model Comment {
-  id        String   @id @default(uuid()) @db.Uuid
-  body      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  issueId   String   @db.Uuid
-  issue     Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
-  userId    String   @db.Uuid
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String       @id @default(uuid()) @db.Uuid
+  body        String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  issueId     String       @db.Uuid
+  issue       Issue        @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  userId      String       @db.Uuid
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attachments Attachment[]
 
   @@index([issueId, createdAt])
   @@index([userId])
+}
+
+model Project {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  color       String    @default("#6366f1")
+  status      String    @default("planned")
+  targetDate  DateTime?
+  teamId      String    @db.Uuid
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  leadId      String?   @db.Uuid
+  lead        User?     @relation("ProjectLead", fields: [leadId], references: [id], onDelete: SetNull)
+  issues      Issue[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([teamId])
+}
+
+model Cycle {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  number    Int
+  startsAt  DateTime
+  endsAt    DateTime
+  teamId    String   @db.Uuid
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  issues    Issue[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamId])
+}
+
+model Attachment {
+  id         String   @id @default(uuid()) @db.Uuid
+  filename   String
+  mimeType   String
+  size       Int
+  url        String
+  issueId    String?  @db.Uuid
+  issue      Issue?   @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  commentId  String?  @db.Uuid
+  comment    Comment? @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  uploaderId String   @db.Uuid
+  uploader   User     @relation("Uploads", fields: [uploaderId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@index([issueId])
+  @@index([commentId])
+  @@index([uploaderId])
 }
 
 model LegacyLinearMapping {

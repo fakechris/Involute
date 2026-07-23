@@ -3,7 +3,7 @@ set -eu
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env.production}"
-COMPOSE_FILE="${COMPOSE_FILE:-$ROOT_DIR/docker-compose.prod.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-$ROOT_DIR/docker-compose.prod.images.yml}"
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 OUTPUT_DIR="${OUTPUT_DIR:-$ROOT_DIR/.backups}"
 OUTPUT_FILE="${OUTPUT_FILE:-$OUTPUT_DIR/involute-$TIMESTAMP.sql.gz}"

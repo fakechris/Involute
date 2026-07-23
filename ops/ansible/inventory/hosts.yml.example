@@ -1,12 +1,13 @@
 all:
   hosts:
-    involute_tailscale:
+    involute_production:
       ansible_host: tailnet-host.example.ts.net
       ansible_user: root
+      involute_stack_profile: production
       involute_bind_address: 100.x.y.z
-      involute_stack_profile: tailscale
-      involute_app_origin: http://100.x.y.z:4201
-      involute_seed_database: true
-      involute_admin_email_allowlist: "first-admin@example.com"
-      involute_auth_token: change-me
-      involute_viewer_assertion_secret: change-me
+      involute_app_domain: involute.example.com
+      involute_app_origin: https://involute.example.com
+      involute_smoke_base_url: https://involute.example.com
+      involute_seed_database: false
+      involute_require_google_oauth: true
+      # Put real secrets in ops/ansible/group_vars/all/vault.yml.

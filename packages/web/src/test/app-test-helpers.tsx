@@ -87,6 +87,10 @@ const hoistedApolloMocks = vi.hoisted<ApolloMockSet>(() => ({
       return [vi.fn().mockResolvedValue({ data: { teamMembershipRemove: { success: true, membershipId: 'membership-1' } } })];
     }
 
+    if (source.includes('mutation FileUpload')) {
+      return [vi.fn().mockResolvedValue({ data: { fileUpload: { success: true, attachment: null } } })];
+    }
+
     return [vi.fn()];
   }),
 }));
@@ -195,6 +199,10 @@ beforeEach(() => {
       return [vi.fn().mockResolvedValue({ data: { teamMembershipRemove: { success: true, membershipId: 'membership-1' } } })];
     }
 
+    if (source.includes('mutation FileUpload')) {
+      return [vi.fn().mockResolvedValue({ data: { fileUpload: { success: true, attachment: null } } })];
+    }
+
     return [vi.fn()];
   });
 });
@@ -246,12 +254,12 @@ export const boardQueryResult: BoardPageQueryData = {
         name: 'Involute',
         states: {
           nodes: [
-            { id: 'state-backlog', name: 'Backlog' },
-            { id: 'state-ready', name: 'Ready' },
-            { id: 'state-progress', name: 'In Progress' },
-            { id: 'state-review', name: 'In Review' },
-            { id: 'state-done', name: 'Done' },
-            { id: 'state-canceled', name: 'Canceled' },
+            { id: 'state-backlog', name: 'Backlog', type: 'BACKLOG', position: 0 },
+            { id: 'state-ready', name: 'Ready', type: 'UNSTARTED', position: 1 },
+            { id: 'state-progress', name: 'In Progress', type: 'STARTED', position: 2 },
+            { id: 'state-review', name: 'In Review', type: 'STARTED', position: 3 },
+            { id: 'state-done', name: 'Done', type: 'COMPLETED', position: 4 },
+            { id: 'state-canceled', name: 'Canceled', type: 'CANCELED', position: 5 },
           ],
         },
       },
@@ -261,12 +269,12 @@ export const boardQueryResult: BoardPageQueryData = {
         name: 'Sonata',
         states: {
           nodes: [
-            { id: 'son-backlog', name: 'Backlog' },
-            { id: 'son-ready', name: 'Ready' },
-            { id: 'son-progress', name: 'In Progress' },
-            { id: 'son-review', name: 'In Review' },
-            { id: 'son-done', name: 'Done' },
-            { id: 'son-canceled', name: 'Canceled' },
+            { id: 'son-backlog', name: 'Backlog', type: 'BACKLOG', position: 0 },
+            { id: 'son-ready', name: 'Ready', type: 'UNSTARTED', position: 1 },
+            { id: 'son-progress', name: 'In Progress', type: 'STARTED', position: 2 },
+            { id: 'son-review', name: 'In Review', type: 'STARTED', position: 3 },
+            { id: 'son-done', name: 'Done', type: 'COMPLETED', position: 4 },
+            { id: 'son-canceled', name: 'Canceled', type: 'CANCELED', position: 5 },
           ],
         },
       },
@@ -295,9 +303,10 @@ export const boardQueryResult: BoardPageQueryData = {
         identifier: 'INV-1',
         title: 'Backlog item',
         description: 'Backlog description',
+        priority: 0,
         createdAt: '2026-04-02T10:00:00.000Z',
         updatedAt: '2026-04-02T10:00:00.000Z',
-        state: { id: 'state-backlog', name: 'Backlog' },
+        state: { id: 'state-backlog', name: 'Backlog', type: 'BACKLOG', position: 0 },
         team: { id: 'team-1', key: 'INV' },
         labels: { nodes: [{ id: 'label-task', name: 'task' }] },
         assignee: { id: 'user-1', name: 'Admin', email: 'admin@involute.local' },
@@ -310,9 +319,10 @@ export const boardQueryResult: BoardPageQueryData = {
         identifier: 'INV-2',
         title: 'Ready item',
         description: 'Ready description',
+        priority: 0,
         createdAt: '2026-04-02T10:00:00.000Z',
         updatedAt: '2026-04-02T10:00:00.000Z',
-        state: { id: 'state-ready', name: 'Ready' },
+        state: { id: 'state-ready', name: 'Ready', type: 'UNSTARTED', position: 1 },
         team: { id: 'team-1', key: 'INV' },
         labels: { nodes: [{ id: 'label-bug', name: 'Bug' }] },
         assignee: null,
@@ -329,9 +339,10 @@ export const boardQueryResult: BoardPageQueryData = {
         identifier: 'SON-1',
         title: 'Sonata backlog item',
         description: 'Sonata description',
+        priority: 0,
         createdAt: '2026-04-02T10:00:00.000Z',
         updatedAt: '2026-04-02T10:00:00.000Z',
-        state: { id: 'son-backlog', name: 'Backlog' },
+        state: { id: 'son-backlog', name: 'Backlog', type: 'BACKLOG', position: 0 },
         team: { id: 'team-2', key: 'SON' },
         labels: { nodes: [{ id: 'label-feature', name: 'Feature' }] },
         assignee: null,
