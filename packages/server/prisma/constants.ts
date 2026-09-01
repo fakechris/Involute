@@ -22,5 +22,4 @@ export const DEFAULT_LABEL_NAMES = [
   'Feature',
   'Bug',
   'Improvement',
-  'spec-orch',
 ] as const;

@@ -1013,6 +1013,400 @@ function toIssueListRows(issues: IssueListItem[]): Array<Record<string, unknown>
   }));
 }
 
+interface WorkContextResult {
+  ancestors: Array<{ identifier: string; title: string }>;
+  audits: Array<{
+    actor: { email: string | null; name: string | null } | null;
+    actorKind: string;
+    createdAt: string;
+    reason: string | null;
+    revision: number;
+    surface: string | null;
+  }>;
+  blockedBy: Array<{ identifier: string; title: string }>;
+  blocks: Array<{ identifier: string; title: string }>;
+  work: {
+    acceptance: string | null;
+    commitmentStatus: string;
+    constraints: string | null;
+    identifier: string;
+    kind: string;
+    outcome: string | null;
+    priority: number;
+    repository: string | null;
+    revision: number;
+    scope: string | null;
+    state: { name: string };
+    title: string;
+    verification: string | null;
+  };
+}
+
+interface ReadyWorkItem {
+  identifier: string;
+  priority: number;
+  repository: string | null;
+  state: { name: string };
+  title: string;
+}
+
+async function fetchWorkContext(id: string): Promise<WorkContextResult | null> {
+  const client = await createConfiguredGraphQLClient();
+  const result = await client.request<{ workContext: WorkContextResult | null }>(
+    /* GraphQL */ `
+      query CliWorkContext($id: String!) {
+        workContext(id: $id) {
+          work {
+            identifier
+            title
+            kind
+            commitmentStatus
+            revision
+            priority
+            outcome
+            scope
+            constraints
+            acceptance
+            verification
+            repository
+            state { name }
+          }
+          ancestors { identifier title }
+          blockedBy { identifier title }
+          blocks { identifier title }
+          audits {
+            revision
+            actorKind
+            surface
+            reason
+            createdAt
+            actor { name email }
+          }
+        }
+      }
+    `,
+    { id },
+  );
+
+  return result.workContext;
+}
+
+async function fetchReadyWork(filter: {
+  priority?: number;
+  projectId?: string;
+  repository?: string;
+  teamKey?: string;
+}): Promise<ReadyWorkItem[]> {
+  const client = await createConfiguredGraphQLClient();
+  const result = await client.request<{
+    readyWork: { nodes: ReadyWorkItem[] };
+  }>(
+    /* GraphQL */ `
+      query CliReadyWork($filter: ReadyWorkFilter) {
+        readyWork(filter: $filter) {
+          nodes {
+            identifier
+            title
+            priority
+            repository
+            state { name }
+          }
+        }
+      }
+    `,
+    {
+      filter: {
+        ...(filter.repository ? { repository: filter.repository } : {}),
+        ...(filter.teamKey ? { teamKey: filter.teamKey } : {}),
+        ...(filter.projectId ? { projectId: filter.projectId } : {}),
+        ...(filter.priority !== undefined ? { priority: filter.priority } : {}),
+      },
+    },
+  );
+
+  return result.readyWork.nodes;
+}
+
+async function proposeWorkViaCli(options: {
+  acceptance?: string;
+  description?: string;
+  idempotencyKey?: string;
+  related?: string;
+  team: string;
+  title: string;
+}): Promise<{ commitmentStatus: string; identifier: string; title: string }> {
+  const client = await createConfiguredGraphQLClient();
+  const team = await fetchTeamByKey(options.team);
+
+  if (!team) {
+    throw new CliError(`Team not found: ${options.team}`);
+  }
+
+  const result = await client.request<{
+    workPropose: {
+      issue: { commitmentStatus: string; identifier: string; title: string } | null;
+      success: boolean;
+    };
+  }>(
+    /* GraphQL */ `
+      mutation CliWorkPropose($input: WorkProposeInput!) {
+        workPropose(input: $input) {
+          success
+          issue { identifier title commitmentStatus }
+        }
+      }
+    `,
+    {
+      input: {
+        teamId: team.id,
+        title: options.title,
+        ...(options.description ? { description: options.description } : {}),
+        ...(options.acceptance ? { acceptance: options.acceptance } : {}),
+        ...(options.related ? { relatedWorkId: options.related } : {}),
+        ...(options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}),
+      },
+    },
+  );
+
+  if (!result.workPropose.success || !result.workPropose.issue) {
+    throw new CliError('Work propose failed.');
+  }
+
+  return result.workPropose.issue;
+}
+
+async function commitWorkViaCli(
+  id: string,
+  options: { acceptance: string; assignee?: string },
+): Promise<{ commitmentStatus: string; identifier: string; revision: number }> {
+  const client = await createConfiguredGraphQLClient();
+  const bundle = await fetchWorkContext(id);
+
+  if (!bundle) {
+    throw new CliError('Work not found');
+  }
+
+  const result = await client.request<{
+    workCommit: {
+      issue: { commitmentStatus: string; identifier: string; revision: number } | null;
+      success: boolean;
+    };
+  }>(
+    /* GraphQL */ `
+      mutation CliWorkCommit($id: String!, $input: WorkCommitInput!) {
+        workCommit(id: $id, input: $input) {
+          success
+          issue { identifier commitmentStatus revision }
+        }
+      }
+    `,
+    {
+      id,
+      input: {
+        expectedRevision: bundle.work.revision,
+        acceptance: options.acceptance,
+        ...(options.assignee ? { assigneeId: options.assignee } : {}),
+      },
+    },
+  );
+
+  if (!result.workCommit.success || !result.workCommit.issue) {
+    throw new CliError('Work commit failed.');
+  }
+
+  return result.workCommit.issue;
+}
+
+async function rejectWorkViaCli(
+  id: string,
+  options: { reason?: string },
+): Promise<{ commitmentStatus: string; identifier: string; revision: number }> {
+  const client = await createConfiguredGraphQLClient();
+  const bundle = await fetchWorkContext(id);
+
+  if (!bundle) {
+    throw new CliError('Work not found');
+  }
+
+  const result = await client.request<{
+    workReject: {
+      issue: { commitmentStatus: string; identifier: string; revision: number } | null;
+      success: boolean;
+    };
+  }>(
+    /* GraphQL */ `
+      mutation CliWorkReject($id: String!, $input: WorkRejectInput!) {
+        workReject(id: $id, input: $input) {
+          success
+          issue { identifier commitmentStatus revision }
+        }
+      }
+    `,
+    {
+      id,
+      input: {
+        expectedRevision: bundle.work.revision,
+        ...(options.reason ? { reason: options.reason } : {}),
+      },
+    },
+  );
+
+  if (!result.workReject.success || !result.workReject.issue) {
+    throw new CliError('Work reject failed.');
+  }
+
+  return result.workReject.issue;
+}
+
+async function claimWorkViaCli(
+  id: string,
+  leaseSeconds?: number,
+): Promise<{
+  claim: { actor: { email: string | null; name: string | null }; leaseUntil: string };
+  issue: { identifier: string };
+}> {
+  const client = await createConfiguredGraphQLClient();
+  const result = await client.request<{
+    workClaim: {
+      claim: { actor: { email: string | null; name: string | null }; leaseUntil: string } | null;
+      issue: { identifier: string } | null;
+      success: boolean;
+    };
+  }>(
+    /* GraphQL */ `
+      mutation CliWorkClaim($id: String!, $input: WorkClaimInput) {
+        workClaim(id: $id, input: $input) {
+          success
+          issue { identifier }
+          claim {
+            leaseUntil
+            actor { name email }
+          }
+        }
+      }
+    `,
+    {
+      id,
+      input: leaseSeconds ? { leaseSeconds } : {},
+    },
+  );
+
+  if (!result.workClaim.success || !result.workClaim.issue || !result.workClaim.claim) {
+    throw new CliError('Work claim failed.');
+  }
+
+  return { claim: result.workClaim.claim, issue: result.workClaim.issue };
+}
+
+async function reportRunViaCli(
+  workId: string,
+  input: { phase?: string; status?: string; summary?: string },
+): Promise<{ publicId: string; status: string; workIdentifier: string }> {
+  const client = await createConfiguredGraphQLClient();
+  const result = await client.request<{
+    runReport: {
+      issue: { identifier: string; state: { name: string } } | null;
+      run: { publicId: string; status: string } | null;
+      success: boolean;
+    };
+  }>(
+    /* GraphQL */ `
+      mutation CliRunReport($input: RunReportInput!) {
+        runReport(input: $input) {
+          success
+          issue { identifier state { name } }
+          run { publicId status }
+        }
+      }
+    `,
+    {
+      input: {
+        workId,
+        ...(input.status ? { status: input.status } : {}),
+        ...(input.phase ? { phase: input.phase } : {}),
+        ...(input.summary ? { summary: input.summary } : {}),
+      },
+    },
+  );
+
+  if (!result.runReport.success || !result.runReport.run || !result.runReport.issue) {
+    throw new CliError('Run report failed.');
+  }
+
+  return {
+    publicId: result.runReport.run.publicId,
+    status: result.runReport.run.status,
+    workIdentifier: result.runReport.issue.identifier,
+  };
+}
+
+async function attachEvidenceViaCli(
+  workId: string,
+  input: { kind: string; summary?: string; url: string },
+): Promise<{ kind: string; url: string; workIdentifier: string }> {
+  const client = await createConfiguredGraphQLClient();
+  const result = await client.request<{
+    evidenceAttach: {
+      evidence: { kind: string; url: string } | null;
+      issue: { identifier: string } | null;
+      success: boolean;
+    };
+  }>(
+    /* GraphQL */ `
+      mutation CliEvidenceAttach($input: EvidenceAttachInput!) {
+        evidenceAttach(input: $input) {
+          success
+          issue { identifier }
+          evidence { kind url }
+        }
+      }
+    `,
+    {
+      input: {
+        workId,
+        kind: input.kind,
+        url: input.url,
+        ...(input.summary ? { summary: input.summary } : {}),
+      },
+    },
+  );
+
+  if (!result.evidenceAttach.success || !result.evidenceAttach.evidence || !result.evidenceAttach.issue) {
+    throw new CliError('Evidence attach failed.');
+  }
+
+  return {
+    kind: result.evidenceAttach.evidence.kind,
+    url: result.evidenceAttach.evidence.url,
+    workIdentifier: result.evidenceAttach.issue.identifier,
+  };
+}
+
+function formatWorkContext(context: WorkContextResult): string {
+  return formatKeyValues({
+    identifier: context.work.identifier,
+    title: context.work.title,
+    state: context.work.state.name,
+    kind: context.work.kind,
+    commitmentStatus: context.work.commitmentStatus,
+    revision: context.work.revision,
+    priority: context.work.priority,
+    outcome: context.work.outcome ?? '',
+    scope: context.work.scope ?? '',
+    constraints: context.work.constraints ?? '',
+    acceptance: context.work.acceptance ?? '',
+    verification: context.work.verification ?? '',
+    repository: context.work.repository ?? '',
+    ancestors: context.ancestors.map((issue) => `${issue.identifier} ${issue.title}`),
+    blockedBy: context.blockedBy.map((issue) => `${issue.identifier} ${issue.title}`),
+    blocks: context.blocks.map((issue) => `${issue.identifier} ${issue.title}`),
+    audits: context.audits.map((audit) => {
+      const actor = audit.actor?.name ?? audit.actor?.email ?? audit.actorKind;
+      return `${audit.createdAt} r${audit.revision} ${actor} ${audit.surface ?? ''}`.trim();
+    }),
+  });
+}
+
 export function createProgram(): Command {
   const program = new Command()
     .name('involute')
@@ -1194,6 +1588,249 @@ export function createProgram(): Command {
         });
       },
     );
+
+  const workCommand = program.command('work').description('Agent-facing work graph commands');
+
+  workCommand
+    .command('context')
+    .description('Load the complete context bundle for a work item')
+    .argument('<id>', 'Issue identifier or UUID')
+    .option('--json', 'Output machine-readable JSON')
+    .action(async function (this: Command, id: string, options: JsonOption) {
+      await runWithCliErrorHandling(async () => {
+        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+        const bundle = await fetchWorkContext(id);
+
+        if (!bundle) {
+          throw new CliError('Work not found');
+        }
+
+        process.stdout.write(
+          formatOutput(context.json ? bundle : formatWorkContext(bundle), context),
+        );
+      });
+    });
+
+  workCommand
+    .command('ready')
+    .description('List committed, unblocked work that can be claimed')
+    .option('--repository <repository>', 'Filter by repository')
+    .option('--team <key>', 'Filter by team key')
+    .option('--project-id <id>', 'Filter by project id')
+    .option('--priority <priority>', 'Filter by exact priority')
+    .option('--json', 'Output machine-readable JSON')
+    .action(async function (
+      this: Command,
+      options: JsonOption & {
+        priority?: string;
+        projectId?: string;
+        repository?: string;
+        team?: string;
+      },
+    ) {
+      await runWithCliErrorHandling(async () => {
+        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+        let priority: number | undefined;
+
+        if (options.priority !== undefined) {
+          priority = Number(options.priority);
+          if (!Number.isInteger(priority)) {
+            throw new CliError(`Invalid --priority value "${options.priority}". Expected an integer.`);
+          }
+        }
+
+        const nodes = await fetchReadyWork({
+          ...(options.repository ? { repository: options.repository } : {}),
+          ...(options.team ? { teamKey: options.team } : {}),
+          ...(options.projectId ? { projectId: options.projectId } : {}),
+          ...(priority !== undefined ? { priority } : {}),
+        });
+        process.stdout.write(
+          formatOutput(
+            context.json
+              ? nodes
+              : nodes.map((issue) => ({
+                  identifier: issue.identifier,
+                  title: issue.title,
+                  state: issue.state.name,
+                  priority: issue.priority,
+                  repository: issue.repository ?? '',
+                })),
+            context,
+          ),
+        );
+      });
+    });
+
+  workCommand
+    .command('propose')
+    .description('Create candidate work that does not enter the ready queue')
+    .requiredOption('--title <title>', 'Work title')
+    .requiredOption('--team <key>', 'Team key')
+    .option('--description <description>', 'Problem or notes')
+    .option('--acceptance <acceptance>', 'Acceptance criteria')
+    .option('--related <id>', 'Related work identifier')
+    .option('--idempotency-key <key>', 'Idempotency key')
+    .option('--json', 'Output machine-readable JSON')
+    .action(async function (
+      this: Command,
+      options: JsonOption & {
+        acceptance?: string;
+        description?: string;
+        idempotencyKey?: string;
+        related?: string;
+        team: string;
+        title: string;
+      },
+    ) {
+      await runWithCliErrorHandling(async () => {
+        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+        const created = await proposeWorkViaCli(options);
+        process.stdout.write(
+          formatOutput(
+            context.json ? created : { identifier: created.identifier, commitmentStatus: created.commitmentStatus },
+            context,
+          ),
+        );
+      });
+    });
+
+  workCommand
+    .command('commit')
+    .description('Promote candidate work to a committed delivery contract')
+    .argument('<id>', 'Issue identifier or UUID')
+    .requiredOption('--acceptance <acceptance>', 'Acceptance criteria')
+    .option('--assignee <userId>', 'Human owner user id')
+    .option('--json', 'Output machine-readable JSON')
+    .action(async function (
+      this: Command,
+      id: string,
+      options: JsonOption & { acceptance: string; assignee?: string },
+    ) {
+      await runWithCliErrorHandling(async () => {
+        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+        const committed = await commitWorkViaCli(id, options);
+        process.stdout.write(
+          formatOutput(
+            context.json
+              ? committed
+              : {
+                  identifier: committed.identifier,
+                  commitmentStatus: committed.commitmentStatus,
+                  revision: committed.revision,
+                },
+            context,
+          ),
+        );
+      });
+    });
+
+  workCommand
+    .command('reject')
+    .description('Reject candidate work so it never enters the committed graph')
+    .argument('<id>', 'Issue identifier or UUID')
+    .option('--reason <reason>', 'Why this candidate is being rejected')
+    .option('--json', 'Output machine-readable JSON')
+    .action(async function (
+      this: Command,
+      id: string,
+      options: JsonOption & { reason?: string },
+    ) {
+      await runWithCliErrorHandling(async () => {
+        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+        const rejected = await rejectWorkViaCli(id, options);
+        process.stdout.write(
+          formatOutput(
+            context.json
+              ? rejected
+              : {
+                  identifier: rejected.identifier,
+                  commitmentStatus: rejected.commitmentStatus,
+                  revision: rejected.revision,
+                },
+            context,
+          ),
+        );
+      });
+    });
+
+  workCommand
+    .command('claim')
+    .description('Atomically claim committed work for the current actor')
+    .argument('<id>', 'Issue identifier or UUID')
+    .option('--lease-seconds <seconds>', 'Lease length in seconds')
+    .option('--json', 'Output machine-readable JSON')
+    .action(async function (
+      this: Command,
+      id: string,
+      options: JsonOption & { leaseSeconds?: string },
+    ) {
+      await runWithCliErrorHandling(async () => {
+        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+        let leaseSeconds: number | undefined;
+
+        if (options.leaseSeconds !== undefined) {
+          leaseSeconds = Number(options.leaseSeconds);
+          if (!Number.isInteger(leaseSeconds) || leaseSeconds <= 0) {
+            throw new CliError(`Invalid --lease-seconds value "${options.leaseSeconds}".`);
+          }
+        }
+
+        const claimed = await claimWorkViaCli(id, leaseSeconds);
+        process.stdout.write(
+          formatOutput(
+            context.json
+              ? claimed
+              : {
+                  identifier: claimed.issue.identifier,
+                  leaseUntil: claimed.claim.leaseUntil,
+                  actor: claimed.claim.actor.name ?? claimed.claim.actor.email ?? '',
+                },
+            context,
+          ),
+        );
+      });
+    });
+
+  workCommand
+    .command('run-report')
+    .description('Report a run phase or completion (never marks work Done)')
+    .argument('<id>', 'Work identifier or UUID')
+    .option('--status <status>', 'queued, running, blocked, completed, failed')
+    .option('--phase <phase>', 'High-level phase name')
+    .option('--summary <summary>', 'Short status for humans')
+    .option('--json', 'Output machine-readable JSON')
+    .action(async function (
+      this: Command,
+      id: string,
+      options: JsonOption & { phase?: string; status?: string; summary?: string },
+    ) {
+      await runWithCliErrorHandling(async () => {
+        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+        const reported = await reportRunViaCli(id, options);
+        process.stdout.write(formatOutput(context.json ? reported : reported, context));
+      });
+    });
+
+  workCommand
+    .command('evidence')
+    .description('Attach a PR, test, or artifact and move work to In Review')
+    .argument('<id>', 'Work identifier or UUID')
+    .requiredOption('--kind <kind>', 'pr, test, log, screenshot, artifact, or decision')
+    .requiredOption('--url <url>', 'Evidence URL')
+    .option('--summary <summary>', 'Short description')
+    .option('--json', 'Output machine-readable JSON')
+    .action(async function (
+      this: Command,
+      id: string,
+      options: JsonOption & { kind: string; summary?: string; url: string },
+    ) {
+      await runWithCliErrorHandling(async () => {
+        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+        const attached = await attachEvidenceViaCli(id, options);
+        process.stdout.write(formatOutput(context.json ? attached : attached, context));
+      });
+    });
 
   return program;
 }

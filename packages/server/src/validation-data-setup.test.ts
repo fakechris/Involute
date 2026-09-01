@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { runImportPipeline } from './import-pipeline.js';
-import { CANONICAL_WORKFLOW_STATE_NAMES } from './validation-data-constants.js';
+import { CANONICAL_LABEL_NAMES, CANONICAL_WORKFLOW_STATE_NAMES } from './validation-data-constants.js';
 import { runValidationDataSetup } from './validation-data-setup.js';
 
 loadProjectEnvironment();
@@ -33,7 +33,7 @@ describe('runValidationDataSetup', () => {
   it('creates INV, APP, and VAL teams with canonical states, seeded labels, and repeatable board issues', async () => {
     const summary = await runValidationDataSetup(prisma);
 
-    expect(summary.labelsCount).toBeGreaterThanOrEqual(10);
+    expect(summary.labelsCount).toBeGreaterThanOrEqual(CANONICAL_LABEL_NAMES.length);
     expect(summary.manyIssueCount).toBeGreaterThanOrEqual(60);
 
     const invTeam = await prisma.team.findUnique({

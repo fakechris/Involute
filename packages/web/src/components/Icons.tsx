@@ -90,6 +90,10 @@ export function IcoCycle({ size = 14, ...rest }: IconProps) {
   return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><path d="M2 7a5 5 0 0 1 9-3m1 3a5 5 0 0 1-9 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M11 2v2h-2m-6 8v-2h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>);
 }
 
+export function IcoGraph({ size = 14, ...rest }: IconProps) {
+  return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><circle cx="3.5" cy="3.5" r="1.7" stroke="currentColor" strokeWidth="1.2"/><circle cx="10.5" cy="4" r="1.7" stroke="currentColor" strokeWidth="1.2"/><circle cx="7" cy="10.5" r="1.7" stroke="currentColor" strokeWidth="1.2"/><path d="M5 4.2 9 4.5M4.2 5.1 6.2 9.1M9.4 5.4 8 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>);
+}
+
 export function IcoLink({ size = 14, ...rest }: IconProps) {
   return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><path d="M6 8a2 2 0 0 0 3 0l2.5-2.5a2 2 0 0 0-3-3L7 4M8 6a2 2 0 0 0-3 0L2.5 8.5a2 2 0 0 0 3 3L7 10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>);
 }

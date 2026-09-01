@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import type { CommitmentStatus, Prisma, WorkKind } from '@prisma/client';
 
 export interface StringComparatorInput {
   eq?: string | null;
@@ -8,6 +8,14 @@ export interface StringComparatorInput {
 
 export interface BooleanComparatorInput {
   eq?: boolean | null;
+}
+
+export interface IntComparatorInput {
+  eq?: number | null;
+}
+
+export interface DateTimeComparatorInput {
+  gte?: Date | null;
 }
 
 export interface TeamFilterInput {
@@ -34,9 +42,13 @@ export interface IssueLabelRelationFilterInput {
 export interface IssueFilterInput {
   and?: IssueFilterInput[] | null;
   assignee?: UserFilterRefInput | null;
+  commitmentStatus?: CommitmentStatus | null;
+  kind?: WorkKind | null;
   labels?: IssueLabelRelationFilterInput | null;
+  priority?: IntComparatorInput | null;
   state?: WorkflowStateFilterRefInput | null;
   team?: TeamFilterInput | null;
+  updatedAt?: DateTimeComparatorInput | null;
 }
 
 export function buildIssueWhere(
@@ -125,6 +137,36 @@ export function buildIssueWhere(
             notIn: excludedLabelNames,
           },
         },
+      },
+    });
+  }
+
+  if (filter?.kind) {
+    clauses.push({
+      kind: filter.kind,
+    });
+  }
+
+  if (filter?.commitmentStatus) {
+    clauses.push({
+      commitmentStatus: filter.commitmentStatus,
+    });
+  }
+
+  const priorityEq = filter?.priority?.eq;
+
+  if (priorityEq !== undefined && priorityEq !== null) {
+    clauses.push({
+      priority: priorityEq,
+    });
+  }
+
+  const updatedAtGte = filter?.updatedAt?.gte;
+
+  if (updatedAtGte) {
+    clauses.push({
+      updatedAt: {
+        gte: updatedAtGte,
       },
     });
   }

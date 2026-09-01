@@ -89,6 +89,71 @@ describe('issue service', () => {
 
     expect(persistedRoot.parentId).toBeNull();
   });
+
+  it('projects parent updates onto contains links, bumps revision, and writes audit', async () => {
+    const team = await prisma.team.findUniqueOrThrow({
+      where: {
+        key: DEFAULT_TEAM_KEY,
+      },
+    });
+    const backlogState = await prisma.workflowState.findFirstOrThrow({
+      where: {
+        teamId: team.id,
+        name: 'Backlog',
+      },
+    });
+    const parent = await prisma.issue.create({
+      data: {
+        identifier: 'INV-10',
+        title: 'Parent',
+        teamId: team.id,
+        stateId: backlogState.id,
+      },
+    });
+    const child = await prisma.issue.create({
+      data: {
+        identifier: 'INV-11',
+        title: 'Child',
+        teamId: team.id,
+        stateId: backlogState.id,
+      },
+    });
+
+    const updated = await updateIssue(prisma, child.id, {
+      parentId: parent.id,
+      title: 'Child with parent',
+    });
+
+    expect(updated.revision).toBe(2);
+    expect(updated.parentId).toBe(parent.id);
+
+    const links = await prisma.workLink.findMany({
+      where: {
+        type: 'CONTAINS',
+        toId: child.id,
+      },
+    });
+    expect(links).toEqual([
+      expect.objectContaining({
+        fromId: parent.id,
+        toId: child.id,
+        type: 'CONTAINS',
+      }),
+    ]);
+
+    const audits = await prisma.workAudit.findMany({
+      where: {
+        workId: child.id,
+      },
+      orderBy: {
+        revision: 'asc',
+      },
+    });
+    expect(audits).toHaveLength(1);
+    expect(audits[0]?.revision).toBe(2);
+    expect(audits[0]?.actorKind).toBe('SERVICE');
+    expect(audits[0]?.surface).toBe('internal');
+  });
 });
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<void> {

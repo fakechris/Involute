@@ -17,6 +17,11 @@ import type {
   TeamUpdateAccessMutationData,
   IssueUpdateMutationData,
 } from '../board/types';
+import type {
+  CandidatesPageQueryData,
+  WorkContextPageQueryData,
+  WorkGraphPageQueryData,
+} from '../work/types';
 export type {
   AccessPageQueryData,
   BoardPageQueryData,
@@ -89,6 +94,14 @@ const hoistedApolloMocks = vi.hoisted<ApolloMockSet>(() => ({
 
     if (source.includes('mutation FileUpload')) {
       return [vi.fn().mockResolvedValue({ data: { fileUpload: { success: true, attachment: null } } })];
+    }
+
+    if (source.includes('mutation WorkCommit')) {
+      return [vi.fn().mockResolvedValue({ data: { workCommit: { success: true, issue: { id: 'issue-c', identifier: 'INV-9', commitmentStatus: 'COMMITTED' } } } })];
+    }
+
+    if (source.includes('mutation WorkReject')) {
+      return [vi.fn().mockResolvedValue({ data: { workReject: { success: true, issue: { id: 'issue-c', identifier: 'INV-9', commitmentStatus: 'REJECTED' } } } })];
     }
 
     return [vi.fn()];
@@ -201,6 +214,14 @@ beforeEach(() => {
 
     if (source.includes('mutation FileUpload')) {
       return [vi.fn().mockResolvedValue({ data: { fileUpload: { success: true, attachment: null } } })];
+    }
+
+    if (source.includes('mutation WorkCommit')) {
+      return [vi.fn().mockResolvedValue({ data: { workCommit: { success: true, issue: { id: 'issue-c', identifier: 'INV-9', commitmentStatus: 'COMMITTED' } } } })];
+    }
+
+    if (source.includes('mutation WorkReject')) {
+      return [vi.fn().mockResolvedValue({ data: { workReject: { success: true, issue: { id: 'issue-c', identifier: 'INV-9', commitmentStatus: 'REJECTED' } } } })];
     }
 
     return [vi.fn()];
@@ -398,10 +419,13 @@ export const accessQueryResult: AccessPageQueryData = {
 
 type QueryState = {
   accessData?: AccessPageQueryData;
+  candidatesData?: CandidatesPageQueryData;
   data?: BoardPageQueryData;
   error?: Error;
   fetchMore?: ReturnType<typeof vi.fn>;
+  graphData?: WorkGraphPageQueryData;
   loading?: boolean;
+  workContextData?: WorkContextPageQueryData;
 };
 
 export function renderApp(
@@ -429,6 +453,35 @@ export function renderApp(
     if (source.includes('query AccessPage')) {
       return {
         data: queryState.accessData ?? accessQueryResult,
+        error: queryState.error,
+        loading: queryState.loading ?? false,
+      };
+    }
+
+    if (source.includes('query CandidatesPage')) {
+      return {
+        data: queryState.candidatesData ?? {
+          teams: queryState.data?.teams ?? { nodes: [] },
+          users: queryState.data?.users ?? { nodes: [] },
+          issues: { nodes: [], pageInfo: { endCursor: null, hasNextPage: false } },
+        },
+        error: queryState.error,
+        loading: queryState.loading ?? false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query WorkGraphPage')) {
+      return {
+        data: queryState.graphData ?? { issues: { nodes: [] } },
+        error: queryState.error,
+        loading: queryState.loading ?? false,
+      };
+    }
+
+    if (source.includes('query WorkContextPage')) {
+      return {
+        data: queryState.workContextData ?? { workContext: null },
         error: queryState.error,
         loading: queryState.loading ?? false,
       };

@@ -25,6 +25,7 @@ describe('App routes and team flows', () => {
         variables: {
           first: 200,
           filter: {
+            commitmentStatus: 'COMMITTED',
             team: {
               key: {
                 eq: 'SON',
@@ -48,6 +49,7 @@ describe('App routes and team flows', () => {
         variables: {
           first: 200,
           filter: {
+            commitmentStatus: 'COMMITTED',
             team: {
               key: {
                 eq: 'SON',

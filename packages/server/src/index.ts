@@ -13,6 +13,8 @@ import { createAuthenticationPlugin, createGraphQLContext } from './auth.js';
 import { getAllowedBrowserOrigins, handleAuthRoutes } from './auth-routes.js';
 import { getExposedError } from './errors.js';
 import type { GoogleOAuthConfiguration } from './google-oauth.js';
+import { flushEventOutbox, parseWebhookTargets } from './event-outbox.js';
+import { handleMcpRequest } from './mcp.js';
 import { createGraphQLSchema } from './schema.js';
 import { getServerEnvironment, loadServerEnvironment, type ServerEnvironment } from './environment.js';
 
@@ -29,6 +31,8 @@ export interface StartServerOptions {
   prisma?: PrismaClient;
   sessionTtlSeconds?: number;
   viewerAssertionSecret?: string | null;
+  webhookSecret?: string | null;
+  webhookUrls?: string | null;
 }
 
 export interface StartedServer {
@@ -131,22 +135,36 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       return;
     }
 
-    handleAuthRoutes({
+    const mcpAuth = {
       allowAdminFallback: options.allowAdminFallback ?? environment.allowAdminFallback,
-      appOrigin: options.appOrigin ?? environment.appOrigin,
       authToken: options.authToken ?? environment.authToken,
-      googleOAuth,
       prisma,
+      viewerAssertionSecret: options.viewerAssertionSecret ?? environment.viewerAssertionSecret,
+    };
+
+    handleMcpRequest({
+      ...mcpAuth,
       request,
       response,
-      sessionTtlSeconds: options.sessionTtlSeconds ?? environment.sessionTtlSeconds,
-      viewerAssertionSecret: options.viewerAssertionSecret ?? environment.viewerAssertionSecret,
-    }).then((handled) => {
-      if (handled) {
+    }).then((handledMcp) => {
+      if (handledMcp) {
         return;
       }
 
-      yoga(request, response);
+      return handleAuthRoutes({
+        ...mcpAuth,
+        appOrigin: options.appOrigin ?? environment.appOrigin,
+        googleOAuth,
+        request,
+        response,
+        sessionTtlSeconds: options.sessionTtlSeconds ?? environment.sessionTtlSeconds,
+      }).then((handled) => {
+        if (handled) {
+          return;
+        }
+
+        yoga(request, response);
+      });
     }).catch((error: unknown) => {
       const exposedError = getExposedError(error);
 
@@ -178,6 +196,21 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     httpServer.listen(options.port ?? environment.port);
   });
 
+  const webhookTargets = parseWebhookTargets(
+    options.webhookUrls ?? environment.webhookUrls,
+    options.webhookSecret ?? environment.webhookSecret,
+  );
+  const outboxTimer =
+    webhookTargets.length > 0
+      ? setInterval(() => {
+          void flushEventOutbox(prisma, webhookTargets).catch((error: unknown) => {
+            console.error('Failed to flush event outbox.');
+            console.error(error);
+          });
+        }, 2000)
+      : null;
+  outboxTimer?.unref();
+
   const address = httpServer.address();
 
   if (!address || typeof address === 'string') {
@@ -189,6 +222,10 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     port: address.port,
     prisma,
     stop: async () => {
+      if (outboxTimer) {
+        clearInterval(outboxTimer);
+      }
+
       await new Promise<void>((resolve, reject) => {
         httpServer.close((error) => {
           if (error) {

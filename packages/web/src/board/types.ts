@@ -203,6 +203,7 @@ export interface BoardPageQueryVariables {
         eq: boolean;
       };
     };
+    commitmentStatus?: 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
   };
 }
 

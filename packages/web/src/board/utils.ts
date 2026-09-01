@@ -2,6 +2,7 @@ import { BOARD_COLUMN_ORDER } from './constants';
 import type {
   BoardColumn,
   BoardPageQueryData,
+  BoardPageQueryVariables,
   Html5BoardDragPayload,
   IssueSummary,
   TeamSummary,
@@ -11,6 +12,25 @@ import { readLocalStorageValue } from '../lib/storage';
 
 export const ACTIVE_TEAM_STORAGE_KEY = 'involute.activeTeamKey';
 export const OPEN_CREATE_ISSUE_EVENT = 'involute:open-create-issue';
+
+export function buildCommittedIssueFilter(
+  teamKey: string | null,
+): NonNullable<BoardPageQueryVariables['filter']> {
+  if (teamKey) {
+    return {
+      commitmentStatus: 'COMMITTED',
+      team: {
+        key: {
+          eq: teamKey,
+        },
+      },
+    };
+  }
+
+  return {
+    commitmentStatus: 'COMMITTED',
+  };
+}
 
 export function readStoredTeamKey(): string | null {
   if (typeof window === 'undefined') {

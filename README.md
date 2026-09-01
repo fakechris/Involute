@@ -4,17 +4,27 @@
 [![CI](https://github.com/fakechris/Involute/actions/workflows/ci.yml/badge.svg)](https://github.com/fakechris/Involute/actions/workflows/ci.yml)
 [![Docker Publish](https://github.com/fakechris/Involute/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/fakechris/Involute/actions/workflows/docker-publish.yml)
 
-一人团队的 epic / issue / team / workspace 项目管理系统开源实现。
+Agent-native project-state and work-graph kernel.
 
-Involute bundles a GraphQL API, a kanban web app, and a CLI that can export one team snapshot, import it into Involute, verify the result, and then let you visually accept it in the board UI.
+Involute stores long-lived work identity, contracts, links, status, decisions, and evidence. Codex, Claude Code, and other agents are the primary entrypoints; the kanban web app is an optional observation and governance surface.
+
+The current tree still ships a GraphQL API, a kanban UI, and a CLI that can export one Linear team snapshot, import it, verify it, and show it on the board. That import loop remains supported. The product direction is a callable kernel, not a Linear UI clone. See [docs/vision.md](docs/vision.md).
 
 ## Current status
 
 - `M0` single-team migration acceptance is done.
 - `M2` Google OAuth, session auth, admin bootstrap, and team RBAC are done.
-- `M1` deployable self-hosting is in progress.
-- The latest `main` is already live on the VPS, backup/restore has been rehearsed once, Google OAuth is configured on the public domain, and the canonical `SON` team snapshot has been refreshed into the VPS stack.
-- The current highest-priority gap is operator confidence on the VPS: a tighter runbook for deploy, rollback, logs, and restore.
+- `M1` VPS self-hosting is operational. Operator runbook: [docs/ops.md](docs/ops.md).
+- The public domain serves HTTPS with Google OAuth. Backup and restore scripts are `scripts/postgres-backup.sh` and `scripts/postgres-restore.sh`.
+- The Linear-replacement track is M5. K0–K6 ship as the work-graph kernel: MCP at `/mcp`, propose/commit/claim/reject, runs/evidence, and observation UI (`/candidates`, `/graph`, `/work/:id`). The board projects committed issues only.
+
+Connect an agent:
+
+```bash
+codex mcp add involute --url http://localhost:4200/mcp
+```
+
+See [skills/involute/SKILL.md](skills/involute/SKILL.md).
 
 See [docs/current-status.md](docs/current-status.md), [docs/milestones.md](docs/milestones.md), [docs/vision.md](docs/vision.md), and [docs/api.md](docs/api.md) for the current product state and API surface.
 
@@ -25,6 +35,7 @@ See [docs/current-status.md](docs/current-status.md), [docs/milestones.md](docs/
 - `packages/cli` — `involute` CLI for config, import/export, teams, issues, labels, and comments
 - `packages/shared` — shared TypeScript utilities
 - `docs/api.md` — HTTP and GraphQL API reference
+- `docs/ops.md` — production deploy, rollback, logs, backup, restore, smoke
 - `docs/vision.md` — current product vision
 - `docs/milestones.md` — active milestones and sequencing
 
@@ -224,13 +235,14 @@ Operational notes:
 - `SEED_DATABASE` defaults to `false` in production; turn it on only for a fresh demo seed
 - the web container is the static production build, not the Vite dev server
 
-Backups:
+Backups and restore:
 
 ```bash
 sh scripts/postgres-backup.sh
+RESTORE_TARGET=throwaway sh scripts/postgres-restore.sh .backups/involute-<timestamp>.sql.gz
 ```
 
-This writes a gzipped SQL dump to `.backups/`.
+This writes a gzipped SQL dump to `.backups/`. See [docs/ops.md](docs/ops.md) for production restore and the smoke checklist.
 
 ## Automated deployment with Ansible
 

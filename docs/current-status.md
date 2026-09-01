@@ -6,7 +6,9 @@ Last updated against `main` at `351fd06`.
 
 Involute is past the local prototype stage. The single-team import loop is stable, the issue lifecycle is covered in browser E2E, Google OAuth plus session auth is in place, team-level RBAC exists in both API and web UI, and the web client has already moved onto the new shell and keyboard-first interaction model.
 
-The main remaining milestone is not feature breadth. It is production confidence: public-domain deployment, backup/restore validation, and operator-facing polish around auth and access.
+The product identity has shifted: Involute is a headless project-state and work-graph kernel that Agents call. The board is an optional projection, not the destination. The operational remaining work on M1 still matters — the VPS must stay trustworthy while the kernel is built.
+
+The Linear-replacement track is M5. It starts from the current Issue/GraphQL kernel and adds typed links, context bundles, candidate/commitment, claim/lease, MCP, runs, and evidence. It does not start from a new WorkItem table or a new UI.
 
 ## What is done
 
@@ -49,11 +51,11 @@ Done:
 
 ### M1: Deployable self-hosting
 
-In progress:
+VPS path is live. Operator procedure is in [ops.md](./ops.md):
 
-- the public VPS path is live, but the operator runbook still needs to be tightened
-- Google OAuth is configured on the public domain, but the production smoke path should still be treated as an operator-owned checklist
-- backup exists and restore has been exercised once, but recurring operational procedure still needs to be documented cleanly
+- deploy / rollback / logs / compose status
+- backup and restore (`scripts/postgres-backup.sh`, `scripts/postgres-restore.sh`)
+- production smoke checklist (`pnpm smoke:prod`)
 
 ### Auth/access product polish
 
@@ -64,18 +66,25 @@ Not blocking for engineering correctness, but still needed before broader operat
 - stronger regression coverage for public/private visibility and owner/editor/viewer behavior
 - clearer operator-facing guidance for first-admin bootstrap
 
+### M5: Agent-native work-graph kernel
+
+K0–K6 are implemented: product contract, work graph, context/ready, propose/commit/claim/reject, MCP, Skill, runs, evidence, outbound webhooks, and observation UI.
+
+Agent protocol is MCP + work mutations. Comment heartbeats are not a client protocol.
+
 ## Current recommended priority
 
-1. Tighten the VPS operator runbook for deploy, rollback, logs, and restore.
-2. Keep the public OAuth/session path exercised and documented.
-3. Polish access-management UX and tighten auth/RBAC regression coverage.
-4. Keep deployment automation, package release automation, and database migrations aligned.
+1. Ship the kernel and deploy the VPS onto this tree.
+2. Keep the operator runbook, OAuth/session path, and backup/restore trustworthy (M1).
+3. Do not add Linear-clone Inbox/Cycle/AgentSession products. Existing leftover routes are frozen.
 
 ## Deliberately not next
 
 - multi-team workspace import
+- Linear Inbox / Cycle / dashboard product work
+- AgentSession live UI, Loops, or hosted coding sessions
+- growing Inbox, Cycles, Projects, or My Issues
 - large-scale performance work
-- major visual redesign
 - magic-link email auth
 - broader enterprise auth/SSO work
 - turning Railway into a fully supported path before the VPS path is fully operationalized

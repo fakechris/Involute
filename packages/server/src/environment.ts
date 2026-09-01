@@ -20,6 +20,8 @@ export interface ServerEnvironment {
   requireGoogleOAuth: boolean;
   sessionTtlSeconds: number;
   viewerAssertionSecret: string | null;
+  webhookSecret: string | null;
+  webhookUrls: string | null;
 }
 
 export function getProjectEnvPath(): string {
@@ -75,5 +77,7 @@ export function getServerEnvironment(env: NodeJS.ProcessEnv = process.env): Serv
       ? Math.trunc(sessionTtlSeconds)
       : 60 * 60 * 24 * 30,
     viewerAssertionSecret: env.VIEWER_ASSERTION_SECRET?.trim() || null,
+    webhookSecret: env.INVOLUTE_WEBHOOK_SECRET?.trim() || null,
+    webhookUrls: env.INVOLUTE_WEBHOOK_URL?.trim() || null,
   };
 }

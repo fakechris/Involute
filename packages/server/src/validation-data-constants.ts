@@ -17,5 +17,4 @@ export const CANONICAL_LABEL_NAMES = [
   'Feature',
   'Bug',
   'Improvement',
-  'spec-orch',
 ] as const;
