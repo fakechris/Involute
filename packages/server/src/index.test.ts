@@ -212,7 +212,7 @@ describe('GraphQL server core', () => {
         },
       },
     ]);
-    expect(response.body.data.issueLabels.nodes.length).toBeGreaterThanOrEqual(10);
+    expect(response.body.data.issueLabels.nodes.length).toBeGreaterThanOrEqual(DEFAULT_LABEL_NAMES.length);
   });
 
   it('exposes imported issue timestamps and imported users through the live API surface', async () => {

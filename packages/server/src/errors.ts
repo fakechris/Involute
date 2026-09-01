@@ -22,6 +22,27 @@ export const TEAM_HAS_NO_WORKFLOW_STATES_MESSAGE =
   'The selected team does not have any workflow states.';
 export const TEAM_WRITE_FORBIDDEN_MESSAGE = 'You do not have edit access to this team.';
 export const TEAM_MANAGE_FORBIDDEN_MESSAGE = 'You do not have access to manage this team.';
+export const WORK_LINK_NOT_FOUND_MESSAGE = 'Work link not found.';
+export const WORK_LINK_SELF_REFERENCE_MESSAGE = 'Work cannot link to itself.';
+export const WORK_LINK_CYCLE_MESSAGE = 'Work link cannot create a cycle.';
+export const WORK_LINK_TEAM_MISMATCH_MESSAGE = 'Work links must stay within the same team.';
+export const WORK_LINK_ENDPOINT_NOT_FOUND_MESSAGE = 'Work link endpoint not found.';
+export const WORK_COMMIT_FORBIDDEN_MESSAGE = 'Agents cannot commit work.';
+export const WORK_REJECT_FORBIDDEN_MESSAGE = 'Agents cannot reject work.';
+export const WORK_ACCEPT_FORBIDDEN_MESSAGE = 'Agents cannot accept or cancel work.';
+export const WORK_NOT_CANDIDATE_MESSAGE = 'Only candidate work can be committed or rejected.';
+export const WORK_NOT_COMMITTED_MESSAGE = 'Only committed work can be claimed.';
+export const WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE =
+  'Committed work requires acceptance criteria.';
+export const WORK_COMMIT_REQUIRES_OWNER_MESSAGE = 'Committed work requires a human owner.';
+export const WORK_OWNER_MUST_BE_HUMAN_MESSAGE = 'Work owner must be a human assignee.';
+export const WORK_REVISION_CONFLICT_MESSAGE = 'Work revision does not match expected_revision.';
+export const WORK_ALREADY_CLAIMED_MESSAGE = 'Work is already claimed.';
+export const WORK_CLAIM_REQUIRES_ACTOR_MESSAGE = 'Claiming work requires an authenticated actor.';
+export const WORK_RELATED_NOT_FOUND_MESSAGE = 'Related work not found.';
+export const WORK_RUN_NOT_FOUND_MESSAGE = 'Work run not found.';
+export const WORK_EVIDENCE_KIND_INVALID_MESSAGE = 'Unknown evidence kind.';
+export const WORK_RUN_STATUS_INVALID_MESSAGE = 'Unknown run status.';
 
 const exposedErrorCodes = new Map<string, string>([
   [NOT_AUTHENTICATED_MESSAGE, 'UNAUTHENTICATED'],
@@ -42,6 +63,26 @@ const exposedErrorCodes = new Map<string, string>([
   [TEAM_HAS_NO_WORKFLOW_STATES_MESSAGE, 'BAD_USER_INPUT'],
   [TEAM_WRITE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
   [TEAM_MANAGE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
+  [WORK_LINK_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [WORK_LINK_SELF_REFERENCE_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_LINK_CYCLE_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_LINK_TEAM_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_LINK_ENDPOINT_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [WORK_COMMIT_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
+  [WORK_REJECT_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
+  [WORK_ACCEPT_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
+  [WORK_NOT_CANDIDATE_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_NOT_COMMITTED_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_COMMIT_REQUIRES_OWNER_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_OWNER_MUST_BE_HUMAN_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_REVISION_CONFLICT_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_ALREADY_CLAIMED_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_CLAIM_REQUIRES_ACTOR_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_RELATED_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [WORK_RUN_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [WORK_EVIDENCE_KIND_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_RUN_STATUS_INVALID_MESSAGE, 'BAD_USER_INPUT'],
 ]);
 
 export function createNotAuthenticatedError(): GraphQLError {

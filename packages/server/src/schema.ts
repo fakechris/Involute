@@ -12,6 +12,9 @@ import type {
   TeamMembershipRole,
   TeamVisibility,
   User,
+  WorkClaim,
+  WorkLink,
+  WorkLinkType,
   WorkflowState,
 } from '@prisma/client';
 
@@ -31,6 +34,7 @@ import {
   createValidationError,
   getExposedError,
   isPrismaInvalidInputError,
+  ISSUE_NOT_FOUND_MESSAGE,
   MEMBERSHIP_NOT_FOUND_MESSAGE,
   TEAM_OWNER_REQUIRED_MESSAGE,
 } from './errors.js';
@@ -53,6 +57,26 @@ import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
 
 import { requireAuthentication, type GraphQLContext } from './auth.js';
 import { createComment, createIssue, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
+import { listIncidentLinks } from './link-service.js';
+import { writeActorFromViewer } from './work-service.js';
+import {
+  findWorkByIdOrIdentifier,
+  getWorkContext,
+  listReadyWork,
+  type ListReadyWorkInput,
+  type WorkContextBundle,
+} from './context-service.js';
+import {
+  claimWork,
+  commitWork,
+  proposeWork,
+  rejectWork,
+  type ClaimWorkInput,
+  type CommitWorkInput,
+  type ProposeWorkInput,
+  type RejectWorkInput,
+} from './claim-service.js';
+import { attachEvidence, reportRun } from './run-service.js';
 import { createProject, updateProject, deleteProject, type CreateProjectInput, type UpdateProjectInput } from './project-service.js';
 import { createCycle, updateCycle, deleteCycle, type CreateCycleInput, type UpdateCycleInput } from './cycle-service.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
@@ -80,6 +104,8 @@ type IssueParent = Issue & {
   project?: Project | null;
   cycle?: Cycle | null;
 };
+type WorkLinkParent = WorkLink & { from?: Issue | null; to?: Issue | null };
+type WorkClaimParent = WorkClaim & { actor?: User | null };
 
 interface StringComparatorInput {
   eq?: string | null;
@@ -187,6 +213,8 @@ const typeDefs = /* GraphQL */ `
     project(id: String!): Project
     cycles(teamId: String!): CycleConnection!
     cycle(id: String!): Cycle
+    workContext(id: String!): WorkContext
+    readyWork(filter: ReadyWorkFilter): IssueConnection!
   }
 
   type Mutation {
@@ -206,6 +234,12 @@ const typeDefs = /* GraphQL */ `
     cycleDelete(id: String!): CycleDeletePayload!
     userUpdate(input: UserUpdateInput!): UserUpdatePayload!
     fileUpload(input: FileUploadInput!): FileUploadPayload!
+    workPropose(input: WorkProposeInput!): WorkProposePayload!
+    workCommit(id: String!, input: WorkCommitInput!): WorkCommitPayload!
+    workReject(id: String!, input: WorkRejectInput!): WorkRejectPayload!
+    workClaim(id: String!, input: WorkClaimInput): WorkClaimPayload!
+    runReport(input: RunReportInput!): RunReportPayload!
+    evidenceAttach(input: EvidenceAttachInput!): EvidenceAttachPayload!
   }
 
   type Team {
@@ -260,11 +294,41 @@ const typeDefs = /* GraphQL */ `
     email: String
     isMe: Boolean
     globalRole: GlobalRole!
+    actorKind: ActorKind!
   }
 
   enum GlobalRole {
     ADMIN
     USER
+  }
+
+  enum ActorKind {
+    HUMAN
+    AGENT
+    SERVICE
+  }
+
+  enum WorkKind {
+    ISSUE
+    PROJECT
+    MILESTONE
+    DECISION
+    EPIC
+  }
+
+  enum CommitmentStatus {
+    CANDIDATE
+    COMMITTED
+    REJECTED
+  }
+
+  enum WorkLinkType {
+    CONTAINS
+    BLOCKS
+    DERIVED_FROM
+    DISCOVERED_DURING
+    RELATED_TO
+    DUPLICATE_OF
   }
 
   type Comment {
@@ -296,7 +360,93 @@ const typeDefs = /* GraphQL */ `
     cycle: Cycle
     projectId: String
     cycleId: String
+    kind: WorkKind!
+    commitmentStatus: CommitmentStatus!
+    revision: Int!
+    outcome: String
+    scope: String
+    constraints: String
+    acceptance: String
+    verification: String
+    repository: String
+    links(type: WorkLinkType): WorkLinkConnection!
+    claim: WorkClaimRecord
     comments(first: Int, after: String, orderBy: CommentOrderBy): CommentConnection!
+  }
+
+  type WorkLink {
+    id: ID!
+    type: WorkLinkType!
+    from: Issue!
+    to: Issue!
+    createdAt: DateTime!
+  }
+
+  type WorkLinkConnection {
+    nodes: [WorkLink!]!
+  }
+
+  type WorkAuditRecord {
+    id: ID!
+    revision: Int!
+    actorKind: ActorKind!
+    actor: User
+    surface: String
+    reason: String
+    createdAt: DateTime!
+  }
+
+  type WorkContext {
+    work: Issue!
+    ancestors: [Issue!]!
+    blockedBy: [Issue!]!
+    blocks: [Issue!]!
+    claim: WorkClaimRecord
+    audits: [WorkAuditRecord!]!
+    runs: [WorkRunRecord!]!
+    evidence: [WorkEvidenceRecord!]!
+  }
+
+  enum WorkRunStatus {
+    QUEUED
+    RUNNING
+    BLOCKED
+    COMPLETED
+    FAILED
+  }
+
+  enum WorkEvidenceKind {
+    PR
+    TEST
+    LOG
+    SCREENSHOT
+    ARTIFACT
+    DECISION
+  }
+
+  type WorkRunRecord {
+    id: ID!
+    publicId: String!
+    status: WorkRunStatus!
+    phase: String
+    summary: String
+    externalUrl: String
+    startedAt: DateTime!
+    endedAt: DateTime
+  }
+
+  type WorkEvidenceRecord {
+    id: ID!
+    kind: WorkEvidenceKind!
+    url: String!
+    summary: String
+    createdAt: DateTime!
+  }
+
+  type WorkClaimRecord {
+    actor: User!
+    leaseUntil: DateTime!
+    createdAt: DateTime!
   }
 
   type Project {
@@ -408,12 +558,33 @@ const typeDefs = /* GraphQL */ `
     every: IssueLabelFilterRef
   }
 
+  input IntComparator {
+    eq: Int
+  }
+
+  input DateTimeComparator {
+    gte: DateTime
+  }
+
   input IssueFilter {
     and: [IssueFilter!]
     team: TeamFilter
     state: WorkflowStateFilterRef
     assignee: UserFilterRef
     labels: IssueLabelRelationFilter
+    kind: WorkKind
+    commitmentStatus: CommitmentStatus
+    priority: IntComparator
+    updatedAt: DateTimeComparator
+  }
+
+  input ReadyWorkFilter {
+    first: Int
+    kind: WorkKind
+    priority: Int
+    projectId: String
+    repository: String
+    teamKey: String
   }
 
   input IssueLabelFilter {
@@ -586,6 +757,93 @@ const typeDefs = /* GraphQL */ `
     success: Boolean!
     attachment: Attachment
   }
+
+  input WorkProposeInput {
+    teamId: String!
+    title: String!
+    description: String
+    outcome: String
+    scope: String
+    constraints: String
+    acceptance: String
+    verification: String
+    repository: String
+    kind: WorkKind
+    relatedWorkId: String
+    relatedWorkType: WorkLinkType
+    idempotencyKey: String
+  }
+
+  input WorkCommitInput {
+    expectedRevision: Int!
+    acceptance: String
+    assigneeId: String
+    outcome: String
+    scope: String
+    constraints: String
+    verification: String
+  }
+
+  input WorkClaimInput {
+    leaseSeconds: Int
+    idempotencyKey: String
+  }
+
+  input WorkRejectInput {
+    expectedRevision: Int!
+    reason: String
+  }
+
+  type WorkProposePayload {
+    success: Boolean!
+    issue: Issue
+  }
+
+  type WorkCommitPayload {
+    success: Boolean!
+    issue: Issue
+  }
+
+  type WorkRejectPayload {
+    success: Boolean!
+    issue: Issue
+  }
+
+  type WorkClaimPayload {
+    success: Boolean!
+    issue: Issue
+    claim: WorkClaimRecord
+  }
+
+  input RunReportInput {
+    workId: String!
+    runId: String
+    status: String
+    phase: String
+    summary: String
+    externalUrl: String
+    decisionRequested: Boolean
+  }
+
+  input EvidenceAttachInput {
+    workId: String!
+    runId: String
+    kind: String!
+    url: String!
+    summary: String
+  }
+
+  type RunReportPayload {
+    success: Boolean!
+    issue: Issue
+    run: WorkRunRecord
+  }
+
+  type EvidenceAttachPayload {
+    success: Boolean!
+    issue: Issue
+    evidence: WorkEvidenceRecord
+  }
 `;
 
 const resolvers = {
@@ -674,6 +932,36 @@ const resolvers = {
             key: 'asc',
           },
         }),
+      };
+    },
+    workContext: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<WorkContextBundle | null> => {
+      const work = await findWorkByIdOrIdentifier(context.prisma, args.id);
+
+      if (!work) {
+        return null;
+      }
+
+      await assertCanReadTeam(context.prisma, context, work.teamId);
+      return getWorkContext(context.prisma, work.id);
+    },
+    readyWork: async (
+      _parent: unknown,
+      args: { filter?: ListReadyWorkInput | null },
+      context: GraphQLContext,
+    ): Promise<{ nodes: Issue[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
+      const result = await listReadyWork(
+        context.prisma,
+        args.filter ?? {},
+        buildReadableIssueWhere(context),
+      );
+
+      return {
+        nodes: result.nodes,
+        pageInfo: buildPageInfo(result.nodes, result.hasNextPage),
       };
     },
     issueLabels: async (
@@ -771,7 +1059,11 @@ const resolvers = {
     ): Promise<{ issue: IssueParent | null; success: boolean }> =>
       runMutation(async () => {
         await assertCanWriteTeam(context.prisma, context, args.input.teamId);
-        const issue = await createIssue(context.prisma, args.input);
+        const issue = await createIssue(
+          context.prisma,
+          args.input,
+          writeActorFromViewer(context.viewer),
+        );
 
         return {
           issue: await getIssueById(context.prisma, issue.id),
@@ -788,7 +1080,12 @@ const resolvers = {
     ): Promise<{ issue: IssueParent | null; success: boolean }> =>
       runMutation(async () => {
         await assertCanWriteIssue(context.prisma, context, args.id);
-        const issue = await updateIssue(context.prisma, args.id, args.input);
+        const issue = await updateIssue(
+          context.prisma,
+          args.id,
+          args.input,
+          writeActorFromViewer(context.viewer),
+        );
 
         return {
           issue: await getIssueById(context.prisma, issue.id),
@@ -813,6 +1110,183 @@ const resolvers = {
         };
       }, {
         issueId: null,
+        success: false as const,
+      }),
+    workPropose: async (
+      _parent: unknown,
+      args: { input: ProposeWorkInput },
+      context: GraphQLContext,
+    ): Promise<{ issue: IssueParent | null; success: boolean }> =>
+      runMutation(async () => {
+        await assertCanWriteTeam(context.prisma, context, args.input.teamId);
+        const issue = await proposeWork(
+          context.prisma,
+          args.input,
+          writeActorFromViewer(context.viewer),
+        );
+
+        return {
+          issue: await getIssueById(context.prisma, issue.id),
+          success: true as const,
+        };
+      }, {
+        issue: null,
+        success: false as const,
+      }),
+    workCommit: async (
+      _parent: unknown,
+      args: { id: string; input: CommitWorkInput },
+      context: GraphQLContext,
+    ): Promise<{ issue: IssueParent | null; success: boolean }> =>
+      runMutation(async () => {
+        const existing = await findWorkByIdOrIdentifier(context.prisma, args.id);
+        if (!existing) {
+          throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+        }
+
+        await assertCanWriteIssue(context.prisma, context, existing.id);
+        const issue = await commitWork(
+          context.prisma,
+          existing.id,
+          args.input,
+          writeActorFromViewer(context.viewer),
+        );
+
+        return {
+          issue: await getIssueById(context.prisma, issue.id),
+          success: true as const,
+        };
+      }, {
+        issue: null,
+        success: false as const,
+      }),
+    workReject: async (
+      _parent: unknown,
+      args: { id: string; input: RejectWorkInput },
+      context: GraphQLContext,
+    ): Promise<{ issue: IssueParent | null; success: boolean }> =>
+      runMutation(async () => {
+        const existing = await findWorkByIdOrIdentifier(context.prisma, args.id);
+        if (!existing) {
+          throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+        }
+
+        await assertCanWriteIssue(context.prisma, context, existing.id);
+        const issue = await rejectWork(
+          context.prisma,
+          existing.id,
+          args.input,
+          writeActorFromViewer(context.viewer),
+        );
+
+        return {
+          issue: await getIssueById(context.prisma, issue.id),
+          success: true as const,
+        };
+      }, {
+        issue: null,
+        success: false as const,
+      }),
+    workClaim: async (
+      _parent: unknown,
+      args: { id: string; input?: ClaimWorkInput | null },
+      context: GraphQLContext,
+    ): Promise<{ claim: WorkClaimParent | null; issue: IssueParent | null; success: boolean }> =>
+      runMutation(async () => {
+        const existing = await findWorkByIdOrIdentifier(context.prisma, args.id);
+        if (!existing) {
+          throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+        }
+
+        await assertCanWriteIssue(context.prisma, context, existing.id);
+        const result = await claimWork(
+          context.prisma,
+          existing.id,
+          args.input ?? {},
+          writeActorFromViewer(context.viewer),
+        );
+
+        return {
+          claim: await context.prisma.workClaim.findUniqueOrThrow({
+            where: { id: result.claim.id },
+            include: { actor: true },
+          }),
+          issue: await getIssueById(context.prisma, result.work.id),
+          success: true as const,
+        };
+      }, {
+        claim: null,
+        issue: null,
+        success: false as const,
+      }),
+    runReport: async (
+      _parent: unknown,
+      args: {
+        input: {
+          decisionRequested?: boolean | null;
+          externalUrl?: string | null;
+          phase?: string | null;
+          runId?: string | null;
+          status?: string | null;
+          summary?: string | null;
+          workId: string;
+        };
+      },
+      context: GraphQLContext,
+    ) =>
+      runMutation(async () => {
+        const existing = await findWorkByIdOrIdentifier(context.prisma, args.input.workId);
+        if (!existing) {
+          throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+        }
+        await assertCanWriteIssue(context.prisma, context, existing.id);
+        const result = await reportRun(
+          context.prisma,
+          args.input,
+          writeActorFromViewer(context.viewer),
+        );
+        return {
+          issue: await getIssueById(context.prisma, result.work.id),
+          run: result.run,
+          success: true as const,
+        };
+      }, {
+        issue: null,
+        run: null,
+        success: false as const,
+      }),
+    evidenceAttach: async (
+      _parent: unknown,
+      args: {
+        input: {
+          kind: string;
+          runId?: string | null;
+          summary?: string | null;
+          url: string;
+          workId: string;
+        };
+      },
+      context: GraphQLContext,
+    ) =>
+      runMutation(async () => {
+        const existing = await findWorkByIdOrIdentifier(context.prisma, args.input.workId);
+        if (!existing) {
+          throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+        }
+        await assertCanWriteIssue(context.prisma, context, existing.id);
+        const result = await attachEvidence(
+          context.prisma,
+          args.input,
+          writeActorFromViewer(context.viewer),
+        );
+        return {
+          evidence: result.evidence,
+          issue: await getIssueById(context.prisma, result.work.id),
+          success: true as const,
+        };
+      }, {
+        evidence: null,
+        issue: null,
         success: false as const,
       }),
     commentCreate: async (
@@ -1167,6 +1641,42 @@ const resolvers = {
     isMe: (parent: UserParent, _args: Record<string, never>, context: GraphQLContext): boolean =>
       context.viewer?.id === parent.id,
     globalRole: (parent: UserParent): User['globalRole'] => parent.globalRole,
+    actorKind: (parent: UserParent): User['actorKind'] => parent.actorKind,
+  },
+  WorkClaimRecord: {
+    actor: async (
+      parent: WorkClaimParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<User> =>
+      parent.actor ??
+      context.prisma.user.findUniqueOrThrow({
+        where: { id: parent.actorId },
+      }),
+  },
+  WorkLink: {
+    from: async (
+      parent: WorkLinkParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<Issue> =>
+      parent.from ??
+      context.prisma.issue.findUniqueOrThrow({
+        where: {
+          id: parent.fromId,
+        },
+      }),
+    to: async (
+      parent: WorkLinkParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<Issue> =>
+      parent.to ??
+      context.prisma.issue.findUniqueOrThrow({
+        where: {
+          id: parent.toId,
+        },
+      }),
   },
   TeamMembership: {
     user: async (
@@ -1301,6 +1811,22 @@ const resolvers = {
       if (!parent.projectId) return null;
       return parent.project ?? context.prisma.project.findUnique({ where: { id: parent.projectId } });
     },
+    links: async (
+      parent: IssueParent,
+      args: { type?: WorkLinkType | null },
+      context: GraphQLContext,
+    ): Promise<{ nodes: WorkLink[] }> => ({
+      nodes: await listIncidentLinks(context.prisma, parent.id, args.type),
+    }),
+    claim: async (
+      parent: IssueParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<WorkClaimParent | null> =>
+      context.prisma.workClaim.findUnique({
+        where: { workId: parent.id },
+        include: { actor: true },
+      }),
     cycle: async (
       parent: IssueParent,
       _args: Record<string, never>,

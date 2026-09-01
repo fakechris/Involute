@@ -40,6 +40,7 @@ describe('App team selection', () => {
         variables: {
           first: 200,
           filter: {
+            commitmentStatus: 'COMMITTED',
             team: {
               key: {
                 eq: 'SON',
@@ -62,6 +63,7 @@ describe('App team selection', () => {
         variables: {
           first: 200,
           filter: {
+            commitmentStatus: 'COMMITTED',
             team: {
               key: {
                 eq: 'SON',
@@ -139,7 +141,12 @@ describe('App team selection', () => {
     expect(apolloMocks.useQuery).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        variables: { first: 200 },
+        variables: {
+          first: 200,
+          filter: {
+            commitmentStatus: 'COMMITTED',
+          },
+        },
       }),
     );
 
@@ -154,6 +161,7 @@ describe('App team selection', () => {
           variables: {
             first: 200,
             filter: {
+              commitmentStatus: 'COMMITTED',
               team: {
                 key: {
                   eq: 'SON',

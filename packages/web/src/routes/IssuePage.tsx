@@ -578,6 +578,9 @@ export function IssuePage() {
         </div>
         <div style={{ flex: 1 }} />
         <div className="issue-panel__header-actions">
+          <Btn variant="subtle" onClick={() => navigate(`/work/${activeIssue.id}`)}>
+            Work context
+          </Btn>
           <Btn variant="ghost" icon={<IcoChevL />} title="Previous issue" onClick={() => navigate(-1)} />
           <Btn variant="ghost" icon={<IcoChevR />} title="Next issue" onClick={() => navigate(1)} />
           <div style={{ position: 'relative' }}>

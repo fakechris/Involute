@@ -20,7 +20,7 @@ Exit criteria:
 
 ## M1: Deployable self-hosting
 
-Status: in progress.
+Status: done for the VPS path; keep the runbook current as the kernel ships.
 
 Scope:
 
@@ -38,6 +38,7 @@ Done inside M1 already:
 - the public-domain deployment path is serving the latest mainline build over HTTPS
 - one backup and restore drill has been executed successfully
 - the canonical `SON` dataset has been refreshed from the source system into the VPS stack
+- operator runbook, restore script, and smoke checklist live in [docs/ops.md](./ops.md)
 
 Exit criteria:
 
@@ -68,7 +69,7 @@ Exit criteria:
 
 ## M3: UI/UX redesign
 
-Status: in progress.
+Status: in progress. Observation-only after the current shell; not the Linear-replacement path.
 
 Scope:
 
@@ -86,6 +87,8 @@ Exit criteria:
 
 - visual direction is intentional and no longer feels placeholder-like
 - redesign does not regress the M0 lifecycle, deployment path, or team permission model
+- no new Linear-clone surfaces (Inbox product, Cycle product, Agent live UI) are added under M3
+- leftover Inbox / Cycles / Projects / My Issues / Views routes are frozen; do not grow them
 
 ## M4: Multi-team workspace import
 
@@ -101,3 +104,84 @@ Exit criteria:
 
 - multiple teams can be brought in predictably
 - repeated imports have explicit behavior and reporting
+
+## M5: Agent-native work-graph kernel
+
+Status: implemented in tree. This is the Linear-replacement track.
+
+Involute replaces Linear as a callable project-state service, not as a board clone. Existing GraphQL Issue APIs stay as a generic compatibility facade for the web app and CLI. Web UI stays optional observation and governance.
+
+### K0: Product contract
+
+Status: done.
+
+- rewrite vision around a headless work-graph kernel
+- agent protocol is MCP + work mutations, not comment heartbeats
+- stop prioritizing Linear UI features
+
+### K1: Work node + typed links
+
+Status: implemented in tree, not shipped.
+
+- additive Prisma fields on `Issue`: kind, commitmentStatus, revision, contract fields, repository
+- `User.actorKind`
+- `WorkLink` and `WorkAudit`
+- multi-hop cycle detection for `CONTAINS` and `BLOCKS`
+- GraphQL exposes new fields as read-only; existing mutations keep their shape
+- `issueUpdate(parentId)` projects onto a `CONTAINS` link and writes audit
+
+### K2: Context bundle + ready queue
+
+Status: implemented in tree, not shipped.
+
+- `getWorkContext` returns contract, contains-ancestors, blockers, and recent audits
+- `listReadyWork` returns committed, unblocked, unfinished work in urgency order
+- GraphQL `workContext` / `readyWork`; IssueFilter also accepts `kind`, `priority.eq`, `updatedAt.gte`
+- CLI `involute work context` and `involute work ready`
+
+### K3: Propose / commit / claim
+
+Status: implemented in tree, not shipped.
+
+- `workPropose` creates `CANDIDATE` work that cannot enter the ready queue
+- `workCommit` requires acceptance criteria, a human owner, and `expectedRevision`
+- `workClaim` is atomic with a lease; agents do not occupy `assigneeId`
+- agents may propose/claim/update, not commit or move work to Done/Canceled
+- `workClaim` is the only claim path; moving an issue to In Progress does not create a lease
+- comments are not an agent protocol
+
+### K4: MCP + Skill
+
+Status: implemented in tree, not shipped.
+
+- Streamable HTTP JSON-RPC at `/mcp` and `/mcp/readonly` on the same Node process
+- tools call domain services: search, context, ready, propose, commit, update, link, claim
+- readonly endpoint omits write tools
+- Skill at `skills/involute/SKILL.md`
+- `run_report` / `evidence_attach` shipped in K5
+
+### K5: Run, evidence, events
+
+Status: implemented in tree, not shipped.
+
+- `WorkRun`, `WorkEvidence`, `EventOutbox`
+- `run_report` / `evidence_attach` via MCP, GraphQL, and CLI
+- run complete and evidence move work to In Review, never Done
+- outbound webhooks: `INVOLUTE_WEBHOOK_URL`, `INVOLUTE_WEBHOOK_SECRET`, HMAC + delivery id + `updatedFrom`
+
+### K6: Observation UI
+
+Status: implemented in tree, not shipped.
+
+- candidate review at `/candidates` with `workCommit` / `workReject`
+- contains/blocks graph at `/graph`
+- work context page at `/work/:id` (contract, claim, runs, evidence, audits)
+- board and backlog query `commitmentStatus: COMMITTED` only
+
+Exit criteria:
+
+- an Agent can complete search → context → claim → run report → evidence → In Review without opening the web app
+- existing `SON` identifiers, import, GraphQL, and CLI keep working
+- two agents cannot claim the same committed work
+- propose retries are idempotent
+- concurrent updates conflict on revision instead of silently overwriting

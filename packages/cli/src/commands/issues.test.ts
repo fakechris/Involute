@@ -355,7 +355,7 @@ async function seedTestData(prisma: PrismaClient): Promise<void> {
     });
   }
 
-  for (const name of ['task', 'epic', 'spec', 'needs-clarification', 'blocked', 'agent-ready', 'Feature', 'Bug', 'Improvement', 'spec-orch']) {
+  for (const name of ['task', 'epic', 'spec', 'needs-clarification', 'blocked', 'agent-ready', 'Feature', 'Bug', 'Improvement']) {
     await prisma.issueLabel.create({
       data: { name },
     });

@@ -45,6 +45,7 @@ import type {
 } from '../board/types';
 import {
   ACTIVE_TEAM_STORAGE_KEY,
+  buildCommittedIssueFilter,
   filterIssuesByTeam,
   getBoardColumns,
   getInitialTeamKey,
@@ -161,17 +162,7 @@ export function BoardPage() {
   const boardQueryVariables = useMemo<BoardPageQueryVariables>(
     () => ({
       first: ISSUE_PAGE_SIZE,
-      ...(queryTeamKey
-        ? {
-            filter: {
-              team: {
-                key: {
-                  eq: queryTeamKey,
-                },
-              },
-            },
-          }
-        : {}),
+      filter: buildCommittedIssueFilter(queryTeamKey),
     }),
     [queryTeamKey],
   );

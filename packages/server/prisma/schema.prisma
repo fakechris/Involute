@@ -31,6 +31,52 @@ enum WorkflowStateType {
   CANCELED
 }
 
+enum ActorKind {
+  HUMAN
+  AGENT
+  SERVICE
+}
+
+enum WorkKind {
+  ISSUE
+  PROJECT
+  MILESTONE
+  DECISION
+  EPIC
+}
+
+enum CommitmentStatus {
+  CANDIDATE
+  COMMITTED
+  REJECTED
+}
+
+enum WorkLinkType {
+  CONTAINS
+  BLOCKS
+  DERIVED_FROM
+  DISCOVERED_DURING
+  RELATED_TO
+  DUPLICATE_OF
+}
+
+enum WorkRunStatus {
+  QUEUED
+  RUNNING
+  BLOCKED
+  COMPLETED
+  FAILED
+}
+
+enum WorkEvidenceKind {
+  PR
+  TEST
+  LOG
+  SCREENSHOT
+  ARTIFACT
+  DECISION
+}
+
 model Team {
   id              String          @id @default(uuid()) @db.Uuid
   key             String          @unique
@@ -73,12 +119,17 @@ model User {
   avatarUrl      String?
   googleSubject  String?   @unique
   globalRole     GlobalRole @default(USER)
+  actorKind      ActorKind @default(HUMAN)
   assignedIssues Issue[]   @relation("IssueAssignee")
   comments       Comment[]
   memberships    TeamMembership[]
   sessions       Session[]
   ledProjects    Project[] @relation("ProjectLead")
   uploads        Attachment[] @relation("Uploads")
+  workLinks      WorkLink[] @relation("WorkLinkActor")
+  workAudits     WorkAudit[] @relation("WorkAuditActor")
+  workClaims     WorkClaim[] @relation("WorkClaimActor")
+  workRuns       WorkRun[]   @relation("WorkRunActor")
 }
 
 model Session {
@@ -108,29 +159,45 @@ model TeamMembership {
 }
 
 model Issue {
-  id          String         @id @default(uuid()) @db.Uuid
-  identifier  String         @unique
-  title       String
-  description String?
-  stateId     String         @db.Uuid
-  state       WorkflowState  @relation(fields: [stateId, teamId], references: [id, teamId], onDelete: Restrict)
-  assigneeId  String?        @db.Uuid
-  assignee    User?          @relation("IssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  parentId    String?        @db.Uuid
-  parent      Issue?         @relation("IssueParentChild", fields: [parentId], references: [id], onDelete: SetNull)
-  children    Issue[]        @relation("IssueParentChild")
-  teamId      String         @db.Uuid
-  team        Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  priority    Int            @default(0)
-  labels      IssueLabel[]
-  comments    Comment[]
-  projectId   String?        @db.Uuid
-  project     Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  cycleId     String?        @db.Uuid
-  cycle       Cycle?         @relation(fields: [cycleId], references: [id], onDelete: SetNull)
-  attachments Attachment[]
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id                String            @id @default(uuid()) @db.Uuid
+  identifier        String            @unique
+  title             String
+  description       String?
+  stateId           String            @db.Uuid
+  state             WorkflowState     @relation(fields: [stateId, teamId], references: [id, teamId], onDelete: Restrict)
+  assigneeId        String?           @db.Uuid
+  assignee          User?             @relation("IssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  parentId          String?           @db.Uuid
+  parent            Issue?            @relation("IssueParentChild", fields: [parentId], references: [id], onDelete: SetNull)
+  children          Issue[]           @relation("IssueParentChild")
+  teamId            String            @db.Uuid
+  team              Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  priority          Int               @default(0)
+  kind              WorkKind          @default(ISSUE)
+  commitmentStatus  CommitmentStatus  @default(COMMITTED)
+  revision          Int               @default(1)
+  outcome           String?
+  scope             String?
+  constraints       String?
+  acceptance        String?
+  verification      String?
+  repository        String?
+  labels            IssueLabel[]
+  comments          Comment[]
+  projectId         String?           @db.Uuid
+  project           Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  cycleId           String?           @db.Uuid
+  cycle             Cycle?            @relation(fields: [cycleId], references: [id], onDelete: SetNull)
+  attachments       Attachment[]
+  outgoingLinks     WorkLink[]        @relation("WorkLinkFrom")
+  incomingLinks     WorkLink[]        @relation("WorkLinkTo")
+  audits            WorkAudit[]
+  claim             WorkClaim?
+  idempotencyKeys   WorkIdempotency[]
+  runs              WorkRun[]
+  evidence          WorkEvidence[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
 
   @@index([teamId])
   @@index([stateId, teamId])
@@ -139,6 +206,9 @@ model Issue {
   @@index([parentId])
   @@index([projectId])
   @@index([cycleId])
+  @@index([kind])
+  @@index([commitmentStatus])
+  @@index([repository])
 }
 
 model Comment {
@@ -218,4 +288,123 @@ model LegacyLinearMapping {
   @@unique([oldId, entityType])
   @@unique([newId, entityType])
   @@index([entityType])
+}
+
+model WorkLink {
+  id        String       @id @default(uuid()) @db.Uuid
+  type      WorkLinkType
+  fromId    String       @db.Uuid
+  from      Issue        @relation("WorkLinkFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId      String       @db.Uuid
+  to        Issue        @relation("WorkLinkTo", fields: [toId], references: [id], onDelete: Cascade)
+  actorId   String?      @db.Uuid
+  actor     User?        @relation("WorkLinkActor", fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt DateTime     @default(now())
+
+  @@unique([fromId, toId, type])
+  @@index([fromId, type])
+  @@index([toId, type])
+  @@index([actorId])
+}
+
+model WorkAudit {
+  id              String     @id @default(uuid()) @db.Uuid
+  workId          String     @db.Uuid
+  work            Issue      @relation(fields: [workId], references: [id], onDelete: Cascade)
+  revision        Int
+  actorKind       ActorKind
+  actorId         String?    @db.Uuid
+  actor           User?      @relation("WorkAuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  surface         String?
+  sessionId       String?
+  sourceMessageId String?
+  reason          String?
+  before          Json?
+  after           Json
+  createdAt       DateTime   @default(now())
+
+  @@index([workId, createdAt])
+  @@index([actorId])
+}
+
+model WorkClaim {
+  id         String   @id @default(uuid()) @db.Uuid
+  workId     String   @unique @db.Uuid
+  work       Issue    @relation(fields: [workId], references: [id], onDelete: Cascade)
+  actorId    String   @db.Uuid
+  actor      User     @relation("WorkClaimActor", fields: [actorId], references: [id], onDelete: Cascade)
+  leaseUntil DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([actorId])
+  @@index([leaseUntil])
+}
+
+model WorkIdempotency {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String
+  operation String
+  workId    String   @db.Uuid
+  work      Issue    @relation(fields: [workId], references: [id], onDelete: Cascade)
+  actorId   String?  @db.Uuid
+  createdAt DateTime @default(now())
+
+  @@unique([operation, key])
+  @@index([workId])
+}
+
+model AppSequence {
+  name  String @id
+  value Int
+}
+
+model WorkRun {
+  id          String        @id @default(uuid()) @db.Uuid
+  publicId    String        @unique
+  workId      String        @db.Uuid
+  work        Issue         @relation(fields: [workId], references: [id], onDelete: Cascade)
+  actorId     String?       @db.Uuid
+  actor       User?         @relation("WorkRunActor", fields: [actorId], references: [id], onDelete: SetNull)
+  status      WorkRunStatus @default(RUNNING)
+  phase       String?
+  summary     String?
+  externalUrl String?
+  startedAt   DateTime      @default(now())
+  endedAt     DateTime?
+  evidence    WorkEvidence[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([workId, createdAt])
+  @@index([actorId])
+  @@index([status])
+}
+
+model WorkEvidence {
+  id        String           @id @default(uuid()) @db.Uuid
+  workId    String           @db.Uuid
+  work      Issue            @relation(fields: [workId], references: [id], onDelete: Cascade)
+  runId     String?          @db.Uuid
+  run       WorkRun?         @relation(fields: [runId], references: [id], onDelete: SetNull)
+  kind      WorkEvidenceKind
+  url       String
+  summary   String?
+  createdAt DateTime         @default(now())
+
+  @@index([workId, createdAt])
+  @@index([runId])
+}
+
+model EventOutbox {
+  id          String    @id @default(uuid()) @db.Uuid
+  type        String
+  payload     Json
+  createdAt   DateTime  @default(now())
+  deliveredAt DateTime?
+  attempts    Int       @default(0)
+  lastError   String?
+
+  @@index([deliveredAt, createdAt])
+  @@index([type])
 }

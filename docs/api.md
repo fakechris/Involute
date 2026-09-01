@@ -2,22 +2,31 @@
 
 ## Overview
 
-Involute exposes two HTTP surfaces:
+Involute exposes three HTTP surfaces today:
 
 - REST-like auth and health endpoints on the same server origin
 - a GraphQL API at `/graphql`
+- a Streamable HTTP MCP endpoint at `/mcp` (read-write) and `/mcp/readonly`
+
+The GraphQL schema is the compatibility facade used by the web app and CLI. Agent-facing reads should prefer `workContext` and `readyWork` over composing `issues` filters. Writes for the kernel are `workPropose`, `workCommit`, `workReject`, and `workClaim`. `runReport` and `evidenceAttach` move work to In Review, never Done. Comments are a human observation surface, not an agent heartbeat.
+
+See [vision.md](./vision.md) and [milestones.md](./milestones.md) for the kernel direction.
 
 Default local endpoints:
 
 - `http://localhost:4200/health`
 - `http://localhost:4200/auth/*`
 - `http://localhost:4200/graphql`
+- `http://localhost:4200/mcp`
+- `http://localhost:4200/mcp/readonly`
 
 Production example:
 
 - `https://involute.example.com/health`
 - `https://involute.example.com/auth/*`
 - `https://involute.example.com/graphql`
+- `https://involute.example.com/mcp`
+- `https://involute.example.com/mcp/readonly`
 
 ## Authentication model
 
@@ -170,6 +179,22 @@ query Issue($id: String!) {
     children {
       nodes { id identifier title }
     }
+    kind
+    commitmentStatus
+    revision
+    outcome
+    scope
+    constraints
+    acceptance
+    verification
+    repository
+    links(type: CONTAINS) {
+      nodes {
+        type
+        from { id identifier }
+        to { id identifier }
+      }
+    }
     comments(first: 50) {
       nodes {
         id
@@ -197,6 +222,62 @@ Supported filters:
 - `assignee.isMe`
 - label name via `some` / `every`
 - nested `and`
+- `kind`
+- `commitmentStatus`
+- `priority.eq`
+- `updatedAt.gte`
+
+The web board and backlog always send `commitmentStatus: COMMITTED`. Candidates are reviewed at `/candidates`, not on the board.
+
+### `workContext(id: String!)`
+
+Returns the Agent context bundle for an issue identifier or UUID: contract fields, contains-ancestors, blockers, and recent audits.
+
+```graphql
+query WorkContext($id: String!) {
+  workContext(id: $id) {
+    work {
+      identifier
+      title
+      kind
+      commitmentStatus
+      revision
+      outcome
+      acceptance
+    }
+    ancestors { identifier title }
+    blockedBy { identifier title }
+    blocks { identifier title }
+    audits { revision actorKind surface reason createdAt }
+    runs { publicId status phase summary }
+    evidence { kind url summary }
+  }
+}
+```
+
+### `readyWork(filter: ReadyWorkFilter)`
+
+Returns committed, unblocked, unfinished work in urgency order (Urgent → High → Medium → Low → none). Excludes `In Progress` / `In Review` / `Done` / `Canceled`, `BLOCKS` targets, and `blocked` / `needs-clarification` labels.
+
+```graphql
+query ReadyWork {
+  readyWork(filter: { repository: "fakechris/involute", first: 20 }) {
+    nodes {
+      identifier
+      title
+      priority
+      state { name }
+    }
+  }
+}
+```
+
+CLI:
+
+```bash
+involute work context INV-142
+involute work ready --repository fakechris/involute --json
+```
 
 ```graphql
 query Issues($first: Int!, $after: String, $filter: IssueFilter) {
@@ -365,6 +446,68 @@ mutation IssueDelete($id: String!) {
 }
 ```
 
+### `workPropose`
+
+Creates candidate work. It does not enter `readyWork`. Retries with the same `idempotencyKey` return the original candidate.
+
+```graphql
+mutation Propose($input: WorkProposeInput!) {
+  workPropose(input: $input) {
+    success
+    issue { identifier commitmentStatus }
+  }
+}
+```
+
+### `workCommit`
+
+Promotes a candidate to a committed contract. Requires `expectedRevision`, acceptance criteria, and a human `assigneeId`. Agents receive `FORBIDDEN`.
+
+```graphql
+mutation Commit($id: String!, $input: WorkCommitInput!) {
+  workCommit(id: $id, input: $input) {
+    success
+    issue { identifier commitmentStatus revision }
+  }
+}
+```
+
+### `workReject`
+
+Rejects a candidate so it never enters the committed graph. Requires `expectedRevision`. Agents receive `FORBIDDEN`.
+
+```graphql
+mutation Reject($id: String!, $input: WorkRejectInput!) {
+  workReject(id: $id, input: $input) {
+    success
+    issue { identifier commitmentStatus revision }
+  }
+}
+```
+
+### `workClaim`
+
+Atomically leases committed work to the current actor. Does not change `assignee`. Unexpired claims are excluded from `readyWork`.
+
+```graphql
+mutation Claim($id: String!) {
+  workClaim(id: $id) {
+    success
+    issue { identifier }
+    claim { leaseUntil actor { id name } }
+  }
+}
+```
+
+CLI:
+
+```bash
+involute work propose --team SON --title "..." --json
+involute work commit INV-142 --acceptance "..." --assignee <userId>
+involute work reject INV-142 --reason "out of scope"
+involute work claim INV-142
+```
+
 ### `commentCreate`
 
 Creates a comment on an issue.
@@ -495,6 +638,30 @@ Use `endCursor` as the next `after` value.
 - `OWNER` can manage team visibility and memberships
 - `EDITOR` and `OWNER` can modify issues and comments
 - `VIEWER` is read-only
+
+## Work graph (read-only facade)
+
+Existing issues are work nodes. New fields are queryable; `issueCreate` / `issueUpdate` input shapes are unchanged.
+
+- `kind` defaults to `ISSUE`
+- `commitmentStatus` defaults to `COMMITTED` (imported and currently created issues are already commitments)
+- `revision` starts at `1` and increments on each domain update
+- `links` returns incident `WorkLink` rows (`CONTAINS`, `BLOCKS`, `DERIVED_FROM`, `DISCOVERED_DURING`, `RELATED_TO`, `DUPLICATE_OF`)
+- setting `parentId` through `issueUpdate` also writes a `CONTAINS` link (parent → child) and records a `WorkAudit` row
+- `viewer.actorKind` is `HUMAN`, `AGENT`, or `SERVICE`
+
+## MCP
+
+Streamable HTTP JSON-RPC at `POST /mcp` and `POST /mcp/readonly`. Same bearer token / session / viewer assertion as GraphQL.
+
+```bash
+codex mcp add involute --url https://involute.example.com/mcp
+codex mcp add involute-readonly --url https://involute.example.com/mcp/readonly
+```
+
+Tools: `work_search`, `work_get_context`, `work_list_ready`, `work_propose`, `work_commit`, `work_update`, `work_link`, `work_claim`, `run_report`, `evidence_attach`. The readonly endpoint exposes only the first three. Agent behavior is in `skills/involute/SKILL.md`.
+
+Completed runs and attached evidence move work to In Review, never Done. Outbound webhooks use `INVOLUTE_WEBHOOK_URL` and `INVOLUTE_WEBHOOK_SECRET`.
 
 ## Error model
 

@@ -16,29 +16,53 @@ import {
   WORKFLOW_STATE_NOT_FOUND_MESSAGE,
   WORKFLOW_STATE_TEAM_CREATE_MISMATCH_MESSAGE,
   WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE,
+  WORK_REVISION_CONFLICT_MESSAGE,
 } from './errors.js';
+import { assertActorCan, isAcceptStateName } from './claim-service.js';
+import { assertNoWorkLinkCycle, syncContainsFromParentId } from './link-service.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
+import {
+  INTERNAL_WRITE_ACTOR,
+  recordWorkAudit,
+  selectIssueSnapshot,
+  type WriteActor,
+} from './work-service.js';
 
 export interface CreateIssueInput {
+  acceptance?: string | null;
+  commitmentStatus?: Issue['commitmentStatus'] | null;
+  constraints?: string | null;
+  cycleId?: string | null;
   description?: string | null;
+  kind?: Issue['kind'] | null;
+  outcome?: string | null;
   priority?: number | null;
+  projectId?: string | null;
+  repository?: string | null;
+  scope?: string | null;
   stateId?: string | null;
   teamId: string;
   title: string;
-  projectId?: string | null;
-  cycleId?: string | null;
+  verification?: string | null;
 }
 
 export interface UpdateIssueInput {
+  acceptance?: string | null;
   assigneeId?: string | null;
+  constraints?: string | null;
+  cycleId?: string | null;
   description?: string | null;
+  expectedRevision?: number | null;
   labelIds?: string[] | null;
+  outcome?: string | null;
   parentId?: string | null;
   priority?: number | null;
+  projectId?: string | null;
+  repository?: string | null;
+  scope?: string | null;
   stateId?: string | null;
   title?: string | null;
-  projectId?: string | null;
-  cycleId?: string | null;
+  verification?: string | null;
 }
 
 export interface CreateCommentInput {
@@ -51,6 +75,7 @@ type WorkflowStateSelection = Pick<WorkflowState, 'id' | 'name' | 'teamId'>;
 export async function createIssue(
   prisma: PrismaClient,
   input: CreateIssueInput,
+  actor: WriteActor = INTERNAL_WRITE_ACTOR,
 ): Promise<Issue> {
   const team = await prisma.team.findUnique({
     where: {
@@ -83,18 +108,34 @@ export async function createIssue(
       },
     });
 
-    return transaction.issue.create({
+    const created = await transaction.issue.create({
       data: {
-        identifier: `${updatedTeam.key.toUpperCase()}-${updatedTeam.nextIssueNumber - 1}`,
-        title: input.title,
+        acceptance: input.acceptance ?? null,
+        commitmentStatus: input.commitmentStatus ?? 'COMMITTED',
+        constraints: input.constraints ?? null,
+        cycleId: input.cycleId ?? null,
         description: input.description ?? null,
+        identifier: `${updatedTeam.key.toUpperCase()}-${updatedTeam.nextIssueNumber - 1}`,
+        kind: input.kind ?? 'ISSUE',
+        outcome: input.outcome ?? null,
         priority: input.priority ?? 0,
+        projectId: input.projectId ?? null,
+        repository: input.repository ?? null,
+        scope: input.scope ?? null,
         stateId: state.id,
         teamId: input.teamId,
-        projectId: input.projectId ?? null,
-        cycleId: input.cycleId ?? null,
+        title: input.title,
+        verification: input.verification ?? null,
       },
     });
+
+    await recordWorkAudit(transaction, {
+      actor,
+      after: selectIssueSnapshot(created),
+      workId: created.id,
+    });
+
+    return created;
   });
 }
 
@@ -102,21 +143,28 @@ export async function updateIssue(
   prisma: PrismaClient,
   id: string,
   input: UpdateIssueInput,
+  actor: WriteActor = INTERNAL_WRITE_ACTOR,
 ): Promise<Issue> {
   return prisma.$transaction(async (transaction) => {
     const existingIssue = await transaction.issue.findUnique({
       where: {
         id,
       },
-      select: {
-        id: true,
-        teamId: true,
-      },
     });
 
     if (!existingIssue) {
       throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
     }
+
+    if (
+      input.expectedRevision !== undefined &&
+      input.expectedRevision !== null &&
+      existingIssue.revision !== input.expectedRevision
+    ) {
+      throw createValidationError(WORK_REVISION_CONFLICT_MESSAGE);
+    }
+
+    let nextParentId: string | null | undefined;
 
     const data: Prisma.IssueUpdateInput = {};
 
@@ -127,6 +175,7 @@ export async function updateIssue(
         },
         select: {
           id: true,
+          name: true,
           teamId: true,
         },
       });
@@ -137,6 +186,10 @@ export async function updateIssue(
 
       if (state.teamId !== existingIssue.teamId) {
         throw createValidationError(WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE);
+      }
+
+      if (isAcceptStateName(state.name)) {
+        assertActorCan(actor.actorKind, 'accept');
       }
 
       data.state = {
@@ -212,6 +265,7 @@ export async function updateIssue(
 
     if ('parentId' in input) {
       if (input.parentId === null) {
+        nextParentId = null;
         data.parent = {
           disconnect: true,
         };
@@ -239,7 +293,9 @@ export async function updateIssue(
         }
 
         await assertNoParentCycle(transaction, id, parentIssue.id);
+        await assertNoWorkLinkCycle(transaction, 'CONTAINS', parentIssue.id, id);
 
+        nextParentId = parentIssue.id;
         data.parent = {
           connect: {
             id: parentIssue.id,
@@ -264,20 +320,57 @@ export async function updateIssue(
       }
     }
 
-    if (Object.keys(data).length === 0) {
-      return transaction.issue.findUniqueOrThrow({
-        where: {
-          id,
-        },
-      });
+    if ('acceptance' in input) {
+      data.acceptance = input.acceptance ?? null;
     }
 
-    return transaction.issue.update({
+    if ('constraints' in input) {
+      data.constraints = input.constraints ?? null;
+    }
+
+    if ('outcome' in input) {
+      data.outcome = input.outcome ?? null;
+    }
+
+    if ('scope' in input) {
+      data.scope = input.scope ?? null;
+    }
+
+    if ('verification' in input) {
+      data.verification = input.verification ?? null;
+    }
+
+    if ('repository' in input) {
+      data.repository = input.repository ?? null;
+    }
+
+    if (Object.keys(data).length === 0) {
+      return existingIssue;
+    }
+
+    data.revision = {
+      increment: 1,
+    };
+
+    const updated = await transaction.issue.update({
       where: {
         id,
       },
       data,
     });
+
+    if (nextParentId !== undefined) {
+      await syncContainsFromParentId(transaction, id, nextParentId, actor);
+    }
+
+    await recordWorkAudit(transaction, {
+      actor,
+      after: selectIssueSnapshot(updated),
+      before: selectIssueSnapshot(existingIssue),
+      workId: id,
+    });
+
+    return updated;
   });
 }
 

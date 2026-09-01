@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
-import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon } from './components/Icons';
+import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon, IcoCheck, IcoGraph } from './components/Icons';
 import { Avatar } from './components/Primitives';
 
 import {
@@ -77,6 +77,18 @@ const SettingsPage = lazy(async () => {
 const CyclesPage = lazy(async () => {
   const module = await import('./routes/CyclesPage');
   return { default: module.CyclesPage };
+});
+const CandidatesPage = lazy(async () => {
+  const module = await import('./routes/CandidatesPage');
+  return { default: module.CandidatesPage };
+});
+const GraphPage = lazy(async () => {
+  const module = await import('./routes/GraphPage');
+  return { default: module.GraphPage };
+});
+const WorkContextPage = lazy(async () => {
+  const module = await import('./routes/WorkContextPage');
+  return { default: module.WorkContextPage };
 });
 
 const THEME_STORAGE_KEY = 'involute.theme';
@@ -647,6 +659,18 @@ export function App() {
             return;
           }
 
+          if (shortcutKey === 'c') {
+            event.preventDefault();
+            navigate('/candidates');
+            return;
+          }
+
+          if (shortcutKey === 'r') {
+            event.preventDefault();
+            navigate('/graph');
+            return;
+          }
+
           if (shortcutKey === 'i') {
             event.preventDefault();
             navigate('/inbox');
@@ -732,6 +756,22 @@ export function App() {
   const paletteActions = useMemo<PaletteAction[]>(() => {
     const actions: PaletteAction[] = [
       {
+        id: 'go-candidates',
+        label: 'Go to candidates',
+        description: 'Review proposed work before it is committed',
+        group: 'Navigation',
+        shortcut: 'G C',
+        run: () => navigate('/candidates'),
+      },
+      {
+        id: 'go-graph',
+        label: 'Go to graph',
+        description: 'Inspect contains and blocks relationships',
+        group: 'Navigation',
+        shortcut: 'G R',
+        run: () => navigate('/graph'),
+      },
+      {
         id: 'go-inbox',
         label: 'Go to inbox',
         description: 'Open notifications and activity',
@@ -742,7 +782,7 @@ export function App() {
       {
         id: 'go-board',
         label: 'Go to board',
-        description: 'Open the active team board',
+        description: 'Open the committed-issue board',
         group: 'Navigation',
         shortcut: 'G B',
         run: () => navigate('/'),
@@ -934,6 +974,17 @@ export function App() {
           </button>
 
           <nav className="app-shell__nav-section">
+            <NavLink to="/candidates" className={getNavLinkClassName} title="Go to Candidates · G C">
+              <span className="app-shell__nav-icon"><IcoCheck size={14} /></span>
+              <span className="app-shell__link-label">Candidates</span>
+              <kbd className="app-shell__link-kbd" aria-hidden="true">C</kbd>
+            </NavLink>
+            <NavLink to="/graph" className={getNavLinkClassName} title="Go to Graph · G R">
+              <span className="app-shell__nav-icon"><IcoGraph size={14} /></span>
+              <span className="app-shell__link-label">Graph</span>
+              <kbd className="app-shell__link-kbd" aria-hidden="true">R</kbd>
+            </NavLink>
+            {/* Frozen Linear leftover routes: no new Inbox / Cycle / AgentSession product work. */}
             <NavLink to="/inbox" className={getNavLinkClassName} title="Go to Inbox · G I">
               <span className="app-shell__nav-icon"><IcoInbox size={14} /></span>
               <span className="app-shell__link-label">Inbox</span>
@@ -1143,6 +1194,9 @@ export function App() {
             <Routes>
               <Route path="/" element={<BoardPage />} />
               <Route path="/backlog" element={<BoardPage />} />
+              <Route path="/candidates" element={<CandidatesPage />} />
+              <Route path="/graph" element={<GraphPage />} />
+              <Route path="/work/:id" element={<WorkContextPage />} />
               <Route path="/inbox" element={<InboxPage />} />
               <Route path="/my-issues" element={<MyIssuesPage />} />
               <Route path="/views" element={<ViewsPage />} />
