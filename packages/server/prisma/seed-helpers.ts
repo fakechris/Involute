@@ -95,7 +95,7 @@ export async function seedDatabase(
       await prisma.teamMembership.upsert({
         where: { teamId_userId: { teamId: team.id, userId: admin.id } },
         create: { role: 'OWNER', teamId: team.id, userId: admin.id },
-        update: {},
+        update: { role: 'OWNER' },
       });
     }
   }

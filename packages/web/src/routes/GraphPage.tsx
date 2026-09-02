@@ -106,6 +106,7 @@ export function GraphPage() {
   const navigate = useNavigate();
   const teamKey = readStoredTeamKey();
   const [loadingMore, setLoadingMore] = useState(false);
+  const [paginationError, setPaginationError] = useState(false);
   const { data, error, fetchMore, loading, refetch } = useQuery<WorkGraphPageQueryData, WorkGraphPageQueryVariables>(WORK_GRAPH_PAGE_QUERY, {
     variables: {
       first: 100,
@@ -121,6 +122,7 @@ export function GraphPage() {
   async function handleLoadMore() {
     if (!pageInfo?.hasNextPage || !pageInfo.endCursor) return;
     setLoadingMore(true);
+    setPaginationError(false);
     try {
       await fetchMore({
         variables: { after: pageInfo.endCursor },
@@ -131,6 +133,8 @@ export function GraphPage() {
           },
         }),
       });
+    } catch {
+      setPaginationError(true);
     } finally {
       setLoadingMore(false);
     }
@@ -207,9 +211,18 @@ export function GraphPage() {
               <section className="work-graph__column" aria-label="Pagination">
                 <h2>More nodes</h2>
                 <p className="observation-empty">Load the remaining page before treating this graph as complete.</p>
-                <button type="button" disabled={loadingMore} onClick={() => void handleLoadMore()}>
-                  {loadingMore ? 'Loading…' : 'Load more'}
-                </button>
+                {paginationError ? (
+                  <div role="alert">
+                    <p>Could not load more graph nodes.</p>
+                    <button type="button" disabled={loadingMore} onClick={() => void handleLoadMore()}>
+                      Retry loading more
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" disabled={loadingMore} onClick={() => void handleLoadMore()}>
+                    {loadingMore ? 'Loading…' : 'Load more'}
+                  </button>
+                )}
               </section>
             ) : null}
           </div>

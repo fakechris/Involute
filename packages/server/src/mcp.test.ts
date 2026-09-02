@@ -8,6 +8,7 @@ import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
 import { READ_ONLY_MCP_TOOLS, WRITE_MCP_TOOLS } from './mcp-tools.ts';
 import { hashAgentToken } from './agent-credentials.ts';
+import { createGraphQLContext } from './auth.ts';
 
 loadProjectEnvironment();
 
@@ -108,6 +109,15 @@ describe('Involute MCP', () => {
     });
     expect((await graphqlResponse.json()).errors[0].message).toBe('Not authenticated');
 
+    const prefixLookalike = await createGraphQLContext({
+      authToken: TEST_AUTH_TOKEN,
+      prisma,
+      request: new Request(`${server.url}/mcp-evil`, {
+        headers: { authorization: `Bearer ${token}` },
+      }),
+    });
+    expect(prefixLookalike.authMode).toBe('none');
+
     await prisma.agentCredential.update({
       where: { id: credential.id },
       data: { revokedAt: new Date() },
@@ -166,6 +176,31 @@ describe('Involute MCP', () => {
     const readyAfter = await callTool('work_list_ready', {});
     expect(readyIdentifiers(readyAfter)).not.toContain(committed.identifier);
     expect(claimed.work.commitmentStatus).toBe('COMMITTED');
+  });
+
+  it('rejects invalid related-work types and missing evidence run IDs at runtime', async () => {
+    const invalidType = await mcpRpc('/mcp', {
+      id: 'invalid-related-type',
+      method: 'tools/call',
+      params: {
+        name: 'work_propose',
+        arguments: { team: DEFAULT_TEAM_KEY, title: 'Invalid relation', related_work_type: 'NOT_A_LINK' },
+      },
+    });
+    expect(invalidType.body.error.message).toContain('related_work_type');
+
+    const existing = await prisma.issue.create({
+      data: { identifier: 'INV-101', stateId: ready.id, teamId: team.id, title: 'Evidence target' },
+    });
+    const missingRun = await mcpRpc('/mcp', {
+      id: 'missing-run',
+      method: 'tools/call',
+      params: {
+        name: 'evidence_attach',
+        arguments: { work_id: existing.id, kind: 'test', url: 'https://example.test/report' },
+      },
+    });
+    expect(missingRun.body.error.message).toContain('run_id');
   });
 });
 

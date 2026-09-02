@@ -39,6 +39,7 @@ export const WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE =
 export const WORK_COMMIT_REQUIRES_OWNER_MESSAGE = 'Committed work requires a human owner.';
 export const WORK_OWNER_MUST_BE_HUMAN_MESSAGE = 'Work owner must be a human assignee.';
 export const WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE = 'Work owner must belong to the work team.';
+export const WORK_READY_STATE_MISSING_MESSAGE = 'Team workflow is missing an unstarted state.';
 export const WORK_REVISION_CONFLICT_MESSAGE = 'Work revision does not match expected_revision.';
 export const WORK_IDEMPOTENCY_CONFLICT_MESSAGE =
   'Idempotency key was already used with a different request.';
@@ -52,10 +53,11 @@ export const WORK_RUN_NOT_FOUND_MESSAGE = 'Work run not found.';
 export const WORK_EVIDENCE_KIND_INVALID_MESSAGE = 'Unknown evidence kind.';
 export const WORK_RUN_STATUS_INVALID_MESSAGE = 'Unknown run status.';
 export const WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE =
-  'Starting a run requires an active claim owned by the current actor.';
+  'Reporting a run requires an active claim owned by the current actor.';
 export const WORK_RUN_ACTOR_MISMATCH_MESSAGE = 'Only the run actor can update this run.';
 export const WORK_RUN_TERMINAL_MESSAGE = 'Completed or failed runs cannot be changed.';
 export const WORK_RUN_TRANSITION_INVALID_MESSAGE = 'Invalid work run status transition.';
+export const WORK_RUN_CONFLICT_MESSAGE = 'Work run changed while the update was in progress.';
 export const WORK_EVIDENCE_REQUIRES_RUN_MESSAGE = 'Evidence must reference a work run.';
 export const WORK_REVIEW_REQUIRED_MESSAGE = 'Work is not awaiting review.';
 export const WORK_REVIEW_STATE_MISSING_MESSAGE = 'Team workflow is missing a required semantic state.';
@@ -95,6 +97,7 @@ const exposedErrorCodes = new Map<string, string>([
   [WORK_COMMIT_REQUIRES_OWNER_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_OWNER_MUST_BE_HUMAN_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_READY_STATE_MISSING_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_REVISION_CONFLICT_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_IDEMPOTENCY_CONFLICT_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE, 'BAD_USER_INPUT'],
@@ -109,6 +112,7 @@ const exposedErrorCodes = new Map<string, string>([
   [WORK_RUN_ACTOR_MISMATCH_MESSAGE, 'FORBIDDEN'],
   [WORK_RUN_TERMINAL_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_RUN_TRANSITION_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_RUN_CONFLICT_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_EVIDENCE_REQUIRES_RUN_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_REVIEW_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_REVIEW_STATE_MISSING_MESSAGE, 'BAD_USER_INPUT'],

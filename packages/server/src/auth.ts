@@ -180,7 +180,7 @@ async function computeRequestAuthentication({
 
   const requestToken = extractTokenFromAuthorizationHeader(request.headers.get('authorization'));
   const pathname = new URL(request.url).pathname;
-  const agent = pathname.startsWith('/mcp')
+  const agent = (pathname === '/mcp' || pathname.startsWith('/mcp/'))
     ? await resolveAgentPrincipal(prisma, requestToken)
     : null;
 

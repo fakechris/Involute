@@ -44,16 +44,16 @@ verify_checksum() {
     echo "WARNING: no checksum file found at $INPUT_FILE.sha256" >&2
     return
   fi
+  expected="$(awk 'NR == 1 {print $1}' "$INPUT_FILE.sha256")"
   if command -v sha256sum >/dev/null 2>&1; then
-    (cd "$(dirname "$INPUT_FILE")" && sha256sum -c "$(basename "$INPUT_FILE").sha256")
+    actual="$(sha256sum "$INPUT_FILE" | awk '{print $1}')"
   else
-    expected="$(awk '{print $1}' "$INPUT_FILE.sha256")"
     actual="$(shasum -a 256 "$INPUT_FILE" | awk '{print $1}')"
-    [ "$expected" = "$actual" ] || {
-      echo "Backup checksum mismatch: $INPUT_FILE" >&2
-      exit 1
-    }
   fi
+  [ -n "$expected" ] && [ "$expected" = "$actual" ] || {
+    echo "Backup checksum mismatch: $INPUT_FILE" >&2
+    exit 1
+  }
 }
 
 verify_checksum

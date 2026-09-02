@@ -22,7 +22,9 @@ Default deploy path: `/opt/involute`.
 | Postgres | compose service `db`, not published publicly |
 
 Production uses published images (`docker-compose.prod.images.yml`), not a VPS source build.
-Application images must be pinned to an immutable `sha-<commit>` tag. `latest` is not accepted by the deploy playbook.
+Application images must be pinned to an immutable `sha-<12-40 lowercase hex>` tag. `latest`, branch names, and version tags are not accepted by the deploy playbook. The production app origin must be HTTPS.
+
+TLS terminates at Caddy. The web proxy talks to the API over HTTP on the host-local Compose network, including forwarded MCP bearer tokens. The deployment model therefore trusts the VPS root account and all containers attached to that network; do not co-locate untrusted containers. A multi-tenant host would require a separate encrypted or mutually authenticated upstream design.
 
 ## Status
 
@@ -59,7 +61,7 @@ Images publish from `main` via `.github/workflows/docker-publish.yml`. Productio
 pnpm deploy:prod
 ```
 
-Set `involute_image_tag: sha-<12>` in the encrypted inventory. The GitHub Actions workflow derives that tag from the selected commit unless an explicit SHA tag is supplied for rollback. The playbook pulls images and takes a timestamped Postgres backup before stopping the current stack.
+Set `involute_image_tag: sha-<12>` in the encrypted inventory. The GitHub Actions workflow derives that tag from the selected commit unless an explicit SHA tag is supplied for rollback. The playbook takes a timestamped Postgres backup before stopping either a legacy or standardized stack, preserves `.backups` during repository synchronization, and then pulls the target images.
 
 Or GitHub Actions `Deploy` with `profile=production`. Keep `INVOLUTE_DEPLOY_ON_MAIN=false` unless auto-deploy on main is an explicit choice.
 
@@ -136,7 +138,7 @@ Run after every deploy. Replace the domain with the live origin.
 4. The automated smoke performs MCP `initialize`, `tools/list`, and a read-only `work_search` call.
 5. Open `/candidates`, `/graph`, and one `/work/:id`; verify errors are not rendered as empty data.
 
-Uploads are stored in the named `uploads-prod-data` volume and downloads require authentication. Include that volume in the VPS backup policy; a database backup alone does not contain uploaded files.
+Uploads are stored in the named `uploads-prod-data` volume and downloads require authentication. Executable/unknown formats are served as sandboxed attachments instead of same-origin inline content. Include that volume in the VPS backup policy; a database backup alone does not contain uploaded files.
 
 Do not treat comment create as an agent heartbeat. Agents use `/mcp`.
 
@@ -167,7 +169,7 @@ Use a short-lived credential for production smoke when practical. Revocation tak
 
 ## Webhooks
 
-Set `INVOLUTE_WEBHOOK_URL` and `INVOLUTE_WEBHOOK_SECRET` together. Multiple comma-separated URLs share the signing secret. Delivery state is tracked per target: a successful endpoint is not replayed merely because another endpoint needs a retry; a target is dead-lettered after eight failed attempts.
+Set `INVOLUTE_WEBHOOK_URL` and `INVOLUTE_WEBHOOK_SECRET` together. Multiple comma-separated URLs share the signing secret. Delivery state is tracked per target: a successful endpoint is not replayed merely because another endpoint needs a retry; each request has a 10-second timeout, and a target is dead-lettered after eight failed attempts.
 
 ## First admin
 

@@ -356,6 +356,48 @@ describe('K6 observation UI', () => {
     })));
   });
 
+  it('shows retry controls when candidate pagination fails', async () => {
+    const fetchMore = vi.fn().mockRejectedValueOnce(new Error('network down')).mockResolvedValueOnce(undefined);
+    renderApp({
+      data: boardQueryResult,
+      candidatesData: {
+        ...candidateQuery,
+        issues: {
+          ...candidateQuery.issues,
+          pageInfo: { endCursor: 'candidate-cursor', hasNextPage: true },
+        },
+      },
+      fetchMore,
+      loading: false,
+    }, ['/candidates']);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Load more' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load more candidates.');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading more' }));
+    await waitFor(() => expect(fetchMore).toHaveBeenCalledTimes(2));
+  });
+
+  it('shows retry controls when graph pagination fails', async () => {
+    const fetchMore = vi.fn().mockRejectedValueOnce(new Error('network down')).mockResolvedValueOnce(undefined);
+    renderApp({
+      data: boardQueryResult,
+      fetchMore,
+      graphData: {
+        ...graphQuery,
+        issues: {
+          ...graphQuery.issues,
+          pageInfo: { endCursor: 'graph-cursor', hasNextPage: true },
+        },
+      },
+      loading: false,
+    }, ['/graph']);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Load more' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load more graph nodes.');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading more' }));
+    await waitFor(() => expect(fetchMore).toHaveBeenCalledTimes(2));
+  });
+
   it('does not report a failed context query as missing work', async () => {
     renderApp({ data: boardQueryResult, error: new Error('network down'), loading: false }, ['/work/issue-2']);
     expect(await screen.findByRole('heading', { name: 'Could not load work context' })).toBeInTheDocument();

@@ -48,6 +48,15 @@ export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
   'evidence_attach',
 ];
 
+const WORK_LINK_TYPES: readonly WorkLinkType[] = [
+  'CONTAINS',
+  'BLOCKS',
+  'DERIVED_FROM',
+  'DISCOVERED_DURING',
+  'RELATED_TO',
+  'DUPLICATE_OF',
+];
+
 interface JsonSchema {
   type: 'object';
   properties: Record<string, unknown>;
@@ -126,7 +135,7 @@ export async function callMcpTool(
         proposeInput.kind = kind;
       }
       const relatedType = optionalString(args.related_work_type);
-      if (relatedType) proposeInput.relatedWorkType = relatedType as WorkLinkType;
+      if (relatedType) proposeInput.relatedWorkType = parseWorkLinkType(relatedType, 'related_work_type');
       return proposeWork(context.prisma, proposeInput, writeActorFromViewer(context.viewer, 'mcp'));
     }
     case 'work_commit': {
@@ -213,10 +222,10 @@ export async function callMcpTool(
       await assertCanWriteIssue(context.prisma, context, work.id);
       const evidenceInput: Parameters<typeof attachEvidence>[1] = {
         kind: requiredString(args.kind, 'kind'),
+        runId: requiredString(args.run_id, 'run_id'),
         url: requiredString(args.url, 'url'),
         workId: work.id,
       };
-      assignOptional(evidenceInput, 'runId', optionalString(args.run_id));
       assignOptional(evidenceInput, 'summary', optionalString(args.summary));
       return attachEvidence(
         context.prisma,
@@ -420,6 +429,13 @@ function requiredString(value: unknown, name: string): string {
     throw new Error(`Missing required string argument "${name}".`);
   }
   return value;
+}
+
+function parseWorkLinkType(value: string, name: string): WorkLinkType {
+  if ((WORK_LINK_TYPES as readonly string[]).includes(value)) {
+    return value as WorkLinkType;
+  }
+  throw new Error(`Argument "${name}" must be one of: ${WORK_LINK_TYPES.join(', ')}.`);
 }
 
 function requiredNumber(value: unknown, name: string): number {

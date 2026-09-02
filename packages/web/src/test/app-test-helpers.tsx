@@ -428,6 +428,7 @@ type QueryState = {
   fetchMore?: ReturnType<typeof vi.fn>;
   graphData?: WorkGraphPageQueryData;
   loading?: boolean;
+  refetch?: ReturnType<typeof vi.fn>;
   workContextData?: WorkContextPageQueryData;
 };
 
@@ -458,6 +459,7 @@ export function renderApp(
         data: queryState.accessData ?? accessQueryResult,
         error: queryState.error,
         loading: queryState.loading ?? false,
+        refetch: queryState.refetch ?? vi.fn().mockResolvedValue(undefined),
       };
     }
 
@@ -508,6 +510,7 @@ export function renderApp(
         },
         error: queryState.error,
         loading: queryState.loading ?? false,
+        refetch: queryState.refetch ?? vi.fn().mockResolvedValue(undefined),
       };
     }
 

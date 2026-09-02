@@ -14,6 +14,17 @@ This is a source, npm, and container-image release. It does not mean the product
 - One readiness predicate shared by ready-list and claim, semantic workflow-state matching, correct blocker handling, and serialized cycle-safe graph writes.
 - Paginated candidate and graph observation, explicit UI error states, human review actions in web and CLI, and a documented boundary between graph `PROJECT` work and the frozen legacy `Project` entity.
 
+## Release-review hardening
+
+The release-candidate review also closed cross-layer failures that were not visible in the original unit-test pass:
+
+- GraphQL now serializes the semantic `REVIEW` workflow type, and commit fails closed if a team has no `UNSTARTED` state.
+- Ready-list and claim cover every work kind unless a caller explicitly filters by kind.
+- Active runs remain bound to a live claim, concurrent run updates use compare-and-swap, and completing a run clears its claim reference before the lease row is removed.
+- Agent credentials match only the `/mcp` path segment; MCP validates link types and required evidence run IDs at runtime.
+- Webhook requests time out, active upload formats such as SVG are forced to download in a sandboxed response, and pagination/revision conflicts have explicit retry or reload behavior.
+- Deployment validates the exact `sha-<12-40 hex>` image format and a production HTTPS origin; host backups survive rsync and occur before any legacy stack is stopped.
+
 ## Agent lifecycle
 
 The supported execution path is:
@@ -45,7 +56,8 @@ Before production rollout:
 - confirm the target image is the exact `sha-<commit>` built from this release
 - run `sh scripts/postgres-backup.sh`
 - run `pnpm deploy:prod`
-- run `pnpm smoke:prod https://<your-domain>` with valid auth and MCP credentials
+- export `INVOLUTE_SMOKE_AUTH_TOKEN=<production-auth-token>` and run
+  `pnpm smoke:prod https://<your-domain>` with valid MCP credentials
 - verify uploads survive a server/container restart
 - verify candidates, graph, work context, claim, run, evidence, and human review against production
 

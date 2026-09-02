@@ -113,4 +113,20 @@ describe('seedDatabase', () => {
     expect(adminUsers).toHaveLength(0);
   });
 
+  it('repairs an existing default-admin membership back to owner', async () => {
+    await seedDatabase(prisma);
+    const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
+    const admin = await prisma.user.findUniqueOrThrow({ where: { email: DEFAULT_ADMIN_EMAIL } });
+    await prisma.teamMembership.update({
+      where: { teamId_userId: { teamId: team.id, userId: admin.id } },
+      data: { role: 'EDITOR' },
+    });
+
+    await seedDatabase(prisma);
+
+    await expect(prisma.teamMembership.findUniqueOrThrow({
+      where: { teamId_userId: { teamId: team.id, userId: admin.id } },
+    })).resolves.toMatchObject({ role: 'OWNER' });
+  });
+
 });

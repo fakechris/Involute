@@ -3,6 +3,9 @@ CREATE TYPE "WorkReviewDecisionKind" AS ENUM ('ACCEPTED', 'REJECTED');
 ALTER TABLE "WorkRun" ADD COLUMN "claimId" UUID;
 ALTER TABLE "WorkRun" ADD COLUMN "baseRevision" INTEGER;
 CREATE INDEX "WorkRun_claimId_idx" ON "WorkRun"("claimId");
+ALTER TABLE "WorkRun"
+  ADD CONSTRAINT "WorkRun_claimId_fkey"
+  FOREIGN KEY ("claimId") REFERENCES "WorkClaim"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "WorkEvidence" ADD COLUMN "actorId" UUID;
 
 CREATE INDEX "WorkEvidence_actorId_idx" ON "WorkEvidence"("actorId");

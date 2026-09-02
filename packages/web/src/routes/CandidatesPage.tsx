@@ -202,6 +202,8 @@ function CandidateCard({
 
 export function CandidatesPage() {
   const teamKey = readStoredTeamKey();
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [paginationError, setPaginationError] = useState(false);
   const { data, error, fetchMore, loading, refetch } = useQuery<
     CandidatesPageQueryData,
     CandidatesPageQueryVariables
@@ -232,17 +234,25 @@ export function CandidatesPage() {
 
   async function handleLoadMore() {
     if (!pageInfo?.hasNextPage || !pageInfo.endCursor) return;
-    await fetchMore({
-      variables: { after: pageInfo.endCursor },
-      updateQuery: (previous, { fetchMoreResult }) => ({
-        ...fetchMoreResult,
-        teams: previous.teams,
-        issues: {
-          ...fetchMoreResult.issues,
-          nodes: [...previous.issues.nodes, ...fetchMoreResult.issues.nodes],
-        },
-      }),
-    });
+    setLoadingMore(true);
+    setPaginationError(false);
+    try {
+      await fetchMore({
+        variables: { after: pageInfo.endCursor },
+        updateQuery: (previous, { fetchMoreResult }) => ({
+          ...fetchMoreResult,
+          teams: previous.teams,
+          issues: {
+            ...fetchMoreResult.issues,
+            nodes: [...previous.issues.nodes, ...fetchMoreResult.issues.nodes],
+          },
+        }),
+      });
+    } catch {
+      setPaginationError(true);
+    } finally {
+      setLoadingMore(false);
+    }
   }
 
   return (
@@ -278,9 +288,16 @@ export function CandidatesPage() {
                 onRejected={() => void refetch()}
               />
             ))}
-            {pageInfo?.hasNextPage ? (
-              <Btn variant="subtle" disabled={loading} onClick={() => void handleLoadMore()}>
-                {loading ? 'Loading…' : 'Load more'}
+            {paginationError ? (
+              <div role="alert">
+                <p>Could not load more candidates.</p>
+                <Btn variant="subtle" disabled={loadingMore} onClick={() => void handleLoadMore()}>
+                  Retry loading more
+                </Btn>
+              </div>
+            ) : pageInfo?.hasNextPage ? (
+              <Btn variant="subtle" disabled={loadingMore} onClick={() => void handleLoadMore()}>
+                {loadingMore ? 'Loading…' : 'Load more'}
               </Btn>
             ) : null}
           </div>

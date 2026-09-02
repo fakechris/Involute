@@ -16,6 +16,7 @@ import {
   WORK_NOT_READY_MESSAGE,
   WORK_OWNER_MUST_BE_HUMAN_MESSAGE,
   WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE,
+  WORK_READY_STATE_MISSING_MESSAGE,
   WORK_RELATED_NOT_FOUND_MESSAGE,
   WORK_REVISION_CONFLICT_MESSAGE,
   WORK_IDEMPOTENCY_CONFLICT_MESSAGE,
@@ -221,6 +222,9 @@ export async function commitWork(
       orderBy: { position: 'asc' },
       select: { id: true },
     });
+    if (!readyState) {
+      throw createValidationError(WORK_READY_STATE_MISSING_MESSAGE);
+    }
 
     const updated = await transaction.issue.update({
       where: { id: existing.id },
@@ -231,7 +235,7 @@ export async function commitWork(
         constraints: input.constraints === undefined ? existing.constraints : input.constraints,
         outcome: input.outcome === undefined ? existing.outcome : input.outcome,
         scope: input.scope === undefined ? existing.scope : input.scope,
-        ...(readyState ? { stateId: readyState.id } : {}),
+        stateId: readyState.id,
         verification: input.verification === undefined ? existing.verification : input.verification,
       },
     });

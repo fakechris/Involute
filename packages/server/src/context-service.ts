@@ -240,7 +240,6 @@ export function compareReadyWork(
 function buildReadyWorkWhere(input: ListReadyWorkInput): Prisma.IssueWhereInput {
   const clauses: Prisma.IssueWhereInput[] = [
     { commitmentStatus: 'COMMITTED' },
-    { kind: input.kind ?? 'ISSUE' },
     { acceptance: { not: null } },
     { assignee: { is: { actorKind: 'HUMAN' } } },
     {
@@ -283,6 +282,10 @@ function buildReadyWorkWhere(input: ListReadyWorkInput): Prisma.IssueWhereInput 
       ],
     },
   ];
+
+  if (input.kind) {
+    clauses.push({ kind: input.kind });
+  }
 
   if (input.repository) {
     clauses.push({ repository: input.repository });

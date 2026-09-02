@@ -11,6 +11,7 @@ import {
   WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE,
   WORK_NOT_CANDIDATE_MESSAGE,
   WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE,
+  WORK_READY_STATE_MISSING_MESSAGE,
   WORK_REJECT_FORBIDDEN_MESSAGE,
   WORK_REVISION_CONFLICT_MESSAGE,
   WORK_IDEMPOTENCY_CONFLICT_MESSAGE,
@@ -207,6 +208,36 @@ describe('claim service', () => {
       },
       { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
     )).rejects.toThrow(WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE);
+  });
+
+  it('refuses to commit when the team has no unstarted state', async () => {
+    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'No ready state' });
+    await prisma.workflowState.delete({ where: { id: ready.id } });
+
+    await expect(commitWork(
+      prisma,
+      candidate.id,
+      { acceptance: 'must remain claimable', assigneeId: human.id, expectedRevision: candidate.revision },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    )).rejects.toThrow(WORK_READY_STATE_MISSING_MESSAGE);
+  });
+
+  it('lists and claims ready committed work of every work kind', async () => {
+    const candidate = await proposeWork(prisma, { kind: 'EPIC', teamId: team.id, title: 'Claimable epic' });
+    const committed = await commitWork(
+      prisma,
+      candidate.id,
+      { acceptance: 'epic is executable', assigneeId: human.id, expectedRevision: candidate.revision },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    );
+
+    expect((await listReadyWork(prisma)).nodes.map((work) => work.id)).toContain(committed.id);
+    await expect(claimWork(
+      prisma,
+      committed.id,
+      {},
+      { actorId: agent.id, actorKind: 'AGENT', surface: 'test' },
+    )).resolves.toMatchObject({ work: { id: committed.id, kind: 'EPIC' } });
   });
 
   it('forbids agents from committing and does not treat In Progress as a claim', async () => {

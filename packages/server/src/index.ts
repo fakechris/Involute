@@ -31,6 +31,7 @@ export interface StartServerOptions {
   port?: number;
   prisma?: PrismaClient;
   sessionTtlSeconds?: number;
+  uploadsDir?: string;
   viewerAssertionSecret?: string | null;
   webhookSecret?: string | null;
   webhookUrls?: string | null;
@@ -99,7 +100,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     scopes: options.googleOAuth?.scopes ?? ['openid', 'email', 'profile'],
   } satisfies GoogleOAuthConfiguration;
 
-  const uploadsDir = getUploadsDirectory();
+  const uploadsDir = options.uploadsDir ?? getUploadsDirectory();
 
   const httpServer = createServer((request, response) => {
     if (request.method === 'GET' && getPathname(request.url) === '/health') {
@@ -287,12 +288,16 @@ async function handleUploadDownload(options: {
   const stat = statSync(filePath);
   const mimeTypes: Record<string, string> = {
     '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-    '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
-    '.pdf': 'application/pdf',
+    '.gif': 'image/gif', '.webp': 'image/webp',
   };
   const ext = extname(filename).toLowerCase();
   response.setHeader('cache-control', 'private, no-store');
+  response.setHeader('content-security-policy', "sandbox; default-src 'none'");
+  response.setHeader('x-content-type-options', 'nosniff');
   response.setHeader('content-type', mimeTypes[ext] ?? 'application/octet-stream');
+  if (!(ext in mimeTypes)) {
+    response.setHeader('content-disposition', 'attachment');
+  }
   response.setHeader('content-length', stat.size);
   createReadStream(filePath).pipe(response);
 }

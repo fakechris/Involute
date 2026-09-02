@@ -34,9 +34,30 @@ SET
 FROM "Issue" AS issue
 WHERE issue."id" = idem."workId";
 
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM "WorkIdempotency"
+    WHERE "teamId" IS NULL OR "actorKey" IS NULL OR "requestHash" IS NULL
+  ) THEN
+    RAISE EXCEPTION 'WorkIdempotency backfill left required scope columns null';
+  END IF;
+END $$;
+
+ALTER TABLE "WorkIdempotency"
+  ADD CONSTRAINT "WorkIdempotency_teamId_not_null" CHECK ("teamId" IS NOT NULL) NOT VALID,
+  ADD CONSTRAINT "WorkIdempotency_actorKey_not_null" CHECK ("actorKey" IS NOT NULL) NOT VALID,
+  ADD CONSTRAINT "WorkIdempotency_requestHash_not_null" CHECK ("requestHash" IS NOT NULL) NOT VALID;
+ALTER TABLE "WorkIdempotency" VALIDATE CONSTRAINT "WorkIdempotency_teamId_not_null";
+ALTER TABLE "WorkIdempotency" VALIDATE CONSTRAINT "WorkIdempotency_actorKey_not_null";
+ALTER TABLE "WorkIdempotency" VALIDATE CONSTRAINT "WorkIdempotency_requestHash_not_null";
 ALTER TABLE "WorkIdempotency" ALTER COLUMN "teamId" SET NOT NULL;
 ALTER TABLE "WorkIdempotency" ALTER COLUMN "actorKey" SET NOT NULL;
 ALTER TABLE "WorkIdempotency" ALTER COLUMN "requestHash" SET NOT NULL;
+ALTER TABLE "WorkIdempotency"
+  DROP CONSTRAINT "WorkIdempotency_teamId_not_null",
+  DROP CONSTRAINT "WorkIdempotency_actorKey_not_null",
+  DROP CONSTRAINT "WorkIdempotency_requestHash_not_null";
 
 DROP INDEX "WorkIdempotency_operation_key_key";
 ALTER TABLE "WorkIdempotency" DROP CONSTRAINT "WorkIdempotency_workId_fkey";
@@ -46,7 +67,9 @@ CREATE INDEX "WorkIdempotency_teamId_idx" ON "WorkIdempotency"("teamId");
 
 ALTER TABLE "WorkIdempotency"
   ADD CONSTRAINT "WorkIdempotency_teamId_fkey"
-  FOREIGN KEY ("teamId") REFERENCES "Team"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  FOREIGN KEY ("teamId") REFERENCES "Team"("id") ON DELETE CASCADE ON UPDATE CASCADE NOT VALID;
 ALTER TABLE "WorkIdempotency"
   ADD CONSTRAINT "WorkIdempotency_workId_fkey"
-  FOREIGN KEY ("workId") REFERENCES "Issue"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  FOREIGN KEY ("workId") REFERENCES "Issue"("id") ON DELETE SET NULL ON UPDATE CASCADE NOT VALID;
+ALTER TABLE "WorkIdempotency" VALIDATE CONSTRAINT "WorkIdempotency_teamId_fkey";
+ALTER TABLE "WorkIdempotency" VALIDATE CONSTRAINT "WorkIdempotency_workId_fkey";

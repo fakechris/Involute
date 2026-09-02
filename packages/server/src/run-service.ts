@@ -4,6 +4,7 @@ import type {
   PrismaClient,
   WorkEvidence,
   WorkEvidenceKind,
+  WorkClaim,
   WorkReviewDecision,
   WorkReviewDecisionKind,
   WorkRun,
@@ -23,6 +24,7 @@ import {
   WORK_RUN_ACTOR_MISMATCH_MESSAGE,
   WORK_RUN_TERMINAL_MESSAGE,
   WORK_RUN_TRANSITION_INVALID_MESSAGE,
+  WORK_RUN_CONFLICT_MESSAGE,
   WORK_EVIDENCE_REQUIRES_RUN_MESSAGE,
   WORK_REVIEW_REQUIRED_MESSAGE,
   WORK_REVIEW_STATE_MISSING_MESSAGE,
@@ -84,6 +86,7 @@ export async function reportRun(
     const work = await requireWork(transaction, input.workId);
     const status = parseRunStatus(input.status);
     let run = input.runId ? await findRun(transaction, input.runId, work.id) : null;
+    let activeClaim: WorkClaim | null = null;
 
     if (input.runId && !run) {
       throw createNotFoundError(WORK_RUN_NOT_FOUND_MESSAGE);
@@ -91,20 +94,20 @@ export async function reportRun(
 
     const isNew = !run;
     if (!run) {
-      const claim = await transaction.workClaim.findFirst({
+      activeClaim = await transaction.workClaim.findFirst({
         where: {
           actorId,
           leaseUntil: { gt: new Date() },
           workId: work.id,
         },
       });
-      if (!claim) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
+      if (!activeClaim) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
       const publicId = await nextRunPublicId(transaction);
       run = await transaction.workRun.create({
         data: {
           actorId,
           baseRevision: work.revision,
-          claimId: claim.id,
+          claimId: activeClaim.id,
           externalUrl: input.externalUrl ?? null,
           phase: input.phase ?? null,
           publicId,
@@ -122,19 +125,32 @@ export async function reportRun(
         if (!status || status === run.status) return { run, work };
         throw createValidationError(WORK_RUN_TERMINAL_MESSAGE);
       }
+      if (!run.claimId) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
+      activeClaim = await transaction.workClaim.findFirst({
+        where: {
+          actorId,
+          id: run.claimId,
+          leaseUntil: { gt: new Date() },
+          workId: work.id,
+        },
+      });
+      if (!activeClaim) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
       if (status && status !== run.status && !ALLOWED_RUN_TRANSITIONS[run.status].includes(status)) {
         throw createValidationError(WORK_RUN_TRANSITION_INVALID_MESSAGE);
       }
-      run = await transaction.workRun.update({
-        where: { id: run.id },
+      const update = await transaction.workRun.updateMany({
+        where: { id: run.id, updatedAt: run.updatedAt },
         data: {
           ...(status ? { status } : {}),
           ...(input.phase !== undefined ? { phase: input.phase } : {}),
           ...(input.summary !== undefined ? { summary: input.summary } : {}),
           ...(input.externalUrl !== undefined ? { externalUrl: input.externalUrl } : {}),
           ...(status && TERMINAL_RUN_STATUSES.includes(status) ? { endedAt: new Date() } : {}),
+          ...(status === 'COMPLETED' ? { claimId: null } : {}),
         },
       });
+      if (update.count !== 1) throw createValidationError(WORK_RUN_CONFLICT_MESSAGE);
+      run = await transaction.workRun.findUniqueOrThrow({ where: { id: run.id } });
     }
 
     const eventType = eventTypeForRun(isNew, run.status, input.decisionRequested);
@@ -157,9 +173,9 @@ export async function reportRun(
     let nextWork = work;
     if (run.status === 'COMPLETED') {
       nextWork = await moveToInReview(transaction, work, actor);
-      await transaction.workClaim.deleteMany({
-        where: { actorId, workId: work.id },
-      });
+      if (activeClaim) {
+        await transaction.workClaim.deleteMany({ where: { id: activeClaim.id } });
+      }
     }
 
     return { run, work: nextWork };

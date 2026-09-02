@@ -83,7 +83,7 @@ import { createCycle, updateCycle, deleteCycle, type CreateCycleInput, type Upda
 import { orderWorkflowStates } from './workflow-state-order.js';
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { extname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 type TeamParent = Team & { memberships?: TeamMembershipParent[] | null; states?: WorkflowState[] | null };
@@ -1642,7 +1642,8 @@ const resolvers = {
         if (!existsSync(uploadsDir)) {
           mkdirSync(uploadsDir, { recursive: true });
         }
-        const ext = args.input.filename.includes('.') ? args.input.filename.slice(args.input.filename.lastIndexOf('.')) : '';
+        const requestedExt = extname(args.input.filename).toLowerCase();
+        const ext = /^\.[a-z0-9]{1,10}$/.test(requestedExt) ? requestedExt : '';
         const storedName = `${randomUUID()}${ext}`;
         const buffer = Buffer.from(args.input.content, 'base64');
         writeFileSync(join(uploadsDir, storedName), buffer);

@@ -361,6 +361,7 @@ model WorkClaim {
   leaseUntil DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  runs       WorkRun[]
 
   @@index([actorId])
   @@index([leaseUntil])
@@ -397,6 +398,7 @@ model WorkRun {
   actorId     String?       @db.Uuid
   actor       User?         @relation("WorkRunActor", fields: [actorId], references: [id], onDelete: SetNull)
   claimId     String?       @db.Uuid
+  claim       WorkClaim?    @relation(fields: [claimId], references: [id], onDelete: SetNull)
   baseRevision Int?
   status      WorkRunStatus @default(RUNNING)
   phase       String?

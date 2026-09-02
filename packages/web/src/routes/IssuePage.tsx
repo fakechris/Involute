@@ -38,13 +38,14 @@ import { Avatar, Btn, Kbd } from '../components/Primitives';
 import { RichTextEditor } from '../components/RichTextEditor';
 
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
+const CONFLICT_MESSAGE = 'The issue changed while you were editing. The latest version was reloaded; review it and retry.';
 const ISSUE_DELETE_ERROR_MESSAGE = 'We could not delete the issue. Please try again.';
 const COMMENT_DELETE_ERROR_MESSAGE = 'We could not delete the comment. Please try again.';
 
 export function IssuePage() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { data, error, loading } = useQuery<IssuePageQueryData, IssuePageQueryVariables>(ISSUE_PAGE_QUERY, {
+  const { data, error, loading, refetch } = useQuery<IssuePageQueryData, IssuePageQueryVariables>(ISSUE_PAGE_QUERY, {
     skip: !id,
     variables: {
       id: id ?? '',
@@ -253,8 +254,14 @@ export function IssuePage() {
           : result.data!.issueUpdate.issue!,
       );
     } catch (mutationIssue) {
-      setLocalIssue(previousIssue);
-      setMutationError(ERROR_MESSAGE);
+      try {
+        const refreshed = await refetch();
+        setLocalIssue(refreshed.data?.issue ?? previousIssue);
+        setMutationError(CONFLICT_MESSAGE);
+      } catch {
+        setLocalIssue(previousIssue);
+        setMutationError(ERROR_MESSAGE);
+      }
     } finally {
       setIsSavingState(false);
     }

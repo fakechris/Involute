@@ -18,6 +18,7 @@ export const WORK_EVENT_TYPES = [
 ] as const;
 
 export type WorkEventType = (typeof WORK_EVENT_TYPES)[number];
+export const WEBHOOK_REQUEST_TIMEOUT_MS = 10_000;
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -114,6 +115,7 @@ export async function flushEventOutbox(
             'involute-signature': `sha256=${signature}`,
           },
           body,
+          signal: AbortSignal.timeout(WEBHOOK_REQUEST_TIMEOUT_MS),
         });
 
         if (!response.ok) {
