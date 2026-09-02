@@ -40,6 +40,15 @@ The Linear import path remains a way to load historical commitments. It is no lo
 - Treat the existing GraphQL Issue API as a generic compatibility facade for web and CLI
 - Keep leftover Linear shell routes frozen: Inbox, Cycles, Projects, My Issues, Views
 
+### Project vocabulary boundary
+
+There are two deliberately separate concepts while the Linear-compatible shell remains:
+
+- `Issue.kind = PROJECT` is a work-graph node: an agent-visible project contract that participates in typed links, claims, runs, evidence, and review.
+- GraphQL `Project` / `Issue.projectId` is frozen legacy projection metadata used by the existing Web/CLI compatibility surface.
+
+They do not share identity and are not synchronized. New kernel workflows model project hierarchy with a `PROJECT` work node plus `CONTAINS` links. The legacy `Project` entity may be read or maintained for compatibility, but it must not acquire new product semantics.
+
 ## Four state machines (do not collapse)
 
 | Machine | Meaning |

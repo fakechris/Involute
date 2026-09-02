@@ -12,6 +12,8 @@ test.describe('board flow', () => {
 
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'All issues', exact: true })).toBeVisible();
+    await page.getByRole('region', { name: 'Done column (collapsed)' }).click();
+    await expect(page.getByRole('region', { name: 'Done column', exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Create issue' }).click();
 

@@ -1,6 +1,9 @@
 import type { PrismaClient, Team, User, WorkflowState, IssueLabel, Issue, Comment } from '@prisma/client';
 
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -35,20 +38,24 @@ interface TestFixture {
 describe('GraphQL server core', () => {
   let server: StartedServer;
   let fixture: TestFixture;
+  let uploadsDir: string;
 
   beforeAll(async () => {
     await prisma.$connect();
+    uploadsDir = await mkdtemp(join(tmpdir(), 'involute-uploads-test-'));
     server = await startServer({
       allowAdminFallback: true,
       prisma,
       authToken: TEST_AUTH_TOKEN,
       port: 0,
+      uploadsDir,
     });
     activeServer = server;
   });
 
   afterAll(async () => {
     await server.stop();
+    await rm(uploadsDir, { force: true, recursive: true });
     await prisma.$disconnect();
   });
 
@@ -73,6 +80,19 @@ describe('GraphQL server core', () => {
         __typename: 'Query',
       },
     });
+  });
+
+  it('forces active upload formats to download without same-origin execution', async () => {
+    await writeFile(join(uploadsDir, 'proof.svg'), '<svg onload="alert(1)"></svg>');
+    const response = await fetch(`${server.url}/uploads/proof.svg`, {
+      headers: { authorization: `Bearer ${TEST_AUTH_TOKEN}` },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('application/octet-stream');
+    expect(response.headers.get('content-disposition')).toBe('attachment');
+    expect(response.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'");
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
   });
 
   it('rejects missing or invalid auth with a GraphQL error while allowing valid bearer and raw tokens', async () => {

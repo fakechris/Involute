@@ -59,6 +59,9 @@ services:
       GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-http://localhost:4200/auth/google/callback}
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:4201}
       PORT: 4200
+      INVOLUTE_UPLOADS_DIR: /var/lib/involute/uploads
+      INVOLUTE_WEBHOOK_URL: ${INVOLUTE_WEBHOOK_URL:-}
+      INVOLUTE_WEBHOOK_SECRET: ${INVOLUTE_WEBHOOK_SECRET:-}
     healthcheck:
       test:
         [
@@ -73,6 +76,8 @@ services:
       start_period: 10s
     ports:
       - "${SERVER_BIND_ADDRESS:-0.0.0.0}:4200:4200"
+    volumes:
+      - uploads-data:/var/lib/involute/uploads
 
   web:
     image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-fakechris}/involute-web:${INVOLUTE_IMAGE_TAG:-latest}
@@ -108,3 +113,4 @@ services:
 
 volumes:
   postgres-data:
+  uploads-data:

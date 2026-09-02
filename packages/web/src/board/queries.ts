@@ -46,6 +46,7 @@ export const BOARD_PAGE_QUERY = gql`
       nodes {
         id
         identifier
+        revision
         title
         description
         priority
@@ -112,6 +113,7 @@ export const ISSUE_UPDATE_MUTATION = gql`
       issue {
         id
         identifier
+        revision
         title
         description
         priority
@@ -210,6 +212,7 @@ export const ISSUE_PAGE_QUERY = gql`
     issue(id: $id) {
       id
       identifier
+      revision
       title
       description
       priority
@@ -255,6 +258,7 @@ export const ISSUE_PAGE_QUERY = gql`
       parent {
         id
         identifier
+        revision
         title
       }
       projectId

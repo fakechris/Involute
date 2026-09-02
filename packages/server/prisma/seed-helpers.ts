@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient, WorkflowStateType } from '@prisma/client';
 
 import { ensureAdminUsers } from './admin-helpers.ts';
 import {
@@ -42,6 +42,15 @@ export async function seedDatabase(
   });
 
   for (const name of DEFAULT_WORKFLOW_STATE_NAMES) {
+    const typeByName: Record<(typeof DEFAULT_WORKFLOW_STATE_NAMES)[number], WorkflowStateType> = {
+      Backlog: 'BACKLOG',
+      Ready: 'UNSTARTED',
+      'In Progress': 'STARTED',
+      'In Review': 'REVIEW',
+      Done: 'COMPLETED',
+      Canceled: 'CANCELED',
+    };
+    const position = DEFAULT_WORKFLOW_STATE_NAMES.indexOf(name);
     await prisma.workflowState.upsert({
       where: {
         teamId_name: {
@@ -51,9 +60,11 @@ export async function seedDatabase(
       },
       create: {
         name,
+        position,
         teamId: team.id,
+        type: typeByName[name],
       },
-      update: {},
+      update: { position, type: typeByName[name] },
     });
   }
 
@@ -77,8 +88,15 @@ export async function seedDatabase(
   }
 
   if (includeDefaultAdmin) {
-    await ensureAdminUsers(prisma, [DEFAULT_ADMIN_EMAIL], {
+    const [admin] = await ensureAdminUsers(prisma, [DEFAULT_ADMIN_EMAIL], {
       defaultName: DEFAULT_ADMIN_NAME,
     });
+    if (admin) {
+      await prisma.teamMembership.upsert({
+        where: { teamId_userId: { teamId: team.id, userId: admin.id } },
+        create: { role: 'OWNER', teamId: team.id, userId: admin.id },
+        update: { role: 'OWNER' },
+      });
+    }
   }
 }

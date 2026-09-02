@@ -14,3 +14,7 @@ involute_postgres_password: replace-with-a-long-url-safe-random-password
 involute_google_oauth_client_id: replace-with-google-client-id
 involute_google_oauth_client_secret: replace-with-google-client-secret
 involute_google_oauth_redirect_uri: https://involute.example.com/auth/google/callback
+
+# Optional; configure both values together.
+involute_webhook_url: https://automation.example.com/involute
+involute_webhook_secret: replace-with-a-webhook-signing-secret

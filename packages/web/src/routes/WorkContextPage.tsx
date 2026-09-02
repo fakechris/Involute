@@ -1,10 +1,17 @@
-import { useQuery } from '@apollo/client/react';
+import { useMutation, useQuery } from '@apollo/client/react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { IcoChevL } from '../components/Icons';
 import { Btn } from '../components/Primitives';
-import { WORK_CONTEXT_PAGE_QUERY } from '../work/queries';
-import type { WorkContextPageQueryData, WorkContextPageQueryVariables, WorkRef } from '../work/types';
+import { WORK_CONTEXT_PAGE_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
+import type {
+  WorkContextPageQueryData,
+  WorkContextPageQueryVariables,
+  WorkRef,
+  WorkReviewMutationData,
+  WorkReviewMutationVariables,
+} from '../work/types';
 
 function formatWhen(value: string | null | undefined): string {
   if (!value) {
@@ -59,7 +66,11 @@ function RelatedList({
 export function WorkContextPage() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { data, error, loading } = useQuery<WorkContextPageQueryData, WorkContextPageQueryVariables>(
+  const [reviewReason, setReviewReason] = useState('');
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewPending, setReviewPending] = useState<'ACCEPTED' | 'REJECTED' | null>(null);
+  const [runReview] = useMutation<WorkReviewMutationData, WorkReviewMutationVariables>(WORK_REVIEW_MUTATION);
+  const { data, error, loading, refetch } = useQuery<WorkContextPageQueryData, WorkContextPageQueryVariables>(
     WORK_CONTEXT_PAGE_QUERY,
     {
       skip: !id,
@@ -79,7 +90,22 @@ export function WorkContextPage() {
     );
   }
 
-  if (error || !bundle) {
+  if (error) {
+    return (
+      <div className="observation-page">
+        <div className="page-header">
+          <h1 className="page-header__title">Work context</h1>
+        </div>
+        <div className="empty-state" role="alert">
+          <h3>Could not load work context</h3>
+          <p>The kernel request failed; this is not being reported as a missing work item.</p>
+          <Btn variant="subtle" onClick={() => void refetch()}>Retry</Btn>
+        </div>
+      </div>
+    );
+  }
+
+  if (!bundle) {
     return (
       <div className="observation-page">
         <div className="page-header">
@@ -94,6 +120,33 @@ export function WorkContextPage() {
   }
 
   const work = bundle.work;
+
+  async function handleReview(decision: 'ACCEPTED' | 'REJECTED') {
+    setReviewError(null);
+    setReviewPending(decision);
+    try {
+      const result = await runReview({
+        variables: {
+          id: work.id,
+          input: {
+            decision,
+            expectedRevision: work.revision,
+            ...(reviewReason.trim() ? { reason: reviewReason.trim() } : {}),
+          },
+        },
+      });
+      if (!result.data?.workReview.success || !result.data.workReview.issue) {
+        setReviewError('The review decision was not accepted. Refresh and check the current revision.');
+        return;
+      }
+      setReviewReason('');
+      await refetch();
+    } catch {
+      setReviewError('The review request failed. The work state was not assumed to have changed.');
+    } finally {
+      setReviewPending(null);
+    }
+  }
 
   return (
     <div className="observation-page">
@@ -138,6 +191,38 @@ export function WorkContextPage() {
             <p className="observation-empty">Unclaimed</p>
           )}
         </section>
+        {work.state.type === 'REVIEW' ? (
+          <section className="work-context__section" aria-label="Human review">
+            <h2>Human review</h2>
+            <p>Only an explicit human decision can move this work out of review.</p>
+            <label className="observation-field">
+              <span>Reason</span>
+              <input
+                aria-label="Review reason"
+                value={reviewReason}
+                onChange={(event) => setReviewReason(event.target.value)}
+                placeholder="Optional decision note"
+              />
+            </label>
+            {reviewError ? <p className="observation-error" role="alert">{reviewError}</p> : null}
+            <div className="observation-card__actions">
+              <Btn
+                variant="accent"
+                disabled={reviewPending !== null}
+                onClick={() => void handleReview('ACCEPTED')}
+              >
+                {reviewPending === 'ACCEPTED' ? 'Accepting…' : 'Accept'}
+              </Btn>
+              <Btn
+                variant="danger"
+                disabled={reviewPending !== null}
+                onClick={() => void handleReview('REJECTED')}
+              >
+                {reviewPending === 'REJECTED' ? 'Rejecting…' : 'Reject'}
+              </Btn>
+            </div>
+          </section>
+        ) : null}
         <section className="work-context__section">
           <h2>Runs</h2>
           {bundle.runs.length === 0 ? (
@@ -150,6 +235,12 @@ export function WorkContextPage() {
                   <span>{run.status.toLowerCase()}</span>
                   {run.phase ? <span>{run.phase}</span> : null}
                   {run.summary ? <span>{run.summary}</span> : null}
+                  <span className="observation-card__meta">base rev {run.baseRevision ?? '—'}</span>
+                  <span className="observation-card__meta">claim {run.claimId ?? '—'}</span>
+                  <span className="observation-card__meta">actor {run.actorId ?? '—'}</span>
+                  <span className="observation-card__meta">
+                    {formatWhen(run.startedAt)} → {formatWhen(run.endedAt)}
+                  </span>
                   {run.externalUrl ? (
                     <a href={run.externalUrl} target="_blank" rel="noreferrer">
                       {run.externalUrl}
@@ -173,7 +264,28 @@ export function WorkContextPage() {
                     {item.url}
                   </a>
                   {item.summary ? <span>{item.summary}</span> : null}
+                  <span className="observation-card__meta">run {item.runId ?? '—'}</span>
+                  <span className="observation-card__meta">actor {item.actorId ?? '—'}</span>
                   <span className="observation-card__meta">{formatWhen(item.createdAt)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section className="work-context__section">
+          <h2>Review decisions</h2>
+          {bundle.reviewDecisions.length === 0 ? (
+            <p className="observation-empty">No review decisions</p>
+          ) : (
+            <ul className="work-context__timeline">
+              {bundle.reviewDecisions.map((decision) => (
+                <li key={decision.id}>
+                  <strong>{decision.decision.toLowerCase()}</strong>
+                  <span>{decision.reviewer.name ?? decision.reviewer.email ?? decision.reviewer.id}</span>
+                  <span>rev {decision.fromRevision} → {decision.toRevision}</span>
+                  {decision.run ? <span className="mono">{decision.run.publicId}</span> : null}
+                  {decision.reason ? <span>{decision.reason}</span> : null}
+                  <span className="observation-card__meta">{formatWhen(decision.createdAt)}</span>
                 </li>
               ))}
             </ul>

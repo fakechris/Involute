@@ -1,5 +1,7 @@
 import type { ActorKind, Issue, Prisma, PrismaClient, User } from '@prisma/client';
 
+import { createValidationError, WORK_REVISION_CONFLICT_MESSAGE } from './errors.js';
+
 export interface WriteActor {
   actorId?: string | null;
   actorKind: ActorKind;
@@ -23,6 +25,21 @@ export function writeActorFromViewer(viewer: User | null, surface = 'graphql'): 
 }
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
+
+export async function claimIssueRevision(
+  prisma: DatabaseClient,
+  id: string,
+  expectedRevision: number,
+): Promise<void> {
+  const result = await prisma.issue.updateMany({
+    where: { id, revision: expectedRevision },
+    data: { revision: { increment: 1 } },
+  });
+
+  if (result.count !== 1) {
+    throw createValidationError(WORK_REVISION_CONFLICT_MESSAGE);
+  }
+}
 
 const ISSUE_SNAPSHOT_SELECT = {
   acceptance: true,

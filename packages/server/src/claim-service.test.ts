@@ -10,7 +10,11 @@ import {
   WORK_COMMIT_FORBIDDEN_MESSAGE,
   WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE,
   WORK_NOT_CANDIDATE_MESSAGE,
+  WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE,
+  WORK_READY_STATE_MISSING_MESSAGE,
   WORK_REJECT_FORBIDDEN_MESSAGE,
+  WORK_REVISION_CONFLICT_MESSAGE,
+  WORK_IDEMPOTENCY_CONFLICT_MESSAGE,
 } from './errors.ts';
 import { claimWork, commitWork, proposeWork, rejectWork } from './claim-service.ts';
 import { listReadyWork } from './context-service.ts';
@@ -72,6 +76,36 @@ describe('claim service', () => {
 
     const readyQueue = await listReadyWork(prisma);
     expect(readyQueue.nodes.map((issue) => issue.id)).not.toContain(first.id);
+  });
+
+  it('scopes idempotency by team and rejects reuse with a different payload', async () => {
+    const otherTeam = await prisma.team.create({
+      data: {
+        key: 'OTHER',
+        name: 'Other',
+        states: { create: { name: 'Backlog', position: 0, type: 'BACKLOG' } },
+      },
+    });
+    const first = await proposeWork(prisma, {
+      idempotencyKey: 'same-key', teamId: team.id, title: 'First payload',
+    });
+    const other = await proposeWork(prisma, {
+      idempotencyKey: 'same-key', teamId: otherTeam.id, title: 'Other team payload',
+    });
+    expect(other.id).not.toBe(first.id);
+    await expect(proposeWork(prisma, {
+      idempotencyKey: 'same-key', teamId: team.id, title: 'Changed payload',
+    })).rejects.toThrow(WORK_IDEMPOTENCY_CONFLICT_MESSAGE);
+  });
+
+  it('creates one candidate for concurrent propose retries', async () => {
+    const input = { idempotencyKey: 'concurrent-propose', teamId: team.id, title: 'One candidate' };
+    const [left, right] = await Promise.all([
+      proposeWork(prisma, input),
+      proposeWork(prisma, input),
+    ]);
+    expect(left.id).toBe(right.id);
+    expect(await prisma.issue.count({ where: { title: 'One candidate' } })).toBe(1);
   });
 
   it('commits only with acceptance and a human owner, then allows claim', async () => {
@@ -139,6 +173,71 @@ describe('claim service', () => {
     expect(refreshed.claim.leaseUntil.getTime()).toBeGreaterThanOrEqual(
       claimed.claim.leaseUntil.getTime(),
     );
+  });
+
+  it('atomically rejects concurrent commits with the same expected revision', async () => {
+    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'CAS commit' });
+    const mutation = () => commitWork(
+      prisma,
+      candidate.id,
+      { acceptance: 'exactly one commit wins', assigneeId: human.id, expectedRevision: candidate.revision },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    );
+    const results = await Promise.allSettled([mutation(), mutation()]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.find((result) => result.status === 'rejected');
+    expect(rejected).toBeDefined();
+    expect((rejected as PromiseRejectedResult).reason.message).toMatch(
+      new RegExp(`${WORK_REVISION_CONFLICT_MESSAGE}|Only candidate work`),
+    );
+  });
+
+  it('rejects a human owner who is not a member of the work team', async () => {
+    const outsider = await prisma.user.create({
+      data: { actorKind: 'HUMAN', email: 'outsider@example.test', name: 'Outsider' },
+    });
+    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Team-scoped ownership' });
+
+    await expect(commitWork(
+      prisma,
+      candidate.id,
+      {
+        acceptance: 'owner is selected from the work team',
+        assigneeId: outsider.id,
+        expectedRevision: candidate.revision,
+      },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    )).rejects.toThrow(WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE);
+  });
+
+  it('refuses to commit when the team has no unstarted state', async () => {
+    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'No ready state' });
+    await prisma.workflowState.delete({ where: { id: ready.id } });
+
+    await expect(commitWork(
+      prisma,
+      candidate.id,
+      { acceptance: 'must remain claimable', assigneeId: human.id, expectedRevision: candidate.revision },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    )).rejects.toThrow(WORK_READY_STATE_MISSING_MESSAGE);
+  });
+
+  it('lists and claims ready committed work of every work kind', async () => {
+    const candidate = await proposeWork(prisma, { kind: 'EPIC', teamId: team.id, title: 'Claimable epic' });
+    const committed = await commitWork(
+      prisma,
+      candidate.id,
+      { acceptance: 'epic is executable', assigneeId: human.id, expectedRevision: candidate.revision },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    );
+
+    expect((await listReadyWork(prisma)).nodes.map((work) => work.id)).toContain(committed.id);
+    await expect(claimWork(
+      prisma,
+      committed.id,
+      {},
+      { actorId: agent.id, actorKind: 'AGENT', surface: 'test' },
+    )).resolves.toMatchObject({ work: { id: committed.id, kind: 'EPIC' } });
   });
 
   it('forbids agents from committing and does not treat In Progress as a claim', async () => {

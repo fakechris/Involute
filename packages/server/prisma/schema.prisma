@@ -27,6 +27,7 @@ enum WorkflowStateType {
   BACKLOG
   UNSTARTED
   STARTED
+  REVIEW
   COMPLETED
   CANCELED
 }
@@ -77,6 +78,11 @@ enum WorkEvidenceKind {
   DECISION
 }
 
+enum WorkReviewDecisionKind {
+  ACCEPTED
+  REJECTED
+}
+
 model Team {
   id              String          @id @default(uuid()) @db.Uuid
   key             String          @unique
@@ -88,6 +94,7 @@ model Team {
   memberships     TeamMembership[]
   projects        Project[]
   cycles          Cycle[]
+  idempotencyKeys WorkIdempotency[]
 
   @@index([key])
 }
@@ -130,6 +137,23 @@ model User {
   workAudits     WorkAudit[] @relation("WorkAuditActor")
   workClaims     WorkClaim[] @relation("WorkClaimActor")
   workRuns       WorkRun[]   @relation("WorkRunActor")
+  workEvidence   WorkEvidence[] @relation("WorkEvidenceActor")
+  reviewDecisions WorkReviewDecision[] @relation("WorkReviewDecisionReviewer")
+  agentCredentials AgentCredential[]
+}
+
+model AgentCredential {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  tokenHash String   @unique
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+  revokedAt DateTime?
+
+  @@index([userId])
+  @@index([revokedAt, expiresAt])
 }
 
 model Session {
@@ -196,6 +220,7 @@ model Issue {
   idempotencyKeys   WorkIdempotency[]
   runs              WorkRun[]
   evidence          WorkEvidence[]
+  reviewDecisions   WorkReviewDecision[]
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
@@ -336,6 +361,7 @@ model WorkClaim {
   leaseUntil DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  runs       WorkRun[]
 
   @@index([actorId])
   @@index([leaseUntil])
@@ -345,12 +371,17 @@ model WorkIdempotency {
   id        String   @id @default(uuid()) @db.Uuid
   key       String
   operation String
-  workId    String   @db.Uuid
-  work      Issue    @relation(fields: [workId], references: [id], onDelete: Cascade)
+  teamId    String   @db.Uuid
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  actorKey  String
+  requestHash String
+  workId    String?  @db.Uuid
+  work      Issue?   @relation(fields: [workId], references: [id], onDelete: SetNull)
   actorId   String?  @db.Uuid
   createdAt DateTime @default(now())
 
-  @@unique([operation, key])
+  @@unique([teamId, actorKey, operation, key], name: "work_idempotency_scope")
+  @@index([teamId])
   @@index([workId])
 }
 
@@ -366,6 +397,9 @@ model WorkRun {
   work        Issue         @relation(fields: [workId], references: [id], onDelete: Cascade)
   actorId     String?       @db.Uuid
   actor       User?         @relation("WorkRunActor", fields: [actorId], references: [id], onDelete: SetNull)
+  claimId     String?       @db.Uuid
+  claim       WorkClaim?    @relation(fields: [claimId], references: [id], onDelete: SetNull)
+  baseRevision Int?
   status      WorkRunStatus @default(RUNNING)
   phase       String?
   summary     String?
@@ -373,11 +407,13 @@ model WorkRun {
   startedAt   DateTime      @default(now())
   endedAt     DateTime?
   evidence    WorkEvidence[]
+  reviewDecisions WorkReviewDecision[]
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
   @@index([workId, createdAt])
   @@index([actorId])
+  @@index([claimId])
   @@index([status])
 }
 
@@ -387,6 +423,8 @@ model WorkEvidence {
   work      Issue            @relation(fields: [workId], references: [id], onDelete: Cascade)
   runId     String?          @db.Uuid
   run       WorkRun?         @relation(fields: [runId], references: [id], onDelete: SetNull)
+  actorId   String?          @db.Uuid
+  actor     User?            @relation("WorkEvidenceActor", fields: [actorId], references: [id], onDelete: SetNull)
   kind      WorkEvidenceKind
   url       String
   summary   String?
@@ -394,6 +432,26 @@ model WorkEvidence {
 
   @@index([workId, createdAt])
   @@index([runId])
+  @@index([actorId])
+}
+
+model WorkReviewDecision {
+  id             String                 @id @default(uuid()) @db.Uuid
+  workId         String                 @db.Uuid
+  work           Issue                  @relation(fields: [workId], references: [id], onDelete: Cascade)
+  runId          String?                @db.Uuid
+  run            WorkRun?               @relation(fields: [runId], references: [id], onDelete: SetNull)
+  reviewerId     String                 @db.Uuid
+  reviewer       User                   @relation("WorkReviewDecisionReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+  decision       WorkReviewDecisionKind
+  reason         String?
+  fromRevision   Int
+  toRevision     Int
+  createdAt      DateTime               @default(now())
+
+  @@index([workId, createdAt])
+  @@index([runId])
+  @@index([reviewerId])
 }
 
 model EventOutbox {
@@ -402,9 +460,26 @@ model EventOutbox {
   payload     Json
   createdAt   DateTime  @default(now())
   deliveredAt DateTime?
+  deadLetteredAt DateTime?
   attempts    Int       @default(0)
   lastError   String?
+  deliveries EventOutboxDelivery[]
 
   @@index([deliveredAt, createdAt])
   @@index([type])
+}
+
+model EventOutboxDelivery {
+  id          String      @id @default(uuid()) @db.Uuid
+  eventId     String      @db.Uuid
+  event       EventOutbox @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  targetHash  String
+  attempts    Int         @default(0)
+  deliveredAt DateTime?
+  lastError   String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([eventId, targetHash])
+  @@index([deliveredAt, attempts])
 }

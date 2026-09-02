@@ -3,7 +3,7 @@ import type { PrismaClient, Team, WorkflowState } from '@prisma/client';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
+import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { getWorkContext, listReadyWork } from './context-service.ts';
 import { createIssue, updateIssue } from './issue-service.ts';
@@ -148,6 +148,11 @@ describe('context service', () => {
       where: { id: otherRepo.id },
       data: { repository: 'other/repo', updatedAt: new Date('2026-08-31T08:00:00.000Z') },
     });
+    const owner = await prisma.user.findUniqueOrThrow({ where: { email: DEFAULT_ADMIN_EMAIL } });
+    await prisma.issue.updateMany({
+      where: { commitmentStatus: 'COMMITTED' },
+      data: { acceptance: 'ready contract', assigneeId: owner.id },
+    });
     await prisma.issue.update({
       where: { id: high.id },
       data: { updatedAt: new Date('2026-08-31T12:00:00.000Z') },
@@ -162,12 +167,12 @@ describe('context service', () => {
 
     expect(identifiers).toEqual([
       urgent.identifier,
-      backlogItem.identifier,
       otherRepo.identifier,
       high.identifier,
       none.identifier,
     ]);
     expect(identifiers).not.toContain(started.identifier);
+    expect(identifiers).not.toContain(backlogItem.identifier);
     expect(identifiers).not.toContain(finished.identifier);
     expect(identifiers).not.toContain(candidate.identifier);
     expect(identifiers).not.toContain(blocked.identifier);
@@ -175,6 +180,10 @@ describe('context service', () => {
 
     const filtered = await listReadyWork(prisma, { repository: 'other/repo' });
     expect(filtered.nodes.map((issue) => issue.identifier)).toEqual([otherRepo.identifier]);
+
+    await prisma.issue.update({ where: { id: urgent.id }, data: { stateId: done.id } });
+    const afterBlockerCompleted = await listReadyWork(prisma, { first: 20 });
+    expect(afterBlockerCompleted.nodes.map((issue) => issue.identifier)).toContain(blocked.identifier);
   });
 });
 

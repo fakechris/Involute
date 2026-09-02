@@ -8,9 +8,10 @@ import type { Plugin } from 'graphql-yoga';
 import { DEFAULT_ADMIN_EMAIL } from './constants.js';
 import { createNotAuthenticatedError, NOT_AUTHENTICATED_MESSAGE } from './errors.js';
 import { getSessionRecord, readCookieValue, SESSION_COOKIE_NAME } from './session.js';
+import { resolveAgentPrincipal } from './agent-credentials.js';
 
 export interface GraphQLContext {
-  authMode: 'none' | 'session' | 'token';
+  authMode: 'agent-token' | 'none' | 'session' | 'token';
   isTrustedSystem: boolean;
   prisma: PrismaClient;
   viewer: User | null;
@@ -174,6 +175,21 @@ async function computeRequestAuthentication({
       authorized: true,
       isTrustedSystem: false,
       viewer: session.user,
+    };
+  }
+
+  const requestToken = extractTokenFromAuthorizationHeader(request.headers.get('authorization'));
+  const pathname = new URL(request.url).pathname;
+  const agent = (pathname === '/mcp' || pathname.startsWith('/mcp/'))
+    ? await resolveAgentPrincipal(prisma, requestToken)
+    : null;
+
+  if (agent) {
+    return {
+      authMode: 'agent-token',
+      authorized: true,
+      isTrustedSystem: false,
+      viewer: agent,
     };
   }
 

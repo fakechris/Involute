@@ -669,6 +669,7 @@ export function BoardPage() {
           variables: {
             id: issue.id,
             input: {
+              expectedRevision: issue.revision,
               stateId: bulkTargetStateId,
             },
           },
@@ -761,6 +762,7 @@ export function BoardPage() {
           variables: {
             id: issue.id,
             input: {
+              expectedRevision: issue.revision,
               assigneeId: nextAssigneeId,
             },
           },
@@ -869,6 +871,7 @@ export function BoardPage() {
           variables: {
             id: issue.id,
             input: {
+              expectedRevision: issue.revision,
               labelIds,
             },
           },
@@ -974,6 +977,7 @@ export function BoardPage() {
           variables: {
             id: issue.id,
             input: {
+              expectedRevision: issue.revision,
               labelIds,
             },
           },
@@ -1166,7 +1170,7 @@ export function BoardPage() {
       const result = await runIssueUpdate({
         variables: {
           id: issue.id,
-          input,
+          input: { ...input, expectedRevision: issue.revision },
         },
       });
 

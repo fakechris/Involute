@@ -9,6 +9,7 @@ import type {
   WorkEvidence,
   WorkKind,
   WorkRun,
+  WorkReviewDecision,
   WorkflowStateType,
 } from '@prisma/client';
 
@@ -17,7 +18,7 @@ import { ISSUE_NOT_FOUND_MESSAGE, createNotFoundError } from './errors.js';
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
 export const READY_EXCLUDED_STATE_NAMES = ['In Progress', 'In Review', 'Done', 'Canceled'] as const;
-export const READY_EXCLUDED_STATE_TYPES: WorkflowStateType[] = ['STARTED', 'COMPLETED', 'CANCELED'];
+export const READY_EXCLUDED_STATE_TYPES: WorkflowStateType[] = ['STARTED', 'REVIEW', 'COMPLETED', 'CANCELED'];
 export const READY_EXCLUDED_LABELS = ['blocked', 'needs-clarification'] as const;
 export const READY_PRIORITY_ORDER = [1, 2, 3, 4, 0] as const;
 export const DEFAULT_READY_WORK_FIRST = 20;
@@ -49,6 +50,7 @@ export interface WorkContextBundle {
   claim: (WorkClaim & { actor: User }) | null;
   evidence: WorkEvidence[];
   runs: WorkRun[];
+  reviewDecisions: Array<WorkReviewDecision & { reviewer: User }>;
   work: Issue;
 }
 
@@ -83,7 +85,7 @@ export async function getWorkContext(
     throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
   }
 
-  const [ancestors, blockedBy, blocks, audits, claim, runs, evidence] = await Promise.all([
+  const [ancestors, blockedBy, blocks, audits, claim, runs, evidence, reviewDecisions] = await Promise.all([
     loadAncestors(prisma, work),
     loadLinkedIssues(prisma, work.id, 'BLOCKS', 'incoming'),
     loadLinkedIssues(prisma, work.id, 'BLOCKS', 'outgoing'),
@@ -107,6 +109,12 @@ export async function getWorkContext(
       orderBy: [{ createdAt: 'desc' }],
       take: MAX_CONTEXT_RUNS,
     }),
+    prisma.workReviewDecision.findMany({
+      where: { workId: work.id },
+      include: { reviewer: true, run: true },
+      orderBy: { createdAt: 'desc' },
+      take: MAX_CONTEXT_RUNS,
+    }),
   ]);
 
   return {
@@ -117,6 +125,7 @@ export async function getWorkContext(
     claim,
     evidence,
     runs,
+    reviewDecisions,
     work,
   };
 }
@@ -171,23 +180,41 @@ export async function listReadyWork(
   readableWhere?: Prisma.IssueWhereInput,
 ): Promise<{ hasNextPage: boolean; nodes: Issue[] }> {
   const first = clampFirst(input.first);
-  const where = combineWhere(readableWhere, buildReadyWorkWhere(input));
-  const candidates = await prisma.issue.findMany({
-    ...(where ? { where } : {}),
-    include: {
-      labels: true,
-      state: true,
-    },
-    take: MAX_READY_WORK_FIRST + 1,
-  });
-  const sorted = [...candidates].sort(compareReadyWork);
-  const limited = sorted.slice(0, MAX_READY_WORK_FIRST);
-  const nodes = limited.slice(0, first);
+  const baseWhere = combineWhere(readableWhere, buildReadyWorkWhere(input));
+  const priorities: Array<number | 'other'> = input.priority !== undefined && input.priority !== null
+    ? [input.priority]
+    : [...READY_PRIORITY_ORDER, 'other'];
+  const ordered: Issue[] = [];
+
+  for (const priority of priorities) {
+    const remaining = first + 1 - ordered.length;
+    if (remaining <= 0) break;
+    const priorityWhere: Prisma.IssueWhereInput = priority === 'other'
+      ? { priority: { notIn: [...READY_PRIORITY_ORDER] } }
+      : { priority };
+    const batch = await prisma.issue.findMany({
+      where: combineWhere(baseWhere, priorityWhere),
+      orderBy: [{ updatedAt: 'desc' }, { identifier: 'asc' }],
+      take: remaining,
+    });
+    ordered.push(...batch);
+  }
+  const nodes = ordered.slice(0, first);
 
   return {
-    hasNextPage: limited.length > first,
+    hasNextPage: ordered.length > first,
     nodes,
   };
+}
+
+export async function isWorkReadyForClaim(
+  prisma: DatabaseClient,
+  workId: string,
+): Promise<boolean> {
+  return Boolean(await prisma.issue.findFirst({
+    where: combineWhere({ id: workId }, buildReadyWorkWhere({})),
+    select: { id: true },
+  }));
 }
 
 export function compareReadyWork(
@@ -213,14 +240,12 @@ export function compareReadyWork(
 function buildReadyWorkWhere(input: ListReadyWorkInput): Prisma.IssueWhereInput {
   const clauses: Prisma.IssueWhereInput[] = [
     { commitmentStatus: 'COMMITTED' },
-    { kind: input.kind ?? 'ISSUE' },
+    { acceptance: { not: null } },
+    { assignee: { is: { actorKind: 'HUMAN' } } },
     {
       state: {
         is: {
-          AND: [
-            { type: { notIn: READY_EXCLUDED_STATE_TYPES } },
-            { name: { notIn: [...READY_EXCLUDED_STATE_NAMES] } },
-          ],
+          type: 'UNSTARTED',
         },
       },
     },
@@ -228,6 +253,10 @@ function buildReadyWorkWhere(input: ListReadyWorkInput): Prisma.IssueWhereInput 
       incomingLinks: {
         none: {
           type: 'BLOCKS',
+          from: {
+            commitmentStatus: 'COMMITTED',
+            state: { type: { notIn: ['COMPLETED', 'CANCELED'] } },
+          },
         },
       },
     },
@@ -254,6 +283,10 @@ function buildReadyWorkWhere(input: ListReadyWorkInput): Prisma.IssueWhereInput 
     },
   ];
 
+  if (input.kind) {
+    clauses.push({ kind: input.kind });
+  }
+
   if (input.repository) {
     clauses.push({ repository: input.repository });
   }
@@ -270,10 +303,6 @@ function buildReadyWorkWhere(input: ListReadyWorkInput): Prisma.IssueWhereInput 
         },
       },
     });
-  }
-
-  if (input.priority !== undefined && input.priority !== null) {
-    clauses.push({ priority: input.priority });
   }
 
   return { AND: clauses };

@@ -11,13 +11,17 @@ on:
         options:
           - tailscale
           - production
+      image_tag:
+        description: Exact image tag to deploy; defaults to sha-<workflow commit>
+        required: false
+        type: string
   push:
     branches:
       - main
 
 concurrency:
   group: deploy-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -40,7 +44,9 @@ jobs:
       INVOLUTE_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.INVOLUTE_GOOGLE_OAUTH_CLIENT_ID }}
       INVOLUTE_GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.INVOLUTE_GOOGLE_OAUTH_CLIENT_SECRET }}
       INVOLUTE_GOOGLE_OAUTH_REDIRECT_URI: ${{ secrets.INVOLUTE_GOOGLE_OAUTH_REDIRECT_URI }}
-      INVOLUTE_IMAGE_TAG: ${{ vars.INVOLUTE_IMAGE_TAG || 'latest' }}
+      INVOLUTE_WEBHOOK_URL: ${{ secrets.INVOLUTE_WEBHOOK_URL }}
+      INVOLUTE_WEBHOOK_SECRET: ${{ secrets.INVOLUTE_WEBHOOK_SECRET }}
+      DEPLOY_IMAGE_TAG_INPUT: ${{ inputs.image_tag || '' }}
       INVOLUTE_REQUIRE_GOOGLE_OAUTH: ${{ vars.INVOLUTE_REQUIRE_GOOGLE_OAUTH || 'true' }}
     steps:
       - name: Validate required deployment secrets
@@ -79,9 +85,27 @@ jobs:
               done
             fi
           fi
+          if [ -n "${INVOLUTE_WEBHOOK_URL:-}" ] && [ -z "${INVOLUTE_WEBHOOK_SECRET:-}" ]; then
+            echo "Missing required secret: INVOLUTE_WEBHOOK_SECRET" >&2
+            exit 1
+          fi
+          if [ -n "${INVOLUTE_WEBHOOK_SECRET:-}" ] && [ -z "${INVOLUTE_WEBHOOK_URL:-}" ]; then
+            echo "Missing required secret: INVOLUTE_WEBHOOK_URL" >&2
+            exit 1
+          fi
 
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Resolve immutable image tag
+        run: |
+          set -eu
+          image_tag="${DEPLOY_IMAGE_TAG_INPUT:-sha-$(printf '%s' "$GITHUB_SHA" | cut -c1-12)}"
+          if ! printf '%s' "$image_tag" | grep -Eq '^sha-[0-9a-f]{12,40}$'; then
+            echo "Deployments require an immutable sha-<12-40 lowercase hex> image tag, not '$image_tag'." >&2
+            exit 1
+          fi
+          printf 'INVOLUTE_IMAGE_TAG=%s\n' "$image_tag" >> "$GITHUB_ENV"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -129,6 +153,8 @@ jobs:
                           "involute_google_oauth_client_id": os.environ.get("INVOLUTE_GOOGLE_OAUTH_CLIENT_ID", ""),
                           "involute_google_oauth_client_secret": os.environ.get("INVOLUTE_GOOGLE_OAUTH_CLIENT_SECRET", ""),
                           "involute_google_oauth_redirect_uri": os.environ.get("INVOLUTE_GOOGLE_OAUTH_REDIRECT_URI", ""),
+                          "involute_webhook_url": os.environ.get("INVOLUTE_WEBHOOK_URL", ""),
+                          "involute_webhook_secret": os.environ.get("INVOLUTE_WEBHOOK_SECRET", ""),
                           "involute_image_tag": os.environ.get("INVOLUTE_IMAGE_TAG", "latest"),
                           "involute_require_google_oauth": os.environ.get("INVOLUTE_REQUIRE_GOOGLE_OAUTH", "true"),
                       }

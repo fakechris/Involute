@@ -13,19 +13,35 @@ import {
   WORK_COMMIT_REQUIRES_OWNER_MESSAGE,
   WORK_NOT_CANDIDATE_MESSAGE,
   WORK_NOT_COMMITTED_MESSAGE,
+  WORK_NOT_READY_MESSAGE,
   WORK_OWNER_MUST_BE_HUMAN_MESSAGE,
+  WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE,
+  WORK_READY_STATE_MISSING_MESSAGE,
   WORK_RELATED_NOT_FOUND_MESSAGE,
   WORK_REVISION_CONFLICT_MESSAGE,
+  WORK_IDEMPOTENCY_CONFLICT_MESSAGE,
+  WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE,
 } from './errors.js';
-import { findWorkByIdOrIdentifier } from './context-service.js';
+import { findWorkByIdOrIdentifier, isWorkReadyForClaim } from './context-service.js';
 import { enqueueWorkEvent } from './event-outbox.js';
 import { createWorkLink } from './link-service.js';
-import { INTERNAL_WRITE_ACTOR, recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
+import { createIssueInTransaction } from './issue-service.js';
+import {
+  completeWorkIdempotency,
+  hashIdempotencyRequest,
+  reserveWorkIdempotency,
+} from './idempotency.js';
+import {
+  claimIssueRevision,
+  INTERNAL_WRITE_ACTOR,
+  recordWorkAudit,
+  selectIssueSnapshot,
+  type WriteActor,
+} from './work-service.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
 export const DEFAULT_CLAIM_LEASE_SECONDS = 2 * 60 * 60;
-export const ACCEPT_STATE_NAMES = ['Done', 'Canceled'] as const;
 
 export type WorkPermission = 'propose' | 'commit' | 'reject' | 'claim' | 'update' | 'accept';
 
@@ -90,99 +106,61 @@ export async function proposeWork(
 ): Promise<Issue> {
   assertActorCan(actor.actorKind, 'propose');
 
-  if (input.idempotencyKey) {
-    const existing = await prisma.workIdempotency.findUnique({
-      where: {
-        operation_key: {
-          key: input.idempotencyKey,
-          operation: 'propose',
-        },
-      },
-      include: {
-        work: true,
-      },
-    });
-
-    if (existing) {
-      return existing.work;
-    }
-  }
-
-  const { createIssue } = await import('./issue-service.js');
-  const createInput: import('./issue-service.js').CreateIssueInput = {
-    commitmentStatus: 'CANDIDATE',
-    teamId: input.teamId,
-    title: input.title,
-  };
-
-  if (input.acceptance !== undefined) createInput.acceptance = input.acceptance;
-  if (input.constraints !== undefined) createInput.constraints = input.constraints;
-  if (input.description !== undefined) createInput.description = input.description;
-  if (input.kind !== undefined && input.kind !== null) createInput.kind = input.kind;
-  if (input.outcome !== undefined) createInput.outcome = input.outcome;
-  if (input.repository !== undefined) createInput.repository = input.repository;
-  if (input.scope !== undefined) createInput.scope = input.scope;
-  if (input.verification !== undefined) createInput.verification = input.verification;
-
-  const created = await createIssue(prisma, createInput, actor);
-
-  if (input.relatedWorkId) {
-    const related = await findWorkByIdOrIdentifier(prisma, input.relatedWorkId);
-
-    if (!related) {
-      throw createNotFoundError(WORK_RELATED_NOT_FOUND_MESSAGE);
-    }
-
-    await createWorkLink(prisma, {
-      actor,
-      fromId: created.id,
-      toId: related.id,
-      type: input.relatedWorkType ?? 'DISCOVERED_DURING',
-    });
-  }
-
-  if (input.idempotencyKey) {
-    try {
-      await prisma.workIdempotency.create({
-        data: {
-          actorId: actor.actorId ?? null,
-          key: input.idempotencyKey,
-          operation: 'propose',
-          workId: created.id,
-        },
+  return prisma.$transaction(async (transaction) => {
+    let idempotencyId: string | null = null;
+    if (input.idempotencyKey) {
+      const reservation = await reserveWorkIdempotency(transaction, {
+        actor,
+        key: input.idempotencyKey,
+        operation: 'propose',
+        requestHash: hashIdempotencyRequest({ ...input, idempotencyKey: null }),
+        teamId: input.teamId,
       });
-    } catch (error) {
-      if (isUniqueConstraintError(error)) {
-        const raced = await prisma.workIdempotency.findUnique({
-          where: {
-            operation_key: {
-              key: input.idempotencyKey,
-              operation: 'propose',
-            },
-          },
-          include: { work: true },
-        });
-
-        if (raced) {
-          return raced.work;
+      if (!reservation.created) {
+        if (!reservation.record.workId) {
+          throw createValidationError(WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE);
         }
+        return transaction.issue.findUniqueOrThrow({ where: { id: reservation.record.workId } });
       }
-
-      throw error;
+      idempotencyId = reservation.record.id;
     }
-  }
 
-  await enqueueWorkEvent(prisma, {
-    payload: {
-      title: created.title,
-      actorId: actor.actorId ?? null,
-    },
-    type: 'work.proposed',
-    workId: created.id,
-    workIdentifier: created.identifier,
+    const createInput: import('./issue-service.js').CreateIssueInput = {
+      commitmentStatus: 'CANDIDATE',
+      teamId: input.teamId,
+      title: input.title,
+    };
+    if (input.acceptance !== undefined) createInput.acceptance = input.acceptance;
+    if (input.constraints !== undefined) createInput.constraints = input.constraints;
+    if (input.description !== undefined) createInput.description = input.description;
+    if (input.kind !== undefined && input.kind !== null) createInput.kind = input.kind;
+    if (input.outcome !== undefined) createInput.outcome = input.outcome;
+    if (input.repository !== undefined) createInput.repository = input.repository;
+    if (input.scope !== undefined) createInput.scope = input.scope;
+    if (input.verification !== undefined) createInput.verification = input.verification;
+
+    const created = await createIssueInTransaction(transaction, createInput, actor);
+    if (input.relatedWorkId) {
+      const related = await findWorkByIdOrIdentifier(transaction, input.relatedWorkId);
+      if (!related) throw createNotFoundError(WORK_RELATED_NOT_FOUND_MESSAGE);
+      await createWorkLink(transaction, {
+        actor,
+        fromId: created.id,
+        toId: related.id,
+        type: input.relatedWorkType ?? 'DISCOVERED_DURING',
+      });
+    }
+    if (idempotencyId) {
+      await completeWorkIdempotency(transaction, idempotencyId, created.id);
+    }
+    await enqueueWorkEvent(transaction, {
+      payload: { title: created.title, actorId: actor.actorId ?? null },
+      type: 'work.proposed',
+      workId: created.id,
+      workIdentifier: created.identifier,
+    });
+    return created;
   });
-
-  return created;
 }
 
 export async function commitWork(
@@ -204,6 +182,8 @@ export async function commitWork(
       throw createValidationError(WORK_REVISION_CONFLICT_MESSAGE);
     }
 
+    await claimIssueRevision(transaction, existing.id, input.expectedRevision);
+
     const acceptance = nonEmpty(input.acceptance) ?? nonEmpty(existing.acceptance);
     if (!acceptance) {
       throw createValidationError(WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE);
@@ -216,20 +196,35 @@ export async function commitWork(
 
     const owner = await transaction.user.findUnique({
       where: { id: assigneeId },
-      select: { id: true, actorKind: true },
+      select: {
+        id: true,
+        actorKind: true,
+        memberships: {
+          where: { teamId: existing.teamId },
+          take: 1,
+          select: { id: true },
+        },
+      },
     });
 
     if (!owner || owner.actorKind !== 'HUMAN') {
       throw createValidationError(WORK_OWNER_MUST_BE_HUMAN_MESSAGE);
     }
+    if (owner.memberships.length === 0) {
+      throw createValidationError(WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE);
+    }
 
     const readyState = await transaction.workflowState.findFirst({
       where: {
         teamId: existing.teamId,
-        name: 'Ready',
+        type: 'UNSTARTED',
       },
+      orderBy: { position: 'asc' },
       select: { id: true },
     });
+    if (!readyState) {
+      throw createValidationError(WORK_READY_STATE_MISSING_MESSAGE);
+    }
 
     const updated = await transaction.issue.update({
       where: { id: existing.id },
@@ -239,9 +234,8 @@ export async function commitWork(
         commitmentStatus: 'COMMITTED',
         constraints: input.constraints === undefined ? existing.constraints : input.constraints,
         outcome: input.outcome === undefined ? existing.outcome : input.outcome,
-        revision: { increment: 1 },
         scope: input.scope === undefined ? existing.scope : input.scope,
-        ...(readyState ? { stateId: readyState.id } : {}),
+        stateId: readyState.id,
         verification: input.verification === undefined ? existing.verification : input.verification,
       },
     });
@@ -288,6 +282,9 @@ export async function rejectWork(
       throw createValidationError(WORK_REVISION_CONFLICT_MESSAGE);
     }
 
+
+    await claimIssueRevision(transaction, existing.id, input.expectedRevision);
+
     const reason = nonEmpty(input.reason);
     const actorForAudit: WriteActor = { ...actor };
     if (reason) {
@@ -298,7 +295,6 @@ export async function rejectWork(
       where: { id: existing.id },
       data: {
         commitmentStatus: 'REJECTED',
-        revision: { increment: 1 },
       },
     });
 
@@ -336,33 +332,50 @@ export async function claimWork(
     throw createValidationError(WORK_CLAIM_REQUIRES_ACTOR_MESSAGE);
   }
 
-  if (input.idempotencyKey) {
-    const existingKey = await prisma.workIdempotency.findUnique({
-      where: {
-        operation_key: {
-          key: input.idempotencyKey,
-          operation: 'claim',
-        },
-      },
-    });
-
-    if (existingKey) {
-      const existing = await prisma.workClaim.findUnique({
-        where: { workId: existingKey.workId },
-        include: { work: true },
-      });
-
-      if (existing) {
-        return { claim: existing, work: existing.work };
-      }
-    }
-  }
-
   const result = await prisma.$transaction(async (transaction) => {
     const work = await requireWork(transaction, id);
 
     if (work.commitmentStatus !== 'COMMITTED') {
       throw createValidationError(WORK_NOT_COMMITTED_MESSAGE);
+    }
+
+    const currentClaim = await transaction.workClaim.findUnique({ where: { workId: work.id } });
+    if (currentClaim && currentClaim.leaseUntil > new Date() && currentClaim.actorId !== actor.actorId) {
+      throw createValidationError(WORK_ALREADY_CLAIMED_MESSAGE);
+    }
+    const renewingOwnClaim = Boolean(
+      currentClaim && currentClaim.actorId === actor.actorId && currentClaim.leaseUntil > new Date(),
+    );
+    if (!renewingOwnClaim && !(await isWorkReadyForClaim(transaction, work.id))) {
+      throw createValidationError(WORK_NOT_READY_MESSAGE);
+    }
+
+    let idempotencyId: string | null = null;
+    if (input.idempotencyKey) {
+      const reservation = await reserveWorkIdempotency(transaction, {
+        actor,
+        key: input.idempotencyKey,
+        operation: 'claim',
+        requestHash: hashIdempotencyRequest({
+          leaseSeconds: input.leaseSeconds ?? null,
+          workId: work.id,
+        }),
+        teamId: work.teamId,
+      });
+      if (!reservation.created) {
+        if (reservation.record.workId !== work.id) {
+          throw createValidationError(WORK_IDEMPOTENCY_CONFLICT_MESSAGE);
+        }
+        const existing = await transaction.workClaim.findUnique({
+          where: { workId: work.id },
+          include: { work: true },
+        });
+        if (!existing || existing.actorId !== actor.actorId) {
+          throw createValidationError(WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE);
+        }
+        return { claim: existing, work: existing.work };
+      }
+      idempotencyId = reservation.record.id;
     }
 
     const leaseUntil = new Date(
@@ -377,25 +390,7 @@ export async function claimWork(
       workId: work.id,
     });
 
-    if (input.idempotencyKey) {
-      await transaction.workIdempotency.upsert({
-        where: {
-          operation_key: {
-            key: input.idempotencyKey,
-            operation: 'claim',
-          },
-        },
-        create: {
-          actorId: actor.actorId ?? null,
-          key: input.idempotencyKey,
-          operation: 'claim',
-          workId: work.id,
-        },
-        update: {
-          workId: work.id,
-        },
-      });
-    }
+    if (idempotencyId) await completeWorkIdempotency(transaction, idempotencyId, work.id);
 
     await enqueueWorkEvent(transaction, {
       payload: {
@@ -504,6 +499,6 @@ function isUniqueConstraintError(error: unknown): boolean {
   return tag === 'PrismaClientKnownRequestError' && (error as { code?: string }).code === 'P2002';
 }
 
-export function isAcceptStateName(name: string): boolean {
-  return (ACCEPT_STATE_NAMES as readonly string[]).includes(name);
+export function isAcceptStateType(type: string): boolean {
+  return type === 'COMPLETED' || type === 'CANCELED';
 }

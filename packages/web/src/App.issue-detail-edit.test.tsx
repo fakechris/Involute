@@ -5,7 +5,12 @@ import { apolloMocks, boardQueryResult, getIssue, renderApp } from './test/app-t
 import { App } from './App';
 import type { IssueUpdateMutationData } from './board/types';
 
-function renderTestApp(queryState = { data: boardQueryResult, loading: false }, initialEntries: string[] = ['/']) {
+type TestQueryState = Exclude<Parameters<typeof renderApp>[1], string[]>;
+
+function renderTestApp(
+  queryState: TestQueryState = { data: boardQueryResult, loading: false },
+  initialEntries: string[] = ['/'],
+) {
   return renderApp(App, queryState, initialEntries);
 }
 
@@ -53,7 +58,7 @@ describe('App issue detail editing', () => {
       expect(mutate).toHaveBeenCalledWith({
         variables: {
           id: 'issue-1',
-          input: { title: 'Enter-saved title' },
+          input: { expectedRevision: 1, title: 'Enter-saved title' },
         },
       }),
     );
@@ -92,7 +97,7 @@ describe('App issue detail editing', () => {
       expect(mutate).toHaveBeenNthCalledWith(1, {
         variables: {
           id: 'issue-1',
-          input: { title: 'Updated backlog item' },
+          input: { expectedRevision: 1, title: 'Updated backlog item' },
         },
       }),
     );
@@ -126,7 +131,7 @@ describe('App issue detail editing', () => {
       expect(mutate).toHaveBeenCalledWith({
         variables: {
           id: 'issue-1',
-          input: { description: 'Updated description' },
+          input: { description: 'Updated description', expectedRevision: 1 },
         },
       }),
     );
@@ -164,7 +169,7 @@ describe('App issue detail editing', () => {
       expect(mutate).toHaveBeenCalledWith({
         variables: {
           id: 'issue-1',
-          input: { description: 'Locally edited draft' },
+          input: { description: 'Locally edited draft', expectedRevision: 1 },
         },
       }),
     );
@@ -218,7 +223,7 @@ describe('App issue detail editing', () => {
       expect(mutate).toHaveBeenCalledWith({
         variables: {
           id: 'issue-1',
-          input: { title: 'Persisted title' },
+          input: { expectedRevision: 1, title: 'Persisted title' },
         },
       }),
     );
@@ -228,5 +233,23 @@ describe('App issue detail editing', () => {
     drawer = await screen.findByLabelText('Issue detail drawer');
 
     expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Persisted title');
+  });
+
+  it('reloads the latest issue after a revision conflict before retrying', async () => {
+    const mutate = vi.fn().mockResolvedValue({
+      data: { issueUpdate: { success: false, issue: null } } satisfies IssueUpdateMutationData,
+    });
+    const latestIssue = { ...getIssue('issue-1'), revision: 2, title: 'Changed by another actor' };
+    const refetch = vi.fn().mockResolvedValue({ data: { issue: latestIssue } });
+    apolloMocks.useMutation.mockReturnValue([mutate]);
+
+    renderTestApp({ data: boardQueryResult, loading: false, refetch }, ['/issue/issue-1']);
+    const titleInput = await screen.findByLabelText('Issue title');
+    fireEvent.change(titleInput, { target: { value: 'My stale edit' } });
+    fireEvent.blur(titleInput);
+
+    expect(await screen.findByText(/latest version was reloaded/i)).toBeInTheDocument();
+    expect(refetch).toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByLabelText('Issue title')).toHaveValue('Changed by another actor'));
   });
 });

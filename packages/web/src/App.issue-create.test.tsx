@@ -14,6 +14,7 @@ describe('App issue creation', () => {
     const invIssues = Array.from({ length: 200 }, (_, index) => ({
       id: `inv-issue-${index + 1}`,
       identifier: `INV-${index + 1}`,
+      revision: 1,
       title: `Involute issue ${index + 1}`,
       description: `INV issue ${index + 1}`,
       priority: 0,
@@ -31,6 +32,7 @@ describe('App issue creation', () => {
     const sonIssue = {
       id: 'son-issue-425',
       identifier: 'SON-425',
+      revision: 1,
       title: 'Newest Sonata issue',
       description: 'Recently created in SON',
       priority: 0,
@@ -59,7 +61,7 @@ describe('App issue creation', () => {
       ['/'],
     );
 
-    fireEvent.change(await screen.findByLabelText('Select team'), {
+    fireEvent.change(await screen.findByLabelText('Select team', {}, { timeout: 3000 }), {
       target: { value: 'SON' },
     });
 
@@ -75,6 +77,7 @@ describe('App issue creation', () => {
           issue: {
             id: 'issue-3',
             identifier: 'INV-3',
+            revision: 1,
             title: 'Created issue',
             description: 'Created description',
             priority: 0,

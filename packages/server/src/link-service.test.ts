@@ -136,6 +136,20 @@ describe('link service', () => {
     expect(related).toHaveLength(2);
   });
 
+  it('serializes concurrent opposite blocking edges so a cycle cannot commit', async () => {
+    const a = await createIssue(prisma, { teamId: team.id, title: 'Concurrent A', stateId: backlog.id });
+    const b = await createIssue(prisma, { teamId: team.id, title: 'Concurrent B', stateId: backlog.id });
+    const results = await Promise.allSettled([
+      createWorkLink(prisma, { fromId: a.id, toId: b.id, type: 'BLOCKS' }),
+      createWorkLink(prisma, { fromId: b.id, toId: a.id, type: 'BLOCKS' }),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+    expect(await prisma.workLink.count({
+      where: { type: 'BLOCKS', OR: [{ fromId: a.id, toId: b.id }, { fromId: b.id, toId: a.id }] },
+    })).toBe(1);
+  });
+
   it('clears parentId when a contains link is deleted', async () => {
     const parent = await createIssue(prisma, { teamId: team.id, title: 'Parent', stateId: backlog.id });
     const child = await createIssue(prisma, { teamId: team.id, title: 'Child', stateId: backlog.id });

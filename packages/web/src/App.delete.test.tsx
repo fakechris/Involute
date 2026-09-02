@@ -74,6 +74,7 @@ const boardQueryResult: BoardPageQueryData = {
       {
         id: 'issue-1',
         identifier: 'INV-1',
+        revision: 1,
         title: 'Mutable issue',
         description: 'Initial description',
         priority: 0,

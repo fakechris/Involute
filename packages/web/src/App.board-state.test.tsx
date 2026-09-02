@@ -36,7 +36,7 @@ describe('App board state flows', () => {
     expect(mutate).toHaveBeenCalledWith({
       variables: {
         id: 'issue-1',
-        input: { stateId: 'state-progress' },
+        input: { expectedRevision: 1, stateId: 'state-progress' },
       },
     });
 
@@ -70,7 +70,7 @@ describe('App board state flows', () => {
       expect(mutate).toHaveBeenCalledWith({
         variables: {
           id: 'issue-1',
-          input: { stateId: 'state-ready' },
+          input: { expectedRevision: 1, stateId: 'state-ready' },
         },
       }),
     );

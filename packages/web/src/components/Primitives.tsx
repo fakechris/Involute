@@ -69,7 +69,7 @@ export function Kbd({ keys }: { keys: string | string[] }) {
 type BtnVariant = 'ghost' | 'subtle' | 'primary' | 'accent' | 'danger';
 
 export function Btn({
-  children, variant = 'ghost', size = 'sm', icon, kbd, onClick, active, title, style,
+  children, variant = 'ghost', size = 'sm', icon, kbd, onClick, active, disabled, title, style,
 }: {
   children?: ReactNode;
   variant?: BtnVariant;
@@ -78,6 +78,7 @@ export function Btn({
   kbd?: string | string[];
   onClick?: () => void;
   active?: boolean;
+  disabled?: boolean;
   title?: string;
   style?: CSSProperties;
 }) {
@@ -117,11 +118,12 @@ export function Btn({
   return (
     <button
       type="button"
+      disabled={disabled}
       title={title}
       onClick={onClick}
       onMouseEnter={handleEnter}
       onMouseLeave={handleLeave}
-      style={{ ...base, ...variants[variant], ...style }}
+      style={{ ...base, ...variants[variant], ...(disabled ? { cursor: 'not-allowed', opacity: 0.55 } : {}), ...style }}
     >
       {icon}
       {children ? <span>{children}</span> : null}

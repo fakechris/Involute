@@ -7,6 +7,8 @@ import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/s
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
 import { READ_ONLY_MCP_TOOLS, WRITE_MCP_TOOLS } from './mcp-tools.ts';
+import { hashAgentToken } from './agent-credentials.ts';
+import { createGraphQLContext } from './auth.ts';
 
 loadProjectEnvironment();
 
@@ -81,6 +83,51 @@ describe('Involute MCP', () => {
     expect(blocked.body.error.message).toContain('read-only');
   });
 
+  it('accepts revocable team-scoped agent tokens only on MCP', async () => {
+    const token = 'inv_agent_test-credential';
+    const agent = await prisma.user.create({
+      data: { actorKind: 'AGENT', email: 'mcp-agent@example.com', name: 'MCP Agent' },
+    });
+    await prisma.teamMembership.create({
+      data: { role: 'EDITOR', teamId: team.id, userId: agent.id },
+    });
+    const credential = await prisma.agentCredential.create({
+      data: { name: 'test', tokenHash: hashAgentToken(token), userId: agent.id },
+    });
+
+    const mcpResponse = await mcpRpcWithToken('/mcp/readonly', {
+      id: 'agent-tools',
+      method: 'tools/list',
+    }, token);
+    expect(mcpResponse.status).toBe(200);
+    expect(mcpResponse.body.result.tools).toHaveLength(READ_ONLY_MCP_TOOLS.length);
+
+    const graphqlResponse = await fetch(`${server.url}/graphql`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ query: '{ viewer { id } }' }),
+    });
+    expect((await graphqlResponse.json()).errors[0].message).toBe('Not authenticated');
+
+    const prefixLookalike = await createGraphQLContext({
+      authToken: TEST_AUTH_TOKEN,
+      prisma,
+      request: new Request(`${server.url}/mcp-evil`, {
+        headers: { authorization: `Bearer ${token}` },
+      }),
+    });
+    expect(prefixLookalike.authMode).toBe('none');
+
+    await prisma.agentCredential.update({
+      where: { id: credential.id },
+      data: { revokedAt: new Date() },
+    });
+    expect((await mcpRpcWithToken('/mcp/readonly', {
+      id: 'revoked-agent',
+      method: 'tools/list',
+    }, token)).status).toBe(401);
+  });
+
   it('runs search → context → propose → commit → claim without marking work done', async () => {
     await prisma.issue.create({
       data: {
@@ -130,6 +177,31 @@ describe('Involute MCP', () => {
     expect(readyIdentifiers(readyAfter)).not.toContain(committed.identifier);
     expect(claimed.work.commitmentStatus).toBe('COMMITTED');
   });
+
+  it('rejects invalid related-work types and missing evidence run IDs at runtime', async () => {
+    const invalidType = await mcpRpc('/mcp', {
+      id: 'invalid-related-type',
+      method: 'tools/call',
+      params: {
+        name: 'work_propose',
+        arguments: { team: DEFAULT_TEAM_KEY, title: 'Invalid relation', related_work_type: 'NOT_A_LINK' },
+      },
+    });
+    expect(invalidType.body.error.message).toContain('related_work_type');
+
+    const existing = await prisma.issue.create({
+      data: { identifier: 'INV-101', stateId: ready.id, teamId: team.id, title: 'Evidence target' },
+    });
+    const missingRun = await mcpRpc('/mcp', {
+      id: 'missing-run',
+      method: 'tools/call',
+      params: {
+        name: 'evidence_attach',
+        arguments: { work_id: existing.id, kind: 'test', url: 'https://example.test/report' },
+      },
+    });
+    expect(missingRun.body.error.message).toContain('run_id');
+  });
 });
 
 function readyIdentifiers(result: { nodes?: Array<{ identifier: string }> }): string[] {
@@ -166,4 +238,21 @@ async function mcpRpc(
     body: await response.json(),
     status: response.status,
   };
+}
+
+async function mcpRpcWithToken(
+  path: string,
+  message: { id: number | string; method: string; params?: unknown },
+  token: string,
+): Promise<{ body: any; status: number }> {
+  const response = await fetch(`${server.url}${path}`, {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', ...message }),
+  });
+  return { body: await response.json(), status: response.status };
 }

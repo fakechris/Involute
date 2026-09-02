@@ -644,6 +644,7 @@ Use `endCursor` as the next `after` value.
 Existing issues are work nodes. New fields are queryable; `issueCreate` / `issueUpdate` input shapes are unchanged.
 
 - `kind` defaults to `ISSUE`
+- `kind: PROJECT` means a work-graph project contract. It is not the legacy GraphQL `Project` row and is not synchronized with `projectId`; use `CONTAINS` links for new graph hierarchy.
 - `commitmentStatus` defaults to `COMMITTED` (imported and currently created issues are already commitments)
 - `revision` starts at `1` and increments on each domain update
 - `links` returns incident `WorkLink` rows (`CONTAINS`, `BLOCKS`, `DERIVED_FROM`, `DISCOVERED_DURING`, `RELATED_TO`, `DUPLICATE_OF`)

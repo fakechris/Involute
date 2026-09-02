@@ -17,7 +17,7 @@
         ['db', 'server', 'web']
         if (
           (involute_stack_profile | default(involute_default_stack_profile)) == 'tailscale'
-          or not (involute_enable_caddy | default(false) | bool)
+          or not (involute_enable_caddy | default(true) | bool)
         )
         else []
       }}
@@ -28,7 +28,7 @@
         '--profile caddy'
         if (
           (involute_stack_profile | default(involute_default_stack_profile)) == 'production'
-          and (involute_enable_caddy | default(false) | bool)
+          and (involute_enable_caddy | default(true) | bool)
         )
         else ''
       }}
@@ -63,6 +63,7 @@
       - "dist"
       - ".env"
       - ".env.production"
+      - ".backups"
       - "ops/ansible/inventory/hosts.yml"
       - ".tmp"
       - "playwright-report"
@@ -78,6 +79,18 @@
           - involute_viewer_assertion_secret | length > 0
           - involute_app_origin is defined
           - involute_app_origin | length > 0
+          - involute_image_tag is defined
+          - involute_image_tag | length > 0
+          - involute_image_tag is match('^sha-[0-9a-f]{12,40}$')
+          - >-
+            (
+              (involute_stack_profile | default(involute_default_stack_profile)) != 'production'
+            ) or (
+              involute_app_origin is match('^https://[^/]+(?:/.*)?$')
+            )
+          - >-
+            (involute_webhook_url | default('') | length == 0) or
+            (involute_webhook_secret | default('') | length > 0)
           - >-
             (
               (involute_stack_profile | default(involute_default_stack_profile)) != 'production'
@@ -115,7 +128,8 @@
         fail_msg: >-
           Missing or invalid deploy variables. Production requires a URL-safe
           involute_postgres_password matching ^[A-Za-z0-9._~-]+$ because it is
-          used in DATABASE_URL. Production also requires Google OAuth client ID,
+          used in DATABASE_URL, an HTTPS app origin, and an immutable image tag
+          matching ^sha-[0-9a-f]{12,40}$. Production also requires Google OAuth client ID,
           client secret, and redirect URI when involute_require_google_oauth is
           true. Tailscale deployments require involute_bind_address and either
           an admin allowlist, seeded default admin, or admin fallback.
@@ -156,6 +170,49 @@
       ansible.builtin.stat:
         path: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/docker-compose.prod.yml"
       register: involute_legacy_prod_compose
+
+    - name: Back up a running database before deployment
+      ansible.builtin.shell: >
+        backup_created=false;
+        for stack in
+        {{ (involute_env_target ~ ':' ~ involute_compose_files[0]) | quote }}
+        '.env.production:docker-compose.prod.yml'
+        '.env:docker-compose.yml'; do
+          env_file="${stack%%:*}";
+          compose_file="${stack#*:}";
+          if [ -f "$env_file" ] && [ -f "$compose_file" ] &&
+             docker compose --env-file "$env_file" -f "$compose_file"
+             ps --status running --services | grep -qx db; then
+            ENV_FILE="$PWD/$env_file"
+            COMPOSE_FILE="$PWD/$compose_file"
+            OUTPUT_DIR={{ (involute_deploy_path | default(involute_default_deploy_path)) ~ '/.backups' | quote }}
+            export ENV_FILE COMPOSE_FILE OUTPUT_DIR;
+            sh scripts/postgres-backup.sh;
+            backup_created=true;
+            break;
+          fi;
+        done;
+        if [ "$backup_created" = false ]; then
+          echo 'No running database; skipping pre-deploy backup.';
+        fi
+      args:
+        chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+      register: involute_backup
+      changed_when: "'Wrote backup' in involute_backup.stdout"
+
+    - name: Pull immutable application images before stopping services
+      ansible.builtin.shell: >
+        docker compose
+        {{ involute_compose_env_file_args }}
+        {{ involute_compose_profile_args }}
+        {{ involute_compose_file_args }}
+        pull server server-init web cli
+      args:
+        chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+      register: involute_image_pull
+      retries: 20
+      delay: 15
+      until: involute_image_pull.rc == 0
 
     - name: Stop legacy source-build stack if present
       ansible.builtin.shell: >
@@ -253,6 +310,18 @@
         status_code: 302
       register: involute_google_start_smoke
       failed_when: "'accounts.google.com' not in (involute_google_start_smoke.location | default(''))"
+
+    - name: Run authenticated production smoke including MCP
+      ansible.builtin.command:
+        argv:
+          - sh
+          - scripts/prod-smoke.sh
+          - "{{ involute_smoke_base_url }}"
+      args:
+        chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+      environment:
+        INVOLUTE_SMOKE_AUTH_TOKEN: "{{ involute_auth_token }}"
+      no_log: true
 
     - name: Show compose status
       ansible.builtin.shell: >

@@ -1,23 +1,26 @@
 import { gql } from '@apollo/client';
 
 export const CANDIDATES_PAGE_QUERY = gql`
-  query CandidatesPage($first: Int!, $filter: IssueFilter) {
+  query CandidatesPage($first: Int!, $after: String, $filter: IssueFilter) {
     teams {
       nodes {
         id
         key
         name
+        memberships {
+          nodes {
+            id
+            user {
+              id
+              name
+              email
+              actorKind
+            }
+          }
+        }
       }
     }
-    users {
-      nodes {
-        id
-        name
-        email
-        actorKind
-      }
-    }
-    issues(first: $first, filter: $filter) {
+    issues(first: $first, after: $after, filter: $filter) {
       nodes {
         id
         identifier
@@ -59,8 +62,8 @@ export const CANDIDATES_PAGE_QUERY = gql`
 `;
 
 export const WORK_GRAPH_PAGE_QUERY = gql`
-  query WorkGraphPage($first: Int!, $filter: IssueFilter) {
-    issues(first: $first, filter: $filter) {
+  query WorkGraphPage($first: Int!, $after: String, $filter: IssueFilter) {
+    issues(first: $first, after: $after, filter: $filter) {
       nodes {
         id
         identifier
@@ -87,6 +90,10 @@ export const WORK_GRAPH_PAGE_QUERY = gql`
             }
           }
         }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
   }
@@ -153,6 +160,9 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
       runs {
         id
         publicId
+        actorId
+        claimId
+        baseRevision
         status
         phase
         summary
@@ -162,10 +172,22 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
       }
       evidence {
         id
+        actorId
+        runId
         kind
         url
         summary
         createdAt
+      }
+      reviewDecisions {
+        id
+        decision
+        reason
+        fromRevision
+        toRevision
+        createdAt
+        reviewer { id name email }
+        run { id publicId status startedAt endedAt }
       }
       audits {
         id
@@ -205,6 +227,23 @@ export const WORK_REJECT_MUTATION = gql`
         id
         identifier
         commitmentStatus
+      }
+    }
+  }
+`;
+
+export const WORK_REVIEW_MUTATION = gql`
+  mutation WorkReview($id: String!, $input: WorkReviewInput!) {
+    workReview(id: $id, input: $input) {
+      success
+      issue {
+        id
+        identifier
+        revision
+      }
+      decision {
+        id
+        decision
       }
     }
   }

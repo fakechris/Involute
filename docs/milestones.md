@@ -20,7 +20,7 @@ Exit criteria:
 
 ## M1: Deployable self-hosting
 
-Status: done for the VPS path; keep the runbook current as the kernel ships.
+Status: deployment path implemented and previously exercised; the current mainline/kernel build is not deployed.
 
 Scope:
 
@@ -35,7 +35,7 @@ Scope:
 Done inside M1 already:
 
 - the Tailscale VPS deployment path has been exercised successfully against the latest mainline build
-- the public-domain deployment path is serving the latest mainline build over HTTPS
+- the public-domain deployment path has served an earlier mainline build over HTTPS; the current build still needs an immutable-image deploy and authenticated smoke
 - one backup and restore drill has been executed successfully
 - the canonical `SON` dataset has been refreshed from the source system into the VPS stack
 - operator runbook, restore script, and smoke checklist live in [docs/ops.md](./ops.md)
@@ -107,7 +107,7 @@ Exit criteria:
 
 ## M5: Agent-native work-graph kernel
 
-Status: implemented in tree. This is the Linear-replacement track.
+Status: released in `npm-v0.2.0`; production deployment pending. This is the Linear-replacement track.
 
 Involute replaces Linear as a callable project-state service, not as a board clone. Existing GraphQL Issue APIs stay as a generic compatibility facade for the web app and CLI. Web UI stays optional observation and governance.
 
@@ -121,7 +121,7 @@ Status: done.
 
 ### K1: Work node + typed links
 
-Status: implemented in tree, not shipped.
+Status: released in `npm-v0.2.0`; production deployment pending.
 
 - additive Prisma fields on `Issue`: kind, commitmentStatus, revision, contract fields, repository
 - `User.actorKind`
@@ -132,7 +132,7 @@ Status: implemented in tree, not shipped.
 
 ### K2: Context bundle + ready queue
 
-Status: implemented in tree, not shipped.
+Status: released in `npm-v0.2.0`; production deployment pending.
 
 - `getWorkContext` returns contract, contains-ancestors, blockers, and recent audits
 - `listReadyWork` returns committed, unblocked, unfinished work in urgency order
@@ -141,7 +141,7 @@ Status: implemented in tree, not shipped.
 
 ### K3: Propose / commit / claim
 
-Status: implemented in tree, not shipped.
+Status: released in `npm-v0.2.0`; production deployment pending.
 
 - `workPropose` creates `CANDIDATE` work that cannot enter the ready queue
 - `workCommit` requires acceptance criteria, a human owner, and `expectedRevision`
@@ -152,7 +152,7 @@ Status: implemented in tree, not shipped.
 
 ### K4: MCP + Skill
 
-Status: implemented in tree, not shipped.
+Status: released in `npm-v0.2.0`; production deployment pending.
 
 - Streamable HTTP JSON-RPC at `/mcp` and `/mcp/readonly` on the same Node process
 - tools call domain services: search, context, ready, propose, commit, update, link, claim
@@ -162,7 +162,7 @@ Status: implemented in tree, not shipped.
 
 ### K5: Run, evidence, events
 
-Status: implemented in tree, not shipped.
+Status: released in `npm-v0.2.0`; production deployment pending.
 
 - `WorkRun`, `WorkEvidence`, `EventOutbox`
 - `run_report` / `evidence_attach` via MCP, GraphQL, and CLI
@@ -171,7 +171,7 @@ Status: implemented in tree, not shipped.
 
 ### K6: Observation UI
 
-Status: implemented in tree, not shipped.
+Status: released in `npm-v0.2.0`; production deployment pending.
 
 - candidate review at `/candidates` with `workCommit` / `workReject`
 - contains/blocks graph at `/graph`

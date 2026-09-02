@@ -1,4 +1,4 @@
-import type { TeamSummary, UserSummary, WorkflowStateSummary } from '../board/types';
+import type { UserSummary, WorkflowStateSummary } from '../board/types';
 
 export type CommitmentStatus = 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
 export type WorkKind = 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
@@ -70,6 +70,9 @@ export interface GraphWorkNode {
 export interface WorkRunSummary {
   id: string;
   publicId: string;
+  actorId?: string | null;
+  claimId?: string | null;
+  baseRevision?: number | null;
   status: WorkRunStatus;
   phase?: string | null;
   summary?: string | null;
@@ -80,10 +83,23 @@ export interface WorkRunSummary {
 
 export interface WorkEvidenceSummary {
   id: string;
+  actorId?: string | null;
+  runId?: string | null;
   kind: WorkEvidenceKind;
   url: string;
   summary?: string | null;
   createdAt: string;
+}
+
+export interface WorkReviewDecisionSummary {
+  id: string;
+  decision: 'ACCEPTED' | 'REJECTED';
+  reason?: string | null;
+  fromRevision: number;
+  toRevision: number;
+  createdAt: string;
+  reviewer: WorkUserSummary;
+  run?: WorkRunSummary | null;
 }
 
 export interface WorkAuditSummary {
@@ -134,14 +150,22 @@ export interface WorkContextBundle {
   audits: WorkAuditSummary[];
   runs: WorkRunSummary[];
   evidence: WorkEvidenceSummary[];
+  reviewDecisions: WorkReviewDecisionSummary[];
 }
 
 export interface CandidatesPageQueryData {
   teams: {
-    nodes: TeamSummary[];
-  };
-  users: {
-    nodes: WorkUserSummary[];
+    nodes: Array<{
+      id: string;
+      key: string;
+      name: string;
+      memberships: {
+        nodes: Array<{
+          id: string;
+          user: WorkUserSummary;
+        }>;
+      };
+    }>;
   };
   issues: {
     nodes: CandidateWork[];
@@ -154,6 +178,7 @@ export interface CandidatesPageQueryData {
 
 export interface CandidatesPageQueryVariables {
   first: number;
+  after?: string;
   filter?: {
     commitmentStatus?: CommitmentStatus;
     team?: {
@@ -167,11 +192,16 @@ export interface CandidatesPageQueryVariables {
 export interface WorkGraphPageQueryData {
   issues: {
     nodes: GraphWorkNode[];
+    pageInfo: {
+      endCursor: string | null;
+      hasNextPage: boolean;
+    };
   };
 }
 
 export interface WorkGraphPageQueryVariables {
   first: number;
+  after?: string;
   filter?: {
     team?: {
       key?: {
@@ -217,5 +247,23 @@ export interface WorkRejectMutationVariables {
   input: {
     expectedRevision: number;
     reason?: string;
+  };
+}
+
+export interface WorkReviewMutationData {
+  workReview: {
+    success: boolean;
+    issue: { id: string; identifier: string; revision: number } | null;
+    decision: { id: string; decision: 'ACCEPTED' | 'REJECTED' } | null;
+  };
+}
+
+export interface WorkReviewMutationVariables {
+  id: string;
+  input: {
+    expectedRevision: number;
+    decision: 'ACCEPTED' | 'REJECTED';
+    reason?: string;
+    runId?: string;
   };
 }

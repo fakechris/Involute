@@ -17,7 +17,7 @@ export interface TeamMembershipSummary {
   user: AccessUserSummary;
 }
 
-export type WorkflowStateType = 'BACKLOG' | 'UNSTARTED' | 'STARTED' | 'COMPLETED' | 'CANCELED';
+export type WorkflowStateType = 'BACKLOG' | 'UNSTARTED' | 'STARTED' | 'REVIEW' | 'COMPLETED' | 'CANCELED';
 
 export interface WorkflowStateSummary {
   id: string;
@@ -80,6 +80,7 @@ export interface CycleSummary {
 export interface IssueSummary {
   id: string;
   identifier: string;
+  revision: number;
   title: string;
   description?: string | null;
   priority: number;
@@ -264,6 +265,7 @@ export interface IssueUpdateMutationData {
 export interface IssueUpdateMutationVariables {
   id: string;
   input: {
+    expectedRevision?: number;
     assigneeId?: string | null;
     description?: string | null;
     labelIds?: string[];
