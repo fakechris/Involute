@@ -7,6 +7,7 @@ import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/s
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
 import { READ_ONLY_MCP_TOOLS, WRITE_MCP_TOOLS } from './mcp-tools.ts';
+import { hashAgentToken } from './agent-credentials.ts';
 
 loadProjectEnvironment();
 
@@ -79,6 +80,42 @@ describe('Involute MCP', () => {
       },
     });
     expect(blocked.body.error.message).toContain('read-only');
+  });
+
+  it('accepts revocable team-scoped agent tokens only on MCP', async () => {
+    const token = 'inv_agent_test-credential';
+    const agent = await prisma.user.create({
+      data: { actorKind: 'AGENT', email: 'mcp-agent@example.com', name: 'MCP Agent' },
+    });
+    await prisma.teamMembership.create({
+      data: { role: 'EDITOR', teamId: team.id, userId: agent.id },
+    });
+    const credential = await prisma.agentCredential.create({
+      data: { name: 'test', tokenHash: hashAgentToken(token), userId: agent.id },
+    });
+
+    const mcpResponse = await mcpRpcWithToken('/mcp/readonly', {
+      id: 'agent-tools',
+      method: 'tools/list',
+    }, token);
+    expect(mcpResponse.status).toBe(200);
+    expect(mcpResponse.body.result.tools).toHaveLength(READ_ONLY_MCP_TOOLS.length);
+
+    const graphqlResponse = await fetch(`${server.url}/graphql`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ query: '{ viewer { id } }' }),
+    });
+    expect((await graphqlResponse.json()).errors[0].message).toBe('Not authenticated');
+
+    await prisma.agentCredential.update({
+      where: { id: credential.id },
+      data: { revokedAt: new Date() },
+    });
+    expect((await mcpRpcWithToken('/mcp/readonly', {
+      id: 'revoked-agent',
+      method: 'tools/list',
+    }, token)).status).toBe(401);
   });
 
   it('runs search → context → propose → commit → claim without marking work done', async () => {
@@ -166,4 +203,21 @@ async function mcpRpc(
     body: await response.json(),
     status: response.status,
   };
+}
+
+async function mcpRpcWithToken(
+  path: string,
+  message: { id: number | string; method: string; params?: unknown },
+  token: string,
+): Promise<{ body: any; status: number }> {
+  const response = await fetch(`${server.url}${path}`, {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', ...message }),
+  });
+  return { body: await response.json(), status: response.status };
 }

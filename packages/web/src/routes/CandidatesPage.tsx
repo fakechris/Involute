@@ -44,48 +44,63 @@ function CandidateCard({
   const [assigneeId, setAssigneeId] = useState(candidate.assignee?.id ?? humans[0]?.id ?? '');
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<'commit' | 'reject' | null>(null);
   const [runCommit] = useMutation<WorkCommitMutationData, WorkCommitMutationVariables>(WORK_COMMIT_MUTATION);
   const [runReject] = useMutation<WorkRejectMutationData, WorkRejectMutationVariables>(WORK_REJECT_MUTATION);
 
   async function handleCommit() {
     setError(null);
-    const result = await runCommit({
-      variables: {
-        id: candidate.id,
-        input: {
-          expectedRevision: candidate.revision,
-          ...(acceptance.trim() ? { acceptance: acceptance.trim() } : {}),
-          ...(assigneeId ? { assigneeId } : {}),
+    setPendingAction('commit');
+    try {
+      const result = await runCommit({
+        variables: {
+          id: candidate.id,
+          input: {
+            expectedRevision: candidate.revision,
+            ...(acceptance.trim() ? { acceptance: acceptance.trim() } : {}),
+            ...(assigneeId ? { assigneeId } : {}),
+          },
         },
-      },
-    });
+      });
 
-    if (!result.data?.workCommit.success || !result.data.workCommit.issue) {
+      if (!result.data?.workCommit.success || !result.data.workCommit.issue) {
+        setError(COMMIT_ERROR_MESSAGE);
+        return;
+      }
+
+      onCommitted();
+    } catch {
       setError(COMMIT_ERROR_MESSAGE);
-      return;
+    } finally {
+      setPendingAction(null);
     }
-
-    onCommitted();
   }
 
   async function handleReject() {
     setError(null);
-    const result = await runReject({
-      variables: {
-        id: candidate.id,
-        input: {
-          expectedRevision: candidate.revision,
-          ...(reason.trim() ? { reason: reason.trim() } : {}),
+    setPendingAction('reject');
+    try {
+      const result = await runReject({
+        variables: {
+          id: candidate.id,
+          input: {
+            expectedRevision: candidate.revision,
+            ...(reason.trim() ? { reason: reason.trim() } : {}),
+          },
         },
-      },
-    });
+      });
 
-    if (!result.data?.workReject.success || !result.data.workReject.issue) {
+      if (!result.data?.workReject.success || !result.data.workReject.issue) {
+        setError(REJECT_ERROR_MESSAGE);
+        return;
+      }
+
+      onRejected();
+    } catch {
       setError(REJECT_ERROR_MESSAGE);
-      return;
+    } finally {
+      setPendingAction(null);
     }
-
-    onRejected();
   }
 
   return (
@@ -161,11 +176,21 @@ function CandidateCard({
         </p>
       ) : null}
       <div className="observation-card__actions">
-        <Btn variant="accent" icon={<IcoCheck size={12} />} onClick={() => void handleCommit()}>
-          Commit
+        <Btn
+          variant="accent"
+          icon={<IcoCheck size={12} />}
+          disabled={pendingAction !== null}
+          onClick={() => void handleCommit()}
+        >
+          {pendingAction === 'commit' ? 'Committing…' : 'Commit'}
         </Btn>
-        <Btn variant="danger" icon={<IcoClose size={12} />} onClick={() => void handleReject()}>
-          Reject
+        <Btn
+          variant="danger"
+          icon={<IcoClose size={12} />}
+          disabled={pendingAction !== null}
+          onClick={() => void handleReject()}
+        >
+          {pendingAction === 'reject' ? 'Rejecting…' : 'Reject'}
         </Btn>
         <Btn variant="ghost" onClick={() => navigate(`/work/${candidate.id}`)}>
           Open context
@@ -177,11 +202,14 @@ function CandidateCard({
 
 export function CandidatesPage() {
   const teamKey = readStoredTeamKey();
-  const { data, loading, refetch } = useQuery<CandidatesPageQueryData, CandidatesPageQueryVariables>(
+  const { data, error, fetchMore, loading, refetch } = useQuery<
+    CandidatesPageQueryData,
+    CandidatesPageQueryVariables
+  >(
     CANDIDATES_PAGE_QUERY,
     {
       variables: {
-        first: 100,
+        first: 50,
         filter: {
           commitmentStatus: 'CANDIDATE',
           ...(teamKey ? { team: { key: { eq: teamKey } } } : {}),
@@ -189,8 +217,33 @@ export function CandidatesPage() {
       },
     },
   );
-  const humans = useMemo(() => humanUsers(data?.users.nodes ?? []), [data?.users.nodes]);
+  const humansByTeam = useMemo(() => {
+    const result = new Map<string, WorkUserSummary[]>();
+    for (const team of data?.teams.nodes ?? []) {
+      const unique = new Map(
+        humanUsers(team.memberships.nodes.map((membership) => membership.user)).map((user) => [user.id, user]),
+      );
+      result.set(team.id, Array.from(unique.values()));
+    }
+    return result;
+  }, [data?.teams.nodes]);
   const candidates = data?.issues.nodes ?? [];
+  const pageInfo = data?.issues.pageInfo;
+
+  async function handleLoadMore() {
+    if (!pageInfo?.hasNextPage || !pageInfo.endCursor) return;
+    await fetchMore({
+      variables: { after: pageInfo.endCursor },
+      updateQuery: (previous, { fetchMoreResult }) => ({
+        ...fetchMoreResult,
+        teams: previous.teams,
+        issues: {
+          ...fetchMoreResult.issues,
+          nodes: [...previous.issues.nodes, ...fetchMoreResult.issues.nodes],
+        },
+      }),
+    });
+  }
 
   return (
     <div className="observation-page">
@@ -201,7 +254,13 @@ export function CandidatesPage() {
         <span className="observation-hint">Proposed work waits here until a human commits it.</span>
       </div>
       <div className="page-content observation-content">
-        {loading && candidates.length === 0 ? (
+        {error ? (
+          <div className="empty-state" role="alert">
+            <h3>Could not load candidates</h3>
+            <p>The request failed before the candidate queue could be read.</p>
+            <Btn variant="subtle" onClick={() => void refetch()}>Retry</Btn>
+          </div>
+        ) : loading && candidates.length === 0 ? (
           <p className="observation-empty">Loading candidates…</p>
         ) : candidates.length === 0 ? (
           <div className="empty-state">
@@ -214,11 +273,16 @@ export function CandidatesPage() {
               <CandidateCard
                 key={candidate.id}
                 candidate={candidate}
-                humans={humans}
+                humans={humansByTeam.get(candidate.team.id) ?? []}
                 onCommitted={() => void refetch()}
                 onRejected={() => void refetch()}
               />
             ))}
+            {pageInfo?.hasNextPage ? (
+              <Btn variant="subtle" disabled={loading} onClick={() => void handleLoadMore()}>
+                {loading ? 'Loading…' : 'Load more'}
+              </Btn>
+            ) : null}
           </div>
         )}
       </div>

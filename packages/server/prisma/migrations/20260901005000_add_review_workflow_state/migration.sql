@@ -1,0 +1,1 @@
+ALTER TYPE "WorkflowStateType" ADD VALUE IF NOT EXISTS 'REVIEW';

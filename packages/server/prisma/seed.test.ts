@@ -94,6 +94,9 @@ describe('seedDatabase', () => {
 
     expect(adminUsers).toHaveLength(1);
     expect(adminUsers[0]?.name).toBe('Admin');
+    await expect(prisma.teamMembership.findUnique({
+      where: { teamId_userId: { teamId: team!.id, userId: adminUsers[0]!.id } },
+    })).resolves.toMatchObject({ role: 'OWNER' });
   });
 
   it('can seed the baseline catalog without creating a default admin user', async () => {

@@ -8,6 +8,8 @@ export const MEMBERSHIP_NOT_FOUND_MESSAGE = 'Team membership not found.';
 export const WORKFLOW_STATE_NOT_FOUND_MESSAGE = 'Workflow state not found.';
 export const ISSUE_LABEL_NOT_FOUND_MESSAGE = 'One or more issue labels were not found.';
 export const ASSIGNEE_NOT_FOUND_MESSAGE = 'Assignee not found.';
+export const PROJECT_NOT_FOUND_MESSAGE = 'Project not found in the issue team.';
+export const CYCLE_NOT_FOUND_MESSAGE = 'Cycle not found in the issue team.';
 export const TEAM_OWNER_REQUIRED_MESSAGE = 'Each team must retain at least one owner.';
 export const PARENT_ISSUE_NOT_FOUND_MESSAGE = 'Parent issue not found.';
 export const PARENT_ISSUE_TEAM_MISMATCH_MESSAGE =
@@ -36,13 +38,27 @@ export const WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE =
   'Committed work requires acceptance criteria.';
 export const WORK_COMMIT_REQUIRES_OWNER_MESSAGE = 'Committed work requires a human owner.';
 export const WORK_OWNER_MUST_BE_HUMAN_MESSAGE = 'Work owner must be a human assignee.';
+export const WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE = 'Work owner must belong to the work team.';
 export const WORK_REVISION_CONFLICT_MESSAGE = 'Work revision does not match expected_revision.';
+export const WORK_IDEMPOTENCY_CONFLICT_MESSAGE =
+  'Idempotency key was already used with a different request.';
+export const WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE =
+  'Idempotent operation result is no longer available.';
 export const WORK_ALREADY_CLAIMED_MESSAGE = 'Work is already claimed.';
+export const WORK_NOT_READY_MESSAGE = 'Work is not ready to be claimed.';
 export const WORK_CLAIM_REQUIRES_ACTOR_MESSAGE = 'Claiming work requires an authenticated actor.';
 export const WORK_RELATED_NOT_FOUND_MESSAGE = 'Related work not found.';
 export const WORK_RUN_NOT_FOUND_MESSAGE = 'Work run not found.';
 export const WORK_EVIDENCE_KIND_INVALID_MESSAGE = 'Unknown evidence kind.';
 export const WORK_RUN_STATUS_INVALID_MESSAGE = 'Unknown run status.';
+export const WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE =
+  'Starting a run requires an active claim owned by the current actor.';
+export const WORK_RUN_ACTOR_MISMATCH_MESSAGE = 'Only the run actor can update this run.';
+export const WORK_RUN_TERMINAL_MESSAGE = 'Completed or failed runs cannot be changed.';
+export const WORK_RUN_TRANSITION_INVALID_MESSAGE = 'Invalid work run status transition.';
+export const WORK_EVIDENCE_REQUIRES_RUN_MESSAGE = 'Evidence must reference a work run.';
+export const WORK_REVIEW_REQUIRED_MESSAGE = 'Work is not awaiting review.';
+export const WORK_REVIEW_STATE_MISSING_MESSAGE = 'Team workflow is missing a required semantic state.';
 
 const exposedErrorCodes = new Map<string, string>([
   [NOT_AUTHENTICATED_MESSAGE, 'UNAUTHENTICATED'],
@@ -53,6 +69,8 @@ const exposedErrorCodes = new Map<string, string>([
   [WORKFLOW_STATE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ISSUE_LABEL_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ASSIGNEE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [PROJECT_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [CYCLE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [TEAM_OWNER_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [PARENT_ISSUE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [PARENT_ISSUE_TEAM_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
@@ -76,13 +94,24 @@ const exposedErrorCodes = new Map<string, string>([
   [WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_COMMIT_REQUIRES_OWNER_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_OWNER_MUST_BE_HUMAN_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_REVISION_CONFLICT_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_IDEMPOTENCY_CONFLICT_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_ALREADY_CLAIMED_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_NOT_READY_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_CLAIM_REQUIRES_ACTOR_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_RELATED_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [WORK_RUN_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [WORK_EVIDENCE_KIND_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_RUN_STATUS_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_RUN_ACTOR_MISMATCH_MESSAGE, 'FORBIDDEN'],
+  [WORK_RUN_TERMINAL_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_RUN_TRANSITION_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_EVIDENCE_REQUIRES_RUN_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_REVIEW_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_REVIEW_STATE_MISSING_MESSAGE, 'BAD_USER_INPUT'],
 ]);
 
 export function createNotAuthenticatedError(): GraphQLError {

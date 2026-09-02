@@ -406,6 +406,8 @@ The current HTTP and GraphQL surface is documented in [docs/api.md](docs/api.md)
 
 Tag-driven npm publishing is wired through [`.github/workflows/npm-publish.yml`](.github/workflows/npm-publish.yml).
 
+Release notes for the current Agent-native kernel line are in [docs/releases/npm-v0.2.0.md](docs/releases/npm-v0.2.0.md).
+
 Release tags use this format:
 
 ```bash
@@ -418,6 +420,8 @@ That workflow publishes the current package set in version lockstep:
 - `@turnkeyai/involute-shared`
 - `@turnkeyai/involute-server`
 - `@turnkeyai/involute`
+
+The checked-in package manifests intentionally stay at `0.0.0`; the workflow derives the published version from the release tag and rewrites workspace dependencies in its isolated publish checkout.
 
 Repository setup required before enabling it:
 

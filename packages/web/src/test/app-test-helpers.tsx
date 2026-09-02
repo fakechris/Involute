@@ -322,6 +322,7 @@ export const boardQueryResult: BoardPageQueryData = {
       {
         id: 'issue-1',
         identifier: 'INV-1',
+        revision: 1,
         title: 'Backlog item',
         description: 'Backlog description',
         priority: 0,
@@ -338,6 +339,7 @@ export const boardQueryResult: BoardPageQueryData = {
       {
         id: 'issue-2',
         identifier: 'INV-2',
+        revision: 1,
         title: 'Ready item',
         description: 'Ready description',
         priority: 0,
@@ -358,6 +360,7 @@ export const boardQueryResult: BoardPageQueryData = {
       {
         id: 'issue-3',
         identifier: 'SON-1',
+        revision: 1,
         title: 'Sonata backlog item',
         description: 'Sonata description',
         priority: 0,
@@ -461,11 +464,16 @@ export function renderApp(
     if (source.includes('query CandidatesPage')) {
       return {
         data: queryState.candidatesData ?? {
-          teams: queryState.data?.teams ?? { nodes: [] },
-          users: queryState.data?.users ?? { nodes: [] },
+          teams: {
+            nodes: (queryState.data?.teams.nodes ?? []).map((team) => ({
+              ...team,
+              memberships: team.memberships ?? { nodes: [] },
+            })),
+          },
           issues: { nodes: [], pageInfo: { endCursor: null, hasNextPage: false } },
         },
         error: queryState.error,
+        fetchMore: queryState.fetchMore ?? vi.fn().mockResolvedValue(undefined),
         loading: queryState.loading ?? false,
         refetch: vi.fn().mockResolvedValue(undefined),
       };
@@ -473,9 +481,11 @@ export function renderApp(
 
     if (source.includes('query WorkGraphPage')) {
       return {
-        data: queryState.graphData ?? { issues: { nodes: [] } },
+        data: queryState.graphData ?? { issues: { nodes: [], pageInfo: { endCursor: null, hasNextPage: false } } },
         error: queryState.error,
+        fetchMore: queryState.fetchMore ?? vi.fn().mockResolvedValue(undefined),
         loading: queryState.loading ?? false,
+        refetch: vi.fn().mockResolvedValue(undefined),
       };
     }
 
@@ -484,6 +494,7 @@ export function renderApp(
         data: queryState.workContextData ?? { workContext: null },
         error: queryState.error,
         loading: queryState.loading ?? false,
+        refetch: vi.fn().mockResolvedValue(undefined),
       };
     }
 

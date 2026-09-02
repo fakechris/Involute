@@ -55,14 +55,25 @@ describe('work CLI commands', () => {
       },
     });
 
-    for (const name of ['Backlog', 'Ready', 'In Progress', 'In Review', 'Done', 'Canceled']) {
+    const states = [
+      ['Backlog', 'BACKLOG'],
+      ['Ready', 'UNSTARTED'],
+      ['In Progress', 'STARTED'],
+      ['In Review', 'REVIEW'],
+      ['Done', 'COMPLETED'],
+      ['Canceled', 'CANCELED'],
+    ] as const;
+    for (const [position, [name, type]] of states.entries()) {
       await prisma.workflowState.create({
-        data: { name, teamId: team.id },
+        data: { name, position, teamId: team.id, type },
       });
     }
 
-    await prisma.user.create({
+    const admin = await prisma.user.create({
       data: { email: DEFAULT_ADMIN_EMAIL, name: 'Admin' },
+    });
+    await prisma.teamMembership.create({
+      data: { role: 'OWNER', teamId: team.id, userId: admin.id },
     });
 
     const ready = await prisma.workflowState.findFirstOrThrow({
@@ -85,7 +96,19 @@ describe('work CLI commands', () => {
       title: 'Blocker work',
       stateId: readyStateId,
     });
-    await updateIssue(prisma, child.id, { parentId: parent.id });
+    await updateIssue(prisma, parent.id, {
+      acceptance: 'parent contract is ready',
+      assigneeId: admin.id,
+    });
+    await updateIssue(prisma, child.id, {
+      acceptance: 'child contract is ready after blockers finish',
+      assigneeId: admin.id,
+      parentId: parent.id,
+    });
+    await updateIssue(prisma, blocker.id, {
+      acceptance: 'blocker contract is ready',
+      assigneeId: admin.id,
+    });
     await createWorkLink(prisma, { fromId: blocker.id, toId: child.id, type: 'BLOCKS' });
 
     parentIdentifier = parent.identifier;

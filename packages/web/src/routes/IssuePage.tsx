@@ -239,7 +239,7 @@ export function IssuePage() {
       const result = await runIssueUpdate({
         variables: {
           id: issue.id,
-          input,
+          input: { ...input, expectedRevision: issue.revision },
         },
       });
 

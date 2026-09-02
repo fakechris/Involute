@@ -78,6 +78,7 @@ interface IssueDetail {
   description: string | null;
   id: string;
   identifier: string;
+  revision: number;
   labels: { nodes: LabelSummary[] };
   state: { id: string; name: string };
   team: { key: string };
@@ -548,6 +549,7 @@ async function fetchIssueByIdentifier(identifier: string): Promise<IssueDetail |
         issue(id: $id) {
           id
           identifier
+          revision
           title
           description
           state {
@@ -758,7 +760,7 @@ async function updateIssueViaCli(
     throw new CliError('Issue not found');
   }
 
-  const updateInput: Record<string, unknown> = {};
+  const updateInput: Record<string, unknown> = { expectedRevision: issue.revision };
 
   if (input.state) {
     const state = (await fetchTeamStates(issue.team.key)).find(
@@ -1025,6 +1027,15 @@ interface WorkContextResult {
   }>;
   blockedBy: Array<{ identifier: string; title: string }>;
   blocks: Array<{ identifier: string; title: string }>;
+  claim: { actor: { email: string | null; name: string | null }; leaseUntil: string } | null;
+  runs: Array<{ publicId: string; status: string; phase: string | null; summary: string | null }>;
+  evidence: Array<{ kind: string; runId: string | null; url: string; summary: string | null }>;
+  reviewDecisions: Array<{
+    decision: string;
+    reason: string | null;
+    reviewer: { email: string | null; name: string | null };
+    run: { publicId: string } | null;
+  }>;
   work: {
     acceptance: string | null;
     commitmentStatus: string;
@@ -1074,6 +1085,10 @@ async function fetchWorkContext(id: string): Promise<WorkContextResult | null> {
           ancestors { identifier title }
           blockedBy { identifier title }
           blocks { identifier title }
+          claim { leaseUntil actor { name email } }
+          runs { publicId status phase summary }
+          evidence { kind runId url summary }
+          reviewDecisions { decision reason reviewer { name email } run { publicId } }
           audits {
             revision
             actorKind
@@ -1300,7 +1315,7 @@ async function claimWorkViaCli(
 
 async function reportRunViaCli(
   workId: string,
-  input: { phase?: string; status?: string; summary?: string },
+  input: { phase?: string; runId?: string; status?: string; summary?: string },
 ): Promise<{ publicId: string; status: string; workIdentifier: string }> {
   const client = await createConfiguredGraphQLClient();
   const result = await client.request<{
@@ -1322,6 +1337,7 @@ async function reportRunViaCli(
     {
       input: {
         workId,
+        ...(input.runId ? { runId: input.runId } : {}),
         ...(input.status ? { status: input.status } : {}),
         ...(input.phase ? { phase: input.phase } : {}),
         ...(input.summary ? { summary: input.summary } : {}),
@@ -1342,7 +1358,7 @@ async function reportRunViaCli(
 
 async function attachEvidenceViaCli(
   workId: string,
-  input: { kind: string; summary?: string; url: string },
+  input: { kind: string; runId: string; summary?: string; url: string },
 ): Promise<{ kind: string; url: string; workIdentifier: string }> {
   const client = await createConfiguredGraphQLClient();
   const result = await client.request<{
@@ -1364,6 +1380,7 @@ async function attachEvidenceViaCli(
     {
       input: {
         workId,
+        runId: input.runId,
         kind: input.kind,
         url: input.url,
         ...(input.summary ? { summary: input.summary } : {}),
@@ -1379,6 +1396,50 @@ async function attachEvidenceViaCli(
     kind: result.evidenceAttach.evidence.kind,
     url: result.evidenceAttach.evidence.url,
     workIdentifier: result.evidenceAttach.issue.identifier,
+  };
+}
+
+async function reviewWorkViaCli(
+  workId: string,
+  input: { decision: 'accepted' | 'rejected'; reason?: string; runId?: string },
+): Promise<{ decision: string; revision: number; state: string; workIdentifier: string }> {
+  const client = await createConfiguredGraphQLClient();
+  const context = await fetchWorkContext(workId);
+  if (!context) throw new CliError('Work not found');
+  const result = await client.request<{
+    workReview: {
+      decision: { decision: string } | null;
+      issue: { identifier: string; revision: number; state: { name: string } } | null;
+      success: boolean;
+    };
+  }>(
+    /* GraphQL */ `
+      mutation CliWorkReview($id: String!, $input: WorkReviewInput!) {
+        workReview(id: $id, input: $input) {
+          success
+          issue { identifier revision state { name } }
+          decision { decision }
+        }
+      }
+    `,
+    {
+      id: workId,
+      input: {
+        decision: input.decision.toUpperCase(),
+        expectedRevision: context.work.revision,
+        ...(input.reason ? { reason: input.reason } : {}),
+        ...(input.runId ? { runId: input.runId } : {}),
+      },
+    },
+  );
+  if (!result.workReview.success || !result.workReview.issue || !result.workReview.decision) {
+    throw new CliError('Work review failed.');
+  }
+  return {
+    decision: result.workReview.decision.decision,
+    revision: result.workReview.issue.revision,
+    state: result.workReview.issue.state.name,
+    workIdentifier: result.workReview.issue.identifier,
   };
 }
 
@@ -1400,6 +1461,14 @@ function formatWorkContext(context: WorkContextResult): string {
     ancestors: context.ancestors.map((issue) => `${issue.identifier} ${issue.title}`),
     blockedBy: context.blockedBy.map((issue) => `${issue.identifier} ${issue.title}`),
     blocks: context.blocks.map((issue) => `${issue.identifier} ${issue.title}`),
+    claim: context.claim
+      ? `${context.claim.actor.name ?? context.claim.actor.email ?? 'actor'} until ${context.claim.leaseUntil}`
+      : '',
+    runs: context.runs.map((run) => `${run.publicId} ${run.status} ${run.phase ?? ''} ${run.summary ?? ''}`.trim()),
+    evidence: context.evidence.map((item) => `${item.kind} ${item.runId ?? ''} ${item.url} ${item.summary ?? ''}`.trim()),
+    reviews: context.reviewDecisions.map((item) =>
+      `${item.decision} ${item.run?.publicId ?? ''} ${item.reviewer.name ?? item.reviewer.email ?? ''} ${item.reason ?? ''}`.trim(),
+    ),
     audits: context.audits.map((audit) => {
       const actor = audit.actor?.name ?? audit.actor?.email ?? audit.actorKind;
       return `${audit.createdAt} r${audit.revision} ${actor} ${audit.surface ?? ''}`.trim();
@@ -1797,13 +1866,14 @@ export function createProgram(): Command {
     .description('Report a run phase or completion (never marks work Done)')
     .argument('<id>', 'Work identifier or UUID')
     .option('--status <status>', 'queued, running, blocked, completed, failed')
+    .option('--run-id <runId>', 'Existing RUN-N or run UUID; omit only to start a run')
     .option('--phase <phase>', 'High-level phase name')
     .option('--summary <summary>', 'Short status for humans')
     .option('--json', 'Output machine-readable JSON')
     .action(async function (
       this: Command,
       id: string,
-      options: JsonOption & { phase?: string; status?: string; summary?: string },
+      options: JsonOption & { phase?: string; runId?: string; status?: string; summary?: string },
     ) {
       await runWithCliErrorHandling(async () => {
         const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
@@ -1814,21 +1884,50 @@ export function createProgram(): Command {
 
   workCommand
     .command('evidence')
-    .description('Attach a PR, test, or artifact and move work to In Review')
+    .description('Attach a PR, test, or artifact to an existing run')
     .argument('<id>', 'Work identifier or UUID')
     .requiredOption('--kind <kind>', 'pr, test, log, screenshot, artifact, or decision')
     .requiredOption('--url <url>', 'Evidence URL')
+    .requiredOption('--run-id <runId>', 'Existing RUN-N or run UUID')
     .option('--summary <summary>', 'Short description')
     .option('--json', 'Output machine-readable JSON')
     .action(async function (
       this: Command,
       id: string,
-      options: JsonOption & { kind: string; summary?: string; url: string },
+      options: JsonOption & { kind: string; runId: string; summary?: string; url: string },
     ) {
       await runWithCliErrorHandling(async () => {
         const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
         const attached = await attachEvidenceViaCli(id, options);
         process.stdout.write(formatOutput(context.json ? attached : attached, context));
+      });
+    });
+
+  workCommand
+    .command('review')
+    .description('Accept or reject work awaiting human review')
+    .argument('<id>', 'Work identifier or UUID')
+    .requiredOption('--decision <decision>', 'accepted or rejected')
+    .option('--run-id <runId>', 'RUN-N or run UUID being reviewed')
+    .option('--reason <reason>', 'Review reason')
+    .option('--json', 'Output machine-readable JSON')
+    .action(async function (
+      this: Command,
+      id: string,
+      options: JsonOption & { decision: string; reason?: string; runId?: string },
+    ) {
+      await runWithCliErrorHandling(async () => {
+        const normalized = options.decision.toLowerCase();
+        if (normalized !== 'accepted' && normalized !== 'rejected') {
+          throw new CliError('Review decision must be accepted or rejected.');
+        }
+        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+        const reviewed = await reviewWorkViaCli(id, {
+          decision: normalized,
+          ...(options.reason ? { reason: options.reason } : {}),
+          ...(options.runId ? { runId: options.runId } : {}),
+        });
+        process.stdout.write(formatOutput(reviewed, context));
       });
     });
 

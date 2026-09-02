@@ -34,6 +34,7 @@ afterEach(() => {
 const makeIssue = (overrides: Partial<IssueSummary> = {}): IssueSummary => ({
   id: 'issue-1',
   identifier: 'INV-1',
+  revision: 1,
   title: 'Test issue',
   description: 'Test description',
   priority: 0,

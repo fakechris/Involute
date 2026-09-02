@@ -59,6 +59,7 @@ import { requireAuthentication, type GraphQLContext } from './auth.js';
 import { createComment, createIssue, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
 import { listIncidentLinks } from './link-service.js';
 import { writeActorFromViewer } from './work-service.js';
+import { getUploadsDirectory } from './uploads.js';
 import {
   findWorkByIdOrIdentifier,
   getWorkContext,
@@ -76,14 +77,13 @@ import {
   type ProposeWorkInput,
   type RejectWorkInput,
 } from './claim-service.js';
-import { attachEvidence, reportRun } from './run-service.js';
+import { attachEvidence, reportRun, reviewWork } from './run-service.js';
 import { createProject, updateProject, deleteProject, type CreateProjectInput, type UpdateProjectInput } from './project-service.js';
 import { createCycle, updateCycle, deleteCycle, type CreateCycleInput, type UpdateCycleInput } from './cycle-service.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 type TeamParent = Team & { memberships?: TeamMembershipParent[] | null; states?: WorkflowState[] | null };
@@ -240,6 +240,7 @@ const typeDefs = /* GraphQL */ `
     workClaim(id: String!, input: WorkClaimInput): WorkClaimPayload!
     runReport(input: RunReportInput!): RunReportPayload!
     evidenceAttach(input: EvidenceAttachInput!): EvidenceAttachPayload!
+    workReview(id: String!, input: WorkReviewInput!): WorkReviewPayload!
   }
 
   type Team {
@@ -405,6 +406,7 @@ const typeDefs = /* GraphQL */ `
     audits: [WorkAuditRecord!]!
     runs: [WorkRunRecord!]!
     evidence: [WorkEvidenceRecord!]!
+    reviewDecisions: [WorkReviewDecisionRecord!]!
   }
 
   enum WorkRunStatus {
@@ -427,6 +429,9 @@ const typeDefs = /* GraphQL */ `
   type WorkRunRecord {
     id: ID!
     publicId: String!
+    actorId: String
+    claimId: String
+    baseRevision: Int
     status: WorkRunStatus!
     phase: String
     summary: String
@@ -438,9 +443,27 @@ const typeDefs = /* GraphQL */ `
   type WorkEvidenceRecord {
     id: ID!
     kind: WorkEvidenceKind!
+    actorId: String
+    runId: String
     url: String!
     summary: String
     createdAt: DateTime!
+  }
+
+  enum WorkReviewDecisionKind {
+    ACCEPTED
+    REJECTED
+  }
+
+  type WorkReviewDecisionRecord {
+    id: ID!
+    decision: WorkReviewDecisionKind!
+    reason: String
+    fromRevision: Int!
+    toRevision: Int!
+    createdAt: DateTime!
+    reviewer: User!
+    run: WorkRunRecord
   }
 
   type WorkClaimRecord {
@@ -602,6 +625,7 @@ const typeDefs = /* GraphQL */ `
   }
 
   input IssueUpdateInput {
+    expectedRevision: Int
     stateId: String
     labelIds: [String!]
     parentId: String
@@ -827,10 +851,17 @@ const typeDefs = /* GraphQL */ `
 
   input EvidenceAttachInput {
     workId: String!
-    runId: String
+    runId: String!
     kind: String!
     url: String!
     summary: String
+  }
+
+  input WorkReviewInput {
+    expectedRevision: Int!
+    decision: WorkReviewDecisionKind!
+    reason: String
+    runId: String
   }
 
   type RunReportPayload {
@@ -843,6 +874,12 @@ const typeDefs = /* GraphQL */ `
     success: Boolean!
     issue: Issue
     evidence: WorkEvidenceRecord
+  }
+
+  type WorkReviewPayload {
+    success: Boolean!
+    issue: Issue
+    decision: WorkReviewDecisionRecord
   }
 `;
 
@@ -1289,6 +1326,37 @@ const resolvers = {
         issue: null,
         success: false as const,
       }),
+    workReview: async (
+      _parent: unknown,
+      args: {
+        id: string;
+        input: {
+          decision: 'ACCEPTED' | 'REJECTED';
+          expectedRevision: number;
+          reason?: string | null;
+          runId?: string | null;
+        };
+      },
+      context: GraphQLContext,
+    ) => runMutation(async () => {
+      const existing = await findWorkByIdOrIdentifier(context.prisma, args.id);
+      if (!existing) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+      await assertCanWriteIssue(context.prisma, context, existing.id);
+      const result = await reviewWork(
+        context.prisma,
+        existing.id,
+        args.input,
+        writeActorFromViewer(context.viewer),
+      );
+      return {
+        decision: await context.prisma.workReviewDecision.findUniqueOrThrow({
+          where: { id: result.decision.id },
+          include: { reviewer: true, run: true },
+        }),
+        issue: await getIssueById(context.prisma, result.work.id),
+        success: true as const,
+      };
+    }, { decision: null, issue: null, success: false as const }),
     commentCreate: async (
       _parent: unknown,
       args: { input: CreateCommentInput },
@@ -1569,7 +1637,7 @@ const resolvers = {
     ): Promise<{ attachment: Attachment | null; success: boolean }> => {
       const viewer = requireAuthentication(context);
       return runMutation(async () => {
-        const uploadsDir = resolve(fileURLToPath(import.meta.url), '../../uploads');
+        const uploadsDir = getUploadsDirectory();
         if (!existsSync(uploadsDir)) {
           mkdirSync(uploadsDir, { recursive: true });
         }

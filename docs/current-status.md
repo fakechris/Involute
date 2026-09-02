@@ -1,6 +1,6 @@
 # Current Status
 
-Last updated against `main` at `351fd06`.
+Last reviewed on 2026-09-01 for the `npm-v0.2.0` release. Release A–E is included in this source release. Production still runs an earlier deployment; the new migrations and runtime behavior remain unverified there until an immutable image deploy and authenticated smoke complete.
 
 ## Summary
 
@@ -44,14 +44,22 @@ Done:
 - Ansible bootstrap and deploy playbooks exist
 - GitHub Actions deploy workflow exists
 - Tailscale-only VPS deployment has already been exercised successfully
-- the public-domain VPS path is already serving the latest mainline build over HTTPS
+- the public-domain VPS exists, but it has not yet been updated to `cf3feb9`
 - one Postgres backup and restore drill has already been completed
+
+### Release A–E hardening (`npm-v0.2.0`)
+
+- immutable SHA-only deploys, pre-deploy backup, fail-closed restore, authenticated MCP smoke, persistent authenticated uploads
+- revocable MCP-only Agent credentials, transactionally scoped idempotency, revision CAS, and team-scoped human ownership
+- claim-bound runs, run-bound evidence, explicit In Review state, human acceptance/rejection, per-target webhook retry state
+- one readiness predicate shared by ready-list and claim, semantic workflow-state checks, blocker semantics, and serialized graph-cycle writes
+- paginated candidate/graph observation, explicit query failure states, human review UI/CLI, and a documented boundary between graph `PROJECT` work and the frozen legacy `Project` entity
 
 ## What is not done yet
 
 ### M1: Deployable self-hosting
 
-VPS path is live. Operator procedure is in [ops.md](./ops.md):
+VPS tooling exists, but the current mainline image is not yet verified on production. Operator procedure is in [ops.md](./ops.md):
 
 - deploy / rollback / logs / compose status
 - backup and restore (`scripts/postgres-backup.sh`, `scripts/postgres-restore.sh`)
@@ -74,7 +82,7 @@ Agent protocol is MCP + work mutations. Comment heartbeats are not a client prot
 
 ## Current recommended priority
 
-1. Ship the kernel and deploy the VPS onto this tree.
+1. Deploy the VPS onto the immutable image SHA produced from `npm-v0.2.0`, then run the authenticated production smoke.
 2. Keep the operator runbook, OAuth/session path, and backup/restore trustworthy (M1).
 3. Do not add Linear-clone Inbox/Cycle/AgentSession products. Existing leftover routes are frozen.
 

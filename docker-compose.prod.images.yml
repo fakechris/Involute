@@ -61,6 +61,9 @@ services:
       PORT: 4200
       REQUIRE_GOOGLE_OAUTH: ${REQUIRE_GOOGLE_OAUTH:-true}
       SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-2592000}
+      INVOLUTE_UPLOADS_DIR: /var/lib/involute/uploads
+      INVOLUTE_WEBHOOK_URL: ${INVOLUTE_WEBHOOK_URL:-}
+      INVOLUTE_WEBHOOK_SECRET: ${INVOLUTE_WEBHOOK_SECRET:-}
       VIEWER_ASSERTION_SECRET: ${VIEWER_ASSERTION_SECRET:?Set VIEWER_ASSERTION_SECRET in .env.production}
     healthcheck:
       test:
@@ -76,6 +79,8 @@ services:
       start_period: 10s
     ports:
       - "${SERVER_BIND_ADDRESS:-127.0.0.1}:4200:4200"
+    volumes:
+      - uploads-prod-data:/var/lib/involute/uploads
 
   web:
     image: ${INVOLUTE_IMAGE_REGISTRY:-docker.io}/${INVOLUTE_IMAGE_NAMESPACE:-fakechris}/involute-web:${INVOLUTE_IMAGE_TAG:-latest}
@@ -131,3 +136,5 @@ volumes:
     name: ${CADDY_DATA_VOLUME_NAME:-involute_caddy-data}
   caddy-config:
     name: ${CADDY_CONFIG_VOLUME_NAME:-involute_caddy-config}
+  uploads-prod-data:
+    name: ${UPLOADS_VOLUME_NAME:-involute_uploads-prod-data}

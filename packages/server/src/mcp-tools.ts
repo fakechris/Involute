@@ -113,11 +113,20 @@ export async function callMcpTool(
         title: requiredString(args.title, 'title'),
       };
       assignOptional(proposeInput, 'acceptance', optionalString(args.acceptance));
+      assignOptional(proposeInput, 'constraints', optionalString(args.constraints));
       assignOptional(proposeInput, 'description', optionalString(args.description));
       assignOptional(proposeInput, 'idempotencyKey', optionalString(args.idempotency_key));
       assignOptional(proposeInput, 'outcome', optionalString(args.outcome));
+      assignOptional(proposeInput, 'scope', optionalString(args.scope));
       assignOptional(proposeInput, 'relatedWorkId', optionalString(args.related_work_id));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
+      assignOptional(proposeInput, 'verification', optionalString(args.verification));
+      const kind = optionalString(args.kind);
+      if (kind === 'ISSUE' || kind === 'PROJECT' || kind === 'MILESTONE' || kind === 'DECISION' || kind === 'EPIC') {
+        proposeInput.kind = kind;
+      }
+      const relatedType = optionalString(args.related_work_type);
+      if (relatedType) proposeInput.relatedWorkType = relatedType as WorkLinkType;
       return proposeWork(context.prisma, proposeInput, writeActorFromViewer(context.viewer, 'mcp'));
     }
     case 'work_commit': {
@@ -128,6 +137,10 @@ export async function callMcpTool(
       };
       assignOptional(commitInput, 'acceptance', optionalString(args.acceptance));
       assignOptional(commitInput, 'assigneeId', optionalString(args.assignee_id));
+      assignOptional(commitInput, 'constraints', optionalString(args.constraints));
+      assignOptional(commitInput, 'outcome', optionalString(args.outcome));
+      assignOptional(commitInput, 'scope', optionalString(args.scope));
+      assignOptional(commitInput, 'verification', optionalString(args.verification));
       return commitWork(
         context.prisma,
         work.id,
@@ -265,8 +278,13 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         title: { type: 'string' },
         description: { type: 'string' },
         outcome: { type: 'string' },
+        scope: { type: 'string' },
+        constraints: { type: 'string' },
         acceptance: { type: 'string' },
+        verification: { type: 'string' },
+        kind: { type: 'string', enum: ['ISSUE', 'PROJECT', 'MILESTONE', 'DECISION', 'EPIC'] },
         related_work_id: { type: 'string' },
+        related_work_type: { type: 'string', enum: ['CONTAINS', 'BLOCKS', 'DERIVED_FROM', 'DISCOVERED_DURING', 'RELATED_TO', 'DUPLICATE_OF'] },
         repository: { type: 'string' },
         idempotency_key: { type: 'string' },
       },
@@ -283,6 +301,10 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         expected_revision: { type: 'integer' },
         acceptance: { type: 'string' },
         assignee_id: { type: 'string' },
+        outcome: { type: 'string' },
+        scope: { type: 'string' },
+        constraints: { type: 'string' },
+        verification: { type: 'string' },
       },
       required: ['id', 'expected_revision'],
     },
@@ -353,7 +375,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   },
   {
     name: 'evidence_attach',
-    description: 'Attach a PR, test report, log, screenshot, or artifact. Moves work to In Review, never Done.',
+    description: 'Attach a PR, test report, log, screenshot, or artifact to an existing run.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -363,7 +385,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         url: { type: 'string' },
         summary: { type: 'string' },
       },
-      required: ['work_id', 'kind', 'url'],
+      required: ['work_id', 'run_id', 'kind', 'url'],
     },
   },
 ];

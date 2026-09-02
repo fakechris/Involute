@@ -25,4 +25,11 @@ docker compose \
 
 gzip -c "$TEMP_FILE" > "$OUTPUT_FILE"
 
+if command -v sha256sum >/dev/null 2>&1; then
+  sha256sum "$OUTPUT_FILE" > "$OUTPUT_FILE.sha256"
+else
+  shasum -a 256 "$OUTPUT_FILE" > "$OUTPUT_FILE.sha256"
+fi
+
 printf 'Wrote backup to %s\n' "$OUTPUT_FILE"
+printf 'Wrote checksum to %s.sha256\n' "$OUTPUT_FILE"

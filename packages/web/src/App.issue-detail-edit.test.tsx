@@ -53,7 +53,7 @@ describe('App issue detail editing', () => {
       expect(mutate).toHaveBeenCalledWith({
         variables: {
           id: 'issue-1',
-          input: { title: 'Enter-saved title' },
+          input: { expectedRevision: 1, title: 'Enter-saved title' },
         },
       }),
     );
@@ -92,7 +92,7 @@ describe('App issue detail editing', () => {
       expect(mutate).toHaveBeenNthCalledWith(1, {
         variables: {
           id: 'issue-1',
-          input: { title: 'Updated backlog item' },
+          input: { expectedRevision: 1, title: 'Updated backlog item' },
         },
       }),
     );
@@ -126,7 +126,7 @@ describe('App issue detail editing', () => {
       expect(mutate).toHaveBeenCalledWith({
         variables: {
           id: 'issue-1',
-          input: { description: 'Updated description' },
+          input: { description: 'Updated description', expectedRevision: 1 },
         },
       }),
     );
@@ -164,7 +164,7 @@ describe('App issue detail editing', () => {
       expect(mutate).toHaveBeenCalledWith({
         variables: {
           id: 'issue-1',
-          input: { description: 'Locally edited draft' },
+          input: { description: 'Locally edited draft', expectedRevision: 1 },
         },
       }),
     );
@@ -218,7 +218,7 @@ describe('App issue detail editing', () => {
       expect(mutate).toHaveBeenCalledWith({
         variables: {
           id: 'issue-1',
-          input: { title: 'Persisted title' },
+          input: { expectedRevision: 1, title: 'Persisted title' },
         },
       }),
     );

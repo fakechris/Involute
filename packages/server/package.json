@@ -25,6 +25,9 @@
   },
   "scripts": {
     "admin:bootstrap": "pnpm exec tsx prisma/bootstrap-admin.ts",
+    "agent:create": "pnpm exec tsx prisma/agent-credential.ts create",
+    "agent:list": "pnpm exec tsx prisma/agent-credential.ts list",
+    "agent:revoke": "pnpm exec tsx prisma/agent-credential.ts revoke",
     "build": "pnpm --filter @turnkeyai/involute-shared build && pnpm run prisma:generate && pnpm exec tsc -p tsconfig.json",
     "prisma:db:push": "pnpm exec prisma db push --skip-generate",
     "prisma:generate": "pnpm exec prisma generate",

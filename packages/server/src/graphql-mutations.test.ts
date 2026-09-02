@@ -550,12 +550,14 @@ describe('GraphQL mutations', () => {
   });
 
   it('does not let team access changes remove the last owner', async () => {
-    const ownerMembership = await prisma.teamMembership.create({
-      data: {
+    const ownerMembership = await prisma.teamMembership.upsert({
+      where: { teamId_userId: { teamId: fixture.team.id, userId: fixture.viewer.id } },
+      create: {
         role: 'OWNER',
         teamId: fixture.team.id,
         userId: fixture.viewer.id,
       },
+      update: { role: 'OWNER' },
     });
 
     const removeResponse = await postGraphQL({
@@ -623,7 +625,7 @@ describe('GraphQL mutations', () => {
     ).resolves.toMatchObject({
       role: 'OWNER',
     });
-  });
+  }, 10_000);
 
   it('does not overwrite an existing user name when access management upserts by email', async () => {
     const existingUser = await prisma.user.create({

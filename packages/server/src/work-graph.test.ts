@@ -219,6 +219,14 @@ describe('work graph GraphQL facade', () => {
       toId: child.id,
       type: 'BLOCKS',
     });
+    await prisma.issue.updateMany({
+      where: {
+        id: {
+          in: [parent.id, child.id, blockerCreate.body.data.issueCreate.issue.id],
+        },
+      },
+      data: { acceptance: 'ready contract', assigneeId: viewer.id },
+    });
 
     const contextResponse = await postGraphQL({
       query: `

@@ -17,13 +17,16 @@ import {
   WORKFLOW_STATE_TEAM_CREATE_MISMATCH_MESSAGE,
   WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE,
   WORK_REVISION_CONFLICT_MESSAGE,
+  PROJECT_NOT_FOUND_MESSAGE,
+  CYCLE_NOT_FOUND_MESSAGE,
 } from './errors.js';
-import { assertActorCan, isAcceptStateName } from './claim-service.js';
+import { assertActorCan, isAcceptStateType } from './claim-service.js';
 import { assertNoWorkLinkCycle, syncContainsFromParentId } from './link-service.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
 import {
   INTERNAL_WRITE_ACTOR,
   recordWorkAudit,
+  claimIssueRevision,
   selectIssueSnapshot,
   type WriteActor,
 } from './work-service.js';
@@ -71,9 +74,18 @@ export interface CreateCommentInput {
 }
 
 type WorkflowStateSelection = Pick<WorkflowState, 'id' | 'name' | 'teamId'>;
+type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
 export async function createIssue(
   prisma: PrismaClient,
+  input: CreateIssueInput,
+  actor: WriteActor = INTERNAL_WRITE_ACTOR,
+): Promise<Issue> {
+  return prisma.$transaction((transaction) => createIssueInTransaction(transaction, input, actor));
+}
+
+export async function createIssueInTransaction(
+  prisma: DatabaseClient,
   input: CreateIssueInput,
   actor: WriteActor = INTERNAL_WRITE_ACTOR,
 ): Promise<Issue> {
@@ -90,10 +102,11 @@ export async function createIssue(
     throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
   }
 
+  await assertProjectAndCycleTeam(prisma, input.teamId, input.projectId, input.cycleId);
+
   const state = await resolveCreateState(prisma, input.teamId, input.stateId);
 
-  return prisma.$transaction(async (transaction) => {
-    const updatedTeam = await transaction.team.update({
+  const updatedTeam = await prisma.team.update({
       where: {
         id: input.teamId,
       },
@@ -108,7 +121,7 @@ export async function createIssue(
       },
     });
 
-    const created = await transaction.issue.create({
+  const created = await prisma.issue.create({
       data: {
         acceptance: input.acceptance ?? null,
         commitmentStatus: input.commitmentStatus ?? 'COMMITTED',
@@ -129,14 +142,13 @@ export async function createIssue(
       },
     });
 
-    await recordWorkAudit(transaction, {
+  await recordWorkAudit(prisma, {
       actor,
       after: selectIssueSnapshot(created),
       workId: created.id,
     });
 
-    return created;
-  });
+  return created;
 }
 
 export async function updateIssue(
@@ -164,6 +176,14 @@ export async function updateIssue(
       throw createValidationError(WORK_REVISION_CONFLICT_MESSAGE);
     }
 
+
+    await assertProjectAndCycleTeam(
+      transaction,
+      existingIssue.teamId,
+      input.projectId,
+      input.cycleId,
+    );
+
     let nextParentId: string | null | undefined;
 
     const data: Prisma.IssueUpdateInput = {};
@@ -176,6 +196,7 @@ export async function updateIssue(
         select: {
           id: true,
           name: true,
+          type: true,
           teamId: true,
         },
       });
@@ -188,7 +209,7 @@ export async function updateIssue(
         throw createValidationError(WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE);
       }
 
-      if (isAcceptStateName(state.name)) {
+      if (isAcceptStateType(state.type)) {
         assertActorCan(actor.actorKind, 'accept');
       }
 
@@ -348,9 +369,11 @@ export async function updateIssue(
       return existingIssue;
     }
 
-    data.revision = {
-      increment: 1,
-    };
+    if (input.expectedRevision !== undefined && input.expectedRevision !== null) {
+      await claimIssueRevision(transaction, id, input.expectedRevision);
+    } else {
+      data.revision = { increment: 1 };
+    }
 
     const updated = await transaction.issue.update({
       where: {
@@ -372,6 +395,28 @@ export async function updateIssue(
 
     return updated;
   });
+}
+
+async function assertProjectAndCycleTeam(
+  prisma: DatabaseClient,
+  teamId: string,
+  projectId: string | null | undefined,
+  cycleId: string | null | undefined,
+): Promise<void> {
+  if (projectId) {
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, teamId },
+      select: { id: true },
+    });
+    if (!project) throw createNotFoundError(PROJECT_NOT_FOUND_MESSAGE);
+  }
+  if (cycleId) {
+    const cycle = await prisma.cycle.findFirst({
+      where: { id: cycleId, teamId },
+      select: { id: true },
+    });
+    if (!cycle) throw createNotFoundError(CYCLE_NOT_FOUND_MESSAGE);
+  }
 }
 
 async function assertNoParentCycle(

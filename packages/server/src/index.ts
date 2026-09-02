@@ -2,7 +2,7 @@ import type { PrismaClient } from '@prisma/client';
 
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
 import { createServer, type Server as HttpServer } from 'node:http';
-import { resolve, join, extname } from 'node:path';
+import { join, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, createReadStream, statSync } from 'node:fs';
 
@@ -17,6 +17,7 @@ import { flushEventOutbox, parseWebhookTargets } from './event-outbox.js';
 import { handleMcpRequest } from './mcp.js';
 import { createGraphQLSchema } from './schema.js';
 import { getServerEnvironment, loadServerEnvironment, type ServerEnvironment } from './environment.js';
+import { getUploadsDirectory } from './uploads.js';
 
 loadServerEnvironment();
 
@@ -98,7 +99,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     scopes: options.googleOAuth?.scopes ?? ['openid', 'email', 'profile'],
   } satisfies GoogleOAuthConfiguration;
 
-  const uploadsDir = resolve(fileURLToPath(import.meta.url), '../../uploads');
+  const uploadsDir = getUploadsDirectory();
 
   const httpServer = createServer((request, response) => {
     if (request.method === 'GET' && getPathname(request.url) === '/health') {
@@ -109,38 +110,32 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     }
 
     const pathname = getPathname(request.url);
-    if (request.method === 'GET' && pathname.startsWith('/uploads/')) {
-      const filename = pathname.slice('/uploads/'.length);
-      if (filename.includes('..') || filename.includes('/')) {
-        response.statusCode = 400;
-        response.end('Bad request');
-        return;
-      }
-      const filePath = join(uploadsDir, filename);
-      if (!existsSync(filePath)) {
-        response.statusCode = 404;
-        response.end('Not found');
-        return;
-      }
-      const stat = statSync(filePath);
-      const mimeTypes: Record<string, string> = {
-        '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
-        '.pdf': 'application/pdf',
-      };
-      const ext = extname(filename).toLowerCase();
-      response.setHeader('content-type', mimeTypes[ext] ?? 'application/octet-stream');
-      response.setHeader('content-length', stat.size);
-      createReadStream(filePath).pipe(response);
-      return;
-    }
-
     const mcpAuth = {
       allowAdminFallback: options.allowAdminFallback ?? environment.allowAdminFallback,
       authToken: options.authToken ?? environment.authToken,
       prisma,
       viewerAssertionSecret: options.viewerAssertionSecret ?? environment.viewerAssertionSecret,
     };
+
+    if (request.method === 'GET' && pathname.startsWith('/uploads/')) {
+      const filename = pathname.slice('/uploads/'.length);
+      handleUploadDownload({
+        auth: mcpAuth,
+        filename,
+        request,
+        response,
+        uploadsDir,
+      }).catch((error: unknown) => {
+        console.error('Failed to handle upload download request.');
+        console.error(error);
+        if (!response.headersSent) {
+          response.statusCode = 500;
+          response.setHeader('content-type', 'application/json; charset=utf-8');
+        }
+        response.end(JSON.stringify({ error: 'Internal server error' }));
+      });
+      return;
+    }
 
     handleMcpRequest({
       ...mcpAuth,
@@ -243,6 +238,63 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     },
     url: `http://127.0.0.1:${address.port}`,
   };
+}
+
+async function handleUploadDownload(options: {
+  auth: {
+    allowAdminFallback: boolean;
+    authToken: string;
+    prisma: PrismaClient;
+    viewerAssertionSecret: string | null;
+  };
+  filename: string;
+  request: import('node:http').IncomingMessage;
+  response: import('node:http').ServerResponse;
+  uploadsDir: string;
+}): Promise<void> {
+  const { filename, request, response, uploadsDir } = options;
+  if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+    response.statusCode = 400;
+    response.end('Bad request');
+    return;
+  }
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(request.headers)) {
+    if (typeof value === 'string') headers.set(key, value);
+    else if (Array.isArray(value)) headers.set(key, value.join(', '));
+  }
+  const context = await createGraphQLContext({
+    ...options.auth,
+    request: new Request(`http://${request.headers.host ?? '127.0.0.1'}${request.url ?? '/'}`, {
+      headers,
+      method: 'GET',
+    }),
+  });
+  if (context.authMode === 'none') {
+    response.statusCode = 401;
+    response.setHeader('content-type', 'application/json; charset=utf-8');
+    response.end(JSON.stringify({ error: 'Authentication required.' }));
+    return;
+  }
+
+  const filePath = join(uploadsDir, filename);
+  if (!existsSync(filePath)) {
+    response.statusCode = 404;
+    response.end('Not found');
+    return;
+  }
+  const stat = statSync(filePath);
+  const mimeTypes: Record<string, string> = {
+    '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+    '.pdf': 'application/pdf',
+  };
+  const ext = extname(filename).toLowerCase();
+  response.setHeader('cache-control', 'private, no-store');
+  response.setHeader('content-type', mimeTypes[ext] ?? 'application/octet-stream');
+  response.setHeader('content-length', stat.size);
+  createReadStream(filePath).pipe(response);
 }
 
 async function main(): Promise<void> {

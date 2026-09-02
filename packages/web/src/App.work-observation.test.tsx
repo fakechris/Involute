@@ -21,12 +21,20 @@ function documentSource(document: unknown): string {
 }
 
 const candidateQuery: CandidatesPageQueryData = {
-  teams: boardQueryResult.teams,
-  users: {
-    nodes: [
-      { id: 'user-1', name: 'Admin', email: 'admin@involute.local', actorKind: 'HUMAN' },
-      { id: 'agent-1', name: 'Codex', email: 'codex@involute.local', actorKind: 'AGENT' },
-    ],
+  teams: {
+    nodes: boardQueryResult.teams.nodes.map((team) => ({
+      ...team,
+      memberships: team.id === 'team-1'
+        ? {
+            nodes: [
+              {
+                id: 'membership-1',
+                user: { id: 'user-1', name: 'Admin', email: 'admin@involute.local', actorKind: 'HUMAN' },
+              },
+            ],
+          }
+        : { nodes: [] },
+    })),
   },
   issues: {
     nodes: [
@@ -115,6 +123,7 @@ const graphQuery: WorkGraphPageQueryData = {
         },
       },
     ],
+    pageInfo: { endCursor: null, hasNextPage: false },
   },
 };
 
@@ -134,7 +143,7 @@ const workContextQuery: WorkContextPageQueryData = {
       acceptance: 'readyWork omits INV-2 while blocked',
       verification: 'context-service tests',
       repository: 'fakechris/involute',
-      state: { id: 'state-review', name: 'In Review', type: 'STARTED', position: 3 },
+      state: { id: 'state-review', name: 'In Review', type: 'REVIEW', position: 3 },
       team: { id: 'team-1', key: 'INV', name: 'Involute' },
       assignee: { id: 'user-1', name: 'Admin', email: 'admin@involute.local' },
     },
@@ -150,6 +159,9 @@ const workContextQuery: WorkContextPageQueryData = {
       {
         id: 'run-1',
         publicId: 'RUN-1',
+        actorId: 'agent-1',
+        claimId: 'claim-1',
+        baseRevision: 2,
         status: 'COMPLETED',
         phase: 'implement',
         summary: 'Patch landed, waiting for review',
@@ -161,12 +173,15 @@ const workContextQuery: WorkContextPageQueryData = {
     evidence: [
       {
         id: 'ev-1',
+        actorId: 'agent-1',
+        runId: 'run-1',
         kind: 'PR',
         url: 'https://example.test/pr/1',
         summary: 'Implementation PR',
         createdAt: '2026-08-31T16:21:00.000Z',
       },
     ],
+    reviewDecisions: [],
     audits: [
       {
         id: 'audit-1',
@@ -285,6 +300,18 @@ describe('K6 observation UI', () => {
   });
 
   it('shows contract, runs, evidence, and audits on the work context page', async () => {
+    const review = vi.fn().mockResolvedValue({
+      data: {
+        workReview: {
+          success: true,
+          issue: { id: 'issue-2', identifier: 'INV-2', revision: 4 },
+          decision: { id: 'decision-1', decision: 'ACCEPTED' },
+        },
+      },
+    });
+    apolloMocks.useMutation.mockImplementation((document) => {
+      return documentSource(document).includes('mutation WorkReview') ? [review] : [vi.fn()];
+    });
     renderApp(
       { data: boardQueryResult, workContextData: workContextQuery, loading: false },
       ['/work/issue-2'],
@@ -298,6 +325,41 @@ describe('K6 observation UI', () => {
     expect(screen.getByText('Implementation PR')).toBeInTheDocument();
     expect(screen.getByText('run completed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Issue editor' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
+    await waitFor(() => expect(review).toHaveBeenCalledWith({
+      variables: {
+        id: 'issue-2',
+        input: { decision: 'ACCEPTED', expectedRevision: 3 },
+      },
+    }));
+  });
+
+  it('loads the next candidate page only from the advertised cursor', async () => {
+    const fetchMore = vi.fn().mockResolvedValue(undefined);
+    renderApp({
+      data: boardQueryResult,
+      candidatesData: {
+        ...candidateQuery,
+        issues: {
+          ...candidateQuery.issues,
+          pageInfo: { endCursor: 'candidate-cursor', hasNextPage: true },
+        },
+      },
+      fetchMore,
+      loading: false,
+    }, ['/candidates']);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Load more' }));
+    await waitFor(() => expect(fetchMore).toHaveBeenCalledWith(expect.objectContaining({
+      variables: { after: 'candidate-cursor' },
+      updateQuery: expect.any(Function),
+    })));
+  });
+
+  it('does not report a failed context query as missing work', async () => {
+    renderApp({ data: boardQueryResult, error: new Error('network down'), loading: false }, ['/work/issue-2']);
+    expect(await screen.findByRole('heading', { name: 'Could not load work context' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Work not found' })).not.toBeInTheDocument();
   });
 
   it('opens candidates and graph from keyboard shortcuts', async () => {

@@ -53,7 +53,7 @@ describe('App issue metadata flows', () => {
       expect(mutate).toHaveBeenNthCalledWith(1, {
         variables: {
           id: 'issue-1',
-          input: { labelIds: ['label-task', 'label-feature'] },
+          input: { expectedRevision: 1, labelIds: ['label-task', 'label-feature'] },
         },
       }),
     );
@@ -64,7 +64,7 @@ describe('App issue metadata flows', () => {
       expect(mutate).toHaveBeenNthCalledWith(2, {
         variables: {
           id: 'issue-1',
-          input: { assigneeId: null },
+          input: { assigneeId: null, expectedRevision: 1 },
         },
       }),
     );
@@ -97,7 +97,7 @@ describe('App issue metadata flows', () => {
       expect(mutate).toHaveBeenCalledWith({
         variables: {
           id: 'issue-1',
-          input: { labelIds: [] },
+          input: { expectedRevision: 1, labelIds: [] },
         },
       }),
     );

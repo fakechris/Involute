@@ -53,6 +53,8 @@ export async function createWorkLink(
     throw createValidationError(WORK_LINK_TEAM_MISMATCH_MESSAGE);
   }
 
+  await prisma.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${fromIssue.teamId}, 0))`;
+
   if (CYCLE_CHECKED_LINK_TYPES.has(input.type)) {
     await assertNoWorkLinkCycle(prisma, input.type, input.fromId, input.toId);
   }

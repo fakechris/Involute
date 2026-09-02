@@ -51,6 +51,8 @@ export function getServerEnvironment(env: NodeJS.ProcessEnv = process.env): Serv
   const googleOAuthClientId = env.GOOGLE_OAUTH_CLIENT_ID?.trim() || null;
   const googleOAuthClientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() || null;
   const googleOAuthRedirectUri = env.GOOGLE_OAUTH_REDIRECT_URI?.trim() || null;
+  const webhookSecret = env.INVOLUTE_WEBHOOK_SECRET?.trim() || null;
+  const webhookUrls = env.INVOLUTE_WEBHOOK_URL?.trim() || null;
 
   if (allowAdminFallback && nodeEnvironment !== 'development' && nodeEnvironment !== 'test') {
     throw new Error('ALLOW_ADMIN_FALLBACK=true is only supported in development or test environments.');
@@ -60,6 +62,10 @@ export function getServerEnvironment(env: NodeJS.ProcessEnv = process.env): Serv
     throw new Error(
       'REQUIRE_GOOGLE_OAUTH=true requires GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, and GOOGLE_OAUTH_REDIRECT_URI.',
     );
+  }
+
+  if (Boolean(webhookSecret) !== Boolean(webhookUrls)) {
+    throw new Error('INVOLUTE_WEBHOOK_URL and INVOLUTE_WEBHOOK_SECRET must be configured together.');
   }
 
   return {
@@ -77,7 +83,7 @@ export function getServerEnvironment(env: NodeJS.ProcessEnv = process.env): Serv
       ? Math.trunc(sessionTtlSeconds)
       : 60 * 60 * 24 * 30,
     viewerAssertionSecret: env.VIEWER_ASSERTION_SECRET?.trim() || null,
-    webhookSecret: env.INVOLUTE_WEBHOOK_SECRET?.trim() || null,
-    webhookUrls: env.INVOLUTE_WEBHOOK_URL?.trim() || null,
+    webhookSecret,
+    webhookUrls,
   };
 }

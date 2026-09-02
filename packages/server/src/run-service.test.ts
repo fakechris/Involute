@@ -6,9 +6,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
-import { commitWork, proposeWork } from './claim-service.ts';
+import { claimWork, commitWork, proposeWork } from './claim-service.ts';
 import { flushEventOutbox } from './event-outbox.ts';
-import { attachEvidence, reportRun } from './run-service.ts';
+import { attachEvidence, reportRun, reviewWork } from './run-service.ts';
 
 loadProjectEnvironment();
 
@@ -28,6 +28,7 @@ describe('run and evidence', () => {
 
   beforeEach(async () => {
     await prisma.eventOutbox.deleteMany();
+    await prisma.workReviewDecision.deleteMany();
     await prisma.workEvidence.deleteMany();
     await prisma.workRun.deleteMany();
     await prisma.comment.deleteMany();
@@ -59,6 +60,13 @@ describe('run and evidence', () => {
       { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
     );
 
+    const claimed = await claimWork(
+      prisma,
+      committed.id,
+      {},
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    );
+
     const started = await reportRun(
       prisma,
       { phase: 'implementing', status: 'running', workId: committed.id },
@@ -66,6 +74,8 @@ describe('run and evidence', () => {
     );
     expect(started.run.publicId).toMatch(/^RUN-/);
     expect(started.run.status).toBe('RUNNING');
+    expect(started.run.claimId).toBe(claimed.claim.id);
+    expect(started.run.baseRevision).toBe(committed.revision);
 
     const completed = await reportRun(
       prisma,
@@ -100,10 +110,29 @@ describe('run and evidence', () => {
       where: { id: evidence.work.stateId },
     });
     expect(afterEvidence.name).toBe('In Review');
+    expect(evidence.evidence.actorId).toBe(human.id);
+
+    await expect(reportRun(
+      prisma,
+      { runId: started.run.publicId, status: 'running', workId: committed.id },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    )).rejects.toThrow('Completed or failed runs cannot be changed.');
+
+    const accepted = await reviewWork(
+      prisma,
+      completed.work.id,
+      { decision: 'ACCEPTED', expectedRevision: completed.work.revision, runId: started.run.publicId },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    );
+    const acceptedState = await prisma.workflowState.findUniqueOrThrow({
+      where: { id: accepted.work.stateId },
+    });
+    expect(acceptedState.type).toBe('COMPLETED');
+    expect(accepted.decision.runId).toBe(started.run.id);
 
     const events = await prisma.eventOutbox.findMany({ orderBy: { createdAt: 'asc' } });
     expect(events.map((event) => event.type)).toEqual(
-      expect.arrayContaining(['work.proposed', 'work.committed', 'run.started', 'run.completed', 'artifact.attached']),
+      expect.arrayContaining(['work.proposed', 'work.committed', 'run.started', 'run.completed', 'artifact.attached', 'work.review_submitted', 'work.accepted']),
     );
 
     const delivered: Array<{ body: string; headers: Headers; url: string }> = [];
@@ -130,5 +159,31 @@ describe('run and evidence', () => {
     expect(completedDelivery?.headers.get('involute-delivery')).toBeTruthy();
     const committedDelivery = delivered.find((item) => item.body.includes('work.committed'));
     expect(committedDelivery?.body).toContain('updatedFrom');
+  });
+
+  it('retries only failed webhook targets', async () => {
+    const event = await prisma.eventOutbox.create({
+      data: { payload: { data: {}, type: 'work.proposed' }, type: 'work.proposed' },
+    });
+    const attempts = new Map<string, number>();
+    const targets = [
+      { secret: 'shared-secret', url: 'https://one.example.test/hook' },
+      { secret: 'shared-secret', url: 'https://two.example.test/hook' },
+    ];
+    const deliver = async (url: string | URL | Request): Promise<Response> => {
+      const key = String(url);
+      const count = (attempts.get(key) ?? 0) + 1;
+      attempts.set(key, count);
+      if (key === targets[1]!.url && count === 1) {
+        return new Response('temporary failure', { status: 503 });
+      }
+      return new Response('ok', { status: 200 });
+    };
+
+    expect(await flushEventOutbox(prisma, targets, deliver as typeof fetch)).toEqual({ delivered: 0, failed: 1 });
+    expect(await flushEventOutbox(prisma, targets, deliver as typeof fetch)).toEqual({ delivered: 1, failed: 0 });
+    expect(attempts.get(targets[0]!.url)).toBe(1);
+    expect(attempts.get(targets[1]!.url)).toBe(2);
+    expect((await prisma.eventOutbox.findUniqueOrThrow({ where: { id: event.id } })).deliveredAt).not.toBeNull();
   });
 });

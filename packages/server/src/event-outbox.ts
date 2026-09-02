@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 
 import type { Prisma, PrismaClient } from '@prisma/client';
 
@@ -12,6 +12,8 @@ export const WORK_EVENT_TYPES = [
   'run.completed',
   'decision.requested',
   'artifact.attached',
+  'work.review_submitted',
+  'work.review_rejected',
   'work.accepted',
 ] as const;
 
@@ -65,7 +67,7 @@ export async function flushEventOutbox(
   const pending = await prisma.eventOutbox.findMany({
     where: {
       deliveredAt: null,
-      attempts: { lt: 8 },
+      deadLetteredAt: null,
     },
     orderBy: { createdAt: 'asc' },
     take: limit,
@@ -82,27 +84,58 @@ export async function flushEventOutbox(
       ...(event.payload as object),
     });
 
-    try {
-      await Promise.all(
-        targets.map(async (target) => {
-          const signature = createHmac('sha256', target.secret).update(body).digest('hex');
-          const response = await fetchImpl(target.url, {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              'involute-delivery': event.id,
-              'involute-event': event.type,
-              'involute-signature': `sha256=${signature}`,
-            },
-            body,
-          });
+    const targetResults: boolean[] = [];
+    const targetErrors: string[] = [];
+    for (const target of targets) {
+      const targetHash = createHash('sha256').update(target.url).digest('hex');
+      const delivery = await prisma.eventOutboxDelivery.upsert({
+        where: { eventId_targetHash: { eventId: event.id, targetHash } },
+        create: { eventId: event.id, targetHash },
+        update: {},
+      });
+      if (delivery.deliveredAt) {
+        targetResults.push(true);
+        continue;
+      }
+      if (delivery.attempts >= 8) {
+        targetResults.push(false);
+        targetErrors.push(delivery.lastError ?? `Webhook ${target.url} exhausted retries`);
+        continue;
+      }
 
-          if (!response.ok) {
-            throw new Error(`Webhook ${target.url} returned ${response.status}`);
-          }
-        }),
-      );
+      try {
+        const signature = createHmac('sha256', target.secret).update(body).digest('hex');
+        const response = await fetchImpl(target.url, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'involute-delivery': event.id,
+            'involute-event': event.type,
+            'involute-signature': `sha256=${signature}`,
+          },
+          body,
+        });
 
+        if (!response.ok) {
+          throw new Error(`Webhook ${target.url} returned ${response.status}`);
+        }
+        await prisma.eventOutboxDelivery.update({
+          where: { id: delivery.id },
+          data: { attempts: { increment: 1 }, deliveredAt: new Date(), lastError: null },
+        });
+        targetResults.push(true);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await prisma.eventOutboxDelivery.update({
+          where: { id: delivery.id },
+          data: { attempts: { increment: 1 }, lastError: message },
+        });
+        targetResults.push(false);
+        targetErrors.push(message);
+      }
+    }
+
+    if (targetResults.every(Boolean)) {
       await prisma.eventOutbox.update({
         where: { id: event.id },
         data: {
@@ -112,13 +145,21 @@ export async function flushEventOutbox(
         },
       });
       delivered += 1;
-    } catch (error) {
+    } else {
       failed += 1;
+      const deliveries = await prisma.eventOutboxDelivery.findMany({
+        where: {
+          eventId: event.id,
+          targetHash: { in: targets.map((target) => createHash('sha256').update(target.url).digest('hex')) },
+        },
+      });
+      const deadLettered = deliveries.some((delivery) => !delivery.deliveredAt && delivery.attempts >= 8);
       await prisma.eventOutbox.update({
         where: { id: event.id },
         data: {
           attempts: { increment: 1 },
-          lastError: error instanceof Error ? error.message : String(error),
+          ...(deadLettered ? { deadLetteredAt: new Date() } : {}),
+          lastError: targetErrors.join('; '),
         },
       });
     }

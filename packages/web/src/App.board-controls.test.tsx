@@ -151,6 +151,7 @@ describe('App board controls', () => {
         variables: {
           id: 'issue-1',
           input: {
+            expectedRevision: 1,
             stateId: 'state-ready',
           },
         },
@@ -258,6 +259,7 @@ describe('App board controls', () => {
           id: 'issue-1',
           input: {
             assigneeId: null,
+            expectedRevision: 1,
           },
         },
       }),
@@ -273,6 +275,7 @@ describe('App board controls', () => {
         variables: {
           id: 'issue-1',
           input: {
+            expectedRevision: 1,
             labelIds: ['label-bug', 'label-task'],
           },
         },
@@ -289,6 +292,7 @@ describe('App board controls', () => {
         variables: {
           id: 'issue-1',
           input: {
+            expectedRevision: 1,
             labelIds: ['label-bug'],
           },
         },
