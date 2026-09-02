@@ -62,6 +62,26 @@ describe('foundation scrutiny fixes', () => {
     findManySpy.mockRestore();
   });
 
+  it('serializes every seeded workflow state type through GraphQL', async () => {
+    await seedDatabase(prisma);
+
+    const response = await postGraphQL({
+      query: '{ teams { nodes { states { nodes { type } } } } }',
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.teams.nodes[0].states.nodes.map((state: { type: string }) => state.type)).toEqual([
+      'BACKLOG',
+      'UNSTARTED',
+      'STARTED',
+      'REVIEW',
+      'COMPLETED',
+      'CANCELED',
+    ]);
+  });
+
   it('fails issueCreate gracefully when the provided state belongs to another team', async () => {
     const fixture = await createTwoTeamFixture(prisma);
 

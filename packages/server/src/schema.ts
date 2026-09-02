@@ -273,6 +273,7 @@ const typeDefs = /* GraphQL */ `
     BACKLOG
     UNSTARTED
     STARTED
+    REVIEW
     COMPLETED
     CANCELED
   }
