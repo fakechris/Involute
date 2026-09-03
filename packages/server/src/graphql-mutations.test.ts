@@ -1291,6 +1291,81 @@ describe('GraphQL mutations', () => {
       issue: null,
     });
   });
+
+  it('issues, lists, and revokes agent credentials with scoped tokens', async () => {
+    const createResponse = await postGraphQL({
+      query: `
+        mutation AgentCreate($input: AgentCredentialCreateInput!) {
+          agentCredentialCreate(input: $input) {
+            success
+            token
+            credential { id name scopes user { email actorKind } }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          email: 'ci-agent@example.invalid',
+          name: 'CI Agent',
+          scopes: ['read', 'propose'],
+          team: fixture.team.key,
+        },
+      },
+    });
+
+    expect(createResponse.status).toBe(200);
+    expect(createResponse.body.errors).toBeUndefined();
+    const created = createResponse.body.data.agentCredentialCreate;
+    expect(created.success).toBe(true);
+    expect(created.token).toMatch(/^inv_agent_/);
+    expect(created.credential.scopes).toEqual(expect.arrayContaining(['read', 'propose']));
+    expect(created.credential.user.actorKind).toBe('AGENT');
+    const credentialId = created.credential.id as string;
+
+    const stored = await prisma.agentCredential.findUniqueOrThrow({ where: { id: credentialId } });
+    expect(stored.tokenHash).not.toContain('inv_agent_');
+
+    const listResponse = await postGraphQL({
+      query: `
+        query AgentList($teamId: String!) {
+          agentCredentials(teamId: $teamId) {
+            id
+            name
+            scopes
+            revokedAt
+          }
+        }
+      `,
+      variables: { teamId: fixture.team.id },
+    });
+    expect(listResponse.body.data.agentCredentials).toEqual([
+      expect.objectContaining({ id: credentialId, revokedAt: null }),
+    ]);
+
+    const otherTeamList = await postGraphQL({
+      query: `
+        query AgentList($teamId: String!) {
+          agentCredentials(teamId: $teamId) { id }
+        }
+      `,
+      variables: { teamId: fixture.otherTeam.id },
+    });
+    expect(otherTeamList.body.data.agentCredentials).toEqual([]);
+
+    const revokeResponse = await postGraphQL({
+      query: `
+        mutation AgentRevoke($id: String!) {
+          agentCredentialRevoke(id: $id) {
+            success
+            credential { id revokedAt }
+          }
+        }
+      `,
+      variables: { id: credentialId },
+    });
+    expect(revokeResponse.body.data.agentCredentialRevoke.success).toBe(true);
+    expect(revokeResponse.body.data.agentCredentialRevoke.credential.revokedAt).not.toBeNull();
+  });
 });
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<MutationFixture> {

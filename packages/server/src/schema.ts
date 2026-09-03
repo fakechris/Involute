@@ -1,4 +1,5 @@
 import type {
+  AgentCredential,
   Attachment,
   Comment,
   Cycle,
@@ -36,6 +37,8 @@ import {
   isPrismaInvalidInputError,
   ISSUE_NOT_FOUND_MESSAGE,
   MEMBERSHIP_NOT_FOUND_MESSAGE,
+  TEAM_MANAGE_FORBIDDEN_MESSAGE,
+  TEAM_NOT_FOUND_MESSAGE,
   TEAM_OWNER_REQUIRED_MESSAGE,
   UPLOAD_TOO_LARGE_MESSAGE,
 } from './errors.js';
@@ -57,6 +60,7 @@ import type {
 import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
 
 import { requireAuthentication, type GraphQLContext } from './auth.js';
+import { issueAgentCredential, parseAgentScopes } from './agent-credentials.js';
 import { createComment, createIssue, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
 import { listIncidentLinks } from './link-service.js';
 import { writeActorFromViewer } from './work-service.js';
@@ -107,6 +111,7 @@ type IssueParent = Issue & {
 };
 type WorkLinkParent = WorkLink & { from?: Issue | null; to?: Issue | null };
 type WorkClaimParent = WorkClaim & { actor?: User | null };
+type AgentCredentialParent = AgentCredential & { user?: User | null };
 
 interface StringComparatorInput {
   eq?: string | null;
@@ -218,6 +223,7 @@ const typeDefs = /* GraphQL */ `
     cycle(id: String!): Cycle
     workContext(id: String!): WorkContext
     readyWork(filter: ReadyWorkFilter): IssueConnection!
+    agentCredentials(teamId: String!): [AgentCredentialRecord!]!
   }
 
   type Mutation {
@@ -244,6 +250,8 @@ const typeDefs = /* GraphQL */ `
     runReport(input: RunReportInput!): RunReportPayload!
     evidenceAttach(input: EvidenceAttachInput!): EvidenceAttachPayload!
     workReview(id: String!, input: WorkReviewInput!): WorkReviewPayload!
+    agentCredentialCreate(input: AgentCredentialCreateInput!): AgentCredentialCreatePayload!
+    agentCredentialRevoke(id: String!): AgentCredentialRevokePayload!
   }
 
   type Team {
@@ -474,6 +482,35 @@ const typeDefs = /* GraphQL */ `
     actor: User!
     leaseUntil: DateTime!
     createdAt: DateTime!
+  }
+
+  type AgentCredentialRecord {
+    id: ID!
+    name: String!
+    scopes: [String!]!
+    createdAt: DateTime!
+    expiresAt: DateTime
+    revokedAt: DateTime
+    user: User!
+  }
+
+  input AgentCredentialCreateInput {
+    team: String!
+    name: String!
+    email: String
+    scopes: [String!]
+    expiresAt: DateTime
+  }
+
+  type AgentCredentialCreatePayload {
+    success: Boolean!
+    credential: AgentCredentialRecord
+    token: String
+  }
+
+  type AgentCredentialRevokePayload {
+    success: Boolean!
+    credential: AgentCredentialRecord
   }
 
   type Project {
@@ -1040,6 +1077,20 @@ const resolvers = {
         }),
       };
     },
+    agentCredentials: async (
+      _parent: unknown,
+      args: { teamId: string },
+      context: GraphQLContext,
+    ): Promise<AgentCredentialParent[]> => {
+      const team = await resolveTeamByIdOrKey(context.prisma, args.teamId);
+      if (!team) throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
+      await assertCanManageTeam(context.prisma, context, team.id);
+      return context.prisma.agentCredential.findMany({
+        where: { user: { memberships: { some: { teamId: team.id } } } },
+        include: { user: true },
+        orderBy: { createdAt: 'desc' },
+      });
+    },
     projects: async (
       _parent: unknown,
       args: { teamId: string },
@@ -1344,6 +1395,7 @@ const resolvers = {
         input: {
           decision: 'ACCEPTED' | 'REJECTED';
           expectedRevision: number;
+          idempotencyKey?: string | null;
           reason?: string | null;
           runId?: string | null;
         };
@@ -1368,6 +1420,58 @@ const resolvers = {
         success: true as const,
       };
     }, { decision: null, issue: null, success: false as const }),
+    agentCredentialCreate: async (
+      _parent: unknown,
+      args: {
+        input: {
+          email?: string | null;
+          expiresAt?: string | null;
+          name: string;
+          scopes?: string[] | null;
+          team: string;
+        };
+      },
+      context: GraphQLContext,
+    ): Promise<{ credential: AgentCredentialParent | null; success: boolean; token: string | null }> =>
+      runMutation(async () => {
+        const team = await resolveTeamByIdOrKey(context.prisma, args.input.team);
+        if (!team) throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
+        await assertCanManageTeam(context.prisma, context, team.id);
+        const { credential, token } = await issueAgentCredential(context.prisma, {
+          email: args.input.email ?? null,
+          expiresAt: args.input.expiresAt ? new Date(args.input.expiresAt) : null,
+          name: args.input.name,
+          scopes: parseAgentScopes(args.input.scopes?.join(',')),
+          teamKey: team.key,
+        });
+        return {
+          credential: await context.prisma.agentCredential.findUniqueOrThrow({
+            where: { id: credential.id },
+            include: { user: true },
+          }),
+          success: true as const,
+          token,
+        };
+      }, { credential: null, success: false as const, token: null }),
+    agentCredentialRevoke: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<{ credential: AgentCredentialParent | null; success: boolean }> =>
+      runMutation(async () => {
+        const credential = await context.prisma.agentCredential.findUnique({
+          where: { id: args.id },
+          include: { user: { include: { memberships: true } } },
+        });
+        if (!credential) throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
+        await assertCanManageAgentCredential(context, credential.user?.memberships ?? []);
+        const updated = await context.prisma.agentCredential.update({
+          where: { id: credential.id },
+          data: { revokedAt: new Date() },
+          include: { user: true },
+        });
+        return { credential: updated, success: true as const };
+      }, { credential: null, success: false as const }),
     commentCreate: async (
       _parent: unknown,
       args: { input: CreateCommentInput },
@@ -1784,6 +1888,19 @@ const resolvers = {
         },
       }),
   },
+  AgentCredentialRecord: {
+    user: async (
+      parent: AgentCredentialParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<User> =>
+      parent.user ??
+      context.prisma.user.findUniqueOrThrow({
+        where: {
+          id: parent.userId,
+        },
+      }),
+  },
   Comment: {
     user: async (
       parent: CommentParent,
@@ -2027,6 +2144,34 @@ async function getIssueById(prisma: PrismaClient, id: string): Promise<IssuePare
     },
     include: buildIssueDetailInclude(),
   });
+}
+
+async function resolveTeamByIdOrKey(prisma: PrismaClient, idOrKey: string): Promise<Team | null> {
+  try {
+    const byId = await prisma.team.findUnique({ where: { id: idOrKey } });
+    if (byId) return byId;
+  } catch {
+    // Non-UUID values fall through to key lookup.
+  }
+  return prisma.team.findUnique({ where: { key: idOrKey } });
+}
+
+async function assertCanManageAgentCredential(
+  context: GraphQLContext,
+  memberships: Array<{ teamId: string }>,
+): Promise<void> {
+  if (context.isTrustedSystem || context.viewer?.globalRole === 'ADMIN') {
+    return;
+  }
+  for (const membership of memberships) {
+    try {
+      await assertCanManageTeam(context.prisma, context, membership.teamId);
+      return;
+    } catch {
+      // Try the next team the agent belongs to.
+    }
+  }
+  throw createValidationError(TEAM_MANAGE_FORBIDDEN_MESSAGE);
 }
 
 function buildTeamWhere(filter: TeamFilterInput | null | undefined) {
