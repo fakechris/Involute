@@ -67,6 +67,8 @@ export const UPLOAD_TOO_LARGE_MESSAGE = 'Upload exceeds the 10 MB size limit.';
 export const WEBHOOK_NOT_FOUND_MESSAGE = 'Webhook subscription not found.';
 export const WEBHOOK_URL_INVALID_MESSAGE = 'Webhook URL must be a valid absolute http(s) URL.';
 export const WEBHOOK_EVENT_TYPE_INVALID_MESSAGE = 'Unknown webhook event type.';
+export const AGENT_SCOPE_INVALID_MESSAGE = 'Unknown agent scope.';
+export const AGENT_CREDENTIAL_NOT_FOUND_MESSAGE = 'Agent credential not found.';
 
 export function createScopeForbiddenError(scope: string): GraphQLError {
   return new GraphQLError(`Agent credential lacks required scope: ${scope}.`, {
@@ -133,6 +135,8 @@ const exposedErrorCodes = new Map<string, string>([
   [WEBHOOK_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [WEBHOOK_URL_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [WEBHOOK_EVENT_TYPE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [AGENT_SCOPE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [AGENT_CREDENTIAL_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
 ]);
 
 export function createNotAuthenticatedError(): GraphQLError {

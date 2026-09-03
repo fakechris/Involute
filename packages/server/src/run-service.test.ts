@@ -1,6 +1,6 @@
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
 import type { PrismaClient, Team, User } from '@prisma/client';
-import { createHash, createHmac } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -363,8 +363,61 @@ describe('run and evidence', () => {
     expect(otherTeam.key).toBe('OTHER');
   });
 
-  it('falls back to env targets when no subscription exists', async () => {
-    expect(await collectOutboundWebhookTargets(prisma, 'https://env.example.test/hook', 'env-secret')).toEqual([
+  it('treats same-URL subscriptions as distinct delivery identities', async () => {
+    const signatures: Array<string | null> = [];
+    const deliver = async (_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      signatures.push(new Headers(init?.headers).get('involute-signature'));
+      return new Response('ok', { status: 200 });
+    };
+
+    await prisma.webhookSubscription.create({
+      data: { eventTypes: [], secret: 'secret-one', teamId: null, url: 'https://same.example.test/hook' },
+    });
+    await prisma.webhookSubscription.create({
+      data: { eventTypes: [], secret: 'secret-two', teamId: null, url: 'https://same.example.test/hook' },
+    });
+    await prisma.eventOutbox.create({
+      data: { payload: { data: {}, type: 'work.proposed' }, type: 'work.proposed' },
+    });
+
+    const targets = await collectOutboundWebhookTargets(prisma, null, null);
+    expect(targets).toHaveLength(2);
+    expect(await flushEventOutbox(prisma, targets, deliver as typeof fetch)).toEqual({ delivered: 1, failed: 0 });
+    expect(signatures).toHaveLength(2);
+    expect(new Set(signatures).size).toBe(2);
+    const event = await prisma.eventOutbox.findFirstOrThrow();
+    expect(await prisma.eventOutboxDelivery.count({ where: { eventId: event.id } })).toBe(2);
+  });
+
+  it('delivers every same-work event to team-scoped subscriptions', async () => {
+    const posted: string[] = [];
+    const deliver = async (url: string | URL | Request): Promise<Response> => {
+      posted.push(String(url));
+      return new Response('ok', { status: 200 });
+    };
+
+    await prisma.webhookSubscription.create({
+      data: { eventTypes: [], secret: 'team-secret', teamId: team.id, url: 'https://scoped.example.test/hook' },
+    });
+    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Fan-out work' });
+    const committed = await commitWork(
+      prisma,
+      candidate.id,
+      { acceptance: 'fan out', assigneeId: human.id, expectedRevision: candidate.revision },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    );
+
+    const targets = await collectOutboundWebhookTargets(prisma, null, null);
+    // work.proposed + work.committed share one work id; both must reach the sub.
+    expect(await flushEventOutbox(prisma, targets, deliver as typeof fetch)).toEqual({ delivered: 2, failed: 0 });
+    expect(posted).toEqual([
+      'https://scoped.example.test/hook',
+      'https://scoped.example.test/hook',
+    ]);
+    expect(committed.commitmentStatus).toBe('COMMITTED');
+  });
+
+  it('falls back to env targets when no subscription exists', async () => {    expect(await collectOutboundWebhookTargets(prisma, 'https://env.example.test/hook', 'env-secret')).toEqual([
       { secret: 'env-secret', url: 'https://env.example.test/hook' },
     ]);
     expect(await collectOutboundWebhookTargets(prisma, null, null)).toEqual([]);
@@ -397,14 +450,10 @@ describe('run and evidence', () => {
     const another = await prisma.eventOutbox.create({
       data: { payload: { data: {}, type: 'work.proposed' }, type: 'work.proposed' },
     });
-    await prisma.eventOutboxDelivery.create({
-      data: {
-        attempts: 8,
-        eventId: another.id,
-        lastError: 'down',
-        targetHash: createHash('sha256').update('https://flaky.example.test/hook').digest('hex'),
-      },
-    });
+    const targetsOnce = await collectOutboundWebhookTargets(prisma, null, null);
+    expect(await flushEventOutbox(prisma, targetsOnce, failing as typeof fetch)).toEqual({ delivered: 0, failed: 1 });
+    const delivery = await prisma.eventOutboxDelivery.findFirstOrThrow({ where: { eventId: another.id } });
+    await prisma.eventOutboxDelivery.update({ where: { id: delivery.id }, data: { attempts: 8 } });
     await prisma.webhookSubscription.update({
       where: { id: subscription.id },
       data: { consecutiveFailures: 9 },

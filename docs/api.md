@@ -682,7 +682,10 @@ Completed runs and attached evidence move work to In Review, never Done. Outboun
 ### Webhook subscriptions (Linear-style, per-endpoint secrets)
 
 Preferred over the legacy shared `INVOLUTE_WEBHOOK_URL`/`INVOLUTE_WEBHOOK_SECRET`
-pair (still honored when no subscription exists). Each subscription carries its
+pair. The env pair is used only when **zero enabled subscriptions** exist
+(disabled subscriptions do not count — disabling your last subscription
+silently reactivates the env fallback, so remove the env values when you cut
+over). Each subscription carries its
 own signing secret, optional team scope (`team` null = all teams), and event
 type filter (empty = all `work.*`/`run.*`/`artifact.*` types). Only team owners
 (team-scoped) or global admins (all-teams) can manage them; secrets are

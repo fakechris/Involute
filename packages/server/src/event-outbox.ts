@@ -78,9 +78,11 @@ export async function flushEventOutbox(
     return { delivered: 0, failed: 0 };
   }
 
-  // Duplicate URLs would POST twice against the same deduped delivery row and
-  // skew the all-terminal dead-letter check, so collapse them first.
-  const distinctTargets = [...new Map(targets.map((target) => [target.url, target])).values()];
+  // Subscriptions are distinct delivery identities even when they share a URL
+  // (different secrets/teams): collapse only truly identical targets so one
+  // slow webhook cannot head-of-line block the others and terminal evaluation
+  // stays per identity.
+  const distinctTargets = [...new Map(targets.map((target) => [targetIdentity(target), target])).values()];
 
   const claimCutoff = new Date(Date.now() - OUTBOX_CLAIM_LEASE_MS);
   const pending = await prisma.eventOutbox.findMany({
@@ -146,7 +148,7 @@ export async function flushEventOutbox(
     const outcomes = await Promise.all(
       eventTargets.map(async (target) => deliverToTarget(prisma, event, target, body, fetchImpl)),
     );
-    const targetHashes = eventTargets.map((target) => targetHashFor(target.url));
+    const targetHashes = eventTargets.map((target) => targetHashFor(target));
 
     if (outcomes.every((outcome) => outcome.ok)) {
       const finalized = await prisma.eventOutbox.updateMany({
@@ -211,24 +213,28 @@ async function loadEventTeams(
   prisma: PrismaClient,
   events: Array<{ id: string; payload: unknown }>,
 ): Promise<Map<string, string>> {
-  const workIds = new Map<string, string>();
+  // One work id can back many events (proposed/committed/claimed/...), so fan
+  // out: every event sharing a work id gets that work's team. A work→single
+  // event map would silently drop team-scoped deliveries for the losers.
+  const eventIdsByWorkId = new Map<string, string[]>();
   for (const event of events) {
     const workId = (event.payload as { work?: { id?: unknown } } | null)?.work?.id;
     if (typeof workId === 'string') {
-      workIds.set(workId, event.id);
+      const bucket = eventIdsByWorkId.get(workId) ?? [];
+      bucket.push(event.id);
+      eventIdsByWorkId.set(workId, bucket);
     }
   }
-  if (workIds.size === 0) {
+  if (eventIdsByWorkId.size === 0) {
     return new Map();
   }
   const issues = await prisma.issue.findMany({
-    where: { id: { in: [...workIds.keys()] } },
+    where: { id: { in: [...eventIdsByWorkId.keys()] } },
     select: { id: true, teamId: true },
   });
   const teams = new Map<string, string>();
   for (const issue of issues) {
-    const eventId = workIds.get(issue.id);
-    if (eventId) {
+    for (const eventId of eventIdsByWorkId.get(issue.id) ?? []) {
       teams.set(eventId, issue.teamId);
     }
   }
@@ -271,8 +277,20 @@ async function accountSubscriptionOutcomes(
   }
 }
 
-function targetHashFor(url: string): string {
-  return createHash('sha256').update(url).digest('hex');
+function targetIdentity(target: WebhookTarget): string {
+  return [
+    target.url,
+    target.secret,
+    target.subscriptionId ?? '',
+    target.teamId ?? '',
+    (target.eventTypes ?? []).join(','),
+  ].join('\0');
+}
+
+function targetHashFor(target: WebhookTarget): string {
+  // Subscription-scoped hash: two subscriptions sharing one URL keep separate
+  // delivery rows so each secret-signed POST is tracked independently.
+  return createHash('sha256').update(targetIdentity(target)).digest('hex');
 }
 
 async function deliverToTarget(
@@ -282,7 +300,7 @@ async function deliverToTarget(
   body: string,
   fetchImpl: typeof fetch,
 ): Promise<{ attempts: number; error: string; ok: boolean }> {
-  const targetHash = targetHashFor(target.url);
+  const targetHash = targetHashFor(target);
   const delivery = await prisma.eventOutboxDelivery.upsert({
     where: { eventId_targetHash: { eventId: event.id, targetHash } },
     create: { eventId: event.id, targetHash },

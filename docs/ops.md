@@ -184,8 +184,9 @@ with a per-endpoint secret shown once, optional team scope, and event-type
 filter. Subscriptions that exhaust retries across 10 consecutive flushes are
 auto-disabled; re-enable after fixing the receiver.
 
-The legacy shared pair below remains as a fallback while zero subscriptions
-exist. When any enabled subscription exists, the env pair is ignored.
+The legacy shared pair below remains as a fallback while zero **enabled**
+subscriptions exist (disabled ones do not block fallback — clear the env
+values when you cut over to subscriptions). When any enabled subscription exists, the env pair is ignored.
 
 Set `INVOLUTE_WEBHOOK_URL` and `INVOLUTE_WEBHOOK_SECRET` together. Multiple comma-separated URLs share the signing secret. Delivery state is tracked per target: a successful endpoint is not replayed merely because another endpoint needs a retry; each request has a 10-second timeout, and a target is dead-lettered after eight failed attempts.
 

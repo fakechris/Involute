@@ -96,6 +96,7 @@ model Team {
   cycles          Cycle[]
   idempotencyKeys WorkIdempotency[]
   webhookSubscriptions WebhookSubscription[]
+  agentCredentials AgentCredential[]
 
   @@index([key])
 }
@@ -149,6 +150,8 @@ model AgentCredential {
   tokenHash String   @unique
   userId    String   @db.Uuid
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId    String?  @db.Uuid
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
   scopes    String[] @default(["read", "propose", "claim", "report", "update", "link"])
   createdAt DateTime @default(now())
   expiresAt DateTime?

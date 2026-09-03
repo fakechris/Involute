@@ -58,6 +58,7 @@ async function main(): Promise<void> {
         name: true,
         revokedAt: true,
         scopes: true,
+        teamId: true,
         user: { select: { email: true, id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },

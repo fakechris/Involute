@@ -32,6 +32,8 @@ import {
 } from 'graphql';
 
 import {
+  AGENT_CREDENTIAL_NOT_FOUND_MESSAGE,
+  AGENT_SCOPE_INVALID_MESSAGE,
   createNotFoundError,
   createValidationError,
   getExposedError,
@@ -64,7 +66,8 @@ import type {
 import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
 
 import { requireAuthentication, type GraphQLContext } from './auth.js';
-import { issueAgentCredential, parseAgentScopes } from './agent-credentials.js';
+import { issueAgentCredential, parseAgentScopeList } from './agent-credentials.js';
+import type { AgentScope } from './agent-credentials.js';
 import { WORK_EVENT_TYPES } from './event-outbox.js';
 import { createComment, createIssue, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
 import { listIncidentLinks } from './link-service.js';
@@ -499,6 +502,7 @@ const typeDefs = /* GraphQL */ `
     id: ID!
     name: String!
     scopes: [String!]!
+    teamId: String
     createdAt: DateTime!
     expiresAt: DateTime
     revokedAt: DateTime
@@ -1128,8 +1132,15 @@ const resolvers = {
       const team = await resolveTeamByIdOrKey(context.prisma, args.teamId);
       if (!team) throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
       await assertCanManageTeam(context.prisma, context, team.id);
+      // Credentials are bound to their issuing team; the membership fallback
+      // covers legacy rows issued before the binding existed.
       return context.prisma.agentCredential.findMany({
-        where: { user: { memberships: { some: { teamId: team.id } } } },
+        where: {
+          OR: [
+            { teamId: team.id },
+            { teamId: null, user: { memberships: { some: { teamId: team.id } } } },
+          ],
+        },
         include: { user: true },
         orderBy: { createdAt: 'desc' },
       });
@@ -1495,11 +1506,17 @@ const resolvers = {
         const team = await resolveTeamByIdOrKey(context.prisma, args.input.team);
         if (!team) throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
         await assertCanManageTeam(context.prisma, context, team.id);
+        let scopes: AgentScope[] | undefined;
+        try {
+          scopes = args.input.scopes == null ? undefined : parseAgentScopeList(args.input.scopes);
+        } catch {
+          throw createValidationError(AGENT_SCOPE_INVALID_MESSAGE);
+        }
         const { credential, token } = await issueAgentCredential(context.prisma, {
           email: args.input.email ?? null,
           expiresAt: args.input.expiresAt ? new Date(args.input.expiresAt) : null,
           name: args.input.name,
-          scopes: parseAgentScopes(args.input.scopes?.join(',')),
+          scopes,
           teamKey: team.key,
         });
         return {
@@ -1521,8 +1538,11 @@ const resolvers = {
           where: { id: args.id },
           include: { user: { include: { memberships: true } } },
         });
-        if (!credential) throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
-        await assertCanManageAgentCredential(context, credential.user?.memberships ?? []);
+        if (!credential) throw createNotFoundError(AGENT_CREDENTIAL_NOT_FOUND_MESSAGE);
+        await assertCanManageAgentCredential(context, {
+          memberships: credential.user?.memberships ?? [],
+          teamId: credential.teamId,
+        });
         const updated = await context.prisma.agentCredential.update({
           where: { id: credential.id },
           data: { revokedAt: new Date() },
@@ -2304,20 +2324,24 @@ async function resolveTeamByIdOrKey(prisma: PrismaClient, idOrKey: string): Prom
 
 async function assertCanManageAgentCredential(
   context: GraphQLContext,
-  memberships: Array<{ teamId: string }>,
+  credential: { teamId: string | null; memberships: Array<{ teamId: string }> },
 ): Promise<void> {
   if (context.isTrustedSystem || context.viewer?.globalRole === 'ADMIN') {
     return;
   }
-  for (const membership of memberships) {
-    try {
-      await assertCanManageTeam(context.prisma, context, membership.teamId);
-      return;
-    } catch {
-      // Try the next team the agent belongs to.
-    }
+  // Bound credentials are managed by the issuing team's owners only, so an
+  // owner of team B cannot revoke team A's agent. Legacy unbound credentials
+  // require manage rights on every team the agent belongs to.
+  if (credential.teamId) {
+    await assertCanManageTeam(context.prisma, context, credential.teamId);
+    return;
   }
-  throw createValidationError(TEAM_MANAGE_FORBIDDEN_MESSAGE);
+  if (credential.memberships.length === 0) {
+    throw createValidationError(TEAM_MANAGE_FORBIDDEN_MESSAGE);
+  }
+  for (const membership of credential.memberships) {
+    await assertCanManageTeam(context.prisma, context, membership.teamId);
+  }
 }
 
 // Webhook scope gate (Linear parity: only workspace admins manage webhooks).

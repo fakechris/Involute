@@ -18,15 +18,21 @@ export function parseAgentScopes(value: string | null | undefined): AgentScope[]
   if (!value || value.trim() === '') {
     return [...DEFAULT_AGENT_SCOPES];
   }
-  const scopes = value.split(',').map((entry) => entry.trim().toLowerCase()).filter(Boolean);
-  const unknown = scopes.filter((scope) => !(AGENT_SCOPES as readonly string[]).includes(scope));
+  return parseAgentScopeList(value.split(','));
+}
+
+// Explicit scope lists (e.g. GraphQL `scopes: []`) never inherit the default:
+// an empty list means read-only. Only omitted scopes get the full default.
+export function parseAgentScopeList(scopes: readonly string[]): AgentScope[] {
+  const normalized = scopes.map((entry) => entry.trim().toLowerCase()).filter(Boolean);
+  const unknown = normalized.filter((scope) => !(AGENT_SCOPES as readonly string[]).includes(scope));
   if (unknown.length > 0) {
     throw new Error(`Unknown agent scope(s): ${unknown.join(', ')}. Expected one of: ${AGENT_SCOPES.join(', ')}.`);
   }
-  if (!scopes.includes('read')) {
-    scopes.unshift('read');
+  if (!normalized.includes('read')) {
+    normalized.unshift('read');
   }
-  return [...new Set(scopes)] as AgentScope[];
+  return [...new Set(normalized)] as AgentScope[];
 }
 
 export function createAgentToken(): string {
@@ -46,7 +52,7 @@ export interface IssueAgentCredentialInput {
   email?: string | null;
   expiresAt?: Date | null;
   name: string;
-  scopes?: AgentScope[] | null;
+  scopes?: AgentScope[] | null | undefined;
   teamKey: string;
 }
 
@@ -57,6 +63,7 @@ export interface IssuedAgentCredential {
     id: string;
     name: string;
     scopes: string[];
+    teamId: string | null;
     userId: string;
   };
   token: string;
@@ -100,10 +107,11 @@ export async function issueAgentCredential(
       expiresAt: input.expiresAt ?? null,
       name,
       scopes: input.scopes ?? [...DEFAULT_AGENT_SCOPES],
+      teamId: team.id,
       tokenHash: hashAgentToken(token),
       userId: user.id,
     },
-    select: { createdAt: true, expiresAt: true, id: true, name: true, scopes: true, userId: true },
+    select: { createdAt: true, expiresAt: true, id: true, name: true, scopes: true, teamId: true, userId: true },
   });
   return { credential, token };
 }

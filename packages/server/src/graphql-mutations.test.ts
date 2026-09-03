@@ -1469,6 +1469,78 @@ describe('GraphQL mutations', () => {
     expect(deleteResponse.body.data.webhookDelete).toEqual({ success: true });
     expect(await prisma.webhookSubscription.findUnique({ where: { id: subscriptionId } })).toBeNull();
   });
+
+  it('binds agent credentials to their issuing team and scopes', async () => {
+    const readOnly = await postGraphQL({
+      query: `
+        mutation AgentCreate($input: AgentCredentialCreateInput!) {
+          agentCredentialCreate(input: $input) {
+            success
+            credential { id teamId scopes }
+          }
+        }
+      `,
+      variables: {
+        input: { name: 'Read only', scopes: [], team: fixture.team.key },
+      },
+    });
+    expect(readOnly.body.data.agentCredentialCreate.success).toBe(true);
+    // Explicit empty scopes mean read-only, never the full default.
+    expect(readOnly.body.data.agentCredentialCreate.credential.scopes).toEqual(['read']);
+    expect(readOnly.body.data.agentCredentialCreate.credential.teamId).toBe(fixture.team.id);
+    const readOnlyId = readOnly.body.data.agentCredentialCreate.credential.id as string;
+
+    const otherTeamCredential = await postGraphQL({
+      query: `
+        mutation AgentCreate($input: AgentCredentialCreateInput!) {
+          agentCredentialCreate(input: $input) {
+            success
+            credential { id teamId }
+          }
+        }
+      `,
+      variables: {
+        input: { name: 'Other team agent', team: fixture.otherTeam.key },
+      },
+    });
+    const otherId = otherTeamCredential.body.data.agentCredentialCreate.credential.id as string;
+
+    // Revoking scope follows the issuing team binding, not mere membership:
+    // an owner of team A cannot revoke team B's credential.
+    const ownerA = await prisma.user.create({
+      data: { email: 'owner-a@example.invalid', name: 'Owner A' },
+    });
+    await prisma.teamMembership.create({
+      data: { role: 'OWNER', teamId: fixture.team.id, userId: ownerA.id },
+    });
+    const ownerASession = await createSession(prisma, ownerA.id, 60 * 60);
+    const crossRevoke = await postGraphQL({
+      cookie: `involute_session=${encodeURIComponent(ownerASession.token)}`,
+      query: `
+        mutation AgentRevoke($id: String!) {
+          agentCredentialRevoke(id: $id) { success }
+        }
+      `,
+      token: null,
+      variables: { id: otherId },
+    });
+    expect(crossRevoke.body.data).toBeNull();
+    expect(crossRevoke.body.errors?.[0]?.extensions?.code).toBe('FORBIDDEN');
+    expect(
+      await prisma.agentCredential.findUniqueOrThrow({ where: { id: otherId } }),
+    ).toMatchObject({ revokedAt: null });
+
+    const ownList = await postGraphQL({
+      query: `
+        query AgentList($teamId: String!) {
+          agentCredentials(teamId: $teamId) { id }
+        }
+      `,
+      variables: { teamId: fixture.team.id },
+    });
+    expect(ownList.body.data.agentCredentials.map((row: { id: string }) => row.id)).toContain(readOnlyId);
+    expect(ownList.body.data.agentCredentials.map((row: { id: string }) => row.id)).not.toContain(otherId);
+  });
 });
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<MutationFixture> {
