@@ -12,6 +12,7 @@ import { resolveAgentPrincipal } from './agent-credentials.js';
 
 export interface GraphQLContext {
   authMode: 'agent-token' | 'none' | 'session' | 'token';
+  agentScopes?: string[] | null;
   isTrustedSystem: boolean;
   prisma: PrismaClient;
   viewer: User | null;
@@ -26,6 +27,7 @@ export interface GraphQLContextOptions {
 }
 
 interface RequestAuthentication {
+  agentScopes?: string[] | null;
   authMode: GraphQLContext['authMode'];
   authorized: boolean;
   isTrustedSystem: boolean;
@@ -84,6 +86,7 @@ export async function createGraphQLContext({
 
   return {
     authMode: authentication.authMode,
+    agentScopes: authentication.authMode === 'agent-token' ? authentication.agentScopes ?? null : null,
     isTrustedSystem: authentication.isTrustedSystem,
     prisma,
     viewer: authentication.viewer,
@@ -187,9 +190,10 @@ async function computeRequestAuthentication({
   if (agent) {
     return {
       authMode: 'agent-token',
+      agentScopes: agent.scopes,
       authorized: true,
       isTrustedSystem: false,
-      viewer: agent,
+      viewer: agent.user,
     };
   }
 

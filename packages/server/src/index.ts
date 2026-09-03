@@ -13,7 +13,7 @@ import { createAuthenticationPlugin, createGraphQLContext } from './auth.js';
 import { getAllowedBrowserOrigins, handleAuthRoutes } from './auth-routes.js';
 import { getExposedError } from './errors.js';
 import type { GoogleOAuthConfiguration } from './google-oauth.js';
-import { flushEventOutbox, parseWebhookTargets } from './event-outbox.js';
+import { collectOutboundWebhookTargets, flushEventOutbox } from './event-outbox.js';
 import { handleMcpRequest } from './mcp.js';
 import { createGraphQLSchema } from './schema.js';
 import { getServerEnvironment, loadServerEnvironment, type ServerEnvironment } from './environment.js';
@@ -209,19 +209,25 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     httpServer.listen(options.port ?? environment.port);
   });
 
-  const webhookTargets = parseWebhookTargets(
-    options.webhookUrls ?? environment.webhookUrls,
-    options.webhookSecret ?? environment.webhookSecret,
-  );
-  const outboxTimer =
-    webhookTargets.length > 0
-      ? setInterval(() => {
-          void flushEventOutbox(prisma, webhookTargets).catch((error: unknown) => {
-            console.error('Failed to flush event outbox.');
-            console.error(error);
-          });
-        }, 2000)
-      : null;
+  // Subscriptions are resolved on every tick so CRUD changes apply without a
+  // restart; with zero subscriptions the legacy env pair is the fallback.
+  const outboxTimer = setInterval(() => {
+    void (async () => {
+      try {
+        const webhookTargets = await collectOutboundWebhookTargets(
+          prisma,
+          options.webhookUrls ?? environment.webhookUrls,
+          options.webhookSecret ?? environment.webhookSecret,
+        );
+        if (webhookTargets.length > 0) {
+          await flushEventOutbox(prisma, webhookTargets);
+        }
+      } catch (error: unknown) {
+        console.error('Failed to flush event outbox.');
+        console.error(error);
+      }
+    })();
+  }, 2000);
   outboxTimer?.unref();
 
   const address = httpServer.address();

@@ -128,6 +128,33 @@ describe('Involute MCP', () => {
     }, token)).status).toBe(401);
   });
 
+  it('confines agent tokens to their granted scopes', async () => {
+    const token = 'inv_agent_scoped-credential';
+    const agent = await prisma.user.create({
+      data: { actorKind: 'AGENT', email: 'scoped-agent@example.com', name: 'Scoped Agent' },
+    });
+    await prisma.teamMembership.create({
+      data: { role: 'EDITOR', teamId: team.id, userId: agent.id },
+    });
+    await prisma.agentCredential.create({
+      data: { name: 'read-only-agent', scopes: ['read'], tokenHash: hashAgentToken(token), userId: agent.id },
+    });
+
+    const allowed = await mcpRpcWithToken('/mcp', {
+      id: 'scoped-search',
+      method: 'tools/call',
+      params: { name: 'work_search', arguments: { query: 'nothing' } },
+    }, token);
+    expect(allowed.body.error).toBeUndefined();
+
+    const denied = await mcpRpcWithToken('/mcp', {
+      id: 'scoped-propose',
+      method: 'tools/call',
+      params: { name: 'work_propose', arguments: { team: DEFAULT_TEAM_KEY, title: 'no scope' } },
+    }, token);
+    expect(denied.body.error.message).toContain('lacks required scope: propose');
+  });
+
   it('runs search → context → propose → commit → claim without marking work done', async () => {
     await prisma.issue.create({
       data: {

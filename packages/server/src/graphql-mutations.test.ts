@@ -1291,6 +1291,256 @@ describe('GraphQL mutations', () => {
       issue: null,
     });
   });
+
+  it('issues, lists, and revokes agent credentials with scoped tokens', async () => {
+    const createResponse = await postGraphQL({
+      query: `
+        mutation AgentCreate($input: AgentCredentialCreateInput!) {
+          agentCredentialCreate(input: $input) {
+            success
+            token
+            credential { id name scopes user { email actorKind } }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          email: 'ci-agent@example.invalid',
+          name: 'CI Agent',
+          scopes: ['read', 'propose'],
+          team: fixture.team.key,
+        },
+      },
+    });
+
+    expect(createResponse.status).toBe(200);
+    expect(createResponse.body.errors).toBeUndefined();
+    const created = createResponse.body.data.agentCredentialCreate;
+    expect(created.success).toBe(true);
+    expect(created.token).toMatch(/^inv_agent_/);
+    expect(created.credential.scopes).toEqual(expect.arrayContaining(['read', 'propose']));
+    expect(created.credential.user.actorKind).toBe('AGENT');
+    const credentialId = created.credential.id as string;
+
+    const stored = await prisma.agentCredential.findUniqueOrThrow({ where: { id: credentialId } });
+    expect(stored.tokenHash).not.toContain('inv_agent_');
+
+    const listResponse = await postGraphQL({
+      query: `
+        query AgentList($teamId: String!) {
+          agentCredentials(teamId: $teamId) {
+            id
+            name
+            scopes
+            revokedAt
+          }
+        }
+      `,
+      variables: { teamId: fixture.team.id },
+    });
+    expect(listResponse.body.data.agentCredentials).toEqual([
+      expect.objectContaining({ id: credentialId, revokedAt: null }),
+    ]);
+
+    const otherTeamList = await postGraphQL({
+      query: `
+        query AgentList($teamId: String!) {
+          agentCredentials(teamId: $teamId) { id }
+        }
+      `,
+      variables: { teamId: fixture.otherTeam.id },
+    });
+    expect(otherTeamList.body.data.agentCredentials).toEqual([]);
+
+    const revokeResponse = await postGraphQL({
+      query: `
+        mutation AgentRevoke($id: String!) {
+          agentCredentialRevoke(id: $id) {
+            success
+            credential { id revokedAt }
+          }
+        }
+      `,
+      variables: { id: credentialId },
+    });
+    expect(revokeResponse.body.data.agentCredentialRevoke.success).toBe(true);
+    expect(revokeResponse.body.data.agentCredentialRevoke.credential.revokedAt).not.toBeNull();
+  });
+
+  it('manages webhook subscriptions with write-once secrets and rotation', async () => {
+    const createResponse = await postGraphQL({
+      query: `
+        mutation WebhookCreate($input: WebhookCreateInput!) {
+          webhookCreate(input: $input) {
+            success
+            secret
+            subscription { id url label teamId eventTypes enabled consecutiveFailures }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          eventTypes: ['work.proposed', 'work.accepted'],
+          label: 'CI hook',
+          team: fixture.team.key,
+          url: 'https://hooks.example.test/involute',
+        },
+      },
+    });
+
+    expect(createResponse.status).toBe(200);
+    expect(createResponse.body.errors).toBeUndefined();
+    const created = createResponse.body.data.webhookCreate;
+    expect(created.success).toBe(true);
+    expect(created.secret).toMatch(/^[0-9a-f]{64}$/);
+    expect(created.subscription).toEqual(expect.objectContaining({
+      eventTypes: ['work.proposed', 'work.accepted'],
+      teamId: fixture.team.id,
+    }));
+    const subscriptionId = created.subscription.id as string;
+
+    const listResponse = await postGraphQL({
+      query: `
+        query WebhookList($teamId: String!) {
+          webhooks(teamId: $teamId) {
+            id
+            url
+            label
+          }
+        }
+      `,
+      variables: { teamId: fixture.team.id },
+    });
+    expect(listResponse.body.data.webhooks).toEqual([
+      expect.objectContaining({ id: subscriptionId }),
+    ]);
+    expect(JSON.stringify(listResponse.body.data.webhooks)).not.toContain(created.secret);
+
+    const badUrl = await postGraphQL({
+      query: `
+        mutation WebhookCreate($input: WebhookCreateInput!) {
+          webhookCreate(input: $input) { success subscription { id } }
+        }
+      `,
+      variables: { input: { team: fixture.team.key, url: 'ftp://example.test/hook' } },
+    });
+    expect(badUrl.body.errors).toBeUndefined();
+    expect(badUrl.body.data.webhookCreate).toEqual({ success: false, subscription: null });
+
+    const rotateResponse = await postGraphQL({
+      query: `
+        mutation WebhookRotate($id: String!) {
+          webhookRotateSecret(id: $id) {
+            success
+            secret
+            subscription { id consecutiveFailures }
+          }
+        }
+      `,
+      variables: { id: subscriptionId },
+    });
+    expect(rotateResponse.body.data.webhookRotateSecret.success).toBe(true);
+    expect(rotateResponse.body.data.webhookRotateSecret.secret).not.toBe(created.secret);
+
+    const disableResponse = await postGraphQL({
+      query: `
+        mutation WebhookUpdate($id: String!, $input: WebhookUpdateInput!) {
+          webhookUpdate(id: $id, input: $input) {
+            success
+            subscription { id enabled }
+          }
+        }
+      `,
+      variables: { id: subscriptionId, input: { enabled: false } },
+    });
+    expect(disableResponse.body.data.webhookUpdate.subscription).toEqual({
+      id: subscriptionId,
+      enabled: false,
+    });
+
+    const deleteResponse = await postGraphQL({
+      query: `
+        mutation WebhookDelete($id: String!) {
+          webhookDelete(id: $id) { success }
+        }
+      `,
+      variables: { id: subscriptionId },
+    });
+    expect(deleteResponse.body.data.webhookDelete).toEqual({ success: true });
+    expect(await prisma.webhookSubscription.findUnique({ where: { id: subscriptionId } })).toBeNull();
+  });
+
+  it('binds agent credentials to their issuing team and scopes', async () => {
+    const readOnly = await postGraphQL({
+      query: `
+        mutation AgentCreate($input: AgentCredentialCreateInput!) {
+          agentCredentialCreate(input: $input) {
+            success
+            credential { id teamId scopes }
+          }
+        }
+      `,
+      variables: {
+        input: { name: 'Read only', scopes: [], team: fixture.team.key },
+      },
+    });
+    expect(readOnly.body.data.agentCredentialCreate.success).toBe(true);
+    // Explicit empty scopes mean read-only, never the full default.
+    expect(readOnly.body.data.agentCredentialCreate.credential.scopes).toEqual(['read']);
+    expect(readOnly.body.data.agentCredentialCreate.credential.teamId).toBe(fixture.team.id);
+    const readOnlyId = readOnly.body.data.agentCredentialCreate.credential.id as string;
+
+    const otherTeamCredential = await postGraphQL({
+      query: `
+        mutation AgentCreate($input: AgentCredentialCreateInput!) {
+          agentCredentialCreate(input: $input) {
+            success
+            credential { id teamId }
+          }
+        }
+      `,
+      variables: {
+        input: { name: 'Other team agent', team: fixture.otherTeam.key },
+      },
+    });
+    const otherId = otherTeamCredential.body.data.agentCredentialCreate.credential.id as string;
+
+    // Revoking scope follows the issuing team binding, not mere membership:
+    // an owner of team A cannot revoke team B's credential.
+    const ownerA = await prisma.user.create({
+      data: { email: 'owner-a@example.invalid', name: 'Owner A' },
+    });
+    await prisma.teamMembership.create({
+      data: { role: 'OWNER', teamId: fixture.team.id, userId: ownerA.id },
+    });
+    const ownerASession = await createSession(prisma, ownerA.id, 60 * 60);
+    const crossRevoke = await postGraphQL({
+      cookie: `involute_session=${encodeURIComponent(ownerASession.token)}`,
+      query: `
+        mutation AgentRevoke($id: String!) {
+          agentCredentialRevoke(id: $id) { success }
+        }
+      `,
+      token: null,
+      variables: { id: otherId },
+    });
+    expect(crossRevoke.body.data).toBeNull();
+    expect(crossRevoke.body.errors?.[0]?.extensions?.code).toBe('FORBIDDEN');
+    expect(
+      await prisma.agentCredential.findUniqueOrThrow({ where: { id: otherId } }),
+    ).toMatchObject({ revokedAt: null });
+
+    const ownList = await postGraphQL({
+      query: `
+        query AgentList($teamId: String!) {
+          agentCredentials(teamId: $teamId) { id }
+        }
+      `,
+      variables: { teamId: fixture.team.id },
+    });
+    expect(ownList.body.data.agentCredentials.map((row: { id: string }) => row.id)).toContain(readOnlyId);
+    expect(ownList.body.data.agentCredentials.map((row: { id: string }) => row.id)).not.toContain(otherId);
+  });
 });
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<MutationFixture> {

@@ -14,7 +14,7 @@ import {
   listReadyWork,
   searchWork,
 } from './context-service.js';
-import { ISSUE_NOT_FOUND_MESSAGE, TEAM_NOT_FOUND_MESSAGE, createNotFoundError } from './errors.js';
+import { ISSUE_NOT_FOUND_MESSAGE, TEAM_NOT_FOUND_MESSAGE, createNotFoundError, createScopeForbiddenError } from './errors.js';
 import { updateIssue } from './issue-service.js';
 import { createWorkLink } from './link-service.js';
 import { attachEvidence, reportRun } from './run-service.js';
@@ -83,6 +83,7 @@ export async function callMcpTool(
   if (readonly && !(READ_ONLY_MCP_TOOLS as readonly string[]).includes(name)) {
     throw new Error(`Tool "${name}" is not available on the read-only MCP endpoint.`);
   }
+  assertToolScope(context, name as McpToolName);
 
   switch (name as McpToolName) {
     case 'work_search': {
@@ -467,5 +468,35 @@ function assignOptional<T extends object, K extends keyof T>(
 ): void {
   if (value !== undefined) {
     target[key] = value;
+  }
+}
+
+// Linear-mapped credential scopes. Human sessions and trusted tokens bypass
+// scope checks (full access); agent tokens are confined to the scopes granted
+// at issuance. `work_commit` stays human-only via actorKind gates, so it maps
+// to no scope.
+const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
+  work_search: 'read',
+  work_get_context: 'read',
+  work_list_ready: 'read',
+  work_propose: 'propose',
+  work_commit: null,
+  work_update: 'update',
+  work_link: 'link',
+  work_claim: 'claim',
+  run_report: 'report',
+  evidence_attach: 'report',
+};
+
+export function assertToolScope(context: GraphQLContext, name: McpToolName): void {
+  if (context.authMode !== 'agent-token') {
+    return;
+  }
+  const scope = MCP_TOOL_SCOPES[name];
+  if (!scope) {
+    return;
+  }
+  if (!context.agentScopes?.includes(scope)) {
+    throw createScopeForbiddenError(scope);
   }
 }

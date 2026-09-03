@@ -24,7 +24,9 @@ Connect an agent:
 codex mcp add involute --url http://localhost:4200/mcp
 ```
 
-See [skills/involute/SKILL.md](skills/involute/SKILL.md).
+See [skills/involute/SKILL.md](skills/involute/SKILL.md). Per-client setup
+(Codex, Claude Code, Cursor, Opencode, others), tokens, and rotation:
+[docs/agent-setup.md](docs/agent-setup.md).
 
 See [docs/current-status.md](docs/current-status.md), [docs/milestones.md](docs/milestones.md), [docs/vision.md](docs/vision.md), and [docs/api.md](docs/api.md) for the current product state and API surface.
 

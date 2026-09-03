@@ -64,6 +64,17 @@ export const WORK_EVIDENCE_REQUIRES_RUN_MESSAGE = 'Evidence must reference a wor
 export const WORK_REVIEW_REQUIRED_MESSAGE = 'Work is not awaiting review.';
 export const WORK_REVIEW_STATE_MISSING_MESSAGE = 'Team workflow is missing a required semantic state.';
 export const UPLOAD_TOO_LARGE_MESSAGE = 'Upload exceeds the 10 MB size limit.';
+export const WEBHOOK_NOT_FOUND_MESSAGE = 'Webhook subscription not found.';
+export const WEBHOOK_URL_INVALID_MESSAGE = 'Webhook URL must be a valid absolute http(s) URL.';
+export const WEBHOOK_EVENT_TYPE_INVALID_MESSAGE = 'Unknown webhook event type.';
+export const AGENT_SCOPE_INVALID_MESSAGE = 'Unknown agent scope.';
+export const AGENT_CREDENTIAL_NOT_FOUND_MESSAGE = 'Agent credential not found.';
+
+export function createScopeForbiddenError(scope: string): GraphQLError {
+  return new GraphQLError(`Agent credential lacks required scope: ${scope}.`, {
+    extensions: { code: 'FORBIDDEN' },
+  });
+}
 
 const exposedErrorCodes = new Map<string, string>([
   [NOT_AUTHENTICATED_MESSAGE, 'UNAUTHENTICATED'],
@@ -121,6 +132,11 @@ const exposedErrorCodes = new Map<string, string>([
   [WORK_REVIEW_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_REVIEW_STATE_MISSING_MESSAGE, 'BAD_USER_INPUT'],
   [UPLOAD_TOO_LARGE_MESSAGE, 'BAD_USER_INPUT'],
+  [WEBHOOK_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [WEBHOOK_URL_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [WEBHOOK_EVENT_TYPE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [AGENT_SCOPE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [AGENT_CREDENTIAL_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
 ]);
 
 export function createNotAuthenticatedError(): GraphQLError {

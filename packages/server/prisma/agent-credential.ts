@@ -1,11 +1,19 @@
 import { PrismaClient } from '@prisma/client';
 
-import { createAgentToken, hashAgentToken } from '../src/agent-credentials.ts';
+import { issueAgentCredential, parseAgentScopes } from '../src/agent-credentials.ts';
 import { loadProjectEnvironment } from './env.ts';
 
 loadProjectEnvironment();
 
 const prisma = new PrismaClient();
+
+function readFlag(args: string[], name: string): string | null {
+  const index = args.indexOf(`--${name}`);
+  if (index === -1) {
+    return null;
+  }
+  return args[index + 1] ?? null;
+}
 
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
@@ -13,31 +21,16 @@ async function main(): Promise<void> {
   if (command === 'create') {
     const [teamKey, name, email, expiresAtValue] = args;
     if (!teamKey || !name || !email) {
-      throw new Error('Usage: agent:create <team-key> <name> <email> [expires-at]');
+      throw new Error('Usage: agent:create <team-key> <name> <email> [expires-at] [--scopes read,propose,claim,report,update,link]');
     }
-    const team = await prisma.team.findUniqueOrThrow({ where: { key: teamKey } });
-    const normalizedEmail = email.trim().toLowerCase();
-    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-    if (existing && existing.actorKind !== 'AGENT') {
-      throw new Error(`User ${normalizedEmail} already exists and is not an AGENT.`);
-    }
-    const user = existing ?? await prisma.user.create({
-      data: { actorKind: 'AGENT', email: normalizedEmail, name },
-    });
-    await prisma.teamMembership.upsert({
-      where: { teamId_userId: { teamId: team.id, userId: user.id } },
-      create: { role: 'EDITOR', teamId: team.id, userId: user.id },
-      update: { role: 'EDITOR' },
-    });
-    const token = createAgentToken();
-    const credential = await prisma.agentCredential.create({
-      data: {
-        expiresAt: expiresAtValue ? new Date(expiresAtValue) : null,
-        name,
-        tokenHash: hashAgentToken(token),
-        userId: user.id,
-      },
-      select: { createdAt: true, expiresAt: true, id: true, name: true, userId: true },
+    const scopes = parseAgentScopes(readFlag(args, 'scopes'));
+    const expiresAt = expiresAtValue && !expiresAtValue.startsWith('--') ? new Date(expiresAtValue) : null;
+    const { credential, token } = await issueAgentCredential(prisma, {
+      email,
+      expiresAt,
+      name,
+      scopes,
+      teamKey,
     });
     process.stdout.write(`${JSON.stringify({ credential, token }, null, 2)}\n`);
     process.stderr.write('Store the token now; only its hash is persisted.\n');
@@ -64,6 +57,8 @@ async function main(): Promise<void> {
         id: true,
         name: true,
         revokedAt: true,
+        scopes: true,
+        teamId: true,
         user: { select: { email: true, id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },

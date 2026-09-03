@@ -95,6 +95,8 @@ model Team {
   projects        Project[]
   cycles          Cycle[]
   idempotencyKeys WorkIdempotency[]
+  webhookSubscriptions WebhookSubscription[]
+  agentCredentials AgentCredential[]
 
   @@index([key])
 }
@@ -148,6 +150,9 @@ model AgentCredential {
   tokenHash String   @unique
   userId    String   @db.Uuid
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId    String?  @db.Uuid
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  scopes    String[] @default(["read", "propose", "claim", "report", "update", "link"])
   createdAt DateTime @default(now())
   expiresAt DateTime?
   revokedAt DateTime?
@@ -484,4 +489,26 @@ model EventOutboxDelivery {
 
   @@unique([eventId, targetHash])
   @@index([deliveredAt, attempts])
+}
+
+// Linear-mapped webhook subscriptions: per-endpoint signing secret (shown
+// once at create/rotate), optional team scoping (null = all teams), and event
+// type filtering (empty = all types). Replaces the single shared
+// INVOLUTE_WEBHOOK_URL/SECRET pair, which remains as a legacy fallback while
+// no subscription exists.
+model WebhookSubscription {
+  id                  String   @id @default(uuid()) @db.Uuid
+  label               String?
+  url                 String
+  secret              String
+  teamId              String?  @db.Uuid
+  team                Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  eventTypes          String[] @default([])
+  enabled             Boolean  @default(true)
+  consecutiveFailures Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([teamId])
+  @@index([enabled])
 }
