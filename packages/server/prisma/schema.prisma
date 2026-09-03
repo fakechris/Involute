@@ -148,6 +148,7 @@ model AgentCredential {
   tokenHash String   @unique
   userId    String   @db.Uuid
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scopes    String[] @default(["read", "propose", "claim", "report", "update", "link"])
   createdAt DateTime @default(now())
   expiresAt DateTime?
   revokedAt DateTime?

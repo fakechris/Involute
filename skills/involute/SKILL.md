@@ -7,13 +7,23 @@ description: Use Involute as the project-state and work-graph kernel. Search, lo
 
 Involute stores long-lived work identity, contracts, links, status, and evidence. Codex / Claude Code is the working surface. Do not treat Involute as a TODO list or a place to dump local plan steps.
 
-Connect:
+Connect (any MCP-compatible client; full guide in `docs/agent-setup.md`):
 
 ```bash
 codex mcp add involute --url https://<host>/mcp
 # analysis-only:
 codex mcp add involute-readonly --url https://<host>/mcp/readonly
 ```
+
+```bash
+claude mcp add --transport http involute https://<host>/mcp \
+  --header "Authorization: Bearer inv_agent_…"
+```
+
+Cursor (`.cursor/mcp.json`) and Opencode (`opencode.json`) take a remote
+server entry with the same URL plus an
+`Authorization: Bearer inv_agent_…` header. Kimi / Droid / Amp / ZCode / Agy
+and other clients: add a Streamable HTTP MCP server with that URL + header.
 
 Prefer `/mcp/readonly` until you have been asked to create or claim work.
 

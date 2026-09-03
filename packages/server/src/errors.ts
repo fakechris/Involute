@@ -65,6 +65,12 @@ export const WORK_REVIEW_REQUIRED_MESSAGE = 'Work is not awaiting review.';
 export const WORK_REVIEW_STATE_MISSING_MESSAGE = 'Team workflow is missing a required semantic state.';
 export const UPLOAD_TOO_LARGE_MESSAGE = 'Upload exceeds the 10 MB size limit.';
 
+export function createScopeForbiddenError(scope: string): GraphQLError {
+  return new GraphQLError(`Agent credential lacks required scope: ${scope}.`, {
+    extensions: { code: 'FORBIDDEN' },
+  });
+}
+
 const exposedErrorCodes = new Map<string, string>([
   [NOT_AUTHENTICATED_MESSAGE, 'UNAUTHENTICATED'],
   [TEAM_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
