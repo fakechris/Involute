@@ -5,6 +5,20 @@ Involute exposes a Streamable HTTP MCP server. Any MCP-compatible client
 connect with a URL plus an `Authorization` header. Behavior rules for agents
 live in [`skills/involute/SKILL.md`](../skills/involute/SKILL.md).
 
+## 0. Where is the server?
+
+Pick the endpoint that matches where your agents run:
+
+| Agents run… | MCP URL | How to bring it up |
+|---|---|---|
+| On this machine (local dev) | `http://localhost:4200/mcp` | `pnpm compose:up`, token = `AUTH_TOKEN` from repo-root `.env` |
+| On the tailnet (private test phase) | `http://<tailscale-ip>:4200/mcp` | `pnpm deploy:tailscale` (see README VPS section) |
+| Anywhere (production) | `https://<APP_DOMAIN>/mcp` | `pnpm deploy:prod` with `.env.production` |
+
+The examples below use `https://involute.example.com/mcp`; substitute your
+row from the table above. If `curl <your-base>/health` is not `OK`, stop —
+agents cannot connect until the server is up.
+
 ## 1. Get a token
 
 Each agent gets its own revocable credential with Linear-style scopes (`read`
