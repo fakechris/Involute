@@ -212,6 +212,7 @@ export function CandidatesPage() {
     {
       variables: {
         first: 50,
+        teamFilter: teamKey ? { key: { eq: teamKey } } : null,
         filter: {
           commitmentStatus: 'CANDIDATE',
           ...(teamKey ? { team: { key: { eq: teamKey } } } : {}),

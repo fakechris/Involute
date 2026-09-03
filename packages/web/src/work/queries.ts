@@ -1,8 +1,8 @@
 import { gql } from '@apollo/client';
 
 export const CANDIDATES_PAGE_QUERY = gql`
-  query CandidatesPage($first: Int!, $after: String, $filter: IssueFilter) {
-    teams {
+  query CandidatesPage($first: Int!, $after: String, $filter: IssueFilter, $teamFilter: TeamFilter) {
+    teams(filter: $teamFilter) {
       nodes {
         id
         key

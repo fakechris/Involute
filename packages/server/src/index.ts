@@ -23,6 +23,9 @@ loadServerEnvironment();
 
 export type { ServerEnvironment };
 
+// 10MB upload cap (decoded) + base64/JSON overhead headroom.
+export const MAX_REQUEST_BODY_BYTES = 20 * 1024 * 1024;
+
 export interface StartServerOptions {
   appOrigin?: string;
   allowAdminFallback?: boolean;
@@ -108,6 +111,20 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       response.setHeader('content-type', 'text/plain; charset=utf-8');
       response.end('OK');
       return;
+    }
+
+    // HTTP-level body cap before Yoga/MCP parse anything: uploads top out at
+    // 10MB decoded (~13.4MB base64 + JSON envelope), so 20MB leaves headroom
+    // while bounding unauthenticated allocation. Chunked bodies without a
+    // declared length bypass this check and rely on the resolver-level cap.
+    if (request.method === 'POST' || request.method === 'PUT' || request.method === 'PATCH') {
+      const declaredLength = Number(request.headers['content-length']);
+      if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BODY_BYTES) {
+        response.statusCode = 413;
+        response.setHeader('content-type', 'application/json; charset=utf-8');
+        response.end(JSON.stringify({ error: 'Request body too large.' }));
+        return;
+      }
     }
 
     const pathname = getPathname(request.url);
@@ -277,6 +294,50 @@ async function handleUploadDownload(options: {
     response.setHeader('content-type', 'application/json; charset=utf-8');
     response.end(JSON.stringify({ error: 'Authentication required.' }));
     return;
+  }
+
+  // Uploads are unguessable (random UUID filenames) but must still be
+  // authorization-checked: files without a database row are never served,
+  // trusted token bearers (CLI/server-to-server, full API access already) may
+  // fetch any recorded upload, while session/agent viewers must be the
+  // uploader, an admin, or a reader of the linked issue/comment team.
+  const attachment = await options.auth.prisma.attachment.findFirst({
+    where: { url: `/uploads/${filename}` },
+    include: { comment: { select: { issueId: true } },
+      issue: { select: { teamId: true } } },
+  });
+  if (!attachment) {
+    response.statusCode = 404;
+    response.end('Not found');
+    return;
+  }
+  const viewer = context.viewer;
+  const isOwner = viewer && attachment.uploaderId === viewer.id;
+  const isAdmin = viewer?.globalRole === 'ADMIN';
+  if (context.authMode !== 'token' && !isOwner && !isAdmin) {
+    const issueId = attachment.issueId ?? attachment.comment?.issueId ?? null;
+    if (!issueId) {
+      response.statusCode = 403;
+      response.end('Forbidden');
+      return;
+    }
+    const issue = await options.auth.prisma.issue.findUnique({
+      where: { id: issueId },
+      select: { teamId: true },
+    });
+    if (!issue) {
+      response.statusCode = 404;
+      response.end('Not found');
+      return;
+    }
+    try {
+      const { assertCanReadTeam } = await import('./access-control.js');
+      await assertCanReadTeam(options.auth.prisma, context, issue.teamId);
+    } catch {
+      response.statusCode = 403;
+      response.end('Forbidden');
+      return;
+    }
   }
 
   const filePath = join(uploadsDir, filename);

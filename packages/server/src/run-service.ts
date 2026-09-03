@@ -14,10 +14,17 @@ import type {
 import { findWorkByIdOrIdentifier } from './context-service.js';
 import { enqueueWorkEvent } from './event-outbox.js';
 import {
+  completeWorkIdempotency,
+  hashIdempotencyRequest,
+  reserveWorkIdempotency,
+} from './idempotency.js';
+import {
   createNotFoundError,
   createValidationError,
   ISSUE_NOT_FOUND_MESSAGE,
   WORK_EVIDENCE_KIND_INVALID_MESSAGE,
+  WORK_IDEMPOTENCY_CONFLICT_MESSAGE,
+  WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE,
   WORK_RUN_NOT_FOUND_MESSAGE,
   WORK_RUN_STATUS_INVALID_MESSAGE,
   WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE,
@@ -52,6 +59,7 @@ const ALLOWED_RUN_TRANSITIONS: Record<WorkRunStatus, readonly WorkRunStatus[]> =
 export interface ReportRunInput {
   decisionRequested?: boolean | null;
   externalUrl?: string | null;
+  idempotencyKey?: string | null;
   phase?: string | null;
   runId?: string | null;
   status?: string | null;
@@ -60,6 +68,7 @@ export interface ReportRunInput {
 }
 
 export interface AttachEvidenceInput {
+  idempotencyKey?: string | null;
   kind: string;
   runId?: string | null;
   summary?: string | null;
@@ -70,6 +79,7 @@ export interface AttachEvidenceInput {
 export interface ReviewWorkInput {
   decision: WorkReviewDecisionKind;
   expectedRevision: number;
+  idempotencyKey?: string | null;
   reason?: string | null;
   runId?: string | null;
 }
@@ -84,6 +94,33 @@ export async function reportRun(
 
   return prisma.$transaction(async (transaction) => {
     const work = await requireWork(transaction, input.workId);
+    let idempotencyId: string | null = null;
+    if (input.idempotencyKey) {
+      const reservation = await reserveWorkIdempotency(transaction, {
+        actor,
+        key: input.idempotencyKey,
+        operation: 'run_report',
+        requestHash: hashIdempotencyRequest({ ...input, idempotencyKey: null }),
+        teamId: work.teamId,
+      });
+      if (!reservation.created) {
+        if (reservation.record.workId !== work.id) {
+          throw createValidationError(WORK_IDEMPOTENCY_CONFLICT_MESSAGE);
+        }
+        if (!reservation.record.resultId) {
+          throw createValidationError(WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE);
+        }
+        const replayed = await transaction.workRun.findUnique({
+          where: { id: reservation.record.resultId },
+        });
+        if (!replayed || replayed.workId !== work.id) {
+          throw createValidationError(WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE);
+        }
+        const freshWork = await transaction.issue.findUniqueOrThrow({ where: { id: work.id } });
+        return { run: replayed, work: freshWork };
+      }
+      idempotencyId = reservation.record.id;
+    }
     const status = parseRunStatus(input.status);
     let run = input.runId ? await findRun(transaction, input.runId, work.id) : null;
     let activeClaim: WorkClaim | null = null;
@@ -122,7 +159,12 @@ export async function reportRun(
         throw createValidationError(WORK_RUN_ACTOR_MISMATCH_MESSAGE);
       }
       if (TERMINAL_RUN_STATUSES.includes(run.status)) {
-        if (!status || status === run.status) return { run, work };
+        if (!status || status === run.status) {
+          if (idempotencyId) {
+            await completeWorkIdempotency(transaction, idempotencyId, work.id, run.id);
+          }
+          return { run, work };
+        }
         throw createValidationError(WORK_RUN_TERMINAL_MESSAGE);
       }
       if (!run.claimId) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
@@ -178,6 +220,10 @@ export async function reportRun(
       }
     }
 
+    if (idempotencyId) {
+      await completeWorkIdempotency(transaction, idempotencyId, work.id, run.id);
+    }
+
     return { run, work: nextWork };
   });
 }
@@ -194,6 +240,33 @@ export async function attachEvidence(
 
   return prisma.$transaction(async (transaction) => {
     const work = await requireWork(transaction, input.workId);
+    let evidenceIdempotencyId: string | null = null;
+    if (input.idempotencyKey) {
+      const reservation = await reserveWorkIdempotency(transaction, {
+        actor,
+        key: input.idempotencyKey,
+        operation: 'evidence_attach',
+        requestHash: hashIdempotencyRequest({ ...input, idempotencyKey: null }),
+        teamId: work.teamId,
+      });
+      if (!reservation.created) {
+        if (reservation.record.workId !== work.id) {
+          throw createValidationError(WORK_IDEMPOTENCY_CONFLICT_MESSAGE);
+        }
+        if (!reservation.record.resultId) {
+          throw createValidationError(WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE);
+        }
+        const replayed = await transaction.workEvidence.findUnique({
+          where: { id: reservation.record.resultId },
+        });
+        if (!replayed || replayed.workId !== work.id) {
+          throw createValidationError(WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE);
+        }
+        const freshWork = await transaction.issue.findUniqueOrThrow({ where: { id: work.id } });
+        return { evidence: replayed, work: freshWork };
+      }
+      evidenceIdempotencyId = reservation.record.id;
+    }
     const run = await findRun(transaction, input.runId as string, work.id);
     if (!run) throw createNotFoundError(WORK_RUN_NOT_FOUND_MESSAGE);
     if (run.actorId !== actorId) throw createValidationError(WORK_RUN_ACTOR_MISMATCH_MESSAGE);
@@ -223,6 +296,10 @@ export async function attachEvidence(
       workIdentifier: work.identifier,
     });
 
+    if (evidenceIdempotencyId) {
+      await completeWorkIdempotency(transaction, evidenceIdempotencyId, work.id, evidence.id);
+    }
+
     return { evidence, work };
   });
 }
@@ -247,13 +324,29 @@ async function moveToInReview(prisma: DatabaseClient, work: Issue, actor: WriteA
 
   if (!reviewState) throw createValidationError(WORK_REVIEW_STATE_MISSING_MESSAGE);
 
-  const updated = await prisma.issue.update({
-    where: { id: work.id },
+  // Optimistic guard: only the first concurrent COMPLETED reporter wins the
+  // REVIEW transition. Losers re-read; if the work already moved to a terminal
+  // review state they become idempotent no-ops instead of double-incrementing
+  // revision and emitting a duplicate work.review_submitted event.
+  const transition = await prisma.issue.updateMany({
+    where: { id: work.id, revision: work.revision, stateId: work.stateId },
     data: {
       revision: { increment: 1 },
       stateId: reviewState.id,
     },
   });
+  if (transition.count !== 1) {
+    const fresh = await prisma.issue.findUniqueOrThrow({ where: { id: work.id } });
+    const freshState = await prisma.workflowState.findUnique({
+      where: { id: fresh.stateId },
+      select: { type: true },
+    });
+    if (freshState && (freshState.type === 'REVIEW' || freshState.type === 'COMPLETED' || freshState.type === 'CANCELED')) {
+      return fresh;
+    }
+    throw createValidationError(WORK_RUN_CONFLICT_MESSAGE);
+  }
+  const updated = await prisma.issue.findUniqueOrThrow({ where: { id: work.id } });
   await recordWorkAudit(prisma, {
     actor,
     after: selectIssueSnapshot(updated),
@@ -281,6 +374,33 @@ export async function reviewWork(
 
   return prisma.$transaction(async (transaction) => {
     const work = await requireWork(transaction, id);
+    let reviewIdempotencyId: string | null = null;
+    if (input.idempotencyKey) {
+      const reservation = await reserveWorkIdempotency(transaction, {
+        actor,
+        key: input.idempotencyKey,
+        operation: 'review',
+        requestHash: hashIdempotencyRequest({ ...input, idempotencyKey: null, id }),
+        teamId: work.teamId,
+      });
+      if (!reservation.created) {
+        if (reservation.record.workId !== work.id) {
+          throw createValidationError(WORK_IDEMPOTENCY_CONFLICT_MESSAGE);
+        }
+        if (!reservation.record.resultId) {
+          throw createValidationError(WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE);
+        }
+        const replayed = await transaction.workReviewDecision.findUnique({
+          where: { id: reservation.record.resultId },
+        });
+        if (!replayed || replayed.workId !== work.id) {
+          throw createValidationError(WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE);
+        }
+        const freshWork = await transaction.issue.findUniqueOrThrow({ where: { id: work.id } });
+        return { decision: replayed, work: freshWork };
+      }
+      reviewIdempotencyId = reservation.record.id;
+    }
     const state = await transaction.workflowState.findUnique({
       where: { id: work.stateId },
       select: { type: true },
@@ -331,12 +451,16 @@ export async function reviewWork(
         reason: decision.reason,
         reviewerId: actorId,
         runId: decision.runId,
+        selfReviewed: work.assigneeId === actorId || run?.actorId === actorId,
       },
       type: input.decision === 'ACCEPTED' ? 'work.accepted' : 'work.review_rejected',
       updatedFrom: { revision: work.revision, stateId: work.stateId },
       workId: work.id,
       workIdentifier: work.identifier,
     });
+    if (reviewIdempotencyId) {
+      await completeWorkIdempotency(transaction, reviewIdempotencyId, work.id, decision.id);
+    }
     return { decision, work: updated };
   });
 }

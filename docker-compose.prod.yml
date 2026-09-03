@@ -65,6 +65,9 @@ services:
       PORT: 4200
       REQUIRE_GOOGLE_OAUTH: ${REQUIRE_GOOGLE_OAUTH:-true}
       SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-2592000}
+      INVOLUTE_UPLOADS_DIR: /var/lib/involute/uploads
+      INVOLUTE_WEBHOOK_URL: ${INVOLUTE_WEBHOOK_URL:-}
+      INVOLUTE_WEBHOOK_SECRET: ${INVOLUTE_WEBHOOK_SECRET:-}
       VIEWER_ASSERTION_SECRET: ${VIEWER_ASSERTION_SECRET:?Set VIEWER_ASSERTION_SECRET in .env.production}
     healthcheck:
       test:
@@ -78,6 +81,8 @@ services:
       timeout: 5s
       retries: 20
       start_period: 10s
+    volumes:
+      - uploads-prod-data:/var/lib/involute/uploads
 
   web:
     build:
@@ -131,5 +136,6 @@ services:
 
 volumes:
   postgres-prod-data:
+  uploads-prod-data:
   caddy-data:
   caddy-config:

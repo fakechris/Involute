@@ -57,6 +57,17 @@
         else 'http://' ~ (involute_web_bind_address | default(involute_bind_address | default('127.0.0.1'))) ~ ':4201/'
       }}
     involute_smoke_base_url: "{{ involute_app_origin }}"
+    # Ports that must be free before the stack (re)starts. Override per
+    # inventory when bind addresses/ports differ from the defaults.
+    involute_release_ports: "{{ involute_db_port | default(5434) }} 4200 4201"
+    # The tailscale profile renders empty Google OAuth credentials by design
+    # (see env.tailscale.j2), so OAuth smoke checks only run on production.
+    involute_expect_google_oauth: >-
+      {{
+        (involute_require_google_oauth | default(true) | bool)
+        if (involute_stack_profile | default(involute_default_stack_profile)) == 'production'
+        else false
+      }}
     involute_rsync_excludes:
       - ".git"
       - "node_modules"
@@ -246,7 +257,7 @@
 
     - name: Wait for previous ports to be released
       ansible.builtin.shell: >
-        for port in 5434 4200 4201; do
+        for port in {{ involute_release_ports }}; do
           for attempt in $(seq 1 30); do
             if ! ss -ltn | grep -q ":${port} "; then
               break;
@@ -301,6 +312,7 @@
           - 401
       register: involute_auth_session_smoke
       failed_when: not (involute_auth_session_smoke.json.googleOAuthConfigured | default(false) | bool)
+      when: involute_expect_google_oauth | bool
 
     - name: Verify Google OAuth start redirects to Google
       ansible.builtin.uri:
@@ -310,6 +322,7 @@
         status_code: 302
       register: involute_google_start_smoke
       failed_when: "'accounts.google.com' not in (involute_google_start_smoke.location | default(''))"
+      when: involute_expect_google_oauth | bool
 
     - name: Run authenticated production smoke including MCP
       ansible.builtin.command:

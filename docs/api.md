@@ -664,6 +664,21 @@ Tools: `work_search`, `work_get_context`, `work_list_ready`, `work_propose`, `wo
 
 Completed runs and attached evidence move work to In Review, never Done. Outbound webhooks use `INVOLUTE_WEBHOOK_URL` and `INVOLUTE_WEBHOOK_SECRET`.
 
+### Webhook delivery contract
+
+- Delivery is **at-least-once**: a crash between a successful POST and the
+  delivery bookkeeping row causes redelivery of the same event.
+- Receivers **must dedupe on the `involute-delivery` header**, whose value is
+  the stable event id. Retries of the same event reuse the same id.
+- Authenticity: `involute-signature` is `sha256=` + HMAC-SHA256 of the raw
+  body with `INVOLUTE_WEBHOOK_SECRET`. `involute-event` carries the event
+  type (`run.completed`, `work.accepted`, …).
+- Each target URL is retried independently (up to 8 attempts); one slow or
+  failing target does not block the others. An event is dead-lettered only
+  when **every** target has either been delivered or exhausted its retries.
+- Review events (`work.accepted`, `work.review_rejected`) include
+  `selfReviewed: true` when the reviewer is also the work owner or run actor.
+
 ## Error model
 
 The API exposes safe validation and permission errors as GraphQL errors.
