@@ -179,6 +179,11 @@ export interface CandidatesPageQueryData {
 export interface CandidatesPageQueryVariables {
   first: number;
   after?: string;
+  teamFilter?: {
+    key?: {
+      eq: string;
+    };
+  } | null;
   filter?: {
     commitmentStatus?: CommitmentStatus;
     team?: {

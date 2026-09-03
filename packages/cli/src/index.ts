@@ -218,6 +218,10 @@ function formatTable(rows: Array<Record<string, unknown>>): string {
     return '(no results)';
   }
 
+  const MAX_CELL_WIDTH = 60;
+  const truncate = (value: string): string =>
+    value.length > MAX_CELL_WIDTH ? `${value.slice(0, MAX_CELL_WIDTH - 1)}…` : value;
+
   const headers = Array.from(
     rows.reduce((keys, row) => {
       Object.keys(row).forEach((key) => keys.add(key));
@@ -228,12 +232,12 @@ function formatTable(rows: Array<Record<string, unknown>>): string {
   const widths = headers.map((header) =>
     Math.max(
       header.length,
-      ...rows.map((row) => stringifyValue(row[header]).length),
+      ...rows.map((row) => truncate(stringifyValue(row[header])).length),
     ),
   );
 
   const renderRow = (values: string[]) =>
-    values.map((value, index) => value.padEnd(widths[index] ?? value.length)).join('  ');
+    values.map((value, index) => truncate(value).padEnd(widths[index] ?? value.length)).join('  ');
 
   return [
     renderRow(headers),
@@ -349,18 +353,28 @@ function registerConfigCommands(program: Command): void {
     .description('Read a configuration value')
     .argument('<key>', 'Configuration key (server-url, token, or viewer-assertion)')
     .option('--json', 'Output machine-readable JSON')
-    .action(async function (this: Command, key: string, options: JsonOption) {
+    .option('--show-secret', 'Print secret values in full (token, viewer-assertion)')
+    .action(async function (this: Command, key: string, options: JsonOption & { showSecret?: boolean }) {
       await runWithCliErrorHandling(async () => {
         if (!CONFIG_KEYS.includes(key as ConfigKey)) {
           throw new CliError(`Unknown config key "${key}". Expected one of: ${CONFIG_KEYS.join(', ')}`);
         }
 
         const value = await getConfigValue(key as ConfigKey);
+        const isSecret = key === 'token' || key === 'viewer-assertion';
+        const display = value && isSecret && !options.showSecret ? redactSecret(value) : value;
         const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
-        const payload = context.json ? { key, value: value ?? null } : value ?? '';
+        const payload = context.json ? { key, value: display ?? null } : display ?? '';
         process.stdout.write(formatOutput(payload, context));
       });
     });
+}
+
+function redactSecret(value: string): string {
+  if (value.length <= 8) {
+    return '*** (redacted, pass --show-secret to reveal)';
+  }
+  return `${value.slice(0, 4)}…${value.slice(-4)} (redacted, pass --show-secret to reveal)`;
 }
 
 function registerAuthCommands(program: Command): void {

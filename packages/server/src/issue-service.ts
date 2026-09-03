@@ -16,6 +16,7 @@ import {
   WORKFLOW_STATE_NOT_FOUND_MESSAGE,
   WORKFLOW_STATE_TEAM_CREATE_MISMATCH_MESSAGE,
   WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE,
+  WORK_CONTRACT_UPDATE_FORBIDDEN_MESSAGE,
   WORK_REVISION_CONFLICT_MESSAGE,
   PROJECT_NOT_FOUND_MESSAGE,
   CYCLE_NOT_FOUND_MESSAGE,
@@ -166,6 +167,19 @@ export async function updateIssue(
 
     if (!existingIssue) {
       throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+    }
+
+    // Agents shape candidate work via propose, but the committed contract is
+    // human-owned: once COMMITTED, acceptance/scope/verification/outcome/
+    // constraints can only be rewritten by a human (via commit or human update).
+    if (actor.actorKind === 'AGENT' && existingIssue.commitmentStatus === 'COMMITTED') {
+      const contractFields = ['acceptance', 'constraints', 'outcome', 'scope', 'verification'] as const;
+      const rewritesContract = contractFields.some(
+        (field) => field in input && input[field] !== undefined,
+      );
+      if (rewritesContract) {
+        throw createValidationError(WORK_CONTRACT_UPDATE_FORBIDDEN_MESSAGE);
+      }
     }
 
     if (

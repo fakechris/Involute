@@ -377,6 +377,7 @@ model WorkIdempotency {
   requestHash String
   workId    String?  @db.Uuid
   work      Issue?   @relation(fields: [workId], references: [id], onDelete: SetNull)
+  resultId  String?  @db.Uuid
   actorId   String?  @db.Uuid
   createdAt DateTime @default(now())
 
@@ -461,6 +462,7 @@ model EventOutbox {
   createdAt   DateTime  @default(now())
   deliveredAt DateTime?
   deadLetteredAt DateTime?
+  claimedAt   DateTime?
   attempts    Int       @default(0)
   lastError   String?
   deliveries EventOutboxDelivery[]

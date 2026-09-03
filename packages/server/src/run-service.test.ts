@@ -213,4 +213,71 @@ describe('run and evidence', () => {
       { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
     )).rejects.toThrow('Reporting a run requires an active claim owned by the current actor.');
   });
+
+  it('replays run_report and evidence_attach on idempotency key retry', async () => {
+    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Idempotent run' });
+    const committed = await commitWork(
+      prisma,
+      candidate.id,
+      { acceptance: 'retry safe', assigneeId: human.id, expectedRevision: candidate.revision },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    );
+    await claimWork(prisma, committed.id, {}, { actorId: human.id, actorKind: 'HUMAN', surface: 'test' });
+    const actor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' };
+
+    const first = await reportRun(
+      prisma,
+      { idempotencyKey: 'run-key-1', status: 'running', workId: committed.id },
+      actor,
+    );
+    const replay = await reportRun(
+      prisma,
+      { idempotencyKey: 'run-key-1', status: 'running', workId: committed.id },
+      actor,
+    );
+    expect(replay.run.id).toBe(first.run.id);
+    expect(await prisma.workRun.count({ where: { workId: committed.id } })).toBe(1);
+
+    const ev1 = await attachEvidence(
+      prisma,
+      { idempotencyKey: 'ev-key-1', kind: 'log', runId: first.run.id, url: 'https://example.test/log', workId: committed.id },
+      actor,
+    );
+    const ev2 = await attachEvidence(
+      prisma,
+      { idempotencyKey: 'ev-key-1', kind: 'log', runId: first.run.id, url: 'https://example.test/log', workId: committed.id },
+      actor,
+    );
+    expect(ev2.evidence.id).toBe(ev1.evidence.id);
+    expect(await prisma.workEvidence.count({ where: { workId: committed.id } })).toBe(1);
+  });
+
+  it('completing the same run twice does not duplicate the review transition', async () => {
+    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Double complete' });
+    const committed = await commitWork(
+      prisma,
+      candidate.id,
+      { acceptance: 'once only', assigneeId: human.id, expectedRevision: candidate.revision },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    );
+    await claimWork(prisma, committed.id, {}, { actorId: human.id, actorKind: 'HUMAN', surface: 'test' });
+    const actor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' };
+    const started = await reportRun(prisma, { status: 'running', workId: committed.id }, actor);
+    const revisionBefore = (await prisma.issue.findUniqueOrThrow({ where: { id: committed.id } })).revision;
+
+    const done1 = await reportRun(
+      prisma,
+      { idempotencyKey: 'done-key-1', runId: started.run.id, status: 'completed', workId: committed.id },
+      actor,
+    );
+    const done2 = await reportRun(
+      prisma,
+      { idempotencyKey: 'done-key-1', runId: started.run.id, status: 'completed', workId: committed.id },
+      actor,
+    );
+    expect(done2.run.id).toBe(done1.run.id);
+    const after = await prisma.issue.findUniqueOrThrow({ where: { id: committed.id } });
+    expect(after.revision).toBe(revisionBefore + 1);
+    expect(await prisma.eventOutbox.count({ where: { type: 'work.review_submitted' } })).toBe(1);
+  });
 });

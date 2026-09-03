@@ -32,6 +32,8 @@ export const WORK_LINK_ENDPOINT_NOT_FOUND_MESSAGE = 'Work link endpoint not foun
 export const WORK_COMMIT_FORBIDDEN_MESSAGE = 'Agents cannot commit work.';
 export const WORK_REJECT_FORBIDDEN_MESSAGE = 'Agents cannot reject work.';
 export const WORK_ACCEPT_FORBIDDEN_MESSAGE = 'Agents cannot accept or cancel work.';
+export const WORK_CONTRACT_UPDATE_FORBIDDEN_MESSAGE =
+  'Agents cannot rewrite committed contract fields; ask a human to update acceptance, scope, verification, outcome, or constraints.';
 export const WORK_NOT_CANDIDATE_MESSAGE = 'Only candidate work can be committed or rejected.';
 export const WORK_NOT_COMMITTED_MESSAGE = 'Only committed work can be claimed.';
 export const WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE =
@@ -61,6 +63,7 @@ export const WORK_RUN_CONFLICT_MESSAGE = 'Work run changed while the update was 
 export const WORK_EVIDENCE_REQUIRES_RUN_MESSAGE = 'Evidence must reference a work run.';
 export const WORK_REVIEW_REQUIRED_MESSAGE = 'Work is not awaiting review.';
 export const WORK_REVIEW_STATE_MISSING_MESSAGE = 'Team workflow is missing a required semantic state.';
+export const UPLOAD_TOO_LARGE_MESSAGE = 'Upload exceeds the 10 MB size limit.';
 
 const exposedErrorCodes = new Map<string, string>([
   [NOT_AUTHENTICATED_MESSAGE, 'UNAUTHENTICATED'],
@@ -91,6 +94,7 @@ const exposedErrorCodes = new Map<string, string>([
   [WORK_COMMIT_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
   [WORK_REJECT_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
   [WORK_ACCEPT_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
+  [WORK_CONTRACT_UPDATE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
   [WORK_NOT_CANDIDATE_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_NOT_COMMITTED_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE, 'BAD_USER_INPUT'],
@@ -116,6 +120,7 @@ const exposedErrorCodes = new Map<string, string>([
   [WORK_EVIDENCE_REQUIRES_RUN_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_REVIEW_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_REVIEW_STATE_MISSING_MESSAGE, 'BAD_USER_INPUT'],
+  [UPLOAD_TOO_LARGE_MESSAGE, 'BAD_USER_INPUT'],
 ]);
 
 export function createNotAuthenticatedError(): GraphQLError {

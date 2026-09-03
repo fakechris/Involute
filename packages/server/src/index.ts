@@ -279,6 +279,50 @@ async function handleUploadDownload(options: {
     return;
   }
 
+  // Uploads are unguessable (random UUID filenames) but must still be
+  // authorization-checked: files without a database row are never served,
+  // trusted token bearers (CLI/server-to-server, full API access already) may
+  // fetch any recorded upload, while session/agent viewers must be the
+  // uploader, an admin, or a reader of the linked issue/comment team.
+  const attachment = await options.auth.prisma.attachment.findFirst({
+    where: { url: `/uploads/${filename}` },
+    include: { comment: { select: { issueId: true } },
+      issue: { select: { teamId: true } } },
+  });
+  if (!attachment) {
+    response.statusCode = 404;
+    response.end('Not found');
+    return;
+  }
+  const viewer = context.viewer;
+  const isOwner = viewer && attachment.uploaderId === viewer.id;
+  const isAdmin = viewer?.globalRole === 'ADMIN';
+  if (context.authMode !== 'token' && !isOwner && !isAdmin) {
+    const issueId = attachment.issueId ?? attachment.comment?.issueId ?? null;
+    if (!issueId) {
+      response.statusCode = 403;
+      response.end('Forbidden');
+      return;
+    }
+    const issue = await options.auth.prisma.issue.findUnique({
+      where: { id: issueId },
+      select: { teamId: true },
+    });
+    if (!issue) {
+      response.statusCode = 404;
+      response.end('Not found');
+      return;
+    }
+    try {
+      const { assertCanReadTeam } = await import('./access-control.js');
+      await assertCanReadTeam(options.auth.prisma, context, issue.teamId);
+    } catch {
+      response.statusCode = 403;
+      response.end('Forbidden');
+      return;
+    }
+  }
+
   const filePath = join(uploadsDir, filename);
   if (!existsSync(filePath)) {
     response.statusCode = 404;

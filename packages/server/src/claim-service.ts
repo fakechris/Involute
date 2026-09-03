@@ -29,6 +29,7 @@ import { createIssueInTransaction } from './issue-service.js';
 import {
   completeWorkIdempotency,
   hashIdempotencyRequest,
+  isUniqueConstraintError,
   reserveWorkIdempotency,
 } from './idempotency.js';
 import {
@@ -65,6 +66,7 @@ export interface CommitWorkInput {
   acceptance?: string | null;
   assigneeId?: string | null;
   expectedRevision: number;
+  idempotencyKey?: string | null;
   outcome?: string | null;
   scope?: string | null;
   constraints?: string | null;
@@ -78,6 +80,7 @@ export interface ClaimWorkInput {
 
 export interface RejectWorkInput {
   expectedRevision: number;
+  idempotencyKey?: string | null;
   reason?: string | null;
 }
 
@@ -174,6 +177,24 @@ export async function commitWork(
   return prisma.$transaction(async (transaction) => {
     const existing = await requireWork(transaction, id);
 
+    let commitIdempotencyId: string | null = null;
+    if (input.idempotencyKey) {
+      const reservation = await reserveWorkIdempotency(transaction, {
+        actor,
+        key: input.idempotencyKey,
+        operation: 'commit',
+        requestHash: hashIdempotencyRequest({ ...input, idempotencyKey: null, id }),
+        teamId: existing.teamId,
+      });
+      if (!reservation.created) {
+        if (reservation.record.workId !== existing.id) {
+          throw createValidationError(WORK_IDEMPOTENCY_CONFLICT_MESSAGE);
+        }
+        return transaction.issue.findUniqueOrThrow({ where: { id: existing.id } });
+      }
+      commitIdempotencyId = reservation.record.id;
+    }
+
     if (existing.commitmentStatus !== 'CANDIDATE') {
       throw createValidationError(WORK_NOT_CANDIDATE_MESSAGE);
     }
@@ -259,6 +280,10 @@ export async function commitWork(
       workIdentifier: updated.identifier,
     });
 
+    if (commitIdempotencyId) {
+      await completeWorkIdempotency(transaction, commitIdempotencyId, updated.id);
+    }
+
     return updated;
   });
 }
@@ -274,6 +299,24 @@ export async function rejectWork(
   return prisma.$transaction(async (transaction) => {
     const existing = await requireWork(transaction, id);
 
+    let rejectIdempotencyId: string | null = null;
+    if (input.idempotencyKey) {
+      const reservation = await reserveWorkIdempotency(transaction, {
+        actor,
+        key: input.idempotencyKey,
+        operation: 'reject',
+        requestHash: hashIdempotencyRequest({ ...input, idempotencyKey: null, id }),
+        teamId: existing.teamId,
+      });
+      if (!reservation.created) {
+        if (reservation.record.workId !== existing.id) {
+          throw createValidationError(WORK_IDEMPOTENCY_CONFLICT_MESSAGE);
+        }
+        return transaction.issue.findUniqueOrThrow({ where: { id: existing.id } });
+      }
+      rejectIdempotencyId = reservation.record.id;
+    }
+
     if (existing.commitmentStatus !== 'CANDIDATE') {
       throw createValidationError(WORK_NOT_CANDIDATE_MESSAGE);
     }
@@ -281,7 +324,6 @@ export async function rejectWork(
     if (existing.revision !== input.expectedRevision) {
       throw createValidationError(WORK_REVISION_CONFLICT_MESSAGE);
     }
-
 
     await claimIssueRevision(transaction, existing.id, input.expectedRevision);
 
@@ -315,6 +357,10 @@ export async function rejectWork(
       workId: updated.id,
       workIdentifier: updated.identifier,
     });
+
+    if (rejectIdempotencyId) {
+      await completeWorkIdempotency(transaction, rejectIdempotencyId, updated.id);
+    }
 
     return updated;
   });
@@ -488,15 +534,6 @@ async function requireWork(prisma: DatabaseClient, id: string): Promise<Issue> {
 function nonEmpty(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
-}
-
-function isUniqueConstraintError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const tag = (error as { [Symbol.toStringTag]?: string })[Symbol.toStringTag];
-  return tag === 'PrismaClientKnownRequestError' && (error as { code?: string }).code === 'P2002';
 }
 
 export function isAcceptStateType(type: string): boolean {

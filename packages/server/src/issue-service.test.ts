@@ -154,6 +154,42 @@ describe('issue service', () => {
     expect(audits[0]?.actorKind).toBe('SERVICE');
     expect(audits[0]?.surface).toBe('internal');
   });
+
+  it('blocks agents from rewriting committed contract fields but allows notes', async () => {
+    const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
+    const backlogState = await prisma.workflowState.findFirstOrThrow({
+      where: { teamId: team.id, name: 'Backlog' },
+    });
+    const agent = await prisma.user.create({
+      data: { actorKind: 'AGENT', email: 'agent.contract@test.local', name: 'Agent' },
+    });
+    const committed = await prisma.issue.create({
+      data: {
+        acceptance: 'human approved',
+        commitmentStatus: 'COMMITTED',
+        identifier: 'INV-20',
+        stateId: backlogState.id,
+        teamId: team.id,
+        title: 'Committed contract',
+      },
+    });
+
+    await expect(updateIssue(
+      prisma,
+      committed.id,
+      { acceptance: 'agent rewrote it' },
+      { actorId: agent.id, actorKind: 'AGENT', surface: 'test' },
+    )).rejects.toThrow('Agents cannot rewrite committed contract fields');
+
+    const updated = await updateIssue(
+      prisma,
+      committed.id,
+      { description: 'agent progress note' },
+      { actorId: agent.id, actorKind: 'AGENT', surface: 'test' },
+    );
+    expect(updated.description).toBe('agent progress note');
+    expect(updated.acceptance).toBe('human approved');
+  });
 });
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<void> {

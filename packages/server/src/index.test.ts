@@ -84,6 +84,15 @@ describe('GraphQL server core', () => {
 
   it('forces active upload formats to download without same-origin execution', async () => {
     await writeFile(join(uploadsDir, 'proof.svg'), '<svg onload="alert(1)"></svg>');
+    await prisma.attachment.create({
+      data: {
+        filename: 'proof.svg',
+        mimeType: 'image/svg+xml',
+        size: 32,
+        url: '/uploads/proof.svg',
+        uploaderId: fixture.admin.id,
+      },
+    });
     const response = await fetch(`${server.url}/uploads/proof.svg`, {
       headers: { authorization: `Bearer ${TEST_AUTH_TOKEN}` },
     });
@@ -93,6 +102,15 @@ describe('GraphQL server core', () => {
     expect(response.headers.get('content-disposition')).toBe('attachment');
     expect(response.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'");
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+  });
+
+  it('refuses to serve upload files without a database record', async () => {
+    await writeFile(join(uploadsDir, 'orphan.png'), 'not-an-attachment');
+    const response = await fetch(`${server.url}/uploads/orphan.png`, {
+      headers: { authorization: `Bearer ${TEST_AUTH_TOKEN}` },
+    });
+
+    expect(response.status).toBe(404);
   });
 
   it('rejects missing or invalid auth with a GraphQL error while allowing valid bearer and raw tokens', async () => {

@@ -37,6 +37,7 @@ import {
   ISSUE_NOT_FOUND_MESSAGE,
   MEMBERSHIP_NOT_FOUND_MESSAGE,
   TEAM_OWNER_REQUIRED_MESSAGE,
+  UPLOAD_TOO_LARGE_MESSAGE,
 } from './errors.js';
 import {
   assertCanDeleteComment,
@@ -82,7 +83,7 @@ import { createProject, updateProject, deleteProject, type CreateProjectInput, t
 import { createCycle, updateCycle, deleteCycle, type CreateCycleInput, type UpdateCycleInput } from './cycle-service.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -132,8 +133,10 @@ const COMMENT_ORDER_BY: Prisma.CommentOrderByWithRelationInput[] = [
   { id: 'asc' },
 ];
 const MAX_COMMENTS_CONNECTION_FIRST = 100;
+
 const MAX_ISSUES_CONNECTION_FIRST = 200;
 
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 function buildIssueListInclude(
   options: { includeChildren?: boolean; includeComments?: boolean } = {},
 ): Prisma.IssueInclude {
@@ -807,6 +810,7 @@ const typeDefs = /* GraphQL */ `
     scope: String
     constraints: String
     verification: String
+    idempotencyKey: String
   }
 
   input WorkClaimInput {
@@ -817,6 +821,7 @@ const typeDefs = /* GraphQL */ `
   input WorkRejectInput {
     expectedRevision: Int!
     reason: String
+    idempotencyKey: String
   }
 
   type WorkProposePayload {
@@ -848,6 +853,7 @@ const typeDefs = /* GraphQL */ `
     summary: String
     externalUrl: String
     decisionRequested: Boolean
+    idempotencyKey: String
   }
 
   input EvidenceAttachInput {
@@ -856,6 +862,7 @@ const typeDefs = /* GraphQL */ `
     kind: String!
     url: String!
     summary: String
+    idempotencyKey: String
   }
 
   input WorkReviewInput {
@@ -863,6 +870,7 @@ const typeDefs = /* GraphQL */ `
     decision: WorkReviewDecisionKind!
     reason: String
     runId: String
+    idempotencyKey: String
   }
 
   type RunReportPayload {
@@ -1263,6 +1271,7 @@ const resolvers = {
         input: {
           decisionRequested?: boolean | null;
           externalUrl?: string | null;
+          idempotencyKey?: string | null;
           phase?: string | null;
           runId?: string | null;
           status?: string | null;
@@ -1297,6 +1306,7 @@ const resolvers = {
       _parent: unknown,
       args: {
         input: {
+          idempotencyKey?: string | null;
           kind: string;
           runId?: string | null;
           summary?: string | null;
@@ -1638,6 +1648,10 @@ const resolvers = {
     ): Promise<{ attachment: Attachment | null; success: boolean }> => {
       const viewer = requireAuthentication(context);
       return runMutation(async () => {
+        const buffer = Buffer.from(args.input.content, 'base64');
+        if (buffer.length > MAX_UPLOAD_BYTES) {
+          throw createValidationError(UPLOAD_TOO_LARGE_MESSAGE);
+        }
         const uploadsDir = getUploadsDirectory();
         if (!existsSync(uploadsDir)) {
           mkdirSync(uploadsDir, { recursive: true });
@@ -1645,19 +1659,28 @@ const resolvers = {
         const requestedExt = extname(args.input.filename).toLowerCase();
         const ext = /^\.[a-z0-9]{1,10}$/.test(requestedExt) ? requestedExt : '';
         const storedName = `${randomUUID()}${ext}`;
-        const buffer = Buffer.from(args.input.content, 'base64');
-        writeFileSync(join(uploadsDir, storedName), buffer);
+        const filePath = join(uploadsDir, storedName);
+        writeFileSync(filePath, buffer);
         const url = `/uploads/${storedName}`;
-        const attachment = await context.prisma.attachment.create({
-          data: {
-            filename: args.input.filename,
-            mimeType: args.input.mimeType,
-            size: buffer.length,
-            url,
-            uploaderId: viewer.id,
-          },
-        });
-        return { attachment, success: true as const };
+        try {
+          const attachment = await context.prisma.attachment.create({
+            data: {
+              filename: args.input.filename,
+              mimeType: args.input.mimeType,
+              size: buffer.length,
+              url,
+              uploaderId: viewer.id,
+            },
+          });
+          return { attachment, success: true as const };
+        } catch (error) {
+          try {
+            unlinkSync(filePath);
+          } catch {
+            // Best effort: the DB write already failed, don't mask it.
+          }
+          throw error;
+        }
       }, { attachment: null, success: false as const });
     },
   },

@@ -147,6 +147,7 @@ export async function callMcpTool(
       assignOptional(commitInput, 'acceptance', optionalString(args.acceptance));
       assignOptional(commitInput, 'assigneeId', optionalString(args.assignee_id));
       assignOptional(commitInput, 'constraints', optionalString(args.constraints));
+      assignOptional(commitInput, 'idempotencyKey', optionalString(args.idempotency_key));
       assignOptional(commitInput, 'outcome', optionalString(args.outcome));
       assignOptional(commitInput, 'scope', optionalString(args.scope));
       assignOptional(commitInput, 'verification', optionalString(args.verification));
@@ -183,11 +184,12 @@ export async function callMcpTool(
       const from = await requireWork(context.prisma, requiredString(args.from_id, 'from_id'));
       const to = await requireWork(context.prisma, requiredString(args.to_id, 'to_id'));
       await assertCanWriteIssue(context.prisma, context, from.id);
+      await assertCanWriteIssue(context.prisma, context, to.id);
       return createWorkLink(context.prisma, {
         actor: writeActorFromViewer(context.viewer, 'mcp'),
         fromId: from.id,
         toId: to.id,
-        type: requiredString(args.type, 'type') as WorkLinkType,
+        type: parseWorkLinkType(requiredString(args.type, 'type'), 'type'),
       });
     }
     case 'work_claim': {
@@ -212,6 +214,7 @@ export async function callMcpTool(
       assignOptional(runInput, 'phase', optionalString(args.phase));
       assignOptional(runInput, 'summary', optionalString(args.summary));
       assignOptional(runInput, 'externalUrl', optionalString(args.external_url));
+      assignOptional(runInput, 'idempotencyKey', optionalString(args.idempotency_key));
       if (args.decision_requested === true) {
         runInput.decisionRequested = true;
       }
@@ -227,6 +230,7 @@ export async function callMcpTool(
         workId: work.id,
       };
       assignOptional(evidenceInput, 'summary', optionalString(args.summary));
+      assignOptional(evidenceInput, 'idempotencyKey', optionalString(args.idempotency_key));
       return attachEvidence(
         context.prisma,
         evidenceInput,
@@ -314,6 +318,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         scope: { type: 'string' },
         constraints: { type: 'string' },
         verification: { type: 'string' },
+        idempotency_key: { type: 'string' },
       },
       required: ['id', 'expected_revision'],
     },
@@ -378,6 +383,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         summary: { type: 'string' },
         external_url: { type: 'string' },
         decision_requested: { type: 'boolean' },
+        idempotency_key: { type: 'string' },
       },
       required: ['work_id'],
     },
@@ -393,6 +399,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         kind: { type: 'string', enum: ['pr', 'test', 'log', 'screenshot', 'artifact', 'decision'] },
         url: { type: 'string' },
         summary: { type: 'string' },
+        idempotency_key: { type: 'string' },
       },
       required: ['work_id', 'run_id', 'kind', 'url'],
     },

@@ -2,10 +2,12 @@ import { createHash } from 'node:crypto';
 
 import type { Prisma, PrismaClient, WorkIdempotency } from '@prisma/client';
 
-import { createValidationError, WORK_IDEMPOTENCY_CONFLICT_MESSAGE } from './errors.js';
+import { createValidationError, TEAM_NOT_FOUND_MESSAGE, WORK_IDEMPOTENCY_CONFLICT_MESSAGE } from './errors.js';
 import type { WriteActor } from './work-service.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function idempotencyActorKey(actor: WriteActor): string {
   return actor.actorId ?? `${actor.actorKind.toLowerCase()}:system`;
@@ -26,6 +28,12 @@ export async function reserveWorkIdempotency(
   },
 ): Promise<{ created: boolean; record: WorkIdempotency }> {
   const actorKey = idempotencyActorKey(input.actor);
+  if (!UUID_PATTERN.test(input.teamId)) {
+    throw createValidationError(TEAM_NOT_FOUND_MESSAGE);
+  }
+  if (input.actor.actorId && !UUID_PATTERN.test(input.actor.actorId)) {
+    throw createValidationError(TEAM_NOT_FOUND_MESSAGE);
+  }
   const inserted = await prisma.$queryRaw<Array<{ id: string }>>`
     INSERT INTO "WorkIdempotency"
       ("id", "key", "operation", "teamId", "actorKey", "requestHash", "actorId", "createdAt")
@@ -58,11 +66,24 @@ export async function completeWorkIdempotency(
   prisma: DatabaseClient,
   id: string,
   workId: string,
+  resultId?: string | null,
 ): Promise<void> {
   await prisma.workIdempotency.update({
     where: { id },
-    data: { workId },
+    data: { workId, ...(resultId ? { resultId } : {}) },
   });
+}
+
+export function isUniqueConstraintError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const code = (error as { code?: string }).code;
+  if (code === 'P2002') {
+    return true;
+  }
+  const tag = (error as { [Symbol.toStringTag]?: string })[Symbol.toStringTag];
+  return tag === 'PrismaClientKnownRequestError' && code === 'P2002';
 }
 
 function stableJson(value: unknown): string {
