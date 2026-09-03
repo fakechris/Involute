@@ -159,7 +159,12 @@ export async function reportRun(
         throw createValidationError(WORK_RUN_ACTOR_MISMATCH_MESSAGE);
       }
       if (TERMINAL_RUN_STATUSES.includes(run.status)) {
-        if (!status || status === run.status) return { run, work };
+        if (!status || status === run.status) {
+          if (idempotencyId) {
+            await completeWorkIdempotency(transaction, idempotencyId, work.id, run.id);
+          }
+          return { run, work };
+        }
         throw createValidationError(WORK_RUN_TERMINAL_MESSAGE);
       }
       if (!run.claimId) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);

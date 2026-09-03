@@ -371,10 +371,8 @@ function registerConfigCommands(program: Command): void {
 }
 
 function redactSecret(value: string): string {
-  if (value.length <= 8) {
-    return '*** (redacted, pass --show-secret to reveal)';
-  }
-  return `${value.slice(0, 4)}…${value.slice(-4)} (redacted, pass --show-secret to reveal)`;
+  void value;
+  return '*** (redacted, pass --show-secret to reveal)';
 }
 
 function registerAuthCommands(program: Command): void {

@@ -60,13 +60,13 @@
     # Ports that must be free before the stack (re)starts. Override per
     # inventory when bind addresses/ports differ from the defaults.
     involute_release_ports: "{{ involute_db_port | default(5434) }} 4200 4201"
-    # The tailscale profile ships with blank Google OAuth credentials, so its
-    # smoke checks must not assert a Google redirect.
+    # The tailscale profile renders empty Google OAuth credentials by design
+    # (see env.tailscale.j2), so OAuth smoke checks only run on production.
     involute_expect_google_oauth: >-
       {{
         (involute_require_google_oauth | default(true) | bool)
         if (involute_stack_profile | default(involute_default_stack_profile)) == 'production'
-        else (involute_require_google_oauth | default(false) | bool)
+        else false
       }}
     involute_rsync_excludes:
       - ".git"

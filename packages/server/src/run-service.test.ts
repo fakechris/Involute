@@ -191,6 +191,22 @@ describe('run and evidence', () => {
     expect((await prisma.eventOutbox.findUniqueOrThrow({ where: { id: event.id } })).deliveredAt).not.toBeNull();
   });
 
+  it('delivers once when the same webhook target is configured twice', async () => {
+    const event = await prisma.eventOutbox.create({
+      data: { payload: { data: {}, type: 'work.proposed' }, type: 'work.proposed' },
+    });
+    let posts = 0;
+    const target = { secret: 'shared-secret', url: 'https://dup.example.test/hook' };
+    const deliver = async (): Promise<Response> => {
+      posts += 1;
+      return new Response('ok', { status: 200 });
+    };
+
+    expect(await flushEventOutbox(prisma, [target, { ...target }], deliver as typeof fetch)).toEqual({ delivered: 1, failed: 0 });
+    expect(posts).toBe(1);
+    expect(await prisma.eventOutboxDelivery.count({ where: { eventId: event.id } })).toBe(1);
+  });
+
   it('rejects updates to a running run after its bound claim is gone', async () => {
     const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Claim-bound run' });
     const committed = await commitWork(
@@ -250,6 +266,36 @@ describe('run and evidence', () => {
     );
     expect(ev2.evidence.id).toBe(ev1.evidence.id);
     expect(await prisma.workEvidence.count({ where: { workId: committed.id } })).toBe(1);
+  });
+
+  it('completes the idempotency reservation on terminal-run no-op retries', async () => {
+    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Terminal replay' });
+    const committed = await commitWork(
+      prisma,
+      candidate.id,
+      { acceptance: 'replay safe', assigneeId: human.id, expectedRevision: candidate.revision },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    );
+    await claimWork(prisma, committed.id, {}, { actorId: human.id, actorKind: 'HUMAN', surface: 'test' });
+    const actor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' };
+    const started = await reportRun(prisma, { status: 'running', workId: committed.id }, actor);
+    await reportRun(
+      prisma,
+      { runId: started.run.id, status: 'completed', workId: committed.id },
+      actor,
+    );
+
+    const first = await reportRun(
+      prisma,
+      { idempotencyKey: 'terminal-key-1', runId: started.run.id, status: 'completed', workId: committed.id },
+      actor,
+    );
+    const replay = await reportRun(
+      prisma,
+      { idempotencyKey: 'terminal-key-1', runId: started.run.id, status: 'completed', workId: committed.id },
+      actor,
+    );
+    expect(replay.run.id).toBe(first.run.id);
   });
 
   it('completing the same run twice does not duplicate the review transition', async () => {

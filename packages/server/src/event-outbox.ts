@@ -70,6 +70,10 @@ export async function flushEventOutbox(
     return { delivered: 0, failed: 0 };
   }
 
+  // Duplicate URLs would POST twice against the same deduped delivery row and
+  // skew the all-terminal dead-letter check, so collapse them first.
+  const distinctTargets = [...new Map(targets.map((target) => [target.url, target])).values()];
+
   const claimCutoff = new Date(Date.now() - OUTBOX_CLAIM_LEASE_MS);
   const pending = await prisma.eventOutbox.findMany({
     where: {
@@ -87,7 +91,12 @@ export async function flushEventOutbox(
   for (const event of pending) {
     // Mutual exclusion: overlapping ticks (2s interval) or multiple replicas
     // race here; only the winner processes the event. Losers skip silently.
-    // The claim is released below, so the lease is crash recovery only.
+    // The claim timestamp fences the final write below: if another worker
+    // stole the claim mid-delivery (lease expiry after a >60s stall), our
+    // finalization is skipped and the owner retries. Duplicate POSTs across
+    // such stalls remain possible by design (at-least-once) and are deduped
+    // by receivers on the involute-delivery header.
+    const claimTime = new Date();
     const claimed = await prisma.eventOutbox.updateMany({
       where: {
         id: event.id,
@@ -95,7 +104,7 @@ export async function flushEventOutbox(
         deadLetteredAt: null,
         OR: [{ claimedAt: null }, { claimedAt: { lt: claimCutoff } }],
       },
-      data: { claimedAt: new Date() },
+      data: { claimedAt: claimTime },
     });
     if (claimed.count !== 1) {
       continue;
@@ -111,12 +120,13 @@ export async function flushEventOutbox(
     // Deliver to all targets concurrently: one slow webhook must not
     // head-of-line block the others.
     const outcomes = await Promise.all(
-      targets.map(async (target) => deliverToTarget(prisma, event, target, body, fetchImpl)),
-    );    const targetHashes = targets.map((target) => targetHashFor(target.url));
+      distinctTargets.map(async (target) => deliverToTarget(prisma, event, target, body, fetchImpl)),
+    );
+    const targetHashes = distinctTargets.map((target) => targetHashFor(target.url));
 
     if (outcomes.every((outcome) => outcome.ok)) {
-      await prisma.eventOutbox.update({
-        where: { id: event.id },
+      const finalized = await prisma.eventOutbox.updateMany({
+        where: { id: event.id, claimedAt: claimTime },
         data: {
           attempts: { increment: 1 },
           claimedAt: null,
@@ -124,9 +134,10 @@ export async function flushEventOutbox(
           lastError: null,
         },
       });
-      delivered += 1;
+      if (finalized.count === 1) {
+        delivered += 1;
+      }
     } else {
-      failed += 1;
       const deliveries = await prisma.eventOutboxDelivery.findMany({
         where: { eventId: event.id, targetHash: { in: targetHashes } },
       });
@@ -134,13 +145,13 @@ export async function flushEventOutbox(
       // delivered or exhausted). A single exhausted target must not starve
       // the remaining retryable targets.
       const allTerminal =
-        deliveries.length === targets.length &&
+        deliveries.length === distinctTargets.length &&
         deliveries.every((delivery) => delivery.deliveredAt || delivery.attempts >= MAX_DELIVERY_ATTEMPTS);
       const anyExhausted = deliveries.some(
         (delivery) => !delivery.deliveredAt && delivery.attempts >= MAX_DELIVERY_ATTEMPTS,
       );
-      await prisma.eventOutbox.update({
-        where: { id: event.id },
+      const finalized = await prisma.eventOutbox.updateMany({
+        where: { id: event.id, claimedAt: claimTime },
         data: {
           attempts: { increment: 1 },
           claimedAt: null,
@@ -148,6 +159,9 @@ export async function flushEventOutbox(
           lastError: outcomes.filter((outcome) => !outcome.ok).map((outcome) => outcome.error).join('; '),
         },
       });
+      if (finalized.count === 1) {
+        failed += 1;
+      }
     }
   }
 
