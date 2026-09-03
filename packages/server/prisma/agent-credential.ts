@@ -16,7 +16,8 @@ function readFlag(args: string[], name: string): string | null {
 }
 
 async function main(): Promise<void> {
-  const [command, ...args] = process.argv.slice(2);
+  const [command, ...rawArgs] = process.argv.slice(2);
+  const args = rawArgs.filter((arg) => arg !== '--');
 
   if (command === 'create') {
     const [teamKey, name, email, expiresAtValue] = args;
