@@ -671,13 +671,85 @@ Completed runs and attached evidence move work to In Review, never Done. Outboun
 - Receivers **must dedupe on the `involute-delivery` header**, whose value is
   the stable event id. Retries of the same event reuse the same id.
 - Authenticity: `involute-signature` is `sha256=` + HMAC-SHA256 of the raw
-  body with `INVOLUTE_WEBHOOK_SECRET`. `involute-event` carries the event
+  body with the subscription's secret. `involute-event` carries the event
   type (`run.completed`, `work.accepted`, …).
 - Each target URL is retried independently (up to 8 attempts); one slow or
   failing target does not block the others. An event is dead-lettered only
   when **every** target has either been delivered or exhausted its retries.
 - Review events (`work.accepted`, `work.review_rejected`) include
   `selfReviewed: true` when the reviewer is also the work owner or run actor.
+
+### Webhook subscriptions (Linear-style, per-endpoint secrets)
+
+Preferred over the legacy shared `INVOLUTE_WEBHOOK_URL`/`INVOLUTE_WEBHOOK_SECRET`
+pair (still honored when no subscription exists). Each subscription carries its
+own signing secret, optional team scope (`team` null = all teams), and event
+type filter (empty = all `work.*`/`run.*`/`artifact.*` types). Only team owners
+(team-scoped) or global admins (all-teams) can manage them; secrets are
+returned once at create/rotate and never listed.
+
+```graphql
+mutation {
+  webhookCreate(input: {
+    team: "INV"
+    url: "https://ci.example.com/hooks/involute"
+    label: "CI"
+    eventTypes: ["run.completed", "work.accepted"]
+  }) {
+    success
+    secret        # shown once — store it now
+    subscription { id url teamId eventTypes enabled }
+  }
+}
+```
+
+Rotation is immediate: `webhookRotateSecret(id)` returns a fresh secret and
+resets the failure counter. For zero-downtime rotation, create a temporary
+second subscription with the new secret, update the receiver, then delete the
+old one. Subscriptions that exhaust retries across 10 consecutive flushes are
+automatically disabled (`enabled: false`); re-enable with `webhookUpdate`.
+
+```graphql
+query { webhooks(teamId: "INV") { id url label teamId eventTypes enabled consecutiveFailures } }
+mutation { webhookUpdate(id: "<id>", input: { enabled: true }) { success } }
+mutation { webhookDelete(id: "<id>") { success } }
+```
+
+### Agent credentials and scopes (Linear-style)
+
+Agent tokens (`inv_agent_…`) work on `/mcp` only. Each credential carries
+scopes, enforced per MCP tool; `read` is always granted (as in Linear):
+
+| Scope | Tools |
+|---|---|
+| `read` | `work_search`, `work_get_context`, `work_list_ready` |
+| `propose` | `work_propose` |
+| `claim` | `work_claim` |
+| `report` | `run_report`, `evidence_attach` |
+| `update` | `work_update` (contract fields on committed work stay human-only) |
+| `link` | `work_link` |
+
+`work_commit`/`reject`/`accept` have no scope: they are human-only by
+`actorKind`. Team owners issue scoped credentials without SSH, from Settings →
+Agents or via GraphQL (plaintext token returned once):
+
+```graphql
+mutation {
+  agentCredentialCreate(input: {
+    team: "INV", name: "Codex review",
+    scopes: ["read", "propose", "claim", "report"]
+  }) {
+    success
+    token         # shown once
+    credential { id name scopes user { email } }
+  }
+}
+```
+
+```graphql
+query { agentCredentials(teamId: "INV") { id name scopes revokedAt user { email } } }
+mutation { agentCredentialRevoke(id: "<id>") { success } }
+```
 
 ## Error model
 

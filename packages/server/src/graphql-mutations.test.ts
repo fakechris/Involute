@@ -1366,6 +1366,109 @@ describe('GraphQL mutations', () => {
     expect(revokeResponse.body.data.agentCredentialRevoke.success).toBe(true);
     expect(revokeResponse.body.data.agentCredentialRevoke.credential.revokedAt).not.toBeNull();
   });
+
+  it('manages webhook subscriptions with write-once secrets and rotation', async () => {
+    const createResponse = await postGraphQL({
+      query: `
+        mutation WebhookCreate($input: WebhookCreateInput!) {
+          webhookCreate(input: $input) {
+            success
+            secret
+            subscription { id url label teamId eventTypes enabled consecutiveFailures }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          eventTypes: ['work.proposed', 'work.accepted'],
+          label: 'CI hook',
+          team: fixture.team.key,
+          url: 'https://hooks.example.test/involute',
+        },
+      },
+    });
+
+    expect(createResponse.status).toBe(200);
+    expect(createResponse.body.errors).toBeUndefined();
+    const created = createResponse.body.data.webhookCreate;
+    expect(created.success).toBe(true);
+    expect(created.secret).toMatch(/^[0-9a-f]{64}$/);
+    expect(created.subscription).toEqual(expect.objectContaining({
+      eventTypes: ['work.proposed', 'work.accepted'],
+      teamId: fixture.team.id,
+    }));
+    const subscriptionId = created.subscription.id as string;
+
+    const listResponse = await postGraphQL({
+      query: `
+        query WebhookList($teamId: String!) {
+          webhooks(teamId: $teamId) {
+            id
+            url
+            label
+          }
+        }
+      `,
+      variables: { teamId: fixture.team.id },
+    });
+    expect(listResponse.body.data.webhooks).toEqual([
+      expect.objectContaining({ id: subscriptionId }),
+    ]);
+    expect(JSON.stringify(listResponse.body.data.webhooks)).not.toContain(created.secret);
+
+    const badUrl = await postGraphQL({
+      query: `
+        mutation WebhookCreate($input: WebhookCreateInput!) {
+          webhookCreate(input: $input) { success subscription { id } }
+        }
+      `,
+      variables: { input: { team: fixture.team.key, url: 'ftp://example.test/hook' } },
+    });
+    expect(badUrl.body.errors).toBeUndefined();
+    expect(badUrl.body.data.webhookCreate).toEqual({ success: false, subscription: null });
+
+    const rotateResponse = await postGraphQL({
+      query: `
+        mutation WebhookRotate($id: String!) {
+          webhookRotateSecret(id: $id) {
+            success
+            secret
+            subscription { id consecutiveFailures }
+          }
+        }
+      `,
+      variables: { id: subscriptionId },
+    });
+    expect(rotateResponse.body.data.webhookRotateSecret.success).toBe(true);
+    expect(rotateResponse.body.data.webhookRotateSecret.secret).not.toBe(created.secret);
+
+    const disableResponse = await postGraphQL({
+      query: `
+        mutation WebhookUpdate($id: String!, $input: WebhookUpdateInput!) {
+          webhookUpdate(id: $id, input: $input) {
+            success
+            subscription { id enabled }
+          }
+        }
+      `,
+      variables: { id: subscriptionId, input: { enabled: false } },
+    });
+    expect(disableResponse.body.data.webhookUpdate.subscription).toEqual({
+      id: subscriptionId,
+      enabled: false,
+    });
+
+    const deleteResponse = await postGraphQL({
+      query: `
+        mutation WebhookDelete($id: String!) {
+          webhookDelete(id: $id) { success }
+        }
+      `,
+      variables: { id: subscriptionId },
+    });
+    expect(deleteResponse.body.data.webhookDelete).toEqual({ success: true });
+    expect(await prisma.webhookSubscription.findUnique({ where: { id: subscriptionId } })).toBeNull();
+  });
 });
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<MutationFixture> {

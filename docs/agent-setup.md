@@ -7,12 +7,17 @@ live in [`skills/involute/SKILL.md`](../skills/involute/SKILL.md).
 
 ## 1. Get a token
 
-Each agent gets its own revocable credential. Ask a team owner or operator to
-provision one (scoped to exactly one team, optional expiry):
+Each agent gets its own revocable credential with Linear-style scopes (`read`
+always granted; add `propose`, `claim`, `report`, `update`, `link` as needed —
+start least-privilege, e.g. read-only analysis starts on `/mcp/readonly`).
+
+Fastest path: a team owner opens Settings → Agents in the web UI, picks
+scopes, and copies the one-time token. Equivalent operator/SSH path (scoped
+to exactly one team, optional expiry):
 
 ```bash
 pnpm --filter @turnkeyai/involute-server agent:create -- INV "Codex production" codex-production@example.invalid
-# with expiry: agent:create -- INV "Temp reviewer" temp@example.invalid 2026-10-01T00:00:00Z
+# scoped + expiring: agent:create -- INV "Temp reviewer" temp@example.invalid 2026-10-01T00:00:00Z --scopes read,propose
 ```
 
 Store the printed `inv_agent_…` value in the agent's secret store. It is shown

@@ -1,13 +1,13 @@
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
 import type { PrismaClient, Team, User } from '@prisma/client';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { claimWork, commitWork, proposeWork } from './claim-service.ts';
-import { flushEventOutbox } from './event-outbox.ts';
+import { collectOutboundWebhookTargets, flushEventOutbox } from './event-outbox.ts';
 import { attachEvidence, reportRun, reviewWork } from './run-service.ts';
 
 loadProjectEnvironment();
@@ -28,6 +28,8 @@ describe('run and evidence', () => {
 
   beforeEach(async () => {
     await prisma.eventOutbox.deleteMany();
+    await prisma.eventOutboxDelivery.deleteMany();
+    await prisma.webhookSubscription.deleteMany();
     await prisma.workReviewDecision.deleteMany();
     await prisma.workEvidence.deleteMany();
     await prisma.workRun.deleteMany();
@@ -296,6 +298,124 @@ describe('run and evidence', () => {
       actor,
     );
     expect(replay.run.id).toBe(first.run.id);
+  });
+
+  it('routes outbox events to subscriptions by team and event type', async () => {
+    const otherTeam = await prisma.team.create({ data: { key: 'OTHER', name: 'Other' } });
+    const posted: string[] = [];
+    const deliver = async (url: string | URL | Request): Promise<Response> => {
+      posted.push(String(url));
+      return new Response('ok', { status: 200 });
+    };
+
+    await prisma.webhookSubscription.create({
+      data: {
+        eventTypes: ['work.proposed'],
+        label: 'team hook',
+        secret: 'team-secret',
+        teamId: team.id,
+        url: 'https://team.example.test/hook',
+      },
+    });
+    await prisma.webhookSubscription.create({
+      data: {
+        eventTypes: [],
+        label: 'global hook',
+        secret: 'global-secret',
+        teamId: null,
+        url: 'https://global.example.test/hook',
+      },
+    });
+
+    // work.proposed for the subscribed team → both endpoints fire.
+    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Routed work' });
+    const targets = await collectOutboundWebhookTargets(prisma, 'https://env.example.test/hook', 'env-secret');
+    expect(targets.map((target) => target.url).sort()).toEqual([
+      'https://global.example.test/hook',
+      'https://team.example.test/hook',
+    ]);
+    expect(await flushEventOutbox(prisma, targets, deliver as typeof fetch)).toEqual({ delivered: 1, failed: 0 });
+    expect(posted.sort()).toEqual(['https://global.example.test/hook', 'https://team.example.test/hook']);
+
+    // A run event the team subscription did not opt into → global only.
+    posted.length = 0;
+    const committed = await commitWork(
+      prisma,
+      candidate.id,
+      { acceptance: 'scoped', assigneeId: human.id, expectedRevision: candidate.revision },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    );
+    await claimWork(prisma, committed.id, {}, { actorId: human.id, actorKind: 'HUMAN', surface: 'test' });
+    await reportRun(
+      prisma,
+      { status: 'running', workId: committed.id },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    );
+    const round2 = await collectOutboundWebhookTargets(prisma, null, null);
+    expect(await flushEventOutbox(prisma, round2, deliver as typeof fetch)).toEqual({ delivered: 3, failed: 0 });
+    expect(posted).toEqual([
+      'https://global.example.test/hook',
+      'https://global.example.test/hook',
+      'https://global.example.test/hook',
+    ]);
+
+    // Events for other teams never reach the team-scoped subscription.
+    expect(otherTeam.key).toBe('OTHER');
+  });
+
+  it('falls back to env targets when no subscription exists', async () => {
+    expect(await collectOutboundWebhookTargets(prisma, 'https://env.example.test/hook', 'env-secret')).toEqual([
+      { secret: 'env-secret', url: 'https://env.example.test/hook' },
+    ]);
+    expect(await collectOutboundWebhookTargets(prisma, null, null)).toEqual([]);
+  });
+
+  it('disables subscriptions after persistent delivery failure', async () => {
+    const subscription = await prisma.webhookSubscription.create({
+      data: {
+        eventTypes: [],
+        secret: 'flaky-secret',
+        teamId: null,
+        url: 'https://flaky.example.test/hook',
+      },
+    });
+    await prisma.eventOutbox.create({
+      data: { payload: { data: {}, type: 'work.proposed' }, type: 'work.proposed' },
+    });
+    const failing = async (): Promise<Response> => new Response('down', { status: 503 });
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const targets = await collectOutboundWebhookTargets(prisma, null, null);
+      expect(await flushEventOutbox(prisma, targets, failing as typeof fetch)).toEqual({ delivered: 0, failed: 1 });
+    }
+    // Exhausted but not yet disabled: only one counted failure so far.
+    const stillEnabled = await prisma.webhookSubscription.findUniqueOrThrow({ where: { id: subscription.id } });
+    expect(stillEnabled.enabled).toBe(true);
+    expect(stillEnabled.consecutiveFailures).toBe(1);
+
+    // An already-exhausted delivery on a fresh event pushes the counter over.
+    const another = await prisma.eventOutbox.create({
+      data: { payload: { data: {}, type: 'work.proposed' }, type: 'work.proposed' },
+    });
+    await prisma.eventOutboxDelivery.create({
+      data: {
+        attempts: 8,
+        eventId: another.id,
+        lastError: 'down',
+        targetHash: createHash('sha256').update('https://flaky.example.test/hook').digest('hex'),
+      },
+    });
+    await prisma.webhookSubscription.update({
+      where: { id: subscription.id },
+      data: { consecutiveFailures: 9 },
+    });
+    const targets = await collectOutboundWebhookTargets(prisma, null, null);
+    expect(await flushEventOutbox(prisma, targets, failing as typeof fetch)).toEqual({ delivered: 0, failed: 1 });
+    const after = await prisma.webhookSubscription.findUniqueOrThrow({ where: { id: subscription.id } });
+    expect(after.enabled).toBe(false);
+    expect(after.consecutiveFailures).toBe(10);
+    // Disabled subscriptions stop minimal traffic: collector yields nothing.
+    expect(await collectOutboundWebhookTargets(prisma, null, null)).toEqual([]);
   });
 
   it('completing the same run twice does not duplicate the review transition', async () => {

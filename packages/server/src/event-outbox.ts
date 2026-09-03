@@ -30,7 +30,15 @@ type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 export interface WebhookTarget {
   secret: string;
   url: string;
+  // Present for database-backed subscriptions (absent for legacy env targets,
+  // which match every event). Mirrors Linear's per-webhook secret + team /
+  // resource scoping.
+  subscriptionId?: string;
+  teamId?: string | null;
+  eventTypes?: string[];
 }
+
+export const WEBHOOK_AUTO_DISABLE_THRESHOLD = 10;
 
 export interface EnqueueWorkEventInput {
   payload: Prisma.InputJsonValue;
@@ -84,6 +92,7 @@ export async function flushEventOutbox(
     orderBy: { createdAt: 'asc' },
     take: limit,
   });
+  const eventTeams = await loadEventTeams(prisma, pending);
 
   let delivered = 0;
   let failed = 0;
@@ -117,12 +126,27 @@ export async function flushEventOutbox(
       ...(event.payload as object),
     });
 
+    // Subscription routing: env targets match everything; subscriptions match
+    // on team (null = all teams) and event type (empty = all types). Events
+    // nobody subscribes to are marked delivered so they never wedge the queue.
+    const eventTargets = distinctTargets.filter((target) =>
+      targetMatchesEvent(target, event.type, eventTeams.get(event.id) ?? null),
+    );
+    if (eventTargets.length === 0) {
+      await prisma.eventOutbox.updateMany({
+        where: { id: event.id, claimedAt: claimTime },
+        data: { attempts: { increment: 1 }, claimedAt: null, deliveredAt: new Date() },
+      });
+      delivered += 1;
+      continue;
+    }
+
     // Deliver to all targets concurrently: one slow webhook must not
     // head-of-line block the others.
     const outcomes = await Promise.all(
-      distinctTargets.map(async (target) => deliverToTarget(prisma, event, target, body, fetchImpl)),
+      eventTargets.map(async (target) => deliverToTarget(prisma, event, target, body, fetchImpl)),
     );
-    const targetHashes = distinctTargets.map((target) => targetHashFor(target.url));
+    const targetHashes = eventTargets.map((target) => targetHashFor(target.url));
 
     if (outcomes.every((outcome) => outcome.ok)) {
       const finalized = await prisma.eventOutbox.updateMany({
@@ -136,6 +160,7 @@ export async function flushEventOutbox(
       });
       if (finalized.count === 1) {
         delivered += 1;
+        await accountSubscriptionOutcomes(prisma, eventTargets, outcomes);
       }
     } else {
       const deliveries = await prisma.eventOutboxDelivery.findMany({
@@ -145,7 +170,7 @@ export async function flushEventOutbox(
       // delivered or exhausted). A single exhausted target must not starve
       // the remaining retryable targets.
       const allTerminal =
-        deliveries.length === distinctTargets.length &&
+        deliveries.length === eventTargets.length &&
         deliveries.every((delivery) => delivery.deliveredAt || delivery.attempts >= MAX_DELIVERY_ATTEMPTS);
       const anyExhausted = deliveries.some(
         (delivery) => !delivery.deliveredAt && delivery.attempts >= MAX_DELIVERY_ATTEMPTS,
@@ -161,11 +186,89 @@ export async function flushEventOutbox(
       });
       if (finalized.count === 1) {
         failed += 1;
+        await accountSubscriptionOutcomes(prisma, eventTargets, outcomes);
       }
     }
   }
 
   return { delivered, failed };
+}
+
+function targetMatchesEvent(target: WebhookTarget, eventType: string, eventTeamId: string | null): boolean {
+  if (!target.subscriptionId) {
+    return true;
+  }
+  if (target.teamId && target.teamId !== eventTeamId) {
+    return false;
+  }
+  if (target.eventTypes && target.eventTypes.length > 0 && !target.eventTypes.includes(eventType)) {
+    return false;
+  }
+  return true;
+}
+
+async function loadEventTeams(
+  prisma: PrismaClient,
+  events: Array<{ id: string; payload: unknown }>,
+): Promise<Map<string, string>> {
+  const workIds = new Map<string, string>();
+  for (const event of events) {
+    const workId = (event.payload as { work?: { id?: unknown } } | null)?.work?.id;
+    if (typeof workId === 'string') {
+      workIds.set(workId, event.id);
+    }
+  }
+  if (workIds.size === 0) {
+    return new Map();
+  }
+  const issues = await prisma.issue.findMany({
+    where: { id: { in: [...workIds.keys()] } },
+    select: { id: true, teamId: true },
+  });
+  const teams = new Map<string, string>();
+  for (const issue of issues) {
+    const eventId = workIds.get(issue.id);
+    if (eventId) {
+      teams.set(eventId, issue.teamId);
+    }
+  }
+  return teams;
+}
+
+async function accountSubscriptionOutcomes(
+  prisma: PrismaClient,
+  targets: WebhookTarget[],
+  outcomes: Array<{ attempts: number; ok: boolean }>,
+): Promise<void> {
+  for (let index = 0; index < targets.length; index += 1) {
+    const target = targets[index];
+    const outcome = outcomes[index];
+    if (!target?.subscriptionId || !outcome) {
+      continue;
+    }
+    if (outcome.ok) {
+      await prisma.webhookSubscription.updateMany({
+        where: { id: target.subscriptionId, consecutiveFailures: { gt: 0 } },
+        data: { consecutiveFailures: 0 },
+      });
+      continue;
+    }
+    // Only exhausted deliveries count toward auto-disable; transient failures
+    // keep retrying without penalty, mirroring Linear's persistent-failure rule.
+    if (outcome.attempts >= MAX_DELIVERY_ATTEMPTS) {
+      const subscription = await prisma.webhookSubscription.update({
+        where: { id: target.subscriptionId },
+        data: { consecutiveFailures: { increment: 1 } },
+        select: { consecutiveFailures: true },
+      });
+      if (subscription.consecutiveFailures >= WEBHOOK_AUTO_DISABLE_THRESHOLD) {
+        await prisma.webhookSubscription.update({
+          where: { id: target.subscriptionId },
+          data: { enabled: false },
+        });
+      }
+    }
+  }
 }
 
 function targetHashFor(url: string): string {
@@ -178,7 +281,7 @@ async function deliverToTarget(
   target: WebhookTarget,
   body: string,
   fetchImpl: typeof fetch,
-): Promise<{ ok: boolean; error: string }> {
+): Promise<{ attempts: number; error: string; ok: boolean }> {
   const targetHash = targetHashFor(target.url);
   const delivery = await prisma.eventOutboxDelivery.upsert({
     where: { eventId_targetHash: { eventId: event.id, targetHash } },
@@ -186,10 +289,10 @@ async function deliverToTarget(
     update: {},
   });
   if (delivery.deliveredAt) {
-    return { ok: true, error: '' };
+    return { attempts: delivery.attempts, error: '', ok: true };
   }
   if (delivery.attempts >= MAX_DELIVERY_ATTEMPTS) {
-    return { ok: false, error: delivery.lastError ?? `Webhook ${target.url} exhausted retries` };
+    return { attempts: delivery.attempts, error: delivery.lastError ?? `Webhook ${target.url} exhausted retries`, ok: false };
   }
 
   try {
@@ -209,18 +312,18 @@ async function deliverToTarget(
     if (!response.ok) {
       throw new Error(`Webhook ${target.url} returned ${response.status}`);
     }
-    await prisma.eventOutboxDelivery.update({
+    const recorded = await prisma.eventOutboxDelivery.update({
       where: { id: delivery.id },
       data: { attempts: { increment: 1 }, deliveredAt: new Date(), lastError: null },
     });
-    return { ok: true, error: '' };
+    return { attempts: recorded.attempts, error: '', ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await prisma.eventOutboxDelivery.update({
+    const recorded = await prisma.eventOutboxDelivery.update({
       where: { id: delivery.id },
       data: { attempts: { increment: 1 }, lastError: message },
     });
-    return { ok: false, error: message };
+    return { attempts: recorded.attempts, error: message, ok: false };
   }
 }
 
@@ -235,4 +338,28 @@ export function parseWebhookTargets(urlList: string | null | undefined, secret: 
   }
 
   return urls.map((url) => ({ url, secret }));
+}
+
+// Linear-style routing: database subscriptions win when any enabled one
+// exists; otherwise fall back to the legacy shared env pair so existing
+// deployments keep working without migration steps.
+export async function collectOutboundWebhookTargets(
+  prisma: PrismaClient,
+  envUrl: string | null | undefined,
+  envSecret: string | null | undefined,
+): Promise<WebhookTarget[]> {
+  const subscriptions = await prisma.webhookSubscription.findMany({
+    where: { enabled: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (subscriptions.length === 0) {
+    return parseWebhookTargets(envUrl, envSecret);
+  }
+  return subscriptions.map((subscription) => ({
+    eventTypes: subscription.eventTypes,
+    secret: subscription.secret,
+    subscriptionId: subscription.id,
+    teamId: subscription.teamId,
+    url: subscription.url,
+  }));
 }

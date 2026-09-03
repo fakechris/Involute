@@ -144,7 +144,15 @@ Do not treat comment create as an agent heartbeat. Agents use `/mcp`.
 
 ## Agent credentials
 
-Provision a separate revocable token for each Agent. The token is accepted only on `/mcp`; it cannot use the GraphQL compatibility API. The command adds the Agent as an `EDITOR` on exactly the selected team and prints the plaintext token once:
+Prefer self-service issuance: team owners open Settings → Agents (or call
+`agentCredentialCreate`), pick Linear-style scopes, and hand the one-time
+token to the agent. Tokens work on `/mcp` only and are confined to their
+scopes (`read` always granted; `propose`, `claim`, `report`, `update`,
+`link` as granted). Details: [docs/api.md](api.md#agent-credentials-and-scopes-linear-style).
+
+For operator/SSH provisioning, or teams without an owner signed in, use the
+server script. The command adds the Agent as an `EDITOR` on exactly the
+selected team and prints the plaintext token once:
 
 ```bash
 cd /opt/involute
@@ -168,6 +176,16 @@ docker compose --env-file .env.production -f docker-compose.prod.images.yml run 
 Use a short-lived credential for production smoke when practical. Revocation takes effect on the next MCP request.
 
 ## Webhooks
+
+Prefer database subscriptions over env vars: team owners manage them via
+GraphQL (`webhookCreate/Update/Delete/RotateSecret`, see
+[docs/api.md](api.md#webhook-subscriptions-linear-style-per-endpoint-secrets))
+with a per-endpoint secret shown once, optional team scope, and event-type
+filter. Subscriptions that exhaust retries across 10 consecutive flushes are
+auto-disabled; re-enable after fixing the receiver.
+
+The legacy shared pair below remains as a fallback while zero subscriptions
+exist. When any enabled subscription exists, the env pair is ignored.
 
 Set `INVOLUTE_WEBHOOK_URL` and `INVOLUTE_WEBHOOK_SECRET` together. Multiple comma-separated URLs share the signing secret. Delivery state is tracked per target: a successful endpoint is not replayed merely because another endpoint needs a retry; each request has a 10-second timeout, and a target is dead-lettered after eight failed attempts.
 

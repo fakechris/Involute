@@ -13,6 +13,7 @@ import type {
   TeamMembershipRole,
   TeamVisibility,
   User,
+  WebhookSubscription,
   WorkClaim,
   WorkLink,
   WorkLinkType,
@@ -41,6 +42,9 @@ import {
   TEAM_NOT_FOUND_MESSAGE,
   TEAM_OWNER_REQUIRED_MESSAGE,
   UPLOAD_TOO_LARGE_MESSAGE,
+  WEBHOOK_EVENT_TYPE_INVALID_MESSAGE,
+  WEBHOOK_NOT_FOUND_MESSAGE,
+  WEBHOOK_URL_INVALID_MESSAGE,
 } from './errors.js';
 import {
   assertCanDeleteComment,
@@ -61,6 +65,7 @@ import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
 
 import { requireAuthentication, type GraphQLContext } from './auth.js';
 import { issueAgentCredential, parseAgentScopes } from './agent-credentials.js';
+import { WORK_EVENT_TYPES } from './event-outbox.js';
 import { createComment, createIssue, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
 import { listIncidentLinks } from './link-service.js';
 import { writeActorFromViewer } from './work-service.js';
@@ -88,6 +93,7 @@ import { createCycle, updateCycle, deleteCycle, type CreateCycleInput, type Upda
 import { orderWorkflowStates } from './workflow-state-order.js';
 
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { extname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -224,6 +230,7 @@ const typeDefs = /* GraphQL */ `
     workContext(id: String!): WorkContext
     readyWork(filter: ReadyWorkFilter): IssueConnection!
     agentCredentials(teamId: String!): [AgentCredentialRecord!]!
+    webhooks(teamId: String!): [WebhookSubscriptionRecord!]!
   }
 
   type Mutation {
@@ -252,6 +259,10 @@ const typeDefs = /* GraphQL */ `
     workReview(id: String!, input: WorkReviewInput!): WorkReviewPayload!
     agentCredentialCreate(input: AgentCredentialCreateInput!): AgentCredentialCreatePayload!
     agentCredentialRevoke(id: String!): AgentCredentialRevokePayload!
+    webhookCreate(input: WebhookCreateInput!): WebhookMutationPayload!
+    webhookUpdate(id: String!, input: WebhookUpdateInput!): WebhookMutationPayload!
+    webhookDelete(id: String!): WebhookMutationPayload!
+    webhookRotateSecret(id: String!): WebhookMutationPayload!
   }
 
   type Team {
@@ -511,6 +522,38 @@ const typeDefs = /* GraphQL */ `
   type AgentCredentialRevokePayload {
     success: Boolean!
     credential: AgentCredentialRecord
+  }
+
+  type WebhookSubscriptionRecord {
+    id: ID!
+    label: String
+    url: String!
+    teamId: String
+    eventTypes: [String!]!
+    enabled: Boolean!
+    consecutiveFailures: Int!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  input WebhookCreateInput {
+    team: String
+    url: String!
+    label: String
+    eventTypes: [String!]
+  }
+
+  input WebhookUpdateInput {
+    url: String
+    label: String
+    eventTypes: [String!]
+    enabled: Boolean
+  }
+
+  type WebhookMutationPayload {
+    success: Boolean!
+    subscription: WebhookSubscriptionRecord
+    secret: String
   }
 
   type Project {
@@ -1091,6 +1134,21 @@ const resolvers = {
         orderBy: { createdAt: 'desc' },
       });
     },
+    webhooks: async (
+      _parent: unknown,
+      args: { teamId: string },
+      context: GraphQLContext,
+    ): Promise<WebhookSubscription[]> => {
+      const team = await resolveTeamByIdOrKey(context.prisma, args.teamId);
+      if (!team) throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
+      await assertCanManageTeam(context.prisma, context, team.id);
+      // Team owners see their team's subscriptions plus the global ones that
+      // also receive their team's events. Secrets are never listed.
+      return context.prisma.webhookSubscription.findMany({
+        where: { OR: [{ teamId: team.id }, { teamId: null }] },
+        orderBy: { createdAt: 'asc' },
+      });
+    },
     projects: async (
       _parent: unknown,
       args: { teamId: string },
@@ -1472,6 +1530,94 @@ const resolvers = {
         });
         return { credential: updated, success: true as const };
       }, { credential: null, success: false as const }),
+    webhookCreate: async (
+      _parent: unknown,
+      args: {
+        input: {
+          eventTypes?: string[] | null;
+          label?: string | null;
+          team?: string | null;
+          url: string;
+        };
+      },
+      context: GraphQLContext,
+    ): Promise<{ secret: string | null; subscription: WebhookSubscription | null; success: boolean }> =>
+      runMutation(async () => {
+        const teamId = await resolveWebhookTeamId(context, args.input.team ?? null);
+        const eventTypes = normalizeWebhookEventTypes(args.input.eventTypes ?? null);
+        const secret = randomBytes(32).toString('hex');
+        const subscription = await context.prisma.webhookSubscription.create({
+          data: {
+            eventTypes,
+            label: args.input.label?.trim() || null,
+            secret,
+            teamId,
+            url: normalizeWebhookUrl(args.input.url),
+          },
+        });
+        return { secret, subscription, success: true as const };
+      }, { secret: null, subscription: null, success: false as const }),
+    webhookUpdate: async (
+      _parent: unknown,
+      args: {
+        id: string;
+        input: {
+          enabled?: boolean | null;
+          eventTypes?: string[] | null;
+          label?: string | null;
+          url?: string | null;
+        };
+      },
+      context: GraphQLContext,
+    ): Promise<{ secret: string | null; subscription: WebhookSubscription | null; success: boolean }> =>
+      runMutation(async () => {
+        const existing = await requireWebhookSubscription(context, args.id);
+        const data: Prisma.WebhookSubscriptionUpdateInput = {};
+        if (args.input.url !== undefined && args.input.url !== null) {
+          data.url = normalizeWebhookUrl(args.input.url);
+        }
+        if (args.input.label !== undefined) {
+          data.label = args.input.label?.trim() || null;
+        }
+        if (args.input.eventTypes !== undefined && args.input.eventTypes !== null) {
+          data.eventTypes = normalizeWebhookEventTypes(args.input.eventTypes);
+        }
+        if (args.input.enabled !== undefined && args.input.enabled !== null) {
+          data.enabled = args.input.enabled;
+          if (args.input.enabled) {
+            data.consecutiveFailures = 0;
+          }
+        }
+        const subscription = await context.prisma.webhookSubscription.update({
+          where: { id: existing.id },
+          data,
+        });
+        return { secret: null, subscription, success: true as const };
+      }, { secret: null, subscription: null, success: false as const }),
+    webhookDelete: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<{ secret: string | null; subscription: WebhookSubscription | null; success: boolean }> =>
+      runMutation(async () => {
+        const existing = await requireWebhookSubscription(context, args.id);
+        await context.prisma.webhookSubscription.delete({ where: { id: existing.id } });
+        return { secret: null, subscription: null, success: true as const };
+      }, { secret: null, subscription: null, success: false as const }),
+    webhookRotateSecret: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<{ secret: string | null; subscription: WebhookSubscription | null; success: boolean }> =>
+      runMutation(async () => {
+        const existing = await requireWebhookSubscription(context, args.id);
+        const secret = randomBytes(32).toString('hex');
+        const subscription = await context.prisma.webhookSubscription.update({
+          where: { id: existing.id },
+          data: { consecutiveFailures: 0, secret },
+        });
+        return { secret, subscription, success: true as const };
+      }, { secret: null, subscription: null, success: false as const }),
     commentCreate: async (
       _parent: unknown,
       args: { input: CreateCommentInput },
@@ -2172,6 +2318,62 @@ async function assertCanManageAgentCredential(
     }
   }
   throw createValidationError(TEAM_MANAGE_FORBIDDEN_MESSAGE);
+}
+
+// Webhook scope gate (Linear parity: only workspace admins manage webhooks).
+// Team-scoped subscriptions need team OWNER; global (all-teams) ones need a
+// global ADMIN or trusted system caller.
+async function resolveWebhookTeamId(context: GraphQLContext, team: string | null): Promise<string | null> {
+  if (!team) {
+    if (context.isTrustedSystem || context.viewer?.globalRole === 'ADMIN') {
+      return null;
+    }
+    throw createValidationError(TEAM_MANAGE_FORBIDDEN_MESSAGE);
+  }
+  const record = await resolveTeamByIdOrKey(context.prisma, team);
+  if (!record) throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
+  await assertCanManageTeam(context.prisma, context, record.id);
+  return record.id;
+}
+
+async function requireWebhookSubscription(
+  context: GraphQLContext,
+  id: string,
+): Promise<WebhookSubscription> {
+  let subscription: WebhookSubscription | null = null;
+  try {
+    subscription = await context.prisma.webhookSubscription.findUnique({ where: { id } });
+  } catch {
+    subscription = null;
+  }
+  if (!subscription) throw createNotFoundError(WEBHOOK_NOT_FOUND_MESSAGE);
+  await resolveWebhookTeamId(context, subscription.teamId);
+  return subscription;
+}
+
+function normalizeWebhookUrl(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url.trim());
+  } catch {
+    throw createValidationError(WEBHOOK_URL_INVALID_MESSAGE);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw createValidationError(WEBHOOK_URL_INVALID_MESSAGE);
+  }
+  return parsed.toString();
+}
+
+function normalizeWebhookEventTypes(eventTypes: string[] | null): string[] {
+  if (!eventTypes || eventTypes.length === 0) {
+    return [];
+  }
+  const normalized = [...new Set(eventTypes.map((type) => type.trim()).filter(Boolean))];
+  const unknown = normalized.filter((type) => !(WORK_EVENT_TYPES as readonly string[]).includes(type));
+  if (unknown.length > 0) {
+    throw createValidationError(WEBHOOK_EVENT_TYPE_INVALID_MESSAGE);
+  }
+  return normalized;
 }
 
 function buildTeamWhere(filter: TeamFilterInput | null | undefined) {
