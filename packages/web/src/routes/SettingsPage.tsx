@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 
 import { IcoPlus, IcoTeam } from '../components/Icons';
 import { Avatar, Btn } from '../components/Primitives';
+import { AgentsTab } from './AgentsTab';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { BOARD_PAGE_QUERY, USER_UPDATE_MUTATION, FILE_UPLOAD_MUTATION } from '../board/queries';
 import type { BoardPageQueryData, BoardPageQueryVariables, UserUpdateMutationData, UserUpdateMutationVariables, FileUploadMutationData, FileUploadMutationVariables } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 
-type SettingsTab = 'profile' | 'preferences' | 'access';
+type SettingsTab = 'profile' | 'preferences' | 'access' | 'agents';
 
 const THEME_STORAGE_KEY = 'involute.theme';
 const DENSITY_STORAGE_KEY = 'involute.density';
@@ -46,6 +47,7 @@ export function SettingsPage() {
     { id: 'profile', label: 'Profile' },
     { id: 'preferences', label: 'Preferences' },
     { id: 'access', label: 'Members & access' },
+    { id: 'agents', label: 'Agents' },
   ];
 
   return (
@@ -90,6 +92,7 @@ export function SettingsPage() {
           {tab === 'profile' && <ProfileTab />}
           {tab === 'preferences' && <PreferencesTab />}
           {tab === 'access' && <AccessTab />}
+          {tab === 'agents' && <AgentsTab />}
         </div>
       </div>
     </div>
