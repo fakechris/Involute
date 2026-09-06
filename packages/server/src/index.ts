@@ -22,6 +22,12 @@ import {
   sweepStaleNotifications,
 } from './notification-email.js';
 import { handleMcpRequest } from './mcp.js';
+import {
+  getRateLimitOptions,
+  requestIdentityKey,
+  TokenBucketRateLimiter,
+  type RateLimitOptions,
+} from './rate-limit.js';
 import { createGraphQLSchema } from './schema.js';
 import { getServerEnvironment, loadServerEnvironment, type ServerEnvironment } from './environment.js';
 import { getUploadsDirectory } from './uploads.js';
@@ -38,6 +44,8 @@ export interface StartServerOptions {
   appOrigin?: string;
   /** Serve the built web app from the API process (single-container deploys). */
   webDistDir?: string | null;
+  /** Per-identity token-bucket limits on /graphql, /mcp*, and /auth/*. */
+  rateLimit?: RateLimitOptions | null;
   allowAdminFallback?: boolean;
   authToken?: string;
   googleOAuth?: Partial<GoogleOAuthConfiguration>;
@@ -114,6 +122,11 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   } satisfies GoogleOAuthConfiguration;
 
   const uploadsDir = options.uploadsDir ?? getUploadsDirectory();
+  const rateLimitOptions =
+    'rateLimit' in options ? options.rateLimit : getRateLimitOptions();
+  const rateLimiter = rateLimitOptions?.enabled
+    ? new TokenBucketRateLimiter(rateLimitOptions)
+    : null;
 
   const httpServer = createServer(async (request, response) => {
     if (request.method === 'GET' && getPathname(request.url) === '/health') {
@@ -140,6 +153,30 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
         response.end(JSON.stringify({ database: 'unavailable', status: 'not-ready' }));
       }
       return;
+    }
+
+    // Per-identity rate limit on state-changing/API surfaces. GETs (docs,
+    // health, uploads) stay unlimited; the bucket keys on bearer/session
+    // identity, falling back to the remote address for anonymous probes.
+    if (
+      rateLimiter &&
+      (request.method === 'POST' || request.method === 'PUT' || request.method === 'PATCH')
+    ) {
+      const limitedPath = getPathname(request.url);
+      if (
+        limitedPath === '/graphql' ||
+        limitedPath.startsWith('/mcp') ||
+        limitedPath.startsWith('/auth/')
+      ) {
+        const decision = rateLimiter.take(requestIdentityKey(request));
+        if (!decision.allowed) {
+          response.statusCode = 429;
+          response.setHeader('content-type', 'application/json; charset=utf-8');
+          response.setHeader('retry-after', String(decision.retryAfterSeconds));
+          response.end(JSON.stringify({ error: 'Rate limit exceeded. Retry later.' }));
+          return;
+        }
+      }
     }
 
     // HTTP-level body cap before Yoga/MCP parse anything: uploads top out at

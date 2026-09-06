@@ -1,0 +1,90 @@
+name: AIO smoke
+
+# Builds the single-container image and proves it can boot, migrate, and
+# serve the API + web + MCP surfaces against a fresh database. Guards the
+# Dockerfile `aio` target from rotting between releases.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - docker-compose.aio.yml
+      - packages/server/**
+      - packages/shared/**
+      - packages/web/**
+      - scripts/aio-smoke.sh
+      - .github/workflows/aio-smoke.yml
+  pull_request:
+    paths:
+      - Dockerfile
+      - docker-compose.aio.yml
+      - packages/server/**
+      - packages/shared/**
+      - packages/web/**
+      - scripts/aio-smoke.sh
+      - .github/workflows/aio-smoke.yml
+
+jobs:
+  aio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      db:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: involute
+          POSTGRES_USER: involute
+          POSTGRES_PASSWORD: involute
+        ports:
+          - 5544:5432
+        options: >-
+          --health-cmd "pg_isready -U involute"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AIO_IMAGE: involute-aio:${{ github.sha }}
+      AIO_SMOKE_AUTH_TOKEN: aio-smoke-token
+      AIO_DB_URL: postgresql://involute:involute@127.0.0.1:5544/involute?schema=public
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build AIO image
+        run: docker build --target aio -t "$AIO_IMAGE" .
+
+      - name: Start AIO container
+        run: |
+          docker run -d --name aio --network host \
+            -e DATABASE_URL="$AIO_DB_URL" \
+            -e AUTH_TOKEN="$AIO_SMOKE_AUTH_TOKEN" \
+            -e APP_ORIGIN=http://127.0.0.1:4200 \
+            -e NODE_ENV=production \
+            "$AIO_IMAGE"
+
+      - name: Wait for readiness
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:4200/ready >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "AIO container never became ready" >&2
+          docker logs aio >&2 || true
+          exit 1
+
+      - name: Smoke the container surfaces
+        run: sh scripts/aio-smoke.sh http://127.0.0.1:4200
+
+      - name: Verify the web app is served
+        run: |
+          BODY="$(curl -fsS http://127.0.0.1:4200/)"
+          echo "$BODY" | grep -qi '<div id="root">' || {
+            echo "AIO / did not serve the SPA shell" >&2
+            exit 1
+          }
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: docker logs aio >&2 || true

@@ -124,6 +124,43 @@ sh scripts/postgres-restore.sh .backups/involute-<timestamp>.sql.gz
 
 Then restart API/web and smoke-check.
 
+## AIO drill (single-container rehearsal)
+
+Full rehearsal of the single-container path: fresh database, AIO container,
+migrations, public API surface, backup, and restore-verify. Run it locally
+before a real deploy, and on a new host right after the first `setup.sh`:
+
+```bash
+docker build --target aio -t involute-aio:drill .
+sh scripts/aio-rehearse.sh involute-aio:drill
+```
+
+The script prints each step and keeps the verified backup at
+`.backups/aio-drill-<timestamp>.sql.gz`. A green drill means: image builds,
+migrations apply on an empty database, `/health` + `/ready` answer, the
+machine docs and MCP surfaces respond, GraphQL accepts authenticated writes,
+and a `pg_dump` round-trip preserves data. For the VPS rehearsal, run the
+same two commands on the host (the image tag must exist there — build it on
+the host or push/pull it), then run `pnpm smoke:prod https://<domain>` with
+`INVOLUTE_SMOKE_AUTH_TOKEN` set for the OAuth-aware production smoke.
+
+## Rate limits
+
+`/graphql`, `/mcp*`, and `/auth/*` POSTs go through a per-identity token
+bucket keyed on bearer token / session cookie (hashed), falling back to the
+remote address. Defaults: burst 300, refill 120/minute. Override with
+`RATE_LIMIT_ENABLED`, `RATE_LIMIT_BURST`, `RATE_LIMIT_REFILL_PER_MINUTE`;
+`RATE_LIMIT_ENABLED=false` disables entirely (not recommended for
+internet-facing deploys). Exceeded requests get `429` with `Retry-After`.
+
+## Ops alerts
+
+Dead-lettered webhook events and auto-disabled subscriptions always land as
+in-app notifications for human admins. Set `OPS_WEBHOOK_URL` (optional) to
+also POST a JSON summary of each alert to your chat/paging sink; delivery is
+best-effort (5s timeout, no retry) so an alert can never amplify the
+incident it reports.
+
 ## Production smoke checklist
 
 Run after every deploy. Replace the domain with the live origin.

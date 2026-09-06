@@ -260,6 +260,47 @@ describe('run and evidence', () => {
     expect(posts).toBe(1);
   });
 
+  it('emits an ops alert when an event dead-letters', async () => {
+    const event = await prisma.eventOutbox.create({
+      data: { payload: { data: {}, type: 'work.proposed' }, type: 'work.proposed' },
+    });
+    const opsUrl = 'https://ops.example.test/alert';
+    const previousOpsUrl = process.env.OPS_WEBHOOK_URL;
+    process.env.OPS_WEBHOOK_URL = opsUrl;
+    const alertPosts: Array<Record<string, unknown>> = [];
+    const target = { secret: 'rejecting-secret', url: 'https://reject.example.test/hook' };
+
+    try {
+      // Fetch body is not visible through the (url, init) mock signature used
+      // by flushEventOutbox callers, so wrap once more to capture the body.
+      const fetchWithBody = (async (url: string | URL | Request, init?: RequestInit) => {
+        if (String(url) === opsUrl) {
+          alertPosts.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+          return new Response('ok', { status: 200 });
+        }
+        return new Response('bad request', { status: 400 });
+      }) as unknown as typeof fetch;
+
+      await flushEventOutbox(prisma, [target], fetchWithBody);
+    } finally {
+      if (previousOpsUrl === undefined) {
+        delete process.env.OPS_WEBHOOK_URL;
+      } else {
+        process.env.OPS_WEBHOOK_URL = previousOpsUrl;
+      }
+    }
+
+    expect((await prisma.eventOutbox.findUniqueOrThrow({ where: { id: event.id } })).deadLetteredAt).not.toBeNull();
+    expect(alertPosts).toHaveLength(1);
+    expect(alertPosts[0]?.['kind']).toBe('event.dead_letter');
+
+    const admin = await prisma.user.findUniqueOrThrow({ where: { email: DEFAULT_ADMIN_EMAIL } });
+    const opsNotifications = await prisma.notification.findMany({
+      where: { type: 'ops.event.dead_letter', userId: admin.id },
+    });
+    expect(opsNotifications).toHaveLength(1);
+  });
+
   it('rate-limit responses keep the retry schedule', async () => {
     const event = await prisma.eventOutbox.create({
       data: { payload: { data: {}, type: 'work.proposed' }, type: 'work.proposed' },
