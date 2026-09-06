@@ -1,6 +1,7 @@
 import { createHash, createHmac } from 'node:crypto';
 
 import { compileIqlPredicate, parseIqlOrThrow } from './iql-compile.js';
+import { emitOpsAlert } from './ops-alerts.js';
 
 import type { Issue, Prisma, PrismaClient, WorkflowStateType } from '@prisma/client';
 
@@ -254,7 +255,23 @@ export async function flushEventOutbox(
       });
       if (finalized.count === 1) {
         failed += 1;
-        await accountSubscriptionOutcomes(prisma, eventTargets, outcomes);
+        await accountSubscriptionOutcomes(prisma, eventTargets, outcomes, fetchImpl);
+        if (allResolved && anyExhausted) {
+          await emitOpsAlert(
+            prisma,
+            {
+              details: {
+                event_id: event.id,
+                event_type: event.type,
+                work: (event.payload as { work?: { identifier?: unknown } } | null)?.work ?? null,
+              },
+              kind: 'event.dead_letter',
+              summary: `Event ${event.type} dead-lettered after exhausting all delivery targets`,
+            },
+            process.env.OPS_WEBHOOK_URL?.trim() || null,
+            fetchImpl,
+          );
+        }
       }
     }
   }
@@ -410,6 +427,7 @@ async function accountSubscriptionOutcomes(
   prisma: PrismaClient,
   targets: WebhookTarget[],
   outcomes: DeliveryOutcome[],
+  fetchImpl: typeof fetch = fetch,
 ): Promise<void> {
   for (let index = 0; index < targets.length; index += 1) {
     const target = targets[index];
@@ -456,6 +474,21 @@ async function accountSubscriptionOutcomes(
             url: disabled.url,
           },
         });
+        await emitOpsAlert(
+          prisma,
+          {
+            details: {
+              consecutiveFailures: disabled.consecutiveFailures,
+              label: disabled.label,
+              subscription_id: disabled.id,
+              url: disabled.url,
+            },
+            kind: 'webhook.disabled',
+            summary: `Webhook subscription ${disabled.label ?? disabled.url} auto-disabled`,
+          },
+          process.env.OPS_WEBHOOK_URL?.trim() || null,
+          fetchImpl,
+        );
       }
     }
   }
