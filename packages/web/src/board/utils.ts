@@ -1,4 +1,3 @@
-import { BOARD_COLUMN_ORDER } from './constants';
 import type {
   BoardColumn,
   BoardPageQueryData,
@@ -9,6 +8,17 @@ import type {
   WorkflowStateSummary,
 } from './types';
 import { readLocalStorageValue } from '../lib/storage';
+
+// Closed group enum: ordering is by state group first, so custom-named states
+// still land in the right board section.
+const WORKFLOW_STATE_TYPE_ORDER = [
+  'BACKLOG',
+  'UNSTARTED',
+  'STARTED',
+  'REVIEW',
+  'COMPLETED',
+  'CANCELED',
+] as const;
 
 export const ACTIVE_TEAM_STORAGE_KEY = 'involute.activeTeamKey';
 export const OPEN_CREATE_ISSUE_EVENT = 'involute:open-create-issue';
@@ -102,7 +112,7 @@ export function getBoardColumns(team: TeamSummary | null, issues: IssueSummary[]
   }
 
   return [...statesById.values()]
-    .sort((left, right) => compareBoardStates(left.name, right.name))
+    .sort(compareBoardStates)
     .map((state) => ({
       name: state.name,
       stateId: state.id,
@@ -275,18 +285,24 @@ export function getStoredTeamKey(teams: TeamSummary[]): string | null {
   return teams.some((team) => team.key === storedTeamKey) ? storedTeamKey : null;
 }
 
-function compareBoardStates(leftName: string, rightName: string): number {
-  const defaultBoardOrder = BOARD_COLUMN_ORDER as readonly string[];
-  const leftIndex = defaultBoardOrder.indexOf(leftName);
-  const rightIndex = defaultBoardOrder.indexOf(rightName);
-  const leftOrder = leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex;
-  const rightOrder = rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex;
+function compareBoardStates(left: WorkflowStateSummary, right: WorkflowStateSummary): number {
+  const typeDiff = stateTypeRank(left.type) - stateTypeRank(right.type);
 
-  if (leftOrder !== rightOrder) {
-    return leftOrder - rightOrder;
+  if (typeDiff !== 0) {
+    return typeDiff;
   }
 
-  return leftName.localeCompare(rightName);
+  if (left.position !== right.position) {
+    return left.position - right.position;
+  }
+
+  return left.name.localeCompare(right.name);
+}
+
+function stateTypeRank(type: WorkflowStateSummary['type']): number {
+  const index = (WORKFLOW_STATE_TYPE_ORDER as readonly string[]).indexOf(type);
+
+  return index === -1 ? Number.MAX_SAFE_INTEGER : index;
 }
 
 function areIssuesEquivalent(left: IssueSummary, right: IssueSummary): boolean {

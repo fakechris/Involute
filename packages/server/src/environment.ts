@@ -16,12 +16,22 @@ export interface ServerEnvironment {
   googleOAuthClientId: string | null;
   googleOAuthClientSecret: string | null;
   googleOAuthRedirectUri: string | null;
+  notificationEmail: NotificationEmailEnvironment;
   port: number;
   requireGoogleOAuth: boolean;
   sessionTtlSeconds: number;
   viewerAssertionSecret: string | null;
   webhookSecret: string | null;
   webhookUrls: string | null;
+}
+
+export interface NotificationEmailEnvironment {
+  enabled: boolean;
+  host: string | null;
+  password: string | null;
+  port: number;
+  from: string | null;
+  user: string | null;
 }
 
 export function getProjectEnvPath(): string {
@@ -53,6 +63,19 @@ export function getServerEnvironment(env: NodeJS.ProcessEnv = process.env): Serv
   const googleOAuthRedirectUri = env.GOOGLE_OAUTH_REDIRECT_URI?.trim() || null;
   const webhookSecret = env.INVOLUTE_WEBHOOK_SECRET?.trim() || null;
   const webhookUrls = env.INVOLUTE_WEBHOOK_URL?.trim() || null;
+  const notificationEmail: NotificationEmailEnvironment = {
+    enabled: env.NOTIFICATION_EMAIL_ENABLED === 'true',
+    from: env.NOTIFICATION_EMAIL_FROM?.trim() || null,
+    host: env.NOTIFICATION_EMAIL_SMTP_HOST?.trim() || null,
+    password: env.NOTIFICATION_EMAIL_SMTP_PASSWORD?.trim() || null,
+    port: Number(env.NOTIFICATION_EMAIL_SMTP_PORT ?? 587),
+    user: env.NOTIFICATION_EMAIL_SMTP_USER?.trim() || null,
+  };
+  if (notificationEmail.enabled && (!notificationEmail.host || !notificationEmail.from)) {
+    throw new Error(
+      'NOTIFICATION_EMAIL_ENABLED=true requires NOTIFICATION_EMAIL_SMTP_HOST and NOTIFICATION_EMAIL_FROM.',
+    );
+  }
 
   if (allowAdminFallback && nodeEnvironment !== 'development' && nodeEnvironment !== 'test') {
     throw new Error('ALLOW_ADMIN_FALLBACK=true is only supported in development or test environments.');
@@ -77,6 +100,7 @@ export function getServerEnvironment(env: NodeJS.ProcessEnv = process.env): Serv
     googleOAuthClientId,
     googleOAuthClientSecret,
     googleOAuthRedirectUri,
+    notificationEmail,
     port: Number.isFinite(port) && port > 0 ? port : DEFAULT_PORT,
     requireGoogleOAuth,
     sessionTtlSeconds: Number.isFinite(sessionTtlSeconds) && sessionTtlSeconds > 0

@@ -800,9 +800,20 @@ async function createTeamWithStates(
     },
   });
 
+  const typeByName: Record<string, 'BACKLOG' | 'UNSTARTED' | 'STARTED' | 'REVIEW' | 'COMPLETED' | 'CANCELED'> = {
+      Backlog: 'BACKLOG',
+      Ready: 'UNSTARTED',
+      'In Progress': 'STARTED',
+      'In Review': 'REVIEW',
+      Done: 'COMPLETED',
+      Canceled: 'CANCELED',
+    };
+
   await prismaClient.workflowState.createMany({
-    data: DEFAULT_WORKFLOW_STATE_NAMES.map((stateName) => ({
+    data: DEFAULT_WORKFLOW_STATE_NAMES.map((stateName, position) => ({
       name: stateName,
+      type: typeByName[stateName],
+      position,
       teamId: team.id,
     })),
   });

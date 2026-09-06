@@ -17,3 +17,15 @@ export interface ViewerAssertionClaims {
   sub: string;
   subType: ViewerAssertionSubjectType;
 }
+
+export {
+  assertValidIql,
+  describeIql,
+  IQL_FIELDS,
+  IqlParseError,
+  parseIql,
+  type IqlComparisonOp,
+  type IqlField,
+  type IqlQuery,
+  type IqlTerm,
+} from './iql.js';

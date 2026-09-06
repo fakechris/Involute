@@ -57,6 +57,8 @@ export interface ProposeWorkInput {
   relatedWorkType?: WorkLinkType | null;
   repository?: string | null;
   scope?: string | null;
+  /** Where the candidate came from: agent / web / cli / import. */
+  source?: string | null;
   teamId: string;
   title: string;
   verification?: string | null;
@@ -140,6 +142,7 @@ export async function proposeWork(
     if (input.outcome !== undefined) createInput.outcome = input.outcome;
     if (input.repository !== undefined) createInput.repository = input.repository;
     if (input.scope !== undefined) createInput.scope = input.scope;
+    if (input.source !== undefined) createInput.source = input.source;
     if (input.verification !== undefined) createInput.verification = input.verification;
 
     const created = await createIssueInTransaction(transaction, createInput, actor);

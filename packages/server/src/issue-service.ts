@@ -11,6 +11,7 @@ import {
   PARENT_ISSUE_NOT_FOUND_MESSAGE,
   PARENT_ISSUE_SELF_REFERENCE_MESSAGE,
   PARENT_ISSUE_TEAM_MISMATCH_MESSAGE,
+  SNOOZE_REQUIRES_CANDIDATE_MESSAGE,
   TEAM_HAS_NO_WORKFLOW_STATES_MESSAGE,
   TEAM_NOT_FOUND_MESSAGE,
   WORKFLOW_STATE_NOT_FOUND_MESSAGE,
@@ -44,6 +45,7 @@ export interface CreateIssueInput {
   projectId?: string | null;
   repository?: string | null;
   scope?: string | null;
+  source?: string | null;
   stateId?: string | null;
   teamId: string;
   title: string;
@@ -64,6 +66,7 @@ export interface UpdateIssueInput {
   projectId?: string | null;
   repository?: string | null;
   scope?: string | null;
+  snoozedUntil?: Date | null;
   stateId?: string | null;
   title?: string | null;
   verification?: string | null;
@@ -136,6 +139,7 @@ export async function createIssueInTransaction(
         projectId: input.projectId ?? null,
         repository: input.repository ?? null,
         scope: input.scope ?? null,
+        source: input.source ?? null,
         stateId: state.id,
         teamId: input.teamId,
         title: input.title,
@@ -244,6 +248,15 @@ export async function updateIssue(
 
     if ('priority' in input && input.priority !== undefined && input.priority !== null) {
       data.priority = input.priority;
+    }
+
+    // Snooze is candidate-pool governance: committed work has a human owner
+    // and a delivery contract, so pausing it silently would be wrong.
+    if ('snoozedUntil' in input) {
+      if (input.snoozedUntil && existingIssue.commitmentStatus !== 'CANDIDATE') {
+        throw createValidationError(SNOOZE_REQUIRES_CANDIDATE_MESSAGE);
+      }
+      data.snoozedUntil = input.snoozedUntil ?? null;
     }
 
     if ('assigneeId' in input) {
@@ -576,6 +589,8 @@ async function resolveCreateState(
       id: true,
       name: true,
       teamId: true,
+      type: true,
+      position: true,
     },
   });
 

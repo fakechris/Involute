@@ -38,6 +38,8 @@ export interface CandidateWork {
   acceptance?: string | null;
   verification?: string | null;
   repository?: string | null;
+  snoozedUntil?: string | null;
+  source?: string | null;
   createdAt: string;
   team: {
     id: string;

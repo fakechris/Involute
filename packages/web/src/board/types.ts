@@ -82,6 +82,8 @@ export interface IssueSummary {
   identifier: string;
   revision: number;
   title: string;
+  kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
+  commitmentStatus?: 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
   description?: string | null;
   priority: number;
   createdAt: string;

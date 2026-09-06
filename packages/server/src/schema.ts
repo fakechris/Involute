@@ -25,6 +25,7 @@ import {
   GraphQLError,
   GraphQLScalarType,
   Kind,
+  valueFromASTUntyped,
   type FieldNode,
   type FragmentDefinitionNode,
   type GraphQLResolveInfo,
@@ -40,6 +41,7 @@ import {
   isPrismaInvalidInputError,
   ISSUE_NOT_FOUND_MESSAGE,
   MEMBERSHIP_NOT_FOUND_MESSAGE,
+  NOTIFICATION_NOT_FOUND_MESSAGE,
   TEAM_MANAGE_FORBIDDEN_MESSAGE,
   TEAM_NOT_FOUND_MESSAGE,
   TEAM_OWNER_REQUIRED_MESSAGE,
@@ -64,13 +66,14 @@ import type {
   UpdateIssueInput,
 } from './issue-service.js';
 import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
+import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
 
 import { requireAuthentication, type GraphQLContext } from './auth.js';
 import { issueAgentCredential, parseAgentScopeList } from './agent-credentials.js';
 import type { AgentScope } from './agent-credentials.js';
 import { WORK_EVENT_TYPES } from './event-outbox.js';
 import { createComment, createIssue, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
-import { listIncidentLinks } from './link-service.js';
+import { createWorkLink, listIncidentLinks } from './link-service.js';
 import { writeActorFromViewer } from './work-service.js';
 import { getUploadsDirectory } from './uploads.js';
 import {
@@ -222,7 +225,7 @@ const typeDefs = /* GraphQL */ `
   type Query {
     viewer: User
     issue(id: String!): Issue
-    issues(first: Int!, after: String, filter: IssueFilter): IssueConnection!
+    issues(first: Int!, after: String, filter: IssueFilter, query: String): IssueConnection!
     teams(filter: TeamFilter): TeamConnection!
     issueLabels(filter: IssueLabelFilter): IssueLabelConnection!
     users: UserConnection!
@@ -231,9 +234,11 @@ const typeDefs = /* GraphQL */ `
     cycles(teamId: String!): CycleConnection!
     cycle(id: String!): Cycle
     workContext(id: String!): WorkContext
-    readyWork(filter: ReadyWorkFilter): IssueConnection!
+    readyWork(filter: ReadyWorkFilter, query: String): IssueConnection!
     agentCredentials(teamId: String!): [AgentCredentialRecord!]!
     webhooks(teamId: String!): [WebhookSubscriptionRecord!]!
+    notifications(first: Int, after: String, unreadOnly: Boolean): NotificationConnection!
+    unreadNotificationCount: Int!
   }
 
   type Mutation {
@@ -254,6 +259,7 @@ const typeDefs = /* GraphQL */ `
     userUpdate(input: UserUpdateInput!): UserUpdatePayload!
     fileUpload(input: FileUploadInput!): FileUploadPayload!
     workPropose(input: WorkProposeInput!): WorkProposePayload!
+    workLink(fromId: String!, toId: String!, type: WorkLinkType!): WorkLinkMutationPayload!
     workCommit(id: String!, input: WorkCommitInput!): WorkCommitPayload!
     workReject(id: String!, input: WorkRejectInput!): WorkRejectPayload!
     workClaim(id: String!, input: WorkClaimInput): WorkClaimPayload!
@@ -266,6 +272,9 @@ const typeDefs = /* GraphQL */ `
     webhookUpdate(id: String!, input: WebhookUpdateInput!): WebhookMutationPayload!
     webhookDelete(id: String!): WebhookMutationPayload!
     webhookRotateSecret(id: String!): WebhookMutationPayload!
+    notificationMarkRead(id: String!): NotificationMutationPayload!
+    notificationsMarkAllRead: NotificationMarkAllPayload!
+    notificationPreferencesUpdate(emailNotifications: Boolean!): NotificationPreferencesPayload!
   }
 
   type Team {
@@ -390,6 +399,8 @@ const typeDefs = /* GraphQL */ `
     kind: WorkKind!
     commitmentStatus: CommitmentStatus!
     revision: Int!
+    snoozedUntil: DateTime
+    source: String
     outcome: String
     scope: String
     constraints: String
@@ -534,6 +545,7 @@ const typeDefs = /* GraphQL */ `
     url: String!
     teamId: String
     eventTypes: [String!]!
+    filterQuery: String
     enabled: Boolean!
     consecutiveFailures: Int!
     createdAt: DateTime!
@@ -545,12 +557,14 @@ const typeDefs = /* GraphQL */ `
     url: String!
     label: String
     eventTypes: [String!]
+    filterQuery: String
   }
 
   input WebhookUpdateInput {
     url: String
     label: String
     eventTypes: [String!]
+    filterQuery: String
     enabled: Boolean
   }
 
@@ -558,6 +572,37 @@ const typeDefs = /* GraphQL */ `
     success: Boolean!
     subscription: WebhookSubscriptionRecord
     secret: String
+  }
+
+  scalar Json
+
+  type NotificationRecord {
+    id: ID!
+    type: String!
+    work: Issue
+    payload: Json!
+    readAt: DateTime
+    createdAt: DateTime!
+  }
+
+  type NotificationConnection {
+    nodes: [NotificationRecord!]!
+    pageInfo: PageInfo!
+  }
+
+  type NotificationMutationPayload {
+    success: Boolean!
+    notification: NotificationRecord
+  }
+
+  type NotificationMarkAllPayload {
+    success: Boolean!
+    count: Int!
+  }
+
+  type NotificationPreferencesPayload {
+    success: Boolean!
+    emailNotifications: Boolean!
   }
 
   type Project {
@@ -723,6 +768,7 @@ const typeDefs = /* GraphQL */ `
     priority: Int
     projectId: String
     cycleId: String
+    snoozedUntil: DateTime
   }
 
   input ProjectCreateInput {
@@ -884,6 +930,7 @@ const typeDefs = /* GraphQL */ `
     relatedWorkId: String
     relatedWorkType: WorkLinkType
     idempotencyKey: String
+    source: String
   }
 
   input WorkCommitInput {
@@ -911,6 +958,11 @@ const typeDefs = /* GraphQL */ `
   type WorkProposePayload {
     success: Boolean!
     issue: Issue
+  }
+
+  type WorkLinkMutationPayload {
+    success: Boolean!
+    link: WorkLink
   }
 
   type WorkCommitPayload {
@@ -978,6 +1030,13 @@ const typeDefs = /* GraphQL */ `
 
 const resolvers = {
   DateTime: DateTimeScalar,
+  Json: new GraphQLScalarType({
+    name: 'Json',
+    description: 'Arbitrary JSON payload.',
+    serialize: (value) => value,
+    parseValue: (value) => value,
+    parseLiteral: (ast) => valueFromASTUntyped(ast),
+  }),
   Query: {
     viewer: (_parent: unknown, _args: Record<string, never>, context: GraphQLContext): User | null =>
       context.viewer,
@@ -1019,15 +1078,21 @@ const resolvers = {
     },
     issues: async (
       _parent: unknown,
-      args: { after?: string | null; filter?: IssueFilterInput | null; first: number },
+      args: { after?: string | null; filter?: IssueFilterInput | null; first: number; query?: string | null },
       context: GraphQLContext,
       info: GraphQLResolveInfo,
     ): Promise<{ nodes: IssueParent[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
       const first = clampConnectionFirst(args.first, MAX_ISSUES_CONNECTION_FIRST);
+      const iqlWhere = args.query?.trim()
+        ? compileIqlToIssueWhere(parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null })
+        : undefined;
       const where = combineIssueWhere(
         combineIssueWhere(
-          buildIssueWhere(args.filter, context.viewer?.id ?? null),
-          buildReadableIssueWhere(context),
+          combineIssueWhere(
+            buildIssueWhere(args.filter, context.viewer?.id ?? null),
+            buildReadableIssueWhere(context),
+          ),
+          iqlWhere,
         ),
         buildIssueCursorWhere(args.after),
       );
@@ -1080,12 +1145,12 @@ const resolvers = {
     },
     readyWork: async (
       _parent: unknown,
-      args: { filter?: ListReadyWorkInput | null },
+      args: { filter?: ListReadyWorkInput | null; query?: string | null },
       context: GraphQLContext,
     ): Promise<{ nodes: Issue[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
       const result = await listReadyWork(
         context.prisma,
-        args.filter ?? {},
+        { ...args.filter, iql: args.query ?? null, viewerId: context.viewer?.id ?? null },
         buildReadableIssueWhere(context),
       );
 
@@ -1159,6 +1224,47 @@ const resolvers = {
         where: { OR: [{ teamId: team.id }, { teamId: null }] },
         orderBy: { createdAt: 'asc' },
       });
+    },
+    notifications: async (
+      _parent: unknown,
+      args: { after?: string | null; first?: number | null; unreadOnly?: boolean | null },
+      context: GraphQLContext,
+    ): Promise<{ nodes: Array<Prisma.NotificationGetPayload<{ include: { work: true } }>>; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
+      const viewer = requireAuthentication(context);
+      const first = clampConnectionFirst(args.first ?? 20, 100);
+      const cursor = args.after ? decodeCursor(args.after) : null;
+      const cursorDate = cursor ? parseDateTime(cursor.createdAt) : null;
+      const notifications = await context.prisma.notification.findMany({
+        where: {
+          userId: viewer.id,
+          ...(args.unreadOnly ? { readAt: null } : {}),
+          ...(cursor && cursorDate
+            ? {
+                OR: [
+                  { createdAt: { lt: cursorDate } },
+                  { createdAt: cursorDate, id: { lt: cursor.id } },
+                ],
+              }
+            : {}),
+        },
+        include: { work: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: first + 1,
+      });
+      const nodes = notifications.slice(0, first);
+
+      return {
+        nodes,
+        pageInfo: buildPageInfo(nodes, notifications.length > first),
+      };
+    },
+    unreadNotificationCount: async (
+      _parent: unknown,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<number> => {
+      const viewer = requireAuthentication(context);
+      return context.prisma.notification.count({ where: { userId: viewer.id, readAt: null } });
     },
     projects: async (
       _parent: unknown,
@@ -1246,10 +1352,18 @@ const resolvers = {
     ): Promise<{ issue: IssueParent | null; success: boolean }> =>
       runMutation(async () => {
         await assertCanWriteIssue(context.prisma, context, args.id);
+        // GraphQL delivers snoozedUntil as an ISO string while the service
+        // layer wants Date|null.
+        const { snoozedUntil, ...input } = args.input as UpdateIssueInput & { snoozedUntil?: string | null };
         const issue = await updateIssue(
           context.prisma,
           args.id,
-          args.input,
+          {
+            ...input,
+            ...(snoozedUntil !== undefined
+              ? { snoozedUntil: snoozedUntil === null ? null : parseDateTime(snoozedUntil) }
+              : {}),
+          },
           writeActorFromViewer(context.viewer),
         );
 
@@ -1299,6 +1413,26 @@ const resolvers = {
         issue: null,
         success: false as const,
       }),
+    workLink: async (
+      _parent: unknown,
+      args: { fromId: string; toId: string; type: WorkLinkType },
+      context: GraphQLContext,
+    ): Promise<{ link: WorkLink | null; success: boolean }> =>
+      runMutation(async () => {
+        const from = await findWorkByIdOrIdentifier(context.prisma, args.fromId);
+        if (!from) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+        const to = await findWorkByIdOrIdentifier(context.prisma, args.toId);
+        if (!to) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+        await assertCanWriteIssue(context.prisma, context, from.id);
+        await assertCanWriteIssue(context.prisma, context, to.id);
+        const link = await createWorkLink(context.prisma, {
+          actor: writeActorFromViewer(context.viewer),
+          fromId: from.id,
+          toId: to.id,
+          type: args.type,
+        });
+        return { link, success: true as const };
+      }, { link: null, success: false as const }),
     workCommit: async (
       _parent: unknown,
       args: { id: string; input: CommitWorkInput },
@@ -1555,6 +1689,7 @@ const resolvers = {
       args: {
         input: {
           eventTypes?: string[] | null;
+          filterQuery?: string | null;
           label?: string | null;
           team?: string | null;
           url: string;
@@ -1563,12 +1698,16 @@ const resolvers = {
       context: GraphQLContext,
     ): Promise<{ secret: string | null; subscription: WebhookSubscription | null; success: boolean }> =>
       runMutation(async () => {
+        const viewer = requireAuthentication(context);
         const teamId = await resolveWebhookTeamId(context, args.input.team ?? null);
         const eventTypes = normalizeWebhookEventTypes(args.input.eventTypes ?? null);
+        const filterQuery = normalizeWebhookFilterQuery(args.input.filterQuery ?? null);
         const secret = randomBytes(32).toString('hex');
         const subscription = await context.prisma.webhookSubscription.create({
           data: {
+            createdById: viewer.id,
             eventTypes,
+            filterQuery,
             label: args.input.label?.trim() || null,
             secret,
             teamId,
@@ -1584,6 +1723,7 @@ const resolvers = {
         input: {
           enabled?: boolean | null;
           eventTypes?: string[] | null;
+          filterQuery?: string | null;
           label?: string | null;
           url?: string | null;
         };
@@ -1601,6 +1741,9 @@ const resolvers = {
         }
         if (args.input.eventTypes !== undefined && args.input.eventTypes !== null) {
           data.eventTypes = normalizeWebhookEventTypes(args.input.eventTypes);
+        }
+        if (args.input.filterQuery !== undefined) {
+          data.filterQuery = normalizeWebhookFilterQuery(args.input.filterQuery);
         }
         if (args.input.enabled !== undefined && args.input.enabled !== null) {
           data.enabled = args.input.enabled;
@@ -1638,6 +1781,61 @@ const resolvers = {
         });
         return { secret, subscription, success: true as const };
       }, { secret: null, subscription: null, success: false as const }),
+    notificationMarkRead: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<{ notification: Prisma.NotificationGetPayload<{ include: { work: true } }> | null; success: boolean }> =>
+      runMutation(async () => {
+        const viewer = requireAuthentication(context);
+        // Scoped to the viewer: marking someone else's notification is a 404,
+        // not a silent success.
+        const updated = await context.prisma.notification.updateMany({
+          where: { id: args.id, readAt: null, userId: viewer.id },
+          data: { readAt: new Date() },
+        });
+        if (updated.count !== 1) {
+          const existing = await context.prisma.notification.findFirst({
+            include: { work: true },
+            where: { id: args.id, userId: viewer.id },
+          });
+          if (!existing) throw createNotFoundError(NOTIFICATION_NOT_FOUND_MESSAGE);
+          return { notification: existing, success: true as const };
+        }
+        const notification = await context.prisma.notification.findUniqueOrThrow({
+          include: { work: true },
+          where: { id: args.id },
+        });
+        return { notification, success: true as const };
+      }, { notification: null, success: false as const }),
+    notificationsMarkAllRead: async (
+      _parent: unknown,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<{ count: number; success: boolean }> =>
+      runMutation(async () => {
+        const viewer = requireAuthentication(context);
+        const { count } = await context.prisma.notification.updateMany({
+          where: { readAt: null, userId: viewer.id },
+          data: { readAt: new Date() },
+        });
+        return { count, success: true as const };
+      }, { count: 0, success: false as const }),
+    notificationPreferencesUpdate: async (
+      _parent: unknown,
+      args: { emailNotifications: boolean },
+      context: GraphQLContext,
+    ): Promise<{ emailNotifications: boolean; success: boolean }> =>
+      runMutation(async () => {
+        const viewer = requireAuthentication(context);
+        const prefs: Record<string, Prisma.InputJsonValue> = { ...(viewer.notificationPrefs as Prisma.InputJsonValue | null ?? {}) as Record<string, Prisma.InputJsonValue> };
+        prefs.emailNotifications = args.emailNotifications;
+        await context.prisma.user.update({
+          where: { id: viewer.id },
+          data: { notificationPrefs: prefs },
+        });
+        return { emailNotifications: args.emailNotifications, success: true as const };
+      }, { emailNotifications: true, success: false as const }),
     commentCreate: async (
       _parent: unknown,
       args: { input: CreateCommentInput },
@@ -2386,6 +2584,16 @@ function normalizeWebhookUrl(url: string): string {
     throw createValidationError(WEBHOOK_URL_INVALID_MESSAGE);
   }
   return parsed.toString();
+}
+
+function normalizeWebhookFilterQuery(filterQuery: string | null): string | null {
+  const trimmed = filterQuery?.trim() || null;
+  if (trimmed) {
+    // Fail creation/update fast on malformed filters instead of silently
+    // dropping every delivery later.
+    parseIqlOrThrow(trimmed);
+  }
+  return trimmed;
 }
 
 function normalizeWebhookEventTypes(eventTypes: string[] | null): string[] {

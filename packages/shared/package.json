@@ -28,6 +28,11 @@
       "types": "./dist/viewer-assertion.d.ts",
       "import": "./dist/viewer-assertion.js",
       "default": "./dist/viewer-assertion.js"
+    },
+    "./iql": {
+      "types": "./dist/iql.d.ts",
+      "import": "./dist/iql.js",
+      "default": "./dist/iql.js"
     }
   },
   "scripts": {

@@ -83,6 +83,26 @@ describe('Involute MCP', () => {
     expect(blocked.body.error.message).toContain('read-only');
   });
 
+  it('advertises tool annotations and serves the protocol guide on the readonly endpoint', async () => {
+    const listed = await mcpRpc('/mcp/readonly', { method: 'tools/list', id: 'ann-1' });
+    const tools = listed.body.result.tools as Array<{
+      name: string;
+      annotations?: { readOnlyHint?: boolean; idempotentHint?: boolean };
+    }>;
+    const search = tools.find((tool) => tool.name === 'work_search');
+    expect(search?.annotations?.readOnlyHint).toBe(true);
+
+    const guide = await mcpRpc('/mcp/readonly', {
+      id: 'ann-2',
+      method: 'tools/call',
+      params: { name: 'protocol_get_guide', arguments: {} },
+    });
+    expect(guide.status).toBe(200);
+    const guideText = JSON.stringify(guide.body.result);
+    expect(guideText).toContain('Run complete is not work accepted');
+    expect(guideText).toContain('involute-signature');
+  });
+
   it('accepts revocable team-scoped agent tokens only on MCP', async () => {
     const token = 'inv_agent_test-credential';
     const agent = await prisma.user.create({

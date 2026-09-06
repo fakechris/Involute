@@ -66,10 +66,16 @@ importers:
       graphql-yoga:
         specifier: ^5.16.0
         version: 5.19.0(graphql@16.13.2)
+      nodemailer:
+        specifier: ^10.0.0
+        version: 10.0.0
     devDependencies:
       '@types/node':
         specifier: ^24.7.2
         version: 24.12.0
+      '@types/nodemailer':
+        specifier: ^8.0.1
+        version: 8.0.1
       prisma:
         specifier: ^6.7.0
         version: 6.19.3(typescript@5.9.3)
@@ -815,6 +821,9 @@ packages:
   '@types/node@24.12.0':
     resolution: {integrity: sha512-GYDxsZi3ChgmckRT9HPU0WEhKLP08ev/Yfcq2AstjrDASOYCSXeyjDsHg4v5t4jOj7cyDX3vmprafKlWIG9MXQ==}
 
+  '@types/nodemailer@8.0.1':
+    resolution: {integrity: sha512-PxpaInm8V1JQDd4j0ds5HfvWQk8JupS1C0Picb96QJsrrRDjBH+DlK7L4ZdNSqNULhiZRQHc40nLVShaGxXAMw==}
+
   '@types/react-dom@19.2.3':
     resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
     peerDependencies:
@@ -1192,6 +1201,10 @@ packages:
 
   node-releases@2.0.36:
     resolution: {integrity: sha512-TdC8FSgHz8Mwtw9g5L4gR/Sh9XhSP/0DEkQxfEFXOpiul5IiHgHan2VhYYb6agDSfp4KuvltmGApc8HMgUrIkA==}
+
+  nodemailer@10.0.0:
+    resolution: {integrity: sha512-wdv+hXBg0iIPIOf108FaZyTxqjQpCvQeAJt9pHHTooPy/y3vQtI9eiImM9AIVKR3e/0FeMA1oueNfBjFJcaK+Q==}
+    engines: {node: '>=20.0.0'}
 
   nypm@0.6.5:
     resolution: {integrity: sha512-K6AJy1GMVyfyMXRVB88700BJqNUkByijGJM8kEHpLdcAt+vSQAVfkWWHYzuRXHSY6xA2sNc5RjTj0p9rE2izVQ==}
@@ -2086,6 +2099,10 @@ snapshots:
     dependencies:
       undici-types: 7.16.0
 
+  '@types/nodemailer@8.0.1':
+    dependencies:
+      '@types/node': 24.12.0
+
   '@types/react-dom@19.2.3(@types/react@19.2.14)':
     dependencies:
       '@types/react': 19.2.14
@@ -2479,6 +2496,8 @@ snapshots:
   node-fetch-native@1.6.7: {}
 
   node-releases@2.0.36: {}
+
+  nodemailer@10.0.0: {}
 
   nypm@0.6.5:
     dependencies:

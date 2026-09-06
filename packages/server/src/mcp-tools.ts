@@ -17,6 +17,7 @@ import {
 import { ISSUE_NOT_FOUND_MESSAGE, TEAM_NOT_FOUND_MESSAGE, createNotFoundError, createScopeForbiddenError } from './errors.js';
 import { updateIssue } from './issue-service.js';
 import { createWorkLink } from './link-service.js';
+import { buildProtocolGuide } from './protocol-docs.js';
 import { attachEvidence, reportRun } from './run-service.js';
 import { writeActorFromViewer } from './work-service.js';
 
@@ -24,6 +25,7 @@ export type McpToolName =
   | 'work_search'
   | 'work_get_context'
   | 'work_list_ready'
+  | 'protocol_get_guide'
   | 'work_propose'
   | 'work_commit'
   | 'work_update'
@@ -36,6 +38,7 @@ export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
   'work_search',
   'work_get_context',
   'work_list_ready',
+  'protocol_get_guide',
 ];
 
 export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
@@ -63,7 +66,14 @@ interface JsonSchema {
   required?: string[];
 }
 
+export interface McpToolAnnotations {
+  readOnlyHint: boolean;
+  destructiveHint: boolean;
+  idempotentHint?: boolean;
+}
+
 export interface McpToolDefinition {
+  annotations: McpToolAnnotations;
   description: string;
   inputSchema: JsonSchema;
   name: McpToolName;
@@ -86,10 +96,18 @@ export async function callMcpTool(
   assertToolScope(context, name as McpToolName);
 
   switch (name as McpToolName) {
+    case 'protocol_get_guide': {
+      return {
+        guide: buildProtocolGuide(),
+        contentType: 'text/markdown',
+      };
+    }
     case 'work_search': {
       const searchInput: Parameters<typeof searchWork>[1] = {};
       assignOptional(searchInput, 'first', optionalNumber(args.first));
       assignOptional(searchInput, 'query', optionalString(args.query));
+      assignOptional(searchInput, 'iql', optionalString(args.filter));
+      searchInput.viewerId = context.viewer?.id ?? null;
       assignOptional(searchInput, 'teamKey', optionalString(args.team_key));
       const status = optionalString(args.commitment_status);
       if (status === 'CANDIDATE' || status === 'COMMITTED' || status === 'REJECTED') {
@@ -109,6 +127,8 @@ export async function callMcpTool(
     case 'work_list_ready': {
       const readyInput: Parameters<typeof listReadyWork>[1] = {};
       assignOptional(readyInput, 'first', optionalNumber(args.first));
+      assignOptional(readyInput, 'iql', optionalString(args.filter));
+      readyInput.viewerId = context.viewer?.id ?? null;
       assignOptional(readyInput, 'priority', optionalNumber(args.priority));
       assignOptional(readyInput, 'projectId', optionalString(args.project_id));
       assignOptional(readyInput, 'repository', optionalString(args.repository));
@@ -137,6 +157,7 @@ export async function callMcpTool(
       }
       const relatedType = optionalString(args.related_work_type);
       if (relatedType) proposeInput.relatedWorkType = parseWorkLinkType(relatedType, 'related_work_type');
+      proposeInput.source = optionalString(args.source) ?? 'agent';
       return proposeWork(context.prisma, proposeInput, writeActorFromViewer(context.viewer, 'mcp'));
     }
     case 'work_commit': {
@@ -174,6 +195,9 @@ export async function callMcpTool(
       assignOptional(updateInput, 'scope', optionalString(args.scope));
       assignOptional(updateInput, 'title', optionalString(args.title));
       assignOptional(updateInput, 'verification', optionalString(args.verification));
+      if (args.snoozed_until !== undefined) {
+        updateInput.snoozedUntil = args.snoozed_until === null ? null : new Date(requiredString(args.snoozed_until, 'snoozed_until'));
+      }
       return updateIssue(
         context.prisma,
         work.id,
@@ -246,11 +270,13 @@ export async function callMcpTool(
 const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_search',
+    annotations: { readOnlyHint: true, destructiveHint: false },
     description: 'Search Involute work by identifier, title, or description. Includes candidates and committed work.',
     inputSchema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Search text' },
+        query: { type: 'string', description: 'Free-text search across identifier, title, and description' },
+        filter: { type: 'string', description: 'IQL filter, e.g. team:SON state-type:STARTED -commitment:rejected. See protocol_get_guide.' },
         team_key: { type: 'string' },
         commitment_status: { type: 'string', enum: ['CANDIDATE', 'COMMITTED', 'REJECTED'] },
         first: { type: 'integer' },
@@ -259,6 +285,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   },
   {
     name: 'work_get_context',
+    annotations: { readOnlyHint: true, destructiveHint: false },
     description: 'Return the full context bundle for a work id or identifier: contract, ancestors, blockers, claim, audits.',
     inputSchema: {
       type: 'object',
@@ -270,6 +297,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   },
   {
     name: 'work_list_ready',
+    annotations: { readOnlyHint: true, destructiveHint: false },
     description: 'List committed, unblocked, unclaimed work in urgency order.',
     inputSchema: {
       type: 'object',
@@ -278,12 +306,14 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         team_key: { type: 'string' },
         project_id: { type: 'string' },
         priority: { type: 'integer' },
+        filter: { type: 'string', description: 'IQL filter applied on top of ready-work rules. See protocol_get_guide.' },
         first: { type: 'integer' },
       },
     },
   },
   {
     name: 'work_propose',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     description: 'Create candidate work. Does not enter the ready queue. Search for duplicates first.',
     inputSchema: {
       type: 'object',
@@ -301,12 +331,14 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         related_work_type: { type: 'string', enum: ['CONTAINS', 'BLOCKS', 'DERIVED_FROM', 'DISCOVERED_DURING', 'RELATED_TO', 'DUPLICATE_OF'] },
         repository: { type: 'string' },
         idempotency_key: { type: 'string' },
+        source: { type: 'string', description: 'Origin of this candidate; defaults to agent' },
       },
       required: ['team', 'title'],
     },
   },
   {
     name: 'work_commit',
+    annotations: { readOnlyHint: false, destructiveHint: false },
     description: 'Promote candidate work to a committed contract. Humans only. Requires acceptance and a human owner.',
     inputSchema: {
       type: 'object',
@@ -326,6 +358,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   },
   {
     name: 'work_update',
+    annotations: { readOnlyHint: false, destructiveHint: false },
     description: 'Update work contract fields. Requires expected_revision. Does not mark work Done.',
     inputSchema: {
       type: 'object',
@@ -341,12 +374,14 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         verification: { type: 'string' },
         repository: { type: 'string' },
         priority: { type: 'integer' },
+        snoozed_until: { type: ['string', 'null'], description: 'ISO timestamp; candidate-only. Pass null to clear.' },
       },
       required: ['id', 'expected_revision'],
     },
   },
   {
     name: 'work_link',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     description: 'Create a typed work link: CONTAINS, BLOCKS, DERIVED_FROM, DISCOVERED_DURING, RELATED_TO, DUPLICATE_OF.',
     inputSchema: {
       type: 'object',
@@ -360,6 +395,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   },
   {
     name: 'work_claim',
+    annotations: { readOnlyHint: false, destructiveHint: false },
     description: 'Atomically claim committed work for the current actor. Does not change the human assignee.',
     inputSchema: {
       type: 'object',
@@ -373,6 +409,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   },
   {
     name: 'run_report',
+    annotations: { readOnlyHint: false, destructiveHint: false },
     description: 'Report a high-level run phase, block, or completion. Completed runs may move work to In Review, never Done.',
     inputSchema: {
       type: 'object',
@@ -391,6 +428,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   },
   {
     name: 'evidence_attach',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     description: 'Attach a PR, test report, log, screenshot, or artifact to an existing run.',
     inputSchema: {
       type: 'object',
@@ -403,6 +441,15 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         idempotency_key: { type: 'string' },
       },
       required: ['work_id', 'run_id', 'kind', 'url'],
+    },
+  },
+  {
+    name: 'protocol_get_guide',
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    description: 'Return the full Involute work protocol: kernel rules, state machines, scopes, tools, webhook events, and the IQL query language. Call this before writing work.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
     },
   },
 ];
@@ -479,6 +526,7 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_search: 'read',
   work_get_context: 'read',
   work_list_ready: 'read',
+  protocol_get_guide: 'read',
   work_propose: 'propose',
   work_commit: null,
   work_update: 'update',

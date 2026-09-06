@@ -1,0 +1,47 @@
+# Single-container stack: one AIO image (API + web + migrations) plus an
+# external Postgres. Use for small self-hosted deployments.
+#
+#   INVOLUTE_IMAGE_NAMESPACE=fakechris INVOLUTE_IMAGE_TAG=latest \
+#     docker compose --env-file .env -f docker-compose.aio.yml up -d
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: involute
+      POSTGRES_USER: involute
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-involute}
+    volumes:
+      - involute-aio-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U involute"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  aio:
+    image: ${INVOLUTE_IMAGE_NAMESPACE:-fakechris}/involute-aio:${INVOLUTE_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${AIO_DATABASE_URL:-postgresql://involute:${POSTGRES_PASSWORD:-involute}@db:5432/involute?schema=public}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:4200}
+      AUTH_TOKEN: ${AUTH_TOKEN:-}
+      VIEWER_ASSERTION_SECRET: ${VIEWER_ASSERTION_SECRET:-}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}
+      ADMIN_EMAIL_ALLOWLIST: ${ADMIN_EMAIL_ALLOWLIST:-}
+      NOTIFICATION_EMAIL_ENABLED: ${NOTIFICATION_EMAIL_ENABLED:-false}
+      NOTIFICATION_EMAIL_SMTP_HOST: ${NOTIFICATION_EMAIL_SMTP_HOST:-}
+      NOTIFICATION_EMAIL_SMTP_PORT: ${NOTIFICATION_EMAIL_SMTP_PORT:-587}
+      NOTIFICATION_EMAIL_SMTP_USER: ${NOTIFICATION_EMAIL_SMTP_USER:-}
+      NOTIFICATION_EMAIL_SMTP_PASSWORD: ${NOTIFICATION_EMAIL_SMTP_PASSWORD:-}
+      NOTIFICATION_EMAIL_FROM: ${NOTIFICATION_EMAIL_FROM:-}
+    ports:
+      - "${AIO_BIND_ADDRESS:-127.0.0.1}:4200:4200"
+
+volumes:
+  involute-aio-db:
