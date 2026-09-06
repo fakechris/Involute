@@ -92,7 +92,9 @@ describe('App board UI', () => {
     renderTestApp({ data: customStateData, loading: false });
 
     const headers = await screen.findAllByRole('heading', { level: 2 });
-    expect(headers.map((header) => header.textContent)).toEqual(['In Progress', 'Done', 'Todo', 'Triage']);
+    // Columns order by state group (backlog → unstarted → started → review →
+    // completed → canceled), so custom names land in the right section.
+    expect(headers.map((header) => header.textContent)).toEqual(['Triage', 'Todo', 'In Progress', 'Done']);
     expect(within(screen.getByTestId('column-Triage')).getByText('INV-10')).toBeInTheDocument();
     expect(within(screen.getByTestId('column-Todo')).getByText('INV-11')).toBeInTheDocument();
   });

@@ -18,6 +18,7 @@ import {
   hashIdempotencyRequest,
   reserveWorkIdempotency,
 } from './idempotency.js';
+import { projectWorkNotifications } from './notification-service.js';
 import {
   createNotFoundError,
   createValidationError,
@@ -196,8 +197,9 @@ export async function reportRun(
     }
 
     const eventType = eventTypeForRun(isNew, run.status, input.decisionRequested);
+    let eventId: string | null = null;
     if (eventType) {
-      await enqueueWorkEvent(transaction, {
+      const enqueued = await enqueueWorkEvent(transaction, {
         payload: {
           runId: run.id,
           publicId: run.publicId,
@@ -210,6 +212,7 @@ export async function reportRun(
         workId: work.id,
         workIdentifier: work.identifier,
       });
+      eventId = enqueued.id;
     }
 
     let nextWork = work;
@@ -218,6 +221,24 @@ export async function reportRun(
       if (activeClaim) {
         await transaction.workClaim.deleteMany({ where: { id: activeClaim.id } });
       }
+    }
+
+    // Human gate: when an attempt finishes (or explicitly asks for a
+    // decision), the human assignee — or the team owners — learns that a
+    // decision is theirs to make. Projected in-transaction so notifications
+    // can never lag or drift from the work state they describe.
+    if (eventId && (eventType === 'decision.requested' || eventType === 'run.completed')) {
+      await projectWorkNotifications(transaction, {
+        eventId,
+        payload: {
+          externalUrl: run.externalUrl,
+          phase: run.phase,
+          publicId: run.publicId,
+          summary: run.summary,
+        },
+        type: eventType,
+        work,
+      });
     }
 
     if (idempotencyId) {
@@ -445,7 +466,9 @@ export async function reviewWork(
       before: selectIssueSnapshot(work),
       workId: work.id,
     });
-    await enqueueWorkEvent(transaction, {
+    let reviewEventId: string | null = null;
+    const reviewEventType = input.decision === 'ACCEPTED' ? 'work.accepted' : 'work.review_rejected';
+    const enqueued = await enqueueWorkEvent(transaction, {
       payload: {
         decisionId: decision.id,
         reason: decision.reason,
@@ -453,11 +476,41 @@ export async function reviewWork(
         runId: decision.runId,
         selfReviewed: work.assigneeId === actorId || run?.actorId === actorId,
       },
-      type: input.decision === 'ACCEPTED' ? 'work.accepted' : 'work.review_rejected',
+      type: reviewEventType,
       updatedFrom: { revision: work.revision, stateId: work.stateId },
       workId: work.id,
       workIdentifier: work.identifier,
     });
+    reviewEventId = enqueued.id;
+
+    // Close the loop with the acting agent's owner: a human actor learns the
+    // review outcome here; agent actors have no notification inbox (their
+    // surface is webhooks), so they are skipped.
+    if (run?.actorId) {
+      const runActor = await transaction.user.findUnique({
+        where: { id: run.actorId },
+        select: { actorKind: true, id: true },
+      });
+      if (runActor?.actorKind === 'HUMAN') {
+        await transaction.notification.createMany({
+          data: [
+            {
+              payload: {
+                decision: input.decision,
+                decisionId: decision.id,
+                reason: decision.reason,
+              },
+              sourceEventId: reviewEventId,
+              teamId: work.teamId,
+              type: reviewEventType,
+              userId: runActor.id,
+              workId: work.id,
+            },
+          ],
+          skipDuplicates: true,
+        });
+      }
+    }
     if (reviewIdempotencyId) {
       await completeWorkIdempotency(transaction, reviewIdempotencyId, work.id, decision.id);
     }

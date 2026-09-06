@@ -112,7 +112,7 @@ async function dispatchMcpMethod(
           version: '0.0.0',
         },
         instructions:
-          'Involute is a project-state kernel. Search before creating work. Propose candidates instead of committed issues. Do not file local TODOs. Run complete is not work accepted.',
+          'Involute is a project-state kernel. Search before creating work. Propose candidates instead of committed issues. Do not file local TODOs. Run complete is not work accepted. Call protocol_get_guide for the full protocol. Machine-readable docs: GET /llms.txt.',
       };
     case 'ping':
       return {};
@@ -122,6 +122,13 @@ async function dispatchMcpMethod(
           name: tool.name,
           description: tool.description,
           inputSchema: tool.inputSchema,
+          annotations: {
+            readOnlyHint: tool.annotations.readOnlyHint,
+            destructiveHint: tool.annotations.destructiveHint,
+            ...(tool.annotations.idempotentHint !== undefined
+              ? { idempotentHint: tool.annotations.idempotentHint }
+              : {}),
+          },
         })),
       };
     case 'tools/call': {

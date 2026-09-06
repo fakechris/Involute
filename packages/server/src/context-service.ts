@@ -14,6 +14,7 @@ import type {
 } from '@prisma/client';
 
 import { ISSUE_NOT_FOUND_MESSAGE, createNotFoundError } from './errors.js';
+import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -28,18 +29,26 @@ export const MAX_CONTEXT_RUNS = 10;
 
 export interface ListReadyWorkInput {
   first?: number | null;
+  /** IQL filter string (see packages/shared/src/iql.ts). */
+  iql?: string | null;
   kind?: WorkKind | null;
   priority?: number | null;
   projectId?: string | null;
   repository?: string | null;
   teamKey?: string | null;
+  /** Resolves `assignee:me` in IQL terms; set by the calling surface. */
+  viewerId?: string | null;
 }
 
 export interface SearchWorkInput {
   commitmentStatus?: CommitmentStatus | null;
   first?: number | null;
+  /** IQL filter string; the plain `query` stays free-text search. */
+  iql?: string | null;
   query?: string | null;
   teamKey?: string | null;
+  /** Resolves `assignee:me` in IQL terms; set by the calling surface. */
+  viewerId?: string | null;
 }
 
 export interface WorkContextBundle {
@@ -142,6 +151,14 @@ export async function searchWork(
     clauses.push(readableWhere);
   }
 
+  if (input.iql?.trim()) {
+    const parsed = parseIqlOrThrow(input.iql);
+    const compiled = compileIqlToIssueWhere(parsed, { viewerId: input.viewerId ?? null });
+    if (compiled) {
+      clauses.push(compiled);
+    }
+  }
+
   const query = input.query?.trim();
   if (query) {
     clauses.push({
@@ -180,7 +197,13 @@ export async function listReadyWork(
   readableWhere?: Prisma.IssueWhereInput,
 ): Promise<{ hasNextPage: boolean; nodes: Issue[] }> {
   const first = clampFirst(input.first);
-  const baseWhere = combineWhere(readableWhere, buildReadyWorkWhere(input));
+  const iqlWhere = input.iql?.trim()
+    ? compileIqlToIssueWhere(parseIqlOrThrow(input.iql), { viewerId: input.viewerId ?? null })
+    : undefined;
+  const baseWhere = combineWhere(
+    readableWhere,
+    combineWhere(iqlWhere, buildReadyWorkWhere(input)) ?? buildReadyWorkWhere(input),
+  );
   const priorities: Array<number | 'other'> = input.priority !== undefined && input.priority !== null
     ? [input.priority]
     : [...READY_PRIORITY_ORDER, 'other'];

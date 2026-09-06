@@ -48,13 +48,30 @@ Typical browser flow:
 
 ### `GET /health`
 
-Returns plain text health status.
+Returns plain text health status (process liveness; always `200` when the
+process is up).
 
 Response:
 
 ```text
 OK
 ```
+
+### `GET /ready`
+
+Readiness probe: pings PostgreSQL. Orchestrators should gate traffic on this,
+not `/health`.
+
+- `200` with `{"database":"ok","status":"ready"}` when the database answers
+- `503` with `{"database":"unavailable","status":"not-ready"}` otherwise
+
+### `GET /llms.txt`, `GET /llms-full.txt`, `GET /docs/<file>.md`
+
+Machine-readable documentation for agents. `/llms.txt` is a generated index;
+`/llms-full.txt` concatenates the protocol guide and the whitelisted docs.
+`/docs/` serves an allowlist of repository docs (`api.md`, `agent-setup.md`,
+`ops.md`, `milestones.md`, `vision.md`) as `text/markdown`; everything else is
+`404`. No authentication.
 
 ### `GET /auth/session`
 
@@ -660,22 +677,25 @@ codex mcp add involute --url https://involute.example.com/mcp
 codex mcp add involute-readonly --url https://involute.example.com/mcp/readonly
 ```
 
-Tools: `work_search`, `work_get_context`, `work_list_ready`, `work_propose`, `work_commit`, `work_update`, `work_link`, `work_claim`, `run_report`, `evidence_attach`. The readonly endpoint exposes only the first three. Agent behavior is in `skills/involute/SKILL.md`.
+Tools: `protocol_get_guide`, `work_search`, `work_get_context`, `work_list_ready`, `work_propose`, `work_commit`, `work_update`, `work_link`, `work_claim`, `run_report`, `evidence_attach`. The readonly endpoint exposes only the read-only four (including `protocol_get_guide`, which returns the full work protocol as markdown). `tools/list` advertises `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`) per tool. `work_search` and `work_list_ready` accept an IQL `filter` argument. Agent behavior is in `skills/involute/SKILL.md`.
 
 Completed runs and attached evidence move work to In Review, never Done. Outbound webhooks use `INVOLUTE_WEBHOOK_URL` and `INVOLUTE_WEBHOOK_SECRET`.
 
 ### Webhook delivery contract
 
+See the **payload v2** section above for the full envelope. Summary:
+
 - Delivery is **at-least-once**: a crash between a successful POST and the
   delivery bookkeeping row causes redelivery of the same event.
-- Receivers **must dedupe on the `involute-delivery` header**, whose value is
-  the stable event id. Retries of the same event reuse the same id.
+- Receivers **dedupe on `event_id` / `involute-event-id`** (stable across
+  retries); `involute-delivery` and `delivery_id` are unique per attempt.
 - Authenticity: `involute-signature` is `sha256=` + HMAC-SHA256 of the raw
   body with the subscription's secret. `involute-event` carries the event
   type (`run.completed`, `work.accepted`, …).
-- Each target URL is retried independently (up to 8 attempts); one slow or
-  failing target does not block the others. An event is dead-lettered only
-  when **every** target has either been delivered or exhausted its retries.
+- Each target is retried independently on an exponential backoff (1m → 10h,
+  5 attempts); 4xx except 408/429 is terminal; one slow or failing target
+  does not block the others. An event is dead-lettered only when **every**
+  target has either been delivered or exhausted its retries.
 - Review events (`work.accepted`, `work.review_rejected`) include
   `selfReviewed: true` when the reviewer is also the work owner or run actor.
 
@@ -753,6 +773,86 @@ mutation {
 query { agentCredentials(teamId: "INV") { id name scopes revokedAt user { email } } }
 mutation { agentCredentialRevoke(id: "<id>") { success } }
 ```
+
+## IQL — unified work filter
+
+`issues(query:)`, `readyWork(query:)`, the MCP `work_search`/`work_list_ready`
+`filter` argument, CLI `--query`, web saved views, and webhook `filterQuery`
+all share one small filter language. Terms combine with AND; prefix `-`
+negates.
+
+```text
+team:SON state:"In Review" state-type:STARTED kind:ISSUE commitment:CANDIDATE
+assignee:me assignee:none label:infra priority:>=2 updated:>30d
+link:blocked-by:none has:contract -state:done "free text"
+```
+
+- `updated` takes durations (`30m`, `7d`, `2w`); `updated:>30d` means "updated
+  within the last 30 days".
+- `link:<type>:<identifier|none>` matches incoming links of that type, where
+  `none` means "no incoming link of this type from unresolved work".
+- Parse failures return GraphQL errors with `extensions.code = 'IQL_PARSE'`;
+  they are never silently swallowed.
+
+## Notifications
+
+Kernel notifications are projected in the same transaction as the work event
+they describe. Human-gate events (`decision.requested`, `run.completed`,
+`work.accepted`, `work.review_rejected`, `webhook.disabled`) notify the human
+assignee, falling back to human team owners. Agent actors never receive
+notifications.
+
+```graphql
+query {
+  notifications(first: 20, unreadOnly: true) {
+    nodes { id type payload readAt createdAt work { id identifier } }
+    pageInfo { hasNextPage endCursor }
+  }
+  unreadNotificationCount
+}
+
+mutation { notificationMarkRead(id: "...") { success } }
+mutation { notificationsMarkAllRead { count success } }
+mutation { notificationPreferencesUpdate(emailNotifications: false) { success } }
+```
+
+Email digests are off by default. Set `NOTIFICATION_EMAIL_ENABLED=true` plus
+`NOTIFICATION_EMAIL_SMTP_HOST`, `NOTIFICATION_EMAIL_SMTP_PORT`,
+`NOTIFICATION_EMAIL_SMTP_USER`, `NOTIFICATION_EMAIL_SMTP_PASSWORD`,
+`NOTIFICATION_EMAIL_FROM` to batch per-user digests every 30 seconds (2-minute
+coalescing window). Read notifications are swept after 90 days, unread after
+180.
+
+## Webhooks — payload v2
+
+Envelopes carry, on every delivery:
+
+```json
+{
+  "type": "work.committed",
+  "event": "work.committed",
+  "event_id": "stable across retries (== EventOutbox id)",
+  "delivery_id": "unique per attempt (<delivery row id>:<attempt>)",
+  "occurred_at": "ISO timestamp",
+  "work": { "id": "...", "identifier": "SON-42" },
+  "data": { "event-specific fields" },
+  "updatedFrom": { "changed fields before the update, when applicable" }
+}
+```
+
+Headers: `involute-event` (type), `involute-event-id` (stable id),
+`involute-delivery` (per-attempt id), `involute-attempt` (1-based),
+`involute-signature: sha256=<hex HMAC-SHA256 of the raw body>`.
+
+Retry schedule: ~1m, 5m, 30m, 2h, 10h (±20% jitter), 5 attempts. HTTP 4xx
+(except 408/429) is terminal for that attempt set. Ten consecutively exhausted
+delivery rounds disable the subscription and emit `webhook.disabled`
+(internally projected as a notification to the subscription creator or the
+instance admins).
+
+Subscriptions accept an optional IQL `filterQuery` (validated at create/update,
+evaluated against the work snapshot per delivery). Internal event
+`webhook.disabled` also appears in `WORK_EVENT_TYPES`.
 
 ## Error model
 

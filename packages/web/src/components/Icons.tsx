@@ -10,6 +10,10 @@ export function IcoSearch({ size = 14, ...rest }: IconProps) {
   return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.3"/><path d="m9 9 3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>);
 }
 
+export function IcoBell({ size = 14, ...rest }: IconProps) {
+  return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><path d="M3.5 6a3.5 3.5 0 0 1 7 0c0 2.4.8 3.6 1.5 4.2H2c.7-.6 1.5-1.8 1.5-4.2Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/><path d="M5.7 11.8a1.4 1.4 0 0 0 2.6 0" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>);
+}
+
 export function IcoPlus({ size = 14, ...rest }: IconProps) {
   return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><path d="M7 3v8M3 7h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>);
 }

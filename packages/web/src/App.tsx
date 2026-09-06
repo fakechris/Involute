@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 
 import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon, IcoCheck, IcoGraph } from './components/Icons';
+import { NotificationsBell } from './components/NotificationsBell';
 import { Avatar } from './components/Primitives';
 
 import {
@@ -1110,6 +1111,7 @@ export function App() {
                 <div className="app-shell__footer-name">{session.viewer.name ?? session.viewer.email ?? 'Signed-in viewer'}</div>
                 <div className="app-shell__footer-role">{session.viewer.globalRole}</div>
               </div>
+              <NotificationsBell authenticated />
               <button
                 type="button"
                 className="app-shell__footer-settings"

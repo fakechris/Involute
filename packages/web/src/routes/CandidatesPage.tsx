@@ -7,7 +7,9 @@ import { IcoCheck, IcoClose } from '../components/Icons';
 import { Btn } from '../components/Primitives';
 import {
   CANDIDATES_PAGE_QUERY,
+  ISSUE_SNOOZE_MUTATION,
   WORK_COMMIT_MUTATION,
+  WORK_LINK_MUTATION,
   WORK_REJECT_MUTATION,
 } from '../work/queries';
 import type {
@@ -28,25 +30,104 @@ function humanUsers(users: WorkUserSummary[]): WorkUserSummary[] {
   return users.filter((user) => user.actorKind !== 'AGENT' && user.actorKind !== 'SERVICE');
 }
 
+interface SnoozeMutationData {
+  issueUpdate: { issue: { id: string } | null; success: boolean };
+}
+
+interface SnoozeMutationVariables {
+  id: string;
+  input: { expectedRevision: number; snoozedUntil?: string | null };
+}
+
+interface WorkLinkMutationData {
+  workLink: { success: boolean };
+}
+
+interface WorkLinkMutationVariables {
+  fromId: string;
+  toId: string;
+  type: 'DUPLICATE_OF';
+}
+
+function isSnoozed(candidate: CandidateWork): boolean {
+  return Boolean(candidate.snoozedUntil && new Date(candidate.snoozedUntil).getTime() > Date.now());
+}
+
 function CandidateCard({
   candidate,
   humans,
+  otherCandidates,
   onCommitted,
   onRejected,
+  onRefresh,
 }: {
   candidate: CandidateWork;
   humans: WorkUserSummary[];
+  otherCandidates: CandidateWork[];
   onCommitted: () => void;
   onRejected: () => void;
+  onRefresh: () => void;
 }) {
   const navigate = useNavigate();
   const [acceptance, setAcceptance] = useState(candidate.acceptance ?? '');
   const [assigneeId, setAssigneeId] = useState(candidate.assignee?.id ?? humans[0]?.id ?? '');
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<'commit' | 'reject' | null>(null);
+  const [pendingAction, setPendingAction] = useState<'commit' | 'reject' | 'snooze' | 'duplicate' | null>(null);
+  const [duplicateOfId, setDuplicateOfId] = useState('');
   const [runCommit] = useMutation<WorkCommitMutationData, WorkCommitMutationVariables>(WORK_COMMIT_MUTATION);
   const [runReject] = useMutation<WorkRejectMutationData, WorkRejectMutationVariables>(WORK_REJECT_MUTATION);
+  const [runSnooze] = useMutation<SnoozeMutationData, SnoozeMutationVariables>(ISSUE_SNOOZE_MUTATION);
+  const [runLink] = useMutation<WorkLinkMutationData, WorkLinkMutationVariables>(WORK_LINK_MUTATION);
+
+  const snoozed = isSnoozed(candidate);
+
+  async function handleSnooze(days: number | null) {
+    setError(null);
+    setPendingAction('snooze');
+    try {
+      const result = await runSnooze({
+        variables: {
+          id: candidate.id,
+          input: {
+            expectedRevision: candidate.revision,
+            ...(days === null
+              ? { snoozedUntil: null }
+              : { snoozedUntil: new Date(Date.now() + days * 24 * 60 * 60_000).toISOString() }),
+          },
+        },
+      });
+      if (!result.data?.issueUpdate.success) {
+        setError('We could not snooze this candidate. Please try again.');
+        return;
+      }
+      onRefresh();
+    } catch {
+      setError('We could not snooze this candidate. Please try again.');
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function handleMarkDuplicate() {
+    if (!duplicateOfId) return;
+    setError(null);
+    setPendingAction('duplicate');
+    try {
+      const result = await runLink({
+        variables: { fromId: candidate.id, toId: duplicateOfId, type: 'DUPLICATE_OF' },
+      });
+      if (!result.data?.workLink.success) {
+        setError('We could not mark this candidate as a duplicate. Please try again.');
+        return;
+      }
+      onRefresh();
+    } catch {
+      setError('We could not mark this candidate as a duplicate. Please try again.');
+    } finally {
+      setPendingAction(null);
+    }
+  }
 
   async function handleCommit() {
     setError(null);
@@ -113,7 +194,7 @@ function CandidateCard({
         >
           {candidate.identifier}
         </button>
-        <span className="observation-card__status">candidate</span>
+        <span className="observation-card__status">{snoozed ? 'snoozed candidate' : 'candidate'}</span>
         <span className="observation-card__meta">{candidate.team.key}</span>
         <span className="observation-card__meta">rev {candidate.revision}</span>
       </header>
@@ -179,7 +260,7 @@ function CandidateCard({
         <Btn
           variant="accent"
           icon={<IcoCheck size={12} />}
-          disabled={pendingAction !== null}
+          disabled={pendingAction !== null || snoozed}
           onClick={() => void handleCommit()}
         >
           {pendingAction === 'commit' ? 'Committing…' : 'Commit'}
@@ -192,10 +273,48 @@ function CandidateCard({
         >
           {pendingAction === 'reject' ? 'Rejecting…' : 'Reject'}
         </Btn>
+        {snoozed ? (
+          <Btn variant="ghost" disabled={pendingAction !== null} onClick={() => void handleSnooze(null)}>
+            Wake now
+          </Btn>
+        ) : (
+          <>
+            <Btn variant="ghost" disabled={pendingAction !== null} onClick={() => void handleSnooze(7)}>
+              Snooze 7d
+            </Btn>
+            <Btn variant="ghost" disabled={pendingAction !== null} onClick={() => void handleSnooze(30)}>
+              Snooze 30d
+            </Btn>
+          </>
+        )}
         <Btn variant="ghost" onClick={() => navigate(`/work/${candidate.id}`)}>
           Open context
         </Btn>
       </div>
+      {!snoozed && otherCandidates.length > 0 ? (
+        <label className="observation-field observation-field--inline">
+          <span>Mark duplicate of</span>
+          <select
+            aria-label={`Mark ${candidate.identifier} as duplicate of`}
+            value={duplicateOfId}
+            onChange={(event) => setDuplicateOfId(event.target.value)}
+          >
+            <option value="">Select work</option>
+            {otherCandidates.map((other) => (
+              <option key={other.id} value={other.id}>
+                {other.identifier} — {other.title}
+              </option>
+            ))}
+          </select>
+          <Btn
+            variant="subtle"
+            disabled={!duplicateOfId || pendingAction !== null}
+            onClick={() => void handleMarkDuplicate()}
+          >
+            {pendingAction === 'duplicate' ? 'Linking…' : 'Link duplicate'}
+          </Btn>
+        </label>
+      ) : null}
     </article>
   );
 }
@@ -231,6 +350,8 @@ export function CandidatesPage() {
     return result;
   }, [data?.teams.nodes]);
   const candidates = data?.issues.nodes ?? [];
+  const snoozedCandidates = candidates.filter(isSnoozed);
+  const activeCandidates = candidates.filter((candidate) => !isSnoozed(candidate));
   const pageInfo = data?.issues.pageInfo;
 
   async function handleLoadMore() {
@@ -280,15 +401,35 @@ export function CandidatesPage() {
           </div>
         ) : (
           <div className="observation-list">
-            {candidates.map((candidate) => (
+            {activeCandidates.map((candidate) => (
               <CandidateCard
                 key={candidate.id}
                 candidate={candidate}
                 humans={humansByTeam.get(candidate.team.id) ?? []}
+                otherCandidates={candidates.filter((other) => other.id !== candidate.id)}
                 onCommitted={() => void refetch()}
                 onRejected={() => void refetch()}
+                onRefresh={() => void refetch()}
               />
             ))}
+            {snoozedCandidates.length > 0 ? (
+              <>
+                <h2 className="observation-section-title">
+                  Snoozed ({snoozedCandidates.length})
+                </h2>
+                {snoozedCandidates.map((candidate) => (
+                  <CandidateCard
+                    key={candidate.id}
+                    candidate={candidate}
+                    humans={humansByTeam.get(candidate.team.id) ?? []}
+                    otherCandidates={candidates.filter((other) => other.id !== candidate.id)}
+                    onCommitted={() => void refetch()}
+                    onRejected={() => void refetch()}
+                    onRefresh={() => void refetch()}
+                  />
+                ))}
+              </>
+            ) : null}
             {paginationError ? (
               <div role="alert">
                 <p>Could not load more candidates.</p>

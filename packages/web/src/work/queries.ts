@@ -35,6 +35,8 @@ export const CANDIDATES_PAGE_QUERY = gql`
         acceptance
         verification
         repository
+        snoozedUntil
+        source
         createdAt
         team {
           id
@@ -244,6 +246,30 @@ export const WORK_REVIEW_MUTATION = gql`
       decision {
         id
         decision
+      }
+    }
+  }
+`;
+
+export const WORK_LINK_MUTATION = gql`
+  mutation WorkLink($fromId: String!, $toId: String!, $type: WorkLinkType!) {
+    workLink(fromId: $fromId, toId: $toId, type: $type) {
+      success
+      link {
+        id
+        type
+      }
+    }
+  }
+`;
+
+export const ISSUE_SNOOZE_MUTATION = gql`
+  mutation IssueSnooze($id: String!, $input: IssueUpdateInput!) {
+    issueUpdate(id: $id, input: $input) {
+      success
+      issue {
+        id
+        snoozedUntil
       }
     }
   }

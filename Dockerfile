@@ -65,3 +65,19 @@ RUN pnpm --filter @turnkeyai/involute-server build && pnpm --filter @turnkeyai/i
 
 ENTRYPOINT ["node", "packages/cli/dist/index.js"]
 CMD ["--help"]
+
+# Single-container deployment: API + migrations + the built web app served by
+# the API process (INVOLUTE_WEB_DIST). Requires an external Postgres.
+FROM base AS aio
+
+RUN pnpm --filter @turnkeyai/involute-server build && pnpm --filter @turnkeyai/involute-web build
+
+ENV INVOLUTE_WEB_DIST=/app/packages/web/dist
+ENV VITE_INVOLUTE_GRAPHQL_URL=/graphql
+
+COPY packages/server/docker-entrypoint-aio.sh /app/docker-entrypoint-aio.sh
+RUN chmod +x /app/docker-entrypoint-aio.sh
+
+EXPOSE 4200
+
+ENTRYPOINT ["/app/docker-entrypoint-aio.sh"]

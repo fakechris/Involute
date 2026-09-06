@@ -69,6 +69,11 @@ export const WEBHOOK_URL_INVALID_MESSAGE = 'Webhook URL must be a valid absolute
 export const WEBHOOK_EVENT_TYPE_INVALID_MESSAGE = 'Unknown webhook event type.';
 export const AGENT_SCOPE_INVALID_MESSAGE = 'Unknown agent scope.';
 export const AGENT_CREDENTIAL_NOT_FOUND_MESSAGE = 'Agent credential not found.';
+export const NOTIFICATION_NOT_FOUND_MESSAGE = 'Notification not found.';
+export const SNOOZE_REQUIRES_CANDIDATE_MESSAGE = 'Only candidate work can be snoozed.';
+// Dynamic IQL failures carry this prefix; getExposedError lets them through so
+// agents see exactly which term failed to parse.
+export const IQL_PARSE_ERROR_PREFIX = 'Invalid IQL query:';
 
 export function createScopeForbiddenError(scope: string): GraphQLError {
   return new GraphQLError(`Agent credential lacks required scope: ${scope}.`, {
@@ -137,6 +142,8 @@ const exposedErrorCodes = new Map<string, string>([
   [WEBHOOK_EVENT_TYPE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_SCOPE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_CREDENTIAL_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [NOTIFICATION_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [SNOOZE_REQUIRES_CANDIDATE_MESSAGE, 'BAD_USER_INPUT'],
 ]);
 
 export function createNotAuthenticatedError(): GraphQLError {
@@ -158,6 +165,22 @@ export function getExposedError(error: unknown): GraphQLError | null {
     exposedErrorCodes.get(error.message) === error.extensions.code
   ) {
     return createExposedError(error.message);
+  }
+
+  // IQL parse failures survive masking by message prefix: wrappers may drop
+  // extensions or re-class the error across module copies, but the message
+  // text is always preserved.
+  const iqlMessage = error instanceof Error && error.message.startsWith(IQL_PARSE_ERROR_PREFIX)
+    ? error.message
+    : error instanceof GraphQLError &&
+        error.originalError instanceof Error &&
+        error.originalError.message.startsWith(IQL_PARSE_ERROR_PREFIX)
+      ? error.originalError.message
+      : null;
+  if (iqlMessage) {
+    return new GraphQLError(iqlMessage, {
+      extensions: { code: 'IQL_PARSE' },
+    });
   }
 
   if (error instanceof Error) {

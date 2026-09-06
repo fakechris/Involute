@@ -494,7 +494,7 @@ async function fetchLabels(): Promise<LabelSummary[]> {
   return result.issueLabels.nodes;
 }
 
-async function fetchIssues(teamKey?: string): Promise<IssueListItem[]> {
+async function fetchIssues(teamKey?: string, iqlQuery?: string): Promise<IssueListItem[]> {
   const client = await createConfiguredGraphQLClient();
   const filter = teamKey
     ? {
@@ -511,8 +511,8 @@ async function fetchIssues(teamKey?: string): Promise<IssueListItem[]> {
   do {
     const result: { issues: { nodes: IssueListItem[]; pageInfo: PageInfo } } = await client.request(
       /* GraphQL */ `
-        query CliIssuesList($after: String, $filter: IssueFilter, $first: Int!) {
-          issues(first: $first, after: $after, filter: $filter) {
+        query CliIssuesList($after: String, $filter: IssueFilter, $first: Int!, $query: String) {
+          issues(first: $first, after: $after, filter: $filter, query: $query) {
             nodes {
               id
               identifier
@@ -1123,14 +1123,14 @@ async function fetchReadyWork(filter: {
   projectId?: string;
   repository?: string;
   teamKey?: string;
-}): Promise<ReadyWorkItem[]> {
+}, iqlQuery?: string): Promise<ReadyWorkItem[]> {
   const client = await createConfiguredGraphQLClient();
   const result = await client.request<{
     readyWork: { nodes: ReadyWorkItem[] };
   }>(
     /* GraphQL */ `
-      query CliReadyWork($filter: ReadyWorkFilter) {
-        readyWork(filter: $filter) {
+      query CliReadyWork($filter: ReadyWorkFilter, $query: String) {
+        readyWork(filter: $filter, query: $query) {
           nodes {
             identifier
             title
@@ -1148,6 +1148,7 @@ async function fetchReadyWork(filter: {
         ...(filter.projectId ? { projectId: filter.projectId } : {}),
         ...(filter.priority !== undefined ? { priority: filter.priority } : {}),
       },
+      ...(iqlQuery ? { query: iqlQuery } : {}),
     },
   );
 
@@ -1574,16 +1575,18 @@ export function createProgram(): Command {
     .command('list')
     .description('List issues')
     .option('--team <key>', 'Filter issues by team key')
+    .option('--query <iql>', 'IQL filter, e.g. "state-type:STARTED priority:>=2 -label:blocked"')
     .option('--json', 'Output machine-readable JSON')
     .action(async function (
       this: Command,
       options: JsonOption & {
+        query?: string;
         team?: string;
       },
     ) {
       await runWithCliErrorHandling(async () => {
         const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
-        const issues = await fetchIssues(options.team);
+        const issues = await fetchIssues(options.team, options.query);
         process.stdout.write(formatOutput(context.json ? issues : toIssueListRows(issues), context));
       });
     });
@@ -1699,12 +1702,14 @@ export function createProgram(): Command {
     .option('--team <key>', 'Filter by team key')
     .option('--project-id <id>', 'Filter by project id')
     .option('--priority <priority>', 'Filter by exact priority')
+    .option('--query <iql>', 'IQL filter, e.g. "kind:ISSUE has:contract repository:involute"')
     .option('--json', 'Output machine-readable JSON')
     .action(async function (
       this: Command,
       options: JsonOption & {
         priority?: string;
         projectId?: string;
+        query?: string;
         repository?: string;
         team?: string;
       },
@@ -1725,7 +1730,7 @@ export function createProgram(): Command {
           ...(options.team ? { teamKey: options.team } : {}),
           ...(options.projectId ? { projectId: options.projectId } : {}),
           ...(priority !== undefined ? { priority } : {}),
-        });
+        }, options.query);
         process.stdout.write(
           formatOutput(
             context.json

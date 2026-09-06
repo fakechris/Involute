@@ -83,6 +83,21 @@ describe('GraphQL server core', () => {
     });
   });
 
+  it('reports readiness with a database ping on /ready', async () => {
+    const readyResponse = await fetch(`${server.url}/ready`);
+
+    expect(readyResponse.status).toBe(200);
+    expect(await readyResponse.json()).toEqual({ database: 'ok', status: 'ready' });
+  });
+
+  it('serves the machine-readable docs index on /llms.txt', async () => {
+    const docsResponse = await fetch(`${server.url}/llms.txt`);
+
+    expect(docsResponse.status).toBe(200);
+    expect(docsResponse.headers.get('content-type')).toContain('text/markdown');
+    expect(await docsResponse.text()).toContain('protocol_get_guide');
+  });
+
   it('forces active upload formats to download without same-origin execution', async () => {
     await writeFile(join(uploadsDir, 'proof.svg'), '<svg onload="alert(1)"></svg>');
     await prisma.attachment.create({
@@ -1108,9 +1123,20 @@ async function createTeamWithStates(
     },
   });
 
+  const typeByName: Record<string, 'BACKLOG' | 'UNSTARTED' | 'STARTED' | 'REVIEW' | 'COMPLETED' | 'CANCELED'> = {
+      Backlog: 'BACKLOG',
+      Ready: 'UNSTARTED',
+      'In Progress': 'STARTED',
+      'In Review': 'REVIEW',
+      Done: 'COMPLETED',
+      Canceled: 'CANCELED',
+    };
+
   await prismaClient.workflowState.createMany({
-    data: DEFAULT_WORKFLOW_STATE_NAMES.map((stateName) => ({
+    data: DEFAULT_WORKFLOW_STATE_NAMES.map((stateName, position) => ({
       name: stateName,
+      type: typeByName[stateName],
+      position,
       teamId: team.id,
     })),
   });

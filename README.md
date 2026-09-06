@@ -105,6 +105,8 @@ Optional but recommended server variables:
 - `SESSION_TTL_SECONDS` — browser session lifetime in seconds
 - `SEED_DEFAULT_ADMIN` — dev/test-only switch to seed `admin@involute.local`; keep this `false` outside local acceptance flows
 - `PRISMA_BASELINE_EXISTING_SCHEMA` — one-time upgrade switch for pre-migration databases that already have the schema but no `_prisma_migrations` history
+- `INVOLUTE_WEB_DIST` — serve the built web app from the API process (used by the AIO image; single container, single port)
+- `NOTIFICATION_EMAIL_ENABLED` — enable per-user email digests for kernel notifications (`decision.requested`, review outcomes, webhook disabled); requires `NOTIFICATION_EMAIL_SMTP_HOST` and `NOTIFICATION_EMAIL_FROM`, optional `NOTIFICATION_EMAIL_SMTP_PORT`/`_USER`/`_PASSWORD`
 
 Compatibility note:
 
@@ -115,6 +117,16 @@ Optional web runtime variables:
 - `VITE_INVOLUTE_GRAPHQL_URL` — override the web app GraphQL endpoint (default: `http://localhost:4200/graphql`)
 - `VITE_INVOLUTE_AUTH_TOKEN` — trusted local/dev bearer token for bypassing browser login
 - `VITE_INVOLUTE_VIEWER_ASSERTION` — signed viewer assertion to act as a specific user without exposing the server secret
+
+## Single-container self-host
+
+```bash
+./setup.sh --local    # generate .env, start docker-compose.aio.yml, wait for /ready
+```
+
+One `involute-aio` image runs the API, applies migrations, and serves the web
+app; only Postgres is external. For the full multi-container stack, keep
+reading.
 
 ## Local stack quick start
 

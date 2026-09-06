@@ -11,13 +11,21 @@ import { createYoga } from 'graphql-yoga';
 
 import { createAuthenticationPlugin, createGraphQLContext } from './auth.js';
 import { getAllowedBrowserOrigins, handleAuthRoutes } from './auth-routes.js';
+import { handleDocsRoutes } from './docs-routes.js';
 import { getExposedError } from './errors.js';
 import type { GoogleOAuthConfiguration } from './google-oauth.js';
 import { collectOutboundWebhookTargets, flushEventOutbox } from './event-outbox.js';
+import {
+  createNotificationEmailSender,
+  isNotificationEmailReady,
+  processNotificationEmails,
+  sweepStaleNotifications,
+} from './notification-email.js';
 import { handleMcpRequest } from './mcp.js';
 import { createGraphQLSchema } from './schema.js';
 import { getServerEnvironment, loadServerEnvironment, type ServerEnvironment } from './environment.js';
 import { getUploadsDirectory } from './uploads.js';
+import { handleWebStatic } from './web-static.js';
 
 loadServerEnvironment();
 
@@ -28,6 +36,8 @@ export const MAX_REQUEST_BODY_BYTES = 20 * 1024 * 1024;
 
 export interface StartServerOptions {
   appOrigin?: string;
+  /** Serve the built web app from the API process (single-container deploys). */
+  webDistDir?: string | null;
   allowAdminFallback?: boolean;
   authToken?: string;
   googleOAuth?: Partial<GoogleOAuthConfiguration>;
@@ -105,11 +115,30 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
 
   const uploadsDir = options.uploadsDir ?? getUploadsDirectory();
 
-  const httpServer = createServer((request, response) => {
+  const httpServer = createServer(async (request, response) => {
     if (request.method === 'GET' && getPathname(request.url) === '/health') {
       response.statusCode = 200;
       response.setHeader('content-type', 'text/plain; charset=utf-8');
       response.end('OK');
+      return;
+    }
+
+    // Readiness: unlike /health (process liveness, always 200), /ready pings
+    // the database so orchestrators and prod-smoke can distinguish "up" from
+    // "up and able to serve work".
+    if (request.method === 'GET' && getPathname(request.url) === '/ready') {
+      try {
+        await prisma.$queryRaw`SELECT 1`;
+        response.statusCode = 200;
+        response.setHeader('content-type', 'application/json; charset=utf-8');
+        response.end(JSON.stringify({ database: 'ok', status: 'ready' }));
+      } catch (error: unknown) {
+        console.error('Readiness check failed.');
+        console.error(error);
+        response.statusCode = 503;
+        response.setHeader('content-type', 'application/json; charset=utf-8');
+        response.end(JSON.stringify({ database: 'unavailable', status: 'not-ready' }));
+      }
       return;
     }
 
@@ -128,6 +157,23 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     }
 
     const pathname = getPathname(request.url);
+
+    if (
+      request.method === 'GET' &&
+      (pathname === '/llms.txt' || pathname === '/llms-full.txt' || pathname.startsWith('/docs/'))
+    ) {
+      handleDocsRoutes({ request, response }).catch((error: unknown) => {
+        console.error('Failed to handle docs route request.');
+        console.error(error);
+        if (!response.headersSent) {
+          response.statusCode = 500;
+          response.setHeader('content-type', 'text/plain; charset=utf-8');
+        }
+        response.end('Internal server error');
+      });
+      return;
+    }
+
     const mcpAuth = {
       allowAdminFallback: options.allowAdminFallback ?? environment.allowAdminFallback,
       authToken: options.authToken ?? environment.authToken,
@@ -173,6 +219,16 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
         sessionTtlSeconds: options.sessionTtlSeconds ?? environment.sessionTtlSeconds,
       }).then((handled) => {
         if (handled) {
+          return;
+        }
+
+        const webDistDir = options.webDistDir ?? process.env.INVOLUTE_WEB_DIST;
+        if (
+          webDistDir &&
+          request.method === 'GET' &&
+          pathname !== '/graphql'
+        ) {
+          handleWebStatic(webDistDir, pathname, response);
           return;
         }
 
@@ -227,8 +283,39 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
         console.error(error);
       }
     })();
-  }, 2000);
+  }, 10_000);
   outboxTimer?.unref();
+
+  // Email digests only run when SMTP is explicitly configured; the in-app
+  // notification surface works without any mail infrastructure.
+  let emailTimer: NodeJS.Timeout | undefined;
+  const notificationEmailRuntime = {
+    appOrigin: options.appOrigin ?? environment.appOrigin,
+    email: environment.notificationEmail,
+  };
+  if (isNotificationEmailReady(notificationEmailRuntime)) {
+    const sender = createNotificationEmailSender(notificationEmailRuntime.email);
+    emailTimer = setInterval(() => {
+      void processNotificationEmails(prisma, notificationEmailRuntime, sender).catch(
+        (error: unknown) => {
+          console.error('Failed to process notification emails.');
+          console.error(error);
+        },
+      );
+    }, 30_000);
+    emailTimer?.unref();
+  }
+
+  // Daily retention sweep: read notifications older than 90 days and unread
+  // notifications older than 180 days are removed.
+  let retentionTimer: NodeJS.Timeout | undefined;
+  retentionTimer = setInterval(() => {
+    void sweepStaleNotifications(prisma).catch((error: unknown) => {
+      console.error('Failed to sweep stale notifications.');
+      console.error(error);
+    });
+  }, 24 * 60 * 60_000);
+  retentionTimer?.unref();
 
   const address = httpServer.address();
 
@@ -243,6 +330,12 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     stop: async () => {
       if (outboxTimer) {
         clearInterval(outboxTimer);
+      }
+      if (emailTimer) {
+        clearInterval(emailTimer);
+      }
+      if (retentionTimer) {
+        clearInterval(retentionTimer);
       }
 
       await new Promise<void>((resolve, reject) => {

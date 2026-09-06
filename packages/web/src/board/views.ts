@@ -1,4 +1,5 @@
 import type { BoardGroupBy, BoardIssueGroup, IssueSummary, LabelSummary, UserSummary } from './types';
+import { looksLikeIql, matchesIql } from './iql-eval';
 import { readLocalStorageValue } from '../lib/storage';
 
 export type BoardSortField = 'identifier' | 'title' | 'updatedAt' | 'createdAt';
@@ -222,14 +223,21 @@ export function applyBoardViewState(
   users: UserSummary[],
 ): IssueSummary[] {
   const normalizedQuery = state.query.trim().toLowerCase();
+  const usesIql = normalizedQuery.length > 0 && looksLikeIql(state.query.trim());
   const usersById = new Map(users.map((user) => [user.id, user]));
 
   const nextIssues = issues.filter((issue) => {
     if (normalizedQuery) {
-      const haystack = [issue.identifier, issue.title, issue.description ?? ''].join(' ').toLowerCase();
+      if (usesIql) {
+        if (!matchesIql(state.query.trim(), issue, null)) {
+          return false;
+        }
+      } else {
+        const haystack = [issue.identifier, issue.title, issue.description ?? ''].join(' ').toLowerCase();
 
-      if (!haystack.includes(normalizedQuery)) {
-        return false;
+        if (!haystack.includes(normalizedQuery)) {
+          return false;
+        }
       }
     }
 

@@ -33,6 +33,16 @@ BASE_URL="${BASE_URL%/}"
 
 curl --connect-timeout 5 --max-time 15 -fsS "$BASE_URL/health" >/dev/null
 
+# Readiness (database ping) — new deploys must go green; older images that
+# predate /ready are tolerated with a warning so the smoke stays backward
+# compatible during rolling upgrades.
+READY_STATUS="$(curl --connect-timeout 5 --max-time 15 -sS -o /dev/null -w '%{http_code}' "$BASE_URL/ready")"
+case "$READY_STATUS" in
+  200) ;;
+  404) echo "Warning: /ready not found (pre-W7 image?); skipping readiness check." >&2 ;;
+  *) echo "/ready returned unexpected status: $READY_STATUS" >&2; exit 1 ;;
+esac
+
 SESSION_RESPONSE="$(mktemp)"
 SESSION_STATUS="$(
   curl --connect-timeout 5 --max-time 15 -sS -o "$SESSION_RESPONSE" -w '%{http_code}' \

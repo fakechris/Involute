@@ -187,10 +187,90 @@ describe('run and evidence', () => {
     };
 
     expect(await flushEventOutbox(prisma, targets, deliver as typeof fetch)).toEqual({ delivered: 0, failed: 1 });
-    expect(await flushEventOutbox(prisma, targets, deliver as typeof fetch)).toEqual({ delivered: 1, failed: 0 });
+    // The failed target is scheduled ~1 minute out: flushes before the backoff
+    // elapses skip it instead of burning attempts.
+    expect(await flushEventOutbox(prisma, targets, deliver as typeof fetch)).toEqual({ delivered: 0, failed: 0 });
+    expect(attempts.get(targets[1]!.url)).toBe(1);
+    const deliveryRow = await prisma.eventOutboxDelivery.findFirstOrThrow({
+      where: { eventId: event.id, deliveredAt: null },
+    });
+    expect(deliveryRow.nextAttemptAt?.getTime()).toBeGreaterThan(Date.now());
+
+    expect(await flushEventOutbox(prisma, targets, deliver as typeof fetch, 20, { now: Date.now() + 2 * 60_000 })).toEqual({ delivered: 1, failed: 0 });
     expect(attempts.get(targets[0]!.url)).toBe(1);
     expect(attempts.get(targets[1]!.url)).toBe(2);
     expect((await prisma.eventOutbox.findUniqueOrThrow({ where: { id: event.id } })).deliveredAt).not.toBeNull();
+  });
+
+  it('sends the v2 payload envelope with stable event id and per-attempt delivery id', async () => {
+    const event = await prisma.eventOutbox.create({
+      data: {
+        payload: { data: { title: 'Envelope' }, type: 'work.proposed', work: { id: '00000000-0000-4000-8000-000000000001', identifier: 'ENV-1' } },
+        type: 'work.proposed',
+      },
+    });
+    const target = { secret: 'envelope-secret', url: 'https://envelope.example.test/hook' };
+    const seen: Array<{ body: string; headers: Headers }> = [];
+    const failing = async (_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      seen.push({ body: String(init?.body), headers: new Headers(init?.headers) });
+      return new Response('nope', { status: 503 });
+    };
+
+    await flushEventOutbox(prisma, [target], failing as typeof fetch, 20, { now: Date.now() });
+    await flushEventOutbox(prisma, [target], failing as typeof fetch, 20, { now: Date.now() + 2 * 60_000 });
+
+    expect(seen.length).toBe(2);
+    const first = JSON.parse(seen[0]!.body) as Record<string, unknown>;
+    const second = JSON.parse(seen[1]!.body) as Record<string, unknown>;
+    expect(first['event_id']).toBe(event.id);
+    expect(second['event_id']).toBe(event.id);
+    expect(first['delivery_id']).not.toBe(second['delivery_id']);
+    expect(first['occurred_at']).toBe(second['occurred_at']);
+    expect(first['data']).toEqual({ title: 'Envelope' });
+    expect(seen[0]!.headers.get('involute-event-id')).toBe(event.id);
+    expect(seen[0]!.headers.get('involute-attempt')).toBe('1');
+    expect(seen[1]!.headers.get('involute-attempt')).toBe('2');
+    expect(seen[0]!.headers.get('involute-delivery')).toBe(first['delivery_id']);
+  });
+
+  it('does not retry non-retryable 4xx responses', async () => {
+    const event = await prisma.eventOutbox.create({
+      data: { payload: { data: {}, type: 'work.proposed' }, type: 'work.proposed' },
+    });
+    let posts = 0;
+    const target = { secret: 'rejecting-secret', url: 'https://reject.example.test/hook' };
+    const deliver = async (): Promise<Response> => {
+      posts += 1;
+      return new Response('bad request', { status: 400 });
+    };
+
+    expect(await flushEventOutbox(prisma, [target], deliver as typeof fetch)).toEqual({ delivered: 0, failed: 1 });
+    expect(posts).toBe(1);
+
+    const deliveryRow = await prisma.eventOutboxDelivery.findFirstOrThrow({ where: { eventId: event.id } });
+    expect(deliveryRow.attempts).toBe(5);
+    expect(deliveryRow.lastError).toContain('not retryable');
+    expect(deliveryRow.nextAttemptAt).toBeNull();
+
+    // Terminal for this target: the event is dead-lettered, not retried.
+    expect(
+      await flushEventOutbox(prisma, [target], deliver as typeof fetch, 20, { now: Date.now() + 24 * 60 * 60_000 }),
+    ).toEqual({ delivered: 0, failed: 0 });
+    expect((await prisma.eventOutbox.findUniqueOrThrow({ where: { id: event.id } })).deadLetteredAt).not.toBeNull();
+    expect(posts).toBe(1);
+  });
+
+  it('rate-limit responses keep the retry schedule', async () => {
+    const event = await prisma.eventOutbox.create({
+      data: { payload: { data: {}, type: 'work.proposed' }, type: 'work.proposed' },
+    });
+    const target = { secret: 'limited-secret', url: 'https://limited.example.test/hook' };
+    const deliver = async (): Promise<Response> => new Response('slow down', { status: 429 });
+
+    expect(await flushEventOutbox(prisma, [target], deliver as typeof fetch)).toEqual({ delivered: 0, failed: 1 });
+    const deliveryRow = await prisma.eventOutboxDelivery.findFirstOrThrow({ where: { eventId: event.id } });
+    expect(deliveryRow.attempts).toBe(1);
+    expect(deliveryRow.nextAttemptAt).not.toBeNull();
   });
 
   it('delivers once when the same webhook target is configured twice', async () => {
@@ -417,6 +497,47 @@ describe('run and evidence', () => {
     expect(committed.commitmentStatus).toBe('COMMITTED');
   });
 
+  it('delivers only matching work to IQL-filtered subscriptions', async () => {
+    await prisma.webhookSubscription.create({
+      data: {
+        eventTypes: ['work.committed'],
+        filterQuery: 'state-type:STARTED',
+        secret: 'filtered-secret',
+        teamId: team.id,
+        url: 'https://iql-filter.example.test/hook',
+      },
+    });
+    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'IQL routed' });
+    const startedStateRow = await prisma.workflowState.findFirstOrThrow({
+      where: { teamId: team.id, type: 'STARTED' },
+    });
+    const committed = await commitWork(
+      prisma,
+      candidate.id,
+      { acceptance: 'routing drill', assigneeId: human.id, expectedRevision: candidate.revision },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    );
+    await prisma.issue.update({
+      where: { id: committed.id },
+      data: { stateId: startedStateRow.id },
+    });
+
+    const delivered: string[] = [];
+    const targets = await collectOutboundWebhookTargets(prisma, null, null);
+    await flushEventOutbox(
+      prisma,
+      targets,
+      (async (url: string | URL | Request, init?: RequestInit) => {
+        delivered.push(String(init?.body));
+        return new Response('ok', { status: 200 });
+      }) as unknown as typeof fetch,
+    );
+
+    expect(delivered.length).toBe(1);
+    expect(delivered[0]).toContain('work.committed');
+    expect(delivered[0]).toContain(committed.identifier);
+  });
+
   it('falls back to env targets when no subscription exists', async () => {    expect(await collectOutboundWebhookTargets(prisma, 'https://env.example.test/hook', 'env-secret')).toEqual([
       { secret: 'env-secret', url: 'https://env.example.test/hook' },
     ]);
@@ -437,34 +558,48 @@ describe('run and evidence', () => {
     });
     const failing = async (): Promise<Response> => new Response('down', { status: 503 });
 
-    for (let attempt = 0; attempt < 8; attempt += 1) {
+    // Walk the delivery through all five backoff slots (1m..10h).
+    for (let attempt = 0; attempt < 5; attempt += 1) {
       const targets = await collectOutboundWebhookTargets(prisma, null, null);
-      expect(await flushEventOutbox(prisma, targets, failing as typeof fetch)).toEqual({ delivered: 0, failed: 1 });
+      const result = await flushEventOutbox(prisma, targets, failing as typeof fetch, 20, {
+        now: Date.now() + attempt * 11 * 60 * 60_000,
+      });
+      expect(result).toEqual({ delivered: 0, failed: 1 });
     }
     // Exhausted but not yet disabled: only one counted failure so far.
     const stillEnabled = await prisma.webhookSubscription.findUniqueOrThrow({ where: { id: subscription.id } });
     expect(stillEnabled.enabled).toBe(true);
     expect(stillEnabled.consecutiveFailures).toBe(1);
 
-    // An already-exhausted delivery on a fresh event pushes the counter over.
-    const another = await prisma.eventOutbox.create({
+    // A second event walking the full schedule pushes the counter over: only
+    // terminal (exhausted) outcomes count toward auto-disable.
+    await prisma.eventOutbox.create({
       data: { payload: { data: {}, type: 'work.proposed' }, type: 'work.proposed' },
     });
-    const targetsOnce = await collectOutboundWebhookTargets(prisma, null, null);
-    expect(await flushEventOutbox(prisma, targetsOnce, failing as typeof fetch)).toEqual({ delivered: 0, failed: 1 });
-    const delivery = await prisma.eventOutboxDelivery.findFirstOrThrow({ where: { eventId: another.id } });
-    await prisma.eventOutboxDelivery.update({ where: { id: delivery.id }, data: { attempts: 8 } });
     await prisma.webhookSubscription.update({
       where: { id: subscription.id },
       data: { consecutiveFailures: 9 },
     });
-    const targets = await collectOutboundWebhookTargets(prisma, null, null);
-    expect(await flushEventOutbox(prisma, targets, failing as typeof fetch)).toEqual({ delivered: 0, failed: 1 });
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      const targets = await collectOutboundWebhookTargets(prisma, null, null);
+      const result = await flushEventOutbox(prisma, targets, failing as typeof fetch, 20, {
+        now: Date.now() + attempt * 11 * 60 * 60_000,
+      });
+      if (attempt === 5) {
+        expect(result).toEqual({ delivered: 0, failed: 1 });
+      }
+    }
     const after = await prisma.webhookSubscription.findUniqueOrThrow({ where: { id: subscription.id } });
     expect(after.enabled).toBe(false);
     expect(after.consecutiveFailures).toBe(10);
     // Disabled subscriptions stop minimal traffic: collector yields nothing.
     expect(await collectOutboundWebhookTargets(prisma, null, null)).toEqual([]);
+    // Auto-disable is announced as an internal event for the notification projector.
+    const disabledEvent = await prisma.eventOutbox.findFirst({
+      where: { type: 'webhook.disabled' },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(disabledEvent).toBeTruthy();
   });
 
   it('completing the same run twice does not duplicate the review transition', async () => {
