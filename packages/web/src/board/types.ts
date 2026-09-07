@@ -101,17 +101,31 @@ export interface IssueSummary {
     nodes: LabelSummary[];
   };
   assignee: UserSummary | null;
+  claim?: {
+    id: string;
+    leaseUntil: string;
+    actor: {
+      id: string;
+      name?: string | null;
+      email?: string | null;
+      actorKind: 'HUMAN' | 'AGENT' | 'SERVICE';
+    };
+  } | null;
   children: {
     nodes: Array<{
       id: string;
       identifier: string;
       title: string;
+      kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
+      state?: WorkflowStateSummary;
+      assignee?: UserSummary | null;
     }>;
   };
   parent?: {
     id: string;
     identifier: string;
     title: string;
+    kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
   } | null;
   comments: {
     nodes: CommentSummary[];
@@ -240,6 +254,8 @@ export interface IssueCreateMutationVariables {
     priority?: number;
     projectId?: string;
     cycleId?: string;
+    kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
+    assigneeId?: string | null;
   };
 }
 
@@ -276,6 +292,8 @@ export interface IssueUpdateMutationVariables {
     title?: string;
     projectId?: string | null;
     cycleId?: string | null;
+    parentId?: string | null;
+    kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
   };
 }
 
@@ -450,3 +468,161 @@ export interface UserUpdateMutationData {
 export interface UserUpdateMutationVariables {
   input: { name?: string; email?: string };
 }
+
+export interface ProjectIssueSummary {
+  id: string;
+  identifier: string;
+  title: string;
+  description?: string | null;
+  priority: number;
+  kind: 'PROJECT';
+  createdAt: string;
+  updatedAt: string;
+  state: WorkflowStateSummary;
+  assignee: UserSummary | null;
+  team: {
+    id: string;
+    key: string;
+    name?: string;
+  };
+  children: {
+    nodes: Array<{
+      id: string;
+      identifier: string;
+      title: string;
+      state: WorkflowStateSummary;
+      assignee: UserSummary | null;
+    }>;
+  };
+}
+
+export interface ProjectIssuesQueryData {
+  issues: {
+    nodes: ProjectIssueSummary[];
+  };
+}
+
+export interface ProjectIssuesQueryVariables {
+  teamKey?: string | null;
+  query?: string | null;
+}
+
+export interface WorkLinkMutationData {
+  workLink: {
+    success: boolean;
+    link: {
+      id: string;
+      type: string;
+      from: { id: string; identifier: string };
+      to: { id: string; identifier: string };
+    } | null;
+  };
+}
+
+export interface WorkLinkMutationVariables {
+  fromId: string;
+  toId: string;
+  type: string;
+}
+
+export interface WorkLinkDeleteMutationData {
+  workLinkDelete: {
+    success: boolean;
+    id: string | null;
+  };
+}
+
+export interface WorkLinkDeleteMutationVariables {
+  id: string;
+}
+
+export interface MilestoneIssueSummary {
+  id: string;
+  identifier: string;
+  title: string;
+  description?: string | null;
+  outcome?: string | null;
+  scope?: string | null;
+  acceptance?: string | null;
+  priority: number;
+  kind: 'MILESTONE';
+  createdAt: string;
+  updatedAt: string;
+  state: WorkflowStateSummary;
+  assignee: UserSummary | null;
+  team: {
+    id: string;
+    key: string;
+    name?: string;
+  };
+  children: {
+    nodes: Array<{
+      id: string;
+      identifier: string;
+      title: string;
+      kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
+      state: WorkflowStateSummary;
+      assignee: UserSummary | null;
+    }>;
+  };
+}
+
+export interface MilestoneIssuesQueryData {
+  issues: {
+    nodes: MilestoneIssueSummary[];
+  };
+}
+
+export interface MilestoneIssuesQueryVariables {
+  teamKey?: string | null;
+  query?: string | null;
+}
+
+export interface NotificationRecordItem {
+  id: string;
+  type: string;
+  payload: Record<string, unknown> | null;
+  readAt: string | null;
+  createdAt: string;
+  work: {
+    id: string;
+    identifier: string;
+    title: string;
+    kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
+    state?: WorkflowStateSummary | null;
+  } | null;
+}
+
+export interface NotificationsPageQueryData {
+  notifications: {
+    nodes: NotificationRecordItem[];
+  };
+  unreadNotificationCount: number;
+}
+
+export interface NotificationsPageQueryVariables {
+  first?: number | null;
+  unreadOnly?: boolean | null;
+}
+
+export interface NotificationMarkReadMutationData {
+  notificationMarkRead: {
+    success: boolean;
+    notification?: {
+      id: string;
+      readAt: string | null;
+    } | null;
+  };
+}
+
+export interface NotificationMarkReadMutationVariables {
+  id: string;
+}
+
+export interface NotificationsMarkAllReadMutationData {
+  notificationsMarkAllRead: {
+    count: number;
+    success: boolean;
+  };
+}
+

@@ -9,6 +9,8 @@ import {
   ISSUE_PAGE_QUERY,
   ISSUE_UPDATE_MUTATION,
   PROJECTS_QUERY,
+  PROJECT_ISSUES_QUERY,
+  WORK_LINK_MUTATION,
   CYCLES_QUERY,
 } from '../board/queries';
 import type {
@@ -26,6 +28,10 @@ import type {
   CommentSummary,
   ProjectsQueryData,
   ProjectsQueryVariables,
+  ProjectIssuesQueryData,
+  ProjectIssuesQueryVariables,
+  WorkLinkMutationData,
+  WorkLinkMutationVariables,
   CyclesQueryData,
   CyclesQueryVariables,
 } from '../board/types';
@@ -65,10 +71,15 @@ export function IssuePage() {
   );
 
   const teamId = data?.issue?.team.id ?? '';
-  const { data: projectsData } = useQuery<ProjectsQueryData, ProjectsQueryVariables>(PROJECTS_QUERY, {
-    skip: !teamId,
-    variables: { teamId },
-  });
+  const teamKey = data?.issue?.team.key ?? '';
+  const { data: projectIssuesData } = useQuery<ProjectIssuesQueryData, ProjectIssuesQueryVariables>(
+    PROJECT_ISSUES_QUERY,
+    {
+      skip: !teamKey,
+      variables: { teamKey },
+    },
+  );
+  const [runWorkLink] = useMutation<WorkLinkMutationData, WorkLinkMutationVariables>(WORK_LINK_MUTATION);
   const { data: cyclesData } = useQuery<CyclesQueryData, CyclesQueryVariables>(CYCLES_QUERY, {
     skip: !teamId,
     variables: { teamId },
@@ -912,19 +923,41 @@ export function IssuePage() {
               <select
                 aria-label="Issue project"
                 className="issue-panel__prop-select"
-                value={activeIssue.projectId ?? ''}
+                value={activeIssue.parent?.kind === 'PROJECT' ? activeIssue.parent.id : (activeIssue.projectId ?? '')}
                 disabled={isSavingState}
-                onChange={(e) => {
-                  const val = e.target.value || null;
-                  void persistIssueUpdate(activeIssue, { projectId: val }, (current) => ({
-                    ...current,
-                    projectId: val,
-                  })).catch(() => undefined);
+                onChange={async (e) => {
+                  const val = e.target.value;
+                  const projectList = projectIssuesData?.issues?.nodes ?? [];
+                  if (!val) {
+                    await persistIssueUpdate(activeIssue, { parentId: null }, (current) => ({
+                      ...current,
+                      parent: null,
+                      projectId: null,
+                    }));
+                  } else {
+                    const selectedProj = projectList.find((p) => p.id === val);
+                    await runWorkLink({
+                      variables: {
+                        fromId: val,
+                        toId: activeIssue.id,
+                        type: 'CONTAINS',
+                      },
+                    });
+                    setLocalIssue((current) => current ? {
+                      ...current,
+                      parent: selectedProj ? {
+                        id: selectedProj.id,
+                        identifier: selectedProj.identifier,
+                        title: selectedProj.title,
+                        kind: 'PROJECT',
+                      } : null,
+                    } : null);
+                  }
                 }}
               >
                 <option value="">No project</option>
-                {(projectsData?.projects?.nodes ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
+                {(projectIssuesData?.issues?.nodes ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>{p.identifier} — {p.title}</option>
                 ))}
               </select>
             </div>

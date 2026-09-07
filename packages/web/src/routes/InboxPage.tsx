@@ -1,25 +1,24 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@apollo/client/react';
+import { useMutation, useQuery } from '@apollo/client/react';
 
-import { BOARD_PAGE_QUERY } from '../board/queries';
-import type { BoardPageQueryData, BoardPageQueryVariables, IssueSummary } from '../board/types';
-import { IcoInbox } from '../components/Icons';
-import { Avatar } from '../components/Primitives';
+import {
+  NOTIFICATIONS_PAGE_QUERY,
+  NOTIFICATION_MARK_READ_MUTATION,
+  NOTIFICATIONS_MARK_ALL_READ_MUTATION,
+} from '../board/queries';
+import type {
+  NotificationRecordItem,
+  NotificationsPageQueryData,
+  NotificationsPageQueryVariables,
+  NotificationMarkReadMutationData,
+  NotificationMarkReadMutationVariables,
+  NotificationsMarkAllReadMutationData,
+} from '../board/types';
+import { IcoCheck, IcoInbox } from '../components/Icons';
+import { Btn } from '../components/Primitives';
 
 type InboxFilter = 'all' | 'unread';
-
-interface InboxEntry {
-  id: string;
-  ago: string;
-  at: string;
-  body: string;
-  fromInitials: string;
-  fromName: string;
-  issue: IssueSummary;
-  kind: 'comment' | 'assigned' | 'status';
-  unread: boolean;
-}
 
 function formatRelative(iso: string): string {
   const ts = new Date(iso).getTime();
@@ -44,88 +43,95 @@ function formatRelative(iso: string): string {
   return `${Math.round(diff / (7 * day))}w`;
 }
 
-function getInitials(name: string | null | undefined): string {
-  if (!name) {
-    return '?';
+function formatNotificationType(type: string): string {
+  switch (type) {
+    case 'decision.requested':
+      return 'Decision requested';
+    case 'run.completed':
+      return 'Run completed';
+    case 'work.accepted':
+      return 'Work accepted';
+    case 'contract.breached':
+      return 'Contract breached';
+    case 'evidence.submitted':
+      return 'Evidence submitted';
+    case 'webhook.disabled':
+      return 'Webhook disabled';
+    default:
+      return type
+        .split('.')
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
   }
-  return name
-    .split(/\s+/)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('')
-    .slice(0, 2);
 }
 
-function deriveEntries(issues: IssueSummary[]): InboxEntry[] {
-  const entries: InboxEntry[] = [];
-
-  for (const issue of issues) {
-    for (const comment of issue.comments.nodes) {
-      entries.push({
-        id: `cmt-${comment.id}`,
-        ago: formatRelative(comment.createdAt),
-        at: comment.createdAt,
-        body: comment.body,
-        fromInitials: getInitials(comment.user?.name ?? comment.user?.email ?? null),
-        fromName: comment.user?.name ?? comment.user?.email ?? 'Someone',
-        issue,
-        kind: 'comment',
-        unread: Date.now() - new Date(comment.createdAt).getTime() < 24 * 60 * 60 * 1000,
-      });
-    }
-
-    if (issue.assignee) {
-      entries.push({
-        id: `asn-${issue.id}`,
-        ago: formatRelative(issue.updatedAt),
-        at: issue.updatedAt,
-        body: 'assigned this to you',
-        fromInitials: getInitials(issue.assignee.name ?? issue.assignee.email ?? null),
-        fromName: issue.assignee.name ?? issue.assignee.email ?? 'Someone',
-        issue,
-        kind: 'assigned',
-        unread: Date.now() - new Date(issue.updatedAt).getTime() < 24 * 60 * 60 * 1000,
-      });
-    }
-  }
-
-  entries.sort((left, right) => {
-    if (left.unread !== right.unread) {
-      return left.unread ? -1 : 1;
-    }
-    return new Date(right.at).getTime() - new Date(left.at).getTime();
-  });
-
-  return entries;
+function getPayloadSummary(payload: Record<string, unknown> | null): string | null {
+  if (!payload) return null;
+  if (typeof payload.summary === 'string' && payload.summary) return payload.summary;
+  if (typeof payload.message === 'string' && payload.message) return payload.message;
+  if (typeof payload.reason === 'string' && payload.reason) return payload.reason;
+  if (typeof payload.decision === 'string' && payload.decision) return `Decision: ${payload.decision}`;
+  return null;
 }
-
-const INBOX_DISPLAY_LIMIT = 24;
 
 export function InboxPage() {
   const navigate = useNavigate();
   const [filter, setFilter] = useState<InboxFilter>('all');
-  const { data, loading, error } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(
-    BOARD_PAGE_QUERY,
+
+  const queryVariables: NotificationsPageQueryVariables = { first: 50 };
+  if (filter === 'unread') {
+    queryVariables.unreadOnly = true;
+  }
+
+  const { data, loading, error, refetch } = useQuery<
+    NotificationsPageQueryData,
+    NotificationsPageQueryVariables
+  >(NOTIFICATIONS_PAGE_QUERY, {
+    fetchPolicy: 'cache-and-network',
+    variables: queryVariables,
+  });
+
+  const [runMarkRead] = useMutation<
+    NotificationMarkReadMutationData,
+    NotificationMarkReadMutationVariables
+  >(NOTIFICATION_MARK_READ_MUTATION, {
+    update(cache, { data: mutationData }) {
+      if (mutationData?.notificationMarkRead.success) {
+        void refetch();
+      }
+    },
+  });
+
+  const [runMarkAllRead, { loading: markingAll }] = useMutation<NotificationsMarkAllReadMutationData>(
+    NOTIFICATIONS_MARK_ALL_READ_MUTATION,
     {
-      fetchPolicy: 'cache-and-network',
-      variables: { first: 60 },
+      onCompleted() {
+        void refetch();
+      },
     },
   );
 
-  const entries = useMemo(() => deriveEntries(data?.issues.nodes ?? []), [data?.issues.nodes]);
-  const visibleEntries = useMemo(() => {
-    const filtered = filter === 'unread' ? entries.filter((entry) => entry.unread) : entries;
-    return filtered.slice(0, INBOX_DISPLAY_LIMIT);
-  }, [entries, filter]);
+  const notifications = useMemo(() => data?.notifications.nodes ?? [], [data?.notifications.nodes]);
+  const unreadCount = data?.unreadNotificationCount ?? 0;
 
-  const unreadCount = entries.filter((entry) => entry.unread).length;
-
-  const actionVerb = (kind: InboxEntry['kind']): string => {
-    switch (kind) {
-      case 'comment': return 'commented on';
-      case 'assigned': return 'assigned you';
-      case 'status': return 'changed status of';
-      default: return 'updated';
+  const handleOpenItem = (item: NotificationRecordItem) => {
+    if (!item.readAt) {
+      void runMarkRead({ variables: { id: item.id } });
     }
+    if (item.work) {
+      navigate(`/work/${item.work.id}`);
+    }
+  };
+
+  const handleMarkItemRead = (e: React.MouseEvent, item: NotificationRecordItem) => {
+    e.stopPropagation();
+    if (!item.readAt) {
+      void runMarkRead({ variables: { id: item.id } });
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    await runMarkAllRead();
   };
 
   return (
@@ -137,6 +143,17 @@ export function InboxPage() {
           {unreadCount}
         </span>
         <div style={{ flex: 1 }} />
+        {unreadCount > 0 && (
+          <Btn
+            variant="ghost"
+            size="sm"
+            disabled={markingAll}
+            onClick={() => void handleMarkAllRead()}
+            style={{ marginRight: 8 }}
+          >
+            Mark all read
+          </Btn>
+        )}
         <div className="inbox-page__toggle" role="tablist" aria-label="Inbox filter">
           {(['all', 'unread'] as const).map((key) => (
             <button
@@ -154,43 +171,116 @@ export function InboxPage() {
       </header>
 
       <div className="inbox-page__list">
-        {error && entries.length === 0 ? (
+        {error && notifications.length === 0 ? (
           <p className="inbox-page__empty" role="alert">
-            Could not load inbox updates. Confirm the API server is running and try again.
+            Could not load inbox notifications. Confirm the API server is running and try again.
           </p>
-        ) : loading && entries.length === 0 ? (
+        ) : loading && notifications.length === 0 ? (
           <p className="inbox-page__empty">Loading…</p>
-        ) : visibleEntries.length === 0 ? (
+        ) : notifications.length === 0 ? (
           <p className="inbox-page__empty">
-            {filter === 'unread' ? 'No unread updates.' : 'Inbox is empty.'}
+            {filter === 'unread' ? 'No unread notifications.' : 'Inbox is empty.'}
           </p>
         ) : (
-          visibleEntries.map((entry) => (
-            <button
-              type="button"
-              key={entry.id}
-              className={`inbox-item${entry.unread ? ' inbox-item--unread' : ''}`}
-              onClick={() => navigate(`/issue/${entry.issue.id}`)}
-            >
-              <div className="inbox-avatar-wrap">
-                <Avatar user={{ name: entry.fromName }} size={24} />
-                {entry.unread && <span className="inbox-unread-dot" />}
-              </div>
-              <div className="inbox-item__content">
-                <div className="inbox-item__line">
-                  <strong>{entry.fromName}</strong>
-                  <span style={{ color: 'var(--fg-dim)' }}> {actionVerb(entry.kind)} </span>
-                  <span className="mono" style={{ color: 'var(--fg-muted)' }}>
-                    {entry.issue.identifier}
-                  </span>
+          notifications.map((item) => {
+            const isUnread = !item.readAt;
+            const summary = getPayloadSummary(item.payload);
+
+            return (
+              <div
+                role="button"
+                tabIndex={0}
+                key={item.id}
+                className={`inbox-item${isUnread ? ' inbox-item--unread' : ''}`}
+                onClick={() => handleOpenItem(item)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleOpenItem(item);
+                  }
+                }}
+              >
+                <div className="inbox-avatar-wrap">
+                  <div
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: 6,
+                      background: 'var(--bg-hover)',
+                      border: '1px solid var(--border)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: 'var(--fg-muted)',
+                    }}
+                  >
+                    ⚡
+                  </div>
+                  {isUnread && <span className="inbox-unread-dot" />}
                 </div>
-                <div className="inbox-item__issue truncate">
-                  {entry.issue.title}
+
+                <div className="inbox-item__content">
+                  <div className="inbox-item__line">
+                    <strong>{formatNotificationType(item.type)}</strong>
+                    {item.work && (
+                      <>
+                        <span style={{ color: 'var(--fg-dim)' }}> on </span>
+                        <span className="mono" style={{ color: 'var(--fg-muted)' }}>
+                          {item.work.identifier}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  {item.work && (
+                    <div className="inbox-item__issue truncate">
+                      {item.work.title}
+                    </div>
+                  )}
+                  {summary && (
+                    <div
+                      style={{
+                        fontSize: 12.5,
+                        color: 'var(--fg-dim)',
+                        marginTop: 2,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {summary}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <span className="inbox-item__time">{formatRelative(item.createdAt)}</span>
+                  {isUnread && (
+                    <button
+                      type="button"
+                      title="Mark as read"
+                      aria-label="Mark as read"
+                      onClick={(e) => handleMarkItemRead(e, item)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 4,
+                        cursor: 'pointer',
+                        color: 'var(--fg-dim)',
+                        borderRadius: 4,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <IcoCheck size={12} />
+                    </button>
+                  )}
                 </div>
               </div>
-              <span className="inbox-item__time">{entry.ago}</span>
-            </button>
-          ))
+            );
+          })
         )}
       </div>
     </main>

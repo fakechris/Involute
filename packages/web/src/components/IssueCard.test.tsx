@@ -158,4 +158,26 @@ describe('IssueCard', () => {
     expect(setNodeRef.mock.calls[0]?.[0]).toBeInstanceOf(HTMLElement);
     expect(setNodeRef.mock.calls[0]?.[0]).toHaveAttribute('data-testid', 'issue-card-issue-1');
   });
+
+  it('renders kind badge when kind is PROJECT', () => {
+    const issue = makeIssue({ kind: 'PROJECT' });
+    render(<IssueCard issue={issue} />);
+    expect(screen.getByText('PROJECT')).toBeInTheDocument();
+  });
+
+  it('renders claim indicator when agent claim is active', () => {
+    const issue = makeIssue({
+      claim: {
+        id: 'claim-1',
+        leaseUntil: '2026-09-07T12:00:00Z',
+        actor: {
+          id: 'agent-1',
+          name: 'Droid',
+          actorKind: 'AGENT',
+        },
+      },
+    });
+    render(<IssueCard issue={issue} />);
+    expect(screen.getByText('🤖 Droid')).toBeInTheDocument();
+  });
 });

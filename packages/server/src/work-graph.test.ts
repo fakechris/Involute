@@ -172,6 +172,105 @@ describe('work graph GraphQL facade', () => {
     expect(audits[1]?.surface).toBe('graphql');
   });
 
+  it('creates project issues and manages CONTAINS links via workLink and workLinkDelete', async () => {
+    const projectCreate = await postGraphQL({
+      query: `
+        mutation CreateProjectIssue($input: IssueCreateInput!) {
+          issueCreate(input: $input) {
+            success
+            issue {
+              id
+              identifier
+              kind
+              title
+              assignee { id name }
+            }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          teamId: team.id,
+          title: 'Infrastructure Project',
+          kind: 'PROJECT',
+          assigneeId: viewer.id,
+          stateId: ready.id,
+        },
+      },
+    });
+
+    expectGraphQLSuccess(projectCreate);
+    expect(projectCreate.body.data.issueCreate.success).toBe(true);
+    const project = projectCreate.body.data.issueCreate.issue;
+    expect(project.kind).toBe('PROJECT');
+    expect(project.assignee.id).toBe(viewer.id);
+
+    const taskCreate = await postGraphQL({
+      query: `
+        mutation CreateTask($input: IssueCreateInput!) {
+          issueCreate(input: $input) {
+            success
+            issue { id identifier kind }
+          }
+        }
+      `,
+      variables: {
+        input: {
+          teamId: team.id,
+          title: 'Child Task',
+          stateId: ready.id,
+        },
+      },
+    });
+    const task = taskCreate.body.data.issueCreate.issue;
+
+    const linkCreate = await postGraphQL({
+      query: `
+        mutation LinkWork($fromId: String!, $toId: String!, $type: WorkLinkType!) {
+          workLink(fromId: $fromId, toId: $toId, type: $type) {
+            success
+            link { id type }
+          }
+        }
+      `,
+      variables: {
+        fromId: project.id,
+        toId: task.id,
+        type: 'CONTAINS',
+      },
+    });
+
+    expectGraphQLSuccess(linkCreate);
+    expect(linkCreate.body.data.workLink.success).toBe(true);
+    const linkId = linkCreate.body.data.workLink.link.id;
+
+    const taskCheck = await prisma.issue.findUniqueOrThrow({
+      where: { id: task.id },
+      select: { parentId: true },
+    });
+    expect(taskCheck.parentId).toBe(project.id);
+
+    const linkDelete = await postGraphQL({
+      query: `
+        mutation DeleteWorkLink($id: String!) {
+          workLinkDelete(id: $id) {
+            success
+            id
+          }
+        }
+      `,
+      variables: { id: linkId },
+    });
+    expectGraphQLSuccess(linkDelete);
+    expect(linkDelete.body.data.workLinkDelete.success).toBe(true);
+
+    const taskAfterDelete = await prisma.issue.findUniqueOrThrow({
+      where: { id: task.id },
+      select: { parentId: true },
+    });
+    expect(taskAfterDelete.parentId).toBeNull();
+  });
+
   it('returns workContext and readyWork without requiring IssueFilter composition', async () => {
     const parentCreate = await postGraphQL({
       query: `

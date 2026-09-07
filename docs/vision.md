@@ -40,14 +40,14 @@ The Linear import path remains a way to load historical commitments. It is no lo
 - Treat the existing GraphQL Issue API as a generic compatibility facade for web and CLI
 - Keep leftover Linear shell routes frozen: Inbox, Cycles, Projects, My Issues, Views
 
-### Project vocabulary boundary
+### Work Graph Convergence (Single Source of Truth)
 
-There are two deliberately separate concepts while the Linear-compatible shell remains:
+The historical dual-track models (legacy Linear shell vs Work Graph Kernel) have converged onto the Work Graph:
 
-- `Issue.kind = PROJECT` is a work-graph node: an agent-visible project contract that participates in typed links, claims, runs, evidence, and review.
-- GraphQL `Project` / `Issue.projectId` is frozen legacy projection metadata used by the existing Web/CLI compatibility surface.
-
-They do not share identity and are not synchronized. New kernel workflows model project hierarchy with a `PROJECT` work node plus `CONTAINS` links. The legacy `Project` entity may be read or maintained for compatibility, but it must not acquire new product semantics.
+- **Projects (`Issue.kind = PROJECT`)**: Projects are top-level work nodes on the Work Graph. Sub-issues and child tasks attach via typed `CONTAINS` work links. The Web `/projects` page and the Issue detail project dropdown query and operate on `kind: PROJECT` work nodes directly.
+- **Milestones (`Issue.kind = MILESTONE`)**: Deliverable goals and release targets are modeled as `MILESTONE` work nodes, tracking progress across child tasks linked via `CONTAINS`. The Web `/cycles` (and `/milestones`) view prioritizes Work Graph Milestones.
+- **Inbox & Notifications**: The Web `/inbox` route consumes the real transactional `Notification` system (`notifications`, `unreadNotificationCount`), giving human operators a live center for triage requests, completed runs, and review notifications.
+- **Legacy Compatibility**: The legacy GraphQL `Project` and `Cycle` tables/queries/mutations remain marked `@deprecated` for backward compatibility, but are no longer the primary path for product workflows.
 
 ## Four state machines (do not collapse)
 
