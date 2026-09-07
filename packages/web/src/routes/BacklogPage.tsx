@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import type { IssueSummary, TeamSummary, UserSummary } from '../board/types';
 import {
@@ -178,6 +179,26 @@ export function BacklogPage({
 
   return (
     <main className="backlog-page">
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '8px 16px',
+          background: 'var(--bg-raised)',
+          borderBottom: '1px solid var(--border)',
+          fontSize: 13,
+          color: 'var(--fg-muted)',
+        }}
+      >
+        <span>
+          <strong>Committed Backlog:</strong> Prioritized work items queued for future execution. For agent proposals and candidate work awaiting human triage, view{' '}
+          <Link to="/candidates" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
+            Candidates
+          </Link>
+          .
+        </span>
+      </div>
       <section className="backlog-toolbar">
         <div className="backlog-toolbar__primary">
           <label className="field-stack backlog-toolbar__search">

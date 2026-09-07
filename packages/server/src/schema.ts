@@ -49,6 +49,7 @@ import {
   WEBHOOK_EVENT_TYPE_INVALID_MESSAGE,
   WEBHOOK_NOT_FOUND_MESSAGE,
   WEBHOOK_URL_INVALID_MESSAGE,
+  WORK_LINK_NOT_FOUND_MESSAGE,
 } from './errors.js';
 import {
   assertCanDeleteComment,
@@ -73,7 +74,7 @@ import { issueAgentCredential, parseAgentScopeList } from './agent-credentials.j
 import type { AgentScope } from './agent-credentials.js';
 import { WORK_EVENT_TYPES } from './event-outbox.js';
 import { createComment, createIssue, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
-import { createWorkLink, listIncidentLinks } from './link-service.js';
+import { createWorkLink, deleteWorkLink, listIncidentLinks } from './link-service.js';
 import { writeActorFromViewer } from './work-service.js';
 import { getUploadsDirectory } from './uploads.js';
 import {
@@ -229,10 +230,10 @@ const typeDefs = /* GraphQL */ `
     teams(filter: TeamFilter): TeamConnection!
     issueLabels(filter: IssueLabelFilter): IssueLabelConnection!
     users: UserConnection!
-    projects(teamId: String!): ProjectConnection!
-    project(id: String!): Project
-    cycles(teamId: String!): CycleConnection!
-    cycle(id: String!): Cycle
+    projects(teamId: String!): ProjectConnection! @deprecated(reason: "Use issues query with kind: PROJECT and CONTAINS links instead.")
+    project(id: String!): Project @deprecated(reason: "Use issue query with kind: PROJECT instead.")
+    cycles(teamId: String!): CycleConnection! @deprecated(reason: "Use issues query with kind: MILESTONE and CONTAINS links instead.")
+    cycle(id: String!): Cycle @deprecated(reason: "Use issue query with kind: MILESTONE instead.")
     workContext(id: String!): WorkContext
     readyWork(filter: ReadyWorkFilter, query: String): IssueConnection!
     agentCredentials(teamId: String!): [AgentCredentialRecord!]!
@@ -250,16 +251,17 @@ const typeDefs = /* GraphQL */ `
     teamUpdateAccess(input: TeamUpdateAccessInput!): TeamUpdateAccessPayload!
     teamMembershipUpsert(input: TeamMembershipUpsertInput!): TeamMembershipUpsertPayload!
     teamMembershipRemove(input: TeamMembershipRemoveInput!): TeamMembershipRemovePayload!
-    projectCreate(input: ProjectCreateInput!): ProjectCreatePayload!
-    projectUpdate(id: String!, input: ProjectUpdateInput!): ProjectUpdatePayload!
-    projectDelete(id: String!): ProjectDeletePayload!
-    cycleCreate(input: CycleCreateInput!): CycleCreatePayload!
-    cycleUpdate(id: String!, input: CycleUpdateInput!): CycleUpdatePayload!
-    cycleDelete(id: String!): CycleDeletePayload!
+    projectCreate(input: ProjectCreateInput!): ProjectCreatePayload! @deprecated(reason: "Use issueCreate with kind: PROJECT instead.")
+    projectUpdate(id: String!, input: ProjectUpdateInput!): ProjectUpdatePayload! @deprecated(reason: "Use issueUpdate instead.")
+    projectDelete(id: String!): ProjectDeletePayload! @deprecated(reason: "Use issueDelete instead.")
+    cycleCreate(input: CycleCreateInput!): CycleCreatePayload! @deprecated(reason: "Use issueCreate with kind: MILESTONE instead.")
+    cycleUpdate(id: String!, input: CycleUpdateInput!): CycleUpdatePayload! @deprecated(reason: "Use issueUpdate instead.")
+    cycleDelete(id: String!): CycleDeletePayload! @deprecated(reason: "Use issueDelete instead.")
     userUpdate(input: UserUpdateInput!): UserUpdatePayload!
     fileUpload(input: FileUploadInput!): FileUploadPayload!
     workPropose(input: WorkProposeInput!): WorkProposePayload!
     workLink(fromId: String!, toId: String!, type: WorkLinkType!): WorkLinkMutationPayload!
+    workLinkDelete(id: String!): WorkLinkDeletePayload!
     workCommit(id: String!, input: WorkCommitInput!): WorkCommitPayload!
     workReject(id: String!, input: WorkRejectInput!): WorkRejectPayload!
     workClaim(id: String!, input: WorkClaimInput): WorkClaimPayload!
@@ -755,6 +757,8 @@ const typeDefs = /* GraphQL */ `
     priority: Int
     projectId: String
     cycleId: String
+    kind: WorkKind
+    assigneeId: String
   }
 
   input IssueUpdateInput {
@@ -769,6 +773,7 @@ const typeDefs = /* GraphQL */ `
     projectId: String
     cycleId: String
     snoozedUntil: DateTime
+    kind: WorkKind
   }
 
   input ProjectCreateInput {
@@ -963,6 +968,11 @@ const typeDefs = /* GraphQL */ `
   type WorkLinkMutationPayload {
     success: Boolean!
     link: WorkLink
+  }
+
+  type WorkLinkDeletePayload {
+    success: Boolean!
+    id: String
   }
 
   type WorkCommitPayload {
@@ -1433,6 +1443,22 @@ const resolvers = {
         });
         return { link, success: true as const };
       }, { link: null, success: false as const }),
+    workLinkDelete: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<{ id: string | null; success: boolean }> =>
+      runMutation(async () => {
+        const existing = await context.prisma.workLink.findUnique({
+          where: { id: args.id },
+          select: { fromId: true, toId: true },
+        });
+        if (!existing) throw createNotFoundError(WORK_LINK_NOT_FOUND_MESSAGE);
+        await assertCanWriteIssue(context.prisma, context, existing.fromId);
+        await assertCanWriteIssue(context.prisma, context, existing.toId);
+        const result = await deleteWorkLink(context.prisma, args.id);
+        return { id: result.id, success: true as const };
+      }, { id: null, success: false as const }),
     workCommit: async (
       _parent: unknown,
       args: { id: string; input: CommitWorkInput },

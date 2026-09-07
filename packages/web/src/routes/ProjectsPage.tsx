@@ -4,51 +4,38 @@ import { useNavigate } from 'react-router-dom';
 
 import {
   BOARD_PAGE_QUERY,
-  PROJECTS_QUERY,
-  PROJECT_CREATE_MUTATION,
-  PROJECT_UPDATE_MUTATION,
-  PROJECT_DELETE_MUTATION,
+  PROJECT_ISSUES_QUERY,
+  ISSUE_CREATE_MUTATION,
+  ISSUE_UPDATE_MUTATION,
+  ISSUE_DELETE_MUTATION,
 } from '../board/queries';
 import type {
   BoardPageQueryData,
   BoardPageQueryVariables,
-  ProjectsQueryData,
-  ProjectsQueryVariables,
-  ProjectSummary,
-  ProjectCreateMutationData,
-  ProjectCreateMutationVariables,
-  ProjectUpdateMutationData,
-  ProjectUpdateMutationVariables,
-  ProjectDeleteMutationData,
-  ProjectDeleteMutationVariables,
+  ProjectIssuesQueryData,
+  ProjectIssuesQueryVariables,
+  ProjectIssueSummary,
+  IssueCreateMutationData,
+  IssueCreateMutationVariables,
+  IssueUpdateMutationData,
+  IssueUpdateMutationVariables,
+  IssueDeleteMutationData,
+  IssueDeleteMutationVariables,
   UserSummary,
+  WorkflowStateType,
 } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 import { IcoChevL, IcoMore, IcoPlus, IcoProject } from '../components/Icons';
 import { Avatar, Btn } from '../components/Primitives';
 
-const STATUS_OPTIONS = [
-  { value: 'planned', label: 'Planned' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'paused', label: 'Paused' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
-];
-
-const COLOR_PALETTE = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#06b6d4'];
-
-function statusBadgeColor(status: string): string {
-  switch (status) {
-    case 'in_progress': return 'var(--accent)';
-    case 'completed': return 'var(--success)';
-    case 'paused': return 'var(--warn)';
-    case 'cancelled': return 'var(--fg-dim)';
+function statusBadgeColor(type: WorkflowStateType): string {
+  switch (type) {
+    case 'STARTED': return 'var(--accent)';
+    case 'COMPLETED': return 'var(--success)';
+    case 'REVIEW': return 'var(--warn)';
+    case 'CANCELED': return 'var(--fg-dim)';
     default: return 'var(--fg-muted)';
   }
-}
-
-function statusLabel(status: string): string {
-  return STATUS_OPTIONS.find((o) => o.value === status)?.label ?? status;
 }
 
 export function ProjectsPage() {
@@ -59,50 +46,47 @@ export function ProjectsPage() {
   const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create');
   const [formName, setFormName] = useState('');
   const [formDesc, setFormDesc] = useState('');
-  const [formColor, setFormColor] = useState('#6366f1');
-  const [formStatus, setFormStatus] = useState('planned');
+  const [formStateId, setFormStateId] = useState('');
   const [formLeadId, setFormLeadId] = useState('');
-  const [formTargetDate, setFormTargetDate] = useState('');
 
   const { data: boardData } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
     variables: { first: 1, ...(teamKey ? { filter: { team: { key: { eq: teamKey } } } } : {}) },
   });
 
-  const teamId = boardData?.teams.nodes.find((t) => t.key === teamKey)?.id ?? boardData?.teams.nodes[0]?.id ?? '';
+  const activeTeam = boardData?.teams.nodes.find((t) => t.key === teamKey) ?? boardData?.teams.nodes[0];
+  const teamId = activeTeam?.id ?? '';
+  const currentTeamKey = activeTeam?.key ?? teamKey ?? null;
+  const teamStates = activeTeam?.states?.nodes ?? [];
   const users: UserSummary[] = boardData?.users.nodes ?? [];
 
-  const { data, loading } = useQuery<ProjectsQueryData, ProjectsQueryVariables>(PROJECTS_QUERY, {
-    skip: !teamId,
-    variables: { teamId },
+  const { data, loading } = useQuery<ProjectIssuesQueryData, ProjectIssuesQueryVariables>(PROJECT_ISSUES_QUERY, {
+    skip: !currentTeamKey,
+    variables: { teamKey: currentTeamKey },
   });
 
-  const [runCreate] = useMutation<ProjectCreateMutationData, ProjectCreateMutationVariables>(PROJECT_CREATE_MUTATION);
-  const [runUpdate] = useMutation<ProjectUpdateMutationData, ProjectUpdateMutationVariables>(PROJECT_UPDATE_MUTATION);
-  const [runDelete] = useMutation<ProjectDeleteMutationData, ProjectDeleteMutationVariables>(PROJECT_DELETE_MUTATION);
+  const [runCreate] = useMutation<IssueCreateMutationData, IssueCreateMutationVariables>(ISSUE_CREATE_MUTATION);
+  const [runUpdate] = useMutation<IssueUpdateMutationData, IssueUpdateMutationVariables>(ISSUE_UPDATE_MUTATION);
+  const [runDelete] = useMutation<IssueDeleteMutationData, IssueDeleteMutationVariables>(ISSUE_DELETE_MUTATION);
 
-  const projects = data?.projects.nodes ?? [];
+  const projects = data?.issues.nodes ?? [];
   const selectedProject = selectedProjectId ? projects.find((p) => p.id === selectedProjectId) ?? null : null;
 
   function openCreateDialog() {
     setDialogMode('create');
     setFormName('');
     setFormDesc('');
-    setFormColor('#6366f1');
-    setFormStatus('planned');
+    setFormStateId(teamStates[0]?.id ?? '');
     setFormLeadId('');
-    setFormTargetDate('');
     dialogRef.current?.showModal();
   }
 
-  function openEditDialog(project: ProjectSummary) {
+  function openEditDialog(project: ProjectIssueSummary) {
     setDialogMode('edit');
     setSelectedProjectId(project.id);
-    setFormName(project.name);
+    setFormName(project.title);
     setFormDesc(project.description ?? '');
-    setFormColor(project.color);
-    setFormStatus(project.status);
-    setFormLeadId(project.lead?.id ?? '');
-    setFormTargetDate(project.targetDate ? new Date(project.targetDate).toISOString().slice(0, 10) : '');
+    setFormStateId(project.state?.id ?? '');
+    setFormLeadId(project.assignee?.id ?? '');
     dialogRef.current?.showModal();
   }
 
@@ -111,44 +95,46 @@ export function ProjectsPage() {
     if (!formName.trim()) return;
 
     if (dialogMode === 'create') {
+      const targetStateId = formStateId || teamStates[0]?.id;
+      const input: IssueCreateMutationVariables['input'] = {
+        teamId,
+        title: formName.trim(),
+        description: formDesc || null,
+        kind: 'PROJECT',
+        assigneeId: formLeadId || null,
+      };
+      if (targetStateId) {
+        input.stateId = targetStateId;
+      }
       await runCreate({
-        variables: {
-          input: {
-            teamId,
-            name: formName.trim(),
-            description: formDesc || null,
-            color: formColor,
-            status: formStatus,
-            leadId: formLeadId || null,
-            targetDate: formTargetDate ? new Date(formTargetDate).toISOString() : null,
-          },
-        },
-        refetchQueries: [{ query: PROJECTS_QUERY, variables: { teamId } }],
+        variables: { input },
+        refetchQueries: [{ query: PROJECT_ISSUES_QUERY, variables: { teamKey: currentTeamKey } }],
       });
     } else if (selectedProjectId) {
+      const input: IssueUpdateMutationVariables['input'] = {
+        title: formName.trim(),
+        description: formDesc || null,
+        assigneeId: formLeadId || null,
+      };
+      if (formStateId) {
+        input.stateId = formStateId;
+      }
       await runUpdate({
         variables: {
           id: selectedProjectId,
-          input: {
-            name: formName.trim(),
-            description: formDesc || null,
-            color: formColor,
-            status: formStatus,
-            leadId: formLeadId || null,
-            targetDate: formTargetDate ? new Date(formTargetDate).toISOString() : null,
-          },
+          input,
         },
-        refetchQueries: [{ query: PROJECTS_QUERY, variables: { teamId } }],
+        refetchQueries: [{ query: PROJECT_ISSUES_QUERY, variables: { teamKey: currentTeamKey } }],
       });
     }
     dialogRef.current?.close();
   }
 
   async function handleDelete(projectId: string) {
-    if (!window.confirm('Delete this project? Issues will be unlinked but not deleted.')) return;
+    if (!window.confirm('Delete this project? Child tasks will be unlinked but not deleted.')) return;
     await runDelete({
       variables: { id: projectId },
-      refetchQueries: [{ query: PROJECTS_QUERY, variables: { teamId } }],
+      refetchQueries: [{ query: PROJECT_ISSUES_QUERY, variables: { teamKey: currentTeamKey } }],
     });
     if (selectedProjectId === projectId) setSelectedProjectId(null);
   }
@@ -190,7 +176,7 @@ export function ProjectsPage() {
               <IcoProject size={22} style={{ color: 'var(--fg-faint)' }} />
             </div>
             <h3>No projects yet</h3>
-            <p>Create a project to organize related issues towards a goal.</p>
+            <p>Create a project work node (kind: PROJECT) to organize related tasks towards a goal.</p>
             <Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateDialog} style={{ marginTop: 12 }}>
               New project
             </Btn>
@@ -212,27 +198,29 @@ export function ProjectsPage() {
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <span style={{ width: 10, height: 10, borderRadius: '50%', background: project.color, flexShrink: 0 }} />
+                    <span className="mono" style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
+                      {project.identifier}
+                    </span>
                     <span style={{ fontSize: 15, fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {project.name}
+                      {project.title}
                     </span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{
                       fontSize: 12, padding: '2px 7px', borderRadius: 10,
-                      background: 'var(--bg-hover)', color: statusBadgeColor(project.status),
+                      background: 'var(--bg-hover)', color: statusBadgeColor(project.state.type),
                       border: '1px solid var(--border)', fontWeight: 500,
                     }}>
-                      {statusLabel(project.status)}
+                      {project.state.name}
                     </span>
-                    {project.lead && (
+                    {project.assignee && (
                       <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: 'var(--fg-dim)' }}>
-                        <Avatar user={{ name: project.lead.name ?? undefined }} size={14} />
-                        {project.lead.name}
+                        <Avatar user={{ name: project.assignee.name ?? undefined }} size={14} />
+                        {project.assignee.name}
                       </span>
                     )}
                     <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)', marginLeft: 'auto' }}>
-                      {project.issues?.nodes.length ?? 0} issues
+                      {project.children?.nodes?.length ?? 0} issues
                     </span>
                   </div>
                 </button>
@@ -266,35 +254,17 @@ export function ProjectsPage() {
               placeholder="Optional description"
             />
           </label>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
             <label style={{ flex: 1 }}>
-              <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Color</span>
-              <div style={{ display: 'flex', gap: 4 }}>
-                {COLOR_PALETTE.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setFormColor(c)}
-                    style={{
-                      width: 20, height: 20, borderRadius: '50%', background: c, border: formColor === c ? '2px solid var(--fg)' : '2px solid transparent',
-                      cursor: 'pointer',
-                    }}
-                  />
-                ))}
-              </div>
-            </label>
-            <label style={{ width: 130 }}>
               <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Status</span>
               <select
                 style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
-                value={formStatus}
-                onChange={(e) => setFormStatus(e.target.value)}
+                value={formStateId}
+                onChange={(e) => setFormStateId(e.target.value)}
               >
-                {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {teamStates.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </label>
-          </div>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
             <label style={{ flex: 1 }}>
               <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Lead</span>
               <select
@@ -305,15 +275,6 @@ export function ProjectsPage() {
                 <option value="">No lead</option>
                 {users.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email ?? u.id}</option>)}
               </select>
-            </label>
-            <label style={{ flex: 1 }}>
-              <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Target date</span>
-              <input
-                type="date"
-                style={{ width: '100%', height: 30, padding: '0 8px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
-                value={formTargetDate}
-                onChange={(e) => setFormTargetDate(e.target.value)}
-              />
             </label>
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -335,29 +296,32 @@ function ProjectDetailView({
   onDelete,
   navigate,
 }: {
-  project: ProjectSummary;
+  project: ProjectIssueSummary;
   onBack: () => void;
   onEdit: () => void;
   onDelete: () => void;
   navigate: ReturnType<typeof useNavigate>;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const issues = project.issues?.nodes ?? [];
+  const issues = project.children?.nodes ?? [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
       <div className="page-header">
         <Btn variant="ghost" icon={<IcoChevL size={12} />} size="sm" onClick={onBack}>Projects</Btn>
-        <span style={{ width: 10, height: 10, borderRadius: '50%', background: project.color }} />
-        <span style={{ fontSize: 15, fontWeight: 500 }}>{project.name}</span>
+        <span className="mono" style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>{project.identifier}</span>
+        <span style={{ fontSize: 15, fontWeight: 500 }}>{project.title}</span>
         <span style={{
           fontSize: 12, padding: '2px 7px', borderRadius: 10,
-          background: 'var(--bg-hover)', color: statusBadgeColor(project.status),
+          background: 'var(--bg-hover)', color: statusBadgeColor(project.state.type),
           border: '1px solid var(--border)', fontWeight: 500,
         }}>
-          {statusLabel(project.status)}
+          {project.state.name}
         </span>
         <div style={{ flex: 1 }} />
+        <Btn variant="subtle" size="sm" onClick={() => navigate(`/work/${project.id}`)} style={{ marginRight: 8 }}>
+          Work context
+        </Btn>
         <div style={{ position: 'relative' }}>
           <Btn variant="ghost" icon={<IcoMore size={14} />} size="sm" onClick={() => setMenuOpen(!menuOpen)} />
           {menuOpen && (
@@ -397,16 +361,13 @@ function ProjectDetailView({
         )}
 
         <div style={{ display: 'flex', gap: 24, marginBottom: 20, fontSize: 14, color: 'var(--fg-dim)' }}>
-          {project.lead && (
+          {project.assignee && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Avatar user={{ name: project.lead.name ?? undefined }} size={18} />
-              Lead: {project.lead.name}
+              <Avatar user={{ name: project.assignee.name ?? undefined }} size={18} />
+              Lead: {project.assignee.name}
             </span>
           )}
-          {project.targetDate && (
-            <span>Target: {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(project.targetDate))}</span>
-          )}
-          <span>{issues.length} issues</span>
+          <span>{issues.length} child issues (CONTAINS)</span>
         </div>
 
         {issues.length > 0 ? (
@@ -427,12 +388,23 @@ function ProjectDetailView({
               >
                 <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)', width: 60 }}>{issue.identifier}</span>
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.title}</span>
+                {issue.state && (
+                  <span style={{ fontSize: 12, color: 'var(--fg-muted)', padding: '2px 6px', background: 'var(--bg-hover)', borderRadius: 4 }}>
+                    {issue.state.name}
+                  </span>
+                )}
+                {issue.assignee && (
+                  <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Avatar user={{ name: issue.assignee.name ?? undefined }} size={14} />
+                    {issue.assignee.name}
+                  </span>
+                )}
               </button>
             ))}
           </div>
         ) : (
           <div style={{ padding: 20, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 14 }}>
-            No issues linked to this project yet.
+            No child issues linked via CONTAINS yet. Link tasks from their issue page or via MCP work_link.
           </div>
         )}
       </div>

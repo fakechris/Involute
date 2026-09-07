@@ -154,6 +154,24 @@ export function IssueCard({
             <StatusIcon stateName={issue.state.name} size={12} />
             {issue.identifier}
           </span>
+          {issue.kind && issue.kind !== 'ISSUE' ? (
+            <span
+              style={{
+                fontSize: 10.5,
+                fontWeight: 600,
+                letterSpacing: '0.04em',
+                padding: '1px 5px',
+                borderRadius: 'var(--r-1)',
+                background: issue.kind === 'PROJECT' ? 'var(--accent-weak)' : 'var(--bg-hover)',
+                color: issue.kind === 'PROJECT' ? 'var(--accent)' : 'var(--fg-dim)',
+                border: `1px solid ${issue.kind === 'PROJECT' ? 'var(--accent-border)' : 'var(--border)'}`,
+                marginLeft: 'auto',
+                textTransform: 'uppercase',
+              }}
+            >
+              {issue.kind}
+            </span>
+          ) : null}
         </div>
 
         <h3 className="issue-card__title">{issue.title}</h3>
@@ -178,12 +196,31 @@ export function IssueCard({
         </div>
 
         <div className="issue-card__footer">
+          {issue.claim ? (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: 11.5,
+                color: 'var(--accent)',
+                background: 'var(--accent-weak)',
+                padding: '2px 6px',
+                borderRadius: 'var(--r-1)',
+                border: '1px solid var(--accent-border)',
+                fontWeight: 500,
+              }}
+              title={`Claimed by ${issue.claim.actor.name ?? 'Agent'} until ${new Date(issue.claim.leaseUntil).toLocaleTimeString()}`}
+            >
+              🤖 {issue.claim.actor.name ?? 'Agent'}
+            </span>
+          ) : null}
           {issue.assignee ? (
-            <div className="issue-card__avatar" aria-hidden="true">
+            <div className="issue-card__avatar" aria-hidden="true" style={{ marginLeft: issue.claim ? 'auto' : undefined }}>
               {getInitials(issue.assignee.name)}
             </div>
           ) : null}
-          <span className="issue-card__assignee">{issue.assignee?.name ?? 'Unassigned'}</span>
+          <span className="issue-card__assignee">{issue.assignee?.name ?? (issue.claim ? '' : 'Unassigned')}</span>
         </div>
       </button>
     </article>

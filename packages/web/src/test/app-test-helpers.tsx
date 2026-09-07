@@ -104,6 +104,14 @@ const hoistedApolloMocks = vi.hoisted<ApolloMockSet>(() => ({
       return [vi.fn().mockResolvedValue({ data: { workReject: { success: true, issue: { id: 'issue-c', identifier: 'INV-9', commitmentStatus: 'REJECTED' } } } })];
     }
 
+    if (source.includes('mutation NotificationMarkRead')) {
+      return [vi.fn().mockResolvedValue({ data: { notificationMarkRead: { success: true, notification: { id: 'notif-1', readAt: new Date().toISOString() } } } })];
+    }
+
+    if (source.includes('mutation NotificationsMarkAllRead')) {
+      return [vi.fn().mockResolvedValue({ data: { notificationsMarkAllRead: { count: 1, success: true } } })];
+    }
+
     return [vi.fn()];
   }),
 }));
@@ -494,6 +502,90 @@ export function renderApp(
     if (source.includes('query WorkContextPage')) {
       return {
         data: queryState.workContextData ?? { workContext: null },
+        error: queryState.error,
+        loading: queryState.loading ?? false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query ProjectIssues')) {
+      return {
+        data: {
+          issues: {
+            nodes: (queryState.data?.issues.nodes ?? []).filter((issue) => issue.kind === 'PROJECT'),
+          },
+        },
+        error: queryState.error,
+        loading: queryState.loading ?? false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query NotificationsPage')) {
+      return {
+        data: {
+          notifications: {
+            nodes: [
+              {
+                id: 'notif-1',
+                type: 'decision.requested',
+                payload: { summary: 'Approval needed for migration' },
+                readAt: null,
+                createdAt: '2026-04-02T10:00:00.000Z',
+                work: {
+                  id: 'issue-1',
+                  identifier: 'INV-1',
+                  title: 'Backlog item',
+                  kind: 'ISSUE',
+                  state: { id: 'state-backlog', name: 'Backlog', type: 'BACKLOG', color: '#6b7280' },
+                },
+              },
+            ],
+          },
+          unreadNotificationCount: 1,
+        },
+        error: queryState.error,
+        loading: queryState.loading ?? false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query MilestoneIssues')) {
+      return {
+        data: {
+          issues: {
+            nodes: [
+              {
+                id: 'milestone-1',
+                identifier: 'INV-5',
+                title: 'Release v1.0',
+                description: 'First stable release',
+                outcome: 'Production ready',
+                scope: 'Core engine and web client',
+                acceptance: 'All tests pass',
+                priority: 1,
+                kind: 'MILESTONE',
+                createdAt: '2026-04-01T10:00:00.000Z',
+                updatedAt: '2026-04-01T10:00:00.000Z',
+                state: { id: 'state-progress', name: 'In Progress', type: 'STARTED', position: 2 },
+                assignee: { id: 'user-1', name: 'Admin', email: 'admin@involute.local' },
+                team: { id: 'team-1', key: 'INV', name: 'Involute' },
+                children: {
+                  nodes: [
+                    {
+                      id: 'issue-1',
+                      identifier: 'INV-1',
+                      title: 'Backlog item',
+                      kind: 'ISSUE',
+                      state: { id: 'state-backlog', name: 'Backlog', type: 'BACKLOG' },
+                      assignee: { id: 'user-1', name: 'Admin' },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
         error: queryState.error,
         loading: queryState.loading ?? false,
         refetch: vi.fn().mockResolvedValue(undefined),

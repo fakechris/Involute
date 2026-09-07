@@ -117,6 +117,17 @@ export const ISSUE_UPDATE_MUTATION = gql`
         title
         description
         priority
+        kind
+        claim {
+          id
+          leaseUntil
+          actor {
+            id
+            name
+            email
+            actorKind
+          }
+        }
         createdAt
         updatedAt
         state {
@@ -145,12 +156,23 @@ export const ISSUE_UPDATE_MUTATION = gql`
             id
             identifier
             title
+            kind
+            state {
+              id
+              name
+              type
+            }
+            assignee {
+              id
+              name
+            }
           }
         }
         parent {
           id
           identifier
           title
+          kind
         }
         projectId
         cycleId
@@ -216,6 +238,7 @@ export const ISSUE_PAGE_QUERY = gql`
       title
       description
       priority
+      kind
       createdAt
       updatedAt
       state {
@@ -253,6 +276,16 @@ export const ISSUE_PAGE_QUERY = gql`
           id
           identifier
           title
+          kind
+          state {
+            id
+            name
+            type
+          }
+          assignee {
+            id
+            name
+          }
         }
       }
       parent {
@@ -260,6 +293,7 @@ export const ISSUE_PAGE_QUERY = gql`
         identifier
         revision
         title
+        kind
       }
       projectId
       cycleId
@@ -458,6 +492,90 @@ export const ISSUE_CREATE_MUTATION = gql`
   }
 `;
 
+export const PROJECT_ISSUES_QUERY = gql`
+  query ProjectIssues($teamKey: String, $query: String) {
+    issues(
+      first: 100
+      filter: { kind: { eq: PROJECT }, team: { key: { eq: $teamKey } } }
+      query: $query
+    ) {
+      nodes {
+        id
+        identifier
+        title
+        description
+        priority
+        kind
+        createdAt
+        updatedAt
+        state {
+          id
+          name
+          type
+          position
+        }
+        assignee {
+          id
+          name
+          email
+          avatarUrl
+        }
+        team {
+          id
+          key
+          name
+        }
+        children {
+          nodes {
+            id
+            identifier
+            title
+            kind
+            state {
+              id
+              name
+              type
+            }
+            assignee {
+              id
+              name
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const WORK_LINK_MUTATION = gql`
+  mutation WorkLink($fromId: String!, $toId: String!, $type: WorkLinkType!) {
+    workLink(fromId: $fromId, toId: $toId, type: $type) {
+      success
+      link {
+        id
+        type
+        from {
+          id
+          identifier
+        }
+        to {
+          id
+          identifier
+        }
+      }
+    }
+  }
+`;
+
+export const WORK_LINK_DELETE_MUTATION = gql`
+  mutation WorkLinkDelete($id: String!) {
+    workLinkDelete(id: $id) {
+      success
+      id
+    }
+  }
+`;
+
 export const PROJECTS_QUERY = gql`
   query Projects($teamId: String!) {
     projects(teamId: $teamId) {
@@ -628,3 +746,121 @@ export const FILE_UPLOAD_MUTATION = gql`
     }
   }
 `;
+
+export const MILESTONE_ISSUES_QUERY = gql`
+  query MilestoneIssues($teamKey: String, $query: String) {
+    issues(
+      first: 100
+      filter: {
+        and: [
+          { kind: MILESTONE }
+          { team: { key: { eq: $teamKey } } }
+        ]
+      }
+      query: $query
+    ) {
+      nodes {
+        id
+        identifier
+        title
+        description
+        outcome
+        scope
+        acceptance
+        priority
+        kind
+        createdAt
+        updatedAt
+        state {
+          id
+          name
+          type
+          position
+        }
+        assignee {
+          id
+          name
+          email
+          avatarUrl
+        }
+        team {
+          id
+          key
+          name
+        }
+        children {
+          nodes {
+            id
+            identifier
+            title
+            kind
+            state {
+              id
+              name
+              type
+            }
+            assignee {
+              id
+              name
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const NOTIFICATIONS_PAGE_QUERY = gql`
+  query NotificationsPage($first: Int, $unreadOnly: Boolean) {
+    notifications(first: $first, unreadOnly: $unreadOnly) {
+      nodes {
+        id
+        type
+        payload
+        readAt
+        createdAt
+        work {
+          id
+          identifier
+          title
+          kind
+          state {
+            id
+            name
+            type
+          }
+        }
+      }
+    }
+    unreadNotificationCount
+  }
+`;
+
+export const NOTIFICATION_MARK_READ_MUTATION = gql`
+  mutation NotificationMarkRead($id: String!) {
+    notificationMarkRead(id: $id) {
+      success
+      notification {
+        id
+        readAt
+      }
+    }
+  }
+`;
+
+export const NOTIFICATIONS_MARK_ALL_READ_MUTATION = gql`
+  mutation NotificationsMarkAllRead {
+    notificationsMarkAllRead {
+      count
+      success
+    }
+  }
+`;
+
+export const UNREAD_NOTIFICATION_COUNT_QUERY = gql`
+  query UnreadNotificationCount {
+    unreadNotificationCount
+  }
+`;
+
+

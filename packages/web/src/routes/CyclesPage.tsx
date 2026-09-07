@@ -2,7 +2,17 @@ import { useMutation, useQuery } from '@apollo/client/react';
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { BOARD_PAGE_QUERY, CYCLES_QUERY, CYCLE_CREATE_MUTATION, CYCLE_UPDATE_MUTATION, CYCLE_DELETE_MUTATION } from '../board/queries';
+import {
+  BOARD_PAGE_QUERY,
+  CYCLES_QUERY,
+  CYCLE_CREATE_MUTATION,
+  CYCLE_UPDATE_MUTATION,
+  CYCLE_DELETE_MUTATION,
+  ISSUE_CREATE_MUTATION,
+  ISSUE_UPDATE_MUTATION,
+  ISSUE_DELETE_MUTATION,
+  MILESTONE_ISSUES_QUERY,
+} from '../board/queries';
 import type {
   BoardPageQueryData,
   BoardPageQueryVariables,
@@ -15,11 +25,22 @@ import type {
   CycleUpdateMutationVariables,
   CycleDeleteMutationData,
   CycleDeleteMutationVariables,
+  IssueCreateMutationData,
+  IssueCreateMutationVariables,
+  IssueUpdateMutationData,
+  IssueUpdateMutationVariables,
+  IssueDeleteMutationData,
+  IssueDeleteMutationVariables,
+  MilestoneIssueSummary,
+  MilestoneIssuesQueryData,
+  MilestoneIssuesQueryVariables,
   WorkflowStateType,
 } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 import { IcoCycle, IcoPlus, IcoSettings } from '../components/Icons';
 import { Btn, StatusIconPrimitive } from '../components/Primitives';
+
+type ViewTab = 'milestones' | 'cycles';
 
 function getStateType(stateType: WorkflowStateType): string {
   switch (stateType) {
@@ -57,7 +78,10 @@ function isCycleCompleted(cycle: CycleSummary): boolean {
 export function CyclesPage() {
   const navigate = useNavigate();
   const [teamKey, setTeamKey] = useState<string | null>(() => readStoredTeamKey());
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [activeTab, setActiveTab] = useState<ViewTab>('milestones');
+
+  const cycleDialogRef = useRef<HTMLDialogElement>(null);
+  const milestoneDialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     function handleActiveTeamKeyChange(event: Event) {
@@ -74,28 +98,76 @@ export function CyclesPage() {
       window.removeEventListener('involute:active-team-key', handleActiveTeamKeyChange as EventListener);
     };
   }, []);
-  const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create');
+
+  // Legacy cycle modal state
+  const [cycleDialogMode, setCycleDialogMode] = useState<'create' | 'edit'>('create');
   const [editingCycleId, setEditingCycleId] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
   const [formStartsAt, setFormStartsAt] = useState('');
   const [formEndsAt, setFormEndsAt] = useState('');
 
+  // Milestone modal state
+  const [milestoneDialogMode, setMilestoneDialogMode] = useState<'create' | 'edit'>('create');
+  const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null);
+  const [milestoneTitle, setMilestoneTitle] = useState('');
+  const [milestoneDescription, setMilestoneDescription] = useState('');
+  const [milestoneOutcome, setMilestoneOutcome] = useState('');
+
   const { data: boardData } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
     variables: { first: 1, ...(teamKey ? { filter: { team: { key: { eq: teamKey } } } } : {}) },
   });
 
-  const teamId = boardData?.teams.nodes.find((t) => t.key === teamKey)?.id ?? boardData?.teams.nodes[0]?.id ?? '';
+  const selectedTeam = boardData?.teams.nodes.find((t) => t.key === teamKey) ?? boardData?.teams.nodes[0] ?? null;
+  const teamId = selectedTeam?.id ?? '';
 
-  const { data, loading } = useQuery<CyclesQueryData, CyclesQueryVariables>(CYCLES_QUERY, {
+  const milestoneQueryVariables: MilestoneIssuesQueryVariables = {};
+  if (teamKey) {
+    milestoneQueryVariables.teamKey = teamKey;
+  }
+
+  // Milestones query
+  const { data: milestoneData, loading: milestoneLoading, refetch: refetchMilestones } = useQuery<
+    MilestoneIssuesQueryData,
+    MilestoneIssuesQueryVariables
+  >(MILESTONE_ISSUES_QUERY, {
+    variables: milestoneQueryVariables,
+    fetchPolicy: 'cache-and-network',
+  });
+
+  // Legacy cycles query
+  const { data: cyclesData, loading: cyclesLoading, refetch: refetchCycles } = useQuery<
+    CyclesQueryData,
+    CyclesQueryVariables
+  >(CYCLES_QUERY, {
     skip: !teamId,
     variables: { teamId },
   });
 
-  const [runCreate] = useMutation<CycleCreateMutationData, CycleCreateMutationVariables>(CYCLE_CREATE_MUTATION);
-  const [runUpdate] = useMutation<CycleUpdateMutationData, CycleUpdateMutationVariables>(CYCLE_UPDATE_MUTATION);
-  const [runDelete] = useMutation<CycleDeleteMutationData, CycleDeleteMutationVariables>(CYCLE_DELETE_MUTATION);
+  // Cycle mutations
+  const [runCycleCreate] = useMutation<CycleCreateMutationData, CycleCreateMutationVariables>(CYCLE_CREATE_MUTATION);
+  const [runCycleUpdate] = useMutation<CycleUpdateMutationData, CycleUpdateMutationVariables>(CYCLE_UPDATE_MUTATION);
+  const [runCycleDelete] = useMutation<CycleDeleteMutationData, CycleDeleteMutationVariables>(CYCLE_DELETE_MUTATION);
 
-  const cycles = data?.cycles.nodes ?? [];
+  // Milestone (Issue) mutations
+  const [runIssueCreate] = useMutation<IssueCreateMutationData, IssueCreateMutationVariables>(ISSUE_CREATE_MUTATION);
+  const [runIssueUpdate] = useMutation<IssueUpdateMutationData, IssueUpdateMutationVariables>(ISSUE_UPDATE_MUTATION);
+  const [runIssueDelete] = useMutation<IssueDeleteMutationData, IssueDeleteMutationVariables>(ISSUE_DELETE_MUTATION);
+
+  const milestones = useMemo(() => milestoneData?.issues?.nodes ?? [], [milestoneData?.issues?.nodes]);
+  const activeMilestones = useMemo(
+    () => milestones.filter((m) => m.state.type === 'STARTED'),
+    [milestones],
+  );
+  const upcomingMilestones = useMemo(
+    () => milestones.filter((m) => m.state.type === 'UNSTARTED' || m.state.type === 'BACKLOG'),
+    [milestones],
+  );
+  const completedMilestones = useMemo(
+    () => milestones.filter((m) => m.state.type === 'COMPLETED' || m.state.type === 'CANCELED'),
+    [milestones],
+  );
+
+  const cycles = cyclesData?.cycles.nodes ?? [];
   const activeCycle = useMemo(() => cycles.find(isCycleActive) ?? null, [cycles]);
   const completedCycles = useMemo(() => cycles.filter(isCycleCompleted), [cycles]);
   const upcomingCycles = useMemo(
@@ -103,32 +175,89 @@ export function CyclesPage() {
     [cycles],
   );
 
-  function openCreateDialog() {
-    setDialogMode('create');
+  function openCreateMilestone() {
+    setMilestoneDialogMode('create');
+    setEditingMilestoneId(null);
+    setMilestoneTitle('');
+    setMilestoneDescription('');
+    setMilestoneOutcome('');
+    milestoneDialogRef.current?.showModal();
+  }
+
+  function openEditMilestone(milestone: MilestoneIssueSummary) {
+    setMilestoneDialogMode('edit');
+    setEditingMilestoneId(milestone.id);
+    setMilestoneTitle(milestone.title);
+    setMilestoneDescription(milestone.description ?? '');
+    setMilestoneOutcome(milestone.outcome ?? '');
+    milestoneDialogRef.current?.showModal();
+  }
+
+  async function handleMilestoneSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!milestoneTitle.trim() || !teamId) return;
+
+    if (milestoneDialogMode === 'create') {
+      const defaultState = selectedTeam?.states.nodes[0];
+      await runIssueCreate({
+        variables: {
+          input: {
+            teamId,
+            title: milestoneTitle.trim(),
+            description: milestoneDescription.trim() || null,
+            kind: 'MILESTONE',
+            ...(defaultState ? { stateId: defaultState.id } : {}),
+          },
+        },
+      });
+    } else if (editingMilestoneId) {
+      await runIssueUpdate({
+        variables: {
+          id: editingMilestoneId,
+          input: {
+            title: milestoneTitle.trim(),
+            description: milestoneDescription.trim() || null,
+          },
+        },
+      });
+    }
+
+    void refetchMilestones();
+    milestoneDialogRef.current?.close();
+  }
+
+  async function handleMilestoneDelete(id: string) {
+    if (!window.confirm('Delete this milestone? This cannot be undone.')) return;
+    await runIssueDelete({ variables: { id } });
+    void refetchMilestones();
+  }
+
+  function openCreateCycleDialog() {
+    setCycleDialogMode('create');
     setEditingCycleId(null);
     setFormName('');
     const now = new Date();
     setFormStartsAt(now.toISOString().slice(0, 10));
     const end = new Date(now.getTime() + 14 * 86400000);
     setFormEndsAt(end.toISOString().slice(0, 10));
-    dialogRef.current?.showModal();
+    cycleDialogRef.current?.showModal();
   }
 
-  function openEditDialog(cycle: CycleSummary) {
-    setDialogMode('edit');
+  function openEditCycleDialog(cycle: CycleSummary) {
+    setCycleDialogMode('edit');
     setEditingCycleId(cycle.id);
     setFormName(cycle.name);
     setFormStartsAt(new Date(cycle.startsAt).toISOString().slice(0, 10));
     setFormEndsAt(new Date(cycle.endsAt).toISOString().slice(0, 10));
-    dialogRef.current?.showModal();
+    cycleDialogRef.current?.showModal();
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleCycleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!formName.trim() || !formStartsAt || !formEndsAt) return;
 
-    if (dialogMode === 'create') {
-      await runCreate({
+    if (cycleDialogMode === 'create') {
+      await runCycleCreate({
         variables: {
           input: {
             teamId,
@@ -137,10 +266,9 @@ export function CyclesPage() {
             endsAt: new Date(formEndsAt).toISOString(),
           },
         },
-        refetchQueries: [{ query: CYCLES_QUERY, variables: { teamId } }],
       });
     } else if (editingCycleId) {
-      await runUpdate({
+      await runCycleUpdate({
         variables: {
           id: editingCycleId,
           input: {
@@ -149,18 +277,45 @@ export function CyclesPage() {
             endsAt: new Date(formEndsAt).toISOString(),
           },
         },
-        refetchQueries: [{ query: CYCLES_QUERY, variables: { teamId } }],
       });
     }
-    dialogRef.current?.close();
+    void refetchCycles();
+    cycleDialogRef.current?.close();
   }
 
-  async function handleDelete(cycleId: string) {
+  async function handleCycleDelete(cycleId: string) {
     if (!window.confirm('Delete this cycle? This cannot be undone.')) return;
-    await runDelete({
-      variables: { id: cycleId },
-      refetchQueries: [{ query: CYCLES_QUERY, variables: { teamId } }],
-    });
+    await runCycleDelete({ variables: { id: cycleId } });
+    void refetchCycles();
+  }
+
+  function renderMilestoneProgress(milestone: MilestoneIssueSummary) {
+    const children = milestone.children?.nodes ?? [];
+    const total = children.length;
+    if (total === 0) return null;
+    const completed = children.filter(
+      (c) => c.state.type === 'COMPLETED' || c.state.type === 'CANCELED',
+    ).length;
+    const pct = Math.round((completed / total) * 100);
+
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+        <div
+          style={{
+            flex: 1,
+            height: 4,
+            borderRadius: 2,
+            background: 'var(--bg-hover)',
+            overflow: 'hidden',
+          }}
+        >
+          <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
+        </div>
+        <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
+          {completed}/{total} ({pct}%)
+        </span>
+      </div>
+    );
   }
 
   function renderCycleProgress(cycle: CycleSummary) {
@@ -188,7 +343,9 @@ export function CyclesPage() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
       <div className="page-header">
         <span style={{ color: 'var(--fg-dim)', display: 'inline-flex' }}><IcoCycle /></span>
-        <span style={{ fontSize: 15, fontWeight: 500 }}>Cycles</span>
+        <span style={{ fontSize: 15, fontWeight: 500 }}>
+          {activeTab === 'milestones' ? 'Milestones' : 'Cycles'}
+        </span>
         {teamKey && (
           <>
             <span style={{ color: 'var(--fg-faint)', fontSize: 14 }}>·</span>
@@ -201,107 +358,295 @@ export function CyclesPage() {
             </span>
           </>
         )}
+
+        <div style={{ display: 'inline-flex', marginLeft: 16, border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 1 }}>
+          <button
+            type="button"
+            className={activeTab === 'milestones' ? 'btn btn--subtle btn--sm is-active' : 'btn btn--ghost btn--sm'}
+            onClick={() => setActiveTab('milestones')}
+            style={{ fontSize: 12, height: 24, padding: '0 8px' }}
+          >
+            Milestones (Work Graph)
+          </button>
+          <button
+            type="button"
+            className={activeTab === 'cycles' ? 'btn btn--subtle btn--sm is-active' : 'btn btn--ghost btn--sm'}
+            onClick={() => setActiveTab('cycles')}
+            style={{ fontSize: 12, height: 24, padding: '0 8px' }}
+          >
+            Cycles (Legacy)
+          </button>
+        </div>
+
         <div style={{ flex: 1 }} />
-        <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={openCreateDialog}>
-          New cycle
-        </Btn>
-      </div>
-
-      <div className="page-content">
-        {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 14 }}>
-            Loading cycles…
-          </div>
-        ) : cycles.length === 0 ? (
-          <div className="empty-state">
-            <div style={{
-              width: 48, height: 48, borderRadius: 12,
-              border: '1px solid var(--border)', background: 'var(--bg-raised)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
-            }}>
-              <IcoCycle size={22} style={{ color: 'var(--fg-faint)' }} />
-            </div>
-            <h3>No cycles configured</h3>
-            <p>Create a cycle to group issues into time-boxed sprints.</p>
-            <Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateDialog} style={{ marginTop: 12 }}>
-              New cycle
-            </Btn>
-          </div>
+        {activeTab === 'milestones' ? (
+          <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={openCreateMilestone}>
+            New milestone
+          </Btn>
         ) : (
-          <div style={{ padding: '20px var(--pad-x)' }}>
-            {activeCycle && (
-              <section style={{ marginBottom: 32 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
-                  ACTIVE CYCLE
-                </div>
-                <div style={{
-                  border: '1px solid var(--accent-border)', borderRadius: 'var(--r-3)',
-                  padding: 16, background: 'var(--bg-raised)',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 15, fontWeight: 500 }}>{activeCycle.name}</span>
-                    <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
-                      {formatDate(activeCycle.startsAt)} – {formatDate(activeCycle.endsAt)}
-                    </span>
-                    <div style={{ flex: 1 }} />
-                    <Btn variant="ghost" icon={<IcoSettings size={12} />} size="sm" onClick={() => openEditDialog(activeCycle)}>
-                      Configure
-                    </Btn>
-                  </div>
-                  {renderCycleProgress(activeCycle)}
-                  {(activeCycle.issues?.nodes ?? []).length > 0 && (
-                    <div style={{ marginTop: 12 }}>
-                      {activeCycle.issues!.nodes.map((issue) => (
-                        <button
-                          key={issue.id}
-                          type="button"
-                          onClick={() => navigate(`/issue/${issue.id}`)}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 8,
-                            width: '100%', padding: '6px 0', background: 'none', border: 'none',
-                            cursor: 'pointer', fontSize: 14.5, color: 'var(--fg)', textAlign: 'left',
-                          }}
-                        >
-                          <StatusIconPrimitive stateType={getStateType(issue.state.type)} stateColor={getStateColor(issue.state.type)} size={14} />
-                          <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>{issue.identifier}</span>
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.title}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </section>
-            )}
-
-            {upcomingCycles.length > 0 && (
-              <section style={{ marginBottom: 32 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
-                  UPCOMING
-                </div>
-                {upcomingCycles.map((cycle) => (
-                  <CycleRow key={cycle.id} cycle={cycle} onEdit={() => openEditDialog(cycle)} onDelete={() => handleDelete(cycle.id)} />
-                ))}
-              </section>
-            )}
-
-            {completedCycles.length > 0 && (
-              <section>
-                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
-                  COMPLETED
-                </div>
-                {completedCycles.map((cycle) => (
-                  <CycleRow key={cycle.id} cycle={cycle} onEdit={() => openEditDialog(cycle)} onDelete={() => handleDelete(cycle.id)} />
-                ))}
-              </section>
-            )}
-          </div>
+          <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={openCreateCycleDialog}>
+            New cycle
+          </Btn>
         )}
       </div>
 
-      <dialog ref={dialogRef} className="dialog-modal" onClick={(e) => { if (e.target === dialogRef.current) dialogRef.current?.close(); }}>
-        <form onSubmit={handleSubmit} style={{ padding: 20, minWidth: 340 }}>
+      <div className="page-content">
+        {activeTab === 'milestones' ? (
+          milestoneLoading ? (
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 14 }}>
+              Loading milestones…
+            </div>
+          ) : milestones.length === 0 ? (
+            <div className="empty-state">
+              <div style={{
+                width: 48, height: 48, borderRadius: 12,
+                border: '1px solid var(--border)', background: 'var(--bg-raised)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+              }}>
+                <IcoCycle size={22} style={{ color: 'var(--fg-faint)' }} />
+              </div>
+              <h3>No milestones configured</h3>
+              <p>Milestones group work nodes into deliverables with outcome criteria and child tasks.</p>
+              <Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateMilestone} style={{ marginTop: 12 }}>
+                New milestone
+              </Btn>
+            </div>
+          ) : (
+            <div style={{ padding: '20px var(--pad-x)' }}>
+              {activeMilestones.length > 0 && (
+                <section style={{ marginBottom: 32 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
+                    IN PROGRESS
+                  </div>
+                  {activeMilestones.map((milestone) => (
+                    <div
+                      key={milestone.id}
+                      style={{
+                        border: '1px solid var(--accent-border)',
+                        borderRadius: 'var(--r-3)',
+                        padding: 16,
+                        background: 'var(--bg-raised)',
+                        marginBottom: 12,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>
+                          {milestone.identifier}
+                        </span>
+                        <span style={{ fontSize: 15, fontWeight: 500 }}>{milestone.title}</span>
+                        <div style={{ flex: 1 }} />
+                        <Btn
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/work/${milestone.id}`)}
+                          style={{ marginRight: 6 }}
+                        >
+                          Work context
+                        </Btn>
+                        <Btn variant="ghost" icon={<IcoSettings size={12} />} size="sm" onClick={() => openEditMilestone(milestone)}>
+                          Configure
+                        </Btn>
+                      </div>
+                      {renderMilestoneProgress(milestone)}
+                      {(milestone.children?.nodes ?? []).length > 0 && (
+                        <div style={{ marginTop: 12, borderTop: '1px solid var(--border-subtle)', paddingTop: 8 }}>
+                          {milestone.children.nodes.map((child) => (
+                            <button
+                              key={child.id}
+                              type="button"
+                              onClick={() => navigate(`/issue/${child.id}`)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                width: '100%',
+                                padding: '6px 0',
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontSize: 14,
+                                color: 'var(--fg)',
+                                textAlign: 'left',
+                              }}
+                            >
+                              <StatusIconPrimitive stateType={getStateType(child.state.type)} stateColor={getStateColor(child.state.type)} size={14} />
+                              <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>{child.identifier}</span>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{child.title}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </section>
+              )}
+
+              {upcomingMilestones.length > 0 && (
+                <section style={{ marginBottom: 32 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
+                    UPCOMING & BACKLOG
+                  </div>
+                  {upcomingMilestones.map((milestone) => (
+                    <MilestoneRow
+                      key={milestone.id}
+                      milestone={milestone}
+                      onEdit={() => openEditMilestone(milestone)}
+                      onDelete={() => void handleMilestoneDelete(milestone.id)}
+                      onNavigate={() => navigate(`/work/${milestone.id}`)}
+                    />
+                  ))}
+                </section>
+              )}
+
+              {completedMilestones.length > 0 && (
+                <section>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
+                    COMPLETED
+                  </div>
+                  {completedMilestones.map((milestone) => (
+                    <MilestoneRow
+                      key={milestone.id}
+                      milestone={milestone}
+                      onEdit={() => openEditMilestone(milestone)}
+                      onDelete={() => void handleMilestoneDelete(milestone.id)}
+                      onNavigate={() => navigate(`/work/${milestone.id}`)}
+                    />
+                  ))}
+                </section>
+              )}
+            </div>
+          )
+        ) : (
+          cyclesLoading ? (
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 14 }}>
+              Loading cycles…
+            </div>
+          ) : cycles.length === 0 ? (
+            <div className="empty-state">
+              <div style={{
+                width: 48, height: 48, borderRadius: 12,
+                border: '1px solid var(--border)', background: 'var(--bg-raised)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+              }}>
+                <IcoCycle size={22} style={{ color: 'var(--fg-faint)' }} />
+              </div>
+              <h3>No cycles configured</h3>
+              <p>Create a cycle to group issues into time-boxed sprints.</p>
+              <Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateCycleDialog} style={{ marginTop: 12 }}>
+                New cycle
+              </Btn>
+            </div>
+          ) : (
+            <div style={{ padding: '20px var(--pad-x)' }}>
+              {activeCycle && (
+                <section style={{ marginBottom: 32 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
+                    ACTIVE CYCLE
+                  </div>
+                  <div style={{
+                    border: '1px solid var(--accent-border)', borderRadius: 'var(--r-3)',
+                    padding: 16, background: 'var(--bg-raised)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 15, fontWeight: 500 }}>{activeCycle.name}</span>
+                      <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
+                        {formatDate(activeCycle.startsAt)} – {formatDate(activeCycle.endsAt)}
+                      </span>
+                      <div style={{ flex: 1 }} />
+                      <Btn variant="ghost" icon={<IcoSettings size={12} />} size="sm" onClick={() => openEditCycleDialog(activeCycle)}>
+                        Configure
+                      </Btn>
+                    </div>
+                    {renderCycleProgress(activeCycle)}
+                    {(activeCycle.issues?.nodes ?? []).length > 0 && (
+                      <div style={{ marginTop: 12 }}>
+                        {activeCycle.issues!.nodes.map((issue) => (
+                          <button
+                            key={issue.id}
+                            type="button"
+                            onClick={() => navigate(`/issue/${issue.id}`)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 8,
+                              width: '100%', padding: '6px 0', background: 'none', border: 'none',
+                              cursor: 'pointer', fontSize: 14.5, color: 'var(--fg)', textAlign: 'left',
+                            }}
+                          >
+                            <StatusIconPrimitive stateType={getStateType(issue.state.type)} stateColor={getStateColor(issue.state.type)} size={14} />
+                            <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>{issue.identifier}</span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {upcomingCycles.length > 0 && (
+                <section style={{ marginBottom: 32 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
+                    UPCOMING
+                  </div>
+                  {upcomingCycles.map((cycle) => (
+                    <CycleRow key={cycle.id} cycle={cycle} onEdit={() => openEditCycleDialog(cycle)} onDelete={() => void handleCycleDelete(cycle.id)} />
+                  ))}
+                </section>
+              )}
+
+              {completedCycles.length > 0 && (
+                <section>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
+                    COMPLETED
+                  </div>
+                  {completedCycles.map((cycle) => (
+                    <CycleRow key={cycle.id} cycle={cycle} onEdit={() => openEditCycleDialog(cycle)} onDelete={() => void handleCycleDelete(cycle.id)} />
+                  ))}
+                </section>
+              )}
+            </div>
+          )
+        )}
+      </div>
+
+      {/* Milestone Dialog */}
+      <dialog ref={milestoneDialogRef} className="dialog-modal" onClick={(e) => { if (e.target === milestoneDialogRef.current) milestoneDialogRef.current?.close(); }}>
+        <form onSubmit={(e) => void handleMilestoneSubmit(e)} style={{ padding: 20, minWidth: 360 }}>
           <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 500 }}>
-            {dialogMode === 'create' ? 'New cycle' : 'Edit cycle'}
+            {milestoneDialogMode === 'create' ? 'New milestone' : 'Edit milestone'}
+          </h3>
+          <label style={{ display: 'block', marginBottom: 12 }}>
+            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Title</span>
+            <input
+              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)' }}
+              value={milestoneTitle}
+              onChange={(e) => setMilestoneTitle(e.target.value)}
+              placeholder="e.g. Release v1.0 or Core Engine"
+              required
+            />
+          </label>
+          <label style={{ display: 'block', marginBottom: 16 }}>
+            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Description</span>
+            <textarea
+              style={{ width: '100%', minHeight: 60, padding: '6px 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)', resize: 'vertical' }}
+              value={milestoneDescription}
+              onChange={(e) => setMilestoneDescription(e.target.value)}
+              placeholder="Milestone goals and deliverables"
+            />
+          </label>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn--subtle btn--md" onClick={() => milestoneDialogRef.current?.close()}>Cancel</button>
+            <button type="submit" className="btn btn--accent btn--md">
+              {milestoneDialogMode === 'create' ? 'Create' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </dialog>
+
+      {/* Cycle Dialog */}
+      <dialog ref={cycleDialogRef} className="dialog-modal" onClick={(e) => { if (e.target === cycleDialogRef.current) cycleDialogRef.current?.close(); }}>
+        <form onSubmit={(e) => void handleCycleSubmit(e)} style={{ padding: 20, minWidth: 340 }}>
+          <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 500 }}>
+            {cycleDialogMode === 'create' ? 'New cycle' : 'Edit cycle'}
           </h3>
           <label style={{ display: 'block', marginBottom: 12 }}>
             <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Name</span>
@@ -336,13 +681,44 @@ export function CyclesPage() {
             </label>
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn--subtle btn--md" onClick={() => dialogRef.current?.close()}>Cancel</button>
+            <button type="button" className="btn btn--subtle btn--md" onClick={() => cycleDialogRef.current?.close()}>Cancel</button>
             <button type="submit" className="btn btn--accent btn--md">
-              {dialogMode === 'create' ? 'Create' : 'Save'}
+              {cycleDialogMode === 'create' ? 'Create' : 'Save'}
             </button>
           </div>
         </form>
       </dialog>
+    </div>
+  );
+}
+
+function MilestoneRow({
+  milestone,
+  onEdit,
+  onDelete,
+  onNavigate,
+}: {
+  milestone: MilestoneIssueSummary;
+  onEdit: () => void;
+  onDelete: () => void;
+  onNavigate: () => void;
+}) {
+  const childCount = milestone.children?.nodes.length ?? 0;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      padding: '10px 12px', borderRadius: 'var(--r-2)',
+      border: '1px solid var(--border)', marginBottom: 6, background: 'var(--bg-raised)',
+    }}>
+      <IcoCycle size={14} style={{ color: 'var(--fg-dim)' }} />
+      <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>
+        {milestone.identifier}
+      </span>
+      <span style={{ fontSize: 15, fontWeight: 500, flex: 1 }}>{milestone.title}</span>
+      <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{childCount} tasks</span>
+      <Btn variant="ghost" size="sm" onClick={onNavigate}>Context</Btn>
+      <Btn variant="ghost" size="sm" onClick={onEdit}>Edit</Btn>
+      <Btn variant="ghost" size="sm" onClick={onDelete} style={{ color: 'var(--danger)' }}>Delete</Btn>
     </div>
   );
 }

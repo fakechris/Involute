@@ -35,6 +35,7 @@ import {
 
 export interface CreateIssueInput {
   acceptance?: string | null;
+  assigneeId?: string | null;
   commitmentStatus?: Issue['commitmentStatus'] | null;
   constraints?: string | null;
   cycleId?: string | null;
@@ -59,6 +60,7 @@ export interface UpdateIssueInput {
   cycleId?: string | null;
   description?: string | null;
   expectedRevision?: number | null;
+  kind?: Issue['kind'] | null;
   labelIds?: string[] | null;
   outcome?: string | null;
   parentId?: string | null;
@@ -128,6 +130,7 @@ export async function createIssueInTransaction(
   const created = await prisma.issue.create({
       data: {
         acceptance: input.acceptance ?? null,
+        assigneeId: input.assigneeId ?? null,
         commitmentStatus: input.commitmentStatus ?? 'COMMITTED',
         constraints: input.constraints ?? null,
         cycleId: input.cycleId ?? null,
@@ -390,6 +393,10 @@ export async function updateIssue(
 
     if ('repository' in input) {
       data.repository = input.repository ?? null;
+    }
+
+    if ('kind' in input && input.kind) {
+      data.kind = input.kind;
     }
 
     if (Object.keys(data).length === 0) {

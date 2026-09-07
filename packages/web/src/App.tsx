@@ -814,8 +814,8 @@ export function App() {
       },
       {
         id: 'go-cycles',
-        label: 'Go to cycles',
-        description: 'Open the cycles view',
+        label: 'Go to milestones',
+        description: 'Open the milestones & cycles view',
         group: 'Navigation',
         shortcut: 'G V',
         run: () => navigate('/cycles'),
@@ -985,7 +985,6 @@ export function App() {
               <span className="app-shell__link-label">Graph</span>
               <kbd className="app-shell__link-kbd" aria-hidden="true">R</kbd>
             </NavLink>
-            {/* Frozen Linear leftover routes: no new Inbox / Cycle / AgentSession product work. */}
             <NavLink to="/inbox" className={getNavLinkClassName} title="Go to Inbox · G I">
               <span className="app-shell__nav-icon"><IcoInbox size={14} /></span>
               <span className="app-shell__link-label">Inbox</span>
@@ -1084,7 +1083,7 @@ export function App() {
                             }}
                           >
                             <span className="app-shell__subnav-icon"><IcoCycle size={12} /></span>
-                            Cycles
+                            Milestones
                           </button>
                         </div>
                       ) : null}
@@ -1208,6 +1207,7 @@ export function App() {
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/settings/*" element={<SettingsPage />} />
               <Route path="/cycles" element={<CyclesPage />} />
+              <Route path="/milestones" element={<CyclesPage />} />
               <Route path="/issue/:id" element={<IssuePage />} />
             </Routes>
           </Suspense>
