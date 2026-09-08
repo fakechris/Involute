@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "involute": {
+      "url": "http://127.0.0.1:4200/mcp",
+      "headers": {
+        "Authorization": "Bearer ${INV_AGENT_TOKEN}"
+      }
+    },
+    "involute-readonly": {
+      "url": "http://127.0.0.1:4200/mcp/readonly",
+      "headers": {
+        "Authorization": "Bearer ${INV_AGENT_TOKEN}"
+      }
+    }
+  }
+}
