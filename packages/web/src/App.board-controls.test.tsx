@@ -10,13 +10,13 @@ describe('App board controls', () => {
   });
 
   it('filters board issues and can save then reload a saved view', async () => {
-    vi.spyOn(window, 'prompt').mockReturnValue('Bug queue');
+    vi.spyOn(window, 'prompt').mockReturnValue('Bug view');
 
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Filter/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
 
     const filters = screen.getByLabelText('Board filters');
     fireEvent.click(within(filters).getByText('Labels'));
@@ -29,7 +29,7 @@ describe('App board controls', () => {
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
-    expect(screen.getByRole('option', { name: 'Bug queue' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Bug view' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
 
@@ -39,7 +39,7 @@ describe('App board controls', () => {
     });
 
     fireEvent.change(screen.getByLabelText('Load saved board view'), {
-      target: { value: screen.getByRole('option', { name: 'Bug queue' }).getAttribute('value') },
+      target: { value: screen.getByRole('option', { name: 'Bug view' }).getAttribute('value') },
     });
 
     await waitFor(() => {
@@ -86,7 +86,7 @@ describe('App board controls', () => {
 
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Filter/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
 
     fireEvent.change(screen.getByLabelText('Sort board by'), {
       target: { value: 'title' },
@@ -134,7 +134,7 @@ describe('App board controls', () => {
 
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Filter/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
 
     expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('data-focused', 'true');
 
@@ -164,7 +164,7 @@ describe('App board controls', () => {
 
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Filter/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
 
     const searchInput = screen.getByLabelText('Search board issues');
     fireEvent.keyDown(window, { key: '/' });
@@ -244,7 +244,7 @@ describe('App board controls', () => {
 
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Filter/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
 
     fireEvent.keyDown(window, { key: 'x' });
 
@@ -305,7 +305,7 @@ describe('App board controls', () => {
 
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Filter/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
 
     const filters = screen.getByLabelText('Board filters');
     fireEvent.click(within(filters).getByText('Labels'));

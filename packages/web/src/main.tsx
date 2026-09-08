@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { AppApolloProvider } from './lib/apollo';
 import './styles/app.css';
+import './styles/in-review.css';
 
 const rootElement = document.getElementById('root');
 

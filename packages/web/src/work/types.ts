@@ -196,6 +196,39 @@ export interface CandidatesPageQueryVariables {
   };
 }
 
+
+/** Committed work currently waiting in an In Review workflow state. */
+export type InReviewWork = CandidateWork;
+
+export interface InReviewPageQueryData {
+  issues: {
+    nodes: InReviewWork[];
+    pageInfo: {
+      endCursor: string | null;
+      hasNextPage: boolean;
+    };
+  };
+}
+
+export interface InReviewPageQueryVariables {
+  first: number;
+  after?: string;
+  query?: string | null;
+  filter: {
+    commitmentStatus?: CommitmentStatus;
+    state?: {
+      name?: {
+        eq: string;
+      };
+    };
+    team?: {
+      key?: {
+        eq: string;
+      };
+    };
+  } | null;
+}
+
 export interface WorkGraphPageQueryData {
   issues: {
     nodes: GraphWorkNode[];

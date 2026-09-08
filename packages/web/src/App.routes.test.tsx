@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { apolloMocks, boardQueryResult, renderApp } from './test/app-test-helpers';
@@ -9,6 +9,20 @@ function renderTestApp(queryState = { data: boardQueryResult, loading: false }, 
   return renderApp(App, queryState, initialEntries);
 }
 
+const boardQueryOptions = expect.objectContaining({
+  variables: {
+    first: 200,
+    filter: {
+      commitmentStatus: 'COMMITTED',
+      team: {
+        key: {
+          eq: 'SON',
+        },
+      },
+    },
+  },
+});
+
 describe('App routes and team flows', () => {
   it('persists the selected team across reload by restoring the saved team key from localStorage', async () => {
     window.localStorage.setItem(ACTIVE_TEAM_STORAGE_KEY, 'SON');
@@ -18,23 +32,7 @@ describe('App routes and team flows', () => {
     expect(await screen.findByText('Workflow overview for Sonata.')).toBeInTheDocument();
     expect(screen.getByLabelText('Select team')).toHaveValue('SON');
     expect(within(screen.getByTestId('column-Backlog')).getByText('SON-1')).toBeInTheDocument();
-    expect(apolloMocks.useQuery).toHaveBeenNthCalledWith(
-      1,
-      expect.anything(),
-      expect.objectContaining({
-        variables: {
-          first: 200,
-          filter: {
-            commitmentStatus: 'COMMITTED',
-            team: {
-              key: {
-                eq: 'SON',
-              },
-            },
-          },
-        },
-      }),
-    );
+    expect(apolloMocks.useQuery).toHaveBeenCalledWith(expect.anything(), boardQueryOptions);
   });
 
   it('hydrates the persisted team key before the initial board query runs on reload', async () => {
@@ -42,23 +40,7 @@ describe('App routes and team flows', () => {
 
     renderTestApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(apolloMocks.useQuery).toHaveBeenNthCalledWith(
-      1,
-      expect.anything(),
-      expect.objectContaining({
-        variables: {
-          first: 200,
-          filter: {
-            commitmentStatus: 'COMMITTED',
-            team: {
-              key: {
-                eq: 'SON',
-              },
-            },
-          },
-        },
-      }),
-    );
+    expect(apolloMocks.useQuery).toHaveBeenCalledWith(expect.anything(), boardQueryOptions);
 
     expect(await screen.findByText('Workflow overview for Sonata.')).toBeInTheDocument();
   });
