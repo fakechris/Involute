@@ -261,4 +261,101 @@ export async function attachEvidence(
 
   return prisma.$transaction(async (transaction) => {
     const work = await requireWork(transaction, input.workId);
-    let evidenceIdempotencyId: st
+    let evidenceIdempotencyId: string | null = null;
+    if (input.idempotencyKey) {
+      const reservation = await reserveWorkIdempotency(transaction, {
+        actor,
+        key: input.idempotencyKey,
+        operation: 'evidence_attach',
+        requestHash: hashIdempotencyRequest({ ...input, idempotencyKey: null }),
+        teamId: work.teamId,
+      });
+      if (!reservation.created) {
+        if (reservation.record.workId !== work.id) {
+          throw createValidationError(WORK_IDEMPOTENCY_CONFLICT_MESSAGE);
+        }
+        if (!reservation.record.resultId) {
+          throw createValidationError(WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE);
+        }
+        const replayed = await transaction.workEvidence.findUnique({
+          where: { id: reservation.record.resultId },
+        });
+        if (!replayed || replayed.workId !== work.id) {
+          throw createValidationError(WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE);
+        }
+        const freshWork = await transaction.issue.findUniqueOrThrow({ where: { id: work.id } });
+        return { evidence: replayed, work: freshWork };
+      }
+      evidenceIdempotencyId = reservation.record.id;
+    }
+    const run = await findRun(transaction, input.runId as string, work.id);
+    if (!run) throw createNotFoundError(WORK_RUN_NOT_FOUND_MESSAGE);
+    if (run.actorId !== actorId) throw createValidationError(WORK_RUN_ACTOR_MISMATCH_MESSAGE);
+
+    const evidence = await transaction.workEvidence.create({
+      data: {
+        kind,
+        actorId,
+        runId: run.id,
+        summary: input.summary ?? null,
+        url: input.url,
+        workId: work.id,
+      },
+    });
+
+    await enqueueWorkEvent(transaction, {
+      payload: {
+        evidenceId: evidence.id,
+        kind: evidence.kind,
+        url: evidence.url,
+        summary: evidence.summary,
+        runId: evidence.runId,
+        actorId: actor.actorId ?? null,
+      },
+      type: 'artifact.attached',
+      workId: work.id,
+      workIdentifier: work.identifier,
+    });
+
+    if (evidenceIdempotencyId) {
+      await completeWorkIdempotency(transaction, evidenceIdempotencyId, work.id, evidence.id);
+    }
+
+    return { evidence, work };
+  });
+}
+
+async function moveToInReview(prisma: DatabaseClient, work: Issue, actor: WriteActor): Promise<Issue> {
+  const currentState = await prisma.workflowState.findUnique({
+    where: { id: work.stateId },
+    select: { type: true },
+  });
+
+  if (!currentState || currentState.type === 'REVIEW' || currentState.type === 'COMPLETED' || currentState.type === 'CANCELED') {
+    return work;
+  }
+
+  const reviewState = await prisma.workflowState.findFirst({
+    where: {
+      teamId: work.teamId,
+      type: 'REVIEW',
+    },
+    select: { id: true },
+  });
+
+  if (!reviewState) throw createValidationError(WORK_REVIEW_STATE_MISSING_MESSAGE);
+
+  // Optimistic guard: only the first concurrent COMPLETED reporter wins the
+  // REVIEW transition. Losers re-read; if the work already moved to a terminal
+  // review state they become idempotent no-ops instead of double-incrementing
+  // revision and emitting a duplicate work.review_submitted event.
+  const transition = await prisma.issue.updateMany({
+    where: { id: work.id, revision: work.revision, stateId: work.stateId },
+    data: {
+      revision: { increment: 1 },
+      stateId: reviewState.id,
+    },
+  });
+  if (transition.count !== 1) {
+    const fresh = await prisma.issue.findUniqueOrThrow({ where: { id: work.id } });
+    const freshState = await prisma.workflowState.findUnique({
