@@ -235,6 +235,46 @@ describe('GraphQL mutations', () => {
     expect(updatedIssue.state.name).toBe('In Progress');
   });
 
+  it('updates issue and resolves claim selection including id without GraphQL validation error', async () => {
+    const response = await postGraphQL({
+      query: `
+        mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
+          issueUpdate(id: $id, input: $input) {
+            success
+            issue {
+              id
+              identifier
+              revision
+              state { id name }
+              claim {
+                id
+                leaseUntil
+                actor {
+                  id
+                  name
+                  email
+                  actorKind
+                }
+              }
+            }
+          }
+        }
+      `,
+      variables: {
+        id: fixture.issue.id,
+        input: {
+          stateId: fixture.states.inProgress.id,
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.issueUpdate.success).toBe(true);
+    expect(response.body.data.issueUpdate.issue.state.name).toBe('In Progress');
+    expect(response.body.data.issueUpdate.issue.claim).toBeNull();
+  });
+
   it('deletes a comment and then deletes its issue', async () => {
     const comment = await prisma.comment.create({
       data: {

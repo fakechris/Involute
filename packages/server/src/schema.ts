@@ -506,6 +506,7 @@ const typeDefs = /* GraphQL */ `
   }
 
   type WorkClaimRecord {
+    id: ID!
     actor: User!
     leaseUntil: DateTime!
     createdAt: DateTime!
@@ -2231,6 +2232,7 @@ const resolvers = {
     actorKind: (parent: UserParent): User['actorKind'] => parent.actorKind,
   },
   WorkClaimRecord: {
+    id: (parent: WorkClaimParent): string => parent.id,
     actor: async (
       parent: WorkClaimParent,
       _args: Record<string, never>,
