@@ -136,7 +136,7 @@ Enforced server-side, not just documented:
   Done, or rewrite `acceptance/scope/verification/outcome/constraints` on
   committed work — those calls fail with `FORBIDDEN` and the agent must ask a
   human
-- completed runs move work to In Review, never Done
+- completed runs move work to In Review; Done is human review or CLEAR auto-accept (agents still cannot mark Done)
 
 ## 5. Rotate or revoke
 
