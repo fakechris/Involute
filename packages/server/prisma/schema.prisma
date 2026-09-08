@@ -83,6 +83,18 @@ enum WorkReviewDecisionKind {
   REJECTED
 }
 
+enum AutoAcceptTier {
+  CLEAR
+  LIKELY
+  AMBIGUOUS
+  INSUFFICIENT
+}
+
+enum AutoAcceptOutcome {
+  ACCEPTED
+  SKIPPED
+}
+
 model Team {
   id              String          @id @default(uuid()) @db.Uuid
   key             String          @unique
@@ -142,6 +154,7 @@ model User {
   workRuns       WorkRun[]   @relation("WorkRunActor")
   workEvidence   WorkEvidence[] @relation("WorkEvidenceActor")
   reviewDecisions WorkReviewDecision[] @relation("WorkReviewDecisionReviewer")
+  autoAcceptEvaluations WorkAutoAcceptEvaluation[] @relation("WorkAutoAcceptEvaluationActor")
   agentCredentials AgentCredential[]
   createdWebhooks WebhookSubscription[] @relation("WebhookSubscriptionCreator")
   notifications  Notification[]
@@ -233,6 +246,7 @@ model Issue {
   runs              WorkRun[]
   evidence          WorkEvidence[]
   reviewDecisions   WorkReviewDecision[]
+  autoAcceptEvaluations WorkAutoAcceptEvaluation[]
   notifications     Notification[]
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
@@ -422,6 +436,7 @@ model WorkRun {
   endedAt     DateTime?
   evidence    WorkEvidence[]
   reviewDecisions WorkReviewDecision[]
+  autoAcceptEvaluations WorkAutoAcceptEvaluation[]
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
@@ -462,10 +477,32 @@ model WorkReviewDecision {
   fromRevision   Int
   toRevision     Int
   createdAt      DateTime               @default(now())
+  autoAcceptEvaluation WorkAutoAcceptEvaluation?
 
   @@index([workId, createdAt])
   @@index([runId])
   @@index([reviewerId])
+}
+
+model WorkAutoAcceptEvaluation {
+  id         String            @id @default(uuid()) @db.Uuid
+  workId     String            @db.Uuid
+  work       Issue             @relation(fields: [workId], references: [id], onDelete: Cascade)
+  runId      String?           @db.Uuid
+  run        WorkRun?          @relation(fields: [runId], references: [id], onDelete: SetNull)
+  actorId    String?           @db.Uuid
+  actor      User?             @relation("WorkAutoAcceptEvaluationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  tier       AutoAcceptTier
+  outcome    AutoAcceptOutcome
+  reasons    String[]
+  signals    Json
+  decisionId String?           @unique @db.Uuid
+  decision   WorkReviewDecision? @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+  createdAt  DateTime          @default(now())
+
+  @@index([workId, createdAt])
+  @@index([runId])
+  @@index([tier, outcome])
 }
 
 model EventOutbox {

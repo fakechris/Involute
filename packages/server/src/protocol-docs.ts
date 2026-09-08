@@ -15,7 +15,7 @@ primary entrypoint; the web board is an observation and governance surface.
 2. Fuzzy discoveries enter as candidates (\`work_propose\`), never as committed work.
 3. Committed work is created by a human (\`work_commit\`). Agents never commit.
 4. Claim before executing (\`work_claim\`); report attempts with \`run_report\`.
-5. Run complete is not work accepted. Moving to Done requires a human review.
+5. Run complete is not work accepted. Moving to Done requires a human review, or the graded auto-accept gate when evidence is objectively CLEAR (e.g. PR merged, test exit 0). Agents still cannot mark Done.
 6. Do not file local TODOs as work. If it is not worth a contract, keep it local.
 7. Pass \`expected_revision\` on updates; conflicts mean someone moved first — re-read.
 
