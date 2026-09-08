@@ -159,3 +159,54 @@ model User {
   createdWebhooks WebhookSubscription[] @relation("WebhookSubscriptionCreator")
   notifications  Notification[]
 }
+
+model AgentCredential {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  tokenHash String   @unique
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId    String?  @db.Uuid
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  scopes    String[] @default(["read", "propose", "claim", "report", "update", "link"])
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+  revokedAt DateTime?
+
+  @@index([userId])
+  @@index([revokedAt, expiresAt])
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @unique
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model TeamMembership {
+  id        String             @id @default(uuid()) @db.Uuid
+  teamId    String             @db.Uuid
+  userId    String             @db.Uuid
+  role      TeamMembershipRole
+  createdAt DateTime           @default(now())
+  team      Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([teamId])
+  @@index([userId])
+}
+
+model Issue {
+  id                String            @id @default(uuid()) @db.Uuid
+  identifier        String            @unique
+  title             String
+  description       String?
+  stateId           String            @db.Uuid
+  state             WorkflowState     @relation(fields: [stateId, teamId], references: [id, teamId], onDelete: Restrict)
