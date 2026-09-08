@@ -89,7 +89,7 @@ describe('App team selection', () => {
     );
   });
 
-  it('allows collapsing an expanded team section from the sidebar without resetting it open', async () => {
+  it('switches teams from the command palette using shell team actions', async () => {
     window.localStorage.setItem(
       APP_SHELL_TEAMS_STORAGE_KEY,
       JSON.stringify(
@@ -116,21 +116,13 @@ describe('App team selection', () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
     await screen.findByRole('heading', { name: 'All issues' });
-    const sonataTeamButton = Array.from(document.querySelectorAll<HTMLButtonElement>('.app-shell__team-link')).find(
-      (button) => button.textContent?.includes('SON') && button.textContent?.includes('Sonata'),
-    );
 
-    expect(sonataTeamButton).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Open command palette/i }));
+    const palette = await screen.findByRole('dialog', { name: 'Command palette' });
+    fireEvent.click(within(palette).getByRole('button', { name: /Open Sonata/i }));
 
-    fireEvent.click(sonataTeamButton!);
-
-    expect(await screen.findByRole('button', { name: 'Issues' })).toBeInTheDocument();
-
-    fireEvent.click(sonataTeamButton!);
-
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: 'Issues' })).not.toBeInTheDocument();
-    });
+    expect(await screen.findByText('Workflow overview for Sonata.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Select team')).toHaveValue('SON');
   });
 
   it('requests board issues with a team-scoped filter after selecting Sonata', async () => {
