@@ -94,3 +94,68 @@ enum AutoAcceptOutcome {
   ACCEPTED
   SKIPPED
 }
+
+model Team {
+  id              String          @id @default(uuid()) @db.Uuid
+  key             String          @unique
+  name            String
+  visibility      TeamVisibility  @default(PRIVATE)
+  nextIssueNumber Int             @default(1)
+  states          WorkflowState[]
+  issues          Issue[]
+  memberships     TeamMembership[]
+  projects        Project[]
+  cycles          Cycle[]
+  idempotencyKeys WorkIdempotency[]
+  webhookSubscriptions WebhookSubscription[]
+  agentCredentials AgentCredential[]
+
+  @@index([key])
+}
+
+model WorkflowState {
+  id       String            @id @default(uuid()) @db.Uuid
+  name     String
+  type     WorkflowStateType @default(UNSTARTED)
+  position Int               @default(0)
+  teamId   String            @db.Uuid
+  team     Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  issues   Issue[]
+
+  @@unique([id, teamId])
+  @@unique([teamId, name])
+  @@index([teamId])
+}
+
+model IssueLabel {
+  id     String  @id @default(uuid()) @db.Uuid
+  name   String  @unique
+  issues Issue[]
+}
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  name           String
+  email          String    @unique
+  avatarUrl      String?
+  googleSubject  String?   @unique
+  globalRole     GlobalRole @default(USER)
+  actorKind      ActorKind @default(HUMAN)
+  notificationPrefs Json    @default("{}")
+  assignedIssues Issue[]   @relation("IssueAssignee")
+  comments       Comment[]
+  memberships    TeamMembership[]
+  sessions       Session[]
+  ledProjects    Project[] @relation("ProjectLead")
+  uploads        Attachment[] @relation("Uploads")
+  workLinks      WorkLink[] @relation("WorkLinkActor")
+  workAudits     WorkAudit[] @relation("WorkAuditActor")
+  workClaims     WorkClaim[] @relation("WorkClaimActor")
+  workRuns       WorkRun[]   @relation("WorkRunActor")
+  workEvidence   WorkEvidence[] @relation("WorkEvidenceActor")
+  reviewDecisions WorkReviewDecision[] @relation("WorkReviewDecisionReviewer")
+  autoAcceptEvaluations WorkAutoAcceptEvaluation[] @relation("WorkAutoAcceptEvaluationActor")
+  agentCredentials AgentCredential[]
+  createdWebhooks WebhookSubscription[] @relation("WebhookSubscriptionCreator")
+  notifications  Notification[]
+}
