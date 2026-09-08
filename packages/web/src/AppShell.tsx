@@ -1,19 +1,11 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { NavLink, Route, Routes, useNavigate } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
+import { NavLink, Route, Routes } from 'react-router-dom';
 
-import { CommandPalette, type PaletteAction } from './app/CommandPalette';
-import { TweaksPanel, type DensityMode, type ThemeMode } from './app/TweaksPanel';
-import {
-  getStoredDensity,
-  getStoredSidebarWidth,
-  getStoredTheme,
-  persistDensity,
-  persistSidebarWidth,
-  persistTheme,
-} from './app/shellStorage';
+import { CommandPalette } from './app/CommandPalette';
+import { TweaksPanel } from './app/TweaksPanel';
+import { useShellController } from './app/useShellController';
 import { IcoFilter, IcoGraph, IcoInbox, IcoIssues, IcoProject, IcoSearch, IcoSettings, IcoTeam, IcoViews } from './components/Icons';
 import { NotificationsBell } from './components/NotificationsBell';
-import { fetchSessionState, type SessionState } from './lib/session';
 
 const BoardPage = lazy(async () => {
   const module = await import('./routes/BoardPage');
@@ -77,127 +69,20 @@ function getNavLinkClassName({ isActive }: { isActive: boolean }) {
 }
 
 export function App() {
-  const navigate = useNavigate();
-  const [theme, setThemeState] = useState<ThemeMode>(() => getStoredTheme());
-  const [density, setDensityState] = useState<DensityMode>(() => getStoredDensity());
-  const [sidebarWidth, setSidebarWidthState] = useState(() => getStoredSidebarWidth());
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [tweaksOpen, setTweaksOpen] = useState(false);
-  const [session, setSession] = useState<SessionState | null>(null);
-  const pendingShortcut = useRef<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchSessionState().then((nextSession) => {
-      if (!cancelled) {
-        setSession(nextSession);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    persistTheme(theme);
-  }, [theme]);
-
-  useEffect(() => {
-    document.documentElement.dataset.density = density;
-    persistDensity(density);
-  }, [density]);
-
-  useEffect(() => {
-    document.documentElement.style.setProperty('--sidebar-width', `${sidebarWidth}px`);
-    persistSidebarWidth(sidebarWidth);
-  }, [sidebarWidth]);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      const target = event.target as HTMLElement | null;
-      const tag = target?.tagName?.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) {
-        return;
-      }
-
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        setPaletteOpen(true);
-        return;
-      }
-
-      if (event.key.toLowerCase() === 'g') {
-        pendingShortcut.current = 'g';
-        window.setTimeout(() => {
-          pendingShortcut.current = null;
-        }, 800);
-        return;
-      }
-
-      if (pendingShortcut.current === 'g') {
-        const shortcutKey = event.key.toLowerCase();
-        pendingShortcut.current = null;
-        if (shortcutKey === 'n') {
-          event.preventDefault();
-          navigate('/in-review');
-          return;
-        }
-        if (shortcutKey === 'b' || shortcutKey === 'i') {
-          event.preventDefault();
-          navigate('/');
-          return;
-        }
-        if (shortcutKey === 'c') {
-          event.preventDefault();
-          navigate('/candidates');
-          return;
-        }
-        if (shortcutKey === 'r') {
-          event.preventDefault();
-          navigate('/graph');
-        }
-      }
-    }
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [navigate]);
-
-  const actions = useMemo<PaletteAction[]>(
-    () => [
-      {
-        id: 'go-board',
-        label: 'Go to board',
-        group: 'Navigation',
-        shortcut: 'G B',
-        run: () => navigate('/'),
-      },
-      {
-        id: 'go-in-review',
-        label: 'Go to In Review',
-        description: 'Batch accept or return committed work waiting in review',
-        group: 'Navigation',
-        shortcut: 'G N',
-        run: () => navigate('/in-review'),
-      },
-      {
-        id: 'go-candidates',
-        label: 'Go to candidates',
-        group: 'Navigation',
-        shortcut: 'G C',
-        run: () => navigate('/candidates'),
-      },
-      {
-        id: 'go-graph',
-        label: 'Go to graph',
-        group: 'Navigation',
-        shortcut: 'G R',
-        run: () => navigate('/graph'),
-      },
-    ],
-    [navigate],
-  );
+  const {
+    actions,
+    density,
+    paletteOpen,
+    session,
+    setDensityState,
+    setPaletteOpen,
+    setSidebarWidthState,
+    setThemeState,
+    setTweaksOpen,
+    sidebarWidth,
+    theme,
+    tweaksOpen,
+  } = useShellController();
 
   return (
     <div className="app-shell">
@@ -269,14 +154,18 @@ export function App() {
             <Route path="/graph" element={<GraphPage />} />
             <Route path="/work/:id" element={<WorkContextPage />} />
             <Route path="/inbox" element={<InboxPage />} />
+            <Route path="/issue/:id" element={<IssuePage />} />
             <Route path="/issues/:id" element={<IssuePage />} />
             <Route path="/my-issues" element={<MyIssuesPage />} />
             <Route path="/views" element={<ViewsPage />} />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/cycles" element={<CyclesPage />} />
+            <Route path="/milestones" element={<CyclesPage />} />
             <Route path="/members" element={<MembersPage />} />
             <Route path="/access" element={<AccessPage />} />
+            <Route path="/settings/access" element={<AccessPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings/*" element={<SettingsPage />} />
           </Routes>
         </Suspense>
       </div>
