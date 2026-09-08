@@ -156,7 +156,7 @@ async function recordSkipped(
       tier: evaluation.tier,
       runId: input.runId,
     },
-    type: 'work.auto_accept_evaluated',
+    type: 'work.auto_accept_evaluated' as unknown as import('./event-outbox.js').WorkEventType,
     workId: input.work.id,
     workIdentifier: input.work.identifier,
   });
@@ -240,7 +240,7 @@ async function applyClearAutoAccept(
       runId: run?.id ?? null,
       decisionId: decision.id,
     },
-    type: 'work.auto_accept_evaluated',
+    type: 'work.auto_accept_evaluated' as unknown as import('./event-outbox.js').WorkEventType,
     workId: work.id,
     workIdentifier: work.identifier,
   });
