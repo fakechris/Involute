@@ -1,0 +1,29 @@
+/* INV-12: Batch In Review UI */
+.in-review-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.in-review-bulkbar {
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--bg-sunken);
+}
+
+.in-review-list-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.in-review-select {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 4px;
+}
