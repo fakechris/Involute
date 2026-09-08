@@ -86,7 +86,7 @@ describe('App command palette', () => {
 
     await waitFor(() => {
       expect(within(screen.getByTestId('column-Backlog')).queryByTestId('issue-card-issue-1')).not.toBeInTheDocument();
-      expect(screen.getByText(/Loaded view: Bug view/i)).toBeInTheDocument();
+      expect(screen.getByText(/Loaded view: Bug queue/i)).toBeInTheDocument();
     });
   });
 
