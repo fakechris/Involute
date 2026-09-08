@@ -63,6 +63,49 @@ export const CANDIDATES_PAGE_QUERY = gql`
   }
 `;
 
+export const IN_REVIEW_PAGE_QUERY = gql`
+  query InReviewPage($first: Int!, $after: String, $filter: IssueFilter, $query: String) {
+    issues(first: $first, after: $after, filter: $filter, query: $query) {
+      nodes {
+        id
+        identifier
+        title
+        description
+        commitmentStatus
+        kind
+        revision
+        outcome
+        scope
+        constraints
+        acceptance
+        verification
+        repository
+        createdAt
+        team {
+          id
+          key
+        }
+        assignee {
+          id
+          name
+          email
+          actorKind
+        }
+        state {
+          id
+          name
+          type
+          position
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`;
+
 export const WORK_GRAPH_PAGE_QUERY = gql`
   query WorkGraphPage($first: Int!, $after: String, $filter: IssueFilter) {
     issues(first: $first, after: $after, filter: $filter) {
