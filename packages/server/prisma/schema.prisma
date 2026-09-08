@@ -412,3 +412,95 @@ model WorkIdempotency {
   @@index([teamId])
   @@index([workId])
 }
+
+model AppSequence {
+  name  String @id
+  value Int
+}
+
+model WorkRun {
+  id          String        @id @default(uuid()) @db.Uuid
+  publicId    String        @unique
+  workId      String        @db.Uuid
+  work        Issue         @relation(fields: [workId], references: [id], onDelete: Cascade)
+  actorId     String?       @db.Uuid
+  actor       User?         @relation("WorkRunActor", fields: [actorId], references: [id], onDelete: SetNull)
+  claimId     String?       @db.Uuid
+  claim       WorkClaim?    @relation(fields: [claimId], references: [id], onDelete: SetNull)
+  baseRevision Int?
+  status      WorkRunStatus @default(RUNNING)
+  phase       String?
+  summary     String?
+  externalUrl String?
+  startedAt   DateTime      @default(now())
+  endedAt     DateTime?
+  evidence    WorkEvidence[]
+  reviewDecisions WorkReviewDecision[]
+  autoAcceptEvaluations WorkAutoAcceptEvaluation[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([workId, createdAt])
+  @@index([actorId])
+  @@index([claimId])
+  @@index([status])
+}
+
+model WorkEvidence {
+  id        String           @id @default(uuid()) @db.Uuid
+  workId    String           @db.Uuid
+  work      Issue            @relation(fields: [workId], references: [id], onDelete: Cascade)
+  runId     String?          @db.Uuid
+  run       WorkRun?         @relation(fields: [runId], references: [id], onDelete: SetNull)
+  actorId   String?          @db.Uuid
+  actor     User?            @relation("WorkEvidenceActor", fields: [actorId], references: [id], onDelete: SetNull)
+  kind      WorkEvidenceKind
+  url       String
+  summary   String?
+  createdAt DateTime         @default(now())
+
+  @@index([workId, createdAt])
+  @@index([runId])
+  @@index([actorId])
+}
+
+model WorkReviewDecision {
+  id             String                 @id @default(uuid()) @db.Uuid
+  workId         String                 @db.Uuid
+  work           Issue                  @relation(fields: [workId], references: [id], onDelete: Cascade)
+  runId          String?                @db.Uuid
+  run            WorkRun?               @relation(fields: [runId], references: [id], onDelete: SetNull)
+  reviewerId     String                 @db.Uuid
+  reviewer       User                   @relation("WorkReviewDecisionReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+  decision       WorkReviewDecisionKind
+  reason         String?
+  fromRevision   Int
+  toRevision     Int
+  createdAt      DateTime               @default(now())
+  autoAcceptEvaluation WorkAutoAcceptEvaluation?
+
+  @@index([workId, createdAt])
+  @@index([runId])
+  @@index([reviewerId])
+}
+
+model WorkAutoAcceptEvaluation {
+  id         String            @id @default(uuid()) @db.Uuid
+  workId     String            @db.Uuid
+  work       Issue             @relation(fields: [workId], references: [id], onDelete: Cascade)
+  runId      String?           @db.Uuid
+  run        WorkRun?          @relation(fields: [runId], references: [id], onDelete: SetNull)
+  actorId    String?           @db.Uuid
+  actor      User?             @relation("WorkAutoAcceptEvaluationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  tier       AutoAcceptTier
+  outcome    AutoAcceptOutcome
+  reasons    String[]
+  signals    Json
+  decisionId String?           @unique @db.Uuid
+  decision   WorkReviewDecision? @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+  createdAt  DateTime          @default(now())
+
+  @@index([workId, createdAt])
+  @@index([runId])
+  @@index([tier, outcome])
+}
