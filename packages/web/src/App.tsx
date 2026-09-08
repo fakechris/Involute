@@ -1,1 +1,1 @@
-PLACEHOLDER
+export { App } from './AppShell';
