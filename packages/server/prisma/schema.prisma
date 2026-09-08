@@ -329,3 +329,86 @@ model Attachment {
   @@index([commentId])
   @@index([uploaderId])
 }
+
+model LegacyLinearMapping {
+  id         String   @id @default(uuid()) @db.Uuid
+  oldId      String
+  newId      String
+  entityType String
+  migratedAt DateTime @default(now())
+
+  @@unique([oldId, entityType])
+  @@unique([newId, entityType])
+  @@index([entityType])
+}
+
+model WorkLink {
+  id        String       @id @default(uuid()) @db.Uuid
+  type      WorkLinkType
+  fromId    String       @db.Uuid
+  from      Issue        @relation("WorkLinkFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId      String       @db.Uuid
+  to        Issue        @relation("WorkLinkTo", fields: [toId], references: [id], onDelete: Cascade)
+  actorId   String?      @db.Uuid
+  actor     User?        @relation("WorkLinkActor", fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt DateTime     @default(now())
+
+  @@unique([fromId, toId, type])
+  @@index([fromId, type])
+  @@index([toId, type])
+  @@index([actorId])
+}
+
+model WorkAudit {
+  id              String     @id @default(uuid()) @db.Uuid
+  workId          String     @db.Uuid
+  work            Issue      @relation(fields: [workId], references: [id], onDelete: Cascade)
+  revision        Int
+  actorKind       ActorKind
+  actorId         String?    @db.Uuid
+  actor           User?      @relation("WorkAuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  surface         String?
+  sessionId       String?
+  sourceMessageId String?
+  reason          String?
+  before          Json?
+  after           Json
+  createdAt       DateTime   @default(now())
+
+  @@index([workId, createdAt])
+  @@index([actorId])
+}
+
+model WorkClaim {
+  id         String   @id @default(uuid()) @db.Uuid
+  workId     String   @unique @db.Uuid
+  work       Issue    @relation(fields: [workId], references: [id], onDelete: Cascade)
+  actorId    String   @db.Uuid
+  actor      User     @relation("WorkClaimActor", fields: [actorId], references: [id], onDelete: Cascade)
+  leaseUntil DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  runs       WorkRun[]
+
+  @@index([actorId])
+  @@index([leaseUntil])
+}
+
+model WorkIdempotency {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String
+  operation String
+  teamId    String   @db.Uuid
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  actorKey  String
+  requestHash String
+  workId    String?  @db.Uuid
+  work      Issue?   @relation(fields: [workId], references: [id], onDelete: SetNull)
+  resultId  String?  @db.Uuid
+  actorId   String?  @db.Uuid
+  createdAt DateTime @default(now())
+
+  @@unique([teamId, actorKey, operation, key], name: "work_idempotency_scope")
+  @@index([teamId])
+  @@index([workId])
+}
