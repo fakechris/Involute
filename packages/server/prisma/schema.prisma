@@ -1,1 +1,96 @@
-PLACEHOLDER
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum GlobalRole {
+  ADMIN
+  USER
+}
+
+enum TeamVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+enum TeamMembershipRole {
+  VIEWER
+  EDITOR
+  OWNER
+}
+
+enum WorkflowStateType {
+  BACKLOG
+  UNSTARTED
+  STARTED
+  REVIEW
+  COMPLETED
+  CANCELED
+}
+
+enum ActorKind {
+  HUMAN
+  AGENT
+  SERVICE
+}
+
+enum WorkKind {
+  ISSUE
+  PROJECT
+  MILESTONE
+  DECISION
+  EPIC
+}
+
+enum CommitmentStatus {
+  CANDIDATE
+  COMMITTED
+  REJECTED
+}
+
+enum WorkLinkType {
+  CONTAINS
+  BLOCKS
+  DERIVED_FROM
+  DISCOVERED_DURING
+  RELATED_TO
+  DUPLICATE_OF
+}
+
+enum WorkRunStatus {
+  QUEUED
+  RUNNING
+  BLOCKED
+  COMPLETED
+  FAILED
+}
+
+enum WorkEvidenceKind {
+  PR
+  TEST
+  LOG
+  SCREENSHOT
+  ARTIFACT
+  DECISION
+}
+
+enum WorkReviewDecisionKind {
+  ACCEPTED
+  REJECTED
+}
+
+enum AutoAcceptTier {
+  CLEAR
+  LIKELY
+  AMBIGUOUS
+  INSUFFICIENT
+}
+
+enum AutoAcceptOutcome {
+  ACCEPTED
+  SKIPPED
+}
