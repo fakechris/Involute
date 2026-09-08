@@ -10,7 +10,7 @@ describe('App command palette', () => {
 
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Search.*⌘K/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Open command palette/i }));
 
     const palette = await screen.findByRole('dialog', { name: 'Command palette' });
     fireEvent.click(within(palette).getByRole('button', { name: /Create issue/i }));
@@ -23,7 +23,7 @@ describe('App command palette', () => {
 
     expect(await screen.findByRole('heading', { name: 'Issue detail' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Search.*⌘K/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Open command palette/i }));
 
     const palette = await screen.findByRole('dialog', { name: 'Command palette' });
     fireEvent.click(within(palette).getByRole('button', { name: /Create issue/i }));
@@ -51,7 +51,7 @@ describe('App command palette', () => {
 
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Search.*⌘K/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Open command palette/i }));
 
     const palette = await screen.findByRole('dialog', { name: 'Command palette' });
     fireEvent.change(within(palette).getByLabelText('Search commands'), {
@@ -80,13 +80,13 @@ describe('App command palette', () => {
       expect(within(screen.getByTestId('column-Backlog')).getByText('Backlog item')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Search.*⌘K/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Open command palette/i }));
     const palette = await screen.findByRole('dialog', { name: 'Command palette' });
     fireEvent.click(within(palette).getByRole('button', { name: /Load board view · Bug queue/i }));
 
     await waitFor(() => {
       expect(within(screen.getByTestId('column-Backlog')).queryByTestId('issue-card-issue-1')).not.toBeInTheDocument();
-      expect(screen.getByText(/Loaded view: Bug queue/i)).toBeInTheDocument();
+      expect(screen.getByText(/Loaded view: Bug view/i)).toBeInTheDocument();
     });
   });
 
