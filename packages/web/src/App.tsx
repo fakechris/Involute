@@ -1,1 +1,1 @@
-__FILE__/workspace/agent-tools/APP_CONTENT_FOR_MCP.txt
+PLACEHOLDER
