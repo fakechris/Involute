@@ -1,0 +1,1 @@
+Completed runs and attached evidence move work to In Review. Done still requires a human `workReview`, or the graded auto-accept gate when evidence is objectively CLEAR (see [docs/auto-accept.md](./auto-accept.md)). Agents still cannot mark Done. Outbound webhooks use `INVOLUTE_WEBHOOK_URL` and `INVOLUTE_WEBHOOK_SECRET`.
