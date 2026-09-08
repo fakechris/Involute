@@ -13,6 +13,7 @@ import {
 } from './app/shellStorage';
 import { IcoFilter, IcoGraph, IcoInbox, IcoIssues, IcoProject, IcoSearch, IcoSettings, IcoTeam, IcoViews } from './components/Icons';
 import { NotificationsBell } from './components/NotificationsBell';
+import { fetchSessionState, type SessionState } from './lib/session';
 
 const BoardPage = lazy(async () => {
   const module = await import('./routes/BoardPage');
@@ -82,7 +83,20 @@ export function App() {
   const [sidebarWidth, setSidebarWidthState] = useState(() => getStoredSidebarWidth());
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [tweaksOpen, setTweaksOpen] = useState(false);
+  const [session, setSession] = useState<SessionState | null>(null);
   const pendingShortcut = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchSessionState().then((nextSession) => {
+      if (!cancelled) {
+        setSession(nextSession);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -231,7 +245,7 @@ export function App() {
           <button type="button" className="app-shell__icon-button" onClick={() => setPaletteOpen(true)} aria-label="Open command palette">
             <IcoSearch size={14} />
           </button>
-          <NotificationsBell />
+          <NotificationsBell authenticated={Boolean(session?.authenticated)} />
           <button type="button" className="app-shell__icon-button" onClick={() => setTweaksOpen((v) => !v)} aria-label="Tweaks">
             Tweaks
           </button>
