@@ -2,49 +2,20 @@ import type {
   Issue,
   Prisma,
   PrismaClient,
-  WorkEvidence,
   WorkEvidenceKind,
-  WorkClaim,
-  WorkReviewDecision,
-  WorkReviewDecisionKind,
   WorkRun,
   WorkRunStatus,
+  WorkReviewDecisionKind,
 } from '@prisma/client';
 
 import { findWorkByIdOrIdentifier } from './context-service.js';
-import { enqueueWorkEvent } from './inv11-hooks.js';
-import {
-  completeWorkIdempotency,
-  hashIdempotencyRequest,
-  reserveWorkIdempotency,
-} from './idempotency.js';
-import { projectWorkNotifications } from './notification-service.js';
 import {
   createNotFoundError,
   createValidationError,
   ISSUE_NOT_FOUND_MESSAGE,
   WORK_EVIDENCE_KIND_INVALID_MESSAGE,
-  WORK_IDEMPOTENCY_CONFLICT_MESSAGE,
-  WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE,
-  WORK_RUN_NOT_FOUND_MESSAGE,
   WORK_RUN_STATUS_INVALID_MESSAGE,
-  WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE,
-  WORK_RUN_ACTOR_MISMATCH_MESSAGE,
-  WORK_RUN_TERMINAL_MESSAGE,
-  WORK_RUN_TRANSITION_INVALID_MESSAGE,
-  WORK_RUN_CONFLICT_MESSAGE,
-  WORK_EVIDENCE_REQUIRES_RUN_MESSAGE,
-  WORK_REVIEW_REQUIRED_MESSAGE,
-  WORK_REVIEW_STATE_MISSING_MESSAGE,
-  WORK_ACCEPT_FORBIDDEN_MESSAGE,
-  WORK_CLAIM_REQUIRES_ACTOR_MESSAGE,
 } from './errors.js';
-import {
-  claimIssueRevision,
-  recordWorkAudit,
-  selectIssueSnapshot,
-  type WriteActor,
-} from './work-service.js';
 
 export type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
