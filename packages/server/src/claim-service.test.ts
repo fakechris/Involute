@@ -15,6 +15,7 @@ import {
   WORK_REJECT_FORBIDDEN_MESSAGE,
   WORK_REVISION_CONFLICT_MESSAGE,
   WORK_IDEMPOTENCY_CONFLICT_MESSAGE,
+  AGENT_DESCRIPTION_REQUIRED_MESSAGE,
 } from './errors.ts';
 import { claimWork, commitWork, proposeWork, rejectWork } from './claim-service.ts';
 import { listReadyWork } from './context-service.ts';
@@ -269,7 +270,11 @@ describe('claim service', () => {
   it('forbids agents from committing and does not treat In Progress as a claim', async () => {
     const candidate = await proposeWork(
       prisma,
-      { teamId: team.id, title: 'Agent discovered' },
+      {
+        teamId: team.id,
+        title: 'Agent discovered',
+        description: '### 1. 目标与架构定位\n测试定位\n### 2. 核心功能与交付范围\n测试范围\n### 3. 验收标准与验证方案\n测试验证',
+      },
       { actorId: agent.id, actorKind: 'AGENT', surface: 'codex' },
     );
 
@@ -390,6 +395,105 @@ describe('claim service', () => {
       orderBy: { createdAt: 'desc' },
     });
     expect(audit.reason).toBe('duplicate of existing work');
+  });
+
+  describe('defensive title sanitization and agent description gate', () => {
+    it('sanitizes status prefixes from titles automatically in proposeWork and updateIssue', async () => {
+      const candidate = await proposeWork(prisma, {
+        teamId: team.id,
+        title: '[已交付] 修复底层通信协议',
+      });
+      expect(candidate.title).toBe('修复底层通信协议');
+
+      const updated = await updateIssue(prisma, candidate.id, {
+        title: '[TODO] 新的工单标题',
+        expectedRevision: candidate.revision,
+      });
+      expect(updated.title).toBe('新的工单标题');
+    });
+
+    it('rejects lazy ref docs/... descriptions for all callers', async () => {
+      await expect(
+        proposeWork(
+          prisma,
+          { teamId: team.id, title: 'Lazy work', description: 'ref docs/milestones/INV-2.md' },
+          { actorId: human.id, actorKind: 'HUMAN', surface: 'web' },
+        ),
+      ).rejects.toThrow(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
+    });
+
+    it('enforces mandatory 3-section Chinese description on AGENT proposals', async () => {
+      const agentActor = { actorId: agent.id, actorKind: 'AGENT' as const, surface: 'mcp' };
+
+      // Empty description rejected for agent
+      await expect(
+        proposeWork(prisma, { teamId: team.id, title: 'Agent work with no desc' }, agentActor),
+      ).rejects.toThrow(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
+
+      // Incomplete description missing 3 sections rejected for agent
+      await expect(
+        proposeWork(
+          prisma,
+          { teamId: team.id, title: 'Agent work', description: 'Just a short note' },
+          agentActor,
+        ),
+      ).rejects.toThrow(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
+
+      // Valid 3 sections accepted for agent
+      const validDesc = [
+        '### 1. 目标与架构定位',
+        '实现底层通信协议加固',
+        '### 2. 核心功能与交付范围',
+        '支持 Claim-Scoped Run Resolution',
+        '### 3. 验收标准与验证方案',
+        'pnpm test 全部通过',
+      ].join('\n');
+
+      const proposed = await proposeWork(
+        prisma,
+        { teamId: team.id, title: 'Agent valid work', description: validDesc },
+        agentActor,
+      );
+      expect(proposed.description).toBe(validDesc);
+    });
+
+    it('enforces description gate when updating candidate work as an agent', async () => {
+      const agentActor = { actorId: agent.id, actorKind: 'AGENT' as const, surface: 'mcp' };
+      const validDesc = [
+        '### 1. 目标与架构定位',
+        '初始定位',
+        '### 2. 核心功能与交付范围',
+        '初始范围',
+        '### 3. 验收标准与验证方案',
+        '初始验证',
+      ].join('\n');
+
+      const candidate = await proposeWork(
+        prisma,
+        { teamId: team.id, title: 'Candidate for update', description: validDesc },
+        agentActor,
+      );
+
+      // Attempting to bypass by updating to unstructured text is rejected
+      await expect(
+        updateIssue(
+          prisma,
+          candidate.id,
+          { description: 'bypassed description', expectedRevision: candidate.revision },
+          agentActor,
+        ),
+      ).rejects.toThrow(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
+
+      // Attempting to bypass by updating to ref docs/ is rejected
+      await expect(
+        updateIssue(
+          prisma,
+          candidate.id,
+          { description: 'ref docs/milestones/INV-2.md', expectedRevision: candidate.revision },
+          agentActor,
+        ),
+      ).rejects.toThrow(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
+    });
   });
 });
 

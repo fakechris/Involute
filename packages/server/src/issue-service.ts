@@ -21,8 +21,9 @@ import {
   WORK_REVISION_CONFLICT_MESSAGE,
   PROJECT_NOT_FOUND_MESSAGE,
   CYCLE_NOT_FOUND_MESSAGE,
+  AGENT_DESCRIPTION_REQUIRED_MESSAGE,
 } from './errors.js';
-import { assertActorCan, isAcceptStateType } from './claim-service.js';
+import { assertActorCan, isAcceptStateType, sanitizeWorkTitle, validateAgentDescription } from './claim-service.js';
 import { assertNoWorkLinkCycle, syncContainsFromParentId } from './link-service.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
 import {
@@ -244,10 +245,15 @@ export async function updateIssue(
     }
 
     if ('title' in input && input.title !== undefined && input.title !== null) {
-      data.title = input.title;
+      data.title = sanitizeWorkTitle(input.title).title;
     }
 
     if ('description' in input) {
+      if (existingIssue.commitmentStatus === 'CANDIDATE' && actor.actorKind === 'AGENT') {
+        validateAgentDescription(input.description, actor);
+      } else if (input.description && /^ref\s*:?\s*docs\//i.test(input.description.trim())) {
+        throw createValidationError(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
+      }
       data.description = input.description ?? null;
     }
 

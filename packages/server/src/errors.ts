@@ -72,6 +72,8 @@ export const AGENT_SCOPE_INVALID_MESSAGE = 'Unknown agent scope.';
 export const AGENT_CREDENTIAL_NOT_FOUND_MESSAGE = 'Agent credential not found.';
 export const NOTIFICATION_NOT_FOUND_MESSAGE = 'Notification not found.';
 export const SNOOZE_REQUIRES_CANDIDATE_MESSAGE = 'Only candidate work can be snoozed.';
+export const AGENT_DESCRIPTION_REQUIRED_MESSAGE =
+  "Agent proposals require a rich structured Chinese description with three sections: '### 1. 目标与架构定位', '### 2. 核心功能与交付范围', and '### 3. 验收标准与验证方案'. Lazy references (e.g. 'ref docs/...') are strictly rejected.";
 // Dynamic IQL failures carry this prefix; getExposedError lets them through so
 // agents see exactly which term failed to parse.
 export const IQL_PARSE_ERROR_PREFIX = 'Invalid IQL query:';
@@ -145,6 +147,7 @@ const exposedErrorCodes = new Map<string, string>([
   [AGENT_CREDENTIAL_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [NOTIFICATION_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [SNOOZE_REQUIRES_CANDIDATE_MESSAGE, 'BAD_USER_INPUT'],
+  [AGENT_DESCRIPTION_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
 ]);
 
 export function createNotAuthenticatedError(): GraphQLError {

@@ -138,9 +138,10 @@ export async function callMcpTool(
     case 'work_propose': {
       const teamId = await resolveTeamId(context.prisma, requiredString(args.team, 'team'));
       await assertCanWriteTeam(context.prisma, context, teamId);
+      const rawTitle = requiredString(args.title, 'title');
       const proposeInput: Parameters<typeof proposeWork>[1] = {
         teamId,
-        title: requiredString(args.title, 'title'),
+        title: rawTitle,
       };
       assignOptional(proposeInput, 'acceptance', optionalString(args.acceptance));
       assignOptional(proposeInput, 'constraints', optionalString(args.constraints));
@@ -159,7 +160,14 @@ export async function callMcpTool(
       const relatedType = optionalString(args.related_work_type);
       if (relatedType) proposeInput.relatedWorkType = parseWorkLinkType(relatedType, 'related_work_type');
       proposeInput.source = optionalString(args.source) ?? 'agent';
-      return proposeWork(context.prisma, proposeInput, writeActorFromViewer(context.viewer, 'mcp'));
+      const created = await proposeWork(context.prisma, proposeInput, writeActorFromViewer(context.viewer, 'mcp'));
+      if (created.title !== rawTitle) {
+        return {
+          ...created,
+          warning: `Status prefix was automatically removed from title: "${rawTitle}" -> "${created.title}". Do not encode work status into titles; use work_claim and run_report to transition states.`,
+        };
+      }
+      return created;
     }
     case 'work_commit': {
       const work = await requireWork(context.prisma, requiredString(args.id, 'id'));
@@ -194,17 +202,25 @@ export async function callMcpTool(
       assignOptional(updateInput, 'priority', optionalNumber(args.priority));
       assignOptional(updateInput, 'repository', optionalString(args.repository));
       assignOptional(updateInput, 'scope', optionalString(args.scope));
-      assignOptional(updateInput, 'title', optionalString(args.title));
+      const rawTitle = optionalString(args.title);
+      assignOptional(updateInput, 'title', rawTitle);
       assignOptional(updateInput, 'verification', optionalString(args.verification));
       if (args.snoozed_until !== undefined) {
         updateInput.snoozedUntil = args.snoozed_until === null ? null : new Date(requiredString(args.snoozed_until, 'snoozed_until'));
       }
-      return updateIssue(
+      const updated = await updateIssue(
         context.prisma,
         work.id,
         updateInput,
         writeActorFromViewer(context.viewer, 'mcp'),
       );
+      if (rawTitle && updated.title !== rawTitle) {
+        return {
+          ...updated,
+          warning: `Status prefix was automatically removed from title: "${rawTitle}" -> "${updated.title}". Do not encode work status into titles; use work_claim and run_report to transition states.`,
+        };
+      }
+      return updated;
     }
     case 'work_link': {
       const from = await requireWork(context.prisma, requiredString(args.from_id, 'from_id'));

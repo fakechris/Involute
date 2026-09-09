@@ -34,6 +34,8 @@ import {
   requireWork,
 } from './run-service-shared.js';
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function reportRun(
   prisma: PrismaClient,
   input: ReportRunInput,
@@ -71,55 +73,109 @@ export async function reportRun(
       }
       idempotencyId = reservation.record.id;
     }
+
     const status = parseRunStatus(input.status);
+    const isTerminalStatus = Boolean(status && TERMINAL_RUN_STATUSES.includes(status));
     let run = input.runId ? await findRun(transaction, input.runId, work.id) : null;
     let activeClaim: WorkClaim | null = null;
 
+    // Constraint 3: Cross-scope runId must hard-fail if runId actually exists on another work or actor
     if (input.runId && !run) {
-      // Check if input.runId was mistakenly passed as the claim ID
-      const claimMatch = await transaction.workClaim.findFirst({
+      const isInputUuid = UUID_PATTERN.test(input.runId);
+      const crossRun = await transaction.workRun.findFirst({
         where: {
-          actorId,
-          leaseUntil: { gt: new Date() },
-          workId: work.id,
-          id: input.runId,
+          OR: [
+            { publicId: input.runId },
+            ...(isInputUuid ? [{ id: input.runId }] : []),
+          ],
         },
       });
-      if (claimMatch) {
-        // Agent mistakenly passed claim.id as runId. Forgive and use as active claim for new run.
-        activeClaim = claimMatch;
-      } else {
-        // Check if there is an active claim and no existing runs for this work
-        const claim = await transaction.workClaim.findFirst({
+      if (crossRun) {
+        if (crossRun.workId !== work.id) {
+          throw createValidationError(
+            `Work run '${input.runId}' belongs to a different work item (${crossRun.workId}).`,
+          );
+        }
+        if (crossRun.actorId !== actorId) {
+          throw createValidationError(WORK_RUN_ACTOR_MISMATCH_MESSAGE);
+        }
+      }
+    }
+
+    // 2. Resolve Active Claim or Idempotent Completed Run
+    if (!run) {
+      // Check if input.runId was mistakenly passed as the claim ID
+      if (input.runId && UUID_PATTERN.test(input.runId)) {
+        const claimMatch = await transaction.workClaim.findFirst({
           where: {
             actorId,
-            leaseUntil: { gt: new Date() },
+            id: input.runId,
             workId: work.id,
+            ...(isTerminalStatus ? {} : { leaseUntil: { gt: new Date() } }),
           },
         });
-        const existingRunsCount = await transaction.workRun.count({
-          where: { workId: work.id },
+        if (claimMatch) {
+          activeClaim = claimMatch;
+        }
+      }
+
+      if (!activeClaim) {
+        activeClaim = await transaction.workClaim.findFirst({
+          where: {
+            actorId,
+            workId: work.id,
+            ...(isTerminalStatus ? {} : { leaseUntil: { gt: new Date() } }),
+          },
         });
-        if (claim && existingRunsCount === 0) {
-          // Agent passed a client-generated UUID on the initial run. Forgive and start new run.
-          activeClaim = claim;
-        } else {
+      }
+
+      if (activeClaim) {
+        // Constraint 4: Row-level lock on WorkClaim to guarantee serialization under concurrent requests
+        await transaction.$queryRaw`SELECT id FROM "WorkClaim" WHERE id = ${activeClaim.id}::uuid FOR UPDATE`;
+
+        // Constraint 1: Check for existing open run under this claimId
+        const openRun = await transaction.workRun.findFirst({
+          where: {
+            claimId: activeClaim.id,
+            status: { in: ['QUEUED', 'RUNNING', 'BLOCKED'] },
+          },
+          orderBy: { startedAt: 'desc' },
+        });
+
+        if (openRun) {
+          // Rebind to open run under this claim!
+          run = openRun;
+        }
+      } else {
+        // Constraint 2: Completed retry idempotency when claim has already been deleted
+        if (status === 'COMPLETED' || (!status && input.runId)) {
+          const recentCompletedRun = await transaction.workRun.findFirst({
+            where: {
+              actorId,
+              status: 'COMPLETED',
+              workId: work.id,
+            },
+            orderBy: { endedAt: 'desc' },
+          });
+          if (recentCompletedRun) {
+            if (idempotencyId) {
+              await completeWorkIdempotency(transaction, idempotencyId, work.id, recentCompletedRun.id);
+            }
+            return { run: recentCompletedRun, work };
+          }
+        }
+
+        // If no active claim and not a completed retry:
+        if (input.runId) {
           throw createNotFoundError(WORK_RUN_NOT_FOUND_MESSAGE);
+        } else {
+          throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
         }
       }
     }
 
     const isNew = !run;
     if (!run) {
-      if (!activeClaim) {
-        activeClaim = await transaction.workClaim.findFirst({
-          where: {
-            actorId,
-            leaseUntil: { gt: new Date() },
-            workId: work.id,
-          },
-        });
-      }
       if (!activeClaim) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
       const publicId = await nextRunPublicId(transaction);
       run = await transaction.workRun.create({
@@ -149,16 +205,20 @@ export async function reportRun(
         }
         throw createValidationError(WORK_RUN_TERMINAL_MESSAGE);
       }
-      if (!run.claimId) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
-      activeClaim = await transaction.workClaim.findFirst({
-        where: {
-          actorId,
-          id: run.claimId,
-          leaseUntil: { gt: new Date() },
-          workId: work.id,
-        },
-      });
-      if (!activeClaim) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
+
+      // Constraint 5: Lease expiration does not block terminal completed/failed updates
+      if (!activeClaim) {
+        if (!run.claimId) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
+        activeClaim = await transaction.workClaim.findFirst({
+          where: {
+            actorId,
+            id: run.claimId,
+            workId: work.id,
+            ...(isTerminalStatus ? {} : { leaseUntil: { gt: new Date() } }),
+          },
+        });
+        if (!activeClaim) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
+      }
       if (status && status !== run.status && !ALLOWED_RUN_TRANSITIONS[run.status].includes(status)) {
         throw createValidationError(WORK_RUN_TRANSITION_INVALID_MESSAGE);
       }

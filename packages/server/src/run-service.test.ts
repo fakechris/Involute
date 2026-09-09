@@ -690,5 +690,193 @@ describe('run and evidence', () => {
     expect(res1.run.claimId).toBe(claim.id);
     expect(res1.run.status).toBe('RUNNING');
   });
+
+  describe('Claim-Scoped Run Resolution & Adversarial DX Matrix', () => {
+    it('Scenario A: Agent passes claim.id for both running and completed reports -> exactly 1 run, transitions to REVIEW', async () => {
+      const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Scenario A claim.id test' });
+      const committed = await commitWork(
+        prisma,
+        candidate.id,
+        { acceptance: 'Scenario A', assigneeId: human.id, expectedRevision: candidate.revision },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+      );
+      const { claim } = await claimWork(prisma, committed.id, {}, { actorId: human.id, actorKind: 'HUMAN', surface: 'test' });
+      const actor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' };
+
+      // Step 1: Agent mistakenly passes claim.id
+      const step1 = await reportRun(prisma, { status: 'running', workId: committed.id, runId: claim.id }, actor);
+      expect(step1.run.status).toBe('RUNNING');
+
+      // Step 2: Agent mistakenly passes claim.id again to complete!
+      const step2 = await reportRun(prisma, { status: 'completed', workId: committed.id, runId: claim.id }, actor);
+      expect(step2.run.status).toBe('COMPLETED');
+      expect(step2.run.id).toBe(step1.run.id);
+
+      // Exactly 1 run in database
+      const runs = await prisma.workRun.findMany({ where: { workId: committed.id } });
+      expect(runs).toHaveLength(1);
+
+      // Work advanced to Review
+      const reviewState = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'REVIEW' } });
+      const refreshed = await prisma.issue.findUniqueOrThrow({ where: { id: committed.id } });
+      expect(refreshed.stateId).toBe(reviewState.id);
+    });
+
+    it('Scenario B: Agent passes same random UUID for both running and completed reports -> exactly 1 run, transitions to REVIEW', async () => {
+      const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Scenario B client UUID test' });
+      const committed = await commitWork(
+        prisma,
+        candidate.id,
+        { acceptance: 'Scenario B', assigneeId: human.id, expectedRevision: candidate.revision },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+      );
+      await claimWork(prisma, committed.id, {}, { actorId: human.id, actorKind: 'HUMAN', surface: 'test' });
+      const actor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' };
+      const clientUuid = 'a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d';
+
+      // Step 1: Client random UUID
+      const step1 = await reportRun(prisma, { status: 'running', workId: committed.id, runId: clientUuid }, actor);
+      expect(step1.run.status).toBe('RUNNING');
+
+      // Step 2: Same client random UUID to complete!
+      const step2 = await reportRun(prisma, { status: 'completed', workId: committed.id, runId: clientUuid }, actor);
+      expect(step2.run.status).toBe('COMPLETED');
+      expect(step2.run.id).toBe(step1.run.id);
+
+      const runs = await prisma.workRun.findMany({ where: { workId: committed.id } });
+      expect(runs).toHaveLength(1);
+    });
+
+    it('Scenario C: Agent omits runId for both running and completed reports -> reuses open run, exactly 1 run', async () => {
+      const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Scenario C omitted runId test' });
+      const committed = await commitWork(
+        prisma,
+        candidate.id,
+        { acceptance: 'Scenario C', assigneeId: human.id, expectedRevision: candidate.revision },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+      );
+      await claimWork(prisma, committed.id, {}, { actorId: human.id, actorKind: 'HUMAN', surface: 'test' });
+      const actor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' };
+
+      // Step 1: Omit runId
+      const step1 = await reportRun(prisma, { status: 'running', workId: committed.id }, actor);
+      expect(step1.run.status).toBe('RUNNING');
+
+      // Step 2: Omit runId again to complete
+      const step2 = await reportRun(prisma, { status: 'completed', workId: committed.id }, actor);
+      expect(step2.run.status).toBe('COMPLETED');
+      expect(step2.run.id).toBe(step1.run.id);
+
+      const runs = await prisma.workRun.findMany({ where: { workId: committed.id } });
+      expect(runs).toHaveLength(1);
+    });
+
+    it('Scenario D: Retrying completed report when claim is deleted returns existing completed run idempotently', async () => {
+      const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Scenario D retry idempotency test' });
+      const committed = await commitWork(
+        prisma,
+        candidate.id,
+        { acceptance: 'Scenario D', assigneeId: human.id, expectedRevision: candidate.revision },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+      );
+      const { claim } = await claimWork(prisma, committed.id, {}, { actorId: human.id, actorKind: 'HUMAN', surface: 'test' });
+      const actor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' };
+
+      // Complete the run (which deletes the claim)
+      const firstComplete = await reportRun(prisma, { status: 'completed', workId: committed.id, runId: claim.id }, actor);
+      expect(firstComplete.run.status).toBe('COMPLETED');
+
+      // Verify claim is gone
+      const claimAfter = await prisma.workClaim.findUnique({ where: { workId: committed.id } });
+      expect(claimAfter).toBeNull();
+
+      // Agent retries completed report (passing old claim.id or omitted runId)
+      const retryComplete = await reportRun(prisma, { status: 'completed', workId: committed.id, runId: claim.id }, actor);
+      expect(retryComplete.run.id).toBe(firstComplete.run.id);
+      expect(retryComplete.run.status).toBe('COMPLETED');
+
+      // Still exactly 1 run
+      const runs = await prisma.workRun.findMany({ where: { workId: committed.id } });
+      expect(runs).toHaveLength(1);
+    });
+
+    it('Scenario E: Passing a runId belonging to a different work item is rejected with validation error', async () => {
+      const workA = await proposeWork(prisma, { teamId: team.id, title: 'Work A' });
+      const workB = await proposeWork(prisma, { teamId: team.id, title: 'Work B' });
+      const committedA = await commitWork(
+        prisma,
+        workA.id,
+        { acceptance: 'A', assigneeId: human.id, expectedRevision: workA.revision },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+      );
+      const committedB = await commitWork(
+        prisma,
+        workB.id,
+        { acceptance: 'B', assigneeId: human.id, expectedRevision: workB.revision },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+      );
+      const actor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' };
+
+      // Claim & create run on Work B
+      await claimWork(prisma, committedB.id, {}, actor);
+      const runB = await reportRun(prisma, { status: 'running', workId: committedB.id }, actor);
+
+      // Claim Work A, but try to report using runB.run.id (or runB.run.publicId) on Work A!
+      await claimWork(prisma, committedA.id, {}, actor);
+      await expect(
+        reportRun(prisma, { status: 'running', workId: committedA.id, runId: runB.run.id }, actor),
+      ).rejects.toThrow(/belongs to a different work item/);
+
+      await expect(
+        reportRun(prisma, { status: 'running', workId: committedA.id, runId: runB.run.publicId }, actor),
+      ).rejects.toThrow(/belongs to a different work item/);
+    });
+
+    it('Scenario F: Concurrent initial reports under the same claim serialize and produce exactly 1 run', async () => {
+      const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Scenario F concurrency test' });
+      const committed = await commitWork(
+        prisma,
+        candidate.id,
+        { acceptance: 'Scenario F', assigneeId: human.id, expectedRevision: candidate.revision },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+      );
+      await claimWork(prisma, committed.id, {}, { actorId: human.id, actorKind: 'HUMAN', surface: 'test' });
+      const actor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' };
+
+      // Run 2 concurrent calls without runId
+      const [res1, res2] = await Promise.all([
+        reportRun(prisma, { status: 'running', workId: committed.id, summary: 'Concurrent call 1' }, actor),
+        reportRun(prisma, { status: 'running', workId: committed.id, summary: 'Concurrent call 2' }, actor),
+      ]);
+
+      expect(res1.run.id).toBe(res2.run.id);
+      const runs = await prisma.workRun.findMany({ where: { workId: committed.id } });
+      expect(runs).toHaveLength(1);
+    });
+
+    it('Scenario G: BLOCKED continuation reuses the open run when reporting completed', async () => {
+      const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Scenario G blocked continuation' });
+      const committed = await commitWork(
+        prisma,
+        candidate.id,
+        { acceptance: 'Scenario G', assigneeId: human.id, expectedRevision: candidate.revision },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+      );
+      await claimWork(prisma, committed.id, {}, { actorId: human.id, actorKind: 'HUMAN', surface: 'test' });
+      const actor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' };
+
+      // Step 1: Blocked
+      const step1 = await reportRun(prisma, { status: 'blocked', summary: 'Waiting on dependency', workId: committed.id }, actor);
+      expect(step1.run.status).toBe('BLOCKED');
+
+      // Step 2: Later completed without specifying runId or passing claimId
+      const step2 = await reportRun(prisma, { status: 'completed', summary: 'Unblocked and finished', workId: committed.id }, actor);
+      expect(step2.run.status).toBe('COMPLETED');
+      expect(step2.run.id).toBe(step1.run.id);
+
+      const runs = await prisma.workRun.findMany({ where: { workId: committed.id } });
+      expect(runs).toHaveLength(1);
+    });
+  });
 });
 
