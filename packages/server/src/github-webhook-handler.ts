@@ -43,7 +43,7 @@ export interface PullRequestPayload {
       ref: string; // branch name
     };
     updated_at: string;
-    merge_commit_sha?: string | null;
+    merge_commit_sha?: string | null | undefined;
   };
   repository: {
     full_name: string;

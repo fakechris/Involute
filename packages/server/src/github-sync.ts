@@ -47,7 +47,7 @@ export interface GitHubApiClient {
  * Fetches newest PRs first and paginates backwards until reaching items older than `since`.
  */
 export class DefaultGitHubApiClient implements GitHubApiClient {
-  private token?: string;
+  private token: string | undefined;
 
   constructor(token?: string) {
     this.token = token || process.env.GITHUB_TOKEN;
@@ -231,7 +231,7 @@ export async function reconcileRepoPullRequests(
         merged: Boolean(pr.merged_at),
         head: { ref: pr.head.ref },
         updated_at: pr.updated_at,
-        merge_commit_sha: pr.merge_commit_sha,
+        merge_commit_sha: pr.merge_commit_sha ?? null,
       },
       repository: {
         full_name: repoRoute.repository,
@@ -390,8 +390,8 @@ export async function reconcileAllConfiguredRepos(
 export function startGitHubSyncScheduler(
   prisma: PrismaClient,
   options: {
-    intervalMs?: number;
-    githubClient?: GitHubApiClient;
+    intervalMs?: number | undefined;
+    githubClient?: GitHubApiClient | undefined;
   } = {},
 ): () => void {
   const intervalMs = options.intervalMs ?? 10 * 60 * 1000;
