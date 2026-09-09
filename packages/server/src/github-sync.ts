@@ -17,6 +17,7 @@ import type { PrismaClient } from '@prisma/client';
 
 import type { RepoRoute } from './github-repo-routes.js';
 import { getRepoRoutes } from './github-repo-routes.js';
+import { emitOpsAlert } from './ops-alerts.js';
 import type { PullRequestPayload } from './github-webhook-handler.js';
 import { processGitHubPrEvent } from './github-webhook-handler.js';
 
@@ -58,7 +59,11 @@ export class DefaultGitHubApiClient implements GitHubApiClient {
   ): Promise<GitHubSyncPullRequest[]> {
     const sinceMs = since.getTime();
     const collected: GitHubSyncPullRequest[] = [];
-    const maxPages = 10; // Up to 1,000 PRs per reconciliation cycle
+    // maxPages = 10 limits each reconciliation cycle to the most recent 1,000 updated PRs.
+    // In ordinary operation with periodic 10-minute cycles or 24-hour cold-start windows, 1,000 PRs
+    // is well above normal activity. If an extended outage causes >1,000 PRs to be updated,
+    // operators can perform segmented catch-up using manual forceWatermark (see AGENTS.md Runbook).
+    const maxPages = 10;
     let page = 1;
 
     while (page <= maxPages) {
@@ -289,6 +294,24 @@ export async function reconcileRepoPullRequests(
         `[github-sync] Poisoned PR #${pr.number} on ${repoRoute.repository} recorded in dead letter (attempt ${deadLetter.attempts}/${maxDeadLetterAttempts}):`,
         errorMessage,
       );
+
+      if (deadLetter.attempts >= maxDeadLetterAttempts) {
+        await emitOpsAlert(
+          prisma,
+          {
+            kind: 'github_sync.dead_letter',
+            summary: `GitHub Sync: PR #${pr.number} on ${repoRoute.repository} quarantined after ${deadLetter.attempts} failed attempts`,
+            details: {
+              repository: repoRoute.repository,
+              itemRef,
+              prNumber: pr.number,
+              attempts: deadLetter.attempts,
+              error: errorMessage,
+            },
+          },
+          process.env.OPS_WEBHOOK_URL?.trim() || null,
+        );
+      }
     }
   }
 
