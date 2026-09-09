@@ -18,20 +18,20 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_DB: involute
+          POSTGRES_DB: involute_test
           POSTGRES_PASSWORD: postgres
           POSTGRES_USER: postgres
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d involute"
+          --health-cmd "pg_isready -U postgres -d involute_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
     env:
       AUTH_TOKEN: ci-auth-token
       CI: "true"
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/involute?schema=public
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/involute_test?schema=public
       VIEWER_ASSERTION_SECRET: ci-viewer-assertion-secret
     steps:
       - name: Checkout
@@ -66,6 +66,9 @@ jobs:
 
       - name: Lint
         run: pnpm lint
+
+      - name: Deploy test database migrations
+        run: pnpm --filter @turnkeyai/involute-server prisma:migrate:deploy
 
       - name: Test
         run: pnpm test
