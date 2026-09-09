@@ -68,8 +68,10 @@ try {
 
 process.env.DATABASE_URL = targetDbUrl;
 
-const child = spawn(process.platform === 'win32' ? 'vitest.cmd' : 'vitest', vitestArgs, {
+const child = spawn('pnpm', ['exec', 'vitest', ...vitestArgs], {
   stdio: 'inherit',
+  shell: true,
+  cwd: new URL('..', import.meta.url).pathname,
   env: {
     ...process.env,
     DATABASE_URL: targetDbUrl,

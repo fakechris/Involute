@@ -248,6 +248,10 @@ model Issue {
   reviewDecisions   WorkReviewDecision[]
   autoAcceptEvaluations WorkAutoAcceptEvaluation[]
   notifications     Notification[]
+  // Phase 2: GitHub webhook PR provenance tracking
+  stateSourcePrId      String?
+  lastAppliedEventTime DateTime?
+  webhookEventLogs     WebhookEventLog[]
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
@@ -584,4 +588,41 @@ model Notification {
 
   @@unique([sourceEventId, userId])
   @@index([userId, readAt, createdAt])
+}
+
+// Phase 2: Idempotent GitHub webhook event log with physical unique constraint
+// to eliminate TOCTOU races in duplicate event processing.
+model WebhookEventLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  issueId         String   @db.Uuid
+  issue           Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  eventSourceKey  String
+  eventType       String
+  payload         Json     @default("{}")
+  createdAt       DateTime @default(now())
+
+  @@unique([issueId, eventSourceKey], map: "idx_webhook_event_source")
+  @@index([issueId])
+  @@index([eventSourceKey])
+}
+
+// Phase 3: Persistent watermark cursor for reconciliation sync engine.
+model SyncWatermark {
+  key       String   @id
+  watermark DateTime
+  updatedAt DateTime @updatedAt
+}
+
+// Phase 3: Dead-letter quarantine for poisoned PR events that repeatedly fail.
+model SyncDeadLetter {
+  id           String   @id @default(uuid()) @db.Uuid
+  repository   String
+  itemRef      String
+  error        String
+  attempts     Int      @default(1)
+  lastFailedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@unique([repository, itemRef])
+  @@index([repository])
 }

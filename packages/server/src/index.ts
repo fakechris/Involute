@@ -32,6 +32,7 @@ import { createGraphQLSchema } from './schema.js';
 import { getServerEnvironment, loadServerEnvironment, type ServerEnvironment } from './environment.js';
 import { getUploadsDirectory } from './uploads.js';
 import { handleWebStatic } from './web-static.js';
+import { handleGitHubWebhook } from './github-webhook-handler.js';
 
 loadServerEnvironment();
 
@@ -56,6 +57,8 @@ export interface StartServerOptions {
   viewerAssertionSecret?: string | null;
   webhookSecret?: string | null;
   webhookUrls?: string | null;
+  /** HMAC secret for verifying incoming GitHub webhook signatures */
+  githubWebhookSecret?: string | null;
 }
 
 export interface StartedServer {
@@ -194,6 +197,22 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     }
 
     const pathname = getPathname(request.url);
+
+    // GitHub webhook endpoint — must be before docs/MCP routes to avoid
+    // body consumption conflicts. Only active when a secret is configured.
+    const ghWebhookSecret = options.githubWebhookSecret ?? process.env.GITHUB_WEBHOOK_SECRET;
+    if (ghWebhookSecret && pathname.startsWith('/api/webhooks/github')) {
+      handleGitHubWebhook({ prisma, webhookSecret: ghWebhookSecret }, request, response)
+        .catch((error: unknown) => {
+          console.error('[github-webhook] Unhandled error in webhook handler:', error);
+          if (!response.headersSent) {
+            response.statusCode = 200;
+            response.setHeader('content-type', 'application/json');
+            response.end(JSON.stringify({ ok: true }));
+          }
+        });
+      return;
+    }
 
     if (
       request.method === 'GET' &&
