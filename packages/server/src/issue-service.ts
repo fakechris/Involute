@@ -42,6 +42,7 @@ export interface CreateIssueInput {
   description?: string | null;
   kind?: Issue['kind'] | null;
   outcome?: string | null;
+  parentId?: string | null;
   priority?: number | null;
   projectId?: string | null;
   repository?: string | null;
@@ -138,6 +139,7 @@ export async function createIssueInTransaction(
         identifier: `${updatedTeam.key.toUpperCase()}-${updatedTeam.nextIssueNumber - 1}`,
         kind: input.kind ?? 'ISSUE',
         outcome: input.outcome ?? null,
+        parentId: input.parentId ?? null,
         priority: input.priority ?? 0,
         projectId: input.projectId ?? null,
         repository: input.repository ?? null,

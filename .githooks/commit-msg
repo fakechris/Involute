@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Involute Git Hook: verify work graph binding
+ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+if [ -f "$ROOT_DIR/scripts/verify-work-graph.sh" ]; then
+  exec "$ROOT_DIR/scripts/verify-work-graph.sh" "$1"
+fi
+exit 0

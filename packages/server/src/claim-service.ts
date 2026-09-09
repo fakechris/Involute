@@ -4,6 +4,7 @@ import {
   createNotFoundError,
   createValidationError,
   ISSUE_NOT_FOUND_MESSAGE,
+  PARENT_ISSUE_NOT_FOUND_MESSAGE,
   WORK_ALREADY_CLAIMED_MESSAGE,
   WORK_ACCEPT_FORBIDDEN_MESSAGE,
   WORK_CLAIM_REQUIRES_ACTOR_MESSAGE,
@@ -53,6 +54,7 @@ export interface ProposeWorkInput {
   idempotencyKey?: string | null;
   kind?: Issue['kind'] | null;
   outcome?: string | null;
+  parentId?: string | null;
   relatedWorkId?: string | null;
   relatedWorkType?: WorkLinkType | null;
   repository?: string | null;
@@ -145,8 +147,26 @@ export async function proposeWork(
     if (input.source !== undefined) createInput.source = input.source;
     if (input.verification !== undefined) createInput.verification = input.verification;
 
+    let parentWork: Issue | null = null;
+    if (input.parentId) {
+      parentWork = await findWorkByIdOrIdentifier(transaction, input.parentId);
+      if (!parentWork) throw createNotFoundError(PARENT_ISSUE_NOT_FOUND_MESSAGE);
+      createInput.parentId = parentWork.id;
+    } else if (input.relatedWorkId && input.relatedWorkType === 'CONTAINS') {
+      parentWork = await findWorkByIdOrIdentifier(transaction, input.relatedWorkId);
+      if (!parentWork) throw createNotFoundError(WORK_RELATED_NOT_FOUND_MESSAGE);
+      createInput.parentId = parentWork.id;
+    }
+
     const created = await createIssueInTransaction(transaction, createInput, actor);
-    if (input.relatedWorkId) {
+    if (parentWork) {
+      await createWorkLink(transaction, {
+        actor,
+        fromId: parentWork.id,
+        toId: created.id,
+        type: 'CONTAINS',
+      });
+    } else if (input.relatedWorkId) {
       const related = await findWorkByIdOrIdentifier(transaction, input.relatedWorkId);
       if (!related) throw createNotFoundError(WORK_RELATED_NOT_FOUND_MESSAGE);
       await createWorkLink(transaction, {

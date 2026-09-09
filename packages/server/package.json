@@ -28,6 +28,8 @@
     "agent:create": "pnpm exec tsx prisma/agent-credential.ts create",
     "agent:list": "pnpm exec tsx prisma/agent-credential.ts list",
     "agent:revoke": "pnpm exec tsx prisma/agent-credential.ts revoke",
+    "candidates:batch-commit": "pnpm exec tsx prisma/batch-commit.ts",
+    "hotfix:reflex": "pnpm exec tsx prisma/hotfix-reflex.ts",
     "build": "pnpm --filter @turnkeyai/involute-shared build && pnpm run prisma:generate && pnpm exec tsc -p tsconfig.json",
     "prisma:db:push": "pnpm exec prisma db push --skip-generate",
     "prisma:generate": "pnpm exec prisma generate",

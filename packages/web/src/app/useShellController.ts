@@ -89,6 +89,7 @@ export function useShellController() {
 
   useEffect(() => {
     document.documentElement.style.setProperty('--sidebar-width', `${sidebarWidth}px`);
+    document.documentElement.style.setProperty('--sidebar-w', `${sidebarWidth}px`);
     persistSidebarWidth(sidebarWidth);
   }, [sidebarWidth]);
 

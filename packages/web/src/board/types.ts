@@ -85,6 +85,7 @@ export interface IssueSummary {
   kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
   commitmentStatus?: 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
   description?: string | null;
+  repository?: string | null;
   priority: number;
   createdAt: string;
   updatedAt: string;
@@ -474,6 +475,7 @@ export interface ProjectIssueSummary {
   identifier: string;
   title: string;
   description?: string | null;
+  repository?: string | null;
   priority: number;
   kind: 'PROJECT';
   createdAt: string;

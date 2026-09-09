@@ -9,11 +9,45 @@
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.observation-field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.observation-field--inline span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.observation-field--inline input {
+  height: 28px;
+  padding: 0 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  color: var(--fg);
+  font-size: 13px;
+  min-width: 220px;
+  outline: none;
+  transition: border-color var(--dur-1) var(--ease);
+}
+
+.observation-field--inline input:focus {
+  border-color: var(--accent);
+}
+
 .in-review-bulkbar {
   margin-bottom: 12px;
   border: 1px solid var(--border);
   border-radius: var(--r-2);
   background: var(--bg-sunken);
+  padding: 8px 12px;
 }
 
 .in-review-list-toolbar {
@@ -25,5 +59,19 @@
 .in-review-select {
   display: inline-flex;
   align-items: center;
-  margin-right: 4px;
+  margin-right: 6px;
 }
+
+.in-review-select input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.observation-card--selected {
+  border-color: var(--accent) !important;
+  background: var(--bg-hover) !important;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+

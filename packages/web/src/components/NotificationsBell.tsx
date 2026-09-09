@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { gql } from '@apollo/client';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useNavigate } from 'react-router-dom';
@@ -60,7 +60,31 @@ const PANEL_SIZE = 10;
 
 export function NotificationsBell({ authenticated }: { authenticated: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen]);
 
   const countQuery = useQuery<{ unreadNotificationCount: number }>(UNREAD_COUNT_QUERY, {
     // The one deliberate poll in the shell: notifications are push-shaped but
@@ -95,7 +119,7 @@ export function NotificationsBell({ authenticated }: { authenticated: boolean })
   };
 
   return (
-    <div className="notif-bell">
+    <div className="notif-bell" ref={containerRef}>
       <button
         type="button"
         className="app-shell__footer-settings"

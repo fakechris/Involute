@@ -147,6 +147,7 @@ export async function callMcpTool(
       assignOptional(proposeInput, 'description', optionalString(args.description));
       assignOptional(proposeInput, 'idempotencyKey', optionalString(args.idempotency_key));
       assignOptional(proposeInput, 'outcome', optionalString(args.outcome));
+      assignOptional(proposeInput, 'parentId', optionalString(args.parent_id));
       assignOptional(proposeInput, 'scope', optionalString(args.scope));
       assignOptional(proposeInput, 'relatedWorkId', optionalString(args.related_work_id));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
@@ -327,8 +328,16 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         acceptance: { type: 'string' },
         verification: { type: 'string' },
         kind: { type: 'string', enum: ['ISSUE', 'PROJECT', 'MILESTONE', 'DECISION', 'EPIC'] },
-        related_work_id: { type: 'string' },
-        related_work_type: { type: 'string', enum: ['CONTAINS', 'BLOCKS', 'DERIVED_FROM', 'DISCOVERED_DURING', 'RELATED_TO', 'DUPLICATE_OF'] },
+        parent_id: {
+          type: 'string',
+          description: 'Recommended: The identifier (e.g. INV-2) or UUID of the parent work item (PROJECT or MILESTONE) that CONTAINS this item. Guarantees top-down hierarchy and prevents relationship inversion.',
+        },
+        related_work_id: { type: 'string', description: 'Existing work item identifier (e.g. INV-2) or UUID to relate this new item to.' },
+        related_work_type: {
+          type: 'string',
+          enum: ['CONTAINS', 'BLOCKS', 'DERIVED_FROM', 'DISCOVERED_DURING', 'RELATED_TO', 'DUPLICATE_OF'],
+          description: 'Relationship type. If CONTAINS, the related item (e.g. Project/Milestone) contains this new item as a child. Defaults to DISCOVERED_DURING.',
+        },
         repository: { type: 'string' },
         idempotency_key: { type: 'string' },
         source: { type: 'string', description: 'Origin of this candidate; defaults to agent' },

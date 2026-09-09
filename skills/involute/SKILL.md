@@ -22,6 +22,7 @@ Connect: Streamable HTTP MCP at `http://127.0.0.1:4200/mcp` (local) with `Author
 | [report-run](../report-run/SKILL.md) | Phase / block / complete (In Review, never Done) |
 | [attach-evidence](../attach-evidence/SKILL.md) | PR/test/artifact URL |
 | [agent-setup](../agent-setup/SKILL.md) | Wire MCP + Bearer token (secrets stay out of git) |
+| [project-onboarding](../project-onboarding/SKILL.md) | Initial repo onboarding, 3-tier tree, reality alignment |
 
 ## Hard rules (all skills)
 
@@ -34,6 +35,25 @@ Connect: Streamable HTTP MCP at `http://127.0.0.1:4200/mcp` (local) with `Author
 7. Run complete is not work accepted. **Never** move work to Done yourself.
 8. Expanding scope requires `work_update` with `expected_revision` or a new candidate linked `DISCOVERED_DURING`.
 9. Keep plans/findings local. Sync only phases, blockers, decisions, and evidence pointers.
+
+## Unplanned Work & Hotfix Protocol (即时热修与计划外工作自动闭环法则)
+
+Any bugfix or unplanned modification touching product source code MUST adhere to this automatic reflex:
+
+1. **触发时机 (Trigger)**:
+   当 Agent 在排查或重构中，修改了超出当前 Claim 任务原始范围的代码（例如修复了底层公共库、修了系统服务 Bug、更新了通信协议）。
+2. **执行原则（动量优先 - Momentum First）**:
+   Agent 可以先就地改好代码、通过本地测试，绝不打断修复心流与工程动量。
+3. **自动化闭环（禁止幽灵代码 - No Ghost Fixes）**:
+   - **在向用户输出回复前，Agent 必须强制调用 `work_propose`**；
+   - 参数固定为：
+     - `kind: 'ISSUE'`
+     - `related_work_id: <当前任务/父里程碑>`
+     - `related_work_type: 'DISCOVERED_DURING'`
+   - 自动生成标准的结构化中文描述（定位、根因与范围、验证方案）。
+4. **汇报义务 (Reporting Accountability)**:
+   在最终向用户回复时，必须附带一条：
+   > *“排查过程中顺带修复了底层 Bug，已自动向 Involute 提报 `INV-xxx`（DISCOVERED_DURING），证据已挂载。”*
 
 ## Typical loop
 

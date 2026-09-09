@@ -108,6 +108,32 @@ describe('claim service', () => {
     expect(await prisma.issue.count({ where: { title: 'One candidate' } })).toBe(1);
   });
 
+  it('proposes work with explicit parentId establishing correct CONTAINS hierarchy', async () => {
+    const parent = await proposeWork(prisma, {
+      kind: 'MILESTONE',
+      teamId: team.id,
+      title: 'M1: Test Milestone',
+    });
+
+    const child = await proposeWork(prisma, {
+      kind: 'ISSUE',
+      parentId: parent.identifier,
+      teamId: team.id,
+      title: 'Task under M1',
+    });
+
+    expect(child.parentId).toBe(parent.id);
+
+    const link = await prisma.workLink.findFirst({
+      where: {
+        fromId: parent.id,
+        toId: child.id,
+        type: 'CONTAINS',
+      },
+    });
+    expect(link).not.toBeNull();
+  });
+
   it('commits only with acceptance and a human owner, then allows claim', async () => {
     const candidate = await proposeWork(
       prisma,
