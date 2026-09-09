@@ -18,13 +18,14 @@ primary entrypoint; the web board is an observation and governance surface.
 5. Run complete is not work accepted. Moving to Done requires a human review, or the graded auto-accept gate when evidence is objectively CLEAR (e.g. PR merged, test exit 0). Agents still cannot mark Done.
 6. Do not file local TODOs as work. If it is not worth a contract, keep it local.
 7. Pass \`expected_revision\` on updates; conflicts mean someone moved first — re-read.
-8. Every production code modification MUST be bound to an Involute work item (INV-xxx). Unlinked changes are blocked by the Layer 1 Git guardrail.
+8. Every production code modification MUST be bound to an Involute work item (INV-xxx). Unlinked PRs are blocked by CI offline lint and synchronized via GitHub Webhooks.
 
 ## Three-Layer Defense Pyramid (三层防御金字塔)
 
-1. **Layer 1: Deterministic Engine Guardrail (Git Commit / PR Hook)**
-   - Hard enforcement via \`scripts/verify-work-graph.sh\` and \`.githooks/commit-msg\`.
-   - Any commit modifying core source code (\`packages/*/src\`) must reference a valid \`INV-xxx\` identifier. Unlinked code is blocked at the door.
+1. **Layer 1: Deterministic Engine Guardrail (Branch-First Convention & CI Offline Lint)**
+   - Zero-touch local developer environment: local git commits are completely non-blocking and work offline.
+   - Work branch naming convention (e.g. \`feat/INV-xxx-slug\`) or PR title linkage (e.g. \`feat: [INV-xxx] description\`).
+   - PR gate enforced purely offline in CI via \`scripts/ci-pr-lint.sh\`; asynchronous GitHub Webhooks reconcile status to Involute kernel.
 2. **Layer 2: Defensive Contract / Schema Layer (Explicit \`parent_id\`)**
    - When proposing hierarchical work, supply \`parent_id\` directly in \`work_propose\`.
    - Eliminates relationship inversion bugs and guarantees top-down \`CONTAINS\` linking.
