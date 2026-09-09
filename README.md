@@ -3,14 +3,73 @@
 [![npm version](https://img.shields.io/npm/v/@turnkeyai/involute?label=npm)](https://www.npmjs.com/package/@turnkeyai/involute)
 [![CI](https://github.com/fakechris/Involute/actions/workflows/ci.yml/badge.svg)](https://github.com/fakechris/Involute/actions/workflows/ci.yml)
 [![Docker Publish](https://github.com/fakechris/Involute/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/fakechris/Involute/actions/workflows/docker-publish.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 
-Agent-native project-state and work-graph kernel.
+> **Agent-native project-state and work-graph kernel.**
+> Involute stores long-lived work identity, delivery contracts, typed links, decisions, and evidence.
+> Codex, Claude Code, and other agents are the primary entrypoints over MCP; the kanban web app
+> is only an observation and governance surface. Headless, self-hostable, zero LLM dependency.
 
-Involute stores long-lived work identity, contracts, links, status, decisions, and evidence. Codex, Claude Code, and other agents are the primary entrypoints; the kanban web app is an optional observation and governance surface.
+**Status** M0 migration done · M1 VPS self-hosting operational · M2 OAuth + RBAC done · work-graph kernel (K0–K6) shipped · Linear replacement = M5 · Apache-2.0
 
-The current tree still ships a GraphQL API, a kanban UI, and a CLI that can export one Linear team snapshot, import it, verify it, and show it on the board. That import loop remains supported. The product direction is a callable kernel, not a Linear UI clone. See [docs/vision.md](docs/vision.md).
+## ✨ Highlights
 
-## Current status
+- 🧠 **Work-graph kernel** — every work item is a node with a stable identity (`SON-18`, `INV-142`), a delivery contract (outcome, scope, constraints, acceptance, verification), and typed links (`contains`, `blocks`, `derived_from`, `discovered_during`).
+- 🤖 **MCP-native agent protocol** — `work_search` / `work_get_context` / `work_list_ready` / `work_propose` / `work_claim` / `work_update` / `work_report_run` / `work_attach_evidence` over Streamable HTTP MCP at `/mcp`, with a read-only mirror at `/mcp/readonly`.
+- 🛡️ **Human gates where they matter** — fuzzy discoveries enter as *candidates*, never straight into the committed backlog; commit and rejection are human actions; **run complete is not work accepted** — `Done` always stays a human (or explicit `accept`) decision.
+- 🧾 **Runs + evidence** — every execution attempt is a run with phase reports, blockers, and attached PR / test / artifact URLs; graded auto-accept handles CLEAR in-review work.
+- 🖥️ **Observation web, not the write path** — React + Vite kanban that projects committed issues only, plus candidate review (`/candidates`), work-graph view (`/graph`), per-work runs/evidence pages (`/work/:id`), and an inbox backed by real notifications.
+- 📥 **Linear import loop** — export one Linear team snapshot, import, verify, and view it on the board; historical commitments load in once, then the kernel takes over.
+- 📦 **Self-hostable** — single `involute-aio` container, full compose stack, published Docker Hub images, Ansible playbooks, GitHub Actions deploy, and Postgres backup/restore scripts.
+- 🔐 **Auth & RBAC** — Google OAuth browser sessions, bearer tokens with read-only scopes for CLI and agents, signed viewer assertions, `PUBLIC`/`PRIVATE` teams, and an admin email allowlist.
+- 🧰 **CLI** — `involute` for config, teams, issues, labels, comments, import/export, and viewer assertions.
+
+## 🚀 Quick start
+
+### 1. Run it (single container)
+
+```bash
+./setup.sh --local    # generate .env, start docker-compose.aio.yml, wait for /ready
+```
+
+One `involute-aio` image runs the API, applies migrations, and serves the web app; only Postgres is external. For the full multi-container stack, see [Local stack quick start](#local-stack-quick-start).
+
+### 2. Connect an agent
+
+```bash
+codex mcp add involute --url http://localhost:4200/mcp
+```
+
+Claude Code, Cursor, Opencode, and other clients, tokens, and rotation are covered in [docs/agent-setup.md](docs/agent-setup.md). The agent-facing protocol discipline lives in the skill pack: [skills/involute/SKILL.md](skills/involute/SKILL.md).
+
+### 3. Or drive it from the CLI
+
+```bash
+npm install -g @turnkeyai/involute
+involute config set server-url https://involute.example.com/graphql
+involute config set token YOUR_AUTH_TOKEN
+involute teams list
+```
+
+## 🔁 The agent loop
+
+```text
+work_list_ready / work_search → work_get_context → work_claim
+(local plan — do not upload)
+work_update or work_propose for newly confirmed work
+run_report + evidence_attach → In Review (human accepts → Done)
+```
+
+Four state machines, deliberately not collapsed:
+
+| Machine | Meaning |
+|---|---|
+| `commitmentStatus` | candidate / committed / rejected |
+| Issue workflow state | Backlog → Ready → In Progress → In Review → Done / Canceled |
+| Claim + Run | who is executing this attempt, and whether that attempt finished |
+| Local `task_plan.md` | Agent working memory; not stored as Involute work |
+
+## 🗺️ Current status
 
 - `M0` single-team migration acceptance is done.
 - `M2` Google OAuth, session auth, admin bootstrap, and team RBAC are done.
@@ -18,59 +77,19 @@ The current tree still ships a GraphQL API, a kanban UI, and a CLI that can expo
 - The public domain serves HTTPS with Google OAuth. Backup and restore scripts are `scripts/postgres-backup.sh` and `scripts/postgres-restore.sh`.
 - The Linear-replacement track is M5. K0–K6 ship as the work-graph kernel: MCP at `/mcp`, propose/commit/claim/reject, runs/evidence, and observation UI (`/candidates`, `/graph`, `/work/:id`). The board projects committed issues only.
 
-Connect an agent:
-
-```bash
-codex mcp add involute --url http://localhost:4200/mcp
-```
-
-See [skills/involute/SKILL.md](skills/involute/SKILL.md). Per-client setup
-(Codex, Claude Code, Cursor, Opencode, others), tokens, and rotation:
-[docs/agent-setup.md](docs/agent-setup.md).
-
 See [docs/current-status.md](docs/current-status.md), [docs/milestones.md](docs/milestones.md), [docs/vision.md](docs/vision.md), and [docs/api.md](docs/api.md) for the current product state and API surface.
 
 ## Workspace layout
 
-- `packages/server` — GraphQL API, Prisma-backed data model, import pipeline, validation helpers
+- `packages/server` — GraphQL API, MCP endpoint, Prisma-backed data model, import pipeline, validation helpers
 - `packages/web` — React + Vite kanban UI
 - `packages/cli` — `involute` CLI for config, import/export, teams, issues, labels, and comments
 - `packages/shared` — shared TypeScript utilities
+- `skills/` — agent skill pack (search, propose, claim, report, evidence, setup)
 - `docs/api.md` — HTTP and GraphQL API reference
 - `docs/ops.md` — production deploy, rollback, logs, backup, restore, smoke
 - `docs/vision.md` — current product vision
 - `docs/milestones.md` — active milestones and sequencing
-
-## Install the CLI
-
-The published CLI is the fastest way to use Involute against an existing server:
-
-```bash
-npm install -g @turnkeyai/involute
-involute --help
-```
-
-Or install it project-locally:
-
-```bash
-npm install @turnkeyai/involute
-npx involute --help
-```
-
-Point the CLI at your Involute API:
-
-```bash
-involute config set server-url https://involute.example.com/graphql
-involute config set token YOUR_AUTH_TOKEN
-involute teams list
-```
-
-Import and verify one team snapshot:
-
-```bash
-export SOURCE_API_TOKEN='src_api_xxx'
-involute import team --token "$SOURCE_API_TOKEN" --team SON --keep-export --output ./son-export
-```
 
 ## Environment
 
@@ -117,16 +136,6 @@ Optional web runtime variables:
 - `VITE_INVOLUTE_GRAPHQL_URL` — override the web app GraphQL endpoint (default: `http://localhost:4200/graphql`)
 - `VITE_INVOLUTE_AUTH_TOKEN` — trusted local/dev bearer token for bypassing browser login
 - `VITE_INVOLUTE_VIEWER_ASSERTION` — signed viewer assertion to act as a specific user without exposing the server secret
-
-## Single-container self-host
-
-```bash
-./setup.sh --local    # generate .env, start docker-compose.aio.yml, wait for /ready
-```
-
-One `involute-aio` image runs the API, applies migrations, and serves the web
-app; only Postgres is external. For the full multi-container stack, keep
-reading.
 
 ## Local stack quick start
 
@@ -309,7 +318,7 @@ ANSIBLE_VAULT_PASSWORD_FILE=ops/ansible/vault-password.txt pnpm deploy:prod
 
 `ops/ansible/group_vars/all/vault.yml` and `ops/ansible/vault-password.txt` are ignored by git.
 
-GitHub Actions can run the same deployment path from [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml). Configure these repository secrets before enabling it:
+GitHub Actions can run the same deployment path from [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml). Configure these repository secrets before enabling it:
 
 - `DEPLOY_HOST`
 - `DEPLOY_KNOWN_HOSTS`
@@ -422,66 +431,6 @@ Tag-driven npm publishing is wired through [`.github/workflows/npm-publish.yml`]
 
 Release notes for the current Agent-native kernel line are in [docs/releases/npm-v0.2.0.md](docs/releases/npm-v0.2.0.md).
 
-Release tags use this format:
-
-```bash
-git tag npm-v1.0.0
-git push origin npm-v1.0.0
-```
-
-That workflow publishes the current package set in version lockstep:
-
-- `@turnkeyai/involute-shared`
-- `@turnkeyai/involute-server`
-- `@turnkeyai/involute`
-
-The checked-in package manifests intentionally stay at `0.0.0`; the workflow derives the published version from the release tag and rewrites workspace dependencies in its isolated publish checkout.
-
-Repository setup required before enabling it:
-
-- add `NPM_TOKEN` as a GitHub Actions secret
-- ensure the npm account behind that token can publish the current `@turnkeyai/*` scope
-- after first publish, grant package access to the npm developers team in your org settings
-
-Team access page for the current npm org setup:
-
-- <https://www.npmjs.com/settings/turnkeyai/teams/team/developers/access>
-
-Useful admin/database commands:
-
-```bash
-pnpm --filter @turnkeyai/involute-server admin:bootstrap you@example.com
-pnpm --filter @turnkeyai/involute-server prisma:migrate:baseline
-pnpm --filter @turnkeyai/involute-server prisma:migrate:reset
-pnpm --filter @turnkeyai/involute-server prisma:db:push
-```
-
-Guidance:
-
-- prefer `prisma:migrate:dev` while changing the schema locally
-- use `prisma:migrate:deploy` in compose, CI, and production
-- keep `prisma:db:push` as an explicit development-only escape hatch, not the default deployment path
-- if you are upgrading an older database that predates `prisma/migrations`, run `prisma:migrate:baseline` once before the first `prisma:migrate:deploy`, or set `PRISMA_BASELINE_EXISTING_SCHEMA=true` for a one-time compose bootstrap
-
-## Quality gates
-
-Unit and integration checks:
-
-```bash
-pnpm typecheck
-pnpm lint
-pnpm test
-pnpm build
-```
-
-Browser E2E:
-
-```bash
-pnpm e2e
-```
-
-The Playwright suite verifies the core board lifecycle: create, update, comment, delete comment, and delete issue.
-
 ## Docker images
 
 This repo ships one multi-target `Dockerfile` with `server`, `web-dev`, `web`, and `cli` targets.
@@ -551,3 +500,7 @@ pnpm --filter @turnkeyai/involute exec node dist/index.js import team --token "$
 - Keep the compose stack, CI, and deploy automation reproducible while the product boundary hardens
 
 Railway remains a possible later hosting path, but it is not the current blocking milestone. See [docs/current-status.md](docs/current-status.md), [docs/vision.md](docs/vision.md), and [docs/milestones.md](docs/milestones.md) for the current direction.
+
+## License
+
+[Apache-2.0](./LICENSE)
