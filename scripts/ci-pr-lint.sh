@@ -5,7 +5,8 @@
 # Zero network calls, zero external database dependencies.
 # ==============================================================================
 
-set -euo pipefail
+set -eu
+(set -o pipefail 2>/dev/null) && set -o pipefail || true
 
 PR_TITLE="${PR_TITLE:-}"
 PR_BRANCH="${PR_BRANCH:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)}"

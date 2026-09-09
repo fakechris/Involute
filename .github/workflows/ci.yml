@@ -39,7 +39,7 @@ jobs:
 
       - name: Verify PR Work Graph Reference
         if: github.event_name == 'pull_request'
-        run: sh scripts/ci-pr-lint.sh
+        run: bash scripts/ci-pr-lint.sh
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BRANCH: ${{ github.head_ref }}
