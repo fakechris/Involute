@@ -33,6 +33,11 @@ import { getServerEnvironment, loadServerEnvironment, type ServerEnvironment } f
 import { getUploadsDirectory } from './uploads.js';
 import { handleWebStatic } from './web-static.js';
 import { handleGitHubWebhook } from './github-webhook-handler.js';
+import {
+  DefaultGitHubApiClient,
+  reconcileAllConfiguredRepos,
+  startGitHubSyncScheduler,
+} from './github-sync.js';
 
 loadServerEnvironment();
 
@@ -59,6 +64,10 @@ export interface StartServerOptions {
   webhookUrls?: string | null;
   /** HMAC secret for verifying incoming GitHub webhook signatures */
   githubWebhookSecret?: string | null;
+  /** Whether the GitHub reconciliation sync engine is enabled (default: true if GITHUB_TOKEN set) */
+  githubSyncEnabled?: boolean;
+  /** Interval in ms for periodic reconciliation sync (default: 10 minutes) */
+  githubSyncIntervalMs?: number;
 }
 
 export interface StartedServer {
@@ -373,6 +382,33 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   }, 24 * 60 * 60_000);
   retentionTimer?.unref();
 
+  // Phase 3: Persistent Watermark Cursor Reconciliation Sync Engine
+  let stopGitHubSync: (() => void) | undefined;
+  const githubSyncEnabled =
+    options.githubSyncEnabled ??
+    (Boolean(process.env.GITHUB_TOKEN) || process.env.GITHUB_SYNC_ENABLED === 'true');
+
+  if (githubSyncEnabled) {
+    const client = new DefaultGitHubApiClient();
+    stopGitHubSync = startGitHubSyncScheduler(prisma, {
+      intervalMs: options.githubSyncIntervalMs,
+      githubClient: client,
+    });
+
+    // Cold-start self-check / initial reconciliation run (async, non-blocking)
+    void reconcileAllConfiguredRepos(prisma, client)
+      .then((results) => {
+        for (const res of results) {
+          console.log(
+            `[github-sync] Cold-start reconciliation completed for ${res.repository}: watermark=${res.watermarkAfter.toISOString()}, processed=${res.processedCount}, errors=${res.errorCount}`,
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        console.error('[github-sync] Cold-start reconciliation failed:', error);
+      });
+  }
+
   const address = httpServer.address();
 
   if (!address || typeof address === 'string') {
@@ -384,6 +420,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     port: address.port,
     prisma,
     stop: async () => {
+      if (stopGitHubSync) {
+        stopGitHubSync();
+      }
       if (outboxTimer) {
         clearInterval(outboxTimer);
       }

@@ -31,7 +31,7 @@ interface BranchCreatePayload {
   };
 }
 
-interface PullRequestPayload {
+export interface PullRequestPayload {
   action: string;
   pull_request: {
     id: number;
