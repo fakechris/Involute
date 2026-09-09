@@ -15,7 +15,7 @@
 ## ✨ Highlights
 
 - 🧠 **Work-graph kernel** — every work item is a node with a stable identity (`SON-18`, `INV-142`), a delivery contract (outcome, scope, constraints, acceptance, verification), and typed links (`contains`, `blocks`, `derived_from`, `discovered_during`).
-- 🤖 **MCP-native agent protocol** — `work_search` / `work_get_context` / `work_list_ready` / `work_propose` / `work_claim` / `work_update` / `work_report_run` / `work_attach_evidence` over Streamable HTTP MCP at `/mcp`, with a read-only mirror at `/mcp/readonly`.
+- 🤖 **MCP-native agent protocol** — `work_search` / `work_get_context` / `work_list_ready` / `work_propose` / `work_commit` / `work_claim` / `work_update` / `run_report` / `evidence_attach` over Streamable HTTP MCP at `/mcp`, with a read-only mirror at `/mcp/readonly`.
 - 🛡️ **Human gates where they matter** — fuzzy discoveries enter as *candidates*, never straight into the committed backlog; commit and rejection are human actions; **run complete is not work accepted** — `Done` always stays a human (or explicit `accept`) decision.
 - 🧾 **Runs + evidence** — every execution attempt is a run with phase reports, blockers, and attached PR / test / artifact URLs; graded auto-accept handles CLEAR in-review work.
 - 🖥️ **Observation web, not the write path** — React + Vite kanban that projects committed issues only, plus candidate review (`/candidates`), work-graph view (`/graph`), per-work runs/evidence pages (`/work/:id`), and an inbox backed by real notifications.
