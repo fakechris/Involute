@@ -51,7 +51,8 @@ export const WORK_ALREADY_CLAIMED_MESSAGE = 'Work is already claimed.';
 export const WORK_NOT_READY_MESSAGE = 'Work is not ready to be claimed.';
 export const WORK_CLAIM_REQUIRES_ACTOR_MESSAGE = 'Claiming work requires an authenticated actor.';
 export const WORK_RELATED_NOT_FOUND_MESSAGE = 'Related work not found.';
-export const WORK_RUN_NOT_FOUND_MESSAGE = 'Work run not found.';
+export const WORK_RUN_NOT_FOUND_MESSAGE =
+  'Work run not found. To start a new run, omit run_id (the server assigns RUN-N automatically). Only pass run_id when updating an existing run.';
 export const WORK_EVIDENCE_KIND_INVALID_MESSAGE = 'Unknown evidence kind.';
 export const WORK_RUN_STATUS_INVALID_MESSAGE = 'Unknown run status.';
 export const WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE =

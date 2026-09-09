@@ -33,6 +33,7 @@ describe('run and evidence', () => {
     await prisma.workReviewDecision.deleteMany();
     await prisma.workEvidence.deleteMany();
     await prisma.workRun.deleteMany();
+    await prisma.workClaim.deleteMany();
     await prisma.comment.deleteMany();
     await prisma.issue.deleteMany();
     await prisma.workflowState.deleteMany();
@@ -671,4 +672,23 @@ describe('run and evidence', () => {
     expect(after.revision).toBe(revisionBefore + 1);
     expect(await prisma.eventOutbox.count({ where: { type: 'work.review_submitted' } })).toBe(1);
   });
+
+  it('forgivingly starts a new run when agent mistakenly passes claimId as runId on initial run', async () => {
+    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Mistaken run_id test' });
+    const committed = await commitWork(
+      prisma,
+      candidate.id,
+      { acceptance: 'forgiving', assigneeId: human.id, expectedRevision: candidate.revision },
+      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    );
+    const { claim } = await claimWork(prisma, committed.id, {}, { actorId: human.id, actorKind: 'HUMAN', surface: 'test' });
+    const actor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' };
+
+    // Agent mistakenly passes claim.id as runId on initial report
+    const res1 = await reportRun(prisma, { status: 'running', workId: committed.id, runId: claim.id }, actor);
+    expect(res1.run).toBeTruthy();
+    expect(res1.run.claimId).toBe(claim.id);
+    expect(res1.run.status).toBe('RUNNING');
+  });
 });
+

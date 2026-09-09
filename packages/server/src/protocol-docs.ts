@@ -122,6 +122,28 @@ Human-only (delegated CLI or Web UI):
 
 Call \`protocol_get_guide\` on the MCP endpoint to fetch this document verbatim.
 
+## First-Time Onboarding Blueprint (首次接入黄金规范)
+
+When connecting a repository to Involute for the first time:
+1. **Strict 3-Tier Hierarchy (严谨三层拓扑)**:
+   - Root: One \`kind: 'PROJECT'\` matching \`<owner/repo>\`.
+   - Mid-tier: Delivery phases as \`kind: 'MILESTONE'\` linked via \`CONTAINS\`.
+   - Leaf-tier: Independently acceptable units as \`kind: 'ISSUE'\` linked to milestone via \`CONTAINS\` (pass \`parent_id: <MILESTONE_ID>\`). No orphan issues.
+2. **Mandatory Rich Structured Chinese Descriptions (强制提供结构化中文详细描述)**:
+   - Absolute prohibition: \`description: null\`, empty text, or brief links like \`ref docs/foo.md\`.
+   - Every proposal MUST structure \`description\` with:
+     - \`### 1. 目标与架构定位\`
+     - \`### 2. 核心功能与交付范围\`
+     - \`### 3. 验收标准与验证方案\`
+   - Title MUST NOT contain \`[已交付]\` or \`[待办]\` status tags.
+3. **Codebase Reality Alignment (现状与代码真实进度对齐)**:
+   - For historical features already implemented and passing tests: immediately after commitment, execute \`work_claim\` -> \`run_report(completed)\` -> \`evidence_attach\` to advance them to **In Review**.
+   - Genuinely unstarted work remains in **Ready**.
+4. **Run Reporting Rule (新建 Run 规则)**:
+   - When calling \`run_report\` to start a new run, **OMIT \`run_id\`**. The server assigns the run ID.
+   - Do NOT pass \`claim.id\` or client-generated UUID as \`run_id\`.
+
+
 ## Webhook events
 
 Subscriptions receive signed HTTP POST deliveries. Signature header:

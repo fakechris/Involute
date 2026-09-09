@@ -76,18 +76,50 @@ export async function reportRun(
     let activeClaim: WorkClaim | null = null;
 
     if (input.runId && !run) {
-      throw createNotFoundError(WORK_RUN_NOT_FOUND_MESSAGE);
-    }
-
-    const isNew = !run;
-    if (!run) {
-      activeClaim = await transaction.workClaim.findFirst({
+      // Check if input.runId was mistakenly passed as the claim ID
+      const claimMatch = await transaction.workClaim.findFirst({
         where: {
           actorId,
           leaseUntil: { gt: new Date() },
           workId: work.id,
+          id: input.runId,
         },
       });
+      if (claimMatch) {
+        // Agent mistakenly passed claim.id as runId. Forgive and use as active claim for new run.
+        activeClaim = claimMatch;
+      } else {
+        // Check if there is an active claim and no existing runs for this work
+        const claim = await transaction.workClaim.findFirst({
+          where: {
+            actorId,
+            leaseUntil: { gt: new Date() },
+            workId: work.id,
+          },
+        });
+        const existingRunsCount = await transaction.workRun.count({
+          where: { workId: work.id },
+        });
+        if (claim && existingRunsCount === 0) {
+          // Agent passed a client-generated UUID on the initial run. Forgive and start new run.
+          activeClaim = claim;
+        } else {
+          throw createNotFoundError(WORK_RUN_NOT_FOUND_MESSAGE);
+        }
+      }
+    }
+
+    const isNew = !run;
+    if (!run) {
+      if (!activeClaim) {
+        activeClaim = await transaction.workClaim.findFirst({
+          where: {
+            actorId,
+            leaseUntil: { gt: new Date() },
+            workId: work.id,
+          },
+        });
+      }
       if (!activeClaim) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
       const publicId = await nextRunPublicId(transaction);
       run = await transaction.workRun.create({

@@ -320,8 +320,14 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
       type: 'object',
       properties: {
         team: { type: 'string', description: 'Team key or UUID' },
-        title: { type: 'string' },
-        description: { type: 'string' },
+        title: {
+          type: 'string',
+          description: 'Clear deliverable title. Do NOT prefix with [已交付], [待办], or status tags — status is tracked via the Involute state machine.',
+        },
+        description: {
+          type: 'string',
+          description: 'Mandatory rich structured Chinese Markdown description. MUST include: 1. ### 1. 目标与架构定位, 2. ### 2. 核心功能与交付范围, 3. ### 3. 验收标准与验证方案. Minimal docs links (ref docs/...) are strictly rejected.',
+        },
         outcome: { type: 'string' },
         scope: { type: 'string' },
         constraints: { type: 'string' },
@@ -423,8 +429,11 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        work_id: { type: 'string' },
-        run_id: { type: 'string', description: 'Existing RUN-N or UUID; omit to start a new run' },
+        work_id: { type: 'string', description: 'Work item identifier (e.g. INV-104) or UUID' },
+        run_id: {
+          type: 'string',
+          description: 'Existing RUN-N public ID or UUID to update. IMPORTANT: To start a new run, OMIT this field. Do NOT pass claim.id or client-generated UUID here.',
+        },
         status: { type: 'string', enum: ['queued', 'running', 'blocked', 'completed', 'failed'] },
         phase: { type: 'string' },
         summary: { type: 'string' },
