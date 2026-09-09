@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 
-export type OpsAlertKind = 'event.dead_letter' | 'webhook.disabled';
+export type OpsAlertKind = 'event.dead_letter' | 'webhook.disabled' | 'github_sync.dead_letter';
 
 export interface OpsAlert {
   details: Record<string, unknown>;

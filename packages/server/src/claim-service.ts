@@ -4,6 +4,7 @@ import {
   createNotFoundError,
   createValidationError,
   ISSUE_NOT_FOUND_MESSAGE,
+  PARENT_ISSUE_NOT_FOUND_MESSAGE,
   WORK_ALREADY_CLAIMED_MESSAGE,
   WORK_ACCEPT_FORBIDDEN_MESSAGE,
   WORK_CLAIM_REQUIRES_ACTOR_MESSAGE,
@@ -21,6 +22,7 @@ import {
   WORK_REVISION_CONFLICT_MESSAGE,
   WORK_IDEMPOTENCY_CONFLICT_MESSAGE,
   WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE,
+  AGENT_DESCRIPTION_REQUIRED_MESSAGE,
 } from './errors.js';
 import { findWorkByIdOrIdentifier, isWorkReadyForClaim } from './context-service.js';
 import { enqueueWorkEvent } from './event-outbox.js';
@@ -53,6 +55,7 @@ export interface ProposeWorkInput {
   idempotencyKey?: string | null;
   kind?: Issue['kind'] | null;
   outcome?: string | null;
+  parentId?: string | null;
   relatedWorkId?: string | null;
   relatedWorkType?: WorkLinkType | null;
   repository?: string | null;
@@ -104,12 +107,51 @@ export function assertActorCan(actorKind: ActorKind | null | undefined, permissi
   }
 }
 
+export const STATUS_PREFIX_REGEX = /^\[(已交付|已完成|待办|已解决|已关闭|进行中|done|completed|todo|fixed|in progress)\]\s*/i;
+
+export function sanitizeWorkTitle(title: string): { title: string; warning: string | null } {
+  if (STATUS_PREFIX_REGEX.test(title)) {
+    const cleaned = title.replace(STATUS_PREFIX_REGEX, '').trim();
+    return {
+      title: cleaned,
+      warning: `Status prefix was automatically removed from title: "${title}" -> "${cleaned}". Do not encode work status into titles; use work_claim and run_report to transition states.`,
+    };
+  }
+  return { title, warning: null };
+}
+
+export function validateAgentDescription(
+  description: string | null | undefined,
+  actor: WriteActor,
+): void {
+  // Lazy references like "ref docs/..." are strictly forbidden for all surfaces/actors
+  if (description && /^ref\s*:?\s*docs\//i.test(description.trim())) {
+    throw createValidationError(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
+  }
+
+  // Mandatory 3-section Chinese description strictly enforced for AGENT actors
+  if (actor.actorKind === 'AGENT') {
+    if (!description || description.trim().length === 0) {
+      throw createValidationError(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
+    }
+    const hasSection1 = /1\.\s*目标与架构定位|目标与架构定位/.test(description);
+    const hasSection2 = /2\.\s*核心功能与交付范围|核心功能与交付范围/.test(description);
+    const hasSection3 = /3\.\s*验收标准与验证方案|验收标准与验证方案/.test(description);
+
+    if (!hasSection1 || !hasSection2 || !hasSection3) {
+      throw createValidationError(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
+    }
+  }
+}
+
 export async function proposeWork(
   prisma: PrismaClient,
   input: ProposeWorkInput,
   actor: WriteActor = INTERNAL_WRITE_ACTOR,
 ): Promise<Issue> {
   assertActorCan(actor.actorKind, 'propose');
+  validateAgentDescription(input.description, actor);
+  const { title: sanitizedTitle } = sanitizeWorkTitle(input.title);
 
   return prisma.$transaction(async (transaction) => {
     let idempotencyId: string | null = null;
@@ -133,7 +175,7 @@ export async function proposeWork(
     const createInput: import('./issue-service.js').CreateIssueInput = {
       commitmentStatus: 'CANDIDATE',
       teamId: input.teamId,
-      title: input.title,
+      title: sanitizedTitle,
     };
     if (input.acceptance !== undefined) createInput.acceptance = input.acceptance;
     if (input.constraints !== undefined) createInput.constraints = input.constraints;
@@ -145,8 +187,26 @@ export async function proposeWork(
     if (input.source !== undefined) createInput.source = input.source;
     if (input.verification !== undefined) createInput.verification = input.verification;
 
+    let parentWork: Issue | null = null;
+    if (input.parentId) {
+      parentWork = await findWorkByIdOrIdentifier(transaction, input.parentId);
+      if (!parentWork) throw createNotFoundError(PARENT_ISSUE_NOT_FOUND_MESSAGE);
+      createInput.parentId = parentWork.id;
+    } else if (input.relatedWorkId && input.relatedWorkType === 'CONTAINS') {
+      parentWork = await findWorkByIdOrIdentifier(transaction, input.relatedWorkId);
+      if (!parentWork) throw createNotFoundError(WORK_RELATED_NOT_FOUND_MESSAGE);
+      createInput.parentId = parentWork.id;
+    }
+
     const created = await createIssueInTransaction(transaction, createInput, actor);
-    if (input.relatedWorkId) {
+    if (parentWork) {
+      await createWorkLink(transaction, {
+        actor,
+        fromId: parentWork.id,
+        toId: created.id,
+        type: 'CONTAINS',
+      });
+    } else if (input.relatedWorkId) {
       const related = await findWorkByIdOrIdentifier(transaction, input.relatedWorkId);
       if (!related) throw createNotFoundError(WORK_RELATED_NOT_FOUND_MESSAGE);
       await createWorkLink(transaction, {

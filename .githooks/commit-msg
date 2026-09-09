@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Involute: Zero-touch commit-msg hook (non-blocking)
+exit 0

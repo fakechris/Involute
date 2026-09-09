@@ -21,8 +21,9 @@ import {
   WORK_REVISION_CONFLICT_MESSAGE,
   PROJECT_NOT_FOUND_MESSAGE,
   CYCLE_NOT_FOUND_MESSAGE,
+  AGENT_DESCRIPTION_REQUIRED_MESSAGE,
 } from './errors.js';
-import { assertActorCan, isAcceptStateType } from './claim-service.js';
+import { assertActorCan, isAcceptStateType, sanitizeWorkTitle, validateAgentDescription } from './claim-service.js';
 import { assertNoWorkLinkCycle, syncContainsFromParentId } from './link-service.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
 import {
@@ -42,6 +43,7 @@ export interface CreateIssueInput {
   description?: string | null;
   kind?: Issue['kind'] | null;
   outcome?: string | null;
+  parentId?: string | null;
   priority?: number | null;
   projectId?: string | null;
   repository?: string | null;
@@ -138,6 +140,7 @@ export async function createIssueInTransaction(
         identifier: `${updatedTeam.key.toUpperCase()}-${updatedTeam.nextIssueNumber - 1}`,
         kind: input.kind ?? 'ISSUE',
         outcome: input.outcome ?? null,
+        parentId: input.parentId ?? null,
         priority: input.priority ?? 0,
         projectId: input.projectId ?? null,
         repository: input.repository ?? null,
@@ -242,10 +245,15 @@ export async function updateIssue(
     }
 
     if ('title' in input && input.title !== undefined && input.title !== null) {
-      data.title = input.title;
+      data.title = sanitizeWorkTitle(input.title).title;
     }
 
     if ('description' in input) {
+      if (existingIssue.commitmentStatus === 'CANDIDATE' && actor.actorKind === 'AGENT') {
+        validateAgentDescription(input.description, actor);
+      } else if (input.description && /^ref\s*:?\s*docs\//i.test(input.description.trim())) {
+        throw createValidationError(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
+      }
       data.description = input.description ?? null;
     }
 

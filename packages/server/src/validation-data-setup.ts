@@ -41,6 +41,19 @@ export interface ValidationDataSetupSummary {
 export async function runValidationDataSetup(
   prisma: PrismaClient,
 ): Promise<ValidationDataSetupSummary> {
+  const dbUrl = process.env.DATABASE_URL || '';
+  try {
+    const parsed = new URL(dbUrl);
+    const dbName = parsed.pathname.replace(/^\//, '');
+    if (!dbName.endsWith('_test') && process.env.ALLOW_VALIDATION_ON_PROD !== 'true') {
+      throw new Error(
+        `[SECURITY FATAL] Refusing to inject validation/dummy fixture data into non-test database '${dbName}'! Target must end with _test.`
+      );
+    }
+  } catch (e: any) {
+    if (e?.message?.includes('[SECURITY FATAL]')) throw e;
+  }
+
   await ensureCanonicalLabels(prisma);
   await ensureAdminUser(prisma);
 

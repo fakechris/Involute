@@ -138,15 +138,17 @@ export async function callMcpTool(
     case 'work_propose': {
       const teamId = await resolveTeamId(context.prisma, requiredString(args.team, 'team'));
       await assertCanWriteTeam(context.prisma, context, teamId);
+      const rawTitle = requiredString(args.title, 'title');
       const proposeInput: Parameters<typeof proposeWork>[1] = {
         teamId,
-        title: requiredString(args.title, 'title'),
+        title: rawTitle,
       };
       assignOptional(proposeInput, 'acceptance', optionalString(args.acceptance));
       assignOptional(proposeInput, 'constraints', optionalString(args.constraints));
       assignOptional(proposeInput, 'description', optionalString(args.description));
       assignOptional(proposeInput, 'idempotencyKey', optionalString(args.idempotency_key));
       assignOptional(proposeInput, 'outcome', optionalString(args.outcome));
+      assignOptional(proposeInput, 'parentId', optionalString(args.parent_id));
       assignOptional(proposeInput, 'scope', optionalString(args.scope));
       assignOptional(proposeInput, 'relatedWorkId', optionalString(args.related_work_id));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
@@ -158,7 +160,14 @@ export async function callMcpTool(
       const relatedType = optionalString(args.related_work_type);
       if (relatedType) proposeInput.relatedWorkType = parseWorkLinkType(relatedType, 'related_work_type');
       proposeInput.source = optionalString(args.source) ?? 'agent';
-      return proposeWork(context.prisma, proposeInput, writeActorFromViewer(context.viewer, 'mcp'));
+      const created = await proposeWork(context.prisma, proposeInput, writeActorFromViewer(context.viewer, 'mcp'));
+      if (created.title !== rawTitle) {
+        return {
+          ...created,
+          warning: `Status prefix was automatically removed from title: "${rawTitle}" -> "${created.title}". Do not encode work status into titles; use work_claim and run_report to transition states.`,
+        };
+      }
+      return created;
     }
     case 'work_commit': {
       const work = await requireWork(context.prisma, requiredString(args.id, 'id'));
@@ -193,17 +202,25 @@ export async function callMcpTool(
       assignOptional(updateInput, 'priority', optionalNumber(args.priority));
       assignOptional(updateInput, 'repository', optionalString(args.repository));
       assignOptional(updateInput, 'scope', optionalString(args.scope));
-      assignOptional(updateInput, 'title', optionalString(args.title));
+      const rawTitle = optionalString(args.title);
+      assignOptional(updateInput, 'title', rawTitle);
       assignOptional(updateInput, 'verification', optionalString(args.verification));
       if (args.snoozed_until !== undefined) {
         updateInput.snoozedUntil = args.snoozed_until === null ? null : new Date(requiredString(args.snoozed_until, 'snoozed_until'));
       }
-      return updateIssue(
+      const updated = await updateIssue(
         context.prisma,
         work.id,
         updateInput,
         writeActorFromViewer(context.viewer, 'mcp'),
       );
+      if (rawTitle && updated.title !== rawTitle) {
+        return {
+          ...updated,
+          warning: `Status prefix was automatically removed from title: "${rawTitle}" -> "${updated.title}". Do not encode work status into titles; use work_claim and run_report to transition states.`,
+        };
+      }
+      return updated;
     }
     case 'work_link': {
       const from = await requireWork(context.prisma, requiredString(args.from_id, 'from_id'));
@@ -319,16 +336,30 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
       type: 'object',
       properties: {
         team: { type: 'string', description: 'Team key or UUID' },
-        title: { type: 'string' },
-        description: { type: 'string' },
+        title: {
+          type: 'string',
+          description: 'Clear deliverable title. Do NOT prefix with [已交付], [待办], or status tags — status is tracked via the Involute state machine.',
+        },
+        description: {
+          type: 'string',
+          description: 'Mandatory rich structured Chinese Markdown description. MUST include: 1. ### 1. 目标与架构定位, 2. ### 2. 核心功能与交付范围, 3. ### 3. 验收标准与验证方案. Minimal docs links (ref docs/...) are strictly rejected.',
+        },
         outcome: { type: 'string' },
         scope: { type: 'string' },
         constraints: { type: 'string' },
         acceptance: { type: 'string' },
         verification: { type: 'string' },
         kind: { type: 'string', enum: ['ISSUE', 'PROJECT', 'MILESTONE', 'DECISION', 'EPIC'] },
-        related_work_id: { type: 'string' },
-        related_work_type: { type: 'string', enum: ['CONTAINS', 'BLOCKS', 'DERIVED_FROM', 'DISCOVERED_DURING', 'RELATED_TO', 'DUPLICATE_OF'] },
+        parent_id: {
+          type: 'string',
+          description: 'Recommended: The identifier (e.g. INV-2) or UUID of the parent work item (PROJECT or MILESTONE) that CONTAINS this item. Guarantees top-down hierarchy and prevents relationship inversion.',
+        },
+        related_work_id: { type: 'string', description: 'Existing work item identifier (e.g. INV-2) or UUID to relate this new item to.' },
+        related_work_type: {
+          type: 'string',
+          enum: ['CONTAINS', 'BLOCKS', 'DERIVED_FROM', 'DISCOVERED_DURING', 'RELATED_TO', 'DUPLICATE_OF'],
+          description: 'Relationship type. If CONTAINS, the related item (e.g. Project/Milestone) contains this new item as a child. Defaults to DISCOVERED_DURING.',
+        },
         repository: { type: 'string' },
         idempotency_key: { type: 'string' },
         source: { type: 'string', description: 'Origin of this candidate; defaults to agent' },
@@ -414,8 +445,11 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     inputSchema: {
       type: 'object',
       properties: {
-        work_id: { type: 'string' },
-        run_id: { type: 'string', description: 'Existing RUN-N or UUID; omit to start a new run' },
+        work_id: { type: 'string', description: 'Work item identifier (e.g. INV-104) or UUID' },
+        run_id: {
+          type: 'string',
+          description: 'Existing RUN-N public ID or UUID to update. IMPORTANT: To start a new run, OMIT this field. Do NOT pass claim.id or client-generated UUID here.',
+        },
         status: { type: 'string', enum: ['queued', 'running', 'blocked', 'completed', 'failed'] },
         phase: { type: 'string' },
         summary: { type: 'string' },

@@ -15,6 +15,7 @@ export interface BoardViewState {
   sortField: BoardSortField;
   stateIds: string[];
   viewMode: BoardViewMode;
+  projectKey?: string | null;
 }
 
 export interface SavedBoardView {
@@ -42,6 +43,7 @@ const DEFAULT_BOARD_VIEW_STATE: BoardViewState = {
   sortField: 'updatedAt',
   stateIds: [],
   viewMode: 'board',
+  projectKey: null,
 };
 
 export const APPLY_BOARD_VIEW_EVENT = 'involute:apply-board-view';
@@ -101,6 +103,9 @@ function normalizeBoardViewState(value: unknown): BoardViewState {
     viewMode: candidate.viewMode !== undefined && isBoardViewMode(candidate.viewMode)
       ? candidate.viewMode
       : DEFAULT_BOARD_VIEW_STATE.viewMode,
+    projectKey: typeof candidate.projectKey === 'string' && candidate.projectKey.trim()
+      ? candidate.projectKey.trim()
+      : null,
   };
 }
 
@@ -233,7 +238,14 @@ export function applyBoardViewState(
           return false;
         }
       } else {
-        const haystack = [issue.identifier, issue.title, issue.description ?? ''].join(' ').toLowerCase();
+        const haystack = [
+          issue.identifier,
+          issue.title,
+          issue.description ?? '',
+          issue.parent?.title ?? '',
+          issue.parent?.identifier ?? '',
+          issue.project?.name ?? '',
+        ].join(' ').toLowerCase();
 
         if (!haystack.includes(normalizedQuery)) {
           return false;
@@ -259,6 +271,41 @@ export function applyBoardViewState(
 
     if (state.stateIds.length > 0 && !state.stateIds.includes(issue.state.id)) {
       return false;
+    }
+
+    if (state.projectKey) {
+      const target = state.projectKey.toLowerCase().trim();
+      const directMatch =
+        issue.id.toLowerCase() === target ||
+        issue.identifier.toLowerCase() === target ||
+        (issue.repository && issue.repository.toLowerCase() === target) ||
+        (issue.title && issue.title.toLowerCase() === target);
+
+      const repoMatch = Boolean(
+        issue.repository &&
+        (issue.repository.toLowerCase().includes(target) || target.includes(issue.repository.toLowerCase()))
+      );
+
+      const parentMatch = Boolean(
+        issue.parent &&
+        (issue.parent.id.toLowerCase() === target ||
+          issue.parent.identifier.toLowerCase() === target ||
+          issue.parent.title.toLowerCase() === target ||
+          issue.parent.title.toLowerCase().includes(target) ||
+          target.includes(issue.parent.title.toLowerCase()))
+      );
+
+      const projectMatch = Boolean(
+        issue.project &&
+        (issue.project.id.toLowerCase() === target ||
+          issue.project.name.toLowerCase() === target ||
+          issue.project.name.toLowerCase().includes(target) ||
+          target.includes(issue.project.name.toLowerCase()))
+      );
+
+      if (!directMatch && !repoMatch && !parentMatch && !projectMatch) {
+        return false;
+      }
     }
 
     return true;
@@ -303,6 +350,10 @@ export function buildBoardViewSummary(
 
   if (viewState.query.trim()) {
     tokens.push(`Query: ${viewState.query.trim()}`);
+  }
+
+  if (viewState.projectKey) {
+    tokens.push(`Project: ${viewState.projectKey}`);
   }
 
   for (const assigneeId of viewState.assigneeIds) {

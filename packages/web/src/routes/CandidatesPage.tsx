@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@apollo/client/react';
-import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
 import { IcoCheck, IcoClose } from '../components/Icons';
@@ -57,6 +57,8 @@ function CandidateCard({
   candidate,
   humans,
   otherCandidates,
+  isSelected,
+  onToggleSelect,
   onCommitted,
   onRejected,
   onRefresh,
@@ -64,6 +66,8 @@ function CandidateCard({
   candidate: CandidateWork;
   humans: WorkUserSummary[];
   otherCandidates: CandidateWork[];
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
   onCommitted: () => void;
   onRejected: () => void;
   onRefresh: () => void;
@@ -185,8 +189,20 @@ function CandidateCard({
   }
 
   return (
-    <article className="observation-card" aria-label={`${candidate.identifier} candidate`}>
+    <article
+      className={`observation-card${isSelected ? ' observation-card--selected' : ''}`}
+      aria-label={`${candidate.identifier} candidate`}
+    >
       <header className="observation-card__header">
+        {onToggleSelect ? (
+          <label className="candidates-select-checkbox" title={`Select ${candidate.identifier}`}>
+            <input
+              type="checkbox"
+              checked={isSelected ?? false}
+              onChange={() => onToggleSelect(candidate.id)}
+            />
+          </label>
+        ) : null}
         <button
           type="button"
           className="observation-card__id"
@@ -196,6 +212,9 @@ function CandidateCard({
         </button>
         <span className="observation-card__status">{snoozed ? 'snoozed candidate' : 'candidate'}</span>
         <span className="observation-card__meta">{candidate.team.key}</span>
+        {candidate.repository ? (
+          <span className="observation-card__meta observation-card__repo">{candidate.repository}</span>
+        ) : null}
         <span className="observation-card__meta">rev {candidate.revision}</span>
       </header>
       <h2 className="observation-card__title">{candidate.title}</h2>
@@ -321,8 +340,20 @@ function CandidateCard({
 
 export function CandidatesPage() {
   const teamKey = readStoredTeamKey();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedProject = searchParams.get('project');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkAssigneeId, setBulkAssigneeId] = useState('');
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+  const [bulkAction, setBulkAction] = useState<'commit' | 'reject' | null>(null);
+  const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
+  const [bulkError, setBulkError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [paginationError, setPaginationError] = useState(false);
+
+  const [runCommit] = useMutation<WorkCommitMutationData, WorkCommitMutationVariables>(WORK_COMMIT_MUTATION);
+  const [runReject] = useMutation<WorkRejectMutationData, WorkRejectMutationVariables>(WORK_REJECT_MUTATION);
+
   const { data, error, fetchMore, loading, refetch } = useQuery<
     CandidatesPageQueryData,
     CandidatesPageQueryVariables
@@ -339,6 +370,7 @@ export function CandidatesPage() {
       },
     },
   );
+
   const humansByTeam = useMemo(() => {
     const result = new Map<string, WorkUserSummary[]>();
     for (const team of data?.teams.nodes ?? []) {
@@ -349,9 +381,168 @@ export function CandidatesPage() {
     }
     return result;
   }, [data?.teams.nodes]);
+
+  const allHumans = useMemo(() => {
+    const all = Array.from(humansByTeam.values()).flat();
+    const unique = new Map<string, WorkUserSummary>();
+    for (const u of all) {
+      if (!unique.has(u.id)) unique.set(u.id, u);
+    }
+    return Array.from(unique.values());
+  }, [humansByTeam]);
+
+  useEffect(() => {
+    if (!bulkAssigneeId && allHumans.length > 0 && allHumans[0]) {
+      setBulkAssigneeId(allHumans[0].id);
+    }
+  }, [allHumans, bulkAssigneeId]);
+
   const candidates = data?.issues.nodes ?? [];
-  const snoozedCandidates = candidates.filter(isSnoozed);
-  const activeCandidates = candidates.filter((candidate) => !isSnoozed(candidate));
+  const repositories = useMemo(() => {
+    const repos = new Set<string>();
+    for (const c of candidates) {
+      if (c.repository) repos.add(c.repository);
+    }
+    return Array.from(repos).sort();
+  }, [candidates]);
+
+  function selectProject(repo: string | null) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (repo) {
+        next.set('project', repo);
+      } else {
+        next.delete('project');
+      }
+      return next;
+    });
+    setSelectedIds([]);
+  }
+
+  const snoozedCandidates = useMemo(() => candidates.filter(isSnoozed), [candidates]);
+  const activeCandidates = useMemo(() => candidates.filter((c) => !isSnoozed(c)), [candidates]);
+
+  const filteredActiveCandidates = useMemo(() => {
+    if (!selectedProject) return activeCandidates;
+    return activeCandidates.filter((c) => c.repository === selectedProject);
+  }, [activeCandidates, selectedProject]);
+
+  const filteredSnoozedCandidates = useMemo(() => {
+    if (!selectedProject) return snoozedCandidates;
+    return snoozedCandidates.filter((c) => c.repository === selectedProject);
+  }, [snoozedCandidates, selectedProject]);
+
+  const allVisibleSelected =
+    filteredActiveCandidates.length > 0 &&
+    filteredActiveCandidates.every((c) => selectedIds.includes(c.id));
+  const someVisibleSelected =
+    filteredActiveCandidates.some((c) => selectedIds.includes(c.id));
+
+  function toggleSelect(id: string) {
+    setSelectedIds((curr) =>
+      curr.includes(id) ? curr.filter((item) => item !== id) : [...curr, id],
+    );
+  }
+
+  function selectAllVisible() {
+    const visibleIds = filteredActiveCandidates.map((c) => c.id);
+    setSelectedIds((curr) => Array.from(new Set([...curr, ...visibleIds])));
+  }
+
+  function clearSelection() {
+    setSelectedIds([]);
+  }
+
+  async function handleBatchCommit() {
+    if (selectedIds.length === 0 || isBulkProcessing) return;
+    setIsBulkProcessing(true);
+    setBulkAction('commit');
+    setBulkError(null);
+    setBulkProgress({ done: 0, total: selectedIds.length });
+
+    const toCommit = candidates.filter((c) => selectedIds.includes(c.id));
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < toCommit.length; i++) {
+      const candidate = toCommit[i];
+      if (!candidate) continue;
+      const teamHumans = humansByTeam.get(candidate.team.id) ?? [];
+      const assigneeId = bulkAssigneeId || candidate.assignee?.id || teamHumans[0]?.id || allHumans[0]?.id;
+      const acceptance =
+        candidate.acceptance && candidate.acceptance.trim() !== ''
+          ? candidate.acceptance.trim()
+          : `Accepted and committed for execution: ${candidate.title}`;
+
+      try {
+        await runCommit({
+          variables: {
+            id: candidate.id,
+            input: {
+              expectedRevision: candidate.revision,
+              acceptance,
+              ...(assigneeId ? { assigneeId } : {}),
+            },
+          },
+        });
+        successCount++;
+      } catch (err) {
+        failCount++;
+        console.error(`Failed to commit candidate ${candidate.identifier}:`, err);
+      }
+      setBulkProgress({ done: i + 1, total: toCommit.length });
+    }
+
+    setIsBulkProcessing(false);
+    setBulkAction(null);
+    setSelectedIds([]);
+    if (failCount > 0) {
+      setBulkError(`Committed ${successCount}, failed ${failCount}.`);
+    }
+    void refetch();
+  }
+
+  async function handleBatchReject() {
+    if (selectedIds.length === 0 || isBulkProcessing) return;
+    setIsBulkProcessing(true);
+    setBulkAction('reject');
+    setBulkError(null);
+    setBulkProgress({ done: 0, total: selectedIds.length });
+
+    const toReject = candidates.filter((c) => selectedIds.includes(c.id));
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < toReject.length; i++) {
+      const candidate = toReject[i];
+      if (!candidate) continue;
+      try {
+        await runReject({
+          variables: {
+            id: candidate.id,
+            input: {
+              expectedRevision: candidate.revision,
+              reason: 'Batch rejected by reviewer',
+            },
+          },
+        });
+        successCount++;
+      } catch (err) {
+        failCount++;
+        console.error(`Failed to reject candidate ${candidate.identifier}:`, err);
+      }
+      setBulkProgress({ done: i + 1, total: toReject.length });
+    }
+
+    setIsBulkProcessing(false);
+    setBulkAction(null);
+    setSelectedIds([]);
+    if (failCount > 0) {
+      setBulkError(`Rejected ${successCount}, failed ${failCount}.`);
+    }
+    void refetch();
+  }
+
   const pageInfo = data?.issues.pageInfo;
 
   async function handleLoadMore() {
@@ -385,6 +576,39 @@ export function CandidatesPage() {
         <div style={{ flex: 1 }} />
         <span className="observation-hint">Proposed work waits here until a human commits it.</span>
       </div>
+
+      {repositories.length > 0 ? (
+        <div className="board-project-pills" role="tablist" aria-label="Project switcher" style={{ padding: '0 24px 8px' }}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!selectedProject}
+            className={`board-project-pill${!selectedProject ? ' board-project-pill--active' : ''}`}
+            onClick={() => selectProject(null)}
+          >
+            <span className="board-project-pill__name">All Projects</span>
+            <span className="board-project-pill__count">{candidates.length}</span>
+          </button>
+          {repositories.map((repo) => {
+            const count = candidates.filter((c) => c.repository === repo).length;
+            const isActive = selectedProject === repo;
+            return (
+              <button
+                key={repo}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                className={`board-project-pill${isActive ? ' board-project-pill--active' : ''}`}
+                onClick={() => selectProject(repo)}
+              >
+                <span className="board-project-pill__name">{repo}</span>
+                <span className="board-project-pill__count">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       <div className="page-content observation-content">
         {error ? (
           <div className="empty-state" role="alert">
@@ -401,28 +625,114 @@ export function CandidatesPage() {
           </div>
         ) : (
           <div className="observation-list">
-            {activeCandidates.map((candidate) => (
+            {filteredActiveCandidates.length > 0 ? (
+              <div className="candidates-toolbar">
+                <label className="candidates-toolbar__select-all">
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someVisibleSelected && !allVisibleSelected;
+                    }}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        selectAllVisible();
+                      } else {
+                        clearSelection();
+                      }
+                    }}
+                  />
+                  <span>Select all visible ({filteredActiveCandidates.length})</span>
+                </label>
+                {selectedIds.length > 0 ? (
+                  <button
+                    type="button"
+                    className="candidates-toolbar__clear-btn"
+                    onClick={clearSelection}
+                  >
+                    Clear selection ({selectedIds.length})
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
+            {filteredActiveCandidates.map((candidate) => (
               <CandidateCard
                 key={candidate.id}
                 candidate={candidate}
                 humans={humansByTeam.get(candidate.team.id) ?? []}
                 otherCandidates={candidates.filter((other) => other.id !== candidate.id)}
+                isSelected={selectedIds.includes(candidate.id)}
+                onToggleSelect={toggleSelect}
                 onCommitted={() => void refetch()}
                 onRejected={() => void refetch()}
                 onRefresh={() => void refetch()}
               />
             ))}
-            {snoozedCandidates.length > 0 ? (
+
+            {selectedIds.length > 0 ? (
+              <div className="candidates-bulkbar">
+                <div className="candidates-bulkbar__left">
+                  <span className="candidates-bulkbar__count">
+                    <strong>{selectedIds.length}</strong> selected
+                  </span>
+                  <label className="candidates-bulkbar__field">
+                    <span>Owner:</span>
+                    <select
+                      value={bulkAssigneeId}
+                      onChange={(e) => setBulkAssigneeId(e.target.value)}
+                      aria-label="Batch commit owner"
+                    >
+                      {allHumans.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name ?? u.email ?? u.id}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="candidates-bulkbar__right">
+                  {bulkError ? <span className="candidates-bulkbar__error">{bulkError}</span> : null}
+                  <Btn
+                    variant="accent"
+                    icon={<IcoCheck size={14} />}
+                    disabled={isBulkProcessing}
+                    onClick={() => void handleBatchCommit()}
+                  >
+                    {isBulkProcessing && bulkAction === 'commit'
+                      ? `Committing ${bulkProgress.done}/${bulkProgress.total}…`
+                      : `Batch Commit (${selectedIds.length})`}
+                  </Btn>
+                  <Btn
+                    variant="danger"
+                    icon={<IcoClose size={14} />}
+                    disabled={isBulkProcessing}
+                    onClick={() => void handleBatchReject()}
+                  >
+                    {isBulkProcessing && bulkAction === 'reject'
+                      ? `Rejecting ${bulkProgress.done}/${bulkProgress.total}…`
+                      : `Batch Reject (${selectedIds.length})`}
+                  </Btn>
+                  <Btn variant="ghost" disabled={isBulkProcessing} onClick={clearSelection}>
+                    Cancel
+                  </Btn>
+                </div>
+              </div>
+            ) : null}
+
+            {filteredSnoozedCandidates.length > 0 ? (
               <>
                 <h2 className="observation-section-title">
-                  Snoozed ({snoozedCandidates.length})
+                  Snoozed ({filteredSnoozedCandidates.length})
                 </h2>
-                {snoozedCandidates.map((candidate) => (
+                {filteredSnoozedCandidates.map((candidate) => (
                   <CandidateCard
                     key={candidate.id}
                     candidate={candidate}
                     humans={humansByTeam.get(candidate.team.id) ?? []}
                     otherCandidates={candidates.filter((other) => other.id !== candidate.id)}
+                    isSelected={selectedIds.includes(candidate.id)}
+                    onToggleSelect={toggleSelect}
                     onCommitted={() => void refetch()}
                     onRejected={() => void refetch()}
                     onRefresh={() => void refetch()}
@@ -430,6 +740,7 @@ export function CandidatesPage() {
                 ))}
               </>
             ) : null}
+
             {paginationError ? (
               <div role="alert">
                 <p>Could not load more candidates.</p>

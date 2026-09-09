@@ -50,6 +50,8 @@ export const BOARD_PAGE_QUERY = gql`
         title
         description
         priority
+        kind
+        repository
         createdAt
         updatedAt
         state {
@@ -496,7 +498,7 @@ export const PROJECT_ISSUES_QUERY = gql`
   query ProjectIssues($teamKey: String, $query: String) {
     issues(
       first: 100
-      filter: { kind: { eq: PROJECT }, team: { key: { eq: $teamKey } } }
+      filter: { kind: PROJECT, team: { key: { eq: $teamKey } } }
       query: $query
     ) {
       nodes {
@@ -506,6 +508,7 @@ export const PROJECT_ISSUES_QUERY = gql`
         description
         priority
         kind
+        repository
         createdAt
         updatedAt
         state {
@@ -518,7 +521,6 @@ export const PROJECT_ISSUES_QUERY = gql`
           id
           name
           email
-          avatarUrl
         }
         team {
           id

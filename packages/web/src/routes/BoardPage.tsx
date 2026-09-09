@@ -15,7 +15,7 @@ import {
 } from '@dnd-kit/core';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
   BOARD_PAGE_QUERY,
@@ -88,7 +88,7 @@ import { IssueCard } from '../components/IssueCard';
 import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
 import { KanbanView } from '../components/KanbanView';
 import { BacklogPage } from './BacklogPage';
-import { IcoFilter, IcoPlus, IcoList, IcoBoard, IcoClose, IcoChevR } from '../components/Icons';
+import { IcoFilter, IcoPlus, IcoList, IcoBoard, IcoClose, IcoChevR, IcoProject } from '../components/Icons';
 import { Btn, PriorityIcon } from '../components/Primitives';
 
 const ISSUE_PAGE_SIZE = 200;
@@ -133,10 +133,21 @@ function moveIssueToState(
 
 export function BoardPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlTeam = searchParams.get('team');
+  const urlProject = searchParams.get('project');
+  const urlIssue = searchParams.get('issue');
+
   const [activeTeamKey, setActiveTeamKey] = useState<string | null>(() => readStoredTeamKey());
   const [pendingTeamKey, setPendingTeamKey] = useState<string | null>(null);
   const activeTeamKeyRef = useRef(activeTeamKey);
   activeTeamKeyRef.current = activeTeamKey;
+
+  useEffect(() => {
+    if (urlTeam && urlTeam !== activeTeamKey) {
+      setPendingTeamKey(urlTeam);
+    }
+  }, [urlTeam, activeTeamKey]);
 
   useEffect(() => {
     function handleActiveTeamKeyChange(event: Event) {
@@ -176,6 +187,7 @@ export function BoardPage() {
     {
       variables: boardQueryVariables,
       notifyOnNetworkStatusChange: true,
+      fetchPolicy: 'cache-and-network',
     },
   );
   const queryData = data ?? previousData;
@@ -222,9 +234,41 @@ export function BoardPage() {
   const [createDescription, setCreateDescription] = useState('');
   const [dragPreviewStateId, setDragPreviewStateId] = useState<string | null>(null);
   const [dragOriginStateId, setDragOriginStateId] = useState<string | null>(null);
-  const [boardViewState, setBoardViewState] = useState<BoardViewState>(() =>
-    readStoredBoardViewState(activeTeamKey),
+  const [boardViewState, setBoardViewState] = useState<BoardViewState>(() => {
+    const state = readStoredBoardViewState(activeTeamKey);
+    const initialProject = searchParams.get('project');
+    return initialProject ? { ...state, projectKey: initialProject } : state;
+  });
+
+  useEffect(() => {
+    if (urlProject !== null) {
+      if (boardViewState.projectKey !== urlProject) {
+        setBoardViewState((s) => ({ ...s, projectKey: urlProject }));
+      }
+    } else if (boardViewState.projectKey) {
+      setBoardViewState((s) => ({ ...s, projectKey: null }));
+    }
+  }, [urlProject]);
+
+  const handleSelectProject = useCallback(
+    (projectKey: string | null) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (projectKey) {
+            next.set('project', projectKey);
+          } else {
+            next.delete('project');
+          }
+          return next;
+        },
+        { replace: false },
+      );
+      setBoardViewState((s) => ({ ...s, projectKey }));
+    },
+    [setSearchParams],
   );
+
   const [savedBoardViews, setSavedBoardViews] = useState<SavedBoardView[]>(() =>
     readSavedBoardViews(activeTeamKey),
   );
@@ -355,6 +399,107 @@ export function BoardPage() {
   const visibleIssues = useMemo(() => {
     return filterIssuesByTeam(allIssues, activeTeamKey ?? selectedTeam?.key ?? null);
   }, [activeTeamKey, allIssues, selectedTeam?.key]);
+
+  const availableProjects = useMemo(() => {
+    const map = new Map<string, { id: string; identifier: string; name: string; key: string; issueCount: number }>();
+
+    for (const issue of visibleIssues) {
+      if (issue.kind === 'PROJECT') {
+        const name = issue.repository || issue.title;
+        map.set(name, {
+          id: issue.id,
+          identifier: issue.identifier,
+          name,
+          key: issue.identifier,
+          issueCount: 0,
+        });
+      }
+    }
+
+    for (const issue of visibleIssues) {
+      if (issue.repository && !map.has(issue.repository)) {
+        map.set(issue.repository, {
+          id: issue.id,
+          identifier: issue.identifier,
+          name: issue.repository,
+          key: issue.repository,
+          issueCount: 0,
+        });
+      }
+    }
+
+    const projects = Array.from(map.values());
+    for (const p of projects) {
+      const target = p.name.toLowerCase();
+      const targetId = p.id.toLowerCase();
+      const targetIdent = p.identifier.toLowerCase();
+
+      let count = 0;
+      for (const issue of visibleIssues) {
+        const directMatch =
+          issue.id.toLowerCase() === targetId ||
+          issue.identifier.toLowerCase() === targetIdent ||
+          (issue.repository && issue.repository.toLowerCase() === target) ||
+          (issue.title && issue.title.toLowerCase() === target);
+
+        const repoMatch = Boolean(
+          issue.repository &&
+          (issue.repository.toLowerCase().includes(target) || target.includes(issue.repository.toLowerCase()))
+        );
+
+        const parentMatch = Boolean(
+          issue.parent &&
+          (issue.parent.id.toLowerCase() === targetId ||
+            issue.parent.identifier.toLowerCase() === targetIdent ||
+            issue.parent.title.toLowerCase() === target ||
+            issue.parent.title.toLowerCase().includes(target) ||
+            target.includes(issue.parent.title.toLowerCase()))
+        );
+
+        const projectMatch = Boolean(
+          issue.project &&
+          (issue.project.id.toLowerCase() === targetId ||
+            issue.project.name.toLowerCase() === target ||
+            issue.project.name.toLowerCase().includes(target) ||
+            target.includes(issue.project.name.toLowerCase()))
+        );
+
+        if (directMatch || repoMatch || parentMatch || projectMatch) {
+          count++;
+        }
+      }
+      p.issueCount = count;
+    }
+
+    return projects.sort((a, b) => a.name.localeCompare(b.name));
+  }, [visibleIssues]);
+
+  const activeProject = useMemo(() => {
+    if (!boardViewState.projectKey) return null;
+    const target = boardViewState.projectKey.toLowerCase();
+    return (
+      availableProjects.find(
+        (p) => p.name.toLowerCase() === target || p.identifier.toLowerCase() === target,
+      ) ?? null
+    );
+  }, [availableProjects, boardViewState.projectKey]);
+
+  const prevUrlIssueRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (urlIssue && urlIssue !== prevUrlIssueRef.current) {
+      prevUrlIssueRef.current = urlIssue;
+      const match = allIssues.find(
+        (i) => i.identifier.toLowerCase() === urlIssue.toLowerCase() || i.id === urlIssue,
+      );
+      if (match) {
+        setFocusedIssueId(match.id);
+        setSelectedIssueId(match.id);
+      }
+    } else if (!urlIssue && prevUrlIssueRef.current) {
+      prevUrlIssueRef.current = null;
+    }
+  }, [urlIssue, allIssues]);
+
   const boardVisibleIssues = useMemo(
     () => applyBoardViewState(visibleIssues, boardViewState, users),
     [boardViewState, users, visibleIssues],
@@ -616,6 +761,14 @@ export function BoardPage() {
     setMutationError(null);
     setFocusedIssueId(issue.id);
     setSelectedIssueId(issue.id);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('issue', issue.identifier);
+        return next;
+      },
+      { replace: false },
+    );
   }
 
   function selectAllVisibleIssues() {
@@ -1679,10 +1832,17 @@ export function BoardPage() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, whiteSpace: 'nowrap' }}>
           {selectedTeam ? (
-            <span className="mono" style={{
-              fontSize: 12, fontWeight: 500, padding: '1px 5px', borderRadius: 3,
-              background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-muted)',
-            }}>{selectedTeam.key}</span>
+            <Link
+              to={`/?team=${encodeURIComponent(selectedTeam.key)}`}
+              className="mono"
+              style={{
+                fontSize: 12, fontWeight: 500, padding: '1px 5px', borderRadius: 3,
+                background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-muted)',
+                textDecoration: 'none',
+              }}
+            >
+              {selectedTeam.key}
+            </Link>
           ) : null}
           <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--fg)' }}>
             {selectedTeam?.name ?? 'Involute'}
@@ -1690,8 +1850,12 @@ export function BoardPage() {
           <span style={{ color: 'var(--fg-faint)', display: 'inline-flex' }}>
             <IcoChevR size={12} />
           </span>
-          <h1 style={{ fontSize: 15, fontWeight: 400, color: 'var(--fg-muted)', margin: 0 }}>{isBacklogView ? 'Backlog' : 'All issues'}</h1>
-          <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)', marginLeft: 4 }}>{visibleIssues.length}</span>
+          <h1 style={{ fontSize: 15, fontWeight: 400, color: 'var(--fg-muted)', margin: 0 }}>
+            {activeProject ? activeProject.name : isBacklogView ? 'Backlog' : 'All issues'}
+          </h1>
+          <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)', marginLeft: 4 }}>
+            {boardVisibleIssues.length}
+          </span>
         </div>
         <p className="app-shell__subtext" style={{ fontSize: 13, color: 'var(--fg-dim)', margin: 0 }}>
           {isBacklogView
@@ -1742,6 +1906,42 @@ export function BoardPage() {
           }}
         >Create issue</Btn>
       </header>
+
+      {availableProjects.length > 0 && (
+        <div className="board-project-bar" role="navigation" aria-label="Filter by project">
+          <span className="board-project-bar__label">
+            <IcoProject size={13} />
+            <span>Project:</span>
+          </span>
+          <button
+            type="button"
+            className={`board-project-pill${!boardViewState.projectKey ? ' board-project-pill--active' : ''}`}
+            onClick={() => handleSelectProject(null)}
+          >
+            <span>All Projects</span>
+            <span className="board-project-pill__count">{visibleIssues.length}</span>
+          </button>
+          {availableProjects.map((p) => {
+            const isActive =
+              Boolean(boardViewState.projectKey) &&
+              (boardViewState.projectKey?.toLowerCase() === p.name.toLowerCase() ||
+                boardViewState.projectKey?.toLowerCase() === p.identifier.toLowerCase());
+            return (
+              <button
+                key={p.id}
+                type="button"
+                className={`board-project-pill${isActive ? ' board-project-pill--active' : ''}`}
+                onClick={() => handleSelectProject(isActive ? null : p.name)}
+                title={`Filter board to ${p.name} (${p.issueCount} issues)`}
+              >
+                <span className="mono board-project-pill__id">{p.identifier}</span>
+                <span className="board-project-pill__name">{p.name}</span>
+                <span className="board-project-pill__count">{p.issueCount}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {mutationError ? (
         <section className="shell-notice shell-notice--error" role="alert">
@@ -1829,6 +2029,54 @@ export function BoardPage() {
               </fieldset>
             </details>
 
+            {availableProjects.length > 0 ? (
+              <details style={{ position: 'relative', fontSize: 13 }}>
+                <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>Projects</summary>
+                <fieldset style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 200 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                    <input
+                      type="radio"
+                      name="board-filter-project"
+                      checked={!boardViewState.projectKey}
+                      onChange={() => handleSelectProject(null)}
+                    />
+                    All Projects
+                  </label>
+                  {availableProjects.map((p) => (
+                    <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                      <input
+                        type="radio"
+                        name="board-filter-project"
+                        checked={
+                          Boolean(boardViewState.projectKey) &&
+                          (boardViewState.projectKey?.toLowerCase() === p.name.toLowerCase() ||
+                            boardViewState.projectKey?.toLowerCase() === p.identifier.toLowerCase())
+                        }
+                        onChange={() => handleSelectProject(p.name)}
+                      />
+                      [{p.identifier}] {p.name} ({p.issueCount})
+                    </label>
+                  ))}
+                </fieldset>
+              </details>
+            ) : null}
+
+            {boardViewState.projectKey ? (
+              <button
+                type="button"
+                aria-label={`Remove Project: ${boardViewState.projectKey}`}
+                onClick={() => handleSelectProject(null)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
+                  fontSize: 13, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
+                  background: 'var(--bg-active)', color: 'var(--fg)', cursor: 'pointer',
+                }}
+              >
+                Project: {boardViewState.projectKey}
+                <span style={{ color: 'var(--fg-dim)', display: 'inline-flex', marginLeft: 2 }}><IcoClose size={10} /></span>
+              </button>
+            ) : null}
+
             {boardViewState.stateIds.map((stateId) => {
               const state = selectedTeam?.states.nodes.find((s) => s.id === stateId);
               return (
@@ -1836,8 +2084,7 @@ export function BoardPage() {
                   display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
                   fontSize: 13, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
                   background: 'var(--bg-active)', color: 'var(--fg)', cursor: 'pointer',
-                }}>
-                  State: {state?.name ?? stateId}
+                }}>{state?.name ?? stateId}
                   <span style={{ color: 'var(--fg-dim)', display: 'inline-flex', marginLeft: 2 }}><IcoClose size={10} /></span>
                 </button>
               );
@@ -1871,8 +2118,8 @@ export function BoardPage() {
               );
             })}
 
-            {(boardViewState.query || boardViewState.assigneeIds.length > 0 || boardViewState.stateIds.length > 0 || boardViewState.labelIds.length > 0) ? (
-              <button type="button" onClick={resetBoardViewState} style={{
+            {(boardViewState.query || boardViewState.projectKey || boardViewState.assigneeIds.length > 0 || boardViewState.stateIds.length > 0 || boardViewState.labelIds.length > 0) ? (
+              <button type="button" onClick={() => { resetBoardViewState(); handleSelectProject(null); }} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4, height: 22, padding: '0 8px',
                 fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', cursor: 'pointer',
                 background: 'transparent', border: 'none',
@@ -2247,7 +2494,17 @@ export function BoardPage() {
         users={users}
         savingState={isSavingState}
         errorMessage={mutationError}
-        onClose={() => setSelectedIssueId(null)}
+        onClose={() => {
+          setSelectedIssueId(null);
+          setSearchParams(
+            (prev) => {
+              const next = new URLSearchParams(prev);
+              next.delete('issue');
+              return next;
+            },
+            { replace: true },
+          );
+        }}
         onStateChange={persistStateChange}
         onTitleSave={persistTitleChange}
         onDescriptionSave={persistDescriptionChange}

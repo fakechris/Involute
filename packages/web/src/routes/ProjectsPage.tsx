@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import {
   BOARD_PAGE_QUERY,
@@ -59,9 +59,10 @@ export function ProjectsPage() {
   const teamStates = activeTeam?.states?.nodes ?? [];
   const users: UserSummary[] = boardData?.users.nodes ?? [];
 
-  const { data, loading } = useQuery<ProjectIssuesQueryData, ProjectIssuesQueryVariables>(PROJECT_ISSUES_QUERY, {
+  const { data, loading, error, refetch } = useQuery<ProjectIssuesQueryData, ProjectIssuesQueryVariables>(PROJECT_ISSUES_QUERY, {
     skip: !currentTeamKey,
     variables: { teamKey: currentTeamKey },
+    fetchPolicy: 'cache-and-network',
   });
 
   const [runCreate] = useMutation<IssueCreateMutationData, IssueCreateMutationVariables>(ISSUE_CREATE_MUTATION);
@@ -162,7 +163,15 @@ export function ProjectsPage() {
       </div>
 
       <div className="page-content">
-        {loading ? (
+        {error ? (
+          <div className="empty-state" role="alert">
+            <h3>Could not load projects</h3>
+            <p>{error.message}</p>
+            <Btn variant="subtle" size="sm" onClick={() => void refetch()} style={{ marginTop: 12 }}>
+              Retry
+            </Btn>
+          </div>
+        ) : loading ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 14 }}>
             Loading projects…
           </div>
@@ -222,6 +231,27 @@ export function ProjectsPage() {
                     <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)', marginLeft: 'auto' }}>
                       {project.children?.nodes?.length ?? 0} issues
                     </span>
+                    <Link
+                      to={`/?project=${encodeURIComponent(project.repository || project.title)}`}
+                      className="btn btn--subtle"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: 12,
+                        padding: '2px 8px',
+                        borderRadius: 'var(--r-1)',
+                        textDecoration: 'none',
+                        color: 'var(--accent)',
+                        border: '1px solid var(--border)',
+                        background: 'var(--bg)',
+                        marginLeft: 8,
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      title={`Open ${project.title} on board`}
+                    >
+                      Board →
+                    </Link>
                   </div>
                 </button>
               ))}
@@ -319,6 +349,14 @@ function ProjectDetailView({
           {project.state.name}
         </span>
         <div style={{ flex: 1 }} />
+        <Btn
+          variant="subtle"
+          size="sm"
+          onClick={() => navigate(`/?project=${encodeURIComponent(project.repository || project.title)}`)}
+          style={{ marginRight: 8 }}
+        >
+          Open on Board →
+        </Btn>
         <Btn variant="subtle" size="sm" onClick={() => navigate(`/work/${project.id}`)} style={{ marginRight: 8 }}>
           Work context
         </Btn>
