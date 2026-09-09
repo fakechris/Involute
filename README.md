@@ -5,12 +5,20 @@
 [![Docker Publish](https://github.com/fakechris/Involute/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/fakechris/Involute/actions/workflows/docker-publish.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 
+English | [中文](README.zh.md)
+
 > **Agent-native project-state and work-graph kernel.**
 > Involute stores long-lived work identity, delivery contracts, typed links, decisions, and evidence.
 > Codex, Claude Code, and other agents are the primary entrypoints over MCP; the kanban web app
 > is only an observation and governance surface. Headless, self-hostable, zero LLM dependency.
 
 **Status** M0 migration done · M1 VPS self-hosting operational · M2 OAuth + RBAC done · work-graph kernel (K0–K6) shipped · Linear replacement = M5 · Apache-2.0
+
+## 🖥️ Preview
+
+| Kanban board (observation surface — committed issues only) |
+|---|
+| ![Involute kanban board](assets/board.jpg) |
 
 ## ✨ Highlights
 
