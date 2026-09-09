@@ -421,6 +421,41 @@ pnpm --filter @turnkeyai/involute-server prisma:migrate:dev -- --name your_chang
 pnpm --filter @turnkeyai/involute-server prisma:migrate:deploy
 ```
 
+Escape hatches / admin commands:
+
+```bash
+pnpm --filter @turnkeyai/involute-server admin:bootstrap you@example.com
+pnpm --filter @turnkeyai/involute-server prisma:migrate:baseline
+pnpm --filter @turnkeyai/involute-server prisma:migrate:reset
+pnpm --filter @turnkeyai/involute-server prisma:db:push
+```
+
+Guidance:
+
+- prefer `prisma:migrate:dev` while changing the schema locally
+- use `prisma:migrate:deploy` in compose, CI, and production
+- keep `prisma:db:push` as an explicit development-only escape hatch, not the default deployment path
+- if you are upgrading an older database that predates `prisma/migrations`, run `prisma:migrate:baseline` once before the first `prisma:migrate:deploy`, or set `PRISMA_BASELINE_EXISTING_SCHEMA=true` for a one-time compose bootstrap
+
+## Quality gates
+
+Unit and integration checks:
+
+```bash
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+```
+
+Browser E2E:
+
+```bash
+pnpm e2e
+```
+
+The Playwright suite verifies the core board lifecycle: create, update, comment, delete comment, and delete issue.
+
 ## API reference
 
 The current HTTP and GraphQL surface is documented in [docs/api.md](docs/api.md).
@@ -430,6 +465,31 @@ The current HTTP and GraphQL surface is documented in [docs/api.md](docs/api.md)
 Tag-driven npm publishing is wired through [`.github/workflows/npm-publish.yml`](.github/workflows/npm-publish.yml).
 
 Release notes for the current Agent-native kernel line are in [docs/releases/npm-v0.2.0.md](docs/releases/npm-v0.2.0.md).
+
+Release tags use this format:
+
+```bash
+git tag npm-v1.0.0
+git push origin npm-v1.0.0
+```
+
+That workflow publishes the current package set in version lockstep:
+
+- `@turnkeyai/involute-shared`
+- `@turnkeyai/involute-server`
+- `@turnkeyai/involute`
+
+The checked-in package manifests intentionally stay at `0.0.0`; the workflow derives the published version from the release tag and rewrites workspace dependencies in its isolated publish checkout.
+
+Repository setup required before enabling it:
+
+- add `NPM_TOKEN` as a GitHub Actions secret
+- ensure the npm account behind that token can publish the current `@turnkeyai/*` scope
+- after first publish, grant package access to the npm developers team in your org settings
+
+Team access page for the current npm org setup:
+
+- <https://www.npmjs.com/settings/turnkeyai/teams/team/developers/access>
 
 ## Docker images
 
