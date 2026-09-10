@@ -2203,6 +2203,7 @@ export function BoardPage() {
                 style={{ height: 22, padding: '0 6px', fontSize: 13, fontWeight: 500, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
               >
                 <option value="status">Status</option>
+                <option value="project">Project</option>
                 <option value="priority">Priority</option>
                 <option value="assignee">Assignee</option>
                 <option value="label">Label</option>
@@ -2441,8 +2442,18 @@ export function BoardPage() {
                       {group.meta?.priority !== undefined && (
                         <PriorityIcon level={group.meta.priority} size={13} />
                       )}
+                      {group.meta?.repository !== undefined && (
+                        <span style={{ color: 'var(--accent)', display: 'inline-flex', marginRight: 4 }}>
+                          <IcoProject size={13} />
+                        </span>
+                      )}
                       <span className="issue-group-header__label">{group.label}</span>
                       <span className="issue-group-header__count">{group.issues.length}</span>
+                      {group.meta?.repository !== undefined && group.issues.length > 0 && (
+                        <span style={{ fontSize: 12, color: 'var(--fg-dim)', marginLeft: 8 }}>
+                          {group.issues.filter((i) => i.state.type === 'COMPLETED').length}/{group.issues.length} completed
+                        </span>
+                      )}
                       <div style={{ flex: 1 }} />
                       <button
                         type="button"

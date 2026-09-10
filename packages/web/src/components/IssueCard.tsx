@@ -154,24 +154,34 @@ export function IssueCard({
             <StatusIcon stateName={issue.state.name} size={12} />
             {issue.identifier}
           </span>
-          {issue.kind && issue.kind !== 'ISSUE' ? (
-            <span
-              style={{
-                fontSize: 10.5,
-                fontWeight: 600,
-                letterSpacing: '0.04em',
-                padding: '1px 5px',
-                borderRadius: 'var(--r-1)',
-                background: issue.kind === 'PROJECT' ? 'var(--accent-weak)' : 'var(--bg-hover)',
-                color: issue.kind === 'PROJECT' ? 'var(--accent)' : 'var(--fg-dim)',
-                border: `1px solid ${issue.kind === 'PROJECT' ? 'var(--accent-border)' : 'var(--border)'}`,
-                marginLeft: 'auto',
-                textTransform: 'uppercase',
-              }}
-            >
-              {issue.kind}
-            </span>
-          ) : null}
+          <div className="issue-card__header-tags">
+            {issue.repository ? (
+              <span
+                className="issue-card__repo-badge"
+                title={`Project: ${issue.repository}`}
+                data-testid={`issue-repo-${issue.id}`}
+              >
+                {issue.repository.includes('/') ? issue.repository.split('/')[1] : issue.repository}
+              </span>
+            ) : null}
+            {issue.kind && issue.kind !== 'ISSUE' ? (
+              <span
+                style={{
+                  fontSize: 10.5,
+                  fontWeight: 600,
+                  letterSpacing: '0.04em',
+                  padding: '1px 5px',
+                  borderRadius: 'var(--r-1)',
+                  background: issue.kind === 'PROJECT' ? 'var(--accent-weak)' : 'var(--bg-hover)',
+                  color: issue.kind === 'PROJECT' ? 'var(--accent)' : 'var(--fg-dim)',
+                  border: `1px solid ${issue.kind === 'PROJECT' ? 'var(--accent-border)' : 'var(--border)'}`,
+                  textTransform: 'uppercase',
+                }}
+              >
+                {issue.kind}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <h3 className="issue-card__title">{issue.title}</h3>

@@ -38,6 +38,84 @@ function statusBadgeColor(type: WorkflowStateType): string {
   }
 }
 
+function ProjectProgressBar({
+  issues,
+}: {
+  issues: Array<{ state?: { type: WorkflowStateType } | null }>;
+}) {
+  const total = issues.length;
+  if (total === 0) return null;
+
+  const completed = issues.filter((i) => i.state?.type === 'COMPLETED').length;
+  const review = issues.filter((i) => i.state?.type === 'REVIEW').length;
+  const started = issues.filter((i) => i.state?.type === 'STARTED').length;
+  const unstarted = issues.filter((i) => i.state?.type === 'UNSTARTED').length;
+  const backlog = issues.filter((i) => i.state?.type === 'BACKLOG').length;
+  const percent = Math.round((completed / total) * 100);
+
+  return (
+    <div style={{ marginTop: 10, marginBottom: 6 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          fontSize: 12,
+          color: 'var(--fg-dim)',
+          marginBottom: 6,
+        }}
+      >
+        <span style={{ fontWeight: 600, color: 'var(--fg)' }}>{percent}% complete</span>
+        <span>{completed}/{total} issues</span>
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          height: 6,
+          borderRadius: 3,
+          overflow: 'hidden',
+          background: 'var(--bg-sunken)',
+          border: '1px solid var(--border)',
+          gap: 1,
+        }}
+        title={`Completed: ${completed} | In Review: ${review} | In Progress: ${started} | Ready: ${unstarted} | Backlog: ${backlog}`}
+      >
+        {completed > 0 && (
+          <div style={{ width: `${(completed / total) * 100}%`, background: 'var(--success)' }} />
+        )}
+        {review > 0 && (
+          <div style={{ width: `${(review / total) * 100}%`, background: 'var(--warn)' }} />
+        )}
+        {started > 0 && (
+          <div style={{ width: `${(started / total) * 100}%`, background: 'var(--accent)' }} />
+        )}
+        {unstarted > 0 && (
+          <div style={{ width: `${(unstarted / total) * 100}%`, background: 'var(--fg-muted)' }} />
+        )}
+        {backlog > 0 && (
+          <div style={{ width: `${(backlog / total) * 100}%`, background: 'var(--border-strong)' }} />
+        )}
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 8,
+          fontSize: 11.5,
+          color: 'var(--fg-muted)',
+          marginTop: 6,
+        }}
+      >
+        {completed > 0 && <span>🟢 {completed} Done</span>}
+        {review > 0 && <span>🟡 {review} Review</span>}
+        {started > 0 && <span>🔵 {started} Active</span>}
+        {unstarted > 0 && <span>⚪ {unstarted} Ready</span>}
+        {backlog > 0 && <span>📦 {backlog} Backlog</span>}
+      </div>
+    </div>
+  );
+}
+
 export function ProjectsPage() {
   const navigate = useNavigate();
   const teamKey = readStoredTeamKey();
@@ -192,69 +270,102 @@ export function ProjectsPage() {
           </div>
         ) : (
           <div style={{ padding: '20px var(--pad-x)' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
-              {projects.map((project) => (
-                <button
-                  key={project.id}
-                  type="button"
-                  onClick={() => setSelectedProjectId(project.id)}
-                  style={{
-                    border: '1px solid var(--border)', borderRadius: 'var(--r-3)',
-                    background: 'var(--bg-raised)', padding: 14, cursor: 'pointer',
-                    textAlign: 'left', transition: 'border-color var(--dur-1) var(--ease)',
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <span className="mono" style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
-                      {project.identifier}
-                    </span>
-                    <span style={{ fontSize: 15, fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {project.title}
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{
-                      fontSize: 12, padding: '2px 7px', borderRadius: 10,
-                      background: 'var(--bg-hover)', color: statusBadgeColor(project.state.type),
-                      border: '1px solid var(--border)', fontWeight: 500,
-                    }}>
-                      {project.state.name}
-                    </span>
-                    {project.assignee && (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: 'var(--fg-dim)' }}>
-                        <Avatar user={{ name: project.assignee.name ?? undefined }} size={14} />
-                        {project.assignee.name}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 14 }}>
+              {projects.map((project) => {
+                const childIssues = project.children?.nodes ?? [];
+                return (
+                  <button
+                    key={project.id}
+                    type="button"
+                    onClick={() => setSelectedProjectId(project.id)}
+                    style={{
+                      border: '1px solid var(--border)', borderRadius: 'var(--r-3)',
+                      background: 'var(--bg-raised)', padding: 16, cursor: 'pointer',
+                      textAlign: 'left', transition: 'border-color var(--dur-1) var(--ease)',
+                      display: 'flex', flexDirection: 'column', gap: 8,
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="mono" style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
+                        {project.identifier}
                       </span>
-                    )}
-                    <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)', marginLeft: 'auto' }}>
-                      {project.children?.nodes?.length ?? 0} issues
-                    </span>
-                    <Link
-                      to={`/?project=${encodeURIComponent(project.repository || project.title)}`}
-                      className="btn btn--subtle"
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        fontSize: 12,
-                        padding: '2px 8px',
-                        borderRadius: 'var(--r-1)',
-                        textDecoration: 'none',
-                        color: 'var(--accent)',
-                        border: '1px solid var(--border)',
-                        background: 'var(--bg)',
-                        marginLeft: 8,
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      title={`Open ${project.title} on board`}
-                    >
-                      Board →
-                    </Link>
-                  </div>
-                </button>
-              ))}
+                      <span style={{ fontSize: 15, fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {project.title}
+                      </span>
+                      {project.repository && (
+                        <span
+                          className="issue-card__repo-badge"
+                          title={`Repository: ${project.repository}`}
+                        >
+                          {project.repository.includes('/') ? project.repository.split('/')[1] : project.repository}
+                        </span>
+                      )}
+                    </div>
+
+                    <ProjectProgressBar issues={childIssues} />
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--border-subtle)' }}>
+                      <span style={{
+                        fontSize: 12, padding: '2px 7px', borderRadius: 10,
+                        background: 'var(--bg-hover)', color: statusBadgeColor(project.state.type),
+                        border: '1px solid var(--border)', fontWeight: 500,
+                      }}>
+                        {project.state.name}
+                      </span>
+                      {project.assignee && (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: 'var(--fg-dim)' }}>
+                          <Avatar user={{ name: project.assignee.name ?? undefined }} size={14} />
+                          {project.assignee.name}
+                        </span>
+                      )}
+                      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Link
+                          to={`/?project=${encodeURIComponent(project.repository || project.title)}`}
+                          className="btn btn--subtle"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            fontSize: 12,
+                            padding: '2px 8px',
+                            borderRadius: 'var(--r-1)',
+                            textDecoration: 'none',
+                            color: 'var(--accent)',
+                            border: '1px solid var(--border)',
+                            background: 'var(--bg)',
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          title={`Open ${project.title} on board`}
+                        >
+                          Board →
+                        </Link>
+                        <Link
+                          to={`/graph?project=${encodeURIComponent(project.repository || project.title)}`}
+                          className="btn btn--subtle"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            fontSize: 12,
+                            padding: '2px 8px',
+                            borderRadius: 'var(--r-1)',
+                            textDecoration: 'none',
+                            color: 'var(--fg-muted)',
+                            border: '1px solid var(--border)',
+                            background: 'var(--bg)',
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          title={`Open ${project.title} on graph`}
+                        >
+                          Graph →
+                        </Link>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -357,6 +468,14 @@ function ProjectDetailView({
         >
           Open on Board →
         </Btn>
+        <Btn
+          variant="subtle"
+          size="sm"
+          onClick={() => navigate(`/graph?project=${encodeURIComponent(project.repository || project.title)}`)}
+          style={{ marginRight: 8 }}
+        >
+          Graph →
+        </Btn>
         <Btn variant="subtle" size="sm" onClick={() => navigate(`/work/${project.id}`)} style={{ marginRight: 8 }}>
           Work context
         </Btn>
@@ -393,12 +512,12 @@ function ProjectDetailView({
 
       <div className="page-content" style={{ padding: '20px var(--pad-x)' }}>
         {project.description && (
-          <p style={{ fontSize: 15, color: 'var(--fg-muted)', marginBottom: 20, lineHeight: 1.5 }}>
+          <p style={{ fontSize: 15, color: 'var(--fg-muted)', marginBottom: 16, lineHeight: 1.5 }}>
             {project.description}
           </p>
         )}
 
-        <div style={{ display: 'flex', gap: 24, marginBottom: 20, fontSize: 14, color: 'var(--fg-dim)' }}>
+        <div style={{ display: 'flex', gap: 24, marginBottom: 16, fontSize: 14, color: 'var(--fg-dim)' }}>
           {project.assignee && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <Avatar user={{ name: project.assignee.name ?? undefined }} size={18} />
@@ -406,6 +525,10 @@ function ProjectDetailView({
             </span>
           )}
           <span>{issues.length} child issues (CONTAINS)</span>
+        </div>
+
+        <div style={{ marginBottom: 20 }}>
+          <ProjectProgressBar issues={issues} />
         </div>
 
         {issues.length > 0 ? (

@@ -180,4 +180,19 @@ describe('IssueCard', () => {
     render(<IssueCard issue={issue} />);
     expect(screen.getByText('🤖 Droid')).toBeInTheDocument();
   });
+
+  it('renders repository badge when repository is present', () => {
+    const issue = makeIssue({ repository: 'fakechris/QuantHarvest' });
+    render(<IssueCard issue={issue} />);
+    const badge = screen.getByTestId('issue-repo-issue-1');
+    expect(badge).toBeInTheDocument();
+    expect(badge).toHaveTextContent('QuantHarvest');
+    expect(badge).toHaveAttribute('title', 'Project: fakechris/QuantHarvest');
+  });
+
+  it('does not render repository badge when repository is not present', () => {
+    const issue = makeIssue({ repository: null });
+    render(<IssueCard issue={issue} />);
+    expect(screen.queryByTestId('issue-repo-issue-1')).not.toBeInTheDocument();
+  });
 });
