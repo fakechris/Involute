@@ -322,4 +322,54 @@ describe('App board controls', () => {
       expect(within(screen.getByTestId('column-Backlog')).getByText('Backlog item')).toBeInTheDocument();
     });
   });
+
+  it('filters board issues by project using the project combobox and restores stored project', async () => {
+    window.localStorage.setItem('involute.board.viewState.INV', JSON.stringify({
+      assigneeIds: [],
+      groupBy: 'status',
+      labelIds: [],
+      query: '',
+      sortDirection: 'asc',
+      sortField: 'updatedAt',
+      stateIds: [],
+      viewMode: 'board',
+      projectKey: 'fakechris/Involute',
+    }));
+
+    const dataWithProject = {
+      ...boardQueryResult,
+      issues: {
+        ...boardQueryResult.issues,
+        nodes: [
+          ...boardQueryResult.issues.nodes,
+          {
+            id: 'proj-1',
+            identifier: 'INV-10',
+            revision: 1,
+            title: 'fakechris/Involute',
+            description: null,
+            priority: 0,
+            createdAt: '2026-04-02T10:00:00.000Z',
+            updatedAt: '2026-04-02T10:00:00.000Z',
+            state: { id: 'state-ready', name: 'Ready', type: 'UNSTARTED' as const, position: 1 },
+            team: { id: 'team-1', key: 'INV' },
+            labels: { nodes: [] },
+            assignee: null,
+            children: { nodes: [] },
+            parent: null,
+            comments: { nodes: [] },
+            kind: 'PROJECT' as const,
+            repository: 'fakechris/Involute',
+          },
+        ],
+      },
+    };
+
+    renderApp({ data: dataWithProject, loading: false }, ['/?team=INV']);
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'fakechris/Involute' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Project: fakechris/Involute' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('column-Ready')).getByText('INV-10')).toBeInTheDocument();
+    expect(within(screen.getByTestId('column-Backlog')).queryByText('Backlog item')).not.toBeInTheDocument();
+  });
 });

@@ -7,14 +7,21 @@ import {
   buildReadableIssueWhere,
 } from './access-control.js';
 import type { GraphQLContext } from './auth.js';
-import { claimWork, commitWork, proposeWork } from './claim-service.js';
+import { claimWork, commitWork, normalizeInitialStateType, proposeWork } from './claim-service.js';
 import {
   findWorkByIdOrIdentifier,
   getWorkContext,
   listReadyWork,
   searchWork,
 } from './context-service.js';
-import { ISSUE_NOT_FOUND_MESSAGE, TEAM_NOT_FOUND_MESSAGE, createNotFoundError, createScopeForbiddenError } from './errors.js';
+import {
+  ISSUE_NOT_FOUND_MESSAGE,
+  TEAM_NOT_FOUND_MESSAGE,
+  WORKFLOW_STATE_NOT_FOUND_MESSAGE,
+  createNotFoundError,
+  createScopeForbiddenError,
+  createValidationError,
+} from './errors.js';
 import { updateIssue } from './issue-service.js';
 import { createWorkLink } from './link-service.js';
 import { buildProtocolGuide } from './protocol-docs.js';
@@ -209,6 +216,35 @@ export async function callMcpTool(
       assignOptional(updateInput, 'verification', optionalString(args.verification));
       if (args.snoozed_until !== undefined) {
         updateInput.snoozedUntil = args.snoozed_until === null ? null : new Date(requiredString(args.snoozed_until, 'snoozed_until'));
+      }
+      const rawState = optionalString(args.state);
+      const rawStateId = optionalString(args.state_id);
+      if (rawStateId) {
+        const stateObj = await context.prisma.workflowState.findUnique({
+          where: { id: rawStateId },
+          select: { id: true, type: true, teamId: true },
+        });
+        if (!stateObj || stateObj.teamId !== work.teamId) {
+          throw createValidationError(WORKFLOW_STATE_NOT_FOUND_MESSAGE);
+        }
+        if (stateObj.type === 'COMPLETED' || stateObj.type === 'CANCELED') {
+          throw createValidationError(
+            'Agents cannot transition work directly to COMPLETED or CANCELED. Agents stop at In Review; Done is human-gated.',
+          );
+        }
+        updateInput.stateId = stateObj.id;
+      } else if (rawState) {
+        const targetType = normalizeInitialStateType(rawState);
+        if (targetType) {
+          const matchingState = await context.prisma.workflowState.findFirst({
+            where: { teamId: work.teamId, type: targetType },
+            orderBy: { position: 'asc' },
+            select: { id: true },
+          });
+          if (matchingState) {
+            updateInput.stateId = matchingState.id;
+          }
+        }
       }
       const updated = await updateIssue(
         context.prisma,
@@ -415,6 +451,14 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         verification: { type: 'string' },
         repository: { type: 'string' },
         priority: { type: 'integer' },
+        state: {
+          type: 'string',
+          description: 'Optional target workflow state: UNSTARTED (Ready), STARTED (In Progress), or REVIEW (In Review). Cannot be COMPLETED or CANCELED.',
+        },
+        state_id: {
+          type: 'string',
+          description: 'Optional workflow state ID to transition to. Cannot be COMPLETED or CANCELED.',
+        },
         snoozed_until: { type: ['string', 'null'], description: 'ISO timestamp; candidate-only. Pass null to clear.' },
       },
       required: ['id', 'expected_revision'],

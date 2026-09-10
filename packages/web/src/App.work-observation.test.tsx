@@ -70,6 +70,8 @@ const graphQuery: WorkGraphPageQueryData = {
         identifier: 'INV-1',
         title: 'Parent epic',
         commitmentStatus: 'COMMITTED',
+        kind: 'PROJECT',
+        repository: 'fakechris/involute',
         state: { name: 'Ready' },
         links: {
           nodes: [
@@ -87,6 +89,8 @@ const graphQuery: WorkGraphPageQueryData = {
         identifier: 'INV-2',
         title: 'Child task',
         commitmentStatus: 'COMMITTED',
+        kind: 'ISSUE',
+        repository: 'fakechris/involute',
         state: { name: 'Ready' },
         links: {
           nodes: [
@@ -110,6 +114,8 @@ const graphQuery: WorkGraphPageQueryData = {
         identifier: 'INV-3',
         title: 'Blocker',
         commitmentStatus: 'COMMITTED',
+        kind: 'ISSUE',
+        repository: 'fakechris/involute',
         state: { name: 'In Progress' },
         links: {
           nodes: [
@@ -121,6 +127,16 @@ const graphQuery: WorkGraphPageQueryData = {
             },
           ],
         },
+      },
+      {
+        id: 'issue-4',
+        identifier: 'INV-4',
+        title: 'fakechris/lumenbox',
+        commitmentStatus: 'COMMITTED',
+        kind: 'PROJECT',
+        repository: 'fakechris/lumenbox',
+        state: { name: 'Ready' },
+        links: { nodes: [] },
       },
     ],
     pageInfo: { endCursor: null, hasNextPage: false },
@@ -297,6 +313,16 @@ describe('K6 observation UI', () => {
     const blocks = screen.getByRole('region', { name: 'Blocks' });
     expect(within(blocks).getByRole('button', { name: 'INV-3' })).toBeInTheDocument();
     expect(within(blocks).getByText('blocks')).toBeInTheDocument();
+  });
+
+  it('filters the graph view by project', async () => {
+    renderApp({ data: boardQueryResult, graphData: graphQuery, loading: false }, ['/graph?project=fakechris/involute']);
+
+    expect(await screen.findByRole('heading', { name: 'Graph' })).toBeInTheDocument();
+    expect(screen.getAllByText('fakechris/involute').length).toBeGreaterThan(0);
+    const contains = screen.getByRole('region', { name: 'Contains' });
+    expect(within(contains).getByRole('button', { name: 'INV-1' })).toBeInTheDocument();
+    expect(within(contains).getByRole('button', { name: 'INV-2' })).toBeInTheDocument();
   });
 
   it('shows contract, runs, evidence, and audits on the work context page', async () => {

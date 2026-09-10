@@ -61,6 +61,8 @@ export interface GraphWorkNode {
   identifier: string;
   title: string;
   commitmentStatus: CommitmentStatus;
+  kind?: WorkKind | null;
+  repository?: string | null;
   state: {
     name: string;
   };

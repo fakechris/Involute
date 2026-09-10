@@ -147,7 +147,7 @@ export function validateAgentDescription(
   }
 }
 
-function normalizeInitialStateType(raw: string | null | undefined): 'UNSTARTED' | 'STARTED' | 'REVIEW' | null {
+export function normalizeInitialStateType(raw: string | null | undefined): 'UNSTARTED' | 'STARTED' | 'REVIEW' | null {
   if (!raw) return null;
   const s = raw.trim().toUpperCase().replace(/[\s-]+/g, '_');
   if (s === 'COMPLETED' || s === 'DONE' || s === 'CANCELED' || s === 'CANCELLED') {
@@ -559,17 +559,36 @@ export async function claimWork(
 
     if (idempotencyId) await completeWorkIdempotency(transaction, idempotencyId, work.id);
 
+    let updatedWork = work;
+    const currentState = await transaction.workflowState.findUnique({
+      where: { id: work.stateId },
+      select: { type: true },
+    });
+    if (currentState && (currentState.type === 'UNSTARTED' || currentState.type === 'BACKLOG')) {
+      const startedState = await transaction.workflowState.findFirst({
+        where: { teamId: work.teamId, type: 'STARTED' },
+        orderBy: { position: 'asc' },
+        select: { id: true },
+      });
+      if (startedState) {
+        updatedWork = await transaction.issue.update({
+          where: { id: work.id },
+          data: { stateId: startedState.id },
+        });
+      }
+    }
+
     await enqueueWorkEvent(transaction, {
       payload: {
         actorId: actor.actorId,
         leaseUntil: claim.leaseUntil.toISOString(),
       },
       type: 'work.claimed',
-      workId: work.id,
-      workIdentifier: work.identifier,
+      workId: updatedWork.id,
+      workIdentifier: updatedWork.identifier,
     });
 
-    return { claim, work };
+    return { claim, work: updatedWork };
   });
 
   return result;

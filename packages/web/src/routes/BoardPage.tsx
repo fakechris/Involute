@@ -88,6 +88,7 @@ import { InlineCreate } from '../components/InlineCreate';
 import { IssueCard } from '../components/IssueCard';
 import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
 import { KanbanView } from '../components/KanbanView';
+import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
 import { BacklogPage } from './BacklogPage';
 import { IcoFilter, IcoPlus, IcoList, IcoBoard, IcoClose, IcoChevR, IcoProject } from '../components/Icons';
 import { Btn, PriorityIcon } from '../components/Primitives';
@@ -139,7 +140,7 @@ export function BoardPage() {
   const urlProject = searchParams.get('project');
   const urlIssue = searchParams.get('issue');
 
-  const [activeTeamKey, setActiveTeamKey] = useState<string | null>(() => readStoredTeamKey());
+  const [activeTeamKey, setActiveTeamKey] = useState<string | null>(() => urlTeam ?? readStoredTeamKey());
   const [pendingTeamKey, setPendingTeamKey] = useState<string | null>(null);
   const activeTeamKeyRef = useRef(activeTeamKey);
   activeTeamKeyRef.current = activeTeamKey;
@@ -249,7 +250,14 @@ export function BoardPage() {
         setBoardViewState((s) => ({ ...s, projectKey: urlProject }));
       }
     } else if (boardViewState.projectKey) {
-      setBoardViewState((s) => ({ ...s, projectKey: null }));
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('project', boardViewState.projectKey!);
+          return next;
+        },
+        { replace: true },
+      );
     }
   }, [urlProject]);
 
@@ -265,7 +273,7 @@ export function BoardPage() {
           }
           return next;
         },
-        { replace: false },
+        { replace: true },
       );
       setBoardViewState((s) => ({ ...s, projectKey }));
     },
@@ -358,9 +366,21 @@ export function BoardPage() {
   }, [boardQueryVariables]);
 
   useLayoutEffect(() => {
-    setBoardViewState(readStoredBoardViewState(activeTeamKey));
+    const stored = readStoredBoardViewState(activeTeamKey);
+    const targetProject = (urlProject !== null ? urlProject : stored.projectKey) ?? null;
+    setBoardViewState({ ...stored, projectKey: targetProject });
     setSavedBoardViews(readSavedBoardViews(activeTeamKey));
     setActiveSavedBoardViewId('');
+    if (urlProject === null && stored.projectKey) {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('project', stored.projectKey!);
+          return next;
+        },
+        { replace: true },
+      );
+    }
   }, [activeTeamKey]);
 
   useEffect(() => {
@@ -1962,37 +1982,13 @@ export function BoardPage() {
 
       {availableProjects.length > 0 && (
         <div className="board-project-bar" role="navigation" aria-label="Filter by project">
-          <span className="board-project-bar__label">
-            <IcoProject size={13} />
-            <span>Project:</span>
-          </span>
-          <button
-            type="button"
-            className={`board-project-pill${!boardViewState.projectKey ? ' board-project-pill--active' : ''}`}
-            onClick={() => handleSelectProject(null)}
-          >
-            <span>All Projects</span>
-            <span className="board-project-pill__count">{visibleIssues.length}</span>
-          </button>
-          {availableProjects.map((p) => {
-            const isActive =
-              Boolean(boardViewState.projectKey) &&
-              (boardViewState.projectKey?.toLowerCase() === p.name.toLowerCase() ||
-                boardViewState.projectKey?.toLowerCase() === p.identifier.toLowerCase());
-            return (
-              <button
-                key={p.id}
-                type="button"
-                className={`board-project-pill${isActive ? ' board-project-pill--active' : ''}`}
-                onClick={() => handleSelectProject(isActive ? null : p.name)}
-                title={`Filter board to ${p.name} (${p.issueCount} issues)`}
-              >
-                <span className="mono board-project-pill__id">{p.identifier}</span>
-                <span className="board-project-pill__name">{p.name}</span>
-                <span className="board-project-pill__count">{p.issueCount}</span>
-              </button>
-            );
-          })}
+          <ProjectFilterCombobox
+            projects={availableProjects}
+            selectedProjectKey={boardViewState.projectKey ?? null}
+            totalCount={visibleIssues.length}
+            onSelectProject={handleSelectProject}
+            showQuickPills={availableProjects.length <= 4}
+          />
         </div>
       )}
 
@@ -2081,38 +2077,6 @@ export function BoardPage() {
                 ))}
               </fieldset>
             </details>
-
-            {availableProjects.length > 0 ? (
-              <details style={{ position: 'relative', fontSize: 13 }}>
-                <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>Projects</summary>
-                <fieldset style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 200 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                    <input
-                      type="radio"
-                      name="board-filter-project"
-                      checked={!boardViewState.projectKey}
-                      onChange={() => handleSelectProject(null)}
-                    />
-                    All Projects
-                  </label>
-                  {availableProjects.map((p) => (
-                    <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                      <input
-                        type="radio"
-                        name="board-filter-project"
-                        checked={
-                          Boolean(boardViewState.projectKey) &&
-                          (boardViewState.projectKey?.toLowerCase() === p.name.toLowerCase() ||
-                            boardViewState.projectKey?.toLowerCase() === p.identifier.toLowerCase())
-                        }
-                        onChange={() => handleSelectProject(p.name)}
-                      />
-                      [{p.identifier}] {p.name} ({p.issueCount})
-                    </label>
-                  ))}
-                </fieldset>
-              </details>
-            ) : null}
 
             {boardViewState.projectKey ? (
               <button
