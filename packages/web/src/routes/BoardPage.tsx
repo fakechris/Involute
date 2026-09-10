@@ -46,6 +46,7 @@ import type {
 import {
   ACTIVE_TEAM_STORAGE_KEY,
   buildCommittedIssueFilter,
+  normalizeRepositoryFilterKey,
   filterIssuesByTeam,
   areIssuesEquivalent,
   getBoardColumns,
@@ -85,7 +86,7 @@ import { BoardCreateIssueDialog } from '../components/BoardCreateIssueDialog';
 import { BoardLoadMoreNotice } from '../components/BoardLoadMoreNotice';
 import { Column } from '../components/Column';
 import { InlineCreate } from '../components/InlineCreate';
-import { IssueCard } from '../components/IssueCard';
+import { IssueCard, getProjectColor } from '../components/IssueCard';
 import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
 import { KanbanView } from '../components/KanbanView';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
@@ -178,7 +179,16 @@ export function BoardPage() {
   });
 
   const queryTeamKey = pendingTeamKey ?? activeTeamKey;
-  const rawProjectKey = boardViewState.projectKey ?? urlProject;
+  const projectInput = boardViewState.projectKey ?? urlProject;
+
+  const [resolvedMapping, setResolvedMapping] = useState<{ input: string; repo: string } | null>(null);
+
+  const rawProjectKey = useMemo(() => {
+    if (resolvedMapping && resolvedMapping.input === projectInput) {
+      return resolvedMapping.repo;
+    }
+    return normalizeRepositoryFilterKey(projectInput);
+  }, [projectInput, resolvedMapping]);
 
   const repositoryFilter = useMemo(() => {
     if (!rawProjectKey) return null;
@@ -275,6 +285,7 @@ export function BoardPage() {
 
   const handleSelectProject = useCallback(
     (projectKey: string | null) => {
+      setResolvedMapping(null);
       setSearchParams(
         (prev) => {
           const next = new URLSearchParams(prev);
@@ -440,13 +451,14 @@ export function BoardPage() {
       return queryData.projectSummary.projects.map((p) => ({
         id: p.identifier ?? p.repository,
         identifier: p.identifier ?? p.repository,
-        name: p.name || p.repository,
+        name: p.repository,
+        title: p.name || p.repository,
         key: p.repository,
         issueCount: p.totalCount,
       }));
     }
 
-    const map = new Map<string, { id: string; identifier: string; name: string; key: string; issueCount: number }>();
+    const map = new Map<string, { id: string; identifier: string; name: string; title?: string; key: string; issueCount: number }>();
 
     for (const issue of visibleIssues) {
       if (issue.kind === 'PROJECT') {
@@ -455,6 +467,7 @@ export function BoardPage() {
           id: issue.id,
           identifier: issue.identifier,
           name,
+          title: issue.title,
           key: issue.repository || issue.identifier,
           issueCount: 0,
         });
@@ -467,6 +480,7 @@ export function BoardPage() {
           id: issue.id,
           identifier: issue.identifier,
           name: issue.repository,
+          title: issue.repository,
           key: issue.repository,
           issueCount: 0,
         });
@@ -518,6 +532,21 @@ export function BoardPage() {
 
     return projects.sort((a, b) => a.name.localeCompare(b.name));
   }, [queryData?.projectSummary?.projects, visibleIssues]);
+
+  useEffect(() => {
+    if (!projectInput) {
+      if (resolvedMapping !== null) {
+        setResolvedMapping(null);
+      }
+      return;
+    }
+    if (availableProjects.length > 0) {
+      const normalized = normalizeRepositoryFilterKey(projectInput, availableProjects);
+      if (normalized && normalized !== projectInput && (!resolvedMapping || resolvedMapping.repo !== normalized)) {
+        setResolvedMapping({ input: projectInput, repo: normalized });
+      }
+    }
+  }, [projectInput, availableProjects, resolvedMapping]);
 
   const activeProject = useMemo(() => {
     if (!boardViewState.projectKey) return null;
@@ -1952,7 +1981,9 @@ export function BoardPage() {
             {activeProject ? activeProject.name : isBacklogView ? 'Backlog' : 'All issues'}
           </h1>
           <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)', marginLeft: 4 }}>
-            {boardVisibleIssues.length}
+            {activeProject
+              ? activeProject.issueCount
+              : (queryData?.projectSummary?.totalCount ?? boardVisibleIssues.length)}
           </span>
         </div>
         <p className="app-shell__subtext" style={{ fontSize: 13, color: 'var(--fg-dim)', margin: 0 }}>
@@ -2009,11 +2040,34 @@ export function BoardPage() {
         <div className="board-project-bar" role="navigation" aria-label="Filter by project">
           <ProjectFilterCombobox
             projects={availableProjects}
-            selectedProjectKey={boardViewState.projectKey ?? null}
+            selectedProjectKey={rawProjectKey}
             totalCount={queryData?.projectSummary?.totalCount ?? visibleIssues.length}
             onSelectProject={handleSelectProject}
-            showQuickPills={availableProjects.length <= 4}
+            showQuickPills={false}
           />
+          <div className="board-project-legend" aria-label="Project legend">
+            {availableProjects.map((p) => {
+              const isPillActive = Boolean(rawProjectKey && (rawProjectKey.toLowerCase() === p.key.toLowerCase() || rawProjectKey.toLowerCase() === p.name.toLowerCase()));
+              const color = getProjectColor(p.key);
+              const shortName = p.key.includes('/') ? p.key.split('/')[1] : p.name;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`board-project-legend__pill${isPillActive ? ' board-project-legend__pill--active' : ''}`}
+                  onClick={() => handleSelectProject(isPillActive ? null : p.key)}
+                  title={`${p.title || p.name} (${p.issueCount} issues) · 点击${isPillActive ? '取消' : ''}过滤`}
+                >
+                  <span
+                    className="board-project-legend__dot"
+                    style={{ backgroundColor: color.fg }}
+                  />
+                  <span>{shortName}</span>
+                  <span style={{ opacity: 0.65, fontSize: 10 }}>{p.issueCount}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -2350,6 +2404,17 @@ export function BoardPage() {
         errorMessage={loadMoreIssuesError}
         hasMoreIssues={hasMoreIssues}
         isLoadingMoreIssues={isLoadingMoreIssues}
+        loadedCount={visibleIssues.length}
+        scopeLabel={rawProjectKey ? '当前项目共' : '全团队共'}
+        totalCount={
+          rawProjectKey
+            ? (availableProjects.find(
+                (p) =>
+                  p.key.toLowerCase() === rawProjectKey.toLowerCase() ||
+                  p.name.toLowerCase() === rawProjectKey.toLowerCase(),
+              )?.issueCount ?? undefined)
+            : (queryData?.projectSummary?.totalCount ?? undefined)
+        }
         onLoadMore={() => void handleLoadMoreIssues()}
       />
 
@@ -2432,6 +2497,7 @@ export function BoardPage() {
                     void handleNativeDropIssue(payload, targetStateId);
                   }}
                   onSelectIssue={openIssue}
+                  onFilterProject={handleSelectProject}
                 />
               ))}
             </section>
@@ -2457,6 +2523,7 @@ export function BoardPage() {
               onNativeDropIssue={(payload, targetStateId) => {
                 void handleNativeDropIssue(payload, targetStateId);
               }}
+              onFilterProject={handleSelectProject}
             />
           ) : (
             <section style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }} aria-label="Issue list">
@@ -2507,6 +2574,7 @@ export function BoardPage() {
                       isSelected={selectedIssueIds.includes(issue.id)}
                       onSelect={openIssue}
                       onToggleSelected={toggleIssueSelection}
+                      onFilterProject={handleSelectProject}
                       onNativeDragStart={(payload) => {
                         setActiveIssueId(payload.issueId);
                         setDragOriginStateId(payload.stateId);

@@ -18,6 +18,7 @@ interface ColumnProps {
   onNativeDropIssue?: (payload: Html5BoardDragPayload, targetStateId: string) => void;
   onNativeDragStart?: (payload: Html5BoardDragPayload) => void;
   onNativeDragEnd?: () => void;
+  onFilterProject?: ((projectKey: string) => void) | undefined;
 }
 
 export function Column({
@@ -33,6 +34,7 @@ export function Column({
   onNativeDropIssue,
   onNativeDragStart,
   onNativeDragEnd,
+  onFilterProject,
 }: ColumnProps) {
   const { isOver, setNodeRef } = useDroppable({
     id: stateId,
@@ -132,6 +134,7 @@ export function Column({
                   isFocused={focusedIssueId === issue.id}
                   isSelected={selectedIssueIds.includes(issue.id)}
                   onSelect={onSelectIssue}
+                  {...(onFilterProject ? { onFilterProject } : {})}
                   {...(onToggleIssueSelection ? { onToggleSelected: onToggleIssueSelection } : {})}
                   {...getIssueCardNativeDragProps()}
                 />
@@ -141,6 +144,7 @@ export function Column({
                   issue={issue}
                   isFocused={focusedIssueId === issue.id}
                   isSelected={selectedIssueIds.includes(issue.id)}
+                  {...(onFilterProject ? { onFilterProject } : {})}
                   {...(onToggleIssueSelection ? { onToggleSelected: onToggleIssueSelection } : {})}
                   {...getIssueCardNativeDragProps()}
                 />

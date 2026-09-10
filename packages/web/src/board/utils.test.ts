@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildCommittedIssueFilter, getBoardColumns } from './utils';
+import { buildCommittedIssueFilter, getBoardColumns, normalizeRepositoryFilterKey } from './utils';
 import type { IssueSummary, TeamSummary, WorkflowStateSummary } from './types';
 
 function makeState(
@@ -125,5 +125,35 @@ describe('buildCommittedIssueFilter', () => {
         isNull: true,
       },
     });
+  });
+});
+
+describe('normalizeRepositoryFilterKey', () => {
+  const projects = [
+    { key: 'fakechris/Involute', repository: 'fakechris/Involute', name: 'fakechris/Involute', identifier: 'INV-79', title: 'fakechris/Involute Work-Graph Kernel' },
+    { key: 'fakechris/moyu-badge', repository: 'fakechris/moyu-badge', name: 'fakechris/moyu-badge', identifier: 'INV-65', title: 'DeskPet Game (moyu-badge)' },
+  ];
+
+  it('normalizes null, undefined, all to null and __none__ to __none__', () => {
+    expect(normalizeRepositoryFilterKey(null)).toBeNull();
+    expect(normalizeRepositoryFilterKey(undefined)).toBeNull();
+    expect(normalizeRepositoryFilterKey('all')).toBeNull();
+    expect(normalizeRepositoryFilterKey('__none__')).toBe('__none__');
+  });
+
+  it('normalizes project keys with attached trailing descriptions', () => {
+    expect(normalizeRepositoryFilterKey('fakechris/Involute Work-Graph Kernel', projects)).toBe('fakechris/Involute');
+    expect(normalizeRepositoryFilterKey('fakechris/Involute Work-Graph Kernel')).toBe('fakechris/Involute');
+    expect(normalizeRepositoryFilterKey('fakechris/lumen-notes (Lumen Notes 学术平板手写笔记系统)')).toBe('fakechris/lumen-notes');
+  });
+
+  it('resolves project identifier to canonical repository', () => {
+    expect(normalizeRepositoryFilterKey('INV-79', projects)).toBe('fakechris/Involute');
+    expect(normalizeRepositoryFilterKey('INV-65', projects)).toBe('fakechris/moyu-badge');
+  });
+
+  it('keeps clean repository key as is', () => {
+    expect(normalizeRepositoryFilterKey('fakechris/Involute', projects)).toBe('fakechris/Involute');
+    expect(normalizeRepositoryFilterKey('fakechris/Involute')).toBe('fakechris/Involute');
   });
 });

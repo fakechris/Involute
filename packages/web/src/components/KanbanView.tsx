@@ -19,6 +19,7 @@ interface KanbanViewProps {
   onNativeDropIssue?: ((payload: Html5BoardDragPayload, targetStateId: string) => void) | undefined;
   onNativeDragStart?: ((payload: Html5BoardDragPayload) => void) | undefined;
   onNativeDragEnd?: (() => void) | undefined;
+  onFilterProject?: ((projectKey: string) => void) | undefined;
 }
 
 function KanbanColumn({
@@ -31,6 +32,7 @@ function KanbanColumn({
   onNativeDropIssue,
   onNativeDragStart,
   onNativeDragEnd,
+  onFilterProject,
 }: {
   group: BoardIssueGroup;
   focusedIssueId: string | null;
@@ -41,6 +43,7 @@ function KanbanColumn({
   onNativeDropIssue?: ((payload: Html5BoardDragPayload, targetStateId: string) => void) | undefined;
   onNativeDragStart?: ((payload: Html5BoardDragPayload) => void) | undefined;
   onNativeDragEnd?: (() => void) | undefined;
+  onFilterProject?: ((projectKey: string) => void) | undefined;
 }) {
   const [isCreating, setIsCreating] = useState(false);
   const droppableId = group.meta?.stateId ?? group.id;
@@ -125,6 +128,7 @@ function KanbanColumn({
               isSelected={selectedIssueIds.includes(issue.id)}
               onSelect={onSelectIssue}
               onToggleSelected={onToggleIssueSelection}
+              {...(onFilterProject ? { onFilterProject } : {})}
               {...(onNativeDragStart ? { onNativeDragStart } : {})}
               {...(onNativeDragEnd ? { onNativeDragEnd } : {})}
             />
@@ -148,6 +152,7 @@ export function KanbanView({
   onNativeDropIssue,
   onNativeDragStart,
   onNativeDragEnd,
+  onFilterProject,
 }: KanbanViewProps) {
   return (
     <div className="kanban-container">
@@ -163,6 +168,7 @@ export function KanbanView({
           onNativeDropIssue={onNativeDropIssue}
           onNativeDragStart={onNativeDragStart}
           onNativeDragEnd={onNativeDragEnd}
+          {...(onFilterProject ? { onFilterProject } : {})}
         />
       ))}
     </div>
