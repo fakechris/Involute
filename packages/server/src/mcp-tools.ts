@@ -403,7 +403,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         source: { type: 'string', description: 'Origin of this candidate; defaults to agent' },
         initial_state: {
           type: 'string',
-          description: 'Optional initial target state upon human commit: UNSTARTED (Ready), STARTED (In Progress), or REVIEW (In Review). Defaults to UNSTARTED. CANNOT be COMPLETED (Done) or CANCELED.',
+          description: 'Optional initial target state upon human commit: BACKLOG (Backlog), UNSTARTED (Ready), STARTED (In Progress), or REVIEW (In Review). Defaults to UNSTARTED. CANNOT be COMPLETED (Done) or CANCELED.',
         },
       },
       required: ['team', 'title'],
