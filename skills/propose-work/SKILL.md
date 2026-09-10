@@ -22,11 +22,17 @@ New independently acceptable work discovered during a run, or a scoped follow-up
   - `### 2. 核心功能与交付范围`: Modules, APIs, components affected.
   - `### 3. 验收标准与验证方案`: Concrete vitest/jest commands, exit 0 criteria.
 - Set `repository` (e.g. `fakechris/Involute`) and `kind` (`ISSUE`, `MILESTONE`, `PROJECT`).
+- **Initial Target State (`initial_state`)**:
+  Always set `initial_state` to route the item to the right phase upon human commit:
+  - `'REVIEW'`: For historical features or work already implemented and passing tests in the repository. When committed (via Web UI `/candidates` or batch-commit CLI), the item directly lands in **`In Review`**!
+  - `'STARTED'`: For active / in-progress tasks. Lands in **`In Progress`**.
+  - `'UNSTARTED'`: For pending unstarted tasks (default). Lands in **`Ready`**.
 - Candidates do **not** enter the ready queue until committed by a human (via Web UI `/candidates` or `pnpm candidates:batch-commit`).
 
 ## Rules
 
 - Never use propose as a TODO dump.
+- Candidate `initial_state` CANNOT be `COMPLETED` or `CANCELED`. Agents stop at `In Review`; `Done` is strictly human-gated.
 - Agents do not unilaterally `work_commit` or reject candidates via MCP — humans commit.
 - For unplanned hotfixes / bugfixes: run `pnpm hotfix:reflex` to propose and link with `DISCOVERED_DURING`.
 - All production code changes must link to a committed `INV-xxx` (enforced by Layer 1 Git guardrail).

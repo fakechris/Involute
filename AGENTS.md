@@ -47,7 +47,7 @@ flowchart TD
 ## 4. Agent Operational Rules
 
 1. **Search Before Proposing**: Always execute `work_search` to avoid duplicate titles or redundant milestones.
-2. **Propose, Never Unilaterally Commit**: Agents propose candidates (`kind: 'MILESTONE'` or `'ISSUE'`); only humans commit them.
+2. **Propose, Never Unilaterally Commit**: Agents propose candidates (`kind: 'MILESTONE'` or `'ISSUE'`); only humans commit them. Specify `initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED'` on `work_propose` so committed items route directly to the proper phase upon human approval.
 3. **No Scratchpad Pollution**: Do not dump local grep output, shell logs, or transient scratchpad thoughts into Involute. Only track discrete, independently acceptable deliverables.
 4. **Claim-Driven Execution**: Call `work_claim` to lease a specific task after confirmation.
 5. **Report Runs with Evidence**: As execution progresses, record phases with `run_report`. On completion, attach durable evidence (PR, commit SHA, test exit code, or artifact URL) with `evidence_attach`.
@@ -72,9 +72,13 @@ When an agent onboards a repository for the first time, it MUST get everything r
      - `### 1. 目标与架构定位`: Role in system architecture, why it is needed.
      - `### 2. 核心功能与交付范围`: Exact modules, UI components, APIs, behavior changes.
      - `### 3. 验收标准与验证方案`: Concrete vitest/jest commands, exit 0 criteria, PR checks.
-3. **Codebase Reality Alignment (现状与代码真实进度对齐)**:
-   - Do NOT dump already-completed features into `Ready` like unstarted work.
-   - For historical features already working and passing tests: immediately after commit, the agent executes `work_claim` -> `run_report(completed)` -> `evidence_attach` (linking test suite) to advance them to `In Review`. Only genuinely unstarted work remains in `Ready`.
+3. **Codebase Reality Alignment & Candidate Initial State (现状与代码真实进度对齐)**:
+   - **Direct State Routing via `initial_state` in `work_propose`**:
+     `work_propose` accepts `initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED'` (or `'IN_REVIEW' | 'IN_PROGRESS' | 'READY'`).
+     - **For historical features already working and passing tests**: MUST pass `initial_state: 'REVIEW'` when calling `work_propose`! When the human commits (via Web UI `/candidates` or CLI batch-commit), the work item is **directly committed into `In Review`**, without needing a secondary claim->report cycle.
+     - **For in-flight / ongoing work**: Pass `initial_state: 'STARTED'` to land directly in `In Progress`.
+     - **For genuinely unstarted work**: Pass `initial_state: 'UNSTARTED'` (default) to land in `Ready`.
+     - **Hard Guardrail**: Candidate `initial_state` can NEVER be `COMPLETED` (`Done`) or `CANCELED`. Agents stop at `In Review`; `Done` is strictly human-gated.
 4. **Batch Presentation**:
    - Present a formatted Markdown tree of proposed items to the user.
    - Point the human to the Candidate queue with project filter pre-selected: `http://100.114.30.43:4201/candidates?project=<owner/repo>`.

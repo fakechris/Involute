@@ -30,10 +30,14 @@ Tool dependencies: `work_search`, `work_propose`, `work_link`, `work_get_context
      - `### 2. 核心功能与交付范围` (Concrete changes, components, APIs, UI behaviors)
      - `### 3. 验收标准与验证方案` (Concrete test paths, verification commands, exit 0 criteria)
 
-3. **Codebase Reality Alignment (现状与代码真实进度对齐)**:
+3. **Codebase Reality Alignment & Candidate Initial State (现状与代码真实进度对齐)**:
    - Run tests and inspect commits before deciding status.
-   - **Already implemented & passing tests**: After the human commits the candidate, the agent must immediately `work_claim` -> `run_report(completed)` -> `evidence_attach` to move it to `In Review`. **Do NOT leave completed historical work sitting in `Ready`**.
-   - **Truly unstarted work**: Remains in `Ready` for future sprint claims.
+   - **Direct State Routing via `initial_state`**:
+     When proposing via `work_propose`, pass `initial_state`:
+     - `'REVIEW'`: For historical features already implemented and passing tests. When the human commits (via Web UI `/candidates` or batch-commit CLI), the work item directly enters **`In Review`**!
+     - `'STARTED'`: For active / ongoing work. Directly enters **`In Progress`**.
+     - `'UNSTARTED'`: For truly unstarted work (default). Directly enters **`Ready`**.
+   - **Hard Guardrail**: Candidate `initial_state` CANNOT be `COMPLETED` (`Done`) or `CANCELED`. Agents stop at `In Review`; `Done` is strictly human-gated.
 
 4. **Zero Scratchpad Pollution (严禁倾倒临时杂质)**:
    - Do NOT dump local grep logs, shell traces, or one-line refactor scratchpad notes into Involute.
@@ -88,10 +92,15 @@ Tool dependencies: `work_search`, `work_propose`, `work_link`, `work_get_context
    - Recent commit logs (`git log -n 30 --oneline`).
    - Vitest / Jest / pytest test suites to determine what is already built and working.
 2. For each Milestone (`kind: 'MILESTONE'`):
-   - Propose with `related_work_id: <PROJECT_ID>`, `related_work_type: 'CONTAINS'`.
+   - Propose with `parent_id: <PROJECT_ID>` (or `related_work_id: <PROJECT_ID>`, `related_work_type: 'CONTAINS'`).
+   - If all underlying features are already implemented and passing tests, set `initial_state: 'REVIEW'`. Otherwise `'UNSTARTED'`.
    - Must include complete structured Chinese `description`.
 3. For each Issue (`kind: 'ISSUE'`):
-   - Propose with `related_work_id: <MILESTONE_ID>`, `related_work_type: 'CONTAINS'`.
+   - Propose with `parent_id: <MILESTONE_ID>` (or `related_work_id: <MILESTONE_ID>`, `related_work_type: 'CONTAINS'`).
+   - **Crucial**: Set `initial_state` correctly at propose time:
+     - `initial_state: 'REVIEW'` for already implemented & tested historical features.
+     - `initial_state: 'STARTED'` for currently in-progress tasks.
+     - `initial_state: 'UNSTARTED'` for pending unstarted tasks.
    - Must include complete structured Chinese `description`.
 
 ### Step 4: Generate or Update `AGENTS.md`
@@ -110,10 +119,9 @@ Print a structured summary for the human operator:
    - 或对 Agent 下达指令：*"这批全部通过，帮我批量 commit"*。
 
 ### Step 6: Post-Commit State Alignment (历史存量状态对齐)
-Once committed:
-1. Identify items whose features are **already complete and tested in the repository**.
-2. For each completed item:
-   - Call `work_claim` to lease the task.
-   - Call `run_report` with `status: "completed"`, `phase: "Verification"`, and summary.
-   - Call `evidence_attach` with `kind: "test"` or `"pr"`, passing test suite path or PR URL.
-3. The items move smoothly to **`In Review`**, leaving only genuine pending work in **`Ready`**.
+- **Direct 1-Pass State (Zero-friction path)**:
+  Items proposed with `initial_state: 'REVIEW'` land **directly in `In Review`** the moment they are committed. No secondary manual promotion is needed!
+- **Evidence Attachment**:
+  For items in `In Review`, agents should attach test suites or verification evidence via `evidence_attach` with `kind: "test"` or `"pr"` (passing test suite path or PR URL).
+- **Fallback for unaligned items**:
+  If any completed item was mistakenly committed into `Ready`, immediately advance it via `work_claim` -> `run_report(completed)` -> `evidence_attach` to move it to **`In Review`**. Only truly unstarted items remain in **`Ready`**.
