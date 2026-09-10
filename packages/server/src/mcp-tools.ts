@@ -160,6 +160,7 @@ export async function callMcpTool(
       const relatedType = optionalString(args.related_work_type);
       if (relatedType) proposeInput.relatedWorkType = parseWorkLinkType(relatedType, 'related_work_type');
       proposeInput.source = optionalString(args.source) ?? 'agent';
+      assignOptional(proposeInput, 'initialState', optionalString(args.initial_state));
       const created = await proposeWork(context.prisma, proposeInput, writeActorFromViewer(context.viewer, 'mcp'));
       if (created.title !== rawTitle) {
         return {
@@ -178,10 +179,11 @@ export async function callMcpTool(
       assignOptional(commitInput, 'acceptance', optionalString(args.acceptance));
       assignOptional(commitInput, 'assigneeId', optionalString(args.assignee_id));
       assignOptional(commitInput, 'constraints', optionalString(args.constraints));
-      assignOptional(commitInput, 'idempotencyKey', optionalString(args.idempotency_key));
       assignOptional(commitInput, 'outcome', optionalString(args.outcome));
       assignOptional(commitInput, 'scope', optionalString(args.scope));
+      assignOptional(commitInput, 'stateId', optionalString(args.state_id));
       assignOptional(commitInput, 'verification', optionalString(args.verification));
+      assignOptional(commitInput, 'idempotencyKey', optionalString(args.idempotency_key));
       return commitWork(
         context.prisma,
         work.id,
@@ -363,6 +365,10 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         repository: { type: 'string' },
         idempotency_key: { type: 'string' },
         source: { type: 'string', description: 'Origin of this candidate; defaults to agent' },
+        initial_state: {
+          type: 'string',
+          description: 'Optional initial target state upon human commit: UNSTARTED (Ready), STARTED (In Progress), or REVIEW (In Review). Defaults to UNSTARTED. CANNOT be COMPLETED (Done) or CANCELED.',
+        },
       },
       required: ['team', 'title'],
     },
@@ -381,6 +387,10 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         outcome: { type: 'string' },
         scope: { type: 'string' },
         constraints: { type: 'string' },
+        state_id: {
+          type: 'string',
+          description: 'Optional target workflow state ID or type to transition to upon commit. Cannot be COMPLETED or CANCELED.',
+        },
         verification: { type: 'string' },
         idempotency_key: { type: 'string' },
       },

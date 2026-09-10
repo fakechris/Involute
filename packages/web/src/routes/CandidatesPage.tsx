@@ -211,6 +211,15 @@ function CandidateCard({
           {candidate.identifier}
         </button>
         <span className="observation-card__status">{snoozed ? 'snoozed candidate' : 'candidate'}</span>
+        {candidate.state?.type === 'REVIEW' ? (
+          <span className="observation-card__status observation-card__status--target" title="Target state upon approval: In Review">
+            Target: In Review
+          </span>
+        ) : candidate.state?.type === 'STARTED' ? (
+          <span className="observation-card__status observation-card__status--target" title="Target state upon approval: In Progress">
+            Target: In Progress
+          </span>
+        ) : null}
         <span className="observation-card__meta">{candidate.team.key}</span>
         {candidate.repository ? (
           <span className="observation-card__meta observation-card__repo">{candidate.repository}</span>

@@ -3477,6 +3477,13 @@ kbd {
   padding: 1px 8px;
 }
 
+.observation-card__status--target {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-weight: 500;
+}
+
 .observation-card__meta {
   font-size: 12px;
   color: var(--fg-dim);

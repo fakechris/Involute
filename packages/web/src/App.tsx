@@ -1093,7 +1093,7 @@ export function App() {
                         </span>
                         <span className="app-shell__team-key">{team.key}</span>
                         <span className="app-shell__team-name">{team.name}</span>
-                        <span className="app-shell__team-count">{teamIssues.length}</span>
+                        <span className="app-shell__team-count">{team.issueCount ?? teamIssues.length}</span>
                       </NavLink>
                       {isExpanded ? (
                         <div className="app-shell__team-subnav">

@@ -23,6 +23,7 @@ import {
   WORK_IDEMPOTENCY_CONFLICT_MESSAGE,
   WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE,
   AGENT_DESCRIPTION_REQUIRED_MESSAGE,
+  WORKFLOW_STATE_NOT_FOUND_MESSAGE,
 } from './errors.js';
 import { findWorkByIdOrIdentifier, isWorkReadyForClaim } from './context-service.js';
 import { enqueueWorkEvent } from './event-outbox.js';
@@ -53,6 +54,7 @@ export interface ProposeWorkInput {
   constraints?: string | null;
   description?: string | null;
   idempotencyKey?: string | null;
+  initialState?: string | null;
   kind?: Issue['kind'] | null;
   outcome?: string | null;
   parentId?: string | null;
@@ -74,6 +76,7 @@ export interface CommitWorkInput {
   idempotencyKey?: string | null;
   outcome?: string | null;
   scope?: string | null;
+  stateId?: string | null;
   constraints?: string | null;
   verification?: string | null;
 }
@@ -144,6 +147,20 @@ export function validateAgentDescription(
   }
 }
 
+function normalizeInitialStateType(raw: string | null | undefined): 'UNSTARTED' | 'STARTED' | 'REVIEW' | null {
+  if (!raw) return null;
+  const s = raw.trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (s === 'COMPLETED' || s === 'DONE' || s === 'CANCELED' || s === 'CANCELLED') {
+    throw createValidationError(
+      'Candidate initial_state cannot be COMPLETED or CANCELED. Agents stop at In Review; Done is human-gated.',
+    );
+  }
+  if (s === 'STARTED' || s === 'IN_PROGRESS') return 'STARTED';
+  if (s === 'REVIEW' || s === 'IN_REVIEW') return 'REVIEW';
+  if (s === 'UNSTARTED' || s === 'READY' || s === 'BACKLOG') return 'UNSTARTED';
+  return null;
+}
+
 export async function proposeWork(
   prisma: PrismaClient,
   input: ProposeWorkInput,
@@ -177,6 +194,20 @@ export async function proposeWork(
       teamId: input.teamId,
       title: sanitizedTitle,
     };
+    const targetType = normalizeInitialStateType(input.initialState);
+    if (targetType) {
+      const matchingState = await transaction.workflowState.findFirst({
+        where: {
+          teamId: input.teamId,
+          type: targetType,
+        },
+        orderBy: { position: 'asc' },
+        select: { id: true },
+      });
+      if (matchingState) {
+        createInput.stateId = matchingState.id;
+      }
+    }
     if (input.acceptance !== undefined) createInput.acceptance = input.acceptance;
     if (input.constraints !== undefined) createInput.constraints = input.constraints;
     if (input.description !== undefined) createInput.description = input.description;
@@ -310,6 +341,33 @@ export async function commitWork(
       throw createValidationError(WORK_READY_STATE_MISSING_MESSAGE);
     }
 
+    let targetStateId = readyState.id;
+    if (input.stateId) {
+      const overrideState = await transaction.workflowState.findUnique({
+        where: { id: input.stateId },
+        select: { id: true, type: true, teamId: true },
+      });
+      if (!overrideState || overrideState.teamId !== existing.teamId) {
+        throw createValidationError(WORKFLOW_STATE_NOT_FOUND_MESSAGE);
+      }
+      if (overrideState.type === 'COMPLETED' || overrideState.type === 'CANCELED') {
+        throw createValidationError('Cannot commit candidate directly to COMPLETED or CANCELED state.');
+      }
+      targetStateId = overrideState.id;
+    } else if (existing.stateId) {
+      const existingState = await transaction.workflowState.findUnique({
+        where: { id: existing.stateId },
+        select: { id: true, type: true, teamId: true },
+      });
+      if (
+        existingState &&
+        existingState.teamId === existing.teamId &&
+        (existingState.type === 'STARTED' || existingState.type === 'REVIEW')
+      ) {
+        targetStateId = existingState.id;
+      }
+    }
+
     const updated = await transaction.issue.update({
       where: { id: existing.id },
       data: {
@@ -319,7 +377,7 @@ export async function commitWork(
         constraints: input.constraints === undefined ? existing.constraints : input.constraints,
         outcome: input.outcome === undefined ? existing.outcome : input.outcome,
         scope: input.scope === undefined ? existing.scope : input.scope,
-        stateId: readyState.id,
+        stateId: targetStateId,
         verification: input.verification === undefined ? existing.verification : input.verification,
       },
     });

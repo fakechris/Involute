@@ -495,6 +495,101 @@ describe('claim service', () => {
       ).rejects.toThrow(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
     });
   });
+
+  describe('candidate initial_state and direct commit workflow', () => {
+    it('proposes work with initialState REVIEW and commits directly into REVIEW state', async () => {
+      const candidate = await proposeWork(prisma, {
+        teamId: team.id,
+        title: 'Work targeting review',
+        initialState: 'REVIEW',
+      });
+
+      const reviewState = await prisma.workflowState.findFirstOrThrow({
+        where: { teamId: team.id, type: 'REVIEW' },
+      });
+      expect(candidate.stateId).toBe(reviewState.id);
+
+      const committed = await commitWork(
+        prisma,
+        candidate.id,
+        {
+          acceptance: 'Verified in review',
+          assigneeId: human.id,
+          expectedRevision: candidate.revision,
+        },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'web' },
+      );
+      expect(committed.commitmentStatus).toBe('COMMITTED');
+      expect(committed.stateId).toBe(reviewState.id);
+    });
+
+    it('proposes work with initialState STARTED and commits directly into STARTED state', async () => {
+      const candidate = await proposeWork(prisma, {
+        teamId: team.id,
+        title: 'Work targeting started',
+        initialState: 'IN_PROGRESS',
+      });
+
+      const startedState = await prisma.workflowState.findFirstOrThrow({
+        where: { teamId: team.id, type: 'STARTED' },
+      });
+      expect(candidate.stateId).toBe(startedState.id);
+
+      const committed = await commitWork(
+        prisma,
+        candidate.id,
+        {
+          acceptance: 'Verified in progress',
+          assigneeId: human.id,
+          expectedRevision: candidate.revision,
+        },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'web' },
+      );
+      expect(committed.stateId).toBe(startedState.id);
+    });
+
+    it('rejects proposing candidate with COMPLETED or CANCELED initial_state', async () => {
+      await expect(
+        proposeWork(prisma, {
+          teamId: team.id,
+          title: 'Illegal completed proposal',
+          initialState: 'COMPLETED',
+        }),
+      ).rejects.toThrow('Candidate initial_state cannot be COMPLETED or CANCELED');
+
+      await expect(
+        proposeWork(prisma, {
+          teamId: team.id,
+          title: 'Illegal canceled proposal',
+          initialState: 'CANCELED',
+        }),
+      ).rejects.toThrow('Candidate initial_state cannot be COMPLETED or CANCELED');
+    });
+
+    it('allows commitWork to explicitly specify stateId override', async () => {
+      const candidate = await proposeWork(prisma, {
+        teamId: team.id,
+        title: 'Default candidate',
+      });
+
+      const inProgressState = await prisma.workflowState.findFirstOrThrow({
+        where: { teamId: team.id, type: 'STARTED' },
+      });
+
+      const committed = await commitWork(
+        prisma,
+        candidate.id,
+        {
+          acceptance: 'Verified explicit state',
+          assigneeId: human.id,
+          expectedRevision: candidate.revision,
+          stateId: inProgressState.id,
+        },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'web' },
+      );
+      expect(committed.stateId).toBe(inProgressState.id);
+    });
+  });
 });
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<void> {

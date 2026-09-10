@@ -286,6 +286,7 @@ const typeDefs = /* GraphQL */ `
     visibility: TeamVisibility!
     states: WorkflowStateConnection!
     memberships: TeamMembershipConnection!
+    issueCount: Int!
   }
 
   enum TeamVisibility {
@@ -937,6 +938,7 @@ const typeDefs = /* GraphQL */ `
     relatedWorkType: WorkLinkType
     idempotencyKey: String
     source: String
+    initialState: String
   }
 
   input WorkCommitInput {
@@ -948,6 +950,7 @@ const typeDefs = /* GraphQL */ `
     constraints: String
     verification: String
     idempotencyKey: String
+    stateId: String
   }
 
   input WorkClaimInput {
@@ -2223,6 +2226,18 @@ const resolvers = {
             orderBy: [{ role: 'asc' }, { createdAt: 'asc' }],
           })),
       };
+    },
+    issueCount: async (
+      parent: TeamParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<number> => {
+      return context.prisma.issue.count({
+        where: {
+          teamId: parent.id,
+          commitmentStatus: 'COMMITTED',
+        },
+      });
     },
   },
   User: {

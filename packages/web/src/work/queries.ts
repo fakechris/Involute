@@ -7,6 +7,7 @@ export const CANDIDATES_PAGE_QUERY = gql`
         id
         key
         name
+        issueCount
         memberships {
           nodes {
             id
