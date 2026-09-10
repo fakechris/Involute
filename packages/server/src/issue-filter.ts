@@ -4,6 +4,7 @@ export interface StringComparatorInput {
   eq?: string | null;
   in?: string[] | null;
   nin?: string[] | null;
+  isNull?: boolean | null;
 }
 
 export interface BooleanComparatorInput {
@@ -46,6 +47,7 @@ export interface IssueFilterInput {
   kind?: WorkKind | null;
   labels?: IssueLabelRelationFilterInput | null;
   priority?: IntComparatorInput | null;
+  repository?: StringComparatorInput | null;
   state?: WorkflowStateFilterRefInput | null;
   team?: TeamFilterInput | null;
   updatedAt?: DateTimeComparatorInput | null;
@@ -158,6 +160,48 @@ export function buildIssueWhere(
   if (priorityEq !== undefined && priorityEq !== null) {
     clauses.push({
       priority: priorityEq,
+    });
+  }
+
+  const repositoryEq = filter?.repository?.eq;
+
+  if (repositoryEq !== undefined && repositoryEq !== null) {
+    clauses.push({
+      repository: repositoryEq,
+    });
+  }
+
+  const repositoryIn = filter?.repository?.in;
+
+  if (repositoryIn !== undefined && repositoryIn !== null) {
+    clauses.push({
+      repository: {
+        in: repositoryIn,
+      },
+    });
+  }
+
+  const repositoryNin = filter?.repository?.nin;
+
+  if (repositoryNin !== undefined && repositoryNin !== null) {
+    clauses.push({
+      repository: {
+        notIn: repositoryNin,
+      },
+    });
+  }
+
+  const repositoryIsNull = filter?.repository?.isNull;
+
+  if (repositoryIsNull === true) {
+    clauses.push({
+      repository: null,
+    });
+  } else if (repositoryIsNull === false) {
+    clauses.push({
+      repository: {
+        not: null,
+      },
     });
   }
 
