@@ -44,8 +44,12 @@ primary entrypoint; the web board is an observation and governance surface.
    - \`### 1. 目标与架构定位\`: System role, rationale.
    - \`### 2. 核心功能与交付范围\`: Specific modules, UI components, APIs.
    - \`### 3. 验收标准与验证方案\`: Concrete vitest/jest commands, exit 0 criteria.
-3. **Codebase Reality Alignment**:
-   Historical working features passing tests must be advanced via \`work_claim\` -> \`run_report(completed)\` -> \`evidence_attach\` to **\`In Review\`**. Only genuinely unstarted work remains in \`Ready\`.
+3. **Codebase Reality Alignment & Candidate Initial State (现状与代码真实进度对齐)**:
+   - Pass \`initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED'\` when calling \`work_propose\`.
+   - Historical working features passing tests must be proposed with \`initial_state: 'REVIEW'\` so they advance directly to **\`In Review\`** upon human commitment.
+   - Active in-progress work uses \`initial_state: 'STARTED'\` (**\`In Progress\`**).
+   - Truly unstarted work uses \`initial_state: 'UNSTARTED'\` (**\`Ready\`**).
+   - Candidates can NEVER be proposed with \`COMPLETED\` (\`Done\`) or \`CANCELED\`; agents stop at In Review.
 
 ## Endpoints
 
@@ -108,7 +112,7 @@ Read-only:
 - \`protocol_get_guide\` — fetch this document verbatim.
 
 Write:
-- \`work_propose\` — create candidate work. Pass \`parent_id\` to nest under project/milestone.
+- \`work_propose\` — create candidate work. Pass \`parent_id\` to nest under project/milestone. Pass \`initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED'\` to direct-route upon human commitment.
 - \`work_update\` — update contract fields with \`expected_revision\`.
 - \`work_link\` — create typed work link.
 - \`work_claim\` — atomically claim committed work for the current agent actor.
@@ -137,8 +141,11 @@ When connecting a repository to Involute for the first time:
      - \`### 3. 验收标准与验证方案\`
    - Title MUST NOT contain \`[已交付]\` or \`[待办]\` status tags.
 3. **Codebase Reality Alignment (现状与代码真实进度对齐)**:
-   - For historical features already implemented and passing tests: immediately after commitment, execute \`work_claim\` -> \`run_report(completed)\` -> \`evidence_attach\` to advance them to **In Review**.
-   - Genuinely unstarted work remains in **Ready**.
+   - **Direct State Assignment via \`initial_state\`**:
+     - For historical features already implemented and passing tests: pass \`initial_state: 'REVIEW'\` during \`work_propose\`. Upon human commitment, they land directly in **In Review**.
+     - For in-flight tasks, pass \`initial_state: 'STARTED'\` (**In Progress**).
+     - Genuinely unstarted work uses \`initial_state: 'UNSTARTED'\` (**Ready**).
+     - Never propose \`COMPLETED\` or \`CANCELED\`; candidate \`initial_state\` stops at In Review.
 4. **Run Reporting Rule (新建 Run 规则)**:
    - When calling \`run_report\` to start a new run, **OMIT \`run_id\`**. The server assigns the run ID.
    - Do NOT pass \`claim.id\` or client-generated UUID as \`run_id\`.

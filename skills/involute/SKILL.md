@@ -16,7 +16,7 @@ Connect: Streamable HTTP MCP at `http://127.0.0.1:4200/mcp` (local) with `Author
 | [search-work](../search-work/SKILL.md) | Find existing work before creating anything |
 | [get-context](../get-context/SKILL.md) | Load contract, ancestors, blockers, claim, audits |
 | [list-ready](../list-ready/SKILL.md) | Committed, unblocked, unclaimed work |
-| [propose-work](../propose-work/SKILL.md) | Candidate only; does not enter ready queue |
+| [propose-work](../propose-work/SKILL.md) | Candidate proposal with optional initial_state ('REVIEW'/'STARTED'/'UNSTARTED') |
 | [claim-work](../claim-work/SKILL.md) | Lease ready work after the user chooses it |
 | [update-work](../update-work/SKILL.md) | Contract fields with `expected_revision` |
 | [report-run](../report-run/SKILL.md) | Phase / block / complete (In Review, never Done) |
@@ -27,7 +27,7 @@ Connect: Streamable HTTP MCP at `http://127.0.0.1:4200/mcp` (local) with `Author
 ## Hard rules (all skills)
 
 1. Search before propose. Duplicate titles are a failure.
-2. Fuzzy discoveries go through `work_propose`, never straight to committed issues.
+2. Fuzzy discoveries go through `work_propose`, never straight to committed issues. Set `initial_state: 'REVIEW'` for completed features so they commit directly to `In Review`; candidate `initial_state` cannot be `COMPLETED` or `CANCELED`.
 3. Do not create a child unless it can be independently accepted.
 4. Do not write local TODOs, grep results, or shell steps into Involute.
 5. `work_claim` after the user chooses a ready item — do not grab the whole queue.
