@@ -86,7 +86,7 @@ import { BoardCreateIssueDialog } from '../components/BoardCreateIssueDialog';
 import { BoardLoadMoreNotice } from '../components/BoardLoadMoreNotice';
 import { Column } from '../components/Column';
 import { InlineCreate } from '../components/InlineCreate';
-import { IssueCard, getProjectColor } from '../components/IssueCard';
+import { IssueCard, getProjectColorClass } from '../components/IssueCard';
 import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
 import { KanbanView } from '../components/KanbanView';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
@@ -2048,7 +2048,7 @@ export function BoardPage() {
           <div className="board-project-legend" aria-label="Project legend">
             {availableProjects.map((p) => {
               const isPillActive = Boolean(rawProjectKey && (rawProjectKey.toLowerCase() === p.key.toLowerCase() || rawProjectKey.toLowerCase() === p.name.toLowerCase()));
-              const color = getProjectColor(p.key);
+              const colorClass = getProjectColorClass(p.key);
               const shortName = p.key.includes('/') ? p.key.split('/')[1] : p.name;
               return (
                 <button
@@ -2059,8 +2059,7 @@ export function BoardPage() {
                   title={`${p.title || p.name} (${p.issueCount} issues) · 点击${isPillActive ? '取消' : ''}过滤`}
                 >
                   <span
-                    className="board-project-legend__dot"
-                    style={{ backgroundColor: color.fg }}
+                    className={`board-project-legend__dot ${colorClass ?? ''}`}
                   />
                   <span>{shortName}</span>
                   <span style={{ opacity: 0.65, fontSize: 10 }}>{p.issueCount}</span>

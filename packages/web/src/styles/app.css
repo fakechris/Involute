@@ -2054,6 +2054,41 @@ kbd {
   text-decoration: underline;
 }
 
+/* ===== Project color accents (hash-stable, theme-adaptive) ===== */
+/* Light theme (default): deep, saturated fg for contrast on parchment */
+.proj-color-0 { --proj-fg: #4f46e5; --proj-bg: rgba(79, 70, 229, 0.1); --proj-border: rgba(79, 70, 229, 0.32); }
+.proj-color-1 { --proj-fg: #047857; --proj-bg: rgba(4, 120, 87, 0.1); --proj-border: rgba(4, 120, 87, 0.32); }
+.proj-color-2 { --proj-fg: #92400e; --proj-bg: rgba(180, 83, 9, 0.1); --proj-border: rgba(180, 83, 9, 0.32); }
+.proj-color-3 { --proj-fg: #be123c; --proj-bg: rgba(190, 18, 60, 0.08); --proj-border: rgba(190, 18, 60, 0.3); }
+.proj-color-4 { --proj-fg: #0e7490; --proj-bg: rgba(14, 116, 144, 0.1); --proj-border: rgba(14, 116, 144, 0.32); }
+.proj-color-5 { --proj-fg: #7c3aed; --proj-bg: rgba(124, 58, 237, 0.1); --proj-border: rgba(124, 58, 237, 0.3); }
+.proj-color-6 { --proj-fg: #9a3412; --proj-bg: rgba(194, 65, 12, 0.1); --proj-border: rgba(194, 65, 12, 0.32); }
+.proj-color-7 { --proj-fg: #0369a1; --proj-bg: rgba(3, 105, 161, 0.1); --proj-border: rgba(3, 105, 161, 0.32); }
+.proj-color-8 { --proj-fg: #3f6212; --proj-bg: rgba(77, 124, 15, 0.12); --proj-border: rgba(77, 124, 15, 0.34); }
+.proj-color-9 { --proj-fg: #be185d; --proj-bg: rgba(190, 24, 93, 0.08); --proj-border: rgba(190, 24, 93, 0.3); }
+
+/* Dark theme: bright, luminous fg for contrast on near-black */
+[data-theme="dark"] .proj-color-0 { --proj-fg: #818cf8; --proj-bg: rgba(99, 102, 241, 0.16); --proj-border: rgba(99, 102, 241, 0.38); }
+[data-theme="dark"] .proj-color-1 { --proj-fg: #34d399; --proj-bg: rgba(16, 185, 129, 0.16); --proj-border: rgba(16, 185, 129, 0.38); }
+[data-theme="dark"] .proj-color-2 { --proj-fg: #fbbf24; --proj-bg: rgba(245, 158, 11, 0.16); --proj-border: rgba(245, 158, 11, 0.38); }
+[data-theme="dark"] .proj-color-3 { --proj-fg: #fb7185; --proj-bg: rgba(244, 63, 94, 0.16); --proj-border: rgba(244, 63, 94, 0.38); }
+[data-theme="dark"] .proj-color-4 { --proj-fg: #22d3ee; --proj-bg: rgba(6, 182, 212, 0.16); --proj-border: rgba(6, 182, 212, 0.38); }
+[data-theme="dark"] .proj-color-5 { --proj-fg: #c084fc; --proj-bg: rgba(168, 85, 247, 0.16); --proj-border: rgba(168, 85, 247, 0.38); }
+[data-theme="dark"] .proj-color-6 { --proj-fg: #fb923c; --proj-bg: rgba(249, 115, 22, 0.16); --proj-border: rgba(249, 115, 22, 0.38); }
+[data-theme="dark"] .proj-color-7 { --proj-fg: #38bdf8; --proj-bg: rgba(14, 165, 233, 0.16); --proj-border: rgba(14, 165, 233, 0.38); }
+[data-theme="dark"] .proj-color-8 { --proj-fg: #a3e635; --proj-bg: rgba(132, 204, 22, 0.16); --proj-border: rgba(132, 204, 22, 0.38); }
+[data-theme="dark"] .proj-color-9 { --proj-fg: #f472b6; --proj-bg: rgba(236, 72, 153, 0.16); --proj-border: rgba(236, 72, 153, 0.38); }
+
+.issue-card__repo-badge[class*='proj-color-'] {
+  background: var(--proj-bg);
+  color: var(--proj-fg);
+  border-color: var(--proj-border);
+}
+
+.board-project-legend__dot[class*='proj-color-'] {
+  background-color: var(--proj-fg);
+}
+
 .board-project-bar {
   display: flex;
   align-items: center;
