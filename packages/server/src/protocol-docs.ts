@@ -45,10 +45,11 @@ primary entrypoint; the web board is an observation and governance surface.
    - \`### 2. 核心功能与交付范围\`: Specific modules, UI components, APIs.
    - \`### 3. 验收标准与验证方案\`: Concrete vitest/jest commands, exit 0 criteria.
 3. **Codebase Reality Alignment & Candidate Initial State (现状与代码真实进度对齐)**:
-   - Pass \`initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED'\` when calling \`work_propose\`.
+   - Pass \`initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED' | 'BACKLOG'\` when calling \`work_propose\`.
    - Historical working features passing tests must be proposed with \`initial_state: 'REVIEW'\` so they advance directly to **\`In Review\`** upon human commitment.
    - Active in-progress work uses \`initial_state: 'STARTED'\` (**\`In Progress\`**).
-   - Truly unstarted work uses \`initial_state: 'UNSTARTED'\` (**\`Ready\`**).
+   - Truly unstarted work committed for the immediate active cycle uses \`initial_state: 'UNSTARTED'\` (**\`Ready\`**).
+   - Future roadmap items, subsequent milestones (M2+), tech debt, or unscheduled tasks use \`initial_state: 'BACKLOG'\` (**\`Backlog\`**).
    - Candidates can NEVER be proposed with \`COMPLETED\` (\`Done\`) or \`CANCELED\`; agents stop at In Review.
 
 ## Endpoints
@@ -112,7 +113,7 @@ Read-only:
 - \`protocol_get_guide\` — fetch this document verbatim.
 
 Write:
-- \`work_propose\` — create candidate work. Pass \`parent_id\` to nest under project/milestone. Pass \`initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED'\` to direct-route upon human commitment.
+- \`work_propose\` — create candidate work. Pass \`parent_id\` to nest under project/milestone. Pass \`initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED' | 'BACKLOG'\` to direct-route upon human commitment.
 - \`work_update\` — update contract fields with \`expected_revision\`.
 - \`work_link\` — create typed work link.
 - \`work_claim\` — atomically claim committed work for the current agent actor.
@@ -144,7 +145,8 @@ When connecting a repository to Involute for the first time:
    - **Direct State Assignment via \`initial_state\`**:
      - For historical features already implemented and passing tests: pass \`initial_state: 'REVIEW'\` during \`work_propose\`. Upon human commitment, they land directly in **In Review**.
      - For in-flight tasks, pass \`initial_state: 'STARTED'\` (**In Progress**).
-     - Genuinely unstarted work uses \`initial_state: 'UNSTARTED'\` (**Ready**).
+     - For genuinely unstarted work in the immediate active cycle: pass \`initial_state: 'UNSTARTED'\` (**Ready**).
+     - For future milestones (M2+), technical debt, or unscheduled tasks: pass \`initial_state: 'BACKLOG'\` (**Backlog**).
      - Never propose \`COMPLETED\` or \`CANCELED\`; candidate \`initial_state\` stops at In Review.
 4. **Run Reporting Rule (新建 Run 规则)**:
    - When calling \`run_report\` to start a new run, **OMIT \`run_id\`**. The server assigns the run ID.

@@ -147,7 +147,7 @@ export function validateAgentDescription(
   }
 }
 
-export function normalizeInitialStateType(raw: string | null | undefined): 'UNSTARTED' | 'STARTED' | 'REVIEW' | null {
+export function normalizeInitialStateType(raw: string | null | undefined): 'BACKLOG' | 'UNSTARTED' | 'STARTED' | 'REVIEW' | null {
   if (!raw) return null;
   const s = raw.trim().toUpperCase().replace(/[\s-]+/g, '_');
   if (s === 'COMPLETED' || s === 'DONE' || s === 'CANCELED' || s === 'CANCELLED') {
@@ -155,9 +155,10 @@ export function normalizeInitialStateType(raw: string | null | undefined): 'UNST
       'Candidate initial_state cannot be COMPLETED or CANCELED. Agents stop at In Review; Done is human-gated.',
     );
   }
+  if (s === 'BACKLOG') return 'BACKLOG';
   if (s === 'STARTED' || s === 'IN_PROGRESS') return 'STARTED';
   if (s === 'REVIEW' || s === 'IN_REVIEW') return 'REVIEW';
-  if (s === 'UNSTARTED' || s === 'READY' || s === 'BACKLOG') return 'UNSTARTED';
+  if (s === 'UNSTARTED' || s === 'READY') return 'UNSTARTED';
   return null;
 }
 
@@ -207,6 +208,11 @@ export async function proposeWork(
       if (matchingState) {
         createInput.stateId = matchingState.id;
       }
+      if (targetType === 'BACKLOG') {
+        createInput.source = input.source
+          ? `${input.source};initial_state=BACKLOG`
+          : 'initial_state=BACKLOG';
+      }
     }
     if (input.acceptance !== undefined) createInput.acceptance = input.acceptance;
     if (input.constraints !== undefined) createInput.constraints = input.constraints;
@@ -215,7 +221,7 @@ export async function proposeWork(
     if (input.outcome !== undefined) createInput.outcome = input.outcome;
     if (input.repository !== undefined) createInput.repository = input.repository;
     if (input.scope !== undefined) createInput.scope = input.scope;
-    if (input.source !== undefined) createInput.source = input.source;
+    if (input.source !== undefined && targetType !== 'BACKLOG') createInput.source = input.source;
     if (input.verification !== undefined) createInput.verification = input.verification;
 
     let parentWork: Issue | null = null;
@@ -359,14 +365,21 @@ export async function commitWork(
         where: { id: existing.stateId },
         select: { id: true, type: true, teamId: true },
       });
+      const isExplicitBacklog =
+        existingState?.type === 'BACKLOG' &&
+        Boolean(existing.source?.includes('initial_state=BACKLOG'));
       if (
         existingState &&
         existingState.teamId === existing.teamId &&
-        (existingState.type === 'STARTED' || existingState.type === 'REVIEW')
+        (existingState.type === 'STARTED' || existingState.type === 'REVIEW' || isExplicitBacklog)
       ) {
         targetStateId = existingState.id;
       }
     }
+
+    const cleanSource = existing.source?.includes('initial_state=BACKLOG')
+      ? existing.source.replace(/;?initial_state=BACKLOG;?/, '').trim() || null
+      : existing.source;
 
     const updated = await transaction.issue.update({
       where: { id: existing.id },
@@ -377,6 +390,7 @@ export async function commitWork(
         constraints: input.constraints === undefined ? existing.constraints : input.constraints,
         outcome: input.outcome === undefined ? existing.outcome : input.outcome,
         scope: input.scope === undefined ? existing.scope : input.scope,
+        source: cleanSource,
         stateId: targetStateId,
         verification: input.verification === undefined ? existing.verification : input.verification,
       },

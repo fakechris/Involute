@@ -74,10 +74,11 @@ When an agent onboards a repository for the first time, it MUST get everything r
      - `### 3. 验收标准与验证方案`: Concrete vitest/jest commands, exit 0 criteria, PR checks.
 3. **Codebase Reality Alignment & Candidate Initial State (现状与代码真实进度对齐)**:
    - **Direct State Routing via `initial_state` in `work_propose`**:
-     `work_propose` accepts `initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED'` (or `'IN_REVIEW' | 'IN_PROGRESS' | 'READY'`).
+     `work_propose` accepts `initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED' | 'BACKLOG'` (or `'IN_REVIEW' | 'IN_PROGRESS' | 'READY'`).
      - **For historical features already working and passing tests**: MUST pass `initial_state: 'REVIEW'` when calling `work_propose`! When the human commits (via Web UI `/candidates` or CLI batch-commit), the work item is **directly committed into `In Review`**, without needing a secondary claim->report cycle.
      - **For in-flight / ongoing work**: Pass `initial_state: 'STARTED'` to land directly in `In Progress`.
-     - **For genuinely unstarted work**: Pass `initial_state: 'UNSTARTED'` (default) to land in `Ready`.
+     - **For genuinely unstarted work in immediate active cycle**: Pass `initial_state: 'UNSTARTED'` (default) to land in `Ready`.
+     - **For future roadmap items, subsequent milestones (M2+), tech debt, or unscheduled tasks**: Pass `initial_state: 'BACKLOG'` to land in `Backlog`. This prevents polluting the active board's Ready column and avoids premature agent auto-claiming.
      - **Hard Guardrail**: Candidate `initial_state` can NEVER be `COMPLETED` (`Done`) or `CANCELED`. Agents stop at `In Review`; `Done` is strictly human-gated.
 4. **Batch Presentation**:
    - Present a formatted Markdown tree of proposed items to the user.

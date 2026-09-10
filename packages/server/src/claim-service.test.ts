@@ -548,6 +548,32 @@ describe('claim service', () => {
       expect(committed.stateId).toBe(startedState.id);
     });
 
+    it('proposes work with initialState BACKLOG and commits directly into BACKLOG state', async () => {
+      const candidate = await proposeWork(prisma, {
+        teamId: team.id,
+        title: 'Work targeting backlog',
+        initialState: 'BACKLOG',
+      });
+
+      const backlogState = await prisma.workflowState.findFirstOrThrow({
+        where: { teamId: team.id, type: 'BACKLOG' },
+      });
+      expect(candidate.stateId).toBe(backlogState.id);
+
+      const committed = await commitWork(
+        prisma,
+        candidate.id,
+        {
+          acceptance: 'Verified in backlog',
+          assigneeId: human.id,
+          expectedRevision: candidate.revision,
+        },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'web' },
+      );
+      expect(committed.commitmentStatus).toBe('COMMITTED');
+      expect(committed.stateId).toBe(backlogState.id);
+    });
+
     it('rejects proposing candidate with COMPLETED or CANCELED initial_state', async () => {
       await expect(
         proposeWork(prisma, {
