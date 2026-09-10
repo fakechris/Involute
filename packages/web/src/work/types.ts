@@ -157,7 +157,19 @@ export interface WorkContextBundle {
   reviewDecisions: WorkReviewDecisionSummary[];
 }
 
+export interface CandidateProjectSummary {
+  repository: string;
+  totalCount: number;
+}
+
+export interface CandidateSummary {
+  totalCount: number;
+  noRepositoryCount: number;
+  projects: CandidateProjectSummary[];
+}
+
 export interface CandidatesPageQueryData {
+  candidateSummary?: CandidateSummary | null;
   teams: {
     nodes: Array<{
       id: string;
@@ -190,6 +202,12 @@ export interface CandidatesPageQueryVariables {
   } | null;
   filter?: {
     commitmentStatus?: CommitmentStatus;
+    repository?: {
+      eq?: string;
+      in?: string[];
+      nin?: string[];
+      isNull?: boolean;
+    };
     team?: {
       key?: {
         eq: string;

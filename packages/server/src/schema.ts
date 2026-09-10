@@ -236,6 +236,7 @@ const typeDefs = /* GraphQL */ `
     cycle(id: String!): Cycle @deprecated(reason: "Use issue query with kind: MILESTONE instead.")
     workContext(id: String!): WorkContext
     readyWork(filter: ReadyWorkFilter, query: String): IssueConnection!
+    candidateSummary(teamFilter: TeamFilter): CandidateSummary!
     agentCredentials(teamId: String!): [AgentCredentialRecord!]!
     webhooks(teamId: String!): [WebhookSubscriptionRecord!]!
     notifications(first: Int, after: String, unreadOnly: Boolean): NotificationConnection!
@@ -687,10 +688,22 @@ const typeDefs = /* GraphQL */ `
     endCursor: String
   }
 
+  type CandidateProjectSummary {
+    repository: String!
+    totalCount: Int!
+  }
+
+  type CandidateSummary {
+    totalCount: Int!
+    noRepositoryCount: Int!
+    projects: [CandidateProjectSummary!]!
+  }
+
   input StringComparator {
     eq: String
     in: [String!]
     nin: [String!]
+    isNull: Boolean
   }
 
   input BooleanComparator {
@@ -735,6 +748,7 @@ const typeDefs = /* GraphQL */ `
     kind: WorkKind
     commitmentStatus: CommitmentStatus
     priority: IntComparator
+    repository: StringComparator
     updatedAt: DateTimeComparator
   }
 
@@ -1141,6 +1155,50 @@ const resolvers = {
             key: 'asc',
           },
         }),
+      };
+    },
+    candidateSummary: async (
+      _parent: unknown,
+      args: { teamFilter?: TeamFilterInput | null },
+      context: GraphQLContext,
+    ): Promise<{ totalCount: number; noRepositoryCount: number; projects: Array<{ repository: string; totalCount: number }> }> => {
+      const readableWhere = buildReadableIssueWhere(context);
+      const teamKey = args.teamFilter?.key?.eq;
+      const where: Prisma.IssueWhereInput = {
+        commitmentStatus: 'CANDIDATE',
+        ...(teamKey ? { team: { is: { key: teamKey } } } : {}),
+        ...(readableWhere ? readableWhere : {}),
+      };
+
+      const groups = await context.prisma.issue.groupBy({
+        by: ['repository'],
+        where,
+        _count: { _all: true },
+      });
+
+      let totalCount = 0;
+      let noRepositoryCount = 0;
+      const projects: Array<{ repository: string; totalCount: number }> = [];
+
+      for (const group of groups) {
+        const count = group._count._all;
+        totalCount += count;
+        if (group.repository) {
+          projects.push({
+            repository: group.repository,
+            totalCount: count,
+          });
+        } else {
+          noRepositoryCount += count;
+        }
+      }
+
+      projects.sort((a, b) => a.repository.localeCompare(b.repository));
+
+      return {
+        totalCount,
+        noRepositoryCount,
+        projects,
       };
     },
     workContext: async (

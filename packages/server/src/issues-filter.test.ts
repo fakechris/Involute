@@ -488,6 +488,126 @@ describe('issues query filtering', () => {
       ),
     ).toBe(false);
   });
+
+  it('filters issues by repository with eq and in comparators', async () => {
+    const readyState = await prisma.workflowState.findFirstOrThrow({
+      where: { teamId: fixture.team.id, name: 'Ready' },
+    });
+
+    await prisma.issue.create({
+      data: {
+        commitmentStatus: 'CANDIDATE',
+        identifier: 'INV-TEST-REPO-1',
+        kind: 'ISSUE',
+        repository: 'fakechris/QuantHarvest',
+        stateId: readyState.id,
+        teamId: fixture.team.id,
+        title: 'QuantHarvest Candidate Task',
+      },
+    });
+
+    await prisma.issue.create({
+      data: {
+        commitmentStatus: 'CANDIDATE',
+        identifier: 'INV-TEST-REPO-2',
+        kind: 'ISSUE',
+        repository: 'chris/staffgics',
+        stateId: readyState.id,
+        teamId: fixture.team.id,
+        title: 'Staffgics Candidate Task',
+      },
+    });
+
+    const response = await queryIssues({
+      first: 10,
+      filter: {
+        commitmentStatus: 'CANDIDATE',
+        repository: {
+          eq: 'fakechris/QuantHarvest',
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.issues.nodes).toHaveLength(1);
+    expect(response.body.data.issues.nodes[0].identifier).toBe('INV-TEST-REPO-1');
+  });
+
+  it('returns candidateSummary with complete totalCount and projects breakdown across repositories', async () => {
+    const readyState = await prisma.workflowState.findFirstOrThrow({
+      where: { teamId: fixture.team.id, name: 'Ready' },
+    });
+
+    await prisma.issue.createMany({
+      data: [
+        {
+          commitmentStatus: 'CANDIDATE',
+          identifier: 'INV-SUM-1',
+          kind: 'ISSUE',
+          repository: 'fakechris/QuantHarvest',
+          stateId: readyState.id,
+          teamId: fixture.team.id,
+          title: 'QH 1',
+        },
+        {
+          commitmentStatus: 'CANDIDATE',
+          identifier: 'INV-SUM-2',
+          kind: 'ISSUE',
+          repository: 'fakechris/QuantHarvest',
+          stateId: readyState.id,
+          teamId: fixture.team.id,
+          title: 'QH 2',
+        },
+        {
+          commitmentStatus: 'CANDIDATE',
+          identifier: 'INV-SUM-3',
+          kind: 'ISSUE',
+          repository: 'chris/staffgics',
+          stateId: readyState.id,
+          teamId: fixture.team.id,
+          title: 'Staffgics 1',
+        },
+        {
+          commitmentStatus: 'CANDIDATE',
+          identifier: 'INV-SUM-4',
+          kind: 'ISSUE',
+          repository: null,
+          stateId: readyState.id,
+          teamId: fixture.team.id,
+          title: 'No repo candidate',
+        },
+      ],
+    });
+
+    const summaryResponse = await postGraphQL({
+      query: `
+        query {
+          candidateSummary(teamFilter: { key: { eq: "${DEFAULT_TEAM_KEY}" } }) {
+            totalCount
+            noRepositoryCount
+            projects {
+              repository
+              totalCount
+            }
+          }
+        }
+      `,
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(summaryResponse.status).toBe(200);
+    expect(summaryResponse.body.errors).toBeUndefined();
+    const summary = summaryResponse.body.data.candidateSummary;
+    expect(summary.totalCount).toBeGreaterThanOrEqual(4);
+    expect(summary.noRepositoryCount).toBeGreaterThanOrEqual(1);
+    expect(summary.projects).toEqual(
+      expect.arrayContaining([
+        { repository: 'chris/staffgics', totalCount: 1 },
+        { repository: 'fakechris/QuantHarvest', totalCount: 2 },
+      ]),
+    );
+  });
 });
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<IssueFilterFixture> {

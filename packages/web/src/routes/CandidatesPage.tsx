@@ -363,6 +363,14 @@ export function CandidatesPage() {
   const [runCommit] = useMutation<WorkCommitMutationData, WorkCommitMutationVariables>(WORK_COMMIT_MUTATION);
   const [runReject] = useMutation<WorkRejectMutationData, WorkRejectMutationVariables>(WORK_REJECT_MUTATION);
 
+  const repositoryFilter = useMemo(() => {
+    if (!selectedProject) return undefined;
+    if (selectedProject === '__none__') {
+      return { isNull: true };
+    }
+    return { eq: selectedProject };
+  }, [selectedProject]);
+
   const { data, error, fetchMore, loading, refetch } = useQuery<
     CandidatesPageQueryData,
     CandidatesPageQueryVariables
@@ -370,11 +378,12 @@ export function CandidatesPage() {
     CANDIDATES_PAGE_QUERY,
     {
       variables: {
-        first: 50,
+        first: 100,
         teamFilter: teamKey ? { key: { eq: teamKey } } : null,
         filter: {
           commitmentStatus: 'CANDIDATE',
           ...(teamKey ? { team: { key: { eq: teamKey } } } : {}),
+          ...(repositoryFilter ? { repository: repositoryFilter } : {}),
         },
       },
     },
@@ -407,13 +416,28 @@ export function CandidatesPage() {
   }, [allHumans, bulkAssigneeId]);
 
   const candidates = data?.issues.nodes ?? [];
+  const candidateSummary = data?.candidateSummary;
+  const summaryProjects = useMemo(() => candidateSummary?.projects ?? [], [candidateSummary?.projects]);
+  const noRepoCount = candidateSummary?.noRepositoryCount ?? 0;
+  const totalCandidateCount = candidateSummary?.totalCount ?? candidates.length;
+
   const repositories = useMemo(() => {
+    if (summaryProjects.length > 0) {
+      return summaryProjects.map((p) => p.repository);
+    }
     const repos = new Set<string>();
     for (const c of candidates) {
       if (c.repository) repos.add(c.repository);
     }
     return Array.from(repos).sort();
-  }, [candidates]);
+  }, [summaryProjects, candidates]);
+
+  const currentProjectTotal = useMemo(() => {
+    if (!selectedProject) return totalCandidateCount;
+    if (selectedProject === '__none__') return noRepoCount;
+    const match = summaryProjects.find((p) => p.repository === selectedProject);
+    return match ? match.totalCount : candidates.filter((c) => c.repository === selectedProject).length;
+  }, [selectedProject, totalCandidateCount, noRepoCount, summaryProjects, candidates]);
 
   function selectProject(repo: string | null) {
     setSearchParams((prev) => {
@@ -433,11 +457,13 @@ export function CandidatesPage() {
 
   const filteredActiveCandidates = useMemo(() => {
     if (!selectedProject) return activeCandidates;
+    if (selectedProject === '__none__') return activeCandidates.filter((c) => !c.repository);
     return activeCandidates.filter((c) => c.repository === selectedProject);
   }, [activeCandidates, selectedProject]);
 
   const filteredSnoozedCandidates = useMemo(() => {
     if (!selectedProject) return snoozedCandidates;
+    if (selectedProject === '__none__') return snoozedCandidates.filter((c) => !c.repository);
     return snoozedCandidates.filter((c) => c.repository === selectedProject);
   }, [snoozedCandidates, selectedProject]);
 
@@ -561,14 +587,18 @@ export function CandidatesPage() {
     try {
       await fetchMore({
         variables: { after: pageInfo.endCursor },
-        updateQuery: (previous, { fetchMoreResult }) => ({
-          ...fetchMoreResult,
-          teams: previous.teams,
-          issues: {
-            ...fetchMoreResult.issues,
-            nodes: [...previous.issues.nodes, ...fetchMoreResult.issues.nodes],
-          },
-        }),
+        updateQuery: (previous, { fetchMoreResult }) => {
+          const summary = fetchMoreResult.candidateSummary ?? previous.candidateSummary ?? null;
+          return {
+            ...fetchMoreResult,
+            ...(summary !== undefined ? { candidateSummary: summary } : {}),
+            teams: previous.teams,
+            issues: {
+              ...fetchMoreResult.issues,
+              nodes: [...previous.issues.nodes, ...fetchMoreResult.issues.nodes],
+            },
+          };
+        },
       });
     } catch {
       setPaginationError(true);
@@ -581,12 +611,12 @@ export function CandidatesPage() {
     <div className="observation-page">
       <div className="page-header">
         <h1 className="page-header__title">Candidates</h1>
-        <span className="mono observation-count">{candidates.length}</span>
+        <span className="mono observation-count">{currentProjectTotal}</span>
         <div style={{ flex: 1 }} />
         <span className="observation-hint">Proposed work waits here until a human commits it.</span>
       </div>
 
-      {repositories.length > 0 ? (
+      {repositories.length > 0 || noRepoCount > 0 ? (
         <div className="board-project-pills" role="tablist" aria-label="Project switcher" style={{ padding: '0 24px 8px' }}>
           <button
             type="button"
@@ -596,10 +626,11 @@ export function CandidatesPage() {
             onClick={() => selectProject(null)}
           >
             <span className="board-project-pill__name">All Projects</span>
-            <span className="board-project-pill__count">{candidates.length}</span>
+            <span className="board-project-pill__count">{totalCandidateCount}</span>
           </button>
           {repositories.map((repo) => {
-            const count = candidates.filter((c) => c.repository === repo).length;
+            const projectMeta = summaryProjects.find((p) => p.repository === repo);
+            const count = projectMeta ? projectMeta.totalCount : candidates.filter((c) => c.repository === repo).length;
             const isActive = selectedProject === repo;
             return (
               <button
@@ -615,6 +646,18 @@ export function CandidatesPage() {
               </button>
             );
           })}
+          {noRepoCount > 0 ? (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedProject === '__none__'}
+              className={`board-project-pill${selectedProject === '__none__' ? ' board-project-pill--active' : ''}`}
+              onClick={() => selectProject('__none__')}
+            >
+              <span className="board-project-pill__name">No Repository</span>
+              <span className="board-project-pill__count">{noRepoCount}</span>
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -751,16 +794,28 @@ export function CandidatesPage() {
             ) : null}
 
             {paginationError ? (
-              <div role="alert">
+              <div role="alert" style={{ marginTop: '16px' }}>
                 <p>Could not load more candidates.</p>
                 <Btn variant="subtle" disabled={loadingMore} onClick={() => void handleLoadMore()}>
                   Retry loading more
                 </Btn>
               </div>
             ) : pageInfo?.hasNextPage ? (
-              <Btn variant="subtle" disabled={loadingMore} onClick={() => void handleLoadMore()}>
-                {loadingMore ? 'Loading…' : 'Load more'}
-              </Btn>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '16px' }}>
+                <span className="mono observation-hint" style={{ fontSize: '13px' }}>
+                  Showing {candidates.length} of {currentProjectTotal} candidates
+                  {currentProjectTotal > candidates.length ? ` (${currentProjectTotal - candidates.length} remaining)` : ''}
+                </span>
+                <Btn variant="subtle" aria-label="Load more" disabled={loadingMore} onClick={() => void handleLoadMore()}>
+                  {loadingMore ? 'Loading…' : 'Load more'}
+                </Btn>
+              </div>
+            ) : candidates.length > 50 ? (
+              <div style={{ marginTop: '16px' }}>
+                <span className="mono observation-hint" style={{ fontSize: '13px' }}>
+                  All {candidates.length} candidates loaded
+                </span>
+              </div>
             ) : null}
           </div>
         )}
