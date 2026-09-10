@@ -999,9 +999,10 @@ kbd {
   padding: 6px var(--pad-x, var(--content-gutter));
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-raised, var(--bg));
-  overflow-x: auto;
+  position: relative;
+  z-index: 20;
+  overflow: visible;
   flex-shrink: 0;
-  scrollbar-width: thin;
 }
 
 .board-project-bar__label {
@@ -3290,6 +3291,9 @@ kbd {
   padding: 0 var(--pad-x, var(--content-gutter));
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
+  position: relative;
+  z-index: 20;
+  overflow: visible;
 }
 
 .page-content {
