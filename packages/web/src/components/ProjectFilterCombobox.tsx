@@ -6,6 +6,7 @@ export interface AvailableProject {
   identifier: string;
   name: string;
   key: string;
+  title?: string;
   issueCount: number;
 }
 
@@ -37,23 +38,43 @@ export function ProjectFilterCombobox({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
 
-  // Exact matching for selected project (case-insensitive)
+  // Matching for selected project: Pass 1 exact, Pass 2 fuzzy
   const activeProject = useMemo(() => {
     if (!selectedProjectKey) return null;
     const target = selectedProjectKey.trim().toLowerCase();
+
+    const exactMatch = projects.find((p) => {
+      const k = p.key.toLowerCase();
+      const n = p.name.toLowerCase();
+      const id = p.identifier.toLowerCase();
+      const t = p.title?.toLowerCase() || '';
+      return k === target || n === target || id === target || (t !== '' && t === target);
+    });
+    if (exactMatch) return exactMatch;
+
     return (
-      projects.find(
-        (p) => p.name.toLowerCase() === target || p.identifier.toLowerCase() === target,
-      ) ?? null
+      projects.find((p) => {
+        const k = p.key.toLowerCase();
+        const t = p.title?.toLowerCase() || '';
+        return (
+          target.startsWith(k) ||
+          (t !== '' && target.startsWith(t)) ||
+          (k.includes('/') && target.includes(k))
+        );
+      }) ?? null
     );
   }, [projects, selectedProjectKey]);
 
-  // Search filtering matches identifier or name
+  // Search filtering matches identifier, name, key or title
   const filteredProjects = useMemo(() => {
     if (!searchQuery.trim()) return projects;
     const q = searchQuery.toLowerCase().trim();
     return projects.filter(
-      (p) => p.name.toLowerCase().includes(q) || p.identifier.toLowerCase().includes(q),
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.key.toLowerCase().includes(q) ||
+        p.identifier.toLowerCase().includes(q) ||
+        Boolean(p.title && p.title.toLowerCase().includes(q)),
     );
   }, [projects, searchQuery]);
 
@@ -205,8 +226,10 @@ export function ProjectFilterCombobox({
           {projects.map((p) => {
             const isActive =
               Boolean(selectedProjectKey) &&
-              (selectedProjectKey?.toLowerCase() === p.name.toLowerCase() ||
-                selectedProjectKey?.toLowerCase() === p.identifier.toLowerCase());
+              (selectedProjectKey?.toLowerCase() === p.key.toLowerCase() ||
+                selectedProjectKey?.toLowerCase() === p.name.toLowerCase() ||
+                selectedProjectKey?.toLowerCase() === p.identifier.toLowerCase() ||
+                Boolean(p.title && selectedProjectKey?.toLowerCase() === p.title.toLowerCase()));
             return (
               <button
                 key={p.id}
@@ -301,8 +324,10 @@ export function ProjectFilterCombobox({
                 const itemIndex = index + 1;
                 const isSelected =
                   Boolean(selectedProjectKey) &&
-                  (selectedProjectKey?.toLowerCase() === p.name.toLowerCase() ||
-                    selectedProjectKey?.toLowerCase() === p.identifier.toLowerCase());
+                  (selectedProjectKey?.toLowerCase() === p.key.toLowerCase() ||
+                    selectedProjectKey?.toLowerCase() === p.name.toLowerCase() ||
+                    selectedProjectKey?.toLowerCase() === p.identifier.toLowerCase() ||
+                    Boolean(p.title && selectedProjectKey?.toLowerCase() === p.title.toLowerCase()));
                 const isHighlighted = highlightedIndex === itemIndex;
 
                 return (
@@ -318,7 +343,7 @@ export function ProjectFilterCombobox({
                       {isSelected ? <IcoCheck size={12} /> : null}
                     </span>
                     <span className="mono project-combobox__item-id">{p.identifier}</span>
-                    <span className="project-combobox__item-name" title={p.name}>
+                    <span className="project-combobox__item-name" title={p.title || p.name}>
                       {p.name}
                     </span>
                     <span className="project-combobox__item-count">{p.issueCount}</span>

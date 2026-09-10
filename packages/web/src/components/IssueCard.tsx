@@ -15,6 +15,30 @@ interface IssueCardProps {
   sortable?: boolean;
   onNativeDragStart?: (payload: Html5BoardDragPayload) => void;
   onNativeDragEnd?: () => void;
+  onFilterProject?: ((projectKey: string) => void) | undefined;
+}
+
+export function getProjectColor(repository?: string | null): { bg: string; fg: string; border: string } {
+  if (!repository) {
+    return { bg: 'var(--bg-hover)', fg: 'var(--fg-muted)', border: 'var(--border)' };
+  }
+  const PALETTE = [
+    { bg: 'rgba(99, 102, 241, 0.15)', fg: '#818cf8', border: 'rgba(99, 102, 241, 0.35)' }, // indigo
+    { bg: 'rgba(16, 185, 129, 0.15)', fg: '#34d399', border: 'rgba(16, 185, 129, 0.35)' }, // emerald
+    { bg: 'rgba(245, 158, 11, 0.15)', fg: '#fbbf24', border: 'rgba(245, 158, 11, 0.35)' }, // amber
+    { bg: 'rgba(244, 63, 94, 0.15)', fg: '#fb7185', border: 'rgba(244, 63, 94, 0.35)' },   // rose
+    { bg: 'rgba(6, 182, 212, 0.15)', fg: '#22d3ee', border: 'rgba(6, 182, 212, 0.35)' },   // cyan
+    { bg: 'rgba(168, 85, 247, 0.15)', fg: '#c084fc', border: 'rgba(168, 85, 247, 0.35)' }, // purple
+    { bg: 'rgba(249, 115, 22, 0.15)', fg: '#fb923c', border: 'rgba(249, 115, 22, 0.35)' }, // orange
+    { bg: 'rgba(14, 165, 233, 0.15)', fg: '#38bdf8', border: 'rgba(14, 165, 233, 0.35)' }, // sky
+    { bg: 'rgba(132, 204, 22, 0.15)', fg: '#a3e635', border: 'rgba(132, 204, 22, 0.35)' }, // lime
+    { bg: 'rgba(236, 72, 153, 0.15)', fg: '#f472b6', border: 'rgba(236, 72, 153, 0.35)' }, // pink
+  ];
+  let hash = 0;
+  for (let i = 0; i < repository.length; i++) {
+    hash = (hash * 31 + repository.charCodeAt(i)) >>> 0;
+  }
+  return PALETTE[hash % PALETTE.length] ?? { bg: 'var(--bg-hover)', fg: 'var(--fg-muted)', border: 'var(--border)' };
 }
 
 function getInitials(name: string | null | undefined): string {
@@ -52,6 +76,7 @@ export function IssueCard({
   sortable = true,
   onNativeDragEnd,
   onNativeDragStart,
+  onFilterProject,
 }: IssueCardProps) {
   const suppressNextSelectRef = useRef(false);
   const {
@@ -157,9 +182,30 @@ export function IssueCard({
           <div className="issue-card__header-tags">
             {issue.repository ? (
               <span
-                className="issue-card__repo-badge"
+                role={onFilterProject ? 'button' : undefined}
+                tabIndex={onFilterProject ? 0 : undefined}
+                className={`issue-card__repo-badge${onFilterProject ? ' issue-card__repo-badge--interactive' : ''}`}
+                style={{
+                  backgroundColor: getProjectColor(issue.repository).bg,
+                  color: getProjectColor(issue.repository).fg,
+                  borderColor: getProjectColor(issue.repository).border,
+                }}
                 title={`Project: ${issue.repository}`}
                 data-testid={`issue-repo-${issue.id}`}
+                onClick={(e) => {
+                  if (onFilterProject) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onFilterProject(issue.repository!);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (onFilterProject && (e.key === 'Enter' || e.key === ' ')) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onFilterProject(issue.repository!);
+                  }
+                }}
               >
                 {issue.repository.includes('/') ? issue.repository.split('/')[1] : issue.repository}
               </span>
@@ -209,7 +255,7 @@ export function IssueCard({
           {issue.claim ? (
             <span
               className="issue-card__claim-badge"
-              title={`Claimed by ${issue.claim.actor.name ?? 'Agent'} until ${new Date(issue.claim.leaseUntil).toLocaleTimeString()}`}
+              title={`Agent 租约中: ${issue.claim.actor.name ?? 'Agent'} (租约有效至 ${new Date(issue.claim.leaseUntil).toLocaleTimeString()})`}
             >
               🤖 {issue.claim.actor.name ?? 'Agent'}
             </span>

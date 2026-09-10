@@ -424,3 +424,58 @@ function areArraysEqualIgnoringOrder(left: string[], right: string[]): boolean {
 
   return sortedLeft.every((value, index) => value === sortedRight[index]);
 }
+
+export function normalizeRepositoryFilterKey(
+  inputKey: string | null | undefined,
+  availableProjects?: Array<{ identifier?: string | null; key?: string; repository?: string; name?: string; title?: string }> | null,
+): string | null {
+  if (!inputKey || inputKey === 'all') return null;
+  if (inputKey === '__none__') return '__none__';
+
+  const trimmed = inputKey.trim();
+
+  if (availableProjects && availableProjects.length > 0) {
+    const targetLower = trimmed.toLowerCase();
+
+    // Pass 1: Exact matches (repo, id, name, or title)
+    const exactMatch = availableProjects.find((p) => {
+      const repo = (p.repository ?? p.key ?? '').toLowerCase();
+      const id = (p.identifier ?? '').toLowerCase();
+      const name = (p.name ?? '').toLowerCase();
+      const title = (p.title ?? '').toLowerCase();
+      return (
+        repo === targetLower ||
+        id === targetLower ||
+        name === targetLower ||
+        (title !== '' && title === targetLower)
+      );
+    });
+    if (exactMatch) {
+      return exactMatch.repository ?? exactMatch.key ?? trimmed;
+    }
+
+    // Pass 2: Prefix / substring match with word boundary safety
+    const fuzzyMatch = availableProjects.find((p) => {
+      const repo = (p.repository ?? p.key ?? '').toLowerCase();
+      const title = (p.title ?? '').toLowerCase();
+      return (
+        (repo && targetLower.startsWith(repo)) ||
+        (title && targetLower.startsWith(title)) ||
+        (repo.includes('/') && targetLower.includes(repo))
+      );
+    });
+    if (fuzzyMatch) {
+      return fuzzyMatch.repository ?? fuzzyMatch.key ?? trimmed;
+    }
+  }
+
+  // If input has owner/repo with trailing description or parenthesis, e.g. "fakechris/Involute Work-Graph Kernel"
+  if (trimmed.includes('/')) {
+    const cleaned = trimmed.split(/[\s(]/)[0];
+    if (cleaned && cleaned.includes('/')) {
+      return cleaned;
+    }
+  }
+
+  return trimmed;
+}
