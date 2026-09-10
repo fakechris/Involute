@@ -235,7 +235,7 @@ export async function isWorkReadyForClaim(
   workId: string,
 ): Promise<boolean> {
   return Boolean(await prisma.issue.findFirst({
-    where: combineWhere({ id: workId }, buildReadyWorkWhere({})),
+    where: combineWhere({ id: workId }, buildReadyWorkWhere({}, { allowStarted: true })),
     select: { id: true },
   }));
 }
@@ -260,7 +260,7 @@ export function compareReadyWork(
   return left.identifier.localeCompare(right.identifier);
 }
 
-function buildReadyWorkWhere(input: ListReadyWorkInput): Prisma.IssueWhereInput {
+function buildReadyWorkWhere(input: ListReadyWorkInput, options?: { allowStarted?: boolean }): Prisma.IssueWhereInput {
   const clauses: Prisma.IssueWhereInput[] = [
     { commitmentStatus: 'COMMITTED' },
     { acceptance: { not: null } },
@@ -268,7 +268,7 @@ function buildReadyWorkWhere(input: ListReadyWorkInput): Prisma.IssueWhereInput 
     {
       state: {
         is: {
-          type: 'UNSTARTED',
+          type: options?.allowStarted ? { in: ['UNSTARTED', 'STARTED'] } : 'UNSTARTED',
         },
       },
     },

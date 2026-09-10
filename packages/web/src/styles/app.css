@@ -1075,6 +1075,272 @@ kbd {
   color: #fff;
 }
 
+/* Linear-style Project Filter Combobox */
+.project-combobox {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  user-select: none;
+}
+
+.project-combobox__trigger-group {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--r-2, 6px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-hover, rgba(255, 255, 255, 0.05));
+  transition: background var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+
+.project-combobox__trigger-group:hover {
+  background: var(--bg-active, rgba(255, 255, 255, 0.1));
+  border-color: var(--border-strong);
+}
+
+.project-combobox__trigger-group--active {
+  background: var(--accent-weak, rgba(79, 124, 255, 0.15)) !important;
+  border-color: var(--accent-border, #4f7cff) !important;
+}
+
+.project-combobox__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color var(--dur-1) var(--ease);
+}
+
+.project-combobox__trigger:hover {
+  color: var(--fg);
+}
+
+.project-combobox__trigger--active {
+  color: var(--accent, #4f7cff) !important;
+  font-weight: 500;
+  padding-right: 4px;
+}
+
+.project-combobox__trigger-label {
+  color: var(--fg-dim);
+  font-weight: 500;
+}
+
+.project-combobox__trigger-value {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.project-combobox__trigger-id {
+  font-size: 11px;
+  color: var(--accent, #4f7cff);
+  font-family: var(--font-mono);
+}
+
+.project-combobox__trigger-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.project-combobox__trigger-count {
+  font-size: 11px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+}
+
+.project-combobox__trigger--active .project-combobox__trigger-count {
+  background: var(--accent);
+  color: #fff;
+}
+
+.project-combobox__trigger-chevron {
+  font-size: 10px;
+  color: var(--fg-dim);
+  margin-left: 1px;
+}
+
+.project-combobox__clear-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--accent, #4f7cff);
+  cursor: pointer;
+  padding: 0 6px 0 2px;
+  opacity: 0.75;
+  transition: opacity var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+
+.project-combobox__clear-btn:hover {
+  opacity: 1;
+  color: #fff;
+}
+
+.project-combobox__popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 100;
+  min-width: 280px;
+  max-width: 380px;
+  background: var(--bg-raised, #1a1a1e);
+  border: 1px solid var(--border-strong, #323238);
+  border-radius: var(--r-2, 6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.3);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.project-combobox__search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  height: 28px;
+  background: var(--bg, #111113);
+  border: 1px solid var(--border, #28282c);
+  border-radius: var(--r-1, 4px);
+}
+
+.project-combobox__search-icon {
+  color: var(--fg-dim);
+  flex-shrink: 0;
+}
+
+.project-combobox__search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  color: var(--fg, #e0e0e0);
+  font-size: 12px;
+  font-family: inherit;
+  min-width: 0;
+}
+
+.project-combobox__search-input::placeholder {
+  color: var(--fg-dim, #71717a);
+}
+
+.project-combobox__search-clear {
+  border: none;
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.project-combobox__search-clear:hover {
+  color: var(--fg);
+}
+
+.project-combobox__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.project-combobox__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: var(--r-1, 4px);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--fg);
+  transition: background var(--dur-1) var(--ease);
+}
+
+.project-combobox__item:hover,
+.project-combobox__item--highlighted {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.07));
+}
+
+.project-combobox__item--selected {
+  font-weight: 500;
+  color: var(--accent, #4f7cff);
+}
+
+.project-combobox__item-check {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent, #4f7cff);
+  flex-shrink: 0;
+}
+
+.project-combobox__item-id {
+  font-size: 11px;
+  color: var(--fg-dim);
+  flex-shrink: 0;
+}
+
+.project-combobox__item--selected .project-combobox__item-id {
+  color: var(--accent, #4f7cff);
+}
+
+.project-combobox__item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-combobox__item-count {
+  font-size: 10.5px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+.project-combobox__item--selected .project-combobox__item-count {
+  background: var(--accent);
+  color: #fff;
+}
+
+.project-combobox__divider {
+  height: 1px;
+  background: var(--border-subtle, rgba(255, 255, 255, 0.06));
+  margin: 3px 0;
+}
+
+.project-combobox__empty {
+  padding: 12px 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
 /* Toolbars (replaces card-style viewbars) — flat strip */
 .board-viewbar,
 .board-filter-row,
@@ -1802,8 +2068,31 @@ kbd {
 .issue-card__footer {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   justify-content: space-between;
+  margin-top: 4px;
+}
+
+.issue-card__claim-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--accent);
+  background: var(--accent-weak);
+  padding: 2px 6px;
+  border-radius: var(--r-1);
+  border: 1px solid var(--accent-border);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.issue-card__assignee-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  min-width: 0;
 }
 
 .issue-card__avatar {

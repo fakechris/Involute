@@ -249,6 +249,43 @@ describe('Involute MCP', () => {
     });
     expect(missingRun.body.error.message).toContain('run_id');
   });
+
+  it('supports updating work state via work_update and rejects COMPLETED/CANCELED', async () => {
+    const candidate = await prisma.issue.create({
+      data: {
+        identifier: 'INV-102',
+        stateId: ready.id,
+        teamId: team.id,
+        title: 'State transition target',
+        commitmentStatus: 'COMMITTED',
+      },
+    });
+
+    const inProgressState = await prisma.workflowState.findFirstOrThrow({
+      where: { teamId: team.id, type: 'STARTED' },
+    });
+
+    const updated = await callTool('work_update', {
+      id: candidate.id,
+      expected_revision: candidate.revision,
+      state: 'IN_PROGRESS',
+    });
+    expect(updated.stateId).toBe(inProgressState.id);
+
+    const illegal = await mcpRpc('/mcp', {
+      id: 'illegal-state',
+      method: 'tools/call',
+      params: {
+        name: 'work_update',
+        arguments: {
+          id: candidate.id,
+          expected_revision: updated.revision,
+          state: 'COMPLETED',
+        },
+      },
+    });
+    expect(illegal.body.error.message).toContain('COMPLETED');
+  });
 });
 
 function readyIdentifiers(result: { nodes?: Array<{ identifier: string }> }): string[] {

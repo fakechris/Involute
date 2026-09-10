@@ -198,29 +198,20 @@ export function IssueCard({
         <div className="issue-card__footer">
           {issue.claim ? (
             <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                fontSize: 11.5,
-                color: 'var(--accent)',
-                background: 'var(--accent-weak)',
-                padding: '2px 6px',
-                borderRadius: 'var(--r-1)',
-                border: '1px solid var(--accent-border)',
-                fontWeight: 500,
-              }}
+              className="issue-card__claim-badge"
               title={`Claimed by ${issue.claim.actor.name ?? 'Agent'} until ${new Date(issue.claim.leaseUntil).toLocaleTimeString()}`}
             >
               🤖 {issue.claim.actor.name ?? 'Agent'}
             </span>
           ) : null}
-          {issue.assignee ? (
-            <div className="issue-card__avatar" aria-hidden="true" style={{ marginLeft: issue.claim ? 'auto' : undefined }}>
-              {getInitials(issue.assignee.name)}
-            </div>
-          ) : null}
-          <span className="issue-card__assignee">{issue.assignee?.name ?? (issue.claim ? '' : 'Unassigned')}</span>
+          <div className="issue-card__assignee-group">
+            {issue.assignee ? (
+              <div className="issue-card__avatar" aria-hidden="true">
+                {getInitials(issue.assignee.name)}
+              </div>
+            ) : null}
+            <span className="issue-card__assignee">{issue.assignee?.name ?? (issue.claim ? '' : 'Unassigned')}</span>
+          </div>
         </div>
       </button>
     </article>

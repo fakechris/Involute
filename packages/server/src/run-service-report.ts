@@ -257,7 +257,9 @@ export async function reportRun(
     }
 
     let nextWork = work;
-    if (run.status === 'COMPLETED') {
+    if (run.status === 'RUNNING') {
+      nextWork = await moveToInProgress(transaction, work);
+    } else if (run.status === 'COMPLETED') {
       nextWork = await moveToInReview(transaction, work, actor);
       if (activeClaim) {
         await transaction.workClaim.deleteMany({ where: { id: activeClaim.id } });
@@ -290,6 +292,43 @@ export async function reportRun(
     const freshWork = await transaction.issue.findUniqueOrThrow({ where: { id: nextWork.id } });
     return { run, work: freshWork };
   });
+}
+
+export async function moveToInProgress(prisma: DatabaseClient, work: Issue): Promise<Issue> {
+  const currentState = await prisma.workflowState.findUnique({
+    where: { id: work.stateId },
+    select: { type: true },
+  });
+
+  if (!currentState || (currentState.type !== 'UNSTARTED' && currentState.type !== 'BACKLOG')) {
+    return work;
+  }
+
+  const startedState = await prisma.workflowState.findFirst({
+    where: {
+      teamId: work.teamId,
+      type: 'STARTED',
+    },
+    orderBy: { position: 'asc' },
+    select: { id: true },
+  });
+
+  if (!startedState) {
+    return work;
+  }
+
+  const transition = await prisma.issue.updateMany({
+    where: { id: work.id, stateId: work.stateId },
+    data: {
+      stateId: startedState.id,
+    },
+  });
+
+  if (transition.count === 1) {
+    return prisma.issue.findUniqueOrThrow({ where: { id: work.id } });
+  }
+
+  return work;
 }
 
 export async function moveToInReview(prisma: DatabaseClient, work: Issue, actor: WriteActor): Promise<Issue> {

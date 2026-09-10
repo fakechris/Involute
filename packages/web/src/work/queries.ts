@@ -115,6 +115,8 @@ export const WORK_GRAPH_PAGE_QUERY = gql`
         identifier
         title
         commitmentStatus
+        kind
+        repository
         state {
           name
         }
