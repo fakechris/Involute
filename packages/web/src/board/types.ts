@@ -261,7 +261,7 @@ export interface IssueCreateMutationVariables {
   };
 }
 
-export type BoardGroupBy = 'none' | 'status' | 'priority' | 'assignee' | 'label';
+export type BoardGroupBy = 'none' | 'project' | 'status' | 'priority' | 'assignee' | 'label';
 
 export interface BoardIssueGroup {
   id: string;
@@ -272,6 +272,7 @@ export interface BoardIssueGroup {
     priority?: number;
     assigneeId?: string | null;
     labelId?: string;
+    repository?: string | null;
   };
 }
 

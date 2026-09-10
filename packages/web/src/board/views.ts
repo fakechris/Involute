@@ -66,7 +66,7 @@ function isBoardSortDirection(value: unknown): value is BoardSortDirection {
 }
 
 function isBoardGroupBy(value: unknown): value is BoardGroupBy {
-  return value === 'none' || value === 'status' || value === 'priority' || value === 'assignee' || value === 'label';
+  return value === 'none' || value === 'project' || value === 'status' || value === 'priority' || value === 'assignee' || value === 'label';
 }
 
 function isBoardViewMode(value: unknown): value is BoardViewMode {
@@ -412,6 +412,51 @@ export function groupIssuesBy(
 ): BoardIssueGroup[] {
   if (groupBy === 'none') {
     return [{ id: 'all', label: 'All issues', issues }];
+  }
+
+  if (groupBy === 'project') {
+    const projectMap = new Map<string, { repository: string; issues: IssueSummary[] }>();
+    const noProjectIssues: IssueSummary[] = [];
+
+    for (const issue of issues) {
+      const repo = issue.repository?.trim();
+      if (!repo) {
+        noProjectIssues.push(issue);
+      } else {
+        if (!projectMap.has(repo)) {
+          projectMap.set(repo, { repository: repo, issues: [] });
+        }
+        projectMap.get(repo)!.issues.push(issue);
+      }
+    }
+
+    const sortedProjects = Array.from(projectMap.entries()).sort((a, b) => {
+      const nameA = (a[0].includes('/') ? a[0].split('/')[1] : a[0]) ?? a[0];
+      const nameB = (b[0].includes('/') ? b[0].split('/')[1] : b[0]) ?? b[0];
+      return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+    });
+    const groups: BoardIssueGroup[] = [];
+
+    for (const [repo, entry] of sortedProjects) {
+      const shortName = repo.includes('/') ? repo.split('/')[1] : repo;
+      groups.push({
+        id: `project-${repo}`,
+        label: shortName || repo,
+        issues: entry.issues,
+        meta: { repository: repo },
+      });
+    }
+
+    if (noProjectIssues.length > 0) {
+      groups.push({
+        id: 'project-none',
+        label: 'No Project',
+        issues: noProjectIssues,
+        meta: { repository: null },
+      });
+    }
+
+    return groups;
   }
 
   if (groupBy === 'status') {

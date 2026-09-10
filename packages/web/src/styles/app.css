@@ -2017,6 +2017,31 @@ kbd {
   color: var(--fg-dim);
 }
 
+.issue-card__header-tags {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.issue-card__repo-badge {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 1.5px 5px;
+  border-radius: var(--r-1);
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .issue-card__title {
   margin: 0 0 2px;
   font-size: 12.5px;

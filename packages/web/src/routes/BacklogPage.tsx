@@ -398,6 +398,7 @@ export function BacklogPage({
               <tr>
                 <th scope="col">Identifier</th>
                 <th scope="col">Title</th>
+                <th scope="col">Project</th>
                 <th scope="col">State</th>
                 <th scope="col">Labels</th>
                 <th scope="col">Assignee</th>
@@ -416,6 +417,15 @@ export function BacklogPage({
                     >
                       {issue.title}
                     </button>
+                  </td>
+                  <td>
+                    {issue.repository ? (
+                      <span className="issue-card__repo-badge" title={issue.repository}>
+                        {issue.repository.includes('/') ? issue.repository.split('/')[1] : issue.repository}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--fg-faint)' }}>—</span>
+                    )}
                   </td>
                   <td>{issue.state.name}</td>
                   <td>

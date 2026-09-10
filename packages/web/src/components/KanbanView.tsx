@@ -6,7 +6,7 @@ import type { BoardIssueGroup, Html5BoardDragPayload, IssueSummary } from '../bo
 import { parseHtml5BoardDragPayload } from '../board/utils';
 import { IssueCard } from './IssueCard';
 import { InlineCreate } from './InlineCreate';
-import { IcoPlus } from './Icons';
+import { IcoPlus, IcoProject } from './Icons';
 import { PriorityIcon } from './Primitives';
 
 interface KanbanViewProps {
@@ -60,12 +60,19 @@ function KanbanColumn({
       aria-label={`${group.label} column`}
     >
       <div className="kanban-column-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flex: 1 }}>
           {group.meta?.priority !== undefined && (
             <PriorityIcon level={group.meta.priority} size={12} />
           )}
-          <span style={{ fontSize: 14, fontWeight: 600 }}>{group.label}</span>
-          <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
+          {group.meta?.repository !== undefined && (
+            <span style={{ color: 'var(--accent)', display: 'inline-flex', flexShrink: 0 }}>
+              <IcoProject size={13} />
+            </span>
+          )}
+          <span style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {group.label}
+          </span>
+          <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)', flexShrink: 0 }}>
             {group.issues.length}
           </span>
         </div>
