@@ -4,12 +4,13 @@ export const APP_SHELL_TEAMS_STORAGE_KEY = 'involute.appShell.teams';
 export const APP_SHELL_ISSUES_STORAGE_KEY = 'involute.appShell.issues';
 export const APP_SHELL_TEAMS_EVENT = 'involute:app-shell-teams';
 export const APP_SHELL_ISSUES_EVENT = 'involute:app-shell-issues';
-const MAX_APP_SHELL_ISSUES = 40;
+const MAX_APP_SHELL_ISSUES = 200;
 
 export interface AppShellTeamSummary {
   id: string;
   key: string;
   name: string;
+  issueCount?: number | undefined;
 }
 
 export interface AppShellIssueSummary {
@@ -25,6 +26,7 @@ function normalizeTeams(teams: TeamSummary[]): AppShellTeamSummary[] {
     id: team.id,
     key: team.key,
     name: team.name,
+    issueCount: team.issueCount,
   }));
 }
 

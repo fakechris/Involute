@@ -7,6 +7,7 @@ export const BOARD_PAGE_QUERY = gql`
         id
         key
         name
+        issueCount
         memberships {
           nodes {
             id
@@ -354,6 +355,7 @@ export const ACCESS_PAGE_QUERY = gql`
         id
         key
         name
+        issueCount
         visibility
         memberships {
           nodes {

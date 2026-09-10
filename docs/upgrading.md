@@ -6,7 +6,7 @@ pull and start. Scan top-down when skipping versions.
 
 | Release | Checkpoint |
 |---|---|
-| Wave 1–3 kernel hardening (see `docs/plane-borrow-design.md`) | Additive migrations only: `Notification` table, `WebhookSubscription.createdById` + `filterQuery`, `Issue.snoozedUntil`/`source`, `EventOutboxDelivery.nextAttemptAt`, `User.notificationPrefs`. No action needed beyond a normal `migrate deploy`. Webhook **retry semantics changed**: failures back off (1m → 5m → 30m → 2h → 10h, 5 attempts); 4xx (except 408/429) is not retried; payloads gained `event`/`event_id`/`delivery_id`/`occurred_at` and headers `involute-event-id`/`involute-attempt` — receiver dedupe should key on `event_id`, not `involute-delivery`. `GET /ready` now exists for orchestrators; keep `/health` for liveness. |
+| Wave 1–3 kernel hardening (internal research memo) | Additive migrations only: `Notification` table, `WebhookSubscription.createdById` + `filterQuery`, `Issue.snoozedUntil`/`source`, `EventOutboxDelivery.nextAttemptAt`, `User.notificationPrefs`. No action needed beyond a normal `migrate deploy`. Webhook **retry semantics changed**: failures back off (1m → 5m → 30m → 2h → 10h, 5 attempts); 4xx (except 408/429) is not retried; payloads gained `event`/`event_id`/`delivery_id`/`occurred_at` and headers `involute-event-id`/`involute-attempt` — receiver dedupe should key on `event_id`, not `involute-delivery`. `GET /ready` now exists for orchestrators; keep `/health` for liveness. |
 
 ## Conventions
 

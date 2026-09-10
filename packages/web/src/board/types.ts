@@ -9,6 +9,7 @@ export interface TeamSummary {
   states: {
     nodes: WorkflowStateSummary[];
   };
+  issueCount?: number | undefined;
 }
 
 export interface TeamMembershipSummary {
