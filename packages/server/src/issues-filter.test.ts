@@ -608,6 +608,106 @@ describe('issues query filtering', () => {
       ]),
     );
   });
+
+  it('returns projectSummary with accurate totalCount, name, identifier and projects breakdown for committed issues', async () => {
+    const readyState = await prisma.workflowState.findFirstOrThrow({
+      where: { teamId: fixture.team.id, name: 'Ready' },
+    });
+
+    // Create a root PROJECT node for QuantHarvest
+    await prisma.issue.create({
+      data: {
+        commitmentStatus: 'COMMITTED',
+        identifier: 'INV-PROJ-QH',
+        kind: 'PROJECT',
+        repository: 'fakechris/QuantHarvest',
+        stateId: readyState.id,
+        teamId: fixture.team.id,
+        title: 'QuantHarvest Engine',
+      },
+    });
+
+    await prisma.issue.createMany({
+      data: [
+        {
+          commitmentStatus: 'COMMITTED',
+          identifier: 'INV-COM-1',
+          kind: 'ISSUE',
+          repository: 'fakechris/QuantHarvest',
+          stateId: readyState.id,
+          teamId: fixture.team.id,
+          title: 'QH Committed Issue 1',
+        },
+        {
+          commitmentStatus: 'COMMITTED',
+          identifier: 'INV-COM-2',
+          kind: 'ISSUE',
+          repository: 'chris/staffgics',
+          stateId: readyState.id,
+          teamId: fixture.team.id,
+          title: 'Staffgics Committed Issue 1',
+        },
+        {
+          commitmentStatus: 'COMMITTED',
+          identifier: 'INV-COM-3',
+          kind: 'ISSUE',
+          repository: null,
+          stateId: readyState.id,
+          teamId: fixture.team.id,
+          title: 'No Repo Committed Issue',
+        },
+        {
+          commitmentStatus: 'CANDIDATE',
+          identifier: 'INV-CAND-SKIP',
+          kind: 'ISSUE',
+          repository: 'fakechris/QuantHarvest',
+          stateId: readyState.id,
+          teamId: fixture.team.id,
+          title: 'Uncommitted Candidate Should Not Count in ProjectSummary',
+        },
+      ],
+    });
+
+    const summaryResponse = await postGraphQL({
+      query: `
+        query {
+          projectSummary(teamFilter: { key: { eq: "${DEFAULT_TEAM_KEY}" } }) {
+            totalCount
+            noRepositoryCount
+            projects {
+              repository
+              name
+              identifier
+              totalCount
+            }
+          }
+        }
+      `,
+      token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+
+    expect(summaryResponse.status).toBe(200);
+    expect(summaryResponse.body.errors).toBeUndefined();
+    const summary = summaryResponse.body.data.projectSummary;
+    expect(summary.totalCount).toBeGreaterThanOrEqual(4);
+    expect(summary.noRepositoryCount).toBeGreaterThanOrEqual(1);
+    expect(summary.projects).toEqual(
+      expect.arrayContaining([
+        {
+          repository: 'fakechris/QuantHarvest',
+          name: 'QuantHarvest Engine',
+          identifier: 'INV-PROJ-QH',
+          totalCount: 2, // 1 PROJECT + 1 ISSUE (candidate excluded)
+        },
+        {
+          repository: 'chris/staffgics',
+          name: 'chris/staffgics',
+          identifier: null,
+          totalCount: 1,
+        },
+      ]),
+    );
+  });
 });
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<IssueFilterFixture> {

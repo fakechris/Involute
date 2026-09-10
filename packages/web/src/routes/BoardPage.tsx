@@ -171,13 +171,30 @@ export function BoardPage() {
   }, []);
   const [isLoadingMoreIssues, setIsLoadingMoreIssues] = useState(false);
   const [loadMoreIssuesError, setLoadMoreIssuesError] = useState<string | null>(null);
+  const [boardViewState, setBoardViewState] = useState<BoardViewState>(() => {
+    const state = readStoredBoardViewState(activeTeamKey);
+    const initialProject = searchParams.get('project');
+    return initialProject ? { ...state, projectKey: initialProject } : state;
+  });
+
   const queryTeamKey = pendingTeamKey ?? activeTeamKey;
+  const rawProjectKey = boardViewState.projectKey ?? urlProject;
+
+  const repositoryFilter = useMemo(() => {
+    if (!rawProjectKey) return null;
+    if (rawProjectKey === '__none__') {
+      return { isNull: true };
+    }
+    return { eq: rawProjectKey };
+  }, [rawProjectKey]);
+
   const boardQueryVariables = useMemo<BoardPageQueryVariables>(
     () => ({
       first: ISSUE_PAGE_SIZE,
-      filter: buildCommittedIssueFilter(queryTeamKey),
+      ...(queryTeamKey ? { teamFilter: { key: { eq: queryTeamKey } } } : {}),
+      filter: buildCommittedIssueFilter(queryTeamKey, repositoryFilter),
     }),
-    [queryTeamKey],
+    [queryTeamKey, repositoryFilter],
   );
   const location = useLocation();
   const isBacklogView = location.pathname === '/backlog';
@@ -238,11 +255,6 @@ export function BoardPage() {
   const [createDescription, setCreateDescription] = useState('');
   const [dragPreviewStateId, setDragPreviewStateId] = useState<string | null>(null);
   const [dragOriginStateId, setDragOriginStateId] = useState<string | null>(null);
-  const [boardViewState, setBoardViewState] = useState<BoardViewState>(() => {
-    const state = readStoredBoardViewState(activeTeamKey);
-    const initialProject = searchParams.get('project');
-    return initialProject ? { ...state, projectKey: initialProject } : state;
-  });
 
   useEffect(() => {
     if (urlProject !== null) {
@@ -424,6 +436,16 @@ export function BoardPage() {
   }, [activeTeamKey, allIssues, selectedTeam?.key]);
 
   const availableProjects = useMemo(() => {
+    if (queryData?.projectSummary?.projects && queryData.projectSummary.projects.length > 0) {
+      return queryData.projectSummary.projects.map((p) => ({
+        id: p.identifier ?? p.repository,
+        identifier: p.identifier ?? p.repository,
+        name: p.name || p.repository,
+        key: p.repository,
+        issueCount: p.totalCount,
+      }));
+    }
+
     const map = new Map<string, { id: string; identifier: string; name: string; key: string; issueCount: number }>();
 
     for (const issue of visibleIssues) {
@@ -433,7 +455,7 @@ export function BoardPage() {
           id: issue.id,
           identifier: issue.identifier,
           name,
-          key: issue.identifier,
+          key: issue.repository || issue.identifier,
           issueCount: 0,
         });
       }
@@ -495,14 +517,17 @@ export function BoardPage() {
     }
 
     return projects.sort((a, b) => a.name.localeCompare(b.name));
-  }, [visibleIssues]);
+  }, [queryData?.projectSummary?.projects, visibleIssues]);
 
   const activeProject = useMemo(() => {
     if (!boardViewState.projectKey) return null;
     const target = boardViewState.projectKey.toLowerCase();
     return (
       availableProjects.find(
-        (p) => p.name.toLowerCase() === target || p.identifier.toLowerCase() === target,
+        (p) =>
+          p.key.toLowerCase() === target ||
+          p.name.toLowerCase() === target ||
+          p.identifier.toLowerCase() === target,
       ) ?? null
     );
   }, [availableProjects, boardViewState.projectKey]);
@@ -1985,7 +2010,7 @@ export function BoardPage() {
           <ProjectFilterCombobox
             projects={availableProjects}
             selectedProjectKey={boardViewState.projectKey ?? null}
-            totalCount={visibleIssues.length}
+            totalCount={queryData?.projectSummary?.totalCount ?? visibleIssues.length}
             onSelectProject={handleSelectProject}
             showQuickPills={availableProjects.length <= 4}
           />

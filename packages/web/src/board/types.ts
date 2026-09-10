@@ -138,7 +138,21 @@ export interface IssueSummary {
   cycle?: { id: string; name: string; number: number } | null;
 }
 
+export interface ProjectSummaryItem {
+  repository: string;
+  name: string;
+  identifier: string | null;
+  totalCount: number;
+}
+
+export interface ProjectSummaryResult {
+  totalCount: number;
+  noRepositoryCount: number;
+  projects: ProjectSummaryItem[];
+}
+
 export interface BoardPageQueryData {
+  projectSummary?: ProjectSummaryResult;
   teams: {
     nodes: TeamSummary[];
   };
@@ -211,6 +225,11 @@ export interface TeamMembershipRemoveMutationVariables {
 export interface BoardPageQueryVariables {
   first: number;
   after?: string;
+  teamFilter?: {
+    key?: {
+      eq?: string;
+    };
+  } | null;
   filter?: {
     team?: {
       key?: {
@@ -221,6 +240,11 @@ export interface BoardPageQueryVariables {
       isMe?: {
         eq: boolean;
       };
+    };
+    repository?: {
+      eq?: string;
+      in?: string[];
+      isNull?: boolean;
     };
     commitmentStatus?: 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
   };

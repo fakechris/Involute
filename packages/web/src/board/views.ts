@@ -274,41 +274,47 @@ export function applyBoardViewState(
     }
 
     if (state.projectKey) {
-      const target = state.projectKey.toLowerCase().trim();
-      const directMatch =
-        issue.id.toLowerCase() === target ||
-        issue.identifier.toLowerCase() === target ||
-        (issue.repository && issue.repository.toLowerCase() === target) ||
-        (issue.title && issue.title.toLowerCase() === target);
+      if (state.projectKey === '__none__') {
+        if (issue.repository || issue.projectId || issue.project) {
+          return false;
+        }
+      } else {
+        const target = state.projectKey.toLowerCase().trim();
+        const directMatch =
+          issue.id.toLowerCase() === target ||
+          issue.identifier.toLowerCase() === target ||
+          (issue.repository && issue.repository.toLowerCase() === target) ||
+          (issue.title && issue.title.toLowerCase() === target);
 
-      const repoMatch = Boolean(
-        issue.repository &&
-        (issue.repository.toLowerCase().includes(target) || target.includes(issue.repository.toLowerCase()))
-      );
+        const repoMatch = Boolean(
+          issue.repository &&
+          (issue.repository.toLowerCase().includes(target) || target.includes(issue.repository.toLowerCase()))
+        );
 
-      const parentMatch = Boolean(
-        issue.parent &&
-        (issue.parent.id.toLowerCase() === target ||
-          issue.parent.identifier.toLowerCase() === target ||
-          issue.parent.title.toLowerCase() === target ||
-          issue.parent.title.toLowerCase().includes(target) ||
-          target.includes(issue.parent.title.toLowerCase()))
-      );
+        const parentMatch = Boolean(
+          issue.parent &&
+          (issue.parent.id.toLowerCase() === target ||
+            issue.parent.identifier.toLowerCase() === target ||
+            issue.parent.title.toLowerCase() === target ||
+            issue.parent.title.toLowerCase().includes(target) ||
+            target.includes(issue.parent.title.toLowerCase()))
+        );
 
-      const projectIdMatch = Boolean(
-        issue.projectId && issue.projectId.toLowerCase() === target,
-      );
+        const projectIdMatch = Boolean(
+          issue.projectId && issue.projectId.toLowerCase() === target,
+        );
 
-      const projectMatch = Boolean(
-        issue.project &&
-        (issue.project.id.toLowerCase() === target ||
-          issue.project.name.toLowerCase() === target ||
-          issue.project.name.toLowerCase().includes(target) ||
-          target.includes(issue.project.name.toLowerCase()))
-      );
+        const projectMatch = Boolean(
+          issue.project &&
+          (issue.project.id.toLowerCase() === target ||
+            issue.project.name.toLowerCase() === target ||
+            issue.project.name.toLowerCase().includes(target) ||
+            target.includes(issue.project.name.toLowerCase()))
+        );
 
-      if (!directMatch && !repoMatch && !projectIdMatch && !parentMatch && !projectMatch) {
-        return false;
+        if (!directMatch && !repoMatch && !projectIdMatch && !parentMatch && !projectMatch) {
+          return false;
+        }
       }
     }
 

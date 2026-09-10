@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { getBoardColumns } from './utils';
+import { buildCommittedIssueFilter, getBoardColumns } from './utils';
 import type { IssueSummary, TeamSummary, WorkflowStateSummary } from './types';
 
 function makeState(
@@ -78,5 +78,52 @@ describe('getBoardColumns', () => {
     const columns = getBoardColumns(team, [makeIssue('issue-1', issueState)]);
 
     expect(columns.map((column) => column.stateId)).toEqual(['s-ready', 's-custom']);
+  });
+});
+
+describe('buildCommittedIssueFilter', () => {
+  it('builds basic committed filter without team or repository', () => {
+    expect(buildCommittedIssueFilter(null)).toEqual({
+      commitmentStatus: 'COMMITTED',
+    });
+  });
+
+  it('builds committed filter with team key', () => {
+    expect(buildCommittedIssueFilter('INV')).toEqual({
+      commitmentStatus: 'COMMITTED',
+      team: {
+        key: {
+          eq: 'INV',
+        },
+      },
+    });
+  });
+
+  it('builds committed filter with team and repository eq filter', () => {
+    expect(buildCommittedIssueFilter('INV', { eq: 'fakechris/moyu-badge' })).toEqual({
+      commitmentStatus: 'COMMITTED',
+      team: {
+        key: {
+          eq: 'INV',
+        },
+      },
+      repository: {
+        eq: 'fakechris/moyu-badge',
+      },
+    });
+  });
+
+  it('builds committed filter with repository isNull filter for orphans', () => {
+    expect(buildCommittedIssueFilter('INV', { isNull: true })).toEqual({
+      commitmentStatus: 'COMMITTED',
+      team: {
+        key: {
+          eq: 'INV',
+        },
+      },
+      repository: {
+        isNull: true,
+      },
+    });
   });
 });

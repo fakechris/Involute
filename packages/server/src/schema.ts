@@ -237,6 +237,7 @@ const typeDefs = /* GraphQL */ `
     workContext(id: String!): WorkContext
     readyWork(filter: ReadyWorkFilter, query: String): IssueConnection!
     candidateSummary(teamFilter: TeamFilter): CandidateSummary!
+    projectSummary(teamFilter: TeamFilter): ProjectSummaryResult!
     agentCredentials(teamId: String!): [AgentCredentialRecord!]!
     webhooks(teamId: String!): [WebhookSubscriptionRecord!]!
     notifications(first: Int, after: String, unreadOnly: Boolean): NotificationConnection!
@@ -697,6 +698,19 @@ const typeDefs = /* GraphQL */ `
     totalCount: Int!
     noRepositoryCount: Int!
     projects: [CandidateProjectSummary!]!
+  }
+
+  type ProjectSummaryItem {
+    repository: String!
+    name: String!
+    identifier: String
+    totalCount: Int!
+  }
+
+  type ProjectSummaryResult {
+    totalCount: Int!
+    noRepositoryCount: Int!
+    projects: [ProjectSummaryItem!]!
   }
 
   input StringComparator {
@@ -1186,6 +1200,96 @@ const resolvers = {
         if (group.repository) {
           projects.push({
             repository: group.repository,
+            totalCount: count,
+          });
+        } else {
+          noRepositoryCount += count;
+        }
+      }
+
+      projects.sort((a, b) => a.repository.localeCompare(b.repository));
+
+      return {
+        totalCount,
+        noRepositoryCount,
+        projects,
+      };
+    },
+    projectSummary: async (
+      _parent: unknown,
+      args: { teamFilter?: TeamFilterInput | null },
+      context: GraphQLContext,
+    ): Promise<{
+      totalCount: number;
+      noRepositoryCount: number;
+      projects: Array<{
+        repository: string;
+        name: string;
+        identifier: string | null;
+        totalCount: number;
+      }>;
+    }> => {
+      const readableWhere = buildReadableIssueWhere(context);
+      const teamKey = args.teamFilter?.key?.eq;
+      const teamKeyIn = args.teamFilter?.key?.in;
+      const teamClause = teamKey
+        ? { team: { is: { key: teamKey } } }
+        : teamKeyIn && teamKeyIn.length > 0
+          ? { team: { is: { key: { in: teamKeyIn } } } }
+          : {};
+
+      const where: Prisma.IssueWhereInput = {
+        commitmentStatus: 'COMMITTED',
+        ...teamClause,
+        ...(readableWhere ? readableWhere : {}),
+      };
+
+      const groups = await context.prisma.issue.groupBy({
+        by: ['repository'],
+        where,
+        _count: { _all: true },
+      });
+
+      const projectNodes = await context.prisma.issue.findMany({
+        where: {
+          commitmentStatus: 'COMMITTED',
+          kind: 'PROJECT',
+          repository: { not: null },
+          ...teamClause,
+          ...(readableWhere ? readableWhere : {}),
+        },
+        select: {
+          id: true,
+          identifier: true,
+          title: true,
+          repository: true,
+        },
+      });
+
+      const projectMap = new Map(
+        projectNodes
+          .filter((p): p is typeof p & { repository: string } => Boolean(p.repository))
+          .map((p) => [p.repository, p]),
+      );
+
+      let totalCount = 0;
+      let noRepositoryCount = 0;
+      const projects: Array<{
+        repository: string;
+        name: string;
+        identifier: string | null;
+        totalCount: number;
+      }> = [];
+
+      for (const group of groups) {
+        const count = group._count._all;
+        totalCount += count;
+        if (group.repository) {
+          const projectNode = projectMap.get(group.repository);
+          projects.push({
+            repository: group.repository,
+            name: projectNode?.title || group.repository,
+            identifier: projectNode?.identifier ?? null,
             totalCount: count,
           });
         } else {
