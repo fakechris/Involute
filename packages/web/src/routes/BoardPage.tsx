@@ -1981,7 +1981,9 @@ export function BoardPage() {
             {activeProject ? activeProject.name : isBacklogView ? 'Backlog' : 'All issues'}
           </h1>
           <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)', marginLeft: 4 }}>
-            {boardVisibleIssues.length}
+            {activeProject
+              ? activeProject.issueCount
+              : (queryData?.projectSummary?.totalCount ?? boardVisibleIssues.length)}
           </span>
         </div>
         <p className="app-shell__subtext" style={{ fontSize: 13, color: 'var(--fg-dim)', margin: 0 }}>
