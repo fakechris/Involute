@@ -1,7 +1,17 @@
 import { gql } from '@apollo/client';
 
 export const BOARD_PAGE_QUERY = gql`
-  query BoardPage($first: Int!, $after: String, $filter: IssueFilter) {
+  query BoardPage($first: Int!, $after: String, $filter: IssueFilter, $teamFilter: TeamFilter) {
+    projectSummary(teamFilter: $teamFilter) {
+      totalCount
+      noRepositoryCount
+      projects {
+        repository
+        name
+        identifier
+        totalCount
+      }
+    }
     teams {
       nodes {
         id

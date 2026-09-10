@@ -17,7 +17,9 @@ export function loadProjectEnvironment(): void {
   const isTestContext =
     process.env.NODE_ENV === 'test' ||
     Boolean(process.env.VITEST) ||
-    process.argv.some((arg) => arg.includes('vitest') || arg.includes('test'));
+    process.env.npm_lifecycle_event === 'test' ||
+    process.argv.slice(0, 2).some((arg) => arg.includes('vitest')) ||
+    process.argv.slice(0, 2).some((arg) => /[\/\\]vitest(\.[cm]?js)?$/.test(arg));
 
   if (isTestContext) {
     // If TEST_DATABASE_URL is provided, prioritize it

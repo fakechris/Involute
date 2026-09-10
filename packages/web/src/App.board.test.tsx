@@ -224,6 +224,11 @@ describe('App board UI', () => {
         variables: {
           first: 200,
           after: 'cursor-2',
+          teamFilter: {
+            key: {
+              eq: 'INV',
+            },
+          },
           filter: {
             commitmentStatus: 'COMMITTED',
             team: {

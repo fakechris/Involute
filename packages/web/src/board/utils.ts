@@ -25,21 +25,29 @@ export const OPEN_CREATE_ISSUE_EVENT = 'involute:open-create-issue';
 
 export function buildCommittedIssueFilter(
   teamKey: string | null,
+  repositoryFilter?: {
+    eq?: string;
+    in?: string[];
+    isNull?: boolean;
+  } | null,
 ): NonNullable<BoardPageQueryVariables['filter']> {
+  const filter: NonNullable<BoardPageQueryVariables['filter']> = {
+    commitmentStatus: 'COMMITTED',
+  };
+
   if (teamKey) {
-    return {
-      commitmentStatus: 'COMMITTED',
-      team: {
-        key: {
-          eq: teamKey,
-        },
+    filter.team = {
+      key: {
+        eq: teamKey,
       },
     };
   }
 
-  return {
-    commitmentStatus: 'COMMITTED',
-  };
+  if (repositoryFilter) {
+    filter.repository = repositoryFilter;
+  }
+
+  return filter;
 }
 
 export function readStoredTeamKey(): string | null {

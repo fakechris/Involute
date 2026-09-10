@@ -12,6 +12,11 @@ function renderTestApp(queryState = { data: boardQueryResult, loading: false }, 
 const boardQueryOptions = expect.objectContaining({
   variables: {
     first: 200,
+    teamFilter: {
+      key: {
+        eq: 'SON',
+      },
+    },
     filter: {
       commitmentStatus: 'COMMITTED',
       team: {
