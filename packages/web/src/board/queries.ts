@@ -52,6 +52,16 @@ export const BOARD_PAGE_QUERY = gql`
         priority
         kind
         repository
+        claim {
+          id
+          leaseUntil
+          actor {
+            id
+            name
+            email
+            actorKind
+          }
+        }
         createdAt
         updatedAt
         state {
@@ -120,6 +130,7 @@ export const ISSUE_UPDATE_MUTATION = gql`
         description
         priority
         kind
+        repository
         claim {
           id
           leaseUntil
@@ -440,6 +451,7 @@ export const ISSUE_CREATE_MUTATION = gql`
         title
         description
         priority
+        repository
         createdAt
         updatedAt
         state {

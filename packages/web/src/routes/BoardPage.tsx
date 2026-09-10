@@ -47,6 +47,7 @@ import {
   ACTIVE_TEAM_STORAGE_KEY,
   buildCommittedIssueFilter,
   filterIssuesByTeam,
+  areIssuesEquivalent,
   getBoardColumns,
   getInitialTeamKey,
   getStoredTeamKey,
@@ -179,7 +180,7 @@ export function BoardPage() {
   );
   const location = useLocation();
   const isBacklogView = location.pathname === '/backlog';
-  const { data, previousData, error, fetchMore, loading } = useQuery<
+  const { data, previousData, error, fetchMore, loading, refetch } = useQuery<
     BoardPageQueryData,
     BoardPageQueryVariables
   >(
@@ -191,6 +192,8 @@ export function BoardPage() {
     },
   );
   const queryData = data ?? previousData;
+  const inFlightUpdatesRef = useRef<Set<string>>(new Set());
+  const lastHandledDropRef = useRef<{ issueId: string; targetStateId: string; timestamp: number } | null>(null);
   const [runIssueUpdate] = useMutation<IssueUpdateMutationData, IssueUpdateMutationVariables>(
     ISSUE_UPDATE_MUTATION,
   );
@@ -1310,6 +1313,11 @@ export function BoardPage() {
     input: IssueUpdateMutationVariables['input'],
     applyOptimisticIssue: (current: IssueSummary) => IssueSummary,
   ) {
+    if (inFlightUpdatesRef.current.has(issue.id)) {
+      return;
+    }
+    inFlightUpdatesRef.current.add(issue.id);
+
     const previousOverride = issueOverrides[issue.id];
     const optimisticIssue = applyOptimisticIssue(issue);
 
@@ -1331,22 +1339,28 @@ export function BoardPage() {
         throw new Error('Mutation failed');
       }
 
+      const returnedIssue = result.data.issueUpdate.issue;
+
       setIssueOverrides((currentOverrides) => {
         const currentIssue = currentOverrides[issue.id] ?? optimisticIssue;
+        const merged = mergeIssueWithPreservedComments(currentIssue, returnedIssue);
 
-        return replaceIssueOverride(
-          currentOverrides,
-          issue.id,
-          mergeIssueWithPreservedComments(currentIssue, result.data!.issueUpdate.issue!),
-        );
+        const baseIssue = baseIssues.find((b) => b.id === issue.id);
+        if (baseIssue && areIssuesEquivalent(baseIssue, merged)) {
+          return replaceIssueOverride(currentOverrides, issue.id, null);
+        }
+
+        return replaceIssueOverride(currentOverrides, issue.id, merged);
       });
     } catch (mutationIssue) {
       setIssueOverrides((currentOverrides) =>
         replaceIssueOverride(currentOverrides, issue.id, previousOverride ?? null),
       );
       setMutationError(ERROR_MESSAGE);
+      void refetch();
       throw mutationIssue;
     } finally {
+      inFlightUpdatesRef.current.delete(issue.id);
       setIsSavingState(false);
     }
   }
@@ -1629,6 +1643,15 @@ export function BoardPage() {
     setDragPreviewStateId(null);
     setDragOriginStateId(null);
 
+    // If this drop was already processed by handleNativeDropIssue recently, do nothing
+    if (
+      lastHandledDropRef.current &&
+      lastHandledDropRef.current.issueId === issueId &&
+      Date.now() - lastHandledDropRef.current.timestamp < 1000
+    ) {
+      return;
+    }
+
     const issue = visibleIssues.find((item) => item.id === issueId);
 
     if (!targetStateId) {
@@ -1642,6 +1665,21 @@ export function BoardPage() {
       }
       return;
     }
+
+    if (collapsedColumns[targetStateId]) {
+      setCollapsedColumns((prev) => ({ ...prev, [targetStateId]: false }));
+    }
+
+    const now = Date.now();
+    if (
+      lastHandledDropRef.current &&
+      lastHandledDropRef.current.issueId === issueId &&
+      lastHandledDropRef.current.targetStateId === targetStateId &&
+      now - lastHandledDropRef.current.timestamp < 1000
+    ) {
+      return;
+    }
+    lastHandledDropRef.current = { issueId, targetStateId, timestamp: now };
 
     // Compare against the origin state to avoid skipping the mutation after
     // handleDragOver has already optimistically moved the card.
@@ -1759,6 +1797,21 @@ export function BoardPage() {
     setActiveIssueId(null);
     setDragPreviewStateId(null);
     setDragOriginStateId(null);
+
+    if (collapsedColumns[targetStateId]) {
+      setCollapsedColumns((prev) => ({ ...prev, [targetStateId]: false }));
+    }
+
+    const now = Date.now();
+    if (
+      lastHandledDropRef.current &&
+      lastHandledDropRef.current.issueId === payload.issueId &&
+      lastHandledDropRef.current.targetStateId === targetStateId &&
+      now - lastHandledDropRef.current.timestamp < 1000
+    ) {
+      return;
+    }
+    lastHandledDropRef.current = { issueId: payload.issueId, targetStateId, timestamp: now };
 
     if (!issue || !targetState || payload.stateId === targetStateId) {
       return;
