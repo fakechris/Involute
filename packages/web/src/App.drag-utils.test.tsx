@@ -4,6 +4,7 @@ import type { DragEndEvent } from '@dnd-kit/core';
 import { boardQueryResult, getIssue } from './test/app-test-helpers';
 import { getAuthToken, getAuthTokenDetails, getGraphqlUrl, getGraphqlUrlDetails, getServerBaseUrl } from './lib/apollo';
 import {
+  areIssuesEquivalent,
   createHtml5BoardDragPayload,
   mergeIssueWithPreservedComments,
   parseHtml5BoardDragPayload,
@@ -229,5 +230,63 @@ describe('App drag helpers', () => {
     const merged = mergeIssueWithPreservedComments(previousIssue, nextIssue);
     expect(merged.children.nodes).toHaveLength(1);
     expect(merged.children.nodes[0]!.identifier).toBe('INV-10');
+  });
+
+  it('mergeIssueWithPreservedComments preserves repository, claim, parent and project metadata', () => {
+    const previousIssue: IssueSummary = {
+      ...getIssue('issue-1'),
+      repository: 'fakechris/Involute',
+      projectId: 'proj-1',
+      project: { id: 'proj-1', name: 'Involute', color: '#6366f1' },
+      cycleId: 'cycle-1',
+      cycle: { id: 'cycle-1', name: 'Cycle 1', number: 1 },
+      claim: {
+        id: 'claim-1',
+        leaseUntil: '2026-04-02T12:00:00.000Z',
+        actor: { id: 'actor-1', name: 'Agent', actorKind: 'AGENT' },
+      },
+      parent: { id: 'parent-1', identifier: 'INV-0', title: 'Parent Milestone', kind: 'MILESTONE' },
+    };
+    const nextIssue = {
+      ...getIssue('issue-1'),
+      title: 'Updated title from mutation lacking repository',
+    } as IssueSummary;
+    delete (nextIssue as unknown as Record<string, unknown>).repository;
+    delete (nextIssue as unknown as Record<string, unknown>).project;
+    delete (nextIssue as unknown as Record<string, unknown>).claim;
+    delete (nextIssue as unknown as Record<string, unknown>).parent;
+
+    const merged = mergeIssueWithPreservedComments(previousIssue, nextIssue);
+    expect(merged.repository).toBe('fakechris/Involute');
+    expect(merged.projectId).toBe('proj-1');
+    expect(merged.project?.name).toBe('Involute');
+    expect(merged.claim?.id).toBe('claim-1');
+    expect(merged.parent?.identifier).toBe('INV-0');
+  });
+
+  it('areIssuesEquivalent considers base issue with newer updatedAt equivalent when all content fields match', () => {
+    const baseIssue: IssueSummary = {
+      ...getIssue('issue-1'),
+      updatedAt: '2026-04-02T12:00:00.000Z',
+    };
+    const optimisticOverride: IssueSummary = {
+      ...getIssue('issue-1'),
+      updatedAt: '2026-04-02T10:00:00.000Z', // older client timestamp
+    };
+
+    expect(areIssuesEquivalent(baseIssue, optimisticOverride)).toBe(true);
+  });
+
+  it('areIssuesEquivalent returns false when state or content differs', () => {
+    const baseIssue: IssueSummary = {
+      ...getIssue('issue-1'),
+      state: { id: 'state-ready', name: 'Ready', type: 'UNSTARTED', position: 1 },
+    };
+    const optimisticOverride: IssueSummary = {
+      ...getIssue('issue-1'),
+      state: { id: 'state-done', name: 'Done', type: 'COMPLETED', position: 4 },
+    };
+
+    expect(areIssuesEquivalent(baseIssue, optimisticOverride)).toBe(false);
   });
 });

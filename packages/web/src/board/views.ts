@@ -295,6 +295,10 @@ export function applyBoardViewState(
           target.includes(issue.parent.title.toLowerCase()))
       );
 
+      const projectIdMatch = Boolean(
+        issue.projectId && issue.projectId.toLowerCase() === target,
+      );
+
       const projectMatch = Boolean(
         issue.project &&
         (issue.project.id.toLowerCase() === target ||
@@ -303,7 +307,7 @@ export function applyBoardViewState(
           target.includes(issue.project.name.toLowerCase()))
       );
 
-      if (!directMatch && !repoMatch && !parentMatch && !projectMatch) {
+      if (!directMatch && !repoMatch && !projectIdMatch && !parentMatch && !projectMatch) {
         return false;
       }
     }

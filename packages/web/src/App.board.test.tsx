@@ -237,4 +237,160 @@ describe('App board UI', () => {
       }),
     );
   });
+
+  it('moves an issue to Done via drag-and-drop and keeps it visible in Done with project filter active', async () => {
+    const updateIssue = vi.fn().mockImplementation(({ variables }) => {
+      const is104 = variables.id === 'issue-104';
+      const identifier = is104 ? 'INV-104' : 'INV-105';
+      const title = is104 ? 'Task 104' : 'Task 105';
+      return Promise.resolve({
+        data: {
+          issueUpdate: {
+            success: true,
+            issue: {
+              ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+              id: variables.id,
+              identifier,
+              title,
+              repository: 'fakechris/Involute',
+              state: { id: 'state-done', name: 'Done', type: 'COMPLETED', position: 4 },
+            },
+          },
+        } satisfies IssueUpdateMutationData,
+      });
+    });
+
+    apolloMocks.useMutation.mockImplementation((document) => {
+      const source =
+        typeof document === 'string'
+          ? document
+          : 'loc' in document && document.loc?.source.body
+            ? document.loc.source.body
+            : String(document);
+
+      if (source.includes('mutation IssueUpdate')) {
+        return [updateIssue];
+      }
+
+      return [vi.fn()];
+    });
+
+    const projectData: BoardPageQueryData = {
+      ...boardQueryResult,
+      issues: {
+        ...boardQueryResult.issues,
+        nodes: [
+          {
+            ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+            id: 'issue-104',
+            identifier: 'INV-104',
+            title: 'Task 104',
+            repository: 'fakechris/Involute',
+            state: { id: 'state-review', name: 'In Review', type: 'REVIEW', position: 3 },
+          },
+          {
+            ...(boardQueryResult.issues.nodes[1] as IssueSummary),
+            id: 'issue-105',
+            identifier: 'INV-105',
+            title: 'Task 105',
+            repository: 'fakechris/Involute',
+            state: { id: 'state-review', name: 'In Review', type: 'REVIEW', position: 3 },
+          },
+        ],
+      },
+    };
+
+    renderTestApp({ data: projectData, loading: false }, ['/?project=fakechris%2FInvolute']);
+
+    const contextProps = dndMocks.lastContextProps as {
+      onDragEnd?: (event: unknown) => void;
+      onDragOver?: (event: unknown) => void;
+      onDragStart?: (event: unknown) => void;
+    } | null;
+
+    // Drag INV-104 from In Review to Done
+    await act(async () => {
+      contextProps?.onDragStart?.({ active: { id: 'issue-104' } });
+    });
+
+    await act(async () => {
+      contextProps?.onDragOver?.({
+        active: { id: 'issue-104' },
+        over: {
+          id: 'state-done',
+          data: {
+            current: {
+              stateId: 'state-done',
+              title: 'Done',
+              type: 'column',
+            },
+          },
+        },
+      });
+    });
+
+    await act(async () => {
+      contextProps?.onDragEnd?.({
+        active: { id: 'issue-104' },
+        over: {
+          id: 'state-done',
+          data: {
+            current: {
+              stateId: 'state-done',
+              title: 'Done',
+              type: 'column',
+            },
+          },
+        },
+      });
+    });
+
+    // INV-104 must NOT disappear! It must be in the Done column!
+    await waitFor(() => {
+      expect(within(screen.getByTestId('column-Done')).getByText('INV-104')).toBeInTheDocument();
+    });
+
+    // Now drag INV-105 to Done
+    await act(async () => {
+      contextProps?.onDragStart?.({ active: { id: 'issue-105' } });
+    });
+
+    await act(async () => {
+      contextProps?.onDragOver?.({
+        active: { id: 'issue-105' },
+        over: {
+          id: 'state-done',
+          data: {
+            current: {
+              stateId: 'state-done',
+              title: 'Done',
+              type: 'column',
+            },
+          },
+        },
+      });
+    });
+
+    await act(async () => {
+      contextProps?.onDragEnd?.({
+        active: { id: 'issue-105' },
+        over: {
+          id: 'state-done',
+          data: {
+            current: {
+              stateId: 'state-done',
+              title: 'Done',
+              type: 'column',
+            },
+          },
+        },
+      });
+    });
+
+    // Both INV-104 and INV-105 must be in the Done column! Neither disappeared!
+    await waitFor(() => {
+      expect(within(screen.getByTestId('column-Done')).getByText('INV-104')).toBeInTheDocument();
+      expect(within(screen.getByTestId('column-Done')).getByText('INV-105')).toBeInTheDocument();
+    });
+  });
 });

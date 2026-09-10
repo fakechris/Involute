@@ -156,7 +156,28 @@ export function mergeIssueWithPreservedComments(
   const nextChildren = nextIssue.children ?? previousIssue.children;
 
   return {
+    ...previousIssue,
     ...nextIssue,
+    repository:
+      nextIssue.repository !== undefined
+        ? nextIssue.repository
+        : (previousIssue.repository ?? null),
+    project:
+      nextIssue.project !== undefined
+        ? nextIssue.project
+        : (previousIssue.project ?? null),
+    cycle:
+      nextIssue.cycle !== undefined
+        ? nextIssue.cycle
+        : (previousIssue.cycle ?? null),
+    claim:
+      nextIssue.claim !== undefined
+        ? nextIssue.claim
+        : (previousIssue.claim ?? null),
+    parent:
+      nextIssue.parent !== undefined
+        ? nextIssue.parent
+        : (previousIssue.parent ?? null),
     children: nextChildren,
     comments:
       nextComments.nodes.length > 0 || previousIssue.comments.nodes.length === 0
@@ -305,13 +326,19 @@ function stateTypeRank(type: WorkflowStateSummary['type']): number {
   return index === -1 ? Number.MAX_SAFE_INTEGER : index;
 }
 
-function areIssuesEquivalent(left: IssueSummary, right: IssueSummary): boolean {
+export function areIssuesEquivalent(left: IssueSummary, right: IssueSummary): boolean {
+  const leftTime = new Date(left.updatedAt).getTime();
+  const rightTime = new Date(right.updatedAt).getTime();
+  const isTimeConsistent =
+    left.updatedAt === right.updatedAt ||
+    (!isNaN(leftTime) && !isNaN(rightTime) && leftTime >= rightTime);
+
   return (
     left.id === right.id &&
     left.identifier === right.identifier &&
     left.title === right.title &&
     (left.description ?? null) === (right.description ?? null) &&
-    left.updatedAt === right.updatedAt &&
+    isTimeConsistent &&
     left.state.id === right.state.id &&
     left.team.key === right.team.key &&
     (left.assignee?.id ?? null) === (right.assignee?.id ?? null) &&
