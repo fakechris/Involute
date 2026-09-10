@@ -52,6 +52,11 @@ flowchart TD
 4. **Claim-Driven Execution**: Call `work_claim` to lease a specific task after confirmation.
 5. **Report Runs with Evidence**: As execution progresses, record phases with `run_report`. On completion, attach durable evidence (PR, commit SHA, test exit code, or artifact URL) with `evidence_attach`.
 6. **In Review, Never Done**: Agents transition tasks to `In Review`. Moving work to `Done` is strictly reserved for human review or the verified `CLEAR` auto-accept gate.
+7. **Competitive Research Isolation (竞品分析隔离铁律)**:
+   - **绝对禁令**：严禁将任何外部竞品（如 Linear、Plane、Jira 等）的调研文档、逆向代码、架构借用分析提交到 Git 版本库，严禁放在 `docs/` 等公开文档目录中。
+   - **专属隔离目录**：所有竞品分析与调研报告必须统一存放在仓库根目录的 `research/` 目录中。
+   - **强制 Git 忽略**：`research/` 目录必须在 `.gitignore` 中被严格忽略，确保零代码污染、零合规与版权风险。
+
 
 ## 5. First-Time Onboarding Blueprint (首次接入黄金规范)
 

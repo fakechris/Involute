@@ -185,3 +185,115 @@ Exit criteria:
 - two agents cannot claim the same committed work
 - propose retries are idempotent
 - concurrent updates conflict on revision instead of silently overwriting
+
+## M6: 效能度量与统计洞察引擎 (Analytics & Performance Insights Engine)
+
+Status: planned (next priority).
+
+Scope:
+
+- activate dormant timestamp data in `WorkAudit` and `WorkRun` into first-class engineering metrics
+- calculate flow metrics:
+  - **Lead Time**: end-to-end duration from `CANDIDATE` propose to `COMPLETED`
+  - **Cycle Time**: active engineering execution duration from `work_claim` to `REVIEW`
+  - **Review Idle Time**: time waiting in `REVIEW` for human acceptance
+  - **Agent Execution vs Human Review**: clear breakdown of machine effort vs human gate latency
+- milestone & project dynamic burndown:
+  - daily committed snapshot aggregation
+  - ideal burndown slope vs actual remaining effort
+  - **Scope Creep** detection: tracking issues added mid-flight after milestone start
+- velocity & throughput forecasting:
+  - rolling average throughput (completed issues/points per week)
+  - automated completion date projection
+- GraphQL surface: `projectAnalytics`, `milestoneBurndown`, `flowMetrics`
+- Web UI: dedicated `/analytics` dashboard and embedded milestone progress widgets
+
+Exit criteria:
+
+- project and milestone views display flow time percentiles (P50/P90) and burndown curves
+- users can immediately pinpoint whether bottlenecks stem from agent execution or review delays
+- analytics queries execute under 200ms using indexed audit aggregations
+
+## M7: 极速键盘流与高密度交互体验 (Linear-Grade Keyboard & Peek Ergonomics)
+
+Status: planned (next priority).
+
+Scope:
+
+- global keyboard-first interaction system:
+  - `J` / `K` navigate cards with visual focus ring
+  - `Space` opens Peek Drawer, `Esc` dismisses
+  - `S` quick-switch status, `P` priority, `A` assignee, `C` global quick-create modal
+  - `X` multi-select toggle, `Shift + J/K` range selection, floating batch action bar
+- Peek Drawer (Side Sheet) depth upgrade:
+  - all properties support inline click-to-edit without opening secondary modals
+  - seamless previous/next issue navigation (`[` / `]` or `J/K`) while drawer remains open
+  - hierarchical sub-issue and dependency drilling directly inside the drawer
+- sub-50ms perceived latency via optimistic UI updates
+
+Exit criteria:
+
+- full issue triage, assignment, and status transitions can be performed 100% via keyboard
+- clicking an issue opens a non-disruptive drawer without full-page reloads
+- keyboard shortcuts work consistently across Board, Backlog, and Candidates
+
+## M8: 多维拓扑视图矩阵 (Multi-View Matrix & Critical Path Gantt)
+
+Status: planned.
+
+Scope:
+
+- high-density Spreadsheet / Table View:
+  - Airtable/Linear-style compact data grid
+  - in-cell direct editing, column sorting, and custom column visibility
+- dependency Timeline & Gantt View:
+  - visual representation of `BLOCKS` and `CONTAINS` relationships over time
+  - automated Topological Critical Path calculation
+  - drag-to-reschedule with dependency constraint warnings
+- multi-dimensional grouping & filtering:
+  - group by State Group, Assignee, Priority, Label, Milestone
+
+Exit criteria:
+
+- users can switch seamlessly between Board, Table, and Gantt views with persisted view state
+- dependency cycles and critical path blockers are highlighted visually
+
+## M9: 动态迭代周期与容量规划 (Cycles, Estimations & Capacity)
+
+Status: planned.
+
+Scope:
+
+- automated sprint Cycles engine:
+  - auto-start and auto-close based on configured cadences (1-week / 2-week)
+  - automatic rollover of uncompleted work to the next cycle
+  - cycle cooldown periods and auto-archival of completed work
+- estimation points system:
+  - Fibonacci (1, 2, 3, 5, 8) and T-shirt sizing
+  - team and agent capacity planning (workload allocation and threshold warnings)
+- project health pulses:
+  - recurring status updates (On-Track / At-Risk / Off-Track) with progress summary
+
+Exit criteria:
+
+- cycles advance automatically on schedule with zero manual admin intervention
+- velocity and burndown charts can be computed against story points
+
+## M10: 富文本协作与实时协同总线 (Rich WYSIWYG & Real-Time Sync)
+
+Status: planned.
+
+Scope:
+
+- TipTap / ProseMirror rich WYSIWYG document editor:
+  - slash commands (`/h1`, `/code`, `/table`, `/checklist`)
+  - clipboard screenshot paste-to-upload
+  - inline `@` mentions for human team members and agents
+- real-time collaboration bus (WebSocket / SSE):
+  - live card movement synchronization across multiple open browser tabs
+  - live agent execution progress and log streaming without manual refresh
+
+Exit criteria:
+
+- replace all plain `<textarea>` inputs with rich markdown/WYSIWYG editing
+- multi-user card drag-and-drop reflects in real time across clients within 200ms
