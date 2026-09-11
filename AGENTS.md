@@ -214,6 +214,38 @@ WHERE key = 'github_sync_fakechris/Involute';
 ```
 调整后，等待下一轮对账定时器触发或重启服务触发冷启动对账，引擎即可将该时间段后的所有 PR 事件平滑补齐至 Involute 状态机中。
 
+### 9.5 溯源异常巡检 (Traceability Guard Runbook)
+
+CI 的 PR lint 只做离线正则匹配（`INV-\d+`），无法验证引用的真实性——Agent 可以在 PR 标题/分支名里引用一个不存在或不相关的既有工单（历史事故：PR #64-66 引用了无关的 INV-391/392/393）。INV-449 引入两道服务端实质检查：
+
+**实时告警（`ops.github.pr_unverified_reference`）**：Webhook 处理 PR `opened` / `reopened` / `edited` 及分支 `create` 事件时，对解析出的 Identifier 做实质校验，异常时向全体 HUMAN ADMIN 发送 Inbox 通知（并 POST 到 `OPS_WEBHOOK_URL`，若配置）。`synchronize` / `closed` 不触发（推送不改变引用，避免告警风暴）。三种 reason：
+- `unknown-identifier`：引用的工单在数据库中不存在；处理流程跳过（与之前一致）。
+- `team-mismatch`：工单存在但属于其他团队（跨仓污染）；处理流程跳过。
+- `terminal-issue-reference`：新 PR 引用了已 Done/Canceled 的工单；**仅告警，流程不变**（吸收态 CAS 自然 no-op，事件日志照常记录）。
+
+排查动作：在 Inbox 中查看通知详情（repository / prNumber / branch / identifier / reason / sender），与 PR 作者确认真实工单；若为笔误，编辑 PR 标题或重命名分支（`edited` 事件会重新校验）。
+
+**合并后审计（`traceabilityAudit`）**：GraphQL 查询扫描各路由仓库最近 N 天（默认 7，上限 90）内合并的 PR，分类溯源异常。示例：
+
+```graphql
+query {
+  traceabilityAudit(days: 14) {
+    scannedPrCount
+    days
+    anomalies { repository prNumber prTitle prUrl identifier reason }
+    repoErrors { repository message }
+  }
+}
+```
+
+异常类处置：
+- `no-identifier`：合并的 PR 完全没有工单引用（直接推送绕过了 lint）→ 补齐工单或在工单上手动 `evidence_attach` 记录该 PR。
+- `unknown-identifier`：引用不存在 → 同上，确认真实工单并修正记录。
+- `team-mismatch`：跨团队引用 → 检查路由表配置或确认是否引错仓库的工单。
+- `no-evidence`：工单存在但从未挂载该 PR 的 evidence（合并未被回溯）→ 在该工单上手动 `evidence_attach` PR 链接补账。
+
+`repoErrors` 非空表示对应仓库的 GitHub API 调用失败（如限流），该仓库本轮未被扫描，其余仓库结果不受影响。
+
 
 ## 10. 决策记录协议 (DECISION Work Kind：做什么 / 明确不做什么)
 

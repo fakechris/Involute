@@ -16,6 +16,7 @@ import type { PrismaClient, WorkflowStateType } from '@prisma/client';
 
 import { extractIssueIdentifiers, findRepoRoute, resolveIssueIdentifierFromPr } from './github-repo-routes.js';
 import { applyMonotonicForward, applyProvenanceRollback } from './github-webhook-state-machine.js';
+import { emitOpsAlert } from './ops-alerts.js';
 
 export interface GitHubWebhookOptions {
   prisma: PrismaClient;
@@ -28,6 +29,9 @@ interface BranchCreatePayload {
   ref_type: string;
   repository: {
     full_name: string;
+  };
+  sender?: {
+    login?: string;
   };
 }
 
@@ -48,10 +52,62 @@ export interface PullRequestPayload {
   repository: {
     full_name: string;
   };
+  sender?: {
+    login?: string;
+  };
 }
 
 function isValidAction(action: string): action is 'opened' | 'reopened' | 'closed' {
   return action === 'opened' || action === 'reopened' || action === 'closed';
+}
+
+// Reference checks only fire where the human/agent chooses the reference:
+// opened/reopened/edited. synchronize and closed never change it, so alerting
+// there would only spam on every push.
+function isReferenceCheckAction(action: string): action is 'opened' | 'reopened' | 'edited' {
+  return action === 'opened' || action === 'reopened' || action === 'edited';
+}
+
+type UnverifiedReferenceReason = 'unknown-identifier' | 'team-mismatch' | 'terminal-issue-reference';
+
+/**
+ * INV-449 traceability guard: the CI lint only regex-matches INV-\d+ offline,
+ * so a PR can cite an unrelated or nonexistent issue. Surface that here as a
+ * best-effort ops alert (in-app admin notification + optional OPS_WEBHOOK_URL
+ * POST); emitOpsAlert swallows its own failures, so processing never breaks.
+ */
+async function emitUnverifiedReferenceAlert(
+  prisma: PrismaClient,
+  input: {
+    repository: string;
+    prNumber: number | null;
+    prTitle: string | null;
+    prUrl: string | null;
+    branch: string;
+    identifier: string;
+    reason: UnverifiedReferenceReason;
+    sender?: string | null;
+  },
+): Promise<void> {
+  const ref = input.prNumber ? `PR #${input.prNumber}` : `branch ${input.branch}`;
+  await emitOpsAlert(
+    prisma,
+    {
+      kind: 'github.pr_unverified_reference',
+      summary: `Unverified work reference: ${ref} on ${input.repository} → ${input.identifier} (${input.reason})`,
+      details: {
+        repository: input.repository,
+        prNumber: input.prNumber,
+        prTitle: input.prTitle,
+        prUrl: input.prUrl,
+        branch: input.branch,
+        identifier: input.identifier,
+        reason: input.reason,
+        sender: input.sender ?? null,
+      },
+    },
+    process.env.OPS_WEBHOOK_URL?.trim() || null,
+  );
 }
 
 /**
@@ -201,8 +257,10 @@ export async function processGitHubPrEvent(
 ): Promise<void> {
   const { action, pull_request: pr, repository } = payload;
 
-  if (!isValidAction(action)) {
-    return; // We only handle opened, reopened, closed
+  // `edited` carries no state transition but still re-asserts the reference,
+  // so it is checked below even though the CAS machine ignores it.
+  if (!isValidAction(action) && !isReferenceCheckAction(action)) {
+    return; // We only handle opened, reopened, closed (+ edited for reference checks)
   }
 
   // Route lookup
@@ -232,6 +290,18 @@ export async function processGitHubPrEvent(
 
   if (!issue) {
     console.log(`[github-webhook] Issue ${identifier} not found in database`);
+    if (isReferenceCheckAction(action)) {
+      await emitUnverifiedReferenceAlert(prisma, {
+        repository: repository.full_name,
+        prNumber: pr.number,
+        prTitle: pr.title,
+        prUrl: pr.html_url,
+        branch: pr.head.ref,
+        identifier,
+        reason: 'unknown-identifier',
+        sender: payload.sender?.login ?? null,
+      });
+    }
     return;
   }
 
@@ -240,7 +310,38 @@ export async function processGitHubPrEvent(
     console.log(
       `[github-webhook] Team mismatch: issue ${identifier} belongs to team ${issue.team.key}, but repo route ${repository.full_name} is configured for team ${route.teamKey}`,
     );
+    if (isReferenceCheckAction(action)) {
+      await emitUnverifiedReferenceAlert(prisma, {
+        repository: repository.full_name,
+        prNumber: pr.number,
+        prTitle: pr.title,
+        prUrl: pr.html_url,
+        branch: pr.head.ref,
+        identifier,
+        reason: 'team-mismatch',
+        sender: payload.sender?.login ?? null,
+      });
+    }
     return;
+  }
+
+  // Referencing a Done/Canceled issue in a new PR is a smell (the CAS machine
+  // will absorb it as a no-op), but processing continues unchanged.
+  if (isReferenceCheckAction(action) && (issue.state.type === 'COMPLETED' || issue.state.type === 'CANCELED')) {
+    await emitUnverifiedReferenceAlert(prisma, {
+      repository: repository.full_name,
+      prNumber: pr.number,
+      prTitle: pr.title,
+      prUrl: pr.html_url,
+      branch: pr.head.ref,
+      identifier,
+      reason: 'terminal-issue-reference',
+      sender: payload.sender?.login ?? null,
+    });
+  }
+
+  if (!isValidAction(action)) {
+    return; // edited: reference checks above only, no state transition
   }
 
   const prIdStr = String(pr.id);
@@ -403,6 +504,16 @@ export async function processGitHubCreateEvent(
 
   if (!issue) {
     console.log(`[github-webhook] Issue ${identifier} not found in database`);
+    await emitUnverifiedReferenceAlert(prisma, {
+      repository: payload.repository.full_name,
+      prNumber: null,
+      prTitle: null,
+      prUrl: null,
+      branch: payload.ref,
+      identifier,
+      reason: 'unknown-identifier',
+      sender: payload.sender?.login ?? null,
+    });
     return;
   }
 
@@ -411,6 +522,16 @@ export async function processGitHubCreateEvent(
     console.log(
       `[github-webhook] Team mismatch: issue ${identifier} belongs to team ${issue.team.key}, but repo route ${payload.repository.full_name} is configured for team ${route.teamKey}`,
     );
+    await emitUnverifiedReferenceAlert(prisma, {
+      repository: payload.repository.full_name,
+      prNumber: null,
+      prTitle: null,
+      prUrl: null,
+      branch: payload.ref,
+      identifier,
+      reason: 'team-mismatch',
+      sender: payload.sender?.login ?? null,
+    });
     return;
   }
 
