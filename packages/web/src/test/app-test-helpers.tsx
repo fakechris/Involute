@@ -96,6 +96,10 @@ const hoistedApolloMocks = vi.hoisted<ApolloMockSet>(() => ({
       return [vi.fn().mockResolvedValue({ data: { fileUpload: { success: true, attachment: null } } })];
     }
 
+    if (source.includes('mutation BugReport')) {
+      return [vi.fn().mockResolvedValue({ data: { bugReport: { success: true, issue: { id: 'issue-b1', identifier: 'INV-42', title: 'Reported bug', priority: 0, repository: null } } } })];
+    }
+
     if (source.includes('mutation WorkCommit')) {
       return [vi.fn().mockResolvedValue({ data: { workCommit: { success: true, issue: { id: 'issue-c', identifier: 'INV-9', commitmentStatus: 'COMMITTED' } } } })];
     }
@@ -222,6 +226,10 @@ beforeEach(() => {
 
     if (source.includes('mutation FileUpload')) {
       return [vi.fn().mockResolvedValue({ data: { fileUpload: { success: true, attachment: null } } })];
+    }
+
+    if (source.includes('mutation BugReport')) {
+      return [vi.fn().mockResolvedValue({ data: { bugReport: { success: true, issue: { id: 'issue-b1', identifier: 'INV-42', title: 'Reported bug', priority: 0, repository: null } } } })];
     }
 
     if (source.includes('mutation WorkCommit')) {

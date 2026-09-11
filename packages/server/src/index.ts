@@ -43,8 +43,8 @@ loadServerEnvironment();
 
 export type { ServerEnvironment };
 
-// 10MB upload cap (decoded) + base64/JSON overhead headroom.
-export const MAX_REQUEST_BODY_BYTES = 20 * 1024 * 1024;
+// 50MB upload cap (decoded) + base64/JSON overhead headroom.
+export const MAX_REQUEST_BODY_BYTES = 100 * 1024 * 1024;
 
 export interface StartServerOptions {
   appOrigin?: string;
@@ -192,7 +192,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     }
 
     // HTTP-level body cap before Yoga/MCP parse anything: uploads top out at
-    // 10MB decoded (~13.4MB base64 + JSON envelope), so 20MB leaves headroom
+    // 50MB decoded (~67MB base64 + JSON envelope), so 100MB leaves headroom
     // while bounding unauthenticated allocation. Chunked bodies without a
     // declared length bypass this check and rely on the resolver-level cap.
     if (request.method === 'POST' || request.method === 'PUT' || request.method === 'PATCH') {

@@ -151,6 +151,58 @@ export interface ProjectSummaryResult {
   projects: ProjectSummaryItem[];
 }
 
+export interface BugReportMutationData {
+  bugReport: {
+    success: boolean;
+    issue: {
+      id: string;
+      identifier: string;
+      title: string;
+      priority: number;
+      repository: string | null;
+    } | null;
+  };
+}
+
+export interface BugReportMutationVariables {
+  input: {
+    teamId: string;
+    title: string;
+    description?: string | null;
+    priority?: number | null;
+    repository?: string | null;
+    labelIds?: string[];
+  };
+}
+
+export interface BugSummaryData {
+  openCount: number;
+  closedCount: number;
+  byPriority: Array<{ priority: number; count: number }>;
+  byRepository: Array<{ repository: string | null; openCount: number; closedCount: number }>;
+  byTypeLabel: Array<{ label: string; count: number }>;
+  unclaimedOpenCount: number;
+  oldestOpenAgeDays: number | null;
+  avgOpenAgeDays: number | null;
+  createdPerWeek: Array<{ weekStart: string; count: number }>;
+}
+
+export interface BugsPageQueryData {
+  bugSummary: BugSummaryData;
+  issues: {
+    nodes: IssueSummary[];
+    pageInfo: {
+      endCursor: string | null;
+      hasNextPage: boolean;
+    };
+  };
+}
+
+export interface BugsPageQueryVariables {
+  teamFilter?: { key: { eq: string } };
+  issueFilter?: Record<string, unknown>;
+}
+
 export interface BoardPageQueryData {
   projectSummary?: ProjectSummaryResult;
   teams: {

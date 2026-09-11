@@ -518,6 +518,81 @@ export const ISSUE_CREATE_MUTATION = gql`
   }
 `;
 
+export const BUG_REPORT_MUTATION = gql`
+  mutation BugReport($input: BugReportInput!) {
+    bugReport(input: $input) {
+      success
+      issue {
+        id
+        identifier
+        title
+        priority
+        repository
+      }
+    }
+  }
+`;
+
+export const BUGS_PAGE_QUERY = gql`
+  query BugsPage($teamFilter: TeamFilter, $issueFilter: IssueFilter) {
+    bugSummary(teamFilter: $teamFilter) {
+      openCount
+      closedCount
+      byPriority {
+        priority
+        count
+      }
+      byRepository {
+        repository
+        openCount
+        closedCount
+      }
+      byTypeLabel {
+        label
+        count
+      }
+      unclaimedOpenCount
+      oldestOpenAgeDays
+      avgOpenAgeDays
+      createdPerWeek {
+        weekStart
+        count
+      }
+    }
+    issues(first: 100, filter: $issueFilter) {
+      nodes {
+        id
+        identifier
+        title
+        priority
+        repository
+        createdAt
+        updatedAt
+        state {
+          id
+          name
+          type
+          position
+        }
+        team {
+          id
+          key
+        }
+        labels {
+          nodes {
+            id
+            name
+          }
+        }
+      }
+      pageInfo {
+        endCursor
+        hasNextPage
+      }
+    }
+  }
+`;
+
 export const PROJECT_ISSUES_QUERY = gql`
   query ProjectIssues($teamKey: String, $query: String) {
     issues(

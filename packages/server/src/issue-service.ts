@@ -42,6 +42,7 @@ export interface CreateIssueInput {
   cycleId?: string | null;
   description?: string | null;
   kind?: Issue['kind'] | null;
+  labelIds?: string[] | null;
   outcome?: string | null;
   parentId?: string | null;
   priority?: number | null;
@@ -114,6 +115,30 @@ export async function createIssueInTransaction(
 
   const state = await resolveCreateState(prisma, input.teamId, input.stateId);
 
+  let labelConnect: Array<{ id: string }> | undefined;
+  if (input.labelIds !== undefined && input.labelIds !== null) {
+    const labelIds = [...new Set(input.labelIds)];
+
+    if (labelIds.length > 0) {
+      const labels = await prisma.issueLabel.findMany({
+        where: {
+          id: {
+            in: labelIds,
+          },
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (labels.length !== labelIds.length) {
+        throw createNotFoundError(ISSUE_LABEL_NOT_FOUND_MESSAGE);
+      }
+    }
+
+    labelConnect = labelIds.map((labelId) => ({ id: labelId }));
+  }
+
   const updatedTeam = await prisma.team.update({
       where: {
         id: input.teamId,
@@ -150,6 +175,7 @@ export async function createIssueInTransaction(
         teamId: input.teamId,
         title: input.title,
         verification: input.verification ?? null,
+        ...(labelConnect ? { labels: { connect: labelConnect } } : {}),
       },
     });
 

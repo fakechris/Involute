@@ -72,8 +72,9 @@ import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
 import { requireAuthentication, type GraphQLContext } from './auth.js';
 import { issueAgentCredential, parseAgentScopeList } from './agent-credentials.js';
 import type { AgentScope } from './agent-credentials.js';
-import { WORK_EVENT_TYPES } from './event-outbox.js';
-import { createComment, createIssue, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
+import { WORK_EVENT_TYPES, enqueueWorkEvent } from './event-outbox.js';
+import { createComment, createIssue, createIssueInTransaction, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
+import { projectWorkNotifications } from './notification-service.js';
 import { createWorkLink, deleteWorkLink, listIncidentLinks } from './link-service.js';
 import { writeActorFromViewer } from './work-service.js';
 import { getUploadsDirectory } from './uploads.js';
@@ -140,6 +141,27 @@ interface IssueLabelFilterInput {
   name?: StringComparatorInput | null;
 }
 
+interface BugReportInput {
+  teamId: string;
+  title: string;
+  description?: string | null;
+  priority?: number | null;
+  repository?: string | null;
+  labelIds?: string[] | null;
+}
+
+interface BugSummaryResultShape {
+  openCount: number;
+  closedCount: number;
+  byPriority: Array<{ priority: number; count: number }>;
+  byRepository: Array<{ repository: string | null; openCount: number; closedCount: number }>;
+  byTypeLabel: Array<{ label: string; count: number }>;
+  unclaimedOpenCount: number;
+  oldestOpenAgeDays: number | null;
+  avgOpenAgeDays: number | null;
+  createdPerWeek: Array<{ weekStart: string; count: number }>;
+}
+
 type CommentOrderByInput = 'createdAt';
 interface CursorPayload {
   createdAt: string;
@@ -154,7 +176,13 @@ const MAX_COMMENTS_CONNECTION_FIRST = 100;
 
 const MAX_ISSUES_CONNECTION_FIRST = 200;
 
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
+const BUG_LABEL_NAME = 'bug';
+const BUG_REPORT_SOURCE = 'bug-report';
+const BUG_TREND_WEEKS = 8;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 function buildIssueListInclude(
   options: { includeChildren?: boolean; includeComments?: boolean } = {},
 ): Prisma.IssueInclude {
@@ -238,6 +266,7 @@ const typeDefs = /* GraphQL */ `
     readyWork(filter: ReadyWorkFilter, query: String): IssueConnection!
     candidateSummary(teamFilter: TeamFilter): CandidateSummary!
     projectSummary(teamFilter: TeamFilter): ProjectSummaryResult!
+    bugSummary(teamFilter: TeamFilter): BugSummaryResult!
     agentCredentials(teamId: String!): [AgentCredentialRecord!]!
     webhooks(teamId: String!): [WebhookSubscriptionRecord!]!
     notifications(first: Int, after: String, unreadOnly: Boolean): NotificationConnection!
@@ -246,6 +275,7 @@ const typeDefs = /* GraphQL */ `
 
   type Mutation {
     issueCreate(input: IssueCreateInput!): IssueCreatePayload!
+    bugReport(input: BugReportInput!): BugReportPayload!
     issueUpdate(id: String!, input: IssueUpdateInput!): IssueUpdatePayload!
     issueDelete(id: String!): IssueDeletePayload!
     commentCreate(input: CommentCreateInput!): CommentCreatePayload!
@@ -789,6 +819,55 @@ const typeDefs = /* GraphQL */ `
     cycleId: String
     kind: WorkKind
     assigneeId: String
+    labelIds: [String!]
+    repository: String
+  }
+
+  input BugReportInput {
+    teamId: String!
+    title: String!
+    description: String
+    priority: Int
+    repository: String
+    labelIds: [String!]
+  }
+
+  type BugReportPayload {
+    success: Boolean!
+    issue: Issue
+  }
+
+  type BugPriorityCount {
+    priority: Int!
+    count: Int!
+  }
+
+  type BugRepositoryCount {
+    repository: String
+    openCount: Int!
+    closedCount: Int!
+  }
+
+  type BugTypeLabelCount {
+    label: String!
+    count: Int!
+  }
+
+  type BugWeekCount {
+    weekStart: String!
+    count: Int!
+  }
+
+  type BugSummaryResult {
+    openCount: Int!
+    closedCount: Int!
+    byPriority: [BugPriorityCount!]!
+    byRepository: [BugRepositoryCount!]!
+    byTypeLabel: [BugTypeLabelCount!]!
+    unclaimedOpenCount: Int!
+    oldestOpenAgeDays: Float
+    avgOpenAgeDays: Float
+    createdPerWeek: [BugWeekCount!]!
   }
 
   input IssueUpdateInput {
@@ -1305,6 +1384,158 @@ const resolvers = {
         projects,
       };
     },
+    bugSummary: async (
+      _parent: unknown,
+      args: { teamFilter?: TeamFilterInput | null },
+      context: GraphQLContext,
+    ): Promise<BugSummaryResultShape> => {
+      const readableWhere = buildReadableIssueWhere(context);
+      const teamKey = args.teamFilter?.key?.eq;
+      const teamKeyIn = args.teamFilter?.key?.in;
+      const teamClause = teamKey
+        ? { team: { is: { key: teamKey } } }
+        : teamKeyIn && teamKeyIn.length > 0
+          ? { team: { is: { key: { in: teamKeyIn } } } }
+          : {};
+
+      const now = new Date();
+      const emptyWeeks = [...buildBugWeekBuckets().entries()].map(([weekStart, count]) => ({ weekStart, count }));
+      const bugLabel = await context.prisma.issueLabel.findFirst({
+        where: { name: { equals: BUG_LABEL_NAME, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      if (!bugLabel) {
+        return {
+          openCount: 0,
+          closedCount: 0,
+          byPriority: [],
+          byRepository: [],
+          byTypeLabel: [],
+          unclaimedOpenCount: 0,
+          oldestOpenAgeDays: null,
+          avgOpenAgeDays: null,
+          createdPerWeek: emptyWeeks,
+        };
+      }
+
+      const baseWhere: Prisma.IssueWhereInput = {
+        commitmentStatus: 'COMMITTED',
+        labels: { some: { id: bugLabel.id } },
+        ...teamClause,
+        ...(readableWhere ? readableWhere : {}),
+      };
+      const openWhere: Prisma.IssueWhereInput = {
+        ...baseWhere,
+        state: { type: { notIn: ['COMPLETED', 'CANCELED'] } },
+      };
+      const closedWhere: Prisma.IssueWhereInput = {
+        ...baseWhere,
+        state: { type: { in: ['COMPLETED', 'CANCELED'] } },
+      };
+      const trendCutoff = startOfUtcWeek(now);
+      trendCutoff.setUTCDate(trendCutoff.getUTCDate() - (BUG_TREND_WEEKS - 1) * 7);
+
+      const [openBugs, closedRepoGroups, recentCreations] = await Promise.all([
+        context.prisma.issue.findMany({
+          where: openWhere,
+          select: {
+            createdAt: true,
+            priority: true,
+            repository: true,
+            labels: { select: { id: true, name: true } },
+            claim: { select: { leaseUntil: true } },
+          },
+        }),
+        context.prisma.issue.groupBy({
+          by: ['repository'],
+          where: closedWhere,
+          _count: { _all: true },
+        }),
+        context.prisma.issue.findMany({
+          where: { ...baseWhere, createdAt: { gte: trendCutoff } },
+          select: { createdAt: true },
+        }),
+      ]);
+
+      const priorityCounts = new Map<number, number>();
+      const repoOpenCounts = new Map<string | null, number>();
+      const typeLabelCounts = new Map<string, number>();
+      let unclaimedOpenCount = 0;
+      let oldestCreatedAt: Date | null = null;
+      let ageSumDays = 0;
+
+      for (const bug of openBugs) {
+        priorityCounts.set(bug.priority, (priorityCounts.get(bug.priority) ?? 0) + 1);
+        repoOpenCounts.set(bug.repository, (repoOpenCounts.get(bug.repository) ?? 0) + 1);
+        for (const label of bug.labels) {
+          if (label.id === bugLabel.id) {
+            continue;
+          }
+          typeLabelCounts.set(label.name, (typeLabelCounts.get(label.name) ?? 0) + 1);
+        }
+        if (!bug.claim || bug.claim.leaseUntil.getTime() <= now.getTime()) {
+          unclaimedOpenCount += 1;
+        }
+        ageSumDays += (now.getTime() - bug.createdAt.getTime()) / MS_PER_DAY;
+        if (!oldestCreatedAt || bug.createdAt < oldestCreatedAt) {
+          oldestCreatedAt = bug.createdAt;
+        }
+      }
+
+      const byPriority = [...priorityCounts.entries()]
+        .map(([priority, count]) => ({ priority, count }))
+        .sort(
+          (a, b) =>
+            (a.priority === 0 ? Number.MAX_SAFE_INTEGER : a.priority) -
+            (b.priority === 0 ? Number.MAX_SAFE_INTEGER : b.priority),
+        );
+
+      const repoClosedCounts = new Map<string | null, number>(
+        closedRepoGroups.map((group) => [group.repository, group._count._all]),
+      );
+      const repositories = new Set<string | null>([...repoOpenCounts.keys(), ...repoClosedCounts.keys()]);
+      const byRepository = [...repositories]
+        .map((repository) => ({
+          repository,
+          openCount: repoOpenCounts.get(repository) ?? 0,
+          closedCount: repoClosedCounts.get(repository) ?? 0,
+        }))
+        .sort((a, b) => {
+          if (a.repository === null) return 1;
+          if (b.repository === null) return -1;
+          return a.repository.localeCompare(b.repository);
+        });
+
+      const byTypeLabel = [...typeLabelCounts.entries()]
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+
+      const weekBuckets = buildBugWeekBuckets();
+      for (const creation of recentCreations) {
+        const key = startOfUtcWeek(creation.createdAt).toISOString().slice(0, 10);
+        if (weekBuckets.has(key)) {
+          weekBuckets.set(key, (weekBuckets.get(key) ?? 0) + 1);
+        }
+      }
+      const createdPerWeek = [...weekBuckets.entries()].map(([weekStart, count]) => ({ weekStart, count }));
+
+      const openCount = openBugs.length;
+      const closedCount = closedRepoGroups.reduce((sum, group) => sum + group._count._all, 0);
+
+      return {
+        openCount,
+        closedCount,
+        byPriority,
+        byRepository,
+        byTypeLabel,
+        unclaimedOpenCount,
+        oldestOpenAgeDays: oldestCreatedAt
+          ? Math.round(((now.getTime() - oldestCreatedAt.getTime()) / MS_PER_DAY) * 10) / 10
+          : null,
+        avgOpenAgeDays: openCount > 0 ? Math.round((ageSumDays / openCount) * 10) / 10 : null,
+        createdPerWeek,
+      };
+    },
     workContext: async (
       _parent: unknown,
       args: { id: string },
@@ -1515,6 +1746,63 @@ const resolvers = {
 
         return {
           issue: await getIssueById(context.prisma, issue.id),
+          success: true as const,
+        };
+      }, {
+        issue: null,
+        success: false as const,
+      }),
+    bugReport: async (
+      _parent: unknown,
+      args: { input: BugReportInput },
+      context: GraphQLContext,
+    ): Promise<{ issue: IssueParent | null; success: boolean }> =>
+      runMutation(async () => {
+        requireAuthentication(context);
+        await assertCanWriteTeam(context.prisma, context, args.input.teamId);
+        // Resolved outside the issue transaction: a concurrent first-ever
+        // report may win the label create, and a failed INSERT would poison
+        // a Postgres transaction.
+        const bugLabel = await findOrCreateBugLabel(context.prisma);
+        const labelIds = [...new Set([bugLabel.id, ...(args.input.labelIds ?? [])])];
+        const created = await context.prisma.$transaction(async (transaction) => {
+          const issue = await createIssueInTransaction(
+            transaction,
+            {
+              description: args.input.description ?? null,
+              kind: 'ISSUE',
+              labelIds,
+              priority: args.input.priority ?? null,
+              repository: args.input.repository ?? null,
+              source: BUG_REPORT_SOURCE,
+              teamId: args.input.teamId,
+              title: args.input.title,
+            },
+            writeActorFromViewer(context.viewer),
+          );
+          const payload = {
+            identifier: issue.identifier,
+            priority: issue.priority,
+            repository: issue.repository,
+            title: issue.title,
+          };
+          const event = await enqueueWorkEvent(transaction, {
+            payload,
+            type: 'bug.reported',
+            workId: issue.id,
+            workIdentifier: issue.identifier,
+          });
+          await projectWorkNotifications(transaction, {
+            eventId: event.id,
+            payload,
+            type: 'bug.reported',
+            work: issue,
+          });
+          return issue;
+        });
+
+        return {
+          issue: await getIssueById(context.prisma, created.id),
           success: true as const,
         };
       }, {
@@ -2713,6 +3001,45 @@ async function getIssueById(prisma: PrismaClient, id: string): Promise<IssuePare
     },
     include: buildIssueDetailInclude(),
   });
+}
+
+async function findOrCreateBugLabel(prisma: DatabaseClient): Promise<IssueLabel> {
+  const existing = await prisma.issueLabel.findFirst({
+    where: { name: { equals: BUG_LABEL_NAME, mode: 'insensitive' } },
+  });
+  if (existing) {
+    return existing;
+  }
+  try {
+    return await prisma.issueLabel.create({ data: { name: BUG_LABEL_NAME } });
+  } catch {
+    // A concurrent first-ever report created the label between our read and
+    // create; re-read the winner.
+    const winner = await prisma.issueLabel.findFirst({
+      where: { name: { equals: BUG_LABEL_NAME, mode: 'insensitive' } },
+    });
+    if (winner) {
+      return winner;
+    }
+    throw new Error('Failed to resolve the bug label.');
+  }
+}
+
+// ISO week starts on Monday; buckets are keyed by the UTC date of that Monday.
+function startOfUtcWeek(date: Date): Date {
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
+  return start;
+}
+
+function buildBugWeekBuckets(): Map<string, number> {
+  const buckets = new Map<string, number>();
+  const currentWeek = startOfUtcWeek(new Date());
+  for (let offset = BUG_TREND_WEEKS - 1; offset >= 0; offset -= 1) {
+    const weekStart = new Date(currentWeek.getTime() - offset * 7 * MS_PER_DAY);
+    buckets.set(weekStart.toISOString().slice(0, 10), 0);
+  }
+  return buckets;
 }
 
 async function resolveTeamByIdOrKey(prisma: PrismaClient, idOrKey: string): Promise<Team | null> {
