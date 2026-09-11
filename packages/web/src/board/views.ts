@@ -2,7 +2,7 @@ import type { BoardGroupBy, BoardIssueGroup, IssueSummary, LabelSummary, UserSum
 import { looksLikeIql, matchesIql } from './iql-eval';
 import { readLocalStorageValue } from '../lib/storage';
 
-export type BoardSortField = 'identifier' | 'title' | 'updatedAt' | 'createdAt';
+export type BoardSortField = 'identifier' | 'title' | 'updatedAt' | 'createdAt' | 'priority';
 export type BoardSortDirection = 'asc' | 'desc';
 export type BoardViewMode = 'list' | 'board';
 
@@ -39,7 +39,7 @@ const DEFAULT_BOARD_VIEW_STATE: BoardViewState = {
   groupBy: 'status',
   labelIds: [],
   query: '',
-  sortDirection: 'asc',
+  sortDirection: 'desc',
   sortField: 'updatedAt',
   stateIds: [],
   viewMode: 'board',
@@ -58,7 +58,7 @@ function getSavedBoardViewsStorageKey(teamKey: string) {
 }
 
 function isBoardSortField(value: unknown): value is BoardSortField {
-  return value === 'identifier' || value === 'title' || value === 'updatedAt' || value === 'createdAt';
+  return value === 'identifier' || value === 'title' || value === 'updatedAt' || value === 'createdAt' || value === 'priority';
 }
 
 function isBoardSortDirection(value: unknown): value is BoardSortDirection {
@@ -329,25 +329,42 @@ export function applyBoardViewState(
   });
 }
 
-function compareIssuesForBoardSort(
+export function compareIssuesForBoardSort(
   left: IssueSummary,
   right: IssueSummary,
   sortField: BoardSortField,
   _usersById: Map<string, UserSummary>,
 ): number {
+  let comparison: number;
   switch (sortField) {
     case 'title':
-      return left.title.localeCompare(right.title);
+      comparison = left.title.localeCompare(right.title);
+      break;
     case 'createdAt':
-      return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+      comparison = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+      break;
     case 'updatedAt':
-      return new Date(left.updatedAt).getTime() - new Date(right.updatedAt).getTime();
+      comparison = new Date(left.updatedAt).getTime() - new Date(right.updatedAt).getTime();
+      break;
+    case 'priority': {
+      // Linear semantics: 1=urgent … 4=low, 0=none. Asc = urgent first, none sinks.
+      const leftRank = left.priority === 0 ? 5 : left.priority;
+      const rightRank = right.priority === 0 ? 5 : right.priority;
+      comparison = leftRank - rightRank;
+      break;
+    }
     case 'identifier':
     default:
-      return left.identifier.localeCompare(right.identifier, undefined, {
+      comparison = left.identifier.localeCompare(right.identifier, undefined, {
         numeric: true,
       });
+      break;
   }
+  if (comparison !== 0) {
+    return comparison;
+  }
+  // Stable tiebreak so equal keys (e.g. same priority) keep a visible, repeatable order.
+  return left.identifier.localeCompare(right.identifier, undefined, { numeric: true });
 }
 
 export function buildBoardViewSummary(
