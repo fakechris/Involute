@@ -17,6 +17,11 @@ User (or router) picks a ready committed item for you to execute.
 - Claim with `id` (UUID).
 - Start `run_report` status `running` with a short phase/summary.
 
+## Branch name (harness-issued)
+
+- The claim response includes `suggested_branch` (GraphQL `suggestedBranch`): e.g. `feat/inv-456-harness-issued-branch-names`.
+- Create your git branch with that name **verbatim**. Never invent branch names containing issue identifiers — the traceability guard only trusts harness-issued references unconditionally.
+
 ## Rules
 
 - One claim at a time unless asked otherwise.
