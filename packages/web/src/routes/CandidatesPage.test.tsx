@@ -1,8 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CandidatesPage } from './CandidatesPage';
+
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location-probe">{location.pathname + location.search}</output>;
+}
 
 const mockRunCommit = vi.fn();
 const mockRunReject = vi.fn();
@@ -228,5 +233,34 @@ describe('CandidatesPage', () => {
     } finally {
       queryDataHolder.current = null;
     }
+  });
+
+  it('shows a post-commit glance dialog grouped by project and navigates to the board', async () => {
+    render(
+      <MemoryRouter>
+        <CandidatesPage />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByLabelText(/Select all visible/));
+    fireEvent.click(screen.getByRole('button', { name: /Batch Commit \(2\)/ }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Batch commit summary' });
+    expect(dialog).toHaveTextContent('Committed 2 work items');
+
+    const involuteRow = screen.getByRole('link', { name: /Involute× 1/ });
+    const lumenboxRow = screen.getByRole('link', { name: /lumenbox× 1/ });
+    expect(involuteRow).toBeInTheDocument();
+    expect(lumenboxRow).toBeInTheDocument();
+
+    fireEvent.click(lumenboxRow);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('location-probe')).toHaveTextContent(
+        '/?team=INV&project=fakechris%2Flumenbox',
+      ),
+    );
+    expect(screen.queryByRole('dialog', { name: 'Batch commit summary' })).not.toBeInTheDocument();
   });
 });

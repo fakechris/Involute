@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
 import { IcoCheck, IcoClose } from '../components/Icons';
@@ -71,6 +71,92 @@ function targetStateBadge(candidate: CandidateWork): { label: string; title: str
       : { label: 'Target: Ready', title: 'Target state upon approval: Ready (moved out of Backlog)' };
   }
   return null;
+}
+
+interface CommitGlanceState {
+  committed: CandidateWork[];
+  failCount: number;
+}
+
+function CommitGlanceDialog({
+  glance,
+  onClose,
+}: {
+  glance: CommitGlanceState;
+  onClose: () => void;
+}) {
+  const teamKey = glance.committed[0]?.team.key ?? null;
+  const groups = useMemo(() => {
+    const byRepository = new Map<string | null, number>();
+    for (const candidate of glance.committed) {
+      const repository = candidate.repository ?? null;
+      byRepository.set(repository, (byRepository.get(repository) ?? 0) + 1);
+    }
+    return Array.from(byRepository.entries());
+  }, [glance.committed]);
+
+  const successCount = glance.committed.length;
+
+  return (
+    <aside className="issue-panel" aria-label="Batch commit summary" aria-modal="true" role="dialog">
+      <button
+        type="button"
+        className="issue-panel__backdrop"
+        aria-label="Close commit summary"
+        onClick={onClose}
+      />
+      <section className="issue-panel__frame commit-glance__frame">
+        <div className="issue-panel__header">
+          <div>
+            <p className="app-shell__eyebrow">Involute</p>
+            <h2>
+              Committed {successCount} work item{successCount === 1 ? '' : 's'}
+            </h2>
+          </div>
+          <button type="button" className="issue-panel__close" onClick={onClose}>
+            Close
+          </button>
+        </div>
+
+        <div className="issue-panel__section">
+          {glance.failCount > 0 ? (
+            <p className="commit-glance__warning" role="alert">
+              {glance.failCount} failed — they remain in the queue.
+            </p>
+          ) : null}
+          <ul className="commit-glance__list">
+            {groups.map(([repository, count]) => {
+              const shortName = repository ? repository.split('/').pop() || repository : 'No project';
+              const target = repository
+                ? `/?team=${teamKey ?? ''}&project=${encodeURIComponent(repository)}`
+                : `/?team=${teamKey ?? ''}&project=__none__`;
+              return (
+                <li key={repository ?? '__none__'}>
+                  <Link className="commit-glance__project" to={target} onClick={onClose}>
+                    <span className="commit-glance__name">{shortName}</span>
+                    <span className="commit-glance__count">× {count}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        <div className="issue-panel__section commit-glance__footer">
+          <Link
+            className="ui-action ui-action--accent"
+            to={`/?team=${teamKey ?? ''}`}
+            onClick={onClose}
+          >
+            View all on board
+          </Link>
+          <button type="button" className="ui-action" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </section>
+    </aside>
+  );
 }
 
 function CandidateCard({
@@ -376,6 +462,7 @@ export function CandidatesPage() {
   const [bulkAction, setBulkAction] = useState<'commit' | 'reject' | null>(null);
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
   const [bulkError, setBulkError] = useState<string | null>(null);
+  const [commitGlance, setCommitGlance] = useState<CommitGlanceState | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [paginationError, setPaginationError] = useState(false);
 
@@ -517,6 +604,7 @@ export function CandidatesPage() {
     const toCommit = candidates.filter((c) => selectedIds.includes(c.id));
     let successCount = 0;
     let failCount = 0;
+    const committedCandidates: CandidateWork[] = [];
 
     for (let i = 0; i < toCommit.length; i++) {
       const candidate = toCommit[i];
@@ -540,6 +628,7 @@ export function CandidatesPage() {
           },
         });
         successCount++;
+        committedCandidates.push(candidate);
       } catch (err) {
         failCount++;
         console.error(`Failed to commit candidate ${candidate.identifier}:`, err);
@@ -552,6 +641,9 @@ export function CandidatesPage() {
     setSelectedIds([]);
     if (failCount > 0) {
       setBulkError(`Committed ${successCount}, failed ${failCount}.`);
+    }
+    if (successCount > 0) {
+      setCommitGlance({ committed: committedCandidates, failCount });
     }
     void refetch();
   }
@@ -839,6 +931,10 @@ export function CandidatesPage() {
           </div>
         )}
       </div>
+
+      {commitGlance ? (
+        <CommitGlanceDialog glance={commitGlance} onClose={() => setCommitGlance(null)} />
+      ) : null}
     </div>
   );
 }

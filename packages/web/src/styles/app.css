@@ -389,6 +389,22 @@ kbd {
   color: var(--fg);
 }
 
+.app-shell__recent-link {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.app-shell__recent-link .app-shell__link-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .app-shell__team-section {
   display: flex;
   flex-direction: column;
@@ -4118,6 +4134,56 @@ kbd {
   padding: 8px 0;
   border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 16px;
+}
+
+.commit-glance__frame {
+  width: min(460px, calc(100vw - 24px));
+}
+
+.commit-glance__warning {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.commit-glance__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.commit-glance__project {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: transparent;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: var(--fg);
+  cursor: pointer;
+  text-align: left;
+}
+
+.commit-glance__project:hover {
+  background: var(--bg-hover);
+}
+
+.commit-glance__count {
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+.commit-glance__footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .candidates-toolbar__select-all {

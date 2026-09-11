@@ -1,9 +1,16 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon, IcoCheck, IcoGraph, IcoFilter, IcoBug } from './components/Icons';
+import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon, IcoCheck, IcoGraph, IcoFilter, IcoBug, IcoHistory } from './components/Icons';
 import { NotificationsBell } from './components/NotificationsBell';
 import { Avatar } from './components/Primitives';
+import {
+  deriveViewLabel,
+  pushRecentView,
+  readRecentViews,
+  writeRecentViews,
+  type RecentViewEntry,
+} from './recent-views';
 
 import {
   ACTIVE_TEAM_STORAGE_KEY,
@@ -177,6 +184,14 @@ function getStoredSidebarWidth() {
   }
 
   return 248;
+}
+
+function getStoredRecentViews(): RecentViewEntry[] {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  return readRecentViews(window.localStorage);
 }
 
 function persistSidebarWidth(nextSidebarWidth: number) {
@@ -483,8 +498,30 @@ export function App() {
     readSavedBacklogViews(readStoredTeamKey()),
   );
   const [expandedTeamKey, setExpandedTeamKey] = useState<string | null>(() => readStoredTeamKey());
+  const [recentViews, setRecentViews] = useState<RecentViewEntry[]>(() => getStoredRecentViews());
   const [searchParams] = useSearchParams();
   const urlTeam = searchParams.get('team');
+
+  useEffect(() => {
+    if (!session?.authenticated) {
+      return;
+    }
+
+    const label = deriveViewLabel(location.pathname, location.search);
+    if (!label) {
+      return;
+    }
+
+    setRecentViews((currentViews) => {
+      const nextViews = pushRecentView(currentViews, {
+        path: `${location.pathname}${location.search}`,
+        label,
+        at: Date.now(),
+      });
+      writeRecentViews(window.localStorage, nextViews);
+      return nextViews;
+    });
+  }, [location.pathname, location.search, session?.authenticated]);
 
   useEffect(() => {
     if (urlTeam && urlTeam !== activeTeamKey) {
@@ -1057,6 +1094,26 @@ export function App() {
               <kbd className="app-shell__link-kbd" aria-hidden="true">W</kbd>
             </NavLink>
           </nav>
+
+          {recentViews.length > 0 ? (
+            <div className="app-shell__team-section">
+              <div className="app-shell__section-label">Recent</div>
+              <nav className="app-shell__nav-section" aria-label="Recent views">
+                {recentViews.map((view) => (
+                  <button
+                    key={view.path}
+                    type="button"
+                    className="app-shell__link app-shell__recent-link"
+                    title={view.label}
+                    onClick={() => navigate(view.path)}
+                  >
+                    <span className="app-shell__nav-icon"><IcoHistory size={14} /></span>
+                    <span className="app-shell__link-label">{view.label}</span>
+                  </button>
+                ))}
+              </nav>
+            </div>
+          ) : null}
 
           <div className="app-shell__team-section">
             <div className="app-shell__section-label">Workspace</div>
