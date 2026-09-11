@@ -628,4 +628,182 @@ describe('GitHub Webhook & Dual-Track CAS State Machine (Phase 2)', () => {
       expect(logCount).toBe(1);
     });
   });
+
+  describe('Traceability Guard: unverified reference ops alerts (INV-449)', () => {
+    const ALERT_TYPE = 'ops.github.pr_unverified_reference';
+
+    beforeEach(async () => {
+      await prisma.notification.deleteMany();
+    });
+
+    function buildPrPayload(overrides: {
+      action?: string;
+      number?: number;
+      title?: string;
+      branch?: string;
+      updatedAt?: string;
+    }) {
+      const number = overrides.number ?? 500;
+      return {
+        action: overrides.action ?? 'opened',
+        pull_request: {
+          id: 20000 + number,
+          number,
+          title: overrides.title ?? 'feat: something',
+          html_url: `https://github.com/fakechris/Involute/pull/${number}`,
+          merged: false,
+          head: { ref: overrides.branch ?? 'feat/no-ref-here' },
+          updated_at: overrides.updatedAt ?? '2026-09-10T10:00:00.000Z',
+        },
+        repository: { full_name: 'fakechris/Involute' },
+        sender: { login: 'fake-agent' },
+      };
+    }
+
+    async function findAlerts(userId?: string) {
+      // emitOpsAlert fans out to every HUMAN ADMIN; the shared test DB holds
+      // several, so positive assertions scope to the seeded admin.
+      return prisma.notification.findMany({
+        where: { type: ALERT_TYPE, ...(userId ? { userId } : {}) },
+      });
+    }
+
+    it('alerts admins with unknown-identifier when the referenced issue does not exist', async () => {
+      await processGitHubPrEvent(
+        prisma,
+        buildPrPayload({ branch: 'feat/INV-9999-ghost', title: 'feat: [INV-9999] ghost ref' }),
+      );
+
+      const alerts = await findAlerts(human.id);
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]?.userId).toBe(human.id);
+      const details = alerts[0]?.payload as Record<string, unknown>;
+      expect(details).toMatchObject({
+        repository: 'fakechris/Involute',
+        prNumber: 500,
+        branch: 'feat/INV-9999-ghost',
+        identifier: 'INV-9999',
+        reason: 'unknown-identifier',
+        sender: 'fake-agent',
+      });
+    });
+
+    it('alerts with team-mismatch when the issue belongs to another team than the route', async () => {
+      const issue = await createTestIssue('Mismatch alert target');
+      setCustomRepoRoutes([
+        {
+          repository: 'fakechris/Involute',
+          teamKey: 'OTHER',
+          identifierPattern: /(?:^|[^A-Za-z])((?:INV|inv)-[0-9]+)/,
+        },
+      ]);
+      try {
+        await processGitHubPrEvent(
+          prisma,
+          buildPrPayload({ branch: `feat/${issue.identifier}-x`, title: `feat: [${issue.identifier}] x` }),
+        );
+      } finally {
+        setCustomRepoRoutes(null);
+      }
+
+      const alerts = await findAlerts(human.id);
+      expect(alerts).toHaveLength(1);
+      const details = alerts[0]?.payload as Record<string, unknown>;
+      expect(details).toMatchObject({
+        identifier: issue.identifier,
+        reason: 'team-mismatch',
+      });
+
+      // Processing skipped as before: no state transition happened.
+      const untouched = await prisma.issue.findUniqueOrThrow({
+        where: { id: issue.id },
+        include: { state: true },
+      });
+      expect(untouched.state.type).toBe('UNSTARTED');
+    });
+
+    it('alerts with terminal-issue-reference but still records the event and continues processing', async () => {
+      const issue = await createTestIssue('Terminal reference target');
+
+      // Move the issue to COMPLETED first
+      await prisma.$transaction((tx) =>
+        applyMonotonicForward(tx, {
+          issueId: issue.id,
+          teamId: team.id,
+          targetStateType: 'COMPLETED',
+          eventSourceKey: 'terminal_target_merged',
+          eventType: 'pull_request.merged',
+          eventTimestamp: '2026-09-10T09:00:00.000Z',
+        }),
+      );
+
+      await processGitHubPrEvent(
+        prisma,
+        buildPrPayload({ branch: `feat/${issue.identifier}-rework`, title: `fix: [${issue.identifier}] rework` }),
+      );
+
+      const alerts = await findAlerts(human.id);
+      expect(alerts).toHaveLength(1);
+      const details = alerts[0]?.payload as Record<string, unknown>;
+      expect(details).toMatchObject({
+        identifier: issue.identifier,
+        reason: 'terminal-issue-reference',
+      });
+
+      // Behavior unchanged: the absorbing-state CAS no-ops, but the opened
+      // event is still recorded in the webhook event log (2 rows: the merge
+      // above plus this opened).
+      const logCount = await prisma.webhookEventLog.count({ where: { issueId: issue.id } });
+      expect(logCount).toBe(2);
+      const current = await prisma.issue.findUniqueOrThrow({
+        where: { id: issue.id },
+        include: { state: true },
+      });
+      expect(current.state.type).toBe('COMPLETED');
+    });
+
+    it('produces no alert for a valid reference', async () => {
+      const issue = await createTestIssue('Valid reference target');
+      await processGitHubPrEvent(
+        prisma,
+        buildPrPayload({ branch: `feat/${issue.identifier}-ok`, title: `feat: [${issue.identifier}] ok` }),
+      );
+
+      expect(await findAlerts()).toHaveLength(0);
+    });
+
+    it('alerts on edited but not on synchronize for the same bad reference', async () => {
+      await processGitHubPrEvent(
+        prisma,
+        buildPrPayload({ action: 'edited', branch: 'feat/INV-9998-ghost', title: 'fix: [INV-9998] typo fix' }),
+      );
+      expect(await findAlerts(human.id)).toHaveLength(1);
+
+      await processGitHubPrEvent(
+        prisma,
+        buildPrPayload({ action: 'synchronize', branch: 'feat/INV-9998-ghost', title: 'fix: [INV-9998] typo fix' }),
+      );
+      expect(await findAlerts(human.id)).toHaveLength(1);
+    });
+
+    it('alerts on branch create with unknown-identifier', async () => {
+      await processGitHubCreateEvent(prisma, {
+        ref: 'feat/INV-9997-ghost-branch',
+        ref_type: 'branch',
+        repository: { full_name: 'fakechris/Involute' },
+        sender: { login: 'fake-agent' },
+      });
+
+      const alerts = await findAlerts(human.id);
+      expect(alerts).toHaveLength(1);
+      const details = alerts[0]?.payload as Record<string, unknown>;
+      expect(details).toMatchObject({
+        branch: 'feat/INV-9997-ghost-branch',
+        identifier: 'INV-9997',
+        reason: 'unknown-identifier',
+        prNumber: null,
+        sender: 'fake-agent',
+      });
+    });
+  });
 });

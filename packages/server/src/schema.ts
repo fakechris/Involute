@@ -75,6 +75,7 @@ import type { AgentScope } from './agent-credentials.js';
 import { WORK_EVENT_TYPES, enqueueWorkEvent } from './event-outbox.js';
 import { createComment, createIssue, createIssueInTransaction, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
 import { projectWorkNotifications } from './notification-service.js';
+import { auditMergedPrTraceability } from './traceability-audit.js';
 import { createWorkLink, deleteWorkLink, listIncidentLinks } from './link-service.js';
 import { writeActorFromViewer } from './work-service.js';
 import { getUploadsDirectory } from './uploads.js';
@@ -267,6 +268,7 @@ const typeDefs = /* GraphQL */ `
     candidateSummary(teamFilter: TeamFilter): CandidateSummary!
     projectSummary(teamFilter: TeamFilter): ProjectSummaryResult!
     bugSummary(teamFilter: TeamFilter): BugSummaryResult!
+    traceabilityAudit(days: Int): TraceabilityAuditResult!
     agentCredentials(teamId: String!): [AgentCredentialRecord!]!
     webhooks(teamId: String!): [WebhookSubscriptionRecord!]!
     notifications(first: Int, after: String, unreadOnly: Boolean): NotificationConnection!
@@ -868,6 +870,27 @@ const typeDefs = /* GraphQL */ `
     oldestOpenAgeDays: Float
     avgOpenAgeDays: Float
     createdPerWeek: [BugWeekCount!]!
+  }
+
+  type TraceabilityAnomaly {
+    repository: String!
+    prNumber: Int!
+    prTitle: String!
+    prUrl: String!
+    identifier: String
+    reason: String!
+  }
+
+  type TraceabilityRepoError {
+    repository: String!
+    message: String!
+  }
+
+  type TraceabilityAuditResult {
+    scannedPrCount: Int!
+    days: Int!
+    anomalies: [TraceabilityAnomaly!]!
+    repoErrors: [TraceabilityRepoError!]!
   }
 
   input IssueUpdateInput {
@@ -1535,6 +1558,17 @@ const resolvers = {
         avgOpenAgeDays: openCount > 0 ? Math.round((ageSumDays / openCount) * 10) / 10 : null,
         createdPerWeek,
       };
+    },
+    traceabilityAudit: async (
+      _parent: unknown,
+      args: { days?: number | null },
+      context: GraphQLContext,
+    ) => {
+      requireAuthentication(context);
+      return auditMergedPrTraceability({
+        prisma: context.prisma,
+        ...(args.days !== undefined && args.days !== null ? { days: args.days } : {}),
+      });
     },
     workContext: async (
       _parent: unknown,
