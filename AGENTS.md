@@ -168,6 +168,12 @@ flowchart LR
 - **倒序分页回溯（Direction=desc）**：始终从最新更新开始逐页抓取，遇到早于水位线的数据立即截断终止，保障每次轮询以最小开销捕获最新变更。单周期上限为 10 页（1,000 个 PR）。
 - **毒消息死信隔离（SyncDeadLetter Quarantine）**：连续重试失败达到阈值（3 次）的 PR 自动沉降至 `SyncDeadLetter`，释放低水位线游标以避免阻断全仓对账，并触发 `github_sync.dead_letter` 运维告警。
 
+### 8.5 分支名由系统签发 (Harness-Issued Branch Names)
+为根除 Agent 自造含工单号分支名导致的引用伪造（撞号）问题，分支命名权收归系统：
+- `work_claim` 的返回（GraphQL `WorkClaimPayload.suggestedBranch` 与 MCP `suggested_branch` 字段）统一签发分支名，格式 `feat/<identifier>-<ascii-slug>`（非 ASCII 标题退化为 `feat/<identifier>`，小写 identifier 仍可被 webhook 词界正则解析）；
+- Agent **必须原样使用**签发值创建分支，禁止自造任何含 `INV-\d+` / `LUM-\d+` 的分支名；
+- 仅有签发名才是溯源防线（§9.5）无条件信任的引用；PR 标题补充 `[INV-xxx]` 仍按 §8.2 的离线正则校验执行。
+
 ## 9. Operations & Observability Runbook (运维巡检与故障排查手册)
 
 ### 9.1 对账引擎运行状态巡检 (Inspect Watermark Sync Health)
