@@ -58,6 +58,7 @@ export interface CreateIssueInput {
 
 export interface UpdateIssueInput {
   acceptance?: string | null;
+  alias?: string | null;
   assigneeId?: string | null;
   constraints?: string | null;
   cycleId?: string | null;
@@ -427,6 +428,10 @@ export async function updateIssue(
 
     if ('repository' in input) {
       data.repository = input.repository ?? null;
+    }
+
+    if ('alias' in input) {
+      data.alias = input.alias ?? null;
     }
 
     if ('kind' in input && input.kind) {

@@ -14,7 +14,7 @@
 import type { PrismaClient } from '@prisma/client';
 
 import type { RepoRoute } from './github-repo-routes.js';
-import { DEFAULT_REPO_ROUTES, resolveIssueIdentifierFromPr } from './github-repo-routes.js';
+import { listAllRepoRoutes, resolveCanonicalIssueRef } from './github-repo-routes.js';
 
 export const TRACEABILITY_AUDIT_DEFAULT_DAYS = 7;
 export const TRACEABILITY_AUDIT_MAX_DAYS = 90;
@@ -45,6 +45,7 @@ export type TraceabilityAnomalyReason =
   | 'no-identifier'
   | 'unknown-identifier'
   | 'team-mismatch'
+  | 'project-mismatch'
   | 'no-evidence';
 
 export interface TraceabilityAnomaly {
@@ -146,10 +147,11 @@ export async function defaultListMergedPrs(
 export async function auditMergedPrTraceability(
   options: TraceabilityAuditOptions,
 ): Promise<TraceabilityAuditResult> {
-  const { prisma, repos = DEFAULT_REPO_ROUTES, now = new Date() } = options;
+  const { prisma, now = new Date() } = options;
   const days = resolveAuditDays(options.days);
   const sinceDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
   const listMerged = options.listMergedPrs ?? defaultListMergedPrs;
+  const repos = options.repos ?? (await listAllRepoRoutes(prisma));
 
   const anomalies: TraceabilityAnomaly[] = [];
   const repoErrors: TraceabilityRepoError[] = [];
@@ -176,15 +178,16 @@ export async function auditMergedPrTraceability(
         prUrl: pr.html_url,
       };
 
-      const identifier = resolveIssueIdentifierFromPr({
+      const ref = resolveCanonicalIssueRef({
         branch: pr.head.ref,
         title: pr.title,
         route,
       });
-      if (!identifier) {
+      if (!ref) {
         anomalies.push({ ...base, identifier: null, reason: 'no-identifier' });
         continue;
       }
+      const identifier = ref.identifier;
 
       const issue = await prisma.issue.findUnique({
         where: { identifier },
@@ -197,6 +200,16 @@ export async function auditMergedPrTraceability(
 
       if (issue.team.key !== route.teamKey) {
         anomalies.push({ ...base, identifier, reason: 'team-mismatch' });
+        continue;
+      }
+
+      // Alias references are legal when the issue actually belongs to the
+      // aliased project; otherwise the membership claim is fake.
+      if (
+        ref.viaAlias &&
+        (issue.repository ?? '').toLowerCase().trim() !== route.repository.toLowerCase().trim()
+      ) {
+        anomalies.push({ ...base, identifier, reason: 'project-mismatch' });
         continue;
       }
 

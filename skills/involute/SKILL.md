@@ -30,7 +30,7 @@ Connect: Streamable HTTP MCP at `http://127.0.0.1:4200/mcp` (local) with `Author
 2. Fuzzy discoveries go through `work_propose`, never straight to committed issues. Set `initial_state: 'REVIEW'` for completed features so they commit directly to `In Review`; candidate `initial_state` cannot be `COMPLETED` or `CANCELED`.
 3. Do not create a child unless it can be independently accepted.
 4. Do not write local TODOs, grep results, or shell steps into Involute.
-5. `work_claim` after the user chooses a ready item — do not grab the whole queue. Use the returned `suggested_branch` verbatim as your git branch name; never invent branch names containing issue identifiers.
+5. `work_claim` after the user chooses a ready item — do not grab the whole queue. Use the returned `suggested_branch` verbatim as your git branch name; never invent branch names containing issue identifiers. Alias-prefixed references (e.g. `LUM-398` on a repo whose PROJECT node has `alias: LUM`) are also accepted and canonicalize to the team key (`INV-398`).
 6. `work_commit` and candidate rejection are **human** actions. Agents stop and ask.
 7. Run complete is not work accepted. **Never** move work to Done yourself.
 8. Expanding scope requires `work_update` with `expected_revision` or a new candidate linked `DISCOVERED_DURING`.

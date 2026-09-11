@@ -445,6 +445,7 @@ const typeDefs = /* GraphQL */ `
     acceptance: String
     verification: String
     repository: String
+    alias: String
     links(type: WorkLinkType): WorkLinkConnection!
     claim: WorkClaimRecord
     comments(first: Int, after: String, orderBy: CommentOrderBy): CommentConnection!
@@ -907,6 +908,7 @@ const typeDefs = /* GraphQL */ `
     cycleId: String
     snoozedUntil: DateTime
     kind: WorkKind
+    alias: String
   }
 
   input ProjectCreateInput {

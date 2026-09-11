@@ -8,11 +8,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { commitWork, proposeWork } from './claim-service.ts';
+import { createIssue, updateIssue } from './issue-service.ts';
 import {
   DEFAULT_REPO_ROUTES,
   extractIssueIdentifiers,
   findRepoRoute,
   resolveIssueIdentifierFromPr,
+  resolveRepoRoute,
   setCustomRepoRoutes,
 } from './github-repo-routes.ts';
 import {
@@ -804,6 +806,137 @@ describe('GitHub Webhook & Dual-Track CAS State Machine (Phase 2)', () => {
         prNumber: null,
         sender: 'fake-agent',
       });
+    });
+  });
+
+  describe('Project Alias Routing (INV-459)', () => {
+    const LUMENBOX_REPO = 'fakechris/lumenbox';
+    const ALERT_TYPE = 'ops.github.pr_unverified_reference';
+
+    beforeEach(async () => {
+      await prisma.notification.deleteMany();
+    });
+
+    async function createLumenboxProject(): Promise<Issue> {
+      const project = await createIssue(prisma, {
+        kind: 'PROJECT',
+        repository: LUMENBOX_REPO,
+        teamId: team.id,
+        title: 'lumenbox project',
+      });
+      return updateIssue(prisma, project.id, { alias: 'LUM' });
+    }
+
+    function aliasRefFor(issue: Issue): string {
+      return `LUM-${issue.identifier.split('-')[1]}`;
+    }
+
+    async function processLumenboxPrOpened(issue: Issue, prId: number): Promise<void> {
+      await processGitHubPrEvent(prisma, {
+        action: 'opened',
+        pull_request: {
+          id: prId,
+          number: prId,
+          title: `feat: [${aliasRefFor(issue)}] aliased change`,
+          html_url: `https://github.com/fakechris/lumenbox/pull/${prId}`,
+          merged: false,
+          head: { ref: `feat/${aliasRefFor(issue)}-x` },
+          updated_at: '2026-09-11T10:00:00.000Z',
+        },
+        repository: { full_name: LUMENBOX_REPO },
+        sender: { login: 'fake-agent' },
+      });
+    }
+
+    it('derives the route from the PROJECT node and falls back to static routes', async () => {
+      const project = await createLumenboxProject();
+
+      const route = await resolveRepoRoute(prisma, LUMENBOX_REPO);
+      expect(route).not.toBeNull();
+      expect(route?.teamKey).toBe('INV');
+      expect(route?.alias).toBe('LUM');
+      expect(route?.projectId).toBe(project.id);
+      expect(extractIssueIdentifiers('INV-1', route!)).toEqual(['INV-1']);
+      expect(extractIssueIdentifiers('LUM-1', route!)).toEqual(['LUM-1']);
+
+      // No PROJECT node owns fakechris/Involute here → static fallback.
+      const fallback = await resolveRepoRoute(prisma, 'fakechris/Involute');
+      expect(fallback?.teamKey).toBe('INV');
+      expect(fallback?.alias).toBeUndefined();
+
+      expect(await resolveRepoRoute(prisma, 'unknown/repo')).toBeNull();
+    });
+
+    it('drives the canonical issue through the state machine for an alias reference with matching membership', async () => {
+      await createLumenboxProject();
+      const issue = await createTestIssue('Alias routed work');
+      await updateIssue(prisma, issue.id, { repository: LUMENBOX_REPO });
+
+      await processLumenboxPrOpened(issue, 31001);
+
+      const updated = await prisma.issue.findUniqueOrThrow({
+        where: { id: issue.id },
+        include: { state: true },
+      });
+      expect(updated.state.type).toBe('REVIEW');
+      expect(
+        await prisma.notification.count({ where: { type: ALERT_TYPE } }),
+      ).toBe(0);
+    });
+
+    it('alerts project-mismatch and skips when the alias membership claim is wrong', async () => {
+      await createLumenboxProject();
+      // Issue belongs to no project (repository null): the LUM- alias asserts
+      // lumenbox membership, which is false.
+      const issue = await createTestIssue('Wrong-project alias target');
+
+      await processLumenboxPrOpened(issue, 31002);
+
+      const untouched = await prisma.issue.findUniqueOrThrow({
+        where: { id: issue.id },
+        include: { state: true },
+      });
+      expect(untouched.state.type).toBe('UNSTARTED');
+
+      const alerts = await prisma.notification.findMany({
+        where: { type: ALERT_TYPE, userId: human.id },
+      });
+      expect(alerts).toHaveLength(1);
+      const details = alerts[0]?.payload as Record<string, unknown>;
+      expect(details).toMatchObject({
+        repository: LUMENBOX_REPO,
+        identifier: issue.identifier,
+        reason: 'project-mismatch',
+      });
+    });
+
+    it('processes INV-prefixed references on an alias-routed repo normally (no membership assertion)', async () => {
+      await createLumenboxProject();
+      const issue = await createTestIssue('Direct reference on lumenbox');
+
+      await processGitHubPrEvent(prisma, {
+        action: 'opened',
+        pull_request: {
+          id: 31003,
+          number: 31003,
+          title: `feat: [${issue.identifier}] direct ref`,
+          html_url: 'https://github.com/fakechris/lumenbox/pull/31003',
+          merged: false,
+          head: { ref: `feat/${issue.identifier}-direct` },
+          updated_at: '2026-09-11T11:00:00.000Z',
+        },
+        repository: { full_name: LUMENBOX_REPO },
+        sender: { login: 'fake-agent' },
+      });
+
+      const updated = await prisma.issue.findUniqueOrThrow({
+        where: { id: issue.id },
+        include: { state: true },
+      });
+      expect(updated.state.type).toBe('REVIEW');
+      expect(
+        await prisma.notification.count({ where: { type: ALERT_TYPE } }),
+      ).toBe(0);
     });
   });
 });

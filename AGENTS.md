@@ -147,7 +147,7 @@ flowchart LR
 
 ### 8.2 离线 CI PR 正则校验 (Offline CI PR Regex Lint)
 - **CI 级门禁**：通过 `.github/workflows/ci.yml`（步骤：`Verify PR Work Graph Reference`）在 GitHub Actions 中执行 PR 静态校验。
-- **词界提取正则**：采用 `(?:^|[^A-Za-z])((?:INV|inv)-[0-9]+)` 精确提取工作项 Identifier，彻底防止 `REINV-12` 或 `INV-1234` 产生局部误匹配。
+- **通用形式校验（INV-459 起）**：正则放宽为词界通用形式 `(^|[^A-Za-z])[A-Za-z]+-[0-9]+`，任何 `TEAM-123` 风格引用（含项目别名前缀如 `LUM-398`）均通过形式检查；**引用的真实性校验已全部下沉服务端**（§9.5 溯源防线 + §8.6 别名路由）。
 - **解析优先级**：`PR Branch Name > PR Title`（优先从分支名提取，缺失时回退至 PR 标题）。
 - **零网络依赖**：CI 校验仅作纯静态正则判定，不向 Involute 发起任何网络调用，CI 流程极速稳定。
 
@@ -173,6 +173,13 @@ flowchart LR
 - `work_claim` 的返回（GraphQL `WorkClaimPayload.suggestedBranch` 与 MCP `suggested_branch` 字段）统一签发分支名，格式 `feat/<identifier>-<ascii-slug>`（非 ASCII 标题退化为 `feat/<identifier>`，小写 identifier 仍可被 webhook 词界正则解析）；
 - Agent **必须原样使用**签发值创建分支，禁止自造任何含 `INV-\d+` / `LUM-\d+` 的分支名；
 - 仅有签发名才是溯源防线（§9.5）无条件信任的引用；PR 标题补充 `[INV-xxx]` 仍按 §8.2 的离线正则校验执行。
+
+### 8.6 项目别名路由 (Project Alias Routing, INV-459)
+仓库路由不再依赖静态表，而是从工作图推导：**PROJECT 类 Issue 节点的 `repository` 字段即该仓库的归属声明**。
+- **路由推导**：`resolveRepoRoute(prisma, repo)` 查找拥有该仓库的 PROJECT 节点（优先 COMMITTED，排除 REJECTED）——路由的 `teamKey` 取节点所在团队，`projectId` 取节点 ID；无 PROJECT 节点的仓库回退到静态表 / `GITHUB_REPO_ROUTES` 环境变量（向后兼容，`setCustomRepoRoutes` 测试钩子不受影响）。`listAllRepoRoutes(prisma)` 输出图路由与静态表的并集（按仓库去重，图优先），供对账引擎与溯源审计使用。
+- **别名前缀（Alias）**：PROJECT 节点可设置 `alias`（如 lumenbox 项目节点 `alias: LUM`）。该仓库的引用解析同时接受团队前缀与别名前缀：`LUM-398` 规范化为 `INV-398` 并标记 `viaAlias`——语义是"工单 INV-398，且声明属于 lumenbox 项目"。
+- **成员校验**：`viaAlias` 引用会强制校验工单的 `repository` 与路由仓库一致；不一致（含 repository 为空）即触发 `project-mismatch` 告警并跳过处理（PR `opened`/`reopened`/`edited` 与分支 `create`）；溯源审计中别名引用合法，仅当成员声明不实时记为 `project-mismatch` 异常。团队前缀直接引用（`INV-398`）不做成员断言，行为不变。
+- **设置别名**：通过 `issueUpdate`（GraphQL `IssueUpdateInput.alias` / MCP `work_update`）在 PROJECT 节点上写入，例如把 `INV-2`（lumenbox 项目节点）的 `alias` 设为 `LUM`、`repository` 设为 `fakechris/lumenbox` 后，lumenbox 仓库的 `LUM-xxx` 引用即刻生效；清空传 `alias: null`。
 
 ## 9. Operations & Observability Runbook (运维巡检与故障排查手册)
 

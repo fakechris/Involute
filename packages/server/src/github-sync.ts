@@ -16,7 +16,7 @@
 import type { PrismaClient } from '@prisma/client';
 
 import type { RepoRoute } from './github-repo-routes.js';
-import { getRepoRoutes } from './github-repo-routes.js';
+import { listAllRepoRoutes } from './github-repo-routes.js';
 import { emitOpsAlert } from './ops-alerts.js';
 import type { PullRequestPayload } from './github-webhook-handler.js';
 import { processGitHubPrEvent } from './github-webhook-handler.js';
@@ -356,14 +356,15 @@ export async function reconcileRepoPullRequests(
 }
 
 /**
- * Reconcile all configured repositories in DEFAULT_REPO_ROUTES / GITHUB_REPO_ROUTES.
+ * Reconcile all configured repositories: graph-derived PROJECT routes unioned
+ * with the static/env fallback list (INV-459).
  */
 export async function reconcileAllConfiguredRepos(
   prisma: PrismaClient,
   githubClient: GitHubApiClient,
   options: Partial<ReconcileOptions> = {},
 ): Promise<ReconcileResult[]> {
-  const routes = getRepoRoutes();
+  const routes = await listAllRepoRoutes(prisma);
   const results: ReconcileResult[] = [];
 
   for (const route of routes) {

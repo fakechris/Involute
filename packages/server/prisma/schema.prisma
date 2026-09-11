@@ -231,6 +231,9 @@ model Issue {
   acceptance        String?
   verification      String?
   repository        String?
+  // INV-459: per-project reference alias (e.g. LUM on the lumenbox PROJECT
+  // node) — alias-prefixed PR references canonicalize to the team key.
+  alias             String?
   labels            IssueLabel[]
   comments          Comment[]
   projectId         String?           @db.Uuid
