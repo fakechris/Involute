@@ -137,7 +137,7 @@ describe('GraphQL server core', () => {
         {
           headers: {
             authorization: `Bearer ${TEST_AUTH_TOKEN}`,
-            'content-length': 21 * 1024 * 1024,
+            'content-length': 101 * 1024 * 1024,
             'content-type': 'application/json',
           },
           host: address.hostname,

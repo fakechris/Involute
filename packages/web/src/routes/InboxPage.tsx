@@ -57,6 +57,8 @@ function formatNotificationType(type: string): string {
       return 'Evidence submitted';
     case 'webhook.disabled':
       return 'Webhook disabled';
+    case 'bug.reported':
+      return 'Bug reported';
     default:
       return type
         .split('.')

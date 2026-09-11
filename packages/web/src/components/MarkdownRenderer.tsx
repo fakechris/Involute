@@ -14,6 +14,13 @@ interface ParsedToken {
   lang?: string;
 }
 
+const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mov'];
+
+function isVideoUrl(href: string): boolean {
+  const path = href.split(/[?#]/)[0]?.toLowerCase() ?? '';
+  return VIDEO_EXTENSIONS.some((extension) => path.endsWith(extension));
+}
+
 function tokenizeInline(text: string): ParsedToken[] {
   const tokens: ParsedToken[] = [];
   let remaining = text;
@@ -85,6 +92,21 @@ function renderTokens(tokens: ParsedToken[], keyPrefix: string): ReactNode[] {
       case 'code':
         return <code key={key}>{token.content}</code>;
       case 'link':
+        if (isVideoUrl(token.href ?? '')) {
+          return (
+            <video
+              key={key}
+              src={token.href}
+              controls
+              preload="metadata"
+              style={{ display: 'block', maxWidth: '100%', maxHeight: 360, margin: '4px 0' }}
+            >
+              <a href={token.href} target="_blank" rel="noopener noreferrer">
+                {token.content}
+              </a>
+            </video>
+          );
+        }
         return (
           <a key={key} href={token.href} target="_blank" rel="noopener noreferrer">
             {token.content}

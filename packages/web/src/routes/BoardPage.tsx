@@ -90,8 +90,9 @@ import { IssueCard, getProjectColorClass } from '../components/IssueCard';
 import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
 import { KanbanView } from '../components/KanbanView';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
+import { ReportBugDialog } from '../components/ReportBugDialog';
 import { BacklogPage } from './BacklogPage';
-import { IcoFilter, IcoPlus, IcoList, IcoBoard, IcoClose, IcoChevR, IcoProject } from '../components/Icons';
+import { IcoFilter, IcoPlus, IcoBug, IcoList, IcoBoard, IcoClose, IcoChevR, IcoProject } from '../components/Icons';
 import { Btn, PriorityIcon } from '../components/Primitives';
 
 const ISSUE_PAGE_SIZE = 200;
@@ -261,6 +262,7 @@ export function BoardPage() {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [isSavingState, setIsSavingState] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isReportBugOpen, setIsReportBugOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
   const [dragPreviewStateId, setDragPreviewStateId] = useState<string | null>(null);
@@ -2034,6 +2036,15 @@ export function BoardPage() {
             setIsCreateOpen(true);
           }}
         >Create issue</Btn>
+        <Btn
+          variant="ghost"
+          icon={<IcoBug size={12} />}
+          size="sm"
+          onClick={() => {
+            setMutationError(null);
+            setIsReportBugOpen(true);
+          }}
+        >Report bug</Btn>
       </header>
 
       {availableProjects.length > 0 && (
@@ -2652,6 +2663,15 @@ export function BoardPage() {
         onDescriptionChange={setCreateDescription}
         onTeamChange={(teamKey) => setPendingTeamKey(teamKey === activeTeamKey ? null : teamKey)}
       />
+      {selectedTeam ? (
+        <ReportBugDialog
+          isOpen={isReportBugOpen}
+          teamId={selectedTeam.id}
+          projects={queryData?.projectSummary?.projects ?? []}
+          labels={labels}
+          onClose={() => setIsReportBugOpen(false)}
+        />
+      ) : null}
     </main>
   );
 }

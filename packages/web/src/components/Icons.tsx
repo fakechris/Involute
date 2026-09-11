@@ -18,6 +18,10 @@ export function IcoPlus({ size = 14, ...rest }: IconProps) {
   return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><path d="M7 3v8M3 7h8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>);
 }
 
+export function IcoBug({ size = 14, ...rest }: IconProps) {
+  return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><ellipse cx="7" cy="8" rx="3.4" ry="3.6" stroke="currentColor" strokeWidth="1.2"/><path d="M7 4.4V2.6M4.8 3.4l.9 1.3M9.2 3.4l-.9 1.3M3.6 7H1.8M3.9 9.7l-1.5 1M12.2 7h-1.8M11.6 10.7l-1.5-1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>);
+}
+
 export function IcoInbox({ size = 14, ...rest }: IconProps) {
   return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><path d="M2 8v3a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8m-10 0 1.5-4h7L12 8m-10 0h3l1 1.5h2L9 8h3" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>);
 }

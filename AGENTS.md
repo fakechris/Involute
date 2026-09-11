@@ -275,3 +275,13 @@ features:
 | feature matrix、竞品笔记、文章日志 | 产品仓库 `research/` |
 | "明确不做"的执行级决策 | Involute DECISION 节点（§10） |
 | 刷新调研、转化行动项、bug、交付 | Involute 工单 |
+
+## 12. Bug Management Flow (缺陷上报与处理闭环)
+
+Involute ships a Linear-style bug pipeline: humans report through the UI, agents discover and fix through the standard work-graph protocol.
+
+1. **Human reports via Report Bug UI**: The board toolbar's **Report bug** button opens a dialog (title, rich-text description with paste-to-upload images/videos, priority, project, type labels). Submitting calls the `bugReport` GraphQL mutation, which creates the issue **directly as COMMITTED** (no candidate review), find-or-creates the `bug` label (case-insensitive), tags `source: 'bug-report'`, and lands it in the team's default backlog state.
+2. **Discovery by agents**: Every report emits a `bug.reported` inbox notification to team humans **and** a `bug.reported` outbox webhook event (subscribable via `WORK_EVENT_TYPES`), so external agents can discover new bugs and `work_claim` them like any other committed work.
+3. **Fixing agents follow the standard protocol**: claim → `run_report` → `evidence_attach` → In Review. Bugs are ordinary committed issues; `Done` remains strictly human-gated.
+4. **Statistics**: The `/bugs` page (backed by the `bugSummary` query) shows open/closed counts, per-project and per-type-label breakdowns, unclaimed open count, open-age stats, and an 8-week creation trend for triage.
+5. **Agent-discovered bugs**: Bugs an agent finds while working still follow the §7 DISCOVERED_DURING protocol (`work_propose` with `related_work_type: 'DISCOVERED_DURING'`) — the Report Bug UI flow is for human-reported defects.
