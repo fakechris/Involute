@@ -72,6 +72,13 @@ const mockTeams = [
   },
 ];
 
+// Mutable holder so individual tests can swap the query result; the page
+// re-renders (and re-calls useQuery) after its assignee-init effect, so
+// mockReturnValueOnce is not reliable here.
+const { queryDataHolder } = vi.hoisted(() => ({
+  queryDataHolder: { current: null as null | { issues: unknown; teams: unknown } },
+}));
+
 afterEach(() => {
   cleanup();
 });
@@ -98,7 +105,7 @@ beforeEach(() => {
 
 vi.mock('@apollo/client/react', () => ({
   useQuery: vi.fn(() => ({
-    data: {
+    data: queryDataHolder.current ?? {
       issues: {
         nodes: candidateItems,
         pageInfo: { endCursor: null, hasNextPage: false },
@@ -180,5 +187,46 @@ describe('CandidatesPage', () => {
         },
       },
     });
+  });
+
+  it('shows commit-target badges for backlog candidates, distinguishing parked from default', () => {
+    const backlogCandidates = [
+      {
+        ...candidateItems[0],
+        id: 'cand-b1',
+        identifier: 'INV-50',
+        title: 'Explicitly parked candidate',
+        repository: 'fakechris/Involute',
+        source: 'initial_state=BACKLOG',
+        state: { id: 'st-backlog', name: 'Backlog', type: 'BACKLOG', position: 0 },
+      },
+      {
+        ...candidateItems[1],
+        id: 'cand-b2',
+        identifier: 'INV-51',
+        title: 'Default-landed backlog candidate',
+        repository: 'fakechris/Involute',
+        source: null,
+        state: { id: 'st-backlog', name: 'Backlog', type: 'BACKLOG', position: 0 },
+      },
+    ];
+    queryDataHolder.current = {
+      issues: { nodes: backlogCandidates, pageInfo: { endCursor: null, hasNextPage: false } },
+      teams: { nodes: mockTeams },
+    };
+    try {
+      render(
+        <MemoryRouter>
+          <CandidatesPage />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText('Target: Backlog')).toBeInTheDocument();
+      expect(screen.getByTitle(/stays parked in Backlog/)).toBeInTheDocument();
+      expect(screen.getByText('Target: Ready')).toBeInTheDocument();
+      expect(screen.getByTitle(/moved out of Backlog/)).toBeInTheDocument();
+    } finally {
+      queryDataHolder.current = null;
+    }
   });
 });
