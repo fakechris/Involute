@@ -8,6 +8,7 @@ import {
 } from './access-control.js';
 import type { GraphQLContext } from './auth.js';
 import { claimWork, commitWork, normalizeInitialStateType, proposeWork } from './claim-service.js';
+import { suggestedBranchName } from './branch-name.js';
 import {
   findWorkByIdOrIdentifier,
   getWorkContext,
@@ -278,12 +279,16 @@ export async function callMcpTool(
       const claimInput: Parameters<typeof claimWork>[2] = {};
       assignOptional(claimInput, 'idempotencyKey', optionalString(args.idempotency_key));
       assignOptional(claimInput, 'leaseSeconds', optionalNumber(args.lease_seconds));
-      return claimWork(
+      const result = await claimWork(
         context.prisma,
         work.id,
         claimInput,
         writeActorFromViewer(context.viewer, 'mcp'),
       );
+      return {
+        ...result,
+        suggested_branch: suggestedBranchName(result.work.identifier, result.work.title),
+      };
     }
     case 'run_report': {
       const work = await requireWork(context.prisma, requiredString(args.work_id, 'work_id'));
@@ -481,7 +486,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_claim',
     annotations: { readOnlyHint: false, destructiveHint: false },
-    description: 'Atomically claim committed work for the current actor. Does not change the human assignee.',
+    description: 'Atomically claim committed work for the current actor. Does not change the human assignee. The response includes suggested_branch — a harness-issued branch name you MUST use verbatim for your git branch; never invent branch names containing issue identifiers.',
     inputSchema: {
       type: 'object',
       properties: {

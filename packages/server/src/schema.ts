@@ -76,6 +76,7 @@ import { WORK_EVENT_TYPES, enqueueWorkEvent } from './event-outbox.js';
 import { createComment, createIssue, createIssueInTransaction, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
 import { projectWorkNotifications } from './notification-service.js';
 import { auditMergedPrTraceability } from './traceability-audit.js';
+import { suggestedBranchName } from './branch-name.js';
 import { createWorkLink, deleteWorkLink, listIncidentLinks } from './link-service.js';
 import { writeActorFromViewer } from './work-service.js';
 import { getUploadsDirectory } from './uploads.js';
@@ -1123,6 +1124,7 @@ const typeDefs = /* GraphQL */ `
     success: Boolean!
     issue: Issue
     claim: WorkClaimRecord
+    suggestedBranch: String
   }
 
   input RunReportInput {
@@ -2005,7 +2007,7 @@ const resolvers = {
       _parent: unknown,
       args: { id: string; input?: ClaimWorkInput | null },
       context: GraphQLContext,
-    ): Promise<{ claim: WorkClaimParent | null; issue: IssueParent | null; success: boolean }> =>
+    ): Promise<{ claim: WorkClaimParent | null; issue: IssueParent | null; success: boolean; suggestedBranch: string | null }> =>
       runMutation(async () => {
         const existing = await findWorkByIdOrIdentifier(context.prisma, args.id);
         if (!existing) {
@@ -2027,11 +2029,13 @@ const resolvers = {
           }),
           issue: await getIssueById(context.prisma, result.work.id),
           success: true as const,
+          suggestedBranch: suggestedBranchName(result.work.identifier, result.work.title),
         };
       }, {
         claim: null,
         issue: null,
         success: false as const,
+        suggestedBranch: null,
       }),
     runReport: async (
       _parent: unknown,
