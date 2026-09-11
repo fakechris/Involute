@@ -238,7 +238,9 @@ describe('claim service', () => {
   });
 
   it('refuses to commit when the team has no unstarted state', async () => {
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'No ready state' });
+    // Candidates now default to Ready, which would hold an FK reference and
+    // block the delete below; park this one in Backlog explicitly instead.
+    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'No ready state', initialState: 'BACKLOG' });
     await prisma.workflowState.delete({ where: { id: ready.id } });
 
     await expect(commitWork(
@@ -497,6 +499,27 @@ describe('claim service', () => {
   });
 
   describe('candidate initial_state and direct commit workflow', () => {
+    it('defaults candidates without initialState to Ready, not the team default Backlog', async () => {
+      const candidate = await proposeWork(prisma, {
+        teamId: team.id,
+        title: 'Work without explicit initial state',
+      });
+
+      expect(candidate.stateId).toBe(ready.id);
+
+      const committed = await commitWork(
+        prisma,
+        candidate.id,
+        {
+          acceptance: 'Verified',
+          assigneeId: human.id,
+          expectedRevision: candidate.revision,
+        },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'web' },
+      );
+      expect(committed.stateId).toBe(ready.id);
+    });
+
     it('proposes work with initialState REVIEW and commits directly into REVIEW state', async () => {
       const candidate = await proposeWork(prisma, {
         teamId: team.id,

@@ -195,7 +195,10 @@ export async function proposeWork(
       teamId: input.teamId,
       title: sanitizedTitle,
     };
-    const targetType = normalizeInitialStateType(input.initialState);
+    // Default per MCP contract is UNSTARTED (Ready): without an explicit
+    // initialState we must not fall through to the team's position-0 state
+    // (Backlog for INV), or candidates silently park outside the ready lane.
+    const targetType = normalizeInitialStateType(input.initialState) ?? 'UNSTARTED';
     if (targetType) {
       const matchingState = await transaction.workflowState.findFirst({
         where: {

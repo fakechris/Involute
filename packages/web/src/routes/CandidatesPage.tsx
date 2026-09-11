@@ -53,6 +53,26 @@ function isSnoozed(candidate: CandidateWork): boolean {
   return Boolean(candidate.snoozedUntil && new Date(candidate.snoozedUntil).getTime() > Date.now());
 }
 
+// Mirrors the server-side commit routing in claim-service.ts: REVIEW/STARTED
+// states are commit targets; BACKLOG only survives commit when the candidate
+// was explicitly parked (initial_state=BACKLOG marker), otherwise commit
+// corrects it to Ready.
+function targetStateBadge(candidate: CandidateWork): { label: string; title: string } | null {
+  const type = candidate.state?.type;
+  if (type === 'REVIEW') {
+    return { label: 'Target: In Review', title: 'Target state upon approval: In Review' };
+  }
+  if (type === 'STARTED') {
+    return { label: 'Target: In Progress', title: 'Target state upon approval: In Progress' };
+  }
+  if (type === 'BACKLOG') {
+    return candidate.source?.includes('initial_state=BACKLOG')
+      ? { label: 'Target: Backlog', title: 'Target state upon approval: stays parked in Backlog' }
+      : { label: 'Target: Ready', title: 'Target state upon approval: Ready (moved out of Backlog)' };
+  }
+  return null;
+}
+
 function CandidateCard({
   candidate,
   humans,
@@ -211,15 +231,14 @@ function CandidateCard({
           {candidate.identifier}
         </button>
         <span className="observation-card__status">{snoozed ? 'snoozed candidate' : 'candidate'}</span>
-        {candidate.state?.type === 'REVIEW' ? (
-          <span className="observation-card__status observation-card__status--target" title="Target state upon approval: In Review">
-            Target: In Review
-          </span>
-        ) : candidate.state?.type === 'STARTED' ? (
-          <span className="observation-card__status observation-card__status--target" title="Target state upon approval: In Progress">
-            Target: In Progress
-          </span>
-        ) : null}
+        {(() => {
+          const badge = targetStateBadge(candidate);
+          return badge ? (
+            <span className="observation-card__status observation-card__status--target" title={badge.title}>
+              {badge.label}
+            </span>
+          ) : null;
+        })()}
         <span className="observation-card__meta">{candidate.team.key}</span>
         {candidate.repository ? (
           <span className="observation-card__meta observation-card__repo">{candidate.repository}</span>
