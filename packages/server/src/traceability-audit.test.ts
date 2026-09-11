@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { createIssue } from './issue-service.js';
+import { buildIdentifierPattern } from './github-repo-routes.ts';
 import type { MergedPullRequest } from './traceability-audit.ts';
 import {
   auditMergedPrTraceability,
@@ -219,8 +220,7 @@ describe('merged-PR traceability audit (INV-449)', () => {
     expect(defaulted.days).toBe(7);
   });
 
-  it('captures a failing repo in repoErrors and still audits the others', async () => {
-    const issue = await createCommittedIssue('Isolation audit target');
+  it('captures a failing repo in repoErrors and still audits the others', async () => {    const issue = await createCommittedIssue('Isolation audit target');
     await prisma.workEvidence.create({
       data: {
         workId: issue.id,
@@ -260,5 +260,79 @@ describe('merged-PR traceability audit (INV-449)', () => {
     ]);
     expect(result.scannedPrCount).toBe(1);
     expect(result.anomalies).toEqual([]);
+  });
+
+  describe('alias references (INV-459)', () => {
+    const LUMENBOX_ROUTE = {
+      repository: 'fakechris/lumenbox',
+      teamKey: 'INV',
+      identifierPattern: buildIdentifierPattern(['INV', 'LUM']),
+      alias: 'LUM',
+    } as const;
+
+    function aliasRefFor(issue: { identifier: string }): string {
+      return `LUM-${issue.identifier.split('-')[1]}`;
+    }
+
+    it('treats an alias reference with correct membership as legal (no anomaly)', async () => {
+      const issue = await createCommittedIssue('Alias member target');
+      await prisma.issue.update({
+        where: { id: issue.id },
+        data: { repository: 'fakechris/lumenbox' },
+      });
+      await prisma.workEvidence.create({
+        data: {
+          workId: issue.id,
+          kind: 'PR',
+          url: 'https://github.com/fakechris/lumenbox/pull/21',
+          summary: 'GitHub PR #21',
+        },
+      });
+
+      const result = await auditMergedPrTraceability({
+        prisma,
+        now: NOW,
+        repos: [LUMENBOX_ROUTE],
+        listMergedPrs: async () => [
+          buildMergedPr({
+            number: 21,
+            title: `feat: [${aliasRefFor(issue)}] aliased merge`,
+            html_url: 'https://github.com/fakechris/lumenbox/pull/21',
+            head: { ref: `feat/${aliasRefFor(issue)}-x` },
+          }),
+        ],
+      });
+
+      expect(result.scannedPrCount).toBe(1);
+      expect(result.anomalies).toEqual([]);
+      expect(result.repoErrors).toEqual([]);
+    });
+
+    it('flags an alias reference with wrong membership as project-mismatch', async () => {
+      const issue = await createCommittedIssue('Alias non-member target');
+      // repository stays null: the LUM- alias claims lumenbox membership.
+
+      const result = await auditMergedPrTraceability({
+        prisma,
+        now: NOW,
+        repos: [LUMENBOX_ROUTE],
+        listMergedPrs: async () => [
+          buildMergedPr({
+            number: 22,
+            title: `feat: [${aliasRefFor(issue)}] fake membership`,
+            html_url: 'https://github.com/fakechris/lumenbox/pull/22',
+            head: { ref: `feat/${aliasRefFor(issue)}-x` },
+          }),
+        ],
+      });
+
+      expect(result.anomalies).toHaveLength(1);
+      expect(result.anomalies[0]).toMatchObject({
+        repository: 'fakechris/lumenbox',
+        prNumber: 22,
+        identifier: issue.identifier,
+        reason: 'project-mismatch',
+      });
+    });
   });
 });

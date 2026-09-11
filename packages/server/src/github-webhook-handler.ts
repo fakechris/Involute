@@ -14,7 +14,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { PrismaClient, WorkflowStateType } from '@prisma/client';
 
-import { extractIssueIdentifiers, findRepoRoute, resolveIssueIdentifierFromPr } from './github-repo-routes.js';
+import { resolveCanonicalIssueRef, resolveRepoRoute } from './github-repo-routes.js';
 import { applyMonotonicForward, applyProvenanceRollback } from './github-webhook-state-machine.js';
 import { emitOpsAlert } from './ops-alerts.js';
 
@@ -68,7 +68,7 @@ function isReferenceCheckAction(action: string): action is 'opened' | 'reopened'
   return action === 'opened' || action === 'reopened' || action === 'edited';
 }
 
-type UnverifiedReferenceReason = 'unknown-identifier' | 'team-mismatch' | 'terminal-issue-reference';
+type UnverifiedReferenceReason = 'unknown-identifier' | 'team-mismatch' | 'terminal-issue-reference' | 'project-mismatch';
 
 /**
  * INV-449 traceability guard: the CI lint only regex-matches INV-\d+ offline,
@@ -263,24 +263,26 @@ export async function processGitHubPrEvent(
     return; // We only handle opened, reopened, closed (+ edited for reference checks)
   }
 
-  // Route lookup
-  const route = findRepoRoute(repository.full_name);
+  // Route lookup (graph-derived from PROJECT nodes, static list as fallback)
+  const route = await resolveRepoRoute(prisma, repository.full_name);
   if (!route) {
     console.log(`[github-webhook] No route configured for repository: ${repository.full_name}`);
     return;
   }
 
-  // Extract issue identifier from branch (priority) or title
-  const identifier = resolveIssueIdentifierFromPr({
+  // Extract issue identifier from branch (priority) or title; alias prefixes
+  // (e.g. LUM-398) canonicalize to the team key with viaAlias set.
+  const ref = resolveCanonicalIssueRef({
     branch: pr.head.ref,
     title: pr.title,
     route,
   });
 
-  if (!identifier) {
+  if (!ref) {
     console.log(`[github-webhook] No issue identifier found in PR #${pr.number} (${pr.title}) on ${repository.full_name}`);
     return;
   }
+  const identifier = ref.identifier;
 
   // Look up the issue in the database
   const issue = await prisma.issue.findUnique({
@@ -319,6 +321,31 @@ export async function processGitHubPrEvent(
         branch: pr.head.ref,
         identifier,
         reason: 'team-mismatch',
+        sender: payload.sender?.login ?? null,
+      });
+    }
+    return;
+  }
+
+  // Alias semantics: LUM-398 asserts the issue belongs to the aliased
+  // project. A reference via alias to an issue of another repository (or no
+  // repository) is a fake membership claim — alert and skip.
+  if (
+    ref.viaAlias &&
+    (issue.repository ?? '').toLowerCase().trim() !== route.repository.toLowerCase().trim()
+  ) {
+    console.log(
+      `[github-webhook] Project mismatch: ${identifier} referenced via alias ${route.alias} on ${repository.full_name}, but issue repository is ${issue.repository ?? 'none'}`,
+    );
+    if (isReferenceCheckAction(action)) {
+      await emitUnverifiedReferenceAlert(prisma, {
+        repository: repository.full_name,
+        prNumber: pr.number,
+        prTitle: pr.title,
+        prUrl: pr.html_url,
+        branch: pr.head.ref,
+        identifier,
+        reason: 'project-mismatch',
         sender: payload.sender?.login ?? null,
       });
     }
@@ -481,21 +508,17 @@ export async function processGitHubCreateEvent(
     return;
   }
 
-  const route = findRepoRoute(payload.repository.full_name);
+  const route = await resolveRepoRoute(prisma, payload.repository.full_name);
   if (!route) {
     console.log(`[github-webhook] No route configured for repository: ${payload.repository.full_name}`);
     return;
   }
 
-  const identifiers = extractIssueIdentifiers(payload.ref, route);
-  if (identifiers.length === 0) {
+  const ref = resolveCanonicalIssueRef({ branch: payload.ref, title: '', route });
+  if (!ref) {
     return;
   }
-
-  const identifier = identifiers[0];
-  if (!identifier) {
-    return;
-  }
+  const identifier = ref.identifier;
 
   const issue = await prisma.issue.findUnique({
     where: { identifier },
@@ -530,6 +553,28 @@ export async function processGitHubCreateEvent(
       branch: payload.ref,
       identifier,
       reason: 'team-mismatch',
+      sender: payload.sender?.login ?? null,
+    });
+    return;
+  }
+
+  // Alias semantics on branch create: same project-membership verification
+  // as the PR flow.
+  if (
+    ref.viaAlias &&
+    (issue.repository ?? '').toLowerCase().trim() !== route.repository.toLowerCase().trim()
+  ) {
+    console.log(
+      `[github-webhook] Project mismatch: ${identifier} referenced via alias ${route.alias} on ${payload.repository.full_name}, but issue repository is ${issue.repository ?? 'none'}`,
+    );
+    await emitUnverifiedReferenceAlert(prisma, {
+      repository: payload.repository.full_name,
+      prNumber: null,
+      prTitle: null,
+      prUrl: null,
+      branch: payload.ref,
+      identifier,
+      reason: 'project-mismatch',
       sender: payload.sender?.login ?? null,
     });
     return;
