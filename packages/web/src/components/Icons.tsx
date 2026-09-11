@@ -98,6 +98,10 @@ export function IcoCycle({ size = 14, ...rest }: IconProps) {
   return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><path d="M2 7a5 5 0 0 1 9-3m1 3a5 5 0 0 1-9 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M11 2v2h-2m-6 8v-2h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>);
 }
 
+export function IcoHistory({ size = 14, ...rest }: IconProps) {
+  return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><path d="M2.5 3.4v2.3h2.3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/><path d="M2.9 5.7a4.4 4.4 0 1 1-.4 2.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><path d="M7 4.6V7l1.7 1.1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>);
+}
+
 export function IcoGraph({ size = 14, ...rest }: IconProps) {
   return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><circle cx="3.5" cy="3.5" r="1.7" stroke="currentColor" strokeWidth="1.2"/><circle cx="10.5" cy="4" r="1.7" stroke="currentColor" strokeWidth="1.2"/><circle cx="7" cy="10.5" r="1.7" stroke="currentColor" strokeWidth="1.2"/><path d="M5 4.2 9 4.5M4.2 5.1 6.2 9.1M9.4 5.4 8 9" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>);
 }
