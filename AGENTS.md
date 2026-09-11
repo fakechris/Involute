@@ -179,7 +179,7 @@ flowchart LR
 - **路由推导**：`resolveRepoRoute(prisma, repo)` 查找拥有该仓库的 PROJECT 节点（优先 COMMITTED，排除 REJECTED）——路由的 `teamKey` 取节点所在团队，`projectId` 取节点 ID；无 PROJECT 节点的仓库回退到静态表 / `GITHUB_REPO_ROUTES` 环境变量（向后兼容，`setCustomRepoRoutes` 测试钩子不受影响）。`listAllRepoRoutes(prisma)` 输出图路由与静态表的并集（按仓库去重，图优先），供对账引擎与溯源审计使用。
 - **别名前缀（Alias）**：PROJECT 节点可设置 `alias`（如 lumenbox 项目节点 `alias: LUM`）。该仓库的引用解析同时接受团队前缀与别名前缀：`LUM-398` 规范化为 `INV-398` 并标记 `viaAlias`——语义是"工单 INV-398，且声明属于 lumenbox 项目"。
 - **成员校验**：`viaAlias` 引用会强制校验工单的 `repository` 与路由仓库一致；不一致（含 repository 为空）即触发 `project-mismatch` 告警并跳过处理（PR `opened`/`reopened`/`edited` 与分支 `create`）；溯源审计中别名引用合法，仅当成员声明不实时记为 `project-mismatch` 异常。团队前缀直接引用（`INV-398`）不做成员断言，行为不变。
-- **设置别名**：通过 `issueUpdate`（GraphQL `IssueUpdateInput.alias` / MCP `work_update`）在 PROJECT 节点上写入，例如把 `INV-2`（lumenbox 项目节点）的 `alias` 设为 `LUM`、`repository` 设为 `fakechris/lumenbox` 后，lumenbox 仓库的 `LUM-xxx` 引用即刻生效；清空传 `alias: null`。
+- **设置别名**：通过 `issueUpdate`（GraphQL `IssueUpdateInput.alias` / MCP `work_update`）在 PROJECT 节点上写入，例如把 `INV-96`（lumenbox 项目节点）的 `alias` 设为 `LUM`（其 `repository` 已为 `fakechris/lumenbox`）后，lumenbox 仓库的 `LUM-xxx` 引用即刻生效；清空传 `alias: null`。
 
 ## 9. Operations & Observability Runbook (运维巡检与故障排查手册)
 
