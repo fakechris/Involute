@@ -130,6 +130,12 @@ describe('App board controls', () => {
       return [vi.fn()];
     });
 
+    window.localStorage.setItem('involute.activeTeamKey', 'INV');
+    window.localStorage.setItem(
+      'involute.board.viewState.INV',
+      JSON.stringify({ sortField: 'updatedAt', sortDirection: 'asc' }),
+    );
+
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
@@ -137,7 +143,6 @@ describe('App board controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
 
     expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('data-focused', 'true');
-
     fireEvent.keyDown(window, { key: 'x' });
     expect(screen.getByRole('checkbox', { name: 'Select INV-1' })).toBeChecked();
 
@@ -239,6 +244,12 @@ describe('App board controls', () => {
 
       return [vi.fn()];
     });
+
+    window.localStorage.setItem('involute.activeTeamKey', 'INV');
+    window.localStorage.setItem(
+      'involute.board.viewState.INV',
+      JSON.stringify({ sortField: 'updatedAt', sortDirection: 'asc' }),
+    );
 
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 

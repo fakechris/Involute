@@ -214,3 +214,64 @@ WHERE key = 'github_sync_fakechris/Involute';
 ```
 调整后，等待下一轮对账定时器触发或重启服务触发冷启动对账，引擎即可将该时间段后的所有 PR 事件平滑补齐至 Involute 状态机中。
 
+
+## 10. 决策记录协议 (DECISION Work Kind：做什么 / 明确不做什么)
+
+`WorkKind.DECISION` 是一等公民（`work_propose` 的 `kind` 枚举已支持），用于沉淀**执行级决策**，尤其是"明确不做（wont-do）"的功能判断——这类记录此前无处可查，导致团队反复重新讨论同一问题。
+
+### 10.1 何时必须创建 DECISION 节点
+- 竞品调研、文章分析或讨论中得出"我们明确不做 X"的结论时；
+- 做与不做之间存在真实取舍、未来可能被重新质疑的功能判断；
+- 架构选型层面"选 A 弃 B"且影响后续工单拆解的决定。
+
+### 10.2 创建规范
+- `kind: 'DECISION'`，通过 `CONTAINS` 挂到对应产品的 PROJECT 节点下，不得孤儿化；
+- 标题即结论，禁止模糊表述：`不做：自动同步竞品定价页（依据：与人工报价流程冲突）`；
+- `description` 沿用三段式结构，其中 `### 2. 核心功能与交付范围` 改写为"决策内容与依据"，必须引用来源（竞品 matrix 行、文章 URL、讨论日期）；
+- 状态语义：`COMPLETED` = 决策生效中；决策被推翻时不得删除节点，转为 `CANCELED` 并在描述顶部追加推翻原因与新决策的 identifier。
+
+### 10.3 查询方式
+IQL `kind = DECISION` 即可列出全部执行级决策；战略级取舍（跨项目资源分配、roadmap 优先级）仍归 planofplan，不在此重复记录。
+
+## 11. 研究资产目录协议 (research/ 隔离约定)
+
+竞品调研与文章分析属于**持续演化的知识资产**，不进入 Involute 工单本体（避免 scratchpad 污染），统一写入各产品仓库的 `research/` 目录。该目录在多数项目中被 `.gitignore` 隔离，可自由存放未定稿材料；若某项目希望将研究资产纳入版本管理，移除对应 ignore 条目即可，结构不变。
+
+### 11.1 竞品调研：`research/competitive/`
+```
+research/competitive/
+├── matrix.yml              # 结构化 feature 矩阵（唯一事实源）
+├── competitors/
+│   ├── <competitor-a>.md   # 每家一份持续调研笔记
+│   └── <competitor-b>.md
+└── articles.md             # 见 11.2（也可放 research/ 根目录，按项目习惯）
+```
+
+**`matrix.yml` 规范**（机器可读，agent 必须精确 diff，禁止自由改写结构）：
+```yaml
+product: <owner/repo>
+updated_at: 2026-09-10
+competitors: [<name-a>, <name-b>]
+features:
+  - name: <能力点>
+    us: yes | no | partial | planned | wont-do
+    <name-a>: yes | no | partial | unknown
+    note: 一行说明；wont-do 必须附对应 DECISION 的 INV 号
+```
+- 每个产品维护 5~10 家核心竞品；`us: wont-do` 必须与 §10 的 DECISION 节点互相引用；
+- `competitors/<name>.md` 头部必须带 `last_verified_at: YYYY-MM-DD`，超过 14 天未刷新即视为过期；
+- **刷新动作是 Involute 工作**：每双周由调度（cron / agent 定时触发）对每个竞品执行刷新，产出以 evidence（matrix 的 commit 或文件 diff 摘要）挂载到对应调研工单。
+
+### 11.2 文章分析：`research/articles.md`
+- 一行一条：`| 日期 | 标题 | URL | 三行以内要点 | 衍生的 INV 号（无则填 -） |`；
+- **闭环铁律**：agent 分析完一篇文章后，凡提取出可执行点，必须当场 `work_propose` 为候选工单（描述中回链文章 URL）；只分析不转化视为任务未完成；
+- 文章本体与分析全文留在 pinboard / 本目录，不为每篇文章单独建 Involute 工单。
+
+### 11.3 系统边界速查
+| 内容 | 归属 |
+|---|---|
+| 原始收藏、灵感剪藏 | pinboard |
+| 跨项目 roadmap、战略取舍 | planofplan |
+| feature matrix、竞品笔记、文章日志 | 产品仓库 `research/` |
+| "明确不做"的执行级决策 | Involute DECISION 节点（§10） |
+| 刷新调研、转化行动项、bug、交付 | Involute 工单 |

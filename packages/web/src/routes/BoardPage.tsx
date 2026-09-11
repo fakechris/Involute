@@ -2245,6 +2245,7 @@ export function BoardPage() {
               >
                 <option value="updatedAt">Updated</option>
                 <option value="createdAt">Created</option>
+                <option value="priority">Priority</option>
                 <option value="identifier">ID</option>
                 <option value="title">Title</option>
               </select>

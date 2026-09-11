@@ -36,6 +36,12 @@ describe('App board drawer flows', () => {
   });
 
   it('navigates between visible board issues from the drawer controls and keyboard shortcuts', async () => {
+    window.localStorage.setItem('involute.activeTeamKey', 'INV');
+    window.localStorage.setItem(
+      'involute.board.viewState.INV',
+      JSON.stringify({ sortField: 'updatedAt', sortDirection: 'asc' }),
+    );
+
     renderTestApp();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
