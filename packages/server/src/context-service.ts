@@ -14,6 +14,7 @@ import type {
 } from '@prisma/client';
 
 import { ISSUE_NOT_FOUND_MESSAGE, createNotFoundError } from './errors.js';
+import { resolveProjectScope } from './project-scope.js';
 import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
@@ -200,10 +201,10 @@ export async function listReadyWork(
   const iqlWhere = input.iql?.trim()
     ? compileIqlToIssueWhere(parseIqlOrThrow(input.iql), { viewerId: input.viewerId ?? null })
     : undefined;
-  const baseWhere = combineWhere(
-    readableWhere,
-    combineWhere(iqlWhere, buildReadyWorkWhere(input)) ?? buildReadyWorkWhere(input),
-  );
+  const scope = await resolveProjectScope(prisma, input, readableWhere);
+  const baseWhere: Prisma.IssueWhereInput = {
+    AND: [readableWhere ?? {}, iqlWhere ?? {}, scope?.where ?? {}, buildReadyWorkWhere(input)],
+  };
   const priorities: Array<number | 'other'> = input.priority !== undefined && input.priority !== null
     ? [input.priority]
     : [...READY_PRIORITY_ORDER, 'other'];
@@ -308,14 +309,6 @@ function buildReadyWorkWhere(input: ListReadyWorkInput, options?: { allowStarted
 
   if (input.kind) {
     clauses.push({ kind: input.kind });
-  }
-
-  if (input.repository) {
-    clauses.push({ repository: input.repository });
-  }
-
-  if (input.projectId) {
-    clauses.push({ projectId: input.projectId });
   }
 
   if (input.teamKey) {

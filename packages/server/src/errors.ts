@@ -8,6 +8,9 @@ export const MEMBERSHIP_NOT_FOUND_MESSAGE = 'Team membership not found.';
 export const WORKFLOW_STATE_NOT_FOUND_MESSAGE = 'Workflow state not found.';
 export const ISSUE_LABEL_NOT_FOUND_MESSAGE = 'One or more issue labels were not found.';
 export const ASSIGNEE_NOT_FOUND_MESSAGE = 'Assignee not found.';
+export const PROJECT_SCOPE_NOT_FOUND_MESSAGE = 'Project scope not found.';
+export const PROJECT_SCOPE_CONFLICT_MESSAGE = 'Project selectors conflict.';
+export const PROJECT_SCOPE_AMBIGUOUS_MESSAGE = 'Project scope is ambiguous.';
 export const PROJECT_NOT_FOUND_MESSAGE = 'Project not found in the issue team.';
 export const CYCLE_NOT_FOUND_MESSAGE = 'Cycle not found in the issue team.';
 export const TEAM_OWNER_REQUIRED_MESSAGE = 'Each team must retain at least one owner.';
@@ -94,6 +97,9 @@ const exposedErrorCodes = new Map<string, string>([
   [ISSUE_LABEL_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ASSIGNEE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [PROJECT_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [PROJECT_SCOPE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [PROJECT_SCOPE_CONFLICT_MESSAGE, 'PROJECT_SCOPE_CONFLICT'],
+  [PROJECT_SCOPE_AMBIGUOUS_MESSAGE, 'PROJECT_SCOPE_AMBIGUOUS'],
   [CYCLE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [TEAM_OWNER_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [PARENT_ISSUE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],

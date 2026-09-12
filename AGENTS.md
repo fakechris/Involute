@@ -6,8 +6,8 @@ This repository is bound to the **Involute Work-Graph Kernel** for task tracking
 
 - **Repository**: `fakechris/Involute`
 - **Team Key**: `INV`
-- **Root Project Identifier**: `INV-2`
-- **Root Project UUID**: `ffaa4fd1-cdd3-4fa0-8b10-5d75df0059d9`
+- **Root Project Identifier**: `INV-79`
+- **Root Project UUID**: `ee47bd7b-5aa4-4ca4-95b3-701b4ab4ecef`
 - **Web UI**: [http://100.114.30.43:4201/](http://100.114.30.43:4201/)
 - **Candidate Review Queue**: [http://100.114.30.43:4201/candidates](http://100.114.30.43:4201/candidates)
 - **Work Graph Observation**: [http://100.114.30.43:4201/graph](http://100.114.30.43:4201/graph)
