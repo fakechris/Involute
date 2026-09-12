@@ -17,8 +17,9 @@ primary entrypoint; the web board is an observation and governance surface.
 4. Claim before executing (\`work_claim\`); report attempts with \`run_report\`. The claim response issues \`suggested_branch\` — use it verbatim as your git branch name. Never invent branch names containing issue identifiers: a harness-issued name is the only reference the traceability guard trusts unconditionally.
 5. Run complete is not work accepted. Moving to Done requires a human review, or the graded auto-accept gate when evidence is objectively CLEAR (e.g. PR merged, test exit 0). Agents still cannot mark Done.
 6. Do not file local TODOs as work. If it is not worth a contract, keep it local.
-7. Pass \`expected_revision\` on updates; conflicts mean someone moved first — re-read.
-8. Every production code modification MUST be bound to an Involute work item (INV-xxx). Unlinked PRs are blocked by CI offline lint and synchronized via GitHub Webhooks.
+7. Ready project selectors accept a Work Graph PROJECT UUID/identifier or a legacy Project UUID. A PROJECT with a repository shares the repository query scope; a PROJECT without one uses its CONTAINS/parentId subtree. Ambiguous repository declarations or conflicting selectors fail. Ready stays all-kind unless explicitly filtered (e.g. kind:ISSUE).
+8. Pass \`expected_revision\` on updates; conflicts mean someone moved first — re-read.
+9. Every production code modification MUST be bound to an Involute work item (INV-xxx). Unlinked PRs are blocked by CI offline lint and synchronized via GitHub Webhooks.
 
 ## Three-Layer Defense Pyramid (三层防御金字塔)
 

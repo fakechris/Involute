@@ -662,6 +662,9 @@ Existing issues are work nodes. New fields are queryable; `issueCreate` / `issue
 
 - `kind` defaults to `ISSUE`
 - `kind: PROJECT` means a work-graph project contract. It is not the legacy GraphQL `Project` row and is not synchronized with `projectId`; use `CONTAINS` links for new graph hierarchy.
+- Ready selectors (`readyWork.filter.projectId`, MCP `project_id`, CLI `--project-id`) accept a Work Graph PROJECT UUID or identifier, as well as a legacy Project UUID. A graph root declaring `repository` selects the same repository-declared work as the repository filter, including work awaiting hierarchy repair. A root without a repository selects its readable, same-team CONTAINS/parentId subtree; an explicit repository filter further narrows it. Resolving a scope does not change stored membership.
+- Repository roots prefer COMMITTED over CANDIDATE declarations; multiple preferred readable roots return `PROJECT_SCOPE_AMBIGUOUS`. A selector naming a noncanonical candidate root or a different repository returns `PROJECT_SCOPE_CONFLICT`; an unknown, rejected, wrong-kind or inaccessible root returns `NOT_FOUND`. Legacy Project UUIDs continue to filter `Issue.projectId` and intersect the caller's read scope. A repository without a graph root keeps the existing repository filter.
+- Ready retains the shared commitment/owner/state/claim/blocker checks and all-kind default. Use `kind:ISSUE` (IQL) or GraphQL `kind: ISSUE` for executable leaves. `first` limits the same ordered prefix for every selector; `hasNextPage` indicates more results (this change does not introduce a cursor parameter).
 - `commitmentStatus` defaults to `COMMITTED` (imported and currently created issues are already commitments)
 - `revision` starts at `1` and increments on each domain update
 - `links` returns incident `WorkLink` rows (`CONTAINS`, `BLOCKS`, `DERIVED_FROM`, `DISCOVERED_DURING`, `RELATED_TO`, `DUPLICATE_OF`)
