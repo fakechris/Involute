@@ -1,6 +1,6 @@
 import type { WorkEvidenceKind, WorkRunStatus } from '@prisma/client';
 
-/** How objectively clear In Review evidence is. Only CLEAR may auto-Done. */
+/** Only CLEAR may auto-Done; self-reported evidence cannot establish CLEAR. */
 export type AutoAcceptTier = 'CLEAR' | 'LIKELY' | 'AMBIGUOUS' | 'INSUFFICIENT';
 
 export interface EvidenceGradeInput {
@@ -34,8 +34,9 @@ const PASS_STATUS = new Set(['pass', 'passed', 'success', 'ok', 'green']);
 const FAIL_STATUS = new Set(['fail', 'failed', 'error', 'red', 'pending']);
 
 /**
- * Pure grader for INV-11. Conservative by design: only CLEAR is auto-Done
- * eligible, and soft evidence kinds never promote to CLEAR alone.
+ * Summaries and URLs are caller-controlled claims, not verified results.
+ * This input has no trusted provenance, so it can never establish CLEAR.
+ * Keep parsed signals for review diagnostics, without granting acceptance.
  */
 export function evaluateAutoAcceptGrade(input: AutoAcceptGradeInput): AutoAcceptGradeResult {
   const reasons: string[] = [];
@@ -64,53 +65,13 @@ export function evaluateAutoAcceptGrade(input: AutoAcceptGradeInput): AutoAccept
     return { reasons, signals, tier: 'AMBIGUOUS' };
   }
 
-  const clearHits: string[] = [];
-  let hasHardEvidence = false;
-  let hasSoftEvidence = false;
-
-  for (const signal of signals) {
-    const kind = signal.kind;
-    if (kind === 'PR') {
-      hasHardEvidence = true;
-      // PR CLEAR requires an explicit merged pass. checks-only stays LIKELY.
-      if (signal.merged === 'pass') {
-        clearHits.push('PR merged');
-      } else if (signal.checks === 'pass') {
-        reasons.push('PR has green checks but no merged signal');
-      } else {
-        reasons.push('PR evidence lacks objective merged/checks signals');
-      }
-    } else if (kind === 'TEST') {
-      hasHardEvidence = true;
-      if (signal.exit === 'pass' || signal.status === 'pass') {
-        clearHits.push(signal.exit === 'pass' ? 'TEST exit 0' : 'TEST status pass');
-      } else {
-        reasons.push('TEST evidence lacks exit:0 or status:pass');
-      }
-    } else {
-      hasSoftEvidence = true;
-    }
-  }
-
-  if (clearHits.length > 0) {
-    reasons.push(`CLEAR signals: ${clearHits.join(', ')}`);
-    return { reasons, signals, tier: 'CLEAR' };
-  }
-
-  if (hasHardEvidence) {
-    if (reasons.length === 0) {
-      reasons.push('PR/TEST evidence present without objective pass signals');
-    }
+  if (signals.some((signal) => signal.kind === 'PR' || signal.kind === 'TEST')) {
+    reasons.push('PR/TEST claims are unverified; human review required');
     return { reasons, signals, tier: 'LIKELY' };
   }
 
-  if (hasSoftEvidence) {
-    reasons.push('only soft evidence (log/screenshot/artifact/decision); human review required');
-    return { reasons, signals, tier: 'AMBIGUOUS' };
-  }
-
-  reasons.push('unable to classify evidence');
-  return { reasons, signals, tier: 'INSUFFICIENT' };
+  reasons.push('only soft evidence (log/screenshot/artifact/decision); human review required');
+  return { reasons, signals, tier: 'AMBIGUOUS' };
 }
 
 export function parseEvidenceSignals(evidence: EvidenceGradeInput): ParsedEvidenceSignals {

@@ -25,7 +25,7 @@
 - 🧠 **工作图内核（Work-graph kernel）** —— 每个工作项都是图上的节点：稳定身份（`SON-18`、`INV-142`）、交付契约（outcome、scope、约束、验收、验证方式）、类型化链接（`contains`、`blocks`、`derived_from`、`discovered_during`）。
 - 🤖 **MCP 原生 Agent 协议** —— `work_search` / `work_get_context` / `work_list_ready` / `work_propose` / `work_commit` / `work_claim` / `work_update` / `run_report` / `evidence_attach`，走 Streamable HTTP MCP（`/mcp`），并带只读镜像 `/mcp/readonly`。
 - 🛡️ **关键处设人类闸门** —— 模糊发现先进 *candidate*（候选），绝不直接进已承诺的 backlog；commit 与拒绝是人类动作；**run 完成不等于工作被接受** —— `Done` 永远留给人类（或显式 `accept`）决定。
-- 🧾 **Run + 证据** —— 每次执行尝试都是一条 run：阶段报告、阻塞、附带的 PR / 测试 / 产物链接；分级 auto-accept 自动处理 CLEAR 的 In Review 工作。
+- 🧾 **Run + 证据** —— 每次执行尝试都是一条 run：阶段报告、阻塞、附带的 PR / 测试 / 产物链接；自报证据保留在 In Review，等待人工验收。
 - 🖥️ **观察型 Web，不是写入口** —— React + Vite 看板只投影已 commit 的 issue，另有候选评审（`/candidates`）、工作图视图（`/graph`）、单工作 run/证据页（`/work/:id`）和真实通知驱动的 Inbox。
 - 📥 **Linear 导入闭环** —— 导出一个 Linear 团队快照，导入、校验、上看板；历史承诺一次性载入，之后由内核接管。
 - 📦 **可自托管** —— 单容器 `involute-aio`、完整 compose 栈、Docker Hub 发布镜像、Ansible playbook、GitHub Actions 部署、Postgres 备份/恢复脚本。

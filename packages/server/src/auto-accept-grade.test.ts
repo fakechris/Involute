@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { evaluateAutoAcceptGrade } from './auto-accept-grade.ts';
 
 describe('evaluateAutoAcceptGrade', () => {
-  it('grades CLEAR for merged PR on a completed run', () => {
+  it('requires human review for a self-reported merged PR', () => {
     const result = evaluateAutoAcceptGrade({
       runStatus: 'COMPLETED',
       evidence: [
@@ -14,16 +14,16 @@ describe('evaluateAutoAcceptGrade', () => {
         },
       ],
     });
-    expect(result.tier).toBe('CLEAR');
-    expect(result.reasons.some((reason) => reason.includes('PR merged'))).toBe(true);
+    expect(result.tier).toBe('LIKELY');
+    expect(result.reasons.some((reason) => reason.includes('unverified'))).toBe(true);
   });
 
-  it('grades CLEAR for TEST exit 0', () => {
+  it.each(['exit:0', 'status:pass', 'result=success'])('requires human review for self-reported TEST %s', (summary) => {
     const result = evaluateAutoAcceptGrade({
       runStatus: 'COMPLETED',
-      evidence: [{ kind: 'TEST', summary: 'unit suite exit:0', url: 'https://ci.example/job/1' }],
+      evidence: [{ kind: 'TEST', summary, url: 'https://ci.example/job/1' }],
     });
-    expect(result.tier).toBe('CLEAR');
+    expect(result.tier).toBe('LIKELY');
   });
 
   it('keeps PR with only green checks as LIKELY (not CLEAR)', () => {
