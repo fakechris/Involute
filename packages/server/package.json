@@ -41,7 +41,8 @@
     "setup:web-ui-validation": "pnpm exec tsx src/validation-data-setup.ts",
     "setup:son-validation": "pnpm exec tsx src/son-validation-restore.ts",
     "test": "pnpm --filter @turnkeyai/involute-shared build && pnpm run prisma:generate && node scripts/run-vitest.mjs",
-    "lint": "pnpm --filter @turnkeyai/involute-shared build && pnpm run prisma:generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json"
+    "lint": "pnpm --filter @turnkeyai/involute-shared build && pnpm run prisma:generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json",
+    "github:inbound": "pnpm exec tsx prisma/github-inbound.ts"
   },
   "dependencies": {
     "@graphql-tools/schema": "^10.0.29",
