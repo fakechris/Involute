@@ -854,6 +854,11 @@ Subscriptions accept an optional IQL `filterQuery` (validated at create/update,
 evaluated against the work snapshot per delivery). Internal event
 `webhook.disabled` also appears in `WORK_EVENT_TYPES`.
 
+GitHub lifecycle transitions emit `work.state_changed` with `data.source = "github"`
+and `data.stateType` (the resulting workflow type). The state change and outbox
+row commit together; duplicate or ignored events emit no additional transition.
+See [GitHub inbound operations](github-inbound.md) for receipt and recovery semantics.
+
 ## Error model
 
 The API exposes safe validation and permission errors as GraphQL errors.

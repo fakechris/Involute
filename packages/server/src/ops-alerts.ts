@@ -4,6 +4,8 @@ export type OpsAlertKind =
   | 'event.dead_letter'
   | 'webhook.disabled'
   | 'github_sync.dead_letter'
+  | 'github_inbound.dead_letter'
+  | 'github_inbound.payload_conflict'
   | 'github.pr_unverified_reference';
 
 export interface OpsAlert {
@@ -20,7 +22,7 @@ export interface OpsAlert {
  * guarantees would turn alert storms into incident amplifiers.
  */
 export async function emitOpsAlert(
-  prisma: PrismaClient,
+  prisma: Pick<PrismaClient, 'user' | 'notification'>,
   alert: OpsAlert,
   opsWebhookUrl: string | null,
   fetchImpl: typeof fetch = fetch,
@@ -41,11 +43,24 @@ export async function emitOpsAlert(
         skipDuplicates: true,
       });
     }
-  } catch (error) {
+  } catch {
     console.error(`Failed to record ops notification for ${alert.kind}.`);
-    console.error(error);
   }
 
+  await deliverOpsAlert(alert, opsWebhookUrl, fetchImpl);
+}
+
+export interface DeferredOpsAlert {
+  alert: OpsAlert;
+  url: string | null;
+}
+
+/** HTTP delivery is separate so callers can defer it until after a DB commit. */
+export async function deliverOpsAlert(
+  alert: OpsAlert,
+  opsWebhookUrl: string | null,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
   if (!opsWebhookUrl) {
     return;
   }
@@ -56,8 +71,7 @@ export async function emitOpsAlert(
       method: 'POST',
       signal: AbortSignal.timeout(5_000),
     });
-  } catch (error) {
-    console.error(`Failed to deliver ops alert ${alert.kind} to ${opsWebhookUrl}.`);
-    console.error(error);
+  } catch {
+    console.error(`Failed to deliver ops alert ${alert.kind}.`);
   }
 }

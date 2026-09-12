@@ -175,7 +175,7 @@ const PROJECT_ROUTE_INCLUDE = { team: { select: { key: true } } } as const;
  * without a PROJECT node (and the setCustomRepoRoutes test hook) keep working.
  */
 export async function resolveRepoRoute(
-  prisma: PrismaClient,
+  prisma: Pick<PrismaClient, 'issue'>,
   repository: string,
 ): Promise<RepoRoute | null> {
   const repositoryWhere = {

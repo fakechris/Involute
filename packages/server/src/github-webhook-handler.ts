@@ -2,21 +2,26 @@
 //
 // HTTP handler for /api/webhooks/github
 // Receives GitHub webhook payloads, verifies HMAC signature, and dispatches
-// events to the dual-track CAS state machine asynchronously.
+// events through durable receipts to the dual-track CAS state machine.
 //
 // Design principles (aligned with Linear):
-// - Fast 200 OK response after signature verification
-// - Background async processing with in-process per-issue serial queue
-// - Robust error handling: never return 5xx (GitHub would disable the webhook)
+// - Acknowledge only after signature validation and receipt commit
+// - Lease-based replay after restarts; business effects and receipt completion are atomic
+// - Return a retryable error when durable acceptance fails
 // - TeamKey verification against repo routing table for strict cross-repo isolation
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { PrismaClient, WorkflowStateType } from '@prisma/client';
+import type { Prisma, PrismaClient, WorkflowStateType, InboundGitHubDelivery } from '@prisma/client';
 
 import { resolveCanonicalIssueRef, resolveRepoRoute } from './github-repo-routes.js';
 import { applyMonotonicForward, applyProvenanceRollback } from './github-webhook-state-machine.js';
-import { emitOpsAlert } from './ops-alerts.js';
+import { emitOpsAlert, type DeferredOpsAlert, type OpsAlert } from './ops-alerts.js';
+import { acceptGitHubDelivery, InboundRequestError, safeErrorCode } from './github-inbound.js';
+import { enqueueWorkEvent } from './event-outbox.js';
+
+type DatabaseClient = PrismaClient | Prisma.TransactionClient;
+interface GitHubProcessingOptions { deferredAlerts?: DeferredOpsAlert[]; }
 
 export interface GitHubWebhookOptions {
   prisma: PrismaClient;
@@ -77,8 +82,9 @@ type UnverifiedReferenceReason = 'unknown-identifier' | 'team-mismatch' | 'termi
  * POST); emitOpsAlert swallows its own failures, so processing never breaks.
  */
 async function emitUnverifiedReferenceAlert(
-  prisma: PrismaClient,
+  prisma: DatabaseClient,
   input: {
+    deferredAlerts?: DeferredOpsAlert[] | undefined;
     repository: string;
     prNumber: number | null;
     prTitle: string | null;
@@ -90,24 +96,18 @@ async function emitUnverifiedReferenceAlert(
   },
 ): Promise<void> {
   const ref = input.prNumber ? `PR #${input.prNumber}` : `branch ${input.branch}`;
-  await emitOpsAlert(
-    prisma,
-    {
-      kind: 'github.pr_unverified_reference',
-      summary: `Unverified work reference: ${ref} on ${input.repository} → ${input.identifier} (${input.reason})`,
-      details: {
-        repository: input.repository,
-        prNumber: input.prNumber,
-        prTitle: input.prTitle,
-        prUrl: input.prUrl,
-        branch: input.branch,
-        identifier: input.identifier,
-        reason: input.reason,
-        sender: input.sender ?? null,
-      },
+  const alert: OpsAlert = {
+    kind: 'github.pr_unverified_reference',
+    summary: `Unverified work reference: ${ref} on ${input.repository} → ${input.identifier} (${input.reason})`,
+    details: {
+      repository: input.repository, prNumber: input.prNumber, prTitle: input.prTitle,
+      prUrl: input.prUrl, branch: input.branch, identifier: input.identifier,
+      reason: input.reason, sender: input.sender ?? null,
     },
-    process.env.OPS_WEBHOOK_URL?.trim() || null,
-  );
+  };
+  const url = process.env.OPS_WEBHOOK_URL?.trim() || null;
+  if (input.deferredAlerts) input.deferredAlerts.push({ alert, url });
+  else await emitOpsAlert(prisma, alert, url);
 }
 
 /**
@@ -142,12 +142,15 @@ function readRawBody(request: IncomingMessage, maxBytes: number): Promise<Buffer
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let totalLength = 0;
+    let exceeded = false;
 
     request.on('data', (chunk: Buffer) => {
+      if (exceeded) return;
       totalLength += chunk.length;
       if (totalLength > maxBytes) {
-        request.destroy();
-        reject(new Error('Payload too large'));
+        exceeded = true;
+        chunks.length = 0;
+        reject(new InboundRequestError(413, 'PAYLOAD_TOO_LARGE'));
         return;
       }
       chunks.push(chunk);
@@ -191,7 +194,7 @@ export async function handleGitHubWebhook(
   response: ServerResponse,
 ): Promise<boolean> {
   const url = request.url ?? '';
-  if (!url.startsWith('/api/webhooks/github')) {
+  if (url.split('?')[0] !== '/api/webhooks/github') {
     return false;
   }
 
@@ -208,41 +211,51 @@ export async function handleGitHubWebhook(
 
     // Verify HMAC signature
     const signature = request.headers['x-hub-signature-256'] as string | undefined;
-    if (!signature || !verifySignature(rawBody, signature, options.webhookSecret)) {
+    if (typeof signature !== 'string' || !verifySignature(rawBody, signature, options.webhookSecret)) {
       response.statusCode = 401;
       response.setHeader('content-type', 'application/json');
       response.end(JSON.stringify({ error: 'Invalid signature' }));
       return true;
     }
 
-    // Respond 200 immediately — async processing below
+    let payload: unknown;
+    try { payload = JSON.parse(rawBody.toString('utf-8')); }
+    catch { throw new InboundRequestError(400, 'INVALID_JSON'); }
+    const eventType = request.headers['x-github-event'];
+    if (typeof eventType !== 'string' || !eventType) throw new InboundRequestError(400, 'MISSING_EVENT_TYPE');
+    if (eventType !== 'pull_request' && eventType !== 'create') {
+      response.statusCode = 200;
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: true }));
+      return true;
+    }
+    const deliveryId = request.headers['x-github-delivery'];
+    if (typeof deliveryId !== 'string' || !deliveryId.trim() || deliveryId.length > 200) {
+      throw new InboundRequestError(400, 'INVALID_DELIVERY_ID');
+    }
+    const repository = validateGitHubPayload(eventType, payload);
+    const receipt = await acceptGitHubDelivery(options.prisma, {
+      deliveryId, eventType, repository, payload: payload as Prisma.InputJsonObject, rawBody,
+    });
     response.statusCode = 200;
     response.setHeader('content-type', 'application/json');
-    response.end(JSON.stringify({ ok: true }));
-
-    // Dispatch to background processing (never throw back to GitHub)
-    const eventType = request.headers['x-github-event'] as string | undefined;
-    const deliveryGuid = request.headers['x-github-delivery'] as string | undefined;
-
-    if (eventType === 'pull_request') {
-      const payload = JSON.parse(rawBody.toString('utf-8')) as PullRequestPayload;
-      processGitHubPrEvent(options.prisma, payload).catch((error) => {
-        console.error('[github-webhook] Failed to process PR event:', error);
-      });
-    } else if (eventType === 'create') {
-      const payload = JSON.parse(rawBody.toString('utf-8')) as BranchCreatePayload;
-      processGitHubCreateEvent(options.prisma, payload, deliveryGuid).catch((error) => {
-        console.error('[github-webhook] Failed to process create event:', error);
-      });
-    }
-
+    response.end(JSON.stringify({ ok: true, receipt_id: receipt.id }));
     return true;
   } catch (error) {
-    console.error('[github-webhook] Handler error:', error);
+    const status = error instanceof InboundRequestError ? error.status : 503;
+    const code = error instanceof InboundRequestError ? error.code : 'RECEIPT_UNAVAILABLE';
     if (!response.headersSent) {
-      response.statusCode = 200; // Always 200 to prevent GitHub from disabling
+      response.statusCode = status;
       response.setHeader('content-type', 'application/json');
-      response.end(JSON.stringify({ ok: true, warning: 'Processing error logged' }));
+      response.end(JSON.stringify({ error: code }));
+    }
+    if (code === 'DELIVERY_PAYLOAD_CONFLICT') {
+      await emitOpsAlert(options.prisma, {
+        kind: 'github_inbound.payload_conflict', summary: 'GitHub delivery ID reused with conflicting payload',
+        details: { deliveryId: request.headers['x-github-delivery'] ?? null },
+      }, process.env.OPS_WEBHOOK_URL?.trim() || null);
+    } else if (status === 503) {
+      console.error(`[github-inbound] Receipt acceptance failed: ${safeErrorCode(error)}`);
     }
     return true;
   }
@@ -252,8 +265,9 @@ export async function handleGitHubWebhook(
  * Process a GitHub pull_request event through the dual-track CAS state machine.
  */
 export async function processGitHubPrEvent(
-  prisma: PrismaClient,
+  prisma: DatabaseClient,
   payload: PullRequestPayload,
+  options: GitHubProcessingOptions = {},
 ): Promise<void> {
   const { action, pull_request: pr, repository } = payload;
 
@@ -294,6 +308,7 @@ export async function processGitHubPrEvent(
     console.log(`[github-webhook] Issue ${identifier} not found in database`);
     if (isReferenceCheckAction(action)) {
       await emitUnverifiedReferenceAlert(prisma, {
+      deferredAlerts: options.deferredAlerts,
         repository: repository.full_name,
         prNumber: pr.number,
         prTitle: pr.title,
@@ -314,6 +329,7 @@ export async function processGitHubPrEvent(
     );
     if (isReferenceCheckAction(action)) {
       await emitUnverifiedReferenceAlert(prisma, {
+      deferredAlerts: options.deferredAlerts,
         repository: repository.full_name,
         prNumber: pr.number,
         prTitle: pr.title,
@@ -339,6 +355,7 @@ export async function processGitHubPrEvent(
     );
     if (isReferenceCheckAction(action)) {
       await emitUnverifiedReferenceAlert(prisma, {
+      deferredAlerts: options.deferredAlerts,
         repository: repository.full_name,
         prNumber: pr.number,
         prTitle: pr.title,
@@ -356,6 +373,7 @@ export async function processGitHubPrEvent(
   // will absorb it as a no-op), but processing continues unchanged.
   if (isReferenceCheckAction(action) && (issue.state.type === 'COMPLETED' || issue.state.type === 'CANCELED')) {
     await emitUnverifiedReferenceAlert(prisma, {
+      deferredAlerts: options.deferredAlerts,
       repository: repository.full_name,
       prNumber: pr.number,
       prTitle: pr.title,
@@ -375,11 +393,11 @@ export async function processGitHubPrEvent(
   const eventTimestamp = pr.updated_at;
 
   // P1: Execute processing sequentially per issueId
-  await enqueueIssueTask(issue.id, async () => {
+  await serializeIssue(prisma, issue.id, async () => {
     if (action === 'opened' || action === 'reopened') {
       const eventSourceKey = `github_pr_${pr.id}_${action}_${eventTimestamp}`;
 
-      await prisma.$transaction(async (tx) => {
+      await transact(prisma, async (tx) => {
         const result = await applyMonotonicForward(tx, {
           issueId: issue.id,
           teamId: issue.teamId,
@@ -395,7 +413,7 @@ export async function processGitHubPrEvent(
             branch: pr.head.ref,
           },
         });
-
+        if (result.applied) await enqueueGitHubStateChange(tx, issue, result.newStateType);
         if (result.duplicate) {
           console.log(`[github-webhook] PR #${pr.number} ${action} duplicate ignored for ${identifier}`);
           return;
@@ -422,7 +440,7 @@ export async function processGitHubPrEvent(
       if (pr.merged) {
         const eventSourceKey = `github_pr_${pr.id}_merged_${eventTimestamp}`;
 
-        await prisma.$transaction(async (tx) => {
+        await transact(prisma, async (tx) => {
           const result = await applyMonotonicForward(tx, {
             issueId: issue.id,
             teamId: issue.teamId,
@@ -437,7 +455,7 @@ export async function processGitHubPrEvent(
               mergeCommitSha: pr.merge_commit_sha,
             },
           });
-
+          if (result.applied) await enqueueGitHubStateChange(tx, issue, result.newStateType);
           if (result.duplicate) {
             console.log(`[github-webhook] PR #${pr.number} merged duplicate ignored for ${identifier}`);
             return;
@@ -469,7 +487,7 @@ export async function processGitHubPrEvent(
       } else {
         const eventSourceKey = `github_pr_${pr.id}_unmerged_${eventTimestamp}`;
 
-        await prisma.$transaction(async (tx) => {
+        await transact(prisma, async (tx) => {
           const result = await applyProvenanceRollback(tx, {
             issueId: issue.id,
             teamId: issue.teamId,
@@ -483,7 +501,7 @@ export async function processGitHubPrEvent(
               prUrl: pr.html_url,
             },
           });
-
+          if (result.applied) await enqueueGitHubStateChange(tx, issue, result.newStateType);
           if (result.duplicate) {
             console.log(`[github-webhook] PR #${pr.number} unmerged duplicate ignored for ${identifier}`);
             return;
@@ -500,9 +518,10 @@ export async function processGitHubPrEvent(
  * Process a GitHub create event (e.g. branch creation) through the dual-track CAS state machine.
  */
 export async function processGitHubCreateEvent(
-  prisma: PrismaClient,
+  prisma: DatabaseClient,
   payload: BranchCreatePayload,
   deliveryGuid?: string,
+  options: GitHubProcessingOptions = {},
 ): Promise<void> {
   if (payload.ref_type !== 'branch') {
     return;
@@ -528,6 +547,7 @@ export async function processGitHubCreateEvent(
   if (!issue) {
     console.log(`[github-webhook] Issue ${identifier} not found in database`);
     await emitUnverifiedReferenceAlert(prisma, {
+      deferredAlerts: options.deferredAlerts,
       repository: payload.repository.full_name,
       prNumber: null,
       prTitle: null,
@@ -546,6 +566,7 @@ export async function processGitHubCreateEvent(
       `[github-webhook] Team mismatch: issue ${identifier} belongs to team ${issue.team.key}, but repo route ${payload.repository.full_name} is configured for team ${route.teamKey}`,
     );
     await emitUnverifiedReferenceAlert(prisma, {
+      deferredAlerts: options.deferredAlerts,
       repository: payload.repository.full_name,
       prNumber: null,
       prTitle: null,
@@ -568,6 +589,7 @@ export async function processGitHubCreateEvent(
       `[github-webhook] Project mismatch: ${identifier} referenced via alias ${route.alias} on ${payload.repository.full_name}, but issue repository is ${issue.repository ?? 'none'}`,
     );
     await emitUnverifiedReferenceAlert(prisma, {
+      deferredAlerts: options.deferredAlerts,
       repository: payload.repository.full_name,
       prNumber: null,
       prTitle: null,
@@ -582,8 +604,8 @@ export async function processGitHubCreateEvent(
 
   const eventSourceKey = `github_branch_${payload.repository.full_name}_${payload.ref}_${deliveryGuid || 'create'}`;
 
-  await enqueueIssueTask(issue.id, async () => {
-    await prisma.$transaction(async (tx) => {
+  await serializeIssue(prisma, issue.id, async () => {
+    await transact(prisma, async (tx) => {
       const result = await applyMonotonicForward(tx, {
         issueId: issue.id,
         teamId: issue.teamId,
@@ -596,6 +618,7 @@ export async function processGitHubCreateEvent(
         },
       });
 
+      if (result.applied) await enqueueGitHubStateChange(tx, issue, result.newStateType);
       if (result.duplicate) {
         console.log(`[github-webhook] Branch create duplicate ignored for ${identifier}`);
         return;
@@ -603,5 +626,64 @@ export async function processGitHubCreateEvent(
 
       console.log(`[github-webhook] Branch create ${payload.ref} → ${identifier}: ${result.reason}`);
     });
+  });
+}
+
+
+function object(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new InboundRequestError(400, 'INVALID_PAYLOAD');
+  return value as Record<string, unknown>;
+}
+
+function textField(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) throw new InboundRequestError(400, 'INVALID_PAYLOAD');
+  return value;
+}
+
+function validateGitHubPayload(eventType: string, value: unknown): string {
+  const payload = object(value);
+  const repository = textField(object(payload.repository).full_name);
+  if (repository.length > 512) throw new InboundRequestError(400, 'INVALID_PAYLOAD');
+  if (eventType === 'create') {
+    textField(payload.ref);
+    textField(payload.ref_type);
+  } else if (eventType === 'pull_request') {
+    textField(payload.action);
+    const pr = object(payload.pull_request);
+    if (!Number.isSafeInteger(pr.id) || (pr.id as number) <= 0 || !Number.isSafeInteger(pr.number) || (pr.number as number) <= 0 || typeof pr.merged !== 'boolean') {
+      throw new InboundRequestError(400, 'INVALID_PAYLOAD');
+    }
+    textField(pr.title);
+    textField(pr.html_url);
+    textField(object(pr.head).ref);
+    if (!Number.isFinite(Date.parse(textField(pr.updated_at)))) throw new InboundRequestError(400, 'INVALID_PAYLOAD');
+  } else throw new InboundRequestError(400, 'UNSUPPORTED_EVENT');
+  return repository;
+}
+
+export async function processStoredGitHubEvent(tx: Prisma.TransactionClient, receipt: InboundGitHubDelivery): Promise<DeferredOpsAlert[]> {
+  validateGitHubPayload(receipt.eventType, receipt.payload);
+  const deferredAlerts: DeferredOpsAlert[] = [];
+  if (receipt.eventType === 'create') {
+    await processGitHubCreateEvent(tx, receipt.payload as unknown as BranchCreatePayload, receipt.deliveryId, { deferredAlerts });
+  } else {
+    await processGitHubPrEvent(tx, receipt.payload as unknown as PullRequestPayload, { deferredAlerts });
+  }
+  return deferredAlerts;
+}
+
+function transact<T>(prisma: DatabaseClient, action: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+  return '$transaction' in prisma ? prisma.$transaction(action) : action(prisma);
+}
+
+function serializeIssue<T>(prisma: DatabaseClient, issueId: string, action: () => Promise<T>): Promise<T> {
+  // A leased processor already owns an outer transaction; do not wait in an in-memory queue while holding its locks.
+  return '$transaction' in prisma ? enqueueIssueTask(issueId, action) : action();
+}
+
+async function enqueueGitHubStateChange(tx: Prisma.TransactionClient, issue: { id: string; identifier: string }, stateType?: string) {
+  await enqueueWorkEvent(tx, {
+    type: 'work.state_changed', workId: issue.id, workIdentifier: issue.identifier,
+    payload: { source: 'github', stateType: stateType ?? null },
   });
 }
