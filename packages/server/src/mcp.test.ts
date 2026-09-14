@@ -301,7 +301,7 @@ describe('Involute MCP', () => {
     await prisma.teamMembership.create({ data: { role: 'EDITOR', teamId: team.id, userId: agent.id } });
     await prisma.agentCredential.create({ data: { name: 'client', tokenHash: hashAgentToken(token), userId: agent.id } });
     const work = await prisma.issue.create({ data: { identifier: 'INV-103', title: 'Bound run', stateId: ready.id,
-      teamId: team.id, commitmentStatus: 'COMMITTED', acceptance: 'human review', repository: 'example/project' } });
+      teamId: team.id, assigneeId: viewer.id, commitmentStatus: 'COMMITTED', acceptance: 'human review', repository: 'example/project' } });
     const invoke = async (name: string, args: Record<string, unknown>) => {
       const response = await mcpRpcWithToken('/mcp', { id: name, method: 'tools/call', params: { name, arguments: args } }, token);
       expect(response.body.error).toBeUndefined();

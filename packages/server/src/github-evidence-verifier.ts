@@ -16,7 +16,7 @@ export interface VerificationObservation {
   failureCode: string | null;
   externalRunId: string | null;
   covered: string[];
-  checks: Array<{ id: number; name: string; conclusion: string | null }>;
+  checks: Array<{ id: number; name: string; conclusion: string | null; completedAt: string | null }>;
   source: JsonObject;
 }
 export interface GitHubVerifierOptions {
@@ -136,8 +136,12 @@ export async function verifyGitHubEvidence(input: VerificationRequest, options: 
     if (jobs.length !== expectedTotal || new Set(jobs.map(job => number(job.id))).size !== jobs.length) throw new VerificationError('INVALID_JOB_SET');
     for (const job of jobs) {
       if (job.run_id !== target.id || job.head_sha !== input.commitSha || typeof job.name !== 'string') throw new VerificationError('JOB_MISMATCH', 'FAILED');
-      result.checks.push({ id: number(job.id), name: job.name, conclusion: typeof job.conclusion === 'string' ? job.conclusion : null });
+      result.checks.push({ id: number(job.id), name: job.name, conclusion: typeof job.conclusion === 'string' ? job.conclusion : null,
+        completedAt: typeof job.completed_at === 'string' && Number.isFinite(Date.parse(job.completed_at)) ? job.completed_at : null });
     }
+    // A successful run may contain continue-on-error failures outside the mapped jobs.
+    if (jobs.some(job => job.conclusion && !['success', 'skipped', 'neutral'].includes(String(job.conclusion)))) throw new VerificationError('CHECK_FAILED', 'FAILED');
+    if (jobs.some(job => job.status !== 'completed' || !job.conclusion)) throw new VerificationError('CHECK_PENDING', 'PENDING');
     for (const criterion of input.acceptance.criteria.filter(item => item.workflowId === workflowId)) {
       const matching = jobs.filter(job => job.name === criterion.job);
       if (matching.length && matching.every(job => job.status === 'completed' && job.conclusion === 'success')) result.covered.push(criterion.id);
@@ -147,7 +151,9 @@ export async function verifyGitHubEvidence(input: VerificationRequest, options: 
     checkPr(await get(`/pulls/${input.pullRequestNumber}`));
     const fresh = await get(`/actions/runs/${target.id}`);
     if (fresh.id !== run.id || fresh.run_attempt !== attempt || fresh.head_sha !== input.commitSha || fresh.status !== 'completed' || fresh.conclusion !== 'success') throw new VerificationError('RUN_CHANGED', 'STALE');
-    result.source = { ...result.source, workflowId, attempt, completedAt: run.updated_at ?? null };
+    const completedTimes = result.checks.flatMap(check => check.completedAt ? [Date.parse(check.completedAt)] : []);
+    result.source = { ...result.source, workflowId, attempt, updatedAt: run.updated_at ?? null,
+      completedAt: completedTimes.length ? new Date(Math.max(...completedTimes)).toISOString() : null };
     return { ...result, status: 'VERIFIED' };
   } catch (error) {
     return { ...result, covered: [], status: error instanceof VerificationError ? error.status : 'UNAVAILABLE',

@@ -31,15 +31,16 @@ export async function assessVerifiedEvidence(tx: DatabaseClient, work: Issue, ru
   if (!evidence.length) reasons.push('no verified execution evidence');
   for (const item of evidence) {
     const result = item.verifications[0];
+    const observation = result?.result as { covered?: unknown; source?: { prNumber?: unknown } } | undefined;
     if (!result || result.status !== 'VERIFIED' || result.verifierId !== VERIFIER_ID || result.verifierVersion !== VERIFIER_VERSION ||
         result.runId !== run.id || result.repository !== run.repository || result.commitSha !== run.commitSha ||
+        observation?.source?.prNumber !== run.pullRequestNumber ||
         result.contractRevision !== current.contractRevision || result.acceptanceDigest !== current.acceptanceDigest ||
         Date.now() - result.observedAt.getTime() > VERIFICATION_MAX_AGE_MS || result.observedAt.getTime() > Date.now()) {
       reasons.push(`evidence ${item.id} is unverified, failed, unavailable or stale`);
       continue;
     }
-    const observation = result.result as { covered?: unknown };
-    if (Array.isArray(observation.covered)) for (const id of observation.covered) if (typeof id === 'string') covered.add(id);
+    if (Array.isArray(observation?.covered)) for (const id of observation.covered) if (typeof id === 'string') covered.add(id);
   }
   for (const item of current.acceptance?.criteria ?? []) if (item.required && !covered.has(item.id)) reasons.push(`missing required acceptance ${item.id}`);
   return { eligible: reasons.length === 0, reasons, covered: [...covered].sort() };

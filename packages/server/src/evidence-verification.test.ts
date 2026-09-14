@@ -69,6 +69,24 @@ describe('semantic contracts and GitHub API verification', () => {
     expect(f.calls.some(call => call.url.includes('/attempts/1/jobs'))).toBe(true);
   });
 
+  it('rejects an unmapped failed job even when the workflow reports success', async () => {
+    const f = fixture((path, data) => path.includes('/jobs?') ? { total_count: 2, jobs: [
+      { id: 9, run_id: 8, head_sha: sha, name: 'verify', status: 'completed', conclusion: 'success' },
+      { id: 10, run_id: 8, head_sha: sha, name: 'security', status: 'completed', conclusion: 'failure' },
+    ] } : data);
+    const result = await verifyGitHubEvidence(input, f.options);
+    expect(result.status).toBe('FAILED');
+    expect(result.covered).toEqual([]);
+  });
+
+  it('records job completion time separately from workflow update time', async () => {
+    const f = fixture((path, data) => path.includes('/jobs?') ? { total_count: 1, jobs: [
+      { id: 9, run_id: 8, head_sha: sha, name: 'verify', status: 'completed', conclusion: 'success', completed_at: '2026-09-14T01:00:00Z' },
+    ] } : path.endsWith('/actions/runs/8') ? { ...data, updated_at: '2026-09-14T02:00:00Z' } : data);
+    const result = await verifyGitHubEvidence(input, f.options);
+    expect(result.source).toMatchObject({ completedAt: '2026-09-14T01:00:00.000Z', updatedAt: '2026-09-14T02:00:00Z' });
+  });
+
   it('paginates all jobs without trusting arbitrary next URLs', async () => {
     const f = fixture((path, data) => path.includes('/jobs?') ? { total_count: 101, jobs:
       path.endsWith('page=1') ? Array.from({ length: 100 }, (_, n) => ({ id: n + 10, run_id: 8, head_sha: sha, name: `other-${n}`, status: 'completed', conclusion: 'success' }))
@@ -187,6 +205,13 @@ describe('trusted evidence shadow integration', () => {
     expect((await tryAutoAccept(prisma, s.work.id, { runId: s.run.id }))?.grade.tier).not.toBe('CLEAR');
     await reportRun(prisma, { workId: s.work.id, runId: s.run.id, commitSha: sha }, actor());
     expect((await prisma.workRun.findUniqueOrThrow({ where: { id: s.run.id } })).commitSha).toBe('b'.repeat(40));
+  });
+
+  it('changing only the PR invalidates coverage for the previous PR at the same SHA', async () => {
+    const s = await setup();
+    await verifyEvidence(prisma, s.evidence.id, fixture().options);
+    await reportRun(prisma, { workId: s.work.id, runId: s.run.id, pullRequestNumber: 5, status: 'completed' }, actor());
+    expect((await tryAutoAccept(prisma, s.work.id))?.grade.tier).not.toBe('CLEAR');
   });
 
   it('missing required criteria and unavailable refresh retain Review, preserving all observations', async () => {
