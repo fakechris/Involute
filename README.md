@@ -77,6 +77,8 @@ Four state machines, deliberately not collapsed:
 | Claim + Run | who is executing this attempt, and whether that attempt finished |
 | Local `task_plan.md` | Agent working memory; not stored as Involute work |
 
+Evidence verification is shadow-only: GitHub merges and CLEAR observations still require human acceptance. See [verification setup](docs/evidence-verification.md).
+
 ## 🗺️ Current status
 
 - `M0` single-team migration acceptance is done.

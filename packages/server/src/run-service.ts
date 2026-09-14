@@ -1,6 +1,6 @@
 /**
  * Run / evidence / human review kernel.
- * INV-11: enqueueWorkEvent is routed through inv11-hooks so CLEAR evidence can auto-Done.
+ * enqueueWorkEvent records shadow verification; only human review can accept work.
  */
 export {
   attachEvidence,

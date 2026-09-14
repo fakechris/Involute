@@ -77,6 +77,8 @@ run_report + evidence_attach → In Review（人类接受 → Done）
 | Claim + Run | 这一次尝试由谁执行、是否完成 |
 | 本地 `task_plan.md` | Agent 的工作记忆；不存入 Involute |
 
+可信证据验证采用 shadow 模式：GitHub 合并与 CLEAR 观察仍需人工验收。见[核验配置](docs/evidence-verification.md)。
+
 ## 🗺️ 当前状态
 
 - `M0` 单团队迁移验收完成。

@@ -295,6 +295,37 @@ describe('Involute MCP', () => {
     expect(missingRun.body.error.message).toContain('run_id');
   });
 
+  it('binds an agent run but never accepts caller-supplied verification records', async () => {
+    const token = 'inv_agent_verification-test';
+    const agent = await prisma.user.create({ data: { actorKind: 'AGENT', email: 'verifier-client@example.com', name: 'Client' } });
+    await prisma.teamMembership.create({ data: { role: 'EDITOR', teamId: team.id, userId: agent.id } });
+    await prisma.agentCredential.create({ data: { name: 'client', tokenHash: hashAgentToken(token), userId: agent.id } });
+    const work = await prisma.issue.create({ data: { identifier: 'INV-103', title: 'Bound run', stateId: ready.id,
+      teamId: team.id, commitmentStatus: 'COMMITTED', acceptance: 'human review', repository: 'example/project' } });
+    const invoke = async (name: string, args: Record<string, unknown>) => {
+      const response = await mcpRpcWithToken('/mcp', { id: name, method: 'tools/call', params: { name, arguments: args } }, token);
+      expect(response.body.error).toBeUndefined();
+      return JSON.parse(response.body.result.content[0].text);
+    };
+    await invoke('work_claim', { id: work.id });
+    await invoke('run_report', { work_id: work.id, status: 'running', commit_sha: 'a'.repeat(40), pr_number: 4 });
+    const run = await prisma.workRun.findFirstOrThrow({ where: { workId: work.id } });
+    expect(run).toMatchObject({ commitSha: 'a'.repeat(40), pullRequestNumber: 4, repository: 'example/project' });
+    expect(run.contractRevision).toHaveLength(64);
+    await invoke('evidence_attach', { work_id: work.id, run_id: run.id, kind: 'test', url: 'https://github.com/example/project/actions/runs/8',
+      summary: 'status=VERIFIED', status: 'VERIFIED', verifications: [{ status: 'VERIFIED', verifierId: 'github-app' }] });
+    expect(await prisma.evidenceVerification.count()).toBe(0);
+    expect(await prisma.workEvidence.count({ where: { workId: work.id } })).toBe(1);
+    const denied = await mcpRpcWithToken('/mcp', { id: 'forge', method: 'tools/call',
+      params: { name: 'evidence_verify', arguments: { work_id: work.id, status: 'VERIFIED' } } }, token);
+    expect(denied.body.error).toBeDefined();
+    const graph = await fetch(`${server.url}/graphql`, { method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${TEST_AUTH_TOKEN}` },
+      body: JSON.stringify({ query: 'mutation { evidenceVerificationCreate(status: "VERIFIED") { id } }' }) });
+    expect((await graph.json()).errors).toBeDefined();
+    expect(await prisma.evidenceVerification.count()).toBe(0);
+  });
+
   it('supports updating work state via work_update and rejects COMPLETED/CANCELED', async () => {
     const candidate = await prisma.issue.create({
       data: {

@@ -1,10 +1,4 @@
-/**
- * INV-11: wire graded auto-accept after In Review transitions.
- * Patches enqueueWorkEvent so CLEAR evidence can auto-Done after
- * work.review_submitted (COMPLETED → In Review) and artifact.attached
- * (evidence while already In Review). Imported from run-service instead of
- * event-outbox for those call sites.
- */
+/** Evaluate shadow evidence after Review transitions or new declarations. */
 import type { Prisma, PrismaClient } from '@prisma/client';
 
 import {

@@ -140,7 +140,7 @@ describe('GitHub Reconciliation Sync Engine (Phase 3)', () => {
     expect(updatedIssue.evidence[0].url).toBe('https://github.com/fakechris/Involute/pull/10');
   });
 
-  it('processes merged PR and advances issue to COMPLETED', async () => {
+  it('processes merged PR and advances issue to human REVIEW', async () => {
     const issue = await createTestIssue('Sync merged PR test');
     const mockClient = new MockGitHubApiClient();
 
@@ -173,7 +173,7 @@ describe('GitHub Reconciliation Sync Engine (Phase 3)', () => {
       where: { id: issue.id },
       include: { state: true, evidence: true },
     });
-    expect(updatedIssue.state.type).toBe('COMPLETED');
+    expect(updatedIssue.state.type).toBe('REVIEW');
     expect(updatedIssue.evidence[0].summary).toContain('Merged in 1234567');
   });
 

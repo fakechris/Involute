@@ -508,6 +508,11 @@ const typeDefs = /* GraphQL */ `
     actorId: String
     claimId: String
     baseRevision: Int
+    contractRevision: String
+    acceptanceDigest: String
+    repository: String
+    commitSha: String
+    pullRequestNumber: Int
     status: WorkRunStatus!
     phase: String
     summary: String
@@ -516,7 +521,21 @@ const typeDefs = /* GraphQL */ `
     endedAt: DateTime
   }
 
+  type EvidenceVerificationRecord {
+    id: ID!
+    status: String!
+    verifierId: String!
+    verifierVersion: String!
+    contractRevision: String
+    acceptanceDigest: String
+    commitSha: String
+    externalRunId: String
+    failureCode: String
+    resultDigest: String!
+    observedAt: DateTime!
+  }
   type WorkEvidenceRecord {
+    verifications: [EvidenceVerificationRecord!]!
     id: ID!
     kind: WorkEvidenceKind!
     actorId: String
@@ -1130,6 +1149,8 @@ const typeDefs = /* GraphQL */ `
   }
 
   input RunReportInput {
+    commitSha: String
+    pullRequestNumber: Int
     workId: String!
     runId: String
     status: String
@@ -1177,6 +1198,10 @@ const typeDefs = /* GraphQL */ `
 `;
 
 const resolvers = {
+  WorkEvidenceRecord: {
+    verifications: (parent: { id: string }, _args: unknown, context: GraphQLContext) =>
+      context.prisma.evidenceVerification.findMany({ where: { evidenceId: parent.id }, orderBy: { createdAt: 'desc' }, take: 10 }),
+  },
   DateTime: DateTimeScalar,
   Json: new GraphQLScalarType({
     name: 'Json',
@@ -2043,6 +2068,8 @@ const resolvers = {
       _parent: unknown,
       args: {
         input: {
+          commitSha?: string | null;
+          pullRequestNumber?: number | null;
           decisionRequested?: boolean | null;
           externalUrl?: string | null;
           idempotencyKey?: string | null;

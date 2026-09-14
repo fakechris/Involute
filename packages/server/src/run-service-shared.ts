@@ -29,6 +29,8 @@ export const ALLOWED_RUN_TRANSITIONS: Record<WorkRunStatus, readonly WorkRunStat
 };
 
 export interface ReportRunInput {
+  commitSha?: string | null;
+  pullRequestNumber?: number | null;
   decisionRequested?: boolean | null;
   externalUrl?: string | null;
   idempotencyKey?: string | null;

@@ -1,3 +1,4 @@
+import { startEvidenceVerifier } from './evidence-verification.js';
 import type { PrismaClient } from '@prisma/client';
 
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
@@ -422,6 +423,8 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     ? startGitHubInboundWorker(prisma, processStoredGitHubEvent, retentionDays)
     : null;
 
+  const stopEvidenceVerifier = process.env.EVIDENCE_VERIFIER_ENABLED === 'true' ? startEvidenceVerifier(prisma) : null;
+
   const address = httpServer.address();
 
   if (!address || typeof address === 'string') {
@@ -458,6 +461,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       });
 
       if (stopGitHubInbound) await stopGitHubInbound();
+      if (stopEvidenceVerifier) await stopEvidenceVerifier();
 
       if (ownsPrismaClient) {
         await prisma.$disconnect();
