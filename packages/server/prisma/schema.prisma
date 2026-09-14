@@ -629,3 +629,61 @@ model SyncDeadLetter {
   @@unique([repository, itemRef])
   @@index([repository])
 }
+
+// Signed inbound receipts retain their dedupe keys even after payload retention expires.
+enum InboundGitHubStatus {
+  PENDING
+  PROCESSING
+  RETRY
+  PROCESSED
+  DEAD
+}
+
+model InboundGitHubDelivery {
+  id              String              @id @default(uuid()) @db.Uuid
+  provider        String              @default("github")
+  deliveryId      String
+  payloadHash     String
+  eventType       String
+  repository      String
+  payload         Json?
+  status          InboundGitHubStatus  @default(PENDING)
+  attempts        Int                 @default(0)
+  failureCount    Int                 @default(0)
+  availableAt     DateTime            @default(now())
+  leaseOwner      String?
+  leaseUntil      DateTime?
+  lastErrorCode   String?
+  receivedAt      DateTime            @default(now())
+  processedAt     DateTime?
+  attemptHistory  InboundGitHubAttempt[]
+  replays         InboundGitHubReplay[]
+
+  @@unique([provider, deliveryId])
+  @@index([status, availableAt, receivedAt])
+  @@index([status, leaseUntil])
+}
+
+model InboundGitHubAttempt {
+  id          String                @id @default(uuid()) @db.Uuid
+  deliveryId  String                @db.Uuid
+  delivery    InboundGitHubDelivery  @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  number      Int
+  leaseOwner  String
+  outcome     String                @default("PROCESSING")
+  errorCode   String?
+  startedAt   DateTime              @default(now())
+  endedAt     DateTime?
+
+  @@unique([deliveryId, number])
+}
+
+model InboundGitHubReplay {
+  id                String                @id @default(uuid()) @db.Uuid
+  deliveryId        String                @db.Uuid
+  delivery          InboundGitHubDelivery  @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  reason            String
+  source            String                @default("operator-cli")
+  previousAttempts  Int
+  requestedAt       DateTime              @default(now())
+}

@@ -32,7 +32,8 @@ import { createGraphQLSchema } from './schema.js';
 import { getServerEnvironment, loadServerEnvironment, type ServerEnvironment } from './environment.js';
 import { getUploadsDirectory } from './uploads.js';
 import { handleWebStatic } from './web-static.js';
-import { handleGitHubWebhook } from './github-webhook-handler.js';
+import { handleGitHubWebhook, processStoredGitHubEvent } from './github-webhook-handler.js';
+import { startGitHubInboundWorker } from './github-inbound.js';
 import {
   DefaultGitHubApiClient,
   reconcileAllConfiguredRepos,
@@ -68,6 +69,8 @@ export interface StartServerOptions {
   githubSyncEnabled?: boolean;
   /** Interval in ms for periodic reconciliation sync (default: 10 minutes) */
   githubSyncIntervalMs?: number;
+  /** Disable only the consumer; signed inbound receipts are still durably accepted. */
+  githubInboundEnabled?: boolean;
 }
 
 export interface StartedServer {
@@ -409,6 +412,16 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       });
   }
 
+  const inboundEnabled = options.githubInboundEnabled ?? Boolean(options.githubWebhookSecret ?? process.env.GITHUB_WEBHOOK_SECRET?.trim());
+  const configuredRetentionDays = Number(process.env.GITHUB_INBOUND_RETENTION_DAYS ?? 30);
+  const retentionDays = Number.isInteger(configuredRetentionDays) && configuredRetentionDays > 0 ? configuredRetentionDays : 30;
+  if (inboundEnabled && retentionDays !== configuredRetentionDays) {
+    console.error('[github-inbound] Invalid retention setting; using 30 days.');
+  }
+  const stopGitHubInbound = inboundEnabled
+    ? startGitHubInboundWorker(prisma, processStoredGitHubEvent, retentionDays)
+    : null;
+
   const address = httpServer.address();
 
   if (!address || typeof address === 'string') {
@@ -443,6 +456,8 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
           resolve();
         });
       });
+
+      if (stopGitHubInbound) await stopGitHubInbound();
 
       if (ownsPrismaClient) {
         await prisma.$disconnect();
