@@ -2,9 +2,9 @@
 // Dual-Track CAS State Machine for GitHub Webhook events.
 //
 // Channel A: Monotonic forward CAS — atomic single-statement updateMany with
-//            relation filter on strictly lower-rank workflow states and LWW guard.
+//            scalar stateId filter on strictly lower-rank workflow states and LWW guard.
 // Channel B: Restricted provenance rollback — atomic single-statement updateMany
-//            requiring state: { type: 'REVIEW' } and stateSourcePrId: prId.
+//            requiring a REVIEW stateId and stateSourcePrId: prId.
 //
 // Terminal absorbing states: COMPLETED, CANCELED — no event can move out of these.
 
@@ -152,14 +152,18 @@ export async function applyMonotonicForward(
 
   const eventDate = input.eventTimestamp ? new Date(input.eventTimestamp) : new Date();
   const lowerTypes = LOWER_RANK_TYPES_OF[input.targetStateType];
+  const allowedStates = await tx.workflowState.findMany({
+    where: { teamId: input.teamId, type: { in: lowerTypes } }, select: { id: true },
+  });
 
   // Atomic CAS update: executes at the DB engine level, safe under concurrent executions
   const updateResult = await tx.issue.updateMany({
     where: {
       id: input.issueId,
-      state: {
-        type: { in: lowerTypes },
-      },
+      teamId: input.teamId,
+      // Keep the CAS predicate on the updated row: a relation-filter subquery can
+      // retain a stale join snapshot after waiting for another issue update.
+      stateId: { in: allowedStates.map(state => state.id) },
       OR: [
         { lastAppliedEventTime: null },
         { lastAppliedEventTime: { lte: eventDate } },
@@ -271,13 +275,16 @@ export async function applyProvenanceRollback(
 
   const eventDate = input.eventTimestamp ? new Date(input.eventTimestamp) : new Date();
 
+  const reviewStates = await tx.workflowState.findMany({
+    where: { teamId: input.teamId, type: 'REVIEW' }, select: { id: true },
+  });
+
   // Atomic CAS rollback: executes at the DB engine level
   const rollbackResult = await tx.issue.updateMany({
     where: {
       id: input.issueId,
-      state: {
-        type: 'REVIEW',
-      },
+      teamId: input.teamId,
+      stateId: { in: reviewStates.map(state => state.id) },
       stateSourcePrId: input.prId,
       OR: [
         { lastAppliedEventTime: null },

@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
 import type { PrismaClient, Team, User, Issue } from '@prisma/client';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
@@ -478,6 +478,33 @@ describe('GitHub Webhook & Dual-Track CAS State Machine (Phase 2)', () => {
   });
 
   describe('P1 Concurrency Hardening & Isolation (Reviewer Defense Matrix)', () => {
+    it('rechecks scalar state after waiting for a concurrent forward transition', async () => {
+      const issue = await createTestIssue('Deterministic CAS row wait');
+      const review = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'REVIEW' } });
+      let ready!: () => void; let release!: () => void;
+      const entered = new Promise<void>(resolve => { ready = resolve; });
+      const gate = new Promise<void>(resolve => { release = resolve; });
+      const opened = prisma.$transaction(async tx => {
+        await tx.issue.update({ where: { id: issue.id }, data: { stateId: review.id, lastAppliedEventTime: new Date('2026-09-09T12:00:00Z') } });
+        ready(); await gate;
+      }, { timeout: 15_000 });
+      await entered;
+      const merged = prisma.$transaction(tx => applyMonotonicForward(tx, {
+        issueId: issue.id, teamId: team.id, targetStateType: 'COMPLETED',
+        eventSourceKey: 'deterministic_merge', eventType: 'pull_request.merged', eventTimestamp: '2026-09-09T12:30:00Z',
+      }), { timeout: 15_000 });
+      try {
+        await vi.waitFor(async () => {
+          const waiting = await prisma.$queryRaw<Array<{ count: bigint }>>`SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE 'UPDATE%Issue%'`;
+          expect(Number(waiting[0]!.count)).toBeGreaterThan(0);
+        }, { timeout: 5_000 });
+      } finally { release(); }
+      await opened;
+      const result = await merged;
+      expect(result.applied, result.reason).toBe(true);
+      expect((await prisma.issue.findUniqueOrThrow({ where: { id: issue.id }, include: { state: true } })).state.type).toBe('COMPLETED');
+    });
+
     it('Atomic CAS ensures concurrent opened + merged always settles in COMPLETED', async () => {
       const issue = await createTestIssue('Concurrency CAS battle');
 
