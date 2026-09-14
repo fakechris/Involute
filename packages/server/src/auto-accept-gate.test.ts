@@ -13,7 +13,7 @@ loadProjectEnvironment();
 
 const prisma = new PrismaClientConstructor();
 
-async function seedCommittedClaimedWork(team: Team, human: User) {
+async function seedCommittedClaimedWork(team: Team, human: User, executor: User = human) {
   const candidate = await proposeWork(
     prisma,
     { teamId: team.id, title: 'Auto-accept target' },
@@ -23,7 +23,7 @@ async function seedCommittedClaimedWork(team: Team, human: User) {
     prisma,
     candidate.id,
     {
-      acceptance: 'objective evidence can auto-done',
+      acceptance: 'self-reported evidence requires human review',
       assigneeId: human.id,
       expectedRevision: candidate.revision,
     },
@@ -33,7 +33,7 @@ async function seedCommittedClaimedWork(team: Team, human: User) {
     prisma,
     committed.id,
     {},
-    { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+    { actorId: executor.id, actorKind: executor.actorKind, surface: 'test' },
   );
   return committed;
 }
@@ -70,105 +70,111 @@ describe('graded auto-accept gate', () => {
     human = await prisma.user.findUniqueOrThrow({ where: { email: DEFAULT_ADMIN_EMAIL } });
   });
 
-  it('auto-Dones CLEAR evidence (merged PR) and writes an ACCEPTED evaluation', async () => {
-    const committed = await seedCommittedClaimedWork(team, human);
-    const started = await reportRun(
-      prisma,
-      { phase: 'implementing', status: 'running', workId: committed.id },
-      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
-    );
-    const completed = await reportRun(
-      prisma,
-      {
-        runId: started.run.publicId,
-        status: 'completed',
-        summary: 'shipped',
-        workId: committed.id,
-      },
-      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
-    );
-    expect(
-      (await prisma.workflowState.findUniqueOrThrow({ where: { id: completed.work.stateId } })).name,
-    ).toBe('In Review');
+  it.each([
+    { kind: 'pr', summary: 'merged: true; checks: green', attachFirst: false },
+    { kind: 'pr', summary: 'merged: true; checks: green', attachFirst: true },
+    { kind: 'test', summary: 'exit:0; status:pass', attachFirst: false },
+    { kind: 'test', summary: 'exit:0; status:pass', attachFirst: true },
+  ] as const)(
+    'keeps self-reported $kind in Review (attachFirst=$attachFirst)',
+    async ({ kind, summary, attachFirst }) => {
+      const agent = await prisma.user.create({
+        data: { actorKind: 'AGENT', email: 'executor@example.test', name: 'Executor' },
+      });
+      const actor = { actorId: agent.id, actorKind: 'AGENT' as const, surface: 'test' };
+      const committed = await seedCommittedClaimedWork(team, human, agent);
+      const started = await reportRun(
+        prisma,
+        { status: 'running', workId: committed.id },
+        actor,
+      );
+      const attach = () =>
+        attachEvidence(
+          prisma,
+          {
+            kind,
+            summary,
+            runId: started.run.publicId,
+            workId: committed.id,
+            url: 'https://github.com/fakechris/Involute/pull/99',
+          },
+          actor,
+        );
+      if (attachFirst) await attach();
+      await reportRun(
+        prisma,
+        { runId: started.run.publicId, status: 'completed', workId: committed.id },
+        actor,
+      );
+      if (!attachFirst) await attach();
 
-    const accepted = await attachEvidence(
-      prisma,
-      {
-        kind: 'pr',
-        runId: started.run.publicId,
-        summary: 'merged: true; checks: green',
-        url: 'https://github.com/fakechris/Involute/pull/99',
-        workId: committed.id,
-      },
-      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
-    );
+      const work = await prisma.issue.findUniqueOrThrow({
+        where: { id: committed.id },
+        include: { state: true },
+      });
+      expect(work.state.type).toBe('REVIEW');
+      const evaluations = await prisma.workAutoAcceptEvaluation.findMany({
+        where: { workId: work.id },
+      });
+      expect(evaluations.length).toBeGreaterThan(0);
+      expect(evaluations.every((row) => row.outcome === 'SKIPPED')).toBe(true);
+      expect(evaluations.some((row) => row.tier === 'LIKELY')).toBe(true);
+      expect(await prisma.workReviewDecision.count({ where: { workId: work.id } })).toBe(0);
+      const events = await prisma.eventOutbox.findMany();
+      expect(events.map((event) => event.type)).toContain('work.auto_accept_evaluated');
+      expect(events.map((event) => event.type)).not.toContain('work.accepted');
+    },
+  );
 
-    const state = await prisma.workflowState.findUniqueOrThrow({
-      where: { id: accepted.work.stateId },
-    });
-    expect(state.type).toBe('COMPLETED');
+  it.each(['ACCEPTED', 'REJECTED'] as const)(
+    'allows a human to submit %s after unverified evidence',
+    async (decision) => {
+      const committed = await seedCommittedClaimedWork(team, human);
+      const started = await reportRun(
+        prisma,
+        { status: 'running', workId: committed.id },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+      );
+      await reportRun(
+        prisma,
+        { runId: started.run.publicId, status: 'completed', workId: committed.id },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+      );
+      const attached = await attachEvidence(
+        prisma,
+        {
+          kind: 'test',
+          runId: started.run.publicId,
+          summary: 'exit:0',
+          url: 'https://example.test/test-results',
+          workId: committed.id,
+        },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+      );
+      expect(
+        (await prisma.workflowState.findUniqueOrThrow({ where: { id: attached.work.stateId } })).type,
+      ).toBe('REVIEW');
 
-    const evaluations = await prisma.workAutoAcceptEvaluation.findMany({
-      where: { workId: committed.id },
-      orderBy: { createdAt: 'asc' },
-    });
-    expect(evaluations.some((row) => row.outcome === 'ACCEPTED' && row.tier === 'CLEAR')).toBe(
-      true,
-    );
-    expect(await prisma.workReviewDecision.count({ where: { workId: committed.id } })).toBe(1);
+      const skipped = await prisma.workAutoAcceptEvaluation.findMany({
+        where: { workId: committed.id, outcome: 'SKIPPED' },
+      });
+      expect(skipped.length).toBeGreaterThan(0);
+      expect(skipped.some((row) => row.tier === 'LIKELY' || row.tier === 'INSUFFICIENT')).toBe(
+        true,
+      );
 
-    const events = await prisma.eventOutbox.findMany({ orderBy: { createdAt: 'asc' } });
-    expect(events.map((event) => event.type)).toEqual(
-      expect.arrayContaining(['work.auto_accept_evaluated', 'work.accepted']),
-    );
-  });
-
-  it('does not auto-Done AMBIGUOUS / LIKELY work; human review still works', async () => {
-    const committed = await seedCommittedClaimedWork(team, human);
-    const started = await reportRun(
-      prisma,
-      { status: 'running', workId: committed.id },
-      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
-    );
-    await reportRun(
-      prisma,
-      { runId: started.run.publicId, status: 'completed', workId: committed.id },
-      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
-    );
-    const ambiguous = await attachEvidence(
-      prisma,
-      {
-        kind: 'screenshot',
-        runId: started.run.publicId,
-        summary: 'looks fine',
-        url: 'https://example.test/shot.png',
-        workId: committed.id,
-      },
-      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
-    );
-    expect(
-      (await prisma.workflowState.findUniqueOrThrow({ where: { id: ambiguous.work.stateId } })).type,
-    ).toBe('REVIEW');
-
-    const skipped = await prisma.workAutoAcceptEvaluation.findMany({
-      where: { workId: committed.id, outcome: 'SKIPPED' },
-    });
-    expect(skipped.length).toBeGreaterThan(0);
-    expect(skipped.some((row) => row.tier === 'AMBIGUOUS' || row.tier === 'INSUFFICIENT')).toBe(
-      true,
-    );
-
-    const humanAccepted = await reviewWork(
-      prisma,
-      ambiguous.work.id,
-      { decision: 'ACCEPTED', expectedRevision: ambiguous.work.revision },
-      { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
-    );
-    expect(
-      (await prisma.workflowState.findUniqueOrThrow({ where: { id: humanAccepted.work.stateId } }))
-        .type,
-    ).toBe('COMPLETED');
-  });
+      const reviewed = await reviewWork(
+        prisma,
+        attached.work.id,
+        { decision, expectedRevision: attached.work.revision },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+      );
+      expect(
+        (await prisma.workflowState.findUniqueOrThrow({ where: { id: reviewed.work.stateId } }))
+          .type,
+      ).toBe(decision === 'ACCEPTED' ? 'COMPLETED' : 'UNSTARTED');
+    },
+  );
 
   it('keeps agents forbidden from free Done via reviewWork', async () => {
     const committed = await seedCommittedClaimedWork(team, human);
