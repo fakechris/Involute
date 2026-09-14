@@ -8,7 +8,7 @@
  * 4. Import labels — create mapped label rows
  * 5. Import users — upsert by email
  * 6. Import issues WITHOUT parentId first — preserve identifier and timestamps. Build old_id→new_id mapping.
- * 7. Backfill parentId using mapping
+ * 7. Report source parent relationships for explicit reviewed migration
  * 8. Import comments in createdAt order, preserving original timestamps
  * 9. Write legacy_linear_mapping table entries for all entities
  * 10. Idempotent: re-import skips already-imported records (check mapping table)
@@ -33,6 +33,7 @@ import {
 } from '@turnkeyai/involute-shared/import-format';
 import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { lockWorkGraph } from './graph-integrity.js';
 
 export type ProgressCallback = (message: string) => void;
 
@@ -426,6 +427,7 @@ async function importIssues(
     }
 
     const created = await prisma.$transaction(async (transaction) => {
+      await lockWorkGraph(transaction, newTeamId);
       const conflictingIssue = await transaction.issue.findUnique({
         where: {
           identifier: issue.identifier,
@@ -454,53 +456,16 @@ async function importIssues(
   return { idMap, imported, skipped, warnings };
 }
 
-async function backfillParentIds(
-  prisma: PrismaClient,
-  issues: ExportedIssue[],
-  issueIdMap: Map<string, string>,
-  onProgress?: ProgressCallback,
-): Promise<number> {
-  const issuesWithParent = issues.filter((i) => i.parent !== null);
-  onProgress?.(`Backfilling ${String(issuesWithParent.length)} parent-child relationships...`);
-  let backfilled = 0;
-
-  for (const issue of issuesWithParent) {
-    const newChildId = issueIdMap.get(issue.id);
-    const newParentId = issue.parent ? issueIdMap.get(issue.parent.id) : null;
-
-    if (!newChildId || !newParentId) {
-      continue;
-    }
-
-    // Check if already set (idempotent)
-    const existing = await prisma.issue.findUnique({
-      where: { id: newChildId },
-      select: { parentId: true },
-    });
-
-    if (existing?.parentId === newParentId) {
-      continue;
-    }
-
-    await prisma.issue.update({
-      where: {
-        id: newChildId,
-      },
-      data: {
-        parentId: newParentId,
-      },
-    });
-    await prisma.$executeRaw`
-      UPDATE "Issue"
-      SET "updatedAt" = CAST(${issue.updatedAt} AS TIMESTAMPTZ) AT TIME ZONE 'UTC'
-      WHERE "id" = CAST(${newChildId} AS UUID)
-    `;
-
-    backfilled++;
+function deferredParentRelationships(issues: ExportedIssue[], onProgress?: ProgressCallback): ImportWarningRecord[] {
+  const warnings: ImportWarningRecord[] = [];
+  for (const issue of issues) {
+    if (!issue.parent) continue;
+    recordSkippedImport(warnings, {
+      entityType: 'issue', legacyId: issue.id, identifier: issue.identifier,
+      reason: `Parent relationship to source ${issue.parent.id} deferred: select explicit repository and hierarchy kinds with graph:migrate. Existing mappings are never overwritten.`,
+    }, onProgress);
   }
-
-  onProgress?.(`  Parent-child backfills: ${String(backfilled)}`);
-  return backfilled;
+  return warnings;
 }
 
 interface ExportedCommentEntry {
@@ -736,13 +701,9 @@ export async function runImportPipeline(
     onProgress,
   );
 
-  // Step 7: Backfill parentId
-  const parentChildBackfills = await backfillParentIds(
-    prisma,
-    issues,
-    issueResult.idMap,
-    onProgress,
-  );
+  // Source issues have no declared repository/kind mapping. Keep relationships in
+  // the source export and report them; never infer milestones or overwrite a repair.
+  const parentWarnings = deferredParentRelationships(issues, onProgress);
 
   // Step 8: Import comments
   const commentResult = await importComments(
@@ -767,7 +728,7 @@ export async function runImportPipeline(
       users: userResult.imported + userResult.skipped,
       issues: issueResult.imported + issueResult.skipped,
       comments: commentResult.imported + commentResult.skipped,
-      parentChildBackfills,
+      parentChildBackfills: 0,
     },
     skipped: {
       teams: teamResult.skipped,
@@ -779,7 +740,7 @@ export async function runImportPipeline(
     },
     warnings: {
       orphanCommentFallbacks: commentResult.orphanCommentFallbacks,
-      skippedRecords: [...stateResult.warnings, ...issueResult.warnings, ...commentResult.warnings],
+      skippedRecords: [...stateResult.warnings, ...issueResult.warnings, ...commentResult.warnings, ...parentWarnings],
     },
   };
 }

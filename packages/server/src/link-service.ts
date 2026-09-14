@@ -9,7 +9,8 @@ import {
   WORK_LINK_SELF_REFERENCE_MESSAGE,
   WORK_LINK_TEAM_MISMATCH_MESSAGE,
 } from './errors.js';
-import { INTERNAL_WRITE_ACTOR, type WriteActor } from './work-service.js';
+import { assertContainsEndpoints, lockWorkGraph } from './graph-integrity.js';
+import { INTERNAL_WRITE_ACTOR, recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -34,14 +35,15 @@ export async function createWorkLink(
     throw createValidationError(WORK_LINK_SELF_REFERENCE_MESSAGE);
   }
 
+  const hint = await prisma.issue.findUnique({ where: { id: input.fromId }, select: { teamId: true } });
+  if (!hint) throw createNotFoundError(WORK_LINK_ENDPOINT_NOT_FOUND_MESSAGE);
+  await lockWorkGraph(prisma, hint.teamId);
   const [fromIssue, toIssue] = await Promise.all([
     prisma.issue.findUnique({
       where: { id: input.fromId },
-      select: { id: true, parentId: true, teamId: true },
     }),
     prisma.issue.findUnique({
       where: { id: input.toId },
-      select: { id: true, parentId: true, teamId: true },
     }),
   ]);
 
@@ -53,22 +55,19 @@ export async function createWorkLink(
     throw createValidationError(WORK_LINK_TEAM_MISMATCH_MESSAGE);
   }
 
-  await prisma.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${fromIssue.teamId}, 0))`;
 
   if (CYCLE_CHECKED_LINK_TYPES.has(input.type)) {
     await assertNoWorkLinkCycle(prisma, input.type, input.fromId, input.toId);
   }
 
   if (input.type === 'CONTAINS') {
-    await prisma.workLink.deleteMany({
-      where: {
-        toId: input.toId,
-        type: 'CONTAINS',
-        NOT: {
-          fromId: input.fromId,
-        },
-      },
-    });
+    assertContainsEndpoints(fromIssue, toIssue);
+    const otherParent = await prisma.workLink.findFirst({ where: {
+      toId: input.toId, type: 'CONTAINS', fromId: { not: input.fromId },
+    } });
+    if (otherParent || (toIssue.parentId && toIssue.parentId !== input.fromId)) {
+      throw createValidationError('CONTAINS cannot replace an existing parent; use an explicit parent update.');
+    }
   }
 
   const existing = await prisma.workLink.findUnique({
@@ -83,10 +82,7 @@ export async function createWorkLink(
 
   if (existing) {
     if (input.type === 'CONTAINS' && toIssue.parentId !== input.fromId) {
-      await prisma.issue.update({
-        where: { id: input.toId },
-        data: { parentId: input.fromId },
-      });
+      await projectParent(prisma, toIssue, input.fromId, input.actor);
     }
 
     return existing;
@@ -102,12 +98,7 @@ export async function createWorkLink(
     },
   });
 
-  if (input.type === 'CONTAINS' && toIssue.parentId !== input.fromId) {
-    await prisma.issue.update({
-      where: { id: input.toId },
-      data: { parentId: input.fromId },
-    });
-  }
+  if (input.type === 'CONTAINS') await projectParent(prisma, toIssue, input.fromId, actor);
 
   return created;
 }
@@ -115,11 +106,15 @@ export async function createWorkLink(
 export async function deleteWorkLink(
   prisma: DatabaseClient,
   id: string,
+  actor?: WriteActor | null,
 ): Promise<Pick<WorkLink, 'id'>> {
   if (isPrismaClient(prisma)) {
-    return prisma.$transaction((transaction) => deleteWorkLink(transaction, id));
+    return prisma.$transaction((transaction) => deleteWorkLink(transaction, id, actor));
   }
 
+  const hint = await prisma.workLink.findUnique({ where: { id }, select: { from: { select: { teamId: true } } } });
+  if (!hint) throw createNotFoundError(WORK_LINK_NOT_FOUND_MESSAGE);
+  await lockWorkGraph(prisma, hint.from.teamId);
   const existing = await prisma.workLink.findUnique({
     where: { id },
     select: { id: true, fromId: true, toId: true, type: true },
@@ -136,15 +131,9 @@ export async function deleteWorkLink(
   if (existing.type === 'CONTAINS') {
     const child = await prisma.issue.findUnique({
       where: { id: existing.toId },
-      select: { parentId: true },
     });
 
-    if (child?.parentId === existing.fromId) {
-      await prisma.issue.update({
-        where: { id: existing.toId },
-        data: { parentId: null },
-      });
-    }
+    if (child) await projectParent(prisma, child, child.parentId === existing.fromId ? null : child.parentId, actor);
   }
 
   return { id: existing.id };
@@ -170,27 +159,28 @@ export async function syncContainsFromParentId(
   parentId: string | null,
   actor?: WriteActor | null,
 ): Promise<void> {
-  if (parentId) {
-    const input: CreateWorkLinkInput = {
-      fromId: parentId,
-      toId: childId,
-      type: 'CONTAINS',
-    };
-
-    if (actor !== undefined) {
-      input.actor = actor;
-    }
-
-    await createWorkLink(prisma, input);
-    return;
+  if (isPrismaClient(prisma)) {
+    return prisma.$transaction(tx => syncContainsFromParentId(tx, childId, parentId, actor));
   }
-
-  await prisma.workLink.deleteMany({
-    where: {
-      toId: childId,
-      type: 'CONTAINS',
-    },
+  const hint = await prisma.issue.findUniqueOrThrow({ where: { id: childId }, select: { teamId: true } });
+  await lockWorkGraph(prisma, hint.teamId);
+  const child = await prisma.issue.findUniqueOrThrow({ where: { id: childId } });
+  if (child.parentId !== parentId) throw createValidationError('Parent projection does not match the issue.');
+  if (parentId) {
+    const parent = await prisma.issue.findUniqueOrThrow({ where: { id: parentId } });
+    await assertNoWorkLinkCycle(prisma, 'CONTAINS', parentId, childId);
+    assertContainsEndpoints(parent, child);
+  }
+  await prisma.workLink.deleteMany({ where: { toId: childId, type: 'CONTAINS', ...(parentId ? { fromId: { not: parentId } } : {}) } });
+  if (parentId) await prisma.workLink.upsert({
+    where: { fromId_toId_type: { fromId: parentId, toId: childId, type: 'CONTAINS' } },
+    create: { fromId: parentId, toId: childId, type: 'CONTAINS', actorId: actor?.actorId ?? null }, update: {},
   });
+}
+
+async function projectParent(prisma: Prisma.TransactionClient, before: import('@prisma/client').Issue, parentId: string | null, actor?: WriteActor | null) {
+  const after = await prisma.issue.update({ where: { id: before.id }, data: { parentId, revision: { increment: 1 } } });
+  await recordWorkAudit(prisma, { actor: actor ?? INTERNAL_WRITE_ACTOR, before: selectIssueSnapshot(before), after: selectIssueSnapshot(after), workId: before.id });
 }
 
 export async function assertNoWorkLinkCycle(

@@ -668,7 +668,8 @@ Existing issues are work nodes. New fields are queryable; `issueCreate` / `issue
 - `commitmentStatus` defaults to `COMMITTED` (imported and currently created issues are already commitments)
 - `revision` starts at `1` and increments on each domain update
 - `links` returns incident `WorkLink` rows (`CONTAINS`, `BLOCKS`, `DERIVED_FROM`, `DISCOVERED_DURING`, `RELATED_TO`, `DUPLICATE_OF`)
-- setting `parentId` through `issueUpdate` also writes a `CONTAINS` link (parent → child) and records a `WorkAudit` row
+- setting `parentId` through `issueCreate` or `issueUpdate` also writes a `CONTAINS` link (parent → child) and records a `WorkAudit` row
+- `CONTAINS` requires explicit matching repositories and PROJECT → MILESTONE → ISSUE (or PROJECT → DECISION). Adding a second parent fails; use a revision-checked `issueUpdate` for an intentional move. Kind/repository edits validate incident edges. See [graph migration operations](graph-migration.md) for historical repairs.
 - `viewer.actorKind` is `HUMAN`, `AGENT`, or `SERVICE`
 
 ## MCP

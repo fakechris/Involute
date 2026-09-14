@@ -87,6 +87,8 @@ describe('work graph GraphQL facade', () => {
       where: { identifier: parentId },
     });
 
+    await prisma.issue.update({ where: { id: parent.id }, data: { kind: 'MILESTONE', repository: 'fakechris/Involute' } });
+
     const childCreate = await postGraphQL({
       query: `
         mutation IssueCreate($input: IssueCreateInput!) {
@@ -99,7 +101,7 @@ describe('work graph GraphQL facade', () => {
       variables: {
         input: {
           teamId: team.id,
-          title: 'Child work',
+          title: 'Child work', repository: 'fakechris/Involute',
           stateId: ready.id,
         },
       },
@@ -191,7 +193,7 @@ describe('work graph GraphQL facade', () => {
       variables: {
         input: {
           teamId: team.id,
-          title: 'Infrastructure Project',
+          title: 'Infrastructure Project', repository: 'fakechris/Involute',
           kind: 'PROJECT',
           assigneeId: viewer.id,
           stateId: ready.id,
@@ -217,7 +219,7 @@ describe('work graph GraphQL facade', () => {
       variables: {
         input: {
           teamId: team.id,
-          title: 'Child Task',
+          title: 'Child milestone', kind: 'MILESTONE', repository: 'fakechris/Involute',
           stateId: ready.id,
         },
       },
@@ -269,6 +271,8 @@ describe('work graph GraphQL facade', () => {
       select: { parentId: true },
     });
     expect(taskAfterDelete.parentId).toBeNull();
+    const deleteAudit = await prisma.workAudit.findFirstOrThrow({ where: { workId: task.id }, orderBy: { createdAt: 'desc' } });
+    expect(deleteAudit).toMatchObject({ actorId: viewer.id, actorKind: 'HUMAN' });
   });
 
   it('returns workContext and readyWork without requiring IssueFilter composition', async () => {
@@ -278,7 +282,7 @@ describe('work graph GraphQL facade', () => {
           issueCreate(input: $input) { success issue { id identifier } }
         }
       `,
-      variables: { input: { teamId: team.id, title: 'Parent epic', stateId: ready.id } },
+      variables: { input: { teamId: team.id, title: 'Parent milestone', kind: 'MILESTONE', repository: 'fakechris/Involute', stateId: ready.id } },
     });
     expectGraphQLSuccess(parentCreate);
     const parent = parentCreate.body.data.issueCreate.issue as { id: string; identifier: string };
@@ -289,7 +293,7 @@ describe('work graph GraphQL facade', () => {
           issueCreate(input: $input) { success issue { id identifier } }
         }
       `,
-      variables: { input: { teamId: team.id, title: 'Ready child', stateId: ready.id } },
+      variables: { input: { teamId: team.id, title: 'Ready child', repository: 'fakechris/Involute', stateId: ready.id } },
     });
     expectGraphQLSuccess(childCreate);
     const child = childCreate.body.data.issueCreate.issue as { id: string; identifier: string };
@@ -344,7 +348,7 @@ describe('work graph GraphQL facade', () => {
     expectGraphQLSuccess(contextResponse);
     expect(contextResponse.body.data.workContext.work.identifier).toBe(child.identifier);
     expect(contextResponse.body.data.workContext.ancestors).toEqual([
-      { identifier: parent.identifier, title: 'Parent epic' },
+      { identifier: parent.identifier, title: 'Parent milestone' },
     ]);
     expect(contextResponse.body.data.workContext.blockedBy).toEqual([
       { identifier: blockerCreate.body.data.issueCreate.issue.identifier },

@@ -111,8 +111,9 @@ describe('import board query integration', () => {
     await rm(exportDir, { force: true, recursive: true });
   });
 
-  it('returns imported board data through GraphQL with preserved parent and comment relationships', async () => {
-    await runImportPipeline(prisma, exportDir);
+  it('returns imported board data through GraphQL with deferred hierarchy and preserved comments', async () => {
+    const imported = await runImportPipeline(prisma, exportDir);
+    expect(imported.warnings.skippedRecords).toEqual([expect.objectContaining({ reason: expect.stringContaining('deferred') })]);
 
     const response = await postGraphQL({
       query: `
@@ -156,7 +157,7 @@ describe('import board query integration', () => {
         identifier: 'SON-43',
         title: 'Imported child issue',
         state: { name: 'Ready' },
-        parent: { identifier: 'SON-42' },
+        parent: null,
         comments: {
           nodes: [
             {

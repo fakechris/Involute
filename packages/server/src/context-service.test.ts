@@ -39,9 +39,9 @@ describe('context service', () => {
   });
 
   it('assembles ancestors, blockers, and audits for a work node', async () => {
-    const root = await createIssue(prisma, { teamId: team.id, title: 'Epic', stateId: backlog.id });
-    const parent = await createIssue(prisma, { teamId: team.id, title: 'Parent', stateId: ready.id });
-    const child = await createIssue(prisma, { teamId: team.id, title: 'Child', stateId: ready.id });
+    const root = await createIssue(prisma, { teamId: team.id, title: 'Epic', kind: 'PROJECT', repository: 'fakechris/Involute', stateId: backlog.id });
+    const parent = await createIssue(prisma, { teamId: team.id, title: 'Parent', kind: 'MILESTONE', repository: 'fakechris/Involute', stateId: ready.id });
+    const child = await createIssue(prisma, { teamId: team.id, title: 'Child', repository: 'fakechris/Involute', stateId: ready.id });
     const blocker = await createIssue(prisma, { teamId: team.id, title: 'Blocker', stateId: ready.id });
 
     await updateIssue(prisma, parent.id, { parentId: root.id });

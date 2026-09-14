@@ -1884,7 +1884,7 @@ const resolvers = {
     ): Promise<{ issueId: string | null; success: boolean }> =>
       runMutation(async () => {
         await assertCanWriteIssue(context.prisma, context, args.id);
-        const issue = await deleteIssue(context.prisma, args.id);
+        const issue = await deleteIssue(context.prisma, args.id, writeActorFromViewer(context.viewer));
 
         return {
           issueId: issue.id,
@@ -1948,7 +1948,7 @@ const resolvers = {
         if (!existing) throw createNotFoundError(WORK_LINK_NOT_FOUND_MESSAGE);
         await assertCanWriteIssue(context.prisma, context, existing.fromId);
         await assertCanWriteIssue(context.prisma, context, existing.toId);
-        const result = await deleteWorkLink(context.prisma, args.id);
+        const result = await deleteWorkLink(context.prisma, args.id, writeActorFromViewer(context.viewer));
         return { id: result.id, success: true as const };
       }, { id: null, success: false as const }),
     workCommit: async (

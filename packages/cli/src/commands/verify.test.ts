@@ -132,6 +132,11 @@ async function resetVerifyImportState(
 
   const { runImportPipeline } = await import('@turnkeyai/involute-server/import-pipeline');
   await runImportPipeline(prisma, exportDir);
+  // Source-parity tests start from an explicitly mapped hierarchy. Raw import
+  // now defers source parents until repository/kind choices have been reviewed.
+  const parent = await prisma.issue.update({ where: { identifier: 'VRF-1' }, data: { kind: 'MILESTONE', repository: 'owner/verify', updatedAt: new Date(FIXTURE_ISSUES[0]!.updatedAt) } });
+  const child = await prisma.issue.update({ where: { identifier: 'VRF-2' }, data: { repository: 'owner/verify', parentId: parent.id, updatedAt: new Date(FIXTURE_ISSUES[1]!.updatedAt) } });
+  await prisma.workLink.create({ data: { fromId: parent.id, toId: child.id, type: 'CONTAINS' } });
 }
 
 describe('verify command — error handling', () => {

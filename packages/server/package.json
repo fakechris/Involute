@@ -42,6 +42,7 @@
     "setup:son-validation": "pnpm exec tsx src/son-validation-restore.ts",
     "test": "pnpm --filter @turnkeyai/involute-shared build && pnpm run prisma:generate && node scripts/run-vitest.mjs",
     "lint": "pnpm --filter @turnkeyai/involute-shared build && pnpm run prisma:generate && pnpm exec tsc -p tsconfig.json --noEmit && pnpm exec tsc -p tsconfig.prisma.json",
+    "graph:migrate": "pnpm exec tsx prisma/graph-migrate.ts",
     "github:inbound": "pnpm exec tsx prisma/github-inbound.ts"
   },
   "dependencies": {
