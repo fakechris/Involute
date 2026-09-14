@@ -1626,7 +1626,7 @@ async function resetDatabase(prismaClient: PrismaClient): Promise<MutationFixtur
   const parentIssue = await prismaClient.issue.create({
     data: {
       identifier: 'INV-1',
-      title: 'Parent issue',
+      title: 'Parent issue', kind: 'MILESTONE', repository: 'fakechris/Involute',
       description: 'Used for parent update tests.',
       teamId: team.id,
       stateId: findStateByName(states, 'Backlog').id,
@@ -1639,7 +1639,7 @@ async function resetDatabase(prismaClient: PrismaClient): Promise<MutationFixtur
   const issue = await prismaClient.issue.create({
     data: {
       identifier: 'INV-2',
-      title: 'Mutable issue',
+      title: 'Mutable issue', repository: 'fakechris/Involute',
       description: 'Initial description',
       teamId: team.id,
       stateId: findStateByName(states, 'Ready').id,

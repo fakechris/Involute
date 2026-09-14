@@ -113,14 +113,14 @@ describe('claim service', () => {
     const parent = await proposeWork(prisma, {
       kind: 'MILESTONE',
       teamId: team.id,
-      title: 'M1: Test Milestone',
+      title: 'M1: Test Milestone', repository: 'fakechris/Involute',
     });
 
     const child = await proposeWork(prisma, {
       kind: 'ISSUE',
       parentId: parent.identifier,
       teamId: team.id,
-      title: 'Task under M1',
+      title: 'Task under M1', repository: 'fakechris/Involute',
     });
 
     expect(child.parentId).toBe(parent.id);

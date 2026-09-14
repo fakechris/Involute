@@ -104,7 +104,7 @@ describe('issue service', () => {
     });
     const parent = await prisma.issue.create({
       data: {
-        identifier: 'INV-10',
+        identifier: 'INV-10', kind: 'MILESTONE', repository: 'fakechris/Involute',
         title: 'Parent',
         teamId: team.id,
         stateId: backlogState.id,
@@ -112,7 +112,7 @@ describe('issue service', () => {
     });
     const child = await prisma.issue.create({
       data: {
-        identifier: 'INV-11',
+        identifier: 'INV-11', repository: 'fakechris/Involute',
         title: 'Child',
         teamId: team.id,
         stateId: backlogState.id,

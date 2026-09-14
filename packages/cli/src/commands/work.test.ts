@@ -83,12 +83,12 @@ describe('work CLI commands', () => {
 
     const parent = await createIssue(prisma, {
       teamId: team.id,
-      title: 'Parent work',
+      title: 'Parent work', kind: 'MILESTONE', repository: 'owner/work',
       stateId: readyStateId,
     });
     const child = await createIssue(prisma, {
       teamId: team.id,
-      title: 'Child work',
+      title: 'Child work', repository: 'owner/work',
       stateId: readyStateId,
     });
     const blocker = await createIssue(prisma, {

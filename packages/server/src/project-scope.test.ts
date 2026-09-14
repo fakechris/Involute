@@ -68,7 +68,8 @@ describe('Ready project scope', () => {
     const root = await work({ kind: 'PROJECT', repository: null });
     const milestone = await work({ kind: 'MILESTONE', repository: null, parentId: root.id });
     const leaf = await work({ repository: null });
-    await createWorkLink(prisma, { fromId: milestone.id, toId: leaf.id, type: 'CONTAINS' });
+    // Legacy malformed edges remain readable; new writes require repositories.
+    await prisma.workLink.create({ data: { fromId: milestone.id, toId: leaf.id, type: 'CONTAINS' } });
     await prisma.workLink.create({ data: { fromId: leaf.id, toId: root.id, type: 'CONTAINS' } });
     const unrelated = await work({ repository: null });
     const result = ids(await listReadyWork(prisma, { projectId: root.identifier }));

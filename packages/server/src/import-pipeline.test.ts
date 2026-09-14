@@ -296,22 +296,22 @@ describe('import pipeline', () => {
     expect(childIssue!.updatedAt.toISOString()).toBe('2024-06-04T09:00:00.000Z');
   });
 
-  it('preserves parent-child relationships via ID mapping', async () => {
+  it('defers source hierarchy and never overwrites a subsequently repaired mapping', async () => {
+    const result = await runImportPipeline(prisma, exportDir);
+    const parent = await prisma.issue.findUniqueOrThrow({ where: { identifier: 'SON-43' } });
+    const child = await prisma.issue.findUniqueOrThrow({ where: { identifier: 'SON-44' } });
+    expect(child.parentId).toBeNull();
+    expect(await prisma.workLink.count()).toBe(0);
+    expect(result.warnings.skippedRecords).toEqual(expect.arrayContaining([
+      expect.objectContaining({ legacyId: 'linear-issue-3', reason: expect.stringContaining('linear-issue-1') }),
+    ]));
+    // Simulate an explicitly reviewed repair; import must not write this projection.
+    await prisma.issue.update({ where: { id: parent.id }, data: { kind: 'MILESTONE', repository: 'owner/repo' } });
+    await prisma.issue.update({ where: { id: child.id }, data: { repository: 'owner/repo', parentId: parent.id, revision: { increment: 1 } } });
+    const before = await prisma.issue.findUniqueOrThrow({ where: { id: child.id } });
     await runImportPipeline(prisma, exportDir);
-
-    const parent = await prisma.issue.findUnique({ where: { identifier: 'SON-42' } });
-    const child = await prisma.issue.findUnique({ where: { identifier: 'SON-44' } });
-
-    expect(parent).not.toBeNull();
-    expect(child).not.toBeNull();
-    expect(child!.parentId).toBe(parent!.id);
-
-    const children = await prisma.issue.findMany({
-      where: { parentId: parent!.id },
-      orderBy: { identifier: 'asc' },
-    });
-    expect(children).toHaveLength(1);
-    expect(children[0]!.identifier).toBe('SON-44');
+    expect(await prisma.issue.findUniqueOrThrow({ where: { id: child.id } })).toEqual(before);
+    expect(await prisma.workLink.count()).toBe(0);
   });
 
   it('imports issues without assignee correctly', async () => {
@@ -458,8 +458,8 @@ describe('import pipeline', () => {
     expect(result.counts.users).toBe(2);
     expect(result.counts.issues).toBe(3);
     expect(result.counts.comments).toBe(3);
-    expect(result.counts.parentChildBackfills).toBe(1);
-    expect(result.warnings.skippedRecords).toEqual([]);
+    expect(result.counts.parentChildBackfills).toBe(0);
+    expect(result.warnings.skippedRecords).toEqual([expect.objectContaining({ reason: expect.stringContaining('deferred') })]);
   });
 
   it('keeps null-user comment count parity and reports fallback handling in progress output', async () => {

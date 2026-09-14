@@ -629,3 +629,20 @@ model SyncDeadLetter {
   @@unique([repository, itemRef])
   @@index([repository])
 }
+
+// Operator migration receipts survive client disconnects and preserve rollback guards.
+model WorkGraphMigration {
+  id           String    @id @default(uuid()) @db.Uuid
+  planHash     String    @unique
+  teamId       String    @db.Uuid
+  actorId      String?   @db.Uuid
+  reason       String
+  status       String    @default("APPLIED")
+  plan         Json
+  before       Json
+  after        Json
+  createdAt    DateTime  @default(now())
+  rolledBackAt DateTime?
+
+  @@index([teamId, createdAt])
+}

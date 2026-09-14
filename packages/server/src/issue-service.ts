@@ -25,6 +25,7 @@ import {
 } from './errors.js';
 import { assertActorCan, isAcceptStateType, sanitizeWorkTitle, validateAgentDescription } from './claim-service.js';
 import { assertNoWorkLinkCycle, syncContainsFromParentId } from './link-service.js';
+import { assertNodeHierarchy, lockWorkGraph } from './graph-integrity.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
 import {
   INTERNAL_WRITE_ACTOR,
@@ -99,6 +100,8 @@ export async function createIssueInTransaction(
   input: CreateIssueInput,
   actor: WriteActor = INTERNAL_WRITE_ACTOR,
 ): Promise<Issue> {
+  if ('$transaction' in prisma) return prisma.$transaction(tx => createIssueInTransaction(tx, input, actor));
+  await lockWorkGraph(prisma, input.teamId);
   const team = await prisma.team.findUnique({
     where: {
       id: input.teamId,
@@ -180,6 +183,7 @@ export async function createIssueInTransaction(
       },
     });
 
+  await syncContainsFromParentId(prisma, created.id, created.parentId, actor);
   await recordWorkAudit(prisma, {
       actor,
       after: selectIssueSnapshot(created),
@@ -196,6 +200,9 @@ export async function updateIssue(
   actor: WriteActor = INTERNAL_WRITE_ACTOR,
 ): Promise<Issue> {
   return prisma.$transaction(async (transaction) => {
+    const hint = await transaction.issue.findUnique({ where: { id }, select: { teamId: true } });
+    if (!hint) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+    await lockWorkGraph(transaction, hint.teamId);
     const existingIssue = await transaction.issue.findUnique({
       where: {
         id,
@@ -438,6 +445,15 @@ export async function updateIssue(
       data.kind = input.kind;
     }
 
+    if (nextParentId !== undefined || 'repository' in input || 'kind' in input) {
+      await assertNodeHierarchy(transaction, {
+        ...existingIssue,
+        parentId: nextParentId === undefined ? existingIssue.parentId : nextParentId,
+        repository: 'repository' in input ? input.repository ?? null : existingIssue.repository,
+        kind: input.kind ?? existingIssue.kind,
+      }, nextParentId !== undefined);
+    }
+
     if (Object.keys(data).length === 0) {
       return existingIssue;
     }
@@ -550,27 +566,22 @@ export async function createComment(
 export async function deleteIssue(
   prisma: PrismaClient,
   id: string,
+  actor: WriteActor = INTERNAL_WRITE_ACTOR,
 ): Promise<Pick<Issue, 'id'>> {
-  const issue = await prisma.issue.findUnique({
-    where: {
-      id,
-    },
-    select: {
-      id: true,
-    },
+  return prisma.$transaction(async tx => {
+    const hint = await tx.issue.findUnique({ where: { id }, select: { teamId: true } });
+    if (!hint) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+    await lockWorkGraph(tx, hint.teamId);
+    const issue = await tx.issue.findUnique({ where: { id }, select: { id: true } });
+    if (!issue) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+    const children = await tx.issue.findMany({ where: { parentId: id } });
+    for (const child of children) {
+      const after = await tx.issue.update({ where: { id: child.id }, data: { parentId: null, revision: { increment: 1 } } });
+      await recordWorkAudit(tx, { actor, before: selectIssueSnapshot(child), after: selectIssueSnapshot(after), workId: child.id });
+    }
+    await tx.issue.delete({ where: { id } });
+    return issue;
   });
-
-  if (!issue) {
-    throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
-  }
-
-  await prisma.issue.delete({
-    where: {
-      id,
-    },
-  });
-
-  return issue;
 }
 
 export async function deleteComment(

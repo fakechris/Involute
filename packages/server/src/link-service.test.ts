@@ -50,8 +50,8 @@ describe('link service', () => {
   });
 
   it('creates a contains link, projects it onto parentId, and is idempotent', async () => {
-    const parent = await createIssue(prisma, { teamId: team.id, title: 'Parent', stateId: backlog.id });
-    const child = await createIssue(prisma, { teamId: team.id, title: 'Child', stateId: backlog.id });
+    const parent = await createIssue(prisma, { teamId: team.id, title: 'Parent', kind: 'MILESTONE', stateId: backlog.id, repository: "fakechris/Involute" });
+    const child = await createIssue(prisma, { teamId: team.id, title: 'Child', stateId: backlog.id, repository: "fakechris/Involute" });
 
     const first = await createWorkLink(prisma, {
       fromId: parent.id,
@@ -70,28 +70,28 @@ describe('link service', () => {
     ).resolves.toEqual({ parentId: parent.id });
   });
 
-  it('replaces an existing contains parent instead of allowing two parents', async () => {
-    const firstParent = await createIssue(prisma, { teamId: team.id, title: 'A', stateId: backlog.id });
-    const secondParent = await createIssue(prisma, { teamId: team.id, title: 'B', stateId: backlog.id });
-    const child = await createIssue(prisma, { teamId: team.id, title: 'C', stateId: backlog.id });
+  it('rejects a second contains parent without changing the first', async () => {
+    const firstParent = await createIssue(prisma, { teamId: team.id, title: 'A', kind: 'MILESTONE', stateId: backlog.id, repository: "fakechris/Involute" });
+    const secondParent = await createIssue(prisma, { teamId: team.id, title: 'B', kind: 'MILESTONE', stateId: backlog.id, repository: "fakechris/Involute" });
+    const child = await createIssue(prisma, { teamId: team.id, title: 'C', stateId: backlog.id, repository: "fakechris/Involute" });
 
     await createWorkLink(prisma, { fromId: firstParent.id, toId: child.id, type: 'CONTAINS' });
-    await createWorkLink(prisma, { fromId: secondParent.id, toId: child.id, type: 'CONTAINS' });
+    await expect(createWorkLink(prisma, { fromId: secondParent.id, toId: child.id, type: 'CONTAINS' })).rejects.toThrow('existing parent');
 
     const links = await prisma.workLink.findMany({
       where: { toId: child.id, type: 'CONTAINS' },
     });
     expect(links).toHaveLength(1);
-    expect(links[0]?.fromId).toBe(secondParent.id);
+    expect(links[0]?.fromId).toBe(firstParent.id);
     await expect(
       prisma.issue.findUniqueOrThrow({ where: { id: child.id }, select: { parentId: true } }),
-    ).resolves.toEqual({ parentId: secondParent.id });
+    ).resolves.toEqual({ parentId: firstParent.id });
   });
 
   it('rejects self links, cross-team links, and multi-hop contains cycles', async () => {
-    const root = await createIssue(prisma, { teamId: team.id, title: 'Root', stateId: backlog.id });
-    const middle = await createIssue(prisma, { teamId: team.id, title: 'Middle', stateId: backlog.id });
-    const leaf = await createIssue(prisma, { teamId: team.id, title: 'Leaf', stateId: backlog.id });
+    const root = await createIssue(prisma, { teamId: team.id, title: 'Root', kind: 'PROJECT', stateId: backlog.id, repository: "fakechris/Involute" });
+    const middle = await createIssue(prisma, { teamId: team.id, title: 'Middle', kind: 'MILESTONE', stateId: backlog.id, repository: "fakechris/Involute" });
+    const leaf = await createIssue(prisma, { teamId: team.id, title: 'Leaf', stateId: backlog.id, repository: "fakechris/Involute" });
     const foreignState = await prisma.workflowState.findFirstOrThrow({
       where: { teamId: otherTeam.id },
     });
@@ -118,9 +118,9 @@ describe('link service', () => {
   });
 
   it('rejects multi-hop blocks cycles while allowing related_to cycles', async () => {
-    const a = await createIssue(prisma, { teamId: team.id, title: 'A', stateId: backlog.id });
-    const b = await createIssue(prisma, { teamId: team.id, title: 'B', stateId: backlog.id });
-    const c = await createIssue(prisma, { teamId: team.id, title: 'C', stateId: backlog.id });
+    const a = await createIssue(prisma, { teamId: team.id, title: 'A', kind: 'MILESTONE', stateId: backlog.id, repository: "fakechris/Involute" });
+    const b = await createIssue(prisma, { teamId: team.id, title: 'B', kind: 'MILESTONE', stateId: backlog.id, repository: "fakechris/Involute" });
+    const c = await createIssue(prisma, { teamId: team.id, title: 'C', stateId: backlog.id, repository: "fakechris/Involute" });
 
     await createWorkLink(prisma, { fromId: a.id, toId: b.id, type: 'BLOCKS' });
     await createWorkLink(prisma, { fromId: b.id, toId: c.id, type: 'BLOCKS' });
@@ -137,8 +137,8 @@ describe('link service', () => {
   });
 
   it('serializes concurrent opposite blocking edges so a cycle cannot commit', async () => {
-    const a = await createIssue(prisma, { teamId: team.id, title: 'Concurrent A', stateId: backlog.id });
-    const b = await createIssue(prisma, { teamId: team.id, title: 'Concurrent B', stateId: backlog.id });
+    const a = await createIssue(prisma, { teamId: team.id, title: 'Concurrent A', stateId: backlog.id, repository: "fakechris/Involute" });
+    const b = await createIssue(prisma, { teamId: team.id, title: 'Concurrent B', stateId: backlog.id, repository: "fakechris/Involute" });
     const results = await Promise.allSettled([
       createWorkLink(prisma, { fromId: a.id, toId: b.id, type: 'BLOCKS' }),
       createWorkLink(prisma, { fromId: b.id, toId: a.id, type: 'BLOCKS' }),
@@ -151,8 +151,8 @@ describe('link service', () => {
   });
 
   it('clears parentId when a contains link is deleted', async () => {
-    const parent = await createIssue(prisma, { teamId: team.id, title: 'Parent', stateId: backlog.id });
-    const child = await createIssue(prisma, { teamId: team.id, title: 'Child', stateId: backlog.id });
+    const parent = await createIssue(prisma, { teamId: team.id, title: 'Parent', kind: 'MILESTONE', stateId: backlog.id, repository: "fakechris/Involute" });
+    const child = await createIssue(prisma, { teamId: team.id, title: 'Child', stateId: backlog.id, repository: "fakechris/Involute" });
     const link = await createWorkLink(prisma, {
       fromId: parent.id,
       toId: child.id,

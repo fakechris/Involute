@@ -101,7 +101,7 @@ states by name or group, never by row id.
 Work nodes carry a delivery contract (\`outcome\`, \`scope\`, \`constraints\`,
 \`acceptance\`, \`verification\`) and typed links:
 
-- \`CONTAINS\` — project/milestone hierarchy (prefer passing \`parent_id\` to establish)
+- \`CONTAINS\` — PROJECT → MILESTONE → ISSUE, or PROJECT → DECISION; both endpoints require matching explicit repositories. A second parent is rejected; use a revision-checked parent update to move work.
 - \`BLOCKS\` — dependency; ready work has no incoming \`BLOCKS\` from unresolved work
 - \`DERIVED_FROM\`, \`DISCOVERED_DURING\`, \`RELATED_TO\`, \`DUPLICATE_OF\`
 
