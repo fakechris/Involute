@@ -225,6 +225,51 @@ describe('Involute MCP', () => {
     expect(claimed.work.commitmentStatus).toBe('COMMITTED');
   });
 
+  it('shares project scope semantics between MCP and GraphQL Ready queries', async () => {
+    const root = await prisma.issue.create({ data: {
+      identifier: 'SCOPE-100', title: 'Project root', kind: 'PROJECT',
+      teamId: team.id, stateId: ready.id, assigneeId: viewer.id,
+      acceptance: 'reviewed', repository: 'scope/repo',
+    } });
+    await prisma.issue.create({ data: {
+      identifier: 'SCOPE-101', title: 'First leaf', priority: 1,
+      teamId: team.id, stateId: ready.id, assigneeId: viewer.id,
+      acceptance: 'reviewed', repository: 'scope/repo',
+    } });
+    const selectors = [
+      { mcp: { repository: root.repository }, graphql: { repository: root.repository } },
+      { mcp: { project_id: root.id }, graphql: { projectId: root.id } },
+      { mcp: { project_id: root.identifier }, graphql: { projectId: root.identifier } },
+    ];
+    for (const selector of selectors) {
+      const mcp = await callTool('work_list_ready', { ...selector.mcp, first: 1 });
+      expect(readyIdentifiers(mcp)).toEqual(['SCOPE-101']);
+      expect(mcp.hasNextPage).toBe(true);
+      const response = await fetch(`${server.url}/graphql`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${TEST_AUTH_TOKEN}` },
+        body: JSON.stringify({
+          query: `query ScopeReady($filter: ReadyWorkFilter) {
+            readyWork(filter: $filter) { nodes { identifier } pageInfo { hasNextPage } }
+          }`,
+          variables: { filter: { ...selector.graphql, first: 1 } },
+        }),
+      });
+      const body = await response.json() as {
+        errors?: unknown;
+        data: { readyWork: { nodes: Array<{ identifier: string }>; pageInfo: { hasNextPage: boolean } } };
+      };
+      expect(body.errors).toBeUndefined();
+      expect(readyIdentifiers(body.data.readyWork)).toEqual(readyIdentifiers(mcp));
+      expect(body.data.readyWork.pageInfo.hasNextPage).toBe(mcp.hasNextPage);
+    }
+    const badSelector = await mcpRpc('/mcp/readonly', {
+      id: 'unknown-project', method: 'tools/call',
+      params: { name: 'work_list_ready', arguments: { project_id: 'UNKNOWN-PROJECT' } },
+    });
+    expect(badSelector.body.error.message).toContain('Project scope not found');
+  });
+
   it('rejects invalid related-work types and missing evidence run IDs at runtime', async () => {
     const invalidType = await mcpRpc('/mcp', {
       id: 'invalid-related-type',

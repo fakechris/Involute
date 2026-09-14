@@ -364,7 +364,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
       properties: {
         repository: { type: 'string' },
         team_key: { type: 'string' },
-        project_id: { type: 'string' },
+        project_id: { type: 'string', description: 'Work Graph PROJECT UUID/identifier or legacy Project UUID; shares repository scope with readyWork.' },
         priority: { type: 'integer' },
         filter: { type: 'string', description: 'IQL filter applied on top of ready-work rules. See protocol_get_guide.' },
         first: { type: 'integer' },

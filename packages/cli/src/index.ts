@@ -1700,7 +1700,7 @@ export function createProgram(): Command {
     .description('List committed, unblocked work that can be claimed')
     .option('--repository <repository>', 'Filter by repository')
     .option('--team <key>', 'Filter by team key')
-    .option('--project-id <id>', 'Filter by project id')
+    .option('--project-id <id>', 'Filter by Work Graph PROJECT UUID/identifier or legacy Project UUID')
     .option('--priority <priority>', 'Filter by exact priority')
     .option('--query <iql>', 'IQL filter, e.g. "kind:ISSUE has:contract repository:involute"')
     .option('--json', 'Output machine-readable JSON')
