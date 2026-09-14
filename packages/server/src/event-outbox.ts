@@ -10,6 +10,7 @@ export const WORK_EVENT_TYPES = [
   'work.committed',
   'work.rejected',
   'work.claimed',
+  'work.state_changed',
   'run.started',
   'run.blocked',
   'run.completed',

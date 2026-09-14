@@ -457,6 +457,19 @@ describe('GitHub Webhook & Dual-Track CAS State Machine (Phase 2)', () => {
       expect(getOutput2().status).toBe(401);
     });
 
+    it('does not acknowledge signed malformed JSON as a successful delivery', async () => {
+      const body = '{invalid';
+      const signature = 'sha256=' + createHmac('sha256', testSecret).update(body).digest('hex');
+      const { res, getOutput } = createMockResponse();
+      const req = createMockRequest(body, {
+        'x-hub-signature-256': signature,
+        'x-github-event': 'create',
+        'x-github-delivery': 'invalid-json-delivery',
+      });
+      await handleGitHubWebhook({ prisma, webhookSecret: testSecret }, req, res);
+      expect(getOutput().status).toBe(400);
+    });
+
     it('accepts valid HMAC signature with fast 200 OK', async () => {
       const body = JSON.stringify({
         action: 'opened',

@@ -150,6 +150,10 @@ export async function applyMonotonicForward(
     };
   }
 
+  // GitHub branch create carries no provider timestamp. Its delayed intake or
+  // consumption time must not fence a later PR carrying a real updated_at.
+  // Branch progression remains protected by rank CAS and event deduplication.
+  const untimedBranch = input.eventType === 'create.branch' && !input.eventTimestamp;
   const eventDate = input.eventTimestamp ? new Date(input.eventTimestamp) : new Date();
   const lowerTypes = LOWER_RANK_TYPES_OF[input.targetStateType];
   const allowedStates = await tx.workflowState.findMany({
@@ -164,15 +168,15 @@ export async function applyMonotonicForward(
       // Keep the CAS predicate on the updated row: a relation-filter subquery can
       // retain a stale join snapshot after waiting for another issue update.
       stateId: { in: allowedStates.map(state => state.id) },
-      OR: [
+      ...(untimedBranch ? {} : { OR: [
         { lastAppliedEventTime: null },
         { lastAppliedEventTime: { lte: eventDate } },
-      ],
+      ] }),
     },
     data: {
       stateId: targetState.id,
       stateSourcePrId: input.targetStateType === 'REVIEW' ? (input.sourcePrId ?? null) : null,
-      lastAppliedEventTime: eventDate,
+      ...(untimedBranch ? {} : { lastAppliedEventTime: eventDate }),
     },
   });
 
@@ -212,7 +216,7 @@ export async function applyMonotonicForward(
     };
   }
 
-  if (current.lastAppliedEventTime && eventDate < current.lastAppliedEventTime) {
+  if (!untimedBranch && current.lastAppliedEventTime && eventDate < current.lastAppliedEventTime) {
     return {
       applied: false,
       reason: `Out-of-order event: incoming time ${eventDate.toISOString()} is older than lastAppliedEventTime ${current.lastAppliedEventTime.toISOString()}`,
