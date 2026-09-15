@@ -49,8 +49,9 @@ export async function openAgentRequestsForMentions(
       // A replayed comment write lands one request, not two.
       idempotencyKey: `mention:${input.comment.id}:${mention.actorId}`,
       requestedByActorId: input.comment.userId,
-      // Every comment is its own thread root until INV-561 adds parents.
-      rootCommentId: input.comment.id,
+      // Anchored to the thread, not the work item: two people can ask two
+      // different questions on the same work item without crossing (INV-561).
+      rootCommentId: input.comment.parentCommentId ?? input.comment.id,
       targetActorId: mention.actorId,
       workId: input.workId,
     }, input.comment.createdAt);

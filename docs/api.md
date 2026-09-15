@@ -753,9 +753,8 @@ at 8,000 characters. The point is that a consumer can answer without first
 going and collecting context itself; when it needs more than the briefing it
 calls `work_get_context`.
 
-`rootCommentId` is the thread root. Until `Comment.parentCommentId` lands
-(INV-561) every comment is its own root, so consumers can key on it now and keep
-working when threads arrive.
+`rootCommentId` is the thread root — the comment's `parentCommentId` when it is
+a reply, the comment itself when it is a root.
 
 Both events are enqueued **inside the comment's transaction**: an event never
 announces a comment that was then rolled back, and the mentions it references
@@ -817,6 +816,26 @@ carrying a root request id, a budget and a hop limit, not a relaxed check here.
   from "the agent is busy" or "the host is offline", and must not imply it.
 - **`idempotencyKey`** is `mention:<commentId>:<targetActorId>` for
   mention-opened requests, so a replayed comment write lands one request.
+
+### Comment threads (INV-561)
+
+One work item carries several independent conversations. `CommentCreateInput`
+takes `parentCommentId`; `Comment` exposes `parentCommentId` and `replies`, and
+`issue.comments(rootsOnly: true)` lists the threads rather than every comment
+across all of them.
+
+**Threads are one level deep.** Replying to a reply attaches to the same root,
+so every comment has exactly one unambiguous `rootCommentId`. Arbitrary nesting
+would make "which thread is this request on" a tree walk, and two parallel
+questions on one work item could drift into each other.
+
+A parent must be a comment on the same work item; replying across work items is
+rejected. Deleting a root deletes its replies.
+
+Each `AgentRequest` is anchored to a `rootCommentId`, not to the work item, and
+an answer is posted **into the thread its question was asked in**. So two people
+can ask two different questions of the same agent on the same work item, and
+neither the requests nor the answers cross.
 
 ### Webhook subscriptions (Linear-style, per-endpoint secrets)
 

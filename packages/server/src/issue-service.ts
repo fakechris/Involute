@@ -3,6 +3,7 @@ import type { Comment, Issue, Prisma, PrismaClient, WorkflowState } from '@prism
 import {
   ASSIGNEE_NOT_FOUND_MESSAGE,
   COMMENT_NOT_FOUND_MESSAGE,
+  COMMENT_PARENT_ISSUE_MISMATCH_MESSAGE,
   createNotFoundError,
   createValidationError,
   ISSUE_LABEL_NOT_FOUND_MESSAGE,
@@ -85,6 +86,8 @@ export interface UpdateIssueInput {
 export interface CreateCommentInput {
   body: string;
   issueId: string;
+  /** Reply into an existing thread. Must be a comment on the same work item. */
+  parentCommentId?: string | null;
 }
 
 type WorkflowStateSelection = Pick<WorkflowState, 'id' | 'name' | 'teamId'>;
@@ -558,6 +561,8 @@ export async function createComment(
     throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
   }
 
+  const parentCommentId = await resolveThreadParent(prisma, input, issue.id);
+
   // The comment, its resolved mentions and its events land together
   // (INV-558 / INV-559): a consumer must never observe a comment whose `@`s
   // have not been turned into actorIds yet, and an event must never announce a
@@ -567,6 +572,7 @@ export async function createComment(
       data: {
         body: input.body,
         issueId: input.issueId,
+        parentCommentId,
         userId,
       },
     });
@@ -587,6 +593,42 @@ export async function createComment(
 
     return comment;
   });
+}
+
+/**
+ * Normalizes a reply target to a thread root (INV-561).
+ *
+ * Threads are one level deep on purpose: replying to a reply attaches to the
+ * same root, so every comment has exactly one unambiguous `rootCommentId` and
+ * an `AgentRequest` anchored to it stays anchored. Arbitrary nesting would make
+ * "which thread is this request on" a tree walk, and two parallel questions on
+ * one work item would be able to drift into each other.
+ */
+async function resolveThreadParent(
+  prisma: PrismaClient,
+  input: CreateCommentInput,
+  issueId: string,
+): Promise<string | null> {
+  if (!input.parentCommentId) {
+    return null;
+  }
+
+  const parent = await prisma.comment.findUnique({
+    where: { id: input.parentCommentId },
+    select: { id: true, issueId: true, parentCommentId: true },
+  });
+
+  if (!parent) {
+    throw createNotFoundError(COMMENT_NOT_FOUND_MESSAGE);
+  }
+
+  // A thread belongs to one work item. Replying across work items would let a
+  // request anchored on one item be answered on another.
+  if (parent.issueId !== issueId) {
+    throw createValidationError(COMMENT_PARENT_ISSUE_MISMATCH_MESSAGE);
+  }
+
+  return parent.parentCommentId ?? parent.id;
 }
 
 export async function deleteIssue(

@@ -414,6 +414,10 @@ const typeDefs = /* GraphQL */ `
     user: User
     """Actors resolved server-side from the @handles in the body (INV-558)."""
     mentions: [CommentMention!]!
+    """Thread root this comment replies to; null when it is itself a root (INV-561)."""
+    parentCommentId: String
+    """Replies in this thread, oldest first. Empty for a reply — threads are one level deep."""
+    replies(first: Int): [Comment!]!
   }
 
   type CommentMention {
@@ -458,7 +462,7 @@ const typeDefs = /* GraphQL */ `
     alias: String
     links(type: WorkLinkType): WorkLinkConnection!
     claim: WorkClaimRecord
-    comments(first: Int, after: String, orderBy: CommentOrderBy): CommentConnection!
+    comments(first: Int, after: String, orderBy: CommentOrderBy, rootsOnly: Boolean): CommentConnection!
   }
 
   type WorkLink {
@@ -986,6 +990,8 @@ const typeDefs = /* GraphQL */ `
   input CommentCreateInput {
     issueId: String!
     body: String!
+    """Reply into an existing thread on the same work item. A reply to a reply attaches to the same root."""
+    parentCommentId: String
   }
 
   input TeamUpdateAccessInput {
@@ -2847,6 +2853,18 @@ const resolvers = {
           id: parent.userId,
         },
       }),
+    replies: async (
+      parent: CommentParent,
+      args: { first?: number | null },
+      context: GraphQLContext,
+    ): Promise<Comment[]> =>
+      context.prisma.comment.findMany({
+        where: { parentCommentId: parent.id },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        ...(args.first === undefined || args.first === null
+          ? {}
+          : { take: clampConnectionFirst(args.first, MAX_COMMENTS_CONNECTION_FIRST) }),
+      }),
     mentions: async (
       parent: CommentParent,
       _args: Record<string, never>,
@@ -2999,7 +3017,12 @@ const resolvers = {
     cycleId: (parent: IssueParent): string | null => parent.cycleId,
     comments: async (
       parent: IssueParent,
-      args: { after?: string | null; first?: number; orderBy?: CommentOrderByInput },
+      args: {
+        after?: string | null;
+        first?: number;
+        orderBy?: CommentOrderByInput;
+        rootsOnly?: boolean | null;
+      },
       context: GraphQLContext,
     ): Promise<{ nodes: Comment[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
       const first = args.first === undefined
@@ -3009,6 +3032,7 @@ const resolvers = {
       if (
         parent.comments &&
         (args.after === undefined || args.after === null) &&
+        !args.rootsOnly &&
         isDefaultCommentOrder(args.orderBy)
       ) {
         const nodes = first === undefined ? parent.comments : parent.comments.slice(0, first);
@@ -3020,7 +3044,7 @@ const resolvers = {
       }
 
       const comments = await context.prisma.comment.findMany({
-        where: buildCommentWhere(parent.id, args.after),
+        where: buildCommentWhere(parent.id, args.after, args.rootsOnly),
         orderBy: buildCommentOrderBy(args.orderBy),
         ...(first === undefined ? {} : { take: first + 1 }),
       });
@@ -3398,10 +3422,16 @@ function buildIssueCursorWhere(after: string | null | undefined): Prisma.IssueWh
 function buildCommentWhere(
   issueId: string,
   after: string | null | undefined,
+  rootsOnly: boolean | null | undefined = false,
 ): Prisma.CommentWhereInput {
+  // A work item carries several threads (INV-561); `rootsOnly` lists the
+  // threads rather than every comment across all of them.
+  const threadFilter: Prisma.CommentWhereInput = rootsOnly ? { parentCommentId: null } : {};
+
   if (!after) {
     return {
       issueId,
+      ...threadFilter,
     };
   }
 
@@ -3410,6 +3440,7 @@ function buildCommentWhere(
 
   return {
     issueId,
+    ...threadFilter,
     OR: [
       {
         createdAt: {

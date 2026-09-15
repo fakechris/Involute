@@ -15,12 +15,12 @@ export interface EnqueueCommentEventsInput {
 }
 
 /**
- * Root of the thread this comment belongs to. Until `Comment.parentCommentId`
- * exists (B4 / INV-561) every comment is its own root, so consumers can key on
- * `rootCommentId` from day one and keep working when threads arrive.
+ * Root of the thread this comment belongs to. Replies are one level deep
+ * (INV-561), so the root is the parent when there is one and the comment itself
+ * otherwise — no tree walk.
  */
 function rootCommentIdOf(comment: Comment): string {
-  return comment.id;
+  return comment.parentCommentId ?? comment.id;
 }
 
 /**
