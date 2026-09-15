@@ -3092,6 +3092,18 @@ const resolvers = {
         pageInfo: buildPageInfo(nodes, first !== undefined && comments.length > first),
       };
     },
+    agentRequests: async (
+      parent: IssueParent,
+      args: { first?: number | null },
+      context: GraphQLContext,
+    ): Promise<AgentRequestParent[]> =>
+      context.prisma.agentRequest.findMany({
+        where: { workId: parent.id },
+        orderBy: [{ createdAt: 'desc' }],
+        take: args.first === undefined || args.first === null
+          ? MAX_AGENT_REQUESTS_CONNECTION_FIRST
+          : clampConnectionFirst(args.first, MAX_AGENT_REQUESTS_CONNECTION_FIRST),
+      }),
   },
   AgentRequest: {
     state: (parent: AgentRequestParent): string => toWireState(parent.state),
