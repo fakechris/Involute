@@ -3,7 +3,7 @@ import type { Issue, PrismaClient, User } from '@prisma/client';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { DEFAULT_TEAM_KEY, truncateAndSeed } from '../prisma/seed-helpers.ts';
+import { DEFAULT_TEAM_KEY, resetAndSeed } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { WORK_EVENT_TYPES } from './event-outbox.ts';
 import { createComment } from './issue-service.ts';
@@ -198,5 +198,5 @@ async function createIssue(
 }
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<void> {
-  await truncateAndSeed(prismaClient);
+  await resetAndSeed(prismaClient);
 }

@@ -300,6 +300,12 @@ model Comment {
   issue       Issue        @relation(fields: [issueId], references: [id], onDelete: Cascade)
   userId      String       @db.Uuid
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Threads are one level deep: a reply points at the thread root, never at
+  // another reply, so `rootCommentId` is unambiguous and a work item can carry
+  // several independent conversations at once (docs/54 §C, INV-561).
+  parentCommentId String?  @db.Uuid
+  parentComment   Comment? @relation("CommentThread", fields: [parentCommentId], references: [id], onDelete: Cascade)
+  replies         Comment[] @relation("CommentThread")
   attachments Attachment[]
   mentions    CommentMention[]
   rootedAgentRequests   AgentRequest[] @relation("AgentRequestRoot")
@@ -307,6 +313,8 @@ model Comment {
 
   @@index([issueId, createdAt])
   @@index([userId])
+  @@index([parentCommentId, createdAt])
+  @@index([issueId, parentCommentId, createdAt])
 }
 
 // A question put to one actor, with a state, a deadline and an owner — the

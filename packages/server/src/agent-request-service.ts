@@ -269,10 +269,13 @@ export async function answerAgentRequest(
       throw createValidationError(REQUEST_NOT_HELD_MESSAGE);
     }
 
+    // The answer lands in the thread the question was asked in, so two
+    // parallel questions on one work item do not cross (INV-561).
     const comment = await tx.comment.create({
       data: {
         body,
         issueId: request.workId,
+        parentCommentId: request.rootCommentId,
         userId: input.actorId,
       },
     });

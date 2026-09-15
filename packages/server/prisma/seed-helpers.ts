@@ -94,35 +94,45 @@ export async function seedDatabase(
 }
 
 /**
- * Wipes every table and re-seeds, for test setup.
+ * Clears the work-graph tables these tests write to, then re-seeds.
  *
- * One TRUNCATE instead of a chain of cascading `deleteMany` calls: the chain
- * gets slow enough on a loaded test database to intermittently trip vitest's
- * 10s hook timeout, and it has to be kept in FK order by hand.
+ * Deliberately `deleteMany` rather than `TRUNCATE`: truncating takes ACCESS
+ * EXCLUSIVE on every table named, which conflicts with any connection sitting
+ * `idle in transaction` anywhere in the process and makes the reset queue
+ * behind unrelated work. `deleteMany` takes row locks and only contends on the
+ * rows it actually touches.
+ *
+ * Order is FK-safe, children before parents.
  *
  * Refuses to run against anything but a `_test` database — the same guard
  * `src/test-setup.ts` applies, repeated here because this helper is destructive
  * on its own.
  */
-export async function truncateAndSeed(prisma: PrismaClient): Promise<void> {
+export async function resetAndSeed(prisma: PrismaClient): Promise<void> {
   const [database] = await prisma.$queryRaw<Array<{ current_database: string }>>`
     SELECT current_database()
   `;
   const name = database?.current_database ?? '';
 
   if (!name.endsWith('_test') && process.env.ALLOW_TESTS_ON_PROD_DB !== 'true') {
-    throw new Error(`[SECURITY FATAL] Refusing to truncate non-test database '${name}'.`);
+    throw new Error(`[SECURITY FATAL] Refusing to reset non-test database '${name}'.`);
   }
 
-  const tables = await prisma.$queryRaw<Array<{ tablename: string }>>`
-    SELECT tablename FROM pg_tables
-    WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'
-  `;
-
-  if (tables.length > 0) {
-    const list = tables.map((table) => `"public"."${table.tablename}"`).join(', ');
-    await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
-  }
+  await prisma.commentMention.deleteMany();
+  await prisma.agentRequest.deleteMany();
+  await prisma.comment.deleteMany();
+  await prisma.eventOutbox.deleteMany();
+  await prisma.notification.deleteMany();
+  await prisma.workEvidence.deleteMany();
+  await prisma.workRun.deleteMany();
+  await prisma.issue.deleteMany();
+  await prisma.agentCredential.deleteMany();
+  await prisma.teamMembership.deleteMany();
+  await prisma.workflowState.deleteMany();
+  await prisma.team.deleteMany();
+  await prisma.issueLabel.deleteMany();
+  await prisma.user.deleteMany();
+  await prisma.legacyLinearMapping.deleteMany();
 
   await seedDatabase(prisma);
 }
