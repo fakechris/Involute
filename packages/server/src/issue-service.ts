@@ -27,6 +27,7 @@ import { assertActorCan, isAcceptStateType, sanitizeWorkTitle, validateAgentDesc
 import { assertNoWorkLinkCycle, syncContainsFromParentId } from './link-service.js';
 import { syncCommentMentions } from './mention-service.js';
 import { enqueueCommentEvents } from './comment-events.js';
+import { openAgentRequestsForMentions } from './agent-request-from-mention.js';
 import { assertNodeHierarchy, lockWorkGraph } from './graph-integrity.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
 import {
@@ -571,10 +572,16 @@ export async function createComment(
     });
 
     const mentions = await syncCommentMentions(tx, comment.id, comment.body);
+    const requestIdByActorId = await openAgentRequestsForMentions(tx, {
+      comment,
+      mentions,
+      workId: issue.id,
+    });
 
     await enqueueCommentEvents(tx, {
       comment,
       mentions,
+      requestIdByActorId,
       work: issue,
     });
 

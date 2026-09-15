@@ -69,6 +69,19 @@ enum WorkRunStatus {
   FAILED
 }
 
+// Borrowed verbatim from A2A's task lifecycle rather than invented here. The
+// wire spellings are A2A's (`submitted`, `working`, `input-required`,
+// `completed`, `failed`, `canceled`); these identifiers are the same names in
+// the spelling Prisma enums allow, mapped in agent-request-state.ts.
+enum AgentRequestState {
+  SUBMITTED
+  WORKING
+  INPUT_REQUIRED
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
 enum WorkEvidenceKind {
   PR
   TEST
@@ -162,6 +175,9 @@ model User {
   createdWebhooks WebhookSubscription[] @relation("WebhookSubscriptionCreator")
   notifications  Notification[]
   commentMentions CommentMention[] @relation("CommentMentionActor")
+  agentRequestsTargeted AgentRequest[] @relation("AgentRequestTarget")
+  agentRequestsMade     AgentRequest[] @relation("AgentRequestRequester")
+  agentRequestsClaimed  AgentRequest[] @relation("AgentRequestClaimant")
 }
 
 model AgentCredential {
@@ -172,7 +188,7 @@ model AgentCredential {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   teamId    String?  @db.Uuid
   team      Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  scopes    String[] @default(["read", "propose", "claim", "report", "update", "link"])
+  scopes    String[] @default(["read", "propose", "claim", "report", "update", "link", "answer"])
   createdAt DateTime @default(now())
   expiresAt DateTime?
   revokedAt DateTime?
@@ -240,6 +256,7 @@ model Issue {
   alias             String?
   labels            IssueLabel[]
   comments          Comment[]
+  agentRequests     AgentRequest[]
   projectId         String?           @db.Uuid
   project           Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
   cycleId           String?           @db.Uuid
@@ -285,9 +302,52 @@ model Comment {
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   attachments Attachment[]
   mentions    CommentMention[]
+  rootedAgentRequests   AgentRequest[] @relation("AgentRequestRoot")
+  answeredAgentRequests AgentRequest[] @relation("AgentRequestAnswer")
 
   @@index([issueId, createdAt])
   @@index([userId])
+}
+
+// A question put to one actor, with a state, a deadline and an owner — the
+// ledger docs/54 §B2 asks for. Claiming and answering happen here rather than
+// in a consumer, so two sidecars polling the same actor cannot both answer.
+model AgentRequest {
+  id                 String            @id @default(uuid()) @db.Uuid
+  workId             String            @db.Uuid
+  work               Issue             @relation(fields: [workId], references: [id], onDelete: Cascade)
+  // The thread this request is anchored to. One work item can carry several
+  // independent requests, so the thread — not the work item — is the unit.
+  rootCommentId      String            @db.Uuid
+  rootComment        Comment           @relation("AgentRequestRoot", fields: [rootCommentId], references: [id], onDelete: Cascade)
+  targetActorId      String            @db.Uuid
+  targetActor        User              @relation("AgentRequestTarget", fields: [targetActorId], references: [id], onDelete: Cascade)
+  requestedByActorId String            @db.Uuid
+  requestedByActor   User              @relation("AgentRequestRequester", fields: [requestedByActorId], references: [id], onDelete: Cascade)
+  body               String
+  state              AgentRequestState @default(SUBMITTED)
+  deadlineAt         DateTime
+  canceledAt         DateTime?
+  // Lease, same idea as the outbox flush claim: a consumer that dies holding a
+  // request must not hold it forever.
+  claimedBy          String?           @db.Uuid
+  claimedByActor     User?             @relation("AgentRequestClaimant", fields: [claimedBy], references: [id], onDelete: SetNull)
+  claimedAt          DateTime?
+  claimExpiresAt     DateTime?
+  // Set before the state reaches COMPLETED: an answer that produced no comment
+  // is not an answer.
+  answeredCommentId  String?           @unique @db.Uuid
+  answeredComment    Comment?          @relation("AgentRequestAnswer", fields: [answeredCommentId], references: [id], onDelete: SetNull)
+  failureReason      String?
+  payingPrincipal    String?
+  idempotencyKey     String?           @unique
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([targetActorId, state, createdAt])
+  @@index([workId, createdAt])
+  @@index([state, deadlineAt])
+  @@index([rootCommentId])
 }
 
 // Server-side resolution of `@handle` in a comment body to the mentioned

@@ -9,6 +9,8 @@ type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 export interface EnqueueCommentEventsInput {
   comment: Comment;
   mentions: ResolvedMention[];
+  /** Ledger rows opened for this comment, keyed by target actorId (INV-560). */
+  requestIdByActorId?: Map<string, string>;
   work: { id: string; identifier: string };
 }
 
@@ -84,6 +86,9 @@ export async function enqueueCommentEvents(
           rootCommentId,
         },
         promptContext,
+        // Present when the mention opened a ledger row: the consumer claims
+        // this id rather than inventing its own notion of "mine" (INV-560).
+        requestId: input.requestIdByActorId?.get(mention.actorId) ?? null,
         speaker,
         target: {
           actorId: mention.actorId,

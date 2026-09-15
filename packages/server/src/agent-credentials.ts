@@ -9,8 +9,9 @@ export const AGENT_TOKEN_PREFIX = 'inv_agent_';
 // Linear-mapped scopes: `read` is always granted (like Linear's default read
 // scope). Write capabilities are granted per credential at issuance time.
 // `commit`/`reject`/`accept` stay human-only via actorKind gates, so they have
-// no scope.
-export const AGENT_SCOPES = ['read', 'propose', 'claim', 'report', 'update', 'link'] as const;
+// no scope. `answer` (INV-560) is separate from `report`: reporting your own
+// run is not the same right as speaking for an actor on a thread.
+export const AGENT_SCOPES = ['read', 'propose', 'claim', 'report', 'update', 'link', 'answer'] as const;
 
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
