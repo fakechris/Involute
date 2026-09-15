@@ -198,6 +198,19 @@ describe('work CLI commands', () => {
     };
     expect(claimed.issue.identifier).toBe(committed.identifier);
     expect(claimed.claim.leaseUntil).toBeTruthy();
+    const report = await runCli(['work', 'run-report', committed.identifier, '--status', 'running',
+      '--commit-sha', 'b'.repeat(40), '--pr-number', '12', '--json'], tempDir);
+    expect(report.exitCode, report.stderr).toBe(0);
+    const run = await prisma.workRun.findFirstOrThrow({ where: { work: { identifier: committed.identifier } } });
+    expect(run).toMatchObject({ commitSha: 'b'.repeat(40), pullRequestNumber: 12 });
+    expect(run.contractRevision).toHaveLength(64);
+    for (const value of ['not-a-number', 'Infinity', '0', '-2', '1.5', '9007199254740992']) {
+      const invalid = await runCli(['work', 'run-report', committed.identifier, '--run-id', run.id, '--pr-number', value, '--json'], tempDir);
+      expect(invalid.exitCode).not.toBe(0);
+      expect((await prisma.workRun.findUniqueOrThrow({ where: { id: run.id } })).pullRequestNumber).toBe(12);
+    }
+
+
   });
 
   it('rejects a candidate through the CLI', async () => {

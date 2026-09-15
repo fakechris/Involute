@@ -874,3 +874,10 @@ Typical categories:
 - forbidden errors
 
 Mutation payloads still return `success`, but authorization failures are not silently downgraded into a fake success response.
+
+
+## Trusted evidence (shadow)
+
+`runReport` accepts optional `commitSha` and `pullRequestNumber`; MCP uses `commit_sha` and `pr_number`, CLI uses `--commit-sha` and `--pr-number`. Set both before the run completes. The server freezes the semantic contract at run creation and exposes `contractRevision` / `acceptanceDigest` on the run. `WorkEvidenceRecord.verifications` and MCP context expose append-only server observations, never a client-writable verified flag.
+
+GitHub merge now stops at Review and appends its evidence without overwriting an agent declaration. CLEAR is a shadow grade with SKIPPED outcome, not an acceptance decision. See [evidence verification](evidence-verification.md) for coverage and setup.

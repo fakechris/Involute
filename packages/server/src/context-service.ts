@@ -7,6 +7,7 @@ import type {
   WorkAudit,
   WorkClaim,
   WorkEvidence,
+  EvidenceVerification,
   WorkKind,
   WorkRun,
   WorkReviewDecision,
@@ -58,7 +59,7 @@ export interface WorkContextBundle {
   blockedBy: Issue[];
   blocks: Issue[];
   claim: (WorkClaim & { actor: User }) | null;
-  evidence: WorkEvidence[];
+  evidence: Array<WorkEvidence & { verifications: EvidenceVerification[] }>;
   runs: WorkRun[];
   reviewDecisions: Array<WorkReviewDecision & { reviewer: User }>;
   work: Issue;
@@ -116,6 +117,7 @@ export async function getWorkContext(
     }),
     prisma.workEvidence.findMany({
       where: { workId: work.id },
+      include: { verifications: { orderBy: { createdAt: 'desc' }, take: 10 } },
       orderBy: [{ createdAt: 'desc' }],
       take: MAX_CONTEXT_RUNS,
     }),

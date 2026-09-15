@@ -435,6 +435,14 @@ model WorkRun {
   claimId     String?       @db.Uuid
   claim       WorkClaim?    @relation(fields: [claimId], references: [id], onDelete: SetNull)
   baseRevision Int?
+  // Content-addressed semantic contract; legacy runs remain unbound.
+  contractRevision String?
+  acceptanceDigest String?
+  contractSnapshot Json?
+  claimSnapshotId String? @db.Uuid
+  repository String?
+  commitSha String?
+  pullRequestNumber Int?
   status      WorkRunStatus @default(RUNNING)
   phase       String?
   summary     String?
@@ -464,8 +472,13 @@ model WorkEvidence {
   kind      WorkEvidenceKind
   url       String
   summary   String?
+  verificationNextAt DateTime?
+  verificationLeaseId String? @db.Uuid
+  verificationLeaseUntil DateTime?
+  verifications EvidenceVerification[]
   createdAt DateTime         @default(now())
 
+  @@index([verificationNextAt])
   @@index([workId, createdAt])
   @@index([runId])
   @@index([actorId])
@@ -703,4 +716,36 @@ model InboundGitHubReplay {
   source            String                @default("operator-cli")
   previousAttempts  Int
   requestedAt       DateTime              @default(now())
+}
+
+
+enum EvidenceVerificationStatus {
+  PENDING
+  VERIFIED
+  FAILED
+  UNAVAILABLE
+  STALE
+}
+
+// Only the server verifier appends rows; no GraphQL/MCP mutation exposes writes.
+model EvidenceVerification {
+  id String @id @default(uuid()) @db.Uuid
+  evidenceId String @db.Uuid
+  evidence WorkEvidence @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  verifierId String
+  verifierVersion String
+  status EvidenceVerificationStatus
+  repository String?
+  commitSha String?
+  externalRunId String?
+  contractRevision String?
+  acceptanceDigest String?
+  runId String? @db.Uuid
+  observedAt DateTime @default(now())
+  resultDigest String
+  failureCode String?
+  result Json
+  createdAt DateTime @default(now())
+
+  @@index([evidenceId, createdAt])
 }

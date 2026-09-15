@@ -517,7 +517,10 @@ export async function claimWork(
   }
 
   const result = await prisma.$transaction(async (transaction) => {
-    const work = await requireWork(transaction, id);
+    const initial = await requireWork(transaction, id);
+    // Same Issue → Claim lock order as run snapshots and verification.
+    await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR UPDATE`;
+    const work = await requireWork(transaction, initial.id);
 
     if (work.commitmentStatus !== 'COMMITTED') {
       throw createValidationError(WORK_NOT_COMMITTED_MESSAGE);

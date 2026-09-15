@@ -1,6 +1,6 @@
 import type { WorkEvidenceKind, WorkRunStatus } from '@prisma/client';
 
-/** Only CLEAR may auto-Done; self-reported evidence cannot establish CLEAR. */
+/** CLEAR is a shadow observation only; self-reported evidence cannot establish it. */
 export type AutoAcceptTier = 'CLEAR' | 'LIKELY' | 'AMBIGUOUS' | 'INSUFFICIENT';
 
 export interface EvidenceGradeInput {

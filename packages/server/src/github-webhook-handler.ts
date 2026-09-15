@@ -1,3 +1,5 @@
+import { ACCEPTANCE_POLICY } from './evidence-contract.js';
+import { tryAutoAccept } from './auto-accept-gate.js';
 // packages/server/src/github-webhook-handler.ts
 //
 // HTTP handler for /api/webhooks/github
@@ -444,7 +446,7 @@ export async function processGitHubPrEvent(
           const result = await applyMonotonicForward(tx, {
             issueId: issue.id,
             teamId: issue.teamId,
-            targetStateType: 'COMPLETED' as WorkflowStateType,
+            targetStateType: ACCEPTANCE_POLICY.mergeTarget,
             eventSourceKey,
             eventType: 'pull_request.merged',
             eventTimestamp,
@@ -461,26 +463,16 @@ export async function processGitHubPrEvent(
             return;
           }
 
-          // Always attach/update PR evidence (First-Merge-Wins keeps COMPLETED but records all PRs)
+          // Merge is evidence for human review, not acceptance. Fence older
+          // unmerged-close events even when the issue was already in REVIEW.
+          const reviewStates = await tx.workflowState.findMany({ where: { teamId: issue.teamId, type: 'REVIEW' }, select: { id: true } });
+          await tx.issue.updateMany({ where: { id: issue.id, stateId: { in: reviewStates.map(state => state.id) },
+            OR: [{ lastAppliedEventTime: null }, { lastAppliedEventTime: { lte: new Date(eventTimestamp) } }] },
+            data: { stateSourcePrId: null, lastAppliedEventTime: new Date(eventTimestamp) } });
           const summary = `GitHub PR #${pr.number}: ${pr.title} (Merged${pr.merge_commit_sha ? ` in ${pr.merge_commit_sha.slice(0, 7)}` : ''})`;
-          const existingEvidence = await tx.workEvidence.findFirst({
-            where: { workId: issue.id, url: pr.html_url },
-          });
-          if (existingEvidence) {
-            await tx.workEvidence.update({
-              where: { id: existingEvidence.id },
-              data: { summary },
-            });
-          } else {
-            await tx.workEvidence.create({
-              data: {
-                workId: issue.id,
-                kind: 'PR',
-                url: pr.html_url,
-                summary,
-              },
-            });
-          }
+          const existingEvidence = await tx.workEvidence.findFirst({ where: { workId: issue.id, url: pr.html_url, summary } });
+          if (!existingEvidence) await tx.workEvidence.create({ data: { workId: issue.id, kind: 'PR', url: pr.html_url, summary } });
+          await tryAutoAccept(tx, issue.id);
 
           console.log(`[github-webhook] PR #${pr.number} merged → ${identifier}: ${result.reason}`);
         });

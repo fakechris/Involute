@@ -333,7 +333,7 @@ describe('GitHub Webhook & Dual-Track CAS State Machine (Phase 2)', () => {
   });
 
   describe('Full Event Pipeline & Evidence Attachment', () => {
-    it('attaches PR evidence on open and updates summary on merge', async () => {
+    it('preserves declarations and routes GitHub merge to human review', async () => {
       const issue = await createTestIssue('PR evidence attachment test');
 
       const prPayload = {
@@ -384,8 +384,12 @@ describe('GitHub Webhook & Dual-Track CAS State Machine (Phase 2)', () => {
         where: { id: issue.id },
         include: { state: true, evidence: true },
       });
-      expect(issueInDb.state.type).toBe('COMPLETED');
-      expect(issueInDb.evidence[0].summary).toContain('Merged in abcdef1');
+      expect(issueInDb.state.type).toBe('REVIEW');
+      expect(issueInDb.evidence.some(item => item.summary?.includes('Merged in abcdef1'))).toBe(true);
+      expect(issueInDb.evidence.some(item => !item.summary?.includes('Merged'))).toBe(true);
+      expect(issueInDb.stateSourcePrId).toBeNull();
+      expect(await prisma.workReviewDecision.count({ where: { workId: issue.id, decision: 'ACCEPTED' } })).toBe(0);
+      expect(await prisma.workAutoAcceptEvaluation.count({ where: { workId: issue.id, outcome: 'SKIPPED' } })).toBeGreaterThan(0);
     });
 
     it('Branch creation event advances UNSTARTED to STARTED', async () => {

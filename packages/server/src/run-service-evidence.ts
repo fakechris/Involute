@@ -35,7 +35,9 @@ export async function attachEvidence(
   if (!input.runId) throw createValidationError(WORK_EVIDENCE_REQUIRES_RUN_MESSAGE);
 
   return prisma.$transaction(async (transaction) => {
-    const work = await requireWork(transaction, input.workId);
+    const initial = await requireWork(transaction, input.workId);
+    await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR UPDATE`;
+    const work = await requireWork(transaction, initial.id);
     let evidenceIdempotencyId: string | null = null;
     if (input.idempotencyKey) {
       const reservation = await reserveWorkIdempotency(transaction, {
@@ -70,6 +72,7 @@ export async function attachEvidence(
     const evidence = await transaction.workEvidence.create({
       data: {
         kind,
+        verificationNextAt: kind === 'PR' || kind === 'TEST' ? new Date() : null,
         actorId,
         runId: run.id,
         summary: input.summary ?? null,
@@ -96,7 +99,7 @@ export async function attachEvidence(
       await completeWorkIdempotency(transaction, evidenceIdempotencyId, work.id, evidence.id);
     }
 
-    // INV-11: tryAutoAccept (via inv11-hooks) may have moved work to Done in-transaction.
+    // Shadow evaluation records observations while preserving the review state.
     const freshWork = await transaction.issue.findUniqueOrThrow({ where: { id: work.id } });
     return { evidence, work: freshWork };
   });

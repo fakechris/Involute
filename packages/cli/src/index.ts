@@ -1328,8 +1328,12 @@ async function claimWorkViaCli(
 
 async function reportRunViaCli(
   workId: string,
-  input: { phase?: string; runId?: string; status?: string; summary?: string },
+  input: { phase?: string; runId?: string; status?: string; summary?: string; commitSha?: string; prNumber?: string },
 ): Promise<{ publicId: string; status: string; workIdentifier: string }> {
+  const prNumber = input.prNumber === undefined ? undefined : Number(input.prNumber);
+  if (prNumber !== undefined && (!/^[1-9][0-9]*$/.test(input.prNumber!) || !Number.isSafeInteger(prNumber))) {
+    throw new CliError('Invalid --pr-number. Expected a positive integer.');
+  }
   const client = await createConfiguredGraphQLClient();
   const result = await client.request<{
     runReport: {
@@ -1354,6 +1358,8 @@ async function reportRunViaCli(
         ...(input.status ? { status: input.status } : {}),
         ...(input.phase ? { phase: input.phase } : {}),
         ...(input.summary ? { summary: input.summary } : {}),
+        ...(input.commitSha ? { commitSha: input.commitSha } : {}),
+        ...(prNumber !== undefined ? { pullRequestNumber: prNumber } : {}),
       },
     },
   );
@@ -1884,13 +1890,15 @@ export function createProgram(): Command {
     .argument('<id>', 'Work identifier or UUID')
     .option('--status <status>', 'queued, running, blocked, completed, failed')
     .option('--run-id <runId>', 'Existing RUN-N or run UUID; omit only to start a run')
+    .option('--commit-sha <sha>', 'Full lowercase Git SHA for evidence verification')
+    .option('--pr-number <number>', 'PR number in the bound repository')
     .option('--phase <phase>', 'High-level phase name')
     .option('--summary <summary>', 'Short status for humans')
     .option('--json', 'Output machine-readable JSON')
     .action(async function (
       this: Command,
       id: string,
-      options: JsonOption & { phase?: string; runId?: string; status?: string; summary?: string },
+      options: JsonOption & { phase?: string; runId?: string; status?: string; summary?: string; commitSha?: string; prNumber?: string },
     ) {
       await runWithCliErrorHandling(async () => {
         const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });

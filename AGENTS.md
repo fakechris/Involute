@@ -35,7 +35,7 @@ flowchart TD
     B -->|"Human reviews & commits (work_commit)"| C["COMMITTED Queue (Board & Backlog)"]
     C -->|"Agent leases task (work_claim)"| D["In Progress (Leased)"]
     D -->|"run_report & evidence_attach"| E["In Review (/in-review)"]
-    E -->|"CLEAR grade auto-accept OR Human Review"| F["Done"]
+    E -->|"Human Review"| F["Done"]
 ```
 
 ### Why items appear in Candidates first
@@ -51,7 +51,7 @@ flowchart TD
 3. **No Scratchpad Pollution**: Do not dump local grep output, shell logs, or transient scratchpad thoughts into Involute. Only track discrete, independently acceptable deliverables.
 4. **Claim-Driven Execution**: Call `work_claim` to lease a specific task after confirmation.
 5. **Report Runs with Evidence**: As execution progresses, record phases with `run_report`. On completion, attach durable evidence (PR, commit SHA, test exit code, or artifact URL) with `evidence_attach`.
-6. **In Review, Never Done**: Agents transition tasks to `In Review`. Moving work to `Done` is strictly reserved for human review or the verified `CLEAR` auto-accept gate.
+6. **In Review, Never Done**: Agents transition tasks to `In Review`. Moving work to `Done` is strictly reserved for human review. Evidence verification is shadow-only, even when its grade is `CLEAR`.
 7. **Competitive Research Isolation (竞品分析隔离铁律)**:
    - **绝对禁令**：严禁将任何外部竞品（如 Linear、Plane、Jira 等）的调研文档、逆向代码、架构借用分析提交到 Git 版本库，严禁放在 `docs/` 等公开文档目录中。
    - **专属隔离目录**：所有竞品分析与调研报告必须统一存放在仓库根目录的 `research/` 目录中。
@@ -157,7 +157,7 @@ flowchart LR
 - **Track B（Git / GitHub Webhook 自动化生命周期轨）**：
   - **分支创建 (`create` 事件)**：将处于 `UNSTARTED` / `READY` 的工作项 CAS 推进至 `IN_PROGRESS`。
   - **PR 开启 (`pull_request.opened` / `reopened`)**：将处于 `UNSTARTED` / `READY` / `IN_PROGRESS` 的工作项推进至 `REVIEW`，并原子关联 PR 链接至 `workEvidence`。
-  - **PR 合并 (`pull_request.closed` 且 `merged: true`)**：将处于 `IN_PROGRESS` / `REVIEW` 的工作项 CAS 推进至 `COMPLETED`，并挂载 Merge Commit SHA 与 PR 证明。
+  - **PR 合并 (`pull_request.closed` 且 `merged: true`)**：将工作项推进/保留在 `REVIEW`，追加 Merge Commit SHA 与 PR 证明，并记录同一 shadow 验收策略的评估；合并不等于验收。已人工 Done/Canceled 的吸收态不回退。
   - **PR 未合并关闭 (`pull_request.closed` 且 `merged: false`)**：仅当状态源归属于该 PR (`stateSourcePrId === pr.id`) 时执行受限回退至 `IN_PROGRESS`，并清空 `stateSourcePrId`，防止意外冲刷人工介入状态。
 - **单语句原子 CAS**：底层使用 Prisma `updateMany` 结合语义状态等级（Rank 枚举过滤）与 LWW 时间戳守卫，消除了读-改-写并发竞争引起的丢更新（Lost Update）漏洞。
 - **物理幂等与内存保序**：每个 Issue 拥有独立的进程内串行任务队列，并在数据库中通过 `[issueId, eventSourceKey]` 复合唯一键保证乱序或重复交付时的绝对幂等。
@@ -330,3 +330,10 @@ Involute ships a Linear-style bug pipeline: humans report through the UI, agents
 3. **Fixing agents follow the standard protocol**: claim → `run_report` → `evidence_attach` → In Review. Bugs are ordinary committed issues; `Done` remains strictly human-gated.
 4. **Statistics**: The `/bugs` page (backed by the `bugSummary` query) shows open/closed counts, per-project and per-type-label breakdowns, unclaimed open count, open-age stats, and an 8-week creation trend for triage.
 5. **Agent-discovered bugs**: Bugs an agent finds while working still follow the §7 DISCOVERED_DURING protocol (`work_propose` with `related_work_type: 'DISCOVERED_DURING'`) — the Report Bug UI flow is for human-reported defects.
+
+
+## 13. 可信证据验证（INV-474）
+
+run 启动时冻结 scope/acceptance/constraints/repository 的内容哈希版本，保留原始租约身份；状态与优先级变更不改变语义版本。完成前用 run_report 的 commit_sha/pr_number 绑定执行对象。原始 WorkEvidence 是声明，EvidenceVerification 是服务端追加的观察，两者不可混用。
+
+当前统一采用 shadow 模式：显式 run/evidence 与 GitHub merge 均停在 Review；即使所有 required 条件均被官方 API 验证，CLEAR 也只记录 SKIPPED 评估，必须人工验收。未知/限流/错误 repo、SHA、run、过期合同均不满足验收。历史证据不回填为可信。运维与结构化验收格式见 docs/evidence-verification.md。

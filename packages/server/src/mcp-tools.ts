@@ -295,6 +295,8 @@ export async function callMcpTool(
       await assertCanWriteIssue(context.prisma, context, work.id);
       const runInput: Parameters<typeof reportRun>[1] = { workId: work.id };
       assignOptional(runInput, 'runId', optionalString(args.run_id));
+      assignOptional(runInput, 'commitSha', optionalString(args.commit_sha));
+      assignOptional(runInput, 'pullRequestNumber', optionalNumber(args.pr_number));
       assignOptional(runInput, 'status', optionalString(args.status));
       assignOptional(runInput, 'phase', optionalString(args.phase));
       assignOptional(runInput, 'summary', optionalString(args.summary));
@@ -509,6 +511,8 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
           type: 'string',
           description: 'Existing RUN-N public ID or UUID to update. IMPORTANT: To start a new run, OMIT this field. Do NOT pass claim.id or client-generated UUID here.',
         },
+        commit_sha: { type: 'string', pattern: '^[a-f0-9]{40}$' },
+        pr_number: { type: 'integer', minimum: 1 },
         status: { type: 'string', enum: ['queued', 'running', 'blocked', 'completed', 'failed'] },
         phase: { type: 'string' },
         summary: { type: 'string' },

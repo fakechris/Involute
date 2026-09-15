@@ -1,3 +1,4 @@
+import { snapshotContract, SHA_PATTERN } from './evidence-contract.js';
 import type { Issue, PrismaClient, WorkClaim, WorkRun } from '@prisma/client';
 
 import { enqueueWorkEvent } from './inv11-hooks.js';
@@ -41,11 +42,15 @@ export async function reportRun(
   input: ReportRunInput,
   actor: WriteActor,
 ): Promise<{ run: WorkRun; work: Issue }> {
+  if (input.commitSha != null && !SHA_PATTERN.test(input.commitSha)) throw createValidationError('commitSha must be a lowercase full 40-character Git SHA');
+  if (input.pullRequestNumber != null && (!Number.isSafeInteger(input.pullRequestNumber) || input.pullRequestNumber < 1)) throw createValidationError('pullRequestNumber must be a positive integer');
   const actorId = actor.actorId;
   if (!actorId) throw createValidationError(WORK_CLAIM_REQUIRES_ACTOR_MESSAGE);
 
   return prisma.$transaction(async (transaction) => {
-    const work = await requireWork(transaction, input.workId);
+    const initial = await requireWork(transaction, input.workId);
+    await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR UPDATE`;
+    const work = await requireWork(transaction, initial.id);
     let idempotencyId: string | null = null;
     if (input.idempotencyKey) {
       const reservation = await reserveWorkIdempotency(transaction, {
@@ -178,10 +183,18 @@ export async function reportRun(
     if (!run) {
       if (!activeClaim) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
       const publicId = await nextRunPublicId(transaction);
+      const frozen = snapshotContract(work);
       run = await transaction.workRun.create({
         data: {
           actorId,
           baseRevision: work.revision,
+          contractRevision: frozen.contractRevision,
+          acceptanceDigest: frozen.acceptanceDigest,
+          contractSnapshot: JSON.parse(JSON.stringify(frozen.contractSnapshot)),
+          claimSnapshotId: activeClaim.id,
+          repository: work.repository,
+          commitSha: input.commitSha ?? null,
+          pullRequestNumber: input.pullRequestNumber ?? null,
           claimId: activeClaim.id,
           externalUrl: input.externalUrl ?? null,
           phase: input.phase ?? null,
@@ -222,10 +235,14 @@ export async function reportRun(
       if (status && status !== run.status && !ALLOWED_RUN_TRANSITIONS[run.status].includes(status)) {
         throw createValidationError(WORK_RUN_TRANSITION_INVALID_MESSAGE);
       }
+      const targetChanged = (input.commitSha !== undefined && input.commitSha !== run.commitSha) ||
+        (input.pullRequestNumber !== undefined && input.pullRequestNumber !== run.pullRequestNumber);
       const update = await transaction.workRun.updateMany({
         where: { id: run.id, updatedAt: run.updatedAt },
         data: {
           ...(status ? { status } : {}),
+          ...(input.commitSha !== undefined ? { commitSha: input.commitSha } : {}),
+          ...(input.pullRequestNumber !== undefined ? { pullRequestNumber: input.pullRequestNumber } : {}),
           ...(input.phase !== undefined ? { phase: input.phase } : {}),
           ...(input.summary !== undefined ? { summary: input.summary } : {}),
           ...(input.externalUrl !== undefined ? { externalUrl: input.externalUrl } : {}),
@@ -235,6 +252,7 @@ export async function reportRun(
       });
       if (update.count !== 1) throw createValidationError(WORK_RUN_CONFLICT_MESSAGE);
       run = await transaction.workRun.findUniqueOrThrow({ where: { id: run.id } });
+      if (targetChanged) await transaction.workEvidence.updateMany({ where: { runId: run.id, verificationNextAt: { not: null } }, data: { verificationNextAt: new Date() } });
     }
 
     const eventType = eventTypeForRun(isNew, run.status, input.decisionRequested);
@@ -288,7 +306,7 @@ export async function reportRun(
       await completeWorkIdempotency(transaction, idempotencyId, work.id, run.id);
     }
 
-    // INV-11: hooks may auto-Done after review_submitted; return fresh row.
+    // Return the row after the Review transition and shadow evaluation.
     const freshWork = await transaction.issue.findUniqueOrThrow({ where: { id: nextWork.id } });
     return { run, work: freshWork };
   });
