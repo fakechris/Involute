@@ -1330,6 +1330,10 @@ async function reportRunViaCli(
   workId: string,
   input: { phase?: string; runId?: string; status?: string; summary?: string; commitSha?: string; prNumber?: string },
 ): Promise<{ publicId: string; status: string; workIdentifier: string }> {
+  const prNumber = input.prNumber === undefined ? undefined : Number(input.prNumber);
+  if (prNumber !== undefined && (!/^[1-9][0-9]*$/.test(input.prNumber!) || !Number.isSafeInteger(prNumber))) {
+    throw new CliError('Invalid --pr-number. Expected a positive integer.');
+  }
   const client = await createConfiguredGraphQLClient();
   const result = await client.request<{
     runReport: {
@@ -1355,7 +1359,7 @@ async function reportRunViaCli(
         ...(input.phase ? { phase: input.phase } : {}),
         ...(input.summary ? { summary: input.summary } : {}),
         ...(input.commitSha ? { commitSha: input.commitSha } : {}),
-        ...(input.prNumber ? { pullRequestNumber: Number(input.prNumber) } : {}),
+        ...(prNumber !== undefined ? { pullRequestNumber: prNumber } : {}),
       },
     },
   );

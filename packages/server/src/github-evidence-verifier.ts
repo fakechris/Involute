@@ -38,7 +38,7 @@ const number = (value: unknown): number => {
 };
 
 /** Fixed host/path, bounded body and deadline; redirects and raw errors never escape. */
-async function githubJson(fetcher: typeof fetch, path: string, token: string, body?: JsonObject): Promise<JsonObject> {
+async function githubJson(fetcher: typeof fetch, path: string, token: string, body?: JsonObject): Promise<unknown> {
   const response = await fetcher(`https://api.github.com${path}`, {
     method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(10_000),
     headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`,
@@ -62,7 +62,7 @@ async function githubJson(fetcher: typeof fetch, path: string, token: string, bo
       chunks.push(value);
     }
   } finally { await reader.cancel().catch(() => {}); }
-  return object(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
 }
 
 /** Service-owned credentials; short-lived GitHub App tokens restricted to one repo. */
@@ -83,9 +83,9 @@ export function configuredGitHubVerifier(): GitHubVerifierOptions {
       const signer = createSign('RSA-SHA256');
       signer.update(unsigned);
       const jwt = `${unsigned}.${signer.sign(await readFile(keyPath), 'base64url')}`;
-      const result = await githubJson(fetch, `/app/installations/${installationId}/access_tokens`, jwt, {
+      const result = object(await githubJson(fetch, `/app/installations/${installationId}/access_tokens`, jwt, {
         repositories: [repository.split('/')[1]!], permissions: { actions: 'read', pull_requests: 'read', contents: 'read' },
-      });
+      }));
       if (typeof result.token !== 'string' || !result.token) throw new VerificationError('INVALID_CREDENTIAL_RESPONSE');
       return result.token;
     },
@@ -102,7 +102,8 @@ export async function verifyGitHubEvidence(input: VerificationRequest, options: 
     if (target.type === 'pr' && target.id !== input.pullRequestNumber) throw new VerificationError('PR_MISMATCH', 'FAILED');
     const token = await options.installationToken(input.repository);
     if (!token) throw new VerificationError('VERIFIER_NOT_CONFIGURED');
-    const get = (path: string) => githubJson(options.fetch ?? fetch, `/repos/${input.repository}${path}`, token);
+    const getValue = (path: string) => githubJson(options.fetch ?? fetch, `/repos/${input.repository}${path}`, token);
+    const get = async (path: string) => object(await getValue(path));
     const checkPr = (pr: JsonObject) => {
       if (pr.number !== input.pullRequestNumber || object(object(pr.base).repo).full_name !== input.repository) throw new VerificationError('PR_MISMATCH', 'FAILED');
       if (object(pr.head).sha !== input.commitSha) throw new VerificationError('HEAD_CHANGED', 'STALE');
@@ -121,6 +122,25 @@ export async function verifyGitHubEvidence(input: VerificationRequest, options: 
     if (run.status !== 'completed') throw new VerificationError('RUN_PENDING', 'PENDING');
     if (run.conclusion !== 'success') throw new VerificationError('RUN_FAILED', 'FAILED');
     if (!input.acceptance.criteria.some(item => item.workflowId === workflowId)) throw new VerificationError('WORKFLOW_NOT_MAPPED', 'FAILED');
+
+    // Verify GitHub's commit-to-merged-PR association, not run.pull_requests
+    // (which can describe currently open PRs). This is commit-level evidence;
+    // it does not attest which PR/event triggered the workflow.
+    let associated = false;
+    for (let page = 1; page <= 10; page++) {
+      const data = await getValue(`/commits/${input.commitSha}/pulls?per_page=100&page=${page}`);
+      if (!Array.isArray(data) || data.length > 100) throw new VerificationError('INVALID_PR_ASSOCIATION_PAGE');
+      const matches = data.map(object).filter(item => item.number === input.pullRequestNumber);
+      if (matches.some(item => item.id === pr.id && typeof item.merged_at === 'string' && Number.isFinite(Date.parse(item.merged_at)) &&
+          object(object(item.base).repo).full_name === input.repository && object(item.head).sha === input.commitSha)) {
+        associated = true;
+        break;
+      }
+      if (data.length < 100) break;
+    }
+    if (!associated) throw new VerificationError('PR_COMMIT_ASSOCIATION_UNAVAILABLE');
+    result.source = { ...result.source, association: 'github-commit-pulls', prId: number(pr.id),
+      associationSha: input.commitSha, runEvent: typeof run.event === 'string' ? run.event : null };
 
     const jobs: JsonObject[] = [];
     let expectedTotal: number | null = null;

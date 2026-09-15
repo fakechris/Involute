@@ -16,7 +16,7 @@ const acceptance = { version: 1 as const, criteria: [
 ] };
 const input: VerificationRequest = { repository, commitSha: sha, pullRequestNumber: 4,
   url: `https://github.com/${repository}/actions/runs/8`, acceptance };
-type ResponseHook = (path: string, data: Record<string, unknown>, count: number) => unknown | Promise<unknown>;
+type ResponseHook = (path: string, data: Record<string, unknown> | unknown[], count: number) => unknown | Promise<unknown>;
 
 function fixture(hook?: ResponseHook) {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
@@ -27,9 +27,10 @@ function fixture(hook?: ResponseHook) {
       const path = new URL(String(url)).pathname + new URL(String(url)).search;
       const count = (counts.get(path) ?? 0) + 1;
       counts.set(path, count);
-      let data: Record<string, unknown>;
-      if (path.endsWith('/pulls/4')) data = { number: 4, merged: true, head: { sha }, base: { repo: { full_name: repository } } };
-      else if (path.endsWith('/actions/runs/8')) data = { id: 8, workflow_id: 7, run_attempt: 1, status: 'completed', conclusion: 'success', head_sha: sha, repository: { full_name: repository }, updated_at: '2026-09-14T00:00:00Z' };
+      let data: Record<string, unknown> | unknown[];
+      if (path.endsWith('/pulls/4')) data = { id: 40, number: 4, merged: true, head: { sha }, base: { repo: { full_name: repository } } };
+      else if (path.endsWith('/actions/runs/8')) data = { id: 8, event: 'push', workflow_id: 7, run_attempt: 1, status: 'completed', conclusion: 'success', head_sha: sha, repository: { full_name: repository }, updated_at: '2026-09-14T00:00:00Z' };
+      else if (path.includes('/commits/')) data = [{ id: 40, number: 4, merged_at: '2026-09-14T00:00:00Z', head: { sha }, base: { repo: { full_name: repository } } }];
       else if (path.includes('/attempts/1/jobs')) data = { total_count: 1, jobs: [{ id: 9, run_id: 8, head_sha: sha, name: 'verify', status: 'completed', conclusion: 'success' }] };
       else throw new Error(`unexpected fixture request: ${path}`);
       const value = hook ? await hook(path, data, count) : data;
@@ -39,6 +40,11 @@ function fixture(hook?: ResponseHook) {
 }
 
 describe('semantic contracts and GitHub API verification', () => {
+  it('orders mixed-case criterion IDs by code units before hashing', () => {
+    const criteria = ['a', 'Z', 'A', 'z'].map(id => ({ ...acceptance.criteria[0], id }));
+    expect(parseAcceptance(JSON.stringify({ version: 1, criteria }))?.criteria.map(x => x.id)).toEqual(['A', 'Z', 'a', 'z']);
+  });
+
   it('uses semantic content versions, ignoring state/revision/JSON key order', () => {
     const work = { acceptance: JSON.stringify(acceptance), repository, scope: 'scope', constraints: 'constraints', revision: 1, stateId: 'ready' };
     expect(snapshotContract({ ...work, revision: 99, stateId: 'review' } as typeof work).contractRevision).toBe(snapshotContract(work).contractRevision);
@@ -67,6 +73,32 @@ describe('semantic contracts and GitHub API verification', () => {
     expect(f.calls.every(call => call.url.startsWith('https://api.github.com/repos/example/project/'))).toBe(true);
     expect(f.calls.every(call => call.init?.redirect === 'error')).toBe(true);
     expect(f.calls.some(call => call.url.includes('/attempts/1/jobs'))).toBe(true);
+  });
+
+  it.each(['missing', 'different-pr', 'unmerged', 'wrong-head'])('requires the declared merged PR association: %s', async variant => {
+    const f = fixture((path, data) => path.includes('/commits/') ? variant === 'missing' ? [] : [{
+      id: 40, number: variant === 'different-pr' ? 5 : 4,
+      merged_at: variant === 'unmerged' ? null : '2026-09-14T00:00:00Z',
+      head: { sha: variant === 'wrong-head' ? 'b'.repeat(40) : sha }, base: { repo: { full_name: repository } },
+    }] : data);
+    const result = await verifyGitHubEvidence(input, f.options);
+    expect(result.status).toBe('UNAVAILABLE');
+    expect(result.covered).toEqual([]);
+  });
+
+  it('paginates commit associations and fails closed at the page bound', async () => {
+    const other = { id: 50, number: 5 };
+    const paged = fixture((path, data) => path.includes('/commits/') && path.endsWith('page=1') ? Array(100).fill(other) : data);
+    expect((await verifyGitHubEvidence(input, paged.options)).status).toBe('VERIFIED');
+    const capped = fixture((path, data) => path.includes('/commits/') ? Array(100).fill(other) : data);
+    expect((await verifyGitHubEvidence(input, capped.options)).status).toBe('UNAVAILABLE');
+    expect(capped.calls.filter(call => call.url.includes('/commits/'))).toHaveLength(10);
+  });
+
+  it('accepts a push run only with the matching merged-PR commit association', async () => {
+    const result = await verifyGitHubEvidence(input, fixture().options);
+    expect(result.status).toBe('VERIFIED');
+    expect(result.source).toMatchObject({ association: 'github-commit-pulls', prId: 40, associationSha: sha, runEvent: 'push' });
   });
 
   it('rejects an unmapped failed job even when the workflow reports success', async () => {

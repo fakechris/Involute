@@ -204,6 +204,12 @@ describe('work CLI commands', () => {
     const run = await prisma.workRun.findFirstOrThrow({ where: { work: { identifier: committed.identifier } } });
     expect(run).toMatchObject({ commitSha: 'b'.repeat(40), pullRequestNumber: 12 });
     expect(run.contractRevision).toHaveLength(64);
+    for (const value of ['not-a-number', 'Infinity', '0', '-2', '1.5', '9007199254740992']) {
+      const invalid = await runCli(['work', 'run-report', committed.identifier, '--run-id', run.id, '--pr-number', value, '--json'], tempDir);
+      expect(invalid.exitCode).not.toBe(0);
+      expect((await prisma.workRun.findUniqueOrThrow({ where: { id: run.id } })).pullRequestNumber).toBe(12);
+    }
+
 
   });
 

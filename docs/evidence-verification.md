@@ -30,6 +30,8 @@ run_report(work_id, run_id, commit_sha=<40 lowercase hex>, pr_number=<positive i
 
 GraphQL uses `commitSha` / `pullRequestNumber`; CLI uses `--commit-sha` / `--pr-number`. These fields are declarations. The verifier independently checks the PR's base repository and current head, requires it to be merged, and verifies Actions runs against the declared head SHA. A merge commit SHA or a synthetic PR test merge SHA does not substitute for the PR head SHA. Attach an Actions run that actually ran on that head; mismatches remain unverified.
 
+For Actions evidence, the verifier also requires GitHub’s commit-to-merged-PR association from the commit pull-requests API. This verifies checks on the associated commit; it does not attest which PR triggered the workflow or cryptographically prove the checkout performed by workflow steps. Push runs can qualify for the same associated head commit. Missing or incomplete association remains UNAVAILABLE.
+
 A run keeps its original claim identity after normal claim cleanup. A newer attempt, replacement lease, changed execution target or human rejection disqualifies old observations. Targets may change while a run is open, invalidating old results; completed run targets remain frozen.
 
 ## Configure the operator
@@ -61,4 +63,4 @@ The gate requires the latest observation for every PR/test declaration in the cu
 
 Shadow evaluation and its outbox event share the caller's transaction and an issue row lock with contract/review changes. Human decisions can be compared with the run's shadow evaluations without rewriting the original evidence. This version has no switch that enables automated acceptance. Disable the worker to return to manual-only observation; records are retained. Older application versions may reintroduce GitHub merge-to-Done behavior, so downgrading the application is not a safe way to disable verification. Keep upgraded lifecycle handlers when rolling back worker configuration.
 
-Official API contracts: [workflow runs](https://docs.github.com/en/rest/actions/workflow-runs), [workflow jobs](https://docs.github.com/en/rest/actions/workflow-jobs), [GitHub App authentication](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app).
+Official API contracts: [commit–PR associations](https://docs.github.com/en/rest/commits/commits#list-pull-requests-associated-with-a-commit), [workflow runs](https://docs.github.com/en/rest/actions/workflow-runs), [workflow jobs](https://docs.github.com/en/rest/actions/workflow-jobs), [GitHub App authentication](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app).

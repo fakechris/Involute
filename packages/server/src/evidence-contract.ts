@@ -37,7 +37,7 @@ export function parseAcceptance(value: string | null): AcceptanceContract | null
       criteria.push({ id: item.id, required: item.required, workflowId: item.workflowId, job: item.job });
     }
     if (!criteria.some(item => item.required)) return null;
-    return { version: 1, criteria: criteria.sort((a, b) => a.id.localeCompare(b.id)) };
+    return { version: 1, criteria: criteria.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0) };
   } catch { return null; }
 }
 
