@@ -68,23 +68,15 @@ export async function seedDatabase(
     });
   }
 
+  // Upsert rather than check-then-create: `name` is unique, so a read followed
+  // by a write loses the race against a concurrent seed and dies on the
+  // constraint instead of being the no-op it is meant to be.
   for (const name of DEFAULT_LABEL_NAMES) {
-    const existingLabel = await prisma.issueLabel.findFirst({
-      where: {
-        name,
-      },
-      select: {
-        id: true,
-      },
+    await prisma.issueLabel.upsert({
+      where: { name },
+      create: { name },
+      update: {},
     });
-
-    if (!existingLabel) {
-      await prisma.issueLabel.create({
-        data: {
-          name,
-        },
-      });
-    }
   }
 
   if (includeDefaultAdmin) {

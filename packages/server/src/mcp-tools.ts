@@ -1,4 +1,12 @@
-import type { PrismaClient, WorkLinkType } from '@prisma/client';
+import type { PrismaClient, WorkEvidenceKind, WorkLinkType } from '@prisma/client';
+
+import {
+  answerAgentRequest,
+  claimAgentRequest,
+  readAgentInbox,
+  type AnswerEvidenceInput,
+} from './agent-request-service.js';
+import { toWireState } from './agent-request-state.js';
 
 import {
   assertCanReadTeam,
@@ -40,12 +48,18 @@ export type McpToolName =
   | 'work_link'
   | 'work_claim'
   | 'run_report'
-  | 'evidence_attach';
+  | 'evidence_attach'
+  | 'agent_inbox'
+  | 'agent_request_claim'
+  | 'agent_request_answer';
 
+// Order matches MCP_TOOL_DEFINITIONS, which is the order `listMcpTools`
+// returns them in.
 export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
   'work_search',
   'work_get_context',
   'work_list_ready',
+  'agent_inbox',
   'protocol_get_guide',
 ];
 
@@ -57,6 +71,17 @@ export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
   'work_claim',
   'run_report',
   'evidence_attach',
+  'agent_request_claim',
+  'agent_request_answer',
+];
+
+const WORK_EVIDENCE_KINDS: readonly WorkEvidenceKind[] = [
+  'PR',
+  'TEST',
+  'LOG',
+  'SCREENSHOT',
+  'ARTIFACT',
+  'DECISION',
 ];
 
 const WORK_LINK_TYPES: readonly WorkLinkType[] = [
@@ -324,6 +349,70 @@ export async function callMcpTool(
         writeActorFromViewer(context.viewer, 'mcp'),
       );
     }
+    case 'agent_inbox': {
+      const actorId = requireActorId(context);
+      const page = await readAgentInbox(context.prisma, {
+        actorId,
+        cursor: optionalString(args.cursor) ?? null,
+        first: optionalNumber(args.first) ?? null,
+        since: optionalDate(args.since),
+      });
+      return {
+        cursor: page.cursor,
+        requests: page.items.map((item) => ({
+          body: item.body,
+          claimed_by: item.claimedBy,
+          created_at: item.createdAt.toISOString(),
+          deadline_at: item.deadlineAt.toISOString(),
+          id: item.id,
+          requested_by_actor_id: item.requestedByActorId,
+          root_comment_id: item.rootCommentId,
+          state: item.state,
+          work_id: item.workId,
+          work_identifier: item.workIdentifier,
+        })),
+      };
+    }
+    case 'agent_request_claim': {
+      const actorId = requireActorId(context);
+      const request = await claimAgentRequest(context.prisma, {
+        actorId,
+        id: requiredString(args.id, 'id'),
+      });
+      return {
+        claim_expires_at: request.claimExpiresAt?.toISOString() ?? null,
+        id: request.id,
+        state: toWireState(request.state),
+        work_id: request.workId,
+      };
+    }
+    case 'agent_request_answer': {
+      const actorId = requireActorId(context);
+      const answerInput: Parameters<typeof answerAgentRequest>[1] = {
+        actorId,
+        body: requiredString(args.body, 'body'),
+        id: requiredString(args.id, 'id'),
+      };
+      const state = optionalString(args.state);
+      if (state) {
+        if (state !== 'completed' && state !== 'failed' && state !== 'input-required') {
+          throw createValidationError(
+            'state must be one of: completed, failed, input-required.',
+          );
+        }
+        answerInput.state = state;
+      }
+      const evidence = parseAnswerEvidence(args.evidence);
+      if (evidence.length > 0) {
+        answerInput.evidence = evidence;
+      }
+      const answered = await answerAgentRequest(context.prisma, answerInput);
+      return {
+        answered_comment_id: answered.commentId,
+        id: answered.request.id,
+        state: toWireState(answered.request.state),
+      };
+    }
     default:
       throw new Error(`Unknown tool "${name}".`);
   }
@@ -541,6 +630,61 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'agent_inbox',
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    description:
+      'Open requests addressed to you: questions put to this actor that are still submitted, working, or awaiting your input. Poll with `since` or page with `cursor`. Reading does not reserve anything — call agent_request_claim before you start work.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        since: { type: 'string', description: 'ISO-8601; only requests created after this instant' },
+        cursor: { type: 'string', description: 'Opaque cursor from a previous page' },
+        first: { type: 'integer', description: 'Page size, 1-50 (default 20)' },
+      },
+    },
+  },
+  {
+    name: 'agent_request_claim',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    description:
+      'Take the claim on a request addressed to you, moving it to `working`. Exactly one consumer can hold a claim at a time, so two sidecars polling the same actor cannot both answer. The claim is a 60s lease that you renew by calling this again; if you die holding it, it expires and another consumer may take over.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Agent request id' },
+      },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'agent_request_answer',
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    description:
+      'Answer a request you hold the claim on. Posts a comment authored by you (not by the process carrying your token) and moves the request. `state` defaults to `completed`; use `failed` when you cannot answer, or `input-required` to ask the requester for something and hand the claim back. A2A state names.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Agent request id' },
+        body: { type: 'string', description: 'The answer, posted as your comment' },
+        state: { type: 'string', enum: ['completed', 'failed', 'input-required'] },
+        evidence: {
+          type: 'array',
+          description: 'Durable citations backing the answer',
+          items: {
+            type: 'object',
+            properties: {
+              kind: { type: 'string', enum: ['pr', 'test', 'log', 'screenshot', 'artifact', 'decision'] },
+              url: { type: 'string' },
+              summary: { type: 'string' },
+            },
+            required: ['kind', 'url'],
+          },
+        },
+      },
+      required: ['id', 'body'],
+    },
+  },
+  {
     name: 'protocol_get_guide',
     annotations: { readOnlyHint: true, destructiveHint: false },
     description: 'Return the full Involute work protocol: kernel rules, state machines, scopes, tools, webhook events, and the IQL query language. Call this before writing work.',
@@ -605,6 +749,59 @@ function optionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function optionalDate(value: unknown): Date | null {
+  if (typeof value !== 'string' || value.trim() === '') {
+    return null;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw createValidationError(`Argument "since" is not a valid ISO-8601 timestamp: ${value}.`);
+  }
+  return parsed;
+}
+
+// An inbox is addressed to an actor, so these tools are meaningless without
+// one: a trusted CLI token with no viewer cannot stand in for an agent.
+function requireActorId(context: GraphQLContext): string {
+  const actorId = context.viewer?.id;
+  if (!actorId) {
+    throw createValidationError(
+      'Agent request tools require an authenticated actor; use the agent credential of the actor whose inbox you are reading.',
+    );
+  }
+  return actorId;
+}
+
+function parseAnswerEvidence(value: unknown): AnswerEvidenceInput[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw createValidationError('Argument "evidence" must be an array.');
+  }
+  return value.map((entry, index) => {
+    if (typeof entry !== 'object' || entry === null) {
+      throw createValidationError(`Argument "evidence[${index}]" must be an object.`);
+    }
+    const item = entry as Record<string, unknown>;
+    const kind = requiredString(item.kind, `evidence[${index}].kind`).toUpperCase();
+    if (!(WORK_EVIDENCE_KINDS as readonly string[]).includes(kind)) {
+      throw createValidationError(
+        `Argument "evidence[${index}].kind" must be one of: ${WORK_EVIDENCE_KINDS.join(', ')}.`,
+      );
+    }
+    const parsed: AnswerEvidenceInput = {
+      kind: kind as WorkEvidenceKind,
+      url: requiredString(item.url, `evidence[${index}].url`),
+    };
+    const summary = optionalString(item.summary);
+    if (summary !== undefined) {
+      parsed.summary = summary;
+    }
+    return parsed;
+  });
+}
+
 function assignOptional<T extends object, K extends keyof T>(
   target: T,
   key: K,
@@ -631,6 +828,9 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_claim: 'claim',
   run_report: 'report',
   evidence_attach: 'report',
+  agent_inbox: 'read',
+  agent_request_claim: 'answer',
+  agent_request_answer: 'answer',
 };
 
 export function assertToolScope(context: GraphQLContext, name: McpToolName): void {

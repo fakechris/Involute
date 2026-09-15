@@ -761,6 +761,63 @@ Both events are enqueued **inside the comment's transaction**: an event never
 announces a comment that was then rolled back, and the mentions it references
 are already resolved.
 
+When the mention opened a ledger row, `agent.mentioned` also carries
+`requestId` — the row to claim. See the request ledger below.
+
+### The agent request ledger (INV-560)
+
+A question put to one actor, with a state, a deadline and an owner. Claiming and
+answering happen on the server, so two consumers polling the same actor cannot
+both answer.
+
+**States — A2A's task lifecycle, borrowed rather than invented:**
+
+```
+submitted ─claim─► working ─┬─ answer ────────► completed
+                            ├─ answer(failed) ► failed
+                            ├─ answer(input-required) ► input-required ─claim─► working
+                            ├─ cancel ────────► canceled
+                            └─ deadline ──────► failed
+```
+
+`completed`, `failed` and `canceled` are terminal. Because the hyphen in
+`input-required` cannot be a Prisma enum identifier, storage spells the states
+`SUBMITTED` / `WORKING` / `INPUT_REQUIRED` / … and maps them; every API surface
+uses the A2A spelling.
+
+**Who may open one.** A request is opened when a **human** mentions an agent. An
+agent mentioning another agent posts an ordinary comment and nothing more —
+agent↔agent questions are an echo risk, and the first version keeps a human at
+the head of every chain. Opening that up will take an explicit delegation action
+carrying a root request id, a budget and a hop limit, not a relaxed check here.
+
+**Tools** (agent tokens need the new `answer` scope; `agent_inbox` needs `read`):
+
+| Tool | Does |
+|---|---|
+| `agent_inbox(since?, cursor?, first?)` | Requests addressed to you that are still open. Reading reserves nothing. |
+| `agent_request_claim(id)` | Take the claim, moving the request to `working`. |
+| `agent_request_answer(id, body, state?, evidence[]?)` | Post the answer and move the request. |
+
+- **The claim is a 60s lease.** Exactly one consumer holds it; a second gets an
+  error rather than a duplicate answer. The holder renews by claiming again, and
+  a consumer that dies holding one releases it when the lease lapses. Re-claiming
+  a request you already hold is deliberately allowed — a consumer that restarts
+  mid-flight has to be able to get its own request back.
+- **The answer comment is authored by the answering actor**, not by whatever
+  process is carrying its token. Otherwise every answer looks like it came from
+  the same person again.
+- **`completed` is reached only once `answeredCommentId` is set**, so a failed
+  answer cannot leave a request looking answered.
+- **`input-required` is a first-class state, not a failure.** The agent asks
+  back, hands the claim over, and the request waits — the deadline keeps running.
+- **Deadlines are enforced server-side**, sweeping every 30s. The recorded
+  reason is exactly *"No answer within the deadline."* — it says only that no
+  answer arrived, never why. The server cannot tell "the agent is not running"
+  from "the agent is busy" or "the host is offline", and must not imply it.
+- **`idempotencyKey`** is `mention:<commentId>:<targetActorId>` for
+  mention-opened requests, so a replayed comment write lands one request.
+
 ### Webhook subscriptions (Linear-style, per-endpoint secrets)
 
 Preferred over the legacy shared `INVOLUTE_WEBHOOK_URL`/`INVOLUTE_WEBHOOK_SECRET`

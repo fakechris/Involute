@@ -1,4 +1,5 @@
 import { startEvidenceVerifier } from './evidence-verification.js';
+import { expireOverdueAgentRequests } from './agent-request-service.js';
 import type { PrismaClient } from '@prisma/client';
 
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
@@ -375,6 +376,17 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     emailTimer?.unref();
   }
 
+  // Deadlines are the server's job, not the consumer's (INV-560): an agent
+  // that never comes back must not leave a request open forever. The recorded
+  // reason says only that no answer arrived in time — never why.
+  const requestExpiryTimer = setInterval(() => {
+    void expireOverdueAgentRequests(prisma).catch((error: unknown) => {
+      console.error('Failed to expire overdue agent requests.');
+      console.error(error);
+    });
+  }, 30_000);
+  requestExpiryTimer?.unref();
+
   // Daily retention sweep: read notifications older than 90 days and unread
   // notifications older than 180 days are removed.
   let retentionTimer: NodeJS.Timeout | undefined;
@@ -447,6 +459,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       }
       if (retentionTimer) {
         clearInterval(retentionTimer);
+      }
+      if (requestExpiryTimer) {
+        clearInterval(requestExpiryTimer);
       }
 
       await new Promise<void>((resolve, reject) => {
