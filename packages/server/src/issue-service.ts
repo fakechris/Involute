@@ -26,6 +26,7 @@ import {
 import { assertActorCan, isAcceptStateType, sanitizeWorkTitle, validateAgentDescription } from './claim-service.js';
 import { assertNoWorkLinkCycle, syncContainsFromParentId } from './link-service.js';
 import { syncCommentMentions } from './mention-service.js';
+import { enqueueCommentEvents } from './comment-events.js';
 import { assertNodeHierarchy, lockWorkGraph } from './graph-integrity.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
 import {
@@ -548,6 +549,7 @@ export async function createComment(
     },
     select: {
       id: true,
+      identifier: true,
     },
   });
 
@@ -555,9 +557,10 @@ export async function createComment(
     throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
   }
 
-  // The comment and its resolved mentions land together (INV-558): a consumer
-  // must never observe a comment whose `@`s have not been turned into
-  // actorIds yet, or it would fall back to matching strings itself.
+  // The comment, its resolved mentions and its events land together
+  // (INV-558 / INV-559): a consumer must never observe a comment whose `@`s
+  // have not been turned into actorIds yet, and an event must never announce a
+  // comment that a crash then rolled back.
   return prisma.$transaction(async (tx) => {
     const comment = await tx.comment.create({
       data: {
@@ -567,7 +570,13 @@ export async function createComment(
       },
     });
 
-    await syncCommentMentions(tx, comment.id, comment.body);
+    const mentions = await syncCommentMentions(tx, comment.id, comment.body);
+
+    await enqueueCommentEvents(tx, {
+      comment,
+      mentions,
+      work: issue,
+    });
 
     return comment;
   });

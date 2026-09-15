@@ -20,6 +20,8 @@ export const WORK_EVENT_TYPES = [
   'work.review_rejected',
   'work.accepted',
   'bug.reported',
+  'comment.created',
+  'agent.mentioned',
   'webhook.disabled',
 ] as const;
 

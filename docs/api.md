@@ -733,6 +733,34 @@ See the **payload v2** section above for the full envelope. Summary:
 - Review events (`work.accepted`, `work.review_rejected`) include
   `selfReviewed: true` when the reviewer is also the work owner or run actor.
 
+### Comment events (INV-559)
+
+Two event types ride the same outbox as everything else — same HMAC signing,
+same claim lease, same backoff, same dead-lettering.
+
+- **`comment.created`** — one per comment. Payload `data`: `comment { id, body,
+  createdAt, rootCommentId }`, `speaker { actorId, actorKind, handle, name }`,
+  `mentionedActorIds`.
+- **`agent.mentioned`** — one per **mentioned actor**, not one per comment, so a
+  consumer filters on the addressee and B3's per-target ledger lines up. Payload
+  `data`: the same `comment` and `speaker`, plus `target { actorId, handle }`
+  and `promptContext`.
+
+`promptContext` is the assembled briefing (Linear's field of the same name): the
+work identifier and state, its parent chain, the contract (`description`), the
+acceptance criteria, and the most recent runs and evidence — as markdown, capped
+at 8,000 characters. The point is that a consumer can answer without first
+going and collecting context itself; when it needs more than the briefing it
+calls `work_get_context`.
+
+`rootCommentId` is the thread root. Until `Comment.parentCommentId` lands
+(INV-561) every comment is its own root, so consumers can key on it now and keep
+working when threads arrive.
+
+Both events are enqueued **inside the comment's transaction**: an event never
+announces a comment that was then rolled back, and the mentions it references
+are already resolved.
+
 ### Webhook subscriptions (Linear-style, per-endpoint secrets)
 
 Preferred over the legacy shared `INVOLUTE_WEBHOOK_URL`/`INVOLUTE_WEBHOOK_SECRET`

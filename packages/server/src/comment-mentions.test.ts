@@ -3,7 +3,7 @@ import type { Issue, PrismaClient, User } from '@prisma/client';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
+import { DEFAULT_TEAM_KEY, truncateAndSeed } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { issueAgentCredential } from './agent-credentials.ts';
 import { createComment } from './issue-service.ts';
@@ -201,15 +201,5 @@ async function createIssue(prismaClient: PrismaClient): Promise<Issue> {
 }
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<void> {
-  await prismaClient.commentMention.deleteMany();
-  await prismaClient.comment.deleteMany();
-  await prismaClient.issue.deleteMany();
-  await prismaClient.agentCredential.deleteMany();
-  await prismaClient.teamMembership.deleteMany();
-  await prismaClient.workflowState.deleteMany();
-  await prismaClient.team.deleteMany();
-  await prismaClient.issueLabel.deleteMany();
-  await prismaClient.user.deleteMany();
-  await prismaClient.legacyLinearMapping.deleteMany();
-  await seedDatabase(prismaClient);
+  await truncateAndSeed(prismaClient);
 }
