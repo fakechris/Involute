@@ -1,7 +1,7 @@
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
 import type { Issue, PrismaClient, User } from '@prisma/client';
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { DEFAULT_TEAM_KEY, resetAndSeed } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
@@ -19,6 +19,7 @@ import {
   agentRequestPresence,
 } from './agent-request-presence.ts';
 import { createComment } from './issue-service.ts';
+import { startServer, type StartedServer } from './index.ts';
 
 loadProjectEnvironment();
 
@@ -221,6 +222,74 @@ describe('agent request expiry (INV-562 / A6)', () => {
         }
       }
       expect(PRESENCE_COPY.unresponsive).toContain('no activity');
+    });
+  });
+
+  // Over HTTP like the repo's other GraphQL tests: constructing the schema
+  // in-process and calling graphql() directly hits a module-realm mismatch,
+  // because @graphql-tools/schema resolves its own copy of `graphql`.
+  describe('GraphQL surface', () => {
+    const TEST_AUTH_TOKEN = 'test-auth-token';
+    let server: StartedServer;
+
+    beforeEach(async () => {
+      server = await startServer({
+        allowAdminFallback: true,
+        prisma,
+        authToken: TEST_AUTH_TOKEN,
+        port: 0,
+      });
+    });
+
+    afterEach(async () => {
+      await server.stop();
+    });
+
+    async function query(source: string): Promise<{ data: any; errors?: unknown[] }> {
+      const response = await fetch(`${server.url}/graphql`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${TEST_AUTH_TOKEN}`,
+        },
+        body: JSON.stringify({ query: source }),
+      });
+      return response.json() as Promise<{ data: any; errors?: unknown[] }>;
+    }
+
+    it('serves agentRequests with A2A state and derived presence', async () => {
+      // Regression: the SDL field and its resolver live in two different
+      // places, and a field declared with no resolver fails only at query
+      // time — the type checker cannot see it. That shipped once.
+      const { issue } = await openOverdueRequest(prisma);
+
+      const result = await query(`{ issue(id: "${issue.id}") {
+        agentRequests(first: 5) {
+          id state presence presenceDetail rootCommentId
+          targetActor { handle } requestedByActor { name }
+        }
+      } }`);
+
+      expect(result.errors).toBeUndefined();
+      const requests = result.data.issue.agentRequests;
+      expect(requests).toHaveLength(1);
+      expect(requests[0].state).toBe('submitted');
+      expect(requests[0].presence).toBe('waiting');
+      expect(requests[0].presenceDetail).toBe(PRESENCE_COPY.waiting);
+      expect(requests[0].targetActor.handle).toBe('mia');
+    });
+
+    it('exposes a declared successor on the request', async () => {
+      const { issue, mia } = await openOverdueRequest(prisma);
+      const kai = await createAgent(prisma, 'Kai', 'kai');
+      await prisma.user.update({ where: { id: mia.id }, data: { successorActorId: kai.id } });
+
+      const result = await query(
+        `{ issue(id: "${issue.id}") { agentRequests(first: 1) { successorActor { handle } } } }`,
+      );
+
+      expect(result.errors).toBeUndefined();
+      expect(result.data.issue.agentRequests[0].successorActor.handle).toBe('kai');
     });
   });
 
