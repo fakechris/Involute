@@ -141,6 +141,9 @@ model User {
   googleSubject  String?   @unique
   globalRole     GlobalRole @default(USER)
   actorKind      ActorKind @default(HUMAN)
+  // Addressable alias for `@handle` mentions. Stored lowercase; the actorId is
+  // the identity, the handle is only a way to spell it (docs/54 §B1).
+  handle         String?   @unique
   notificationPrefs Json    @default("{}")
   assignedIssues Issue[]   @relation("IssueAssignee")
   comments       Comment[]
@@ -158,6 +161,7 @@ model User {
   agentCredentials AgentCredential[]
   createdWebhooks WebhookSubscription[] @relation("WebhookSubscriptionCreator")
   notifications  Notification[]
+  commentMentions CommentMention[] @relation("CommentMentionActor")
 }
 
 model AgentCredential {
@@ -280,9 +284,27 @@ model Comment {
   userId      String       @db.Uuid
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   attachments Attachment[]
+  mentions    CommentMention[]
 
   @@index([issueId, createdAt])
   @@index([userId])
+}
+
+// Server-side resolution of `@handle` in a comment body to the mentioned
+// actor. Written in the same transaction as the comment so consumers read
+// actorIds, never raw strings: string matching in a sidecar would double-fire
+// with two consumers and would treat `@foo` inside a code block as a mention
+// (docs/54 §E1, handoff B1).
+model CommentMention {
+  id        String   @id @default(uuid()) @db.Uuid
+  commentId String   @db.Uuid
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  actorId   String   @db.Uuid
+  actor     User     @relation("CommentMentionActor", fields: [actorId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([commentId, actorId])
+  @@index([actorId, createdAt])
 }
 
 model Project {
