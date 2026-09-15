@@ -810,12 +810,55 @@ carrying a root request id, a budget and a hop limit, not a relaxed check here.
   answer cannot leave a request looking answered.
 - **`input-required` is a first-class state, not a failure.** The agent asks
   back, hands the claim over, and the request waits — the deadline keeps running.
-- **Deadlines are enforced server-side**, sweeping every 30s. The recorded
-  reason is exactly *"No answer within the deadline."* — it says only that no
-  answer arrived, never why. The server cannot tell "the agent is not running"
-  from "the agent is busy" or "the host is offline", and must not imply it.
+- **Deadlines are enforced server-side**, sweeping every 30s — and the
+  expiry is not silent. See "When nobody answers" below.
 - **`idempotencyKey`** is `mention:<commentId>:<targetActorId>` for
   mention-opened requests, so a replayed comment write lands one request.
+
+### When nobody answers (INV-562)
+
+An expired request used to flip to `failed` and say nothing, which from the
+asker's side is indistinguishable from the question vanishing. Expiry now, in
+one transaction per request:
+
+1. **Posts a notice in the thread** the question was asked in, authored by the
+   `SERVICE` actor `system@involute.local` — not by a person, and not by the
+   agent that did not answer. Impersonating either would be a lie in the audit
+   trail.
+2. **Notifies the person who asked** (`agent.request_expired`), with `advice`
+   naming who to ask instead.
+3. **Emits `agent.request_expired`** on the outbox for consumers.
+
+The state move is a CAS, so two servers sweeping at once produce one notice.
+
+**What the notice may say.** That no answer arrived before the deadline, and who
+to ask next. **Not** why. The server knows the deadline passed and nothing else;
+"the agent isn't running" is a guess, and a person who believes it goes and
+debugs the wrong thing. A test asserts the copy contains no such claim.
+
+**Who to ask instead** is `User.successorActorId` when the agent declares one,
+otherwise the team's human owners, otherwise an explicit statement that there is
+nobody — never silence. (The field is declared and used for advice here;
+automatic successor takeover is INV-556.)
+
+### Presence: will it actually reply?
+
+`AgentRequest.presence` answers the question a person actually has, which the
+A2A state does not. It is **derived at read time, never stored**, so the A2A
+lifecycle stays the only stored state machine:
+
+| presence | meaning |
+|---|---|
+| `waiting` | nobody has claimed it yet |
+| `live` | claimed, active within the last 10s |
+| `unresponsive` | claimed, silent for over 10s |
+| `stale` | claimed, silent for over 30 minutes — recoverable |
+| `settled` | terminal |
+
+`unresponsive` and `stale` are observations about silence, not conclusions about
+the consumer: it may be thinking, busy, or on a slow host. `stale` is
+recoverable — the holder can renew its claim, or the lease lapses and another
+consumer takes over. Thresholds follow Linear's.
 
 ### Comment threads (INV-561)
 
@@ -937,8 +980,19 @@ link:blocked-by:none has:contract -state:done "free text"
 Kernel notifications are projected in the same transaction as the work event
 they describe. Human-gate events (`decision.requested`, `run.completed`,
 `work.accepted`, `work.review_rejected`, `webhook.disabled`) notify the human
-assignee, falling back to human team owners. Agent actors never receive
-notifications.
+assignee, falling back to human team owners.
+
+**Delivery is per consumer, not per actor kind (INV-562).** The rule used to be
+"agent actors never receive notifications"; it is now:
+
+- **Agents** are reached through the outbox — webhook delivery when a consumer
+  is subscribed, and `agent_inbox` when one is not. An agent with no live
+  consumer is not dropped; its work waits in the inbox to be claimed.
+- **Humans** are reached through the in-app inbox. For an expired request the
+  recipient is **the person who asked**, not the team owners — they are the one
+  left waiting.
+
+`agent.request_expired` notifications carry `advice`: who to ask instead.
 
 ```graphql
 query {

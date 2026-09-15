@@ -1,5 +1,5 @@
 import { startEvidenceVerifier } from './evidence-verification.js';
-import { expireOverdueAgentRequests } from './agent-request-service.js';
+import { expireOverdueAgentRequests } from './agent-request-expiry.js';
 import type { PrismaClient } from '@prisma/client';
 
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';

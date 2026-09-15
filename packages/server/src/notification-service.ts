@@ -8,8 +8,13 @@ const MAX_RECIPIENTS = 10;
 
 /**
  * Human-gate recipients for a work item: the human assignee when there is
- * one, otherwise every human OWNER of the team. Agents never receive
- * notifications — their feedback surface is webhooks.
+ * one, otherwise every human OWNER of the team.
+ *
+ * Agents are not listed here because their delivery path is the outbox
+ * (webhook when a consumer is subscribed, `agent_inbox` when none is) — not
+ * because they are excluded from being told things (INV-562). Notifications
+ * addressed to a specific person, such as an expired request, resolve their
+ * own recipient instead of going through this helper.
  */
 export async function resolveHumanRecipients(
   prisma: DatabaseClient,
