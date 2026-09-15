@@ -1,5 +1,6 @@
 import type {
   AgentCredential,
+  AgentRequest,
   Attachment,
   Comment,
   Cycle,
@@ -73,6 +74,8 @@ import { requireAuthentication, type GraphQLContext } from './auth.js';
 import { issueAgentCredential, parseAgentScopeList } from './agent-credentials.js';
 import type { AgentScope } from './agent-credentials.js';
 import { WORK_EVENT_TYPES, enqueueWorkEvent } from './event-outbox.js';
+import { toWireState } from './agent-request-state.js';
+import { PRESENCE_COPY, agentRequestPresence } from './agent-request-presence.js';
 import { createComment, createIssue, createIssueInTransaction, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
 import { projectWorkNotifications } from './notification-service.js';
 import { auditMergedPrTraceability } from './traceability-audit.js';
@@ -111,6 +114,7 @@ type TeamParent = Team & { memberships?: TeamMembershipParent[] | null; states?:
 type TeamMembershipParent = TeamMembership & { user?: User | null };
 type UserParent = User;
 type CommentParent = Comment & { user?: User | null };
+type AgentRequestParent = AgentRequest;
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 type ProjectParent = Project & { lead?: User | null; team?: Team | null; issues?: Issue[] | null };
 type CycleParent = Cycle & { team?: Team | null; issues?: Issue[] | null };
@@ -175,6 +179,7 @@ const COMMENT_ORDER_BY: Prisma.CommentOrderByWithRelationInput[] = [
   { id: 'asc' },
 ];
 const MAX_COMMENTS_CONNECTION_FIRST = 100;
+const MAX_AGENT_REQUESTS_CONNECTION_FIRST = 50;
 
 const MAX_ISSUES_CONNECTION_FIRST = 200;
 
@@ -369,6 +374,8 @@ const typeDefs = /* GraphQL */ `
     isMe: Boolean
     globalRole: GlobalRole!
     actorKind: ActorKind!
+    """Who picks up this actor's unanswered requests (INV-562)."""
+    successorActor: User
     """Lowercase alias this actor is addressed by in comments, as in @mia."""
     handle: String
   }
@@ -426,6 +433,26 @@ const typeDefs = /* GraphQL */ `
     createdAt: DateTime!
   }
 
+  """A question put to one actor. States are A2A's task lifecycle (INV-560)."""
+  type AgentRequest {
+    id: ID!
+    state: String!
+    """Whether anyone appears to be working on it: waiting / live / unresponsive / stale / settled. Derived, never stored — it answers 'will it reply', which the A2A state does not."""
+    presence: String!
+    """Display copy for the presence. States what is observed, never why."""
+    presenceDetail: String!
+    body: String!
+    deadlineAt: DateTime!
+    createdAt: DateTime!
+    failureReason: String
+    rootCommentId: String!
+    targetActor: User!
+    requestedByActor: User!
+    """Who to ask instead when this one does not answer."""
+    successorActor: User
+    answeredCommentId: String
+  }
+
   enum CommentOrderBy {
     createdAt
   }
@@ -463,6 +490,8 @@ const typeDefs = /* GraphQL */ `
     links(type: WorkLinkType): WorkLinkConnection!
     claim: WorkClaimRecord
     comments(first: Int, after: String, orderBy: CommentOrderBy, rootsOnly: Boolean): CommentConnection!
+    """Questions put to agents on this work item, newest first (INV-560/562)."""
+    agentRequests(first: Int): [AgentRequest!]!
   }
 
   type WorkLink {
@@ -2778,6 +2807,14 @@ const resolvers = {
       context.viewer?.id === parent.id,
     globalRole: (parent: UserParent): User['globalRole'] => parent.globalRole,
     actorKind: (parent: UserParent): User['actorKind'] => parent.actorKind,
+    successorActor: async (
+      parent: UserParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<User | null> =>
+      parent.successorActorId
+        ? context.prisma.user.findUnique({ where: { id: parent.successorActorId } })
+        : null,
   },
   WorkClaimRecord: {
     id: (parent: WorkClaimParent): string => parent.id,
@@ -3054,6 +3091,38 @@ const resolvers = {
         nodes,
         pageInfo: buildPageInfo(nodes, first !== undefined && comments.length > first),
       };
+    },
+  },
+  AgentRequest: {
+    state: (parent: AgentRequestParent): string => toWireState(parent.state),
+    presence: (parent: AgentRequestParent): string => agentRequestPresence(parent),
+    presenceDetail: (parent: AgentRequestParent): string =>
+      PRESENCE_COPY[agentRequestPresence(parent)],
+    targetActor: async (
+      parent: AgentRequestParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<User> =>
+      context.prisma.user.findUniqueOrThrow({ where: { id: parent.targetActorId } }),
+    requestedByActor: async (
+      parent: AgentRequestParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<User> =>
+      context.prisma.user.findUniqueOrThrow({ where: { id: parent.requestedByActorId } }),
+    successorActor: async (
+      parent: AgentRequestParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<User | null> => {
+      const target = await context.prisma.user.findUnique({
+        where: { id: parent.targetActorId },
+        select: { successorActorId: true },
+      });
+      if (!target?.successorActorId) {
+        return null;
+      }
+      return context.prisma.user.findUnique({ where: { id: target.successorActorId } });
     },
   },
   Project: {

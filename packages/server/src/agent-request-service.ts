@@ -22,13 +22,6 @@ export const REQUEST_CLAIM_LEASE_MS = 60_000;
 export const DEFAULT_REQUEST_DEADLINE_MS = 24 * 60 * 60 * 1_000;
 export const MAX_INBOX_PAGE = 50;
 
-/**
- * Expiry copy. It says only that no answer arrived in time — it must never
- * assert why. The server cannot tell "the agent is not running" from "the agent
- * is busy" or "the host is offline", and docs/54 §D3 fixes this wording.
- */
-export const DEADLINE_FAILURE_REASON = 'No answer within the deadline.';
-
 export const REQUEST_NOT_FOUND_MESSAGE = 'Agent request not found.';
 export const REQUEST_NOT_CLAIMABLE_MESSAGE =
   'Agent request is not claimable: it is already claimed by another consumer, or it has reached a terminal state.';
@@ -341,29 +334,4 @@ export async function cancelAgentRequest(
   }
 
   return prisma.agentRequest.findUniqueOrThrow({ where: { id: input.id } });
-}
-
-/**
- * Fails every non-terminal request whose deadline has passed. Server-side
- * timing, so an offline consumer does not keep a request open forever.
- *
- * The recorded reason is `DEADLINE_FAILURE_REASON` and nothing else: the server
- * knows the deadline passed, not why.
- */
-export async function expireOverdueAgentRequests(
-  prisma: PrismaClient,
-  now: Date = new Date(),
-): Promise<number> {
-  const expired = await prisma.agentRequest.updateMany({
-    where: {
-      deadlineAt: { lte: now },
-      state: { in: [...CLAIMABLE_REQUEST_STATES] },
-    },
-    data: {
-      failureReason: DEADLINE_FAILURE_REASON,
-      state: 'FAILED',
-    },
-  });
-
-  return expired.count;
 }

@@ -175,6 +175,12 @@ model User {
   createdWebhooks WebhookSubscription[] @relation("WebhookSubscriptionCreator")
   notifications  Notification[]
   commentMentions CommentMention[] @relation("CommentMentionActor")
+  // Who picks up this actor's requests when its deadline passes (docs/54 §D3).
+  // The name is fixed here; automatic takeover is P3 (INV-556) — today it only
+  // answers "who should I ask instead".
+  successorActorId String?  @db.Uuid
+  successorActor   User?    @relation("ActorSuccessor", fields: [successorActorId], references: [id], onDelete: SetNull)
+  succeedsActors   User[]   @relation("ActorSuccessor")
   agentRequestsTargeted AgentRequest[] @relation("AgentRequestTarget")
   agentRequestsMade     AgentRequest[] @relation("AgentRequestRequester")
   agentRequestsClaimed  AgentRequest[] @relation("AgentRequestClaimant")

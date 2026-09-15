@@ -6,14 +6,16 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TEAM_KEY, resetAndSeed } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import {
-  DEADLINE_FAILURE_REASON,
   REQUEST_CLAIM_LEASE_MS,
   answerAgentRequest,
   cancelAgentRequest,
   claimAgentRequest,
-  expireOverdueAgentRequests,
   readAgentInbox,
 } from './agent-request-service.ts';
+import {
+  DEADLINE_FAILURE_REASON,
+  expireOverdueAgentRequests,
+} from './agent-request-expiry.ts';
 import { A2A_REQUEST_STATES, fromWireState, toWireState } from './agent-request-state.ts';
 import { createComment } from './issue-service.ts';
 

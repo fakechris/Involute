@@ -22,6 +22,7 @@ export const WORK_EVENT_TYPES = [
   'bug.reported',
   'comment.created',
   'agent.mentioned',
+  'agent.request_expired',
   'webhook.disabled',
 ] as const;
 
