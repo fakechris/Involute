@@ -53,6 +53,7 @@ export function useShellController() {
   const [sidebarWidth, setSidebarWidthState] = useState(() => getStoredSidebarWidth());
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [tweaksOpen, setTweaksOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [session, setSession] = useState<SessionState | null>(null);
   const [shellTeams, setShellTeams] = useState<AppShellTeamSummary[]>(() => readStoredShellTeams());
   const [shellIssues, setShellIssues] = useState<AppShellIssueSummary[]>(() => readStoredShellIssues());
@@ -64,6 +65,14 @@ export function useShellController() {
     readSavedBacklogViews(readStoredTeamKey()),
   );
   const gotoPrefixTimeoutRef = useRef<number | null>(null);
+  const paletteOpenRef = useRef(paletteOpen);
+  paletteOpenRef.current = paletteOpen;
+  const shortcutsOpenRef = useRef(shortcutsOpen);
+  shortcutsOpenRef.current = shortcutsOpen;
+  const locationPathnameRef = useRef(location.pathname);
+  locationPathnameRef.current = location.pathname;
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
 
   useEffect(() => {
     let cancelled = false;
@@ -193,7 +202,25 @@ export function useShellController() {
         return;
       }
 
-      if (isTypingField || paletteOpen) {
+      if ((event.metaKey || event.ctrlKey) && event.key === '/') {
+        event.preventDefault();
+        setShortcutsOpen((currentValue) => !currentValue);
+        return;
+      }
+
+      if (event.isComposing) {
+        return;
+      }
+
+      if (isTypingField || paletteOpenRef.current) {
+        return;
+      }
+
+      if (shortcutsOpenRef.current) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setShortcutsOpen(false);
+        }
         return;
       }
 
@@ -201,13 +228,19 @@ export function useShellController() {
         window.clearTimeout(gotoPrefixTimeoutRef.current);
         gotoPrefixTimeoutRef.current = null;
 
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          return;
+        }
+
         if (!event.metaKey && !event.ctrlKey && !event.altKey) {
           const shortcutKey = event.key.toLowerCase();
           const routes: Record<string, string> = {
             b: '/',
             l: '/backlog',
-            n: '/in-review',
             c: '/candidates',
+            n: '/in-review',
+            u: '/bugs',
             r: '/graph',
             i: '/inbox',
             m: '/my-issues',
@@ -218,7 +251,7 @@ export function useShellController() {
             s: '/settings',
           };
 
-          if (shortcutKey === 'a' && session?.authenticated) {
+          if (shortcutKey === 'a' && sessionRef.current?.authenticated) {
             event.preventDefault();
             navigate('/settings/access');
             return;
@@ -228,6 +261,7 @@ export function useShellController() {
           if (route) {
             event.preventDefault();
             navigate(route);
+            return;
           }
         }
       }
@@ -236,7 +270,26 @@ export function useShellController() {
         event.preventDefault();
         gotoPrefixTimeoutRef.current = window.setTimeout(() => {
           gotoPrefixTimeoutRef.current = null;
-        }, 1200);
+        }, 1500);
+        return;
+      }
+
+      if (event.key.toLowerCase() === 'c' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+        event.preventDefault();
+        openCreateIssueSurface(navigate, locationPathnameRef.current);
+        return;
+      }
+
+      if (event.key === '?' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
+        setShortcutsOpen(true);
+        return;
+      }
+
+      if (event.key.toLowerCase() === 't' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+        event.preventDefault();
+        setThemeState((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark'));
+        return;
       }
     }
 
@@ -248,7 +301,7 @@ export function useShellController() {
       }
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [navigate, paletteOpen, session?.authenticated]);
+  }, [navigate]);
 
   const actions = useMemo<PaletteAction[]>(() => {
     const nextActions: PaletteAction[] = [
@@ -256,6 +309,7 @@ export function useShellController() {
       { id: 'go-backlog', label: 'Go to backlog', description: 'Open the list view', group: 'Navigation', shortcut: 'G L', run: () => navigate('/backlog') },
       { id: 'go-in-review', label: 'Go to In Review', description: 'Batch accept or return committed work waiting in review', group: 'Navigation', shortcut: 'G N', run: () => navigate('/in-review') },
       { id: 'go-candidates', label: 'Go to candidates', description: 'Review proposed work before it is committed', group: 'Navigation', shortcut: 'G C', run: () => navigate('/candidates') },
+      { id: 'go-bugs', label: 'Go to bugs', description: 'Open bug queue', group: 'Navigation', shortcut: 'G U', run: () => navigate('/bugs') },
       { id: 'go-graph', label: 'Go to graph', description: 'Inspect contains and blocks relationships', group: 'Navigation', shortcut: 'G R', run: () => navigate('/graph') },
       { id: 'go-inbox', label: 'Go to inbox', description: 'Open notifications and activity', group: 'Navigation', shortcut: 'G I', run: () => navigate('/inbox') },
       { id: 'go-my-issues', label: 'Go to my issues', description: 'Open your assigned issues', group: 'Navigation', shortcut: 'G M', run: () => navigate('/my-issues') },
@@ -265,6 +319,7 @@ export function useShellController() {
       { id: 'go-members', label: 'Go to members', description: 'Open workspace members', group: 'Navigation', shortcut: 'G E', run: () => navigate('/members') },
       { id: 'go-settings', label: 'Go to settings', description: 'Open workspace settings', group: 'Navigation', shortcut: 'G S', run: () => navigate('/settings') },
       { id: 'create-issue', label: 'Create issue', description: 'Open the quick issue composer on the active team', group: 'Actions', shortcut: 'C', run: () => openCreateIssueSurface(navigate, location.pathname) },
+      { id: 'open-shortcuts', label: 'Keyboard shortcuts', description: 'Open keyboard shortcuts and navigation chords cheat sheet', group: 'Help', shortcut: '?', run: () => setShortcutsOpen(true) },
       { id: 'toggle-theme', label: `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`, description: 'Toggle the workspace theme', group: 'Preferences', shortcut: 'T', run: () => setThemeState((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark')) },
       { id: 'open-tweaks', label: 'Open interface tweaks', description: 'Adjust density, theme, and sidebar width', group: 'Preferences', run: () => setTweaksOpen(true) },
     ];
@@ -358,9 +413,11 @@ export function useShellController() {
     session,
     setDensityState,
     setPaletteOpen,
+    setShortcutsOpen,
     setSidebarWidthState,
     setThemeState,
     setTweaksOpen,
+    shortcutsOpen,
     sidebarWidth,
     theme,
     tweaksOpen,

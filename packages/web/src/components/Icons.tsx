@@ -196,3 +196,21 @@ export function IcoStatus({ type, color, size = 14 }: { type: string; color: str
     </svg>
   );
 }
+
+export function IcoKeyboard({ size = 14, ...rest }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}>
+      <rect x="1.5" y="3" width="11" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.1"/>
+      <path d="M3.5 5.5h1M6.5 5.5h1M9.5 5.5h1M4.5 8.5h5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+export function IcoHelp({ size = 14, ...rest }: IconProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}>
+      <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M5.5 5.5a1.5 1.5 0 0 1 2.7-.9c.5.5.3 1.1-.2 1.5-.5.4-.5.9-.5 1.4M7 10h.01" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  );
+}

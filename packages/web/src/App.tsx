@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon, IcoCheck, IcoGraph, IcoFilter, IcoBug, IcoHistory } from './components/Icons';
+import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon, IcoCheck, IcoGraph, IcoFilter, IcoBug, IcoHistory, IcoKeyboard } from './components/Icons';
+import { KeyboardShortcutsDialog } from './app/KeyboardShortcutsDialog';
 import { NotificationsBell } from './components/NotificationsBell';
 import { Avatar } from './components/Primitives';
 import {
@@ -488,6 +489,8 @@ export function App() {
   const [sidebarWidth, setSidebarWidth] = useState(() => getStoredSidebarWidth());
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isTweaksOpen, setIsTweaksOpen] = useState(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [isGotoActive, setIsGotoActive] = useState(false);
   const [shellTeams, setShellTeams] = useState<AppShellTeamSummary[]>(() => readStoredShellTeams());
   const [shellIssues, setShellIssues] = useState<AppShellIssueSummary[]>(() => readStoredShellIssues());
   const [activeTeamKey, setActiveTeamKey] = useState<string | null>(() => readStoredTeamKey());
@@ -532,6 +535,14 @@ export function App() {
   }, [urlTeam, activeTeamKey]);
 
   const gotoPrefixTimeoutRef = useRef<number | null>(null);
+  const isPaletteOpenRef = useRef(isPaletteOpen);
+  isPaletteOpenRef.current = isPaletteOpen;
+  const isShortcutsOpenRef = useRef(isShortcutsOpen);
+  isShortcutsOpenRef.current = isShortcutsOpen;
+  const locationPathnameRef = useRef(location.pathname);
+  locationPathnameRef.current = location.pathname;
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
   const issuesByTeamKey = useMemo(() => {
     const nextMap = new Map<string, AppShellIssueSummary[]>();
 
@@ -694,98 +705,66 @@ export function App() {
         return;
       }
 
-      if (isTypingField || isPaletteOpen) {
+      if ((event.metaKey || event.ctrlKey) && event.key === '/') {
+        event.preventDefault();
+        setIsShortcutsOpen((currentValue) => !currentValue);
+        return;
+      }
+
+      if (event.isComposing) {
+        return;
+      }
+
+      if (isTypingField || isPaletteOpenRef.current) {
+        return;
+      }
+
+      if (isShortcutsOpenRef.current) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          setIsShortcutsOpen(false);
+        }
         return;
       }
 
       if (gotoPrefixTimeoutRef.current !== null) {
         window.clearTimeout(gotoPrefixTimeoutRef.current);
         gotoPrefixTimeoutRef.current = null;
+        setIsGotoActive(false);
+
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          return;
+        }
 
         if (!event.metaKey && !event.ctrlKey && !event.altKey) {
           const shortcutKey = event.key.toLowerCase();
+          const routes: Record<string, string> = {
+            b: '/',
+            l: '/backlog',
+            c: '/candidates',
+            n: '/in-review',
+            u: '/bugs',
+            r: '/graph',
+            i: '/inbox',
+            m: '/my-issues',
+            p: '/projects',
+            v: '/cycles',
+            w: '/views',
+            e: '/members',
+            s: '/settings',
+          };
 
-          if (shortcutKey === 'b') {
-            event.preventDefault();
-            navigate('/');
-            return;
-          }
-
-          if (shortcutKey === 'l') {
-            event.preventDefault();
-            navigate('/backlog');
-            return;
-          }
-
-          if (shortcutKey === 'c') {
-            event.preventDefault();
-            navigate('/candidates');
-            return;
-          }
-
-          if (shortcutKey === 'n') {
-            event.preventDefault();
-            navigate('/in-review');
-            return;
-          }
-
-          if (shortcutKey === 'u') {
-            event.preventDefault();
-            navigate('/bugs');
-            return;
-          }
-
-          if (shortcutKey === 'r') {
-            event.preventDefault();
-            navigate('/graph');
-            return;
-          }
-
-          if (shortcutKey === 'i') {
-            event.preventDefault();
-            navigate('/inbox');
-            return;
-          }
-
-          if (shortcutKey === 'a' && session?.authenticated) {
+          if (shortcutKey === 'a' && sessionRef.current?.authenticated) {
             event.preventDefault();
             navigate('/settings/access');
             return;
           }
 
-          if (shortcutKey === 'm') {
+          const route = routes[shortcutKey];
+          if (route) {
             event.preventDefault();
-            navigate('/my-issues');
-            return;
-          }
-
-          if (shortcutKey === 'p') {
-            event.preventDefault();
-            navigate('/projects');
-            return;
-          }
-
-          if (shortcutKey === 'v') {
-            event.preventDefault();
-            navigate('/cycles');
-            return;
-          }
-
-          if (shortcutKey === 'w') {
-            event.preventDefault();
-            navigate('/views');
-            return;
-          }
-
-          if (shortcutKey === 'e') {
-            event.preventDefault();
-            navigate('/members');
-            return;
-          }
-
-          if (shortcutKey === 's') {
-            event.preventDefault();
-            navigate('/settings');
+            navigate(route);
             return;
           }
         }
@@ -793,15 +772,23 @@ export function App() {
 
       if (event.key.toLowerCase() === 'g' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
         event.preventDefault();
+        setIsGotoActive(true);
         gotoPrefixTimeoutRef.current = window.setTimeout(() => {
           gotoPrefixTimeoutRef.current = null;
-        }, 1200);
+          setIsGotoActive(false);
+        }, 1500);
         return;
       }
 
       if (event.key.toLowerCase() === 'c' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
         event.preventDefault();
-        openCreateIssueSurface(navigate, location.pathname);
+        openCreateIssueSurface(navigate, locationPathnameRef.current);
+        return;
+      }
+
+      if (event.key === '?' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        event.preventDefault();
+        setIsShortcutsOpen(true);
         return;
       }
 
@@ -821,7 +808,7 @@ export function App() {
       }
       window.removeEventListener('keydown', handleGlobalKeyDown);
     };
-  }, [isPaletteOpen, location.pathname, navigate, session?.authenticated]);
+  }, [navigate]);
 
   const paletteActions = useMemo<PaletteAction[]>(() => {
     const actions: PaletteAction[] = [
@@ -936,6 +923,14 @@ export function App() {
         group: 'Preferences',
         shortcut: 'T',
         run: () => setTheme((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark')),
+      },
+      {
+        id: 'open-shortcuts',
+        label: 'Keyboard shortcuts',
+        description: 'Open keyboard shortcuts and navigation chords cheat sheet',
+        group: 'Help',
+        shortcut: '?',
+        run: () => setIsShortcutsOpen(true),
       },
       {
         id: 'open-tweaks',
@@ -1056,42 +1051,42 @@ export function App() {
             <NavLink to="/" className={getNavLinkClassName} end title="Go to Board · G B">
               <span className="app-shell__nav-icon"><IcoIssues size={14} /></span>
               <span className="app-shell__link-label">Board</span>
-              <kbd className="app-shell__link-kbd" aria-hidden="true">B</kbd>
+              <kbd className="app-shell__link-kbd" aria-hidden="true">G B</kbd>
             </NavLink>
             <NavLink to="/candidates" className={getNavLinkClassName} title="Go to Candidates · G C">
               <span className="app-shell__nav-icon"><IcoCheck size={14} /></span>
               <span className="app-shell__link-label">Candidates</span>
-              <kbd className="app-shell__link-kbd" aria-hidden="true">C</kbd>
+              <kbd className="app-shell__link-kbd" aria-hidden="true">G C</kbd>
             </NavLink>
             <NavLink to="/in-review" className={getNavLinkClassName} title="Go to In Review · G N">
               <span className="app-shell__nav-icon"><IcoFilter size={14} /></span>
               <span className="app-shell__link-label">In Review</span>
-              <kbd className="app-shell__link-kbd" aria-hidden="true">N</kbd>
+              <kbd className="app-shell__link-kbd" aria-hidden="true">G N</kbd>
             </NavLink>
             <NavLink to="/bugs" className={getNavLinkClassName} title="Go to Bugs · G U">
               <span className="app-shell__nav-icon"><IcoBug size={14} /></span>
               <span className="app-shell__link-label">Bugs</span>
-              <kbd className="app-shell__link-kbd" aria-hidden="true">U</kbd>
+              <kbd className="app-shell__link-kbd" aria-hidden="true">G U</kbd>
             </NavLink>
             <NavLink to="/graph" className={getNavLinkClassName} title="Go to Graph · G R">
               <span className="app-shell__nav-icon"><IcoGraph size={14} /></span>
               <span className="app-shell__link-label">Graph</span>
-              <kbd className="app-shell__link-kbd" aria-hidden="true">R</kbd>
+              <kbd className="app-shell__link-kbd" aria-hidden="true">G R</kbd>
             </NavLink>
             <NavLink to="/inbox" className={getNavLinkClassName} title="Go to Inbox · G I">
               <span className="app-shell__nav-icon"><IcoInbox size={14} /></span>
               <span className="app-shell__link-label">Inbox</span>
-              <kbd className="app-shell__link-kbd" aria-hidden="true">I</kbd>
+              <kbd className="app-shell__link-kbd" aria-hidden="true">G I</kbd>
             </NavLink>
             <NavLink to="/my-issues" className={getNavLinkClassName} title="Go to My Issues · G M">
               <span className="app-shell__nav-icon"><IcoIssues size={14} /></span>
               <span className="app-shell__link-label">My Issues</span>
-              <kbd className="app-shell__link-kbd" aria-hidden="true">M</kbd>
+              <kbd className="app-shell__link-kbd" aria-hidden="true">G M</kbd>
             </NavLink>
             <NavLink to="/views" className={getNavLinkClassName} title="Go to Views · G W">
               <span className="app-shell__nav-icon"><IcoViews size={14} /></span>
               <span className="app-shell__link-label">Views</span>
-              <kbd className="app-shell__link-kbd" aria-hidden="true">W</kbd>
+              <kbd className="app-shell__link-kbd" aria-hidden="true">G W</kbd>
             </NavLink>
           </nav>
 
@@ -1121,12 +1116,12 @@ export function App() {
               <NavLink to="/projects" className={getNavLinkClassName} title="Go to Projects · G P">
                 <span className="app-shell__nav-icon"><IcoProject size={14} /></span>
                 <span className="app-shell__link-label">Projects</span>
-                <kbd className="app-shell__link-kbd" aria-hidden="true">P</kbd>
+                <kbd className="app-shell__link-kbd" aria-hidden="true">G P</kbd>
               </NavLink>
               <NavLink to="/members" className={getNavLinkClassName} title="Go to Members · G E">
                 <span className="app-shell__nav-icon"><IcoTeam size={14} /></span>
                 <span className="app-shell__link-label">Members</span>
-                <kbd className="app-shell__link-kbd" aria-hidden="true">E</kbd>
+                <kbd className="app-shell__link-kbd" aria-hidden="true">G E</kbd>
               </NavLink>
             </nav>
           </div>
@@ -1232,6 +1227,15 @@ export function App() {
               <button
                 type="button"
                 className="app-shell__footer-settings"
+                title="Keyboard shortcuts · ?"
+                onClick={() => setIsShortcutsOpen(true)}
+                aria-label="Keyboard shortcuts"
+              >
+                <IcoKeyboard size={14} />
+              </button>
+              <button
+                type="button"
+                className="app-shell__footer-settings"
                 title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
                 onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
               >
@@ -1261,6 +1265,15 @@ export function App() {
           ) : (
             <div className="app-shell__sidebar-footer-row">
               <NotificationsBell authenticated={Boolean(session?.authenticated)} />
+              <button
+                type="button"
+                className="app-shell__footer-settings"
+                title="Keyboard shortcuts · ?"
+                onClick={() => setIsShortcutsOpen(true)}
+                aria-label="Keyboard shortcuts"
+              >
+                <IcoKeyboard size={14} />
+              </button>
               <button
                 type="button"
                 className="app-shell__footer-settings"
@@ -1386,11 +1399,22 @@ export function App() {
         sidebarWidth={sidebarWidth}
         theme={theme}
       />
+      {isGotoActive ? (
+        <div className="goto-chord-indicator" role="status" aria-live="polite">
+          <kbd>G</kbd>
+          <span>Go to… (B, L, C, N, U, R, I, M, P, V, W, E, S)</span>
+        </div>
+      ) : null}
+      <KeyboardShortcutsDialog
+        open={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
+      />
     </div>
   );
 }
 
 export { CommandPalette } from './app/CommandPalette';
+export { KeyboardShortcutsDialog } from './app/KeyboardShortcutsDialog';
 export { TweaksPanel } from './app/TweaksPanel';
 export { useShellController } from './app/useShellController';
 export {
