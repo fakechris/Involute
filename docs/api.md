@@ -527,7 +527,8 @@ involute work claim INV-142
 
 ### `commentCreate`
 
-Creates a comment on an issue.
+Creates a comment on an issue, and resolves its `@handle` mentions server-side
+in the same transaction (INV-558).
 
 ```graphql
 mutation CommentCreate($input: CommentCreateInput!) {
@@ -538,10 +539,39 @@ mutation CommentCreate($input: CommentCreateInput!) {
       body
       createdAt
       user { id name email }
+      mentions { id actor { id name handle actorKind } }
     }
   }
 }
 ```
+
+#### Mention resolution
+
+`@handle` in a comment body is resolved to an `actorId` by the server, not by
+the consumer. Matching strings in a client would double-fire when a second
+consumer comes online, and would treat `@foo` inside a pasted snippet as a real
+mention.
+
+- **Handle** — `User.handle`, lowercase, `^[a-z0-9][a-z0-9_-]{0,31}$`, unique
+  across all actors. `agent:create` assigns one automatically (slugified from
+  the agent name, numeric suffix on collision); `--handle mia` sets it
+  explicitly. Re-issuing a credential backfills a handle for agents created
+  before INV-558.
+- **Only AGENT actors resolve.** A handle owned by a HUMAN produces no mention
+  row; mentioning humans is a separate notification surface.
+- **Code is never a mention.** `@` inside a fenced block (triple backtick or
+  triple tilde, including an unterminated one) or an inline code span is
+  ignored.
+- **Not every `@` is a mention.** An `@` preceded by a word character, `.`, `-`,
+  `/`, or another `@` is skipped, so `admin@involute.local` and `@@unique` do
+  not resolve. A run longer than 32 characters resolves to nothing rather than
+  being truncated onto a real actor.
+- **Unknown handles are silently dropped** — a typo must not fail the write.
+- **Repeats collapse** — `(commentId, actorId)` is unique, so `@mia @mia` is one
+  mention row.
+
+Mentions are stored by difference, so an edit that withdraws an `@` deletes that
+row while leaving untouched mentions (and their `createdAt`) alone.
 
 ### `commentDelete`
 

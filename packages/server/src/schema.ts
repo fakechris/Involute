@@ -369,6 +369,8 @@ const typeDefs = /* GraphQL */ `
     isMe: Boolean
     globalRole: GlobalRole!
     actorKind: ActorKind!
+    """Lowercase alias this actor is addressed by in comments, as in @mia."""
+    handle: String
   }
 
   enum GlobalRole {
@@ -410,6 +412,14 @@ const typeDefs = /* GraphQL */ `
     body: String!
     createdAt: DateTime!
     user: User
+    """Actors resolved server-side from the @handles in the body (INV-558)."""
+    mentions: [CommentMention!]!
+  }
+
+  type CommentMention {
+    id: ID!
+    actor: User!
+    createdAt: DateTime!
   }
 
   enum CommentOrderBy {
@@ -2837,6 +2847,22 @@ const resolvers = {
           id: parent.userId,
         },
       }),
+    mentions: async (
+      parent: CommentParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<Array<{ actor: User; createdAt: Date; id: string }>> => {
+      const mentions = await context.prisma.commentMention.findMany({
+        where: { commentId: parent.id },
+        include: { actor: true },
+        orderBy: { createdAt: 'asc' },
+      });
+      return mentions.map((mention) => ({
+        actor: mention.actor,
+        createdAt: mention.createdAt,
+        id: mention.id,
+      }));
+    },
   },
   Issue: {
     priority: (parent: IssueParent): number => parent.priority,

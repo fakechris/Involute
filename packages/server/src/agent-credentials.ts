@@ -2,6 +2,8 @@ import { createHash, randomBytes } from 'node:crypto';
 
 import type { PrismaClient, User } from '@prisma/client';
 
+import { HANDLE_PATTERN, MAX_HANDLE_LENGTH, isValidHandle, normalizeHandle } from './mention-parser.js';
+
 export const AGENT_TOKEN_PREFIX = 'inv_agent_';
 
 // Linear-mapped scopes: `read` is always granted (like Linear's default read
@@ -51,9 +53,50 @@ export interface AgentPrincipal {
 export interface IssueAgentCredentialInput {
   email?: string | null;
   expiresAt?: Date | null;
+  handle?: string | null;
   name: string;
   scopes?: AgentScope[] | null | undefined;
   teamKey: string;
+}
+
+// An agent that cannot be spelled cannot be mentioned (INV-558), so issuance
+// always lands a handle. Explicit `--handle` wins; otherwise the name is
+// slugified, with a numeric suffix on collision.
+export async function allocateAgentHandle(
+  prisma: PrismaClient | import('@prisma/client').Prisma.TransactionClient,
+  requested: string | null | undefined,
+  fallbackName: string,
+): Promise<string> {
+  const explicit = requested ? normalizeHandle(requested) : '';
+
+  if (explicit) {
+    if (!isValidHandle(explicit)) {
+      throw new Error(`Invalid agent handle: ${explicit}. Expected ${HANDLE_PATTERN}.`);
+    }
+    const taken = await prisma.user.findUnique({ where: { handle: explicit } });
+    if (taken) {
+      throw new Error(`Agent handle already taken: ${explicit}.`);
+    }
+    return explicit;
+  }
+
+  const base = normalizeHandle(fallbackName).replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '')
+    .slice(0, MAX_HANDLE_LENGTH) || 'agent';
+
+  for (let suffix = 0; suffix < 1000; suffix += 1) {
+    const candidate = suffix === 0
+      ? base
+      : `${base.slice(0, MAX_HANDLE_LENGTH - String(suffix).length - 1)}-${suffix}`;
+    if (!isValidHandle(candidate)) {
+      continue;
+    }
+    const taken = await prisma.user.findUnique({ where: { handle: candidate } });
+    if (!taken) {
+      return candidate;
+    }
+  }
+
+  throw new Error(`Could not allocate a free handle for agent "${fallbackName}".`);
 }
 
 export interface IssuedAgentCredential {
@@ -94,8 +137,21 @@ export async function issueAgentCredential(
     throw new Error(`User ${normalizedEmail} already exists and is not an AGENT.`);
   }
   const user = existing ?? await prisma.user.create({
-    data: { actorKind: 'AGENT', email: normalizedEmail, name },
+    data: {
+      actorKind: 'AGENT',
+      email: normalizedEmail,
+      handle: await allocateAgentHandle(prisma, input.handle, name),
+      name,
+    },
   });
+  // Backfill: agents issued before INV-558 have no handle, so re-issuing a
+  // credential is how they become mentionable. A no-op rename is not a clash.
+  const requestedHandle = input.handle ? normalizeHandle(input.handle) : '';
+  if (existing && requestedHandle !== existing.handle && (!existing.handle || requestedHandle)) {
+    const handle = await allocateAgentHandle(prisma, input.handle, name);
+    await prisma.user.update({ where: { id: existing.id }, data: { handle } });
+    existing.handle = handle;
+  }
   await prisma.teamMembership.upsert({
     where: { teamId_userId: { teamId: team.id, userId: user.id } },
     create: { role: 'EDITOR', teamId: team.id, userId: user.id },

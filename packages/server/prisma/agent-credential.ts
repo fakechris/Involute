@@ -22,13 +22,14 @@ async function main(): Promise<void> {
   if (command === 'create') {
     const [teamKey, name, email, expiresAtValue] = args;
     if (!teamKey || !name || !email) {
-      throw new Error('Usage: agent:create <team-key> <name> <email> [expires-at] [--scopes read,propose,claim,report,update,link]');
+      throw new Error('Usage: agent:create <team-key> <name> <email> [expires-at] [--scopes read,propose,claim,report,update,link] [--handle mia]');
     }
     const scopes = parseAgentScopes(readFlag(args, 'scopes'));
     const expiresAt = expiresAtValue && !expiresAtValue.startsWith('--') ? new Date(expiresAtValue) : null;
     const { credential, token } = await issueAgentCredential(prisma, {
       email,
       expiresAt,
+      handle: readFlag(args, 'handle'),
       name,
       scopes,
       teamKey,
