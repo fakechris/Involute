@@ -100,3 +100,37 @@ export async function seedDatabase(
     }
   }
 }
+
+/**
+ * Wipes every table and re-seeds, for test setup.
+ *
+ * One TRUNCATE instead of a chain of cascading `deleteMany` calls: the chain
+ * gets slow enough on a loaded test database to intermittently trip vitest's
+ * 10s hook timeout, and it has to be kept in FK order by hand.
+ *
+ * Refuses to run against anything but a `_test` database — the same guard
+ * `src/test-setup.ts` applies, repeated here because this helper is destructive
+ * on its own.
+ */
+export async function truncateAndSeed(prisma: PrismaClient): Promise<void> {
+  const [database] = await prisma.$queryRaw<Array<{ current_database: string }>>`
+    SELECT current_database()
+  `;
+  const name = database?.current_database ?? '';
+
+  if (!name.endsWith('_test') && process.env.ALLOW_TESTS_ON_PROD_DB !== 'true') {
+    throw new Error(`[SECURITY FATAL] Refusing to truncate non-test database '${name}'.`);
+  }
+
+  const tables = await prisma.$queryRaw<Array<{ tablename: string }>>`
+    SELECT tablename FROM pg_tables
+    WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'
+  `;
+
+  if (tables.length > 0) {
+    const list = tables.map((table) => `"public"."${table.tablename}"`).join(', ');
+    await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+  }
+
+  await seedDatabase(prisma);
+}
