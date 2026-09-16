@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@apollo/client/react';
 
-import type { CommentSummary, IssueSummary, TeamSummary } from '../board/types';
+import type { CommentSummary, IssueSummary, TeamSummary, UserSummary } from '../board/types';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { ActorBadge } from './ActorBadge';
 import { RichTextEditor } from './RichTextEditor';
+import { AGENTS_QUERY } from '../board/queries';
 
 interface IssueDetailDrawerProps {
   issue: IssueSummary | null;
@@ -68,6 +71,16 @@ export function IssueDetailDrawer({
   const [commentBody, setCommentBody] = useState('');
   const isSavingTitleRef = useRef(false);
   const titleTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // The same directory the server resolves `@handle` against, so what you can
+  // pick is exactly what will resolve (INV-573). Fetched only once someone
+  // actually types `@` — opening an issue should not cost an extra round trip.
+  const [wantsMentions, setWantsMentions] = useState(false);
+  const { data: agentsData } = useQuery<{ agents: UserSummary[] }>(AGENTS_QUERY, {
+    variables: { teamKey: team?.key ?? null },
+    skip: !team || !wantsMentions,
+    fetchPolicy: 'cache-first',
+  });
+  const mentionables = agentsData?.agents ?? [];
 
   useEffect(() => {
     setSelectedStateId(issue?.state.id ?? '');
@@ -77,17 +90,6 @@ export function IssueDetailDrawer({
     setTitle(issue?.title ?? '');
     setIsEditingTitle(false);
   }, [issue?.id, issue?.title]);
-
-  useEffect(() => {
-    const titleTextarea = titleTextareaRef.current;
-
-    if (!titleTextarea) {
-      return;
-    }
-
-    titleTextarea.style.height = '0px';
-    titleTextarea.style.height = `${Math.max(titleTextarea.scrollHeight, 64)}px`;
-  }, [title, issue?.id]);
 
   useEffect(() => {
     setDescription(issue?.description ?? '');
@@ -106,6 +108,13 @@ export function IssueDetailDrawer({
   }, [issue?.id]);
 
   const states = useMemo(() => team?.states.nodes ?? [], [team]);
+  // Plain-text author label for the activity timeline, where a badge would not
+  // fit. The rendered discussion uses <ActorBadge> instead.
+  function commentAuthorLabel(comment: CommentSummary): string {
+    const base = comment.user?.name ?? comment.user?.email ?? 'Unknown author';
+    return comment.user?.handle ? `${base} (@${comment.user.handle})` : base;
+  }
+
   const comments = useMemo(
     () =>
       issue
@@ -159,7 +168,7 @@ export function IssueDetailDrawer({
       entries.push({
         id: comment.id,
         meta: comment.createdAt,
-        title: `${renderCommentAuthor(comment)} commented`,
+        title: `${commentAuthorLabel(comment)} commented`,
       });
     });
 
@@ -215,10 +224,6 @@ export function IssueDetailDrawer({
     }).format(new Date(createdAt));
   }
 
-  function renderCommentAuthor(comment: CommentSummary) {
-    return comment.user?.name ?? comment.user?.email ?? 'Unknown author';
-  }
-
   function confirmIssueDelete(): boolean {
     return window.confirm(`Delete ${activeIssue.identifier}? This cannot be undone.`);
   }
@@ -249,6 +254,11 @@ export function IssueDetailDrawer({
             <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
               {activeIssue.identifier}
             </span>
+            {activeIssue.proposedByActor ? (
+              <span className="issue-panel__provenance">
+                proposed by <ActorBadge actor={activeIssue.proposedByActor} />
+              </span>
+            ) : null}
           </div>
           <div className="issue-panel__header-actions">
             {layout === 'drawer' && (previousIssue || nextIssue) ? (
@@ -295,6 +305,13 @@ export function IssueDetailDrawer({
 
         <div className="issue-panel__body">
           <div className="issue-panel__main">
+            {/*
+              Auto-grows via CSS: the wrapper's ::after mirrors the text in the
+              same grid cell, so the box is always as tall as its content. No
+              measurement, so nothing goes stale when the font finishes loading
+              or the panel changes width.
+            */}
+            <div className="issue-panel__title-autogrow" data-title={title}>
             <textarea
               ref={titleTextareaRef}
               aria-label="Issue title"
@@ -316,6 +333,7 @@ export function IssueDetailDrawer({
                 }
               }}
             />
+            </div>
             <span className="issue-panel__inline-hint" aria-live="polite">
               {isEditingTitle ? 'Press Enter or blur to save' : 'Editable title'}
             </span>
@@ -408,7 +426,7 @@ export function IssueDetailDrawer({
                   {comments.map((comment) => (
                     <li key={comment.id} className="discussion-entry">
                       <div className="discussion-entry__meta">
-                        <strong>{renderCommentAuthor(comment)}</strong>
+                        <ActorBadge actor={comment.user} />
                         <div className="discussion-entry__actions">
                           <time dateTime={comment.createdAt}>
                             {formatCommentTimestamp(comment.createdAt)}
@@ -441,7 +459,9 @@ export function IssueDetailDrawer({
               <RichTextEditor
                 value={commentBody}
                 onChange={setCommentBody}
-                placeholder="Add a comment…"
+                mentionables={mentionables}
+                onMentionStart={() => setWantsMentions(true)}
+                placeholder="Add a comment… use @ to ask an agent"
                 ariaLabel="Comment body"
                 submitLabel="Add comment"
                 disabled={savingState}

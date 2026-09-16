@@ -2578,6 +2578,39 @@ kbd {
   color: var(--fg-dim);
 }
 
+/*
+  Auto-growing title. The ::after mirrors the text in the same grid cell, so
+  the row is always as tall as the wrapped title and the textarea stretches to
+  fill it. Measuring scrollHeight in JS instead left a stale height whenever
+  the panel reflowed after the measurement (webfont load, drawer -> page,
+  window resize), and `overflow: hidden` then clipped every line but the first.
+*/
+.issue-panel__title-autogrow {
+  display: grid;
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.issue-panel__title-autogrow::after {
+  content: attr(data-title) ' ';
+  visibility: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.issue-panel__title-autogrow > .issue-panel__title-input,
+.issue-panel__title-autogrow::after {
+  grid-area: 1 / 1 / 2 / 2;
+  min-height: 40px;
+  padding: 0;
+  border: 0;
+  font: inherit;
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+}
+
 .issue-panel__title-input {
   min-height: 40px;
   resize: none;
@@ -2591,7 +2624,6 @@ kbd {
   line-height: 1.25;
   letter-spacing: -0.015em;
   color: var(--fg);
-  margin-bottom: 12px;
   width: 100%;
 }
 
@@ -4777,3 +4809,167 @@ kbd {
   opacity: 0.7;
 }
 
+
+/* INV-573: an actor is legible where you read it — kind, handle, runtime,
+   and when it was last around. Previously a comment showed only a name, so a
+   person could not tell an agent from a colleague. */
+.actor-badge {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.actor-badge__glyph {
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+
+.actor-badge__name {
+  font-weight: 600;
+}
+
+.actor-badge__name--link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--fg);
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+.actor-badge__handle {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.actor-badge__kind,
+.actor-badge__fact {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-1, 4px);
+  padding: 0 4px;
+}
+
+.actor-badge--service .actor-badge__kind {
+  border-style: dashed;
+}
+
+.issue-panel__provenance {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+/* Agents directory */
+.agent-directory__list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.agent-directory__row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-2, 6px);
+}
+
+.agent-directory__meta {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.agent-directory__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.agent-timeline {
+  display: grid;
+  gap: 6px;
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  font-size: 12px;
+}
+
+.agent-timeline__entry {
+  display: flex;
+  gap: 8px;
+  color: var(--fg-dim);
+}
+
+.agent-timeline__kind {
+  min-width: 72px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+}
+
+/* @-completion popup in the comment composer */
+.mention-suggest {
+  position: relative;
+}
+
+.mention-suggest__list {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  z-index: 20;
+  min-width: 260px;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0 0 4px;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2, 6px);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 25%);
+}
+
+.mention-suggest__option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--r-1, 4px);
+  background: none;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mention-suggest__option[aria-selected='true'],
+.mention-suggest__option:hover {
+  background: var(--bg-hover, rgb(255 255 255 / 6%));
+}
+
+.mention-suggest__handle {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+.mention-suggest__detail {
+  font-size: 11px;
+  color: var(--fg-dim);
+}
