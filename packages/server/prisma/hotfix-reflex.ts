@@ -1,6 +1,7 @@
 import { PrismaClient, type Prisma } from '@prisma/client';
 
 import { commitWork, proposeWork } from '../src/claim-service.ts';
+import { HOTFIX_REFLEX_ACTOR, ensureServiceActor } from '../src/service-actors.ts';
 import { findWorkByIdOrIdentifier } from '../src/context-service.ts';
 import { writeActorFromViewer } from '../src/work-service.ts';
 import { loadProjectEnvironment } from './env.ts';
@@ -86,6 +87,10 @@ ${title.trim()}
 ### 3. 验收标准与验证方案
 相关修改通过本地自动化测试与 TypeScript 类型检查，验证无功能回归。`;
 
+  // The reflex writes under its own registered identity, so the resulting work
+  // item names who filed it instead of `SERVICE / actorId: null` (INV-573).
+  const reflexActor = await ensureServiceActor(prisma, HOTFIX_REFLEX_ACTOR);
+
   const candidate = await proposeWork(prisma, {
     acceptance: 'Fix verified by automated tests and typecheck; no regression.',
     description,
@@ -100,7 +105,7 @@ ${title.trim()}
     teamId: team.id,
     title: title.trim(),
     verification: 'Automated test suite and typecheck pass cleanly.',
-  });
+  }, reflexActor);
 
   console.log(`\n✓ Successfully created Involute Hotfix Item: [${candidate.identifier}] (${candidate.id})`);
   console.log(`  Title: ${candidate.title}`);

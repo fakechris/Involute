@@ -92,8 +92,20 @@ export interface RejectWorkInput {
   reason?: string | null;
 }
 
+// Commit, reject and accept are the human gates: "agents propose, humans
+// commit". They are stated as a capability set per actor kind rather than as
+// "is this an AGENT", because the old shape granted them to everything that
+// was not literally an AGENT — including SERVICE, which is what
+// `writeActorFromViewer` returns for a null viewer. An actor we could not
+// identify was therefore *more* privileged than a registered agent (INV-573).
+const HUMAN_GATED_PERMISSIONS: readonly WorkPermission[] = ['commit', 'reject', 'accept'];
+
 export function assertActorCan(actorKind: ActorKind | null | undefined, permission: WorkPermission): void {
-  if (actorKind !== 'AGENT') {
+  if (!HUMAN_GATED_PERMISSIONS.includes(permission)) {
+    return;
+  }
+
+  if (actorKind === 'HUMAN') {
     return;
   }
 
@@ -105,9 +117,7 @@ export function assertActorCan(actorKind: ActorKind | null | undefined, permissi
     throw createValidationError(WORK_REJECT_FORBIDDEN_MESSAGE);
   }
 
-  if (permission === 'accept') {
-    throw createValidationError(WORK_ACCEPT_FORBIDDEN_MESSAGE);
-  }
+  throw createValidationError(WORK_ACCEPT_FORBIDDEN_MESSAGE);
 }
 
 export const STATUS_PREFIX_REGEX = /^\[(已交付|已完成|待办|已解决|已关闭|进行中|done|completed|todo|fixed|in progress)\]\s*/i;
