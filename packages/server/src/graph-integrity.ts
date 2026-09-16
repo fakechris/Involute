@@ -39,3 +39,41 @@ export async function assertNodeHierarchy(tx: Prisma.TransactionClient, node: No
   ] } });
   for (const child of children) assertContainsEndpoints(node, child);
 }
+
+/**
+ * Recursively find all descendant node IDs reachable via CONTAINS hierarchy
+ * (inspecting both parentId and WorkLink type=CONTAINS).
+ */
+export async function getContainsDescendantIds(
+  tx: Prisma.TransactionClient,
+  rootId: string,
+): Promise<string[]> {
+  const visited = new Set<string>();
+  const queue: string[] = [rootId];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    const links = await tx.workLink.findMany({
+      where: { type: 'CONTAINS', fromId: currentId },
+      select: { toId: true },
+    });
+    const children = await tx.issue.findMany({
+      where: {
+        OR: [
+          { parentId: currentId },
+          { id: { in: links.map((link) => link.toId) } },
+        ],
+      },
+      select: { id: true },
+    });
+
+    for (const child of children) {
+      if (!visited.has(child.id) && child.id !== rootId) {
+        visited.add(child.id);
+        queue.push(child.id);
+      }
+    }
+  }
+
+  return Array.from(visited);
+}
