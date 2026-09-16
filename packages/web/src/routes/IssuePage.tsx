@@ -35,6 +35,7 @@ import type {
   CyclesQueryData,
   CyclesQueryVariables,
 } from '../board/types';
+import { ActorBadge } from '../components/ActorBadge';
 import { mergeIssueWithPreservedComments } from '../board/utils';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { writeStoredShellIssue } from '../lib/app-shell-state';
@@ -593,6 +594,30 @@ export function IssuePage() {
           <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
             {activeIssue.identifier}
           </span>
+          {activeIssue.provenance ? (
+            <span className="issue-panel__provenance">
+              {activeIssue.provenance.actor ? (
+                <>
+                  proposed by{' '}
+                  <ActorBadge
+                    actor={activeIssue.provenance.actor}
+                    onSelect={(picked) => navigate(`/agents/${picked}`)}
+                  />
+                </>
+              ) : (
+                <>
+                  proposed via{' '}
+                  {[
+                    activeIssue.provenance.source,
+                    activeIssue.provenance.surface,
+                    activeIssue.provenance.actorKind?.toLowerCase(),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || 'an unidentified path'}
+                </>
+              )}
+            </span>
+          ) : null}
         </div>
         <div style={{ flex: 1 }} />
         <div className="issue-panel__header-actions">
@@ -771,9 +796,10 @@ export function IssuePage() {
                       <Avatar user={{ name: renderCommentAuthor(entry.comment) }} size={22} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="issue-activity__comment-meta">
-                          <span style={{ fontSize: 14.5, fontWeight: 500, color: 'var(--fg)' }}>
-                            {renderCommentAuthor(entry.comment)}
-                          </span>
+                          <ActorBadge
+                            actor={entry.comment.user}
+                            onSelect={(picked) => navigate(`/agents/${picked}`)}
+                          />
                           <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
                             {formatTimestamp(entry.timestamp)}
                           </span>

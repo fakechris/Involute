@@ -6,7 +6,7 @@ interface MarkdownRendererProps {
 }
 
 interface ParsedToken {
-  type: 'text' | 'bold' | 'italic' | 'code' | 'codeblock' | 'link' | 'image' | 'br';
+  type: 'text' | 'bold' | 'italic' | 'code' | 'codeblock' | 'link' | 'image' | 'br' | 'mention';
   content?: string;
   children?: ParsedToken[];
   href?: string;
@@ -19,6 +19,15 @@ const VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mov'];
 function isVideoUrl(href: string): boolean {
   const path = href.split(/[?#]/)[0]?.toLowerCase() ?? '';
   return VIDEO_EXTENSIONS.some((extension) => path.endsWith(extension));
+}
+
+/** The character before `@` must not make it part of another token. */
+function isMentionBoundary(text: string, index: number): boolean {
+  if (index === 0) {
+    return true;
+  }
+  const previous = text[index - 1] ?? '';
+  return !/[A-Za-z0-9_@.\-/]/.test(previous);
 }
 
 function tokenizeInline(text: string): ParsedToken[] {
@@ -39,6 +48,16 @@ function tokenizeInline(text: string): ParsedToken[] {
     if (linkMatch) {
       tokens.push({ type: 'link', content: linkMatch[1] ?? '', href: linkMatch[2] ?? '' });
       remaining = remaining.slice(linkMatch[0].length);
+      continue;
+    }
+
+    // Mention: @handle. Only at a token boundary — `admin@involute.local` is
+    // an email, not a mention, and the server would not have resolved it
+    // either (INV-558).
+    const mentionMatch = remaining.match(/^@([a-z0-9][a-z0-9_-]{0,31})(?![a-z0-9_-])/i);
+    if (mentionMatch && isMentionBoundary(text, text.length - remaining.length)) {
+      tokens.push({ type: 'mention', content: (mentionMatch[1] ?? '').toLowerCase() });
+      remaining = remaining.slice(mentionMatch[0].length);
       continue;
     }
 
@@ -91,6 +110,14 @@ function renderTokens(tokens: ParsedToken[], keyPrefix: string): ReactNode[] {
         return <em key={key}>{renderTokens(token.children ?? [], key)}</em>;
       case 'code':
         return <code key={key}>{token.content}</code>;
+      case 'mention':
+        // Routed client-side so the agent's page is one click from the place
+        // it was mentioned.
+        return (
+          <a key={key} className="markdown-mention" href={`/agents/${token.content}`}>
+            @{token.content}
+          </a>
+        );
       case 'link':
         if (isVideoUrl(token.href ?? '')) {
           return (

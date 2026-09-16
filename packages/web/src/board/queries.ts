@@ -367,6 +367,22 @@ export const ISSUE_PAGE_QUERY = gql`
       cycleId
       project { id name color }
       cycle { id name number }
+      provenance {
+        actorKind
+        surface
+        source
+        actor {
+          id
+          name
+          email
+          handle
+          actorKind
+          runtime
+          presence
+          presenceDetail
+          lastSeenAt
+        }
+      }
       comments(first: 100, orderBy: createdAt) {
         nodes {
           id
@@ -376,6 +392,12 @@ export const ISSUE_PAGE_QUERY = gql`
             id
             name
             email
+            handle
+            actorKind
+            runtime
+            presence
+            presenceDetail
+            lastSeenAt
           }
         }
       }
@@ -1076,6 +1098,15 @@ export const AGENT_PROFILE_QUERY = gql`
         answeredRequests
         runs
         evidence
+      }
+      credentials {
+        id
+        name
+        scopes
+        teamKey
+        createdAt
+        expiresAt
+        revokedAt
       }
       timeline {
         at

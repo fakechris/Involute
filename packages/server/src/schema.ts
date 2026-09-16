@@ -471,6 +471,17 @@ const typeDefs = /* GraphQL */ `
     workIdentifier: String
   }
 
+  """A credential is the record of an agent being brought into existence."""
+  type AgentCredentialSummary {
+    id: ID!
+    name: String!
+    scopes: [String!]!
+    teamKey: String
+    createdAt: DateTime!
+    expiresAt: DateTime
+    revokedAt: DateTime
+  }
+
   type AgentActivityCounts {
     proposedWork: Int!
     openRequests: Int!
@@ -483,6 +494,8 @@ const typeDefs = /* GraphQL */ `
   type AgentProfile {
     actor: User!
     counts: AgentActivityCounts!
+    """When and how this actor was created, and what it was granted."""
+    credentials: [AgentCredentialSummary!]!
     timeline: [AgentTimelineEntry!]!
   }
 
