@@ -23,8 +23,19 @@ interface AgentProfileData {
       runs: number;
       evidence: number;
     };
+    credentials: AgentCredentialSummary[];
     timeline: AgentTimelineEntry[];
   } | null;
+}
+
+interface AgentCredentialSummary {
+  id: string;
+  name: string;
+  scopes: string[];
+  teamKey: string | null;
+  createdAt: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
 }
 
 /**
@@ -92,6 +103,13 @@ function AgentList() {
   );
 }
 
+function formatStamp(iso: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(iso));
+}
+
 function AgentProfile({ handle }: { handle: string }) {
   const navigate = useNavigate();
   const { data, loading, error } = useQuery<AgentProfileData>(AGENT_PROFILE_QUERY, {
@@ -119,7 +137,7 @@ function AgentProfile({ handle }: { handle: string }) {
     );
   }
 
-  const { actor, counts, timeline } = profile;
+  const { actor, counts, credentials, timeline } = profile;
 
   return (
     <div className="page-shell">
@@ -147,6 +165,32 @@ function AgentProfile({ handle }: { handle: string }) {
         <span>runs {counts.runs}</span>
         <span>evidence {counts.evidence}</span>
       </div>
+
+      <section className="issue-panel__section">
+        <span className="issue-panel__label">Origin</span>
+        {credentials.length === 0 ? (
+          <p className="discussion-empty">
+            No credential on record — this actor cannot authenticate, so it can never answer.
+          </p>
+        ) : (
+          <ul className="agent-directory__list">
+            {credentials.map((credential) => (
+              <li key={credential.id} className="agent-directory__row">
+                <span>
+                  <strong>{credential.name}</strong>
+                  {credential.teamKey ? <span className="actor-badge__handle"> {credential.teamKey}</span> : null}
+                  {credential.revokedAt ? <span className="actor-badge__kind"> REVOKED</span> : null}
+                </span>
+                <span className="agent-directory__meta">
+                  created {formatStamp(credential.createdAt)}
+                  {credential.expiresAt ? ` · expires ${formatStamp(credential.expiresAt)}` : ''}
+                </span>
+                <span className="agent-directory__meta">scopes: {credential.scopes.join(', ')}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="issue-panel__section">
         <span className="issue-panel__label">Recent activity</span>

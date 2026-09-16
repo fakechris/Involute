@@ -4999,3 +4999,15 @@ kbd {
   font-size: 20px;
   font-weight: 600;
 }
+
+/* @handle inside a comment body links to that agent's page (INV-573). */
+.markdown-mention {
+  font-weight: 500;
+  color: var(--accent, var(--fg));
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+}
+
+.markdown-mention:hover {
+  opacity: 0.8;
+}

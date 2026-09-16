@@ -20,9 +20,25 @@ export interface AgentTimelineEntry {
   workIdentifier: string | null;
 }
 
+export interface AgentCredentialSummary {
+  createdAt: Date;
+  expiresAt: Date | null;
+  id: string;
+  name: string;
+  revokedAt: Date | null;
+  scopes: string[];
+  teamKey: string | null;
+}
+
 export interface AgentProfile {
   actor: User;
   counts: AgentActivityCounts;
+  /**
+   * Where this actor came from. A credential is the only record of an agent
+   * being brought into existence — when, under what name, with which rights —
+   * so without it "what is this thing and who made it" is unanswerable.
+   */
+  credentials: AgentCredentialSummary[];
   timeline: AgentTimelineEntry[];
 }
 
@@ -95,9 +111,32 @@ export async function getAgentProfile(
     prisma.workAudit.count({ where: { actorId: actor.id, revision: 1 } }),
   ]);
 
+  const credentials = await prisma.agentCredential.findMany({
+    where: { userId: actor.id },
+    select: {
+      createdAt: true,
+      expiresAt: true,
+      id: true,
+      name: true,
+      revokedAt: true,
+      scopes: true,
+      team: { select: { key: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
   return {
     actor,
     counts: { answeredRequests, evidence, openRequests, proposedWork, runs },
+    credentials: credentials.map((credential) => ({
+      createdAt: credential.createdAt,
+      expiresAt: credential.expiresAt,
+      id: credential.id,
+      name: credential.name,
+      revokedAt: credential.revokedAt,
+      scopes: credential.scopes,
+      teamKey: credential.team?.key ?? null,
+    })),
     timeline: await buildTimeline(prisma, actor.id),
   };
 }

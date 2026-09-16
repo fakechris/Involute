@@ -135,6 +135,26 @@ describe('agent directory and profile (INV-573)', () => {
       expect(profile!.timeline.some((entry) => entry.kind === 'answered')).toBe(true);
     });
 
+    it('reports the credentials that brought the actor into existence', async () => {
+      // Without this, "what is this thing and who made it" is unanswerable
+      // from the UI — a credential is the only record of an agent's creation.
+      await issueAgentCredential(prisma, {
+        handle: 'mia',
+        name: 'Mia',
+        runtime: 'lumenbox',
+        teamKey: DEFAULT_TEAM_KEY,
+      });
+
+      const profile = await getAgentProfile(prisma, 'mia');
+
+      expect(profile!.credentials).toHaveLength(1);
+      expect(profile!.credentials[0]!.name).toBe('Mia');
+      expect(profile!.credentials[0]!.teamKey).toBe(DEFAULT_TEAM_KEY);
+      expect(profile!.credentials[0]!.scopes).toContain('answer');
+      expect(profile!.credentials[0]!.revokedAt).toBeNull();
+      expect(profile!.credentials[0]!.createdAt).toBeInstanceOf(Date);
+    });
+
     it('is addressable by handle with or without the @', async () => {
       await issueAgentCredential(prisma, { name: 'Mia', handle: 'mia', teamKey: DEFAULT_TEAM_KEY });
 
