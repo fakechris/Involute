@@ -49,6 +49,7 @@ export interface UserSummary {
   presence?: string;
   presenceDetail?: string;
   lastSeenAt?: string | null;
+  agentCardUrl?: string | null;
 }
 
 export interface AccessUserSummary extends UserSummary {
@@ -137,8 +138,13 @@ export interface IssueSummary {
     title: string;
     kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
   } | null;
-  /** The actor that created this work — human or agent (INV-573). */
-  proposedByActor?: UserSummary | null;
+  /** How this work got here; `actor` is null for internal/service writes (INV-573). */
+  provenance?: {
+    actor: UserSummary | null;
+    actorKind: string | null;
+    surface: string | null;
+    source: string | null;
+  } | null;
   comments: {
     nodes: CommentSummary[];
   };

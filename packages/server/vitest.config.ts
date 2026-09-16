@@ -11,6 +11,6 @@ export default defineConfig({
     // (~0.5s), but under load it waits, and the 5s/10s defaults turn that wait
     // into a spurious failure rather than a slower pass.
     hookTimeout: 30_000,
-    testTimeout: 20_000,
+    testTimeout: 30_000,
   },
 });

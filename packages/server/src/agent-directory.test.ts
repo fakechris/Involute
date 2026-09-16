@@ -12,7 +12,7 @@ import {
   actorPresence,
 } from './actor-presence.ts';
 import {
-  findProposingActor,
+  findWorkProvenance,
   getAgentProfile,
   listAgentActors,
 } from './agent-directory.ts';
@@ -168,10 +168,39 @@ describe('agent directory and profile (INV-573)', () => {
         { actorId: credential.userId, actorKind: 'AGENT', surface: 'test' },
       );
 
-      const proposer = await findProposingActor(prisma, created.id);
+      const provenance = await findWorkProvenance(prisma, created.id);
 
-      expect(proposer?.id).toBe(credential.userId);
-      expect(proposer?.handle).toBe('proposer');
+      expect(provenance.actor?.id).toBe(credential.userId);
+      expect(provenance.actor?.handle).toBe('proposer');
+      expect(provenance.actorKind).toBe('AGENT');
+    });
+
+    it('still says what happened when the creating path recorded no actor', async () => {
+      // The hotfix reflex and other internal writes record SERVICE with no
+      // actor row. Returning only the actor left the UI blank there, which
+      // reads as a bug rather than as "nothing identified itself".
+      const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
+      const state = await prisma.workflowState.findFirstOrThrow({
+        where: { name: 'Ready', teamId: team.id },
+      });
+      const issue = await prisma.issue.create({
+        data: { identifier: 'INV-907', stateId: state.id, teamId: team.id, title: 'Internal' },
+      });
+      await prisma.workAudit.create({
+        data: {
+          actorKind: 'SERVICE',
+          after: {},
+          revision: 1,
+          surface: 'internal',
+          workId: issue.id,
+        },
+      });
+
+      const provenance = await findWorkProvenance(prisma, issue.id);
+
+      expect(provenance.actor).toBeNull();
+      expect(provenance.actorKind).toBe('SERVICE');
+      expect(provenance.surface).toBe('internal');
     });
   });
 

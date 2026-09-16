@@ -254,9 +254,30 @@ export function IssueDetailDrawer({
             <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
               {activeIssue.identifier}
             </span>
-            {activeIssue.proposedByActor ? (
+            {activeIssue.provenance ? (
               <span className="issue-panel__provenance">
-                proposed by <ActorBadge actor={activeIssue.proposedByActor} />
+                {activeIssue.provenance.actor ? (
+                  <>
+                    proposed by{' '}
+                    <ActorBadge
+                      actor={activeIssue.provenance.actor}
+                      onSelect={(picked) => navigate(`/agents/${picked}`)}
+                    />
+                  </>
+                ) : (
+                  // No actor was recorded (internal/service writes). Say what
+                  // did happen rather than showing nothing, which reads as a bug.
+                  <>
+                    proposed via{' '}
+                    {[
+                      activeIssue.provenance.source,
+                      activeIssue.provenance.surface,
+                      activeIssue.provenance.actorKind?.toLowerCase(),
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || 'an unidentified path'}
+                  </>
+                )}
               </span>
             ) : null}
           </div>
@@ -426,7 +447,10 @@ export function IssueDetailDrawer({
                   {comments.map((comment) => (
                     <li key={comment.id} className="discussion-entry">
                       <div className="discussion-entry__meta">
-                        <ActorBadge actor={comment.user} />
+                        <ActorBadge
+                          actor={comment.user}
+                          onSelect={(picked) => navigate(`/agents/${picked}`)}
+                        />
                         <div className="discussion-entry__actions">
                           <time dateTime={comment.createdAt}>
                             {formatCommentTimestamp(comment.createdAt)}
