@@ -236,6 +236,11 @@ export async function callMcpTool(
       assignOptional(updateInput, 'outcome', optionalString(args.outcome));
       assignOptional(updateInput, 'priority', optionalNumber(args.priority));
       assignOptional(updateInput, 'repository', optionalString(args.repository));
+      if (args.cascade_repository !== undefined) {
+        updateInput.cascadeRepository = Boolean(args.cascade_repository);
+      } else if (args.repository !== undefined) {
+        updateInput.cascadeRepository = true;
+      }
       assignOptional(updateInput, 'scope', optionalString(args.scope));
       const rawTitle = optionalString(args.title);
       assignOptional(updateInput, 'title', rawTitle);
@@ -546,6 +551,10 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         acceptance: { type: 'string' },
         verification: { type: 'string' },
         repository: { type: 'string' },
+        cascade_repository: {
+          type: 'boolean',
+          description: 'When updating repository, cascade the repository change to all CONTAINS descendants (default: true).',
+        },
         priority: { type: 'integer' },
         state: {
           type: 'string',

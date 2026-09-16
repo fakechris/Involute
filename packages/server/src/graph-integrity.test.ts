@@ -102,4 +102,58 @@ describe('hierarchy write boundary', () => {
     const project = await node('PROJECT'); const decision = await node('DECISION');
     await createWorkLink(prisma, { fromId: project.id, toId: decision.id, type: 'CONTAINS' });
   });
+
+  it('cascades repository updates across CONTAINS hierarchy when cascadeRepository is true', async () => {
+    const project = await node('PROJECT');
+    const milestone = await node('MILESTONE', repo, project.id);
+    const child = await node('ISSUE', repo, milestone.id);
+
+    // Attach a WorkRun to child
+    const run = await prisma.workRun.create({
+      data: {
+        publicId: 'RUN-TEST-CASCADE',
+        workId: child.id,
+        repository: repo,
+        status: 'RUNNING',
+      },
+    });
+
+    const newRepo = 'fakechris/lumen-learn';
+    const updated = await updateIssue(prisma, project.id, {
+      repository: newRepo,
+      cascadeRepository: true,
+    });
+
+    expect(updated.repository).toBe(newRepo);
+
+    // Both milestone and child should have been cascaded
+    const updatedMilestone = await prisma.issue.findUniqueOrThrow({ where: { id: milestone.id } });
+    const updatedChild = await prisma.issue.findUniqueOrThrow({ where: { id: child.id } });
+    const updatedRun = await prisma.workRun.findUniqueOrThrow({ where: { id: run.id } });
+
+    expect(updatedMilestone.repository).toBe(newRepo);
+    expect(updatedChild.repository).toBe(newRepo);
+    expect(updatedRun.repository).toBe(newRepo);
+
+    // Verify audits were recorded for cascaded children
+    const milestoneAudits = await prisma.workAudit.findMany({ where: { workId: milestone.id } });
+    const childAudits = await prisma.workAudit.findMany({ where: { workId: child.id } });
+    expect(milestoneAudits.some((a) => (a.after as { repository?: string })?.repository === newRepo)).toBe(true);
+    expect(childAudits.some((a) => (a.after as { repository?: string })?.repository === newRepo)).toBe(true);
+  });
+
+  it('rejects cascading repository update if parent node belongs to a different repository', async () => {
+    const project = await node('PROJECT');
+    const milestone = await node('MILESTONE', repo, project.id);
+    const child = await node('ISSUE', repo, milestone.id);
+
+    // Changing milestone without changing project should still fail because project is still `repo`
+    await expect(
+      updateIssue(prisma, milestone.id, {
+        repository: 'fakechris/other-repo',
+        cascadeRepository: true,
+      }),
+    ).rejects.toThrow('CONTAINS cannot cross repository boundaries.');
+  });
 });
+

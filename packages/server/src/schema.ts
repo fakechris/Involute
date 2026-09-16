@@ -971,6 +971,8 @@ const typeDefs = /* GraphQL */ `
     snoozedUntil: DateTime
     kind: WorkKind
     alias: String
+    repository: String
+    cascadeRepository: Boolean
   }
 
   input ProjectCreateInput {

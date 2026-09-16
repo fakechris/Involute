@@ -29,7 +29,7 @@ import { assertNoWorkLinkCycle, syncContainsFromParentId } from './link-service.
 import { syncCommentMentions } from './mention-service.js';
 import { enqueueCommentEvents } from './comment-events.js';
 import { openAgentRequestsForMentions } from './agent-request-from-mention.js';
-import { assertNodeHierarchy, lockWorkGraph } from './graph-integrity.js';
+import { assertNodeHierarchy, getContainsDescendantIds, lockWorkGraph } from './graph-integrity.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
 import {
   INTERNAL_WRITE_ACTOR,
@@ -65,6 +65,7 @@ export interface UpdateIssueInput {
   acceptance?: string | null;
   alias?: string | null;
   assigneeId?: string | null;
+  cascadeRepository?: boolean | null;
   constraints?: string | null;
   cycleId?: string | null;
   description?: string | null;
@@ -451,11 +452,50 @@ export async function updateIssue(
       data.kind = input.kind;
     }
 
+    const nextRepository = 'repository' in input ? input.repository ?? null : existingIssue.repository;
+    const repositoryChanged = 'repository' in input && nextRepository !== existingIssue.repository;
+
+    if (repositoryChanged && input.cascadeRepository) {
+      const descendantIds = await getContainsDescendantIds(transaction, id);
+      if (descendantIds.length > 0) {
+        const descendantIssues = await transaction.issue.findMany({
+          where: { id: { in: descendantIds } },
+        });
+        await transaction.issue.updateMany({
+          where: { id: { in: descendantIds } },
+          data: {
+            repository: nextRepository,
+            revision: { increment: 1 },
+          },
+        });
+        await transaction.workRun.updateMany({
+          where: { workId: { in: descendantIds } },
+          data: { repository: nextRepository },
+        });
+        for (const descendant of descendantIssues) {
+          await recordWorkAudit(transaction, {
+            actor,
+            after: selectIssueSnapshot({
+              ...descendant,
+              repository: nextRepository,
+              revision: descendant.revision + 1,
+            }),
+            before: selectIssueSnapshot(descendant),
+            workId: descendant.id,
+          });
+        }
+      }
+      await transaction.workRun.updateMany({
+        where: { workId: id },
+        data: { repository: nextRepository },
+      });
+    }
+
     if (nextParentId !== undefined || 'repository' in input || 'kind' in input) {
       await assertNodeHierarchy(transaction, {
         ...existingIssue,
         parentId: nextParentId === undefined ? existingIssue.parentId : nextParentId,
-        repository: 'repository' in input ? input.repository ?? null : existingIssue.repository,
+        repository: nextRepository,
         kind: input.kind ?? existingIssue.kind,
       }, nextParentId !== undefined);
     }
