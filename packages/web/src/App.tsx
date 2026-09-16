@@ -75,6 +75,11 @@ const ProjectsPage = lazy(async () => {
   const module = await import('./routes/ProjectsPage');
   return { default: module.ProjectsPage };
 });
+const AgentsPage = lazy(async () => {
+  const module = await import('./routes/AgentsPage');
+  return { default: module.AgentsPage };
+});
+
 const MembersPage = lazy(async () => {
   const module = await import('./routes/MembersPage');
   return { default: module.MembersPage };
@@ -1123,6 +1128,10 @@ export function App() {
                 <span className="app-shell__link-label">Members</span>
                 <kbd className="app-shell__link-kbd" aria-hidden="true">G E</kbd>
               </NavLink>
+              <NavLink to="/agents" className={getNavLinkClassName} title="Go to Agents">
+                <span className="app-shell__nav-icon"><IcoTeam size={14} /></span>
+                <span className="app-shell__link-label">Agents</span>
+              </NavLink>
             </nav>
           </div>
 
@@ -1372,6 +1381,8 @@ export function App() {
               <Route path="/views" element={<ViewsPage />} />
               <Route path="/projects" element={<ProjectsPage />} />
               <Route path="/members" element={<MembersPage />} />
+              <Route path="/agents" element={<AgentsPage />} />
+              <Route path="/agents/:handle" element={<AgentsPage />} />
               <Route path="/settings/access" element={<AccessPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/settings/*" element={<SettingsPage />} />

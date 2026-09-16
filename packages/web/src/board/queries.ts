@@ -108,16 +108,21 @@ export const BOARD_PAGE_QUERY = gql`
           identifier
           title
         }
-        proposedByActor {
-          id
-          name
-          email
-          handle
+        provenance {
           actorKind
-          runtime
-          presence
-          presenceDetail
-          lastSeenAt
+          surface
+          source
+          actor {
+            id
+            name
+            email
+            handle
+            actorKind
+            runtime
+            presence
+            presenceDetail
+            lastSeenAt
+          }
         }
         comments(first: 100, orderBy: createdAt) {
           nodes {
@@ -217,16 +222,21 @@ export const ISSUE_UPDATE_MUTATION = gql`
         }
         projectId
         cycleId
-        proposedByActor {
-          id
-          name
-          email
-          handle
+        provenance {
           actorKind
-          runtime
-          presence
-          presenceDetail
-          lastSeenAt
+          surface
+          source
+          actor {
+            id
+            name
+            email
+            handle
+            actorKind
+            runtime
+            presence
+            presenceDetail
+            lastSeenAt
+          }
         }
         comments(first: 100, orderBy: createdAt) {
           nodes {
@@ -535,16 +545,21 @@ export const ISSUE_CREATE_MUTATION = gql`
         }
         projectId
         cycleId
-        proposedByActor {
-          id
-          name
-          email
-          handle
+        provenance {
           actorKind
-          runtime
-          presence
-          presenceDetail
-          lastSeenAt
+          surface
+          source
+          actor {
+            id
+            name
+            email
+            handle
+            actorKind
+            runtime
+            presence
+            presenceDetail
+            lastSeenAt
+          }
         }
         comments(first: 100, orderBy: createdAt) {
           nodes {
@@ -1032,6 +1047,42 @@ export const AGENTS_QUERY = gql`
       presence
       presenceDetail
       lastSeenAt
+      description
+      agentCardUrl
+    }
+  }
+`;
+
+/** One agent: who it is, and what it has done (INV-573). */
+export const AGENT_PROFILE_QUERY = gql`
+  query AgentProfile($handle: String!) {
+    agentProfile(handle: $handle) {
+      actor {
+        id
+        name
+        email
+        handle
+        actorKind
+        runtime
+        description
+        agentCardUrl
+        presence
+        presenceDetail
+        lastSeenAt
+      }
+      counts {
+        proposedWork
+        openRequests
+        answeredRequests
+        runs
+        evidence
+      }
+      timeline {
+        at
+        kind
+        detail
+        workIdentifier
+      }
     }
   }
 `;

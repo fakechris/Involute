@@ -4923,16 +4923,22 @@ kbd {
   font-size: 10px;
 }
 
-/* @-completion popup in the comment composer */
-.mention-suggest {
+/* @-completion popup in the comment composer.
+   Anchored to a shell *outside* .rich-text-editor: that box sets
+   `overflow: hidden` for its rounded corners, which clipped the popup, and
+   without a stacking context of its own the popup was painted under the
+   comment cards above it. */
+.rich-text-shell {
   position: relative;
+  isolation: isolate;
+  z-index: 1;
 }
 
 .mention-suggest__list {
   position: absolute;
-  bottom: 100%;
+  bottom: calc(100% + 4px);
   left: 0;
-  z-index: 20;
+  z-index: 60;
   min-width: 260px;
   max-height: 220px;
   overflow-y: auto;
@@ -4972,4 +4978,24 @@ kbd {
 .mention-suggest__detail {
   font-size: 11px;
   color: var(--fg-dim);
+}
+
+.page-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px var(--content-gutter);
+  overflow-y: auto;
+}
+
+.page-shell__header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.page-shell__header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
 }

@@ -200,20 +200,37 @@ async function buildTimeline(
     .slice(0, MAX_TIMELINE_ENTRIES);
 }
 
+export interface WorkProvenance {
+  actor: User | null;
+  actorKind: string | null;
+  source: string | null;
+  surface: string | null;
+}
+
 /**
- * The actor that created this work. Already recorded — revision 1's audit is
- * the creation — but never surfaced, so nobody could tell which agent proposed
- * an INV.
+ * Where this work came from. Revision 1's audit is the creation, so its actor
+ * is the proposer.
+ *
+ * The actor can legitimately be null: internal paths (the hotfix reflex, and
+ * other service writes) record `actorKind: SERVICE` with no actor row. Returning
+ * only the actor made the UI silent in exactly those cases, which reads as a
+ * bug rather than as "nothing identified itself" — so the kind, the surface and
+ * the source come back too, and the UI can always say something true.
  */
-export async function findProposingActor(
+export async function findWorkProvenance(
   prisma: PrismaClient,
   workId: string,
-): Promise<User | null> {
+): Promise<WorkProvenance> {
   const creation = await prisma.workAudit.findFirst({
     where: { workId },
     orderBy: [{ revision: 'asc' }, { createdAt: 'asc' }],
-    select: { actor: true },
+    select: { actor: true, actorKind: true, surface: true },
   });
 
-  return creation?.actor ?? null;
+  return {
+    actor: creation?.actor ?? null,
+    actorKind: creation?.actorKind ?? null,
+    source: null,
+    surface: creation?.surface ?? null,
+  };
 }

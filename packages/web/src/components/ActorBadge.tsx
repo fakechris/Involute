@@ -28,7 +28,9 @@ export function ActorBadge({
   }
 
   const handle = actor.handle ?? null;
-  const facts = [actor.runtime, presenceLabel(actor)].filter(Boolean) as string[];
+  const facts = (isService
+    ? [actor.runtime]
+    : [actor.runtime, presenceLabel(actor)]).filter(Boolean) as string[];
 
   return (
     <span className={`actor-badge actor-badge--${isService ? 'service' : 'agent'}`}>

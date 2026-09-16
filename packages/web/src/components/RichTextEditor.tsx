@@ -312,6 +312,7 @@ export function RichTextEditor({
   }
 
   return (
+    <div className="rich-text-shell">
     <div
       className={`rich-text-editor${isDragOver ? ' rich-text-editor--dragover' : ''}`}
       onDragOver={handleDragOver}
@@ -335,31 +336,7 @@ export function RichTextEditor({
         onPaste={handlePaste}
         onKeyDown={handleKeyDown}
       />
-      {mention.query !== null && mention.matches.length > 0 ? (
-        <div className="mention-suggest">
-          <ul className="mention-suggest__list" role="listbox" aria-label="Mention an agent">
-            {mention.matches.map((agent, index) => (
-              <li key={agent.id}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={index === mention.highlighted}
-                  className="mention-suggest__option"
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    if (agent.handle) chooseMention(agent.handle);
-                  }}
-                >
-                  <span className="mention-suggest__handle">@{agent.handle}</span>
-                  <span className="mention-suggest__detail">
-                    {[agent.name, agent.runtime, agent.presence].filter(Boolean).join(' · ')}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+
       <div className="rich-text-toolbar">
         <button
           type="button"
@@ -474,6 +451,30 @@ export function RichTextEditor({
           {submitLabel}
         </button>
       </div>
+    </div>
+      {mention.query !== null && mention.matches.length > 0 ? (
+        <ul className="mention-suggest__list" role="listbox" aria-label="Mention an agent">
+          {mention.matches.map((agent, index) => (
+            <li key={agent.id}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={index === mention.highlighted}
+                className="mention-suggest__option"
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  if (agent.handle) chooseMention(agent.handle);
+                }}
+              >
+                <span className="mention-suggest__handle">@{agent.handle}</span>
+                <span className="mention-suggest__detail">
+                  {[agent.name, agent.runtime, agent.presence].filter(Boolean).join(' · ')}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }

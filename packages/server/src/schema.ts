@@ -78,10 +78,11 @@ import { toWireState } from './agent-request-state.js';
 import { PRESENCE_COPY, agentRequestPresence } from './agent-request-presence.js';
 import { ACTOR_PRESENCE_COPY, actorPresence } from './actor-presence.js';
 import {
-  findProposingActor,
+  findWorkProvenance,
   getAgentProfile,
   listAgentActors,
   type AgentProfile as AgentProfileResult,
+  type WorkProvenance as WorkProvenanceResult,
 } from './agent-directory.js';
 import { createComment, createIssue, createIssueInTransaction, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
 import { projectWorkNotifications } from './notification-service.js';
@@ -450,6 +451,18 @@ const typeDefs = /* GraphQL */ `
     replies(first: Int): [Comment!]!
   }
 
+  """
+  Where a work item came from. The actor is null when the creating path
+  recorded none (internal/service writes); actorKind, surface and source still
+  say what happened, so the UI is never silent (INV-573).
+  """
+  type WorkProvenance {
+    actor: User
+    actorKind: String
+    surface: String
+    source: String
+  }
+
   type AgentTimelineEntry {
     at: DateTime!
     kind: String!
@@ -540,6 +553,8 @@ const typeDefs = /* GraphQL */ `
     agentRequests(first: Int): [AgentRequest!]!
     """The actor that created this work — human or agent (INV-573)."""
     proposedByActor: User
+    """How this work got here. Always answerable, even when no actor was recorded."""
+    provenance: WorkProvenance!
   }
 
   type WorkLink {
@@ -3165,7 +3180,18 @@ const resolvers = {
       parent: IssueParent,
       _args: Record<string, never>,
       context: GraphQLContext,
-    ): Promise<User | null> => findProposingActor(context.prisma, parent.id),
+    ): Promise<User | null> => {
+      const provenance = await findWorkProvenance(context.prisma, parent.id);
+      return provenance.actor;
+    },
+    provenance: async (
+      parent: IssueParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<WorkProvenanceResult> => {
+      const provenance = await findWorkProvenance(context.prisma, parent.id);
+      return { ...provenance, source: parent.source ?? null };
+    },
     agentRequests: async (
       parent: IssueParent,
       args: { first?: number | null },
