@@ -157,6 +157,18 @@ model User {
   // Addressable alias for `@handle` mentions. Stored lowercase; the actorId is
   // the identity, the handle is only a way to spell it (docs/54 §B1).
   handle         String?   @unique
+  // Self-declared actor profile (INV-573). Involute stores these and shows
+  // them; it never interprets them. Which runtime an agent happens to be is
+  // exactly the thing docs/54 §A says the kernel must not know about — but a
+  // person reading a comment does need to know, so the agent declares it.
+  runtime        String?
+  description    String?
+  // A2A Agent Card location. Declared now so an actor can carry it; fetching
+  // and honouring it is INV-557 (P4).
+  agentCardUrl   String?
+  // Last time this actor authenticated. The only evidence the server has for
+  // "is it around", and the basis for the derived presence.
+  lastSeenAt     DateTime?
   notificationPrefs Json    @default("{}")
   assignedIssues Issue[]   @relation("IssueAssignee")
   comments       Comment[]

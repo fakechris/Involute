@@ -41,6 +41,14 @@ export interface UserSummary {
   id: string;
   name: string | null;
   email: string | null;
+  /** Present for agent actors (INV-573); absent on plain user selections. */
+  handle?: string | null;
+  actorKind?: 'HUMAN' | 'AGENT' | 'SERVICE';
+  runtime?: string | null;
+  description?: string | null;
+  presence?: string;
+  presenceDetail?: string;
+  lastSeenAt?: string | null;
 }
 
 export interface AccessUserSummary extends UserSummary {
@@ -129,6 +137,8 @@ export interface IssueSummary {
     title: string;
     kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
   } | null;
+  /** The actor that created this work — human or agent (INV-573). */
+  proposedByActor?: UserSummary | null;
   comments: {
     nodes: CommentSummary[];
   };

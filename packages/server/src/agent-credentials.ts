@@ -52,13 +52,21 @@ export interface AgentPrincipal {
 }
 
 export interface IssueAgentCredentialInput {
+  agentCardUrl?: string | null;
+  description?: string | null;
   email?: string | null;
   expiresAt?: Date | null;
   handle?: string | null;
   name: string;
+  runtime?: string | null;
   scopes?: AgentScope[] | null | undefined;
   teamKey: string;
 }
+
+// `lastSeenAt` exists to answer "is this agent around", which needs
+// minute-level accuracy, not millisecond. Writing on every authenticated call
+// would put a row update in front of every request for no extra signal.
+export const LAST_SEEN_REFRESH_MS = 60_000;
 
 // An agent that cannot be spelled cannot be mentioned (INV-558), so issuance
 // always lands a handle. Explicit `--handle` wins; otherwise the name is
@@ -140,9 +148,12 @@ export async function issueAgentCredential(
   const user = existing ?? await prisma.user.create({
     data: {
       actorKind: 'AGENT',
+      agentCardUrl: input.agentCardUrl ?? null,
+      description: input.description ?? null,
       email: normalizedEmail,
       handle: await allocateAgentHandle(prisma, input.handle, name),
       name,
+      runtime: input.runtime ?? null,
     },
   });
   // Backfill: agents issued before INV-558 have no handle, so re-issuing a
@@ -153,6 +164,15 @@ export async function issueAgentCredential(
     await prisma.user.update({ where: { id: existing.id }, data: { handle } });
     existing.handle = handle;
   }
+  // Re-issuing a credential is how an existing actor updates its profile.
+  const profileUpdates: { agentCardUrl?: string; description?: string; runtime?: string } = {};
+  if (input.runtime) profileUpdates.runtime = input.runtime;
+  if (input.description) profileUpdates.description = input.description;
+  if (input.agentCardUrl) profileUpdates.agentCardUrl = input.agentCardUrl;
+  if (existing && Object.keys(profileUpdates).length > 0) {
+    await prisma.user.update({ where: { id: existing.id }, data: profileUpdates });
+  }
+
   await prisma.teamMembership.upsert({
     where: { teamId_userId: { teamId: team.id, userId: user.id } },
     create: { role: 'EDITOR', teamId: team.id, userId: user.id },
@@ -196,5 +216,29 @@ export async function resolveAgentPrincipal(
     return null;
   }
 
+  void touchLastSeen(prisma, credential.user, now);
+
   return { scopes: credential.scopes, user: credential.user };
+}
+
+/**
+ * Records that the actor is around. Deliberately fire-and-forget and throttled:
+ * a stale-by-a-minute presence is fine, a failed presence write blocking an
+ * authenticated request is not.
+ */
+async function touchLastSeen(
+  prisma: PrismaClient,
+  user: User,
+  now: Date,
+): Promise<void> {
+  if (user.lastSeenAt && now.getTime() - user.lastSeenAt.getTime() < LAST_SEEN_REFRESH_MS) {
+    return;
+  }
+
+  try {
+    await prisma.user.update({ where: { id: user.id }, data: { lastSeenAt: now } });
+    user.lastSeenAt = now;
+  } catch {
+    // Presence is a convenience signal; never fail a request over it.
+  }
 }

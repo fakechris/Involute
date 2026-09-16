@@ -76,6 +76,13 @@ import type { AgentScope } from './agent-credentials.js';
 import { WORK_EVENT_TYPES, enqueueWorkEvent } from './event-outbox.js';
 import { toWireState } from './agent-request-state.js';
 import { PRESENCE_COPY, agentRequestPresence } from './agent-request-presence.js';
+import { ACTOR_PRESENCE_COPY, actorPresence } from './actor-presence.js';
+import {
+  findProposingActor,
+  getAgentProfile,
+  listAgentActors,
+  type AgentProfile as AgentProfileResult,
+} from './agent-directory.js';
 import { createComment, createIssue, createIssueInTransaction, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
 import { projectWorkNotifications } from './notification-service.js';
 import { auditMergedPrTraceability } from './traceability-audit.js';
@@ -275,6 +282,10 @@ const typeDefs = /* GraphQL */ `
     projectSummary(teamFilter: TeamFilter): ProjectSummaryResult!
     bugSummary(teamFilter: TeamFilter): BugSummaryResult!
     traceabilityAudit(days: Int): TraceabilityAuditResult!
+    """AGENT actors, most recently active first. Backs the directory and @ completion."""
+    agents(teamKey: String): [User!]!
+    """One agent's profile, by handle or id."""
+    agentProfile(handle: String!): AgentProfile
     agentCredentials(teamId: String!): [AgentCredentialRecord!]!
     webhooks(teamId: String!): [WebhookSubscriptionRecord!]!
     notifications(first: Int, after: String, unreadOnly: Boolean): NotificationConnection!
@@ -378,6 +389,18 @@ const typeDefs = /* GraphQL */ `
     successorActor: User
     """Lowercase alias this actor is addressed by in comments, as in @mia."""
     handle: String
+    """Self-declared runtime, e.g. lumenbox / codex-cli / claude-code. Involute stores it, never interprets it."""
+    runtime: String
+    """What this actor is for."""
+    description: String
+    """A2A Agent Card location, when declared."""
+    agentCardUrl: String
+    """Last time this actor authenticated."""
+    lastSeenAt: DateTime
+    """Derived from lastSeenAt: active / idle / away / never-seen. Never stored."""
+    presence: String!
+    """Display copy for presence. States what was observed, never why."""
+    presenceDetail: String!
   }
 
   enum GlobalRole {
@@ -425,6 +448,29 @@ const typeDefs = /* GraphQL */ `
     parentCommentId: String
     """Replies in this thread, oldest first. Empty for a reply — threads are one level deep."""
     replies(first: Int): [Comment!]!
+  }
+
+  type AgentTimelineEntry {
+    at: DateTime!
+    kind: String!
+    detail: String
+    workId: String
+    workIdentifier: String
+  }
+
+  type AgentActivityCounts {
+    proposedWork: Int!
+    openRequests: Int!
+    answeredRequests: Int!
+    runs: Int!
+    evidence: Int!
+  }
+
+  """Who an agent is and what it has actually done (INV-573)."""
+  type AgentProfile {
+    actor: User!
+    counts: AgentActivityCounts!
+    timeline: [AgentTimelineEntry!]!
   }
 
   type CommentMention {
@@ -492,6 +538,8 @@ const typeDefs = /* GraphQL */ `
     comments(first: Int, after: String, orderBy: CommentOrderBy, rootsOnly: Boolean): CommentConnection!
     """Questions put to agents on this work item, newest first (INV-560/562)."""
     agentRequests(first: Int): [AgentRequest!]!
+    """The actor that created this work — human or agent (INV-573)."""
+    proposedByActor: User
   }
 
   type WorkLink {
@@ -1706,6 +1754,22 @@ const resolvers = {
         }),
       };
     },
+    agents: async (
+      _parent: unknown,
+      args: { teamKey?: string | null },
+      context: GraphQLContext,
+    ): Promise<User[]> => {
+      requireAuthentication(context);
+      return listAgentActors(context.prisma, { teamKey: args.teamKey ?? null });
+    },
+    agentProfile: async (
+      _parent: unknown,
+      args: { handle: string },
+      context: GraphQLContext,
+    ): Promise<AgentProfileResult | null> => {
+      requireAuthentication(context);
+      return getAgentProfile(context.prisma, args.handle);
+    },
     agentCredentials: async (
       _parent: unknown,
       args: { teamId: string },
@@ -2817,6 +2881,9 @@ const resolvers = {
       parent.successorActorId
         ? context.prisma.user.findUnique({ where: { id: parent.successorActorId } })
         : null,
+    presence: (parent: UserParent): string => actorPresence(parent.lastSeenAt),
+    presenceDetail: (parent: UserParent): string =>
+      ACTOR_PRESENCE_COPY[actorPresence(parent.lastSeenAt)],
   },
   WorkClaimRecord: {
     id: (parent: WorkClaimParent): string => parent.id,
@@ -3094,6 +3161,11 @@ const resolvers = {
         pageInfo: buildPageInfo(nodes, first !== undefined && comments.length > first),
       };
     },
+    proposedByActor: async (
+      parent: IssueParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<User | null> => findProposingActor(context.prisma, parent.id),
     agentRequests: async (
       parent: IssueParent,
       args: { first?: number | null },

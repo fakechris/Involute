@@ -34,7 +34,7 @@ describe('App team selection', () => {
     expect(await screen.findByText('Workflow overview for Sonata.')).toBeInTheDocument();
     expect(screen.getByLabelText('Select team')).toHaveValue('SON');
     expect(within(screen.getByTestId('column-Backlog')).getByText('SON-1')).toBeInTheDocument();
-    expect(apolloMocks.useQuery).toHaveBeenLastCalledWith(
+    expect(apolloMocks.useQuery).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         variables: {
@@ -157,7 +157,7 @@ describe('App team selection', () => {
     });
 
     await waitFor(() =>
-      expect(apolloMocks.useQuery).toHaveBeenLastCalledWith(
+      expect(apolloMocks.useQuery).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
           variables: {

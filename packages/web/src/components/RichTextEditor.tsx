@@ -2,7 +2,8 @@ import { type DragEvent, type ClipboardEvent, useCallback, useRef, useState } fr
 import { useMutation } from '@apollo/client/react';
 
 import { FILE_UPLOAD_MUTATION } from '../board/queries';
-import type { FileUploadMutationData, FileUploadMutationVariables } from '../board/types';
+import type { FileUploadMutationData, FileUploadMutationVariables, UserSummary } from '../board/types';
+import { applyMention, findMentionQuery, useMentionSuggest } from './useMentionSuggest';
 import { IcoLink } from './Icons';
 import { Btn, Kbd } from './Primitives';
 
@@ -14,6 +15,11 @@ interface RichTextEditorProps {
   submitLabel?: string;
   disabled?: boolean;
   ariaLabel?: string;
+  /** Mentionable actors for `@` completion (INV-573). Empty disables it. */
+  mentionables?: UserSummary[];
+  /** Fired the first time the caret sits in an `@…` token, so the host can
+   *  load the directory on demand instead of on every render. */
+  onMentionStart?: () => void;
 }
 
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
@@ -83,7 +89,10 @@ export function RichTextEditor({
   submitLabel = 'Comment',
   disabled = false,
   ariaLabel,
+  mentionables = [],
+  onMentionStart,
 }: RichTextEditorProps) {
+  const mention = useMentionSuggest(mentionables);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -237,7 +246,65 @@ export function RichTextEditor({
     }
   }
 
+  function syncMentionQuery(target: HTMLTextAreaElement) {
+    const next = findMentionQuery(target.value, target.selectionStart ?? 0);
+
+    if (next) {
+      onMentionStart?.();
+    }
+
+    mention.setQuery(next);
+  }
+
+  function chooseMention(handle: string) {
+    const textarea = textareaRef.current;
+    if (!textarea || !mention.query) {
+      return;
+    }
+
+    const applied = applyMention(value, mention.query, handle, textarea.selectionStart ?? 0);
+    onChange(applied.value);
+    mention.close();
+
+    // Restore the caret after React re-renders with the new value.
+    requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(applied.caret, applied.caret);
+    });
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    const open = mention.query !== null && mention.matches.length > 0;
+
+    if (open) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        mention.setHighlighted((mention.highlighted + 1) % mention.matches.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        mention.setHighlighted(
+          (mention.highlighted - 1 + mention.matches.length) % mention.matches.length,
+        );
+        return;
+      }
+      // Enter and Tab accept; Escape dismisses without touching the text.
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        const picked = mention.matches[mention.highlighted];
+        if (picked?.handle) {
+          e.preventDefault();
+          chooseMention(picked.handle);
+          return;
+        }
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        mention.close();
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       onSubmit?.();
@@ -258,10 +325,41 @@ export function RichTextEditor({
         value={value}
         placeholder={placeholder}
         disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          onChange(e.target.value);
+          syncMentionQuery(e.target);
+        }}
+        onKeyUp={(e) => syncMentionQuery(e.currentTarget)}
+        onClick={(e) => syncMentionQuery(e.currentTarget)}
+        onBlur={() => window.setTimeout(() => mention.close(), 120)}
         onPaste={handlePaste}
         onKeyDown={handleKeyDown}
       />
+      {mention.query !== null && mention.matches.length > 0 ? (
+        <div className="mention-suggest">
+          <ul className="mention-suggest__list" role="listbox" aria-label="Mention an agent">
+            {mention.matches.map((agent, index) => (
+              <li key={agent.id}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={index === mention.highlighted}
+                  className="mention-suggest__option"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    if (agent.handle) chooseMention(agent.handle);
+                  }}
+                >
+                  <span className="mention-suggest__handle">@{agent.handle}</span>
+                  <span className="mention-suggest__detail">
+                    {[agent.name, agent.runtime, agent.presence].filter(Boolean).join(' · ')}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="rich-text-toolbar">
         <button
           type="button"

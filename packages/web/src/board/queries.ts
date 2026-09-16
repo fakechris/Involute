@@ -108,6 +108,17 @@ export const BOARD_PAGE_QUERY = gql`
           identifier
           title
         }
+        proposedByActor {
+          id
+          name
+          email
+          handle
+          actorKind
+          runtime
+          presence
+          presenceDetail
+          lastSeenAt
+        }
         comments(first: 100, orderBy: createdAt) {
           nodes {
             id
@@ -117,6 +128,12 @@ export const BOARD_PAGE_QUERY = gql`
               id
               name
               email
+              handle
+              actorKind
+              runtime
+              presence
+              presenceDetail
+              lastSeenAt
             }
           }
         }
@@ -200,6 +217,17 @@ export const ISSUE_UPDATE_MUTATION = gql`
         }
         projectId
         cycleId
+        proposedByActor {
+          id
+          name
+          email
+          handle
+          actorKind
+          runtime
+          presence
+          presenceDetail
+          lastSeenAt
+        }
         comments(first: 100, orderBy: createdAt) {
           nodes {
             id
@@ -209,6 +237,12 @@ export const ISSUE_UPDATE_MUTATION = gql`
               id
               name
               email
+              handle
+              actorKind
+              runtime
+              presence
+              presenceDetail
+              lastSeenAt
             }
           }
         }
@@ -501,6 +535,17 @@ export const ISSUE_CREATE_MUTATION = gql`
         }
         projectId
         cycleId
+        proposedByActor {
+          id
+          name
+          email
+          handle
+          actorKind
+          runtime
+          presence
+          presenceDetail
+          lastSeenAt
+        }
         comments(first: 100, orderBy: createdAt) {
           nodes {
             id
@@ -510,6 +555,12 @@ export const ISSUE_CREATE_MUTATION = gql`
               id
               name
               email
+              handle
+              actorKind
+              runtime
+              presence
+              presenceDetail
+              lastSeenAt
             }
           }
         }
@@ -965,3 +1016,22 @@ export const UNREAD_NOTIFICATION_COUNT_QUERY = gql`
 `;
 
 
+
+
+/** Mentionable agent actors, for `@` completion and the directory (INV-573). */
+export const AGENTS_QUERY = gql`
+  query Agents($teamKey: String) {
+    agents(teamKey: $teamKey) {
+      id
+      name
+      email
+      handle
+      actorKind
+      runtime
+      description
+      presence
+      presenceDetail
+      lastSeenAt
+    }
+  }
+`;
