@@ -898,6 +898,14 @@ that execution's identity and session). A run report's receipt binds to the
 state transition the report caused; a report that caused none is refused a
 receipt. The move to In Progress is now audited like every other transition.
 
+**A terminal run accepts only a proven replay (INV-595).** Once a run is
+completed or failed, `run_report` on it returns the original result only for
+a request with the same `idempotencyKey` and identical content. Same key with
+different content is an idempotency conflict. A keyless re-report, or any
+report carrying a new receipt, summary, SHA, PR or phase, is refused with
+`WORK_RUN_TERMINAL_REPLAY_MESSAGE` rather than accepted and dropped; further
+evidence goes through `evidence_attach` or a comment.
+
 Send it as `receipt` on `work_propose`, `run_report` or `agent_request_answer`:
 
 ```json

@@ -101,7 +101,8 @@ Merged so far: INV-590 #94, INV-591 #95, INV-592 #96, INV-593 #97 (main 7fbeb5e,
 **Status**: Complete — PR pending
 
 ## Stage 2: Terminal run replays (INV-595)
-**Status**: Not Started
+**Goal**: same key + same content → replay; same key + different content → conflict; terminal without proven replay → refused; new receipt never silently dropped.
+**Status**: Complete — PR pending (stacked on INV-594)
 
 ## Stage 3: Human hand-off completion (INV-596)
 **Status**: Not Started
