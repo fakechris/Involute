@@ -115,6 +115,31 @@ describe('successor hand-off (INV-589)', () => {
     expect(notice.body).toContain('cannot write on this team');
   });
 
+  it('an agent whose credential carries answer but not claim is still a valid successor: claim and answer both need only the answer scope', async () => {
+    const { admin, mia, request } = await overdueRequest(prisma);
+    const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
+    const answerer = await prisma.user.create({ data: { actorKind: 'AGENT', email: 'answerer@agents.test.local', handle: 'answerer', name: 'Answerer', ownerId: admin.id } });
+    await prisma.agentCredential.create({ data: { name: 'ra', scopes: ['read', 'answer'], teamId: team.id, tokenHash: 'h-'.padEnd(24, 'a'), userId: answerer.id } });
+    await prisma.user.update({ where: { id: mia.id }, data: { successorActorId: answerer.id } });
+
+    await expireOverdueAgentRequests(prisma);
+
+    const next = await prisma.agentRequest.findFirstOrThrow({ where: { handedOffFromId: request.id } });
+    expect(next.targetActorId).toBe(answerer.id);
+  });
+
+  it('a global ADMIN with no membership on the team is a valid successor: ADMIN writes everywhere', async () => {
+    const { admin, mia, request } = await overdueRequest(prisma);
+    const outsideAdmin = await prisma.user.create({ data: { actorKind: 'HUMAN', email: 'root@humans.test.local', globalRole: 'ADMIN', name: 'Root' } });
+    await prisma.user.update({ where: { id: mia.id }, data: { successorActorId: outsideAdmin.id } });
+
+    await expireOverdueAgentRequests(prisma);
+
+    const next = await prisma.agentRequest.findFirstOrThrow({ where: { handedOffFromId: request.id } });
+    expect(next.targetActorId).toBe(outsideAdmin.id);
+    expect(next.targetActorId).not.toBe(admin.id);
+  });
+
   it('skips an agent whose credential on the team lacks the answer scope', async () => {
     const { admin, mia, request } = await overdueRequest(prisma);
     const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
@@ -127,7 +152,7 @@ describe('successor hand-off (INV-589)', () => {
     const next = await prisma.agentRequest.findFirstOrThrow({ where: { handedOffFromId: request.id } });
     expect(next.targetActorId).toBe(admin.id);
     const notice = await prisma.comment.findFirstOrThrow({ where: { parentCommentId: next.rootCommentId } });
-    expect(notice.body).toContain('claim and answer scopes');
+    expect(notice.body).toContain('the answer scope');
   });
 
   it('skips a SERVICE or deactivated successor', async () => {
@@ -237,7 +262,7 @@ async function agent(client: PrismaClient, handle: string, ownerId: string, opts
   });
   if (opts.member !== false) {
     // An agent is part of a team by credential (INV-592); answering needs the
-    // claim and answer scopes on it (INV-596 follow-up).
+    // answer scope on it (INV-596 follow-up).
     await client.agentCredential.create({
       data: { name: handle, scopes: ['read', 'claim', 'answer'], teamId: team.id, tokenHash: `h-${handle}`.padEnd(24, 'x'), userId: user.id },
     });
