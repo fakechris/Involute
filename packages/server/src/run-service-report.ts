@@ -23,6 +23,7 @@ import {
   WORK_REVIEW_STATE_MISSING_MESSAGE,
 } from './errors.js';
 import { recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
+import { attachDecisionReceipt, latestAuditId } from './decision-receipt.js';
 import {
   ALLOWED_RUN_TRANSITIONS,
   TERMINAL_RUN_STATUSES,
@@ -51,6 +52,12 @@ export async function reportRun(
     const initial = await requireWork(transaction, input.workId);
     await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR UPDATE`;
     const work = await requireWork(transaction, initial.id);
+    // A receipt attaches to the audit *this* report writes. Not every report
+    // writes one (a phase-only report changes nothing audited), so remember
+    // where the audit trail stood before we started.
+    const auditBefore = input.receipt
+      ? await transaction.workAudit.findFirst({ where: { workId: work.id }, orderBy: { createdAt: 'desc' }, select: { id: true } })
+      : null;
     let idempotencyId: string | null = null;
     if (input.idempotencyKey) {
       const reservation = await reserveWorkIdempotency(transaction, {
@@ -308,9 +315,19 @@ export async function reportRun(
 
     // Return the row after the Review transition and shadow evaluation.
     const freshWork = await transaction.issue.findUniqueOrThrow({ where: { id: nextWork.id } });
+    if (input.receipt) {
+      const auditAfterId = await latestAuditId(transaction, work.id);
+      if (auditAfterId === auditBefore?.id) {
+        throw createValidationError(RUN_RECEIPT_NEEDS_AUDIT_MESSAGE);
+      }
+      await attachDecisionReceipt(transaction, { auditId: auditAfterId, receipt: input.receipt });
+    }
     return { run, work: freshWork };
   });
 }
+
+export const RUN_RECEIPT_NEEDS_AUDIT_MESSAGE =
+  'This report changed nothing audited, so there is no write for a receipt to explain. Attach the receipt to the report that moves the work (e.g. status: completed), or to the answer/proposal it belongs to.';
 
 export async function moveToInProgress(prisma: DatabaseClient, work: Issue): Promise<Issue> {
   const currentState = await prisma.workflowState.findUnique({

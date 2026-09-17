@@ -7,6 +7,7 @@ import {
   type AnswerEvidenceInput,
 } from './agent-request-service.js';
 import { toWireState } from './agent-request-state.js';
+import type { ReceiptInput, ReceiptReferenceInput } from './decision-receipt.js';
 
 import {
   assertCanReadTeam,
@@ -74,6 +75,33 @@ export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
   'agent_request_claim',
   'agent_request_answer',
 ];
+
+const RECEIPT_SCHEMA = {
+  type: 'object',
+  description:
+    'What you knew and why you decided, frozen at write time so it outlives your session (INV-588). Identity and time are filled by the server from the audit — do not send them. References without a version, digest or excerpt are stored but marked not preserved.',
+  properties: {
+    reasoning: { type: 'string', description: 'Your reasoning, in your own words. Required.' },
+    runtime: { type: 'string', description: 'Runtime snapshot now, e.g. "claude-code 2.1"' },
+    evidence: {
+      type: 'array',
+      description: 'What you relied on',
+      items: {
+        type: 'object',
+        properties: {
+          kind: { type: 'string', description: 'comment | file | commit | url | work | run | message' },
+          ref: { type: 'string' },
+          version: { type: 'string', description: 'revision / sha / timestamp pinning the ref' },
+          digest: { type: 'string', description: 'content digest of what you read' },
+          excerpt: { type: 'string', description: 'a short frozen excerpt of what you saw' },
+        },
+        required: ['kind', 'ref'],
+      },
+    },
+    inputs: { type: 'array', description: 'What you were asked / what you read; same item shape as evidence', items: { type: 'object' } },
+  },
+  required: ['reasoning'],
+} as const;
 
 const WORK_EVIDENCE_KINDS: readonly WorkEvidenceKind[] = [
   'PR',
@@ -193,6 +221,8 @@ export async function callMcpTool(
       const relatedType = optionalString(args.related_work_type);
       if (relatedType) proposeInput.relatedWorkType = parseWorkLinkType(relatedType, 'related_work_type');
       proposeInput.source = optionalString(args.source) ?? 'agent';
+      const proposeReceipt = parseReceipt(args.receipt);
+      if (proposeReceipt) proposeInput.receipt = proposeReceipt;
       assignOptional(proposeInput, 'initialState', optionalString(args.initial_state));
       const created = await proposeWork(context.prisma, proposeInput, writeActorFromViewer(context.viewer, 'mcp'));
       if (created.title !== rawTitle) {
@@ -332,6 +362,8 @@ export async function callMcpTool(
       assignOptional(runInput, 'summary', optionalString(args.summary));
       assignOptional(runInput, 'externalUrl', optionalString(args.external_url));
       assignOptional(runInput, 'idempotencyKey', optionalString(args.idempotency_key));
+      const runReceipt = parseReceipt(args.receipt);
+      if (runReceipt) runInput.receipt = runReceipt;
       if (args.decision_requested === true) {
         runInput.decisionRequested = true;
       }
@@ -420,6 +452,8 @@ export async function callMcpTool(
       if (evidence.length > 0) {
         answerInput.evidence = evidence;
       }
+      const answerReceipt = parseReceipt(args.receipt);
+      if (answerReceipt) answerInput.receipt = answerReceipt;
       const answered = await answerAgentRequest(context.prisma, answerInput);
       return {
         answered_comment_id: answered.commentId,
@@ -624,6 +658,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         phase: { type: 'string' },
         summary: { type: 'string' },
         external_url: { type: 'string' },
+        receipt: RECEIPT_SCHEMA,
         decision_requested: { type: 'boolean' },
         idempotency_key: { type: 'string' },
       },
@@ -688,6 +723,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         claim_token: { type: 'string', description: 'From agent_request_claim' },
         session_id: { type: 'string', description: 'Your session id, recorded on the audit' },
         body: { type: 'string', description: 'The answer, posted as your comment' },
+        receipt: RECEIPT_SCHEMA,
         state: { type: 'string', enum: ['completed', 'failed', 'input-required'] },
         evidence: {
           type: 'array',
@@ -792,6 +828,35 @@ function requireActorId(context: GraphQLContext): string {
     );
   }
   return actorId;
+}
+
+function parseReceipt(value: unknown): ReceiptInput | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'object') throw createValidationError('Argument "receipt" must be an object.');
+  const raw = value as Record<string, unknown>;
+  const parsed: ReceiptInput = { reasoning: requiredString(raw.reasoning, 'receipt.reasoning') };
+  const runtime = optionalString(raw.runtime);
+  if (runtime !== undefined) parsed.runtime = runtime;
+  const refs = (field: 'evidence' | 'inputs'): ReceiptReferenceInput[] | undefined => {
+    const list = raw[field];
+    if (list === undefined || list === null) return undefined;
+    if (!Array.isArray(list)) throw createValidationError(`Argument "receipt.${field}" must be an array.`);
+    return list.map((entry, index) => {
+      if (typeof entry !== 'object' || entry === null) throw createValidationError(`receipt.${field}[${index}] must be an object.`);
+      const item = entry as Record<string, unknown>;
+      const ref: ReceiptReferenceInput = {
+        kind: requiredString(item.kind, `receipt.${field}[${index}].kind`),
+        ref: requiredString(item.ref, `receipt.${field}[${index}].ref`),
+      };
+      const version = optionalString(item.version); if (version !== undefined) ref.version = version;
+      const digest = optionalString(item.digest); if (digest !== undefined) ref.digest = digest;
+      const excerpt = optionalString(item.excerpt); if (excerpt !== undefined) ref.excerpt = excerpt;
+      return ref;
+    });
+  };
+  const evidence = refs('evidence'); if (evidence) parsed.evidence = evidence;
+  const inputs = refs('inputs'); if (inputs) parsed.inputs = inputs;
+  return parsed;
 }
 
 function parseAnswerEvidence(value: unknown): AnswerEvidenceInput[] {

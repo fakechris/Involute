@@ -27,6 +27,7 @@ import {
 } from './errors.js';
 import { findWorkByIdOrIdentifier, isWorkReadyForClaim } from './context-service.js';
 import { enqueueWorkEvent } from './event-outbox.js';
+import { attachDecisionReceipt, latestAuditId, type ReceiptInput } from './decision-receipt.js';
 import { createWorkLink } from './link-service.js';
 import { createIssueInTransaction } from './issue-service.js';
 import {
@@ -50,6 +51,8 @@ export const DEFAULT_CLAIM_LEASE_SECONDS = 2 * 60 * 60;
 export type WorkPermission = 'propose' | 'commit' | 'reject' | 'claim' | 'update' | 'accept';
 
 export interface ProposeWorkInput {
+  /** What the proposer knew and why — attached to the creation audit (INV-588). */
+  receipt?: ReceiptInput | null;
   acceptance?: string | null;
   constraints?: string | null;
   description?: string | null;
@@ -275,6 +278,14 @@ export async function proposeWork(
       workId: created.id,
       workIdentifier: created.identifier,
     });
+    if (input.receipt) {
+      // Same transaction as the write: a proposal and its receipt land
+      // together or not at all.
+      await attachDecisionReceipt(transaction, {
+        auditId: await latestAuditId(transaction, created.id),
+        receipt: input.receipt,
+      });
+    }
     return created;
   });
 }

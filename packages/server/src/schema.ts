@@ -2,6 +2,7 @@ import type {
   AgentCredential,
   AgentRequest,
   Attachment,
+  DecisionReceipt,
   Comment,
   Cycle,
   Issue,
@@ -601,6 +602,32 @@ const typeDefs = /* GraphQL */ `
     actor: User
     surface: String
     reason: String
+    sessionId: String
+    claimGeneration: Int
+    createdAt: DateTime!
+    """The actor's own statement of what it knew when it made this write. Always a claim (INV-588)."""
+    receipt: DecisionReceiptRecord
+  }
+
+  type ReceiptReference {
+    kind: String!
+    ref: String!
+    version: String
+    digest: String
+    excerpt: String
+    """False when the reference is a bare pointer: what was seen cannot be reconstructed from it."""
+    preserved: Boolean!
+  }
+
+  type DecisionReceiptRecord {
+    id: ID!
+    actor: User!
+    sessionId: String
+    runtime: String
+    contractRevision: Int!
+    reasoning: String!
+    evidence: [ReceiptReference!]!
+    inputs: [ReceiptReference!]!
     createdAt: DateTime!
   }
 
@@ -3310,6 +3337,23 @@ const resolvers = {
           ? MAX_AGENT_REQUESTS_CONNECTION_FIRST
           : clampConnectionFirst(args.first, MAX_AGENT_REQUESTS_CONNECTION_FIRST),
       }),
+  },
+  WorkAuditRecord: {
+    receipt: async (
+      parent: { id: string },
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<DecisionReceipt | null> =>
+      context.prisma.decisionReceipt.findUnique({ where: { auditId: parent.id } }),
+  },
+  DecisionReceiptRecord: {
+    actor: async (
+      parent: DecisionReceipt,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<User> => context.prisma.user.findUniqueOrThrow({ where: { id: parent.actorId } }),
+    evidence: (parent: DecisionReceipt): unknown[] => (Array.isArray(parent.evidence) ? parent.evidence : []),
+    inputs: (parent: DecisionReceipt): unknown[] => (Array.isArray(parent.inputs) ? parent.inputs : []),
   },
   AgentRequest: {
     state: (parent: AgentRequestParent): string => toWireState(parent.state),

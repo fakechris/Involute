@@ -1,3 +1,4 @@
+import type { ReceiptInput } from './decision-receipt.js';
 import type {
   Issue,
   Prisma,
@@ -29,6 +30,8 @@ export const ALLOWED_RUN_TRANSITIONS: Record<WorkRunStatus, readonly WorkRunStat
 };
 
 export interface ReportRunInput {
+  /** What the reporter knew and why — attached to the audit this report writes (INV-588). */
+  receipt?: ReceiptInput | null;
   commitSha?: string | null;
   pullRequestNumber?: number | null;
   decisionRequested?: boolean | null;

@@ -251,11 +251,26 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
         actorKind
         surface
         reason
+        sessionId
+        claimGeneration
         createdAt
         actor {
           id
           name
           email
+          handle
+          actorKind
+        }
+        receipt {
+          id
+          reasoning
+          runtime
+          sessionId
+          contractRevision
+          createdAt
+          actor { id name handle }
+          evidence { kind ref version digest excerpt preserved }
+          inputs { kind ref version digest excerpt preserved }
         }
       }
     }

@@ -5011,3 +5011,12 @@ kbd {
 .markdown-mention:hover {
   opacity: 0.8;
 }
+
+
+/* Decision receipt on an audit entry (INV-588). Rendered as a claim. */
+.decision-receipt { margin-top: 6px; width: 100%; font-size: 12px; }
+.decision-receipt > summary { cursor: pointer; color: var(--fg-dim); }
+.decision-receipt__reasoning { margin: 6px 0; white-space: pre-wrap; }
+.decision-receipt__refs ul { margin: 2px 0 6px; padding-left: 16px; }
+.decision-receipt__refs blockquote { margin: 2px 0 0; padding-left: 8px; border-left: 2px solid var(--border-subtle); color: var(--fg-dim); white-space: pre-wrap; }
+.decision-receipt__unpreserved { color: var(--fg-dim); font-style: italic; }

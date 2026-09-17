@@ -178,6 +178,7 @@ model User {
   owner          User?     @relation("ActorOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   ownedActors    User[]    @relation("ActorOwner")
   actorAudits    ActorAudit[] @relation("ActorAuditSubject")
+  decisionReceipts DecisionReceipt[] @relation("DecisionReceiptActor")
   actorAuditsMade ActorAudit[] @relation("ActorAuditActor")
   // Actors are deactivated, never deleted: their id stays valid forever so the
   // audit trail keeps pointing at a real row. A deactivated actor cannot
@@ -347,6 +348,34 @@ model Comment {
   @@index([userId])
   @@index([parentCommentId, createdAt])
   @@index([issueId, parentCommentId, createdAt])
+}
+
+// What the actor knew when it wrote (INV-588). Attached 1:1 to the WorkAudit
+// row of the write it explains; the audit is the immutable event, the receipt
+// is the actor's own statement about it. Identity and time are copied from the
+// audit by the server — an agent cannot claim to be someone else here — and the
+// reasoning and references are the agent's. Always rendered as a claim.
+model DecisionReceipt {
+  id               String    @id @default(uuid()) @db.Uuid
+  auditId          String    @unique @db.Uuid
+  // Cascade, not Restrict: the receipt is part of the audit's record. If the
+  // audit is ever removed (issue deletion cascades audits today), a receipt
+  // with nothing to explain must not block that — the retention contract for
+  // deleted issues' audits is a separate decision (actor-model E).
+  audit            WorkAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  actorId          String    @db.Uuid
+  actor            User      @relation("DecisionReceiptActor", fields: [actorId], references: [id], onDelete: Restrict)
+  sessionId        String?
+  // Snapshot of the runtime at the moment, not the actor's current runtime.
+  runtime          String?
+  contractRevision Int
+  reasoning        String
+  // [{ kind, ref, version?, digest?, excerpt?, preserved: bool }]
+  evidence         Json      @default("[]")
+  inputs           Json      @default("[]")
+  createdAt        DateTime  @default(now())
+
+  @@index([actorId, createdAt])
 }
 
 // Immutable record of a change to an actor itself — owner transfer,
@@ -533,6 +562,7 @@ model WorkAudit {
   before          Json?
   after           Json
   createdAt       DateTime   @default(now())
+  receipt         DecisionReceipt?
 
   @@index([workId, createdAt])
   @@index([actorId])
