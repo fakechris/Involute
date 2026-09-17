@@ -14,6 +14,7 @@ import {
   createNotFoundError,
   createValidationError,
   ISSUE_NOT_FOUND_MESSAGE,
+  REQUEST_NOT_FOUND_MESSAGE,
   TEAM_NOT_FOUND_MESSAGE,
 } from './errors.js';
 const NEVER_MATCHING_UUID = '00000000-0000-0000-0000-000000000000';
@@ -177,14 +178,28 @@ export async function assertCanManageTeam(
 }
 
 /**
- * Who may change an actor's lifecycle (deactivate it, transfer its owner).
+ * Two independent gates (INV-594), never merged into one:
  *
- * A global ADMIN; the actor's owner; or an OWNER of a team the actor belongs
- * to — by membership or by a live credential bound to that team. A HUMAN
- * subject has no owner and belongs to nobody, so only an ADMIN may deactivate
- * one. Being logged in is not enough: knowing an id must not be a capability.
+ * - **Team authorization** — may the caller manage this *team*?
+ *   (`assertCanManageTeam`: ADMIN or the team's OWNER.)
+ * - **Identity authorization** — may the caller act *for this actor*?
+ *   (`assertCanRepresentActor`: ADMIN or the actor's owner.)
+ *
+ * They answer different questions. An actor bound to team A and team B is one
+ * identity with two credentials; B's OWNER manages B's credential, and that
+ * is all. Owning a team the actor happens to be bound to does not make B's
+ * OWNER able to speak as the actor, mint it new credentials, stop it, or
+ * hand its ownership to someone else. The earlier rule ("owner of any bound
+ * team may manage the whole actor") let exactly that happen.
+ *
+ * Operation                        Who
+ * deactivate actor                 ADMIN, actor owner
+ * transfer actor owner             ADMIN, current actor owner
+ * revoke a team's credential       ADMIN, actor owner, that team's OWNER
+ * issue credential to an existing  ADMIN or actor owner — AND manage rights
+ *   actor                            on the target team (both gates)
  */
-export async function assertCanManageActor(
+export async function assertCanRepresentActor(
   prisma: PrismaClient,
   context: GraphQLContext,
   subjectId: string,
@@ -196,39 +211,72 @@ export async function assertCanManageActor(
   if (!viewer || viewer.actorKind !== 'HUMAN') {
     throw createValidationError(ACTOR_MANAGE_FORBIDDEN_MESSAGE);
   }
-
   const subject = await prisma.user.findUnique({
     where: { id: subjectId },
     select: { actorKind: true, ownerId: true },
   });
-  if (!subject || subject.actorKind === 'HUMAN') {
+  // A HUMAN has no owner and is represented by nobody but an ADMIN.
+  if (!subject || subject.actorKind === 'HUMAN' || subject.ownerId !== viewer.id) {
     throw createValidationError(ACTOR_MANAGE_FORBIDDEN_MESSAGE);
   }
-  if (subject.ownerId === viewer.id) {
+}
+
+/** Lifecycle (deactivate, transfer owner): the identity gate, nothing team-shaped. */
+export async function assertCanManageActor(
+  prisma: PrismaClient,
+  context: GraphQLContext,
+  subjectId: string,
+): Promise<void> {
+  await assertCanRepresentActor(prisma, context, subjectId);
+}
+
+/**
+ * Revoking a credential is the one thing a team's OWNER may do to another
+ * team's actor — and only for the credential bound to *their* team. An
+ * unbound (legacy) credential belongs to nobody's team, so only the actor's
+ * owner or an ADMIN may revoke it.
+ */
+export async function assertCanRevokeCredential(
+  prisma: PrismaClient,
+  context: GraphQLContext,
+  credential: { teamId: string | null; userId: string },
+): Promise<void> {
+  if (context.isTrustedSystem || context.viewer?.globalRole === 'ADMIN') {
     return;
   }
+  const viewer = context.viewer;
+  if (!viewer || viewer.actorKind !== 'HUMAN') {
+    throw createValidationError(TEAM_MANAGE_FORBIDDEN_MESSAGE);
+  }
+  const subject = await prisma.user.findUnique({ where: { id: credential.userId }, select: { ownerId: true } });
+  if (subject?.ownerId === viewer.id) {
+    return;
+  }
+  if (!credential.teamId) {
+    throw createValidationError(TEAM_MANAGE_FORBIDDEN_MESSAGE);
+  }
+  await assertCanManageTeam(prisma, context, credential.teamId);
+}
 
-  const [memberships, credentials] = await Promise.all([
-    prisma.teamMembership.findMany({ where: { userId: subjectId }, select: { teamId: true } }),
-    prisma.agentCredential.findMany({
-      where: { revokedAt: null, teamId: { not: null }, userId: subjectId },
-      select: { teamId: true },
-    }),
-  ]);
-  const teamIds = [...new Set([
-    ...memberships.map((m) => m.teamId),
-    ...credentials.map((c) => c.teamId).filter((id): id is string => id !== null),
-  ])];
-  if (teamIds.length === 0) {
-    throw createValidationError(ACTOR_MANAGE_FORBIDDEN_MESSAGE);
-  }
-  const ownsATeam = await prisma.teamMembership.findFirst({
-    where: { role: 'OWNER', teamId: { in: teamIds }, userId: viewer.id },
-    select: { id: true },
+/**
+ * A request is a resource on a work item on a team. Reading it in the inbox,
+ * claiming it, answering it: each is authorized against that team like any
+ * other access to the work item, so a credential bound to team B cannot see
+ * or act on team A's requests even when both are addressed to the same actor.
+ */
+export async function assertCanActOnRequest(
+  prisma: PrismaClient,
+  context: GraphQLContext,
+  requestId: string,
+): Promise<void> {
+  const request = await prisma.agentRequest.findUnique({
+    where: { id: requestId },
+    select: { work: { select: { teamId: true } } },
   });
-  if (!ownsATeam) {
-    throw createValidationError(ACTOR_MANAGE_FORBIDDEN_MESSAGE);
+  if (!request) {
+    throw createNotFoundError(REQUEST_NOT_FOUND_MESSAGE);
   }
+  await assertCanWriteTeam(prisma, context, request.work.teamId);
 }
 
 export async function assertCanReadIssue(

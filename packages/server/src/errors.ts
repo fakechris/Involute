@@ -32,7 +32,7 @@ export const TEAM_MANAGE_FORBIDDEN_MESSAGE = 'You do not have access to manage t
 export const TEAM_ROSTER_HUMANS_ONLY_MESSAGE =
   'Team membership is a human roster. An agent or service is bound to a team by its credential, not by a membership role.';
 export const ACTOR_MANAGE_FORBIDDEN_MESSAGE =
-  'You do not have access to manage this actor: only an admin, its owner, or an owner of a team it belongs to may.';
+  'You do not have access to manage this actor: only an admin or its owner may. Owning a team it is bound to lets you revoke that team\'s credential, nothing more.';
 export const WORK_LINK_NOT_FOUND_MESSAGE = 'Work link not found.';
 export const WORK_LINK_SELF_REFERENCE_MESSAGE = 'Work cannot link to itself.';
 export const WORK_LINK_CYCLE_MESSAGE = 'Work link cannot create a cycle.';
@@ -79,6 +79,7 @@ export const WEBHOOK_URL_INVALID_MESSAGE = 'Webhook URL must be a valid absolute
 export const WEBHOOK_EVENT_TYPE_INVALID_MESSAGE = 'Unknown webhook event type.';
 export const AGENT_SCOPE_INVALID_MESSAGE = 'Unknown agent scope.';
 export const AGENT_CREDENTIAL_NOT_FOUND_MESSAGE = 'Agent credential not found.';
+export const REQUEST_NOT_FOUND_MESSAGE = 'Request not found.';
 export const NOTIFICATION_NOT_FOUND_MESSAGE = 'Notification not found.';
 export const SNOOZE_REQUIRES_CANDIDATE_MESSAGE = 'Only candidate work can be snoozed.';
 export const AGENT_DESCRIPTION_REQUIRED_MESSAGE =
