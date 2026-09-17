@@ -24,6 +24,7 @@ export const WORK_EVENT_TYPES = [
   'agent.mentioned',
   'agent.request_expired',
   'agent.request_handed_off',
+  'agent.request_answered',
   'webhook.disabled',
 ] as const;
 

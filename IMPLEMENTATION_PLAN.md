@@ -105,7 +105,8 @@ Merged so far: INV-590 #94, INV-591 #95, INV-592 #96, INV-593 #97 (main 7fbeb5e,
 **Status**: Complete — PR pending (stacked on INV-594)
 
 ## Stage 3: Human hand-off completion (INV-596)
-**Status**: Not Started
+**Goal**: the person handed a request is notified; `agentRequestAnswer` completes it atomically (target, or ADMIN with override reason); Web offers "Answer" on the request row.
+**Status**: Complete — PR pending (stacked on INV-595)
 
 ## Stage 4: Chain and receipt display (INV-597)
 **Status**: Not Started
