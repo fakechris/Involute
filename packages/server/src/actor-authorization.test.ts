@@ -46,12 +46,12 @@ describe('actor authorization (INV-590)', () => {
       await expect(assertCanManageActor(prisma, ctx(owner), mia.id)).resolves.toBeUndefined();
     });
 
-    it('an OWNER of a team the actor belongs to may', async () => {
+    it('an OWNER of a team the actor belongs to may NOT (INV-594: a team right is not an identity right)', async () => {
       const { mia, team } = await fixture(prisma);
       const lead = await human(prisma, 'lead');
       await prisma.teamMembership.create({ data: { role: 'OWNER', teamId: team.id, userId: lead.id } });
 
-      await expect(assertCanManageActor(prisma, ctx(lead), mia.id)).resolves.toBeUndefined();
+      await expect(assertCanManageActor(prisma, ctx(lead), mia.id)).rejects.toThrow(ACTOR_MANAGE_FORBIDDEN_MESSAGE);
     });
 
     it('an EDITOR of that team may not', async () => {
@@ -63,8 +63,7 @@ describe('actor authorization (INV-590)', () => {
         .rejects.toThrow(ACTOR_MANAGE_FORBIDDEN_MESSAGE);
     });
 
-    it('team ownership is also recognised through a live credential bound to the team', async () => {
-      // No membership row at all — the binding is the credential's teamId.
+    it('a credential binding to the team does not make its OWNER able to manage the actor either', async () => {
       const { mia, team } = await fixture(prisma, { member: false });
       await prisma.agentCredential.create({
         data: { name: 'c', teamId: team.id, tokenHash: 'h-'.padEnd(20, 'x'), userId: mia.id },
@@ -72,7 +71,7 @@ describe('actor authorization (INV-590)', () => {
       const lead = await human(prisma, 'lead');
       await prisma.teamMembership.create({ data: { role: 'OWNER', teamId: team.id, userId: lead.id } });
 
-      await expect(assertCanManageActor(prisma, ctx(lead), mia.id)).resolves.toBeUndefined();
+      await expect(assertCanManageActor(prisma, ctx(lead), mia.id)).rejects.toThrow(ACTOR_MANAGE_FORBIDDEN_MESSAGE);
     });
 
     it('a global ADMIN may, and an AGENT never may', async () => {

@@ -987,15 +987,31 @@ without a `teamId` from the agent's old membership, then removes agents and
 services from the roster. `/settings/access` lists humans; agents bound to the
 team appear in their own section with owner and presence.
 
-#### Who may manage an actor (INV-590)
+#### Who may manage an actor (INV-590, tightened in INV-594)
 
-Being logged in is not a capability; knowing an id is not one either.
-`actorDeactivate` and `actorTransferOwner` require the caller to be **a global
-ADMIN, the actor's owner, or an OWNER of a team the actor belongs to** (by
-membership, or by a live credential bound to that team). A HUMAN has no owner
-and belongs to nobody, so only an ADMIN may deactivate one. Making someone
-else the owner of a new service (`serviceActorCreate` with `ownerId` ≠ self)
-is likewise an admin act.
+Being logged in is not a capability; knowing an id is not one either. Two
+gates, never merged:
+
+- **Team authorization**: may the caller manage this *team*? (ADMIN or the
+  team's OWNER.)
+- **Identity authorization**: may the caller act *for this actor*? (ADMIN or
+  the actor's owner.)
+
+| operation | who |
+|---|---|
+| deactivate actor | ADMIN, actor owner |
+| transfer actor owner | ADMIN, current actor owner |
+| revoke a team's credential | ADMIN, actor owner, that team's OWNER |
+| issue a credential to an existing actor | ADMIN or actor owner, **and** manage rights on the target team |
+| see / claim / answer a request | the credential bound to the request's team — never another credential of the same actor |
+
+Owning a team an actor is bound to lets you revoke that team's credential
+and nothing more: it does not let you mint the actor new credentials, stop
+it, or hand its ownership to someone else. A HUMAN has no owner and is
+represented by nobody but an ADMIN. The hotfix reflex writes to the team its
+credential is bound to; a `--team` flag may only agree. The migration
+`agent_binding_precheck` fails closed when an unbound live credential faces
+more than one membership, listing the cases, rather than guessing a team.
 
 Deactivation ends sessions too: an existing session of a deactivated human is
 dropped at the next request, exactly like an expired one.

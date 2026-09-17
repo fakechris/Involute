@@ -88,3 +88,26 @@ receipt-binding race, the agent-in-TeamMembership debt, and closing items.
 **Goal**: A forced-to-human hand-off gets a real deadline; `AgentRequest` exposes hop/root/handed-off-from; work context and agent pages show the chain and receipts; legacy agents get an owner or are deactivated.
 **Success Criteria**: grace-window test; live GraphQL returns chain fields; directory shows no ownerless active agent.
 **Status**: Not Started
+
+---
+
+## Milestone 3 — second review round (INV-594…598)
+
+Merged so far: INV-590 #94, INV-591 #95, INV-592 #96, INV-593 #97 (main 7fbeb5e, deployed 2026-09-17 06:58 UTC). The second review reproduced five authorization and three spec gaps against that state.
+
+## Stage 1: Cross-team authorization (INV-594)
+**Goal**: Request tools authorized against the request's team; two independent gates (team vs identity); lifecycle owner/ADMIN only; revoke by team OWNER for their credential only; reflex bound to its credential's team; fail-closed migration precheck.
+**Success Criteria**: cross-team matrix (same actor, A/B credentials, A/B private requests, two OWNERs) — every counterexample refused.
+**Status**: Complete — PR pending
+
+## Stage 2: Terminal run replays (INV-595)
+**Status**: Not Started
+
+## Stage 3: Human hand-off completion (INV-596)
+**Status**: Not Started
+
+## Stage 4: Chain and receipt display (INV-597)
+**Status**: Not Started
+
+## Stage 5: Housekeeping (INV-598) — @mia retirement, INV-573 evidence retraction, plan accuracy, flaky test root cause
+**Status**: Not Started
