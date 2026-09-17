@@ -52,7 +52,7 @@ const CONFLICT_MESSAGE = 'The issue changed while you were editing. The latest v
 const ISSUE_DELETE_ERROR_MESSAGE = 'We could not delete the issue. Please try again.';
 const COMMENT_DELETE_ERROR_MESSAGE = 'We could not delete the comment. Please try again.';
 
-/** Group requests into hand-off chains (root first, then by hop). */
+/** Group requests into hand-off chains (root first, then by hop). The server returns whole chains for the newest requests, so a missing root is a defect, flagged below. */
 function groupChains(requests: AgentRequestSummary[]): AgentRequestSummary[][] {
   const byRoot = new Map<string, AgentRequestSummary[]>();
   for (const request of requests) {

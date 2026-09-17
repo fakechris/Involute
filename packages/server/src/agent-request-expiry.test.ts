@@ -293,6 +293,37 @@ describe('agent request expiry (INV-562 / A6)', () => {
       expect(requests[0].targetActor.handle).toBe('mia');
     });
 
+    it('the cap keeps the newest requests and completes their chains, so a fresh hand-off is never hidden', async () => {
+      // 200 old requests then a hand-off to a person: with oldest-first the
+      // 201st never appeared and the person's Answer row was missing (INV-597
+      // follow-up). Modelled with first: 1 — one old standalone, then a
+      // root and its hop.
+      const { issue, mia, request: old, rootCommentId } = await openOverdueRequest(prisma);
+      const human = await prisma.user.findFirstOrThrow({ where: { actorKind: 'HUMAN' } });
+      const base = { body: 'q', rootCommentId, requestedByActorId: human.id, targetActorId: mia.id, workId: issue.id };
+      const root = await prisma.agentRequest.create({
+        data: { ...base, createdAt: new Date(Date.now() + 1000), deadlineAt: new Date(Date.now() + 60_000), idempotencyKey: 'root' },
+      });
+      const hop = await prisma.agentRequest.create({
+        data: {
+          ...base,
+          createdAt: new Date(Date.now() + 2000),
+          deadlineAt: new Date(Date.now() + 60_000),
+          handedOffFromId: root.id,
+          hopCount: 1,
+          idempotencyKey: 'hop',
+          rootRequestId: root.id,
+          targetActorId: human.id,
+        },
+      });
+
+      const result = await query(`{ issue(id: "${issue.id}") { agentRequests(first: 1) { id hopCount } } }`);
+
+      expect(result.errors).toBeUndefined();
+      expect(result.data.issue.agentRequests.map((r: { id: string }) => r.id)).toEqual([root.id, hop.id]);
+      expect(result.data.issue.agentRequests.map((r: { id: string }) => r.id)).not.toContain(old.id);
+    });
+
     it('exposes a declared successor on the request', async () => {
       const { issue, mia } = await openOverdueRequest(prisma);
       const kai = await createAgent(prisma, 'Kai', 'kai');

@@ -601,7 +601,13 @@ const typeDefs = /* GraphQL */ `
     links(type: WorkLinkType): WorkLinkConnection!
     claim: WorkClaimRecord
     comments(first: Int, after: String, orderBy: CommentOrderBy, rootsOnly: Boolean): CommentConnection!
-    """Questions put to agents on this work item, newest first (INV-560/562)."""
+    """
+    Questions put to agents on this work item (INV-560/562). The newest "first"
+    requests, each with the rest of its hand-off chain filled in, returned
+    oldest first. The cap limits which chains are shown, never a chain's hops,
+    so the request currently awaiting an answer is always present with its root
+    (INV-597 follow-up).
+    """
     agentRequests(first: Int): [AgentRequest!]!
     """The actor that created this work — human or agent (INV-573)."""
     proposedByActor: User
@@ -3402,15 +3408,30 @@ const resolvers = {
       parent: IssueParent,
       args: { first?: number | null },
       context: GraphQLContext,
-    ): Promise<AgentRequestParent[]> =>
-      // Oldest first so a chain's root is never cut off before its hops (INV-597 follow-up).
-      context.prisma.agentRequest.findMany({
+    ): Promise<AgentRequestParent[]> => {
+      // Newest first, so a fresh hand-off on a busy work item is never hidden
+      // behind the cap (INV-597 follow-up). Then every chain touched is
+      // completed: a hop without its root is unreadable, and a chain has at
+      // most MAX_HANDOFF_HOPS hops, so the overshoot is bounded.
+      const newest = await context.prisma.agentRequest.findMany({
         where: { workId: parent.id },
-        orderBy: [{ createdAt: 'asc' }],
+        orderBy: [{ createdAt: 'desc' }],
         take: args.first === undefined || args.first === null
           ? MAX_AGENT_REQUESTS_CONNECTION_FIRST
           : clampConnectionFirst(args.first, MAX_AGENT_REQUESTS_CONNECTION_FIRST),
-      }),
+      });
+      const roots = [...new Set(newest.map((request) => request.rootRequestId ?? request.id))];
+      const rest = roots.length === 0
+        ? []
+        : await context.prisma.agentRequest.findMany({
+          where: {
+            id: { notIn: newest.map((request) => request.id) },
+            workId: parent.id,
+            OR: [{ id: { in: roots } }, { rootRequestId: { in: roots } }],
+          },
+        });
+      return [...newest, ...rest].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    },
   },
   WorkAuditRecord: {
     receipt: async (
