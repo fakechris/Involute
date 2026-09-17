@@ -37,6 +37,34 @@ const AGENT_DESCRIPTION = [
   'vitest src/agent-directory.test.ts 通过，exit 0。',
 ].join('\n');
 
+describe('agent profile is bounded by what the viewer may read (INV-597 follow-up)', () => {
+  it('a viewer outside a private team sees none of the agent\'s work, receipts or credentials there', async () => {
+    const { buildReadableIssueWhere, buildReadableTeamWhere } = await import('./access-control.ts');
+    const { proposeWork } = await import('./claim-service.ts');
+    const admin = await prisma.user.findFirstOrThrow({ where: { actorKind: 'HUMAN', globalRole: 'ADMIN' } });
+    const team = await prisma.team.update({ where: { key: DEFAULT_TEAM_KEY }, data: { visibility: 'PRIVATE' } });
+    const { credential } = await issueAgentCredential(prisma, { handle: 'mia', name: 'Mia', ownerId: admin.id, teamKey: DEFAULT_TEAM_KEY });
+    await proposeWork(prisma, {
+      description: ['### 1. 目标与架构定位', 'x', '### 2. 核心功能与交付范围', 'x', '### 3. 验收标准与验证方案', 'x'].join('\n'),
+      receipt: { reasoning: 'private reasoning' }, teamId: team.id, title: 'Private work',
+    }, { actorId: credential.userId, actorKind: 'AGENT', surface: 'test' });
+
+    const outsider = await prisma.user.create({ data: { actorKind: 'HUMAN', email: 'outsider@humans.test.local', name: 'Outsider' } });
+    const context = { authMode: 'session' as const, isTrustedSystem: false, prisma, viewer: outsider };
+    const scope = { readableTeam: buildReadableTeamWhere(context), readableWork: buildReadableIssueWhere(context) };
+
+    const bounded = (await getAgentProfile(prisma, 'mia', scope))!;
+    expect(bounded.receipts).toHaveLength(0);
+    expect(bounded.timeline).toHaveLength(0);
+    expect(bounded.credentials).toHaveLength(0);
+    expect(bounded.counts.proposedWork).toBe(0);
+
+    const unrestricted = (await getAgentProfile(prisma, 'mia'))!;
+    expect(unrestricted.receipts).toHaveLength(1);
+    expect(unrestricted.counts.proposedWork).toBe(1);
+  });
+});
+
 describe('agent directory and profile (INV-573)', () => {
   beforeAll(async () => {
     await prisma.$connect();

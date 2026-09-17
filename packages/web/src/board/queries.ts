@@ -395,7 +395,7 @@ export const ISSUE_PAGE_QUERY = gql`
           lastSeenAt
         }
       }
-      agentRequests(first: 20) {
+      agentRequests(first: 200) {
         id
         state
         presence

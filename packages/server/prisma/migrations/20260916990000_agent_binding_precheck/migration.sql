@@ -26,6 +26,7 @@ BEGIN
   ) t ON true
   WHERE c."teamId" IS NULL
     AND c."revokedAt" IS NULL
+    AND (c."expiresAt" IS NULL OR c."expiresAt" > now())
     AND u."actorKind" IN ('AGENT', 'SERVICE')
     AND t.n > 1;
 

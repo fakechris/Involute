@@ -30,14 +30,32 @@ export interface HandoffResult {
   skipped: Array<{ actorId: string; reason: string }>;
 }
 
-async function canReadThread(tx: Tx, actorId: string, teamId: string): Promise<boolean> {
-  // A human reads it by membership; an agent by a live credential bound to
-  // the team (INV-592). Either counts; neither is granted by being named.
-  const [membership, binding] = await Promise.all([
-    tx.teamMembership.findUnique({ where: { teamId_userId: { teamId, userId: actorId } }, select: { id: true } }),
-    tx.agentCredential.findFirst({ where: { revokedAt: null, teamId, userId: actorId }, select: { id: true } }),
-  ]);
-  return membership !== null || binding !== null;
+/**
+ * Can this actor actually answer a request on this team? Not "can it see the
+ * thread" — a VIEWER can see it and still be a dead end, because answering
+ * is a write (INV-596 follow-up). A human needs EDITOR or OWNER; an agent
+ * needs a live, unexpired credential bound to the team that carries both
+ * the claim and the answer scopes.
+ */
+async function canAnswerOnTeam(tx: Tx, actor: { actorKind: string; id: string }, teamId: string, now: Date): Promise<boolean> {
+  if (actor.actorKind === 'HUMAN') {
+    const membership = await tx.teamMembership.findUnique({
+      where: { teamId_userId: { teamId, userId: actor.id } },
+      select: { role: true },
+    });
+    return membership !== null && (membership.role === 'EDITOR' || membership.role === 'OWNER');
+  }
+  const binding = await tx.agentCredential.findFirst({
+    where: {
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      revokedAt: null,
+      scopes: { hasEvery: ['claim', 'answer'] },
+      teamId,
+      userId: actor.id,
+    },
+    select: { id: true },
+  });
+  return binding !== null;
 }
 
 /**
@@ -54,6 +72,7 @@ export async function pickSuccessor(
   tx: Tx,
   input: {
     forceHuman: boolean;
+    now: Date;
     target: Pick<User, 'id' | 'ownerId' | 'successorActorId'>;
     teamId: string;
     visited: Set<string>;
@@ -84,8 +103,8 @@ export async function pickSuccessor(
       skipped.push({ actorId, reason: 'chain limit reached; escalating to a human' });
       return null;
     }
-    if (!(await canReadThread(tx, actor.id, input.teamId))) {
-      skipped.push({ actorId, reason: 'cannot read this thread' });
+    if (!(await canAnswerOnTeam(tx, actor, input.teamId, input.now))) {
+      skipped.push({ actorId, reason: actor.actorKind === 'HUMAN' ? 'cannot write on this team (viewer only or not a member)' : 'no credential on this team with claim and answer scopes' });
       return null;
     }
     return { actor, source };
@@ -148,6 +167,7 @@ export async function handOffRequest(
 
   const { pick, skipped } = await pickSuccessor(tx, {
     forceHuman,
+    now,
     target: input.target,
     teamId: request.work.teamId,
     visited,

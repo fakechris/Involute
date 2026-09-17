@@ -199,7 +199,7 @@ const COMMENT_ORDER_BY: Prisma.CommentOrderByWithRelationInput[] = [
   { id: 'asc' },
 ];
 const MAX_COMMENTS_CONNECTION_FIRST = 100;
-const MAX_AGENT_REQUESTS_CONNECTION_FIRST = 50;
+const MAX_AGENT_REQUESTS_CONNECTION_FIRST = 200;
 
 const MAX_ISSUES_CONNECTION_FIRST = 200;
 
@@ -1915,7 +1915,12 @@ const resolvers = {
       context: GraphQLContext,
     ): Promise<AgentProfileResult | null> => {
       requireAuthentication(context);
-      return getAgentProfile(context.prisma, args.handle);
+      // Bounded by what the viewer may read: no private team's work, receipts
+      // or credentials leak through an agent's handle (INV-597 follow-up).
+      return getAgentProfile(context.prisma, args.handle, {
+        readableTeam: buildReadableTeamWhere(context),
+        readableWork: buildReadableIssueWhere(context),
+      });
     },
     agentCredentials: async (
       _parent: unknown,
@@ -3440,9 +3445,10 @@ const resolvers = {
       args: { first?: number | null },
       context: GraphQLContext,
     ): Promise<AgentRequestParent[]> =>
+      // Oldest first so a chain's root is never cut off before its hops (INV-597 follow-up).
       context.prisma.agentRequest.findMany({
         where: { workId: parent.id },
-        orderBy: [{ createdAt: 'desc' }],
+        orderBy: [{ createdAt: 'asc' }],
         take: args.first === undefined || args.first === null
           ? MAX_AGENT_REQUESTS_CONNECTION_FIRST
           : clampConnectionFirst(args.first, MAX_AGENT_REQUESTS_CONNECTION_FIRST),
