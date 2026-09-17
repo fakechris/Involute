@@ -340,10 +340,11 @@ async function withAgentActivity(
   const request = await prismaClient.agentRequest.findFirstOrThrow({
     where: { targetActorId: mia.id },
   });
-  await claimAgentRequest(prismaClient, { actorId: mia.id, id: request.id });
+  const held = await claimAgentRequest(prismaClient, { actorId: mia.id, id: request.id });
   await answerAgentRequest(prismaClient, {
     actorId: mia.id,
     body: 'Because of the code-block rule.',
+    claimToken: held.claimToken,
     id: request.id,
   });
 

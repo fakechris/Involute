@@ -162,9 +162,14 @@ describe('agent request expiry (INV-562 / A6)', () => {
 
     it('leaves an answered request alone', async () => {
       const { mia, request, rootCommentId } = await openOverdueRequest(prisma);
-      await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
+      const held = await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
       const { answerAgentRequest } = await import('./agent-request-service.ts');
-      await answerAgentRequest(prisma, { actorId: mia.id, body: 'answered in time', id: request.id });
+      await answerAgentRequest(prisma, {
+        actorId: mia.id,
+        body: 'answered in time',
+        claimToken: held.claimToken,
+        id: request.id,
+      });
 
       await expect(expireOverdueAgentRequests(prisma)).resolves.toBe(0);
 

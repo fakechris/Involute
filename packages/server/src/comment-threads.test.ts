@@ -59,17 +59,19 @@ describe('comment threads (INV-561 / A5)', () => {
       expect(evanRequest?.requestedByActorId).toBe(evan.id);
 
       // Answer each one. Answering the second must not touch the first.
-      await claimAgentRequest(prisma, { actorId: mia.id, id: danaRequest!.id });
+      const danaHeld = await claimAgentRequest(prisma, { actorId: mia.id, id: danaRequest!.id });
       const danaAnswer = await answerAgentRequest(prisma, {
         actorId: mia.id,
         body: 'Because a pasted snippet is not a request.',
+        claimToken: danaHeld.claimToken,
         id: danaRequest!.id,
       });
 
-      await claimAgentRequest(prisma, { actorId: mia.id, id: evanRequest!.id });
+      const evanHeld = await claimAgentRequest(prisma, { actorId: mia.id, id: evanRequest!.id });
       const evanAnswer = await answerAgentRequest(prisma, {
         actorId: mia.id,
         body: 'So an over-long run cannot truncate onto a real handle.',
+        claimToken: evanHeld.claimToken,
         id: evanRequest!.id,
       });
 

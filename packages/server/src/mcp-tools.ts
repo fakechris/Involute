@@ -380,15 +380,21 @@ export async function callMcpTool(
     }
     case 'agent_request_claim': {
       const actorId = requireActorId(context);
-      const request = await claimAgentRequest(context.prisma, {
+      const claimed = await claimAgentRequest(context.prisma, {
         actorId,
+        claimToken: optionalString(args.claim_token) ?? null,
         id: requiredString(args.id, 'id'),
       });
       return {
-        claim_expires_at: request.claimExpiresAt?.toISOString() ?? null,
-        id: request.id,
-        state: toWireState(request.state),
-        work_id: request.workId,
+        claim_expires_at: claimed.request.claimExpiresAt?.toISOString() ?? null,
+        claim_generation: claimed.request.claimGeneration,
+        // Persist this with the execution. It is required to answer and to
+        // renew, and it is not recoverable: losing it means waiting for the
+        // lease to lapse and taking a new generation.
+        claim_token: claimed.claimToken,
+        id: claimed.request.id,
+        state: toWireState(claimed.request.state),
+        work_id: claimed.request.workId,
       };
     }
     case 'agent_request_answer': {
@@ -396,6 +402,7 @@ export async function callMcpTool(
       const answerInput: Parameters<typeof answerAgentRequest>[1] = {
         actorId,
         body: requiredString(args.body, 'body'),
+        claimToken: requiredString(args.claim_token, 'claim_token'),
         id: requiredString(args.id, 'id'),
       };
       const state = optionalString(args.state);
@@ -656,11 +663,12 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     name: 'agent_request_claim',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     description:
-      'Take the claim on a request addressed to you, moving it to `working`. Exactly one consumer can hold a claim at a time, so two sidecars polling the same actor cannot both answer. The claim is a 60s lease that you renew by calling this again; if you die holding it, it expires and another consumer may take over.',
+      'Take the claim on a request addressed to you, moving it to `working`. Returns a claim_token: persist it with this execution, it is required to answer and to renew. Exactly one execution can hold a claim, even among sessions of the same actor. The claim is a 60s lease; renew by calling again with claim_token. If you lose the token, wait for the lease to lapse and claim again for a new generation.',
     inputSchema: {
       type: 'object',
       properties: {
         id: { type: 'string', description: 'Agent request id' },
+        claim_token: { type: 'string', description: 'Your token from a previous claim, to renew the same execution' },
       },
       required: ['id'],
     },
@@ -669,11 +677,12 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     name: 'agent_request_answer',
     annotations: { readOnlyHint: false, destructiveHint: false },
     description:
-      'Answer a request you hold the claim on. Posts a comment authored by you (not by the process carrying your token) and moves the request. `state` defaults to `completed`; use `failed` when you cannot answer, or `input-required` to ask the requester for something and hand the claim back. A2A state names.',
+      'Answer a request you hold the claim on. Requires the claim_token from agent_request_claim, so only the execution that holds the claim can answer — a stale session of the same actor is rejected. Posts a comment authored by you and moves the request. `state` defaults to `completed`; use `failed` when you cannot answer, or `input-required` to ask the requester for something and hand the claim back. A2A state names.',
     inputSchema: {
       type: 'object',
       properties: {
         id: { type: 'string', description: 'Agent request id' },
+        claim_token: { type: 'string', description: 'From agent_request_claim' },
         body: { type: 'string', description: 'The answer, posted as your comment' },
         state: { type: 'string', enum: ['completed', 'failed', 'input-required'] },
         evidence: {
@@ -690,7 +699,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
           },
         },
       },
-      required: ['id', 'body'],
+      required: ['id', 'claim_token', 'body'],
     },
   },
   {
