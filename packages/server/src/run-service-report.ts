@@ -154,25 +154,13 @@ export async function reportRun(
           run = openRun;
         }
       } else {
-        // Constraint 2: Completed retry idempotency when claim has already been deleted
-        if (status === 'COMPLETED' || (!status && input.runId)) {
-          const recentCompletedRun = await transaction.workRun.findFirst({
-            where: {
-              actorId,
-              status: 'COMPLETED',
-              workId: work.id,
-            },
-            orderBy: { endedAt: 'desc' },
-          });
-          if (recentCompletedRun) {
-            if (idempotencyId) {
-              await completeWorkIdempotency(transaction, idempotencyId, work.id, recentCompletedRun.id);
-            }
-            return { run: recentCompletedRun, work };
-          }
-        }
-
-        // If no active claim and not a completed retry:
+        // No active claim and no run found by id. There used to be a fallback
+        // here that returned the actor's most recent COMPLETED run for any
+        // "completed" report — which meant a report carrying a new key and a
+        // new receipt or SHA succeeded, registered the key, and dropped its
+        // content before the terminal guard was ever reached. A proven
+        // replay (same key, same content) already returned above; nothing
+        // else is a replay (INV-595 follow-up).
         if (input.runId) {
           throw createNotFoundError(WORK_RUN_NOT_FOUND_MESSAGE);
         } else {
