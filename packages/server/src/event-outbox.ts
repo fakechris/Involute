@@ -23,6 +23,7 @@ export const WORK_EVENT_TYPES = [
   'comment.created',
   'agent.mentioned',
   'agent.request_expired',
+  'agent.request_handed_off',
   'webhook.disabled',
 ] as const;
 

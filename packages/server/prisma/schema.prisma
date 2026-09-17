@@ -434,6 +434,15 @@ model AgentRequest {
   failureReason      String?
   payingPrincipal    String?
   idempotencyKey     String?           @unique
+  // Hand-off chain (INV-589). A hand-off never reassigns a request; it
+  // terminates this one and opens a new one on the same thread, linked here.
+  // rootRequestId is the first request in the chain; hopCount and
+  // chainDeadlineAt are what make the chain terminate — "every actor has an
+  // owner" does not (A.successor = B, B.successor = A never reaches one).
+  rootRequestId      String?           @db.Uuid
+  handedOffFromId    String?           @db.Uuid
+  hopCount           Int               @default(0)
+  chainDeadlineAt    DateTime?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
@@ -441,6 +450,7 @@ model AgentRequest {
   @@index([workId, createdAt])
   @@index([state, deadlineAt])
   @@index([rootCommentId])
+  @@index([rootRequestId])
 }
 
 // Server-side resolution of `@handle` in a comment body to the mentioned

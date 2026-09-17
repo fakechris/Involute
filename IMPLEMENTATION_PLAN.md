@@ -54,7 +54,7 @@ the limit; terminate-old / open-new / link is atomic and idempotent; a late
 answer from the previous holder loses on claim generation; successor must
 already have read access; impersonating the original actor is rejected at the
 write.
-**Status**: Next
+**Status**: Complete — PR pending (stacked on #91); 551/551 server
 
 ## Cross-cutting
 - Web UI for receipts and hand-off state lands with Stages 4 and 5.
