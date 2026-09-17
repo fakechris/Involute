@@ -1,5 +1,7 @@
+import { recordRequestAudit } from './agent-request-service.js';
 import { CLAIMABLE_REQUEST_STATES } from './agent-request-state.js';
 import { enqueueWorkEvent } from './event-outbox.js';
+import { EXPIRY_SWEEPER_ACTOR, ensureServiceActor } from './service-actors.js';
 
 import type { Prisma, PrismaClient } from '@prisma/client';
 
@@ -8,8 +10,11 @@ type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 /** Bounded so one sweep cannot monopolise the database. */
 export const EXPIRY_BATCH_SIZE = 50;
 
-export const SYSTEM_ACTOR_EMAIL = 'system@involute.local';
-export const SYSTEM_ACTOR_NAME = 'Involute';
+// The sweep and the notice it posts are one act by one actor. Before INV-587
+// the notice was authored by a separate "system" user while the sweep itself
+// recorded nothing.
+export const SYSTEM_ACTOR_EMAIL = EXPIRY_SWEEPER_ACTOR.email;
+export const SYSTEM_ACTOR_NAME = EXPIRY_SWEEPER_ACTOR.name;
 
 /**
  * Expiry copy.
@@ -58,19 +63,8 @@ export function buildExpiryNotice(input: {
  * not answer — impersonating either would be a lie in the audit trail.
  */
 export async function ensureSystemActor(db: DatabaseClient): Promise<{ id: string }> {
-  const existing = await db.user.findUnique({
-    where: { email: SYSTEM_ACTOR_EMAIL },
-    select: { id: true },
-  });
-
-  if (existing) {
-    return existing;
-  }
-
-  return db.user.create({
-    data: { actorKind: 'SERVICE', email: SYSTEM_ACTOR_EMAIL, name: SYSTEM_ACTOR_NAME },
-    select: { id: true },
-  });
+  const sweeper = await ensureServiceActor(db, EXPIRY_SWEEPER_ACTOR);
+  return { id: sweeper.actorId };
 }
 
 /**
@@ -158,6 +152,13 @@ async function expireOneRequest(
     });
 
     const systemActor = await ensureSystemActor(tx);
+
+    await recordRequestAudit(tx, {
+      actor: { actorId: systemActor.id, actorKind: 'SERVICE' },
+      claimGeneration: request.claimGeneration,
+      event: 'expired',
+      request,
+    });
 
     // Posted into the thread the question was asked in, so the person who
     // asked sees the answer to "did anything happen" in the place they asked.

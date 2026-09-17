@@ -447,7 +447,7 @@ describe('agent request ledger (INV-560)', () => {
       const all = [...firstPage.items, ...secondPage.items].map((item) => item.id);
       expect(new Set(all).size).toBe(4);
 
-      await cancelAgentRequest(prisma, { id: all[0]! });
+      await cancelAgentRequest(prisma, { by: { actorId: human.id, actorKind: 'HUMAN' }, id: all[0]! });
       const afterCancel = await readAgentInbox(prisma, { actorId: mia.id, first: 50 });
       expect(afterCancel.items.map((item) => item.id)).not.toContain(all[0]);
     });

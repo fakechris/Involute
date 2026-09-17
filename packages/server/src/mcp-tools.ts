@@ -384,6 +384,7 @@ export async function callMcpTool(
         actorId,
         claimToken: optionalString(args.claim_token) ?? null,
         id: requiredString(args.id, 'id'),
+        sessionId: optionalString(args.session_id) ?? null,
       });
       return {
         claim_expires_at: claimed.request.claimExpiresAt?.toISOString() ?? null,
@@ -404,6 +405,7 @@ export async function callMcpTool(
         body: requiredString(args.body, 'body'),
         claimToken: requiredString(args.claim_token, 'claim_token'),
         id: requiredString(args.id, 'id'),
+        sessionId: optionalString(args.session_id) ?? null,
       };
       const state = optionalString(args.state);
       if (state) {
@@ -669,6 +671,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
       properties: {
         id: { type: 'string', description: 'Agent request id' },
         claim_token: { type: 'string', description: 'Your token from a previous claim, to renew the same execution' },
+        session_id: { type: 'string', description: 'Your session id, recorded on the audit so the context can be found later' },
       },
       required: ['id'],
     },
@@ -683,6 +686,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
       properties: {
         id: { type: 'string', description: 'Agent request id' },
         claim_token: { type: 'string', description: 'From agent_request_claim' },
+        session_id: { type: 'string', description: 'Your session id, recorded on the audit' },
         body: { type: 'string', description: 'The answer, posted as your comment' },
         state: { type: 'string', enum: ['completed', 'failed', 'input-required'] },
         evidence: {

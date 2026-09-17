@@ -32,7 +32,31 @@ export const HOTFIX_REFLEX_ACTOR: ServiceActorSpec = {
   surface: 'hotfix-reflex',
 };
 
-export const SERVICE_ACTORS: readonly ServiceActorSpec[] = [HOTFIX_REFLEX_ACTOR];
+// Moves work items in response to GitHub events: branch created, PR opened,
+// PR merged. Until INV-587 these writes recorded no audit at all.
+export const GITHUB_WEBHOOK_ACTOR: ServiceActorSpec = {
+  description: 'Applies GitHub PR and branch events to work-item state (AGENTS.md §8.3).',
+  email: 'github-webhook@services.involute.local',
+  handle: 'github-webhook',
+  name: 'GitHub Webhook',
+  surface: 'github-webhook',
+};
+
+// Fails overdue requests and posts the notice (INV-562). It writes, so it has
+// an identity like any other writer.
+export const EXPIRY_SWEEPER_ACTOR: ServiceActorSpec = {
+  description: 'Fails agent requests whose deadline passed and posts the notice on the thread.',
+  email: 'expiry-sweeper@services.involute.local',
+  handle: 'expiry-sweeper',
+  name: 'Expiry Sweeper',
+  surface: 'agent_request.expired',
+};
+
+export const SERVICE_ACTORS: readonly ServiceActorSpec[] = [
+  HOTFIX_REFLEX_ACTOR,
+  GITHUB_WEBHOOK_ACTOR,
+  EXPIRY_SWEEPER_ACTOR,
+];
 
 /**
  * Find-or-create the actor row for one of the system's writers.

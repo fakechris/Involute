@@ -95,6 +95,8 @@ export async function recordWorkAudit(
     actor?: WriteActor | null;
     after: IssueSnapshot;
     before?: IssueSnapshot | null;
+    /** For request events: which claim generation the acting execution held (INV-587). */
+    claimGeneration?: number | null;
     workId: string;
   },
 ): Promise<void> {
@@ -103,6 +105,9 @@ export async function recordWorkAudit(
     actorId: actor.actorId ?? null,
     actorKind: actor.actorKind,
     after: snapshotIssue(input.after),
+    ...(input.claimGeneration === undefined || input.claimGeneration === null
+      ? {}
+      : { claimGeneration: input.claimGeneration }),
     reason: actor.reason ?? null,
     revision: input.after.revision,
     sessionId: actor.sessionId ?? null,

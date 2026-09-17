@@ -1,5 +1,6 @@
 import { toWireState } from './agent-request-state.js';
 
+import { Prisma } from '@prisma/client';
 import type { PrismaClient, User } from '@prisma/client';
 
 export const MAX_TIMELINE_ENTRIES = 25;
@@ -114,7 +115,10 @@ export async function getAgentProfile(
     prisma.agentRequest.count({ where: { state: 'COMPLETED', targetActorId: actor.id } }),
     prisma.workRun.count({ where: { actorId: actor.id } }),
     prisma.workEvidence.count({ where: { actorId: actor.id } }),
-    prisma.workAudit.count({ where: { actorId: actor.id, revision: 1 } }),
+    // A creation audit has no `before`. Counting "revision 1" instead would
+    // also count a webhook moving a freshly-proposed item, once those writes
+    // are audited (INV-587).
+    prisma.workAudit.count({ where: { actorId: actor.id, before: { equals: Prisma.DbNull } } }),
   ]);
 
   const credentials = await prisma.agentCredential.findMany({
@@ -156,7 +160,7 @@ async function buildTimeline(
   const [proposals, claims, runs, evidence, requests] = await Promise.all([
     // revision 1 is the row that created the work, so its actor is the proposer.
     prisma.workAudit.findMany({
-      where: { actorId, revision: 1 },
+      where: { actorId, before: { equals: Prisma.DbNull } },
       select: { createdAt: true, work: { select: { id: true, identifier: true, title: true } } },
       orderBy: { createdAt: 'desc' },
       take,

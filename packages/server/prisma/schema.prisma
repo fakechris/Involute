@@ -526,6 +526,10 @@ model WorkAudit {
   sessionId       String?
   sourceMessageId String?
   reason          String?
+  // Which claim generation the acting execution held, for request events
+  // (INV-587). Lets a receipt or a reviewer tie the write to the execution
+  // that was entitled to make it, not just to the actor.
+  claimGeneration Int?
   before          Json?
   after           Json
   createdAt       DateTime   @default(now())

@@ -8,6 +8,7 @@ import {
 } from './agent-request-state.js';
 import { createNotFoundError, createValidationError } from './errors.js';
 import { syncCommentMentions } from './mention-service.js';
+import { recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
 
 import type {
   AgentRequest,
@@ -162,6 +163,45 @@ export async function readAgentInbox(
   };
 }
 
+export type AgentRequestEvent = 'claimed' | 'renewed' | 'answered' | 'canceled' | 'expired' | 'handed-off';
+
+/**
+ * Audit a request event on its work item (INV-587). The issue itself is not
+ * changed, so `before` and `after` are the same snapshot — that is also what
+ * keeps these rows from reading as "this actor proposed the work" (a creation
+ * audit is the one with no `before`). The event, the request and the claim
+ * generation are what a receipt (INV-588) will attach to.
+ */
+export async function recordRequestAudit(
+  tx: Prisma.TransactionClient,
+  input: {
+    actor: WriteActor;
+    claimGeneration?: number | null;
+    event: AgentRequestEvent;
+    request: Pick<AgentRequest, 'id' | 'workId'>;
+  },
+): Promise<void> {
+  const work = await tx.issue.findUniqueOrThrow({ where: { id: input.request.workId } });
+  const snapshot = selectIssueSnapshot(work);
+  await recordWorkAudit(tx, {
+    actor: {
+      ...input.actor,
+      reason: input.event,
+      sourceMessageId: input.request.id,
+      surface: `agent_request.${input.event}`,
+    },
+    after: snapshot,
+    before: snapshot,
+    claimGeneration: input.claimGeneration ?? null,
+    workId: input.request.workId,
+  });
+}
+
+async function actorKindOf(db: DatabaseClient, actorId: string): Promise<WriteActor['actorKind']> {
+  const actor = await db.user.findUnique({ where: { id: actorId }, select: { actorKind: true } });
+  return actor?.actorKind ?? 'AGENT';
+}
+
 export interface ClaimedAgentRequest {
   /** Present to renew, and to answer. Persist it with the execution; it is not recoverable. */
   claimToken: string;
@@ -184,72 +224,82 @@ export interface ClaimedAgentRequest {
  */
 export async function claimAgentRequest(
   prisma: PrismaClient,
-  input: { actorId: string; claimToken?: string | null; id: string; leaseMs?: number },
+  input: { actorId: string; claimToken?: string | null; id: string; leaseMs?: number; sessionId?: string | null },
   now: Date = new Date(),
 ): Promise<ClaimedAgentRequest> {
   const leaseMs = input.leaseMs ?? REQUEST_CLAIM_LEASE_MS;
   const expiresAt = new Date(now.getTime() + leaseMs);
 
-  // Renewal: same execution, proven by the token, lease still live.
-  if (input.claimToken) {
-    const renewed = await prisma.agentRequest.updateMany({
+  return prisma.$transaction(async (tx) => {
+    // Renewal: same execution, proven by the token, lease still live.
+    if (input.claimToken) {
+      const renewed = await tx.agentRequest.updateMany({
+        where: {
+          id: input.id,
+          targetActorId: input.actorId,
+          claimedBy: input.actorId,
+          claimTokenHash: hashClaimToken(input.claimToken),
+          claimExpiresAt: { gt: now },
+          state: { in: [...CLAIMABLE_REQUEST_STATES] },
+        },
+        data: { claimExpiresAt: expiresAt },
+      });
+
+      if (renewed.count === 1) {
+        const request = await tx.agentRequest.findUniqueOrThrow({ where: { id: input.id } });
+        await recordRequestAudit(tx, {
+          actor: { actorId: input.actorId, actorKind: await actorKindOf(tx, input.actorId), sessionId: input.sessionId ?? null },
+          claimGeneration: request.claimGeneration,
+          event: 'renewed',
+          request,
+        });
+        return { claimToken: input.claimToken, request };
+      }
+    }
+
+    // Take: unclaimed, or the previous holder's lease has lapsed. Deliberately
+    // *not* "or held by this same actor" — that is the hole.
+    const claimToken = mintClaimToken();
+    const taken = await tx.agentRequest.updateMany({
       where: {
         id: input.id,
         targetActorId: input.actorId,
-        claimedBy: input.actorId,
-        claimTokenHash: hashClaimToken(input.claimToken),
-        claimExpiresAt: { gt: now },
         state: { in: [...CLAIMABLE_REQUEST_STATES] },
+        OR: [
+          { claimedBy: null },
+          { claimExpiresAt: { lt: now } },
+        ],
       },
-      data: { claimExpiresAt: expiresAt },
+      data: {
+        claimExpiresAt: expiresAt,
+        claimGeneration: { increment: 1 },
+        claimTokenHash: hashClaimToken(claimToken),
+        claimedAt: now,
+        claimedBy: input.actorId,
+        state: 'WORKING',
+      },
     });
 
-    if (renewed.count === 1) {
-      return {
-        claimToken: input.claimToken,
-        request: await prisma.agentRequest.findUniqueOrThrow({ where: { id: input.id } }),
-      };
+    if (taken.count === 0) {
+      const existing = await tx.agentRequest.findUnique({ where: { id: input.id } });
+      if (!existing) {
+        throw createNotFoundError(REQUEST_NOT_FOUND_MESSAGE);
+      }
+      if (input.claimToken && existing.claimedBy === input.actorId) {
+        throw createValidationError(CLAIM_SUPERSEDED_MESSAGE);
+      }
+      throw createValidationError(REQUEST_NOT_CLAIMABLE_MESSAGE);
     }
-  }
 
-  // Take: unclaimed, or the previous holder's lease has lapsed. Deliberately
-  // *not* "or held by this same actor" — that is the hole.
-  const claimToken = mintClaimToken();
-  const taken = await prisma.agentRequest.updateMany({
-    where: {
-      id: input.id,
-      targetActorId: input.actorId,
-      state: { in: [...CLAIMABLE_REQUEST_STATES] },
-      OR: [
-        { claimedBy: null },
-        { claimExpiresAt: { lt: now } },
-      ],
-    },
-    data: {
-      claimExpiresAt: expiresAt,
-      claimGeneration: { increment: 1 },
-      claimTokenHash: hashClaimToken(claimToken),
-      claimedAt: now,
-      claimedBy: input.actorId,
-      state: 'WORKING',
-    },
+    const request = await tx.agentRequest.findUniqueOrThrow({ where: { id: input.id } });
+    await recordRequestAudit(tx, {
+      actor: { actorId: input.actorId, actorKind: await actorKindOf(tx, input.actorId), sessionId: input.sessionId ?? null },
+      claimGeneration: request.claimGeneration,
+      event: 'claimed',
+      request,
+    });
+    return { claimToken, request };
   });
-
-  if (taken.count === 0) {
-    const existing = await prisma.agentRequest.findUnique({ where: { id: input.id } });
-    if (!existing) {
-      throw createNotFoundError(REQUEST_NOT_FOUND_MESSAGE);
-    }
-    if (input.claimToken && existing.claimedBy === input.actorId) {
-      throw createValidationError(CLAIM_SUPERSEDED_MESSAGE);
-    }
-    throw createValidationError(REQUEST_NOT_CLAIMABLE_MESSAGE);
-  }
-
-  return {
-    claimToken,
-    request: await prisma.agentRequest.findUniqueOrThrow({ where: { id: input.id } }),
-  };
 }
 
 export interface AnswerEvidenceInput {
@@ -263,6 +313,8 @@ export interface AnswerAgentRequestInput {
   body: string;
   /** From agent_request_claim. Proves this is the execution that holds the claim. */
   claimToken: string;
+  /** The execution's session id, recorded on the audit for later context. */
+  sessionId?: string | null;
   evidence?: AnswerEvidenceInput[] | null;
   id: string;
   /** `completed` (default), `failed`, or `input-required` when asking back. */
@@ -380,6 +432,13 @@ export async function answerAgentRequest(
       throw createValidationError(REQUEST_NOT_HELD_MESSAGE);
     }
 
+    await recordRequestAudit(tx, {
+      actor: { actorId: input.actorId, actorKind: await actorKindOf(tx, input.actorId), sessionId: input.sessionId ?? null },
+      claimGeneration: request.claimGeneration,
+      event: 'answered',
+      request,
+    });
+
     return {
       commentId: comment.id,
       request: await tx.agentRequest.findUniqueOrThrow({ where: { id: request.id } }),
@@ -389,21 +448,25 @@ export async function answerAgentRequest(
 
 export async function cancelAgentRequest(
   prisma: PrismaClient,
-  input: { id: string },
+  input: { by: WriteActor; id: string },
   now: Date = new Date(),
 ): Promise<AgentRequest> {
-  const moved = await prisma.agentRequest.updateMany({
-    where: { id: input.id, state: { in: [...CLAIMABLE_REQUEST_STATES] } },
-    data: { canceledAt: now, state: 'CANCELED' },
-  });
+  return prisma.$transaction(async (tx) => {
+    const moved = await tx.agentRequest.updateMany({
+      where: { id: input.id, state: { in: [...CLAIMABLE_REQUEST_STATES] } },
+      data: { canceledAt: now, state: 'CANCELED' },
+    });
 
-  if (moved.count === 0) {
-    const existing = await prisma.agentRequest.findUnique({ where: { id: input.id } });
-    if (!existing) {
-      throw createNotFoundError(REQUEST_NOT_FOUND_MESSAGE);
+    if (moved.count === 0) {
+      const existing = await tx.agentRequest.findUnique({ where: { id: input.id } });
+      if (!existing) {
+        throw createNotFoundError(REQUEST_NOT_FOUND_MESSAGE);
+      }
+      throw createValidationError(REQUEST_ALREADY_TERMINAL_MESSAGE);
     }
-    throw createValidationError(REQUEST_ALREADY_TERMINAL_MESSAGE);
-  }
 
-  return prisma.agentRequest.findUniqueOrThrow({ where: { id: input.id } });
+    const request = await tx.agentRequest.findUniqueOrThrow({ where: { id: input.id } });
+    await recordRequestAudit(tx, { actor: input.by, event: 'canceled', request });
+    return request;
+  });
 }
