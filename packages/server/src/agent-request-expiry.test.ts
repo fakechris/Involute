@@ -59,6 +59,7 @@ describe('agent request expiry (INV-562 / A6)', () => {
       // A successor must already be able to read the thread (INV-589).
       const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
       await prisma.teamMembership.create({ data: { role: 'EDITOR', teamId: team.id, userId: kai.id } });
+      await prisma.agentCredential.create({ data: { name: 'kai', scopes: ['read', 'claim', 'answer'], teamId: team.id, tokenHash: 'h-kai'.padEnd(24, 'x'), userId: kai.id } });
       await prisma.user.update({
         where: { id: mia.id },
         data: { successorActorId: kai.id },
