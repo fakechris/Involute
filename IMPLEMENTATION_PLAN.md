@@ -61,3 +61,30 @@ write.
 - Deploy to the box after each merge (pull → migrate → build server + web →
   restart), with a backup first.
 - Evidence attaches to INV-585…589, never to a guessed number.
+
+---
+
+## Milestone 2 — permissions and attribution hardening (INV-590…593)
+
+From the post-merge review of INV-584: three P1 authorization holes, one
+receipt-binding race, the agent-in-TeamMembership debt, and closing items.
+
+## Stage 1: Actor lifecycle authorization (INV-590)
+**Goal**: Only an ADMIN, the actor's owner, or an OWNER of a team the actor belongs to may deactivate it or transfer its owner; deactivated humans lose their sessions; SERVICE provisioning never touches an existing identity and audits what it wrote, in one transaction; built-in services get an owner by default.
+**Success Criteria**: `actor-authorization.test.ts` — bystander refused, owner/team-owner/ADMIN pass, EDITOR refused, HUMAN subject ADMIN-only, deactivated session null, collisions refused with no audit row.
+**Status**: Complete — PR pending
+
+## Stage 2: Receipt binds to its own audit row (INV-591)
+**Goal**: `recordWorkAudit` returns the audit id; propose/answer/report attach the receipt to that row, never to "the latest audit of the work".
+**Success Criteria**: receipt lands on its own audit when two audits exist; existing receipt tests green.
+**Status**: Not Started
+
+## Stage 3: Agent authorization from the credential binding (INV-592)
+**Goal**: Agents are authorized by `AgentCredential.teamId` + scopes, not by a fake EDITOR membership. Backend first, then backfill + migration removing AGENT memberships, then hand-off/mention use the binding, then `/settings/access` shows humans only plus a Team Agents section.
+**Success Criteria**: an agent with no membership can read/write its bound team and nothing else; hand-off and mention suites green; live agent write path verified after deploy.
+**Status**: Not Started
+
+## Stage 4: Hand-off grace window, chain in GraphQL/UI, legacy cleanup (INV-593)
+**Goal**: A forced-to-human hand-off gets a real deadline; `AgentRequest` exposes hop/root/handed-off-from; work context and agent pages show the chain and receipts; legacy agents get an owner or are deactivated.
+**Success Criteria**: grace-window test; live GraphQL returns chain fields; directory shows no ownerless active agent.
+**Status**: Not Started

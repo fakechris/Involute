@@ -959,6 +959,28 @@ The expiry sweep and the notice it posts are now one act by one actor,
   authenticate from outside like an agent, and are still SERVICE: no human
   gates, nothing to ask.
 
+#### Who may manage an actor (INV-590)
+
+Being logged in is not a capability; knowing an id is not one either.
+`actorDeactivate` and `actorTransferOwner` require the caller to be **a global
+ADMIN, the actor's owner, or an OWNER of a team the actor belongs to** (by
+membership, or by a live credential bound to that team). A HUMAN has no owner
+and belongs to nobody, so only an ADMIN may deactivate one. Making someone
+else the owner of a new service (`serviceActorCreate` with `ownerId` ≠ self)
+is likewise an admin act.
+
+Deactivation ends sessions too: an existing session of a deactivated human is
+dropped at the next request, exactly like an expired one.
+
+`serviceActorCreate` **creates, never upserts**. An email or handle that
+already names any actor — human, agent or service — is refused
+(`SERVICE_IDENTITY_COLLISION_MESSAGE`); nothing existing is renamed. The
+`provisioned` audit row is written in the same transaction as the actor and
+describes the row that was actually written. Built-in services
+(`@expiry-sweeper`, `@github-webhook`, `@hotfix-reflex`) default their owner
+to the first active admin when first created, so "every non-human actor has an
+owner" holds without a backfill.
+
 ### Presence: will it actually reply?
 
 `AgentRequest.presence` answers the question a person actually has, which the

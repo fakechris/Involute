@@ -29,6 +29,8 @@ export const TEAM_HAS_NO_WORKFLOW_STATES_MESSAGE =
   'The selected team does not have any workflow states.';
 export const TEAM_WRITE_FORBIDDEN_MESSAGE = 'You do not have edit access to this team.';
 export const TEAM_MANAGE_FORBIDDEN_MESSAGE = 'You do not have access to manage this team.';
+export const ACTOR_MANAGE_FORBIDDEN_MESSAGE =
+  'You do not have access to manage this actor: only an admin, its owner, or an owner of a team it belongs to may.';
 export const WORK_LINK_NOT_FOUND_MESSAGE = 'Work link not found.';
 export const WORK_LINK_SELF_REFERENCE_MESSAGE = 'Work cannot link to itself.';
 export const WORK_LINK_CYCLE_MESSAGE = 'Work link cannot create a cycle.';
@@ -114,6 +116,7 @@ const exposedErrorCodes = new Map<string, string>([
   [TEAM_HAS_NO_WORKFLOW_STATES_MESSAGE, 'BAD_USER_INPUT'],
   [TEAM_WRITE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
   [TEAM_MANAGE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
+  [ACTOR_MANAGE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
   [WORK_LINK_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [WORK_LINK_SELF_REFERENCE_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_LINK_CYCLE_MESSAGE, 'BAD_USER_INPUT'],

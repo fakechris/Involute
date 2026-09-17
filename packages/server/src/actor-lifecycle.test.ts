@@ -226,6 +226,7 @@ describe('actor lifecycle (INV-586)', () => {
       const admin = await humanAdmin(prisma);
 
       const created = await provisionServiceActor(prisma, {
+        byActorId: admin.id,
         description: 'Nightly reconciliation job.',
         handle: 'nightly-sync',
         name: 'Nightly Sync',
@@ -247,7 +248,7 @@ describe('actor lifecycle (INV-586)', () => {
       });
 
       await expect(provisionServiceActor(prisma, {
-        handle: 'rogue', name: 'Rogue', ownerId: credential.userId,
+        byActorId: admin.id, handle: 'rogue', name: 'Rogue', ownerId: credential.userId,
       })).rejects.toThrow(/active HUMAN/);
     });
   });

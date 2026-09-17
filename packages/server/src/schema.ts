@@ -44,6 +44,7 @@ import {
   ISSUE_NOT_FOUND_MESSAGE,
   MEMBERSHIP_NOT_FOUND_MESSAGE,
   NOTIFICATION_NOT_FOUND_MESSAGE,
+  ACTOR_MANAGE_FORBIDDEN_MESSAGE,
   TEAM_MANAGE_FORBIDDEN_MESSAGE,
   TEAM_NOT_FOUND_MESSAGE,
   TEAM_OWNER_REQUIRED_MESSAGE,
@@ -55,6 +56,7 @@ import {
 } from './errors.js';
 import {
   assertCanDeleteComment,
+  assertCanManageActor,
   assertCanManageTeam,
   assertCanReadTeam,
   assertCanWriteIssue,
@@ -78,7 +80,7 @@ import { WORK_EVENT_TYPES, enqueueWorkEvent } from './event-outbox.js';
 import { toWireState } from './agent-request-state.js';
 import { PRESENCE_COPY, agentRequestPresence } from './agent-request-presence.js';
 import { ACTOR_PRESENCE_COPY, actorPresence } from './actor-presence.js';
-import { deactivateActor, recordActorAudit, transferActorOwner } from './actor-lifecycle.js';
+import { deactivateActor, transferActorOwner } from './actor-lifecycle.js';
 import { provisionServiceActor } from './service-actors.js';
 import {
   findWorkProvenance,
@@ -2372,6 +2374,7 @@ const resolvers = {
     ): Promise<{ actor: User | null; success: boolean }> =>
       runMutation(async () => {
         const viewer = requireAuthentication(context);
+        await assertCanManageActor(context.prisma, context, args.id);
         const actor = await deactivateActor(context.prisma, {
           actorId: args.id,
           by: { actorId: viewer.id, actorKind: viewer.actorKind },
@@ -2386,6 +2389,7 @@ const resolvers = {
     ): Promise<{ actor: User | null; success: boolean }> =>
       runMutation(async () => {
         const viewer = requireAuthentication(context);
+        await assertCanManageActor(context.prisma, context, args.id);
         const actor = await transferActorOwner(context.prisma, {
           actorId: args.id,
           by: { actorId: viewer.id, actorKind: viewer.actorKind },
@@ -2404,18 +2408,18 @@ const resolvers = {
         if (viewer.actorKind !== 'HUMAN') {
           throw createValidationError('Only a human may provision a service actor.');
         }
+        const ownerId = args.input.ownerId ?? viewer.id;
+        // Making someone else accountable for a new service is an admin act.
+        if (ownerId !== viewer.id && viewer.globalRole !== 'ADMIN') {
+          throw createValidationError(ACTOR_MANAGE_FORBIDDEN_MESSAGE);
+        }
         const created = await provisionServiceActor(context.prisma, {
+          byActorId: viewer.id,
           description: args.input.description ?? null,
           email: args.input.email ?? null,
           handle: args.input.handle,
           name: args.input.name,
-          ownerId: args.input.ownerId ?? viewer.id,
-        });
-        await recordActorAudit(context.prisma, {
-          action: 'provisioned',
-          after: { actorKind: 'SERVICE', handle: created.handle, ownerId: args.input.ownerId ?? viewer.id },
-          byActorId: viewer.id,
-          subjectId: created.actorId,
+          ownerId,
         });
         const actor = await context.prisma.user.findUniqueOrThrow({ where: { id: created.actorId } });
         return { actor, success: true as const };
