@@ -167,11 +167,19 @@ export async function handOffRequest(
     return { next: null, pick: null, skipped };
   }
 
+  // An agent's hop is capped by the chain's total deadline. A human is not:
+  // when the chain has run out and this is the person it escalated to, they
+  // get the full window. Capping them too would create a request already
+  // expired at birth, which the next sweep would fail before anyone saw it.
+  const deadlineAt = pick.actor.actorKind === 'HUMAN'
+    ? new Date(now.getTime() + HANDOFF_DEADLINE_MS)
+    : new Date(Math.min(now.getTime() + HANDOFF_DEADLINE_MS, chainDeadlineAt.getTime()));
+
   const next = await tx.agentRequest.create({
     data: {
       body: request.body,
       chainDeadlineAt,
-      deadlineAt: new Date(Math.min(now.getTime() + HANDOFF_DEADLINE_MS, chainDeadlineAt.getTime())),
+      deadlineAt,
       handedOffFromId: request.id,
       hopCount: nextHop,
       idempotencyKey: `handoff:${request.id}`,

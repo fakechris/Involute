@@ -155,6 +155,21 @@ describe('successor hand-off (INV-589)', () => {
     await expect(claimAgentRequest(prisma, { actorId: mia.id, id: request.id })).rejects.toThrow(/not claimable/);
   });
 
+  it('a human reached after the chain deadline gets a real window, not a request already expired', async () => {
+    const { request } = await overdueRequest(prisma);
+    // The chain's total budget is already spent.
+    await prisma.agentRequest.update({ where: { id: request.id }, data: { chainDeadlineAt: new Date(Date.now() - 1000) } });
+
+    await expireOverdueAgentRequests(prisma);
+
+    const next = await prisma.agentRequest.findFirstOrThrow({ where: { handedOffFromId: request.id } });
+    const target = await prisma.user.findUniqueOrThrow({ where: { id: next.targetActorId } });
+    expect(target.actorKind).toBe('HUMAN');
+    expect(next.deadlineAt.getTime()).toBeGreaterThan(Date.now() + 60_000);
+    // and a second sweep does not immediately fail it
+    await expect(expireOverdueAgentRequests(prisma)).resolves.toBe(0);
+  });
+
   it('records the hand-off on the audit trail', async () => {
     const { request } = await overdueRequest(prisma);
     await expireOverdueAgentRequests(prisma);

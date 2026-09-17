@@ -384,6 +384,23 @@ export const ISSUE_PAGE_QUERY = gql`
           lastSeenAt
         }
       }
+      agentRequests(first: 20) {
+        id
+        state
+        presence
+        presenceDetail
+        deadlineAt
+        hopCount
+        rootRequestId
+        handedOffFromId
+        failureReason
+        targetActor {
+          id
+          name
+          handle
+          actorKind
+        }
+      }
       comments(first: 100, orderBy: createdAt) {
         nodes {
           id
