@@ -44,7 +44,7 @@ state transition produces an audit row.
 and time, agent supplies reasoning and references; a self-reported actor that
 disagrees with the audit is rejected; references without a version/digest are
 marked unknown; shown on the audit entry and the agent page, always as a claim.
-**Status**: Not Started
+**Status**: Next
 
 ## Stage 5: Successor hand-off — INV-589
 **Goal**: an unanswered request escalates to a person, by construction.

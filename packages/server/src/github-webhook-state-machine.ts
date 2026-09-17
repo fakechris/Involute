@@ -10,6 +10,9 @@
 
 import type { Prisma, WorkflowStateType } from '@prisma/client';
 
+import { GITHUB_WEBHOOK_ACTOR, ensureServiceActor } from './service-actors.js';
+import { recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
+
 export const LOWER_RANK_TYPES_OF: Record<WorkflowStateType, WorkflowStateType[]> = {
   BACKLOG: [],
   UNSTARTED: ['BACKLOG'],
@@ -114,6 +117,32 @@ async function recordEventLog(
  * - Absorbing states (COMPLETED, CANCELED) are never in LOWER_RANK_TYPES_OF
  * - LWW guard: lastAppliedEventTime must be null or <= incoming eventTimestamp
  */
+/**
+ * Until INV-587 these transitions recorded no WorkAudit at all: the CAS
+ * updated the issue and nothing else, so a work item could move Backlog →
+ * Done through GitHub with no row saying who or what did it. The audit is
+ * written in the same transaction as the CAS — it commits with the move or
+ * not at all — and names @github-webhook, with the event key as the source.
+ */
+async function auditTransition(
+  tx: TransactionClient,
+  input: { before: Prisma.IssueGetPayload<Record<string, never>> | null; eventSourceKey: string; eventType: string; issueId: string; actor?: WriteActor | undefined },
+): Promise<void> {
+  const after = await tx.issue.findUniqueOrThrow({ where: { id: input.issueId } });
+  const base = input.actor ?? (await ensureServiceActor(tx, GITHUB_WEBHOOK_ACTOR));
+  await recordWorkAudit(tx, {
+    actor: {
+      ...base,
+      reason: input.eventType,
+      sourceMessageId: input.eventSourceKey,
+      surface: GITHUB_WEBHOOK_ACTOR.surface,
+    },
+    after: selectIssueSnapshot(after),
+    before: input.before ? selectIssueSnapshot(input.before) : null,
+    workId: input.issueId,
+  });
+}
+
 export async function applyMonotonicForward(
   tx: TransactionClient,
   input: MonotonicForwardInput,
@@ -159,6 +188,7 @@ export async function applyMonotonicForward(
   const allowedStates = await tx.workflowState.findMany({
     where: { teamId: input.teamId, type: { in: lowerTypes } }, select: { id: true },
   });
+  const before = await tx.issue.findUnique({ where: { id: input.issueId } });
 
   // Atomic CAS update: executes at the DB engine level, safe under concurrent executions
   const updateResult = await tx.issue.updateMany({
@@ -181,6 +211,12 @@ export async function applyMonotonicForward(
   });
 
   if (updateResult.count > 0) {
+    await auditTransition(tx, {
+      before,
+      eventSourceKey: input.eventSourceKey,
+      eventType: input.eventType,
+      issueId: input.issueId,
+    });
     return {
       applied: true,
       reason: `Atomic CAS transitioned to ${input.targetStateType}`,
@@ -282,6 +318,7 @@ export async function applyProvenanceRollback(
   const reviewStates = await tx.workflowState.findMany({
     where: { teamId: input.teamId, type: 'REVIEW' }, select: { id: true },
   });
+  const before = await tx.issue.findUnique({ where: { id: input.issueId } });
 
   // Atomic CAS rollback: executes at the DB engine level
   const rollbackResult = await tx.issue.updateMany({
@@ -303,6 +340,12 @@ export async function applyProvenanceRollback(
   });
 
   if (rollbackResult.count > 0) {
+    await auditTransition(tx, {
+      before,
+      eventSourceKey: input.eventSourceKey,
+      eventType: input.eventType,
+      issueId: input.issueId,
+    });
     return {
       applied: true,
       reason: `Atomic CAS provenance rollback: REVIEW → STARTED (source PR ${input.prId})`,

@@ -846,6 +846,31 @@ otherwise the team's human owners, otherwise an explicit statement that there is
 nobody — never silence. (The field is declared and used for advice here;
 automatic successor takeover is INV-556.)
 
+### Audit coverage (INV-587)
+
+Every write that changes what a work item is, or what has been asked of an
+actor about it, leaves a `WorkAudit` row. Two classes used to leave none:
+
+- **GitHub-driven state transitions.** The webhook state machine moved items
+  with a bare CAS. It now writes an audit in the *same transaction* as the
+  move — it commits with the transition or not at all — naming
+  `@github-webhook`, with the event key as `sourceMessageId` and the event type
+  as `reason`. A duplicate delivery produces no second audit; a rejected
+  transition produces none.
+- **Request events.** `claim`, `renew`, `answer`, `cancel` and `expire` each
+  write an audit with `surface: agent_request.<event>`, `sourceMessageId` =
+  the request id, and `claimGeneration` = the generation the acting execution
+  held. The issue snapshot is unchanged (`before` = `after`), which is also
+  what keeps these rows from reading as "this actor proposed the work" — a
+  creation audit is the one with no `before`.
+
+Pass `session_id` to `agent_request_claim` / `agent_request_answer` and it is
+recorded on the audit, so the context can be found later. It is context, not a
+credential: the claim token is what authorizes.
+
+The expiry sweep and the notice it posts are now one act by one actor,
+`@expiry-sweeper`.
+
 ### Actor lifecycle (INV-586)
 
 - **Every non-human actor has a human owner** (`User.ownerId`). Ownership is a
