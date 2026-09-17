@@ -27,6 +27,7 @@ export const BOARD_PAGE_QUERY = gql`
               name
               email
               globalRole
+              actorKind
             }
           }
         }

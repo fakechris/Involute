@@ -299,7 +299,7 @@ describe('Involute MCP', () => {
     const token = 'inv_agent_verification-test';
     const agent = await prisma.user.create({ data: { actorKind: 'AGENT', email: 'verifier-client@example.com', name: 'Client' } });
     await prisma.teamMembership.create({ data: { role: 'EDITOR', teamId: team.id, userId: agent.id } });
-    await prisma.agentCredential.create({ data: { name: 'client', tokenHash: hashAgentToken(token), userId: agent.id } });
+    await prisma.agentCredential.create({ data: { name: 'client', tokenHash: hashAgentToken(token), teamId: team.id, userId: agent.id } });
     const work = await prisma.issue.create({ data: { identifier: 'INV-103', title: 'Bound run', stateId: ready.id,
       teamId: team.id, assigneeId: viewer.id, commitmentStatus: 'COMMITTED', acceptance: 'human review', repository: 'example/project' } });
     const invoke = async (name: string, args: Record<string, unknown>) => {

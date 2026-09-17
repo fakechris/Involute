@@ -45,6 +45,7 @@ import {
   MEMBERSHIP_NOT_FOUND_MESSAGE,
   NOTIFICATION_NOT_FOUND_MESSAGE,
   ACTOR_MANAGE_FORBIDDEN_MESSAGE,
+  TEAM_ROSTER_HUMANS_ONLY_MESSAGE,
   TEAM_MANAGE_FORBIDDEN_MESSAGE,
   TEAM_NOT_FOUND_MESSAGE,
   TEAM_OWNER_REQUIRED_MESSAGE,
@@ -2713,6 +2714,9 @@ const resolvers = {
         await assertCanManageTeam(context.prisma, context, args.input.teamId);
         const membership = await context.prisma.$transaction(async (transaction) => {
           const user = await upsertTeamMemberUser(transaction, args.input.email, args.input.name ?? null);
+          if (user.actorKind !== 'HUMAN') {
+            throw createValidationError(TEAM_ROSTER_HUMANS_ONLY_MESSAGE);
+          }
           const existingMembership = await transaction.teamMembership.findUnique({
             where: {
               teamId_userId: {

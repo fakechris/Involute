@@ -18,6 +18,21 @@ import {
 } from './errors.js';
 const NEVER_MATCHING_UUID = '00000000-0000-0000-0000-000000000000';
 
+/**
+ * INV-592: an agent's access comes from the credential it authenticated
+ * with — its team binding and its scopes — never from a TeamMembership.
+ * Memberships are a human roster with human roles; an agent has no role on
+ * it. So every check below has two paths: the human one (membership) and
+ * the agent one (the bound team on the request).
+ */
+function isAgentRequest(context: GraphQLContext): boolean {
+  return context.authMode === 'agent-token';
+}
+
+function boundTeamId(context: GraphQLContext): string | null {
+  return isAgentRequest(context) ? context.agentTeamId ?? null : null;
+}
+
 type MembershipRole = TeamMembershipRole;
 type Visibility = TeamVisibility;
 
@@ -29,6 +44,16 @@ export function buildReadableTeamWhere(context: GraphQLContext): Prisma.TeamWher
   if (!context.viewer) {
     return {
       id: NEVER_MATCHING_UUID,
+    };
+  }
+
+  if (isAgentRequest(context)) {
+    const teamId = boundTeamId(context);
+    return {
+      OR: [
+        { visibility: 'PUBLIC' satisfies Visibility },
+        { id: teamId ?? NEVER_MATCHING_UUID },
+      ],
     };
   }
 
@@ -71,26 +96,12 @@ export async function assertCanReadTeam(
     throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
   }
 
-  const membership = await prisma.team.findFirst({
-    where: {
-      id: teamId,
-      OR: [
-        { visibility: 'PUBLIC' },
-        {
-          memberships: {
-            some: {
-              userId: context.viewer.id,
-            },
-          },
-        },
-      ],
-    },
-    select: {
-      id: true,
-    },
+  const readable = await prisma.team.findFirst({
+    where: { id: teamId, ...buildReadableTeamWhere(context) },
+    select: { id: true },
   });
 
-  if (!membership) {
+  if (!readable) {
     throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
   }
 }
@@ -106,6 +117,15 @@ export async function assertCanWriteTeam(
 
   if (!context.viewer) {
     throw createValidationError(TEAM_WRITE_FORBIDDEN_MESSAGE);
+  }
+
+  if (isAgentRequest(context)) {
+    // Exactly the team the credential is bound to. Scopes (what it may do
+    // there) are checked by the tool surface; this is where it may do it.
+    if (boundTeamId(context) !== teamId) {
+      throw createValidationError(TEAM_WRITE_FORBIDDEN_MESSAGE);
+    }
+    return;
   }
 
   const membership = await prisma.teamMembership.findUnique({
@@ -134,7 +154,8 @@ export async function assertCanManageTeam(
     return;
   }
 
-  if (!context.viewer) {
+  if (!context.viewer || isAgentRequest(context)) {
+    // Managing a team — its roster, its visibility, its agents — is a human act.
     throw createValidationError(TEAM_MANAGE_FORBIDDEN_MESSAGE);
   }
 
@@ -298,33 +319,19 @@ export function buildVisibleUsersWhere(context: GraphQLContext): Prisma.UserWher
     };
   }
 
+  // The teams whose people (and agents) this viewer may see: public ones,
+  // plus the ones it is in — by membership for a human, by binding for an agent.
+  const visibleTeam: Prisma.TeamWhereInput = isAgentRequest(context)
+    ? { OR: [{ visibility: 'PUBLIC' }, { id: boundTeamId(context) ?? NEVER_MATCHING_UUID }] }
+    : { OR: [{ visibility: 'PUBLIC' }, { memberships: { some: { userId: context.viewer.id } } }] };
+
   return {
     OR: [
-      {
-        id: context.viewer.id,
-      },
-      {
-        memberships: {
-          some: {
-            team: {
-              visibility: 'PUBLIC',
-            },
-          },
-        },
-      },
-      {
-        memberships: {
-          some: {
-            team: {
-              memberships: {
-                some: {
-                  userId: context.viewer.id,
-                },
-              },
-            },
-          },
-        },
-      },
+      { id: context.viewer.id },
+      // humans: on the roster of a visible team
+      { memberships: { some: { team: visibleTeam } } },
+      // agents and services: bound to a visible team by a live credential
+      { agentCredentials: { some: { revokedAt: null, team: visibleTeam } } },
     ],
   };
 }

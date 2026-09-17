@@ -57,8 +57,15 @@ export async function listAgentActors(
     where: {
       actorKind: { in: input.kinds ?? ['AGENT', 'SERVICE'] },
       ...(input.includeDeactivated ? {} : { deactivatedAt: null }),
+      // Bound to the team by a live credential — or, for rows that predate
+      // INV-592 and were never re-issued, still on the roster.
       ...(input.teamKey
-        ? { memberships: { some: { team: { key: input.teamKey } } } }
+        ? {
+            OR: [
+              { agentCredentials: { some: { revokedAt: null, team: { key: input.teamKey } } } },
+              { memberships: { some: { team: { key: input.teamKey } } } },
+            ],
+          }
         : {}),
     },
     orderBy: [{ lastSeenAt: 'desc' }, { name: 'asc' }],
