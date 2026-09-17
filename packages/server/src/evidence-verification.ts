@@ -24,7 +24,7 @@ export async function assessVerifiedEvidence(tx: DatabaseClient, work: Issue, ru
   const rejected = await tx.workReviewDecision.findFirst({ where: { workId: work.id, decision: 'REJECTED', createdAt: { gte: run.startedAt } } });
   if (rejected) reasons.push('human rejected this execution');
   const evidence = await tx.workEvidence.findMany({
-    where: { workId: work.id, runId: run.id, kind: { in: ['PR', 'TEST'] } },
+    where: { retractedAt: null, workId: work.id, runId: run.id, kind: { in: ['PR', 'TEST'] } },
     include: { verifications: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1 } },
   });
   const covered = new Set<string>();
@@ -103,7 +103,7 @@ export function startEvidenceVerifier(prisma: PrismaClient) {
   const tick = () => {
     if (stopped || running) return;
     running = (async () => {
-      const due = await prisma.workEvidence.findMany({ where: { verificationNextAt: { lte: new Date() },
+      const due = await prisma.workEvidence.findMany({ where: { retractedAt: null, verificationNextAt: { lte: new Date() },
         work: { commitmentStatus: 'COMMITTED', state: { type: { in: ['STARTED', 'REVIEW'] } } } },
         orderBy: [{ verificationNextAt: 'asc' }, { id: 'asc' }], take: 10, select: { id: true } });
       for (const item of due) {

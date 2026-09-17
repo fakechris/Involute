@@ -25,7 +25,7 @@ export async function tryAutoAccept(prisma: DatabaseClient, workId: string,
   const run = options.runId
     ? await prisma.workRun.findFirst({ where: { id: options.runId, workId } })
     : await prisma.workRun.findFirst({ where: { workId }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
-  const evidence = await prisma.workEvidence.findMany({ where: { workId, ...(run ? { runId: run.id } : {}) } });
+  const evidence = await prisma.workEvidence.findMany({ where: { retractedAt: null, workId, ...(run ? { runId: run.id } : {}) } });
   const grade = evaluateAutoAcceptGrade({ evidence, runStatus: run?.status ?? null });
   const verified = await assessVerifiedEvidence(prisma, work, run);
   if (verified.eligible) { grade.tier = 'CLEAR'; grade.reasons = ['required criteria verified by server observations']; }

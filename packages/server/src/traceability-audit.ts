@@ -217,7 +217,7 @@ export async function auditMergedPrTraceability(
       // and merge. A bare `contains /pull/<n>` would false-match /pull/123
       // when auditing PR #12, so widen then enforce a digit boundary in JS.
       const candidates = await prisma.workEvidence.findMany({
-        where: { workId: issue.id, url: { contains: `/pull/` } },
+        where: { retractedAt: null, workId: issue.id, url: { contains: `/pull/` } },
         select: { url: true },
       });
       const evidence = candidates.some((row) =>

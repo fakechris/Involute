@@ -93,6 +93,10 @@ export interface WorkEvidenceSummary {
   url: string;
   summary?: string | null;
   createdAt: string;
+  retractedAt?: string | null;
+  retractReason?: string | null;
+  retractedBy?: { id: string; name: string | null; handle: string | null } | null;
+  supersededByWork?: { id: string; identifier: string } | null;
 }
 
 export interface WorkReviewDecisionSummary {
