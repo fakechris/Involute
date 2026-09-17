@@ -136,13 +136,3 @@ export async function attachDecisionReceipt(
     },
   });
 }
-
-/** The most recent audit row for a work item, used to attach a receipt right after a write. */
-export async function latestAuditId(db: DatabaseClient, workId: string): Promise<string> {
-  const audit = await db.workAudit.findFirstOrThrow({
-    where: { workId },
-    orderBy: [{ createdAt: 'desc' }, { revision: 'desc' }],
-    select: { id: true },
-  });
-  return audit.id;
-}

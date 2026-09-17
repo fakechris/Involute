@@ -27,9 +27,9 @@ import {
 } from './errors.js';
 import { findWorkByIdOrIdentifier, isWorkReadyForClaim } from './context-service.js';
 import { enqueueWorkEvent } from './event-outbox.js';
-import { attachDecisionReceipt, latestAuditId, type ReceiptInput } from './decision-receipt.js';
+import { attachDecisionReceipt, type ReceiptInput } from './decision-receipt.js';
 import { createWorkLink } from './link-service.js';
-import { createIssueInTransaction } from './issue-service.js';
+import { createIssueWithAudit } from './issue-service.js';
 import {
   completeWorkIdempotency,
   hashIdempotencyRequest,
@@ -251,7 +251,7 @@ export async function proposeWork(
       createInput.parentId = parentWork.id;
     }
 
-    const created = await createIssueInTransaction(transaction, createInput, actor);
+    const { auditId: creationAuditId, issue: created } = await createIssueWithAudit(transaction, createInput, actor);
     if (parentWork) {
       await createWorkLink(transaction, {
         actor,
@@ -282,7 +282,7 @@ export async function proposeWork(
       // Same transaction as the write: a proposal and its receipt land
       // together or not at all.
       await attachDecisionReceipt(transaction, {
-        auditId: await latestAuditId(transaction, created.id),
+        auditId: creationAuditId,
         receipt: input.receipt,
       });
     }

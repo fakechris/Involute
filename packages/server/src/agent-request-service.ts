@@ -9,7 +9,7 @@ import {
 import { createNotFoundError, createValidationError } from './errors.js';
 import { syncCommentMentions } from './mention-service.js';
 import { recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
-import { attachDecisionReceipt, latestAuditId, type ReceiptInput } from './decision-receipt.js';
+import { attachDecisionReceipt, type ReceiptInput } from './decision-receipt.js';
 
 import type {
   AgentRequest,
@@ -181,10 +181,10 @@ export async function recordRequestAudit(
     event: AgentRequestEvent;
     request: Pick<AgentRequest, 'id' | 'workId'>;
   },
-): Promise<void> {
+): Promise<string> {
   const work = await tx.issue.findUniqueOrThrow({ where: { id: input.request.workId } });
   const snapshot = selectIssueSnapshot(work);
-  await recordWorkAudit(tx, {
+  return recordWorkAudit(tx, {
     actor: {
       ...input.actor,
       reason: input.event,
@@ -435,7 +435,7 @@ export async function answerAgentRequest(
       throw createValidationError(REQUEST_NOT_HELD_MESSAGE);
     }
 
-    await recordRequestAudit(tx, {
+    const answeredAuditId = await recordRequestAudit(tx, {
       actor: { actorId: input.actorId, actorKind: await actorKindOf(tx, input.actorId), sessionId: input.sessionId ?? null },
       claimGeneration: request.claimGeneration,
       event: 'answered',
@@ -443,10 +443,7 @@ export async function answerAgentRequest(
     });
 
     if (input.receipt) {
-      await attachDecisionReceipt(tx, {
-        auditId: await latestAuditId(tx, request.workId),
-        receipt: input.receipt,
-      });
+      await attachDecisionReceipt(tx, { auditId: answeredAuditId, receipt: input.receipt });
     }
 
     return {
