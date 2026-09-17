@@ -44,7 +44,7 @@ state transition produces an audit row.
 and time, agent supplies reasoning and references; a self-reported actor that
 disagrees with the audit is rejected; references without a version/digest are
 marked unknown; shown on the audit entry and the agent page, always as a claim.
-**Status**: Next
+**Status**: Complete — PR pending (stacked on #90); 541/541 server
 
 ## Stage 5: Successor hand-off — INV-589
 **Goal**: an unanswered request escalates to a person, by construction.
@@ -54,7 +54,7 @@ the limit; terminate-old / open-new / link is atomic and idempotent; a late
 answer from the previous holder loses on claim generation; successor must
 already have read access; impersonating the original actor is rejected at the
 write.
-**Status**: Not Started
+**Status**: Next
 
 ## Cross-cutting
 - Web UI for receipts and hand-off state lands with Stages 4 and 5.

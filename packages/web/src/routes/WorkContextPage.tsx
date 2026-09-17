@@ -6,6 +6,7 @@ import { IcoChevL } from '../components/Icons';
 import { Btn } from '../components/Primitives';
 import { WORK_CONTEXT_PAGE_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
 import type {
+  ReceiptReferenceSummary,
   WorkContextPageQueryData,
   WorkContextPageQueryVariables,
   WorkRef,
@@ -306,7 +307,43 @@ export function WorkContextPage() {
                   ) : null}
                   {audit.surface ? <span>{audit.surface}</span> : null}
                   {audit.reason ? <span>{audit.reason}</span> : null}
+                  {audit.claimGeneration != null ? <span>gen {audit.claimGeneration}</span> : null}
                   <span className="observation-card__meta">{formatWhen(audit.createdAt)}</span>
+                  {audit.receipt ? (
+                    <details className="decision-receipt">
+                      <summary>
+                        Receipt — claimed by {audit.receipt.actor.handle ? `@${audit.receipt.actor.handle}` : audit.receipt.actor.name}
+                        {audit.receipt.sessionId ? ` in session ${audit.receipt.sessionId}` : ''}
+                        {audit.receipt.runtime ? ` on ${audit.receipt.runtime}` : ''}
+                        {` at ${formatWhen(audit.receipt.createdAt)}`}
+                      </summary>
+                      <p className="decision-receipt__reasoning">{audit.receipt.reasoning}</p>
+                      {[['Relied on', audit.receipt.evidence], ['Read', audit.receipt.inputs]].map(([label, refs]) =>
+                        (refs as ReceiptReferenceSummary[]).length > 0 ? (
+                          <div key={label as string} className="decision-receipt__refs">
+                            <span className="observation-card__meta">{label as string}</span>
+                            <ul>
+                              {(refs as ReceiptReferenceSummary[]).map((ref, index) => (
+                                <li key={`${ref.kind}-${ref.ref}-${index}`}>
+                                  <code>{ref.kind}</code> {ref.ref}
+                                  {ref.version ? ` @ ${ref.version}` : ''}
+                                  {ref.preserved ? null : (
+                                    <span className="decision-receipt__unpreserved" title="A bare pointer: what was seen at the time cannot be reconstructed from it.">
+                                      {' '}not preserved
+                                    </span>
+                                  )}
+                                  {ref.excerpt ? <blockquote>{ref.excerpt}</blockquote> : null}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : null,
+                      )}
+                      <p className="observation-card__meta">
+                        This is the actor's own statement, saved at the time. It is not a verified account.
+                      </p>
+                    </details>
+                  ) : null}
                 </li>
               ))}
             </ul>

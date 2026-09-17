@@ -9,6 +9,7 @@ import {
 import { createNotFoundError, createValidationError } from './errors.js';
 import { syncCommentMentions } from './mention-service.js';
 import { recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
+import { attachDecisionReceipt, latestAuditId, type ReceiptInput } from './decision-receipt.js';
 
 import type {
   AgentRequest,
@@ -315,6 +316,8 @@ export interface AnswerAgentRequestInput {
   claimToken: string;
   /** The execution's session id, recorded on the audit for later context. */
   sessionId?: string | null;
+  /** What the answerer knew and why — attached to the answer's audit (INV-588). */
+  receipt?: ReceiptInput | null;
   evidence?: AnswerEvidenceInput[] | null;
   id: string;
   /** `completed` (default), `failed`, or `input-required` when asking back. */
@@ -438,6 +441,13 @@ export async function answerAgentRequest(
       event: 'answered',
       request,
     });
+
+    if (input.receipt) {
+      await attachDecisionReceipt(tx, {
+        auditId: await latestAuditId(tx, request.workId),
+        receipt: input.receipt,
+      });
+    }
 
     return {
       commentId: comment.id,

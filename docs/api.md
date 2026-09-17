@@ -846,6 +846,38 @@ otherwise the team's human owners, otherwise an explicit statement that there is
 nobody — never silence. (The field is declared and used for advice here;
 automatic successor takeover is INV-556.)
 
+### Decision receipts (INV-588)
+
+A receipt is **the actor's own statement of what it knew and why**, frozen at
+write time so it outlives the session that wrote it. It is attached 1:1 to the
+`WorkAudit` row of the write it explains, in the **same transaction** — a write
+and its receipt land together or not at all — and it is immutable.
+
+Send it as `receipt` on `work_propose`, `run_report` or `agent_request_answer`:
+
+```json
+{ "reasoning": "…", "runtime": "claude-code 2.1",
+  "evidence": [{ "kind": "commit", "ref": "abc123", "version": "abc123" }],
+  "inputs":   [{ "kind": "comment", "ref": "<id>", "excerpt": "what I actually read" }] }
+```
+
+Rules, all enforced at the write:
+
+- **Identity and time come from the audit, never from the payload.** `actorId`
+  and `sessionId` are copied from the audit row. A self-reported `actorId` that
+  disagrees is rejected, not stored. A receipt cannot be attached to a legacy
+  anonymous write — there is no one it could be the statement of.
+- **References are marked `preserved` or not.** A bare id/URL does not preserve
+  what was seen — comments get edited, files change, URLs die. A reference with
+  a `version`, `digest` or frozen `excerpt` is `preserved: true`; one without is
+  stored but `preserved: false`, so a reader knows it is a pointer, not a
+  snapshot. Nothing is silently a pointer.
+- **Always rendered as a claim** — "claimed by `@mia` in session `S` at `T`".
+  A successor answering later says "from the record saved at the time"; it
+  must not imply it recovered the original session's full knowledge.
+
+Read it as `WorkAuditRecord.receipt` in `workContext`.
+
 ### Audit coverage (INV-587)
 
 Every write that changes what a work item is, or what has been asked of an

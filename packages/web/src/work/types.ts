@@ -106,7 +106,33 @@ export interface WorkReviewDecisionSummary {
   run?: WorkRunSummary | null;
 }
 
+export interface ReceiptReferenceSummary {
+  kind: string;
+  ref: string;
+  version: string | null;
+  digest: string | null;
+  excerpt: string | null;
+  /** False when the reference is a bare pointer — what was seen cannot be reconstructed from it. */
+  preserved: boolean;
+}
+
+/** The actor's own statement of what it knew when it wrote. Always a claim (INV-588). */
+export interface DecisionReceiptSummary {
+  id: string;
+  reasoning: string;
+  runtime: string | null;
+  sessionId: string | null;
+  contractRevision: number;
+  createdAt: string;
+  actor: { id: string; name: string | null; handle: string | null };
+  evidence: ReceiptReferenceSummary[];
+  inputs: ReceiptReferenceSummary[];
+}
+
 export interface WorkAuditSummary {
+  sessionId?: string | null;
+  claimGeneration?: number | null;
+  receipt?: DecisionReceiptSummary | null;
   id: string;
   revision: number;
   actorKind: ActorKind;
