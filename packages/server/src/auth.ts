@@ -13,6 +13,8 @@ import { resolveAgentPrincipal } from './agent-credentials.js';
 export interface GraphQLContext {
   authMode: 'agent-token' | 'none' | 'session' | 'token';
   agentScopes?: string[] | null;
+  /** The team the acting credential is bound to (INV-592). An agent's access is this, not a membership. */
+  agentTeamId?: string | null;
   isTrustedSystem: boolean;
   prisma: PrismaClient;
   viewer: User | null;
@@ -28,6 +30,7 @@ export interface GraphQLContextOptions {
 
 interface RequestAuthentication {
   agentScopes?: string[] | null;
+  agentTeamId?: string | null;
   authMode: GraphQLContext['authMode'];
   authorized: boolean;
   isTrustedSystem: boolean;
@@ -87,6 +90,7 @@ export async function createGraphQLContext({
   return {
     authMode: authentication.authMode,
     agentScopes: authentication.authMode === 'agent-token' ? authentication.agentScopes ?? null : null,
+    agentTeamId: authentication.authMode === 'agent-token' ? authentication.agentTeamId ?? null : null,
     isTrustedSystem: authentication.isTrustedSystem,
     prisma,
     viewer: authentication.viewer,
@@ -191,6 +195,7 @@ async function computeRequestAuthentication({
     return {
       authMode: 'agent-token',
       agentScopes: agent.scopes,
+      agentTeamId: agent.teamId,
       authorized: true,
       isTrustedSystem: false,
       viewer: agent.user,

@@ -82,7 +82,7 @@ receipt-binding race, the agent-in-TeamMembership debt, and closing items.
 ## Stage 3: Agent authorization from the credential binding (INV-592)
 **Goal**: Agents are authorized by `AgentCredential.teamId` + scopes, not by a fake EDITOR membership. Backend first, then backfill + migration removing AGENT memberships, then hand-off/mention use the binding, then `/settings/access` shows humans only plus a Team Agents section.
 **Success Criteria**: an agent with no membership can read/write its bound team and nothing else; hand-off and mention suites green; live agent write path verified after deploy.
-**Status**: Not Started
+**Status**: Complete — PR pending (stacked on INV-591); live write-path check happens at deploy
 
 ## Stage 4: Hand-off grace window, chain in GraphQL/UI, legacy cleanup (INV-593)
 **Goal**: A forced-to-human hand-off gets a real deadline; `AgentRequest` exposes hop/root/handed-off-from; work context and agent pages show the chain and receipts; legacy agents get an owner or are deactivated.

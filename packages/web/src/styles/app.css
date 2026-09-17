@@ -1715,6 +1715,27 @@ kbd {
   background: transparent;
   box-shadow: none;
   padding: var(--content-gutter);
+  /* The page clips overflow; the stage is the scroll context, or a long
+     roster is simply cut off with no way down. */
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.access-agent-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  background: var(--bg-raised);
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.access-agent-card p {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .access-status-grid {

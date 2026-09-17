@@ -967,6 +967,26 @@ The expiry sweep and the notice it posts are now one act by one actor,
   authenticate from outside like an agent, and are still SERVICE: no human
   gates, nothing to ask.
 
+#### An agent's access is its credential binding, not a membership (INV-592)
+
+`TeamMembership` is the **human roster**: people with human roles. An agent
+or service has no role on it and is never on it. Its access comes from the
+credential it authenticated with:
+
+- **where** it may act: `AgentCredential.teamId` — the request carries it as
+  `context.agentTeamId`. Reads: that team plus public ones. Writes: that team
+  only. Managing a team: never.
+- **what** it may do there: `AgentCredential.scopes`, checked per tool.
+- **who answers for it**: `User.ownerId`.
+
+`teamMembershipUpsert` refuses a non-human email. The team directory
+(`agents(teamKey)`), mention suggestions, assignee lists and hand-off
+eligibility all recognise an agent as part of a team **by binding**. The
+migration `agent_binding_not_membership` backfills any live credential
+without a `teamId` from the agent's old membership, then removes agents and
+services from the roster. `/settings/access` lists humans; agents bound to the
+team appear in their own section with owner and presence.
+
 #### Who may manage an actor (INV-590)
 
 Being logged in is not a capability; knowing an id is not one either.

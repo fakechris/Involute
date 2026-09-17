@@ -31,11 +31,13 @@ export interface HandoffResult {
 }
 
 async function canReadThread(tx: Tx, actorId: string, teamId: string): Promise<boolean> {
-  const membership = await tx.teamMembership.findUnique({
-    where: { teamId_userId: { teamId, userId: actorId } },
-    select: { id: true },
-  });
-  return membership !== null;
+  // A human reads it by membership; an agent by a live credential bound to
+  // the team (INV-592). Either counts; neither is granted by being named.
+  const [membership, binding] = await Promise.all([
+    tx.teamMembership.findUnique({ where: { teamId_userId: { teamId, userId: actorId } }, select: { id: true } }),
+    tx.agentCredential.findFirst({ where: { revokedAt: null, teamId, userId: actorId }, select: { id: true } }),
+  ]);
+  return membership !== null || binding !== null;
 }
 
 /**

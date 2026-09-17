@@ -48,6 +48,8 @@ export function hashAgentToken(token: string): string {
 
 export interface AgentPrincipal {
   scopes: string[];
+  /** The team the credential is bound to — the agent\'s access, in place of a membership (INV-592). */
+  teamId: string | null;
   user: User;
 }
 
@@ -199,11 +201,11 @@ export async function issueAgentCredential(
     await prisma.user.update({ where: { id: existing.id }, data: profileUpdates });
   }
 
-  await prisma.teamMembership.upsert({
-    where: { teamId_userId: { teamId: team.id, userId: user.id } },
-    create: { role: 'EDITOR', teamId: team.id, userId: user.id },
-    update: { role: 'EDITOR' },
-  });
+  // An agent is not a team member. It never was one in any sense that
+  // mattered — it has no role, it is not on the roster — but until INV-592
+  // this is where it was upserted as an EDITOR so that the membership-based
+  // write check would let it through. The credential's teamId is the binding
+  // now, and access-control reads it from the request.
   const token = createAgentToken();
   const credential = await prisma.agentCredential.create({
     data: {
@@ -247,7 +249,7 @@ export async function resolveAgentPrincipal(
 
   void touchLastSeen(prisma, credential.user, now);
 
-  return { scopes: credential.scopes, user: credential.user };
+  return { scopes: credential.scopes, teamId: credential.teamId, user: credential.user };
 }
 
 /**

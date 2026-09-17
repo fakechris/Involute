@@ -29,6 +29,8 @@ export const TEAM_HAS_NO_WORKFLOW_STATES_MESSAGE =
   'The selected team does not have any workflow states.';
 export const TEAM_WRITE_FORBIDDEN_MESSAGE = 'You do not have edit access to this team.';
 export const TEAM_MANAGE_FORBIDDEN_MESSAGE = 'You do not have access to manage this team.';
+export const TEAM_ROSTER_HUMANS_ONLY_MESSAGE =
+  'Team membership is a human roster. An agent or service is bound to a team by its credential, not by a membership role.';
 export const ACTOR_MANAGE_FORBIDDEN_MESSAGE =
   'You do not have access to manage this actor: only an admin, its owner, or an owner of a team it belongs to may.';
 export const WORK_LINK_NOT_FOUND_MESSAGE = 'Work link not found.';
