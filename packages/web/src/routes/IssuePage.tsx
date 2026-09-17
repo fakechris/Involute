@@ -786,6 +786,30 @@ export function IssuePage() {
               </div>
             ) : null}
 
+            {/* Open questions to agents, with their hand-off chain (INV-589/593) */}
+            {(activeIssue.agentRequests ?? []).length > 0 ? (
+              <div className="issue-panel__section">
+                <h2>Requests · {activeIssue.agentRequests!.length}</h2>
+                <div className="issue-children" role="list">
+                  {activeIssue.agentRequests!.map((request) => (
+                    <div key={request.id} role="listitem" className="issue-children__row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <ActorBadge actor={request.targetActor} onSelect={(picked) => navigate(`/agents/${picked}`)} />
+                      <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>{request.state}</span>
+                      <span style={{ fontSize: 12, color: 'var(--fg-dim)' }} title={request.presenceDetail}>{request.presence}</span>
+                      {request.hopCount > 0 ? (
+                        <span style={{ fontSize: 12, color: 'var(--fg-dim)' }} title={request.handedOffFromId ? `handed off from request ${request.handedOffFromId}` : undefined}>
+                          hand-off #{request.hopCount}
+                        </span>
+                      ) : null}
+                      {request.failureReason ? (
+                        <span style={{ fontSize: 12, color: 'var(--fg-faint)' }}>{request.failureReason}</span>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             {/* Activity */}
             <div className="issue-panel__activity-section">
               <div className="issue-panel__activity-header">Activity</div>

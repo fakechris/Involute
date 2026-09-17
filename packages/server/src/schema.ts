@@ -539,6 +539,14 @@ const typeDefs = /* GraphQL */ `
     """Who to ask instead when this one does not answer."""
     successorActor: User
     answeredCommentId: String
+    """Hand-off chain (INV-589): 0 for the original request, +1 per hand-off."""
+    hopCount: Int!
+    """The first request in this chain; null when this is it."""
+    rootRequestId: String
+    """The request this one was handed off from; null when it was asked directly."""
+    handedOffFromId: String
+    """When the whole chain must have reached a person."""
+    chainDeadlineAt: DateTime
   }
 
   enum CommentOrderBy {

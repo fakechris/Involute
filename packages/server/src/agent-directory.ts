@@ -16,7 +16,7 @@ export interface AgentActivityCounts {
 export interface AgentTimelineEntry {
   at: Date;
   detail: string | null;
-  kind: 'proposed' | 'claimed' | 'run' | 'evidence' | 'answered' | 'asked';
+  kind: 'proposed' | 'claimed' | 'run' | 'evidence' | 'answered' | 'asked' | 'decided';
   workId: string | null;
   workIdentifier: string | null;
 }
@@ -164,7 +164,7 @@ async function buildTimeline(
 ): Promise<AgentTimelineEntry[]> {
   const take = MAX_TIMELINE_ENTRIES;
 
-  const [proposals, claims, runs, evidence, requests] = await Promise.all([
+  const [proposals, claims, runs, evidence, requests, receipts] = await Promise.all([
     // revision 1 is the row that created the work, so its actor is the proposer.
     prisma.workAudit.findMany({
       where: { actorId, before: { equals: Prisma.DbNull } },
@@ -211,9 +211,27 @@ async function buildTimeline(
       orderBy: { updatedAt: 'desc' },
       take,
     }),
+    // Decision receipts: the agent's own account of why (INV-588), shown
+    // where a person looks to understand it.
+    prisma.decisionReceipt.findMany({
+      where: { actorId },
+      select: {
+        reasoning: true,
+        audit: { select: { createdAt: true, work: { select: { id: true, identifier: true } } } },
+      },
+      orderBy: { audit: { createdAt: 'desc' } },
+      take,
+    }),
   ]);
 
   const entries: AgentTimelineEntry[] = [
+    ...receipts.map((row) => ({
+      at: row.audit.createdAt,
+      detail: row.reasoning.length > 240 ? `${row.reasoning.slice(0, 240)}…` : row.reasoning,
+      kind: 'decided' as const,
+      workId: row.audit.work.id,
+      workIdentifier: row.audit.work.identifier,
+    })),
     ...proposals.map((row) => ({
       at: row.createdAt,
       detail: row.work.title,
