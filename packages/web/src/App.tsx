@@ -1132,6 +1132,11 @@ export function App() {
                 <span className="app-shell__nav-icon"><IcoTeam size={14} /></span>
                 <span className="app-shell__link-label">Agents</span>
               </NavLink>
+              <NavLink to="/settings" className={getNavLinkClassName} title="Go to Settings · G S">
+                <span className="app-shell__nav-icon"><IcoSettings size={14} /></span>
+                <span className="app-shell__link-label">Settings</span>
+                <kbd className="app-shell__link-kbd" aria-hidden="true">G S</kbd>
+              </NavLink>
             </nav>
           </div>
 
@@ -1226,87 +1231,112 @@ export function App() {
           ) : null}
 
           {session?.authenticated && session.viewer ? (
-            <div className="app-shell__sidebar-footer-row">
-              <Avatar user={session.viewer.name ? { name: session.viewer.name } : null} size={22} />
-              <div className="app-shell__footer-user">
-                <div className="app-shell__footer-name">{session.viewer.name ?? session.viewer.email ?? 'Signed-in viewer'}</div>
-                <div className="app-shell__footer-role">{session.viewer.globalRole}</div>
-              </div>
-              <NotificationsBell authenticated />
-              <button
-                type="button"
-                className="app-shell__footer-settings"
-                title="Keyboard shortcuts · ?"
-                onClick={() => setIsShortcutsOpen(true)}
-                aria-label="Keyboard shortcuts"
-              >
-                <IcoKeyboard size={14} />
-              </button>
-              <button
-                type="button"
-                className="app-shell__footer-settings"
-                title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-                onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-              >
-                {theme === 'dark' ? <IcoSun size={14} /> : <IcoMoon size={14} />}
-              </button>
-              <button
-                type="button"
-                className="app-shell__footer-settings"
-                title="Settings"
+            <div className="app-shell__sidebar-footer-stack">
+              <div
+                className="app-shell__sidebar-footer-user-row"
                 onClick={() => navigate('/settings')}
+                title="Account & settings · G S"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate('/settings');
+                  }
+                }}
               >
-                <IcoSettings size={14} />
-              </button>
-              <button
-                type="button"
-                className="app-shell__footer-settings"
-                title="Tweaks"
-                onClick={() => setIsTweaksOpen((v) => !v)}
-              >
-                Tweaks
-              </button>
+                <Avatar user={session.viewer.name ? { name: session.viewer.name } : null} size={24} />
+                <div className="app-shell__footer-user">
+                  <div className="app-shell__footer-name">{session.viewer.name ?? session.viewer.email ?? 'Signed-in viewer'}</div>
+                  <div className="app-shell__footer-role">{session.viewer.globalRole}</div>
+                </div>
+                <span className="app-shell__footer-settings-hint" title="Settings">
+                  <IcoSettings size={14} />
+                </span>
+              </div>
+              <div className="app-shell__sidebar-footer-actions-row">
+                <NotificationsBell authenticated />
+                <button
+                  type="button"
+                  className="app-shell__footer-action-btn"
+                  title="Keyboard shortcuts · ?"
+                  onClick={() => setIsShortcutsOpen(true)}
+                  aria-label="Keyboard shortcuts"
+                >
+                  <IcoKeyboard size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="app-shell__footer-action-btn"
+                  title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                  onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+                  aria-label="Toggle theme"
+                >
+                  {theme === 'dark' ? <IcoSun size={14} /> : <IcoMoon size={14} />}
+                </button>
+                <button
+                  type="button"
+                  className="app-shell__footer-action-btn"
+                  title="Settings · G S"
+                  onClick={() => navigate('/settings')}
+                  aria-label="Settings"
+                >
+                  <IcoSettings size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="app-shell__footer-action-btn app-shell__footer-action-btn--text"
+                  title="Tweaks"
+                  onClick={() => setIsTweaksOpen((v) => !v)}
+                >
+                  Tweaks
+                </button>
+              </div>
             </div>
           ) : !isSessionLoaded ? (
             <div className="app-shell__sidebar-meta">
               <span className="app-shell__session-status">Loading session…</span>
             </div>
           ) : (
-            <div className="app-shell__sidebar-footer-row">
-              <NotificationsBell authenticated={Boolean(session?.authenticated)} />
-              <button
-                type="button"
-                className="app-shell__footer-settings"
-                title="Keyboard shortcuts · ?"
-                onClick={() => setIsShortcutsOpen(true)}
-                aria-label="Keyboard shortcuts"
-              >
-                <IcoKeyboard size={14} />
-              </button>
-              <button
-                type="button"
-                className="app-shell__footer-settings"
-                title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-                onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-              >
-                {theme === 'dark' ? <IcoSun size={14} /> : <IcoMoon size={14} />}
-              </button>
-              <button
-                type="button"
-                className="app-shell__footer-settings"
-                title="Settings"
-                onClick={() => navigate('/settings')}
-              >
-                <IcoSettings size={14} />
-              </button>
-              <button
-                type="button"
-                className="app-shell__footer-settings"
-                title="Tweaks"
-                onClick={() => setIsTweaksOpen((v) => !v)}
-              >
-                Tweaks
-              </button>
+            <div className="app-shell__sidebar-footer-stack">
+              <div className="app-shell__sidebar-footer-actions-row">
+                <NotificationsBell authenticated={Boolean(session?.authenticated)} />
+                <button
+                  type="button"
+                  className="app-shell__footer-action-btn"
+                  title="Keyboard shortcuts · ?"
+                  onClick={() => setIsShortcutsOpen(true)}
+                  aria-label="Keyboard shortcuts"
+                >
+                  <IcoKeyboard size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="app-shell__footer-action-btn"
+                  title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+                  onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+                  aria-label="Toggle theme"
+                >
+                  {theme === 'dark' ? <IcoSun size={14} /> : <IcoMoon size={14} />}
+                </button>
+                <button
+                  type="button"
+                  className="app-shell__footer-action-btn"
+                  title="Settings · G S"
+                  onClick={() => navigate('/settings')}
+                  aria-label="Settings"
+                >
+                  <IcoSettings size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="app-shell__footer-action-btn app-shell__footer-action-btn--text"
+                  title="Tweaks"
+                  onClick={() => setIsTweaksOpen((v) => !v)}
+                >
+                  Tweaks
+                </button>
+              </div>
             </div>
           )}
 

@@ -8,9 +8,9 @@ This repository is bound to the **Involute Work-Graph Kernel** for task tracking
 - **Team Key**: `INV`
 - **Root Project Identifier**: `INV-79`
 - **Root Project UUID**: `ee47bd7b-5aa4-4ca4-95b3-701b4ab4ecef`
-- **Web UI**: [http://100.114.30.43:4201/](http://100.114.30.43:4201/)
-- **Candidate Review Queue**: [http://100.114.30.43:4201/candidates](http://100.114.30.43:4201/candidates)
-- **Work Graph Observation**: [http://100.114.30.43:4201/graph](http://100.114.30.43:4201/graph)
+- **Web UI**: [https://involute.lumenopen.com/](https://involute.lumenopen.com/)
+- **Candidate Review Queue**: [https://involute.lumenopen.com/candidates](https://involute.lumenopen.com/candidates)
+- **Work Graph Observation**: [https://involute.lumenopen.com/graph](https://involute.lumenopen.com/graph)
 
 ## 2. MCP Connection Configuration
 
@@ -18,8 +18,9 @@ Pick the endpoint matching where the agent is running:
 
 | Agent Environment | MCP Endpoint URL | Notes |
 |---|---|---|
-| **Remote / Developer Machine** (e.g. Mac, Cursor, Codex, Claude Code) | `http://100.114.30.43:4200/mcp` (or `/mcp/readonly`) | Connect via Tailscale network to the Box |
-| **Local on Box** (executing inside the VPS host) | `http://127.0.0.1:4200/mcp` (or `/mcp/readonly`) | Loopback connection on the host |
+| **Public / Remote / Developer Machine** (e.g. Mac, Cursor, Codex, Claude Code) | `https://involute.lumenopen.com/mcp` (or `/mcp/readonly`) | Global HTTPS via Cloudflare |
+| **Tailscale Direct** | `http://100.97.55.41:80/mcp` | Direct connection via Tailnet to oracle_5 |
+| **Local on Box (oracle_5)** | `http://127.0.0.1:4200/mcp` (or `/mcp/readonly`) | Loopback connection on the host |
 
 - **Auth Header**: `Authorization: Bearer <AGENT_TOKEN>`
 - **Token Format**: `inv_agent_...` minted via Settings → Agents or `pnpm --filter @turnkeyai/involute-server agent:create`.
@@ -41,7 +42,7 @@ flowchart TD
 ### Why items appear in Candidates first
 - `work_propose` creates work with `commitmentStatus: 'CANDIDATE'`.
 - The active **Board** (`/`) and **Backlog** (`/backlog`) intentionally query `commitmentStatus: 'COMMITTED'` only to prevent automated agents from polluting the active queue.
-- All proposed milestones and tasks wait at [http://100.114.30.43:4201/candidates](http://100.114.30.43:4201/candidates) for human approval.
+- All proposed milestones and tasks wait at [https://involute.lumenopen.com/candidates](https://involute.lumenopen.com/candidates) for human approval.
 - Once committed by a human, items become active and eligible for `work_claim`.
 
 ## 4. Agent Operational Rules
@@ -82,7 +83,7 @@ When an agent onboards a repository for the first time, it MUST get everything r
      - **Hard Guardrail**: Candidate `initial_state` can NEVER be `COMPLETED` (`Done`) or `CANCELED`. Agents stop at `In Review`; `Done` is strictly human-gated.
 4. **Batch Presentation**:
    - Present a formatted Markdown tree of proposed items to the user.
-   - Point the human to the Candidate queue with project filter pre-selected: `http://100.114.30.43:4201/candidates?project=<owner/repo>`.
+   - Point the human to the Candidate queue with project filter pre-selected: `https://involute.lumenopen.com/candidates?project=<owner/repo>`.
 
 ## 6. Human-Delegated Batch Commitment Protocol
 
@@ -100,7 +101,7 @@ The agent acts as an authorized batch executor under direct human delegation. Th
    - Assigns work to the designated human team member.
 
 2. **Web UI Batch Actions (Linear-Style)**:
-   - Operators can visit [http://100.114.30.43:4201/candidates](http://100.114.30.43:4201/candidates).
+   - Operators can visit [https://involute.lumenopen.com/candidates](https://involute.lumenopen.com/candidates).
    - Use the **Project Switcher** pills to isolate a repository (`fakechris/Involute`, `fakechris/lumenbox`, or `All Projects`).
    - Click **Select all visible** (or select specific cards).
    - Select the target Human Owner and click **Batch Commit (N)** on the floating batch bar to commit the whole batch in 1 click.

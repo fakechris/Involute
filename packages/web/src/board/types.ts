@@ -44,6 +44,7 @@ export interface UserSummary {
   /** Present for agent actors (INV-573); absent on plain user selections. */
   handle?: string | null;
   actorKind?: 'HUMAN' | 'AGENT' | 'SERVICE';
+  globalRole?: 'ADMIN' | 'USER';
   runtime?: string | null;
   description?: string | null;
   presence?: string;

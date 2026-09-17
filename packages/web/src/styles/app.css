@@ -476,6 +476,51 @@ kbd {
   border-top: 1px solid var(--border-subtle);
 }
 
+.app-shell__sidebar-footer-stack {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-subtle);
+  padding: 8px;
+  gap: 4px;
+}
+
+.app-shell__sidebar-footer-user-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--r-2);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+
+.app-shell__sidebar-footer-user-row:hover {
+  background: var(--bg-hover);
+}
+
+.app-shell__footer-settings-hint {
+  color: var(--fg-dim);
+  opacity: 0.6;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+
+.app-shell__sidebar-footer-user-row:hover .app-shell__footer-settings-hint {
+  opacity: 1;
+  color: var(--fg);
+}
+
+.app-shell__sidebar-footer-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 2px 4px 0;
+}
+
 .app-shell__footer-user {
   flex: 1;
   min-width: 0;
@@ -498,20 +543,32 @@ kbd {
   white-space: nowrap;
 }
 
+.app-shell__footer-action-btn,
 .app-shell__footer-settings {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
   border-radius: var(--r-2);
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--fg-dim);
+  background: transparent;
+  border: none;
+  cursor: pointer;
   transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
 
+.app-shell__footer-action-btn:hover,
 .app-shell__footer-settings:hover {
   background: var(--bg-hover);
   color: var(--fg);
+}
+
+.app-shell__footer-action-btn--text {
+  width: auto;
+  padding: 0 6px;
+  font-size: 12px;
 }
 
 .notif-bell {

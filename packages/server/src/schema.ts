@@ -2904,7 +2904,17 @@ const resolvers = {
       return runMutation(async () => {
         const data: Prisma.UserUpdateInput = {};
         if (args.input.name !== undefined && args.input.name !== null) data.name = args.input.name;
-        if (args.input.email !== undefined && args.input.email !== null) data.email = args.input.email.trim().toLowerCase();
+        if (args.input.email !== undefined && args.input.email !== null) {
+          const targetEmail = args.input.email.trim().toLowerCase();
+          const currentUser = await context.prisma.user.findUnique({
+            where: { id: viewer.id },
+            select: { googleSubject: true, email: true },
+          });
+          if (currentUser?.googleSubject && currentUser.email !== targetEmail) {
+            throw createValidationError('Cannot change email for Google-authenticated accounts.');
+          }
+          data.email = targetEmail;
+        }
         const user = await context.prisma.user.update({ where: { id: viewer.id }, data });
         return { user, success: true as const };
       }, { user: null, success: false as const });
