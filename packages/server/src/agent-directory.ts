@@ -112,11 +112,25 @@ export async function findAgentActor(
  * produced, AgentRequest who was asked). What was missing was somewhere that
  * reads them together, so "Mia" in a thread stops being an opaque name.
  */
+/**
+ * What a viewer may see of an actor's history is bounded by what the viewer
+ * may read: counts, timeline, receipts and credentials are all filtered to
+ * the work items and teams readable by the caller (INV-597 follow-up). An
+ * `undefined` scope means unrestricted (ADMIN / trusted system).
+ */
+export interface ProfileScope {
+  readableTeam?: Prisma.TeamWhereInput | undefined;
+  readableWork?: Prisma.IssueWhereInput | undefined;
+}
+
 export async function getAgentProfile(
   prisma: PrismaClient,
   handleOrId: string,
+  scope: ProfileScope = {},
 ): Promise<AgentProfile | null> {
   const actor = await findAgentActor(prisma, handleOrId);
+  const work = scope.readableWork;
+  const onWork = work ? { work } : {};
 
   if (!actor) {
     return null;
@@ -130,19 +144,20 @@ export async function getAgentProfile(
     proposedWork,
   ] = await Promise.all([
     prisma.agentRequest.count({
-      where: { state: { in: ['SUBMITTED', 'WORKING', 'INPUT_REQUIRED'] }, targetActorId: actor.id },
+      where: { state: { in: ['SUBMITTED', 'WORKING', 'INPUT_REQUIRED'] }, targetActorId: actor.id, ...onWork },
     }),
-    prisma.agentRequest.count({ where: { state: 'COMPLETED', targetActorId: actor.id } }),
-    prisma.workRun.count({ where: { actorId: actor.id } }),
-    prisma.workEvidence.count({ where: { actorId: actor.id } }),
+    prisma.agentRequest.count({ where: { state: 'COMPLETED', targetActorId: actor.id, ...onWork } }),
+    prisma.workRun.count({ where: { actorId: actor.id, ...onWork } }),
+    prisma.workEvidence.count({ where: { actorId: actor.id, ...onWork } }),
     // A creation audit has no `before`. Counting "revision 1" instead would
     // also count a webhook moving a freshly-proposed item, once those writes
     // are audited (INV-587).
-    prisma.workAudit.count({ where: { actorId: actor.id, before: { equals: Prisma.DbNull } } }),
+    prisma.workAudit.count({ where: { actorId: actor.id, before: { equals: Prisma.DbNull }, ...onWork } }),
   ]);
 
   const credentials = await prisma.agentCredential.findMany({
-    where: { userId: actor.id },
+    // Only credentials on teams the viewer may read; unbound legacy rows only for an unrestricted viewer.
+    where: { userId: actor.id, ...(scope.readableTeam ? { team: scope.readableTeam } : {}) },
     select: {
       createdAt: true,
       expiresAt: true,
@@ -156,7 +171,7 @@ export async function getAgentProfile(
   });
 
   const receipts = await prisma.decisionReceipt.findMany({
-    where: { actorId: actor.id },
+    where: { actorId: actor.id, ...(work ? { audit: { work } } : {}) },
     include: { audit: { select: { createdAt: true, id: true, surface: true, work: { select: { id: true, identifier: true, title: true } } } } },
     orderBy: { audit: { createdAt: 'desc' } },
     take: MAX_TIMELINE_ENTRIES,
@@ -180,32 +195,34 @@ export async function getAgentProfile(
       scopes: credential.scopes,
       teamKey: credential.team?.key ?? null,
     })),
-    timeline: await buildTimeline(prisma, actor.id),
+    timeline: await buildTimeline(prisma, actor.id, work),
   };
 }
 
 async function buildTimeline(
   prisma: PrismaClient,
   actorId: string,
+  work: Prisma.IssueWhereInput | undefined,
 ): Promise<AgentTimelineEntry[]> {
+  const onWork = work ? { work } : {};
   const take = MAX_TIMELINE_ENTRIES;
 
   const [proposals, claims, runs, evidence, requests, receipts] = await Promise.all([
     // revision 1 is the row that created the work, so its actor is the proposer.
     prisma.workAudit.findMany({
-      where: { actorId, before: { equals: Prisma.DbNull } },
+      where: { actorId, before: { equals: Prisma.DbNull }, ...onWork },
       select: { createdAt: true, work: { select: { id: true, identifier: true, title: true } } },
       orderBy: { createdAt: 'desc' },
       take,
     }),
     prisma.workClaim.findMany({
-      where: { actorId },
+      where: { actorId, ...onWork },
       select: { createdAt: true, work: { select: { id: true, identifier: true, title: true } } },
       orderBy: { createdAt: 'desc' },
       take,
     }),
     prisma.workRun.findMany({
-      where: { actorId },
+      where: { actorId, ...onWork },
       select: {
         createdAt: true,
         status: true,
@@ -216,7 +233,7 @@ async function buildTimeline(
       take,
     }),
     prisma.workEvidence.findMany({
-      where: { actorId },
+      where: { actorId, ...onWork },
       select: {
         createdAt: true,
         kind: true,
@@ -227,7 +244,7 @@ async function buildTimeline(
       take,
     }),
     prisma.agentRequest.findMany({
-      where: { targetActorId: actorId },
+      where: { targetActorId: actorId, ...onWork },
       select: {
         createdAt: true,
         state: true,
@@ -240,7 +257,7 @@ async function buildTimeline(
     // Decision receipts: the agent's own account of why (INV-588), shown
     // where a person looks to understand it.
     prisma.decisionReceipt.findMany({
-      where: { actorId },
+      where: { actorId, ...(work ? { audit: { work } } : {}) },
       select: {
         reasoning: true,
         audit: { select: { createdAt: true, work: { select: { id: true, identifier: true } } } },

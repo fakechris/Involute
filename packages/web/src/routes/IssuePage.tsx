@@ -815,7 +815,10 @@ export function IssuePage() {
                   <div key={chain[0]!.id} className="issue-children" role="list" style={{ marginBottom: 10 }}>
                     {chain.map((request, index) => (
                       <div key={request.id} id={`request-${request.id}`} role="listitem" className="issue-children__row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-faint)', minWidth: 44 }}>{index === 0 ? 'asked' : `hop ${request.hopCount}`}</span>
+                        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-faint)', minWidth: 44 }}>{request.hopCount === 0 ? 'asked' : `hop ${request.hopCount}`}</span>
+                        {index === 0 && request.hopCount > 0 ? (
+                          <span style={{ fontSize: 12, color: 'var(--warning, #b80)' }} title="The chain's earlier requests are not in this page's result">chain incomplete</span>
+                        ) : null}
                         <ActorBadge actor={request.targetActor} onSelect={(picked) => navigate(`/agents/${picked}`)} />
                         <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>{request.state}</span>
                         <span style={{ fontSize: 12, color: 'var(--fg-dim)' }} title={request.presenceDetail}>{request.presence}</span>

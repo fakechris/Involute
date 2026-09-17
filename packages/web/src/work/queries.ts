@@ -159,7 +159,7 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
   query WorkContextPage($id: String!) {
     workContext(id: $id) {
       work {
-        agentRequests(first: 50) {
+        agentRequests(first: 200) {
           id
           state
           presence
