@@ -1,3 +1,4 @@
+import { describePick, handOffRequest } from './agent-request-handoff.js';
 import { recordRequestAudit } from './agent-request-service.js';
 import { CLAIMABLE_REQUEST_STATES } from './agent-request-state.js';
 import { enqueueWorkEvent } from './event-outbox.js';
@@ -30,6 +31,26 @@ export const DEADLINE_FAILURE_REASON = 'No answer within the deadline.';
 export interface ExpiryNotice {
   body: string;
   fallbackAdvice: string;
+}
+
+/** The notice when the request was handed on (INV-589). */
+export function buildHandoffNotice(input: {
+  askedHandle: string | null;
+  askedName: string;
+  handedTo: string;
+  skipped: Array<{ reason: string }>;
+}): ExpiryNotice {
+  const asked = input.askedHandle ? `@${input.askedHandle}` : input.askedName;
+  const skippedNote = input.skipped.length > 0
+    ? `\n\nSkipped on the way: ${input.skipped.map((s) => s.reason).join('; ')}.`
+    : '';
+  const advice = `Handed to ${input.handedTo}, who will answer in their own name from the record — not as ${asked}.`;
+  return {
+    body: `**${asked} has not replied within the deadline.**\n\n`
+      + 'This says only that no answer arrived in time — not that the agent is unavailable.\n\n'
+      + advice + skippedNote,
+    fallbackAdvice: advice,
+  };
 }
 
 export function buildExpiryNotice(input: {
@@ -132,6 +153,8 @@ async function expireOneRequest(
             handle: true,
             id: true,
             name: true,
+            ownerId: true,
+            successorActorId: true,
             successorActor: { select: { handle: true, id: true, name: true } },
           },
         },
@@ -139,17 +162,32 @@ async function expireOneRequest(
       },
     });
 
-    const teamContacts = request.targetActor.successorActor
-      ? []
-      : await listTeamContacts(tx, request.work.teamId);
+    // Hand off, not just fail (INV-589). Same transaction as the CAS above,
+    // so a second sweep — which never sees the request as claimable — cannot
+    // hand it off twice.
+    const handoff = await handOffRequest(tx, {
+      request,
+      target: {
+        id: request.targetActor.id,
+        ownerId: request.targetActor.ownerId,
+        successorActorId: request.targetActor.successorActorId,
+      },
+    }, now);
 
-    const notice = buildExpiryNotice({
-      askedHandle: request.targetActor.handle,
-      askedName: request.targetActor.name,
-      successorHandle: request.targetActor.successorActor?.handle ?? null,
-      successorName: request.targetActor.successorActor?.name ?? null,
-      teamContacts,
-    });
+    const notice = handoff.pick
+      ? buildHandoffNotice({
+          askedHandle: request.targetActor.handle,
+          askedName: request.targetActor.name,
+          handedTo: describePick(handoff.pick),
+          skipped: handoff.skipped,
+        })
+      : buildExpiryNotice({
+          askedHandle: request.targetActor.handle,
+          askedName: request.targetActor.name,
+          successorHandle: null,
+          successorName: null,
+          teamContacts: await listTeamContacts(tx, request.work.teamId),
+        });
 
     const systemActor = await ensureSystemActor(tx);
 
@@ -159,6 +197,13 @@ async function expireOneRequest(
       event: 'expired',
       request,
     });
+    if (handoff.next) {
+      await recordRequestAudit(tx, {
+        actor: { actorId: systemActor.id, actorKind: 'SERVICE' },
+        event: 'handed-off',
+        request: handoff.next,
+      });
+    }
 
     // Posted into the thread the question was asked in, so the person who
     // asked sees the answer to "did anything happen" in the place they asked.
@@ -177,7 +222,8 @@ async function expireOneRequest(
         reason: DEADLINE_FAILURE_REASON,
         requestId: request.id,
         rootCommentId: request.rootCommentId,
-        successorActorId: request.targetActor.successorActor?.id ?? null,
+        handedOffToRequestId: handoff.next?.id ?? null,
+        successorActorId: handoff.pick?.actor.id ?? null,
         targetActorId: request.targetActor.id,
       },
       type: 'agent.request_expired',

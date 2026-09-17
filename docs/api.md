@@ -846,6 +846,43 @@ otherwise the team's human owners, otherwise an explicit statement that there is
 nobody — never silence. (The field is declared and used for advice here;
 automatic successor takeover is INV-556.)
 
+### Successor hand-off (INV-589)
+
+When a request's deadline passes unanswered, it is **handed off, not
+reassigned**: the request is terminated (`failed`, reason *"No answer within
+the deadline."* — the observed fact) and a **new** request is opened on the
+same thread, targeting the successor, linked by `rootRequestId` /
+`handedOffFromId`. That it was handed off is recorded on the link, the audit
+and the event — never by rewriting why it failed. A2A states are untouched; a hand-off is
+a new request, not an invented state.
+
+Who receives it, in order — skipping anyone deactivated, already visited in
+this chain, unable to read the thread (no team membership), or a `SERVICE`
+actor (nothing to ask):
+
+1. the target's declared `successorActorId`;
+2. the target's **owner** (a human);
+3. the team's human owners.
+
+**The chain terminates by construction, not by hope.** "Every actor has an
+owner" is not enough — `A.successor = B`, `B.successor = A` never reaches one.
+So each chain carries a visited set, a hop count (`hopCount`, max 3) and a
+total deadline (`chainDeadlineAt`); at either limit the hand-off goes
+**straight to a valid human**. What this guarantees is *eventual escalation to
+a person*. It does not guarantee that anyone answers.
+
+- Triggered by the request's own **deadline**, never by the actor's global
+  presence: `lastSeenAt` says a credential was used, not that anyone is
+  working on *this* request.
+- Terminate-old / open-new / link is **one transaction**, keyed by the CAS on
+  the old request, so a second sweep cannot hand off twice.
+- A late answer from the previous holder is rejected: the old request is
+  terminal, and the claim generation it held belongs to a closed request.
+- The successor answers the **new** request **in its own name**. The thread
+  says, in place, "handed to `@kai`" or "handed to Chris". A human successor
+  answers by replying in the thread; the request stays `submitted` until it is
+  answered or canceled.
+
 ### Decision receipts (INV-588)
 
 A receipt is **the actor's own statement of what it knew and why**, frozen at

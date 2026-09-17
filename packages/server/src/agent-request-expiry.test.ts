@@ -56,6 +56,9 @@ describe('agent request expiry (INV-562 / A6)', () => {
     it('posts a notice on the thread naming who to ask instead', async () => {
       const { issue, mia, request, rootCommentId } = await openOverdueRequest(prisma);
       const kai = await createAgent(prisma, 'Kai', 'kai');
+      // A successor must already be able to read the thread (INV-589).
+      const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
+      await prisma.teamMembership.create({ data: { role: 'EDITOR', teamId: team.id, userId: kai.id } });
       await prisma.user.update({
         where: { id: mia.id },
         data: { successorActorId: kai.id },
@@ -71,7 +74,8 @@ describe('agent request expiry (INV-562 / A6)', () => {
       const notice = replies[0]!;
       expect(notice.body).toContain('@mia');
       expect(notice.body).toContain('has not replied within the deadline');
-      expect(notice.body).toContain('@kai');
+      // Since INV-589 the request is handed off, not merely pointed at.
+      expect(notice.body).toContain('Handed to @kai (its declared successor)');
       expect(notice.issueId).toBe(issue.id);
 
       // Posted by the system, not by a person and not by the agent that did
@@ -85,7 +89,7 @@ describe('agent request expiry (INV-562 / A6)', () => {
       expect(settled.failureReason).toBe(DEADLINE_FAILURE_REASON);
     });
 
-    it('falls back to the team humans when no successor is declared', async () => {
+    it('hands off to a team human when no successor is declared', async () => {
       const { rootCommentId } = await openOverdueRequest(prisma);
 
       await expireOverdueAgentRequests(prisma);
@@ -94,8 +98,10 @@ describe('agent request expiry (INV-562 / A6)', () => {
         where: { parentCommentId: rootCommentId },
       });
 
-      expect(notice.body).toContain('No successor is declared');
-      expect(notice.body).toContain('Admin');
+      // Since INV-589: a team owner is eligible, so the request is handed off
+      // to them rather than left with advice. The dead-end text survives for
+      // the case where nobody is eligible (agent-request-handoff.test.ts).
+      expect(notice.body).toContain('Handed to Admin (a team owner)');
     });
 
     it('never claims to know why the answer did not come', async () => {
