@@ -59,6 +59,7 @@ import {
 import {
   assertCanDeleteComment,
   assertCanActOnRequest,
+  assertCanReadIssue,
   assertCanManageActor,
   assertCanRepresentActor,
   assertCanRevokeCredential,
@@ -1436,8 +1437,17 @@ const resolvers = {
   WorkEvidenceRecord: {
     retractedBy: async (parent: WorkEvidence, _args: Record<string, never>, context: GraphQLContext): Promise<User | null> =>
       parent.retractedById ? context.prisma.user.findUnique({ where: { id: parent.retractedById } }) : null,
-    supersededByWork: async (parent: WorkEvidence, _args: Record<string, never>, context: GraphQLContext): Promise<Issue | null> =>
-      parent.supersededByWorkId ? getIssueById(context.prisma, parent.supersededByWorkId) : null,
+    supersededByWork: async (parent: WorkEvidence, _args: Record<string, never>, context: GraphQLContext): Promise<Issue | null> => {
+      if (!parent.supersededByWorkId) return null;
+      // Read authorization on the referenced item: a reader of this evidence
+      // who may not read the other team's work gets null, not the item.
+      try {
+        await assertCanReadIssue(context.prisma, context, parent.supersededByWorkId);
+      } catch {
+        return null;
+      }
+      return getIssueById(context.prisma, parent.supersededByWorkId);
+    },
     verifications: (parent: { id: string }, _args: unknown, context: GraphQLContext) =>
       context.prisma.evidenceVerification.findMany({ where: { evidenceId: parent.id }, orderBy: { createdAt: 'desc' }, take: 10 }),
   },
@@ -2443,6 +2453,11 @@ const resolvers = {
         const evidence = await context.prisma.workEvidence.findUnique({ where: { id: args.input.evidenceId }, select: { workId: true } });
         if (!evidence) throw createNotFoundError(EVIDENCE_NOT_FOUND_MESSAGE);
         await assertCanWriteIssue(context.prisma, context, evidence.workId);
+        // Pointing evidence at a work item is a write to that item too; it
+        // must not become a way to probe or reference another team's work.
+        if (args.input.correctWorkId) {
+          await assertCanWriteIssue(context.prisma, context, args.input.correctWorkId);
+        }
         const updated = await retractEvidence(context.prisma, {
           correctWorkId: args.input.correctWorkId ?? null,
           evidenceId: args.input.evidenceId,

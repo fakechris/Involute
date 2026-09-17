@@ -888,7 +888,9 @@ a person*. It does not guarantee that anyone answers.
 Evidence is never physically deleted. `evidenceRetract(evidenceId, reason,
 correctWorkId?)` — a human act, authorized like any write to the work item —
 marks the row with who, when, why and, when known, the work item it should
-have pointed at. Gates that judge a work item by its evidence (auto-accept,
+have pointed at — a target the caller must also be able to write, and one
+that resolves only for readers who may read it. Once only, by CAS on
+`retractedAt`, so concurrent retractions cannot overwrite each other. Gates that judge a work item by its evidence (auto-accept,
 traceability audit, verification) ignore retracted rows; readers still see
 them, struck through and labelled. The retraction is audited on the work
 item (`evidence.retract`) and emitted (`evidence.retracted`), so the

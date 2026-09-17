@@ -59,6 +59,70 @@ describe('evidence retraction (INV-598)', () => {
   });
 });
 
+describe('evidence retraction — concurrency, verifier, and target authorization', () => {
+  beforeEach(async () => { await resetAndSeed(prisma); });
+
+  it('two concurrent retractions: exactly one succeeds, one audit, one event', async () => {
+    const { admin, evidence } = await fixture(prisma);
+    const by = { actorId: admin.id, actorKind: 'HUMAN' as const, surface: 'test' };
+    const results = await Promise.allSettled([
+      retractEvidence(prisma, { evidenceId: evidence.id, reason: 'first' }, by),
+      retractEvidence(prisma, { evidenceId: evidence.id, reason: 'second' }, by),
+    ]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    await expect(prisma.workAudit.count({ where: { surface: 'evidence.retract', sourceMessageId: evidence.id } })).resolves.toBe(1);
+    await expect(prisma.eventOutbox.count({ where: { type: 'evidence.retracted' } })).resolves.toBe(1);
+  });
+
+  it('the verifier refuses retracted evidence and appends no observation', async () => {
+    const { verifyEvidence } = await import('./evidence-verification.ts');
+    const { admin, evidence } = await fixture(prisma);
+    await prisma.workEvidence.update({ where: { id: evidence.id }, data: { verificationNextAt: new Date() } });
+    await retractEvidence(prisma, { evidenceId: evidence.id, reason: 'wrong' }, { actorId: admin.id, actorKind: 'HUMAN', surface: 'test' });
+
+    await expect(verifyEvidence(prisma, evidence.id)).rejects.toThrow('EVIDENCE_RETRACTED');
+    await expect(prisma.evidenceVerification.count({ where: { evidenceId: evidence.id } })).resolves.toBe(0);
+  });
+
+  it('GraphQL: pointing evidence at a work item the caller cannot write is refused; a non-reader gets no superseding work', async () => {
+    const { startServer } = await import('./index.ts');
+    const { SESSION_COOKIE_NAME, createSession } = await import('./session.ts');
+    const { admin, evidence, wrong } = await fixture(prisma);
+    const server = await startServer({ allowAdminFallback: true, authToken: 'test-auth-token', port: 0, prisma });
+    try {
+      // An editor of the evidence's team who cannot write the target (a private team B item).
+      const teamB = await prisma.team.create({ data: { key: 'TMB', name: 'B', visibility: 'PRIVATE' } });
+      const stateB = await prisma.workflowState.create({ data: { name: 'Ready', position: 0, teamId: teamB.id, type: 'UNSTARTED' } });
+      const privateB = await prisma.issue.create({ data: { identifier: 'TMB-1', stateId: stateB.id, teamId: teamB.id, title: 'B secret' } });
+      const teamA = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
+      const editorA = await prisma.user.create({ data: { actorKind: 'HUMAN', email: 'editor-a@humans.test.local', name: 'Editor A' } });
+      await prisma.teamMembership.create({ data: { role: 'EDITOR', teamId: teamA.id, userId: editorA.id } });
+      const cookieA = `${SESSION_COOKIE_NAME}=${(await createSession(prisma, editorA.id)).token}`;
+
+      const gql = async (cookie: string, query: string, variables: unknown) => {
+        const response = await fetch(`${server.url}/graphql`, {
+          method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify({ query, variables }),
+        });
+        return response.json() as Promise<{ data?: any; errors?: Array<{ message: string }> }>;
+      };
+      const refused = await gql(cookieA, 'mutation($i: EvidenceRetractInput!) { evidenceRetract(input: $i) { success } }',
+        { i: { correctWorkId: privateB.id, evidenceId: evidence.id, reason: 'probe' } });
+      expect(refused.data?.evidenceRetract?.success ?? false).toBe(false);
+      await expect(prisma.workEvidence.findUniqueOrThrow({ where: { id: evidence.id } })).resolves.toMatchObject({ retractedAt: null });
+
+      // The admin retracts it, pointing at a private B item; editor A reads the evidence but not B.
+      await retractEvidence(prisma, { correctWorkId: privateB.id, evidenceId: evidence.id, reason: 'belongs to B' },
+        { actorId: admin.id, actorKind: 'HUMAN', surface: 'test' });
+      const seen = await gql(cookieA, 'query($id: String!) { workContext(id: $id) { evidence { id supersededByWork { identifier } } } }', { id: wrong.id });
+      const rows = (seen.data?.workContext?.evidence ?? []) as Array<{ id: string; supersededByWork: { identifier: string } | null }>;
+      const mine = rows.find((r) => r.id === evidence.id);
+      expect(mine?.supersededByWork ?? null).toBeNull();
+    } finally {
+      await server.stop();
+    }
+  });
+});
+
 async function fixture(client: PrismaClient): Promise<{ admin: User; evidence: { id: string }; mia: User; right: Issue; wrong: Issue }> {
   const admin = await client.user.findFirstOrThrow({ where: { actorKind: 'HUMAN', globalRole: 'ADMIN' } });
   const team = await client.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });

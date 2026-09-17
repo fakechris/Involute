@@ -51,8 +51,9 @@ export async function verifyEvidence(prisma: PrismaClient, evidenceId: string, o
   const evidence = await prisma.workEvidence.findUniqueOrThrow({ where: { id: evidenceId }, include: { run: true, work: true } });
   // Migration does not turn historical declarations into verification requests.
   if (!evidence.verificationNextAt) throw new Error('EVIDENCE_NOT_REQUESTED');
+  if (evidence.retractedAt) throw new Error('EVIDENCE_RETRACTED');
   const leaseId = randomUUID();
-  const claimed = await prisma.workEvidence.updateMany({ where: { id: evidence.id,
+  const claimed = await prisma.workEvidence.updateMany({ where: { id: evidence.id, retractedAt: null,
     OR: [{ verificationLeaseUntil: null }, { verificationLeaseUntil: { lt: new Date() } }] },
     data: { verificationLeaseId: leaseId, verificationLeaseUntil: new Date(Date.now() + 5 * 60_000) } });
   if (claimed.count !== 1) throw new Error('VERIFICATION_BUSY');
@@ -74,7 +75,8 @@ export async function verifyEvidence(prisma: PrismaClient, evidenceId: string, o
 
     return await prisma.$transaction(async tx => {
       await tx.$queryRaw`SELECT id FROM "Issue" WHERE id = ${evidence.workId}::uuid FOR UPDATE`;
-      const owned = await tx.workEvidence.updateMany({ where: { id: evidence.id, verificationLeaseId: leaseId,
+      // A retraction that landed while the network check ran wins: no observation is appended to retracted evidence.
+      const owned = await tx.workEvidence.updateMany({ where: { id: evidence.id, retractedAt: null, verificationLeaseId: leaseId,
         verificationLeaseUntil: { gt: new Date() } }, data: { verificationNextAt: new Date(Date.now() + RETRY_MS) } });
       if (owned.count !== 1) throw new Error('VERIFICATION_LEASE_LOST');
       const fresh = await tx.issue.findUniqueOrThrow({ where: { id: evidence.workId } });

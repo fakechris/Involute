@@ -50,8 +50,11 @@ export async function retractEvidence(
       }
     }
 
-    const updated = await tx.workEvidence.update({
-      where: { id: evidence.id },
+    // CAS on retractedAt: two concurrent retractions must not both succeed,
+    // or the second would overwrite the first person's reason and target and
+    // leave two audits for one act.
+    const moved = await tx.workEvidence.updateMany({
+      where: { id: evidence.id, retractedAt: null },
       data: {
         retractReason: reason,
         retractedAt: now,
@@ -59,6 +62,10 @@ export async function retractEvidence(
         supersededByWorkId: input.correctWorkId ?? null,
       },
     });
+    if (moved.count !== 1) {
+      throw createValidationError(EVIDENCE_ALREADY_RETRACTED_MESSAGE);
+    }
+    const updated = await tx.workEvidence.findUniqueOrThrow({ where: { id: evidence.id } });
 
     const snapshot = selectIssueSnapshot(evidence.work);
     await recordWorkAudit(tx, {
