@@ -795,14 +795,19 @@ carrying a root request id, a budget and a hop limit, not a relaxed check here.
 | Tool | Does |
 |---|---|
 | `agent_inbox(since?, cursor?, first?)` | Requests addressed to you that are still open. Reading reserves nothing. |
-| `agent_request_claim(id)` | Take the claim, moving the request to `working`. |
-| `agent_request_answer(id, body, state?, evidence[]?)` | Post the answer and move the request. |
+| `agent_request_claim(id, claim_token?)` | Take the claim, moving the request to `working`. Returns a `claim_token`. |
+| `agent_request_answer(id, claim_token, body, state?, evidence[]?)` | Post the answer and move the request. |
 
-- **The claim is a 60s lease.** Exactly one consumer holds it; a second gets an
-  error rather than a duplicate answer. The holder renews by claiming again, and
-  a consumer that dies holding one releases it when the lease lapses. Re-claiming
-  a request you already hold is deliberately allowed — a consumer that restarts
-  mid-flight has to be able to get its own request back.
+- **The claim belongs to an execution, not to an actor.** Two sessions can carry
+  the same actor credential. Every take mints a new **claim generation** and a
+  `claim_token` bound to that execution; renewing and answering require the
+  token. A stalled session that wakes up after a fresh one re-claimed is
+  rejected as *superseded* — being the same actor is not enough. Persist the
+  token with your execution; it is not recoverable. If you lose it, wait for
+  your lease to lapse and claim again for a new generation.
+- **The claim is a 60s lease.** Exactly one execution holds it; a second gets an
+  error rather than a duplicate answer. A consumer that dies holding one
+  releases it when the lease lapses.
 - **The answer comment is authored by the answering actor**, not by whatever
   process is carrying its token. Otherwise every answer looks like it came from
   the same person again.

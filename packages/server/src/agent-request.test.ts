@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_TEAM_KEY, resetAndSeed } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import {
+  CLAIM_SUPERSEDED_MESSAGE,
   REQUEST_CLAIM_LEASE_MS,
   answerAgentRequest,
   cancelAgentRequest,
@@ -135,7 +136,7 @@ describe('agent request ledger (INV-560)', () => {
       // Two sidecars carrying credentials for the same actor. The claim is
       // server-side, so only the first take wins the right to answer.
       const first = await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
-      expect(first.state).toBe('WORKING');
+      expect(first.request.state).toBe('WORKING');
 
       const before = await prisma.agentRequest.findUniqueOrThrow({ where: { id: request.id } });
       const impostor = await createAgent(prisma, 'Other Sidecar', 'other');
@@ -147,42 +148,95 @@ describe('agent request ledger (INV-560)', () => {
       expect(after.claimedBy).toBe(before.claimedBy);
     });
 
-    it('lets the holder renew its own claim, and a second consumer steal only after the lease lapses', async () => {
+    it('lets the holding execution renew with its token, keeping the same generation', async () => {
+      const { mia, request } = await openRequest(prisma);
+      const start = new Date();
+
+      const taken = await claimAgentRequest(prisma, { actorId: mia.id, id: request.id }, start);
+      const renewed = await claimAgentRequest(
+        prisma,
+        { actorId: mia.id, claimToken: taken.claimToken, id: request.id },
+        new Date(start.getTime() + 1_000),
+      );
+
+      expect(renewed.claimToken).toBe(taken.claimToken);
+      expect(renewed.request.claimGeneration).toBe(taken.request.claimGeneration);
+      expect(renewed.request.claimExpiresAt?.getTime())
+        .toBe(start.getTime() + 1_000 + REQUEST_CLAIM_LEASE_MS);
+    });
+
+    it('does not let a second execution of the same actor take a live claim just by being the same actor', async () => {
+      // This was the hole: "claimedBy === actorId" counted as holding it.
       const { mia, request } = await openRequest(prisma);
       const start = new Date();
 
       await claimAgentRequest(prisma, { actorId: mia.id, id: request.id }, start);
-      const renewed = await claimAgentRequest(
+
+      await expect(claimAgentRequest(
         prisma,
         { actorId: mia.id, id: request.id },
         new Date(start.getTime() + 1_000),
-      );
+      )).rejects.toThrow('not claimable');
+    });
 
-      expect(renewed.claimedBy).toBe(mia.id);
-      expect(renewed.claimExpiresAt?.getTime())
-        .toBe(start.getTime() + 1_000 + REQUEST_CLAIM_LEASE_MS);
+    it('rejects an answer from a stalled execution after a fresh one re-claimed (the P1 counterexample)', async () => {
+      const { mia, request } = await openRequest(prisma);
+      const t0 = new Date();
+
+      // Session A claims, then stalls past its lease.
+      const sessionA = await claimAgentRequest(prisma, { actorId: mia.id, id: request.id }, t0);
+      const afterLapse = new Date(t0.getTime() + REQUEST_CLAIM_LEASE_MS + 1);
+
+      // Session B, same actor credential, takes a new generation.
+      const sessionB = await claimAgentRequest(prisma, { actorId: mia.id, id: request.id }, afterLapse);
+      expect(sessionB.request.claimGeneration).toBe(sessionA.request.claimGeneration + 1);
+      expect(sessionB.claimToken).not.toBe(sessionA.claimToken);
+
+      // A wakes up and submits its old answer. Same actor, live lease (B's) —
+      // the old check would have let this through.
+      await expect(answerAgentRequest(prisma, {
+        actorId: mia.id,
+        body: 'stale answer from A',
+        claimToken: sessionA.claimToken,
+        id: request.id,
+      }, new Date(afterLapse.getTime() + 1_000))).rejects.toThrow(CLAIM_SUPERSEDED_MESSAGE);
+
+      // B answers fine.
+      const answered = await answerAgentRequest(prisma, {
+        actorId: mia.id,
+        body: 'current answer from B',
+        claimToken: sessionB.claimToken,
+        id: request.id,
+      }, new Date(afterLapse.getTime() + 2_000));
+
+      expect(answered.request.state).toBe('COMPLETED');
+      const comments = await prisma.comment.findMany({ where: { userId: mia.id } });
+      expect(comments).toHaveLength(1);
+      expect(comments[0]?.body).toBe('current answer from B');
     });
 
     it('rejects an answer from a consumer that does not hold the claim', async () => {
       const { mia, request } = await openRequest(prisma);
       const other = await createAgent(prisma, 'Other', 'other');
 
-      await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
+      const held = await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
 
       await expect(answerAgentRequest(prisma, {
         actorId: other.id,
         body: 'not mine to answer',
+        claimToken: held.claimToken,
         id: request.id,
       })).rejects.toThrow('not held by this actor');
     });
 
     it('does not reach completed when the answer fails', async () => {
       const { mia, request } = await openRequest(prisma);
-      await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
+      const held = await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
 
       await expect(answerAgentRequest(prisma, {
         actorId: mia.id,
         body: '   ',
+        claimToken: held.claimToken,
         id: request.id,
       })).rejects.toThrow('must have a body');
 
@@ -195,22 +249,27 @@ describe('agent request ledger (INV-560)', () => {
   });
 
   describe('A4 — a restart between receiving and answering', () => {
-    it('leaves the request claimable by its holder and answerable exactly once', async () => {
+    it('leaves the request claimable after its lease lapses and answerable exactly once', async () => {
       const { mia, request } = await openRequest(prisma);
-      await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
+      const t0 = new Date();
+      await claimAgentRequest(prisma, { actorId: mia.id, id: request.id }, t0);
 
-      // "Restart": the process is gone, the ledger is not. The consumer comes
-      // back and re-reads its inbox rather than trusting in-memory state.
+      // "Restart": the process is gone and so is its claim token. The ledger
+      // is not. The consumer comes back, re-reads its inbox, and — because it
+      // cannot prove it is the same execution — waits for its own lease to
+      // lapse, then takes a new generation like any other consumer.
       const inbox = await readAgentInbox(prisma, { actorId: mia.id });
       expect(inbox.items.map((item) => item.id)).toContain(request.id);
       expect(inbox.items.find((item) => item.id === request.id)?.state).toBe('working');
 
-      await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
+      const afterLapse = new Date(t0.getTime() + REQUEST_CLAIM_LEASE_MS + 1);
+      const retaken = await claimAgentRequest(prisma, { actorId: mia.id, id: request.id }, afterLapse);
       const answered = await answerAgentRequest(prisma, {
         actorId: mia.id,
         body: 'Because PR #77 already covered it.',
+        claimToken: retaken.claimToken,
         id: request.id,
-      });
+      }, new Date(afterLapse.getTime() + 1_000));
 
       expect(answered.request.state).toBe('COMPLETED');
       expect(answered.request.answeredCommentId).toBe(answered.commentId);
@@ -219,8 +278,9 @@ describe('agent request ledger (INV-560)', () => {
       await expect(answerAgentRequest(prisma, {
         actorId: mia.id,
         body: 'Because PR #77 already covered it.',
+        claimToken: retaken.claimToken,
         id: request.id,
-      })).rejects.toThrow('terminal state');
+      }, new Date(afterLapse.getTime() + 2_000))).rejects.toThrow('terminal state');
 
       await expect(prisma.comment.count({ where: { userId: mia.id } })).resolves.toBe(1);
     });
@@ -229,11 +289,12 @@ describe('agent request ledger (INV-560)', () => {
   describe('answering', () => {
     it('posts the answer as the answering actor, not as whoever carried the token', async () => {
       const { issue, mia, request } = await openRequest(prisma);
-      await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
+      const held = await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
 
       const answered = await answerAgentRequest(prisma, {
         actorId: mia.id,
         body: 'I weighed the code-block case first.',
+        claimToken: held.claimToken,
         id: request.id,
       });
 
@@ -247,11 +308,12 @@ describe('agent request ledger (INV-560)', () => {
 
     it('records evidence attached to the answer', async () => {
       const { issue, mia, request } = await openRequest(prisma);
-      await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
+      const held = await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
 
       await answerAgentRequest(prisma, {
         actorId: mia.id,
         body: 'See the PR.',
+        claimToken: held.claimToken,
         evidence: [{ kind: 'PR', summary: 'B1', url: 'https://example.test/pr/77' }],
         id: request.id,
       });
@@ -265,30 +327,35 @@ describe('agent request ledger (INV-560)', () => {
 
     it('treats asking back as input-required and hands the claim back', async () => {
       const { mia, request } = await openRequest(prisma);
-      await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
+      const held = await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
 
       const answered = await answerAgentRequest(prisma, {
         actorId: mia.id,
         body: 'Which revision do you mean?',
+        claimToken: held.claimToken,
         id: request.id,
         state: 'input-required',
       });
 
       expect(answered.request.state).toBe('INPUT_REQUIRED');
       expect(answered.request.claimedBy).toBeNull();
+      expect(answered.request.claimTokenHash).toBeNull();
 
-      // Not terminal: the consumer can pick it back up once the human replies.
+      // Not terminal: the consumer can pick it back up once the human replies,
+      // as a new generation with a new token.
       const resumed = await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
-      expect(resumed.state).toBe('WORKING');
+      expect(resumed.request.state).toBe('WORKING');
+      expect(resumed.claimToken).not.toBe(held.claimToken);
     });
 
     it('records an explicit failure without pretending the request was answered', async () => {
       const { mia, request } = await openRequest(prisma);
-      await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
+      const held = await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
 
       const answered = await answerAgentRequest(prisma, {
         actorId: mia.id,
         body: 'I no longer have the run logs for that decision.',
+        claimToken: held.claimToken,
         id: request.id,
         state: 'failed',
       });
@@ -332,8 +399,8 @@ describe('agent request ledger (INV-560)', () => {
 
     it('leaves a completed request alone when its deadline passes', async () => {
       const { mia, request } = await openRequest(prisma);
-      await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
-      await answerAgentRequest(prisma, { actorId: mia.id, body: 'done', id: request.id });
+      const held = await claimAgentRequest(prisma, { actorId: mia.id, id: request.id });
+      await answerAgentRequest(prisma, { actorId: mia.id, body: 'done', claimToken: held.claimToken, id: request.id });
 
       await prisma.agentRequest.update({
         where: { id: request.id },

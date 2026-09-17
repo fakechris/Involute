@@ -360,6 +360,12 @@ model AgentRequest {
   claimedByActor     User?             @relation("AgentRequestClaimant", fields: [claimedBy], references: [id], onDelete: SetNull)
   claimedAt          DateTime?
   claimExpiresAt     DateTime?
+  // Which *execution* holds the claim, not just which actor. Two sessions can
+  // carry the same actor credential; without this a stale session could answer
+  // after a fresh one re-claimed. Every take mints a new generation and token;
+  // renewal and answer must present the token (INV-573 P1).
+  claimGeneration    Int               @default(0)
+  claimTokenHash     String?
   // Set before the state reaches COMPLETED: an answer that produced no comment
   // is not an answer.
   answeredCommentId  String?           @unique @db.Uuid

@@ -1,3 +1,5 @@
+import { createHash, randomBytes } from 'node:crypto';
+
 import {
   CLAIMABLE_REQUEST_STATES,
   isTerminalState,
@@ -27,6 +29,20 @@ export const REQUEST_NOT_CLAIMABLE_MESSAGE =
   'Agent request is not claimable: it is already claimed by another consumer, or it has reached a terminal state.';
 export const REQUEST_NOT_HELD_MESSAGE =
   'Agent request is not held by this actor with a live claim.';
+export const CLAIM_SUPERSEDED_MESSAGE =
+  'Claim superseded: a newer execution of this actor holds the request. Re-read the inbox and claim again.';
+export const CLAIM_TOKEN_REQUIRED_MESSAGE =
+  'A claim token is required to answer; it was returned by agent_request_claim.';
+
+const CLAIM_TOKEN_PREFIX = 'inv_claim_';
+
+function mintClaimToken(): string {
+  return `${CLAIM_TOKEN_PREFIX}${randomBytes(24).toString('base64url')}`;
+}
+
+function hashClaimToken(token: string): string {
+  return createHash('sha256').update(token, 'utf8').digest('hex');
+}
 export const REQUEST_ALREADY_TERMINAL_MESSAGE =
   'Agent request has already reached a terminal state and cannot be answered again.';
 export const ANSWER_REQUIRES_BODY_MESSAGE = 'An answer must have a body.';
@@ -146,51 +162,94 @@ export async function readAgentInbox(
   };
 }
 
+export interface ClaimedAgentRequest {
+  /** Present to renew, and to answer. Persist it with the execution; it is not recoverable. */
+  claimToken: string;
+  request: AgentRequest;
+}
+
 /**
- * Takes the claim, or renews one this actor already holds.
+ * Takes the claim for one *execution*, or renews the one this execution holds.
  *
- * A single-statement CAS, like the rest of this codebase's state moves: the
- * `where` encodes the whole precondition, so two consumers racing on the same
- * request cannot both succeed regardless of interleaving. Renewal by the
- * current holder is allowed on purpose — a consumer that restarts mid-flight
- * needs to get its own request back (A4), and that is not the same as a second
- * consumer stealing it.
+ * A claim belongs to an execution, not to an actor. Two sessions can carry the
+ * same actor credential, and the first version let either of them renew by
+ * actor alone — so a stalled session could wake up and answer a request that a
+ * fresh session had already re-claimed (INV-573 P1). Now every take mints a new
+ * generation and a token; renewing and answering require the token. An
+ * execution that lost its token waits for its own lease to lapse and then takes
+ * a new generation, exactly like any other consumer.
+ *
+ * Both moves are single-statement CAS, so two consumers racing on the same
+ * request cannot both succeed regardless of interleaving.
  */
 export async function claimAgentRequest(
   prisma: PrismaClient,
-  input: { actorId: string; id: string; leaseMs?: number },
+  input: { actorId: string; claimToken?: string | null; id: string; leaseMs?: number },
   now: Date = new Date(),
-): Promise<AgentRequest> {
+): Promise<ClaimedAgentRequest> {
   const leaseMs = input.leaseMs ?? REQUEST_CLAIM_LEASE_MS;
+  const expiresAt = new Date(now.getTime() + leaseMs);
 
-  const updated = await prisma.agentRequest.updateMany({
+  // Renewal: same execution, proven by the token, lease still live.
+  if (input.claimToken) {
+    const renewed = await prisma.agentRequest.updateMany({
+      where: {
+        id: input.id,
+        targetActorId: input.actorId,
+        claimedBy: input.actorId,
+        claimTokenHash: hashClaimToken(input.claimToken),
+        claimExpiresAt: { gt: now },
+        state: { in: [...CLAIMABLE_REQUEST_STATES] },
+      },
+      data: { claimExpiresAt: expiresAt },
+    });
+
+    if (renewed.count === 1) {
+      return {
+        claimToken: input.claimToken,
+        request: await prisma.agentRequest.findUniqueOrThrow({ where: { id: input.id } }),
+      };
+    }
+  }
+
+  // Take: unclaimed, or the previous holder's lease has lapsed. Deliberately
+  // *not* "or held by this same actor" — that is the hole.
+  const claimToken = mintClaimToken();
+  const taken = await prisma.agentRequest.updateMany({
     where: {
       id: input.id,
       targetActorId: input.actorId,
       state: { in: [...CLAIMABLE_REQUEST_STATES] },
       OR: [
         { claimedBy: null },
-        { claimedBy: input.actorId },
         { claimExpiresAt: { lt: now } },
       ],
     },
     data: {
-      claimExpiresAt: new Date(now.getTime() + leaseMs),
+      claimExpiresAt: expiresAt,
+      claimGeneration: { increment: 1 },
+      claimTokenHash: hashClaimToken(claimToken),
       claimedAt: now,
       claimedBy: input.actorId,
       state: 'WORKING',
     },
   });
 
-  if (updated.count === 0) {
+  if (taken.count === 0) {
     const existing = await prisma.agentRequest.findUnique({ where: { id: input.id } });
     if (!existing) {
       throw createNotFoundError(REQUEST_NOT_FOUND_MESSAGE);
     }
+    if (input.claimToken && existing.claimedBy === input.actorId) {
+      throw createValidationError(CLAIM_SUPERSEDED_MESSAGE);
+    }
     throw createValidationError(REQUEST_NOT_CLAIMABLE_MESSAGE);
   }
 
-  return prisma.agentRequest.findUniqueOrThrow({ where: { id: input.id } });
+  return {
+    claimToken,
+    request: await prisma.agentRequest.findUniqueOrThrow({ where: { id: input.id } }),
+  };
 }
 
 export interface AnswerEvidenceInput {
@@ -202,6 +261,8 @@ export interface AnswerEvidenceInput {
 export interface AnswerAgentRequestInput {
   actorId: string;
   body: string;
+  /** From agent_request_claim. Proves this is the execution that holds the claim. */
+  claimToken: string;
   evidence?: AnswerEvidenceInput[] | null;
   id: string;
   /** `completed` (default), `failed`, or `input-required` when asking back. */
@@ -233,6 +294,10 @@ export async function answerAgentRequest(
   if (!body) {
     throw createValidationError(ANSWER_REQUIRES_BODY_MESSAGE);
   }
+  if (!input.claimToken) {
+    throw createValidationError(CLAIM_TOKEN_REQUIRED_MESSAGE);
+  }
+  const presentedTokenHash = hashClaimToken(input.claimToken);
 
   const wireState = input.state ?? 'completed';
   const nextState: AgentRequestState = wireState === 'completed'
@@ -252,13 +317,17 @@ export async function answerAgentRequest(
       throw createValidationError(REQUEST_ALREADY_TERMINAL_MESSAGE);
     }
 
-    // Holding a live claim is the right to answer. Without this, a second
-    // consumer that lost the claim race could still post the answer.
-    const holdsClaim = request.claimedBy === input.actorId
-      && request.claimExpiresAt !== null
-      && request.claimExpiresAt > now;
+    // Holding a live claim *for this execution* is the right to answer. The
+    // actor alone is not enough: a stalled session of the same actor must not
+    // be able to answer after a fresh session re-claimed.
+    const sameActor = request.claimedBy === input.actorId;
+    const sameExecution = sameActor && request.claimTokenHash === presentedTokenHash;
+    const leaseLive = request.claimExpiresAt !== null && request.claimExpiresAt > now;
 
-    if (!holdsClaim) {
+    if (sameActor && !sameExecution) {
+      throw createValidationError(CLAIM_SUPERSEDED_MESSAGE);
+    }
+    if (!sameExecution || !leaseLive) {
       throw createValidationError(REQUEST_NOT_HELD_MESSAGE);
     }
 
@@ -293,12 +362,15 @@ export async function answerAgentRequest(
       where: {
         id: request.id,
         claimedBy: input.actorId,
+        claimTokenHash: presentedTokenHash,
         state: { in: [...CLAIMABLE_REQUEST_STATES] },
       },
       data: {
         answeredCommentId: comment.id,
+        // Handing back invalidates the execution's token: the next holder
+        // takes a fresh generation.
         ...(nextState === 'INPUT_REQUIRED'
-          ? { claimExpiresAt: null, claimedBy: null }
+          ? { claimExpiresAt: null, claimTokenHash: null, claimedBy: null }
           : {}),
         state: nextState,
       },

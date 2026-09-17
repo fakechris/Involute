@@ -1,9 +1,10 @@
-import { PrismaClient, type Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 
-import { commitWork, proposeWork } from '../src/claim-service.ts';
-import { HOTFIX_REFLEX_ACTOR, ensureServiceActor } from '../src/service-actors.ts';
+import { proposeWork } from '../src/claim-service.ts';
 import { findWorkByIdOrIdentifier } from '../src/context-service.ts';
-import { writeActorFromViewer } from '../src/work-service.ts';
+import { resolveAgentPrincipal } from '../src/agent-credentials.ts';
+import type { WriteActor } from '../src/work-service.ts';
+import { HOTFIX_REFLEX_ACTOR, ensureServiceActor } from '../src/service-actors.ts';
 import { loadProjectEnvironment } from './env.ts';
 
 loadProjectEnvironment();
@@ -18,7 +19,67 @@ function readFlag(args: string[], name: string): string | null {
   return args[index + 1] ?? null;
 }
 
-const hasFlag = (args: string[], name: string) => args.includes(`--${name}`);
+/**
+ * Who files the hotfix item (INV-573 P1-2).
+ *
+ * The reflex is a mechanism, not a mind: it is invoked *by* an agent session,
+ * so the work item should name that agent, with `surface: hotfix-reflex`
+ * recording how. The agent proves itself the way it does everywhere else — with
+ * its own credential — so attribution comes from authentication, not from a
+ * name this script chooses.
+ *
+ * Failure modes are deliberate:
+ * - A token that is present but invalid, expired or revoked FAILS. It never
+ *   degrades to the service identity; that would let a revoked agent keep
+ *   writing under a different name.
+ * - No token at all is allowed only in an explicitly trusted service context
+ *   (HOTFIX_REFLEX_TRUSTED_SERVICE=true), and then files as @hotfix-reflex.
+ *
+ * There is no `--commit`. The previous version looked up *any* HUMAN admin and
+ * committed as them, which proved nothing about that person having authorized
+ * the write. Committing is a human gate; a human does it (AGENTS.md §6).
+ */
+async function resolveReflexActor(): Promise<WriteActor & { label: string }> {
+  const token = process.env.INV_AGENT_TOKEN?.trim() || null;
+  const sessionId = process.env.INV_SESSION_ID?.trim() || null;
+
+  if (token) {
+    const principal = await resolveAgentPrincipal(prisma, token);
+    if (!principal) {
+      throw new Error(
+        'INV_AGENT_TOKEN is set but is not a valid, unexpired, unrevoked agent credential. '
+        + 'Refusing to file the hotfix under a different identity.',
+      );
+    }
+    if (!principal.scopes.includes('propose')) {
+      throw new Error(
+        `Agent ${principal.user.handle ?? principal.user.name} lacks the propose scope.`,
+      );
+    }
+    return {
+      actorId: principal.user.id,
+      actorKind: 'AGENT',
+      label: `@${principal.user.handle ?? principal.user.name} (agent, via hotfix-reflex)`,
+      sessionId,
+      surface: HOTFIX_REFLEX_ACTOR.surface,
+    };
+  }
+
+  if (process.env.HOTFIX_REFLEX_TRUSTED_SERVICE === 'true') {
+    const service = await ensureServiceActor(prisma, HOTFIX_REFLEX_ACTOR);
+    return {
+      ...service,
+      label: `@${HOTFIX_REFLEX_ACTOR.handle} (trusted service context)`,
+      sessionId,
+    };
+  }
+
+  throw new Error(
+    'No agent identity. Set INV_AGENT_TOKEN to the credential of the agent running this session '
+    + '(pnpm --filter @turnkeyai/involute-server agent:create ...), or set '
+    + 'HOTFIX_REFLEX_TRUSTED_SERVICE=true to file as the @hotfix-reflex service in a trusted context.',
+  );
+}
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -27,14 +88,13 @@ async function main(): Promise<void> {
   const teamKey = readFlag(args, 'team') ?? 'INV';
   const repo = readFlag(args, 'repo') ?? 'fakechris/Involute';
   const customDesc = readFlag(args, 'desc');
-  const autoCommit = hasFlag(args, 'commit');
 
   if (!title || title.trim() === '') {
     console.error(`
 [Involute Hotfix Reflex] Error: Missing required --title argument.
 
 Usage:
-  pnpm hotfix:reflex --title "Fix memory leak in link query" [--parent <INV-xxx>] [--commit]
+  pnpm hotfix:reflex --title "Fix memory leak in link query" [--parent <INV-xxx>]
 
 Options:
   --title   Description of the fix (required)
@@ -42,7 +102,11 @@ Options:
   --team    Team key (default: INV)
   --repo    Repository (default: fakechris/Involute)
   --desc    Custom detailed description
-  --commit  Immediately commit the candidate on behalf of human admin
+
+Identity:
+  INV_AGENT_TOKEN                 credential of the agent running this session (preferred)
+  INV_SESSION_ID                  the session id, recorded on the write for later context
+  HOTFIX_REFLEX_TRUSTED_SERVICE   "true" to file as @hotfix-reflex when no agent token exists
 `);
     process.exit(1);
   }
@@ -87,9 +151,9 @@ ${title.trim()}
 ### 3. 验收标准与验证方案
 相关修改通过本地自动化测试与 TypeScript 类型检查，验证无功能回归。`;
 
-  // The reflex writes under its own registered identity, so the resulting work
-  // item names who filed it instead of `SERVICE / actorId: null` (INV-573).
-  const reflexActor = await ensureServiceActor(prisma, HOTFIX_REFLEX_ACTOR);
+  // Resolve the identity BEFORE anything is written, so a bad credential
+  // fails the whole run rather than half of it.
+  const reflexActor = await resolveReflexActor();
 
   const candidate = await proposeWork(prisma, {
     acceptance: 'Fix verified by automated tests and typecheck; no regression.',
@@ -109,43 +173,17 @@ ${title.trim()}
 
   console.log(`\n✓ Successfully created Involute Hotfix Item: [${candidate.identifier}] (${candidate.id})`);
   console.log(`  Title: ${candidate.title}`);
+  console.log(`  Filed as: ${reflexActor.label}`);
   if (parentItem) {
     console.log(`  Parent / Discovered During: [${parentItem.identifier}] ${parentItem.title}`);
   }
-
-  if (autoCommit) {
-    const adminUser = await prisma.user.findFirst({
-      where: { actorKind: 'HUMAN', globalRole: 'ADMIN' },
-    });
-
-    if (adminUser) {
-      const committed = await commitWork(
-        prisma,
-        candidate.id,
-        {
-          acceptance: 'Committed hotfix for execution.',
-          assigneeId: adminUser.id,
-          expectedRevision: candidate.revision,
-        },
-        writeActorFromViewer(adminUser, 'cli'),
-      );
-      console.log(`  Status: COMMITTED (assigned to ${adminUser.name ?? adminUser.email})`);
-    } else {
-      console.log(`  Status: CANDIDATE (awaiting commitment)`);
-    }
-  } else {
-    console.log(`  Status: CANDIDATE (awaiting commitment at http://100.114.30.43:4201/candidates)`);
-  }
-
-  console.log(`\n👉 You can now safely commit your git changes using:`);
-  console.log(`   git commit -m "fix: [${candidate.identifier}] ${title.trim()}"\n`);
+  console.log('  Status: CANDIDATE — a human commits it via /candidates or candidates:batch-commit.');
 }
 
 main()
-  .catch((err) => {
-    console.error('[Involute Hotfix Reflex] Fatal error:', err);
-    process.exit(1);
+  .catch((error: unknown) => {
+    console.error('[Involute Hotfix Reflex] Failed.');
+    console.error(error);
+    process.exitCode = 1;
   })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+  .finally(async () => prisma.$disconnect());
