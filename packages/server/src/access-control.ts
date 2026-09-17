@@ -8,6 +8,7 @@ import type {
 import type { GraphQLContext } from './auth.js';
 import {
   COMMENT_NOT_FOUND_MESSAGE,
+  ACTOR_MANAGE_FORBIDDEN_MESSAGE,
   TEAM_MANAGE_FORBIDDEN_MESSAGE,
   TEAM_WRITE_FORBIDDEN_MESSAGE,
   createNotFoundError,
@@ -151,6 +152,61 @@ export async function assertCanManageTeam(
 
   if (!membership || membership.role !== 'OWNER') {
     throw createValidationError(TEAM_MANAGE_FORBIDDEN_MESSAGE);
+  }
+}
+
+/**
+ * Who may change an actor's lifecycle (deactivate it, transfer its owner).
+ *
+ * A global ADMIN; the actor's owner; or an OWNER of a team the actor belongs
+ * to — by membership or by a live credential bound to that team. A HUMAN
+ * subject has no owner and belongs to nobody, so only an ADMIN may deactivate
+ * one. Being logged in is not enough: knowing an id must not be a capability.
+ */
+export async function assertCanManageActor(
+  prisma: PrismaClient,
+  context: GraphQLContext,
+  subjectId: string,
+): Promise<void> {
+  if (context.isTrustedSystem || context.viewer?.globalRole === 'ADMIN') {
+    return;
+  }
+  const viewer = context.viewer;
+  if (!viewer || viewer.actorKind !== 'HUMAN') {
+    throw createValidationError(ACTOR_MANAGE_FORBIDDEN_MESSAGE);
+  }
+
+  const subject = await prisma.user.findUnique({
+    where: { id: subjectId },
+    select: { actorKind: true, ownerId: true },
+  });
+  if (!subject || subject.actorKind === 'HUMAN') {
+    throw createValidationError(ACTOR_MANAGE_FORBIDDEN_MESSAGE);
+  }
+  if (subject.ownerId === viewer.id) {
+    return;
+  }
+
+  const [memberships, credentials] = await Promise.all([
+    prisma.teamMembership.findMany({ where: { userId: subjectId }, select: { teamId: true } }),
+    prisma.agentCredential.findMany({
+      where: { revokedAt: null, teamId: { not: null }, userId: subjectId },
+      select: { teamId: true },
+    }),
+  ]);
+  const teamIds = [...new Set([
+    ...memberships.map((m) => m.teamId),
+    ...credentials.map((c) => c.teamId).filter((id): id is string => id !== null),
+  ])];
+  if (teamIds.length === 0) {
+    throw createValidationError(ACTOR_MANAGE_FORBIDDEN_MESSAGE);
+  }
+  const ownsATeam = await prisma.teamMembership.findFirst({
+    where: { role: 'OWNER', teamId: { in: teamIds }, userId: viewer.id },
+    select: { id: true },
+  });
+  if (!ownsATeam) {
+    throw createValidationError(ACTOR_MANAGE_FORBIDDEN_MESSAGE);
   }
 }
 
