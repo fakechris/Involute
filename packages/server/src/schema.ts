@@ -20,6 +20,7 @@ import type {
   WorkLink,
   WorkLinkType,
   WorkflowState,
+  WorkEvidence,
 } from '@prisma/client';
 
 import { makeExecutableSchema } from '@graphql-tools/schema';
@@ -58,6 +59,7 @@ import {
 import {
   assertCanDeleteComment,
   assertCanActOnRequest,
+  assertCanReadIssue,
   assertCanManageActor,
   assertCanRepresentActor,
   assertCanRevokeCredential,
@@ -85,6 +87,7 @@ import { toWireState } from './agent-request-state.js';
 import { PRESENCE_COPY, agentRequestPresence } from './agent-request-presence.js';
 import { ACTOR_PRESENCE_COPY, actorPresence } from './actor-presence.js';
 import { deactivateActor, transferActorOwner } from './actor-lifecycle.js';
+import { EVIDENCE_NOT_FOUND_MESSAGE, retractEvidence } from './evidence-retract.js';
 import { answerAgentRequestAsHuman } from './agent-request-service.js';
 import { provisionServiceActor } from './service-actors.js';
 import {
@@ -333,6 +336,8 @@ const typeDefs = /* GraphQL */ `
     agentCredentialCreate(input: AgentCredentialCreateInput!): AgentCredentialCreatePayload!
     """Deactivate an actor: keeps its id and history, revokes its credentials, ends its ability to act. Human-only."""
     actorDeactivate(id: String!, reason: String): ActorLifecyclePayload!
+    """A person retracts wrongly attached evidence: marked, audited, emitted — never deleted (INV-598)."""
+    evidenceRetract(input: EvidenceRetractInput!): EvidenceRetractPayload!
     """A person completes a request addressed to them (INV-596): comment, answeredCommentId, COMPLETED, audit and event in one transaction. An ADMIN may answer for someone else with an overrideReason."""
     agentRequestAnswer(input: AgentRequestAnswerInput!): AgentRequestAnswerPayload!
     """Transfer accountability for a non-human actor to another human. Human-only, recorded in ActorAudit."""
@@ -733,6 +738,23 @@ const typeDefs = /* GraphQL */ `
     url: String!
     summary: String
     createdAt: DateTime!
+    """Retraction (INV-598): set when a person marked this evidence as wrongly attached. Never deleted."""
+    retractedAt: DateTime
+    retractReason: String
+    retractedBy: User
+    """The work item this evidence should have pointed at, when known."""
+    supersededByWork: Issue
+  }
+
+  input EvidenceRetractInput {
+    evidenceId: String!
+    reason: String!
+    correctWorkId: String
+  }
+
+  type EvidenceRetractPayload {
+    success: Boolean!
+    evidence: WorkEvidenceRecord
   }
 
   enum WorkReviewDecisionKind {
@@ -1419,6 +1441,19 @@ const typeDefs = /* GraphQL */ `
 
 const resolvers = {
   WorkEvidenceRecord: {
+    retractedBy: async (parent: WorkEvidence, _args: Record<string, never>, context: GraphQLContext): Promise<User | null> =>
+      parent.retractedById ? context.prisma.user.findUnique({ where: { id: parent.retractedById } }) : null,
+    supersededByWork: async (parent: WorkEvidence, _args: Record<string, never>, context: GraphQLContext): Promise<Issue | null> => {
+      if (!parent.supersededByWorkId) return null;
+      // Read authorization on the referenced item: a reader of this evidence
+      // who may not read the other team's work gets null, not the item.
+      try {
+        await assertCanReadIssue(context.prisma, context, parent.supersededByWorkId);
+      } catch {
+        return null;
+      }
+      return getIssueById(context.prisma, parent.supersededByWorkId);
+    },
     verifications: (parent: { id: string }, _args: unknown, context: GraphQLContext) =>
       context.prisma.evidenceVerification.findMany({ where: { evidenceId: parent.id }, orderBy: { createdAt: 'desc' }, take: 10 }),
   },
@@ -2414,6 +2449,28 @@ const resolvers = {
         success: true as const,
       };
     }, { decision: null, issue: null, success: false as const }),
+    evidenceRetract: async (
+      _parent: unknown,
+      args: { input: { correctWorkId?: string | null; evidenceId: string; reason: string } },
+      context: GraphQLContext,
+    ): Promise<{ evidence: WorkEvidence | null; success: boolean }> =>
+      runMutation(async () => {
+        const viewer = requireAuthentication(context);
+        const evidence = await context.prisma.workEvidence.findUnique({ where: { id: args.input.evidenceId }, select: { workId: true } });
+        if (!evidence) throw createNotFoundError(EVIDENCE_NOT_FOUND_MESSAGE);
+        await assertCanWriteIssue(context.prisma, context, evidence.workId);
+        // Pointing evidence at a work item is a write to that item too; it
+        // must not become a way to probe or reference another team's work.
+        if (args.input.correctWorkId) {
+          await assertCanWriteIssue(context.prisma, context, args.input.correctWorkId);
+        }
+        const updated = await retractEvidence(context.prisma, {
+          correctWorkId: args.input.correctWorkId ?? null,
+          evidenceId: args.input.evidenceId,
+          reason: args.input.reason,
+        }, { actorId: viewer.id, actorKind: viewer.actorKind, surface: 'graphql' });
+        return { evidence: updated, success: true as const };
+      }, { evidence: null, success: false as const }),
     agentRequestAnswer: async (
       _parent: unknown,
       args: { input: { body: string; overrideReason?: string | null; requestId: string } },

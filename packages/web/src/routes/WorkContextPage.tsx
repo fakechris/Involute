@@ -259,11 +259,18 @@ export function WorkContextPage() {
           ) : (
             <ul className="work-context__timeline">
               {bundle.evidence.map((item) => (
-                <li key={item.id}>
+                <li key={item.id} style={item.retractedAt ? { opacity: 0.6 } : undefined}>
                   <strong>{item.kind.toLowerCase()}</strong>
-                  <a href={item.url} target="_blank" rel="noreferrer">
+                  <a href={item.url} target="_blank" rel="noreferrer" style={item.retractedAt ? { textDecoration: 'line-through' } : undefined}>
                     {item.url}
                   </a>
+                  {item.retractedAt ? (
+                    <span title={item.retractReason ?? undefined}>
+                      retracted by {item.retractedBy?.handle ? `@${item.retractedBy.handle}` : item.retractedBy?.name ?? 'someone'} {formatWhen(item.retractedAt)}
+                      {item.supersededByWork ? <> · belongs to <a href={`/issue/${item.supersededByWork.identifier}`}>{item.supersededByWork.identifier}</a></> : null}
+                      {item.retractReason ? ` — ${item.retractReason}` : ''}
+                    </span>
+                  ) : null}
                   {item.summary ? <span>{item.summary}</span> : null}
                   <span className="observation-card__meta">run {item.runId ?? '—'}</span>
                   <span className="observation-card__meta">actor {item.actorId ?? '—'}</span>

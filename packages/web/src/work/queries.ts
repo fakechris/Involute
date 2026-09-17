@@ -246,6 +246,10 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
         url
         summary
         createdAt
+        retractedAt
+        retractReason
+        retractedBy { id name handle }
+        supersededByWork { id identifier }
       }
       reviewDecisions {
         id
