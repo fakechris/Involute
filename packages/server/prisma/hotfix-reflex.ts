@@ -56,6 +56,14 @@ async function resolveReflexActor(): Promise<WriteActor & { label: string; teamI
         `Agent ${principal.user.handle ?? principal.user.name} lacks the propose scope.`,
       );
     }
+    if (!principal.teamId) {
+      // An unbound agent credential is a legacy row. Falling through to the
+      // --team path would let an agent token pick any team; refuse instead.
+      throw new Error(
+        `Agent ${principal.user.handle ?? principal.user.name}'s credential is not bound to a team. `
+        + 'Re-issue it for a team (agent:create <team-key> ...) before filing hotfixes with it.',
+      );
+    }
     return {
       actorId: principal.user.id,
       actorKind: 'AGENT',
@@ -168,7 +176,7 @@ ${title.trim()}
 
   // Resolve the identity BEFORE anything is written, so a bad credential
   // fails the whole run rather than half of it.
-  
+
 
   const candidate = await proposeWork(prisma, {
     acceptance: 'Fix verified by automated tests and typecheck; no regression.',
