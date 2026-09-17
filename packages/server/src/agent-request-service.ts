@@ -7,6 +7,7 @@ import {
   type A2aRequestState,
 } from './agent-request-state.js';
 import { createNotFoundError, createValidationError } from './errors.js';
+import { enqueueWorkEvent } from './event-outbox.js';
 import { syncCommentMentions } from './mention-service.js';
 import { recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
 import { attachDecisionReceipt, type ReceiptInput } from './decision-receipt.js';
@@ -190,7 +191,7 @@ export async function recordRequestAudit(
   return recordWorkAudit(tx, {
     actor: {
       ...input.actor,
-      reason: input.event,
+      reason: input.actor.reason ? `${input.event}; ${input.actor.reason}` : input.event,
       sourceMessageId: input.request.id,
       surface: `agent_request.${input.event}`,
     },
@@ -448,6 +449,114 @@ export async function answerAgentRequest(
     if (input.receipt) {
       await attachDecisionReceipt(tx, { auditId: answeredAuditId, receipt: input.receipt });
     }
+
+    return {
+      commentId: comment.id,
+      request: await tx.agentRequest.findUniqueOrThrow({ where: { id: request.id } }),
+    };
+  });
+}
+
+export const HUMAN_ANSWER_NOT_TARGET_MESSAGE =
+  'Only the person this request is addressed to may answer it. An admin may answer on their behalf with an override reason.';
+export const HUMAN_ANSWER_OVERRIDE_REASON_REQUIRED_MESSAGE = 'Answering on someone else\'s behalf requires an override reason.';
+
+export interface HumanAnswerInput {
+  body: string;
+  by: { actorId: string; actorKind: WriteActor['actorKind']; globalRole: 'ADMIN' | 'USER' };
+  id: string;
+  /** Required when an ADMIN answers a request addressed to someone else. Recorded on the audit. */
+  overrideReason?: string | null;
+}
+
+/**
+ * A request handed to a person is completed by that person (INV-596).
+ *
+ * No claim token: a human holds no execution. The right to answer is being
+ * the request's current target — or being an ADMIN who says, on the record,
+ * why they are answering for someone else. Comment, answeredCommentId, the
+ * move to COMPLETED, the audit and the event land in one transaction; the
+ * move is a CAS on state, so a late or repeated submission is refused rather
+ * than producing a second answer. An ordinary thread reply stays an ordinary
+ * reply: the system never guesses that a comment was meant as the answer.
+ */
+export async function answerAgentRequestAsHuman(
+  prisma: PrismaClient,
+  input: HumanAnswerInput,
+): Promise<AnsweredAgentRequest> {
+  const body = input.body.trim();
+  if (!body) {
+    throw createValidationError(ANSWER_REQUIRES_BODY_MESSAGE);
+  }
+  if (input.by.actorKind !== 'HUMAN') {
+    throw createValidationError(HUMAN_ANSWER_NOT_TARGET_MESSAGE);
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const request = await tx.agentRequest.findUnique({
+      where: { id: input.id },
+      include: { targetActor: { select: { actorKind: true, id: true } }, work: { select: { id: true, identifier: true, teamId: true } } },
+    });
+    if (!request) {
+      throw createNotFoundError(REQUEST_NOT_FOUND_MESSAGE);
+    }
+    if (isTerminalState(request.state)) {
+      throw createValidationError(REQUEST_ALREADY_TERMINAL_MESSAGE);
+    }
+
+    const isTarget = request.targetActorId === input.by.actorId;
+    const override = !isTarget;
+    if (override) {
+      if (input.by.globalRole !== 'ADMIN') {
+        throw createValidationError(HUMAN_ANSWER_NOT_TARGET_MESSAGE);
+      }
+      if (!input.overrideReason?.trim()) {
+        throw createValidationError(HUMAN_ANSWER_OVERRIDE_REASON_REQUIRED_MESSAGE);
+      }
+    }
+
+    const comment = await tx.comment.create({
+      data: { body, issueId: request.workId, parentCommentId: request.rootCommentId, userId: input.by.actorId },
+    });
+    await syncCommentMentions(tx, comment.id, comment.body);
+
+    const moved = await tx.agentRequest.updateMany({
+      where: { id: request.id, state: { in: [...CLAIMABLE_REQUEST_STATES] } },
+      data: {
+        answeredCommentId: comment.id,
+        claimExpiresAt: null,
+        claimTokenHash: null,
+        claimedBy: null,
+        state: 'COMPLETED',
+      },
+    });
+    if (moved.count === 0) {
+      throw createValidationError(REQUEST_ALREADY_TERMINAL_MESSAGE);
+    }
+
+    await recordRequestAudit(tx, {
+      actor: {
+        actorId: input.by.actorId,
+        actorKind: 'HUMAN',
+        ...(override ? { reason: `override: ${input.overrideReason!.trim()}` } : {}),
+      },
+      event: 'answered',
+      request,
+    });
+
+    await enqueueWorkEvent(tx, {
+      payload: {
+        answeredByActorId: input.by.actorId,
+        commentId: comment.id,
+        override: override ? input.overrideReason!.trim() : null,
+        requestId: request.id,
+        rootCommentId: request.rootCommentId,
+        targetActorId: request.targetActorId,
+      },
+      type: 'agent.request_answered',
+      workId: request.work.id,
+      workIdentifier: request.work.identifier,
+    });
 
     return {
       commentId: comment.id,

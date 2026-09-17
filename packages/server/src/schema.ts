@@ -57,6 +57,7 @@ import {
 } from './errors.js';
 import {
   assertCanDeleteComment,
+  assertCanActOnRequest,
   assertCanManageActor,
   assertCanRepresentActor,
   assertCanRevokeCredential,
@@ -84,6 +85,7 @@ import { toWireState } from './agent-request-state.js';
 import { PRESENCE_COPY, agentRequestPresence } from './agent-request-presence.js';
 import { ACTOR_PRESENCE_COPY, actorPresence } from './actor-presence.js';
 import { deactivateActor, transferActorOwner } from './actor-lifecycle.js';
+import { answerAgentRequestAsHuman } from './agent-request-service.js';
 import { provisionServiceActor } from './service-actors.js';
 import {
   findWorkProvenance,
@@ -331,6 +333,8 @@ const typeDefs = /* GraphQL */ `
     agentCredentialCreate(input: AgentCredentialCreateInput!): AgentCredentialCreatePayload!
     """Deactivate an actor: keeps its id and history, revokes its credentials, ends its ability to act. Human-only."""
     actorDeactivate(id: String!, reason: String): ActorLifecyclePayload!
+    """A person completes a request addressed to them (INV-596): comment, answeredCommentId, COMPLETED, audit and event in one transaction. An ADMIN may answer for someone else with an overrideReason."""
+    agentRequestAnswer(input: AgentRequestAnswerInput!): AgentRequestAnswerPayload!
     """Transfer accountability for a non-human actor to another human. Human-only, recorded in ActorAudit."""
     actorTransferOwner(id: String!, ownerId: String!, reason: String): ActorLifecyclePayload!
     """Provision a SERVICE actor for an external program (CI, cron, a bridge). Human-only."""
@@ -748,6 +752,18 @@ const typeDefs = /* GraphQL */ `
     expiresAt: DateTime
     revokedAt: DateTime
     user: User!
+  }
+
+  input AgentRequestAnswerInput {
+    requestId: String!
+    body: String!
+    overrideReason: String
+  }
+
+  type AgentRequestAnswerPayload {
+    success: Boolean!
+    request: AgentRequest
+    comment: Comment
   }
 
   type ActorLifecyclePayload {
@@ -2378,6 +2394,23 @@ const resolvers = {
         success: true as const,
       };
     }, { decision: null, issue: null, success: false as const }),
+    agentRequestAnswer: async (
+      _parent: unknown,
+      args: { input: { body: string; overrideReason?: string | null; requestId: string } },
+      context: GraphQLContext,
+    ): Promise<{ comment: Comment | null; request: AgentRequestParent | null; success: boolean }> =>
+      runMutation(async () => {
+        const viewer = requireAuthentication(context);
+        await assertCanActOnRequest(context.prisma, context, args.input.requestId);
+        const answered = await answerAgentRequestAsHuman(context.prisma, {
+          body: args.input.body,
+          by: { actorId: viewer.id, actorKind: viewer.actorKind, globalRole: viewer.globalRole },
+          id: args.input.requestId,
+          overrideReason: args.input.overrideReason ?? null,
+        });
+        const comment = await context.prisma.comment.findUniqueOrThrow({ where: { id: answered.commentId } });
+        return { comment, request: answered.request, success: true as const };
+      }, { comment: null, request: null, success: false as const }),
     actorDeactivate: async (
       _parent: unknown,
       args: { id: string; reason?: string | null },

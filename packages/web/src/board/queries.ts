@@ -262,6 +262,17 @@ export const ISSUE_UPDATE_MUTATION = gql`
   }
 `;
 
+/** A person completes a request addressed to them (INV-596). */
+export const AGENT_REQUEST_ANSWER_MUTATION = gql`
+  mutation AgentRequestAnswer($input: AgentRequestAnswerInput!) {
+    agentRequestAnswer(input: $input) {
+      success
+      request { id state answeredCommentId }
+      comment { id }
+    }
+  }
+`;
+
 export const COMMENT_CREATE_MUTATION = gql`
   mutation CommentCreate($input: CommentCreateInput!) {
     commentCreate(input: $input) {

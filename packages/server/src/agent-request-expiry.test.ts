@@ -162,7 +162,9 @@ describe('agent request expiry (INV-562 / A6)', () => {
 
       await expect(prisma.comment.count({ where: { parentCommentId: rootCommentId } }))
         .resolves.toBe(1);
-      await expect(prisma.notification.count({ where: { type: 'agent.request_expired' } }))
+      // The asker here is also the person the request was handed to, so they get
+      // the hand-off notification (theirs to act on), not a second status update.
+      await expect(prisma.notification.count({ where: { type: { in: ['agent.request_expired', 'agent.request_handed_off'] } } }))
         .resolves.toBe(1);
     });
 
