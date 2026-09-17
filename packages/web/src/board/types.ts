@@ -169,6 +169,7 @@ export interface AgentRequestSummary {
   rootRequestId: string | null;
   handedOffFromId: string | null;
   failureReason: string | null;
+  answeredCommentId: string | null;
   targetActor: UserSummary;
 }
 

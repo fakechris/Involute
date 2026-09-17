@@ -395,7 +395,7 @@ export const ISSUE_PAGE_QUERY = gql`
           lastSeenAt
         }
       }
-      agentRequests(first: 20) {
+      agentRequests(first: 200) {
         id
         state
         presence
@@ -405,6 +405,7 @@ export const ISSUE_PAGE_QUERY = gql`
         rootRequestId
         handedOffFromId
         failureReason
+        answeredCommentId
         targetActor {
           id
           name
@@ -1142,6 +1143,22 @@ export const AGENT_PROFILE_QUERY = gql`
         createdAt
         expiresAt
         revokedAt
+      }
+      receipts {
+        auditId
+        surface
+        work { id identifier title }
+        receipt {
+          id
+          reasoning
+          runtime
+          sessionId
+          contractRevision
+          createdAt
+          actor { id name handle actorKind }
+          evidence { kind ref version digest excerpt preserved }
+          inputs { kind ref version digest excerpt preserved }
+        }
       }
       timeline {
         at

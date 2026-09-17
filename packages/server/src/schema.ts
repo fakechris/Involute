@@ -197,7 +197,7 @@ const COMMENT_ORDER_BY: Prisma.CommentOrderByWithRelationInput[] = [
   { id: 'asc' },
 ];
 const MAX_COMMENTS_CONNECTION_FIRST = 100;
-const MAX_AGENT_REQUESTS_CONNECTION_FIRST = 50;
+const MAX_AGENT_REQUESTS_CONNECTION_FIRST = 200;
 
 const MAX_ISSUES_CONNECTION_FIRST = 200;
 
@@ -518,7 +518,16 @@ const typeDefs = /* GraphQL */ `
     counts: AgentActivityCounts!
     """When and how this actor was created, and what it was granted."""
     credentials: [AgentCredentialSummary!]!
+    """The actor's decision receipts — its own claims about what it knew and why, each bound to the audited write it explains. Not system-verified facts."""
+    receipts: [AgentReceiptEntry!]!
     timeline: [AgentTimelineEntry!]!
+  }
+
+  type AgentReceiptEntry {
+    auditId: String!
+    surface: String
+    work: Issue!
+    receipt: DecisionReceiptRecord!
   }
 
   type CommentMention {
@@ -592,7 +601,13 @@ const typeDefs = /* GraphQL */ `
     links(type: WorkLinkType): WorkLinkConnection!
     claim: WorkClaimRecord
     comments(first: Int, after: String, orderBy: CommentOrderBy, rootsOnly: Boolean): CommentConnection!
-    """Questions put to agents on this work item, newest first (INV-560/562)."""
+    """
+    Questions put to agents on this work item (INV-560/562). The newest "first"
+    requests, each with the rest of its hand-off chain filled in, returned
+    oldest first. The cap limits which chains are shown, never a chain's hops,
+    so the request currently awaiting an answer is always present with its root
+    (INV-597 follow-up).
+    """
     agentRequests(first: Int): [AgentRequest!]!
     """The actor that created this work — human or agent (INV-573)."""
     proposedByActor: User
@@ -1881,7 +1896,12 @@ const resolvers = {
       context: GraphQLContext,
     ): Promise<AgentProfileResult | null> => {
       requireAuthentication(context);
-      return getAgentProfile(context.prisma, args.handle);
+      // Bounded by what the viewer may read: no private team's work, receipts
+      // or credentials leak through an agent's handle (INV-597 follow-up).
+      return getAgentProfile(context.prisma, args.handle, {
+        readableTeam: buildReadableTeamWhere(context),
+        readableWork: buildReadableIssueWhere(context),
+      });
     },
     agentCredentials: async (
       _parent: unknown,
@@ -3388,14 +3408,30 @@ const resolvers = {
       parent: IssueParent,
       args: { first?: number | null },
       context: GraphQLContext,
-    ): Promise<AgentRequestParent[]> =>
-      context.prisma.agentRequest.findMany({
+    ): Promise<AgentRequestParent[]> => {
+      // Newest first, so a fresh hand-off on a busy work item is never hidden
+      // behind the cap (INV-597 follow-up). Then every chain touched is
+      // completed: a hop without its root is unreadable, and a chain has at
+      // most MAX_HANDOFF_HOPS hops, so the overshoot is bounded.
+      const newest = await context.prisma.agentRequest.findMany({
         where: { workId: parent.id },
         orderBy: [{ createdAt: 'desc' }],
         take: args.first === undefined || args.first === null
           ? MAX_AGENT_REQUESTS_CONNECTION_FIRST
           : clampConnectionFirst(args.first, MAX_AGENT_REQUESTS_CONNECTION_FIRST),
-      }),
+      });
+      const roots = [...new Set(newest.map((request) => request.rootRequestId ?? request.id))];
+      const rest = roots.length === 0
+        ? []
+        : await context.prisma.agentRequest.findMany({
+          where: {
+            id: { notIn: newest.map((request) => request.id) },
+            workId: parent.id,
+            OR: [{ id: { in: roots } }, { rootRequestId: { in: roots } }],
+          },
+        });
+      return [...newest, ...rest].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    },
   },
   WorkAuditRecord: {
     receipt: async (
