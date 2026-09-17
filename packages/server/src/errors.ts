@@ -68,6 +68,8 @@ export const WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE =
   'Reporting a run requires an active claim owned by the current actor.';
 export const WORK_RUN_ACTOR_MISMATCH_MESSAGE = 'Only the run actor can update this run.';
 export const WORK_RUN_TERMINAL_MESSAGE = 'Completed or failed runs cannot be changed.';
+export const WORK_RUN_TERMINAL_REPLAY_MESSAGE =
+  'This run is already completed or failed. Only a proven idempotent replay (same idempotencyKey, identical content) is accepted; anything else is refused rather than silently dropped. Attach further evidence with evidence_attach, or comment on the work item.';
 export const WORK_RUN_TRANSITION_INVALID_MESSAGE = 'Invalid work run status transition.';
 export const WORK_RUN_CONFLICT_MESSAGE = 'Work run changed while the update was in progress.';
 export const WORK_EVIDENCE_REQUIRES_RUN_MESSAGE = 'Evidence must reference a work run.';

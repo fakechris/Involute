@@ -1,4 +1,5 @@
 import { PrismaClient, type Team, type User } from '@prisma/client';
+import { WORK_RUN_TERMINAL_REPLAY_MESSAGE } from './errors.ts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
 import { parseAcceptance, parseGitHubEvidence, snapshotContract } from './evidence-contract.ts';
@@ -235,7 +236,8 @@ describe('trusted evidence shadow integration', () => {
     await verifyEvidence(prisma, s.evidence.id, fixture().options);
     await reportRun(prisma, { workId: s.work.id, runId: s.run.id, commitSha: 'b'.repeat(40), status: 'completed' }, actor());
     expect((await tryAutoAccept(prisma, s.work.id, { runId: s.run.id }))?.grade.tier).not.toBe('CLEAR');
-    await reportRun(prisma, { workId: s.work.id, runId: s.run.id, commitSha: sha }, actor());
+    // A completed run refuses a new target rather than silently ignoring it (INV-595).
+    await expect(reportRun(prisma, { workId: s.work.id, runId: s.run.id, commitSha: sha }, actor())).rejects.toThrow(WORK_RUN_TERMINAL_REPLAY_MESSAGE);
     expect((await prisma.workRun.findUniqueOrThrow({ where: { id: s.run.id } })).commitSha).toBe('b'.repeat(40));
   });
 

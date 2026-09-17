@@ -18,6 +18,7 @@ import {
   WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE,
   WORK_RUN_ACTOR_MISMATCH_MESSAGE,
   WORK_RUN_TERMINAL_MESSAGE,
+  WORK_RUN_TERMINAL_REPLAY_MESSAGE,
   WORK_RUN_TRANSITION_INVALID_MESSAGE,
   WORK_RUN_CONFLICT_MESSAGE,
   WORK_REVIEW_STATE_MISSING_MESSAGE,
@@ -211,13 +212,16 @@ export async function reportRun(
         throw createValidationError(WORK_RUN_ACTOR_MISMATCH_MESSAGE);
       }
       if (TERMINAL_RUN_STATUSES.includes(run.status)) {
-        if (!status || status === run.status) {
-          if (idempotencyId) {
-            await completeWorkIdempotency(transaction, idempotencyId, work.id, run.id);
-          }
-          return { run, work };
+        // A proven replay (same idempotencyKey, identical request hash) has
+        // already returned above. Anything that reaches here — a keyless
+        // re-report, or a keyed one carrying a new receipt, summary, SHA, PR
+        // or phase — is not provably the same request, and the server does
+        // not keep the original to compare "looks the same" field by field.
+        // Refuse; never accept and silently drop the content (INV-595).
+        if (status && status !== run.status) {
+          throw createValidationError(WORK_RUN_TERMINAL_MESSAGE);
         }
-        throw createValidationError(WORK_RUN_TERMINAL_MESSAGE);
+        throw createValidationError(WORK_RUN_TERMINAL_REPLAY_MESSAGE);
       }
 
       // Constraint 5: Lease expiration does not block terminal completed/failed updates
