@@ -99,7 +99,7 @@ export async function recordWorkAudit(
     claimGeneration?: number | null;
     workId: string;
   },
-): Promise<void> {
+): Promise<string> {
   const actor = input.actor ?? INTERNAL_WRITE_ACTOR;
   const data: Prisma.WorkAuditUncheckedCreateInput = {
     actorId: actor.actorId ?? null,
@@ -120,9 +120,12 @@ export async function recordWorkAudit(
     data.before = snapshotIssue(input.before);
   }
 
-  await prisma.workAudit.create({
-    data,
-  });
+  // Return the id so a receipt can be attached to *this* row. "The latest
+  // audit of the work" is not the same thing under concurrency: another
+  // execution's row can commit in between and the receipt would inherit its
+  // identity (INV-591).
+  const created = await prisma.workAudit.create({ data, select: { id: true } });
+  return created.id;
 }
 
 export function selectIssueSnapshot(issue: Issue): IssueSnapshot {

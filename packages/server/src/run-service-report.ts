@@ -23,7 +23,7 @@ import {
   WORK_REVIEW_STATE_MISSING_MESSAGE,
 } from './errors.js';
 import { recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
-import { attachDecisionReceipt, latestAuditId } from './decision-receipt.js';
+import { attachDecisionReceipt } from './decision-receipt.js';
 import {
   ALLOWED_RUN_TRANSITIONS,
   TERMINAL_RUN_STATUSES,
@@ -52,12 +52,6 @@ export async function reportRun(
     const initial = await requireWork(transaction, input.workId);
     await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR UPDATE`;
     const work = await requireWork(transaction, initial.id);
-    // A receipt attaches to the audit *this* report writes. Not every report
-    // writes one (a phase-only report changes nothing audited), so remember
-    // where the audit trail stood before we started.
-    const auditBefore = input.receipt
-      ? await transaction.workAudit.findFirst({ where: { workId: work.id }, orderBy: { createdAt: 'desc' }, select: { id: true } })
-      : null;
     let idempotencyId: string | null = null;
     if (input.idempotencyKey) {
       const reservation = await reserveWorkIdempotency(transaction, {
@@ -281,11 +275,14 @@ export async function reportRun(
       eventId = enqueued.id;
     }
 
+    // A receipt attaches to the audit *this* report writes — the state
+    // transition, if there was one. Not every report writes one.
     let nextWork = work;
+    let transitionAuditId: string | null = null;
     if (run.status === 'RUNNING') {
-      nextWork = await moveToInProgress(transaction, work);
+      ({ auditId: transitionAuditId, work: nextWork } = await moveToInProgress(transaction, work, actor));
     } else if (run.status === 'COMPLETED') {
-      nextWork = await moveToInReview(transaction, work, actor);
+      ({ auditId: transitionAuditId, work: nextWork } = await moveToInReview(transaction, work, actor));
       if (activeClaim) {
         await transaction.workClaim.deleteMany({ where: { id: activeClaim.id } });
       }
@@ -316,11 +313,10 @@ export async function reportRun(
     // Return the row after the Review transition and shadow evaluation.
     const freshWork = await transaction.issue.findUniqueOrThrow({ where: { id: nextWork.id } });
     if (input.receipt) {
-      const auditAfterId = await latestAuditId(transaction, work.id);
-      if (auditAfterId === auditBefore?.id) {
+      if (!transitionAuditId) {
         throw createValidationError(RUN_RECEIPT_NEEDS_AUDIT_MESSAGE);
       }
-      await attachDecisionReceipt(transaction, { auditId: auditAfterId, receipt: input.receipt });
+      await attachDecisionReceipt(transaction, { auditId: transitionAuditId, receipt: input.receipt });
     }
     return { run, work: freshWork };
   });
@@ -329,14 +325,18 @@ export async function reportRun(
 export const RUN_RECEIPT_NEEDS_AUDIT_MESSAGE =
   'This report changed nothing audited, so there is no write for a receipt to explain. Attach the receipt to the report that moves the work (e.g. status: completed), or to the answer/proposal it belongs to.';
 
-export async function moveToInProgress(prisma: DatabaseClient, work: Issue): Promise<Issue> {
+export async function moveToInProgress(
+  prisma: DatabaseClient,
+  work: Issue,
+  actor: WriteActor,
+): Promise<{ auditId: string | null; work: Issue }> {
   const currentState = await prisma.workflowState.findUnique({
     where: { id: work.stateId },
     select: { type: true },
   });
 
   if (!currentState || (currentState.type !== 'UNSTARTED' && currentState.type !== 'BACKLOG')) {
-    return work;
+    return { auditId: null, work };
   }
 
   const startedState = await prisma.workflowState.findFirst({
@@ -349,7 +349,7 @@ export async function moveToInProgress(prisma: DatabaseClient, work: Issue): Pro
   });
 
   if (!startedState) {
-    return work;
+    return { auditId: null, work };
   }
 
   const transition = await prisma.issue.updateMany({
@@ -360,20 +360,33 @@ export async function moveToInProgress(prisma: DatabaseClient, work: Issue): Pro
   });
 
   if (transition.count === 1) {
-    return prisma.issue.findUniqueOrThrow({ where: { id: work.id } });
+    const updated = await prisma.issue.findUniqueOrThrow({ where: { id: work.id } });
+    // The move to In Progress was the one state transition that left no
+    // audit row: a work item could start with nobody named as starting it.
+    const auditId = await recordWorkAudit(prisma, {
+      actor,
+      after: selectIssueSnapshot(updated),
+      before: selectIssueSnapshot(work),
+      workId: work.id,
+    });
+    return { auditId, work: updated };
   }
 
-  return work;
+  return { auditId: null, work };
 }
 
-export async function moveToInReview(prisma: DatabaseClient, work: Issue, actor: WriteActor): Promise<Issue> {
+export async function moveToInReview(
+  prisma: DatabaseClient,
+  work: Issue,
+  actor: WriteActor,
+): Promise<{ auditId: string | null; work: Issue }> {
   const currentState = await prisma.workflowState.findUnique({
     where: { id: work.stateId },
     select: { type: true },
   });
 
   if (!currentState || currentState.type === 'REVIEW' || currentState.type === 'COMPLETED' || currentState.type === 'CANCELED') {
-    return work;
+    return { auditId: null, work };
   }
 
   const reviewState = await prisma.workflowState.findFirst({
@@ -404,12 +417,12 @@ export async function moveToInReview(prisma: DatabaseClient, work: Issue, actor:
       select: { type: true },
     });
     if (freshState && (freshState.type === 'REVIEW' || freshState.type === 'COMPLETED' || freshState.type === 'CANCELED')) {
-      return fresh;
+      return { auditId: null, work: fresh };
     }
     throw createValidationError(WORK_RUN_CONFLICT_MESSAGE);
   }
   const updated = await prisma.issue.findUniqueOrThrow({ where: { id: work.id } });
-  await recordWorkAudit(prisma, {
+  const auditId = await recordWorkAudit(prisma, {
     actor,
     after: selectIssueSnapshot(updated),
     before: selectIssueSnapshot(work),
@@ -421,5 +434,5 @@ export async function moveToInReview(prisma: DatabaseClient, work: Issue, actor:
     workId: work.id,
     workIdentifier: work.identifier,
   });
-  return updated;
+  return { auditId, work: updated };
 }

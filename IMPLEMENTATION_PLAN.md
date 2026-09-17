@@ -77,7 +77,7 @@ receipt-binding race, the agent-in-TeamMembership debt, and closing items.
 ## Stage 2: Receipt binds to its own audit row (INV-591)
 **Goal**: `recordWorkAudit` returns the audit id; propose/answer/report attach the receipt to that row, never to "the latest audit of the work".
 **Success Criteria**: receipt lands on its own audit when two audits exist; existing receipt tests green.
-**Status**: Not Started
+**Status**: Complete — PR pending (stacked on INV-590)
 
 ## Stage 3: Agent authorization from the credential binding (INV-592)
 **Goal**: Agents are authorized by `AgentCredential.teamId` + scopes, not by a fake EDITOR membership. Backend first, then backfill + migration removing AGENT memberships, then hand-off/mention use the binding, then `/settings/access` shows humans only plus a Team Agents section.

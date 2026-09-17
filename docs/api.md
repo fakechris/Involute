@@ -890,6 +890,14 @@ write time so it outlives the session that wrote it. It is attached 1:1 to the
 `WorkAudit` row of the write it explains, in the **same transaction** — a write
 and its receipt land together or not at all — and it is immutable.
 
+**A receipt binds to the audit row its write produced (INV-591).** Every
+audited write returns the id of the row it wrote, and the receipt is attached
+to exactly that row — never to "the latest audit of the work", which under
+concurrency can be another execution's row (the receipt would then inherit
+that execution's identity and session). A run report's receipt binds to the
+state transition the report caused; a report that caused none is refused a
+receipt. The move to In Progress is now audited like every other transition.
+
 Send it as `receipt` on `work_propose`, `run_report` or `agent_request_answer`:
 
 ```json
