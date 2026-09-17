@@ -77,6 +77,8 @@ import { WORK_EVENT_TYPES, enqueueWorkEvent } from './event-outbox.js';
 import { toWireState } from './agent-request-state.js';
 import { PRESENCE_COPY, agentRequestPresence } from './agent-request-presence.js';
 import { ACTOR_PRESENCE_COPY, actorPresence } from './actor-presence.js';
+import { deactivateActor, recordActorAudit, transferActorOwner } from './actor-lifecycle.js';
+import { provisionServiceActor } from './service-actors.js';
 import {
   findWorkProvenance,
   getAgentProfile,
@@ -283,8 +285,8 @@ const typeDefs = /* GraphQL */ `
     projectSummary(teamFilter: TeamFilter): ProjectSummaryResult!
     bugSummary(teamFilter: TeamFilter): BugSummaryResult!
     traceabilityAudit(days: Int): TraceabilityAuditResult!
-    """AGENT actors, most recently active first. Backs the directory and @ completion."""
-    agents(teamKey: String): [User!]!
+    """Non-human actors (AGENT and SERVICE), most recently active first. Backs the directory and @ completion."""
+    agents(teamKey: String, includeDeactivated: Boolean): [User!]!
     """One agent's profile, by handle or id."""
     agentProfile(handle: String!): AgentProfile
     agentCredentials(teamId: String!): [AgentCredentialRecord!]!
@@ -321,6 +323,12 @@ const typeDefs = /* GraphQL */ `
     evidenceAttach(input: EvidenceAttachInput!): EvidenceAttachPayload!
     workReview(id: String!, input: WorkReviewInput!): WorkReviewPayload!
     agentCredentialCreate(input: AgentCredentialCreateInput!): AgentCredentialCreatePayload!
+    """Deactivate an actor: keeps its id and history, revokes its credentials, ends its ability to act. Human-only."""
+    actorDeactivate(id: String!, reason: String): ActorLifecyclePayload!
+    """Transfer accountability for a non-human actor to another human. Human-only, recorded in ActorAudit."""
+    actorTransferOwner(id: String!, ownerId: String!, reason: String): ActorLifecyclePayload!
+    """Provision a SERVICE actor for an external program (CI, cron, a bridge). Human-only."""
+    serviceActorCreate(input: ServiceActorCreateInput!): ActorLifecyclePayload!
     agentCredentialRevoke(id: String!): AgentCredentialRevokePayload!
     webhookCreate(input: WebhookCreateInput!): WebhookMutationPayload!
     webhookUpdate(id: String!, input: WebhookUpdateInput!): WebhookMutationPayload!
@@ -388,6 +396,10 @@ const typeDefs = /* GraphQL */ `
     actorKind: ActorKind!
     """Who picks up this actor's unanswered requests (INV-562)."""
     successorActor: User
+    """The human accountable for a non-human actor. A responsibility, not a permission (INV-586)."""
+    owner: User
+    """Set when the actor was deactivated. Deactivated actors keep their id and history but cannot act."""
+    deactivatedAt: DateTime
     """Lowercase alias this actor is addressed by in comments, as in @mia."""
     handle: String
     """Self-declared runtime, e.g. lumenbox / codex-cli / claude-code. Involute stores it, never interprets it."""
@@ -696,6 +708,20 @@ const typeDefs = /* GraphQL */ `
     expiresAt: DateTime
     revokedAt: DateTime
     user: User!
+  }
+
+  type ActorLifecyclePayload {
+    success: Boolean!
+    actor: User
+  }
+
+  input ServiceActorCreateInput {
+    name: String!
+    handle: String!
+    description: String
+    email: String
+    """Defaults to the caller."""
+    ownerId: String
   }
 
   input AgentCredentialCreateInput {
@@ -1784,11 +1810,14 @@ const resolvers = {
     },
     agents: async (
       _parent: unknown,
-      args: { teamKey?: string | null },
+      args: { includeDeactivated?: boolean | null; teamKey?: string | null },
       context: GraphQLContext,
     ): Promise<User[]> => {
       requireAuthentication(context);
-      return listAgentActors(context.prisma, { teamKey: args.teamKey ?? null });
+      return listAgentActors(context.prisma, {
+        includeDeactivated: args.includeDeactivated ?? false,
+        teamKey: args.teamKey ?? null,
+      });
     },
     agentProfile: async (
       _parent: unknown,
@@ -2309,6 +2338,61 @@ const resolvers = {
         success: true as const,
       };
     }, { decision: null, issue: null, success: false as const }),
+    actorDeactivate: async (
+      _parent: unknown,
+      args: { id: string; reason?: string | null },
+      context: GraphQLContext,
+    ): Promise<{ actor: User | null; success: boolean }> =>
+      runMutation(async () => {
+        const viewer = requireAuthentication(context);
+        const actor = await deactivateActor(context.prisma, {
+          actorId: args.id,
+          by: { actorId: viewer.id, actorKind: viewer.actorKind },
+          reason: args.reason ?? null,
+        });
+        return { actor, success: true as const };
+      }, { actor: null, success: false as const }),
+    actorTransferOwner: async (
+      _parent: unknown,
+      args: { id: string; ownerId: string; reason?: string | null },
+      context: GraphQLContext,
+    ): Promise<{ actor: User | null; success: boolean }> =>
+      runMutation(async () => {
+        const viewer = requireAuthentication(context);
+        const actor = await transferActorOwner(context.prisma, {
+          actorId: args.id,
+          by: { actorId: viewer.id, actorKind: viewer.actorKind },
+          newOwnerId: args.ownerId,
+          reason: args.reason ?? null,
+        });
+        return { actor, success: true as const };
+      }, { actor: null, success: false as const }),
+    serviceActorCreate: async (
+      _parent: unknown,
+      args: { input: { description?: string | null; email?: string | null; handle: string; name: string; ownerId?: string | null } },
+      context: GraphQLContext,
+    ): Promise<{ actor: User | null; success: boolean }> =>
+      runMutation(async () => {
+        const viewer = requireAuthentication(context);
+        if (viewer.actorKind !== 'HUMAN') {
+          throw createValidationError('Only a human may provision a service actor.');
+        }
+        const created = await provisionServiceActor(context.prisma, {
+          description: args.input.description ?? null,
+          email: args.input.email ?? null,
+          handle: args.input.handle,
+          name: args.input.name,
+          ownerId: args.input.ownerId ?? viewer.id,
+        });
+        await recordActorAudit(context.prisma, {
+          action: 'provisioned',
+          after: { actorKind: 'SERVICE', handle: created.handle, ownerId: args.input.ownerId ?? viewer.id },
+          byActorId: viewer.id,
+          subjectId: created.actorId,
+        });
+        const actor = await context.prisma.user.findUniqueOrThrow({ where: { id: created.actorId } });
+        return { actor, success: true as const };
+      }, { actor: null, success: false as const }),
     agentCredentialCreate: async (
       _parent: unknown,
       args: {
@@ -2332,7 +2416,10 @@ const resolvers = {
         } catch {
           throw createValidationError(AGENT_SCOPE_INVALID_MESSAGE);
         }
+        // The human creating the credential is accountable for the agent
+        // unless they say otherwise; an agent token cannot own an agent.
         const { credential, token } = await issueAgentCredential(context.prisma, {
+          ownerId: requireAuthentication(context).id,
           email: args.input.email ?? null,
           expiresAt: args.input.expiresAt ? new Date(args.input.expiresAt) : null,
           name: args.input.name,
@@ -2909,6 +2996,12 @@ const resolvers = {
       parent.successorActorId
         ? context.prisma.user.findUnique({ where: { id: parent.successorActorId } })
         : null,
+    owner: async (
+      parent: UserParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<User | null> =>
+      parent.ownerId ? context.prisma.user.findUnique({ where: { id: parent.ownerId } }) : null,
     presence: (parent: UserParent): string => actorPresence(parent.lastSeenAt),
     presenceDetail: (parent: UserParent): string =>
       ACTOR_PRESENCE_COPY[actorPresence(parent.lastSeenAt)],

@@ -28,7 +28,7 @@ export async function resolveMentionedActors(
   }
 
   const actors = await db.user.findMany({
-    where: { actorKind: 'AGENT', handle: { in: handles } },
+    where: { actorKind: 'AGENT', deactivatedAt: null, handle: { in: handles } },
     select: { handle: true, id: true },
   });
 

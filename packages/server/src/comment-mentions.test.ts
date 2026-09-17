@@ -139,6 +139,7 @@ describe('comment mentions (INV-558 / A2)', () => {
 
   it('gives every issued agent credential a mentionable handle', async () => {
     const { credential } = await issueAgentCredential(prisma, {
+      ownerId: await seededOwnerId(prisma),
       name: 'Codex Chris Mac',
       teamKey: DEFAULT_TEAM_KEY,
     });
@@ -148,8 +149,10 @@ describe('comment mentions (INV-558 / A2)', () => {
   });
 
   it('suffixes a colliding auto-derived handle instead of failing issuance', async () => {
-    const first = await issueAgentCredential(prisma, { name: 'Mia', teamKey: DEFAULT_TEAM_KEY });
-    const second = await issueAgentCredential(prisma, { name: 'Mia', teamKey: DEFAULT_TEAM_KEY });
+    const first = await issueAgentCredential(prisma, {
+      ownerId: await seededOwnerId(prisma), name: 'Mia', teamKey: DEFAULT_TEAM_KEY });
+    const second = await issueAgentCredential(prisma, {
+      ownerId: await seededOwnerId(prisma), name: 'Mia', teamKey: DEFAULT_TEAM_KEY });
 
     const firstUser = await prisma.user.findUniqueOrThrow({ where: { id: first.credential.userId } });
     const secondUser = await prisma.user.findUniqueOrThrow({ where: { id: second.credential.userId } });
@@ -162,6 +165,7 @@ describe('comment mentions (INV-558 / A2)', () => {
     await createAgent(prisma, 'Mia', 'mia');
 
     await expect(issueAgentCredential(prisma, {
+      ownerId: await seededOwnerId(prisma),
       handle: 'mia',
       name: 'Impostor',
       teamKey: DEFAULT_TEAM_KEY,
@@ -202,4 +206,11 @@ async function createIssue(prismaClient: PrismaClient): Promise<Issue> {
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<void> {
   await resetAndSeed(prismaClient);
+}
+
+
+// INV-586: a new agent needs a human accountable for it.
+async function seededOwnerId(client: PrismaClient): Promise<string> {
+  const admin = await client.user.findFirstOrThrow({ where: { actorKind: 'HUMAN' } });
+  return admin.id;
 }
