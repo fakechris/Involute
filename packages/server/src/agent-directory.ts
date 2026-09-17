@@ -1,7 +1,7 @@
 import { toWireState } from './agent-request-state.js';
 
 import { Prisma } from '@prisma/client';
-import type { PrismaClient, User } from '@prisma/client';
+import type { PrismaClient, User, DecisionReceipt } from '@prisma/client';
 
 export const MAX_TIMELINE_ENTRIES = 25;
 
@@ -40,7 +40,20 @@ export interface AgentProfile {
    * so without it "what is this thing and who made it" is unanswerable.
    */
   credentials: AgentCredentialSummary[];
+  /**
+   * The actor's decision receipts: what it said it knew and why it decided,
+   * each bound to the audited write it explains. These are the actor's own
+   * claims, shown as such — never system-verified facts.
+   */
+  receipts: AgentReceiptEntry[];
   timeline: AgentTimelineEntry[];
+}
+
+export interface AgentReceiptEntry {
+  auditId: string;
+  receipt: DecisionReceipt;
+  surface: string | null;
+  work: { id: string; identifier: string; title: string };
 }
 
 /**
@@ -142,9 +155,22 @@ export async function getAgentProfile(
     orderBy: { createdAt: 'desc' },
   });
 
+  const receipts = await prisma.decisionReceipt.findMany({
+    where: { actorId: actor.id },
+    include: { audit: { select: { createdAt: true, id: true, surface: true, work: { select: { id: true, identifier: true, title: true } } } } },
+    orderBy: { audit: { createdAt: 'desc' } },
+    take: MAX_TIMELINE_ENTRIES,
+  });
+
   return {
     actor,
     counts: { answeredRequests, evidence, openRequests, proposedWork, runs },
+    receipts: receipts.map(({ audit, ...receipt }) => ({
+      auditId: audit.id,
+      receipt,
+      surface: audit.surface,
+      work: audit.work,
+    })),
     credentials: credentials.map((credential) => ({
       createdAt: credential.createdAt,
       expiresAt: credential.expiresAt,

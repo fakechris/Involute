@@ -293,13 +293,35 @@ export function WorkContextPage() {
           )}
         </section>
         <section className="work-context__section">
+          <h2>Requests</h2>
+          {(bundle.work.agentRequests ?? []).length === 0 ? (
+            <p className="observation-empty">No requests to agents</p>
+          ) : (
+            <ul className="work-context__timeline">
+              {[...(bundle.work.agentRequests ?? [])]
+                .sort((a, b) => (a.rootRequestId ?? a.id).localeCompare(b.rootRequestId ?? b.id) || a.hopCount - b.hopCount)
+                .map((request) => (
+                  <li key={request.id} id={`request-${request.id}`} className="observation-card">
+                    <span className="mono">{request.hopCount === 0 ? 'asked' : `hop ${request.hopCount}`}</span>
+                    <span>{request.targetActor.handle ? `@${request.targetActor.handle}` : request.targetActor.name}</span>
+                    <span className="mono">{request.state}</span>
+                    <span>{request.presence}</span>
+                    {request.handedOffFromId ? <a href={`#request-${request.handedOffFromId}`}>← from previous</a> : null}
+                    {request.failureReason ? <span>{request.failureReason}</span> : null}
+                    <span className="observation-card__meta">due {formatWhen(request.deadlineAt)}</span>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </section>
+        <section className="work-context__section">
           <h2>Audits</h2>
           {bundle.audits.length === 0 ? (
             <p className="observation-empty">No audits</p>
           ) : (
             <ul className="work-context__timeline">
               {bundle.audits.map((audit) => (
-                <li key={audit.id}>
+                <li key={audit.id} id={`audit-${audit.id}`}>
                   <strong>rev {audit.revision}</strong>
                   <span>{audit.actorKind.toLowerCase()}</span>
                   {audit.actor?.name || audit.actor?.email ? (

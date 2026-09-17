@@ -24,8 +24,21 @@ interface AgentProfileData {
       evidence: number;
     };
     credentials: AgentCredentialSummary[];
+    receipts: AgentReceiptEntry[];
     timeline: AgentTimelineEntry[];
   } | null;
+}
+
+interface ReceiptReference { kind: string; ref: string; version: string | null; digest: string | null; excerpt: string | null; preserved: boolean }
+interface AgentReceiptEntry {
+  auditId: string;
+  surface: string | null;
+  work: { id: string; identifier: string; title: string };
+  receipt: {
+    id: string; reasoning: string; runtime: string | null; sessionId: string | null; contractRevision: number; createdAt: string;
+    actor: { id: string; name: string | null; handle: string | null; actorKind: string };
+    evidence: ReceiptReference[]; inputs: ReceiptReference[];
+  };
 }
 
 interface AgentCredentialSummary {
@@ -143,7 +156,7 @@ function AgentProfile({ handle }: { handle: string }) {
     );
   }
 
-  const { actor, counts, credentials, timeline } = profile;
+  const { actor, counts, credentials, receipts, timeline } = profile;
 
   return (
     <div className="page-shell">
@@ -205,6 +218,59 @@ function AgentProfile({ handle }: { handle: string }) {
       </section>
 
       <section className="issue-panel__section">
+        <span className="issue-panel__label">Decision receipts</span>
+        <p className="discussion-empty" style={{ marginTop: 0 }}>
+          The actor's own account of what it knew and why it decided — a claim by the actor, bound to the audited write it explains. Not verified by the system.
+        </p>
+        {receipts.length === 0 ? (
+          <p className="discussion-empty">No receipts recorded.</p>
+        ) : (
+          <ul className="agent-directory__list">
+            {receipts.map((entry) => (
+              <li key={entry.receipt.id} className="agent-directory__row" id={`receipt-${entry.receipt.id}`}>
+                <details className="decision-receipt" style={{ marginTop: 0 }}>
+                  <summary>
+                    <strong>Claimed by {entry.receipt.actor.handle ? `@${entry.receipt.actor.handle}` : entry.receipt.actor.name}</strong>
+                    {entry.receipt.sessionId ? ` in session ${entry.receipt.sessionId}` : ' (no session recorded)'}
+                    {entry.receipt.runtime ? ` on ${entry.receipt.runtime}` : ''}
+                    {` at ${formatStamp(entry.receipt.createdAt)}`}
+                    {' · '}
+                    <button type="button" className="actor-badge__name--link" onClick={() => navigate(`/issue/${entry.work.identifier}`)}>{entry.work.identifier}</button>
+                    {entry.surface ? <span className="agent-directory__meta"> · {entry.surface}</span> : null}
+                    {' · '}
+                    <button type="button" className="actor-badge__name--link" onClick={() => navigate(`/work/${entry.work.id}#audit-${entry.auditId}`)}>audit</button>
+                    <span className="agent-directory__meta"> · contract rev {entry.receipt.contractRevision}</span>
+                    {' — '}
+                    <span>{entry.receipt.reasoning.length > 160 ? `${entry.receipt.reasoning.slice(0, 160)}…` : entry.receipt.reasoning}</span>
+                  </summary>
+                  <p className="decision-receipt__reasoning">{entry.receipt.reasoning}</p>
+                  {([['Relied on (evidence)', entry.receipt.evidence], ['Read (inputs)', entry.receipt.inputs]] as const).map(([label, refs]) =>
+                    refs.length > 0 ? (
+                      <div key={label} className="decision-receipt__refs">
+                        <strong>{label}</strong>
+                        <ul>
+                          {refs.map((ref, index) => (
+                            <li key={`${ref.kind}-${ref.ref}-${index}`}>
+                              <span className="mono">{ref.kind}</span> {ref.ref}
+                              {ref.version ? ` @ ${ref.version}` : ''}
+                              {ref.digest ? ` (${ref.digest})` : ''}
+                              {' · '}
+                              <span className="agent-directory__meta">{ref.preserved ? 'preserved' : 'pointer only — not frozen'}</span>
+                              {ref.excerpt ? <blockquote>{ref.excerpt}</blockquote> : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null,
+                  )}
+                </details>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="issue-panel__section">
         <span className="issue-panel__label">Recent activity</span>
         {timeline.length === 0 ? (
           <p className="discussion-empty">Nothing recorded yet.</p>
@@ -212,7 +278,9 @@ function AgentProfile({ handle }: { handle: string }) {
           <ol className="agent-timeline">
             {timeline.map((entry, index) => (
               <li key={`${entry.at}-${index}`} className="agent-timeline__entry">
-                <span className="agent-timeline__kind">{entry.kind}</span>
+                <span className="agent-timeline__kind" title={entry.kind === 'decided' ? "The actor's own claim (decision receipt), not a verified fact" : undefined}>
+                  {entry.kind === 'decided' ? 'claimed' : entry.kind}
+                </span>
                 {entry.workIdentifier ? (
                   <button
                     type="button"

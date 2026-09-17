@@ -109,7 +109,8 @@ Merged so far: INV-590 #94, INV-591 #95, INV-592 #96, INV-593 #97 (main 7fbeb5e,
 **Status**: Complete — PR pending (stacked on INV-595)
 
 ## Stage 4: Chain and receipt display (INV-597)
-**Status**: Not Started
+**Goal**: issue page groups requests by chain (root first, hops ordered, previous/next and answered comment clickable); work context shows the chain; agent page lists receipts as the actor's claims with who/session/when/write, reasoning, inputs, evidence and preserved state, expandable.
+**Status**: Complete — PR pending (stacked on INV-596)
 
 ## Stage 5: Housekeeping (INV-598) — @mia retirement, INV-573 evidence retraction, plan accuracy, flaky test root cause
 **Status**: Not Started

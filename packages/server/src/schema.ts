@@ -518,7 +518,16 @@ const typeDefs = /* GraphQL */ `
     counts: AgentActivityCounts!
     """When and how this actor was created, and what it was granted."""
     credentials: [AgentCredentialSummary!]!
+    """The actor's decision receipts — its own claims about what it knew and why, each bound to the audited write it explains. Not system-verified facts."""
+    receipts: [AgentReceiptEntry!]!
     timeline: [AgentTimelineEntry!]!
+  }
+
+  type AgentReceiptEntry {
+    auditId: String!
+    surface: String
+    work: Issue!
+    receipt: DecisionReceiptRecord!
   }
 
   type CommentMention {
