@@ -43,6 +43,7 @@ export const SERVICE_ACTORS: readonly ServiceActorSpec[] = [HOTFIX_REFLEX_ACTOR]
 export async function ensureServiceActor(
   db: DatabaseClient,
   spec: ServiceActorSpec,
+  options: { ownerId?: string | null } = {},
 ): Promise<{ actorId: string; actorKind: 'SERVICE'; surface: string }> {
   const actor = await db.user.upsert({
     where: { email: spec.email },
@@ -52,11 +53,57 @@ export async function ensureServiceActor(
       email: spec.email,
       handle: spec.handle,
       name: spec.name,
+      ownerId: options.ownerId ?? null,
     },
-    // Keep the descriptive fields current without ever reassigning identity.
+    // Keep the descriptive fields current without ever reassigning identity
+    // or silently changing who is accountable.
     update: { description: spec.description, name: spec.name },
+    select: { deactivatedAt: true, id: true },
+  });
+
+  if (actor.deactivatedAt) {
+    throw new Error(`Service actor @${spec.handle} is deactivated and cannot act.`);
+  }
+
+  return { actorId: actor.id, actorKind: 'SERVICE', surface: spec.surface };
+}
+
+/**
+ * Provision a SERVICE actor from the operator CLI (INV-586). Unlike the
+ * built-in specs above, an operator-provisioned service is an arbitrary
+ * external program — CI, cron, a bridge — and must name its owner up front.
+ * It receives a credential like an agent does, because it authenticates from
+ * outside the process; it is still SERVICE, so it cannot pass the human gates
+ * and cannot be asked anything.
+ */
+export async function provisionServiceActor(
+  db: DatabaseClient,
+  input: { description?: string | null; email?: string | null; handle: string; name: string; ownerId: string },
+): Promise<{ actorId: string; handle: string }> {
+  const owner = await db.user.findUnique({
+    where: { id: input.ownerId },
+    select: { actorKind: true, deactivatedAt: true },
+  });
+  if (!owner || owner.actorKind !== 'HUMAN' || owner.deactivatedAt) {
+    throw new Error('Owner must be an active HUMAN actor.');
+  }
+
+  const handle = input.handle.trim().toLowerCase();
+  const email = input.email?.trim().toLowerCase() || `${handle}@services.involute.local`;
+
+  const actor = await db.user.upsert({
+    where: { email },
+    create: {
+      actorKind: 'SERVICE',
+      description: input.description ?? null,
+      email,
+      handle,
+      name: input.name.trim(),
+      ownerId: input.ownerId,
+    },
+    update: { ...(input.description ? { description: input.description } : {}), name: input.name.trim() },
     select: { id: true },
   });
 
-  return { actorId: actor.id, actorKind: 'SERVICE', surface: spec.surface };
+  return { actorId: actor.id, handle };
 }

@@ -42,14 +42,20 @@ export interface AgentProfile {
   timeline: AgentTimelineEntry[];
 }
 
-/** AGENT actors, most recently active first — the directory behind `@`. */
+/**
+ * Non-human actors, most recently active first — the directory behind `@`.
+ * SERVICE actors are listed too (INV-586): they are actors with owners, and
+ * the directory is where you find out what a thing is. Deactivated actors are
+ * hidden unless asked for; they keep their page, they just stop being current.
+ */
 export async function listAgentActors(
   prisma: PrismaClient,
-  input: { teamKey?: string | null } = {},
+  input: { includeDeactivated?: boolean; kinds?: Array<'AGENT' | 'SERVICE'>; teamKey?: string | null } = {},
 ): Promise<User[]> {
   return prisma.user.findMany({
     where: {
-      actorKind: 'AGENT',
+      actorKind: { in: input.kinds ?? ['AGENT', 'SERVICE'] },
+      ...(input.includeDeactivated ? {} : { deactivatedAt: null }),
       ...(input.teamKey
         ? { memberships: { some: { team: { key: input.teamKey } } } }
         : {}),

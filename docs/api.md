@@ -846,6 +846,25 @@ otherwise the team's human owners, otherwise an explicit statement that there is
 nobody — never silence. (The field is declared and used for advice here;
 automatic successor takeover is INV-556.)
 
+### Actor lifecycle (INV-586)
+
+- **Every non-human actor has a human owner** (`User.ownerId`). Ownership is a
+  responsibility — who is accountable, where escalations end — not a
+  permission. `agent:create` requires `--owner <human-email>`; the GraphQL
+  `agentCredentialCreate` defaults the owner to the creating human.
+- **Actors are deactivated, never deleted.** `WorkAudit.actor` is `Restrict`:
+  the database refuses to delete an actor that has written history.
+  `actorDeactivate` keeps the id, handle and every audit row, revokes the
+  actor's credentials, and ends its ability to act — it stops resolving as a
+  principal and stops being mentionable. The directory hides deactivated actors
+  unless asked (`agents(includeDeactivated: true)`).
+- **Ownership transfer is explicit and recorded.** `actorTransferOwner` is
+  human-only and writes an `ActorAudit` row (who, before, after, why).
+- **SERVICE actors can be provisioned** for external programs — CI, cron, a
+  bridge — via `serviceActorCreate` or `agent:service`, with an owner. They
+  authenticate from outside like an agent, and are still SERVICE: no human
+  gates, nothing to ask.
+
 ### Presence: will it actually reply?
 
 `AgentRequest.presence` answers the question a person actually has, which the

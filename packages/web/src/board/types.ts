@@ -50,6 +50,9 @@ export interface UserSummary {
   presenceDetail?: string;
   lastSeenAt?: string | null;
   agentCardUrl?: string | null;
+  deactivatedAt?: string | null;
+  /** The human accountable for a non-human actor (INV-586). */
+  owner?: { id: string; name: string | null; handle: string | null } | null;
 }
 
 export interface AccessUserSummary extends UserSummary {

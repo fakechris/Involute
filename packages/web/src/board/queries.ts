@@ -1071,6 +1071,12 @@ export const AGENTS_QUERY = gql`
       lastSeenAt
       description
       agentCardUrl
+      deactivatedAt
+      owner {
+        id
+        name
+        handle
+      }
     }
   }
 `;

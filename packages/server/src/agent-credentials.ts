@@ -53,6 +53,8 @@ export interface AgentPrincipal {
 
 export interface IssueAgentCredentialInput {
   agentCardUrl?: string | null;
+  /** The human accountable for this agent. Required for new actors. */
+  ownerId?: string | null;
   description?: string | null;
   email?: string | null;
   expiresAt?: Date | null;
@@ -67,6 +69,20 @@ export interface IssueAgentCredentialInput {
 // minute-level accuracy, not millisecond. Writing on every authenticated call
 // would put a row update in front of every request for no extra signal.
 export const LAST_SEEN_REFRESH_MS = 60_000;
+
+/** An owner is accountable for an actor, so it must be an active human. */
+export async function assertHumanOwner(
+  prisma: PrismaClient | import('@prisma/client').Prisma.TransactionClient,
+  ownerId: string,
+): Promise<void> {
+  const owner = await prisma.user.findUnique({
+    where: { id: ownerId },
+    select: { actorKind: true, deactivatedAt: true },
+  });
+  if (!owner || owner.actorKind !== 'HUMAN' || owner.deactivatedAt) {
+    throw new Error('Owner must be an active HUMAN actor.');
+  }
+}
 
 // An agent that cannot be spelled cannot be mentioned (INV-558), so issuance
 // always lands a handle. Explicit `--handle` wins; otherwise the name is
@@ -145,6 +161,15 @@ export async function issueAgentCredential(
   if (existing && existing.actorKind !== 'AGENT') {
     throw new Error(`User ${normalizedEmail} already exists and is not an AGENT.`);
   }
+  if (existing?.deactivatedAt) {
+    throw new Error(`Agent ${existing.handle ?? existing.email} is deactivated; reactivate it before issuing a credential.`);
+  }
+  if (!existing && !input.ownerId) {
+    throw new Error('A new agent needs a human owner (ownerId): who is accountable for it and where its escalations end.');
+  }
+  if (input.ownerId) {
+    await assertHumanOwner(prisma, input.ownerId);
+  }
   const user = existing ?? await prisma.user.create({
     data: {
       actorKind: 'AGENT',
@@ -153,6 +178,7 @@ export async function issueAgentCredential(
       email: normalizedEmail,
       handle: await allocateAgentHandle(prisma, input.handle, name),
       name,
+      ownerId: input.ownerId ?? null,
       runtime: input.runtime ?? null,
     },
   });
@@ -210,6 +236,9 @@ export async function resolveAgentPrincipal(
   if (
     !credential ||
     credential.user.actorKind !== 'AGENT' ||
+    // A deactivated actor keeps its id and its history, but it is no longer a
+    // principal: nothing may act as it (INV-586).
+    credential.user.deactivatedAt ||
     credential.revokedAt ||
     (credential.expiresAt && credential.expiresAt <= now)
   ) {

@@ -118,6 +118,8 @@ export async function resetAndSeed(prisma: PrismaClient): Promise<void> {
     throw new Error(`[SECURITY FATAL] Refusing to reset non-test database '${name}'.`);
   }
 
+  // ActorAudit references users with Restrict (INV-586), so it goes first.
+  await prisma.actorAudit.deleteMany();
   await prisma.commentMention.deleteMany();
   await prisma.agentRequest.deleteMany();
   await prisma.comment.deleteMany();

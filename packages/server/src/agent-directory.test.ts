@@ -76,6 +76,7 @@ describe('agent directory and profile (INV-573)', () => {
   describe('lastSeenAt', () => {
     it('records that an agent is around when it authenticates', async () => {
       const { token, credential } = await issueAgentCredential(prisma, {
+      ownerId: await seededOwnerId(prisma),
         name: 'Mia',
         handle: 'mia',
         teamKey: DEFAULT_TEAM_KEY,
@@ -95,8 +96,10 @@ describe('agent directory and profile (INV-573)', () => {
 
   describe('directory', () => {
     it('lists agent actors and leaves humans out', async () => {
-      await issueAgentCredential(prisma, { name: 'Mia', handle: 'mia', teamKey: DEFAULT_TEAM_KEY });
-      await issueAgentCredential(prisma, { name: 'Kai', handle: 'kai', teamKey: DEFAULT_TEAM_KEY });
+      await issueAgentCredential(prisma, {
+      ownerId: await seededOwnerId(prisma), name: 'Mia', handle: 'mia', teamKey: DEFAULT_TEAM_KEY });
+      await issueAgentCredential(prisma, {
+      ownerId: await seededOwnerId(prisma), name: 'Kai', handle: 'kai', teamKey: DEFAULT_TEAM_KEY });
 
       const agents = await listAgentActors(prisma, { teamKey: DEFAULT_TEAM_KEY });
 
@@ -106,6 +109,7 @@ describe('agent directory and profile (INV-573)', () => {
 
     it('carries the self-declared runtime, so a reader can tell what it is', async () => {
       const { credential } = await issueAgentCredential(prisma, {
+      ownerId: await seededOwnerId(prisma),
         description: 'Answers questions about decisions it made.',
         handle: 'mia',
         name: 'Mia',
@@ -139,6 +143,7 @@ describe('agent directory and profile (INV-573)', () => {
       // Without this, "what is this thing and who made it" is unanswerable
       // from the UI — a credential is the only record of an agent's creation.
       await issueAgentCredential(prisma, {
+      ownerId: await seededOwnerId(prisma),
         handle: 'mia',
         name: 'Mia',
         runtime: 'lumenbox',
@@ -156,7 +161,8 @@ describe('agent directory and profile (INV-573)', () => {
     });
 
     it('is addressable by handle with or without the @', async () => {
-      await issueAgentCredential(prisma, { name: 'Mia', handle: 'mia', teamKey: DEFAULT_TEAM_KEY });
+      await issueAgentCredential(prisma, {
+      ownerId: await seededOwnerId(prisma), name: 'Mia', handle: 'mia', teamKey: DEFAULT_TEAM_KEY });
 
       await expect(getAgentProfile(prisma, '@mia')).resolves.not.toBeNull();
       await expect(getAgentProfile(prisma, 'MIA')).resolves.not.toBeNull();
@@ -177,6 +183,7 @@ describe('agent directory and profile (INV-573)', () => {
     it('names the actor that proposed the work', async () => {
       const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
       const { credential } = await issueAgentCredential(prisma, {
+      ownerId: await seededOwnerId(prisma),
         handle: 'proposer',
         name: 'Proposer',
         teamKey: DEFAULT_TEAM_KEY,
@@ -255,6 +262,7 @@ describe('agent directory and profile (INV-573)', () => {
 
     it('serves the directory with presence', async () => {
       await issueAgentCredential(prisma, {
+      ownerId: await seededOwnerId(prisma),
         handle: 'mia',
         name: 'Mia',
         runtime: 'lumenbox',
@@ -293,6 +301,7 @@ describe('agent directory and profile (INV-573)', () => {
     it('serves proposedByActor on the work item', async () => {
       const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
       const { credential } = await issueAgentCredential(prisma, {
+      ownerId: await seededOwnerId(prisma),
         handle: 'proposer',
         name: 'Proposer',
         teamKey: DEFAULT_TEAM_KEY,
@@ -319,6 +328,7 @@ async function withAgentActivity(
   prismaClient: PrismaClient,
 ): Promise<{ issue: Issue; mia: User }> {
   const { credential } = await issueAgentCredential(prismaClient, {
+      ownerId: await seededOwnerId(prismaClient),
     handle: 'mia',
     name: 'Mia',
     runtime: 'lumenbox',
@@ -349,4 +359,11 @@ async function withAgentActivity(
   });
 
   return { issue, mia };
+}
+
+
+// INV-586: a new agent needs a human accountable for it.
+async function seededOwnerId(client: PrismaClient): Promise<string> {
+  const admin = await client.user.findFirstOrThrow({ where: { actorKind: 'HUMAN' } });
+  return admin.id;
 }

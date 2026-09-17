@@ -90,6 +90,12 @@ function AgentList() {
               {agent.description ? (
                 <span className="agent-directory__meta">{agent.description}</span>
               ) : null}
+              <span className="agent-directory__meta">
+                {agent.owner
+                  ? `owner: ${agent.owner.name ?? agent.owner.handle ?? agent.owner.id}`
+                  : 'no owner recorded — nobody is accountable for this actor'}
+                {agent.deactivatedAt ? ' · deactivated' : ''}
+              </span>
               {!agent.handle ? (
                 <span className="agent-directory__meta">
                   No handle — cannot be mentioned. Re-issue its credential with --handle.
@@ -151,6 +157,12 @@ function AgentProfile({ handle }: { handle: string }) {
         {actor.description ? (
           <p className="agent-directory__meta">{actor.description}</p>
         ) : null}
+        <p className="agent-directory__meta">
+          {actor.owner
+            ? `Accountable owner: ${actor.owner.name ?? actor.owner.handle ?? actor.owner.id}`
+            : 'No owner recorded.'}
+          {actor.deactivatedAt ? ` · Deactivated ${formatStamp(actor.deactivatedAt)}` : ''}
+        </p>
         {actor.agentCardUrl ? (
           <p className="agent-directory__meta">
             Agent card: <code>{actor.agentCardUrl}</code>

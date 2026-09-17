@@ -169,6 +169,20 @@ model User {
   // Last time this actor authenticated. The only evidence the server has for
   // "is it around", and the basis for the derived presence.
   lastSeenAt     DateTime?
+  // The human accountable for a non-human actor and the terminal target of its
+  // escalations (INV-586). A responsibility, not a permission: owning an actor
+  // grants no rights over what it writes, and does not mean each execution was
+  // the owner's instruction. Kept distinct from Issue.assignee,
+  // AgentRequest.requestedByActorId and the authorizer of any one execution.
+  ownerId        String?   @db.Uuid
+  owner          User?     @relation("ActorOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownedActors    User[]    @relation("ActorOwner")
+  actorAudits    ActorAudit[] @relation("ActorAuditSubject")
+  actorAuditsMade ActorAudit[] @relation("ActorAuditActor")
+  // Actors are deactivated, never deleted: their id stays valid forever so the
+  // audit trail keeps pointing at a real row. A deactivated actor cannot
+  // authenticate and is not mentionable.
+  deactivatedAt  DateTime?
   notificationPrefs Json    @default("{}")
   assignedIssues Issue[]   @relation("IssueAssignee")
   comments       Comment[]
@@ -335,6 +349,24 @@ model Comment {
   @@index([issueId, parentCommentId, createdAt])
 }
 
+// Immutable record of a change to an actor itself — owner transfer,
+// deactivation, provisioning. WorkAudit is per work item and cannot hold
+// these (INV-586).
+model ActorAudit {
+  id         String   @id @default(uuid()) @db.Uuid
+  subjectId  String   @db.Uuid
+  subject    User     @relation("ActorAuditSubject", fields: [subjectId], references: [id], onDelete: Restrict)
+  action     String
+  byActorId  String?  @db.Uuid
+  byActor    User?    @relation("ActorAuditActor", fields: [byActorId], references: [id], onDelete: Restrict)
+  before     Json?
+  after      Json
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([subjectId, createdAt])
+}
+
 // A question put to one actor, with a state, a deadline and an owner — the
 // ledger docs/54 §B2 asks for. Claiming and answering happen here rather than
 // in a consumer, so two sidecars polling the same actor cannot both answer.
@@ -487,7 +519,9 @@ model WorkAudit {
   revision        Int
   actorKind       ActorKind
   actorId         String?    @db.Uuid
-  actor           User?      @relation("WorkAuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  // Restrict, not SetNull: an audit row that loses its actor is the orphan
+  // problem this model exists to remove. Deactivate the actor instead.
+  actor           User?      @relation("WorkAuditActor", fields: [actorId], references: [id], onDelete: Restrict)
   surface         String?
   sessionId       String?
   sourceMessageId String?
