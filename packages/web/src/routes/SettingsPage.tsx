@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { IcoPlus, IcoTeam } from '../components/Icons';
@@ -7,7 +7,7 @@ import { AgentsTab } from './AgentsTab';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { BOARD_PAGE_QUERY, USER_UPDATE_MUTATION, FILE_UPLOAD_MUTATION } from '../board/queries';
-import type { BoardPageQueryData, BoardPageQueryVariables, UserUpdateMutationData, UserUpdateMutationVariables, FileUploadMutationData, FileUploadMutationVariables } from '../board/types';
+import type { BoardPageQueryData, BoardPageQueryVariables, UserSummary, UserUpdateMutationData, UserUpdateMutationVariables, FileUploadMutationData, FileUploadMutationVariables } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 
 type SettingsTab = 'profile' | 'preferences' | 'access' | 'agents';
@@ -330,6 +330,27 @@ function PreferencesTab() {
   );
 }
 
+function roleRank(role: string | undefined): number {
+  switch (role) {
+    case 'OWNER': return 3;
+    case 'EDITOR': return 2;
+    case 'VIEWER': return 1;
+    default: return 0;
+  }
+}
+
+function resolveDisplayRole(user: UserSummary, teamRole?: string): string {
+  if (user.globalRole === 'ADMIN') {
+    return teamRole === 'OWNER' ? 'Admin · Owner' : 'Admin';
+  }
+  switch (teamRole) {
+    case 'OWNER': return 'Owner';
+    case 'EDITOR': return 'Editor';
+    case 'VIEWER': return 'Viewer';
+    default: return 'Member';
+  }
+}
+
 function AccessTab() {
   const navigate = useNavigate();
   const teamKey = readStoredTeamKey();
@@ -340,16 +361,35 @@ function AccessTab() {
     },
   });
 
-  const users = data?.users.nodes ?? [];
+  const allUsers = data?.users.nodes ?? [];
+  const humanUsers = useMemo(() => {
+    return allUsers.filter((user) => user.actorKind !== 'AGENT' && user.actorKind !== 'SERVICE');
+  }, [allUsers]);
+
+  const agentCount = allUsers.length - humanUsers.length;
+
+  const teamRoleByUser = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const team of data?.teams.nodes ?? []) {
+      if (!team.memberships) continue;
+      for (const m of team.memberships.nodes) {
+        const prev = map.get(m.user.id);
+        if (!prev || roleRank(m.role) > roleRank(prev)) {
+          map.set(m.user.id, m.role);
+        }
+      }
+    }
+    return map;
+  }, [data?.teams.nodes]);
 
   return (
     <>
       <SectionHeading>Members &amp; access</SectionHeading>
-      <SectionSub>Team membership and visibility. Gated by role.</SectionSub>
+      <SectionSub>Team membership, roles, and access controls.</SectionSub>
 
       {loading ? (
         <div style={{ padding: 20, color: 'var(--fg-dim)', fontSize: 14 }}>Loading members…</div>
-      ) : users.length === 0 ? (
+      ) : humanUsers.length === 0 ? (
         <div style={{ padding: 20, color: 'var(--fg-dim)', fontSize: 14 }}>
           No members found. Sign in to manage team access.
         </div>
@@ -359,40 +399,77 @@ function AccessTab() {
           overflow: 'hidden',
         }}>
           <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 120px 100px 30px',
+            display: 'grid', gridTemplateColumns: '1fr 140px 100px',
             padding: '8px 12px', background: 'var(--bg-sunken)',
             fontSize: 13, color: 'var(--fg-dim)', fontWeight: 500,
             borderBottom: '1px solid var(--border-subtle)',
           }}>
             <div>Member</div>
             <div>Role</div>
-            <div>Joined</div>
-            <div />
+            <div>Status</div>
           </div>
-          {users.map((user, i) => (
-            <div key={user.id} style={{
-              display: 'grid', gridTemplateColumns: '1fr 120px 100px 30px',
-              padding: '10px 12px', alignItems: 'center',
-              borderBottom: i < users.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-              fontSize: 14.5,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Avatar user={{ name: user.name ?? undefined }} size={22} />
-                <div>
-                  <div style={{ color: 'var(--fg)' }}>{user.name ?? 'Unknown'}</div>
-                  <div style={{ color: 'var(--fg-dim)', fontSize: 13 }}>{user.email ?? '—'}</div>
+          {humanUsers.map((user, i) => {
+            const displayRole = resolveDisplayRole(user, teamRoleByUser.get(user.id));
+            const isAdmin = user.globalRole === 'ADMIN';
+
+            return (
+              <div key={user.id} style={{
+                display: 'grid', gridTemplateColumns: '1fr 140px 100px',
+                padding: '10px 12px', alignItems: 'center',
+                borderBottom: i < humanUsers.length - 1 ? '1px solid var(--border-subtle)' : 'none',
+                fontSize: 14.5,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Avatar user={{ name: user.name ?? undefined }} size={24} />
+                  <div>
+                    <div style={{ color: 'var(--fg)', fontWeight: 500 }}>{user.name ?? 'Unknown'}</div>
+                    <div style={{ color: 'var(--fg-dim)', fontSize: 13 }}>{user.email ?? '—'}</div>
+                  </div>
+                </div>
+                <div style={{
+                  color: isAdmin ? 'var(--accent, #3b82f6)' : 'var(--fg-muted)',
+                  fontWeight: isAdmin ? 500 : 400,
+                }}>
+                  {displayRole}
+                </div>
+                <div className="mono" style={{ color: 'var(--fg-dim)', fontSize: 13 }}>
+                  Active
                 </div>
               </div>
-              <div style={{ color: 'var(--fg-muted)' }}>{i === 0 ? 'Admin' : i < 3 ? 'Editor' : 'Viewer'}</div>
-              <div className="mono" style={{ color: 'var(--fg-dim)', fontSize: 13 }}>—</div>
-              <div />
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      <div style={{ marginTop: 16 }}>
-        <Btn variant="subtle" icon={<IcoPlus />} size="md" onClick={() => navigate('/members')}>Invite members</Btn>
+      {agentCount > 0 && (
+        <div style={{
+          marginTop: 16,
+          padding: '12px 16px',
+          background: 'var(--bg-sunken)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 'var(--r-2)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          fontSize: 13.5,
+        }}>
+          <div style={{ color: 'var(--fg-dim)' }}>
+            <strong style={{ color: 'var(--fg)' }}>{agentCount} AI Agent actors</strong> are connected to this workspace.
+          </div>
+          <Btn variant="subtle" size="sm" onClick={() => navigate('/agents')}>
+            View Agents →
+          </Btn>
+        </div>
+      )}
+
+      <div style={{ marginTop: 20, display: 'flex', gap: 12, alignItems: 'center' }}>
+        <Btn variant="primary" size="md" onClick={() => navigate('/settings/access')}>
+          Manage Team Access &amp; RBAC
+        </Btn>
+        <Btn variant="subtle" icon={<IcoPlus />} size="md" onClick={() => navigate('/members')}>
+          Invite members
+        </Btn>
       </div>
     </>
   );

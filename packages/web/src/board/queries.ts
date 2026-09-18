@@ -46,6 +46,8 @@ export const BOARD_PAGE_QUERY = gql`
         id
         name
         email
+        actorKind
+        globalRole
       }
     }
     issueLabels {
@@ -437,6 +439,8 @@ export const ISSUE_PAGE_QUERY = gql`
         id
         name
         email
+        actorKind
+        globalRole
       }
     }
     issueLabels {
