@@ -69,8 +69,9 @@ const hoistedLifecycleMutationMocks = vi.hoisted(() => ({
   actorReactivate: vi.fn().mockResolvedValue({ data: { actorReactivate: { success: true, actor: { id: 'agent-mia', deactivatedAt: null } } } }),
   actorTransferOwner: vi.fn().mockResolvedValue({ data: { actorTransferOwner: { success: true, actor: { id: 'agent-mia', owner: { id: 'user-2', name: 'Sam', handle: null } } } } }),
   agentCredentialRevoke: vi.fn().mockResolvedValue({ data: { agentCredentialRevoke: { success: true } } }),
+  agentCredentialCreate: vi.fn().mockResolvedValue({ data: { agentCredentialCreate: { success: true, token: 'inv_agent_test-token', credential: { id: 'cred-new', name: 'Codex review', scopes: ['read'], user: { id: 'agent-new', handle: 'codex-review' } } } } }),
 }));
-type LifecycleMutationMockSet = Record<'actorDeactivate' | 'actorReactivate' | 'actorTransferOwner' | 'agentCredentialRevoke', ReturnType<typeof vi.fn>>;
+type LifecycleMutationMockSet = Record<'actorDeactivate' | 'actorReactivate' | 'actorTransferOwner' | 'agentCredentialRevoke' | 'agentCredentialCreate', ReturnType<typeof vi.fn>>;
 export const lifecycleMutationMocks: LifecycleMutationMockSet = hoistedLifecycleMutationMocks;
 
 function lifecycleMutationFor(source: string): ReturnType<typeof vi.fn> | null {
@@ -78,6 +79,7 @@ function lifecycleMutationFor(source: string): ReturnType<typeof vi.fn> | null {
   if (source.includes('mutation ActorReactivate')) return hoistedLifecycleMutationMocks.actorReactivate;
   if (source.includes('mutation ActorTransferOwner')) return hoistedLifecycleMutationMocks.actorTransferOwner;
   if (source.includes('mutation AgentCredentialRevoke')) return hoistedLifecycleMutationMocks.agentCredentialRevoke;
+  if (source.includes('mutation AgentCredentialCreate')) return hoistedLifecycleMutationMocks.agentCredentialCreate;
   return null;
 }
 
@@ -463,6 +465,7 @@ export const accessQueryResult: AccessPageQueryData = {
 type QueryState = {
   accessData?: AccessPageQueryData;
   agentProfileData?: unknown;
+  agentsData?: { agents: unknown[] };
   candidatesData?: CandidatesPageQueryData;
   data?: BoardPageQueryData;
   error?: Error;
@@ -563,9 +566,30 @@ export function renderApp(
       };
     }
 
+    if (source.includes('query Agents(') || source.includes('query Agents ')) {
+      return {
+        data: queryState.agentsData ?? { agents: [] },
+        error: undefined,
+        loading: false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query AgentsTeams') || source.includes('query AgentsTab')) {
+      return {
+        data: {
+          teams: { nodes: [{ id: 'team-1', key: 'INV', name: 'Involute' }] },
+          agentCredentials: [],
+        },
+        error: undefined,
+        loading: false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
     if (source.includes('query AgentOwnerCandidates')) {
       return {
-        data: { users: queryState.data?.users ?? { nodes: [] } },
+        data: { viewer: { id: 'user-1' }, users: queryState.data?.users ?? { nodes: [] } },
         error: undefined,
         loading: false,
         refetch: vi.fn().mockResolvedValue(undefined),

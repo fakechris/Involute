@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 
 import type { PrismaClient, User } from '@prisma/client';
 
+import { AGENT_EMAIL_INVALID_MESSAGE } from './errors.js';
 import { HANDLE_PATTERN, MAX_HANDLE_LENGTH, isValidHandle, normalizeHandle } from './mention-parser.js';
 
 export const AGENT_TOKEN_PREFIX = 'inv_agent_';
@@ -16,6 +17,17 @@ export const AGENT_SCOPES = ['read', 'propose', 'claim', 'report', 'update', 'li
 export type AgentScope = (typeof AGENT_SCOPES)[number];
 
 export const DEFAULT_AGENT_SCOPES: readonly AgentScope[] = AGENT_SCOPES;
+
+// Just enough of a shape check to stop a display name landing in the email
+// column: "primary agent" was stored as an actor's email once (INV-606), and
+// from then on nothing could address that actor.
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function isPlausibleEmail(value: string): boolean {
+  return EMAIL_SHAPE.test(value.trim());
+}
+
+
 
 export function parseAgentScopes(value: string | null | undefined): AgentScope[] {
   if (!value || value.trim() === '') {
@@ -157,7 +169,11 @@ export async function issueAgentCredential(
   if (!name) {
     throw new Error('Agent name is required.');
   }
-  const normalizedEmail = (input.email?.trim().toLowerCase())
+  const requestedEmail = input.email?.trim().toLowerCase() || '';
+  if (requestedEmail && !isPlausibleEmail(requestedEmail)) {
+    throw new Error(AGENT_EMAIL_INVALID_MESSAGE);
+  }
+  const normalizedEmail = requestedEmail
     || `agent-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}-${randomBytes(4).toString('hex')}@agents.involute.local`;
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing && existing.actorKind !== 'AGENT') {
