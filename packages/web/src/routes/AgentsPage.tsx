@@ -1,10 +1,12 @@
-import { useQuery } from '@apollo/client/react';
-import { useMemo } from 'react';
+import { useMutation, useQuery } from '@apollo/client/react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { AGENTS_QUERY, AGENT_PROFILE_QUERY } from '../board/queries';
+import { AGENTS_QUERY, AGENT_CREDENTIAL_REVOKE_MUTATION, AGENT_PROFILE_QUERY } from '../board/queries';
 import type { UserSummary } from '../board/types';
 import { ActorBadge } from '../components/ActorBadge';
+import { AgentLifecycleActions } from '../components/AgentLifecycleActions';
+import { Btn } from '../components/Primitives';
 
 interface AgentTimelineEntry {
   at: string;
@@ -26,6 +28,7 @@ interface AgentProfileData {
     credentials: AgentCredentialSummary[];
     receipts: AgentReceiptEntry[];
     timeline: AgentTimelineEntry[];
+    viewerCanManage: boolean;
   } | null;
 }
 
@@ -131,9 +134,26 @@ function formatStamp(iso: string): string {
 
 function AgentProfile({ handle }: { handle: string }) {
   const navigate = useNavigate();
-  const { data, loading, error } = useQuery<AgentProfileData>(AGENT_PROFILE_QUERY, {
+  const { data, loading, error, refetch } = useQuery<AgentProfileData>(AGENT_PROFILE_QUERY, {
     variables: { handle },
   });
+  const [runRevoke] = useMutation<{ agentCredentialRevoke: { success: boolean } }, { id: string }>(AGENT_CREDENTIAL_REVOKE_MUTATION);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
+
+  async function revoke(id: string) {
+    if (!window.confirm('Revoke this credential? Anything connected with it loses access immediately.')) return;
+    setRevokeError(null);
+    try {
+      const result = await runRevoke({ variables: { id } });
+      if (!result?.data?.agentCredentialRevoke.success) {
+        setRevokeError('The server refused to revoke this credential.');
+        return;
+      }
+      await refetch();
+    } catch (caught) {
+      setRevokeError(caught instanceof Error ? caught.message : 'Could not revoke the credential.');
+    }
+  }
 
   if (loading) {
     return <div className="page-shell"><p>Loading @{handle}…</p></div>;
@@ -156,7 +176,7 @@ function AgentProfile({ handle }: { handle: string }) {
     );
   }
 
-  const { actor, counts, credentials, receipts, timeline } = profile;
+  const { actor, counts, credentials, receipts, timeline, viewerCanManage } = profile;
 
   return (
     <div className="page-shell">
@@ -183,6 +203,10 @@ function AgentProfile({ handle }: { handle: string }) {
         ) : null}
       </header>
 
+      {viewerCanManage ? (
+        <AgentLifecycleActions actor={actor} onChanged={() => refetch()} />
+      ) : null}
+
       <div className="agent-directory__counts" aria-label="Activity counts">
         <span>proposed {counts.proposedWork}</span>
         <span>open requests {counts.openRequests}</span>
@@ -193,6 +217,7 @@ function AgentProfile({ handle }: { handle: string }) {
 
       <section className="issue-panel__section">
         <span className="issue-panel__label">Origin</span>
+        {revokeError ? <p className="agent-lifecycle__error" role="alert">{revokeError}</p> : null}
         {credentials.length === 0 ? (
           <p className="discussion-empty">
             No credential on record — this actor cannot authenticate, so it can never answer.
@@ -211,6 +236,11 @@ function AgentProfile({ handle }: { handle: string }) {
                   {credential.expiresAt ? ` · expires ${formatStamp(credential.expiresAt)}` : ''}
                 </span>
                 <span className="agent-directory__meta">scopes: {credential.scopes.join(', ')}</span>
+                {viewerCanManage && !credential.revokedAt ? (
+                  <span>
+                    <Btn variant="ghost" size="md" onClick={() => void revoke(credential.id)}>Revoke</Btn>
+                  </span>
+                ) : null}
               </li>
             ))}
           </ul>

@@ -5,9 +5,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { DEFAULT_TEAM_KEY, resetAndSeed } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
-import { deactivateActor, transferActorOwner } from './actor-lifecycle.ts';
+import { deactivateActor, reactivateActor, transferActorOwner } from './actor-lifecycle.ts';
 import { issueAgentCredential, resolveAgentPrincipal } from './agent-credentials.ts';
-import { listAgentActors } from './agent-directory.ts';
+import { getAgentProfile, listAgentActors } from './agent-directory.ts';
 import { createComment } from './issue-service.ts';
 import { proposeWork } from './claim-service.ts';
 import { provisionServiceActor } from './service-actors.ts';
@@ -204,6 +204,62 @@ describe('actor lifecycle (INV-586)', () => {
       await expect(issueAgentCredential(prisma, {
         email: 'mia@agents.test.local', name: 'Mia', ownerId: admin.id, teamKey: DEFAULT_TEAM_KEY,
       })).rejects.toThrow(/deactivated/);
+    });
+
+    it('reactivation clears the flag, keeps credentials revoked, and is recorded (INV-605)', async () => {
+      const admin = await humanAdmin(prisma);
+      const { credential, token } = await issueAgentCredential(prisma, {
+        handle: 'mia', name: 'Mia', ownerId: admin.id, teamKey: DEFAULT_TEAM_KEY,
+      });
+      await deactivateActor(prisma, {
+        actorId: credential.userId,
+        by: { actorId: admin.id, actorKind: 'HUMAN' },
+        reason: 'Retired.',
+      });
+
+      const reactivated = await reactivateActor(prisma, {
+        actorId: credential.userId,
+        by: { actorId: admin.id, actorKind: 'HUMAN' },
+        reason: 'Back on the roster.',
+      });
+
+      expect(reactivated.deactivatedAt).toBeNull();
+      // The old token does not come back to life.
+      await expect(resolveAgentPrincipal(prisma, token)).resolves.toBeNull();
+      // But a new credential can now be issued.
+      await expect(issueAgentCredential(prisma, {
+        email: reactivated.email, name: 'Mia', ownerId: admin.id, teamKey: DEFAULT_TEAM_KEY,
+      })).resolves.toBeTruthy();
+      const audit = await prisma.actorAudit.findFirstOrThrow({
+        where: { action: 'reactivated', subjectId: credential.userId },
+      });
+      expect(audit.byActorId).toBe(admin.id);
+      expect(audit.reason).toBe('Back on the roster.');
+
+      // Both lifecycle changes show on the actor's own timeline.
+      const profile = await getAgentProfile(prisma, 'mia');
+      const kinds = profile?.timeline.map((entry) => entry.kind) ?? [];
+      expect(kinds).toContain('deactivated');
+      expect(kinds).toContain('reactivated');
+      expect(profile?.timeline.find((entry) => entry.kind === 'deactivated')?.detail).toMatch(/Retired\./);
+    });
+
+    it('refuses to reactivate an active actor, or to let an agent do it', async () => {
+      const admin = await humanAdmin(prisma);
+      const { credential } = await issueAgentCredential(prisma, {
+        handle: 'mia', name: 'Mia', ownerId: admin.id, teamKey: DEFAULT_TEAM_KEY,
+      });
+
+      await expect(reactivateActor(prisma, {
+        actorId: credential.userId,
+        by: { actorId: admin.id, actorKind: 'HUMAN' },
+      })).rejects.toThrow(/not deactivated/i);
+
+      await deactivateActor(prisma, { actorId: credential.userId, by: { actorId: admin.id, actorKind: 'HUMAN' } });
+      await expect(reactivateActor(prisma, {
+        actorId: credential.userId,
+        by: { actorId: credential.userId, actorKind: 'AGENT' },
+      })).rejects.toThrow(/only a human/i);
     });
 
     it('hides deactivated actors from the directory unless asked', async () => {

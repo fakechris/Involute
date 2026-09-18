@@ -63,6 +63,24 @@ function getDocumentSource(document: unknown): string {
   return String(document);
 }
 
+/** Mutation runners for the actor lifecycle (INV-605), shared by both mock sites so tests can assert on them. */
+const hoistedLifecycleMutationMocks = vi.hoisted(() => ({
+  actorDeactivate: vi.fn().mockResolvedValue({ data: { actorDeactivate: { success: true, actor: { id: 'agent-mia', deactivatedAt: '2026-09-18T10:00:00.000Z' } } } }),
+  actorReactivate: vi.fn().mockResolvedValue({ data: { actorReactivate: { success: true, actor: { id: 'agent-mia', deactivatedAt: null } } } }),
+  actorTransferOwner: vi.fn().mockResolvedValue({ data: { actorTransferOwner: { success: true, actor: { id: 'agent-mia', owner: { id: 'user-2', name: 'Sam', handle: null } } } } }),
+  agentCredentialRevoke: vi.fn().mockResolvedValue({ data: { agentCredentialRevoke: { success: true } } }),
+}));
+type LifecycleMutationMockSet = Record<'actorDeactivate' | 'actorReactivate' | 'actorTransferOwner' | 'agentCredentialRevoke', ReturnType<typeof vi.fn>>;
+export const lifecycleMutationMocks: LifecycleMutationMockSet = hoistedLifecycleMutationMocks;
+
+function lifecycleMutationFor(source: string): ReturnType<typeof vi.fn> | null {
+  if (source.includes('mutation ActorDeactivate')) return hoistedLifecycleMutationMocks.actorDeactivate;
+  if (source.includes('mutation ActorReactivate')) return hoistedLifecycleMutationMocks.actorReactivate;
+  if (source.includes('mutation ActorTransferOwner')) return hoistedLifecycleMutationMocks.actorTransferOwner;
+  if (source.includes('mutation AgentCredentialRevoke')) return hoistedLifecycleMutationMocks.agentCredentialRevoke;
+  return null;
+}
+
 const hoistedApolloMocks = vi.hoisted<ApolloMockSet>(() => ({
   useQuery: vi.fn(),
   useMutation: vi.fn((document) => {
@@ -115,6 +133,9 @@ const hoistedApolloMocks = vi.hoisted<ApolloMockSet>(() => ({
     if (source.includes('mutation NotificationsMarkAllRead')) {
       return [vi.fn().mockResolvedValue({ data: { notificationsMarkAllRead: { count: 1, success: true } } })];
     }
+
+    const lifecycle = lifecycleMutationFor(source);
+    if (lifecycle) return [lifecycle];
 
     return [vi.fn()];
   }),
@@ -239,6 +260,9 @@ beforeEach(() => {
     if (source.includes('mutation WorkReject')) {
       return [vi.fn().mockResolvedValue({ data: { workReject: { success: true, issue: { id: 'issue-c', identifier: 'INV-9', commitmentStatus: 'REJECTED' } } } })];
     }
+
+    const lifecycle = lifecycleMutationFor(source);
+    if (lifecycle) return [lifecycle];
 
     return [vi.fn()];
   });
@@ -438,6 +462,7 @@ export const accessQueryResult: AccessPageQueryData = {
 
 type QueryState = {
   accessData?: AccessPageQueryData;
+  agentProfileData?: unknown;
   candidatesData?: CandidatesPageQueryData;
   data?: BoardPageQueryData;
   error?: Error;
@@ -525,6 +550,24 @@ export function renderApp(
         },
         error: queryState.error,
         loading: queryState.loading ?? false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query AgentProfile')) {
+      return {
+        data: queryState.agentProfileData ?? { agentProfile: null },
+        error: queryState.error,
+        loading: queryState.loading ?? false,
+        refetch: queryState.refetch ?? vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query AgentOwnerCandidates')) {
+      return {
+        data: { users: queryState.data?.users ?? { nodes: [] } },
+        error: undefined,
+        loading: false,
         refetch: vi.fn().mockResolvedValue(undefined),
       };
     }

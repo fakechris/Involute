@@ -1131,7 +1131,14 @@ export const AGENT_PROFILE_QUERY = gql`
         presence
         presenceDetail
         lastSeenAt
+        deactivatedAt
+        owner {
+          id
+          name
+          handle
+        }
       }
+      viewerCanManage
       counts {
         proposedWork
         openRequests
@@ -1170,6 +1177,56 @@ export const AGENT_PROFILE_QUERY = gql`
         detail
         workIdentifier
       }
+    }
+  }
+`;
+
+/** Humans who can be made accountable for an actor (INV-605). */
+export const AGENT_OWNER_CANDIDATES_QUERY = gql`
+  query AgentOwnerCandidates {
+    users {
+      nodes {
+        id
+        name
+        email
+        actorKind
+        deactivatedAt
+      }
+    }
+  }
+`;
+
+export const ACTOR_DEACTIVATE_MUTATION = gql`
+  mutation ActorDeactivate($id: String!, $reason: String) {
+    actorDeactivate(id: $id, reason: $reason) {
+      success
+      actor { id deactivatedAt }
+    }
+  }
+`;
+
+export const ACTOR_REACTIVATE_MUTATION = gql`
+  mutation ActorReactivate($id: String!, $reason: String) {
+    actorReactivate(id: $id, reason: $reason) {
+      success
+      actor { id deactivatedAt }
+    }
+  }
+`;
+
+export const ACTOR_TRANSFER_OWNER_MUTATION = gql`
+  mutation ActorTransferOwner($id: String!, $ownerId: String!, $reason: String) {
+    actorTransferOwner(id: $id, ownerId: $ownerId, reason: $reason) {
+      success
+      actor { id owner { id name handle } }
+    }
+  }
+`;
+
+export const AGENT_CREDENTIAL_REVOKE_MUTATION = gql`
+  mutation AgentCredentialRevoke($id: String!) {
+    agentCredentialRevoke(id: $id) {
+      success
     }
   }
 `;
