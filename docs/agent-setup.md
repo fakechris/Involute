@@ -103,16 +103,46 @@ claude mcp add --transport http involute https://involute.example.com/mcp \
 }
 ```
 
-### Kimi / Droid / Amp / ZCode / Agy and other MCP clients
+### Where each client keeps its global MCP entry
 
-Add a remote (Streamable HTTP) MCP server with:
+Every client below reads a **user-level** file. Put the Involute entry there,
+not in a repository-level file, so two people sharing a checkout never share a
+credential. Paths are for macOS/Linux home directories; key names differ per
+client and are the exact ones each client parses.
 
-- URL: `https://involute.example.com/mcp` (or `/mcp/readonly`)
-- Header: `Authorization: Bearer inv_agent_…`
+| Client | Global file | Entry shape |
+|---|---|---|
+| Claude Code | `~/.claude.json` → `mcpServers.involute` | `{"type":"http","url":…,"headers":{"Authorization":"Bearer …"}}` (or `claude mcp add --scope user`) |
+| Codex | `~/.codex/config.toml` → `[mcp_servers.involute]` | `url = "…"` + `http_headers = { "Authorization" = "Bearer …" }` |
+| ZCode | `~/.zcode/cli/config.json` → `mcp.servers.involute` | `{"type":"http","url":…,"headers":{…}}` |
+| Droid (Factory) | `~/.factory/mcp.json` → `mcpServers.involute` | `{"type":"http","url":…,"headers":{…}}` |
+| Gemini CLI | `~/.gemini/settings.json` → `mcpServers.involute` | `{"url":…,"headers":{…}}` |
+| Antigravity CLI (`agy`) | `~/.gemini/config/mcp_config.json` → `mcpServers.involute` | `{"serverUrl":…,"headers":{…}}` — note `serverUrl`, and this is a different file from Gemini CLI's |
+| Grok CLI | `~/.grok/config.toml` → `[mcp_servers.involute]` | `url = "…"` + `headers = { "Authorization" = "Bearer …" }` |
+| Cursor | `~/.cursor/mcp.json` → `mcpServers.involute` | `{"url":…,"headers":{…}}` |
+| Opencode | `~/.config/opencode/opencode.json` → `mcp.involute` | `{"type":"remote","url":…,"headers":{…}}` |
+| Kimi Code | check `kimi mcp list` for the active file | remote entry with `url` + `headers` |
+| DeepSeek Harness (`dsh`) | per profile under `~/.dsh/profiles/<name>/`; check the profile's MCP section | remote entry with `url` + `headers` |
 
-Refer to the client's own docs for where it stores MCP server entries; the
-wire protocol is standard MCP JSON-RPC (`initialize` → `tools/list` →
-`tools/call`).
+Add a second entry named `involute-readonly` pointing at `/mcp/readonly` for
+analysis-only use.
+
+### Rules that keep identities straight
+
+1. **One client, one credential, named after the client.** Issue `codex`,
+   `claude-code`, `droid`, `gemini`, … as separate agents in Settings → Agents.
+   Involute attributes proposals, claims, runs and inbox requests to the
+   credential; two clients on one token are indistinguishable.
+2. **The credential lives only in the user-level file above, as plain text.**
+   Do not reference it as `${SOME_VAR}`: desktop apps launched from the Dock or
+   a launcher do not read `~/.zshrc`, and the client silently fails to
+   authenticate. Do not put a real token in a repository-level `.mcp.json`,
+   `.cursor/mcp.json` or `.grok/config.toml`; those are shared by everyone who
+   opens the checkout. The repo-root `mcp.json` here is a placeholder example.
+3. **The server's `AUTH_TOKEN` is not an agent identity.** It authenticates as
+   a trusted system with no actor; on production, writes made with it have no
+   attributable author. It exists for the `involute` CLI and operator scripts
+   only. Never hand it to a coding agent.
 
 ## 3. Verify the connection
 
