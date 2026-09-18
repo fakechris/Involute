@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { IcoPlus, IcoTeam } from '../components/Icons';
 import { Avatar, Btn } from '../components/Primitives';
@@ -41,7 +41,10 @@ const inputStyle: React.CSSProperties = {
 };
 
 export function SettingsPage() {
-  const [tab, setTab] = useState<SettingsTab>('profile');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requested = searchParams.get('tab');
+  const tab: SettingsTab = requested === 'preferences' || requested === 'access' || requested === 'agents' ? requested : 'profile';
+  const setTab = (next: SettingsTab) => setSearchParams(next === 'profile' ? {} : { tab: next }, { replace: true });
 
   const tabs: Array<{ id: SettingsTab; label: string }> = [
     { id: 'profile', label: 'Profile' },

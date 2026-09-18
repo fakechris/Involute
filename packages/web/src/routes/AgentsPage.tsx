@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { AGENTS_QUERY, AGENT_CREDENTIAL_REVOKE_MUTATION, AGENT_PROFILE_QUERY } from '../board/queries';
 import type { UserSummary } from '../board/types';
@@ -69,11 +69,16 @@ export function AgentsPage() {
 
 function AgentList() {
   const navigate = useNavigate();
+  const [showDeactivated, setShowDeactivated] = useState(false);
   const { data, loading, error } = useQuery<{ agents: UserSummary[] }>(AGENTS_QUERY, {
-    variables: { teamKey: null },
+    variables: { teamKey: null, includeDeactivated: showDeactivated },
   });
 
   const agents = useMemo(() => data?.agents ?? [], [data]);
+  const groups = useMemo(() => ([
+    { key: 'agents', label: 'Agents', hint: 'Act through a credential; can propose, claim and answer.', rows: agents.filter((agent) => agent.actorKind !== 'SERVICE') },
+    { key: 'services', label: 'Services', hint: 'Internal writers such as the GitHub webhook; no credential, never mentionable.', rows: agents.filter((agent) => agent.actorKind === 'SERVICE') },
+  ]), [agents]);
 
   if (loading) {
     return <div className="page-shell"><p>Loading agents…</p></div>;
@@ -89,37 +94,57 @@ function AgentList() {
         <h1>Agents</h1>
         <p className="agent-directory__meta">
           {agents.length} actor{agents.length === 1 ? '' : 's'}. Only agents with a handle can be
-          mentioned.
+          mentioned. Credentials are issued in <Link to="/settings?tab=agents">Settings → Agents</Link>.
         </p>
+        <label className="agent-directory__toggle">
+          <input
+            type="checkbox"
+            checked={showDeactivated}
+            onChange={(event) => setShowDeactivated(event.target.checked)}
+          />
+          Show deactivated
+        </label>
       </header>
 
       {agents.length === 0 ? (
         <p className="discussion-empty">No agent actors yet.</p>
       ) : (
-        <ul className="agent-directory__list">
-          {agents.map((agent) => (
-            <li key={agent.id} className="agent-directory__row">
-              <ActorBadge
-                actor={agent}
-                onSelect={(picked) => navigate(`/agents/${picked}`)}
-              />
-              {agent.description ? (
-                <span className="agent-directory__meta">{agent.description}</span>
-              ) : null}
-              <span className="agent-directory__meta">
-                {agent.owner
-                  ? `owner: ${agent.owner.name ?? agent.owner.handle ?? agent.owner.id}`
-                  : 'no owner recorded — nobody is accountable for this actor'}
-                {agent.deactivatedAt ? ' · deactivated' : ''}
-              </span>
-              {!agent.handle ? (
-                <span className="agent-directory__meta">
-                  No handle — cannot be mentioned. Re-issue its credential with --handle.
-                </span>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+        groups.filter((group) => group.rows.length > 0).map((group) => (
+          <section key={group.key} className="issue-panel__section" aria-label={group.label}>
+            <span className="issue-panel__label">{group.label}</span>
+            <p className="agent-directory__meta" style={{ marginTop: 0 }}>{group.hint}</p>
+            <ul className="agent-directory__list">
+              {group.rows.map((agent) => (
+                <li
+                  key={agent.id}
+                  className={`agent-directory__row${agent.deactivatedAt ? ' agent-directory__row--deactivated' : ''}`}
+                >
+                  <ActorBadge
+                    actor={agent}
+                    onSelect={(picked) => navigate(`/agents/${picked}`)}
+                  />
+                  {agent.description ? (
+                    <span className="agent-directory__meta">{agent.description}</span>
+                  ) : null}
+                  <span className="agent-directory__meta">
+                    {agent.owner
+                      ? `owner: ${agent.owner.name ?? agent.owner.handle ?? agent.owner.id}`
+                      : 'no owner recorded — nobody is accountable for this actor'}
+                    {agent.credentialCounts
+                      ? ` · ${agent.credentialCounts.active} live credential${agent.credentialCounts.active === 1 ? '' : 's'}${agent.credentialCounts.revoked ? `, ${agent.credentialCounts.revoked} revoked` : ''}`
+                      : ''}
+                    {agent.deactivatedAt ? ` · deactivated ${formatStamp(agent.deactivatedAt)}` : ''}
+                  </span>
+                  {!agent.handle && agent.actorKind === 'AGENT' ? (
+                    <span className="agent-directory__meta">
+                      No handle — cannot be mentioned. Issue it a new credential with a handle in Settings → Agents.
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))
       )}
     </div>
   );
@@ -156,11 +181,11 @@ function AgentProfile({ handle }: { handle: string }) {
   }
 
   if (loading) {
-    return <div className="page-shell"><p>Loading @{handle}…</p></div>;
+    return <div className="page-shell"><p>Loading agent…</p></div>;
   }
 
   if (error) {
-    return <div className="page-shell"><p>Could not load @{handle}: {error.message}</p></div>;
+    return <div className="page-shell"><p>Could not load this agent: {error.message}</p></div>;
   }
 
   const profile = data?.agentProfile;
@@ -168,7 +193,7 @@ function AgentProfile({ handle }: { handle: string }) {
   if (!profile) {
     return (
       <div className="page-shell">
-        <p>No agent with handle @{handle}.</p>
+        <p>No agent matches “{handle}”.</p>
         <button type="button" className="ui-action ui-action--subtle" onClick={() => navigate('/agents')}>
           Back to agents
         </button>
@@ -217,6 +242,9 @@ function AgentProfile({ handle }: { handle: string }) {
 
       <section className="issue-panel__section">
         <span className="issue-panel__label">Origin</span>
+        <p className="agent-directory__meta" style={{ marginTop: 0 }}>
+          Issue a new credential for this actor in <Link to="/settings?tab=agents">Settings → Agents</Link>.
+        </p>
         {revokeError ? <p className="agent-lifecycle__error" role="alert">{revokeError}</p> : null}
         {credentials.length === 0 ? (
           <p className="discussion-empty">

@@ -36,7 +36,7 @@ interface AgentCredentialSummary {
   createdAt: string;
   expiresAt: string | null;
   revokedAt: string | null;
-  user: { id: string; name: string; email: string };
+  user: { id: string; name: string; email: string; handle: string | null; deactivatedAt: string | null; owner: { id: string; name: string | null; handle: string | null } | null };
 }
 
 interface AgentsQueryData {
@@ -64,6 +64,13 @@ const AGENTS_TAB_QUERY = gql`
         id
         name
         email
+        handle
+        deactivatedAt
+        owner {
+          id
+          name
+          handle
+        }
       }
     }
   }
@@ -262,32 +269,29 @@ export function AgentsTab() {
       {loading ? (
         <div style={{ padding: 20, color: 'var(--fg-dim)', fontSize: 14 }}>Loading agents…</div>
       ) : (
-        <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-3)', overflow: 'hidden', marginBottom: 24 }}>
-          <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 220px 90px', padding: '8px 12px',
-            background: 'var(--bg-sunken)', fontSize: 13, color: 'var(--fg-dim)', fontWeight: 500,
-            borderBottom: '1px solid var(--border-subtle)',
-          }}>
-            <div>Agent</div>
+        <div className="agent-credentials">
+          <div className="agent-credentials__head">
+            <div>Credential · actor</div>
             <div>Scopes</div>
             <div />
           </div>
           {credentials.length === 0 && (
-            <div style={{ padding: '14px 12px', fontSize: 14, color: 'var(--fg-dim)' }}>No agent credentials yet.</div>
+            <div className="agent-credentials__empty">No agent credentials yet.</div>
           )}
-          {credentials.map((cred, i) => (
-            <div key={cred.id} style={{
-              display: 'grid', gridTemplateColumns: '1fr 220px 90px', padding: '10px 12px',
-              alignItems: 'center', fontSize: 14.5,
-              borderBottom: i < credentials.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-              opacity: cred.revokedAt ? 0.55 : 1,
-            }}>
+          {credentials.map((cred) => (
+            <div key={cred.id} className={`agent-credentials__row${cred.revokedAt ? ' agent-credentials__row--revoked' : ''}`}>
               <div>
                 <div style={{ color: 'var(--fg)' }}>{cred.name}</div>
-                <div style={{ color: 'var(--fg-dim)', fontSize: 13 }}>{cred.user.email}</div>
+                <div style={{ color: 'var(--fg-dim)', fontSize: 13 }}>
+                  <Link to={`/agents/${cred.user.handle ?? cred.user.id}`}>
+                    {cred.user.handle ? `@${cred.user.handle}` : cred.user.name || cred.user.email}
+                  </Link>
+                  {cred.user.owner ? ` · owner ${cred.user.owner.name ?? cred.user.owner.handle ?? cred.user.owner.id}` : ' · no owner'}
+                  {cred.user.deactivatedAt ? ' · actor deactivated' : ''}
+                </div>
               </div>
               <div className="mono" style={{ color: 'var(--fg-muted)', fontSize: 12.5 }}>{cred.scopes.join(', ')}</div>
-              <div style={{ textAlign: 'right' }}>
+              <div className="agent-credentials__action">
                 {!cred.revokedAt && <Btn variant="ghost" size="md" onClick={() => void handleRevoke(cred.id)}>Revoke</Btn>}
                 {cred.revokedAt && <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>revoked</span>}
               </div>

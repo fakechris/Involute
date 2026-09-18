@@ -1091,8 +1091,8 @@ export const UNREAD_NOTIFICATION_COUNT_QUERY = gql`
 
 /** Mentionable agent actors, for `@` completion and the directory (INV-573). */
 export const AGENTS_QUERY = gql`
-  query Agents($teamKey: String) {
-    agents(teamKey: $teamKey) {
+  query Agents($teamKey: String, $includeDeactivated: Boolean) {
+    agents(teamKey: $teamKey, includeDeactivated: $includeDeactivated) {
       id
       name
       email
@@ -1106,6 +1106,10 @@ export const AGENTS_QUERY = gql`
       description
       agentCardUrl
       deactivatedAt
+      credentialCounts {
+        active
+        revoked
+      }
       owner {
         id
         name
