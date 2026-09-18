@@ -101,6 +101,8 @@ describe('bug management', () => {
     await prisma.eventOutboxDelivery.deleteMany();
     await prisma.eventOutbox.deleteMany();
     await prisma.webhookSubscription.deleteMany();
+    // ActorAudit references users with Restrict (INV-586/604): it goes first.
+    await prisma.actorAudit.deleteMany();
     await prisma.user.deleteMany();
     await seedDatabase(prisma);
 

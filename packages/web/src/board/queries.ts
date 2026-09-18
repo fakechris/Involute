@@ -1158,6 +1158,7 @@ export const AGENT_PROFILE_QUERY = gql`
         createdAt
         expiresAt
         revokedAt
+        issuedBy { id name handle }
       }
       receipts {
         auditId

@@ -89,7 +89,7 @@ import { WORK_EVENT_TYPES, enqueueWorkEvent } from './event-outbox.js';
 import { toWireState } from './agent-request-state.js';
 import { PRESENCE_COPY, agentRequestPresence } from './agent-request-presence.js';
 import { ACTOR_PRESENCE_COPY, actorPresence } from './actor-presence.js';
-import { deactivateActor, transferActorOwner, reactivateActor } from './actor-lifecycle.js';
+import { deactivateActor, transferActorOwner, reactivateActor, recordActorAudit } from './actor-lifecycle.js';
 import { isValidHandle, normalizeHandle } from './mention-parser.js';
 import { EVIDENCE_NOT_FOUND_MESSAGE, retractEvidence } from './evidence-retract.js';
 import { answerAgentRequestAsHuman } from './agent-request-service.js';
@@ -437,6 +437,8 @@ const typeDefs = /* GraphQL */ `
     presenceDetail: String!
     """How many credentials can act as this actor, and how many were revoked (INV-607)."""
     credentialCounts: AgentCredentialCounts!
+    """When the row was made; null for actors older than INV-604 with no earlier trace."""
+    createdAt: DateTime
   }
 
   type AgentCredentialCounts {
@@ -520,6 +522,8 @@ const typeDefs = /* GraphQL */ `
     createdAt: DateTime!
     expiresAt: DateTime
     revokedAt: DateTime
+    """The human who minted it; null for operator-CLI issuance or rows older than INV-604."""
+    issuedBy: User
   }
 
   type AgentActivityCounts {
@@ -804,6 +808,7 @@ const typeDefs = /* GraphQL */ `
     expiresAt: DateTime
     revokedAt: DateTime
     user: User!
+    issuedBy: User
   }
 
   input AgentRequestAnswerInput {
@@ -2646,6 +2651,7 @@ const resolvers = {
           email: args.input.email ?? null,
           expiresAt: args.input.expiresAt ? new Date(args.input.expiresAt) : null,
           handle,
+          issuedById: requireAuthentication(context).id,
           name: args.input.name,
           ownerId: args.input.ownerId?.trim() || requireAuthentication(context).id,
           runtime: args.input.runtime?.trim() || null,
@@ -2673,10 +2679,20 @@ const resolvers = {
         });
         if (!credential) throw createNotFoundError(AGENT_CREDENTIAL_NOT_FOUND_MESSAGE);
         await assertCanRevokeCredential(context.prisma, context, credential);
-        const updated = await context.prisma.agentCredential.update({
-          where: { id: credential.id },
-          data: { revokedAt: new Date() },
-          include: { user: true },
+        const now = new Date();
+        const updated = await context.prisma.$transaction(async (tx) => {
+          const row = await tx.agentCredential.update({
+            where: { id: credential.id },
+            data: { revokedAt: now },
+            include: { user: true },
+          });
+          await recordActorAudit(tx, {
+            action: 'credential-revoked',
+            after: { credentialId: row.id, name: row.name, revokedAt: now.toISOString() },
+            byActorId: context.viewer?.id ?? null,
+            subjectId: credential.userId,
+          });
+          return row;
         });
         return { credential: updated, success: true as const };
       }, { credential: null, success: false as const }),
@@ -3304,6 +3320,12 @@ const resolvers = {
       }),
   },
   AgentCredentialRecord: {
+    issuedBy: async (
+      parent: AgentCredentialParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<User | null> =>
+      parent.issuedById ? context.prisma.user.findUnique({ where: { id: parent.issuedById } }) : null,
     user: async (
       parent: AgentCredentialParent,
       _args: Record<string, never>,

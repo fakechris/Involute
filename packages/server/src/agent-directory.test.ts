@@ -55,7 +55,10 @@ describe('agent profile is bounded by what the viewer may read (INV-597 follow-u
 
     const bounded = (await getAgentProfile(prisma, 'mia', scope))!;
     expect(bounded.receipts).toHaveLength(0);
-    expect(bounded.timeline).toHaveLength(0);
+    // Lifecycle rows (created / credential-issued) are about the actor, not
+    // the team's work, so they stay; nothing work-bound leaks.
+    expect(bounded.timeline.filter((entry) => entry.workIdentifier !== null)).toHaveLength(0);
+    expect(bounded.timeline.map((entry) => entry.kind)).toEqual(expect.arrayContaining(['created', 'credential-issued']));
     expect(bounded.credentials).toHaveLength(0);
     expect(bounded.counts.proposedWork).toBe(0);
 

@@ -203,6 +203,8 @@ async function resetDatabase(prismaClient: PrismaClient): Promise<void> {
   await prismaClient.workflowState.deleteMany();
   await prismaClient.team.deleteMany();
   await prismaClient.issueLabel.deleteMany();
+  // ActorAudit references users with Restrict (INV-586/604): it goes first.
+  await prismaClient.actorAudit.deleteMany();
   await prismaClient.user.deleteMany();
   await prismaClient.legacyLinearMapping.deleteMany();
   await seedDatabase(prismaClient);
