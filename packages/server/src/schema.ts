@@ -435,6 +435,13 @@ const typeDefs = /* GraphQL */ `
     presence: String!
     """Display copy for presence. States what was observed, never why."""
     presenceDetail: String!
+    """How many credentials can act as this actor, and how many were revoked (INV-607)."""
+    credentialCounts: AgentCredentialCounts!
+  }
+
+  type AgentCredentialCounts {
+    active: Int!
+    revoked: Int!
   }
 
   enum GlobalRole {
@@ -3234,6 +3241,18 @@ const resolvers = {
     presence: (parent: UserParent): string => actorPresence(parent.lastSeenAt),
     presenceDetail: (parent: UserParent): string =>
       ACTOR_PRESENCE_COPY[actorPresence(parent.lastSeenAt)],
+    credentialCounts: async (
+      parent: UserParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<{ active: number; revoked: number }> => {
+      if (parent.actorKind === 'HUMAN') return { active: 0, revoked: 0 };
+      const [active, revoked] = await Promise.all([
+        context.prisma.agentCredential.count({ where: { userId: parent.id, revokedAt: null } }),
+        context.prisma.agentCredential.count({ where: { userId: parent.id, revokedAt: { not: null } } }),
+      ]);
+      return { active, revoked };
+    },
   },
   WorkClaimRecord: {
     id: (parent: WorkClaimParent): string => parent.id,

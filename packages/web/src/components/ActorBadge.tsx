@@ -13,7 +13,8 @@ export function ActorBadge({
   onSelect,
 }: {
   actor: UserSummary | null;
-  onSelect?: (handle: string) => void;
+  /** Receives the handle, or the id for a legacy actor without one — both resolve on /agents/:handle. */
+  onSelect?: (handleOrId: string) => void;
 }) {
   if (!actor) {
     return <strong className="actor-badge__name">Unknown author</strong>;
@@ -37,11 +38,11 @@ export function ActorBadge({
       <span aria-hidden="true" className="actor-badge__glyph">
         {isService ? '◆' : '⬢'}
       </span>
-      {handle && onSelect ? (
+      {onSelect ? (
         <button
           type="button"
           className="actor-badge__name actor-badge__name--link"
-          onClick={() => onSelect(handle)}
+          onClick={() => onSelect(handle ?? actor.id)}
           title={actor.presenceDetail ?? undefined}
         >
           {label}

@@ -54,6 +54,8 @@ export interface UserSummary {
   deactivatedAt?: string | null;
   /** The human accountable for a non-human actor (INV-586). */
   owner?: { id: string; name: string | null; handle: string | null } | null;
+  /** Live and revoked credential counts for a non-human actor (INV-607). */
+  credentialCounts?: { active: number; revoked: number };
 }
 
 export interface AccessUserSummary extends UserSummary {

@@ -5160,3 +5160,75 @@ kbd {
   font-size: 14px;
   color: var(--danger);
 }
+
+/* Agent directory + credential list (INV-607) */
+.agent-directory__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--fg-dim);
+}
+
+.agent-directory__row--deactivated {
+  opacity: 0.6;
+}
+
+.agent-credentials {
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.agent-credentials__head,
+.agent-credentials__row {
+  display: grid;
+  grid-template-columns: 1fr 220px 90px;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  font-size: 14.5px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.agent-credentials__head {
+  padding: 8px 12px;
+  background: var(--bg-sunken);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-dim);
+}
+
+.agent-credentials__row:last-child {
+  border-bottom: none;
+}
+
+.agent-credentials__row--revoked {
+  opacity: 0.55;
+}
+
+.agent-credentials__empty {
+  padding: 14px 12px;
+  font-size: 14px;
+  color: var(--fg-dim);
+}
+
+.agent-credentials__action {
+  text-align: right;
+}
+
+@media (max-width: 780px) {
+  .agent-credentials__head {
+    display: none;
+  }
+
+  .agent-credentials__row {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-credentials__action {
+    text-align: left;
+  }
+}
