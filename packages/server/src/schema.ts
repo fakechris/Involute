@@ -55,6 +55,9 @@ import {
   WEBHOOK_NOT_FOUND_MESSAGE,
   WEBHOOK_URL_INVALID_MESSAGE,
   WORK_LINK_NOT_FOUND_MESSAGE,
+  AGENT_EMAIL_INVALID_MESSAGE,
+  AGENT_HANDLE_INVALID_MESSAGE,
+  AGENT_HANDLE_TAKEN_MESSAGE,
 } from './errors.js';
 import {
   assertCanDeleteComment,
@@ -80,13 +83,14 @@ import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
 import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
 
 import { requireAuthentication, type GraphQLContext } from './auth.js';
-import { issueAgentCredential, parseAgentScopeList } from './agent-credentials.js';
+import { isPlausibleEmail, issueAgentCredential, parseAgentScopeList } from './agent-credentials.js';
 import type { AgentScope } from './agent-credentials.js';
 import { WORK_EVENT_TYPES, enqueueWorkEvent } from './event-outbox.js';
 import { toWireState } from './agent-request-state.js';
 import { PRESENCE_COPY, agentRequestPresence } from './agent-request-presence.js';
 import { ACTOR_PRESENCE_COPY, actorPresence } from './actor-presence.js';
 import { deactivateActor, transferActorOwner, reactivateActor } from './actor-lifecycle.js';
+import { isValidHandle, normalizeHandle } from './mention-parser.js';
 import { EVIDENCE_NOT_FOUND_MESSAGE, retractEvidence } from './evidence-retract.js';
 import { answerAgentRequestAsHuman } from './agent-request-service.js';
 import { provisionServiceActor } from './service-actors.js';
@@ -827,6 +831,13 @@ const typeDefs = /* GraphQL */ `
     email: String
     scopes: [String!]
     expiresAt: DateTime
+    """Mention handle (@handle). Derived from the name when omitted; must be unused."""
+    handle: String
+    """The human accountable for a new actor. Defaults to the caller."""
+    ownerId: String
+    runtime: String
+    description: String
+    agentCardUrl: String
   }
 
   type AgentCredentialCreatePayload {
@@ -2572,9 +2583,14 @@ const resolvers = {
       _parent: unknown,
       args: {
         input: {
+          agentCardUrl?: string | null;
+          description?: string | null;
           email?: string | null;
           expiresAt?: string | null;
+          handle?: string | null;
           name: string;
+          ownerId?: string | null;
+          runtime?: string | null;
           scopes?: string[] | null;
           team: string;
         };
@@ -2590,6 +2606,19 @@ const resolvers = {
         // for it? Managing team B never makes one able to mint credentials
         // for someone else's actor (INV-594).
         const email = args.input.email?.trim().toLowerCase() || null;
+        if (email && !isPlausibleEmail(email)) {
+          throw createValidationError(AGENT_EMAIL_INVALID_MESSAGE);
+        }
+        const handle = args.input.handle?.trim() ? normalizeHandle(args.input.handle) : null;
+        if (handle && !isValidHandle(handle)) {
+          throw createValidationError(AGENT_HANDLE_INVALID_MESSAGE);
+        }
+        if (handle) {
+          const taken = await context.prisma.user.findUnique({ where: { handle }, select: { email: true } });
+          if (taken && taken.email !== email) {
+            throw createValidationError(AGENT_HANDLE_TAKEN_MESSAGE);
+          }
+        }
         if (email) {
           const existing = await context.prisma.user.findUnique({ where: { email }, select: { id: true } });
           if (existing) {
@@ -2605,10 +2634,14 @@ const resolvers = {
         // The human creating the credential is accountable for the agent
         // unless they say otherwise; an agent token cannot own an agent.
         const { credential, token } = await issueAgentCredential(context.prisma, {
-          ownerId: requireAuthentication(context).id,
+          agentCardUrl: args.input.agentCardUrl?.trim() || null,
+          description: args.input.description?.trim() || null,
           email: args.input.email ?? null,
           expiresAt: args.input.expiresAt ? new Date(args.input.expiresAt) : null,
+          handle,
           name: args.input.name,
+          ownerId: args.input.ownerId?.trim() || requireAuthentication(context).id,
+          runtime: args.input.runtime?.trim() || null,
           scopes,
           teamKey: team.key,
         });

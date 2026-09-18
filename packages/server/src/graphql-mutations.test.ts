@@ -1332,6 +1332,66 @@ describe('GraphQL mutations', () => {
     });
   });
 
+  it('issues a credential with the profile fields, reuses the actor by email, and rejects bad emails and taken handles (INV-606)', async () => {
+    const mutation = `
+      mutation AgentCreate($input: AgentCredentialCreateInput!) {
+        agentCredentialCreate(input: $input) {
+          success
+          credential { id user { id email handle runtime description agentCardUrl owner { id } } }
+        }
+      }
+    `;
+
+    const first = await postGraphQL({
+      query: mutation,
+      variables: {
+        input: {
+          agentCardUrl: 'https://example.invalid/card.json',
+          description: 'Reviews pull requests',
+          email: 'codex@agents.example.invalid',
+          handle: 'Codex-Review',
+          name: 'Codex review',
+          runtime: 'codex',
+          scopes: ['read', 'answer'],
+          team: fixture.team.key,
+        },
+      },
+    });
+    expect(first.body.errors).toBeUndefined();
+    const created = first.body.data.agentCredentialCreate;
+    expect(created.success).toBe(true);
+    expect(created.credential.user).toMatchObject({
+      agentCardUrl: 'https://example.invalid/card.json',
+      description: 'Reviews pull requests',
+      email: 'codex@agents.example.invalid',
+      handle: 'codex-review',
+      runtime: 'codex',
+    });
+    expect(created.credential.user.owner).not.toBeNull();
+
+    // Same email again: a second credential for the same actor, not a second actor.
+    const again = await postGraphQL({
+      query: mutation,
+      variables: { input: { email: 'codex@agents.example.invalid', handle: 'codex-review', name: 'Codex review', team: fixture.team.key } },
+    });
+    expect(again.body.data.agentCredentialCreate.success).toBe(true);
+    expect(again.body.data.agentCredentialCreate.credential.user.id).toBe(created.credential.user.id);
+    expect(await prisma.user.count({ where: { email: 'codex@agents.example.invalid' } })).toBe(1);
+
+    const badEmail = await postGraphQL({
+      query: mutation,
+      variables: { input: { email: 'primary agent', name: 'Primary', team: fixture.team.key } },
+    });
+    expect(badEmail.body.data.agentCredentialCreate.success).toBe(false);
+
+    const takenHandle = await postGraphQL({
+      query: mutation,
+      variables: { input: { handle: 'codex-review', name: 'Impostor', team: fixture.team.key } },
+    });
+    expect(takenHandle.body.data.agentCredentialCreate.success).toBe(false);
+    expect(await prisma.user.count({ where: { name: 'Impostor' } })).toBe(0);
+  });
+
   it('issues, lists, and revokes agent credentials with scoped tokens', async () => {
     const createResponse = await postGraphQL({
       query: `

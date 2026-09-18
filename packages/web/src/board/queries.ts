@@ -1184,6 +1184,9 @@ export const AGENT_PROFILE_QUERY = gql`
 /** Humans who can be made accountable for an actor (INV-605). */
 export const AGENT_OWNER_CANDIDATES_QUERY = gql`
   query AgentOwnerCandidates {
+    viewer {
+      id
+    }
     users {
       nodes {
         id
