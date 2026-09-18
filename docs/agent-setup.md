@@ -100,7 +100,7 @@ are the exact ones each client parses. Add a second entry named
 | Grok CLI | `~/.grok/config.toml` → `[mcp_servers.involute]` | `url = "…"` + `[mcp_servers.involute.headers] Authorization = "Bearer inv_agent_…"` (note `headers`, not Codex's `http_headers`) | `grok mcp doctor involute`; `grok inspect` → `source.type` must be `configToml` |
 | Cursor | `~/.cursor/mcp.json` → `mcpServers.involute` | `{"url":…,"headers":{…}}` | open the file; reload MCP |
 | Opencode | `~/.config/opencode/opencode.json` → `mcp.involute` | `{"type":"remote","url":…,"headers":{…}}` | open the file |
-| Kimi Code | check `kimi mcp list` for the active file | remote entry with `url` + `headers` | `kimi mcp list` |
+| Kimi Code | `~/.kimi-code/mcp.json` → `mcpServers.involute` | `{"url":…,"headers":{…}}` (or `$KIMI_CODE_HOME/mcp.json`) | `/mcp` in the TUI (status); edit via `/mcp-config` |
 | DeepSeek Harness (`dsh`) | per profile under `~/.dsh/profiles/<name>/` | remote entry with `url` + `headers` | check the active profile's MCP section |
 | involute CLI | `~/.involute/config.json` | GraphQL `token` = server `AUTH_TOKEN` (not `inv_agent_`) | CLI talks to `/graphql`; do not reuse this token in any coding agent |
 
@@ -206,6 +206,24 @@ User-level `~/.config/opencode/opencode.json`:
   }
 }
 ```
+
+### Kimi Code
+
+User-level `~/.kimi-code/mcp.json` (or `$KIMI_CODE_HOME/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "involute": {
+      "url": "https://involute.example.com/mcp",
+      "headers": { "Authorization": "Bearer inv_agent_…" }
+    }
+  }
+}
+```
+
+In the TUI, `/mcp-config` adds/edits entries and `/mcp` shows connection
+status. There is no `kimi mcp` CLI subcommand.
 
 ### ZCode / Droid / Gemini / Agy and other MCP clients
 
