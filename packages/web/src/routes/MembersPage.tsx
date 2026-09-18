@@ -24,7 +24,10 @@ function roleRank(role: string | undefined): number {
   }
 }
 
-function formatRole(role: string | undefined): string {
+function formatRole(role: string | undefined, globalRole?: string): string {
+  if (globalRole === 'ADMIN') {
+    return role === 'OWNER' ? 'Admin · Owner' : 'Admin';
+  }
   switch (role) {
     case 'OWNER': return 'Owner';
     case 'EDITOR': return 'Editor';
@@ -50,7 +53,10 @@ export function MembersPage() {
   const [runUpsert] = useMutation<TeamMembershipUpsertMutationData, TeamMembershipUpsertMutationVariables>(TEAM_MEMBERSHIP_UPSERT_MUTATION);
   const [runRemove] = useMutation<TeamMembershipRemoveMutationData, TeamMembershipRemoveMutationVariables>(TEAM_MEMBERSHIP_REMOVE_MUTATION);
 
-  const users = data?.users.nodes ?? [];
+  const users = useMemo(() => {
+    const raw = data?.users.nodes ?? [];
+    return raw.filter((user) => user.actorKind !== 'AGENT' && user.actorKind !== 'SERVICE');
+  }, [data?.users.nodes]);
   const issues = data?.issues.nodes ?? [];
   const teams = data?.teams.nodes ?? [];
   const teamId = teams.find((t) => t.key === teamKey)?.id ?? teams[0]?.id ?? '';
@@ -116,7 +122,7 @@ export function MembersPage() {
                   key={user.id}
                   user={user}
                   issueCount={issueCountByUser.get(user.id) ?? 0}
-                  role={formatRole(roleByUser.get(user.id))}
+                  role={formatRole(roleByUser.get(user.id), user.globalRole)}
                   teamId={teamId}
                   onChangeRole={async (userId, role) => {
                     await runUpsert({
