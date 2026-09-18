@@ -222,6 +222,11 @@ export function dispatchApplyBoardView(detail: ApplyBoardViewDetail): void {
   );
 }
 
+/** The digits after the team key: `INV-602` → `602`; a bare number stays as is. */
+export function identifierNumber(identifier: string): string {
+  return /(\d+)\s*$/.exec(identifier)?.[1] ?? '';
+}
+
 export function applyBoardViewState(
   issues: IssueSummary[],
   state: BoardViewState,
@@ -229,10 +234,19 @@ export function applyBoardViewState(
 ): IssueSummary[] {
   const normalizedQuery = state.query.trim().toLowerCase();
   const usesIql = normalizedQuery.length > 0 && looksLikeIql(state.query.trim());
+  // Digits alone mean "find by number" (INV-608): a person typing 602 wants
+  // INV-602, not every title that mentions 602 and not INV-1602. The number
+  // part of the identifier must start with what was typed, so each further
+  // digit narrows the board instead of scattering it.
+  const numericQuery = /^\d+$/.test(normalizedQuery) ? normalizedQuery : null;
   const usersById = new Map(users.map((user) => [user.id, user]));
 
   const nextIssues = issues.filter((issue) => {
-    if (normalizedQuery) {
+    if (numericQuery) {
+      if (!identifierNumber(issue.identifier).startsWith(numericQuery)) {
+        return false;
+      }
+    } else if (normalizedQuery) {
       if (usesIql) {
         if (!matchesIql(state.query.trim(), issue, null)) {
           return false;

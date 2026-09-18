@@ -115,3 +115,26 @@ describe('board sorting', () => {
     expect(ascending.map((i) => i.identifier)).toEqual(['INV-3', 'INV-20']);
   });
 });
+
+describe('query by issue number (INV-608)', () => {
+  const issues = [
+    makeIssue('6', null, 'Six'),
+    makeIssue('60', null, 'Sixty'),
+    makeIssue('602', null, 'Mobile nav drawer'),
+    makeIssue('1602', null, 'Unrelated'),
+    makeIssue('7', null, 'Mentions 602 in the title'),
+  ];
+
+  it('treats an all-digit query as a prefix on the identifier number, ignoring titles', () => {
+    const state = { ...getDefaultBoardViewState(), query: '60' };
+    expect(applyBoardViewState(issues, state, []).map((i) => i.identifier).sort()).toEqual(['INV-60', 'INV-602']);
+
+    const exact = { ...getDefaultBoardViewState(), query: '602' };
+    expect(applyBoardViewState(issues, exact, []).map((i) => i.identifier)).toEqual(['INV-602']);
+  });
+
+  it('keeps full-text matching once the query is not purely digits', () => {
+    const state = { ...getDefaultBoardViewState(), query: 'mentions 602' };
+    expect(applyBoardViewState(issues, state, []).map((i) => i.identifier)).toEqual(['INV-7']);
+  });
+});

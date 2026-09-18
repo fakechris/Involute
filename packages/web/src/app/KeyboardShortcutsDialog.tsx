@@ -42,6 +42,7 @@ export const SHORTCUT_SECTIONS: ShortcutSection[] = [
       { id: 'act-create', label: 'Create issue', description: 'Open quick issue composer anywhere', keys: ['C'] },
       { id: 'act-palette', label: 'Command palette', description: 'Open search and action launcher', keys: ['⌘', 'K'] },
       { id: 'act-search', label: 'Search in view', description: 'Focus search input on active board or backlog', keys: ['/'] },
+      { id: 'act-number', label: 'Find by issue number', description: 'Type a digit on the board to filter by identifier number', keys: ['0–9'] },
       { id: 'act-shortcuts', label: 'Keyboard shortcuts', description: 'Open this cheat sheet', keys: ['?'] },
       { id: 'act-theme', label: 'Toggle theme', description: 'Switch between light and dark mode', keys: ['T'] },
       { id: 'act-close', label: 'Close / Dismiss', description: 'Close dialog, modal, drawer, or cancel chord', keys: ['Esc'] },
