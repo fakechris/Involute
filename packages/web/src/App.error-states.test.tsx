@@ -53,12 +53,14 @@ describe('App error states', () => {
       loading: false,
     });
 
-    expect(await screen.findByText('Authentication required')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'Sign in with Google to use the board, or set `VITE_INVOLUTE_AUTH_TOKEN` / localStorage `involute.authToken` for trusted local development.',
-      ),
-    ).toBeInTheDocument();
+    // Production copy: no token hints, and a real sign-in link a phone
+    // visitor can tap even though the sidebar is hidden.
+    expect(await screen.findByText('Sign in to continue')).toBeInTheDocument();
+    expect(screen.queryByText(/VITE_INVOLUTE_AUTH_TOKEN/)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Sign in with Google' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('/auth/google/start'),
+    );
   });
 
   it('shows a distinct dev-default-token error when the fallback dev token is rejected', async () => {

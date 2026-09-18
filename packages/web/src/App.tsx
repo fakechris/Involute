@@ -494,6 +494,8 @@ export function App() {
   const [sidebarWidth, setSidebarWidth] = useState(() => getStoredSidebarWidth());
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isTweaksOpen, setIsTweaksOpen] = useState(false);
+  // Below the 980px breakpoint the sidebar is hidden; this opens it as a drawer.
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [isGotoActive, setIsGotoActive] = useState(false);
   const [shellTeams, setShellTeams] = useState<AppShellTeamSummary[]>(() => readStoredShellTeams());
@@ -603,6 +605,10 @@ export function App() {
     document.documentElement.style.setProperty('--sidebar-width', `${sidebarWidth}px`);
     persistSidebarWidth(sidebarWidth);
   }, [sidebarWidth]);
+
+  useEffect(() => {
+    setIsMobileNavOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     setSavedBoardViews(readSavedBoardViews(activeTeamKey));
@@ -1030,8 +1036,20 @@ export function App() {
   ]);
 
   return (
-    <div className="app-shell">
-      <aside className="app-shell__sidebar" aria-label="Workspace navigation">
+    <div className={`app-shell${isMobileNavOpen ? ' app-shell--nav-open' : ''}`}>
+      {isMobileNavOpen ? (
+        <button
+          type="button"
+          className="app-shell__nav-backdrop"
+          aria-label="Close navigation"
+          onClick={() => setIsMobileNavOpen(false)}
+        />
+      ) : null}
+      <aside
+        id="app-shell-sidebar"
+        className={`app-shell__sidebar${isMobileNavOpen ? ' app-shell__sidebar--open' : ''}`}
+        aria-label="Workspace navigation"
+      >
         <div className="app-shell__sidebar-top">
           <div className="app-shell__workspace-switcher">
             <div className="app-shell__workspace-mark">I</div>
@@ -1378,12 +1396,26 @@ export function App() {
         <header className="app-shell__mobilebar">
           <div className="app-shell__mobile-brand">Involute</div>
           <div className="app-shell__mobile-actions">
+            {!session?.authenticated && session?.googleOAuthConfigured ? (
+              <a className="app-shell__session-action" href={getGoogleLoginUrl()}>
+                Sign in
+              </a>
+            ) : null}
             <button
               type="button"
               className="app-shell__session-action"
               onClick={() => setIsPaletteOpen(true)}
             >
               Search
+            </button>
+            <button
+              type="button"
+              className="app-shell__session-action"
+              aria-controls="app-shell-sidebar"
+              aria-expanded={isMobileNavOpen}
+              onClick={() => setIsMobileNavOpen((open) => !open)}
+            >
+              Menu
             </button>
           </div>
         </header>
