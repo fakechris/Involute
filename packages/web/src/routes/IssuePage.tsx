@@ -39,6 +39,7 @@ import type {
 } from '../board/types';
 import { ActorBadge } from '../components/ActorBadge';
 import { mergeIssueWithPreservedComments } from '../board/utils';
+import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { writeStoredShellIssue } from '../lib/app-shell-state';
@@ -524,10 +525,7 @@ export function IssuePage() {
             <h1>Issue detail</h1>
           </div>
         </header>
-        <section className="shell-notice shell-notice--error" role="alert">
-          <h2>{errorState.title}</h2>
-          <p>{errorState.description}</p>
-        </section>
+        <BootstrapErrorNotice state={errorState} />
       </main>
     );
   }

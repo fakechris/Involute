@@ -22,6 +22,7 @@ import type {
   TeamUpdateAccessMutationVariables,
   UserSummary,
 } from '../board/types';
+import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { writeStoredShellTeams } from '../lib/app-shell-state';
 
@@ -182,10 +183,7 @@ export function AccessPage() {
             <h1>Access</h1>
           </div>
         </header>
-        <section className="shell-notice shell-notice--error" role="alert">
-          <h2>{errorState.title}</h2>
-          <p>{errorState.description}</p>
-        </section>
+        <BootstrapErrorNotice state={errorState} />
       </main>
     );
   }

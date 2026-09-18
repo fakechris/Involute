@@ -80,6 +80,7 @@ import {
   writeSavedBoardViews,
   writeStoredBoardViewState,
 } from '../board/views';
+import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { writeStoredShellIssues, writeStoredShellTeams } from '../lib/app-shell-state';
 import { BoardCreateIssueDialog } from '../components/BoardCreateIssueDialog';
@@ -1944,10 +1945,7 @@ export function BoardPage() {
             <h1>Board</h1>
           </div>
         </header>
-        <section className="shell-notice shell-notice--error" role="alert">
-          <h2>{errorState.title}</h2>
-          <p>{errorState.description}</p>
-        </section>
+        <BootstrapErrorNotice state={errorState} />
       </main>
     );
   }

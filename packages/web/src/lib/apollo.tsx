@@ -141,19 +141,35 @@ export function createApolloClient() {
   });
 }
 
-export function getBoardBootstrapErrorMessage(error: Error): {
+export interface BoardBootstrapErrorState {
   title: string;
   description: string;
-} {
+  /** A way forward the visitor can click, when one exists (today: sign in). */
+  action?: { label: string; href: string };
+}
+
+export function getBoardBootstrapErrorMessage(error: Error): BoardBootstrapErrorState {
   const message = error.message.toLowerCase();
   const { source } = getAuthTokenDetails();
 
   if (message.includes('not authenticated') || message.includes('unauthenticated')) {
     if (source === 'missing') {
+      // Production visitors never set tokens by hand; the only thing they
+      // can do is sign in, so say that and hand them the link. The token
+      // hints stay for local development, where they are the real fix.
+      if (!import.meta.env.DEV) {
+        return {
+          title: 'Sign in to continue',
+          description: 'This workspace is private. Sign in with your Google account to see the board.',
+          action: { label: 'Sign in with Google', href: `${getServerBaseUrl()}/auth/google/start` },
+        };
+      }
+
       return {
         title: 'Authentication required',
         description:
           'Sign in with Google to use the board, or set `VITE_INVOLUTE_AUTH_TOKEN` / localStorage `involute.authToken` for trusted local development.',
+        action: { label: 'Sign in with Google', href: `${getServerBaseUrl()}/auth/google/start` },
       };
     }
 
