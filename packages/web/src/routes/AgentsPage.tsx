@@ -52,6 +52,7 @@ interface AgentCredentialSummary {
   createdAt: string;
   expiresAt: string | null;
   revokedAt: string | null;
+  issuedBy?: { id: string; name: string | null; handle: string | null } | null;
 }
 
 /**
@@ -260,7 +261,8 @@ function AgentProfile({ handle }: { handle: string }) {
                   {credential.revokedAt ? <span className="actor-badge__kind"> REVOKED</span> : null}
                 </span>
                 <span className="agent-directory__meta">
-                  created {formatStamp(credential.createdAt)}
+                  issued {formatStamp(credential.createdAt)}
+                  {credential.issuedBy ? ` by ${credential.issuedBy.name ?? (credential.issuedBy.handle ? `@${credential.issuedBy.handle}` : credential.issuedBy.id)}` : ' (issuer not recorded)'}
                   {credential.expiresAt ? ` · expires ${formatStamp(credential.expiresAt)}` : ''}
                 </span>
                 <span className="agent-directory__meta">scopes: {credential.scopes.join(', ')}</span>

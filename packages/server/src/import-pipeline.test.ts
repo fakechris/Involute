@@ -150,6 +150,8 @@ async function clearDatabase(client: PrismaClient): Promise<void> {
   await client.workflowState.deleteMany();
   await client.team.deleteMany();
   await client.issueLabel.deleteMany();
+  // ActorAudit references users with Restrict (INV-586/604): it goes first.
+  await client.actorAudit.deleteMany();
   await client.user.deleteMany();
 }
 

@@ -78,7 +78,7 @@ describe('actor lifecycle (INV-586)', () => {
       });
 
       expect(updated.ownerId).toBe(dana.id);
-      const audit = await prisma.actorAudit.findFirstOrThrow({ where: { subjectId: credential.userId } });
+      const audit = await prisma.actorAudit.findFirstOrThrow({ where: { action: 'owner-transferred', subjectId: credential.userId } });
       expect(audit.action).toBe('owner-transferred');
       expect(audit.byActorId).toBe(admin.id);
       expect(audit.before).toEqual({ ownerId: admin.id });
@@ -204,6 +204,34 @@ describe('actor lifecycle (INV-586)', () => {
       await expect(issueAgentCredential(prisma, {
         email: 'mia@agents.test.local', name: 'Mia', ownerId: admin.id, teamKey: DEFAULT_TEAM_KEY,
       })).rejects.toThrow(/deactivated/);
+    });
+
+    it('records who created the actor and who issued each credential (INV-604)', async () => {
+      const admin = await humanAdmin(prisma);
+      const { credential } = await issueAgentCredential(prisma, {
+        handle: 'mia', issuedById: admin.id, name: 'Mia', ownerId: admin.id, teamKey: DEFAULT_TEAM_KEY,
+      });
+
+      const stored = await prisma.agentCredential.findUniqueOrThrow({ where: { id: credential.id } });
+      expect(stored.issuedById).toBe(admin.id);
+      const actor = await prisma.user.findUniqueOrThrow({ where: { id: credential.userId } });
+      expect(actor.createdAt).not.toBeNull();
+
+      const audits = await prisma.actorAudit.findMany({ where: { subjectId: credential.userId }, orderBy: { createdAt: 'asc' } });
+      expect(audits.map((row) => row.action)).toEqual(['created', 'credential-issued']);
+      expect(audits.every((row) => row.byActorId === admin.id)).toBe(true);
+      expect(audits[1]?.after).toMatchObject({ credentialId: credential.id, teamKey: DEFAULT_TEAM_KEY });
+
+      // A second credential for the same actor: one more issuance row, no second birth.
+      await issueAgentCredential(prisma, { email: actor.email, issuedById: admin.id, name: 'Mia', teamKey: DEFAULT_TEAM_KEY });
+      const again = await prisma.actorAudit.findMany({ where: { subjectId: credential.userId } });
+      expect(again.filter((row) => row.action === 'created')).toHaveLength(1);
+      expect(again.filter((row) => row.action === 'credential-issued')).toHaveLength(2);
+
+      // And the profile shows the issuer.
+      const profile = await getAgentProfile(prisma, 'mia');
+      expect(profile?.credentials[0]?.issuedBy?.email).toBe(admin.email);
+      expect(profile?.timeline.map((entry) => entry.kind)).toEqual(expect.arrayContaining(['created', 'credential-issued']));
     });
 
     it('reactivation clears the flag, keeps credentials revoked, and is recorded (INV-605)', async () => {

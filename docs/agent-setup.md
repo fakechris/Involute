@@ -180,3 +180,9 @@ Enforced server-side, not just documented:
   recorded in ActorAudit with your reason. Reactivate from the same place;
   revoked credentials stay revoked, so issue a fresh one afterwards. Only the
   accountable owner or an ADMIN sees these controls.
+- Every step is on the actor's page under Recent activity: `created`,
+  `credential-issued`, `credential-revoked`, `deactivated`, `reactivated`,
+  `owner-transferred`, each with who did it and the reason given. Each
+  credential also shows who issued it. Actors and credentials older than
+  INV-604 (2026-09-18) have no issuer and may have no creation time; those
+  blanks are real gaps, not defaults.

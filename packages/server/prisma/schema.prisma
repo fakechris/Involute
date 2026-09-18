@@ -184,6 +184,10 @@ model User {
   // audit trail keeps pointing at a real row. A deactivated actor cannot
   // authenticate and is not mentionable.
   deactivatedAt  DateTime?
+  // When the row was made (INV-604). Null for actors that predate the column
+  // and left no earlier trace; never backfilled with a guess.
+  createdAt      DateTime? @default(now())
+  issuedCredentials AgentCredential[] @relation("CredentialIssuer")
   notificationPrefs Json    @default("{}")
   assignedIssues Issue[]   @relation("IssueAssignee")
   comments       Comment[]
@@ -226,6 +230,10 @@ model AgentCredential {
   createdAt DateTime @default(now())
   expiresAt DateTime?
   revokedAt DateTime?
+  // The human who minted it (INV-604). Null for operator-CLI issuance and rows
+  // that predate the column.
+  issuedById String? @db.Uuid
+  issuedBy   User?   @relation("CredentialIssuer", fields: [issuedById], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([revokedAt, expiresAt])

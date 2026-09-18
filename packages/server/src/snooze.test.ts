@@ -32,6 +32,8 @@ describe('candidate snooze', () => {
     await prisma.workflowState.deleteMany();
     await prisma.team.deleteMany();
     await prisma.issueLabel.deleteMany();
+    // ActorAudit references users with Restrict (INV-586/604): it goes first.
+    await prisma.actorAudit.deleteMany();
     await prisma.user.deleteMany();
     await seedDatabase(prisma);
     team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });

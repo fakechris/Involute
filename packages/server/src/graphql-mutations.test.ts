@@ -1465,6 +1465,10 @@ describe('GraphQL mutations', () => {
     });
     expect(revokeResponse.body.data.agentCredentialRevoke.success).toBe(true);
     expect(revokeResponse.body.data.agentCredentialRevoke.credential.revokedAt).not.toBeNull();
+
+    // Revocation is recorded against the actor, with the credential it ended (INV-604).
+    const revoked = await prisma.actorAudit.findFirst({ where: { action: 'credential-revoked', subjectId: stored.userId } });
+    expect(revoked?.after).toMatchObject({ credentialId });
   });
 
   it('manages webhook subscriptions with write-once secrets and rotation', async () => {
@@ -1649,6 +1653,8 @@ async function resetDatabase(prismaClient: PrismaClient): Promise<MutationFixtur
   await prismaClient.workflowState.deleteMany();
   await prismaClient.team.deleteMany();
   await prismaClient.issueLabel.deleteMany();
+  // ActorAudit references users with Restrict (INV-586/604): it goes first.
+  await prismaClient.actorAudit.deleteMany();
   await prismaClient.user.deleteMany();
   await prismaClient.legacyLinearMapping.deleteMany();
 

@@ -69,6 +69,8 @@ export interface IssueAgentCredentialInput {
   agentCardUrl?: string | null;
   /** The human accountable for this agent. Required for new actors. */
   ownerId?: string | null;
+  /** Who is minting the credential; recorded on it and in ActorAudit. Null from the operator CLI. */
+  issuedById?: string | null;
   description?: string | null;
   email?: string | null;
   expiresAt?: Date | null;
@@ -200,6 +202,18 @@ export async function issueAgentCredential(
       runtime: input.runtime ?? null,
     },
   });
+  if (!existing) {
+    // The actor's birth certificate (INV-604): until this row existed the
+    // question "who made this actor, and when" had no answer at all.
+    await prisma.actorAudit.create({
+      data: {
+        action: 'created',
+        after: { actorKind: 'AGENT', email: user.email, handle: user.handle, ownerId: user.ownerId },
+        byActorId: input.issuedById ?? null,
+        subjectId: user.id,
+      },
+    });
+  }
   // Backfill: agents issued before INV-558 have no handle, so re-issuing a
   // credential is how they become mentionable. A no-op rename is not a clash.
   const requestedHandle = input.handle ? normalizeHandle(input.handle) : '';
@@ -226,6 +240,7 @@ export async function issueAgentCredential(
   const credential = await prisma.agentCredential.create({
     data: {
       expiresAt: input.expiresAt ?? null,
+      issuedById: input.issuedById ?? null,
       name,
       scopes: input.scopes ?? [...DEFAULT_AGENT_SCOPES],
       teamId: team.id,
@@ -233,6 +248,20 @@ export async function issueAgentCredential(
       userId: user.id,
     },
     select: { createdAt: true, expiresAt: true, id: true, name: true, scopes: true, teamId: true, userId: true },
+  });
+  await prisma.actorAudit.create({
+    data: {
+      action: 'credential-issued',
+      after: {
+        credentialId: credential.id,
+        expiresAt: credential.expiresAt?.toISOString() ?? null,
+        name: credential.name,
+        scopes: credential.scopes,
+        teamKey: team.key,
+      },
+      byActorId: input.issuedById ?? null,
+      subjectId: user.id,
+    },
   });
   return { credential, token };
 }

@@ -63,6 +63,8 @@ describe('graded auto-accept gate', () => {
     await prisma.workflowState.deleteMany();
     await prisma.team.deleteMany();
     await prisma.issueLabel.deleteMany();
+    // ActorAudit references users with Restrict (INV-586/604): it goes first.
+    await prisma.actorAudit.deleteMany();
     await prisma.user.deleteMany();
     await prisma.legacyLinearMapping.deleteMany();
     await seedDatabase(prisma);

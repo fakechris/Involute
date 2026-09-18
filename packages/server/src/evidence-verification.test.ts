@@ -179,6 +179,8 @@ describe('trusted evidence shadow integration', () => {
     await prisma.workAutoAcceptEvaluation.deleteMany(); await prisma.workReviewDecision.deleteMany();
     await prisma.workEvidence.deleteMany(); await prisma.workRun.deleteMany(); await prisma.comment.deleteMany();
     await prisma.issue.deleteMany(); await prisma.workflowState.deleteMany(); await prisma.team.deleteMany();
+    // ActorAudit references users with Restrict (INV-586/604): it goes first.
+    await prisma.actorAudit.deleteMany();
     await prisma.user.deleteMany(); await prisma.legacyLinearMapping.deleteMany(); await seedDatabase(prisma);
     team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
     human = await prisma.user.findUniqueOrThrow({ where: { email: DEFAULT_ADMIN_EMAIL } });
