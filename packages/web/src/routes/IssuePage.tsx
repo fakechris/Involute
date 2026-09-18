@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import {
+  AGENT_REQUEST_ANSWER_MUTATION,
   COMMENT_DELETE_MUTATION,
   COMMENT_CREATE_MUTATION,
   ISSUE_DELETE_MUTATION,
@@ -14,6 +15,7 @@ import {
   CYCLES_QUERY,
 } from '../board/queries';
 import type {
+  AgentRequestSummary,
   CommentDeleteMutationData,
   CommentDeleteMutationVariables,
   CommentCreateMutationData,
@@ -38,6 +40,7 @@ import type {
 import { ActorBadge } from '../components/ActorBadge';
 import { mergeIssueWithPreservedComments } from '../board/utils';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
+import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { writeStoredShellIssue } from '../lib/app-shell-state';
 import { IcoChevL, IcoChevR, IcoCopy, IcoMore, IcoLink, IcoClose, IcoLabel } from '../components/Icons';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
@@ -48,6 +51,16 @@ const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
 const CONFLICT_MESSAGE = 'The issue changed while you were editing. The latest version was reloaded; review it and retry.';
 const ISSUE_DELETE_ERROR_MESSAGE = 'We could not delete the issue. Please try again.';
 const COMMENT_DELETE_ERROR_MESSAGE = 'We could not delete the comment. Please try again.';
+
+/** Group requests into hand-off chains (root first, then by hop). The server returns whole chains for the newest requests, so a missing root is a defect, flagged below. */
+function groupChains(requests: AgentRequestSummary[]): AgentRequestSummary[][] {
+  const byRoot = new Map<string, AgentRequestSummary[]>();
+  for (const request of requests) {
+    const root = request.rootRequestId ?? request.id;
+    byRoot.set(root, [...(byRoot.get(root) ?? []), request]);
+  }
+  return [...byRoot.values()].map((chain) => [...chain].sort((a, b) => a.hopCount - b.hopCount));
+}
 
 export function IssuePage() {
   const navigate = useNavigate();
@@ -81,6 +94,14 @@ export function IssuePage() {
     },
   );
   const [runWorkLink] = useMutation<WorkLinkMutationData, WorkLinkMutationVariables>(WORK_LINK_MUTATION);
+  const [runAgentRequestAnswer] = useMutation<{ agentRequestAnswer: { success: boolean } }, { input: { body: string; overrideReason?: string | null; requestId: string } }>(AGENT_REQUEST_ANSWER_MUTATION);
+  // Who is looking: decides whether a request row offers "Answer" (INV-596).
+  const [sessionViewer, setSessionViewer] = useState<SessionViewer | null>(null);
+  useEffect(() => { fetchSessionState().then((s) => setSessionViewer(s.viewer)).catch(() => setSessionViewer(null)); }, []);
+  const [answeringRequestId, setAnsweringRequestId] = useState<string | null>(null);
+  const [answerBody, setAnswerBody] = useState('');
+  const [answerOverride, setAnswerOverride] = useState('');
+  const [answerError, setAnswerError] = useState<string | null>(null);
   const { data: cyclesData } = useQuery<CyclesQueryData, CyclesQueryVariables>(CYCLES_QUERY, {
     skip: !teamId,
     variables: { teamId },
@@ -786,13 +807,99 @@ export function IssuePage() {
               </div>
             ) : null}
 
+            {/* Requests to agents, grouped by hand-off chain (INV-589/593/597) */}
+            {(activeIssue.agentRequests ?? []).length > 0 ? (
+              <div className="issue-panel__section">
+                <h2>Requests · {activeIssue.agentRequests!.length}</h2>
+                {groupChains(activeIssue.agentRequests!).map((chain) => (
+                  <div key={chain[0]!.id} className="issue-children" role="list" style={{ marginBottom: 10 }}>
+                    {chain.map((request, index) => (
+                      <div key={request.id} id={`request-${request.id}`} role="listitem" className="issue-children__row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-faint)', minWidth: 44 }}>{request.hopCount === 0 ? 'asked' : `hop ${request.hopCount}`}</span>
+                        {index === 0 && request.hopCount > 0 ? (
+                          <span style={{ fontSize: 12, color: 'var(--warning, #b80)' }} title="The chain's earlier requests are not in this page's result">chain incomplete</span>
+                        ) : null}
+                        <ActorBadge actor={request.targetActor} onSelect={(picked) => navigate(`/agents/${picked}`)} />
+                        <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>{request.state}</span>
+                        <span style={{ fontSize: 12, color: 'var(--fg-dim)' }} title={request.presenceDetail}>{request.presence}</span>
+                        <span style={{ fontSize: 12, color: 'var(--fg-faint)' }} title="deadline">due {new Date(request.deadlineAt).toLocaleString()}</span>
+                        {request.handedOffFromId ? (
+                          <a href={`#request-${request.handedOffFromId}`} style={{ fontSize: 12 }}>← from previous</a>
+                        ) : null}
+                        {chain[index + 1] ? (
+                          <a href={`#request-${chain[index + 1]!.id}`} style={{ fontSize: 12 }}>handed off →</a>
+                        ) : null}
+                        {request.answeredCommentId ? (
+                          <a href={`#comment-${request.answeredCommentId}`} style={{ fontSize: 12 }}>answer</a>
+                        ) : null}
+                        {request.failureReason ? (
+                          <span style={{ fontSize: 12, color: 'var(--fg-faint)' }}>{request.failureReason}</span>
+                        ) : null}
+                        {sessionViewer
+                          && !['completed', 'failed', 'canceled'].includes(request.state)
+                          && (request.targetActor.id === sessionViewer.id || sessionViewer.globalRole === 'ADMIN')
+                          && answeringRequestId !== request.id ? (
+                          <Btn variant="subtle" onClick={() => { setAnsweringRequestId(request.id); setAnswerBody(''); setAnswerOverride(''); setAnswerError(null); }}>
+                            {request.targetActor.id === sessionViewer.id ? 'Answer' : 'Answer on their behalf'}
+                          </Btn>
+                        ) : null}
+                        {answeringRequestId === request.id ? (
+                          <form
+                            style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}
+                            onSubmit={async (event) => {
+                              event.preventDefault();
+                              setAnswerError(null);
+                              try {
+                                const needsOverride = request.targetActor.id !== sessionViewer?.id;
+                                const result = await runAgentRequestAnswer({ variables: { input: {
+                                  body: answerBody,
+                                  overrideReason: needsOverride ? answerOverride : null,
+                                  requestId: request.id,
+                                } } });
+                                if (!result.data?.agentRequestAnswer.success) throw new Error('not completed');
+                                setAnsweringRequestId(null);
+                                await refetch();
+                              } catch (e) {
+                                setAnswerError(e instanceof Error ? e.message : 'Could not submit the answer.');
+                              }
+                            }}
+                          >
+                            <textarea
+                              value={answerBody}
+                              onChange={(e) => setAnswerBody(e.target.value)}
+                              placeholder="Your answer. It is posted in the request's thread and completes the request."
+                              rows={3}
+                              style={{ width: '100%', font: 'inherit', padding: 6 }}
+                            />
+                            {request.targetActor.id !== sessionViewer?.id ? (
+                              <input
+                                value={answerOverride}
+                                onChange={(e) => setAnswerOverride(e.target.value)}
+                                placeholder="Override reason (recorded on the audit): why you are answering for them"
+                                style={{ font: 'inherit', padding: 6 }}
+                              />
+                            ) : null}
+                            {answerError ? <span style={{ color: 'var(--danger, #c33)', fontSize: 12 }}>{answerError}</span> : null}
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <Btn variant="subtle" onClick={() => setAnsweringRequestId(null)}>Cancel</Btn>
+                              <button type="submit" className="ui-action" disabled={answerBody.trim().length === 0}>Post answer and complete</button>
+                            </div>
+                          </form>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
             {/* Activity */}
             <div className="issue-panel__activity-section">
               <div className="issue-panel__activity-header">Activity</div>
               <div className="issue-activity" aria-label="Issue activity">
                 {activityEntries.map((entry) =>
                   entry.kind === 'comment' && entry.comment ? (
-                    <div key={entry.id} className="issue-activity__comment">
+                    <div key={entry.id} id={`comment-${entry.id}`} className="issue-activity__comment">
                       <Avatar user={{ name: renderCommentAuthor(entry.comment) }} size={22} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="issue-activity__comment-meta">

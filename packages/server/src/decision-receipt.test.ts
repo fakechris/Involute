@@ -139,6 +139,37 @@ describe('decision receipts (INV-588)', () => {
       .rejects.toThrow(/no actor/);
   });
 
+  it('binds to its own audit row even when a newer audit for the work exists (the race)', async () => {
+    const { mia, team } = await agentAndTeam(prisma);
+    const human = await prisma.user.findFirstOrThrow({ where: { actorKind: 'HUMAN' } });
+    const state = await prisma.workflowState.findFirstOrThrow({ where: { name: 'Ready', teamId: team.id } });
+    const issue = await prisma.issue.create({ data: { identifier: 'INV-932', stateId: state.id, teamId: team.id, title: 'Race' } });
+    await createComment(prisma, { body: '@mia why?', issueId: issue.id }, human.id);
+    const request = await prisma.agentRequest.findFirstOrThrow({ where: { targetActorId: mia.id } });
+    const held = await claimAgentRequest(prisma, { actorId: mia.id, id: request.id, sessionId: 'sess-a' });
+
+    // Another execution's audit lands with a *later* timestamp than ours will
+    // have — the exact situation "attach to the latest audit" got wrong.
+    const intruder = await prisma.workAudit.create({
+      data: {
+        actorId: human.id, actorKind: 'HUMAN', after: {}, createdAt: new Date(Date.now() + 60_000),
+        revision: 1, sessionId: 'sess-someone-else', surface: 'test', workId: issue.id,
+      },
+    });
+
+    await answerAgentRequest(prisma, {
+      actorId: mia.id, body: 'Mine.', claimToken: held.claimToken, id: request.id,
+      receipt: { reasoning: 'my own reasoning' }, sessionId: 'sess-a',
+    });
+
+    const receipt = await prisma.decisionReceipt.findFirstOrThrow({ where: { reasoning: 'my own reasoning' } });
+    const own = await prisma.workAudit.findFirstOrThrow({ where: { sourceMessageId: request.id, surface: 'agent_request.answered' } });
+    expect(receipt.auditId).toBe(own.id);
+    expect(receipt.auditId).not.toBe(intruder.id);
+    expect(receipt.actorId).toBe(mia.id);
+    expect(receipt.sessionId).toBe('sess-a');
+  });
+
   it('an answer carries its receipt on the answered audit, with the claim generation', async () => {
     const { mia, team } = await agentAndTeam(prisma);
     const human = await prisma.user.findFirstOrThrow({ where: { actorKind: 'HUMAN' } });
@@ -204,6 +235,11 @@ describe('receipts on run_report (INV-588)', () => {
     await commitWork(prisma, created.id, { acceptance: 'Tests pass and the receipt is attached.', assigneeId: admin.id, expectedRevision: created.revision }, { actorId: admin.id, actorKind: 'HUMAN', surface: 'test' });
     await claimWork(prisma, created.id, {}, { actorId: mia.id, actorKind: 'AGENT', surface: 'test' });
 
+    // First running report moves Ready → In Progress (audited, no receipt).
+    await reportRun(prisma, { phase: 'starting', status: 'running', workId: created.id },
+      { actorId: mia.id, actorKind: 'AGENT', surface: 'test' });
+
+    // Second one changes nothing audited: a receipt has no row to explain.
     await expect(reportRun(prisma, {
       phase: 'investigating',
       receipt: { reasoning: 'just thinking' },

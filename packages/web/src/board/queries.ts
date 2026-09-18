@@ -27,6 +27,7 @@ export const BOARD_PAGE_QUERY = gql`
               name
               email
               globalRole
+              actorKind
             }
           }
         }
@@ -263,6 +264,17 @@ export const ISSUE_UPDATE_MUTATION = gql`
   }
 `;
 
+/** A person completes a request addressed to them (INV-596). */
+export const AGENT_REQUEST_ANSWER_MUTATION = gql`
+  mutation AgentRequestAnswer($input: AgentRequestAnswerInput!) {
+    agentRequestAnswer(input: $input) {
+      success
+      request { id state answeredCommentId }
+      comment { id }
+    }
+  }
+`;
+
 export const COMMENT_CREATE_MUTATION = gql`
   mutation CommentCreate($input: CommentCreateInput!) {
     commentCreate(input: $input) {
@@ -383,6 +395,24 @@ export const ISSUE_PAGE_QUERY = gql`
           presence
           presenceDetail
           lastSeenAt
+        }
+      }
+      agentRequests(first: 200) {
+        id
+        state
+        presence
+        presenceDetail
+        deadlineAt
+        hopCount
+        rootRequestId
+        handedOffFromId
+        failureReason
+        answeredCommentId
+        targetActor {
+          id
+          name
+          handle
+          actorKind
         }
       }
       comments(first: 100, orderBy: createdAt) {
@@ -1117,6 +1147,22 @@ export const AGENT_PROFILE_QUERY = gql`
         createdAt
         expiresAt
         revokedAt
+      }
+      receipts {
+        auditId
+        surface
+        work { id identifier title }
+        receipt {
+          id
+          reasoning
+          runtime
+          sessionId
+          contractRevision
+          createdAt
+          actor { id name handle actorKind }
+          evidence { kind ref version digest excerpt preserved }
+          inputs { kind ref version digest excerpt preserved }
+        }
       }
       timeline {
         at

@@ -883,12 +883,41 @@ a person*. It does not guarantee that anyone answers.
   answers by replying in the thread; the request stays `submitted` until it is
   answered or canceled.
 
-### Decision receipts (INV-588)
+#### Evidence retraction (INV-598)
+
+Evidence is never physically deleted. `evidenceRetract(evidenceId, reason,
+correctWorkId?)` — a human act, authorized like any write to the work item —
+marks the row with who, when, why and, when known, the work item it should
+have pointed at — a target the caller must also be able to write, and one
+that resolves only for readers who may read it. Once only, by CAS on
+`retractedAt`, so concurrent retractions cannot overwrite each other. Gates that judge a work item by its evidence (auto-accept,
+traceability audit, verification) ignore retracted rows; readers still see
+them, struck through and labelled. The retraction is audited on the work
+item (`evidence.retract`) and emitted (`evidence.retracted`), so the
+correction is as traceable as the mistake.
+
+## Decision receipts (INV-588)
 
 A receipt is **the actor's own statement of what it knew and why**, frozen at
 write time so it outlives the session that wrote it. It is attached 1:1 to the
 `WorkAudit` row of the write it explains, in the **same transaction** — a write
 and its receipt land together or not at all — and it is immutable.
+
+**A receipt binds to the audit row its write produced (INV-591).** Every
+audited write returns the id of the row it wrote, and the receipt is attached
+to exactly that row — never to "the latest audit of the work", which under
+concurrency can be another execution's row (the receipt would then inherit
+that execution's identity and session). A run report's receipt binds to the
+state transition the report caused; a report that caused none is refused a
+receipt. The move to In Progress is now audited like every other transition.
+
+**A terminal run accepts only a proven replay (INV-595).** Once a run is
+completed or failed, `run_report` on it returns the original result only for
+a request with the same `idempotencyKey` and identical content. Same key with
+different content is an idempotency conflict. A keyless re-report, or any
+report carrying a new receipt, summary, SHA, PR or phase, is refused with
+`WORK_RUN_TERMINAL_REPLAY_MESSAGE` rather than accepted and dropped; further
+evidence goes through `evidence_attach` or a comment.
 
 Send it as `receipt` on `work_propose`, `run_report` or `agent_request_answer`:
 
@@ -958,6 +987,64 @@ The expiry sweep and the notice it posts are now one act by one actor,
   bridge — via `serviceActorCreate` or `agent:service`, with an owner. They
   authenticate from outside like an agent, and are still SERVICE: no human
   gates, nothing to ask.
+
+#### An agent's access is its credential binding, not a membership (INV-592)
+
+`TeamMembership` is the **human roster**: people with human roles. An agent
+or service has no role on it and is never on it. Its access comes from the
+credential it authenticated with:
+
+- **where** it may act: `AgentCredential.teamId` — the request carries it as
+  `context.agentTeamId`. Reads: that team plus public ones. Writes: that team
+  only. Managing a team: never.
+- **what** it may do there: `AgentCredential.scopes`, checked per tool.
+- **who answers for it**: `User.ownerId`.
+
+`teamMembershipUpsert` refuses a non-human email. The team directory
+(`agents(teamKey)`), mention suggestions, assignee lists and hand-off
+eligibility all recognise an agent as part of a team **by binding**. The
+migration `agent_binding_not_membership` backfills any live credential
+without a `teamId` from the agent's old membership, then removes agents and
+services from the roster. `/settings/access` lists humans; agents bound to the
+team appear in their own section with owner and presence.
+
+#### Who may manage an actor (INV-590, tightened in INV-594)
+
+Being logged in is not a capability; knowing an id is not one either. Two
+gates, never merged:
+
+- **Team authorization**: may the caller manage this *team*? (ADMIN or the
+  team's OWNER.)
+- **Identity authorization**: may the caller act *for this actor*? (ADMIN or
+  the actor's owner.)
+
+| operation | who |
+|---|---|
+| deactivate actor | ADMIN, actor owner |
+| transfer actor owner | ADMIN, current actor owner |
+| revoke a team's credential | ADMIN, actor owner, that team's OWNER |
+| issue a credential to an existing actor | ADMIN or actor owner, **and** manage rights on the target team |
+| see / claim / answer a request | the credential bound to the request's team — never another credential of the same actor |
+
+Owning a team an actor is bound to lets you revoke that team's credential
+and nothing more: it does not let you mint the actor new credentials, stop
+it, or hand its ownership to someone else. A HUMAN has no owner and is
+represented by nobody but an ADMIN. The hotfix reflex writes to the team its
+credential is bound to; a `--team` flag may only agree. The migration
+`agent_binding_precheck` fails closed when an unbound live credential faces
+more than one membership, listing the cases, rather than guessing a team.
+
+Deactivation ends sessions too: an existing session of a deactivated human is
+dropped at the next request, exactly like an expired one.
+
+`serviceActorCreate` **creates, never upserts**. An email or handle that
+already names any actor — human, agent or service — is refused
+(`SERVICE_IDENTITY_COLLISION_MESSAGE`); nothing existing is renamed. The
+`provisioned` audit row is written in the same transaction as the actor and
+describes the row that was actually written. Built-in services
+(`@expiry-sweeper`, `@github-webhook`, `@hotfix-reflex`) default their owner
+to the first active admin when first created, so "every non-human actor has an
+owner" holds without a backfill.
 
 ### Presence: will it actually reply?
 

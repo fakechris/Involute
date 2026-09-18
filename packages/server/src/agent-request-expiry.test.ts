@@ -59,6 +59,7 @@ describe('agent request expiry (INV-562 / A6)', () => {
       // A successor must already be able to read the thread (INV-589).
       const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
       await prisma.teamMembership.create({ data: { role: 'EDITOR', teamId: team.id, userId: kai.id } });
+      await prisma.agentCredential.create({ data: { name: 'kai', scopes: ['read', 'claim', 'answer'], teamId: team.id, tokenHash: 'h-kai'.padEnd(24, 'x'), userId: kai.id } });
       await prisma.user.update({
         where: { id: mia.id },
         data: { successorActorId: kai.id },
@@ -162,7 +163,9 @@ describe('agent request expiry (INV-562 / A6)', () => {
 
       await expect(prisma.comment.count({ where: { parentCommentId: rootCommentId } }))
         .resolves.toBe(1);
-      await expect(prisma.notification.count({ where: { type: 'agent.request_expired' } }))
+      // The asker here is also the person the request was handed to, so they get
+      // the hand-off notification (theirs to act on), not a second status update.
+      await expect(prisma.notification.count({ where: { type: { in: ['agent.request_expired', 'agent.request_handed_off'] } } }))
         .resolves.toBe(1);
     });
 
@@ -288,6 +291,37 @@ describe('agent request expiry (INV-562 / A6)', () => {
       expect(requests[0].presence).toBe('waiting');
       expect(requests[0].presenceDetail).toBe(PRESENCE_COPY.waiting);
       expect(requests[0].targetActor.handle).toBe('mia');
+    });
+
+    it('the cap keeps the newest requests and completes their chains, so a fresh hand-off is never hidden', async () => {
+      // 200 old requests then a hand-off to a person: with oldest-first the
+      // 201st never appeared and the person's Answer row was missing (INV-597
+      // follow-up). Modelled with first: 1 — one old standalone, then a
+      // root and its hop.
+      const { issue, mia, request: old, rootCommentId } = await openOverdueRequest(prisma);
+      const human = await prisma.user.findFirstOrThrow({ where: { actorKind: 'HUMAN' } });
+      const base = { body: 'q', rootCommentId, requestedByActorId: human.id, targetActorId: mia.id, workId: issue.id };
+      const root = await prisma.agentRequest.create({
+        data: { ...base, createdAt: new Date(Date.now() + 1000), deadlineAt: new Date(Date.now() + 60_000), idempotencyKey: 'root' },
+      });
+      const hop = await prisma.agentRequest.create({
+        data: {
+          ...base,
+          createdAt: new Date(Date.now() + 2000),
+          deadlineAt: new Date(Date.now() + 60_000),
+          handedOffFromId: root.id,
+          hopCount: 1,
+          idempotencyKey: 'hop',
+          rootRequestId: root.id,
+          targetActorId: human.id,
+        },
+      });
+
+      const result = await query(`{ issue(id: "${issue.id}") { agentRequests(first: 1) { id hopCount } } }`);
+
+      expect(result.errors).toBeUndefined();
+      expect(result.data.issue.agentRequests.map((r: { id: string }) => r.id)).toEqual([root.id, hop.id]);
+      expect(result.data.issue.agentRequests.map((r: { id: string }) => r.id)).not.toContain(old.id);
     });
 
     it('exposes a declared successor on the request', async () => {

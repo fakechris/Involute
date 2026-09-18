@@ -231,31 +231,55 @@ async function expireOneRequest(
       workIdentifier: request.work.identifier,
     });
 
-    // The asker is the one left waiting, so the asker is who gets told —
-    // not the team's owners by default.
+    // Two people may need to hear about this, for two different reasons.
+    // The person the request was handed to now has something to do: they
+    // get the hand-off itself, addressed to them. The asker is left waiting
+    // and gets the status update — which never substitutes for the first.
     const asker = await tx.user.findUnique({
       where: { id: request.requestedByActorId },
       select: { actorKind: true, id: true },
     });
+    const notifications: Prisma.NotificationCreateManyInput[] = [];
 
-    if (asker?.actorKind === 'HUMAN') {
-      await tx.notification.createMany({
-        data: [{
-          payload: {
-            advice: notice.fallbackAdvice,
-            reason: DEADLINE_FAILURE_REASON,
-            requestId: request.id,
-            rootCommentId: request.rootCommentId,
-            workIdentifier: request.work.identifier,
-          },
-          sourceEventId: event.id,
-          teamId: request.work.teamId,
-          type: 'agent.request_expired',
-          userId: asker.id,
-          workId: request.work.id,
-        }],
-        skipDuplicates: true,
+    if (handoff.next && handoff.pick?.actor.actorKind === 'HUMAN') {
+      notifications.push({
+        payload: {
+          body: request.body,
+          fromRequestId: request.id,
+          hopCount: handoff.next.hopCount,
+          previousTargetActorId: request.targetActor.id,
+          requestId: handoff.next.id,
+          rootCommentId: request.rootCommentId,
+          workIdentifier: request.work.identifier,
+        },
+        sourceEventId: event.id,
+        teamId: request.work.teamId,
+        type: 'agent.request_handed_off',
+        userId: handoff.pick.actor.id,
+        workId: request.work.id,
       });
+    }
+
+    if (asker?.actorKind === 'HUMAN' && asker.id !== handoff.pick?.actor.id) {
+      notifications.push({
+        payload: {
+          advice: notice.fallbackAdvice,
+          handedOffToRequestId: handoff.next?.id ?? null,
+          reason: DEADLINE_FAILURE_REASON,
+          requestId: request.id,
+          rootCommentId: request.rootCommentId,
+          workIdentifier: request.work.identifier,
+        },
+        sourceEventId: event.id,
+        teamId: request.work.teamId,
+        type: 'agent.request_expired',
+        userId: asker.id,
+        workId: request.work.id,
+      });
+    }
+
+    if (notifications.length > 0) {
+      await tx.notification.createMany({ data: notifications, skipDuplicates: true });
     }
 
     return true;

@@ -110,6 +110,8 @@ async function main(): Promise<void> {
     if (!name || !handle) throw new Error('Usage: agent:service <name> --handle <handle> --owner <human-email> [--description ...] [--email ...]');
     const owner = await requireHuman(readFlag(args, 'owner'));
     const created = await provisionServiceActor(prisma, {
+      // The operator CLI acts on the owner's behalf; the owner is who the audit names.
+      byActorId: owner.id,
       description: readFlag(args, 'description'),
       email: readFlag(args, 'email'),
       handle,

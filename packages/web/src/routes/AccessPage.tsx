@@ -1,8 +1,11 @@
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { Link } from 'react-router-dom';
+
 import {
   ACCESS_PAGE_QUERY,
+  AGENTS_QUERY,
   TEAM_MEMBERSHIP_REMOVE_MUTATION,
   TEAM_MEMBERSHIP_UPSERT_MUTATION,
   TEAM_UPDATE_ACCESS_MUTATION,
@@ -17,6 +20,7 @@ import type {
   TeamSummary,
   TeamUpdateAccessMutationData,
   TeamUpdateAccessMutationVariables,
+  UserSummary,
 } from '../board/types';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { writeStoredShellTeams } from '../lib/app-shell-state';
@@ -28,6 +32,57 @@ const ACCESS_STATUS_MESSAGE =
 interface AccessNotice {
   message: string;
   tone: 'error' | 'success';
+}
+
+/**
+ * The roster is people. An agent or service bound to the team is listed in
+ * its own section below, with the things that matter about an agent (who
+ * owns it, whether it is alive) rather than a role it does not have.
+ */
+function humanMemberships(memberships: TeamMembershipSummary[]) {
+  return memberships.filter((membership) => membership.user.actorKind !== 'AGENT' && membership.user.actorKind !== 'SERVICE');
+}
+
+function TeamAgentsSection({ teamKey }: { teamKey: string }) {
+  const { data, loading } = useQuery<{ agents: UserSummary[] }>(AGENTS_QUERY, { variables: { teamKey } });
+  const agents = data?.agents ?? [];
+
+  return (
+    <div className="access-stage__section">
+      <div>
+        <h2>Agents</h2>
+        <p className="app-shell__subtext">
+          Bound to this team by a credential, not by a membership role. Each has a human owner. Manage them on the{' '}
+          <Link to="/agents">agents page</Link>.
+        </p>
+      </div>
+      <div className="access-member-list">
+        {loading ? (
+          <p className="app-shell__subtext">Loading agents…</p>
+        ) : agents.length > 0 ? (
+          agents.map((agent) => (
+            <div key={agent.id} className="access-agent-card">
+              <div>
+                <strong>
+                  <Link to={agent.handle ? `/agents/${agent.handle}` : '/agents'}>
+                    {agent.handle ? `@${agent.handle}` : agent.name}
+                  </Link>
+                </strong>
+                <p>
+                  {agent.actorKind}
+                  {agent.runtime ? ` · ${agent.runtime}` : ''}
+                  {agent.presence ? ` · ${agent.presence}` : ''}
+                </p>
+                <p>{agent.owner ? `Owner: ${agent.owner.name}` : 'No owner recorded'}</p>
+              </div>
+            </div>
+          ))
+        ) : (
+          <p className="app-shell__subtext">No agents are bound to this team.</p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function sortMemberships(memberships: TeamMembershipSummary[]) {
@@ -110,7 +165,7 @@ export function AccessPage() {
     [selectedTeamId, teams],
   );
   const memberships = useMemo(
-    () => sortMemberships(selectedTeam?.memberships?.nodes ?? []),
+    () => sortMemberships(humanMemberships(selectedTeam?.memberships?.nodes ?? [])),
     [selectedTeam],
   );
   const isManageable = canManageTeam(selectedTeam, viewer);
@@ -464,6 +519,8 @@ export function AccessPage() {
                 )}
               </div>
             </div>
+
+            <TeamAgentsSection teamKey={selectedTeam.key} />
 
             <div className="access-stage__section">
               <div>

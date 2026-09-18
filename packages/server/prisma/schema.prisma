@@ -196,6 +196,7 @@ model User {
   workClaims     WorkClaim[] @relation("WorkClaimActor")
   workRuns       WorkRun[]   @relation("WorkRunActor")
   workEvidence   WorkEvidence[] @relation("WorkEvidenceActor")
+  retractedEvidence   WorkEvidence[] @relation("WorkEvidenceRetractedBy")
   reviewDecisions WorkReviewDecision[] @relation("WorkReviewDecisionReviewer")
   autoAcceptEvaluations WorkAutoAcceptEvaluation[] @relation("WorkAutoAcceptEvaluationActor")
   agentCredentials AgentCredential[]
@@ -302,6 +303,7 @@ model Issue {
   idempotencyKeys   WorkIdempotency[]
   runs              WorkRun[]
   evidence          WorkEvidence[]
+  supersedingEvidence WorkEvidence[] @relation("WorkEvidenceSupersededBy")
   reviewDecisions   WorkReviewDecision[]
   autoAcceptEvaluations WorkAutoAcceptEvaluation[]
   notifications     Notification[]
@@ -669,6 +671,15 @@ model WorkEvidence {
   verificationLeaseUntil DateTime?
   verifications EvidenceVerification[]
   createdAt DateTime         @default(now())
+  // Retraction (INV-598): evidence is never physically deleted. A wrong link
+  // is marked retracted — by whom, when, why, and which work item it should
+  // have pointed at — so the mistake and its correction are both on record.
+  retractedAt        DateTime?
+  retractedById      String?   @db.Uuid
+  retractedBy        User?     @relation("WorkEvidenceRetractedBy", fields: [retractedById], references: [id], onDelete: SetNull)
+  retractReason      String?
+  supersededByWorkId String?   @db.Uuid
+  supersededByWork   Issue?    @relation("WorkEvidenceSupersededBy", fields: [supersededByWorkId], references: [id], onDelete: SetNull)
 
   @@index([verificationNextAt])
   @@index([workId, createdAt])

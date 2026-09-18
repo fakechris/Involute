@@ -29,6 +29,10 @@ export const TEAM_HAS_NO_WORKFLOW_STATES_MESSAGE =
   'The selected team does not have any workflow states.';
 export const TEAM_WRITE_FORBIDDEN_MESSAGE = 'You do not have edit access to this team.';
 export const TEAM_MANAGE_FORBIDDEN_MESSAGE = 'You do not have access to manage this team.';
+export const TEAM_ROSTER_HUMANS_ONLY_MESSAGE =
+  'Team membership is a human roster. An agent or service is bound to a team by its credential, not by a membership role.';
+export const ACTOR_MANAGE_FORBIDDEN_MESSAGE =
+  'You do not have access to manage this actor: only an admin or its owner may. Owning a team it is bound to lets you revoke that team\'s credential, nothing more.';
 export const WORK_LINK_NOT_FOUND_MESSAGE = 'Work link not found.';
 export const WORK_LINK_SELF_REFERENCE_MESSAGE = 'Work cannot link to itself.';
 export const WORK_LINK_CYCLE_MESSAGE = 'Work link cannot create a cycle.';
@@ -64,6 +68,8 @@ export const WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE =
   'Reporting a run requires an active claim owned by the current actor.';
 export const WORK_RUN_ACTOR_MISMATCH_MESSAGE = 'Only the run actor can update this run.';
 export const WORK_RUN_TERMINAL_MESSAGE = 'Completed or failed runs cannot be changed.';
+export const WORK_RUN_TERMINAL_REPLAY_MESSAGE =
+  'This run is already completed or failed. Only a proven idempotent replay (same idempotencyKey, identical content) is accepted; anything else is refused rather than silently dropped. Attach further evidence with evidence_attach, or comment on the work item.';
 export const WORK_RUN_TRANSITION_INVALID_MESSAGE = 'Invalid work run status transition.';
 export const WORK_RUN_CONFLICT_MESSAGE = 'Work run changed while the update was in progress.';
 export const WORK_EVIDENCE_REQUIRES_RUN_MESSAGE = 'Evidence must reference a work run.';
@@ -75,6 +81,7 @@ export const WEBHOOK_URL_INVALID_MESSAGE = 'Webhook URL must be a valid absolute
 export const WEBHOOK_EVENT_TYPE_INVALID_MESSAGE = 'Unknown webhook event type.';
 export const AGENT_SCOPE_INVALID_MESSAGE = 'Unknown agent scope.';
 export const AGENT_CREDENTIAL_NOT_FOUND_MESSAGE = 'Agent credential not found.';
+export const REQUEST_NOT_FOUND_MESSAGE = 'Request not found.';
 export const NOTIFICATION_NOT_FOUND_MESSAGE = 'Notification not found.';
 export const SNOOZE_REQUIRES_CANDIDATE_MESSAGE = 'Only candidate work can be snoozed.';
 export const AGENT_DESCRIPTION_REQUIRED_MESSAGE =
@@ -114,6 +121,7 @@ const exposedErrorCodes = new Map<string, string>([
   [TEAM_HAS_NO_WORKFLOW_STATES_MESSAGE, 'BAD_USER_INPUT'],
   [TEAM_WRITE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
   [TEAM_MANAGE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
+  [ACTOR_MANAGE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
   [WORK_LINK_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [WORK_LINK_SELF_REFERENCE_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_LINK_CYCLE_MESSAGE, 'BAD_USER_INPUT'],

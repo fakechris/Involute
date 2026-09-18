@@ -50,7 +50,7 @@ export async function buildMentionPromptContext(
       take: MAX_RUNS,
     }),
     db.workEvidence.findMany({
-      where: { workId },
+      where: { retractedAt: null, workId },
       select: { createdAt: true, kind: true, summary: true, url: true },
       orderBy: { createdAt: 'desc' },
       take: MAX_EVIDENCE,

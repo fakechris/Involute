@@ -61,3 +61,59 @@ write.
 - Deploy to the box after each merge (pull → migrate → build server + web →
   restart), with a backup first.
 - Evidence attaches to INV-585…589, never to a guessed number.
+
+---
+
+## Milestone 2 — permissions and attribution hardening (INV-590…593)
+
+From the post-merge review of INV-584: three P1 authorization holes, one
+receipt-binding race, the agent-in-TeamMembership debt, and closing items.
+
+## Stage 1: Actor lifecycle authorization (INV-590)
+**Goal**: Only an ADMIN, the actor's owner, or an OWNER of a team the actor belongs to may deactivate it or transfer its owner; deactivated humans lose their sessions; SERVICE provisioning never touches an existing identity and audits what it wrote, in one transaction; built-in services get an owner by default.
+**Success Criteria**: `actor-authorization.test.ts` — bystander refused, owner/team-owner/ADMIN pass, EDITOR refused, HUMAN subject ADMIN-only, deactivated session null, collisions refused with no audit row.
+**Status**: Complete — PR pending
+
+## Stage 2: Receipt binds to its own audit row (INV-591)
+**Goal**: `recordWorkAudit` returns the audit id; propose/answer/report attach the receipt to that row, never to "the latest audit of the work".
+**Success Criteria**: receipt lands on its own audit when two audits exist; existing receipt tests green.
+**Status**: Complete — PR pending (stacked on INV-590)
+
+## Stage 3: Agent authorization from the credential binding (INV-592)
+**Goal**: Agents are authorized by `AgentCredential.teamId` + scopes, not by a fake EDITOR membership. Backend first, then backfill + migration removing AGENT memberships, then hand-off/mention use the binding, then `/settings/access` shows humans only plus a Team Agents section.
+**Success Criteria**: an agent with no membership can read/write its bound team and nothing else; hand-off and mention suites green; live agent write path verified after deploy.
+**Status**: Complete — PR pending (stacked on INV-591); live write-path check happens at deploy
+
+## Stage 4: Hand-off grace window, chain in GraphQL/UI, legacy cleanup (INV-593)
+**Goal**: A forced-to-human hand-off gets a real deadline; `AgentRequest` exposes hop/root/handed-off-from; work context and agent pages show the chain and receipts; legacy agents get an owner or are deactivated.
+**Success Criteria**: grace-window test; live GraphQL returns chain fields; directory shows no ownerless active agent.
+**Status**: Not Started
+
+---
+
+## Milestone 3 — second review round (INV-594…598)
+
+Merged so far: INV-590 #94, INV-591 #95, INV-592 #96, INV-593 #97 (main 7fbeb5e, deployed 2026-09-17 06:58 UTC). The second review reproduced five authorization and three spec gaps against that state.
+
+## Stage 1: Cross-team authorization (INV-594)
+**Goal**: Request tools authorized against the request's team; two independent gates (team vs identity); lifecycle owner/ADMIN only; revoke by team OWNER for their credential only; reflex bound to its credential's team; fail-closed migration precheck.
+**Success Criteria**: cross-team matrix (same actor, A/B credentials, A/B private requests, two OWNERs) — every counterexample refused.
+**Status**: Complete — PR pending
+
+## Stage 2: Terminal run replays (INV-595)
+**Goal**: same key + same content → replay; same key + different content → conflict; terminal without proven replay → refused; new receipt never silently dropped.
+**Status**: Complete — PR pending (stacked on INV-594)
+
+## Stage 3: Human hand-off completion (INV-596)
+**Goal**: the person handed a request is notified; `agentRequestAnswer` completes it atomically (target, or ADMIN with override reason); Web offers "Answer" on the request row.
+**Status**: Complete — PR pending (stacked on INV-595)
+
+## Stage 4: Chain and receipt display (INV-597)
+**Goal**: issue page groups requests by chain (root first, hops ordered, previous/next and answered comment clickable); work context shows the chain; agent page lists receipts as the actor's claims with who/session/when/write, reasoning, inputs, evidence and preserved state, expandable.
+**Status**: Complete — PR pending (stacked on INV-596)
+
+## Stage 5: Housekeeping (INV-598) — @mia retirement, INV-573 evidence retraction, plan accuracy, flaky test root cause
+**Goal**: evidence retraction record (never delete) + mutation; retract the ten Involute PR links wrongly attached to INV-573 (lumen-learn), pointing #87/#88 at INV-585 and #84–#86 at INV-584; revoke @mia's credential and deactivate it (history kept); plan carries merge SHAs and deploy state; flaky-test root cause established from a saved loop, not asserted.
+**Status**: Code complete — PR pending (stacked on INV-597). Third-review fixes applied on each branch: #103 (reflex unbound token, run fallback, precheck expiry; merged 59f1793), #100 (successor must be able to answer: answer scope only, global ADMIN counts), #101 (profile bounded by readable teams; request cap keeps the newest chains whole), #102 (target write/read authorization, CAS, verifier ignores retracted). Fourth review cleared #103; #100–#102 wait on CI, then final merge and deploy review; the data actions follow the deploy.
+**Local DB note**: the shared `involute_test` database is a hazard for parallel sessions until each session gets its own schema.
+**Flaky test finding (2026-09-17)**: two 12-run loops of `graphql-mutations.test.ts` were saved. Every failure was `PrismaClientInitializationError: Can't reach database server` from `test-setup.ts`, and Docker's event log shows the local DB compose project stopped and the `involute-db-localproxy` container killed/destroyed at 09:12 UTC while a run was in flight — the operator's own manual stop, not an unknown external action. The earlier "non-JSON body / 404 / fetch failed" failures on this machine are consistent with the same cause (the server losing its DB mid-request), not with ephemeral-port reuse. No failure has yet been reproduced with the DB stable; the loop must be rerun on a machine where nothing else manages these containers before the file is called flaky.

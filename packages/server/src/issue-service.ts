@@ -107,7 +107,16 @@ export async function createIssueInTransaction(
   input: CreateIssueInput,
   actor: WriteActor = INTERNAL_WRITE_ACTOR,
 ): Promise<Issue> {
-  if ('$transaction' in prisma) return prisma.$transaction(tx => createIssueInTransaction(tx, input, actor));
+  return (await createIssueWithAudit(prisma, input, actor)).issue;
+}
+
+/** Create a work item and return the id of the audit row that recorded it, for a receipt to bind to. */
+export async function createIssueWithAudit(
+  prisma: DatabaseClient,
+  input: CreateIssueInput,
+  actor: WriteActor = INTERNAL_WRITE_ACTOR,
+): Promise<{ auditId: string; issue: Issue }> {
+  if ('$transaction' in prisma) return prisma.$transaction(tx => createIssueWithAudit(tx, input, actor));
   await lockWorkGraph(prisma, input.teamId);
   const team = await prisma.team.findUnique({
     where: {
@@ -191,13 +200,13 @@ export async function createIssueInTransaction(
     });
 
   await syncContainsFromParentId(prisma, created.id, created.parentId, actor);
-  await recordWorkAudit(prisma, {
+  const auditId = await recordWorkAudit(prisma, {
       actor,
       after: selectIssueSnapshot(created),
       workId: created.id,
     });
 
-  return created;
+  return { auditId, issue: created };
 }
 
 export async function updateIssue(

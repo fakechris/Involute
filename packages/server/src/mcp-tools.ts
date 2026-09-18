@@ -10,6 +10,7 @@ import { toWireState } from './agent-request-state.js';
 import type { ReceiptInput, ReceiptReferenceInput } from './decision-receipt.js';
 
 import {
+  assertCanActOnRequest,
   assertCanReadTeam,
   assertCanWriteIssue,
   assertCanWriteTeam,
@@ -32,6 +33,7 @@ import {
   createScopeForbiddenError,
   createValidationError,
 } from './errors.js';
+import { TEAM_WRITE_FORBIDDEN_MESSAGE } from './errors.js';
 import { updateIssue } from './issue-service.js';
 import { createWorkLink } from './link-service.js';
 import { buildProtocolGuide } from './protocol-docs.js';
@@ -388,11 +390,17 @@ export async function callMcpTool(
     }
     case 'agent_inbox': {
       const actorId = requireActorId(context);
+      // An agent token sees the inbox of *this credential*: requests on the
+      // team it is bound to. The same actor's other credential sees its own.
+      if (context.authMode === 'agent-token' && !context.agentTeamId) {
+        throw createValidationError(TEAM_WRITE_FORBIDDEN_MESSAGE);
+      }
       const page = await readAgentInbox(context.prisma, {
         actorId,
         cursor: optionalString(args.cursor) ?? null,
         first: optionalNumber(args.first) ?? null,
         since: optionalDate(args.since),
+        teamId: context.authMode === 'agent-token' ? context.agentTeamId ?? null : null,
       });
       return {
         cursor: page.cursor,
@@ -412,6 +420,7 @@ export async function callMcpTool(
     }
     case 'agent_request_claim': {
       const actorId = requireActorId(context);
+      await assertCanActOnRequest(context.prisma, context, requiredString(args.id, 'id'));
       const claimed = await claimAgentRequest(context.prisma, {
         actorId,
         claimToken: optionalString(args.claim_token) ?? null,
@@ -432,6 +441,7 @@ export async function callMcpTool(
     }
     case 'agent_request_answer': {
       const actorId = requireActorId(context);
+      await assertCanActOnRequest(context.prisma, context, requiredString(args.id, 'id'));
       const answerInput: Parameters<typeof answerAgentRequest>[1] = {
         actorId,
         body: requiredString(args.body, 'body'),

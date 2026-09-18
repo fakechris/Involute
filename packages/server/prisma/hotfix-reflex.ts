@@ -39,7 +39,7 @@ function readFlag(args: string[], name: string): string | null {
  * committed as them, which proved nothing about that person having authorized
  * the write. Committing is a human gate; a human does it (AGENTS.md §6).
  */
-async function resolveReflexActor(): Promise<WriteActor & { label: string }> {
+async function resolveReflexActor(): Promise<WriteActor & { label: string; teamId: string | null }> {
   const token = process.env.INV_AGENT_TOKEN?.trim() || null;
   const sessionId = process.env.INV_SESSION_ID?.trim() || null;
 
@@ -56,12 +56,23 @@ async function resolveReflexActor(): Promise<WriteActor & { label: string }> {
         `Agent ${principal.user.handle ?? principal.user.name} lacks the propose scope.`,
       );
     }
+    if (!principal.teamId) {
+      // An unbound agent credential is a legacy row. Falling through to the
+      // --team path would let an agent token pick any team; refuse instead.
+      throw new Error(
+        `Agent ${principal.user.handle ?? principal.user.name}'s credential is not bound to a team. `
+        + 'Re-issue it for a team (agent:create <team-key> ...) before filing hotfixes with it.',
+      );
+    }
     return {
       actorId: principal.user.id,
       actorKind: 'AGENT',
       label: `@${principal.user.handle ?? principal.user.name} (agent, via hotfix-reflex)`,
       sessionId,
       surface: HOTFIX_REFLEX_ACTOR.surface,
+      // The credential's binding is where this agent may write. A --team flag
+      // that disagrees is an attempt to write somewhere else (INV-594).
+      teamId: principal.teamId,
     };
   }
 
@@ -71,6 +82,7 @@ async function resolveReflexActor(): Promise<WriteActor & { label: string }> {
       ...service,
       label: `@${HOTFIX_REFLEX_ACTOR.handle} (trusted service context)`,
       sessionId,
+      teamId: null,
     };
   }
 
@@ -85,7 +97,7 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const title = readFlag(args, 'title');
   const parentArg = readFlag(args, 'parent');
-  const teamKey = readFlag(args, 'team') ?? 'INV';
+  const teamFlag = readFlag(args, 'team');
   const repo = readFlag(args, 'repo') ?? 'fakechris/Involute';
   const customDesc = readFlag(args, 'desc');
 
@@ -111,12 +123,20 @@ Identity:
     process.exit(1);
   }
 
-  const team = await prisma.team.findUnique({
-    where: { key: teamKey },
-  });
+  const reflexActor = await resolveReflexActor();
+
+  // An agent credential is bound to one team; that is the team, full stop.
+  // A service (no binding) takes --team, defaulting to INV.
+  let team = reflexActor.teamId
+    ? await prisma.team.findUnique({ where: { id: reflexActor.teamId } })
+    : await prisma.team.findUnique({ where: { key: teamFlag ?? 'INV' } });
 
   if (!team) {
-    console.error(`[Involute Hotfix Reflex] Error: Team with key "${teamKey}" not found.`);
+    console.error(`[Involute Hotfix Reflex] Error: Team "${teamFlag ?? reflexActor.teamId}" not found.`);
+    process.exit(1);
+  }
+  if (reflexActor.teamId && teamFlag && teamFlag !== team.key) {
+    console.error(`[Involute Hotfix Reflex] Error: --team ${teamFlag} but this credential is bound to ${team.key}. Refusing to write outside the credential's team.`);
     process.exit(1);
   }
 
@@ -126,6 +146,9 @@ Identity:
     parentItem = await findWorkByIdOrIdentifier(prisma, parentArg);
     if (!parentItem) {
       console.warn(`[Involute Hotfix Reflex] Warning: Specified parent "${parentArg}" not found, falling back to root project.`);
+    } else if (parentItem.teamId !== team.id) {
+      console.error(`[Involute Hotfix Reflex] Error: parent ${parentArg} is on another team; this credential may not link work to it.`);
+      process.exit(1);
     }
   }
 
@@ -153,7 +176,7 @@ ${title.trim()}
 
   // Resolve the identity BEFORE anything is written, so a bad credential
   // fails the whole run rather than half of it.
-  const reflexActor = await resolveReflexActor();
+
 
   const candidate = await proposeWork(prisma, {
     acceptance: 'Fix verified by automated tests and typecheck; no regression.',

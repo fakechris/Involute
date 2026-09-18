@@ -149,6 +149,8 @@ export interface IssueSummary {
     surface: string | null;
     source: string | null;
   } | null;
+  /** Open questions to agents on this work, with their hand-off chain (INV-589/593). */
+  agentRequests?: AgentRequestSummary[];
   comments: {
     nodes: CommentSummary[];
   };
@@ -156,6 +158,20 @@ export interface IssueSummary {
   cycleId?: string | null;
   project?: { id: string; name: string; color: string } | null;
   cycle?: { id: string; name: string; number: number } | null;
+}
+
+export interface AgentRequestSummary {
+  id: string;
+  state: string;
+  presence: string;
+  presenceDetail: string;
+  deadlineAt: string;
+  hopCount: number;
+  rootRequestId: string | null;
+  handedOffFromId: string | null;
+  failureReason: string | null;
+  answeredCommentId: string | null;
+  targetActor: UserSummary;
 }
 
 export interface ProjectSummaryItem {

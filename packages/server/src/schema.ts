@@ -20,6 +20,7 @@ import type {
   WorkLink,
   WorkLinkType,
   WorkflowState,
+  WorkEvidence,
 } from '@prisma/client';
 
 import { makeExecutableSchema } from '@graphql-tools/schema';
@@ -44,6 +45,8 @@ import {
   ISSUE_NOT_FOUND_MESSAGE,
   MEMBERSHIP_NOT_FOUND_MESSAGE,
   NOTIFICATION_NOT_FOUND_MESSAGE,
+  ACTOR_MANAGE_FORBIDDEN_MESSAGE,
+  TEAM_ROSTER_HUMANS_ONLY_MESSAGE,
   TEAM_MANAGE_FORBIDDEN_MESSAGE,
   TEAM_NOT_FOUND_MESSAGE,
   TEAM_OWNER_REQUIRED_MESSAGE,
@@ -55,6 +58,11 @@ import {
 } from './errors.js';
 import {
   assertCanDeleteComment,
+  assertCanActOnRequest,
+  assertCanReadIssue,
+  assertCanManageActor,
+  assertCanRepresentActor,
+  assertCanRevokeCredential,
   assertCanManageTeam,
   assertCanReadTeam,
   assertCanWriteIssue,
@@ -78,7 +86,9 @@ import { WORK_EVENT_TYPES, enqueueWorkEvent } from './event-outbox.js';
 import { toWireState } from './agent-request-state.js';
 import { PRESENCE_COPY, agentRequestPresence } from './agent-request-presence.js';
 import { ACTOR_PRESENCE_COPY, actorPresence } from './actor-presence.js';
-import { deactivateActor, recordActorAudit, transferActorOwner } from './actor-lifecycle.js';
+import { deactivateActor, transferActorOwner } from './actor-lifecycle.js';
+import { EVIDENCE_NOT_FOUND_MESSAGE, retractEvidence } from './evidence-retract.js';
+import { answerAgentRequestAsHuman } from './agent-request-service.js';
 import { provisionServiceActor } from './service-actors.js';
 import {
   findWorkProvenance,
@@ -190,7 +200,7 @@ const COMMENT_ORDER_BY: Prisma.CommentOrderByWithRelationInput[] = [
   { id: 'asc' },
 ];
 const MAX_COMMENTS_CONNECTION_FIRST = 100;
-const MAX_AGENT_REQUESTS_CONNECTION_FIRST = 50;
+const MAX_AGENT_REQUESTS_CONNECTION_FIRST = 200;
 
 const MAX_ISSUES_CONNECTION_FIRST = 200;
 
@@ -326,6 +336,10 @@ const typeDefs = /* GraphQL */ `
     agentCredentialCreate(input: AgentCredentialCreateInput!): AgentCredentialCreatePayload!
     """Deactivate an actor: keeps its id and history, revokes its credentials, ends its ability to act. Human-only."""
     actorDeactivate(id: String!, reason: String): ActorLifecyclePayload!
+    """A person retracts wrongly attached evidence: marked, audited, emitted — never deleted (INV-598)."""
+    evidenceRetract(input: EvidenceRetractInput!): EvidenceRetractPayload!
+    """A person completes a request addressed to them (INV-596): comment, answeredCommentId, COMPLETED, audit and event in one transaction. An ADMIN may answer for someone else with an overrideReason."""
+    agentRequestAnswer(input: AgentRequestAnswerInput!): AgentRequestAnswerPayload!
     """Transfer accountability for a non-human actor to another human. Human-only, recorded in ActorAudit."""
     actorTransferOwner(id: String!, ownerId: String!, reason: String): ActorLifecyclePayload!
     """Provision a SERVICE actor for an external program (CI, cron, a bridge). Human-only."""
@@ -509,7 +523,16 @@ const typeDefs = /* GraphQL */ `
     counts: AgentActivityCounts!
     """When and how this actor was created, and what it was granted."""
     credentials: [AgentCredentialSummary!]!
+    """The actor's decision receipts — its own claims about what it knew and why, each bound to the audited write it explains. Not system-verified facts."""
+    receipts: [AgentReceiptEntry!]!
     timeline: [AgentTimelineEntry!]!
+  }
+
+  type AgentReceiptEntry {
+    auditId: String!
+    surface: String
+    work: Issue!
+    receipt: DecisionReceiptRecord!
   }
 
   type CommentMention {
@@ -536,6 +559,14 @@ const typeDefs = /* GraphQL */ `
     """Who to ask instead when this one does not answer."""
     successorActor: User
     answeredCommentId: String
+    """Hand-off chain (INV-589): 0 for the original request, +1 per hand-off."""
+    hopCount: Int!
+    """The first request in this chain; null when this is it."""
+    rootRequestId: String
+    """The request this one was handed off from; null when it was asked directly."""
+    handedOffFromId: String
+    """When the whole chain must have reached a person."""
+    chainDeadlineAt: DateTime
   }
 
   enum CommentOrderBy {
@@ -575,7 +606,13 @@ const typeDefs = /* GraphQL */ `
     links(type: WorkLinkType): WorkLinkConnection!
     claim: WorkClaimRecord
     comments(first: Int, after: String, orderBy: CommentOrderBy, rootsOnly: Boolean): CommentConnection!
-    """Questions put to agents on this work item, newest first (INV-560/562)."""
+    """
+    Questions put to agents on this work item (INV-560/562). The newest "first"
+    requests, each with the rest of its hand-off chain filled in, returned
+    oldest first. The cap limits which chains are shown, never a chain's hops,
+    so the request currently awaiting an answer is always present with its root
+    (INV-597 follow-up).
+    """
     agentRequests(first: Int): [AgentRequest!]!
     """The actor that created this work — human or agent (INV-573)."""
     proposedByActor: User
@@ -701,6 +738,23 @@ const typeDefs = /* GraphQL */ `
     url: String!
     summary: String
     createdAt: DateTime!
+    """Retraction (INV-598): set when a person marked this evidence as wrongly attached. Never deleted."""
+    retractedAt: DateTime
+    retractReason: String
+    retractedBy: User
+    """The work item this evidence should have pointed at, when known."""
+    supersededByWork: Issue
+  }
+
+  input EvidenceRetractInput {
+    evidenceId: String!
+    reason: String!
+    correctWorkId: String
+  }
+
+  type EvidenceRetractPayload {
+    success: Boolean!
+    evidence: WorkEvidenceRecord
   }
 
   enum WorkReviewDecisionKind {
@@ -735,6 +789,18 @@ const typeDefs = /* GraphQL */ `
     expiresAt: DateTime
     revokedAt: DateTime
     user: User!
+  }
+
+  input AgentRequestAnswerInput {
+    requestId: String!
+    body: String!
+    overrideReason: String
+  }
+
+  type AgentRequestAnswerPayload {
+    success: Boolean!
+    request: AgentRequest
+    comment: Comment
   }
 
   type ActorLifecyclePayload {
@@ -1375,6 +1441,19 @@ const typeDefs = /* GraphQL */ `
 
 const resolvers = {
   WorkEvidenceRecord: {
+    retractedBy: async (parent: WorkEvidence, _args: Record<string, never>, context: GraphQLContext): Promise<User | null> =>
+      parent.retractedById ? context.prisma.user.findUnique({ where: { id: parent.retractedById } }) : null,
+    supersededByWork: async (parent: WorkEvidence, _args: Record<string, never>, context: GraphQLContext): Promise<Issue | null> => {
+      if (!parent.supersededByWorkId) return null;
+      // Read authorization on the referenced item: a reader of this evidence
+      // who may not read the other team's work gets null, not the item.
+      try {
+        await assertCanReadIssue(context.prisma, context, parent.supersededByWorkId);
+      } catch {
+        return null;
+      }
+      return getIssueById(context.prisma, parent.supersededByWorkId);
+    },
     verifications: (parent: { id: string }, _args: unknown, context: GraphQLContext) =>
       context.prisma.evidenceVerification.findMany({ where: { evidenceId: parent.id }, orderBy: { createdAt: 'desc' }, take: 10 }),
   },
@@ -1852,7 +1931,12 @@ const resolvers = {
       context: GraphQLContext,
     ): Promise<AgentProfileResult | null> => {
       requireAuthentication(context);
-      return getAgentProfile(context.prisma, args.handle);
+      // Bounded by what the viewer may read: no private team's work, receipts
+      // or credentials leak through an agent's handle (INV-597 follow-up).
+      return getAgentProfile(context.prisma, args.handle, {
+        readableTeam: buildReadableTeamWhere(context),
+        readableWork: buildReadableIssueWhere(context),
+      });
     },
     agentCredentials: async (
       _parent: unknown,
@@ -2365,6 +2449,45 @@ const resolvers = {
         success: true as const,
       };
     }, { decision: null, issue: null, success: false as const }),
+    evidenceRetract: async (
+      _parent: unknown,
+      args: { input: { correctWorkId?: string | null; evidenceId: string; reason: string } },
+      context: GraphQLContext,
+    ): Promise<{ evidence: WorkEvidence | null; success: boolean }> =>
+      runMutation(async () => {
+        const viewer = requireAuthentication(context);
+        const evidence = await context.prisma.workEvidence.findUnique({ where: { id: args.input.evidenceId }, select: { workId: true } });
+        if (!evidence) throw createNotFoundError(EVIDENCE_NOT_FOUND_MESSAGE);
+        await assertCanWriteIssue(context.prisma, context, evidence.workId);
+        // Pointing evidence at a work item is a write to that item too; it
+        // must not become a way to probe or reference another team's work.
+        if (args.input.correctWorkId) {
+          await assertCanWriteIssue(context.prisma, context, args.input.correctWorkId);
+        }
+        const updated = await retractEvidence(context.prisma, {
+          correctWorkId: args.input.correctWorkId ?? null,
+          evidenceId: args.input.evidenceId,
+          reason: args.input.reason,
+        }, { actorId: viewer.id, actorKind: viewer.actorKind, surface: 'graphql' });
+        return { evidence: updated, success: true as const };
+      }, { evidence: null, success: false as const }),
+    agentRequestAnswer: async (
+      _parent: unknown,
+      args: { input: { body: string; overrideReason?: string | null; requestId: string } },
+      context: GraphQLContext,
+    ): Promise<{ comment: Comment | null; request: AgentRequestParent | null; success: boolean }> =>
+      runMutation(async () => {
+        const viewer = requireAuthentication(context);
+        await assertCanActOnRequest(context.prisma, context, args.input.requestId);
+        const answered = await answerAgentRequestAsHuman(context.prisma, {
+          body: args.input.body,
+          by: { actorId: viewer.id, actorKind: viewer.actorKind, globalRole: viewer.globalRole },
+          id: args.input.requestId,
+          overrideReason: args.input.overrideReason ?? null,
+        });
+        const comment = await context.prisma.comment.findUniqueOrThrow({ where: { id: answered.commentId } });
+        return { comment, request: answered.request, success: true as const };
+      }, { comment: null, request: null, success: false as const }),
     actorDeactivate: async (
       _parent: unknown,
       args: { id: string; reason?: string | null },
@@ -2372,6 +2495,7 @@ const resolvers = {
     ): Promise<{ actor: User | null; success: boolean }> =>
       runMutation(async () => {
         const viewer = requireAuthentication(context);
+        await assertCanManageActor(context.prisma, context, args.id);
         const actor = await deactivateActor(context.prisma, {
           actorId: args.id,
           by: { actorId: viewer.id, actorKind: viewer.actorKind },
@@ -2386,6 +2510,7 @@ const resolvers = {
     ): Promise<{ actor: User | null; success: boolean }> =>
       runMutation(async () => {
         const viewer = requireAuthentication(context);
+        await assertCanManageActor(context.prisma, context, args.id);
         const actor = await transferActorOwner(context.prisma, {
           actorId: args.id,
           by: { actorId: viewer.id, actorKind: viewer.actorKind },
@@ -2404,18 +2529,18 @@ const resolvers = {
         if (viewer.actorKind !== 'HUMAN') {
           throw createValidationError('Only a human may provision a service actor.');
         }
+        const ownerId = args.input.ownerId ?? viewer.id;
+        // Making someone else accountable for a new service is an admin act.
+        if (ownerId !== viewer.id && viewer.globalRole !== 'ADMIN') {
+          throw createValidationError(ACTOR_MANAGE_FORBIDDEN_MESSAGE);
+        }
         const created = await provisionServiceActor(context.prisma, {
+          byActorId: viewer.id,
           description: args.input.description ?? null,
           email: args.input.email ?? null,
           handle: args.input.handle,
           name: args.input.name,
-          ownerId: args.input.ownerId ?? viewer.id,
-        });
-        await recordActorAudit(context.prisma, {
-          action: 'provisioned',
-          after: { actorKind: 'SERVICE', handle: created.handle, ownerId: args.input.ownerId ?? viewer.id },
-          byActorId: viewer.id,
-          subjectId: created.actorId,
+          ownerId,
         });
         const actor = await context.prisma.user.findUniqueOrThrow({ where: { id: created.actorId } });
         return { actor, success: true as const };
@@ -2436,7 +2561,18 @@ const resolvers = {
       runMutation(async () => {
         const team = await resolveTeamByIdOrKey(context.prisma, args.input.team);
         if (!team) throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
+        // Gate 1: may the caller manage the target team?
         await assertCanManageTeam(context.prisma, context, team.id);
+        // Gate 2: if the email names an existing actor, may the caller act
+        // for it? Managing team B never makes one able to mint credentials
+        // for someone else's actor (INV-594).
+        const email = args.input.email?.trim().toLowerCase() || null;
+        if (email) {
+          const existing = await context.prisma.user.findUnique({ where: { email }, select: { id: true } });
+          if (existing) {
+            await assertCanRepresentActor(context.prisma, context, existing.id);
+          }
+        }
         let scopes: AgentScope[] | undefined;
         try {
           scopes = args.input.scopes == null ? undefined : parseAgentScopeList(args.input.scopes);
@@ -2470,13 +2606,10 @@ const resolvers = {
       runMutation(async () => {
         const credential = await context.prisma.agentCredential.findUnique({
           where: { id: args.id },
-          include: { user: { include: { memberships: true } } },
+          select: { id: true, teamId: true, userId: true },
         });
         if (!credential) throw createNotFoundError(AGENT_CREDENTIAL_NOT_FOUND_MESSAGE);
-        await assertCanManageAgentCredential(context, {
-          memberships: credential.user?.memberships ?? [],
-          teamId: credential.teamId,
-        });
+        await assertCanRevokeCredential(context.prisma, context, credential);
         const updated = await context.prisma.agentCredential.update({
           where: { id: credential.id },
           data: { revokedAt: new Date() },
@@ -2709,6 +2842,9 @@ const resolvers = {
         await assertCanManageTeam(context.prisma, context, args.input.teamId);
         const membership = await context.prisma.$transaction(async (transaction) => {
           const user = await upsertTeamMemberUser(transaction, args.input.email, args.input.name ?? null);
+          if (user.actorKind !== 'HUMAN') {
+            throw createValidationError(TEAM_ROSTER_HUMANS_ONLY_MESSAGE);
+          }
           const existingMembership = await transaction.teamMembership.findUnique({
             where: {
               teamId_userId: {
@@ -3339,14 +3475,30 @@ const resolvers = {
       parent: IssueParent,
       args: { first?: number | null },
       context: GraphQLContext,
-    ): Promise<AgentRequestParent[]> =>
-      context.prisma.agentRequest.findMany({
+    ): Promise<AgentRequestParent[]> => {
+      // Newest first, so a fresh hand-off on a busy work item is never hidden
+      // behind the cap (INV-597 follow-up). Then every chain touched is
+      // completed: a hop without its root is unreadable, and a chain has at
+      // most MAX_HANDOFF_HOPS hops, so the overshoot is bounded.
+      const newest = await context.prisma.agentRequest.findMany({
         where: { workId: parent.id },
         orderBy: [{ createdAt: 'desc' }],
         take: args.first === undefined || args.first === null
           ? MAX_AGENT_REQUESTS_CONNECTION_FIRST
           : clampConnectionFirst(args.first, MAX_AGENT_REQUESTS_CONNECTION_FIRST),
-      }),
+      });
+      const roots = [...new Set(newest.map((request) => request.rootRequestId ?? request.id))];
+      const rest = roots.length === 0
+        ? []
+        : await context.prisma.agentRequest.findMany({
+          where: {
+            id: { notIn: newest.map((request) => request.id) },
+            workId: parent.id,
+            OR: [{ id: { in: roots } }, { rootRequestId: { in: roots } }],
+          },
+        });
+      return [...newest, ...rest].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    },
   },
   WorkAuditRecord: {
     receipt: async (
@@ -3508,28 +3660,6 @@ async function resolveTeamByIdOrKey(prisma: PrismaClient, idOrKey: string): Prom
     // Non-UUID values fall through to key lookup.
   }
   return prisma.team.findUnique({ where: { key: idOrKey } });
-}
-
-async function assertCanManageAgentCredential(
-  context: GraphQLContext,
-  credential: { teamId: string | null; memberships: Array<{ teamId: string }> },
-): Promise<void> {
-  if (context.isTrustedSystem || context.viewer?.globalRole === 'ADMIN') {
-    return;
-  }
-  // Bound credentials are managed by the issuing team's owners only, so an
-  // owner of team B cannot revoke team A's agent. Legacy unbound credentials
-  // require manage rights on every team the agent belongs to.
-  if (credential.teamId) {
-    await assertCanManageTeam(context.prisma, context, credential.teamId);
-    return;
-  }
-  if (credential.memberships.length === 0) {
-    throw createValidationError(TEAM_MANAGE_FORBIDDEN_MESSAGE);
-  }
-  for (const membership of credential.memberships) {
-    await assertCanManageTeam(context.prisma, context, membership.teamId);
-  }
 }
 
 // Webhook scope gate (Linear parity: only workspace admins manage webhooks).

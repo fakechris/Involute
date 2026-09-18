@@ -5,6 +5,7 @@ import { createHmac } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
+import { WORK_IDEMPOTENCY_CONFLICT_MESSAGE, WORK_RUN_TERMINAL_REPLAY_MESSAGE } from './errors.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { claimWork, commitWork, proposeWork } from './claim-service.ts';
 import { collectOutboundWebhookTargets, flushEventOutbox } from './event-outbox.ts';
@@ -403,23 +404,52 @@ describe('run and evidence', () => {
     await claimWork(prisma, committed.id, {}, { actorId: human.id, actorKind: 'HUMAN', surface: 'test' });
     const actor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' };
     const started = await reportRun(prisma, { status: 'running', workId: committed.id }, actor);
-    await reportRun(
-      prisma,
-      { runId: started.run.id, status: 'completed', workId: committed.id },
-      actor,
-    );
 
+    // The completing call carries the key; that is the request a replay must match.
     const first = await reportRun(
       prisma,
-      { idempotencyKey: 'terminal-key-1', runId: started.run.id, status: 'completed', workId: committed.id },
+      { idempotencyKey: 'terminal-key-1', runId: started.run.id, status: 'completed', summary: 'done', workId: committed.id },
       actor,
     );
     const replay = await reportRun(
       prisma,
-      { idempotencyKey: 'terminal-key-1', runId: started.run.id, status: 'completed', workId: committed.id },
+      { idempotencyKey: 'terminal-key-1', runId: started.run.id, status: 'completed', summary: 'done', workId: committed.id },
       actor,
     );
     expect(replay.run.id).toBe(first.run.id);
+
+    // Same key, different content: a conflict, not a quiet success.
+    await expect(reportRun(
+      prisma,
+      { idempotencyKey: 'terminal-key-1', runId: started.run.id, status: 'completed', summary: 'done, but different', workId: committed.id },
+      actor,
+    )).rejects.toThrow(WORK_IDEMPOTENCY_CONFLICT_MESSAGE);
+
+    // Terminal, no key: nothing proves this is a replay. Refused.
+    await expect(reportRun(
+      prisma,
+      { runId: started.run.id, status: 'completed', workId: committed.id },
+      actor,
+    )).rejects.toThrow(WORK_RUN_TERMINAL_REPLAY_MESSAGE);
+
+    // No runId at all, new key, new receipt, after the claim is gone: this used
+    // to rebind to the most recent COMPLETED run and return success.
+    await prisma.workClaim.deleteMany({ where: { workId: committed.id } });
+    await expect(reportRun(
+      prisma,
+      { idempotencyKey: 'terminal-key-3', receipt: { reasoning: 'late thoughts' }, status: 'completed', workId: committed.id },
+      actor,
+    )).rejects.toThrow();
+    await expect(prisma.decisionReceipt.count()).resolves.toBe(0);
+    await expect(prisma.workIdempotency.count({ where: { key: 'terminal-key-3' } })).resolves.toBe(0);
+
+    // Terminal, new key, new receipt: refused, and the receipt does not land.
+    await expect(reportRun(
+      prisma,
+      { idempotencyKey: 'terminal-key-2', receipt: { reasoning: 'late thoughts' }, runId: started.run.id, status: 'completed', workId: committed.id },
+      actor,
+    )).rejects.toThrow(WORK_RUN_TERMINAL_REPLAY_MESSAGE);
+    await expect(prisma.decisionReceipt.count()).resolves.toBe(0);
   });
 
   it('routes outbox events to subscriptions by team and event type', async () => {
@@ -782,18 +812,23 @@ describe('run and evidence', () => {
       const { claim } = await claimWork(prisma, committed.id, {}, { actorId: human.id, actorKind: 'HUMAN', surface: 'test' });
       const actor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' };
 
-      // Complete the run (which deletes the claim)
-      const firstComplete = await reportRun(prisma, { status: 'completed', workId: committed.id, runId: claim.id }, actor);
+      // Complete the run with a key (which deletes the claim)
+      const firstComplete = await reportRun(prisma, { idempotencyKey: 'scenario-d', status: 'completed', workId: committed.id, runId: claim.id }, actor);
       expect(firstComplete.run.status).toBe('COMPLETED');
 
       // Verify claim is gone
       const claimAfter = await prisma.workClaim.findUnique({ where: { workId: committed.id } });
       expect(claimAfter).toBeNull();
 
-      // Agent retries completed report (passing old claim.id or omitted runId)
-      const retryComplete = await reportRun(prisma, { status: 'completed', workId: committed.id, runId: claim.id }, actor);
+      // A proven replay (same key, same content) returns the same run.
+      const retryComplete = await reportRun(prisma, { idempotencyKey: 'scenario-d', status: 'completed', workId: committed.id, runId: claim.id }, actor);
       expect(retryComplete.run.id).toBe(firstComplete.run.id);
       expect(retryComplete.run.status).toBe('COMPLETED');
+
+      // A keyless retry with the stale claim id is not a proven replay. It used
+      // to be rebound to "the most recent COMPLETED run" and succeed; now it
+      // is refused (INV-595 follow-up).
+      await expect(reportRun(prisma, { status: 'completed', workId: committed.id, runId: claim.id }, actor)).rejects.toThrow();
 
       // Still exactly 1 run
       const runs = await prisma.workRun.findMany({ where: { workId: committed.id } });

@@ -159,6 +159,18 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
   query WorkContextPage($id: String!) {
     workContext(id: $id) {
       work {
+        agentRequests(first: 200) {
+          id
+          state
+          presence
+          deadlineAt
+          hopCount
+          rootRequestId
+          handedOffFromId
+          failureReason
+          answeredCommentId
+          targetActor { id name handle actorKind }
+        }
         id
         identifier
         title
@@ -234,6 +246,10 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
         url
         summary
         createdAt
+        retractedAt
+        retractReason
+        retractedBy { id name handle }
+        supersededByWork { id identifier }
       }
       reviewDecisions {
         id

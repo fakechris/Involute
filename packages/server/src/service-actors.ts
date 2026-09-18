@@ -1,3 +1,5 @@
+import { createValidationError } from './errors.js';
+
 import type { Prisma, PrismaClient } from '@prisma/client';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
@@ -69,6 +71,16 @@ export async function ensureServiceActor(
   spec: ServiceActorSpec,
   options: { ownerId?: string | null } = {},
 ): Promise<{ actorId: string; actorKind: 'SERVICE'; surface: string }> {
+  // A built-in service is owned by the first active admin unless told
+  // otherwise, so that "every non-human actor has an owner" holds from the
+  // first run rather than only after a backfill. On a box with no admin yet
+  // (bootstrap), the owner stays null and is filled by the next provisioning.
+  const ownerId = options.ownerId ?? (await db.user.findFirst({
+    where: { actorKind: 'HUMAN', deactivatedAt: null, globalRole: 'ADMIN' },
+    orderBy: { email: 'asc' },
+    select: { id: true },
+  }))?.id ?? null;
+
   const actor = await db.user.upsert({
     where: { email: spec.email },
     create: {
@@ -77,7 +89,7 @@ export async function ensureServiceActor(
       email: spec.email,
       handle: spec.handle,
       name: spec.name,
-      ownerId: options.ownerId ?? null,
+      ownerId,
     },
     // Keep the descriptive fields current without ever reassigning identity
     // or silently changing who is accountable.
@@ -100,34 +112,68 @@ export async function ensureServiceActor(
  * outside the process; it is still SERVICE, so it cannot pass the human gates
  * and cannot be asked anything.
  */
-export async function provisionServiceActor(
-  db: DatabaseClient,
-  input: { description?: string | null; email?: string | null; handle: string; name: string; ownerId: string },
-): Promise<{ actorId: string; handle: string }> {
-  const owner = await db.user.findUnique({
-    where: { id: input.ownerId },
-    select: { actorKind: true, deactivatedAt: true },
-  });
-  if (!owner || owner.actorKind !== 'HUMAN' || owner.deactivatedAt) {
-    throw new Error('Owner must be an active HUMAN actor.');
-  }
+export const SERVICE_IDENTITY_COLLISION_MESSAGE =
+  'An actor with this email or handle already exists. Provisioning creates a new SERVICE identity; it never modifies an existing actor.';
 
+export async function provisionServiceActor(
+  prisma: PrismaClient,
+  input: {
+    /** Who is provisioning — recorded in ActorAudit with the row that was actually created. */
+    byActorId: string;
+    description?: string | null;
+    email?: string | null;
+    handle: string;
+    name: string;
+    ownerId: string;
+  },
+): Promise<{ actorId: string; handle: string }> {
   const handle = input.handle.trim().toLowerCase();
   const email = input.email?.trim().toLowerCase() || `${handle}@services.involute.local`;
+  const name = input.name.trim();
 
-  const actor = await db.user.upsert({
-    where: { email },
-    create: {
-      actorKind: 'SERVICE',
-      description: input.description ?? null,
-      email,
-      handle,
-      name: input.name.trim(),
-      ownerId: input.ownerId,
-    },
-    update: { ...(input.description ? { description: input.description } : {}), name: input.name.trim() },
-    select: { id: true },
+  return prisma.$transaction(async (tx) => {
+    const owner = await tx.user.findUnique({
+      where: { id: input.ownerId },
+      select: { actorKind: true, deactivatedAt: true },
+    });
+    if (!owner || owner.actorKind !== 'HUMAN' || owner.deactivatedAt) {
+      throw createValidationError('Owner must be an active HUMAN actor.');
+    }
+
+    // Create, never upsert. An email or handle that already names someone —
+    // a human, an agent, another service — is a collision, and the answer is
+    // a refusal, not a silent rename of whoever was there.
+    const collision = await tx.user.findFirst({
+      where: { OR: [{ email }, { handle }] },
+      select: { id: true },
+    });
+    if (collision) {
+      throw createValidationError(SERVICE_IDENTITY_COLLISION_MESSAGE);
+    }
+
+    const actor = await tx.user.create({
+      data: {
+        actorKind: 'SERVICE',
+        description: input.description ?? null,
+        email,
+        handle,
+        name,
+        ownerId: input.ownerId,
+      },
+      select: { actorKind: true, handle: true, id: true, ownerId: true },
+    });
+
+    // The audit describes the row that was written, in the same transaction:
+    // either both exist or neither does.
+    await tx.actorAudit.create({
+      data: {
+        action: 'provisioned',
+        after: { actorKind: actor.actorKind, handle: actor.handle, ownerId: actor.ownerId },
+        byActorId: input.byActorId,
+        subjectId: actor.id,
+      },
+    });
+
+    return { actorId: actor.id, handle };
   });
-
-  return { actorId: actor.id, handle };
 }

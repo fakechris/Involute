@@ -93,6 +93,10 @@ export interface WorkEvidenceSummary {
   url: string;
   summary?: string | null;
   createdAt: string;
+  retractedAt?: string | null;
+  retractReason?: string | null;
+  retractedBy?: { id: string; name: string | null; handle: string | null } | null;
+  supersededByWork?: { id: string; identifier: string } | null;
 }
 
 export interface WorkReviewDecisionSummary {
@@ -148,10 +152,25 @@ export interface WorkClaimSummary {
   createdAt: string;
 }
 
+export interface WorkContextRequest {
+  id: string;
+  state: string;
+  presence: string;
+  deadlineAt: string;
+  hopCount: number;
+  rootRequestId: string | null;
+  handedOffFromId: string | null;
+  failureReason: string | null;
+  answeredCommentId: string | null;
+  targetActor: { id: string; name: string | null; handle: string | null; actorKind: string };
+}
+
 export interface WorkContextWork {
   id: string;
   identifier: string;
   title: string;
+  /** Requests to agents on this work, with their hand-off chain (INV-597). */
+  agentRequests?: WorkContextRequest[];
   description?: string | null;
   kind: WorkKind;
   commitmentStatus: CommitmentStatus;

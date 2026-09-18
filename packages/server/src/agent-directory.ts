@@ -1,7 +1,7 @@
 import { toWireState } from './agent-request-state.js';
 
 import { Prisma } from '@prisma/client';
-import type { PrismaClient, User } from '@prisma/client';
+import type { PrismaClient, User, DecisionReceipt } from '@prisma/client';
 
 export const MAX_TIMELINE_ENTRIES = 25;
 
@@ -16,7 +16,7 @@ export interface AgentActivityCounts {
 export interface AgentTimelineEntry {
   at: Date;
   detail: string | null;
-  kind: 'proposed' | 'claimed' | 'run' | 'evidence' | 'answered' | 'asked';
+  kind: 'proposed' | 'claimed' | 'run' | 'evidence' | 'answered' | 'asked' | 'decided';
   workId: string | null;
   workIdentifier: string | null;
 }
@@ -40,7 +40,20 @@ export interface AgentProfile {
    * so without it "what is this thing and who made it" is unanswerable.
    */
   credentials: AgentCredentialSummary[];
+  /**
+   * The actor's decision receipts: what it said it knew and why it decided,
+   * each bound to the audited write it explains. These are the actor's own
+   * claims, shown as such — never system-verified facts.
+   */
+  receipts: AgentReceiptEntry[];
   timeline: AgentTimelineEntry[];
+}
+
+export interface AgentReceiptEntry {
+  auditId: string;
+  receipt: DecisionReceipt;
+  surface: string | null;
+  work: { id: string; identifier: string; title: string };
 }
 
 /**
@@ -57,8 +70,15 @@ export async function listAgentActors(
     where: {
       actorKind: { in: input.kinds ?? ['AGENT', 'SERVICE'] },
       ...(input.includeDeactivated ? {} : { deactivatedAt: null }),
+      // Bound to the team by a live credential — or, for rows that predate
+      // INV-592 and were never re-issued, still on the roster.
       ...(input.teamKey
-        ? { memberships: { some: { team: { key: input.teamKey } } } }
+        ? {
+            OR: [
+              { agentCredentials: { some: { revokedAt: null, team: { key: input.teamKey } } } },
+              { memberships: { some: { team: { key: input.teamKey } } } },
+            ],
+          }
         : {}),
     },
     orderBy: [{ lastSeenAt: 'desc' }, { name: 'asc' }],
@@ -92,11 +112,25 @@ export async function findAgentActor(
  * produced, AgentRequest who was asked). What was missing was somewhere that
  * reads them together, so "Mia" in a thread stops being an opaque name.
  */
+/**
+ * What a viewer may see of an actor's history is bounded by what the viewer
+ * may read: counts, timeline, receipts and credentials are all filtered to
+ * the work items and teams readable by the caller (INV-597 follow-up). An
+ * `undefined` scope means unrestricted (ADMIN / trusted system).
+ */
+export interface ProfileScope {
+  readableTeam?: Prisma.TeamWhereInput | undefined;
+  readableWork?: Prisma.IssueWhereInput | undefined;
+}
+
 export async function getAgentProfile(
   prisma: PrismaClient,
   handleOrId: string,
+  scope: ProfileScope = {},
 ): Promise<AgentProfile | null> {
   const actor = await findAgentActor(prisma, handleOrId);
+  const work = scope.readableWork;
+  const onWork = work ? { work } : {};
 
   if (!actor) {
     return null;
@@ -110,19 +144,20 @@ export async function getAgentProfile(
     proposedWork,
   ] = await Promise.all([
     prisma.agentRequest.count({
-      where: { state: { in: ['SUBMITTED', 'WORKING', 'INPUT_REQUIRED'] }, targetActorId: actor.id },
+      where: { state: { in: ['SUBMITTED', 'WORKING', 'INPUT_REQUIRED'] }, targetActorId: actor.id, ...onWork },
     }),
-    prisma.agentRequest.count({ where: { state: 'COMPLETED', targetActorId: actor.id } }),
-    prisma.workRun.count({ where: { actorId: actor.id } }),
-    prisma.workEvidence.count({ where: { actorId: actor.id } }),
+    prisma.agentRequest.count({ where: { state: 'COMPLETED', targetActorId: actor.id, ...onWork } }),
+    prisma.workRun.count({ where: { actorId: actor.id, ...onWork } }),
+    prisma.workEvidence.count({ where: { actorId: actor.id, ...onWork } }),
     // A creation audit has no `before`. Counting "revision 1" instead would
     // also count a webhook moving a freshly-proposed item, once those writes
     // are audited (INV-587).
-    prisma.workAudit.count({ where: { actorId: actor.id, before: { equals: Prisma.DbNull } } }),
+    prisma.workAudit.count({ where: { actorId: actor.id, before: { equals: Prisma.DbNull }, ...onWork } }),
   ]);
 
   const credentials = await prisma.agentCredential.findMany({
-    where: { userId: actor.id },
+    // Only credentials on teams the viewer may read; unbound legacy rows only for an unrestricted viewer.
+    where: { userId: actor.id, ...(scope.readableTeam ? { team: scope.readableTeam } : {}) },
     select: {
       createdAt: true,
       expiresAt: true,
@@ -135,9 +170,22 @@ export async function getAgentProfile(
     orderBy: { createdAt: 'desc' },
   });
 
+  const receipts = await prisma.decisionReceipt.findMany({
+    where: { actorId: actor.id, ...(work ? { audit: { work } } : {}) },
+    include: { audit: { select: { createdAt: true, id: true, surface: true, work: { select: { id: true, identifier: true, title: true } } } } },
+    orderBy: { audit: { createdAt: 'desc' } },
+    take: MAX_TIMELINE_ENTRIES,
+  });
+
   return {
     actor,
     counts: { answeredRequests, evidence, openRequests, proposedWork, runs },
+    receipts: receipts.map(({ audit, ...receipt }) => ({
+      auditId: audit.id,
+      receipt,
+      surface: audit.surface,
+      work: audit.work,
+    })),
     credentials: credentials.map((credential) => ({
       createdAt: credential.createdAt,
       expiresAt: credential.expiresAt,
@@ -147,32 +195,34 @@ export async function getAgentProfile(
       scopes: credential.scopes,
       teamKey: credential.team?.key ?? null,
     })),
-    timeline: await buildTimeline(prisma, actor.id),
+    timeline: await buildTimeline(prisma, actor.id, work),
   };
 }
 
 async function buildTimeline(
   prisma: PrismaClient,
   actorId: string,
+  work: Prisma.IssueWhereInput | undefined,
 ): Promise<AgentTimelineEntry[]> {
+  const onWork = work ? { work } : {};
   const take = MAX_TIMELINE_ENTRIES;
 
-  const [proposals, claims, runs, evidence, requests] = await Promise.all([
+  const [proposals, claims, runs, evidence, requests, receipts] = await Promise.all([
     // revision 1 is the row that created the work, so its actor is the proposer.
     prisma.workAudit.findMany({
-      where: { actorId, before: { equals: Prisma.DbNull } },
+      where: { actorId, before: { equals: Prisma.DbNull }, ...onWork },
       select: { createdAt: true, work: { select: { id: true, identifier: true, title: true } } },
       orderBy: { createdAt: 'desc' },
       take,
     }),
     prisma.workClaim.findMany({
-      where: { actorId },
+      where: { actorId, ...onWork },
       select: { createdAt: true, work: { select: { id: true, identifier: true, title: true } } },
       orderBy: { createdAt: 'desc' },
       take,
     }),
     prisma.workRun.findMany({
-      where: { actorId },
+      where: { actorId, ...onWork },
       select: {
         createdAt: true,
         status: true,
@@ -183,7 +233,7 @@ async function buildTimeline(
       take,
     }),
     prisma.workEvidence.findMany({
-      where: { actorId },
+      where: { actorId, ...onWork },
       select: {
         createdAt: true,
         kind: true,
@@ -194,7 +244,7 @@ async function buildTimeline(
       take,
     }),
     prisma.agentRequest.findMany({
-      where: { targetActorId: actorId },
+      where: { targetActorId: actorId, ...onWork },
       select: {
         createdAt: true,
         state: true,
@@ -204,9 +254,27 @@ async function buildTimeline(
       orderBy: { updatedAt: 'desc' },
       take,
     }),
+    // Decision receipts: the agent's own account of why (INV-588), shown
+    // where a person looks to understand it.
+    prisma.decisionReceipt.findMany({
+      where: { actorId, ...(work ? { audit: { work } } : {}) },
+      select: {
+        reasoning: true,
+        audit: { select: { createdAt: true, work: { select: { id: true, identifier: true } } } },
+      },
+      orderBy: { audit: { createdAt: 'desc' } },
+      take,
+    }),
   ]);
 
   const entries: AgentTimelineEntry[] = [
+    ...receipts.map((row) => ({
+      at: row.audit.createdAt,
+      detail: row.reasoning.length > 240 ? `${row.reasoning.slice(0, 240)}…` : row.reasoning,
+      kind: 'decided' as const,
+      workId: row.audit.work.id,
+      workIdentifier: row.audit.work.identifier,
+    })),
     ...proposals.map((row) => ({
       at: row.createdAt,
       detail: row.work.title,

@@ -149,7 +149,9 @@ export async function getSessionRecord(
     return null;
   }
 
-  if (session.expiresAt.getTime() <= Date.now()) {
+  // Deactivation ends the ability to act. An existing session is not a way
+  // around that: drop it, exactly as an expired one is dropped.
+  if (session.user.deactivatedAt || session.expiresAt.getTime() <= Date.now()) {
     await prisma.session.delete({
       where: {
         id: session.id,
