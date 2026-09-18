@@ -16,7 +16,10 @@ export interface AgentActivityCounts {
 export interface AgentTimelineEntry {
   at: Date;
   detail: string | null;
-  kind: 'proposed' | 'claimed' | 'run' | 'evidence' | 'answered' | 'asked' | 'decided';
+  kind:
+    | 'proposed' | 'claimed' | 'run' | 'evidence' | 'answered' | 'asked' | 'decided'
+    // Lifecycle actions, verbatim from ActorAudit.action.
+    | 'deactivated' | 'reactivated' | 'owner-transferred' | (string & {});
   workId: string | null;
   workIdentifier: string | null;
 }
@@ -207,7 +210,7 @@ async function buildTimeline(
   const onWork = work ? { work } : {};
   const take = MAX_TIMELINE_ENTRIES;
 
-  const [proposals, claims, runs, evidence, requests, receipts] = await Promise.all([
+  const [proposals, claims, runs, evidence, requests, receipts, lifecycle] = await Promise.all([
     // revision 1 is the row that created the work, so its actor is the proposer.
     prisma.workAudit.findMany({
       where: { actorId, before: { equals: Prisma.DbNull }, ...onWork },
@@ -265,9 +268,35 @@ async function buildTimeline(
       orderBy: { audit: { createdAt: 'desc' } },
       take,
     }),
+    // Lifecycle changes (INV-586) are the one kind of history that is about
+    // the actor rather than about work; without them the page could not say
+    // that an actor was deactivated, or by whom.
+    prisma.actorAudit.findMany({
+      where: { subjectId: actorId },
+      select: {
+        action: true,
+        createdAt: true,
+        reason: true,
+        byActor: { select: { handle: true, name: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take,
+    }),
   ]);
 
   const entries: AgentTimelineEntry[] = [
+    ...lifecycle.map((row) => {
+      const by = row.byActor
+        ? (row.byActor.handle ? `@${row.byActor.handle}` : row.byActor.name ?? row.byActor.email)
+        : 'the system';
+      return {
+        at: row.createdAt,
+        detail: row.reason ? `by ${by} — ${row.reason}` : `by ${by}`,
+        kind: row.action as AgentTimelineEntry['kind'],
+        workId: null,
+        workIdentifier: null,
+      };
+    }),
     ...receipts.map((row) => ({
       at: row.audit.createdAt,
       detail: row.reasoning.length > 240 ? `${row.reasoning.slice(0, 240)}…` : row.reasoning,

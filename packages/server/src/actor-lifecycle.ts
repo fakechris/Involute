@@ -7,8 +7,9 @@ type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
 export const ACTOR_NOT_FOUND_MESSAGE = 'Actor not found.';
 export const ACTOR_ALREADY_DEACTIVATED_MESSAGE = 'Actor is already deactivated.';
+export const ACTOR_NOT_DEACTIVATED_MESSAGE = 'Actor is not deactivated.';
 export const ACTOR_LIFECYCLE_HUMAN_ONLY_MESSAGE =
-  'Only a human may deactivate an actor or transfer its ownership.';
+  'Only a human may deactivate or reactivate an actor, or transfer its ownership.';
 export const ACTOR_DELETE_FORBIDDEN_MESSAGE =
   'Actors are never deleted: their id must stay valid for the audit trail. Deactivate instead.';
 
@@ -65,6 +66,47 @@ export async function deactivateActor(
       action: 'deactivated',
       after: { deactivatedAt: now.toISOString() },
       before: { deactivatedAt: null },
+      byActorId: input.by.actorId,
+      reason: input.reason ?? null,
+      subjectId: actor.id,
+    });
+
+    return updated;
+  });
+}
+
+/**
+ * Reactivation undoes the flag, not the revocations: the credentials that
+ * were live before deactivation stay revoked, and the actor gets a fresh one
+ * through the normal issuance path. Otherwise a token that someone believed
+ * dead could quietly come back to life.
+ */
+export async function reactivateActor(
+  prisma: PrismaClient,
+  input: { actorId: string; by: LifecycleActor; reason?: string | null },
+): Promise<User> {
+  if (input.by.actorKind !== 'HUMAN') {
+    throw createValidationError(ACTOR_LIFECYCLE_HUMAN_ONLY_MESSAGE);
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const actor = await tx.user.findUnique({ where: { id: input.actorId } });
+    if (!actor) {
+      throw createNotFoundError(ACTOR_NOT_FOUND_MESSAGE);
+    }
+    if (!actor.deactivatedAt) {
+      throw createValidationError(ACTOR_NOT_DEACTIVATED_MESSAGE);
+    }
+
+    const updated = await tx.user.update({
+      where: { id: actor.id },
+      data: { deactivatedAt: null },
+    });
+
+    await recordActorAudit(tx, {
+      action: 'reactivated',
+      after: { deactivatedAt: null },
+      before: { deactivatedAt: actor.deactivatedAt.toISOString() },
       byActorId: input.by.actorId,
       reason: input.reason ?? null,
       subjectId: actor.id,

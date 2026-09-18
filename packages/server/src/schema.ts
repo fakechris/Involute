@@ -86,7 +86,7 @@ import { WORK_EVENT_TYPES, enqueueWorkEvent } from './event-outbox.js';
 import { toWireState } from './agent-request-state.js';
 import { PRESENCE_COPY, agentRequestPresence } from './agent-request-presence.js';
 import { ACTOR_PRESENCE_COPY, actorPresence } from './actor-presence.js';
-import { deactivateActor, transferActorOwner } from './actor-lifecycle.js';
+import { deactivateActor, transferActorOwner, reactivateActor } from './actor-lifecycle.js';
 import { EVIDENCE_NOT_FOUND_MESSAGE, retractEvidence } from './evidence-retract.js';
 import { answerAgentRequestAsHuman } from './agent-request-service.js';
 import { provisionServiceActor } from './service-actors.js';
@@ -336,6 +336,8 @@ const typeDefs = /* GraphQL */ `
     agentCredentialCreate(input: AgentCredentialCreateInput!): AgentCredentialCreatePayload!
     """Deactivate an actor: keeps its id and history, revokes its credentials, ends its ability to act. Human-only."""
     actorDeactivate(id: String!, reason: String): ActorLifecyclePayload!
+    """Undo a deactivation. Human-only, recorded in ActorAudit. Revoked credentials stay revoked."""
+    actorReactivate(id: String!, reason: String): ActorLifecyclePayload!
     """A person retracts wrongly attached evidence: marked, audited, emitted — never deleted (INV-598)."""
     evidenceRetract(input: EvidenceRetractInput!): EvidenceRetractPayload!
     """A person completes a request addressed to them (INV-596): comment, answeredCommentId, COMPLETED, audit and event in one transaction. An ADMIN may answer for someone else with an overrideReason."""
@@ -523,6 +525,8 @@ const typeDefs = /* GraphQL */ `
     counts: AgentActivityCounts!
     """When and how this actor was created, and what it was granted."""
     credentials: [AgentCredentialSummary!]!
+    """Whether the viewer may deactivate, reactivate or re-own this actor (owner or ADMIN)."""
+    viewerCanManage: Boolean!
     """The actor's decision receipts — its own claims about what it knew and why, each bound to the audited write it explains. Not system-verified facts."""
     receipts: [AgentReceiptEntry!]!
     timeline: [AgentTimelineEntry!]!
@@ -1929,14 +1933,18 @@ const resolvers = {
       _parent: unknown,
       args: { handle: string },
       context: GraphQLContext,
-    ): Promise<AgentProfileResult | null> => {
+    ): Promise<(AgentProfileResult & { viewerCanManage: boolean }) | null> => {
       requireAuthentication(context);
       // Bounded by what the viewer may read: no private team's work, receipts
       // or credentials leak through an agent's handle (INV-597 follow-up).
-      return getAgentProfile(context.prisma, args.handle, {
+      const profile = await getAgentProfile(context.prisma, args.handle, {
         readableTeam: buildReadableTeamWhere(context),
         readableWork: buildReadableIssueWhere(context),
       });
+      if (!profile) return null;
+      const viewerCanManage = await assertCanManageActor(context.prisma, context, profile.actor.id)
+        .then(() => true, () => false);
+      return { ...profile, viewerCanManage };
     },
     agentCredentials: async (
       _parent: unknown,
@@ -2497,6 +2505,21 @@ const resolvers = {
         const viewer = requireAuthentication(context);
         await assertCanManageActor(context.prisma, context, args.id);
         const actor = await deactivateActor(context.prisma, {
+          actorId: args.id,
+          by: { actorId: viewer.id, actorKind: viewer.actorKind },
+          reason: args.reason ?? null,
+        });
+        return { actor, success: true as const };
+      }, { actor: null, success: false as const }),
+    actorReactivate: async (
+      _parent: unknown,
+      args: { id: string; reason?: string | null },
+      context: GraphQLContext,
+    ): Promise<{ actor: User | null; success: boolean }> =>
+      runMutation(async () => {
+        const viewer = requireAuthentication(context);
+        await assertCanManageActor(context.prisma, context, args.id);
+        const actor = await reactivateActor(context.prisma, {
           actorId: args.id,
           by: { actorId: viewer.id, actorKind: viewer.actorKind },
           reason: args.reason ?? null,

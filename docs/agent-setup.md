@@ -272,3 +272,8 @@ Enforced server-side, not just documented:
   MCP request.
 - If a token leaks, revoke first (`agent:revoke`), ask questions later —
   revocation is immediate and auditable per credential ID.
+- Retire an actor from its page (`/agents/<handle>` → Manage → Deactivate):
+  every credential is revoked, the id and history stay, and the change is
+  recorded in ActorAudit with your reason. Reactivate from the same place;
+  revoked credentials stay revoked, so issue a fresh one afterwards. Only the
+  accountable owner or an ADMIN sees these controls.

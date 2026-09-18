@@ -5139,3 +5139,24 @@ kbd {
 .decision-receipt__refs ul { margin: 2px 0 6px; padding-left: 16px; }
 .decision-receipt__refs blockquote { margin: 2px 0 0; padding-left: 8px; border-left: 2px solid var(--border-subtle); color: var(--fg-dim); white-space: pre-wrap; }
 .decision-receipt__unpreserved { color: var(--fg-dim); font-style: italic; }
+
+/* Agent lifecycle controls (INV-605) */
+.agent-lifecycle__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.agent-lifecycle__form {
+  display: grid;
+  gap: 10px;
+  max-width: 460px;
+  margin-top: 6px;
+}
+
+.agent-lifecycle__error {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--danger);
+}
