@@ -311,6 +311,9 @@ export function BoardPage() {
   );
   const [activeSavedBoardViewId, setActiveSavedBoardViewId] = useState('');
   const boardSearchInputRef = useRef<HTMLInputElement | null>(null);
+  // Set when a digit was typed on the board itself (INV-608); the search box
+  // may not be mounted yet, so the focus happens once the filter bar renders.
+  const pendingSearchFocusRef = useRef(false);
   const [inlineCreateGroupId, setInlineCreateGroupId] = useState<string | null>(null);
   const [filterBarVisible, setFilterBarVisible] = useState(false);
   const [collapsedColumns, setCollapsedColumns] = useState<Record<string, boolean>>(() => {
@@ -689,6 +692,18 @@ export function BoardPage() {
         event.preventDefault();
         boardSearchInputRef.current?.focus();
         boardSearchInputRef.current?.select();
+        return;
+      }
+
+      // A digit typed on the board starts a search by issue number (INV-608):
+      // the filter bar opens with that digit and the caret after it, so the
+      // rest of the number just keeps typing.
+      if (/^[0-9]$/.test(event.key) && !isBacklogView) {
+        event.preventDefault();
+        pendingSearchFocusRef.current = true;
+        setFilterBarVisible(true);
+        setBoardViewState((currentState) => ({ ...currentState, query: event.key }));
+        setActiveSavedBoardViewId('');
       }
     }
 
@@ -697,7 +712,21 @@ export function BoardPage() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [isBacklogView]);
+
+  useEffect(() => {
+    if (!pendingSearchFocusRef.current || !filterBarVisible) {
+      return;
+    }
+    const input = boardSearchInputRef.current;
+    if (!input) {
+      return;
+    }
+    pendingSearchFocusRef.current = false;
+    input.focus();
+    const end = input.value.length;
+    input.setSelectionRange(end, end);
+  }, [filterBarVisible, boardViewState.query]);
 
   useEffect(() => {
     if (!selectedTeam || collapsedColumnsInitialized.current) {

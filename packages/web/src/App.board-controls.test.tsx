@@ -184,6 +184,24 @@ describe('App board controls', () => {
     expect(searchInput).toHaveValue('');
   });
 
+  it('typing a digit on the board opens the filter bar and starts a search by number (INV-608)', async () => {
+    renderApp({ data: boardQueryResult, loading: false }, ['/']);
+
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Search board issues')).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: '1' });
+
+    const searchInput = await screen.findByLabelText('Search board issues');
+    expect(searchInput).toHaveValue('1');
+    expect(searchInput).toHaveFocus();
+
+    // Digits typed inside a field stay in that field.
+    fireEvent.change(searchInput, { target: { value: '' } });
+    fireEvent.keyDown(searchInput, { key: '2' });
+    expect(searchInput).toHaveValue('');
+  });
+
   it('applies bulk assignee and bulk label actions to the selected issues', async () => {
     const updateIssue = vi
       .fn()
