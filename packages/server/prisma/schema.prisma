@@ -960,3 +960,10 @@ model EvidenceVerification {
 
   @@index([evidenceId, createdAt])
 }
+
+// Provider-neutral experiment records. Not evidence verification or work state.
+model SemanticAdviceRecord {
+  key String @id
+  payload Json
+  createdAt DateTime @default(now())
+}

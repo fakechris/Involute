@@ -21,6 +21,10 @@
     "./import-pipeline": {
       "types": "./dist/import-pipeline.d.ts",
       "import": "./dist/import-pipeline.js"
+    },
+    "./semantic-advice": {
+      "types": "./dist/semantic-advice.d.ts",
+      "import": "./dist/semantic-advice.js"
     }
   },
   "scripts": {
