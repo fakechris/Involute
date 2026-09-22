@@ -21,7 +21,7 @@ export interface AdviceRequest extends EvaluationInput {
 export interface AdviceObservation {
   id: string;
   assignmentId: string;
-  assignedArm: 'control' | 'treatment';
+  assignedArm: 'control' | 'treatment' | 'unassigned';
   mode: ExperimentPolicy['mode'];
   configDigest: string;
   inputDigest: string;
@@ -130,7 +130,7 @@ export function createSemanticAdvice(options: AdviceOptions) {
     signal?.addEventListener('abort', onAbort, { once: true });
     if (signal?.aborted) controller.abort();
     active.add(controller);
-    let assigned = { id: '', arm: 'treatment' as 'control' | 'treatment' };
+    let assigned = { id: '', arm: 'unassigned' as 'control' | 'treatment' | 'unassigned' };
     let evaluation: Evaluation | null = null;
     let failure: Failure | null = null;
     let cacheHit = false;
@@ -150,7 +150,7 @@ export function createSemanticAdvice(options: AdviceOptions) {
       validateInput(r);
       if (!await bounded(current(binding))) throw new AdviceError('stale');
       assigned = await bounded(assignment(r, p));
-      if (epoch !== startEpoch) throw new AdviceError('stale');
+      if (epoch !== startEpoch || !await bounded(current(binding))) throw new AdviceError('stale');
       if (assigned.arm === 'control') evaluation = await bounded(baselineProvider.evaluate(r, baseline.model, controller.signal));
       else {
         if (!provider) throw new AdviceError('not_configured');
@@ -184,19 +184,59 @@ export function createSemanticAdvice(options: AdviceOptions) {
       actualModel: evaluation?.model ?? null, policy: p, binding, status: failure === 'stale' ? 'stale' : failure ? 'fallback' : 'evaluated',
       fallback: failure, cacheHit, elapsedMs: now() - started, evaluation, baseline,
     };
+    // Cleanup must not reuse the expired provider deadline. A failure is not permission
+    // to display the old baseline. Each recovery operation has its own bounded deadline.
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
+    active.delete(controller);
+    async function recover<T>(operation: Promise<T>): Promise<T> {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([operation, new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new AdviceError('journal_error')), config.limits.timeoutMs);
+        })]);
+      } finally { if (timer) clearTimeout(timer); }
+    }
+    async function stillCurrent(): Promise<boolean> {
+      try { return epoch === startEpoch && await recover(current(binding)) && epoch === startEpoch; }
+      catch { return false; }
+    }
+    let journaled = false;
     try {
-      await bounded(options.journal.put(`observation:${observation.id}`, { ...observation, invoked, instanceId }));
-      // The journal write is also an await: recheck authority after it, not just before it.
-      if (epoch !== startEpoch || !await bounded(current(binding))) failure = 'stale';
-    } catch (error) { failure = epoch !== startEpoch ? 'stale' : error instanceof AdviceError ? error.code : 'journal_error'; }
-    finally {
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
-      active.delete(controller);
+      // This is an execution observation, not a claim of visibility/current authority.
+      await recover(options.journal.put(`observation:${observation.id}`, { ...observation, invoked, instanceId }));
+      journaled = true;
+    } catch { if (failure !== 'stale') failure = 'journal_error'; }
+    if (!await stillCurrent()) failure = 'stale';
+    if (signal?.aborted && failure !== 'stale') failure = 'canceled';
+    observation.status = failure === 'stale' ? 'stale' : failure ? 'fallback' : 'evaluated';
+    observation.fallback = failure;
+    if (journaled) {
+      const proposedFailure = failure;
+      try {
+        await recover(options.journal.put(`resolution:${observation.id}`, {
+          status: observation.status, failure, epoch: startEpoch, assignmentId: assigned.id,
+          visibleProvider: failure || assigned.arm === 'control' || p.mode === 'shadow' ? 'baseline' : p.provider,
+        }));
+      } catch { if (failure !== 'stale') failure = 'journal_error'; journaled = false; }
+      if (!await stillCurrent()) failure = 'stale';
+      if (signal?.aborted && failure !== 'stale') failure = 'canceled';
+      if (failure !== proposedFailure) {
+        // Also supersede writes whose acknowledgement timed out: they may commit late.
+        try { await recover(options.journal.put(`invalidation:${observation.id}`, { reason: failure })); }
+        catch { journaled = false; }
+        // The invalidation already makes the proposal unusable regardless of its reason.
+        if (!await stillCurrent()) failure = 'stale';
+        if (signal?.aborted && failure !== 'stale') failure = 'canceled';
+      }
+    }
+    observation.status = failure === 'stale' ? 'stale' : failure ? 'fallback' : 'evaluated';
+    observation.fallback = failure;
+    if (failure !== 'stale' && journaled && assigned.id) {
+      localObservations.set(observation.id, observation);
+      while (localObservations.size > config.limits.cacheEntries) localObservations.delete(localObservations.keys().next().value!);
     }
     if (failure) return { status: failure === 'stale' ? 'stale' : 'fallback', visible: failure === 'stale' ? null : baseline, failure, observationId: observation.id };
-    localObservations.set(observation.id, observation);
-    while (localObservations.size > config.limits.cacheEntries) localObservations.delete(localObservations.keys().next().value!);
     const status = assigned.arm === 'control' ? 'control' : p.mode === 'shadow' ? 'shadow'
       : Object.values(evaluation!.judgments).every(x => x.value === null) ? 'abstained' : 'advice';
     return { status, visible: p.mode === 'shadow' || assigned.arm === 'control' ? baseline : evaluation!, observationId: observation.id };
@@ -209,7 +249,7 @@ export function createSemanticAdvice(options: AdviceOptions) {
     if (kind === 'feedback' && !await options.journal.get(`exposure:${hash([o.assignmentId, o.configDigest, actorId])}`)) return false;
     if (o.epoch !== epoch || !config.enabled) return false;
     const token = randomUUID();
-    const saved = await options.journal.put(`${kind}:${hash([o.assignmentId, o.configDigest, actorId])}`, { token, observationId: id, actorId, kind, value: value ?? null, at: now() });
+    const saved = await options.journal.put(`${kind}:${hash([o.assignmentId, o.configDigest, actorId])}`, { token, observationId: id, actorId, kind, value: value ?? null, at: now(), assignedArm: o.assignedArm, visibleProvider: o.fallback || o.assignedArm === 'control' ? 'baseline' : o.provider, fallback: o.fallback });
     return (saved as { token: string }).token === token;
   }
   return { configure, evaluate, recordInteraction };

@@ -39,6 +39,16 @@ describe('provider contracts', () => {
       if (name !== 'jev') expect(result.judgments.category?.uncertainty).toBeUndefined();
     });
   }
+  it('strips undeclared provider fields before caching or persistence', () => {
+    const result = structuredClone(input.baseline);
+    const noisy = { ...result, rawResponse: 'private', judgments: {
+      ...result.judgments, category: { ...result.judgments.category!, rationale: 'private',
+        uncertainty: { semantics: 'provider-score', confidence: 0.8, raw: 'private' } },
+    }, usage: { inputTokens: 3, outputTokens: 0, raw: 'private' } };
+    const normalized = validateEvaluation(noisy, input.checks);
+    expect(JSON.stringify(normalized)).not.toContain('private');
+    expect(normalized.judgments.category?.uncertainty?.confidence).toBe(0.8);
+  });
   it('maps typed checks, carries cancellation and does not forward baseline values', async () => {
     const fetcher = vi.fn(async () => Response.json(wire()));
     const s = signal();

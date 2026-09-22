@@ -41,7 +41,23 @@ export function validateEvaluation(value: unknown, checks: EvaluationInput['chec
       if (!Number.isSafeInteger(usage[key]) || Number(usage[key]) < 0) throw new AdviceError('invalid_response');
     }
   }
-  return structuredClone(result) as unknown as Evaluation;
+  return {
+    model: result.model,
+    judgments: Object.fromEntries(checks.map(check => {
+      const a = record(judgments[check.id]);
+      const u = a.uncertainty === undefined ? undefined : record(a.uncertainty);
+      return [check.id, { kind: check.kind, value: a.value as string | number | null,
+        ...(u ? { uncertainty: { semantics: u.semantics as string,
+          ...(u.confidence === undefined ? {} : { confidence: u.confidence as number }),
+          ...(u.distribution === undefined ? {} : { distribution: { ...u.distribution as Record<string, number> } }),
+        } } : {}),
+      }];
+    })),
+    ...(result.usage === undefined ? {} : { usage: {
+      inputTokens: record(result.usage).inputTokens as number,
+      outputTokens: record(result.usage).outputTokens as number,
+    } }),
+  };
 }
 export const baselineProvider: AdviceProvider = {
   id: 'baseline', capabilities: new Set(['selection', 'likelihood', 'rating']),

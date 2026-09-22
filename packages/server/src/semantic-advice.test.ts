@@ -105,6 +105,80 @@ describe('optional semantic advice', () => {
     const r = await pending; expect(r.failure).toBe('timeout'); expect(r.visible).toEqual(req().baseline);
     expect(observations(s.entries)[0]).toMatchObject({ assignedArm: 'treatment', fallback: 'timeout' });
   });
+  it('checks authorization again after durable assignment before sending input', async () => {
+    const s = setup(); const put = s.journal.put;
+    s.journal.put = async (key, value) => {
+      const saved = await put(key, value);
+      if (key.startsWith('assignment:')) s.isCurrent.mockResolvedValue(false);
+      return saved;
+    };
+    expect(await s.service.evaluate(req())).toMatchObject({ status: 'stale', visible: null });
+    expect(s.evaluate).not.toHaveBeenCalled();
+  });
+  it('never restores a stale baseline when journal persistence fails', async () => {
+    const s = setup(); s.isCurrent.mockResolvedValue(false);
+    s.journal.put = async () => { throw new Error('database unavailable'); };
+    expect(await s.service.evaluate(req())).toMatchObject({ status: 'stale', visible: null, failure: 'stale' });
+  });
+  it('rechecks revoked permission independently after the provider deadline', async () => {
+    vi.useFakeTimers(); const c = cfg(); c.limits.timeoutMs = 10;
+    const s = setup(c, vi.fn(() => new Promise<Evaluation>(() => {})));
+    const pending = s.service.evaluate(req()); await vi.advanceTimersByTimeAsync(1);
+    s.isCurrent.mockResolvedValue(false); await vi.advanceTimersByTimeAsync(20);
+    expect(await pending).toMatchObject({ status: 'stale', visible: null });
+  });
+  it('records a treatment fallback exposure without changing its assigned arm', async () => {
+    vi.useFakeTimers(); const c = cfg('ab'); c.limits.timeoutMs = 10;
+    const s = setup(c, vi.fn(() => new Promise<Evaluation>(() => {})));
+    const pending = s.service.evaluate(req()); await vi.advanceTimersByTimeAsync(20);
+    const result = await pending;
+    expect(await s.service.recordInteraction(result.observationId!, 'a1', 'exposure')).toBe(true);
+    const exposure = [...s.entries].find(([key]) => key.startsWith('exposure:'))?.[1];
+    expect(exposure).toMatchObject({ assignedArm: 'treatment', visibleProvider: 'baseline', fallback: 'timeout' });
+  });
+  it('holds concurrency capacity until an uncooperative timed-out request settles', async () => {
+    vi.useFakeTimers(); const c = cfg(); c.limits.timeoutMs = 10; c.limits.maxConcurrent = 1;
+    const s = setup(c, vi.fn(() => new Promise<Evaluation>(() => {})));
+    const pending = s.service.evaluate(req()); await vi.advanceTimersByTimeAsync(20); await pending;
+    expect((await s.service.evaluate(req())).failure).toBe('capacity');
+    expect(s.evaluate).toHaveBeenCalledTimes(1);
+  });
+  it.each(['observation:', 'resolution:'])('records authority loss during %s persistence', async prefix => {
+    const s = setup(); const put = s.journal.put;
+    s.journal.put = async (key, value) => {
+      const saved = await put(key, value);
+      if (key.startsWith(prefix)) s.isCurrent.mockResolvedValue(false);
+      return saved;
+    };
+    const result = await s.service.evaluate(req());
+    expect(result).toMatchObject({ status: 'stale', visible: null });
+    const final = s.entries.get(`${prefix === 'observation:' ? 'resolution' : 'invalidation'}:${result.observationId}`);
+    expect(final).toMatchObject(prefix === 'observation:' ? { status: 'stale' } : { reason: 'stale' });
+  });
+  it('honors cancellation during resolution persistence and invalidates the proposal', async () => {
+    const s = setup(); const put = s.journal.put; const abort = new AbortController();
+    s.journal.put = async (key, value) => {
+      const saved = await put(key, value);
+      if (key.startsWith('resolution:')) abort.abort();
+      return saved;
+    };
+    const result = await s.service.evaluate(req(), abort.signal);
+    expect(result).toMatchObject({ status: 'fallback', failure: 'canceled', visible: req().baseline });
+    expect(s.entries.get(`invalidation:${result.observationId}`)).toEqual({ reason: 'canceled' });
+  });
+  it('invalidates resolution persistence with an uncertain acknowledgement', async () => {
+    vi.useFakeTimers(); const c = cfg(); c.limits.timeoutMs = 10;
+    const s = setup(c); const put = s.journal.put;
+    s.journal.put = async (key, value) => {
+      const saved = await put(key, value);
+      return key.startsWith('resolution:') ? new Promise(() => {}) : saved;
+    };
+    const pending = s.service.evaluate(req()); await vi.advanceTimersByTimeAsync(20);
+    const result = await pending;
+    expect(result).toMatchObject({ status: 'fallback', failure: 'journal_error', visible: req().baseline });
+    expect(s.entries.get(`invalidation:${result.observationId}`)).toEqual({ reason: 'journal_error' });
+    expect(await s.service.recordInteraction(result.observationId!, 'a1', 'exposure')).toBe(false);
+  });
   it('rejects bad input before any remote call', async () => {
     const s = setup(); const r = req(); r.checks[0]!.instruction = '';
     expect((await s.service.evaluate(r)).failure).toBe('invalid_input'); expect(s.evaluate).not.toHaveBeenCalled();

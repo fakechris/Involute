@@ -79,7 +79,8 @@ team/repository/scenario. `configure` aborts in-flight evaluations, increments a
 local epoch, clears caches and invalidates outstanding exposure handles. Even a
 provider ignoring cancellation cannot publish its late result. A stale result
 has `visible: null`; the caller must discard the payload and refresh authoritative
-context. For timeout/unavailability the baseline remains visible. Do not persist
+context. For timeout/unavailability the baseline remains visible only after an
+independent current-authority check. Do not persist
 or display any response with status `stale` as a current suggestion.
 
 ## Experiment identity and records
@@ -92,11 +93,18 @@ changing allocation does not move existing units; to rerandomize, use a new
 Shadow and enabled assignments are separate from randomized A/B assignments.
 
 `SemanticAdviceRecord` stores immutable first-writer-wins definitions, assignments,
-observations and interactions. Observations keep the input digest and bindings,
+execution observations, resolutions, invalidations and interactions. Observations keep the input digest and bindings,
 baseline and evaluated judgments, actual/requested model, policy versions, usage,
 cache status, elapsed time and fallback reason. They do not store input state,
 credentials, error bodies, or generated rationales. This table is not trusted
-EvidenceVerification and does not participate in acceptance gates.
+EvidenceVerification and does not participate in acceptance gates. Provider output
+is normalized with an explicit field allowlist before caching or persistence.
+Execution observations describe the model attempt. Join the corresponding
+`resolution:<observationId>` and honor any `invalidation:<observationId>` before
+interpreting the proposed return disposition; a missing resolution is unknown.
+Resolutions are provisional, since journal failures may prevent recording a later
+invalidation. They never establish actual visibility. Only an explicit exposure
+event means the application reported displaying a result.
 
 A successful evaluation is not an exposure. After actually displaying a result,
 call `recordInteraction(observationId, actorId, 'exposure')`. Explicit feedback is
@@ -107,18 +115,23 @@ including across processes. Repeated feedback does not overwrite the original.
 Shadow, stale, evicted, or pre-restart handles cannot record exposure; refresh the
 advice before display. Observation handles are bounded per worker.
 
-Failures stay in the assigned arm. Analyze intent-to-treat separately from actual
+Authorized fallback results also accept exposure: the event retains the assigned
+arm and records `visibleProvider: baseline` with its failure reason. Failures stay
+in the assigned arm. Analyze intent-to-treat separately from actual
 provider execution, and keep shadow comparisons separate from user-facing A/B.
 Changing model/questions/calibration changes the configuration digest and records;
 never transfer a confidence threshold across providers without evaluation.
 
 ## Limits and provider replacement
 
-Default limits: 1500ms deadline, 4 concurrent evaluations, 64KB input, 32 checks,
+Default limits: 1500ms provider-path deadline, 4 concurrent provider requests, 64KB input, 32 checks,
 100 selection candidates, 60 remote attempts/minute, 200 cache entries and 30s TTL.
 They can be set under `limits` using the names in `AdviceConfig`. Limits and caches
 are per module/worker, not a distributed billing cap. Retries are deliberately not
-performed; a host adding them must account for the same deadline and budget.
+performed. Recovery journal writes and freshness checks each have a separate bounded
+deadline, so total response time can exceed the provider-path deadline. Requests
+that ignore cancellation retain their concurrency slot until they settle.
+A host adding retries must account for the same deadline and budget.
 Caches include authorized input and complete configuration; authorization is checked
 again even on cache hits.
 
