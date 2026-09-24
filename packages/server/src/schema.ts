@@ -108,6 +108,7 @@ import { suggestedBranchName } from './branch-name.js';
 import { createWorkLink, deleteWorkLink, listIncidentLinks } from './link-service.js';
 import { writeActorFromViewer } from './work-service.js';
 import { getUploadsDirectory } from './uploads.js';
+import { loadProjectWorkGraph, type ProjectWorkGraph } from './work-graph-view.js';
 import {
   findWorkByIdOrIdentifier,
   getWorkContext,
@@ -296,6 +297,12 @@ const typeDefs = /* GraphQL */ `
     cycle(id: String!): Cycle @deprecated(reason: "Use issue query with kind: MILESTONE instead.")
     workContext(id: String!): WorkContext
     readyWork(filter: ReadyWorkFilter, query: String): IssueConnection!
+    """
+    One project's work graph (INV-681): the nodes the project resolves to —
+    by PROJECT identifier/UUID or by repository, the same resolution the ready
+    queue uses — and every typed link touching them.
+    """
+    workGraph(project: String!, includeCandidates: Boolean): WorkGraph!
     candidateSummary(teamFilter: TeamFilter): CandidateSummary!
     projectSummary(teamFilter: TeamFilter): ProjectSummaryResult!
     bugSummary(teamFilter: TeamFilter): BugSummaryResult!
@@ -685,6 +692,24 @@ const typeDefs = /* GraphQL */ `
     evidence: [ReceiptReference!]!
     inputs: [ReceiptReference!]!
     createdAt: DateTime!
+  }
+
+  type WorkGraph {
+    root: Issue
+    repository: String
+    nodes: [Issue!]!
+    """Readable work outside the project that a project item links to."""
+    externalNodes: [Issue!]!
+    edges: [WorkGraphEdge!]!
+    """True when the project has more nodes than one read returns."""
+    truncated: Boolean!
+  }
+
+  type WorkGraphEdge {
+    id: ID!
+    type: WorkLinkType!
+    fromId: ID!
+    toId: ID!
   }
 
   type WorkContext {
@@ -1895,6 +1920,16 @@ const resolvers = {
       await assertCanReadTeam(context.prisma, context, work.teamId);
       return getWorkContext(context.prisma, work.id);
     },
+    workGraph: async (
+      _parent: unknown,
+      args: { project: string; includeCandidates?: boolean | null },
+      context: GraphQLContext,
+    ): Promise<ProjectWorkGraph> =>
+      loadProjectWorkGraph(
+        context.prisma,
+        { project: args.project, includeCandidates: args.includeCandidates ?? false },
+        buildReadableIssueWhere(context),
+      ),
     readyWork: async (
       _parent: unknown,
       args: { filter?: ListReadyWorkInput | null; query?: string | null },

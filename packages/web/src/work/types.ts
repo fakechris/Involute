@@ -1,4 +1,4 @@
-import type { UserSummary, WorkflowStateSummary } from '../board/types';
+import type { UserSummary, WorkflowStateSummary, WorkflowStateType } from '../board/types';
 
 export type CommitmentStatus = 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
 export type WorkKind = 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
@@ -54,21 +54,6 @@ export interface WorkLinkNode {
   type: WorkLinkType;
   from: WorkRef;
   to: WorkRef;
-}
-
-export interface GraphWorkNode {
-  id: string;
-  identifier: string;
-  title: string;
-  commitmentStatus: CommitmentStatus;
-  kind?: WorkKind | null;
-  repository?: string | null;
-  state: {
-    name: string;
-  };
-  links: {
-    nodes: WorkLinkNode[];
-  };
 }
 
 export interface WorkRunSummary {
@@ -294,25 +279,36 @@ export interface InReviewPageQueryVariables {
   } | null;
 }
 
-export interface WorkGraphPageQueryData {
-  issues: {
-    nodes: GraphWorkNode[];
-    pageInfo: {
-      endCursor: string | null;
-      hasNextPage: boolean;
-    };
+export interface WorkGraphNodeRecord {
+  id: string;
+  identifier: string;
+  title: string;
+  kind: WorkKind;
+  commitmentStatus: CommitmentStatus;
+  state: { id: string; name: string; type: WorkflowStateType };
+  assignee: { id: string; name: string | null } | null;
+}
+
+export interface ProjectWorkGraphQueryData {
+  workGraph: {
+    repository: string | null;
+    truncated: boolean;
+    root: { id: string; identifier: string; title: string } | null;
+    nodes: WorkGraphNodeRecord[];
+    externalNodes: WorkGraphNodeRecord[];
+    edges: Array<{ id: string; type: WorkLinkType; fromId: string; toId: string }>;
   };
 }
 
-export interface WorkGraphPageQueryVariables {
-  first: number;
-  after?: string;
-  filter?: {
-    team?: {
-      key?: {
-        eq: string;
-      };
-    };
+export interface ProjectWorkGraphQueryVariables {
+  project: string;
+  includeCandidates?: boolean;
+}
+
+export interface GraphProjectsQueryData {
+  projectSummary: {
+    totalCount: number;
+    projects: Array<{ repository: string; name: string; identifier: string | null; totalCount: number }>;
   };
 }
 
