@@ -51,6 +51,27 @@ const makeIssue = (overrides: Partial<IssueSummary> = {}): IssueSummary => ({
 });
 
 describe('IssueCard', () => {
+  it('marks a card blocked while committed blockers are still open and lists them on hover (INV-679)', () => {
+    const issue = makeIssue({
+      openBlockers: [
+        { id: 'issue-636', identifier: 'INV-636', title: 'Observation contract' },
+        { id: 'issue-637', identifier: 'INV-637', title: 'Result contract' },
+      ],
+    });
+
+    render(<IssueCard issue={issue} />);
+
+    const badge = screen.getByTestId('issue-blocked-issue-1');
+    expect(badge).toHaveTextContent('Blocked · 2');
+    expect(badge).toHaveAttribute('title', 'Blocked by INV-636 Observation contract, INV-637 Result contract');
+  });
+
+  it('shows no blocked marker once no open blocker remains', () => {
+    render(<IssueCard issue={makeIssue({ openBlockers: [] })} />);
+
+    expect(screen.queryByTestId('issue-blocked-issue-1')).not.toBeInTheDocument();
+  });
+
   it('passes stateId from issue.state.id to useSortable data', () => {
     const issue = makeIssue({ state: { id: 'state-progress', name: 'In Progress', type: 'STARTED', position: 2 } });
 

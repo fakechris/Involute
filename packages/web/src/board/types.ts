@@ -1,3 +1,5 @@
+import type { WorkLinkType } from '../work/types';
+
 export interface TeamSummary {
   id: string;
   key: string;
@@ -144,6 +146,11 @@ export interface IssueSummary {
     title: string;
     kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
   } | null;
+  /**
+   * Committed work that still blocks this item (neither Done nor Canceled) —
+   * the rule that keeps it out of the ready queue. Only the board reads it.
+   */
+  openBlockers?: Array<{ id: string; identifier: string; title: string }>;
   /** How this work got here; `actor` is null for internal/service writes (INV-573). */
   provenance?: {
     actor: UserSummary | null;
@@ -628,6 +635,8 @@ export interface ProjectIssuesQueryVariables {
 export interface WorkLinkMutationData {
   workLink: {
     success: boolean;
+    /** Why the server refused the link; null on success (INV-679). */
+    message?: string | null;
     link: {
       id: string;
       type: string;
@@ -647,6 +656,7 @@ export interface WorkLinkDeleteMutationData {
   workLinkDelete: {
     success: boolean;
     id: string | null;
+    message?: string | null;
   };
 }
 
@@ -744,3 +754,32 @@ export interface NotificationsMarkAllReadMutationData {
   };
 }
 
+
+export type { WorkLinkType };
+
+/** The other end of a typed link, as the Relations section shows it (INV-679). */
+export interface IssueRelationEnd {
+  id: string;
+  identifier: string;
+  title: string;
+  commitmentStatus?: 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
+  state?: { id: string; name: string; type: WorkflowStateType } | null;
+}
+
+export interface IssueRelationsQueryData {
+  issue: {
+    id: string;
+    links?: {
+      nodes: Array<{
+        id: string;
+        type: WorkLinkType;
+        from: IssueRelationEnd;
+        to: IssueRelationEnd;
+      }>;
+    };
+  } | null;
+}
+
+export interface IssueRelationsQueryVariables {
+  id: string;
+}

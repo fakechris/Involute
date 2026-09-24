@@ -112,6 +112,7 @@ import {
   findWorkByIdOrIdentifier,
   getWorkContext,
   listReadyWork,
+  OPEN_BLOCKER_LINK_WHERE,
   type ListReadyWorkInput,
   type WorkContextBundle,
 } from './context-service.js';
@@ -153,6 +154,8 @@ type IssueParent = Issue & {
   team?: TeamParent | null;
   project?: Project | null;
   cycle?: Cycle | null;
+  /** Present only when the list read batched `openBlockers`; each link carries its blocker. */
+  incomingLinks?: Array<WorkLink & { from?: Issue | null }> | null;
 };
 type WorkLinkParent = WorkLink & { from?: Issue | null; to?: Issue | null };
 type WorkClaimParent = WorkClaim & { actor?: User | null };
@@ -216,7 +219,12 @@ const BUG_TREND_WEEKS = 8;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function buildIssueListInclude(
-  options: { includeChildren?: boolean; includeComments?: boolean } = {},
+  options: {
+    includeChildren?: boolean;
+    includeComments?: boolean;
+    /** Readable-team filter for the blockers; set to batch `openBlockers` into the list read. */
+    openBlockers?: { readableWhere: Prisma.IssueWhereInput | undefined };
+  } = {},
 ): Prisma.IssueInclude {
   const include: Prisma.IssueInclude = {
     assignee: true,
@@ -240,6 +248,10 @@ function buildIssueListInclude(
     };
   }
 
+  if (options.openBlockers) {
+    include.incomingLinks = buildOpenBlockerLinkQuery(options.openBlockers.readableWhere);
+  }
+
   if (options.includeComments) {
     include.comments = {
       include: {
@@ -250,6 +262,16 @@ function buildIssueListInclude(
   }
 
   return include;
+}
+
+function buildOpenBlockerLinkQuery(readableWhere: Prisma.IssueWhereInput | undefined) {
+  return {
+    where: readableWhere
+      ? { ...OPEN_BLOCKER_LINK_WHERE, from: { ...OPEN_BLOCKER_LINK_WHERE.from, ...readableWhere } }
+      : OPEN_BLOCKER_LINK_WHERE,
+    include: { from: true },
+    orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }],
+  };
 }
 
 function buildIssueDetailInclude(): Prisma.IssueInclude {
@@ -623,6 +645,12 @@ const typeDefs = /* GraphQL */ `
     repository: String
     alias: String
     links(type: WorkLinkType): WorkLinkConnection!
+    """
+    Committed work that still blocks this item: incoming BLOCKS links whose
+    blocker is neither Done nor Canceled — the rule that keeps it out of the
+    ready queue. Batched when read through the issues connection (INV-679).
+    """
+    openBlockers: [Issue!]!
     claim: WorkClaimRecord
     comments(first: Int, after: String, orderBy: CommentOrderBy, rootsOnly: Boolean): CommentConnection!
     """
@@ -1393,11 +1421,15 @@ const typeDefs = /* GraphQL */ `
   type WorkLinkMutationPayload {
     success: Boolean!
     link: WorkLink
+    """Why the link was refused (unknown work, cycle, hierarchy rule); null on success."""
+    message: String
   }
 
   type WorkLinkDeletePayload {
     success: Boolean!
     id: String
+    """Why the removal was refused; null on success."""
+    message: String
   }
 
   type WorkCommitPayload {
@@ -1557,6 +1589,9 @@ const resolvers = {
         include: buildIssueListInclude({
           includeChildren: requestedIssueFields.has('children'),
           includeComments: requestedIssueFields.has('comments'),
+          ...(requestedIssueFields.has('openBlockers')
+            ? { openBlockers: { readableWhere: buildReadableIssueWhere(context) } }
+            : {}),
         }),
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: first + 1,
@@ -2254,8 +2289,8 @@ const resolvers = {
       _parent: unknown,
       args: { fromId: string; toId: string; type: WorkLinkType },
       context: GraphQLContext,
-    ): Promise<{ link: WorkLink | null; success: boolean }> =>
-      runMutation(async () => {
+    ): Promise<{ link: WorkLink | null; message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
         const from = await findWorkByIdOrIdentifier(context.prisma, args.fromId);
         if (!from) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
         const to = await findWorkByIdOrIdentifier(context.prisma, args.toId);
@@ -2274,8 +2309,8 @@ const resolvers = {
       _parent: unknown,
       args: { id: string },
       context: GraphQLContext,
-    ): Promise<{ id: string | null; success: boolean }> =>
-      runMutation(async () => {
+    ): Promise<{ id: string | null; message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
         const existing = await context.prisma.workLink.findUnique({
           where: { id: args.id },
           select: { fromId: true, toId: true },
@@ -3493,6 +3528,16 @@ const resolvers = {
     ): Promise<{ nodes: WorkLink[] }> => ({
       nodes: await listIncidentLinks(context.prisma, parent.id, args.type),
     }),
+    openBlockers: async (
+      parent: IssueParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<Issue[]> => {
+      if (parent.incomingLinks) return parent.incomingLinks.flatMap((link) => (link.from ? [link.from] : []));
+      const query = buildOpenBlockerLinkQuery(buildReadableIssueWhere(context));
+      const links = await context.prisma.workLink.findMany({ ...query, where: { ...query.where, toId: parent.id } });
+      return links.map((link) => link.from);
+    },
     claim: async (
       parent: IssueParent,
       _args: Record<string, never>,
@@ -4042,6 +4087,29 @@ async function runMutation<TResult extends { success: true }, TFallback extends 
       return fallback;
     }
 
+    throw error;
+  }
+}
+
+/**
+ * `runMutation`, but a refusal carries the exposed reason in `message` so a
+ * caller editing the work graph can say why (cycle, unknown work, hierarchy
+ * rule) instead of a bare `success: false` (INV-679).
+ */
+async function runMutationWithReason<TResult extends { success: true }, TFallback extends { success: false }>(
+  operation: () => Promise<TResult>,
+  fallback: TFallback,
+): Promise<TResult | (TFallback & { message: string | null })> {
+  try {
+    return await operation();
+  } catch (error) {
+    const exposedError = getExposedError(error);
+    if (exposedError?.extensions.code === 'FORBIDDEN') {
+      throw exposedError;
+    }
+    if (exposedError || isPrismaInvalidInputError(error)) {
+      return { ...fallback, message: exposedError?.message ?? null };
+    }
     throw error;
   }
 }

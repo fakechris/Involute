@@ -111,6 +111,11 @@ export const BOARD_PAGE_QUERY = gql`
           identifier
           title
         }
+        openBlockers {
+          id
+          identifier
+          title
+        }
         provenance {
           actorKind
           surface
@@ -774,6 +779,7 @@ export const WORK_LINK_MUTATION = gql`
   mutation WorkLink($fromId: String!, $toId: String!, $type: WorkLinkType!) {
     workLink(fromId: $fromId, toId: $toId, type: $type) {
       success
+      message
       link {
         id
         type
@@ -795,6 +801,7 @@ export const WORK_LINK_DELETE_MUTATION = gql`
     workLinkDelete(id: $id) {
       success
       id
+      message
     }
   }
 `;
@@ -1235,6 +1242,44 @@ export const AGENT_CREDENTIAL_REVOKE_MUTATION = gql`
   mutation AgentCredentialRevoke($id: String!) {
     agentCredentialRevoke(id: $id) {
       success
+    }
+  }
+`;
+
+// Typed links for the issue panel's Relations section (INV-679). Kept out of
+// the board query so opening the board does not load every card's links.
+export const ISSUE_RELATIONS_QUERY = gql`
+  query IssueRelations($id: String!) {
+    issue(id: $id) {
+      id
+      links {
+        nodes {
+          id
+          type
+          from {
+            id
+            identifier
+            title
+            commitmentStatus
+            state {
+              id
+              name
+              type
+            }
+          }
+          to {
+            id
+            identifier
+            title
+            commitmentStatus
+            state {
+              id
+              name
+              type
+            }
+          }
+        }
+      }
     }
   }
 `;
