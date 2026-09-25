@@ -388,3 +388,33 @@ export const ISSUE_SNOOZE_MUTATION = gql`
     }
   }
 `;
+
+// Timeline data for the /graph Timeline view (INV-682); fetched only when that
+// view is open, since it reads every item's audit trail.
+export const PROJECT_WORK_TIMELINE_QUERY = gql`
+  query ProjectWorkTimeline($project: String!, $includeCandidates: Boolean) {
+    workGraph(project: $project, includeCandidates: $includeCandidates) {
+      timeline {
+        workId
+        committedAt
+        startedAt
+        reviewAt
+        completedAt
+        canceledAt
+        history
+        transitions {
+          at
+          stateName
+          stateType
+        }
+      }
+      cycles {
+        id
+        name
+        number
+        startsAt
+        endsAt
+      }
+    }
+  }
+`;

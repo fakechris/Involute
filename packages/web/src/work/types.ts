@@ -368,3 +368,19 @@ export interface WorkReviewMutationVariables {
     runId?: string;
   };
 }
+
+export interface ProjectWorkTimelineQueryData {
+  workGraph: {
+    timeline: Array<{
+      workId: string;
+      committedAt: string | null;
+      startedAt: string | null;
+      reviewAt: string | null;
+      completedAt: string | null;
+      canceledAt: string | null;
+      history: 'FULL' | 'PARTIAL' | 'NONE';
+      transitions: Array<{ at: string; stateName: string; stateType: WorkflowStateType }>;
+    }>;
+    cycles: Array<{ id: string; name: string; number: number; startsAt: string; endsAt: string }>;
+  };
+}

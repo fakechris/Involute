@@ -23,6 +23,7 @@ import type {
   WorkContextPageQueryData,
   GraphProjectsQueryData,
   ProjectWorkGraphQueryData,
+  ProjectWorkTimelineQueryData,
 } from '../work/types';
 export type {
   AccessPageQueryData,
@@ -474,6 +475,7 @@ type QueryState = {
   fetchMore?: ReturnType<typeof vi.fn>;
   graphData?: ProjectWorkGraphQueryData;
   graphProjectsData?: GraphProjectsQueryData;
+  timelineData?: ProjectWorkTimelineQueryData;
   loading?: boolean;
   refetch?: ReturnType<typeof vi.fn>;
   relationsData?: IssueRelationsQueryData;
@@ -532,6 +534,15 @@ export function renderApp(
     if (source.includes('query GraphProjects')) {
       return {
         data: queryState.graphProjectsData ?? { projectSummary: { totalCount: 0, projects: [] } },
+        error: undefined,
+        loading: false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query ProjectWorkTimeline')) {
+      return {
+        data: options?.skip ? undefined : queryState.timelineData,
         error: undefined,
         loading: false,
         refetch: vi.fn().mockResolvedValue(undefined),

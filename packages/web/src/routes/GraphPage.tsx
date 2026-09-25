@@ -5,18 +5,21 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { readStoredTeamKey } from '../board/utils';
 import { DependencyGraph, type FocusHops } from '../components/graph/DependencyGraph';
 import { GraphOutline } from '../components/graph/GraphOutline';
+import { ProjectTimeline } from '../components/graph/ProjectTimeline';
 import { IcoGraph } from '../components/Icons';
 import { ProjectFilterCombobox, type AvailableProject } from '../components/ProjectFilterCombobox';
 import { buildOutline, type GraphNode } from '../work/graph-model';
-import { GRAPH_PROJECTS_QUERY, PROJECT_WORK_GRAPH_QUERY } from '../work/queries';
+import { defaultZoom, type TimelineEntry, type TimelineZoom } from '../work/timeline-model';
+import { GRAPH_PROJECTS_QUERY, PROJECT_WORK_GRAPH_QUERY, PROJECT_WORK_TIMELINE_QUERY } from '../work/queries';
 import type {
   GraphProjectsQueryData,
   ProjectWorkGraphQueryData,
   ProjectWorkGraphQueryVariables,
+  ProjectWorkTimelineQueryData,
   WorkGraphNodeRecord,
 } from '../work/types';
 
-type GraphView = 'outline' | 'dependencies';
+type GraphView = 'outline' | 'dependencies' | 'timeline';
 
 function toGraphNode(record: WorkGraphNodeRecord, external: boolean): GraphNode {
   return {
@@ -45,7 +48,11 @@ export function GraphPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const project = searchParams.get('project');
-  const view: GraphView = searchParams.get('view') === 'dependencies' ? 'dependencies' : 'outline';
+  const viewParam = searchParams.get('view');
+  const view: GraphView = viewParam === 'dependencies' || viewParam === 'timeline' ? viewParam : 'outline';
+  const scaleParam = searchParams.get('scale');
+  const chosenScale: TimelineZoom | null =
+    scaleParam === 'day' || scaleParam === 'week' || scaleParam === 'month' ? scaleParam : null;
   const focusId = searchParams.get('focus');
   const hops = parseHops(searchParams.get('hops'));
   const rollup = searchParams.get('rollup') === '1';
@@ -60,6 +67,32 @@ export function GraphPage() {
     variables: { project: project ?? '', includeCandidates },
     skip: !project,
   });
+  // The timeline reads every item's audit trail, so it is fetched only when shown.
+  const timelineQuery = useQuery<ProjectWorkTimelineQueryData, ProjectWorkGraphQueryVariables>(PROJECT_WORK_TIMELINE_QUERY, {
+    variables: { project: project ?? '', includeCandidates },
+    skip: !project || view !== 'timeline',
+  });
+  const timeline = useMemo(() => {
+    const data = timelineQuery.data?.workGraph;
+    const entries = new Map<string, TimelineEntry>(
+      (data?.timeline ?? []).map((entry) => [
+        entry.workId,
+        {
+          workId: entry.workId,
+          committedAt: entry.committedAt ? new Date(entry.committedAt) : null,
+          startedAt: entry.startedAt ? new Date(entry.startedAt) : null,
+          reviewAt: entry.reviewAt ? new Date(entry.reviewAt) : null,
+          completedAt: entry.completedAt ? new Date(entry.completedAt) : null,
+          canceledAt: entry.canceledAt ? new Date(entry.canceledAt) : null,
+          history: entry.history,
+          transitions: entry.transitions.map((transition) => ({ ...transition, at: new Date(transition.at) })),
+        },
+      ]),
+    );
+    const cycles = (data?.cycles ?? []).map((cycle) => ({ ...cycle, startsAt: new Date(cycle.startsAt), endsAt: new Date(cycle.endsAt) }));
+    return { entries, cycles, loaded: Boolean(data) };
+  }, [timelineQuery.data]);
+  const scale = chosenScale ?? defaultZoom([...timeline.entries.values()], new Date());
 
   const projects = useMemo<AvailableProject[]>(
     () =>
@@ -135,6 +168,14 @@ export function GraphPage() {
             >
               Dependencies{blockCount > 0 ? ` · ${blockCount}` : ''}
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={view === 'timeline'}
+              onClick={() => update({ view: 'timeline' })}
+            >
+              Timeline
+            </button>
           </div>
         ) : null}
         <div style={{ flex: 1 }} />
@@ -182,6 +223,27 @@ export function GraphPage() {
             ) : null}
             {view === 'outline' ? (
               <GraphOutline outline={outline} edges={edges} byId={byId} onOpen={openIssue} />
+            ) : view === 'timeline' ? (
+              timelineQuery.error ? (
+                <div className="empty-state" role="alert">
+                  <h3>Could not load the timeline</h3>
+                  <p>{timelineQuery.error.message}</p>
+                  <button type="button" onClick={() => void timelineQuery.refetch()}>Retry</button>
+                </div>
+              ) : !timeline.loaded ? (
+                <p className="observation-empty">Loading timeline…</p>
+              ) : (
+                <ProjectTimeline
+                  outline={outline}
+                  edges={edges}
+                  byId={byId}
+                  entries={timeline.entries}
+                  cycles={timeline.cycles}
+                  zoom={scale}
+                  onZoomChange={(value) => update({ scale: value })}
+                  onOpen={openIssue}
+                />
+              )
             ) : (
               <DependencyGraph
                 nodes={allNodes}
