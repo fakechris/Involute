@@ -2336,6 +2336,19 @@ kbd {
   flex-shrink: 0;
 }
 
+.issue-card__blocked-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 1.5px 5px;
+  border-radius: var(--r-1);
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent);
+}
+
 .issue-card__assignee-group {
   display: inline-flex;
   align-items: center;
@@ -3022,6 +3035,105 @@ kbd {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Relations (issue detail, INV-679) */
+
+.issue-relations {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.issue-relations__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.issue-relations__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.issue-relations__group-label {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.issue-relations__row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.issue-relations__row:last-child {
+  border-bottom: 0;
+}
+
+.issue-relations__row--open-blocker {
+  box-shadow: inset 2px 0 0 var(--warn);
+}
+
+.issue-relations__open.issue-children__row {
+  flex: 1;
+  min-width: 0;
+  grid-template-columns: 64px 14px 1fr auto;
+  border-bottom: 0;
+  background: none;
+  border-top: 0;
+  border-left: 0;
+  border-right: 0;
+  color: inherit;
+}
+
+.issue-relations__state {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.issue-relations__remove {
+  width: 28px;
+  border: 0;
+  background: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.issue-relations__remove:hover:not(:disabled) {
+  color: var(--danger);
+  background: var(--bg-hover);
+}
+
+.issue-relations__form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.issue-relations__form select,
+.issue-relations__form input {
+  width: auto;
+  height: 24px;
+  font-size: 13px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-1);
+  background: var(--bg-raised);
+  color: inherit;
+}
+
+.issue-relations__form input {
+  width: 110px;
+  font-family: var(--font-mono);
+}
+
+.issue-relations__error {
+  font-size: 13px;
+  color: var(--danger);
 }
 
 /* ============================================================== */

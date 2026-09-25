@@ -5,6 +5,7 @@ import { useQuery } from '@apollo/client/react';
 import type { CommentSummary, IssueSummary, TeamSummary, UserSummary } from '../board/types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ActorBadge } from './ActorBadge';
+import { IssueRelations } from './IssueRelations';
 import { RichTextEditor } from './RichTextEditor';
 import { AGENTS_QUERY } from '../board/queries';
 
@@ -424,6 +425,13 @@ export function IssueDetailDrawer({
                 </div>
               </div>
             ) : null}
+
+            <IssueRelations
+              key={activeIssue.id}
+              issueId={activeIssue.id}
+              disabled={savingState}
+              onOpen={(issueId) => navigate(`/issue/${issueId}`)}
+            />
 
             <div className="issue-panel__section">
               <span className="issue-panel__label">Activity</span>

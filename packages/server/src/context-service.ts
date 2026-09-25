@@ -20,6 +20,19 @@ import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
+/**
+ * An incoming BLOCKS link whose blocker still holds the work back: committed
+ * and neither Done nor Canceled. The ready queue excludes work with any such
+ * link, and the board shows the same set as the card's blocked marker (INV-679).
+ */
+export const OPEN_BLOCKER_LINK_WHERE = {
+  type: 'BLOCKS',
+  from: {
+    commitmentStatus: 'COMMITTED',
+    state: { type: { notIn: ['COMPLETED', 'CANCELED'] } },
+  },
+} satisfies Prisma.WorkLinkWhereInput;
+
 export const READY_EXCLUDED_STATE_NAMES = ['In Progress', 'In Review', 'Done', 'Canceled'] as const;
 export const READY_EXCLUDED_STATE_TYPES: WorkflowStateType[] = ['STARTED', 'REVIEW', 'COMPLETED', 'CANCELED'];
 export const READY_EXCLUDED_LABELS = ['blocked', 'needs-clarification'] as const;
@@ -277,13 +290,7 @@ function buildReadyWorkWhere(input: ListReadyWorkInput, options?: { allowStarted
     },
     {
       incomingLinks: {
-        none: {
-          type: 'BLOCKS',
-          from: {
-            commitmentStatus: 'COMMITTED',
-            state: { type: { notIn: ['COMPLETED', 'CANCELED'] } },
-          },
-        },
+        none: OPEN_BLOCKER_LINK_WHERE,
       },
     },
     {

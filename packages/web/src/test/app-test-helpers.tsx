@@ -15,6 +15,7 @@ import type {
   TeamMembershipRemoveMutationData,
   TeamMembershipUpsertMutationData,
   TeamUpdateAccessMutationData,
+  IssueRelationsQueryData,
   IssueUpdateMutationData,
 } from '../board/types';
 import type {
@@ -475,6 +476,7 @@ type QueryState = {
   graphProjectsData?: GraphProjectsQueryData;
   loading?: boolean;
   refetch?: ReturnType<typeof vi.fn>;
+  relationsData?: IssueRelationsQueryData;
   workContextData?: WorkContextPageQueryData;
 };
 
@@ -541,6 +543,16 @@ export function renderApp(
         data: options?.skip ? undefined : queryState.graphData,
         error: queryState.error,
         loading: queryState.loading ?? false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query IssueRelations')) {
+      const issueId = String(options?.variables?.id ?? '');
+      return {
+        data: queryState.relationsData ?? { issue: { id: issueId, links: { nodes: [] } } },
+        error: undefined,
+        loading: false,
         refetch: vi.fn().mockResolvedValue(undefined),
       };
     }

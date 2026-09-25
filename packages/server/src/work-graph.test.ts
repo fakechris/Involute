@@ -15,6 +15,10 @@ const TEST_AUTH_TOKEN = 'test-auth-token';
 
 let server: StartedServer;
 
+// Fixture identifiers must never collide within a run (the column is unique).
+let identifierSeq = 0;
+const nextIdentifierSuffix = () => String((identifierSeq += 1)).padStart(4, '0');
+
 describe('work graph GraphQL facade', () => {
   let team: Team;
   let viewer: User;
@@ -370,6 +374,88 @@ describe('work graph GraphQL facade', () => {
     expect(readyIds).toContain(parent.identifier);
     expect(readyIds).toContain(blockerCreate.body.data.issueCreate.issue.identifier);
     expect(readyIds).not.toContain(child.identifier);
+  });
+
+  it('lists only still-open committed blockers as openBlockers, in list and single reads alike', async () => {
+    const done = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'COMPLETED' } });
+    const make = (title: string, extra: Record<string, unknown> = {}) =>
+      prisma.issue.create({
+        data: {
+          identifier: `INV-9${nextIdentifierSuffix()}`,
+          title,
+          teamId: team.id,
+          stateId: ready.id,
+          ...extra,
+        },
+      });
+    const blocked = await make('Blocked work');
+    const openBlocker = await make('Open blocker');
+    const doneBlocker = await make('Done blocker', { stateId: done.id });
+    const candidateBlocker = await make('Candidate blocker', { commitmentStatus: 'CANDIDATE' });
+    const related = await make('Related only');
+    for (const from of [openBlocker, doneBlocker, candidateBlocker]) {
+      await createWorkLink(prisma, { fromId: from.id, toId: blocked.id, type: 'BLOCKS' });
+    }
+    await createWorkLink(prisma, { fromId: related.id, toId: blocked.id, type: 'RELATED_TO' });
+
+    const listResponse = await postGraphQL({
+      query: `
+        query Issues($first: Int!) {
+          issues(first: $first) { nodes { id openBlockers { id identifier } } }
+        }
+      `,
+      variables: { first: 50 },
+    });
+    expectGraphQLSuccess(listResponse);
+    const nodes = listResponse.body.data.issues.nodes as Array<{ id: string; openBlockers: Array<{ id: string }> }>;
+    expect(nodes.find((node) => node.id === blocked.id)?.openBlockers).toEqual([
+      { id: openBlocker.id, identifier: openBlocker.identifier },
+    ]);
+    expect(nodes.find((node) => node.id === openBlocker.id)?.openBlockers).toEqual([]);
+
+    const singleResponse = await postGraphQL({
+      query: `query Issue($id: String!) { issue(id: $id) { openBlockers { id } } }`,
+      variables: { id: blocked.id },
+    });
+    expectGraphQLSuccess(singleResponse);
+    expect(singleResponse.body.data.issue.openBlockers).toEqual([{ id: openBlocker.id }]);
+
+    await prisma.issue.update({ where: { id: openBlocker.id }, data: { stateId: done.id } });
+    const afterDone = await postGraphQL({
+      query: `query Issue($id: String!) { issue(id: $id) { openBlockers { id } } }`,
+      variables: { id: blocked.id },
+    });
+    expectGraphQLSuccess(afterDone);
+    expect(afterDone.body.data.issue.openBlockers).toEqual([]);
+  });
+
+  it('says why workLink refused instead of a bare success:false', async () => {
+    const make = (title: string) =>
+      prisma.issue.create({
+        data: { identifier: `INV-8${nextIdentifierSuffix()}`, title, teamId: team.id, stateId: ready.id },
+      });
+    const upstream = await make('Upstream');
+    const downstream = await make('Downstream');
+    await createWorkLink(prisma, { fromId: upstream.id, toId: downstream.id, type: 'BLOCKS' });
+    const mutation = `
+      mutation WorkLink($fromId: String!, $toId: String!) {
+        workLink(fromId: $fromId, toId: $toId, type: BLOCKS) { success message link { id } }
+      }
+    `;
+
+    const cycle = await postGraphQL({ query: mutation, variables: { fromId: downstream.id, toId: upstream.id } });
+    expectGraphQLSuccess(cycle);
+    expect(cycle.body.data.workLink).toMatchObject({ success: false, link: null });
+    expect(cycle.body.data.workLink.message).toEqual(expect.stringMatching(/cycle/i));
+
+    const unknown = await postGraphQL({ query: mutation, variables: { fromId: 'INV-99999', toId: upstream.id } });
+    expectGraphQLSuccess(unknown);
+    expect(unknown.body.data.workLink.success).toBe(false);
+    expect(unknown.body.data.workLink.message).toEqual(expect.any(String));
+
+    const ok = await postGraphQL({ query: mutation, variables: { fromId: downstream.identifier, toId: (await make('Third')).id } });
+    expectGraphQLSuccess(ok);
+    expect(ok.body.data.workLink).toMatchObject({ success: true, message: null });
   });
 
   it('proposes candidates, commits with a human owner, and lets an agent claim without taking assignee', async () => {
