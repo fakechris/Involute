@@ -86,6 +86,7 @@ export function IssueCard({
     disabled: !sortable,
   });
 
+  const openBlockers = issue.openBlockers ?? [];
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -170,6 +171,15 @@ export function IssueCard({
             {issue.identifier}
           </span>
           <div className="issue-card__header-tags">
+            {openBlockers.length > 0 ? (
+              <span
+                className="issue-card__blocked-badge"
+                title={`Blocked by ${openBlockers.map((blocker) => `${blocker.identifier} ${blocker.title}`).join(', ')}`}
+                data-testid={`issue-blocked-${issue.id}`}
+              >
+                Blocked{openBlockers.length > 1 ? ` · ${openBlockers.length}` : ''}
+              </span>
+            ) : null}
             {issue.repository ? (
               <span
                 role={onFilterProject ? 'button' : undefined}
