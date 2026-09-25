@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { App } from './App';
 import { apolloMocks, boardQueryResult, renderApp } from './test/app-test-helpers';
-import type { CandidatesPageQueryData, WorkContextPageQueryData, WorkGraphPageQueryData } from './work/types';
+import type { CandidatesPageQueryData, WorkContextPageQueryData } from './work/types';
 
 function documentSource(document: unknown): string {
   if (typeof document === 'string') {
@@ -56,87 +56,6 @@ const candidateQuery: CandidatesPageQueryData = {
         team: { id: 'team-1', key: 'INV' },
         assignee: null,
         state: { id: 'state-backlog', name: 'Backlog', type: 'BACKLOG', position: 0 },
-      },
-    ],
-    pageInfo: { endCursor: null, hasNextPage: false },
-  },
-};
-
-const graphQuery: WorkGraphPageQueryData = {
-  issues: {
-    nodes: [
-      {
-        id: 'issue-1',
-        identifier: 'INV-1',
-        title: 'Parent epic',
-        commitmentStatus: 'COMMITTED',
-        kind: 'PROJECT',
-        repository: 'fakechris/involute',
-        state: { name: 'Ready' },
-        links: {
-          nodes: [
-            {
-              id: 'link-contains',
-              type: 'CONTAINS',
-              from: { id: 'issue-1', identifier: 'INV-1', title: 'Parent epic', commitmentStatus: 'COMMITTED' },
-              to: { id: 'issue-2', identifier: 'INV-2', title: 'Child task', commitmentStatus: 'COMMITTED' },
-            },
-          ],
-        },
-      },
-      {
-        id: 'issue-2',
-        identifier: 'INV-2',
-        title: 'Child task',
-        commitmentStatus: 'COMMITTED',
-        kind: 'ISSUE',
-        repository: 'fakechris/involute',
-        state: { name: 'Ready' },
-        links: {
-          nodes: [
-            {
-              id: 'link-contains',
-              type: 'CONTAINS',
-              from: { id: 'issue-1', identifier: 'INV-1', title: 'Parent epic', commitmentStatus: 'COMMITTED' },
-              to: { id: 'issue-2', identifier: 'INV-2', title: 'Child task', commitmentStatus: 'COMMITTED' },
-            },
-            {
-              id: 'link-blocks',
-              type: 'BLOCKS',
-              from: { id: 'issue-3', identifier: 'INV-3', title: 'Blocker', commitmentStatus: 'COMMITTED' },
-              to: { id: 'issue-2', identifier: 'INV-2', title: 'Child task', commitmentStatus: 'COMMITTED' },
-            },
-          ],
-        },
-      },
-      {
-        id: 'issue-3',
-        identifier: 'INV-3',
-        title: 'Blocker',
-        commitmentStatus: 'COMMITTED',
-        kind: 'ISSUE',
-        repository: 'fakechris/involute',
-        state: { name: 'In Progress' },
-        links: {
-          nodes: [
-            {
-              id: 'link-blocks',
-              type: 'BLOCKS',
-              from: { id: 'issue-3', identifier: 'INV-3', title: 'Blocker', commitmentStatus: 'COMMITTED' },
-              to: { id: 'issue-2', identifier: 'INV-2', title: 'Child task', commitmentStatus: 'COMMITTED' },
-            },
-          ],
-        },
-      },
-      {
-        id: 'issue-4',
-        identifier: 'INV-4',
-        title: 'fakechris/lumenbox',
-        commitmentStatus: 'COMMITTED',
-        kind: 'PROJECT',
-        repository: 'fakechris/lumenbox',
-        state: { name: 'Ready' },
-        links: { nodes: [] },
       },
     ],
     pageInfo: { endCursor: null, hasNextPage: false },
@@ -302,29 +221,6 @@ describe('K6 observation UI', () => {
     });
   });
 
-  it('renders contains and blocks on the graph page', async () => {
-    renderApp({ data: boardQueryResult, graphData: graphQuery, loading: false }, ['/graph']);
-
-    expect(await screen.findByRole('heading', { name: 'Graph' })).toBeInTheDocument();
-    const contains = screen.getByRole('region', { name: 'Contains' });
-    expect(within(contains).getByRole('button', { name: 'INV-1' })).toBeInTheDocument();
-    expect(within(contains).getByRole('button', { name: 'INV-2' })).toBeInTheDocument();
-
-    const blocks = screen.getByRole('region', { name: 'Blocks' });
-    expect(within(blocks).getByRole('button', { name: 'INV-3' })).toBeInTheDocument();
-    expect(within(blocks).getByText('blocks')).toBeInTheDocument();
-  });
-
-  it('filters the graph view by project', async () => {
-    renderApp({ data: boardQueryResult, graphData: graphQuery, loading: false }, ['/graph?project=fakechris/involute']);
-
-    expect(await screen.findByRole('heading', { name: 'Graph' })).toBeInTheDocument();
-    expect(screen.getAllByText('fakechris/involute').length).toBeGreaterThan(0);
-    const contains = screen.getByRole('region', { name: 'Contains' });
-    expect(within(contains).getByRole('button', { name: 'INV-1' })).toBeInTheDocument();
-    expect(within(contains).getByRole('button', { name: 'INV-2' })).toBeInTheDocument();
-  });
-
   it('shows contract, runs, evidence, and audits on the work context page', async () => {
     const review = vi.fn().mockResolvedValue({
       data: {
@@ -403,27 +299,6 @@ describe('K6 observation UI', () => {
     await waitFor(() => expect(fetchMore).toHaveBeenCalledTimes(2));
   });
 
-  it('shows retry controls when graph pagination fails', async () => {
-    const fetchMore = vi.fn().mockRejectedValueOnce(new Error('network down')).mockResolvedValueOnce(undefined);
-    renderApp({
-      data: boardQueryResult,
-      fetchMore,
-      graphData: {
-        ...graphQuery,
-        issues: {
-          ...graphQuery.issues,
-          pageInfo: { endCursor: 'graph-cursor', hasNextPage: true },
-        },
-      },
-      loading: false,
-    }, ['/graph']);
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Load more' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load more graph nodes.');
-    fireEvent.click(screen.getByRole('button', { name: 'Retry loading more' }));
-    await waitFor(() => expect(fetchMore).toHaveBeenCalledTimes(2));
-  });
-
   it('does not report a failed context query as missing work', async () => {
     renderApp({ data: boardQueryResult, error: new Error('network down'), loading: false }, ['/work/issue-2']);
     expect(await screen.findByRole('heading', { name: 'Could not load work context' })).toBeInTheDocument();
@@ -431,7 +306,7 @@ describe('K6 observation UI', () => {
   });
 
   it('opens candidates and graph from keyboard shortcuts', async () => {
-    renderApp({ data: boardQueryResult, candidatesData: candidateQuery, graphData: graphQuery, loading: false }, ['/']);
+    renderApp({ data: boardQueryResult, candidatesData: candidateQuery, loading: false }, ['/']);
 
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
 

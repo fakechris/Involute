@@ -21,7 +21,8 @@ import type {
 import type {
   CandidatesPageQueryData,
   WorkContextPageQueryData,
-  WorkGraphPageQueryData,
+  GraphProjectsQueryData,
+  ProjectWorkGraphQueryData,
 } from '../work/types';
 export type {
   AccessPageQueryData,
@@ -471,7 +472,8 @@ type QueryState = {
   data?: BoardPageQueryData;
   error?: Error;
   fetchMore?: ReturnType<typeof vi.fn>;
-  graphData?: WorkGraphPageQueryData;
+  graphData?: ProjectWorkGraphQueryData;
+  graphProjectsData?: GraphProjectsQueryData;
   loading?: boolean;
   refetch?: ReturnType<typeof vi.fn>;
   relationsData?: IssueRelationsQueryData;
@@ -527,11 +529,19 @@ export function renderApp(
       };
     }
 
-    if (source.includes('query WorkGraphPage')) {
+    if (source.includes('query GraphProjects')) {
       return {
-        data: queryState.graphData ?? { issues: { nodes: [], pageInfo: { endCursor: null, hasNextPage: false } } },
+        data: queryState.graphProjectsData ?? { projectSummary: { totalCount: 0, projects: [] } },
+        error: undefined,
+        loading: false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query ProjectWorkGraph')) {
+      return {
+        data: options?.skip ? undefined : queryState.graphData,
         error: queryState.error,
-        fetchMore: queryState.fetchMore ?? vi.fn().mockResolvedValue(undefined),
         loading: queryState.loading ?? false,
         refetch: vi.fn().mockResolvedValue(undefined),
       };

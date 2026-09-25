@@ -115,41 +115,70 @@ export const IN_REVIEW_PAGE_QUERY = gql`
   }
 `;
 
-export const WORK_GRAPH_PAGE_QUERY = gql`
-  query WorkGraphPage($first: Int!, $after: String, $filter: IssueFilter) {
-    issues(first: $first, after: $after, filter: $filter) {
+// The /graph page (INV-681): pick a project, then read its whole work graph
+// in one request resolved server-side, instead of paging issues and
+// filtering them in the browser.
+export const GRAPH_PROJECTS_QUERY = gql`
+  query GraphProjects($teamFilter: TeamFilter) {
+    projectSummary(teamFilter: $teamFilter) {
+      totalCount
+      projects {
+        repository
+        name
+        identifier
+        totalCount
+      }
+    }
+  }
+`;
+
+export const PROJECT_WORK_GRAPH_QUERY = gql`
+  query ProjectWorkGraph($project: String!, $includeCandidates: Boolean) {
+    workGraph(project: $project, includeCandidates: $includeCandidates) {
+      repository
+      truncated
+      root {
+        id
+        identifier
+        title
+      }
       nodes {
         id
         identifier
         title
-        commitmentStatus
         kind
-        repository
+        commitmentStatus
         state {
+          id
+          name
+          type
+        }
+        assignee {
+          id
           name
         }
-        links {
-          nodes {
-            id
-            type
-            from {
-              id
-              identifier
-              title
-              commitmentStatus
-            }
-            to {
-              id
-              identifier
-              title
-              commitmentStatus
-            }
-          }
+      }
+      externalNodes {
+        id
+        identifier
+        title
+        kind
+        commitmentStatus
+        state {
+          id
+          name
+          type
+        }
+        assignee {
+          id
+          name
         }
       }
-      pageInfo {
-        hasNextPage
-        endCursor
+      edges {
+        id
+        type
+        fromId
+        toId
       }
     }
   }
