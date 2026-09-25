@@ -132,4 +132,14 @@ describe('project graph page (INV-681)', () => {
     expect(within(graph).queryByRole('button', { name: /INV-638/ })).not.toBeInTheDocument();
     expect(container.querySelectorAll('[data-edge-kind]')).toHaveLength(1);
   });
+
+  it('says when every dependency stays inside one milestone instead of claiming there are none', async () => {
+    const insideOnly: ProjectWorkGraphQueryData = {
+      workGraph: { ...graphData.workGraph, externalNodes: [], edges: graphData.workGraph.edges.filter((edge) => edge.id !== 'b3') },
+    };
+    renderApp(App, { data: boardQueryResult, loading: false, graphData: insideOnly, graphProjectsData: projectsData }, [
+      '/graph?project=fakechris/lumenbox&view=dependencies&rollup=1',
+    ]);
+    expect(await screen.findByRole('heading', { name: 'No dependencies between milestones' })).toBeInTheDocument();
+  });
 });

@@ -1,5 +1,6 @@
 import type { Issue, Prisma, PrismaClient, WorkflowState, User, WorkLinkType } from '@prisma/client';
 
+import { PROJECT_SCOPE_NOT_FOUND_MESSAGE } from './errors.js';
 import { resolveProjectScope } from './project-scope.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
@@ -33,6 +34,28 @@ export interface ProjectWorkGraph {
 const NODE_INCLUDE = { state: true, assignee: true } as const;
 
 /**
+ * `owner/name` is a repository. Anything else is tried as a PROJECT
+ * identifier or UUID first and, if no such PROJECT exists, as a bare
+ * repository value — repository is free text, and the project chooser lists
+ * whatever values exist.
+ */
+async function resolveSelector(
+  prisma: DatabaseClient,
+  project: string,
+  readableWhere: Prisma.IssueWhereInput | undefined,
+) {
+  if (project.includes('/')) return resolveProjectScope(prisma, { repository: project }, readableWhere);
+  try {
+    return await resolveProjectScope(prisma, { projectId: project }, readableWhere);
+  } catch (error) {
+    if (error instanceof Error && error.message === PROJECT_SCOPE_NOT_FOUND_MESSAGE) {
+      return resolveProjectScope(prisma, { repository: project }, readableWhere);
+    }
+    throw error;
+  }
+}
+
+/**
  * One project's work graph for the /graph view (INV-681): every node the
  * project resolves to plus every typed link touching them. Resolution is the
  * same `resolveProjectScope` the ready queue uses, so the picture and the
@@ -44,11 +67,7 @@ export async function loadProjectWorkGraph(
   readableWhere?: Prisma.IssueWhereInput,
 ): Promise<ProjectWorkGraph> {
   const project = input.project.trim();
-  const scope = await resolveProjectScope(
-    prisma,
-    project.includes('/') ? { repository: project } : { projectId: project },
-    readableWhere,
-  );
+  const scope = await resolveSelector(prisma, project, readableWhere);
   if (!scope) {
     return { root: null, repository: null, nodes: [], externalNodes: [], edges: [], truncated: false };
   }

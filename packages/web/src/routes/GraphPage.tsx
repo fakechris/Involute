@@ -167,9 +167,9 @@ export function GraphPage() {
             <button type="button" onClick={() => void graphQuery.refetch()}>Retry</button>
           </div>
         ) : graphQuery.loading && !graph ? (
-          <p className="observation-empty">Loading graph…</p>
+          <p className="observation-empty" role="status">Loading graph…</p>
         ) : graph && nodes.length === 0 ? (
-          <div className="empty-state">
+          <div className="empty-state" role="status">
             <h3>No work in {project}</h3>
             <p>Nothing committed resolves to this project{includeCandidates ? ', including candidates' : ''}.</p>
           </div>

@@ -106,9 +106,19 @@ describe('workGraph project view (INV-681)', () => {
       .toContain(candidate.identifier);
   });
 
-  it('errors on an unknown PROJECT identifier; a bare repository with no work is just empty', async () => {
+  it('resolves a bare repository value that has no owner/ prefix', async () => {
+    const loose = await make('Loose work', { repository: 'involute' });
+    const response = await postGraphQL({ query: WORK_GRAPH_QUERY, variables: { project: 'involute' } });
+    expectGraphQLSuccess(response);
+    expect(response.body.data.workGraph.nodes).toEqual([
+      expect.objectContaining({ identifier: loose.identifier }),
+    ]);
+  });
+
+  it('an unknown selector resolves as a repository; one with no work is just empty', async () => {
     const unknown = await postGraphQL({ query: WORK_GRAPH_QUERY, variables: { project: 'INV-99999' } });
-    expect(unknown.body.errors?.[0]?.message).toBeTruthy();
+    expectGraphQLSuccess(unknown);
+    expect(unknown.body.data.workGraph).toMatchObject({ root: null, nodes: [] });
 
     const empty = await postGraphQL({ query: WORK_GRAPH_QUERY, variables: { project: 'acme/missing' } });
     expectGraphQLSuccess(empty);
