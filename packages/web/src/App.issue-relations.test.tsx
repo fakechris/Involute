@@ -142,4 +142,23 @@ describe('issue relations in the detail drawer (INV-679)', () => {
 
     await waitFor(() => expect(workLinkDelete).toHaveBeenCalledWith({ variables: { id: 'link-blocking' } }));
   });
+
+  it('starts each issue with a fresh relation form, so a typed target cannot carry over', async () => {
+    window.localStorage.setItem('involute.activeTeamKey', 'INV');
+    window.localStorage.setItem(
+      'involute.board.viewState.INV',
+      JSON.stringify({ sortField: 'updatedAt', sortDirection: 'asc' }),
+    );
+    renderApp(App, { data: boardQueryResult, loading: false, relationsData }, ['/']);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+    const relations = within(drawer).getByLabelText('Relations');
+
+    fireEvent.click(within(relations).getByRole('button', { name: 'Add relation' }));
+    fireEvent.change(within(relations).getByLabelText('Related issue identifier'), { target: { value: 'INV-42' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Next issue' }));
+
+    await waitFor(() => expect(within(drawer).getByLabelText('Issue title')).not.toHaveValue('Backlog item'));
+    expect(within(drawer).queryByLabelText('Related issue identifier')).not.toBeInTheDocument();
+  });
 });

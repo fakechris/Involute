@@ -15,6 +15,10 @@ const TEST_AUTH_TOKEN = 'test-auth-token';
 
 let server: StartedServer;
 
+// Fixture identifiers must never collide within a run (the column is unique).
+let identifierSeq = 0;
+const nextIdentifierSuffix = () => String((identifierSeq += 1)).padStart(4, '0');
+
 describe('work graph GraphQL facade', () => {
   let team: Team;
   let viewer: User;
@@ -377,7 +381,7 @@ describe('work graph GraphQL facade', () => {
     const make = (title: string, extra: Record<string, unknown> = {}) =>
       prisma.issue.create({
         data: {
-          identifier: `INV-${900 + title.length}${Math.floor(Math.random() * 1000)}`,
+          identifier: `INV-9${nextIdentifierSuffix()}`,
           title,
           teamId: team.id,
           stateId: ready.id,
@@ -428,7 +432,7 @@ describe('work graph GraphQL facade', () => {
   it('says why workLink refused instead of a bare success:false', async () => {
     const make = (title: string) =>
       prisma.issue.create({
-        data: { identifier: `INV-${800 + title.length}${Math.floor(Math.random() * 1000)}`, title, teamId: team.id, stateId: ready.id },
+        data: { identifier: `INV-8${nextIdentifierSuffix()}`, title, teamId: team.id, stateId: ready.id },
       });
     const upstream = await make('Upstream');
     const downstream = await make('Downstream');

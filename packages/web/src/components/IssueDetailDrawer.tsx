@@ -427,6 +427,7 @@ export function IssueDetailDrawer({
             ) : null}
 
             <IssueRelations
+              key={activeIssue.id}
               issueId={activeIssue.id}
               disabled={savingState}
               onOpen={(issueId) => navigate(`/issue/${issueId}`)}
