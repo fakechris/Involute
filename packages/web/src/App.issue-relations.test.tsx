@@ -161,4 +161,11 @@ describe('issue relations in the detail drawer (INV-679)', () => {
     await waitFor(() => expect(within(drawer).getByLabelText('Issue title')).not.toHaveValue('Backlog item'));
     expect(within(drawer).queryByLabelText('Related issue identifier')).not.toBeInTheDocument();
   });
+
+  it('shows the same relations on the full issue page', async () => {
+    renderApp(App, { data: boardQueryResult, loading: false, relationsData }, ['/issue/issue-2']);
+    const relations = await screen.findByLabelText('Relations');
+    expect(within(relations).getByRole('list', { name: 'Blocked by' })).toHaveTextContent('INV-636');
+    expect(within(relations).getByRole('button', { name: 'Add relation' })).toBeInTheDocument();
+  });
 });

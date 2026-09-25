@@ -38,6 +38,7 @@ import type {
   CyclesQueryVariables,
 } from '../board/types';
 import { ActorBadge } from '../components/ActorBadge';
+import { IssueRelations } from '../components/IssueRelations';
 import { mergeIssueWithPreservedComments } from '../board/utils';
 import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
@@ -804,6 +805,9 @@ export function IssuePage() {
                 </div>
               </div>
             ) : null}
+
+            {/* Typed links: blockers, related, duplicates (INV-679). Same section as the board drawer. */}
+            <IssueRelations key={activeIssue.id} issueId={activeIssue.id} onOpen={(issueId) => navigate(`/issue/${issueId}`)} />
 
             {/* Requests to agents, grouped by hand-off chain (INV-589/593/597) */}
             {(activeIssue.agentRequests ?? []).length > 0 ? (

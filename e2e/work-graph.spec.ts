@@ -146,6 +146,10 @@ test.describe('work graph acceptance', () => {
     await expect(relations.getByRole('list', { name: 'Related' })).toContainText(other.identifier);
     await relations.getByRole('button', { name: `Remove related ${other.identifier}` }).click();
     await expect(relations.getByRole('list', { name: 'Related' })).toHaveCount(0);
+
+    // The full issue page (where the graph's "Open issue" lands) shows the same section.
+    await page.goto(`/issue/${downstream.id}`);
+    await expect(page.getByLabel('Relations').getByRole('list', { name: 'Blocked by' })).toContainText(upstream.identifier);
   });
 
   test('graph outline, dependency view and timeline render the project', async ({ page }) => {
