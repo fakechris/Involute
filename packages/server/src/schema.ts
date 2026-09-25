@@ -109,6 +109,7 @@ import { createWorkLink, deleteWorkLink, listIncidentLinks } from './link-servic
 import { writeActorFromViewer } from './work-service.js';
 import { getUploadsDirectory } from './uploads.js';
 import { loadProjectWorkGraph, type ProjectWorkGraph } from './work-graph-view.js';
+import { loadWorkTimelines } from './work-timeline.js';
 import {
   findWorkByIdOrIdentifier,
   getWorkContext,
@@ -731,6 +732,40 @@ const typeDefs = /* GraphQL */ `
     edges: [WorkGraphEdge!]!
     """True when the project has more nodes than one read returns."""
     truncated: Boolean!
+    """
+    Each in-project node's actual path through the workflow, derived from its
+    audit trail (INV-682). Computed only when asked for.
+    """
+    timeline: [WorkTimelineEntry!]!
+    """The team's cycles, for the timeline's cycle band."""
+    cycles: [Cycle!]!
+  }
+
+  enum WorkHistoryCompleteness {
+    FULL
+    PARTIAL
+    NONE
+  }
+
+  type WorkStateTransition {
+    at: DateTime!
+    stateId: ID!
+    stateName: String!
+    stateType: WorkflowStateType!
+  }
+
+  type WorkTimelineEntry {
+    workId: ID!
+    committedAt: DateTime
+    """First entry into In Progress, In Review or Done."""
+    startedAt: DateTime
+    reviewAt: DateTime
+    """Entry into the current Done spell; null once reopened."""
+    completedAt: DateTime
+    canceledAt: DateTime
+    transitions: [WorkStateTransition!]!
+    """FULL when auditing covers the whole life; PARTIAL when it began later; NONE when there is no trail."""
+    history: WorkHistoryCompleteness!
   }
 
   type WorkGraphEdge {
@@ -3351,6 +3386,24 @@ const resolvers = {
       context.prisma.user.findUniqueOrThrow({
         where: { id: parent.actorId },
       }),
+  },
+  WorkGraph: {
+    timeline: (parent: ProjectWorkGraph, _args: Record<string, never>, context: GraphQLContext) =>
+      loadWorkTimelines(
+        context.prisma,
+        parent.nodes.map((node) => ({
+          id: node.id,
+          stateId: node.stateId,
+          commitmentStatus: node.commitmentStatus,
+          updatedAt: node.updatedAt,
+        })),
+      ),
+    cycles: (parent: ProjectWorkGraph, _args: Record<string, never>, context: GraphQLContext) => {
+      const teamId = parent.root?.teamId ?? parent.nodes[0]?.teamId;
+      return teamId
+        ? context.prisma.cycle.findMany({ where: { teamId }, orderBy: [{ startsAt: 'asc' }, { id: 'asc' }] })
+        : [];
+    },
   },
   WorkLink: {
     from: async (

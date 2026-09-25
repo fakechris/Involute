@@ -115,6 +115,49 @@ describe('workGraph project view (INV-681)', () => {
     ]);
   });
 
+  it('derives each item\'s timeline from real audited state changes', async () => {
+    await make('acme/time', { kind: 'PROJECT', repository: 'acme/time' });
+    const progress = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'STARTED' } });
+    const done = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'COMPLETED' } });
+    const created = await postGraphQL({
+      query: `mutation($input: IssueCreateInput!) { issueCreate(input: $input) { issue { id } } }`,
+      variables: { input: { teamId: team.id, title: 'Tracked', stateId: ready.id, repository: 'acme/time' } },
+    });
+    expectGraphQLSuccess(created);
+    const tracked = created.body.data.issueCreate.issue.id as string;
+    for (const stateId of [progress.id, done.id]) {
+      const moved = await postGraphQL({
+        query: `mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success } }`,
+        variables: { id: tracked, input: { stateId } },
+      });
+      expectGraphQLSuccess(moved);
+    }
+    const imported = await make('Imported without audit', { repository: 'acme/time', stateId: done.id });
+
+    const response = await postGraphQL({
+      query: `
+        query($project: String!) {
+          workGraph(project: $project) {
+            timeline { workId history startedAt completedAt transitions { stateType } }
+            cycles { id }
+          }
+        }
+      `,
+      variables: { project: 'acme/time' },
+    });
+    expectGraphQLSuccess(response);
+    const timeline = response.body.data.workGraph.timeline as Array<{
+      workId: string; history: string; startedAt: string | null; completedAt: string | null; transitions: Array<{ stateType: string }>;
+    }>;
+    const trackedEntry = timeline.find((entry) => entry.workId === tracked)!;
+    expect(trackedEntry.history).toBe('FULL');
+    expect(trackedEntry.transitions.map((transition) => transition.stateType)).toEqual(['UNSTARTED', 'STARTED', 'COMPLETED']);
+    expect(trackedEntry.startedAt).not.toBeNull();
+    expect(new Date(trackedEntry.completedAt!).getTime()).toBeGreaterThanOrEqual(new Date(trackedEntry.startedAt!).getTime());
+    expect(timeline.find((entry) => entry.workId === imported.id)).toMatchObject({ history: 'NONE', completedAt: null });
+    expect(response.body.data.workGraph.cycles).toEqual([]);
+  });
+
   it('an unknown selector resolves as a repository; one with no work is just empty', async () => {
     const unknown = await postGraphQL({ query: WORK_GRAPH_QUERY, variables: { project: 'INV-99999' } });
     expectGraphQLSuccess(unknown);

@@ -38,6 +38,12 @@ const AGENT_DESCRIPTION = [
 ].join('\n');
 
 describe('agent profile is bounded by what the viewer may read (INV-597 follow-up)', () => {
+  // Start from a known database rather than whatever the previous test file
+  // left behind; this case needs the seeded admin to exist.
+  beforeEach(async () => {
+    await resetAndSeed(prisma);
+  });
+
   it('a viewer outside a private team sees none of the agent\'s work, receipts or credentials there', async () => {
     const { buildReadableIssueWhere, buildReadableTeamWhere } = await import('./access-control.ts');
     const { proposeWork } = await import('./claim-service.ts');

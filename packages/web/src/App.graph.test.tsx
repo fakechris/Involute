@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { boardQueryResult, renderApp } from './test/app-test-helpers';
 import { App } from './App';
-import type { GraphProjectsQueryData, ProjectWorkGraphQueryData, WorkGraphNodeRecord } from './work/types';
+import type { GraphProjectsQueryData, ProjectWorkGraphQueryData, ProjectWorkTimelineQueryData, WorkGraphNodeRecord } from './work/types';
 
 const states = {
   ready: { id: 's-ready', name: 'Ready', type: 'UNSTARTED' as const },
@@ -51,8 +51,30 @@ const graphData: ProjectWorkGraphQueryData = {
   },
 };
 
+const iso = (day: number) => new Date(Date.UTC(2026, 8, day)).toISOString();
+const transition = (day: number, stateType: 'UNSTARTED' | 'STARTED' | 'REVIEW' | 'COMPLETED', stateName: string) => ({ at: iso(day), stateType, stateName });
+
+const timelineData: ProjectWorkTimelineQueryData = {
+  workGraph: {
+    timeline: [
+      {
+        workId: 'inv-636', committedAt: iso(2), startedAt: iso(4), reviewAt: null, completedAt: null, canceledAt: null, history: 'FULL',
+        transitions: [transition(2, 'UNSTARTED', 'Ready'), transition(4, 'STARTED', 'In Progress')],
+      },
+      {
+        workId: 'inv-637', committedAt: iso(2), startedAt: iso(3), reviewAt: iso(6), completedAt: iso(8), canceledAt: null, history: 'FULL',
+        transitions: [transition(2, 'UNSTARTED', 'Ready'), transition(3, 'STARTED', 'In Progress'), transition(6, 'REVIEW', 'In Review'), transition(8, 'COMPLETED', 'Done')],
+      },
+      {
+        workId: 'inv-638', committedAt: null, startedAt: null, reviewAt: null, completedAt: null, canceledAt: null, history: 'NONE', transitions: [],
+      },
+    ],
+    cycles: [{ id: 'cy1', name: 'Sprint 12', number: 12, startsAt: iso(1), endsAt: iso(14) }],
+  },
+};
+
 function renderGraph(path: string) {
-  return renderApp(App, { data: boardQueryResult, loading: false, graphData, graphProjectsData: projectsData }, [path]);
+  return renderApp(App, { data: boardQueryResult, loading: false, graphData, graphProjectsData: projectsData, timelineData }, [path]);
 }
 
 describe('project graph page (INV-681)', () => {
@@ -141,5 +163,31 @@ describe('project graph page (INV-681)', () => {
       '/graph?project=fakechris/lumenbox&view=dependencies&rollup=1',
     ]);
     expect(await screen.findByRole('heading', { name: 'No dependencies between milestones' })).toBeInTheDocument();
+  });
+
+  it('draws each item\'s recorded path on the timeline without inventing dates', async () => {
+    const { container } = renderGraph('/graph?project=fakechris/lumenbox&view=timeline&scale=day');
+    const timeline = await screen.findByRole('region', { name: 'Project timeline' });
+
+    const done = container.querySelector('[data-work-id="inv-637"]')!;
+    expect(done.querySelectorAll('.timeline-bar')).toHaveLength(3); // waiting, in progress, in review
+    expect(done.querySelectorAll('.timeline-dot')).toHaveLength(1);
+
+    const open = container.querySelector('[data-work-id="inv-636"]')!;
+    expect(open.querySelectorAll('.timeline-dot')).toHaveLength(0);
+
+    expect(container.querySelector('[data-work-id="inv-638"]')).toHaveTextContent('no recorded history');
+    expect(within(timeline).getByText('Sprint 12')).toBeInTheDocument();
+    expect(within(timeline).getByText(/done 1/)).toBeInTheDocument();
+
+    // The milestone spans its leaves; one of its three is done.
+    expect(container.querySelector('[data-work-id="inv-141"] .timeline-span')).toHaveAttribute('title', expect.stringContaining('1/3 done'));
+  });
+
+  it('keeps the chosen scale in the URL', async () => {
+    renderGraph('/graph?project=fakechris/lumenbox&view=timeline');
+    await screen.findByRole('region', { name: 'Project timeline' });
+    fireEvent.change(screen.getByLabelText('Timeline scale'), { target: { value: 'month' } });
+    expect(await screen.findByDisplayValue('Months')).toBeInTheDocument();
   });
 });
