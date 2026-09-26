@@ -138,6 +138,13 @@ export function createApolloClient() {
   return new ApolloClient({
     cache: new InMemoryCache(),
     link: authLink.concat(httpLink),
+    defaultOptions: {
+      // Work changes behind the reader's back (agents propose, claim and
+      // report), so opening a page must not show only what was cached on the
+      // last visit: show the cache at once and fetch the current state. While
+      // the page stays open, cache updates do not trigger further requests.
+      watchQuery: { fetchPolicy: 'cache-and-network', nextFetchPolicy: 'cache-first' },
+    },
   });
 }
 
