@@ -50,6 +50,6 @@ export function isTypeLabel(name: string): boolean {
 }
 
 export function assertSingleType(labels: Array<{ name: string }>): void {
-  const types = new Set(labels.filter((label) => isTypeLabel(label.name)).map((label) => label.name.trim().toLowerCase()));
-  if (types.size > 1) throw createValidationError(ISSUE_TYPE_EXCLUSIVE_MESSAGE);
+  // Counted per label record: "Bug" and "bug" as two labels are two Types too.
+  if (labels.filter((label) => isTypeLabel(label.name)).length > 1) throw createValidationError(ISSUE_TYPE_EXCLUSIVE_MESSAGE);
 }
