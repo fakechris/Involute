@@ -33,7 +33,8 @@ export function createRevisitRefresher(refetch: () => void, now: () => number = 
     },
     onReturn() {
       const at = now();
-      if (at - lastReturnRefetch < FOCUS_REFETCH_MIN_INTERVAL_MS) return;
+      // A clock set backwards must not suppress refreshes until it catches up.
+      if (at >= lastReturnRefetch && at - lastReturnRefetch < FOCUS_REFETCH_MIN_INTERVAL_MS) return;
       lastReturnRefetch = at;
       refetch();
     },

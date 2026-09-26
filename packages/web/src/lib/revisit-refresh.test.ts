@@ -27,4 +27,14 @@ describe('createRevisitRefresher (INV-738)', () => {
     refresher.onReturn();
     expect(refetch).toHaveBeenCalledTimes(2);
   });
+
+  it('still refreshes after the clock moves backwards', () => {
+    const refetch = vi.fn();
+    let clock = 5_000_000;
+    const refresher = createRevisitRefresher(refetch, () => clock);
+    refresher.onReturn();
+    clock -= 60_000;
+    refresher.onReturn();
+    expect(refetch).toHaveBeenCalledTimes(2);
+  });
 });
