@@ -598,6 +598,68 @@ describe('work graph GraphQL facade', () => {
     expect(placed.body.data.workCommit).toMatchObject({ success: true, message: null, issue: { parent: { id: parentId } } });
   });
 
+  it('lets a human rewrite committed contract fields and says why a cleared acceptance is refused', async () => {
+    const work = await prisma.issue.create({
+      data: {
+        acceptance: 'docs/research lands in the repo',
+        assigneeId: viewer.id,
+        commitmentStatus: 'COMMITTED',
+        identifier: `INV-C${nextIdentifierSuffix()}`,
+        parentId: await projectId(team.id),
+        scope: 'research doc in docs/research',
+        stateId: ready.id,
+        teamId: team.id,
+        title: 'Contract under revision',
+      },
+    });
+    const update = (input: Record<string, unknown>) =>
+      postGraphQL({
+        query: `
+          mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
+            issueUpdate(id: $id, input: $input) {
+              success
+              message
+              issue { revision outcome scope constraints acceptance verification }
+            }
+          }
+        `,
+        variables: { id: work.id, input },
+      });
+
+    const rewritten = await update({
+      expectedRevision: work.revision,
+      outcome: 'research stays local',
+      scope: 'only one line in docs/73',
+      constraints: 'no vendor source in the repo',
+      acceptance: 'docs/73 has the row',
+      verification: 'docs-lint passes',
+    });
+    expectGraphQLSuccess(rewritten);
+    expect(rewritten.body.data.issueUpdate).toMatchObject({
+      success: true,
+      message: null,
+      issue: {
+        revision: work.revision + 1,
+        outcome: 'research stays local',
+        scope: 'only one line in docs/73',
+        constraints: 'no vendor source in the repo',
+        acceptance: 'docs/73 has the row',
+        verification: 'docs-lint passes',
+      },
+    });
+    const audit = await prisma.workAudit.findFirstOrThrow({ where: { workId: work.id }, orderBy: { createdAt: 'desc' } });
+    expect(JSON.stringify(audit)).toContain('only one line in docs/73');
+
+    const cleared = await update({ acceptance: '  ' });
+    expectGraphQLSuccess(cleared);
+    expect(cleared.body.data.issueUpdate).toMatchObject({ success: false, issue: null });
+    expect(cleared.body.data.issueUpdate.message).toContain('requires acceptance');
+
+    const stale = await update({ expectedRevision: work.revision, scope: 'stale write' });
+    expect(stale.body.data.issueUpdate.success).toBe(false);
+    expect(stale.body.data.issueUpdate.message).toBeTruthy();
+  });
+
   it('rejects candidates and lets issues filter by commitmentStatus', async () => {
     const propose = await postGraphQL({
       query: `

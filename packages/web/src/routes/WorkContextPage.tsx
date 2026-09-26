@@ -167,7 +167,13 @@ export function WorkContextPage() {
       </div>
       <div className="page-content observation-content work-context">
         <section className="work-context__section">
-          <h2>Contract</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h2>Contract</h2>
+            <div style={{ flex: 1 }} />
+            <Btn variant="subtle" onClick={() => navigate(`/issue/${work.id}#contract`)}>
+              Edit contract
+            </Btn>
+          </div>
           <dl className="observation-contract observation-contract--stack">
             <ContractField label="Kind" value={work.kind.toLowerCase()} />
             <ContractField label="Outcome" value={work.outcome} />

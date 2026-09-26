@@ -42,7 +42,7 @@ export const WORK_COMMIT_FORBIDDEN_MESSAGE = 'Agents cannot commit work.';
 export const WORK_REJECT_FORBIDDEN_MESSAGE = 'Agents cannot reject work.';
 export const WORK_ACCEPT_FORBIDDEN_MESSAGE = 'Agents cannot accept or cancel work.';
 export const WORK_CONTRACT_UPDATE_FORBIDDEN_MESSAGE =
-  'Agents cannot rewrite committed contract fields; ask a human to update acceptance, scope, verification, outcome, or constraints.';
+  'Agents cannot rewrite committed contract fields; ask a human to update acceptance, scope, verification, outcome, or constraints under "Edit contract" on the issue page (/issue/<id>#contract).';
 export const WORK_NOT_CANDIDATE_MESSAGE = 'Only candidate work can be committed or rejected.';
 export const WORK_NOT_COMMITTED_MESSAGE = 'Only committed work can be claimed.';
 export const WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE =

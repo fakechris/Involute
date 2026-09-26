@@ -111,6 +111,11 @@ export interface IssueSummary {
   commitmentStatus?: 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
   description?: string | null;
   repository?: string | null;
+  outcome?: string | null;
+  scope?: string | null;
+  constraints?: string | null;
+  acceptance?: string | null;
+  verification?: string | null;
   priority: number;
   /** Committed bugs only (INV-750). */
   bugSla?: BugSlaSummary | null;
@@ -423,6 +428,8 @@ export interface IssueUpdateMutationData {
   issueUpdate: {
     success: boolean;
     issue: IssueSummary | null;
+    /** Why the server refused the update; absent on success. */
+    message?: string | null;
   };
 }
 
@@ -440,6 +447,11 @@ export interface IssueUpdateMutationVariables {
     cycleId?: string | null;
     parentId?: string | null;
     kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
+    outcome?: string | null;
+    scope?: string | null;
+    constraints?: string | null;
+    acceptance?: string | null;
+    verification?: string | null;
   };
 }
 
