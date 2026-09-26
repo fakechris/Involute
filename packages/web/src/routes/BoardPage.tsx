@@ -85,6 +85,7 @@ import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { writeStoredShellIssues, writeStoredShellTeams } from '../lib/app-shell-state';
 import { BoardCreateIssueDialog } from '../components/BoardCreateIssueDialog';
 import {
+  noMilestonePlacement,
   readLastPlacement,
   rememberPlacement,
   resolveInitialPlacement,
@@ -1744,7 +1745,15 @@ export function BoardPage() {
     if (!selectedTeam || !title.trim()) {
       return;
     }
-    const placement = initialPlacement()?.placement;
+    // Inline create has no picker to catch a remembered milestone that has
+    // since finished, so it goes in at project level ("No milestone").
+    // A list grouped by project creates in that group's project, as in Linear.
+    const groupProject = groupMeta?.repository ? noMilestonePlacement(placeableProjects, groupMeta.repository) : null;
+    const resolved = initialPlacement(groupProject);
+    const placement =
+      resolved?.source === 'last'
+        ? noMilestonePlacement(placeableProjects, resolved.placement.repository)
+        : (resolved?.placement ?? null);
     if (!placement) {
       // Nowhere to put it yet: finish in the dialog, which asks for a project.
       openCreateDialog(null, title.trim());

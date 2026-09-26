@@ -14,6 +14,7 @@ interface GraphOutlineProps {
 }
 
 const CREATE_CONTAINERS = new Set(['PROJECT', 'MILESTONE', 'EPIC']);
+const FINISHED = new Set(['COMPLETED', 'CANCELED']);
 
 /** The project's CONTAINS tree with per-container progress and blocked markers. */
 export function GraphOutline({ outline, edges, byId, onOpen, onCreateIn }: GraphOutlineProps) {
@@ -127,7 +128,7 @@ function OutlineRow({ item, depth, collapsed, onToggle, onOpen, onCreateIn, edge
         ) : (
           <span className="graph-outline__state">{node.stateName}</span>
         )}
-        {onCreateIn && CREATE_CONTAINERS.has(node.kind) && !node.external ? (
+        {onCreateIn && CREATE_CONTAINERS.has(node.kind) && !FINISHED.has(node.stateType) && !node.external ? (
           <button
             type="button"
             className="graph-outline__add"

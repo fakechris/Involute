@@ -8,6 +8,7 @@ import {
   type IssueCreateMutationData,
   type IssueSummary,
 } from './test/app-test-helpers';
+import { getDefaultBoardViewState, writeStoredBoardViewState } from './board/views';
 import type { PlacementOptionsQueryData } from './work/types';
 
 const placementData: PlacementOptionsQueryData = {
@@ -77,9 +78,19 @@ function mockCreate() {
   return createIssue;
 }
 
+/** The list view's per-group inline composer, for the Backlog group. */
+async function openInlineCreate() {
+  writeStoredBoardViewState('INV', { ...getDefaultBoardViewState(), viewMode: 'list' });
+  renderApp(placedState(), ['/?team=INV']);
+  const create = await screen.findAllByTitle('Create issue in this group');
+  fireEvent.click(create[0]!);
+  return screen.findByPlaceholderText(/Issue title — creating in/);
+}
+
 describe('App issue creation', () => {
   beforeEach(() => {
     window.localStorage.removeItem('involute.createPlacement.INV');
+    window.localStorage.removeItem('involute.board.viewState.INV');
   });
 
   it('shows a newly created SON issue on the Sonata board even when the initial workspace dataset exceeds 200 items', async () => {
@@ -241,6 +252,26 @@ describe('App issue creation', () => {
     await waitFor(() => expect(within(dialog).getByLabelText('Issue title')).toHaveValue(''));
     expect(screen.getByRole('dialog', { name: 'Create issue drawer' })).toBeInTheDocument();
     expect((within(dialog).getByLabelText('Location') as HTMLSelectElement).value).toBe('INV-79');
+  });
+
+  it('creates inline at project level rather than in a remembered milestone', async () => {
+    window.localStorage.setItem('involute.createPlacement.INV', JSON.stringify({ repository: 'fakechris/Involute', parentId: 'milestone-81' }));
+    const createIssue = mockCreate();
+    const input = await openInlineCreate();
+    fireEvent.change(input, { target: { value: 'Inline issue' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(createIssue).toHaveBeenCalledTimes(1));
+    expect(createIssue.mock.calls[0]![0].variables.input).toMatchObject({ title: 'Inline issue', parentId: 'INV-79' });
+  });
+
+  it('finishes an unplaced inline create in the dialog', async () => {
+    const createIssue = mockCreate();
+    const input = await openInlineCreate();
+    fireEvent.change(input, { target: { value: 'Needs a home' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    const dialog = await screen.findByRole('dialog', { name: 'Create issue drawer' });
+    expect(within(dialog).getByLabelText('Issue title')).toHaveValue('Needs a home');
+    expect(createIssue).not.toHaveBeenCalled();
   });
 
   it('asks for a project first when the team has none', async () => {

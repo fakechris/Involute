@@ -44,9 +44,13 @@ const graphData: ProjectWorkGraphQueryData = {
     nodes: [
       { id: 'inv-96', identifier: 'INV-96', title: REPOSITORY, kind: 'PROJECT', commitmentStatus: 'COMMITTED', state: ready, assignee: null },
       { id: 'inv-141', identifier: 'INV-141', title: 'Browser and computer use', kind: 'MILESTONE', commitmentStatus: 'COMMITTED', state: ready, assignee: null },
+      { id: 'inv-140', identifier: 'INV-140', title: 'Shipped milestone', kind: 'MILESTONE', commitmentStatus: 'COMMITTED', state: { id: 's-done', name: 'Done', type: 'COMPLETED' as const }, assignee: null },
     ],
     externalNodes: [],
-    edges: [{ id: 'c1', type: 'CONTAINS', fromId: 'inv-96', toId: 'inv-141' }],
+    edges: [
+      { id: 'c1', type: 'CONTAINS', fromId: 'inv-96', toId: 'inv-141' },
+      { id: 'c2', type: 'CONTAINS', fromId: 'inv-96', toId: 'inv-140' },
+    ],
   },
 };
 
@@ -73,6 +77,8 @@ describe('create issue from context (INV-744)', () => {
   it('creates in a milestone from its outline row', async () => {
     render(`/graph?project=${REPOSITORY}`);
     const outline = await screen.findByRole('tree', { name: 'Project outline' });
+    // A finished milestone takes no new work.
+    expect(within(outline).queryByRole('button', { name: 'New issue in INV-140' })).not.toBeInTheDocument();
     fireEvent.click(within(outline).getByRole('button', { name: 'New issue in INV-141' }));
 
     const dialog = await screen.findByRole('dialog', { name: 'Create issue drawer' });

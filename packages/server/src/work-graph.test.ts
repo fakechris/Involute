@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
+import { createIssue } from './issue-service.ts';
 import { createWorkLink } from './link-service.ts';
 import { testParentId } from './test-placement.ts';
 
@@ -20,10 +21,10 @@ let server: StartedServer;
 let identifierSeq = 0;
 const nextIdentifierSuffix = () => String((identifierSeq += 1)).padStart(4, '0');
 
-// Direct creation needs a parent (INV-744): the repository's test project.
+// Direct creation needs a parent (INV-744): the repository's project, made on first use.
 async function projectId(teamId: string, repository = 'fakechris/Involute'): Promise<string> {
-  await testParentId(prisma, teamId, repository);
-  return (await prisma.issue.findFirstOrThrow({ where: { teamId, kind: 'PROJECT', repository } })).id;
+  const existing = await prisma.issue.findFirst({ where: { teamId, kind: 'PROJECT', repository }, select: { id: true } });
+  return existing?.id ?? (await createIssue(prisma, { teamId, kind: 'PROJECT', title: repository, repository })).id;
 }
 
 describe('work graph GraphQL facade', () => {
