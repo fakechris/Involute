@@ -240,6 +240,10 @@ function ParentField({
   );
 }
 
+function isBugCandidate(candidate: CandidateWork): boolean {
+  return (candidate.labels?.nodes ?? []).some((label) => label.name.trim().toLowerCase() === 'bug');
+}
+
 function UnscopedParentField({ candidate, onChange }: { candidate: CandidateWork; onChange: (parentId: string) => void }) {
   const teamKey = readStoredTeamKey();
   const [placement, setPlacement] = useState<CreatePlacement | null>(null);
@@ -290,6 +294,11 @@ function CandidateCard({
   const [duplicateOfId, setDuplicateOfId] = useState('');
   const [parentChoice, setParentChoice] = useState('');
   const missingParent = needsParent(candidate);
+  // Zero-bug (INV-750): a bug is committed with a priority (its SLA) or declined with a reason.
+  const isBug = isBugCandidate(candidate);
+  const [priority, setPriority] = useState(candidate.priority ?? 0);
+  const needsPriority = isBug && !(priority >= 1 && priority <= 4);
+  const needsReason = isBug && !reason.trim();
   const [runCommit] = useMutation<WorkCommitMutationData, WorkCommitMutationVariables>(WORK_COMMIT_MUTATION);
   const [runReject] = useMutation<WorkRejectMutationData, WorkRejectMutationVariables>(WORK_REJECT_MUTATION);
   const [runSnooze] = useMutation<SnoozeMutationData, SnoozeMutationVariables>(ISSUE_SNOOZE_MUTATION);
@@ -373,6 +382,7 @@ function CandidateCard({
             ...(acceptance.trim() ? { acceptance: acceptance.trim() } : {}),
             ...(assigneeId ? { assigneeId } : {}),
             ...(missingParent && parentChoice ? { parentId: parentChoice } : {}),
+            ...(isBug ? { priority } : {}),
           },
         },
       });
@@ -405,7 +415,7 @@ function CandidateCard({
       });
 
       if (!result.data?.workReject.success || !result.data.workReject.issue) {
-        setError(REJECT_ERROR_MESSAGE);
+        setError(result.data?.workReject.message || REJECT_ERROR_MESSAGE);
         return;
       }
 
@@ -499,6 +509,24 @@ function CandidateCard({
         </select>
       </label>
       <ParentField candidate={candidate} value={parentChoice} onChange={setParentChoice} />
+      {isBug ? (
+        <label className="observation-field">
+          <span>Priority (sets the SLA)</span>
+          <select
+            aria-label={`Priority for ${candidate.identifier}`}
+            value={priority}
+            onChange={(event) => setPriority(Number(event.target.value))}
+          >
+            <option value={0} disabled>
+              Choose a priority
+            </option>
+            <option value={1}>Urgent — 24h</option>
+            <option value={2}>High — 48h</option>
+            <option value={3}>Medium — 7 days</option>
+            <option value={4}>Low — 7 days</option>
+          </select>
+        </label>
+      ) : null}
       {(candidate.dependencyHints ?? []).length > 0 ? (
         <div className="observation-dependency-hint" role="note" aria-label={`Dependency hints for ${candidate.identifier}`}>
           <span>Reads like it depends on</span>
@@ -522,7 +550,7 @@ function CandidateCard({
           aria-label={`Reject reason for ${candidate.identifier}`}
           value={reason}
           onChange={(event) => setReason(event.target.value)}
-          placeholder="Optional"
+          placeholder={isBug ? 'Required to decline a bug' : 'Optional'}
         />
       </label>
       {error ? (
@@ -534,8 +562,12 @@ function CandidateCard({
         <Btn
           variant="accent"
           icon={<IcoCheck size={12} />}
-          disabled={pendingAction !== null || snoozed || (missingParent && !parentChoice)}
-          {...(missingParent && !parentChoice ? { title: 'Choose a parent first: committed work must belong somewhere.' } : {})}
+          disabled={pendingAction !== null || snoozed || (missingParent && !parentChoice) || needsPriority}
+          {...(missingParent && !parentChoice
+            ? { title: 'Choose a parent first: committed work must belong somewhere.' }
+            : needsPriority
+              ? { title: 'Choose a priority first: it sets the bug SLA.' }
+              : {})}
           onClick={() => void handleCommit()}
         >
           {pendingAction === 'commit' ? 'Committing…' : 'Commit'}
@@ -543,7 +575,8 @@ function CandidateCard({
         <Btn
           variant="danger"
           icon={<IcoClose size={12} />}
-          disabled={pendingAction !== null}
+          disabled={pendingAction !== null || needsReason}
+          {...(needsReason ? { title: 'Say why this bug will not be fixed.' } : {})}
           onClick={() => void handleReject()}
         >
           {pendingAction === 'reject' ? 'Rejecting…' : 'Reject'}
@@ -598,6 +631,8 @@ export function CandidatesPage() {
   const teamKey = readStoredTeamKey();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedProject = searchParams.get('project');
+  // Bug triage (INV-750): only candidates carrying Type: Bug.
+  const bugsOnly = searchParams.get('type') === 'bug';
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAssigneeId, setBulkAssigneeId] = useState('');
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
@@ -632,6 +667,7 @@ export function CandidatesPage() {
           commitmentStatus: 'CANDIDATE',
           ...(teamKey ? { team: { key: { eq: teamKey } } } : {}),
           ...(repositoryFilter ? { repository: repositoryFilter } : {}),
+          ...(bugsOnly ? { labels: { some: { name: { in: ['bug', 'Bug', 'BUG'] } } } } : {}),
         },
       },
     },
@@ -663,7 +699,10 @@ export function CandidatesPage() {
     }
   }, [allHumans, bulkAssigneeId]);
 
-  const candidates = data?.issues.nodes ?? [];
+  const candidates = useMemo(
+    () => (data?.issues.nodes ?? []).filter((candidate) => !bugsOnly || isBugCandidate(candidate)),
+    [data?.issues.nodes, bugsOnly],
+  );
   const candidateSummary = data?.candidateSummary;
   const summaryProjects = useMemo(() => candidateSummary?.projects ?? [], [candidateSummary?.projects]);
   const noRepoCount = candidateSummary?.noRepositoryCount ?? 0;
@@ -872,6 +911,21 @@ export function CandidatesPage() {
       <div className="page-header">
         <h1 className="page-header__title">Candidates</h1>
         <span className="mono observation-count">{currentProjectTotal}</span>
+        <button
+          type="button"
+          className={`board-project-pill${bugsOnly ? ' board-project-pill--active' : ''}`}
+          aria-pressed={bugsOnly}
+          onClick={() =>
+            setSearchParams((previous) => {
+              const next = new URLSearchParams(previous);
+              if (bugsOnly) next.delete('type');
+              else next.set('type', 'bug');
+              return next;
+            })
+          }
+        >
+          Bugs only
+        </button>
         <div style={{ flex: 1 }} />
         <span className="observation-hint">Proposed work waits here until a human commits it.</span>
       </div>

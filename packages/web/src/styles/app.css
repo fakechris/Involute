@@ -6208,3 +6208,43 @@ kbd {
   margin: 6px 0 0;
   padding-left: 16px;
 }
+
+/* Bug SLA (INV-750). */
+.bug-sla {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--fg-dim);
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.3));
+}
+
+.bug-sla--at-risk {
+  color: #b45309;
+  border-color: rgba(217, 119, 6, 0.5);
+}
+
+.bug-sla--breached {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.triage-rotation {
+  margin: 12px 0 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.triage-rotation li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 14px;
+}
+
+.triage-rotation li > span {
+  flex: 1;
+}

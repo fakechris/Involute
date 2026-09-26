@@ -255,6 +255,7 @@ export async function callMcpTool(
       assignOptional(commitInput, 'acceptance', optionalString(args.acceptance));
       assignOptional(commitInput, 'assigneeId', optionalString(args.assignee_id));
       assignOptional(commitInput, 'parentId', optionalString(args.parent_id));
+      assignOptional(commitInput, 'priority', optionalNumber(args.priority));
       assignOptional(commitInput, 'constraints', optionalString(args.constraints));
       assignOptional(commitInput, 'outcome', optionalString(args.outcome));
       assignOptional(commitInput, 'scope', optionalString(args.scope));
@@ -614,6 +615,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         id: { type: 'string' },
         expected_revision: { type: 'integer' },
         parent_id: { type: 'string', description: 'Identifier (e.g. INV-12) or UUID of the PROJECT, MILESTONE, EPIC or ISSUE to place this work under while committing.' },
+        priority: { type: 'number', description: '1 (Urgent) to 4 (Low). Required to commit a bug (Type: Bug): it sets the SLA — Urgent 24h, High 48h, otherwise 7 days.' },
         acceptance: { type: 'string' },
         assignee_id: { type: 'string' },
         outcome: { type: 'string' },

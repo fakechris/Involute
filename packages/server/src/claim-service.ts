@@ -4,6 +4,9 @@ import {
   createNotFoundError,
   createValidationError,
   ISSUE_NOT_FOUND_MESSAGE,
+  BUG_COMMIT_PRIORITY_REQUIRED_MESSAGE,
+  BUG_NO_BACKLOG_MESSAGE,
+  BUG_REJECT_REASON_REQUIRED_MESSAGE,
   ISSUE_CREATE_REQUIRES_PARENT_MESSAGE,
   PARENT_ISSUE_NOT_FOUND_MESSAGE,
   WORK_ALREADY_CLAIMED_MESSAGE,
@@ -36,7 +39,7 @@ import { createWorkLink } from './link-service.js';
 import { isLegalContains } from './graph-integrity.js';
 import { createIssueWithAudit, mentionTexts, type CreateIssueInput } from './issue-service.js';
 import { linkMentionedWork } from './mention-links.js';
-import { findOrCreateLabelIds } from './labels.js';
+import { findOrCreateLabelIds, isBugWork } from './labels.js';
 import {
   completeWorkIdempotency,
   hashIdempotencyRequest,
@@ -91,6 +94,8 @@ export interface CommitWorkInput {
   parentId?: string | null;
   assigneeId?: string | null;
   expectedRevision: number;
+  /** 1 (Urgent) to 4 (Low); a bug needs one to be committed, it sets the SLA (INV-750). */
+  priority?: number | null;
   idempotencyKey?: string | null;
   outcome?: string | null;
   scope?: string | null;
@@ -504,6 +509,14 @@ export async function commitWork(
 
     await placeForCommit(transaction, existing, input.parentId ?? null, actor);
 
+    // Zero-bug (INV-748/750): a bug is committed to be fixed, with a priority
+    // for its SLA, and never parked in the backlog.
+    const isBug = await isBugWork(transaction, existing.id);
+    const priority = input.priority ?? existing.priority;
+    if (isBug && (!priority || priority < 1 || priority > 4)) {
+      throw createValidationError(BUG_COMMIT_PRIORITY_REQUIRED_MESSAGE);
+    }
+
     const readyState = await transaction.workflowState.findFirst({
       where: {
         teamId: existing.teamId,
@@ -528,6 +541,9 @@ export async function commitWork(
       if (overrideState.type === 'COMPLETED' || overrideState.type === 'CANCELED') {
         throw createValidationError('Cannot commit candidate directly to COMPLETED or CANCELED state.');
       }
+      if (isBug && overrideState.type === 'BACKLOG') {
+        throw createValidationError(BUG_NO_BACKLOG_MESSAGE);
+      }
       targetStateId = overrideState.id;
     } else if (existing.stateId) {
       const existingState = await transaction.workflowState.findUnique({
@@ -540,7 +556,7 @@ export async function commitWork(
       if (
         existingState &&
         existingState.teamId === existing.teamId &&
-        (existingState.type === 'STARTED' || existingState.type === 'REVIEW' || isExplicitBacklog)
+        (existingState.type === 'STARTED' || existingState.type === 'REVIEW' || (isExplicitBacklog && !isBug))
       ) {
         targetStateId = existingState.id;
       }
@@ -558,6 +574,7 @@ export async function commitWork(
         commitmentStatus: 'COMMITTED',
         constraints: input.constraints === undefined ? existing.constraints : input.constraints,
         outcome: input.outcome === undefined ? existing.outcome : input.outcome,
+        priority,
         scope: input.scope === undefined ? existing.scope : input.scope,
         source: cleanSource,
         stateId: targetStateId,
@@ -632,6 +649,9 @@ export async function rejectWork(
     await claimIssueRevision(transaction, existing.id, input.expectedRevision);
 
     const reason = nonEmpty(input.reason);
+    if (!reason && (await isBugWork(transaction, existing.id))) {
+      throw createValidationError(BUG_REJECT_REASON_REQUIRED_MESSAGE);
+    }
     const actorForAudit: WriteActor = { ...actor };
     if (reason) {
       actorForAudit.reason = reason;

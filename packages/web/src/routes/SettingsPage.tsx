@@ -4,13 +4,14 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { IcoPlus, IcoTeam } from '../components/Icons';
 import { Avatar, Btn } from '../components/Primitives';
 import { AgentsTab } from './AgentsTab';
+import { BugTriageTab } from './BugTriageTab';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { BOARD_PAGE_QUERY, USER_UPDATE_MUTATION, FILE_UPLOAD_MUTATION } from '../board/queries';
 import type { BoardPageQueryData, BoardPageQueryVariables, UserSummary, UserUpdateMutationData, UserUpdateMutationVariables, FileUploadMutationData, FileUploadMutationVariables } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 
-type SettingsTab = 'profile' | 'preferences' | 'access' | 'agents';
+type SettingsTab = 'profile' | 'preferences' | 'access' | 'agents' | 'triage';
 
 const THEME_STORAGE_KEY = 'involute.theme';
 const DENSITY_STORAGE_KEY = 'involute.density';
@@ -43,7 +44,8 @@ const inputStyle: React.CSSProperties = {
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requested = searchParams.get('tab');
-  const tab: SettingsTab = requested === 'preferences' || requested === 'access' || requested === 'agents' ? requested : 'profile';
+  const tab: SettingsTab =
+    requested === 'preferences' || requested === 'access' || requested === 'agents' || requested === 'triage' ? requested : 'profile';
   const setTab = (next: SettingsTab) => setSearchParams(next === 'profile' ? {} : { tab: next }, { replace: true });
 
   const tabs: Array<{ id: SettingsTab; label: string }> = [
@@ -51,6 +53,7 @@ export function SettingsPage() {
     { id: 'preferences', label: 'Preferences' },
     { id: 'access', label: 'Members & access' },
     { id: 'agents', label: 'Agents' },
+    { id: 'triage', label: 'Bug triage' },
   ];
 
   return (
@@ -96,6 +99,7 @@ export function SettingsPage() {
           {tab === 'preferences' && <PreferencesTab />}
           {tab === 'access' && <AccessTab />}
           {tab === 'agents' && <AgentsTab />}
+          {tab === 'triage' && <BugTriageTab />}
         </div>
       </div>
     </div>
