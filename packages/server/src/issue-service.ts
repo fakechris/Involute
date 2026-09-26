@@ -32,6 +32,7 @@ import { enqueueCommentEvents } from './comment-events.js';
 import { openAgentRequestsForMentions } from './agent-request-from-mention.js';
 import { assertNodeHierarchy, getContainsDescendantIds, lockWorkGraph } from './graph-integrity.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
+import { assertSingleType } from './labels.js';
 import {
   INTERNAL_WRITE_ACTOR,
   recordWorkAudit,
@@ -150,12 +151,14 @@ export async function createIssueWithAudit(
         },
         select: {
           id: true,
+          name: true,
         },
       });
 
       if (labels.length !== labelIds.length) {
         throw createNotFoundError(ISSUE_LABEL_NOT_FOUND_MESSAGE);
       }
+      assertSingleType(labels);
     }
 
     labelConnect = labelIds.map((labelId) => ({ id: labelId }));
@@ -366,12 +369,14 @@ export async function updateIssue(
           },
           select: {
             id: true,
+            name: true,
           },
         });
 
         if (labels.length !== labelIds.length) {
           throw createNotFoundError(ISSUE_LABEL_NOT_FOUND_MESSAGE);
         }
+        assertSingleType(labels);
       }
 
       data.labels = {

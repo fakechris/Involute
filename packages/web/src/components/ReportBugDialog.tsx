@@ -1,18 +1,21 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useMutation } from '@apollo/client/react';
+import { useMutation, useQuery } from '@apollo/client/react';
 import { Link } from 'react-router-dom';
 
-import { BUG_REPORT_MUTATION } from '../board/queries';
+import { BUG_REPORT_MUTATION, SIMILAR_BUGS_QUERY } from '../board/queries';
 import type {
   BugReportMutationData,
   BugReportMutationVariables,
   LabelSummary,
   ProjectSummaryItem,
+  SimilarBugsQueryData,
 } from '../board/types';
+import { isTypeLabel } from '../work/labels';
+import { readLastPlacement, rememberPlacement, resolveInitialPlacement, type CreatePlacement, type PlacementSource } from '../work/placement';
+import { PlacementPicker } from './PlacementPicker';
 import { RichTextEditor } from './RichTextEditor';
 
 const PRIORITY_OPTIONS = [
-  { value: 0, label: 'No priority' },
   { value: 1, label: 'Urgent' },
   { value: 2, label: 'High' },
   { value: 3, label: 'Medium' },
@@ -24,50 +27,87 @@ const REPORT_ERROR_MESSAGE = 'Could not report the bug. Please try again.';
 interface ReportBugDialogProps {
   isOpen: boolean;
   teamId: string;
+  teamKey: string;
   projects: ProjectSummaryItem[];
   labels: LabelSummary[];
+  /** The board's project filter, to start the report there (INV-749). */
+  boardRepository?: string | null;
   onClose: () => void;
 }
 
-export function ReportBugDialog({ isOpen, teamId, projects, labels, onClose }: ReportBugDialogProps) {
+function useDebounced(value: string, delayMs: number): string {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+/**
+ * Report a bug (Bug route v1, INV-748/749). A bug says where it belongs — its
+ * project, or a milestone in it — and is committed there; "not sure" sends it
+ * to triage instead. Priority and steps to reproduce are required, and open
+ * bugs with similar titles are shown so duplicates are caught before filing.
+ */
+export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boardRepository, onClose }: ReportBugDialogProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [steps, setSteps] = useState('');
   const [priority, setPriority] = useState(0);
-  const [repository, setRepository] = useState('');
+  const [placement, setPlacement] = useState<CreatePlacement | null>(null);
+  const [placementSource, setPlacementSource] = useState<PlacementSource | null>(null);
+  const [triage, setTriage] = useState(false);
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [reported, setReported] = useState<{ id: string; identifier: string } | null>(null);
+  const [reported, setReported] = useState<{ id: string; identifier: string; triage: boolean } | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const projectsRef = useRef(projects);
+  projectsRef.current = projects;
 
-  const [runBugReport, bugReportMutationState] = useMutation<
-    BugReportMutationData,
-    BugReportMutationVariables
-  >(BUG_REPORT_MUTATION);
+  const [runBugReport, bugReportMutationState] = useMutation<BugReportMutationData, BugReportMutationVariables>(BUG_REPORT_MUTATION);
   // The app-level apollo mock returns a bare [fn] tuple for unmatched
   // mutations; tolerate a missing state entry.
   const isSaving = bugReportMutationState?.loading ?? false;
 
-  useEffect(() => {
-    if (isOpen) {
-      setTitle('');
-      setDescription('');
-      setPriority(0);
-      setRepository('');
-      setSelectedLabelIds([]);
-      setErrorMessage(null);
-      setReported(null);
-    }
-  }, [isOpen]);
+  const searchTitle = useDebounced(title.trim(), 300);
+  const similar = useQuery<SimilarBugsQueryData, { teamId: string; title: string }>(SIMILAR_BUGS_QUERY, {
+    variables: { teamId, title: searchTitle },
+    skip: !isOpen || searchTitle.length < 3,
+  });
+  const similarBugs = searchTitle.length >= 3 ? (similar.data?.similarBugs ?? []) : [];
 
   useEffect(() => {
-    titleInputRef.current?.focus();
-  }, [isOpen]);
+    if (!isOpen) return;
+    const initial = resolveInitialPlacement({
+      boardRepository: boardRepository && boardRepository !== '__none__' ? boardRepository : null,
+      last: readLastPlacement(teamKey),
+      projects: projectsRef.current,
+    });
+    setTitle('');
+    setDescription('');
+    setSteps('');
+    setPriority(0);
+    setPlacement(initial?.placement ?? null);
+    setPlacementSource(initial?.source ?? null);
+    setTriage(false);
+    setSelectedLabelIds([]);
+    setErrorMessage(null);
+    setReported(null);
+  }, [isOpen, boardRepository, teamKey]);
+
+  useEffect(() => {
+    if (isOpen) titleInputRef.current?.focus();
+  }, [isOpen, reported]);
 
   if (!isOpen) {
     return null;
   }
 
-  const typeLabels = labels.filter((label) => label.name.toLowerCase() !== 'bug');
+  // Type is Bug by definition; the other Type labels do not apply.
+  const extraLabels = labels.filter((label) => !isTypeLabel(label.name));
+  const placed = triage || Boolean(placement);
+  const canSubmit = Boolean(title.trim() && steps.trim() && priority > 0 && placed) && !isSaving;
 
   function toggleLabel(labelId: string) {
     setSelectedLabelIds((current) =>
@@ -77,7 +117,7 @@ export function ReportBugDialog({ isOpen, teamId, projects, labels, onClose }: R
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!title.trim() || isSaving) {
+    if (!canSubmit) {
       return;
     }
     setErrorMessage(null);
@@ -88,21 +128,32 @@ export function ReportBugDialog({ isOpen, teamId, projects, labels, onClose }: R
             teamId,
             title: title.trim(),
             description: description.trim() || null,
+            stepsToReproduce: steps.trim(),
             priority,
-            repository: repository || null,
+            ...(triage || !placement ? {} : { parentId: placement.parentId }),
             labelIds: selectedLabelIds,
           },
         },
       });
       const payload = result.data?.bugReport;
       if (!payload?.success || !payload.issue) {
-        setErrorMessage(REPORT_ERROR_MESSAGE);
+        setErrorMessage(payload?.message ?? REPORT_ERROR_MESSAGE);
         return;
       }
-      setReported({ id: payload.issue.id, identifier: payload.issue.identifier });
+      if (!triage && placement) rememberPlacement(teamKey, placement);
+      setReported({ id: payload.issue.id, identifier: payload.issue.identifier, triage });
     } catch {
       setErrorMessage(REPORT_ERROR_MESSAGE);
     }
+  }
+
+  function reportAnother() {
+    setTitle('');
+    setDescription('');
+    setSteps('');
+    setSelectedLabelIds([]);
+    setErrorMessage(null);
+    setReported(null);
   }
 
   return (
@@ -126,19 +177,21 @@ export function ReportBugDialog({ isOpen, teamId, projects, labels, onClose }: R
 
         {reported ? (
           <div className="issue-panel__section">
-            <p>
-              Bug <span className="mono">{reported.identifier}</span> reported. The team was
-              notified.
+            <p role="status">
+              Bug <span className="mono">{reported.identifier}</span>{' '}
+              {reported.triage
+                ? 'sent to triage. Someone will place it and commit it or decline it.'
+                : 'reported. The team was notified.'}
             </p>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <Link
                 className="ui-action ui-action--accent"
-                to={`/?issue=${encodeURIComponent(reported.identifier)}`}
+                to={reported.triage ? '/candidates' : `/?issue=${encodeURIComponent(reported.identifier)}`}
                 onClick={onClose}
               >
-                Open on board
+                {reported.triage ? 'Open triage' : 'Open on board'}
               </Link>
-              <button type="button" className="ui-action" onClick={() => setReported(null)}>
+              <button type="button" className="ui-action" onClick={reportAnother}>
                 Report another
               </button>
             </div>
@@ -158,6 +211,36 @@ export function ReportBugDialog({ isOpen, teamId, projects, labels, onClose }: R
                 disabled={isSaving}
                 onChange={(event) => setTitle(event.target.value)}
               />
+              {similarBugs.length > 0 ? (
+                <div className="similar-bugs" role="region" aria-label="Similar open bugs">
+                  <span className="observation-hint">Similar open bugs — is it one of these?</span>
+                  <ul>
+                    {similarBugs.map((bug) => (
+                      <li key={bug.id}>
+                        <Link to={`/issue/${bug.id}`} onClick={onClose}>
+                          <span className="mono">{bug.identifier}</span> {bug.title}
+                        </Link>{' '}
+                        <span className="observation-card__meta">{bug.state.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="issue-panel__section">
+              <label className="issue-panel__label" htmlFor="report-bug-steps">
+                Steps to reproduce
+              </label>
+              <textarea
+                id="report-bug-steps"
+                aria-label="Steps to reproduce"
+                className="issue-panel__textarea"
+                placeholder={'1. Open …\n2. Click …\n3. See …'}
+                value={steps}
+                disabled={isSaving}
+                onChange={(event) => setSteps(event.target.value)}
+              />
             </div>
 
             <div className="issue-panel__section">
@@ -166,7 +249,7 @@ export function ReportBugDialog({ isOpen, teamId, projects, labels, onClose }: R
                 value={description}
                 onChange={setDescription}
                 disabled={isSaving}
-                placeholder="Steps to reproduce, expected vs actual behavior…"
+                placeholder="Expected vs actual behaviour, screenshots…"
                 ariaLabel="Bug description"
               />
             </div>
@@ -180,6 +263,9 @@ export function ReportBugDialog({ isOpen, teamId, projects, labels, onClose }: R
                   disabled={isSaving}
                   onChange={(event) => setPriority(Number(event.target.value))}
                 >
+                  <option value={0} disabled>
+                    Choose a priority
+                  </option>
                   {PRIORITY_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
@@ -190,29 +276,31 @@ export function ReportBugDialog({ isOpen, teamId, projects, labels, onClose }: R
             </div>
 
             <div className="issue-panel__section">
-              <label className="field-stack">
-                <span>Project</span>
-                <select
-                  aria-label="Bug project"
-                  value={repository}
+              {triage ? (
+                <p className="observation-hint">It goes to triage; whoever commits it chooses where it belongs.</p>
+              ) : (
+                <PlacementPicker
+                  projects={projects}
+                  value={placement}
+                  source={placementSource}
                   disabled={isSaving}
-                  onChange={(event) => setRepository(event.target.value)}
-                >
-                  <option value="">No project</option>
-                  {projects.map((project) => (
-                    <option key={project.repository} value={project.repository}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(next) => {
+                    setPlacement(next);
+                    setPlacementSource(null);
+                  }}
+                />
+              )}
+              <label className="create-issue__more" style={{ marginTop: 8 }}>
+                <input type="checkbox" checked={triage} disabled={isSaving} onChange={(event) => setTriage(event.target.checked)} />
+                Not sure where it belongs — send to triage
               </label>
             </div>
 
-            {typeLabels.length > 0 ? (
+            {extraLabels.length > 0 ? (
               <div className="issue-panel__section">
                 <span className="issue-panel__label">Labels</span>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {typeLabels.map((label) => (
+                  {extraLabels.map((label) => (
                     <label
                       key={label.id}
                       style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}
@@ -237,11 +325,7 @@ export function ReportBugDialog({ isOpen, teamId, projects, labels, onClose }: R
               </p>
             ) : null}
 
-            <button
-              type="submit"
-              className="ui-action ui-action--accent"
-              disabled={isSaving || !title.trim()}
-            >
+            <button type="submit" className="ui-action ui-action--accent" disabled={!canSubmit}>
               {isSaving ? 'Reporting…' : 'Report bug'}
             </button>
           </form>

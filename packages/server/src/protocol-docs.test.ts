@@ -19,6 +19,8 @@ const NORM_RULES: Array<[string, RegExp]> = [
   ['preview the tree', /lay out the whole tree/],
   ['research label', /labels: \['research'\]/],
   ['research downstream via DERIVED_FROM', /DERIVED_FROM/],
+  ['bugs carry the Type label', /labels: \['bug'\]/],
+  ['one Type per item', /at most one per item/],
 ];
 
 describe('protocol guide and AGENTS.md agree on norm v1 (INV-721)', () => {

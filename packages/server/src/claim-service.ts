@@ -418,7 +418,14 @@ async function placeForCommit(
       // unless someone moves it on purpose (revision-checked parent update).
       throw createValidationError(WORK_COMMIT_PARENT_CONFLICT_MESSAGE);
     }
-    if (!existing) await createWorkLink(transaction, { actor, fromId: parent.id, toId: work.id, type: 'CONTAINS' });
+    if (!existing) {
+      // Triaged reports can arrive without a repository (INV-749): placing
+      // them takes the parent's, which CONTAINS requires on both ends.
+      if (!work.repository?.trim() && parent.repository) {
+        await transaction.issue.update({ where: { id: work.id }, data: { repository: parent.repository } });
+      }
+      await createWorkLink(transaction, { actor, fromId: parent.id, toId: work.id, type: 'CONTAINS' });
+    }
   }
   const placedUnder = await currentParentId();
   if (!placedUnder) throw createValidationError(WORK_COMMIT_REQUIRES_PARENT_MESSAGE);

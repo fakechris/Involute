@@ -112,6 +112,7 @@ import { loadProjectWorkGraph, type ProjectWorkGraph } from './work-graph-view.j
 import { loadWorkTimelines } from './work-timeline.js';
 import { dependencyHints } from './mention-links.js';
 import { loadWorkHygiene } from './work-hygiene.js';
+import { BUG_LABEL_NAME, findSimilarBugs, reportBug, type BugReportInput } from './bug-report.js';
 import {
   findWorkByIdOrIdentifier,
   getWorkContext,
@@ -180,15 +181,6 @@ interface IssueLabelFilterInput {
   name?: StringComparatorInput | null;
 }
 
-interface BugReportInput {
-  teamId: string;
-  title: string;
-  description?: string | null;
-  priority?: number | null;
-  repository?: string | null;
-  labelIds?: string[] | null;
-}
-
 interface BugSummaryResultShape {
   openCount: number;
   closedCount: number;
@@ -218,8 +210,6 @@ const MAX_ISSUES_CONNECTION_FIRST = 200;
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
-const BUG_LABEL_NAME = 'bug';
-const BUG_REPORT_SOURCE = 'bug-report';
 const BUG_TREND_WEEKS = 8;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -338,6 +328,8 @@ const typeDefs = /* GraphQL */ `
     candidateSummary(teamFilter: TeamFilter): CandidateSummary!
     projectSummary(teamFilter: TeamFilter): ProjectSummaryResult!
     bugSummary(teamFilter: TeamFilter): BugSummaryResult!
+    "Open bugs whose titles share words with the given title, best match first (INV-749)."
+    similarBugs(teamId: String!, title: String!, first: Int): [Issue!]!
     traceabilityAudit(days: Int): TraceabilityAuditResult!
     """Non-human actors (AGENT and SERVICE), most recently active first. Backs the directory and @ completion."""
     agents(teamKey: String, includeDeactivated: Boolean): [User!]!
@@ -1236,13 +1228,20 @@ const typeDefs = /* GraphQL */ `
     teamId: String!
     title: String!
     description: String
+    "Required (INV-749); appended to the description as a Steps to reproduce section."
+    stepsToReproduce: String
+    "Required, 1 (Urgent) to 4 (Low)."
     priority: Int
+    "Where it belongs (id or identifier: its PROJECT for No milestone, a MILESTONE, EPIC or ISSUE). Omit when unsure: the report goes to triage as a candidate."
+    parentId: String
     repository: String
     labelIds: [String!]
   }
 
   type BugReportPayload {
     success: Boolean!
+    "Why the report was refused; null on success."
+    message: String
     issue: Issue
   }
 
@@ -1860,6 +1859,20 @@ const resolvers = {
         projects,
       };
     },
+    similarBugs: async (
+      _parent: unknown,
+      args: { teamId: string; title: string; first?: number | null },
+      context: GraphQLContext,
+    ): Promise<IssueParent[]> => {
+      requireAuthentication(context);
+      const similar = await findSimilarBugs(context.prisma, {
+        teamId: args.teamId,
+        title: args.title,
+        limit: Math.min(Math.max(args.first ?? 5, 1), 20),
+        readableWhere: buildReadableIssueWhere(context) ?? null,
+      });
+      return similar as IssueParent[];
+    },
     bugSummary: async (
       _parent: unknown,
       args: { teamFilter?: TeamFilterInput | null },
@@ -2293,51 +2306,11 @@ const resolvers = {
       _parent: unknown,
       args: { input: BugReportInput },
       context: GraphQLContext,
-    ): Promise<{ issue: IssueParent | null; success: boolean }> =>
-      runMutation(async () => {
+    ): Promise<{ issue: IssueParent | null; message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
         requireAuthentication(context);
         await assertCanWriteTeam(context.prisma, context, args.input.teamId);
-        // Resolved outside the issue transaction: a concurrent first-ever
-        // report may win the label create, and a failed INSERT would poison
-        // a Postgres transaction.
-        const bugLabel = await findOrCreateBugLabel(context.prisma);
-        const labelIds = [...new Set([bugLabel.id, ...(args.input.labelIds ?? [])])];
-        const created = await context.prisma.$transaction(async (transaction) => {
-          const issue = await createIssueInTransaction(
-            transaction,
-            {
-              description: args.input.description ?? null,
-              kind: 'ISSUE',
-              labelIds,
-              priority: args.input.priority ?? null,
-              repository: args.input.repository ?? null,
-              source: BUG_REPORT_SOURCE,
-              teamId: args.input.teamId,
-              title: args.input.title,
-            },
-            writeActorFromViewer(context.viewer),
-          );
-          const payload = {
-            identifier: issue.identifier,
-            priority: issue.priority,
-            repository: issue.repository,
-            title: issue.title,
-          };
-          const event = await enqueueWorkEvent(transaction, {
-            payload,
-            type: 'bug.reported',
-            workId: issue.id,
-            workIdentifier: issue.identifier,
-          });
-          await projectWorkNotifications(transaction, {
-            eventId: event.id,
-            payload,
-            type: 'bug.reported',
-            work: issue,
-          });
-          return issue;
-        });
-
+        const created = await reportBug(context.prisma, args.input, writeActorFromViewer(context.viewer));
         return {
           issue: await getIssueById(context.prisma, created.id),
           success: true as const,
@@ -3902,28 +3875,6 @@ async function getIssueById(prisma: PrismaClient, id: string): Promise<IssuePare
     },
     include: buildIssueDetailInclude(),
   });
-}
-
-async function findOrCreateBugLabel(prisma: DatabaseClient): Promise<IssueLabel> {
-  const existing = await prisma.issueLabel.findFirst({
-    where: { name: { equals: BUG_LABEL_NAME, mode: 'insensitive' } },
-  });
-  if (existing) {
-    return existing;
-  }
-  try {
-    return await prisma.issueLabel.create({ data: { name: BUG_LABEL_NAME } });
-  } catch {
-    // A concurrent first-ever report created the label between our read and
-    // create; re-read the winner.
-    const winner = await prisma.issueLabel.findFirst({
-      where: { name: { equals: BUG_LABEL_NAME, mode: 'insensitive' } },
-    });
-    if (winner) {
-      return winner;
-    }
-    throw new Error('Failed to resolve the bug label.');
-  }
 }
 
 // ISO week starts on Monday; buckets are keyed by the UTC date of that Monday.

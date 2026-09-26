@@ -5,8 +5,11 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { readStoredTeamKey } from '../board/utils';
 import { IcoCheck, IcoClose } from '../components/Icons';
 import { Btn } from '../components/Primitives';
+import { PlacementPicker } from '../components/PlacementPicker';
+import type { CreatePlacement } from '../work/placement';
 import {
   CANDIDATES_PAGE_QUERY,
+  GRAPH_PROJECTS_QUERY,
   ISSUE_SNOOZE_MUTATION,
   PLACEMENT_OPTIONS_QUERY,
   WORK_COMMIT_MUTATION,
@@ -17,6 +20,7 @@ import type {
   CandidateWork,
   CandidatesPageQueryData,
   CandidatesPageQueryVariables,
+  GraphProjectsQueryData,
   PlacementOptionsQueryData,
   WorkCommitMutationData,
   WorkCommitMutationVariables,
@@ -208,11 +212,9 @@ function ParentField({
     );
   }
   if (!candidate.repository) {
-    return (
-      <p className="observation-parent observation-parent--missing" role="note">
-        Needs a parent before commit, and a repository first: place it with its context page or ask the proposer to resubmit with parent_id.
-      </p>
-    );
+    // Triaged reports (INV-749) arrive without a repository: choose the
+    // project first, then where in it; committing gives it that repository.
+    return <UnscopedParentField candidate={candidate} onChange={onChange} />;
   }
   const legal = LEGAL_PARENT_KINDS[candidate.kind];
   const options = [...(data?.projects?.nodes ?? []), ...(data?.milestones?.nodes ?? []), ...(data?.epics?.nodes ?? [])]
@@ -235,6 +237,28 @@ function ParentField({
         ))}
       </select>
     </label>
+  );
+}
+
+function UnscopedParentField({ candidate, onChange }: { candidate: CandidateWork; onChange: (parentId: string) => void }) {
+  const teamKey = readStoredTeamKey();
+  const [placement, setPlacement] = useState<CreatePlacement | null>(null);
+  const { data } = useQuery<GraphProjectsQueryData>(GRAPH_PROJECTS_QUERY, {
+    variables: teamKey ? { teamFilter: { key: { eq: teamKey } } } : {},
+  });
+  return (
+    <div className="observation-field observation-parent observation-parent--missing" aria-label={`Parent for ${candidate.identifier}`}>
+      <span>Parent (required to commit)</span>
+      <PlacementPicker
+        projects={data?.projectSummary.projects ?? []}
+        value={placement}
+        source={null}
+        onChange={(next) => {
+          setPlacement(next);
+          onChange(next?.parentId ?? '');
+        }}
+      />
+    </div>
   );
 }
 

@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 
-import { createValidationError } from './errors.js';
+import { createValidationError, ISSUE_TYPE_EXCLUSIVE_MESSAGE } from './errors.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -35,4 +35,21 @@ export async function findOrCreateLabelIds(prisma: DatabaseClient, names: string
     ids.push(label.id);
   }
   return ids;
+}
+
+/**
+ * The Type label group (Bug route v1, INV-748/749): Bug, Feature and
+ * Improvement are ordinary labels, matched case-insensitively (so the
+ * existing "bug" label is Type: Bug), and an item carries at most one.
+ */
+export const TYPE_LABEL_NAMES = ['Bug', 'Feature', 'Improvement'] as const;
+const TYPE_KEYS: ReadonlySet<string> = new Set(TYPE_LABEL_NAMES.map((name) => name.toLowerCase()));
+
+export function isTypeLabel(name: string): boolean {
+  return TYPE_KEYS.has(name.trim().toLowerCase());
+}
+
+export function assertSingleType(labels: Array<{ name: string }>): void {
+  // Counted per label record: "Bug" and "bug" as two labels are two Types too.
+  if (labels.filter((label) => isTypeLabel(label.name)).length > 1) throw createValidationError(ISSUE_TYPE_EXCLUSIVE_MESSAGE);
 }

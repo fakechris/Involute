@@ -6194,3 +6194,17 @@ kbd {
   margin-top: 6px;
   font-size: 12px;
 }
+
+/* Report bug: open bugs with similar titles (INV-749). */
+.similar-bugs {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border, rgba(127, 127, 127, 0.25));
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.similar-bugs ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+}

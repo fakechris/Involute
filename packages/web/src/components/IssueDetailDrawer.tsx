@@ -7,6 +7,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { ActorBadge } from './ActorBadge';
 import { IssueRelations } from './IssueRelations';
 import { AddSubIssueButton } from './AddSubIssueButton';
+import { toggleLabelId } from '../work/labels';
 import { RichTextEditor } from './RichTextEditor';
 import { AGENTS_QUERY } from '../board/queries';
 
@@ -570,9 +571,8 @@ export function IssueDetailDrawer({
                           checked={checked}
                           disabled={savingState}
                           onChange={(event) => {
-                            const nextLabelIds = event.target.checked
-                              ? [...selectedLabelIds, label.id]
-                              : selectedLabelIds.filter((id) => id !== label.id);
+                            // One Type per item (INV-749): turning a Type on replaces the other.
+                            const nextLabelIds = toggleLabelId(selectedLabelIds, label.id, event.target.checked, labels);
 
                             setSelectedLabelIds(nextLabelIds);
                             void onLabelsChange(activeIssue, nextLabelIds).catch(() => undefined);
