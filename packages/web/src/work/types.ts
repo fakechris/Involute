@@ -419,6 +419,7 @@ export interface WorkHygieneQueryData {
     unlinkedMentions: Array<{ from: HygieneRef; to: HygieneRef }>;
     dependencyWithoutBlocksCount: number;
     dependencyWithoutBlocks: Array<{ from: HygieneRef; to: HygieneRef }>;
+    researchWithoutDownstreamCount: number;
     researchWithoutDownstream: Array<HygieneRef & { repository: string | null }>;
   };
 }

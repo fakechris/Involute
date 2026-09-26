@@ -386,7 +386,10 @@ export async function callMcpTool(
         runInput.decisionRequested = true;
       }
       const reported = await reportRun(context.prisma, runInput, writeActorFromViewer(context.viewer, 'mcp'));
-      if (runInput.status === 'completed' && (await researchLacksDownstream(context.prisma, work.id, runInput.summary))) {
+      // Advisory only: the report is already committed, so a failed check is skipped.
+      const lacksDownstream =
+        runInput.status === 'completed' && (await researchLacksDownstream(context.prisma, work.id, runInput.summary).catch(() => false));
+      if (lacksDownstream) {
         return {
           ...reported,
           warning: 'This is research with nothing derived from it yet. Propose its actionable points (DERIVED_FROM this item) and "won\'t do" conclusions as DECISIONs, or state "no actionable points" in the summary or verification.',

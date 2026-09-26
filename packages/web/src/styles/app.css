@@ -3131,7 +3131,8 @@ kbd {
   font-family: var(--font-mono);
 }
 
-.issue-relations__error {
+.issue-relations__error,
+.hygiene-error {
   font-size: 13px;
   color: var(--danger);
 }

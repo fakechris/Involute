@@ -789,6 +789,7 @@ const typeDefs = /* GraphQL */ `
     unlinkedMentions: [WorkReferencePair!]!
     dependencyWithoutBlocksCount: Int!
     dependencyWithoutBlocks: [WorkReferencePair!]!
+    researchWithoutDownstreamCount: Int!
     researchWithoutDownstream: [Issue!]!
   }
 

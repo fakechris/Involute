@@ -18,6 +18,7 @@ const hygieneData: WorkHygieneQueryData = {
     unlinkedMentions: [{ from: ref(642, 'Decision layer'), to: ref(455, 'Theme briefs') }],
     dependencyWithoutBlocksCount: 1,
     dependencyWithoutBlocks: [{ from: ref(439, 'Bundle MCP'), to: ref(420, 'G1') }],
+    researchWithoutDownstreamCount: 1,
     researchWithoutDownstream: [{ ...ref(694, 'External projects study'), repository: 'fakechris/lumenbox' }],
   },
 };
@@ -44,6 +45,19 @@ describe('work graph health page (INV-721)', () => {
     renderApp(App, { data: boardQueryResult, loading: false, hygieneData }, ['/hygiene']);
     fireEvent.click(await screen.findByRole('button', { name: 'INV-420 blocks INV-439' }));
     await waitFor(() => expect(link).toHaveBeenCalledWith({ variables: { fromId: 'id-420', toId: 'id-439', type: 'BLOCKS' } }));
+  });
+
+  it('shows why the server refused the dependency', async () => {
+    const link = vi.fn().mockResolvedValue({ data: { workLink: { success: false, message: 'This would create a cycle.', link: null } } });
+    const fallback = apolloMocks.useMutation.getMockImplementation() as ((...args: unknown[]) => unknown) | undefined;
+    apolloMocks.useMutation.mockImplementation((document: unknown, ...rest: unknown[]) => {
+      const body = (document as { loc?: { source?: { body?: string } } }).loc?.source?.body ?? '';
+      return body.includes('mutation WorkLink(') ? [link] : fallback ? fallback(document, ...rest) : [vi.fn()];
+    });
+    renderApp(App, { data: boardQueryResult, loading: false, hygieneData }, ['/hygiene']);
+    fireEvent.click(await screen.findByRole('button', { name: 'INV-420 blocks INV-439' }));
+    const region = screen.getByRole('region', { name: 'Dependencies without BLOCKS' });
+    expect(await within(region).findByRole('alert')).toHaveTextContent('This would create a cycle.');
   });
 
   it('opens from the keyboard with g h', async () => {

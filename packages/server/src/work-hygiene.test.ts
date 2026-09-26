@@ -39,6 +39,18 @@ describe('work hygiene and research traceability (INV-721)', () => {
     }
   });
 
+  it('creates a new label from concurrent proposals without aborting either transaction', async () => {
+    const proposals = await Promise.all(
+      Array.from({ length: 4 }, (_, index) => proposeWork(prisma, { teamId: team.id, title: `Race ${index}`, labels: ['race-label'] })),
+    );
+    const labels = await prisma.issueLabel.findMany({ where: { name: 'race-label' } });
+    expect(labels).toHaveLength(1);
+    for (const work of proposals) {
+      const withLabels = await prisma.issue.findUniqueOrThrow({ where: { id: work.id }, include: { labels: true } });
+      expect(withLabels.labels.map((label) => label.id)).toEqual([labels[0]!.id]);
+    }
+  });
+
   it('finds unplaced work, unlinked mentions and prose dependencies without BLOCKS', async () => {
     const project = await make(repo, { kind: 'PROJECT' });
     const milestone = await make('M1', { kind: 'MILESTONE', parentId: project.id });
@@ -74,6 +86,8 @@ describe('work hygiene and research traceability (INV-721)', () => {
     await prisma.issue.update({ where: { id: research.id }, data: { commitmentStatus: 'COMMITTED', stateId: review.id } });
     expect(await researchLacksDownstream(prisma, research.id)).toBe(true);
     expect((await loadWorkHygiene(prisma, { teamId: team.id, teamKey: DEFAULT_TEAM_KEY })).researchWithoutDownstream.map((issue) => issue.id)).toContain(research.id);
+    const hygiene = await loadWorkHygiene(prisma, { teamId: team.id, teamKey: DEFAULT_TEAM_KEY });
+    expect(hygiene.researchWithoutDownstreamCount).toBe(hygiene.researchWithoutDownstream.length);
 
     expect(await researchLacksDownstream(prisma, research.id, 'Read three vendors; no actionable points.')).toBe(false);
 

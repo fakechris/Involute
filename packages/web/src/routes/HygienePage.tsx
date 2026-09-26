@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useNavigate } from 'react-router-dom';
 
@@ -18,6 +19,7 @@ export function HygienePage() {
     variables: { teamKey },
   });
   const [runLink] = useMutation<WorkLinkMutationData, WorkLinkMutationVariables>(WORK_LINK_MUTATION);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const hygiene = data?.workHygiene;
   const open = (ref: HygieneRef) => navigate(`/issue/${ref.id}`);
   const itemButton = (ref: HygieneRef) => (
@@ -49,7 +51,7 @@ export function HygienePage() {
                 ['Not in any project tree', hygiene.unplacedCount],
                 ['Mentions without a link', hygiene.unlinkedMentionCount],
                 ['Dependencies without BLOCKS', hygiene.dependencyWithoutBlocksCount],
-                ['Research with nothing derived', hygiene.researchWithoutDownstream.length],
+                ['Research with nothing derived', hygiene.researchWithoutDownstreamCount],
               ].map(([label, count]) => (
                 <div key={label as string} className={`hygiene-stat${count ? ' hygiene-stat--open' : ''}`}>
                   <span className="hygiene-stat__count">{count}</span>
@@ -74,6 +76,7 @@ export function HygienePage() {
             <section aria-label="Dependencies without BLOCKS">
               <h2>Dependencies without BLOCKS · {hygiene.dependencyWithoutBlocksCount}</h2>
               <p className="observation-hint">The text reads like one depends on the other. Record it if it is true; ignore it if the mention is only an example.</p>
+              {linkError ? <p className="hygiene-error" role="alert">{linkError}</p> : null}
               <ul className="hygiene-list">
                 {hygiene.dependencyWithoutBlocks.map((pair) => (
                   <li key={`${pair.from.id}>${pair.to.id}`}>
@@ -84,7 +87,17 @@ export function HygienePage() {
                       type="button"
                       className="ui-action"
                       onClick={async () => {
-                        await runLink({ variables: { fromId: pair.to.id, toId: pair.from.id, type: 'BLOCKS' } });
+                        setLinkError(null);
+                        try {
+                          const result = await runLink({ variables: { fromId: pair.to.id, toId: pair.from.id, type: 'BLOCKS' } });
+                          if (!result.data?.workLink.success) {
+                            setLinkError(result.data?.workLink.message ?? `Could not record ${pair.to.identifier} blocks ${pair.from.identifier}.`);
+                            return;
+                          }
+                        } catch (linkFailure) {
+                          setLinkError(linkFailure instanceof Error ? linkFailure.message : String(linkFailure));
+                          return;
+                        }
                         await refetch();
                       }}
                     >
@@ -96,7 +109,7 @@ export function HygienePage() {
             </section>
 
             <section aria-label="Research with nothing derived">
-              <h2>Research with nothing derived · {hygiene.researchWithoutDownstream.length}</h2>
+              <h2>Research with nothing derived · {hygiene.researchWithoutDownstreamCount}</h2>
               <p className="observation-hint">Finished research should lead somewhere: propose its actionable points and "won't do" decisions DERIVED_FROM it, or state "no actionable points".</p>
               <ul className="hygiene-list">
                 {hygiene.researchWithoutDownstream.map((item) => (

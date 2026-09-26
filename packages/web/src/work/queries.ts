@@ -377,6 +377,7 @@ export const WORK_LINK_MUTATION = gql`
   mutation WorkLink($fromId: String!, $toId: String!, $type: WorkLinkType!) {
     workLink(fromId: $fromId, toId: $toId, type: $type) {
       success
+      message
       link {
         id
         type
@@ -497,6 +498,7 @@ export const WORK_HYGIENE_QUERY = gql`
           title
         }
       }
+      researchWithoutDownstreamCount
       researchWithoutDownstream {
         id
         identifier

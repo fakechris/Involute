@@ -21,6 +21,7 @@ export interface WorkHygiene {
   dependencyWithoutBlocks: ReferencePair[];
   dependencyWithoutBlocksCount: number;
   researchWithoutDownstream: Issue[];
+  researchWithoutDownstreamCount: number;
 }
 
 function contractTexts(issue: Issue): Array<string | null> {
@@ -110,7 +111,8 @@ export async function loadWorkHygiene(
     unlinkedMentionCount: unlinkedMentions.length,
     dependencyWithoutBlocks: dependencyWithoutBlocks.slice(0, LIST_LIMIT),
     dependencyWithoutBlocksCount: dependencyWithoutBlocks.length,
-    researchWithoutDownstream,
+    researchWithoutDownstream: researchWithoutDownstream.slice(0, LIST_LIMIT),
+    researchWithoutDownstreamCount: researchWithoutDownstream.length,
   };
 }
 
