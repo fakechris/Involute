@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,6 +33,7 @@ const candidateItems = [
     repository: 'fakechris/Involute',
     createdAt: '2026-09-09T09:38:00.000Z',
     snoozedUntil: null,
+    parent: { id: 'm-1', identifier: 'INV-716', title: 'Norm v1', kind: 'MILESTONE' },
     team: { id: 'team-1', key: 'INV' },
     assignee: null,
   },
@@ -108,8 +109,17 @@ beforeEach(() => {
   });
 });
 
+const placementOptions = {
+  projects: { nodes: [{ id: 'p-lum', identifier: 'INV-96', title: 'fakechris/lumenbox', kind: 'PROJECT' }] },
+  milestones: { nodes: [{ id: 'm-lum', identifier: 'INV-141', title: 'Browser and computer use', kind: 'MILESTONE' }] },
+  epics: { nodes: [] },
+};
+
 vi.mock('@apollo/client/react', () => ({
-  useQuery: vi.fn(() => ({
+  useQuery: vi.fn((document: { loc?: { source?: { body?: string } } }) => document.loc?.source?.body?.includes('query PlacementOptions') ? {
+    data: placementOptions,
+    loading: false,
+  } : ({
     data: queryDataHolder.current ?? {
       issues: {
         nodes: candidateItems,
@@ -262,5 +272,53 @@ describe('CandidatesPage', () => {
       ),
     );
     expect(screen.queryByRole('dialog', { name: 'Batch commit summary' })).not.toBeInTheDocument();
+  });
+
+  describe('placement before commit (INV-719)', () => {
+    it('shows where a placed candidate lives and asks for a parent when it has none', () => {
+      render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
+      const placed = screen.getByRole('article', { name: 'INV-40 candidate' });
+      expect(placed).toHaveTextContent('INV-716');
+      expect(placed).toHaveTextContent('Norm v1');
+
+      const unplaced = screen.getByRole('article', { name: 'INV-21 candidate' });
+      const picker = within(unplaced).getByLabelText('Parent for INV-21');
+      const labels = within(picker).getAllByRole('option').map((option) => option.textContent);
+      expect(labels).toEqual(['Choose where this belongs', 'INV-141 — Browser and computer use', 'No milestone (INV-96)']);
+      expect(within(unplaced).getByRole('button', { name: /Commit/ })).toBeDisabled();
+    });
+
+    it('sends the chosen parent with the commit', async () => {
+      render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
+      const unplaced = screen.getByRole('article', { name: 'INV-21 candidate' });
+      fireEvent.change(within(unplaced).getByLabelText('Parent for INV-21'), { target: { value: 'm-lum' } });
+      fireEvent.change(within(unplaced).getByLabelText('Owner for INV-21'), { target: { value: 'user-admin' } });
+      fireEvent.click(within(unplaced).getByRole('button', { name: /Commit/ }));
+      await waitFor(() =>
+        expect(mockRunCommit).toHaveBeenCalledWith({
+          variables: { id: 'cand-2', input: expect.objectContaining({ parentId: 'm-lum', expectedRevision: 1 }) },
+        }),
+      );
+    });
+
+    it('shows the server\'s reason when a commit is refused', async () => {
+      mockRunCommit.mockResolvedValueOnce({
+        data: { workCommit: { success: false, issue: null, message: 'Committed work requires a human owner.' } },
+      });
+      render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
+      const placed = screen.getByRole('article', { name: 'INV-40 candidate' });
+      fireEvent.click(within(placed).getByRole('button', { name: /Commit/ }));
+      expect(await within(placed).findByRole('alert')).toHaveTextContent('Committed work requires a human owner.');
+    });
+
+    it('counts refused batch commits as failures and names why', async () => {
+      mockRunCommit
+        .mockResolvedValueOnce({ data: { workCommit: { success: true, message: null, issue: { id: 'cand-1', identifier: 'INV-40', commitmentStatus: 'COMMITTED' } } } })
+        .mockResolvedValueOnce({ data: { workCommit: { success: false, issue: null, message: 'Committed work requires a parent: place it first.' } } });
+      render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
+      fireEvent.click(screen.getByLabelText(/Select all visible/));
+      fireEvent.click(screen.getByRole('button', { name: /Batch Commit \(2\)/ }));
+      expect(await screen.findByText(/Committed 1, failed 1\. INV-21: Committed work requires a parent/)).toBeInTheDocument();
+    });
   });
 });

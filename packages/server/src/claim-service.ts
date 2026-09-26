@@ -12,6 +12,9 @@ import {
   WORK_REJECT_FORBIDDEN_MESSAGE,
   WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE,
   WORK_COMMIT_REQUIRES_OWNER_MESSAGE,
+  WORK_COMMIT_REQUIRES_PARENT_MESSAGE,
+  WORK_COMMIT_PARENT_REJECTED_MESSAGE,
+  WORK_COMMIT_PARENT_CONFLICT_MESSAGE,
   WORK_NOT_CANDIDATE_MESSAGE,
   WORK_NOT_COMMITTED_MESSAGE,
   WORK_NOT_READY_MESSAGE,
@@ -29,6 +32,7 @@ import { findWorkByIdOrIdentifier, isWorkReadyForClaim } from './context-service
 import { enqueueWorkEvent } from './event-outbox.js';
 import { attachDecisionReceipt, type ReceiptInput } from './decision-receipt.js';
 import { createWorkLink } from './link-service.js';
+import { isLegalContains } from './graph-integrity.js';
 import { createIssueWithAudit } from './issue-service.js';
 import {
   completeWorkIdempotency,
@@ -74,6 +78,8 @@ export interface ProposeWorkInput {
 
 export interface CommitWorkInput {
   acceptance?: string | null;
+  /** Place the candidate under this parent as part of committing it (INV-719). */
+  parentId?: string | null;
   assigneeId?: string | null;
   expectedRevision: number;
   idempotencyKey?: string | null;
@@ -175,6 +181,38 @@ export function normalizeInitialStateType(raw: string | null | undefined): 'BACK
   return null;
 }
 
+const INHERITING_LINK_TYPES: ReadonlySet<WorkLinkType> = new Set(['DISCOVERED_DURING', 'DERIVED_FROM']);
+
+/**
+ * The nearest item at or above `related` that may legally contain a new item
+ * of `child.kind` in the same repository — e.g. a fix found while doing an
+ * issue lands in that issue's milestone, a decision in its project. Null when
+ * nothing up the chain qualifies (cross-repository discovery, unplaced work);
+ * the proposal then stays unplaced and the commit gate asks for a parent.
+ */
+export async function findInheritableParent(
+  prisma: Prisma.TransactionClient | PrismaClient,
+  related: Issue,
+  child: { kind: Issue['kind']; repository: string | null },
+): Promise<Issue | null> {
+  const seen = new Set<string>();
+  let current: Issue | null = related;
+  // Start at the related item's parent for peers (an ISSUE found during an
+  // ISSUE is its sibling, not its sub-issue); a container itself qualifies.
+  if (current.kind === 'ISSUE' || current.kind === child.kind) {
+    current = current.parentId ? await prisma.issue.findUnique({ where: { id: current.parentId } }) : null;
+  }
+  while (current && !seen.has(current.id)) {
+    seen.add(current.id);
+    const repository = child.repository ?? current.repository;
+    if (current.repository && current.repository === repository && isLegalContains(current.kind, child.kind)) {
+      return current;
+    }
+    current = current.parentId ? await prisma.issue.findUnique({ where: { id: current.parentId } }) : null;
+  }
+  return null;
+}
+
 export async function proposeWork(
   prisma: PrismaClient,
   input: ProposeWorkInput,
@@ -240,15 +278,33 @@ export async function proposeWork(
     if (input.source !== undefined && targetType !== 'BACKLOG') createInput.source = input.source;
     if (input.verification !== undefined) createInput.verification = input.verification;
 
+    const relatedType = input.relatedWorkType ?? 'DISCOVERED_DURING';
+    let related: Issue | null = null;
+    if (input.relatedWorkId) {
+      related = await findWorkByIdOrIdentifier(transaction, input.relatedWorkId);
+      if (!related) throw createNotFoundError(WORK_RELATED_NOT_FOUND_MESSAGE);
+    }
+
     let parentWork: Issue | null = null;
     if (input.parentId) {
       parentWork = await findWorkByIdOrIdentifier(transaction, input.parentId);
       if (!parentWork) throw createNotFoundError(PARENT_ISSUE_NOT_FOUND_MESSAGE);
+    } else if (related && relatedType === 'CONTAINS') {
+      parentWork = related;
+    } else if (related && INHERITING_LINK_TYPES.has(relatedType)) {
+      // Norm v1 (INV-718): work found while doing X, or derived from X,
+      // belongs where X belongs unless the proposer says otherwise.
+      parentWork = await findInheritableParent(transaction, related, {
+        kind: createInput.kind ?? 'ISSUE',
+        repository: createInput.repository ?? null,
+      });
+    }
+    if (parentWork) {
       createInput.parentId = parentWork.id;
-    } else if (input.relatedWorkId && input.relatedWorkType === 'CONTAINS') {
-      parentWork = await findWorkByIdOrIdentifier(transaction, input.relatedWorkId);
-      if (!parentWork) throw createNotFoundError(WORK_RELATED_NOT_FOUND_MESSAGE);
-      createInput.parentId = parentWork.id;
+      // A child without a repository inherits its parent's (CONTAINS needs both).
+      if (createInput.repository === undefined || createInput.repository === null) {
+        createInput.repository = parentWork.repository;
+      }
     }
 
     const { auditId: creationAuditId, issue: created } = await createIssueWithAudit(transaction, createInput, actor);
@@ -259,14 +315,15 @@ export async function proposeWork(
         toId: created.id,
         type: 'CONTAINS',
       });
-    } else if (input.relatedWorkId) {
-      const related = await findWorkByIdOrIdentifier(transaction, input.relatedWorkId);
-      if (!related) throw createNotFoundError(WORK_RELATED_NOT_FOUND_MESSAGE);
+    }
+    // The typed relation is recorded even when a parent is also given; before
+    // INV-719 a parent silently replaced it.
+    if (related && relatedType !== 'CONTAINS') {
       await createWorkLink(transaction, {
         actor,
         fromId: created.id,
         toId: related.id,
-        type: input.relatedWorkType ?? 'DISCOVERED_DURING',
+        type: relatedType,
       });
     }
     if (idempotencyId) {
@@ -288,6 +345,42 @@ export async function proposeWork(
     }
     return created;
   });
+}
+
+/**
+ * Norm v1 (INV-718): committing is where placement is enforced. A candidate may
+ * be proposed without a parent, but it becomes committed work only with exactly
+ * one CONTAINS parent (PROJECTs excepted). `parentId` places it in the same
+ * transaction; the link service applies the hierarchy rules and audits the move.
+ */
+async function placeForCommit(
+  transaction: Prisma.TransactionClient,
+  work: Issue,
+  parentId: string | null,
+  actor: WriteActor,
+): Promise<void> {
+  if (work.kind === 'PROJECT') return;
+  const currentParentId = async () => {
+    const current = await transaction.issue.findUniqueOrThrow({ where: { id: work.id }, select: { parentId: true } });
+    if (current.parentId) return current.parentId;
+    const link = await transaction.workLink.findFirst({ where: { toId: work.id, type: 'CONTAINS' }, select: { fromId: true } });
+    return link?.fromId ?? null;
+  };
+  if (parentId) {
+    const parent = await findWorkByIdOrIdentifier(transaction, parentId);
+    if (!parent) throw createNotFoundError(PARENT_ISSUE_NOT_FOUND_MESSAGE);
+    const existing = await currentParentId();
+    if (existing && existing !== parent.id) {
+      // Committing is not a move: an already-placed candidate keeps its parent
+      // unless someone moves it on purpose (revision-checked parent update).
+      throw createValidationError(WORK_COMMIT_PARENT_CONFLICT_MESSAGE);
+    }
+    if (!existing) await createWorkLink(transaction, { actor, fromId: parent.id, toId: work.id, type: 'CONTAINS' });
+  }
+  const placedUnder = await currentParentId();
+  if (!placedUnder) throw createValidationError(WORK_COMMIT_REQUIRES_PARENT_MESSAGE);
+  const parent = await transaction.issue.findUnique({ where: { id: placedUnder }, select: { commitmentStatus: true } });
+  if (!parent || parent.commitmentStatus === 'REJECTED') throw createValidationError(WORK_COMMIT_PARENT_REJECTED_MESSAGE);
 }
 
 export async function commitWork(
@@ -358,6 +451,8 @@ export async function commitWork(
     if (owner.memberships.length === 0) {
       throw createValidationError(WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE);
     }
+
+    await placeForCommit(transaction, existing, input.parentId ?? null, actor);
 
     const readyState = await transaction.workflowState.findFirst({
       where: {

@@ -8,6 +8,7 @@ import { Btn } from '../components/Primitives';
 import {
   CANDIDATES_PAGE_QUERY,
   ISSUE_SNOOZE_MUTATION,
+  PLACEMENT_OPTIONS_QUERY,
   WORK_COMMIT_MUTATION,
   WORK_LINK_MUTATION,
   WORK_REJECT_MUTATION,
@@ -16,10 +17,12 @@ import type {
   CandidateWork,
   CandidatesPageQueryData,
   CandidatesPageQueryVariables,
+  PlacementOptionsQueryData,
   WorkCommitMutationData,
   WorkCommitMutationVariables,
   WorkRejectMutationData,
   WorkRejectMutationVariables,
+  WorkKind,
   WorkUserSummary,
 } from '../work/types';
 
@@ -159,6 +162,82 @@ function CommitGlanceDialog({
   );
 }
 
+// Mirrors the server's CONTAINS rules (norm v1, INV-718): which kinds may hold which.
+const LEGAL_PARENT_KINDS: Record<WorkKind, WorkKind[]> = {
+  PROJECT: [],
+  MILESTONE: ['PROJECT'],
+  DECISION: ['PROJECT'],
+  EPIC: ['PROJECT', 'MILESTONE'],
+  ISSUE: ['MILESTONE', 'EPIC', 'PROJECT'],
+};
+
+export function needsParent(candidate: Pick<CandidateWork, 'kind' | 'parent'>): boolean {
+  return candidate.kind !== 'PROJECT' && !candidate.parent;
+}
+
+/**
+ * Committed work needs a parent (INV-719). Shows where the candidate will live,
+ * or — when it has none — offers the committed containers of its repository it
+ * may legally go under; the choice is sent with the commit.
+ */
+function ParentField({
+  candidate,
+  value,
+  onChange,
+}: {
+  candidate: CandidateWork;
+  value: string;
+  onChange: (parentId: string) => void;
+}) {
+  const missing = needsParent(candidate);
+  const { data, loading } = useQuery<PlacementOptionsQueryData, { repository: string }>(PLACEMENT_OPTIONS_QUERY, {
+    variables: { repository: candidate.repository ?? '' },
+    skip: !missing || !candidate.repository,
+  });
+
+  if (candidate.kind === 'PROJECT') return null;
+  if (candidate.parent) {
+    return (
+      <p className="observation-field observation-parent">
+        <span>Parent</span>
+        <span>
+          <span className="mono">{candidate.parent.identifier}</span> {candidate.parent.title}{' '}
+          <span className="observation-card__meta">{candidate.parent.kind}</span>
+        </span>
+      </p>
+    );
+  }
+  if (!candidate.repository) {
+    return (
+      <p className="observation-parent observation-parent--missing" role="note">
+        Needs a parent before commit, and a repository first: place it with its context page or ask the proposer to resubmit with parent_id.
+      </p>
+    );
+  }
+  const legal = LEGAL_PARENT_KINDS[candidate.kind];
+  const options = [...(data?.projects?.nodes ?? []), ...(data?.milestones?.nodes ?? []), ...(data?.epics?.nodes ?? [])]
+    .filter((option) => legal.includes(option.kind))
+    .sort((left, right) => legal.indexOf(left.kind) - legal.indexOf(right.kind) || left.identifier.localeCompare(right.identifier, undefined, { numeric: true }));
+  return (
+    <label className="observation-field observation-parent observation-parent--missing">
+      <span>Parent (required to commit)</span>
+      <select
+        aria-label={`Parent for ${candidate.identifier}`}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={loading}
+      >
+        <option value="">{loading ? 'Loading…' : options.length ? 'Choose where this belongs' : 'No committed container in this repository'}</option>
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.kind === 'PROJECT' && candidate.kind === 'ISSUE' ? `No milestone (${option.identifier})` : `${option.identifier} — ${option.title}`}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function CandidateCard({
   candidate,
   humans,
@@ -185,6 +264,8 @@ function CandidateCard({
   const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<'commit' | 'reject' | 'snooze' | 'duplicate' | null>(null);
   const [duplicateOfId, setDuplicateOfId] = useState('');
+  const [parentChoice, setParentChoice] = useState('');
+  const missingParent = needsParent(candidate);
   const [runCommit] = useMutation<WorkCommitMutationData, WorkCommitMutationVariables>(WORK_COMMIT_MUTATION);
   const [runReject] = useMutation<WorkRejectMutationData, WorkRejectMutationVariables>(WORK_REJECT_MUTATION);
   const [runSnooze] = useMutation<SnoozeMutationData, SnoozeMutationVariables>(ISSUE_SNOOZE_MUTATION);
@@ -250,12 +331,13 @@ function CandidateCard({
             expectedRevision: candidate.revision,
             ...(acceptance.trim() ? { acceptance: acceptance.trim() } : {}),
             ...(assigneeId ? { assigneeId } : {}),
+            ...(missingParent && parentChoice ? { parentId: parentChoice } : {}),
           },
         },
       });
 
       if (!result.data?.workCommit.success || !result.data.workCommit.issue) {
-        setError(COMMIT_ERROR_MESSAGE);
+        setError(result.data?.workCommit.message || COMMIT_ERROR_MESSAGE);
         return;
       }
 
@@ -375,6 +457,7 @@ function CandidateCard({
           ))}
         </select>
       </label>
+      <ParentField candidate={candidate} value={parentChoice} onChange={setParentChoice} />
       <label className="observation-field">
         <span>Reject reason</span>
         <input
@@ -393,7 +476,8 @@ function CandidateCard({
         <Btn
           variant="accent"
           icon={<IcoCheck size={12} />}
-          disabled={pendingAction !== null || snoozed}
+          disabled={pendingAction !== null || snoozed || (missingParent && !parentChoice)}
+          {...(missingParent && !parentChoice ? { title: 'Choose a parent first: committed work must belong somewhere.' } : {})}
           onClick={() => void handleCommit()}
         >
           {pendingAction === 'commit' ? 'Committing…' : 'Commit'}
@@ -604,6 +688,7 @@ export function CandidatesPage() {
     const toCommit = candidates.filter((c) => selectedIds.includes(c.id));
     let successCount = 0;
     let failCount = 0;
+    const failures: string[] = [];
     const committedCandidates: CandidateWork[] = [];
 
     for (let i = 0; i < toCommit.length; i++) {
@@ -617,7 +702,7 @@ export function CandidatesPage() {
           : `Accepted and committed for execution: ${candidate.title}`;
 
       try {
-        await runCommit({
+        const result = await runCommit({
           variables: {
             id: candidate.id,
             input: {
@@ -627,11 +712,17 @@ export function CandidatesPage() {
             },
           },
         });
-        successCount++;
-        committedCandidates.push(candidate);
+        // A refused commit comes back as success:false, not as an exception.
+        if (result.data?.workCommit.success) {
+          successCount++;
+          committedCandidates.push(candidate);
+        } else {
+          failCount++;
+          failures.push(`${candidate.identifier}: ${result.data?.workCommit.message ?? 'refused'}`);
+        }
       } catch (err) {
         failCount++;
-        console.error(`Failed to commit candidate ${candidate.identifier}:`, err);
+        failures.push(`${candidate.identifier}: ${err instanceof Error ? err.message : 'failed'}`);
       }
       setBulkProgress({ done: i + 1, total: toCommit.length });
     }
@@ -640,7 +731,7 @@ export function CandidatesPage() {
     setBulkAction(null);
     setSelectedIds([]);
     if (failCount > 0) {
-      setBulkError(`Committed ${successCount}, failed ${failCount}.`);
+      setBulkError(`Committed ${successCount}, failed ${failCount}. ${failures.join(' · ')}`);
     }
     if (successCount > 0) {
       setCommitGlance({ committed: committedCandidates, failCount });
@@ -788,6 +879,11 @@ export function CandidatesPage() {
           </div>
         ) : (
           <div className="observation-list">
+            {bulkError && selectedIds.length === 0 ? (
+              <p className="observation-error candidates-bulk-result" role="alert">
+                {bulkError}
+              </p>
+            ) : null}
             {filteredActiveCandidates.length > 0 ? (
               <div className="candidates-toolbar">
                 <label className="candidates-toolbar__select-all">

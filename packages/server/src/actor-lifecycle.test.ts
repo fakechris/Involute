@@ -11,6 +11,7 @@ import { getAgentProfile, listAgentActors } from './agent-directory.ts';
 import { createComment } from './issue-service.ts';
 import { proposeWork } from './claim-service.ts';
 import { provisionServiceActor } from './service-actors.ts';
+import { testParentId } from './test-placement.ts';
 
 loadProjectEnvironment();
 
@@ -107,7 +108,7 @@ describe('actor lifecycle (INV-586)', () => {
       const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
       const work = await proposeWork(
         prisma,
-        { description: DESCRIPTION, teamId: team.id, title: 'Owned but not assigned' },
+        { parentId: await testParentId(prisma, team.id), description: DESCRIPTION, teamId: team.id, title: 'Owned but not assigned' },
         { actorId: credential.userId, actorKind: 'AGENT', surface: 'test' },
       );
 
@@ -126,7 +127,7 @@ describe('actor lifecycle (INV-586)', () => {
       const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
       await proposeWork(
         prisma,
-        { description: DESCRIPTION, teamId: team.id, title: 'History' },
+        { parentId: await testParentId(prisma, team.id), description: DESCRIPTION, teamId: team.id, title: 'History' },
         { actorId: credential.userId, actorKind: 'AGENT', surface: 'test' },
       );
 
@@ -144,7 +145,7 @@ describe('actor lifecycle (INV-586)', () => {
       const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
       const work = await proposeWork(
         prisma,
-        { description: DESCRIPTION, teamId: team.id, title: 'Before deactivation' },
+        { parentId: await testParentId(prisma, team.id), description: DESCRIPTION, teamId: team.id, title: 'Before deactivation' },
         { actorId: credential.userId, actorKind: 'AGENT', surface: 'test' },
       );
 

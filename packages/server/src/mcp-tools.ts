@@ -227,13 +227,18 @@ export async function callMcpTool(
       if (proposeReceipt) proposeInput.receipt = proposeReceipt;
       assignOptional(proposeInput, 'initialState', optionalString(args.initial_state));
       const created = await proposeWork(context.prisma, proposeInput, writeActorFromViewer(context.viewer, 'mcp'));
+      const notes: string[] = [];
       if (created.title !== rawTitle) {
-        return {
-          ...created,
-          warning: `Status prefix was automatically removed from title: "${rawTitle}" -> "${created.title}". Do not encode work status into titles; use work_claim and run_report to transition states.`,
-        };
+        notes.push(`Status prefix was automatically removed from title: "${rawTitle}" -> "${created.title}". Do not encode work status into titles; use work_claim and run_report to transition states.`);
       }
-      return created;
+      if (!proposeInput.parentId && created.parentId) {
+        const parent = await context.prisma.issue.findUnique({ where: { id: created.parentId }, select: { identifier: true, kind: true } });
+        notes.push(`No parent_id given: placed under ${parent?.kind ?? 'parent'} ${parent?.identifier ?? created.parentId}, inherited from the related work (norm v1, INV-718).`);
+      }
+      if (!created.parentId && created.kind !== 'PROJECT') {
+        notes.push('This candidate has no parent. Committing it requires one: pass parent_id now (work_link CONTAINS later), or the human will place it at commit.');
+      }
+      return notes.length ? { ...created, warning: notes.join(' ') } : created;
     }
     case 'work_commit': {
       const work = await requireWork(context.prisma, requiredString(args.id, 'id'));
@@ -243,6 +248,7 @@ export async function callMcpTool(
       };
       assignOptional(commitInput, 'acceptance', optionalString(args.acceptance));
       assignOptional(commitInput, 'assigneeId', optionalString(args.assignee_id));
+      assignOptional(commitInput, 'parentId', optionalString(args.parent_id));
       assignOptional(commitInput, 'constraints', optionalString(args.constraints));
       assignOptional(commitInput, 'outcome', optionalString(args.outcome));
       assignOptional(commitInput, 'scope', optionalString(args.scope));
@@ -544,13 +550,13 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         kind: { type: 'string', enum: ['ISSUE', 'PROJECT', 'MILESTONE', 'DECISION', 'EPIC'] },
         parent_id: {
           type: 'string',
-          description: 'Recommended: The identifier (e.g. INV-2) or UUID of the parent work item (PROJECT or MILESTONE) that CONTAINS this item. Guarantees top-down hierarchy and prevents relationship inversion.',
+          description: 'Identifier (e.g. INV-2) or UUID of the parent that CONTAINS this item: PROJECT (for MILESTONE/DECISION/EPIC, or an ISSUE with no milestone), MILESTONE (EPIC/ISSUE), EPIC (ISSUE) or ISSUE (sub-issue). Committing requires a parent; if omitted with related_work_type DISCOVERED_DURING/DERIVED_FROM, the related item\'s nearest legal ancestor is used.',
         },
         related_work_id: { type: 'string', description: 'Existing work item identifier (e.g. INV-2) or UUID to relate this new item to.' },
         related_work_type: {
           type: 'string',
           enum: ['CONTAINS', 'BLOCKS', 'DERIVED_FROM', 'DISCOVERED_DURING', 'RELATED_TO', 'DUPLICATE_OF'],
-          description: 'Relationship type. If CONTAINS, the related item (e.g. Project/Milestone) contains this new item as a child. Defaults to DISCOVERED_DURING.',
+          description: 'Relationship type from the new item to related_work_id. If CONTAINS, the related item becomes the parent. Otherwise the typed link is recorded in addition to any parent_id. Defaults to DISCOVERED_DURING.',
         },
         repository: { type: 'string' },
         idempotency_key: { type: 'string' },
@@ -566,12 +572,13 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_commit',
     annotations: { readOnlyHint: false, destructiveHint: false },
-    description: 'Promote candidate work to a committed contract. Humans only. Requires acceptance and a human owner.',
+    description: 'Promote candidate work to a committed contract. Humans only. Requires acceptance, a human owner and a parent (every kind except PROJECT); pass parent_id to place it while committing.',
     inputSchema: {
       type: 'object',
       properties: {
         id: { type: 'string' },
         expected_revision: { type: 'integer' },
+        parent_id: { type: 'string', description: 'Identifier (e.g. INV-12) or UUID of the PROJECT, MILESTONE, EPIC or ISSUE to place this work under while committing.' },
         acceptance: { type: 'string' },
         assignee_id: { type: 'string' },
         outcome: { type: 'string' },

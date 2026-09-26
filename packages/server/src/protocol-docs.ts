@@ -101,7 +101,7 @@ states by name or group, never by row id.
 Work nodes carry a delivery contract (\`outcome\`, \`scope\`, \`constraints\`,
 \`acceptance\`, \`verification\`) and typed links:
 
-- \`CONTAINS\` — PROJECT → MILESTONE → ISSUE, or PROJECT → DECISION; both endpoints require matching explicit repositories. A second parent is rejected; use a revision-checked parent update to move work.
+- \`CONTAINS\` — PROJECT → MILESTONE/DECISION/EPIC/ISSUE, MILESTONE → EPIC/ISSUE, EPIC → ISSUE, ISSUE → ISSUE (sub-issues); both endpoints require matching explicit repositories. Every committed item except a PROJECT needs exactly one parent: commit is refused without one. Proposals linked DISCOVERED_DURING/DERIVED_FROM without parent_id inherit the related item's nearest legal ancestor. A second parent is rejected; use a revision-checked parent update to move work.
 - \`BLOCKS\` — dependency; ready work has no incoming \`BLOCKS\` from unresolved work
 - \`DERIVED_FROM\`, \`DISCOVERED_DURING\`, \`RELATED_TO\`, \`DUPLICATE_OF\`
 

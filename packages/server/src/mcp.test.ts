@@ -9,6 +9,7 @@ import { startServer, type StartedServer } from './index.ts';
 import { READ_ONLY_MCP_TOOLS, WRITE_MCP_TOOLS } from './mcp-tools.ts';
 import { hashAgentToken } from './agent-credentials.ts';
 import { createGraphQLContext } from './auth.ts';
+import { testParentId } from './test-placement.ts';
 
 loadProjectEnvironment();
 
@@ -193,13 +194,17 @@ describe('Involute MCP', () => {
     const proposed = await callTool('work_propose', {
       team: DEFAULT_TEAM_KEY,
       title: 'Ignore aborted turns in parser',
+      repository: 'test/placement',
       idempotency_key: 'mcp-parser-1',
     });
     expect(proposed.commitmentStatus).toBe('CANDIDATE');
+    // No parent yet: the proposal says so, and committing it is refused (INV-719).
+    expect(proposed.warning).toContain('no parent');
 
     const replay = await callTool('work_propose', {
       team: DEFAULT_TEAM_KEY,
       title: 'Ignore aborted turns in parser',
+      repository: 'test/placement',
       idempotency_key: 'mcp-parser-1',
     });
     expect(replay.identifier).toBe(proposed.identifier);
@@ -210,13 +215,30 @@ describe('Involute MCP', () => {
     const context = await callTool('work_get_context', { id: proposed.identifier });
     expect(context.work.identifier).toBe(proposed.identifier);
 
+    const refused = await mcpRpc('/mcp', {
+      id: 'commit-without-parent',
+      method: 'tools/call',
+      params: {
+        name: 'work_commit',
+        arguments: {
+          id: proposed.identifier,
+          expected_revision: proposed.revision,
+          acceptance: 'Aborted turns are omitted from extracted issues',
+          assignee_id: viewer.id,
+        },
+      },
+    });
+    expect(JSON.stringify(refused.body)).toContain('requires a parent');
+
     const committed = await callTool('work_commit', {
       id: proposed.identifier,
       expected_revision: proposed.revision,
       acceptance: 'Aborted turns are omitted from extracted issues',
       assignee_id: viewer.id,
+      parent_id: await testParentId(prisma, team.id),
     });
     expect(committed.commitmentStatus).toBe('COMMITTED');
+    expect(committed.parentId).toBe(await testParentId(prisma, team.id));
 
     const claimed = await callTool('work_claim', { id: committed.identifier });
     expect(claimed.claim.actorId).toBe(viewer.id);

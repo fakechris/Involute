@@ -1,4 +1,4 @@
-import type { Issue, Prisma } from '@prisma/client';
+import type { Issue, Prisma, WorkKind } from '@prisma/client';
 import { createValidationError, WORK_LINK_TEAM_MISMATCH_MESSAGE } from './errors.js';
 
 type Node = Pick<Issue, 'id' | 'kind' | 'teamId' | 'repository' | 'parentId'>;
@@ -15,9 +15,28 @@ export function assertContainsEndpoints(parent: Node, child: Node): void {
   if (!parentRepo?.trim() || !childRepo?.trim()) throw createValidationError('CONTAINS requires an explicit repository on both endpoints.');
   if (parentRepo !== parentRepo.trim() || childRepo !== childRepo.trim()) throw createValidationError('CONTAINS repository values must not have surrounding whitespace.');
   if (parentRepo !== childRepo) throw createValidationError('CONTAINS cannot cross repository boundaries.');
-  const legal = (parent.kind === 'PROJECT' && (child.kind === 'MILESTONE' || child.kind === 'DECISION'))
-    || (parent.kind === 'MILESTONE' && child.kind === 'ISSUE');
-  if (!legal) throw createValidationError('CONTAINS requires PROJECT → MILESTONE → ISSUE, or PROJECT → DECISION.');
+  if (!isLegalContains(parent.kind, child.kind)) throw createValidationError(CONTAINS_KINDS_MESSAGE);
+}
+
+/**
+ * Which kinds may contain which (work-graph norm v1, INV-718): a PROJECT holds
+ * milestones, decisions, epics and — shown as "No milestone" — issues; a
+ * MILESTONE holds epics and issues; an EPIC holds issues; an ISSUE holds
+ * sub-issues. Single parent, no cycles and one repository still apply.
+ */
+const LEGAL_CONTAINS: Record<WorkKind, readonly WorkKind[]> = {
+  PROJECT: ['MILESTONE', 'DECISION', 'EPIC', 'ISSUE'],
+  MILESTONE: ['EPIC', 'ISSUE'],
+  EPIC: ['ISSUE'],
+  ISSUE: ['ISSUE'],
+  DECISION: [],
+};
+
+export const CONTAINS_KINDS_MESSAGE =
+  'CONTAINS allows PROJECT → MILESTONE/DECISION/EPIC/ISSUE, MILESTONE → EPIC/ISSUE, EPIC → ISSUE, ISSUE → ISSUE.';
+
+export function isLegalContains(parentKind: WorkKind, childKind: WorkKind): boolean {
+  return LEGAL_CONTAINS[parentKind].includes(childKind);
 }
 
 /** Validate a prospective node against both persisted hierarchy representations. */

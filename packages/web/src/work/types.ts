@@ -41,6 +41,8 @@ export interface CandidateWork {
   snoozedUntil?: string | null;
   source?: string | null;
   createdAt: string;
+  /** The CONTAINS parent; committing requires one for every kind but PROJECT (INV-719). */
+  parent?: { id: string; identifier: string; title: string; kind: WorkKind } | null;
   team: {
     id: string;
     key: string;
@@ -323,6 +325,8 @@ export interface WorkContextPageQueryVariables {
 export interface WorkCommitMutationData {
   workCommit: {
     success: boolean;
+    /** Why the commit was refused; null on success. */
+    message?: string | null;
     issue: { id: string; identifier: string; commitmentStatus: CommitmentStatus } | null;
   };
 }
@@ -333,6 +337,7 @@ export interface WorkCommitMutationVariables {
     expectedRevision: number;
     acceptance?: string;
     assigneeId?: string;
+    parentId?: string;
   };
 }
 
@@ -383,4 +388,17 @@ export interface ProjectWorkTimelineQueryData {
     }>;
     cycles: Array<{ id: string; name: string; number: number; startsAt: string; endsAt: string }>;
   };
+}
+
+export interface PlacementOption {
+  id: string;
+  identifier: string;
+  title: string;
+  kind: WorkKind;
+}
+
+export interface PlacementOptionsQueryData {
+  projects: { nodes: PlacementOption[] };
+  milestones: { nodes: PlacementOption[] };
+  epics: { nodes: PlacementOption[] };
 }

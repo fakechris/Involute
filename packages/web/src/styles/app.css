@@ -4262,6 +4262,35 @@ kbd {
   padding: 8px;
 }
 
+/* Placement before commit (INV-719) */
+.observation-parent {
+  margin: 0;
+}
+
+.observation-parent > span:last-child {
+  font-size: 14px;
+  color: var(--fg);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.observation-parent--missing {
+  padding: 8px 10px;
+  border-radius: var(--r-2);
+  border: 1px dashed color-mix(in srgb, var(--warn) 45%, var(--border));
+  background: color-mix(in srgb, var(--warn) 7%, transparent);
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+.observation-parent--missing > span:first-child {
+  color: var(--warn);
+}
+
+.candidates-bulk-result {
+  margin: 0;
+}
+
 .observation-error {
   margin: 0;
   color: var(--danger);
@@ -5485,6 +5514,12 @@ kbd {
   min-width: 48px;
   text-align: right;
   flex-shrink: 0;
+}
+
+.graph-outline__nomilestone {
+  color: var(--fg-dim);
+  font-size: 12px;
+  font-style: italic;
 }
 
 .graph-outline__unplaced {

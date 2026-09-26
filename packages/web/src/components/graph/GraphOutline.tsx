@@ -122,7 +122,44 @@ function OutlineRow({ item, depth, collapsed, onToggle, onOpen, edges, byId, ren
           <span className="graph-outline__state">{node.stateName}</span>
         )}
       </div>
-      {hasChildren && !isCollapsed ? <div role="group">{renderChildren(children, depth + 1)}</div> : null}
+      {hasChildren && !isCollapsed ? (
+        node.kind === 'PROJECT' ? (
+          <ProjectChildren items={children} depth={depth + 1} renderChildren={renderChildren} />
+        ) : (
+          <div role="group">{renderChildren(children, depth + 1)}</div>
+        )
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * A project's containers first; issues placed directly under the project
+ * (allowed by norm v1, INV-718) are gathered as "No milestone", as in Linear.
+ */
+function ProjectChildren({
+  items,
+  depth,
+  renderChildren,
+}: {
+  items: OutlineItem[];
+  depth: number;
+  renderChildren: (items: OutlineItem[], depth: number) => React.ReactNode;
+}) {
+  const direct = items.filter((item) => item.node.kind === 'ISSUE');
+  const containers = items.filter((item) => item.node.kind !== 'ISSUE');
+  return (
+    <div role="group">
+      {renderChildren(containers, depth)}
+      {direct.length > 0 ? (
+        <div role="group" aria-label="No milestone">
+          <div className="graph-outline__row graph-outline__nomilestone" style={{ paddingLeft: 8 + depth * 18 }}>
+            <span className="graph-outline__caret" aria-hidden="true" />
+            <span>No milestone · {direct.length}</span>
+          </div>
+          {renderChildren(direct, depth + 1)}
+        </div>
+      ) : null}
     </div>
   );
 }

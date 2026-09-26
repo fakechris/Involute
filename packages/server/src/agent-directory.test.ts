@@ -21,6 +21,7 @@ import { answerAgentRequest, claimAgentRequest } from './agent-request-service.t
 import { createComment } from './issue-service.ts';
 import { proposeWork } from './claim-service.ts';
 import { startServer, type StartedServer } from './index.ts';
+import { testParentId } from './test-placement.ts';
 
 loadProjectEnvironment();
 
@@ -50,8 +51,7 @@ describe('agent profile is bounded by what the viewer may read (INV-597 follow-u
     const admin = await prisma.user.findFirstOrThrow({ where: { actorKind: 'HUMAN', globalRole: 'ADMIN' } });
     const team = await prisma.team.update({ where: { key: DEFAULT_TEAM_KEY }, data: { visibility: 'PRIVATE' } });
     const { credential } = await issueAgentCredential(prisma, { handle: 'mia', name: 'Mia', ownerId: admin.id, teamKey: DEFAULT_TEAM_KEY });
-    await proposeWork(prisma, {
-      description: ['### 1. 目标与架构定位', 'x', '### 2. 核心功能与交付范围', 'x', '### 3. 验收标准与验证方案', 'x'].join('\n'),
+    await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), description: ['### 1. 目标与架构定位', 'x', '### 2. 核心功能与交付范围', 'x', '### 3. 验收标准与验证方案', 'x'].join('\n'),
       receipt: { reasoning: 'private reasoning' }, teamId: team.id, title: 'Private work',
     }, { actorId: credential.userId, actorKind: 'AGENT', surface: 'test' });
 
@@ -228,7 +228,7 @@ describe('agent directory and profile (INV-573)', () => {
 
       const created = await proposeWork(
         prisma,
-        { teamId: team.id, title: 'Proposed by an agent', description: AGENT_DESCRIPTION },
+        { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Proposed by an agent', description: AGENT_DESCRIPTION },
         { actorId: credential.userId, actorKind: 'AGENT', surface: 'test' },
       );
 
@@ -345,7 +345,7 @@ describe('agent directory and profile (INV-573)', () => {
       });
       const created = await proposeWork(
         prisma,
-        { teamId: team.id, title: 'Proposed by an agent', description: AGENT_DESCRIPTION },
+        { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Proposed by an agent', description: AGENT_DESCRIPTION },
         { actorId: credential.userId, actorKind: 'AGENT', surface: 'test' },
       );
 

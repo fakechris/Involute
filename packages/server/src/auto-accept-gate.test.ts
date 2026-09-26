@@ -8,6 +8,7 @@ import { loadProjectEnvironment } from '../prisma/env.ts';
 import { claimWork, commitWork, proposeWork } from './claim-service.ts';
 import { attachEvidence, reportRun, reviewWork } from './run-service.ts';
 import { WORK_ACCEPT_FORBIDDEN_MESSAGE } from './errors.ts';
+import { testParentId } from './test-placement.ts';
 
 loadProjectEnvironment();
 
@@ -16,7 +17,7 @@ const prisma = new PrismaClientConstructor();
 async function seedCommittedClaimedWork(team: Team, human: User, executor: User = human) {
   const candidate = await proposeWork(
     prisma,
-    { teamId: team.id, title: 'Auto-accept target' },
+    { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Auto-accept target' },
     { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
   );
   const committed = await commitWork(

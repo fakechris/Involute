@@ -182,4 +182,34 @@ test.describe('work graph acceptance', () => {
 
     expect(errors).toEqual([]);
   });
+
+  test('a candidate without a parent is placed while committing it (INV-719)', async ({ page, request }) => {
+    const { milestone } = fixture!;
+    const teams = await gql<{ teams: { nodes: Array<{ id: string; key: string }> } }>(request, `{ teams { nodes { id key } } }`);
+    const team = teams.teams.nodes.find((candidate) => candidate.key === 'INV') ?? teams.teams.nodes[0]!;
+    const proposed = (
+      await gql<{ workPropose: { issue: { id: string; identifier: string } } }>(
+        request,
+        `mutation($input: WorkProposeInput!) { workPropose(input: $input) { issue { id identifier } } }`,
+        { input: { teamId: team.id, title: 'E2E unplaced candidate', repository: REPOSITORY, acceptance: 'placed at commit' } },
+      )
+    ).workPropose.issue;
+
+    await page.goto(`/candidates?project=${encodeURIComponent(REPOSITORY)}`);
+    const card = page.getByRole('article', { name: `${proposed.identifier} candidate` });
+    await expect(card).toBeVisible();
+    await expect(card.getByRole('button', { name: /Commit/ })).toBeDisabled();
+
+    await card.getByLabel(`Parent for ${proposed.identifier}`).selectOption({ label: `${milestone.identifier} — E2E milestone` });
+    await card.getByRole('button', { name: /Commit/ }).click();
+    await expect(card).toHaveCount(0);
+
+    await page.goto(`/graph?project=${encodeURIComponent(REPOSITORY)}`);
+    const milestoneRow = page
+      .getByRole('tree', { name: 'Project outline' })
+      .getByRole('treeitem', { name: `${milestone.identifier} E2E milestone` });
+    await expect(milestoneRow.getByRole('treeitem', { name: `${proposed.identifier} E2E unplaced candidate` })).toBeVisible();
+
+    await gql(request, `mutation($id: String!) { issueDelete(id: $id) { success } }`, { id: proposed.id }, { asHuman: true });
+  });
 });

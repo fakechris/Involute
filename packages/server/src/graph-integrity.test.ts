@@ -26,13 +26,40 @@ describe('hierarchy write boundary', () => {
 
   it('rejects invalid kinds, missing repositories and same-team cross-repository contains', async () => {
     const parent = await node('PROJECT');
-    for (const child of [await node('ISSUE'), await node('MILESTONE', null), await node('MILESTONE', 'fakechris/lumenbox'), await node('MILESTONE', 'fakechris/involute'), await node('MILESTONE', ' fakechris/Involute ')]) {
+    for (const child of [await node('PROJECT'), await node('MILESTONE', null), await node('MILESTONE', 'fakechris/lumenbox'), await node('MILESTONE', 'fakechris/involute'), await node('MILESTONE', ' fakechris/Involute ')]) {
       await expect(createWorkLink(prisma, { fromId: parent.id, toId: child.id, type: 'CONTAINS' })).rejects.toThrow();
     }
     const paddedParent = await node('PROJECT', ' owner/repo ');
     const paddedChild = await node('MILESTONE', ' owner/repo ');
     await expect(createWorkLink(prisma, { fromId: paddedParent.id, toId: paddedChild.id, type: 'CONTAINS' })).rejects.toThrow('whitespace');
     expect(await prisma.workLink.count()).toBe(0);
+  });
+
+  it('allows the norm v1 hierarchy (INV-718) and still rejects everything else', async () => {
+    const project = await node('PROJECT');
+    const legal: Array<[WorkKind, WorkKind]> = [
+      ['PROJECT', 'ISSUE'], ['PROJECT', 'EPIC'], ['PROJECT', 'DECISION'], ['PROJECT', 'MILESTONE'],
+      ['MILESTONE', 'EPIC'], ['MILESTONE', 'ISSUE'], ['EPIC', 'ISSUE'], ['ISSUE', 'ISSUE'],
+    ];
+    for (const [parentKind, childKind] of legal) {
+      const parent = parentKind === 'PROJECT' ? project : await node(parentKind);
+      const child = await node(childKind);
+      await expect(createWorkLink(prisma, { fromId: parent.id, toId: child.id, type: 'CONTAINS' })).resolves.toBeTruthy();
+    }
+    const illegal: Array<[WorkKind, WorkKind]> = [
+      ['MILESTONE', 'MILESTONE'], ['MILESTONE', 'DECISION'], ['EPIC', 'MILESTONE'], ['ISSUE', 'MILESTONE'],
+      ['ISSUE', 'EPIC'], ['DECISION', 'ISSUE'], ['ISSUE', 'PROJECT'],
+    ];
+    for (const [parentKind, childKind] of illegal) {
+      const parent = await node(parentKind);
+      const child = await node(childKind);
+      await expect(createWorkLink(prisma, { fromId: parent.id, toId: child.id, type: 'CONTAINS' })).rejects.toThrow('CONTAINS allows');
+    }
+  });
+
+  it('rejects a sub-issue cycle', async () => {
+    const a = await node('ISSUE'); const b = await node('ISSUE', repo, a.id);
+    await expect(createWorkLink(prisma, { fromId: b.id, toId: a.id, type: 'CONTAINS' })).rejects.toThrow();
   });
 
   it('rejects a second parent instead of silently replacing an existing parent', async () => {
@@ -53,7 +80,7 @@ describe('hierarchy write boundary', () => {
     const parent = await node('MILESTONE'); const child = await node('ISSUE', repo, parent.id);
     await expect(updateIssue(prisma, parent.id, { repository: 'fakechris/lumenbox' })).rejects.toThrow();
     await expect(updateIssue(prisma, child.id, { repository: null })).rejects.toThrow();
-    await expect(updateIssue(prisma, parent.id, { kind: 'ISSUE' })).rejects.toThrow();
+    await expect(updateIssue(prisma, parent.id, { kind: 'DECISION' })).rejects.toThrow();
     expect((await prisma.issue.findUniqueOrThrow({ where: { id: parent.id } })).kind).toBe('MILESTONE');
   });
 

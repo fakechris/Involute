@@ -11,6 +11,7 @@ import {
   reconcileRepoPullRequests,
 } from './github-sync.ts';
 import { DEFAULT_REPO_ROUTES } from './github-repo-routes.ts';
+import { testParentId } from './test-placement.ts';
 
 loadProjectEnvironment();
 
@@ -63,7 +64,7 @@ describe('GitHub Reconciliation Sync Engine (Phase 3)', () => {
   async function createTestIssue(title: string) {
     const candidate = await proposeWork(
       prisma,
-      { teamId: team.id, title },
+      { parentId: await testParentId(prisma, team.id), teamId: team.id, title },
       { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
     );
     return commitWork(

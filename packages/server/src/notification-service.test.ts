@@ -14,6 +14,7 @@ import { projectWebhookDisabledNotifications, projectWorkNotifications } from '.
 import { reportRun, reviewWork } from './run-service.js';
 import { startServer, type StartedServer } from './index.ts';
 import { createSession } from './session.js';
+import { testParentId } from './test-placement.ts';
 
 loadProjectEnvironment();
 
@@ -99,7 +100,7 @@ describe('work notifications', () => {
   }
 
   async function buildCommittedWork(options: { assigneeId?: string | null } = {}) {
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Notify me' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Notify me' });
     return commitWork(
       prisma,
       candidate.id,
@@ -216,7 +217,7 @@ describe('work notifications', () => {
 
   it('projects exactly once per event when replayed', async () => {
     const committed = await buildCommittedWork();
-    const candidate2 = await proposeWork(prisma, { teamId: team.id, title: 'Replay target' });
+    const candidate2 = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Replay target' });
     void candidate2;
     const event = await prisma.eventOutbox.create({
       data: {

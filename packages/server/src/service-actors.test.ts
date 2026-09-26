@@ -7,6 +7,7 @@ import { loadProjectEnvironment } from '../prisma/env.ts';
 import { assertActorCan, proposeWork } from './claim-service.ts';
 import { findWorkProvenance } from './agent-directory.ts';
 import { HOTFIX_REFLEX_ACTOR, ensureServiceActor } from './service-actors.ts';
+import { testParentId } from './test-placement.ts';
 
 loadProjectEnvironment();
 
@@ -74,7 +75,7 @@ describe('service actors (INV-573)', () => {
 
     const created = await proposeWork(
       prisma,
-      { description: AGENT_DESCRIPTION, source: 'hotfix-reflex', teamId: team.id, title: 'Reflex fix' },
+      { parentId: await testParentId(prisma, team.id), description: AGENT_DESCRIPTION, source: 'hotfix-reflex', teamId: team.id, title: 'Reflex fix' },
       actor,
     );
 

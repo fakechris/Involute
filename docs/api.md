@@ -699,7 +699,7 @@ Existing issues are work nodes. New fields are queryable; `issueCreate` / `issue
 - `revision` starts at `1` and increments on each domain update
 - `links` returns incident `WorkLink` rows (`CONTAINS`, `BLOCKS`, `DERIVED_FROM`, `DISCOVERED_DURING`, `RELATED_TO`, `DUPLICATE_OF`)
 - setting `parentId` through `issueCreate` or `issueUpdate` also writes a `CONTAINS` link (parent → child) and records a `WorkAudit` row
-- `CONTAINS` requires explicit matching repositories and PROJECT → MILESTONE → ISSUE (or PROJECT → DECISION). Adding a second parent fails; use a revision-checked `issueUpdate` for an intentional move. Kind/repository edits validate incident edges. See [graph migration operations](graph-migration.md) for historical repairs.
+- `CONTAINS` requires explicit matching repositories and allows PROJECT → MILESTONE/DECISION/EPIC/ISSUE, MILESTONE → EPIC/ISSUE, EPIC → ISSUE and ISSUE → ISSUE (sub-issues). An ISSUE directly under a PROJECT is shown as "No milestone". Committing a candidate requires a parent (every kind except PROJECT). Adding a second parent fails; use a revision-checked `issueUpdate` for an intentional move. Kind/repository edits validate incident edges. See [graph migration operations](graph-migration.md) for historical repairs.
 - `viewer.actorKind` is `HUMAN`, `AGENT`, or `SERVICE`
 
 ## MCP
