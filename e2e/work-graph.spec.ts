@@ -212,4 +212,27 @@ test.describe('work graph acceptance', () => {
 
     await gql(request, `mutation($id: String!) { issueDelete(id: $id) { success } }`, { id: proposed.id }, { asHuman: true });
   });
+
+  test('mentions become relations and a worded dependency can be recorded from the candidate card (INV-720)', async ({ page, request }) => {
+    const { milestone, upstream } = fixture!;
+    const teams = await gql<{ teams: { nodes: Array<{ id: string; key: string }> } }>(request, `{ teams { nodes { id key } } }`);
+    const team = teams.teams.nodes.find((candidate) => candidate.key === 'INV') ?? teams.teams.nodes[0]!;
+    const proposed = (
+      await gql<{ workPropose: { issue: { id: string; identifier: string } } }>(
+        request,
+        `mutation($input: WorkProposeInput!) { workPropose(input: $input) { issue { id identifier } } }`,
+        { input: { teamId: team.id, title: 'E2E mentions', parentId: milestone.id, description: `依赖 ${upstream.identifier} 完成后再做。`, acceptance: 'linked' } },
+      )
+    ).workPropose.issue;
+
+    await page.goto(`/candidates?project=${encodeURIComponent(REPOSITORY)}`);
+    const card = page.getByRole('article', { name: `${proposed.identifier} candidate` });
+    await card.getByLabel(`Dependency hints for ${proposed.identifier}`).getByRole('button', { name: `${upstream.identifier} blocks this` }).click();
+    await expect(card.getByLabel(`Dependency hints for ${proposed.identifier}`)).toHaveCount(0);
+
+    await page.goto(`/issue/${proposed.id}`);
+    await expect(page.getByLabel('Relations').getByRole('list', { name: 'Blocked by' })).toContainText(upstream.identifier);
+
+    await gql(request, `mutation($id: String!) { issueDelete(id: $id) { success } }`, { id: proposed.id }, { asHuman: true });
+  });
 });

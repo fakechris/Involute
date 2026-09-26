@@ -43,6 +43,8 @@ export interface CandidateWork {
   createdAt: string;
   /** The CONTAINS parent; committing requires one for every kind but PROJECT (INV-719). */
   parent?: { id: string; identifier: string; title: string; kind: WorkKind } | null;
+  /** Identifiers its text names like dependencies without a BLOCKS link (INV-720). */
+  dependencyHints?: string[];
   team: {
     id: string;
     key: string;

@@ -321,4 +321,22 @@ describe('CandidatesPage', () => {
       expect(await screen.findByText(/Committed 1, failed 1\. INV-21: Committed work requires a parent/)).toBeInTheDocument();
     });
   });
+
+  it('offers to record a dependency the text names but no BLOCKS link records (INV-720)', async () => {
+    mockRunCommit.mockClear();
+    queryDataHolder.current = {
+      issues: {
+        nodes: [{ ...candidateItems[0], dependencyHints: ['INV-420'] }],
+        pageInfo: { endCursor: null, hasNextPage: false },
+      },
+      teams: { nodes: mockTeams },
+    };
+    render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
+    const hint = screen.getByLabelText('Dependency hints for INV-40');
+    fireEvent.click(within(hint).getByRole('button', { name: 'INV-420 blocks this' }));
+    await waitFor(() =>
+      expect(mockRunCommit).toHaveBeenCalledWith({ variables: { fromId: 'INV-420', toId: 'cand-1', type: 'BLOCKS' } }),
+    );
+    queryDataHolder.current = null;
+  });
 });
