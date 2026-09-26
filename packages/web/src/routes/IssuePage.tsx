@@ -40,6 +40,7 @@ import type {
 import { ActorBadge } from '../components/ActorBadge';
 import { IssueRelations } from '../components/IssueRelations';
 import { AddSubIssueButton } from '../components/AddSubIssueButton';
+import { BugSlaBadge } from '../components/BugSlaBadge';
 import { mergeIssueWithPreservedComments } from '../board/utils';
 import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
@@ -769,6 +770,13 @@ export function IssuePage() {
                 >Edit</button>
               </div>
             )}
+
+            {activeIssue.bugSla ? (
+              <div className="issue-panel__section">
+                <h2>Bug SLA</h2>
+                <BugSlaBadge sla={activeIssue.bugSla} showMet />
+              </div>
+            ) : null}
 
             {/* Parent issue */}
             {activeIssue.parent ? (

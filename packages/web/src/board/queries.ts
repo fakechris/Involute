@@ -111,6 +111,12 @@ export const BOARD_PAGE_QUERY = gql`
           identifier
           title
         }
+        bugSla {
+          status
+          remainingMs
+          dueAt
+          budgetHours
+        }
         openBlockers {
           id
           identifier
@@ -327,6 +333,12 @@ export const ISSUE_PAGE_QUERY = gql`
       priority
       kind
       repository
+      bugSla {
+        status
+        remainingMs
+        dueAt
+        budgetHours
+      }
       createdAt
       updatedAt
       state {
@@ -1299,6 +1311,52 @@ export const ISSUE_RELATIONS_QUERY = gql`
           }
         }
       }
+    }
+  }
+`;
+
+// Weekly bug triage rotation for the active team (INV-750).
+export const TEAM_TRIAGE_QUERY = gql`
+  query TeamTriage($teamKey: String!) {
+    teams(filter: { key: { eq: $teamKey } }) {
+      nodes {
+        id
+        key
+        name
+        memberships {
+          nodes {
+            id
+            user {
+              id
+              name
+              email
+              actorKind
+            }
+          }
+        }
+        triageRotation {
+          startsAt
+          users {
+            id
+            name
+            email
+          }
+        }
+        currentTriager {
+          id
+          name
+          email
+        }
+      }
+    }
+  }
+`;
+
+export const TEAM_TRIAGE_ROTATION_MUTATION = gql`
+  mutation TeamTriageRotationUpdate($input: TeamTriageRotationInput!) {
+    teamTriageRotationUpdate(input: $input) {
+      success
+      message
     }
   }
 `;

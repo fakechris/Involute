@@ -4,6 +4,7 @@ import { CSS } from '@dnd-kit/utilities';
 
 import type { Html5BoardDragPayload, IssueSummary } from '../board/types';
 import { createHtml5BoardDragPayload } from '../board/utils';
+import { BugSlaBadge } from './BugSlaBadge';
 import { StatusIcon } from './StatusIcon';
 
 interface IssueCardProps {
@@ -180,6 +181,7 @@ export function IssueCard({
                 Blocked{openBlockers.length > 1 ? ` · ${openBlockers.length}` : ''}
               </span>
             ) : null}
+            <BugSlaBadge sla={issue.bugSla} />
             {issue.repository ? (
               <span
                 role={onFilterProject ? 'button' : undefined}

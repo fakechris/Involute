@@ -7,6 +7,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { ActorBadge } from './ActorBadge';
 import { IssueRelations } from './IssueRelations';
 import { AddSubIssueButton } from './AddSubIssueButton';
+import { BugSlaBadge } from './BugSlaBadge';
 import { toggleLabelId } from '../work/labels';
 import { RichTextEditor } from './RichTextEditor';
 import { AGENTS_QUERY } from '../board/queries';
@@ -589,6 +590,15 @@ export function IssueDetailDrawer({
                 <span className="issue-panel__label">Parent</span>
                 <p>{parentSummary}</p>
               </div>
+
+              {activeIssue.bugSla ? (
+                <div className="issue-panel__property-group">
+                  <span className="issue-panel__label">Bug SLA</span>
+                  <p>
+                    <BugSlaBadge sla={activeIssue.bugSla} showMet />
+                  </p>
+                </div>
+              ) : null}
 
               <div className="issue-panel__property-group">
                 <span className="issue-panel__label">Sub-issues</span>

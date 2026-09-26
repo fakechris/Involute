@@ -40,6 +40,8 @@ export interface CandidateWork {
   repository?: string | null;
   snoozedUntil?: string | null;
   source?: string | null;
+  priority?: number;
+  labels?: { nodes: Array<{ id: string; name: string }> };
   createdAt: string;
   /** The CONTAINS parent; committing requires one for every kind but PROJECT (INV-719). */
   parent?: { id: string; identifier: string; title: string; kind: WorkKind } | null;
@@ -340,12 +342,15 @@ export interface WorkCommitMutationVariables {
     acceptance?: string;
     assigneeId?: string;
     parentId?: string;
+    /** Required for bugs: 1 (Urgent) to 4 (Low), sets the SLA (INV-750). */
+    priority?: number;
   };
 }
 
 export interface WorkRejectMutationData {
   workReject: {
     success: boolean;
+    message?: string | null;
     issue: { id: string; identifier: string; commitmentStatus: CommitmentStatus } | null;
   };
 }

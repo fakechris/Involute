@@ -2,6 +2,7 @@ import type { Comment, Issue, Prisma, PrismaClient, WorkflowState } from '@prism
 
 import {
   ASSIGNEE_NOT_FOUND_MESSAGE,
+  BUG_NO_BACKLOG_MESSAGE,
   COMMENT_NOT_FOUND_MESSAGE,
   COMMENT_PARENT_ISSUE_MISMATCH_MESSAGE,
   createNotFoundError,
@@ -32,7 +33,7 @@ import { enqueueCommentEvents } from './comment-events.js';
 import { openAgentRequestsForMentions } from './agent-request-from-mention.js';
 import { assertNodeHierarchy, getContainsDescendantIds, lockWorkGraph } from './graph-integrity.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
-import { assertSingleType } from './labels.js';
+import { assertSingleType, isBugWork } from './labels.js';
 import {
   INTERNAL_WRITE_ACTOR,
   recordWorkAudit,
@@ -295,6 +296,16 @@ export async function updateIssue(
 
       if (isAcceptStateType(state.type)) {
         assertActorCan(actor.actorKind, 'accept');
+      }
+
+      // Zero-bug (INV-750): a committed bug is fixed or declined, never parked.
+      if (
+        state.type === 'BACKLOG' &&
+        state.id !== existingIssue.stateId &&
+        existingIssue.commitmentStatus === 'COMMITTED' &&
+        (await isBugWork(transaction, existingIssue.id))
+      ) {
+        throw createValidationError(BUG_NO_BACKLOG_MESSAGE);
       }
 
       data.state = {

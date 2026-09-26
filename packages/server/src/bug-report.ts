@@ -9,6 +9,7 @@ import {
 import { enqueueWorkEvent } from './event-outbox.js';
 import { createIssueInTransaction } from './issue-service.js';
 import { projectWorkNotifications } from './notification-service.js';
+import { currentTriager } from './bug-triage.js';
 import type { WriteActor } from './work-service.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
@@ -71,9 +72,20 @@ export async function reportBug(prisma: PrismaClient, input: BugReportInput, act
       title: input.title,
     };
     const triage = !input.parentId?.trim();
+    // Zero-bug (INV-750): a placed bug is committed to be fixed, so it starts
+    // in Ready rather than the backlog.
+    const ready = triage
+      ? null
+      : await transaction.workflowState.findFirst({
+          where: { teamId: input.teamId, type: 'UNSTARTED' },
+          orderBy: { position: 'asc' },
+          select: { id: true },
+        });
     const issue = await createIssueInTransaction(
       transaction,
-      triage ? { ...base, commitmentStatus: 'CANDIDATE' } : await placeNewWork(transaction, { ...base, parentId: input.parentId!.trim() }),
+      triage
+        ? { ...base, commitmentStatus: 'CANDIDATE' }
+        : await placeNewWork(transaction, { ...base, parentId: input.parentId!.trim(), ...(ready ? { stateId: ready.id } : {}) }),
       actor,
     );
     const payload = {
@@ -89,7 +101,17 @@ export async function reportBug(prisma: PrismaClient, input: BugReportInput, act
       workId: issue.id,
       workIdentifier: issue.identifier,
     });
-    await projectWorkNotifications(transaction, { eventId: event.id, payload, type: 'bug.reported', work: issue });
+    // Triage goes to this week's triager when the team has a rotation (INV-750).
+    const team = await transaction.team.findUniqueOrThrow({ where: { id: input.teamId }, select: { triageRotation: true } });
+    const triager = triage ? currentTriager(team.triageRotation, new Date()) : null;
+    if (triager) {
+      await transaction.notification.createMany({
+        data: [{ payload, sourceEventId: event.id, teamId: issue.teamId, type: 'bug.reported', userId: triager, workId: issue.id }],
+        skipDuplicates: true,
+      });
+    } else {
+      await projectWorkNotifications(transaction, { eventId: event.id, payload, type: 'bug.reported', work: issue });
+    }
     return issue;
   });
 }

@@ -95,6 +95,13 @@ export interface CycleSummary {
   updatedAt: string;
 }
 
+export interface BugSlaSummary {
+  status: 'ON_TRACK' | 'AT_RISK' | 'BREACHED' | 'PAUSED' | 'MET';
+  remainingMs: number;
+  dueAt: string | null;
+  budgetHours: number;
+}
+
 export interface IssueSummary {
   id: string;
   identifier: string;
@@ -105,6 +112,8 @@ export interface IssueSummary {
   description?: string | null;
   repository?: string | null;
   priority: number;
+  /** Committed bugs only (INV-750). */
+  bugSla?: BugSlaSummary | null;
   createdAt: string;
   updatedAt: string;
   state: WorkflowStateSummary;
@@ -795,4 +804,31 @@ export interface IssueRelationsQueryData {
 
 export interface IssueRelationsQueryVariables {
   id: string;
+}
+
+export interface TriagePerson {
+  id: string;
+  name: string | null;
+  email: string | null;
+}
+
+export interface TeamTriageQueryData {
+  teams: {
+    nodes: Array<{
+      id: string;
+      key: string;
+      name: string;
+      memberships: { nodes: Array<{ id: string; user: TriagePerson & { actorKind?: string | null } }> };
+      triageRotation: { startsAt: string; users: TriagePerson[] } | null;
+      currentTriager: TriagePerson | null;
+    }>;
+  };
+}
+
+export interface TeamTriageRotationMutationData {
+  teamTriageRotationUpdate: { success: boolean; message?: string | null };
+}
+
+export interface TeamTriageRotationMutationVariables {
+  input: { teamId: string; userIds: string[]; startsAt?: string | null };
 }

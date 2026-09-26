@@ -352,6 +352,51 @@ describe('CandidatesPage', () => {
     });
   });
 
+  describe('zero-bug triage (INV-750)', () => {
+    const bugData = () => ({
+      issues: {
+        nodes: [{ ...candidateItems[0], id: 'cand-bug', identifier: 'INV-60', title: 'Crash', priority: 0, labels: { nodes: [{ id: 'l-bug', name: 'Bug' }] } }],
+        pageInfo: { endCursor: null, hasNextPage: false },
+      },
+      teams: { nodes: mockTeams },
+    });
+
+    it('commits a bug only with a priority and declines it only with a reason', async () => {
+      queryDataHolder.current = bugData();
+      try {
+        render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
+        const card = screen.getByRole('article', { name: 'INV-60 candidate' });
+        const commit = within(card).getByRole('button', { name: /Commit/ });
+        const reject = within(card).getByRole('button', { name: /Reject/ });
+        expect(commit).toBeDisabled();
+        expect(reject).toBeDisabled();
+        fireEvent.change(within(card).getByLabelText('Reject reason for INV-60'), { target: { value: 'Works as designed' } });
+        expect(reject).toBeEnabled();
+        fireEvent.change(within(card).getByLabelText('Priority for INV-60'), { target: { value: '2' } });
+        fireEvent.change(within(card).getByLabelText('Owner for INV-60'), { target: { value: 'user-admin' } });
+        fireEvent.click(commit);
+        await waitFor(() =>
+          expect(mockRunCommit).toHaveBeenCalledWith({
+            variables: { id: 'cand-bug', input: expect.objectContaining({ priority: 2 }) },
+          }),
+        );
+      } finally {
+        queryDataHolder.current = null;
+      }
+    });
+
+    it('filters to bugs when "Bugs only" is on', async () => {
+      const { useQuery } = await import('@apollo/client/react');
+      render(<MemoryRouter initialEntries={['/candidates?type=bug']}><CandidatesPage /></MemoryRouter>);
+      expect(screen.getByRole('button', { name: 'Bugs only' })).toHaveAttribute('aria-pressed', 'true');
+      const calls = vi.mocked(useQuery).mock.calls.filter(([document]) => (document as { loc?: { source?: { body?: string } } }).loc?.source?.body?.includes('query CandidatesPage'));
+      const variables = (calls.at(-1)?.[1] as { variables?: { filter?: Record<string, unknown> } })?.variables;
+      expect(variables?.filter).toMatchObject({ labels: { some: { name: { in: ['bug', 'Bug', 'BUG'] } } } });
+      // The fixture has no bug candidates, so nothing is listed.
+      expect(screen.queryByRole('article', { name: 'INV-40 candidate' })).not.toBeInTheDocument();
+    });
+  });
+
   it('offers to record a dependency the text names but no BLOCKS link records (INV-720)', async () => {
     mockRunCommit.mockClear();
     queryDataHolder.current = {

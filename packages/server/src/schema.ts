@@ -113,6 +113,8 @@ import { loadWorkTimelines } from './work-timeline.js';
 import { dependencyHints } from './mention-links.js';
 import { loadWorkHygiene } from './work-hygiene.js';
 import { BUG_LABEL_NAME, findSimilarBugs, reportBug, type BugReportInput } from './bug-report.js';
+import { loadBugSlas } from './bug-sla.js';
+import { currentTriager, parseRotation, setTriageRotation } from './bug-triage.js';
 import {
   findWorkByIdOrIdentifier,
   getWorkContext,
@@ -349,6 +351,7 @@ const typeDefs = /* GraphQL */ `
     commentCreate(input: CommentCreateInput!): CommentCreatePayload!
     commentDelete(id: String!): CommentDeletePayload!
     teamUpdateAccess(input: TeamUpdateAccessInput!): TeamUpdateAccessPayload!
+    teamTriageRotationUpdate(input: TeamTriageRotationInput!): TeamTriageRotationPayload!
     teamMembershipUpsert(input: TeamMembershipUpsertInput!): TeamMembershipUpsertPayload!
     teamMembershipRemove(input: TeamMembershipRemoveInput!): TeamMembershipRemovePayload!
     projectCreate(input: ProjectCreateInput!): ProjectCreatePayload! @deprecated(reason: "Use issueCreate with kind: PROJECT instead.")
@@ -399,6 +402,48 @@ const typeDefs = /* GraphQL */ `
     states: WorkflowStateConnection!
     memberships: TeamMembershipConnection!
     issueCount: Int!
+    "Weekly bug triage rotation (INV-750); null when not configured."
+    triageRotation: TriageRotation
+    "Who triages bugs this week under the rotation."
+    currentTriager: User
+  }
+
+  type TriageRotation {
+    users: [User!]!
+    startsAt: String!
+  }
+
+  "A committed bug's SLA (INV-750): Urgent 24h, High 48h, otherwise 7 days; the clock stops in Review and when closed."
+  type BugSla {
+    status: BugSlaStatus!
+    budgetHours: Int!
+    elapsedMs: Float!
+    remainingMs: Float!
+    "When it runs out if nothing changes; null while paused or closed."
+    dueAt: String
+    startedAt: String!
+  }
+
+  enum BugSlaStatus {
+    ON_TRACK
+    AT_RISK
+    BREACHED
+    PAUSED
+    MET
+  }
+
+  input TeamTriageRotationInput {
+    teamId: String!
+    "Human members in rotation order; empty clears the rotation."
+    userIds: [String!]!
+    "When the first person's week starts (ISO); defaults to now."
+    startsAt: String
+  }
+
+  type TeamTriageRotationPayload {
+    success: Boolean!
+    message: String
+    team: Team
   }
 
   enum TeamVisibility {
@@ -666,6 +711,8 @@ const typeDefs = /* GraphQL */ `
     the dependency, never an automatic one (INV-720).
     """
     dependencyHints: [String!]!
+    "SLA for committed Type: Bug work; null otherwise (INV-750)."
+    bugSla: BugSla
     claim: WorkClaimRecord
     comments(first: Int, after: String, orderBy: CommentOrderBy, rootsOnly: Boolean): CommentConnection!
     """
@@ -1494,6 +1541,8 @@ const typeDefs = /* GraphQL */ `
 
   input WorkCommitInput {
     expectedRevision: Int!
+    "1 (Urgent) to 4 (Low). Required to commit a bug: it sets the SLA (INV-750)."
+    priority: Int
     """Place the candidate under this parent (identifier or id) as part of committing it. Committed work needs a parent (INV-719)."""
     parentId: String
     acceptance: String
@@ -1545,6 +1594,8 @@ const typeDefs = /* GraphQL */ `
 
   type WorkRejectPayload {
     success: Boolean!
+    "Why the rejection was refused, e.g. a bug declined without a reason; null on success."
+    message: String
     issue: Issue
   }
 
@@ -2454,8 +2505,8 @@ const resolvers = {
       _parent: unknown,
       args: { id: string; input: RejectWorkInput },
       context: GraphQLContext,
-    ): Promise<{ issue: IssueParent | null; success: boolean }> =>
-      runMutation(async () => {
+    ): Promise<{ issue: IssueParent | null; message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
         const existing = await findWorkByIdOrIdentifier(context.prisma, args.id);
         if (!existing) {
           throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
@@ -3049,6 +3100,22 @@ const resolvers = {
         success: false as const,
         team: null,
       }),
+    teamTriageRotationUpdate: async (
+      _parent: unknown,
+      args: { input: { teamId: string; userIds: string[]; startsAt?: string | null } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; team: TeamParent | null }> =>
+      runMutationWithReason(async () => {
+        await assertCanManageTeam(context.prisma, context, args.input.teamId);
+        await setTriageRotation(context.prisma, args.input);
+        return {
+          success: true as const,
+          team: await context.prisma.team.findUniqueOrThrow({ where: { id: args.input.teamId } }),
+        };
+      }, {
+        success: false as const,
+        team: null,
+      }),
     teamMembershipUpsert: async (
       _parent: unknown,
       args: { input: { email: string; name?: string | null; role: TeamMembershipRole; teamId: string } },
@@ -3315,6 +3382,17 @@ const resolvers = {
     },
   },
   Team: {
+    triageRotation: async (parent: TeamParent, _args: Record<string, never>, context: GraphQLContext) => {
+      const rotation = parseRotation((parent as TeamParent & { triageRotation?: Prisma.JsonValue | null }).triageRotation);
+      if (!rotation) return null;
+      const users = await context.prisma.user.findMany({ where: { id: { in: rotation.userIds } } });
+      const byId = new Map(users.map((user) => [user.id, user]));
+      return { users: rotation.userIds.map((id) => byId.get(id)).filter(Boolean), startsAt: rotation.startsAt };
+    },
+    currentTriager: async (parent: TeamParent, _args: Record<string, never>, context: GraphQLContext) => {
+      const id = currentTriager((parent as TeamParent & { triageRotation?: Prisma.JsonValue | null }).triageRotation, new Date());
+      return id ? context.prisma.user.findUnique({ where: { id } }) : null;
+    },
     states: async (
       parent: TeamParent,
       _args: Record<string, never>,
@@ -3650,6 +3728,21 @@ const resolvers = {
     }),
     dependencyHints: (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext): Promise<string[]> =>
       dependencyHints(context.prisma, { id: parent.id, teamId: parent.teamId, texts: mentionTexts(parent) }),
+    bugSla: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
+      if (parent.commitmentStatus !== 'COMMITTED') return null;
+      // Labels are usually loaded with the issue: skip non-bugs without a query.
+      if (parent.labels && !parent.labels.some((label) => label.name.toLowerCase() === BUG_LABEL_NAME.toLowerCase())) return null;
+      const sla = (await loadBugSlas(context.prisma, [parent.id])).get(parent.id);
+      if (!sla) return null;
+      return {
+        status: sla.status,
+        budgetHours: Math.round(sla.budgetMs / 3_600_000),
+        elapsedMs: sla.elapsedMs,
+        remainingMs: sla.remainingMs,
+        dueAt: sla.dueAt?.toISOString() ?? null,
+        startedAt: sla.startedAt.toISOString(),
+      };
+    },
     openBlockers: async (
       parent: IssueParent,
       _args: Record<string, never>,
