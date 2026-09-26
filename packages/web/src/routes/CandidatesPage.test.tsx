@@ -116,7 +116,10 @@ const placementOptions = {
 };
 
 vi.mock('@apollo/client/react', () => ({
-  useQuery: vi.fn((document: { loc?: { source?: { body?: string } } }) => document.loc?.source?.body?.includes('query PlacementOptions') ? {
+  useQuery: vi.fn((document: { loc?: { source?: { body?: string } } }) => document.loc?.source?.body?.includes('query GraphProjects') ? {
+    data: { projectSummary: { totalCount: 1, projects: [{ repository: 'fakechris/lumenbox', name: 'Lumenbox', identifier: 'INV-96', totalCount: 1 }] } },
+    loading: false,
+  } : document.loc?.source?.body?.includes('query PlacementOptions') ? {
     data: placementOptions,
     loading: false,
   } : ({
@@ -299,6 +302,33 @@ describe('CandidatesPage', () => {
           variables: { id: 'cand-2', input: expect.objectContaining({ parentId: 'm-lum', expectedRevision: 1 }) },
         }),
       );
+    });
+
+    it('places a triaged bug that has no repository by choosing its project first (INV-749)', async () => {
+      queryDataHolder.current = {
+        issues: {
+          nodes: [{ ...candidateItems[1], id: 'cand-bug', identifier: 'INV-50', title: 'Crash somewhere', repository: null, source: 'bug-report' }],
+          pageInfo: { endCursor: null, hasNextPage: false },
+        },
+        teams: { nodes: mockTeams },
+      };
+      try {
+        render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
+        const card = screen.getByRole('article', { name: 'INV-50 candidate' });
+        const field = within(card).getByLabelText('Parent for INV-50');
+        expect(within(card).getByRole('button', { name: /Commit/ })).toBeDisabled();
+        fireEvent.change(within(field).getByLabelText('Project'), { target: { value: 'fakechris/lumenbox' } });
+        expect(within(field).getByLabelText('Location')).toHaveValue('INV-96');
+        fireEvent.change(within(card).getByLabelText('Owner for INV-50'), { target: { value: 'user-admin' } });
+        fireEvent.click(within(card).getByRole('button', { name: /Commit/ }));
+        await waitFor(() =>
+          expect(mockRunCommit).toHaveBeenCalledWith({
+            variables: { id: 'cand-bug', input: expect.objectContaining({ parentId: 'INV-96' }) },
+          }),
+        );
+      } finally {
+        queryDataHolder.current = null;
+      }
     });
 
     it('shows the server\'s reason when a commit is refused', async () => {

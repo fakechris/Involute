@@ -288,4 +288,23 @@ test.describe('work graph acceptance', () => {
     await expect(milestoneRow.getByRole('treeitem', { name: /E2E created in milestone$/ })).toBeVisible();
     await expect(milestoneRow.getByLabel('1 of 4 done')).toBeVisible();
   });
+
+  test('a reported bug lands in its project as No milestone (INV-749)', async ({ page }) => {
+    await page.goto(`/?project=${encodeURIComponent(REPOSITORY)}`);
+    await page.getByRole('button', { name: 'Report bug' }).click();
+    const drawer = page.getByRole('dialog', { name: 'Report bug drawer' });
+    await drawer.getByLabel('Bug title').fill('E2E created bug from report');
+    await drawer.getByLabel('Steps to reproduce').fill('1. Open the board\n2. See it break');
+    const submit = drawer.getByRole('button', { name: 'Report bug', exact: true });
+    await expect(submit).toBeDisabled(); // no priority yet
+    await drawer.getByLabel('Bug priority').selectOption({ label: 'High' });
+    await expect(drawer.getByLabel('Project')).toHaveValue(REPOSITORY);
+    await expect(drawer.getByLabel('Location').locator('option:checked')).toHaveText('No milestone');
+    await submit.click();
+    await expect(drawer.getByRole('status')).toContainText('reported');
+
+    await page.goto(`/graph?project=${encodeURIComponent(REPOSITORY)}`);
+    const noMilestone = page.getByRole('tree', { name: 'Project outline' }).getByRole('group', { name: 'No milestone' });
+    await expect(noMilestone.getByRole('treeitem', { name: /E2E created bug from report$/ })).toBeVisible();
+  });
 });

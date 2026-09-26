@@ -2758,8 +2758,10 @@ export function BoardPage() {
         <ReportBugDialog
           isOpen={isReportBugOpen}
           teamId={selectedTeam.id}
-          projects={queryData?.projectSummary?.projects ?? []}
+          teamKey={selectedTeam.key}
+          projects={placeableProjects}
           labels={labels}
+          boardRepository={rawProjectKey}
           onClose={() => setIsReportBugOpen(false)}
         />
       ) : null}

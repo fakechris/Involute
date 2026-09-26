@@ -18,10 +18,13 @@ const BUG_REPORT_MUTATION = /* GraphQL */ `
   mutation BugReport($input: BugReportInput!) {
     bugReport(input: $input) {
       success
+      message
       issue {
         id
         identifier
         title
+        description
+        parent { id }
         priority
         repository
         source
@@ -134,9 +137,14 @@ describe('bug management', () => {
     return `involute_session=${session.token}`;
   }
 
+  // A complete report (INV-749): placed under the project, with a priority
+  // and steps to reproduce, unless a test overrides them.
   async function reportBug(cookie: string, input: Record<string, unknown>) {
+    const project =
+      (await prisma.issue.findFirst({ where: { teamId: team.id, kind: 'PROJECT', repository: 'fakechris/Involute' } })) ??
+      (await createIssue(prisma, { teamId: team.id, kind: 'PROJECT', title: 'fakechris/Involute', repository: 'fakechris/Involute' }));
     return postGraphQLAs(cookie, BUG_REPORT_MUTATION, {
-      input: { teamId: team.id, ...input },
+      input: { teamId: team.id, priority: 3, stepsToReproduce: 'Open the board.', parentId: project.id, ...input },
     });
   }
 
@@ -150,8 +158,8 @@ describe('bug management', () => {
       const { body } = await reportBug(cookie, {
         title: 'Board crashes on drag',
         description: 'Drop a card on the Done column.',
+        stepsToReproduce: '1. Drag a card\n2. Drop it on Done',
         priority: 1,
-        repository: 'fakechris/Involute',
       });
 
       expect(body.errors).toBeUndefined();
@@ -164,6 +172,90 @@ describe('bug management', () => {
       expect(issue.repository).toBe('fakechris/Involute');
       expect(issue.state.type).toBe('BACKLOG');
       expect(issue.labels.nodes.map((label: { name: string }) => label.name.toLowerCase())).toContain('bug');
+      expect(issue.description).toBe('Drop a card on the Done column.\n\n### Steps to reproduce\n\n1. Drag a card\n2. Drop it on Done');
+      const project = await prisma.issue.findFirstOrThrow({ where: { kind: 'PROJECT', repository: 'fakechris/Involute' } });
+      expect(issue.parent).toEqual({ id: project.id });
+      expect(await prisma.workLink.count({ where: { type: 'CONTAINS', fromId: project.id, toId: issue.id } })).toBe(1);
+    });
+
+    it('sends a report without a place to triage as a candidate', async () => {
+      const cookie = await login(human);
+      const { body } = await reportBug(cookie, { title: 'Somewhere it breaks', parentId: null });
+      expect(body.data.bugReport).toMatchObject({ success: true, message: null });
+      const issue = body.data.bugReport.issue;
+      expect(issue.commitmentStatus).toBe('CANDIDATE');
+      expect(issue.parent).toBeNull();
+      expect(issue.labels.nodes.map((label: { name: string }) => label.name.toLowerCase())).toContain('bug');
+      const events = await prisma.eventOutbox.findMany({ where: { type: 'bug.reported' } });
+      expect((events[0]?.payload as { data?: { triage?: boolean } }).data?.triage).toBe(true);
+
+      // Placing it at commit gives it the project's repository.
+      const project = await prisma.issue.findFirstOrThrow({ where: { kind: 'PROJECT', repository: 'fakechris/Involute' } });
+      const committed = await postGraphQLAs(
+        cookie,
+        `mutation($id: String!, $input: WorkCommitInput!) { workCommit(id: $id, input: $input) { success message } }`,
+        { id: issue.id, input: { expectedRevision: 1, assigneeId: human.id, acceptance: 'The crash is gone.', parentId: project.id } },
+      );
+      expect(committed.body.data.workCommit).toMatchObject({ success: true });
+      expect(await prisma.issue.findUniqueOrThrow({ where: { id: issue.id } })).toMatchObject({
+        commitmentStatus: 'COMMITTED',
+        repository: 'fakechris/Involute',
+        parentId: project.id,
+      });
+    });
+
+    it('requires a priority and steps to reproduce', async () => {
+      const cookie = await login(human);
+      for (const [input, reason] of [
+        [{ priority: 0 }, 'needs a priority'],
+        [{ priority: null }, 'needs a priority'],
+        [{ stepsToReproduce: '   ' }, 'steps to reproduce'],
+      ] as const) {
+        const { body } = await reportBug(cookie, { title: 'Incomplete', ...input });
+        expect(body.data.bugReport).toMatchObject({ success: false, issue: null, message: expect.stringContaining(reason) });
+      }
+      expect(await prisma.issue.count({ where: { title: 'Incomplete' } })).toBe(0);
+    });
+
+    it('keeps one Type per item: a bug cannot also be a Feature', async () => {
+      const cookie = await login(human);
+      const feature = await prisma.issueLabel.findFirstOrThrow({ where: { name: 'Feature' } });
+      const { body } = await reportBug(cookie, { title: 'Two types', labelIds: [feature.id] });
+      expect(body.data.bugReport).toMatchObject({ success: false, message: expect.stringContaining('at most one Type') });
+
+      const bug = await reportBug(cookie, { title: 'One type' });
+      const bugLabelId = bug.body.data.bugReport.issue.labels.nodes[0].id as string;
+      const update = await postGraphQLAs(
+        cookie,
+        `mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success } }`,
+        { id: bug.body.data.bugReport.issue.id, input: { labelIds: [bugLabelId, feature.id] } },
+      );
+      expect(update.body.data?.issueUpdate?.success ?? false).toBe(false);
+      const swapped = await postGraphQLAs(
+        cookie,
+        `mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success } }`,
+        { id: bug.body.data.bugReport.issue.id, input: { labelIds: [feature.id] } },
+      );
+      expect(swapped.body.data.issueUpdate.success).toBe(true);
+    });
+
+    it('suggests open bugs with similar titles, best match first', async () => {
+      const cookie = await login(human);
+      await reportBug(cookie, { title: 'Board drag crashes the page' });
+      await reportBug(cookie, { title: 'Drag handle misaligned' });
+      await reportBug(cookie, { title: '看板拖拽后卡片消失' });
+      await createIssue(prisma, { teamId: team.id, title: 'Board drag polish (not a bug)' });
+      const query = `query($teamId: String!, $title: String!) { similarBugs(teamId: $teamId, title: $title) { title } }`;
+
+      const latin = await postGraphQLAs(cookie, query, { teamId: team.id, title: 'Crash when I drag on the board' });
+      expect(latin.body.data.similarBugs.map((bug: { title: string }) => bug.title)).toEqual([
+        'Board drag crashes the page',
+        'Drag handle misaligned',
+      ]);
+      const cjk = await postGraphQLAs(cookie, query, { teamId: team.id, title: '拖拽卡片' });
+      expect(cjk.body.data.similarBugs.map((bug: { title: string }) => bug.title)).toEqual(['看板拖拽后卡片消失']);
+      const none = await postGraphQLAs(cookie, query, { teamId: team.id, title: 'ok' });
+      expect(none.body.data.similarBugs).toEqual([]);
     });
 
     it('reuses the existing Bug label case-insensitively and stays idempotent across reports', async () => {
@@ -200,7 +292,7 @@ describe('bug management', () => {
 
       expect(body.data.bugReport.success).toBe(true);
       const names = body.data.bugReport.issue.labels.nodes.map((label: { name: string }) => label.name);
-      expect(names).toContain('bug');
+      expect(names).toContain('Bug');
       expect(names).toContain('ui');
     });
 
@@ -217,7 +309,7 @@ describe('bug management', () => {
 
     it('requires authentication', async () => {
       const { body } = await postGraphQLAs('', BUG_REPORT_MUTATION, {
-        input: { teamId: team.id, title: 'Anonymous bug' },
+        input: { teamId: team.id, title: 'Anonymous bug', priority: 3, stepsToReproduce: 'x' },
       });
 
       expect(body.data ?? null).toBeNull();

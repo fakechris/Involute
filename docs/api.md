@@ -424,6 +424,18 @@ Example variables:
 }
 ```
 
+### `bugReport`
+
+Reports a bug (Bug route v1, INV-748/749). Required: `title`, `priority` (1 Urgent – 4 Low) and `stepsToReproduce` (appended to the description under "Steps to reproduce"). The Type label `Bug` is always added; an item carries at most one of Bug / Feature / Improvement. With `parentId` (id or identifier of the project, a milestone, epic or issue) the bug is committed there; without it the bug becomes a triage candidate that is placed when committed. Refusals return `success: false` and `message`. Either way `bug.reported` is emitted (payload `triage: true` for candidates).
+
+```graphql
+mutation BugReport($input: BugReportInput!) {
+  bugReport(input: $input) { success message issue { id identifier commitmentStatus } }
+}
+```
+
+`similarBugs(teamId, title, first)` returns open bugs whose titles share words with `title` (CJK by character pairs), best match first.
+
 ### `issueUpdate`
 
 Updates any combination of:

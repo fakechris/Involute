@@ -199,12 +199,14 @@ export interface ProjectSummaryResult {
 export interface BugReportMutationData {
   bugReport: {
     success: boolean;
+    message?: string | null;
     issue: {
       id: string;
       identifier: string;
       title: string;
       priority: number;
       repository: string | null;
+      commitmentStatus?: 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
     } | null;
   };
 }
@@ -214,10 +216,16 @@ export interface BugReportMutationVariables {
     teamId: string;
     title: string;
     description?: string | null;
-    priority?: number | null;
-    repository?: string | null;
+    stepsToReproduce: string;
+    priority: number;
+    /** Where it belongs; omitted when unsure, which sends it to triage (INV-749). */
+    parentId?: string | null;
     labelIds?: string[];
   };
+}
+
+export interface SimilarBugsQueryData {
+  similarBugs: Array<{ id: string; identifier: string; title: string; state: { id: string; name: string } }>;
 }
 
 export interface BugSummaryData {

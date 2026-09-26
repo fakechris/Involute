@@ -651,12 +651,29 @@ export const BUG_REPORT_MUTATION = gql`
   mutation BugReport($input: BugReportInput!) {
     bugReport(input: $input) {
       success
+      message
       issue {
         id
         identifier
         title
         priority
         repository
+        commitmentStatus
+      }
+    }
+  }
+`;
+
+// Open bugs with similar titles, shown while reporting one (INV-749).
+export const SIMILAR_BUGS_QUERY = gql`
+  query SimilarBugs($teamId: String!, $title: String!) {
+    similarBugs(teamId: $teamId, title: $title, first: 5) {
+      id
+      identifier
+      title
+      state {
+        id
+        name
       }
     }
   }

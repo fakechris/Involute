@@ -66,6 +66,7 @@ flowchart TD
    - If the source material says an item depends on / must come after another, record `BLOCKS`: `work_propose(blocked_by: [...], blocks: [...])` or `work_link`. `work_commit` warns about dependency wording without `BLOCKS`. **Never invent dependencies or structure.**
    - Before proposing several related items, lay out the whole tree (parents, blockers) and check it; when the source is ambiguous, propose an outline for review instead of guessing.
 10. **Research is an ISSUE labelled `research` (INV-721)**: see §11.4.
+11. **Bugs carry the Type label Bug (INV-748/749)**: `labels: ['bug']` (any casing). Type is Bug / Feature / Improvement, at most one per item; a second Type is refused. See §12.
 
 
 ## 5. First-Time Onboarding Blueprint (首次接入黄金规范)
@@ -130,7 +131,7 @@ Any bugfix or unplanned modification touching product source code MUST adhere to
      - `related_work_id: <当前处理任务ID 或 所属父里程碑ID>`
      - `related_work_type: 'DISCOVERED_DURING'`
      - `parent_id`：可省略——省略时自动继承被关联项所在的里程碑（同仓库）；跨仓库发现的问题必须显式给出目标仓库的父级（§4.8）
-     - 若是 bug，带 `labels: ['bug']`（Bug 路线 v1 上线后改为 Type 标签组）
+     - 若是 bug，带 `labels: ['bug']`（即 Type 标签 Bug，见 §12）
    - 必须自动生成标准的结构化中文描述：
      - `### 1. 目标与架构定位`
      - `### 2. 核心功能与交付范围`
@@ -345,7 +346,11 @@ features:
 
 Involute ships a Linear-style bug pipeline: humans report through the UI, agents discover and fix through the standard work-graph protocol.
 
-1. **Human reports via Report Bug UI**: The board toolbar's **Report bug** button opens a dialog (title, rich-text description with paste-to-upload images/videos, priority, project, type labels). Submitting calls the `bugReport` GraphQL mutation, which creates the issue **directly as COMMITTED** (no candidate review), find-or-creates the `bug` label (case-insensitive), tags `source: 'bug-report'`, and lands it in the team's default backlog state.
+1. **Human reports via Report Bug UI (Bug route v1, INV-748/749)**: The board toolbar's **Report bug** button opens a dialog: title (open bugs with similar titles are shown while typing, from the `similarBugs` query), **steps to reproduce (required)**, rich-text description, **priority (required)**, **where it belongs** (project, then No milestone / a milestone or epic; the board's project filter or the last choice is preselected), and extra labels. Submitting calls `bugReport`, which always adds the Type label `Bug` (find-or-create, case-insensitive) and tags `source: 'bug-report'`:
+   - **Placed** (`parentId`): committed directly under that parent, like any created work.
+   - **Not sure where it belongs**: created as a **CANDIDATE** in triage (`/candidates`); whoever commits it chooses the project and location, and the bug takes that project's repository.
+   - Missing priority or steps are refused with the reason in `message`.
+   - **Type labels** Bug / Feature / Improvement form one group: an item has at most one (the server refuses a second; the UI swaps).
 2. **Discovery by agents**: Every report emits a `bug.reported` inbox notification to team humans **and** a `bug.reported` outbox webhook event (subscribable via `WORK_EVENT_TYPES`), so external agents can discover new bugs and `work_claim` them like any other committed work.
 3. **Fixing agents follow the standard protocol**: claim → `run_report` → `evidence_attach` → In Review. Bugs are ordinary committed issues; `Done` remains strictly human-gated.
 4. **Statistics**: The `/bugs` page (backed by the `bugSummary` query) shows open/closed counts, per-project and per-type-label breakdowns, unclaimed open count, open-age stats, and an 8-week creation trend for triage.

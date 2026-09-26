@@ -27,6 +27,7 @@ primary entrypoint; the web board is an observation and governance surface.
 2. **Relations.** Mentions of other work (\`INV-123\` or a project alias prefix) become RELATED_TO automatically. Dependencies the source material states must be BLOCKS (\`blocked_by\` / \`blocks\` on \`work_propose\`, or \`work_link\`). Never invent dependencies or structure.
 3. **Preview before bulk.** Before proposing several related items, lay out the whole tree (parents, blockers) and check it; if the source is ambiguous, propose an outline for review instead of guessing.
 4. **Research.** Research / competitive analysis is an ISSUE labelled \`research\` (\`labels: ['research']\`); its body stays in \`research/\`. Actionable points are ISSUEs and "won't do" conclusions DECISIONs, each DERIVED_FROM the research item. Before research reaches Review, its downstream is proposed or it states "no actionable points"; otherwise \`run_report(completed)\` warns and \`workHygiene\` lists it.
+5. **Bugs (Bug route v1, INV-748).** A bug is an ISSUE with the Type label \`Bug\` (\`labels: ['bug']\`, any casing). Type is one of Bug / Feature / Improvement, at most one per item; a second Type is refused. Bugs an agent finds are proposed as candidates (DISCOVERED_DURING, placed like any other work) and go through triage; humans report through Report bug, which places the bug in its project or sends it to triage.
 
 ## Three-Layer Defense Pyramid (三层防御金字塔)
 
