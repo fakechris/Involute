@@ -27,6 +27,7 @@ import {
 import { assertActorCan, isAcceptStateType, sanitizeWorkTitle, validateAgentDescription } from './claim-service.js';
 import { assertNoWorkLinkCycle, syncContainsFromParentId } from './link-service.js';
 import { syncCommentMentions } from './mention-service.js';
+import { linkMentionedWork } from './mention-links.js';
 import { enqueueCommentEvents } from './comment-events.js';
 import { openAgentRequestsForMentions } from './agent-request-from-mention.js';
 import { assertNodeHierarchy, getContainsDescendantIds, lockWorkGraph } from './graph-integrity.js';
@@ -115,8 +116,9 @@ export async function createIssueWithAudit(
   prisma: DatabaseClient,
   input: CreateIssueInput,
   actor: WriteActor = INTERNAL_WRITE_ACTOR,
+  options: { linkMentions?: boolean } = {},
 ): Promise<{ auditId: string; issue: Issue }> {
-  if ('$transaction' in prisma) return prisma.$transaction(tx => createIssueWithAudit(tx, input, actor));
+  if ('$transaction' in prisma) return prisma.$transaction(tx => createIssueWithAudit(tx, input, actor, options));
   await lockWorkGraph(prisma, input.teamId);
   const team = await prisma.team.findUnique({
     where: {
@@ -205,6 +207,11 @@ export async function createIssueWithAudit(
       after: selectIssueSnapshot(created),
       workId: created.id,
     });
+  // Callers that add their own typed links first (proposals with blocked_by)
+  // link mentions afterwards, so a declared BLOCKS is not shadowed by RELATED_TO.
+  if (options.linkMentions !== false) {
+    await linkMentionedWork(prisma, { workId: created.id, teamId: created.teamId, texts: mentionTexts(created), actor });
+  }
 
   return { auditId, issue: created };
 }
@@ -536,9 +543,17 @@ export async function updateIssue(
       before: selectIssueSnapshot(existingIssue),
       workId: id,
     });
+    if (mentionTexts(updated).join('\u0000') !== mentionTexts(existingIssue).join('\u0000')) {
+      await linkMentionedWork(transaction, { workId: id, teamId: updated.teamId, texts: mentionTexts(updated), actor });
+    }
 
     return updated;
   });
+}
+
+/** The fields whose references to other work become RELATED_TO edges (INV-720). */
+export function mentionTexts(issue: Pick<Issue, 'description' | 'outcome' | 'scope' | 'constraints' | 'acceptance' | 'verification'>): Array<string | null> {
+  return [issue.description, issue.outcome, issue.scope, issue.constraints, issue.acceptance, issue.verification];
 }
 
 async function assertProjectAndCycleTeam(
@@ -603,6 +618,7 @@ export async function createComment(
     select: {
       id: true,
       identifier: true,
+      teamId: true,
     },
   });
 
@@ -627,6 +643,13 @@ export async function createComment(
     });
 
     const mentions = await syncCommentMentions(tx, comment.id, comment.body);
+    const author = await tx.user.findUnique({ where: { id: userId }, select: { actorKind: true } });
+    await linkMentionedWork(tx, {
+      workId: issue.id,
+      teamId: issue.teamId,
+      texts: [comment.body],
+      actor: { actorId: userId, actorKind: author?.actorKind ?? 'HUMAN', surface: 'comment' },
+    });
     const requestIdByActorId = await openAgentRequestsForMentions(tx, {
       comment,
       mentions,

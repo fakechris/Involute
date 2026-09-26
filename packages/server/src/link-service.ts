@@ -99,6 +99,20 @@ export async function createWorkLink(
   });
 
   if (input.type === 'CONTAINS') await projectParent(prisma, toIssue, input.fromId, actor);
+  // RELATED_TO only says "these are connected" (often recorded automatically
+  // from a mention, INV-720); a specific relation between the same two items
+  // supersedes it, so the pair is not listed twice.
+  if (input.type !== 'RELATED_TO') {
+    await prisma.workLink.deleteMany({
+      where: {
+        type: 'RELATED_TO',
+        OR: [
+          { fromId: input.fromId, toId: input.toId },
+          { fromId: input.toId, toId: input.fromId },
+        ],
+      },
+    });
+  }
 
   return created;
 }

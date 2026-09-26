@@ -700,6 +700,7 @@ Existing issues are work nodes. New fields are queryable; `issueCreate` / `issue
 - `links` returns incident `WorkLink` rows (`CONTAINS`, `BLOCKS`, `DERIVED_FROM`, `DISCOVERED_DURING`, `RELATED_TO`, `DUPLICATE_OF`)
 - setting `parentId` through `issueCreate` or `issueUpdate` also writes a `CONTAINS` link (parent → child) and records a `WorkAudit` row
 - `CONTAINS` requires explicit matching repositories and allows PROJECT → MILESTONE/DECISION/EPIC/ISSUE, MILESTONE → EPIC/ISSUE, EPIC → ISSUE and ISSUE → ISSUE (sub-issues). An ISSUE directly under a PROJECT is shown as "No milestone". Committing a candidate requires a parent (every kind except PROJECT). Adding a second parent fails; use a revision-checked `issueUpdate` for an intentional move. Kind/repository edits validate incident edges. See [graph migration operations](graph-migration.md) for historical repairs.
+- Mentions of other work (`INV-123` or a project alias prefix) in descriptions, contract fields and comments create `RELATED_TO` automatically when the two are not linked yet. `workPropose` / `work_propose` accept `blockedBy` / `blocks` (`blocked_by` / `blocks`) to record dependencies with the proposal; `Issue.dependencyHints` lists references that read like dependencies but have no `BLOCKS`.
 - `viewer.actorKind` is `HUMAN`, `AGENT`, or `SERVICE`
 
 ## MCP

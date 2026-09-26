@@ -49,7 +49,7 @@ interface WorkLinkMutationData {
 interface WorkLinkMutationVariables {
   fromId: string;
   toId: string;
-  type: 'DUPLICATE_OF';
+  type: 'DUPLICATE_OF' | 'BLOCKS';
 }
 
 function isSnoozed(candidate: CandidateWork): boolean {
@@ -300,6 +300,23 @@ function CandidateCard({
     }
   }
 
+  async function handleRecordBlocker(identifier: string) {
+    setError(null);
+    setPendingAction('duplicate');
+    try {
+      const result = await runLink({ variables: { fromId: identifier, toId: candidate.id, type: 'BLOCKS' } });
+      if (!result.data?.workLink.success) {
+        setError(`We could not record ${identifier} as a blocker.`);
+        return;
+      }
+      onRefresh();
+    } catch {
+      setError(`We could not record ${identifier} as a blocker.`);
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
   async function handleMarkDuplicate() {
     if (!duplicateOfId) return;
     setError(null);
@@ -458,6 +475,23 @@ function CandidateCard({
         </select>
       </label>
       <ParentField candidate={candidate} value={parentChoice} onChange={setParentChoice} />
+      {(candidate.dependencyHints ?? []).length > 0 ? (
+        <div className="observation-dependency-hint" role="note" aria-label={`Dependency hints for ${candidate.identifier}`}>
+          <span>Reads like it depends on</span>
+          {(candidate.dependencyHints ?? []).map((identifier) => (
+            <Btn
+              key={identifier}
+              variant="subtle"
+              disabled={pendingAction !== null}
+              title={`Record ${identifier} BLOCKS ${candidate.identifier}`}
+              onClick={() => void handleRecordBlocker(identifier)}
+            >
+              {identifier} blocks this
+            </Btn>
+          ))}
+          <span className="observation-card__meta">no BLOCKS link yet — record it if the text means it</span>
+        </div>
+      ) : null}
       <label className="observation-field">
         <span>Reject reason</span>
         <input

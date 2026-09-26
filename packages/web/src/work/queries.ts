@@ -53,6 +53,7 @@ export const CANDIDATES_PAGE_QUERY = gql`
           title
           kind
         }
+        dependencyHints
         team {
           id
           key

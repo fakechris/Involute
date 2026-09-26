@@ -33,7 +33,8 @@ import { enqueueWorkEvent } from './event-outbox.js';
 import { attachDecisionReceipt, type ReceiptInput } from './decision-receipt.js';
 import { createWorkLink } from './link-service.js';
 import { isLegalContains } from './graph-integrity.js';
-import { createIssueWithAudit } from './issue-service.js';
+import { createIssueWithAudit, mentionTexts } from './issue-service.js';
+import { linkMentionedWork } from './mention-links.js';
 import {
   completeWorkIdempotency,
   hashIdempotencyRequest,
@@ -67,6 +68,10 @@ export interface ProposeWorkInput {
   parentId?: string | null;
   relatedWorkId?: string | null;
   relatedWorkType?: WorkLinkType | null;
+  /** Existing work (ids or identifiers) this proposal is blocked by — each becomes X BLOCKS new (INV-720). */
+  blockedBy?: string[] | null;
+  /** Existing work this proposal blocks — each becomes new BLOCKS X. */
+  blocks?: string[] | null;
   repository?: string | null;
   scope?: string | null;
   /** Where the candidate came from: agent / web / cli / import. */
@@ -307,7 +312,7 @@ export async function proposeWork(
       }
     }
 
-    const { auditId: creationAuditId, issue: created } = await createIssueWithAudit(transaction, createInput, actor);
+    const { auditId: creationAuditId, issue: created } = await createIssueWithAudit(transaction, createInput, actor, { linkMentions: false });
     if (parentWork) {
       await createWorkLink(transaction, {
         actor,
@@ -326,6 +331,21 @@ export async function proposeWork(
         type: relatedType,
       });
     }
+    // Declared dependencies (INV-720): "blocked by X" can now be said at
+    // proposal time instead of needing a second work_link call.
+    for (const [ids, direction] of [[input.blockedBy ?? [], 'blocked-by'], [input.blocks ?? [], 'blocks']] as const) {
+      for (const ref of ids) {
+        const other = await findWorkByIdOrIdentifier(transaction, ref);
+        if (!other) throw createNotFoundError(WORK_RELATED_NOT_FOUND_MESSAGE);
+        await createWorkLink(transaction, {
+          actor,
+          fromId: direction === 'blocked-by' ? other.id : created.id,
+          toId: direction === 'blocked-by' ? created.id : other.id,
+          type: 'BLOCKS',
+        });
+      }
+    }
+    await linkMentionedWork(transaction, { workId: created.id, teamId: created.teamId, texts: mentionTexts(created), actor });
     if (idempotencyId) {
       await completeWorkIdempotency(transaction, idempotencyId, created.id);
     }

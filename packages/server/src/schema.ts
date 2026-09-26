@@ -101,7 +101,7 @@ import {
   type AgentProfile as AgentProfileResult,
   type WorkProvenance as WorkProvenanceResult,
 } from './agent-directory.js';
-import { createComment, createIssue, createIssueInTransaction, deleteComment, deleteIssue, updateIssue } from './issue-service.js';
+import { createComment, createIssue, createIssueInTransaction, deleteComment, deleteIssue, mentionTexts, updateIssue } from './issue-service.js';
 import { projectWorkNotifications } from './notification-service.js';
 import { auditMergedPrTraceability } from './traceability-audit.js';
 import { suggestedBranchName } from './branch-name.js';
@@ -110,6 +110,7 @@ import { writeActorFromViewer } from './work-service.js';
 import { getUploadsDirectory } from './uploads.js';
 import { loadProjectWorkGraph, type ProjectWorkGraph } from './work-graph-view.js';
 import { loadWorkTimelines } from './work-timeline.js';
+import { dependencyHints } from './mention-links.js';
 import {
   findWorkByIdOrIdentifier,
   getWorkContext,
@@ -659,6 +660,12 @@ const typeDefs = /* GraphQL */ `
     ready queue. Batched when read through the issues connection (INV-679).
     """
     openBlockers: [Issue!]!
+    """
+    Identifiers this item's text mentions next to dependency wording ("依赖",
+    "blocked by", …) that have no BLOCKS edge either way — a prompt to record
+    the dependency, never an automatic one (INV-720).
+    """
+    dependencyHints: [String!]!
     claim: WorkClaimRecord
     comments(first: Int, after: String, orderBy: CommentOrderBy, rootsOnly: Boolean): CommentConnection!
     """
@@ -1447,6 +1454,10 @@ const typeDefs = /* GraphQL */ `
     parentId: String
     relatedWorkId: String
     relatedWorkType: WorkLinkType
+    """Existing work this proposal is blocked by (each X BLOCKS the new item)."""
+    blockedBy: [String!]
+    """Existing work this proposal blocks."""
+    blocks: [String!]
     idempotencyKey: String
     source: String
     initialState: String
@@ -3622,6 +3633,8 @@ const resolvers = {
     ): Promise<{ nodes: WorkLink[] }> => ({
       nodes: await listIncidentLinks(context.prisma, parent.id, args.type),
     }),
+    dependencyHints: (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext): Promise<string[]> =>
+      dependencyHints(context.prisma, { id: parent.id, teamId: parent.teamId, texts: mentionTexts(parent) }),
     openBlockers: async (
       parent: IssueParent,
       _args: Record<string, never>,

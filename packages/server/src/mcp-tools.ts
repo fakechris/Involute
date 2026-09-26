@@ -34,7 +34,8 @@ import {
   createValidationError,
 } from './errors.js';
 import { TEAM_WRITE_FORBIDDEN_MESSAGE } from './errors.js';
-import { updateIssue } from './issue-service.js';
+import { mentionTexts, updateIssue } from './issue-service.js';
+import { dependencyHints } from './mention-links.js';
 import { createWorkLink } from './link-service.js';
 import { buildProtocolGuide } from './protocol-docs.js';
 import { attachEvidence, reportRun } from './run-service.js';
@@ -214,6 +215,9 @@ export async function callMcpTool(
       assignOptional(proposeInput, 'parentId', optionalString(args.parent_id));
       assignOptional(proposeInput, 'scope', optionalString(args.scope));
       assignOptional(proposeInput, 'relatedWorkId', optionalString(args.related_work_id));
+      const stringList = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '') : undefined);
+      assignOptional(proposeInput, 'blockedBy', stringList(args.blocked_by));
+      assignOptional(proposeInput, 'blocks', stringList(args.blocks));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
       assignOptional(proposeInput, 'verification', optionalString(args.verification));
       const kind = optionalString(args.kind);
@@ -255,12 +259,16 @@ export async function callMcpTool(
       assignOptional(commitInput, 'stateId', optionalString(args.state_id));
       assignOptional(commitInput, 'verification', optionalString(args.verification));
       assignOptional(commitInput, 'idempotencyKey', optionalString(args.idempotency_key));
-      return commitWork(
+      const committed = await commitWork(
         context.prisma,
         work.id,
         commitInput,
         writeActorFromViewer(context.viewer, 'mcp'),
       );
+      const hints = await dependencyHints(context.prisma, { id: committed.id, teamId: committed.teamId, texts: mentionTexts(committed) });
+      return hints.length
+        ? { ...committed, warning: `Its text reads like it depends on ${hints.join(', ')} but no BLOCKS link records that. If it does, add one (work_link BLOCKS); if not, ignore this.` }
+        : committed;
     }
     case 'work_update': {
       const work = await requireWork(context.prisma, requiredString(args.id, 'id'));
@@ -557,6 +565,16 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
           type: 'string',
           enum: ['CONTAINS', 'BLOCKS', 'DERIVED_FROM', 'DISCOVERED_DURING', 'RELATED_TO', 'DUPLICATE_OF'],
           description: 'Relationship type from the new item to related_work_id. If CONTAINS, the related item becomes the parent. Otherwise the typed link is recorded in addition to any parent_id. Defaults to DISCOVERED_DURING.',
+        },
+        blocked_by: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Identifiers of existing work this item cannot start before (each becomes X BLOCKS this). Record dependencies the source material states; do not invent them.',
+        },
+        blocks: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Identifiers of existing work that waits on this item (this BLOCKS each).',
         },
         repository: { type: 'string' },
         idempotency_key: { type: 'string' },

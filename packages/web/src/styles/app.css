@@ -4287,6 +4287,15 @@ kbd {
   color: var(--warn);
 }
 
+.observation-dependency-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
 .candidates-bulk-result {
   margin: 0;
 }
