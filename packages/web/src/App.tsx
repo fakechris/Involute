@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon, IcoCheck, IcoGraph, IcoFilter, IcoBug, IcoHistory, IcoKeyboard } from './components/Icons';
@@ -46,76 +46,26 @@ import {
   type AppShellTeamSummary,
 } from './lib/app-shell-state';
 import { fetchSessionState, getGoogleLoginUrl, logoutSession, type SessionState } from './lib/session';
+import { lazyRoute, RouteErrorBoundary } from './lib/lazy-route';
 
-const AccessPage = lazy(async () => {
-  const module = await import('./routes/AccessPage');
-  return { default: module.AccessPage };
-});
-const BoardPage = lazy(async () => {
-  const module = await import('./routes/BoardPage');
-  return { default: module.BoardPage };
-});
-const InboxPage = lazy(async () => {
-  const module = await import('./routes/InboxPage');
-  return { default: module.InboxPage };
-});
-const IssuePage = lazy(async () => {
-  const module = await import('./routes/IssuePage');
-  return { default: module.IssuePage };
-});
-const MyIssuesPage = lazy(async () => {
-  const module = await import('./routes/MyIssuesPage');
-  return { default: module.MyIssuesPage };
-});
-const ViewsPage = lazy(async () => {
-  const module = await import('./routes/ViewsPage');
-  return { default: module.ViewsPage };
-});
-const ProjectsPage = lazy(async () => {
-  const module = await import('./routes/ProjectsPage');
-  return { default: module.ProjectsPage };
-});
-const AgentsPage = lazy(async () => {
-  const module = await import('./routes/AgentsPage');
-  return { default: module.AgentsPage };
-});
+const AccessPage = lazyRoute(async () => (await import('./routes/AccessPage')).AccessPage);
+const BoardPage = lazyRoute(async () => (await import('./routes/BoardPage')).BoardPage);
+const InboxPage = lazyRoute(async () => (await import('./routes/InboxPage')).InboxPage);
+const IssuePage = lazyRoute(async () => (await import('./routes/IssuePage')).IssuePage);
+const MyIssuesPage = lazyRoute(async () => (await import('./routes/MyIssuesPage')).MyIssuesPage);
+const ViewsPage = lazyRoute(async () => (await import('./routes/ViewsPage')).ViewsPage);
+const ProjectsPage = lazyRoute(async () => (await import('./routes/ProjectsPage')).ProjectsPage);
+const AgentsPage = lazyRoute(async () => (await import('./routes/AgentsPage')).AgentsPage);
 
-const MembersPage = lazy(async () => {
-  const module = await import('./routes/MembersPage');
-  return { default: module.MembersPage };
-});
-const SettingsPage = lazy(async () => {
-  const module = await import('./routes/SettingsPage');
-  return { default: module.SettingsPage };
-});
-const CyclesPage = lazy(async () => {
-  const module = await import('./routes/CyclesPage');
-  return { default: module.CyclesPage };
-});
-const CandidatesPage = lazy(async () => {
-  const module = await import('./routes/CandidatesPage');
-  return { default: module.CandidatesPage };
-});
-const InReviewPage = lazy(async () => {
-  const module = await import('./routes/InReviewPage');
-  return { default: module.InReviewPage };
-});
-const BugsPage = lazy(async () => {
-  const module = await import('./routes/BugsPage');
-  return { default: module.BugsPage };
-});
-const HygienePage = lazy(async () => {
-  const module = await import('./routes/HygienePage');
-  return { default: module.HygienePage };
-});
-const GraphPage = lazy(async () => {
-  const module = await import('./routes/GraphPage');
-  return { default: module.GraphPage };
-});
-const WorkContextPage = lazy(async () => {
-  const module = await import('./routes/WorkContextPage');
-  return { default: module.WorkContextPage };
-});
+const MembersPage = lazyRoute(async () => (await import('./routes/MembersPage')).MembersPage);
+const SettingsPage = lazyRoute(async () => (await import('./routes/SettingsPage')).SettingsPage);
+const CyclesPage = lazyRoute(async () => (await import('./routes/CyclesPage')).CyclesPage);
+const CandidatesPage = lazyRoute(async () => (await import('./routes/CandidatesPage')).CandidatesPage);
+const InReviewPage = lazyRoute(async () => (await import('./routes/InReviewPage')).InReviewPage);
+const BugsPage = lazyRoute(async () => (await import('./routes/BugsPage')).BugsPage);
+const HygienePage = lazyRoute(async () => (await import('./routes/HygienePage')).HygienePage);
+const GraphPage = lazyRoute(async () => (await import('./routes/GraphPage')).GraphPage);
+const WorkContextPage = lazyRoute(async () => (await import('./routes/WorkContextPage')).WorkContextPage);
 
 const THEME_STORAGE_KEY = 'involute.theme';
 const DENSITY_STORAGE_KEY = 'involute.density';
@@ -1439,6 +1389,7 @@ export function App() {
         </header>
 
         <div className="app-shell__content" data-route={location.pathname}>
+          <RouteErrorBoundary resetKey={location.pathname}>
           <Suspense
             fallback={
               <main className="board-page board-page--state">
@@ -1473,6 +1424,7 @@ export function App() {
               <Route path="/issues/:id" element={<IssuePage />} />
             </Routes>
           </Suspense>
+          </RouteErrorBoundary>
         </div>
       </div>
 
