@@ -407,6 +407,20 @@ export function IssueDetailDrawer({
               )}
             </div>
 
+            {/* The contract, runs, evidence and audit live on full pages; link to them. */}
+            <div className="issue-panel__section" style={{ display: 'flex', gap: 6 }}>
+              <button
+                type="button"
+                className="ui-action ui-action--subtle"
+                onClick={() => navigate(`/issue/${activeIssue.id}#contract`)}
+              >Contract</button>
+              <button
+                type="button"
+                className="ui-action ui-action--subtle"
+                onClick={() => navigate(`/work/${activeIssue.id}`)}
+              >Work context</button>
+            </div>
+
             {activeIssue.children.nodes.length > 0 ? (
               <div className="issue-panel__section">
                 <h2>Sub-issues · {activeIssue.children.nodes.length}</h2>

@@ -252,4 +252,63 @@ describe('App issue detail editing', () => {
     expect(refetch).toHaveBeenCalled();
     await waitFor(() => expect(screen.getByLabelText('Issue title')).toHaveValue('Changed by another actor'));
   });
+  it('lets a human rewrite the contract on the issue page (INV-786)', async () => {
+    const mutate = vi.fn().mockImplementation(({ variables }) =>
+      Promise.resolve({
+        data: {
+          issueUpdate: {
+            success: true,
+            message: null,
+            issue: { ...getIssue('issue-1'), ...variables.input, revision: 2 },
+          },
+        } satisfies IssueUpdateMutationData,
+      }),
+    );
+    apolloMocks.useMutation.mockReturnValue([mutate]);
+
+    renderTestApp({ data: boardQueryResult, loading: false }, ['/issue/issue-1']);
+    const contract = await screen.findByRole('region', { name: 'Contract' });
+    fireEvent.click(within(contract).getByRole('button', { name: 'Edit contract' }));
+    fireEvent.change(within(contract).getByLabelText('Contract Scope'), {
+      target: { value: 'Research stays local; only one line in docs/73' },
+    });
+    fireEvent.change(within(contract).getByLabelText('Contract Acceptance'), {
+      target: { value: 'docs/73 has the row' },
+    });
+    fireEvent.click(within(contract).getByRole('button', { name: 'Save contract' }));
+
+    await waitFor(() =>
+      expect(mutate).toHaveBeenCalledWith({
+        variables: {
+          id: 'issue-1',
+          input: {
+            expectedRevision: 1,
+            scope: 'Research stays local; only one line in docs/73',
+            acceptance: 'docs/73 has the row',
+          },
+        },
+      }),
+    );
+    expect(await within(contract).findByText('Research stays local; only one line in docs/73')).toBeInTheDocument();
+    expect(within(contract).queryByRole('button', { name: 'Save contract' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the contract editor open and shows why the server refused', async () => {
+    const mutate = vi.fn().mockResolvedValue({
+      data: {
+        issueUpdate: { success: false, issue: null, message: 'Committed work requires acceptance criteria.' },
+      } satisfies IssueUpdateMutationData,
+    });
+    const refetch = vi.fn().mockResolvedValue({ data: { issue: getIssue('issue-1') } });
+    apolloMocks.useMutation.mockReturnValue([mutate]);
+
+    renderTestApp({ data: boardQueryResult, loading: false, refetch }, ['/issue/issue-1']);
+    const contract = await screen.findByRole('region', { name: 'Contract' });
+    fireEvent.click(within(contract).getByRole('button', { name: 'Edit contract' }));
+    fireEvent.change(within(contract).getByLabelText('Contract Outcome'), { target: { value: 'New outcome' } });
+    fireEvent.click(within(contract).getByRole('button', { name: 'Save contract' }));
+
+    expect(await screen.findByText('Committed work requires acceptance criteria.')).toBeInTheDocument();
+    expect(within(contract).getByRole('button', { name: 'Save contract' })).toBeInTheDocument();
+  });
 });

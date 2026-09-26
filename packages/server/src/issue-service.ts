@@ -18,6 +18,7 @@ import {
   WORKFLOW_STATE_NOT_FOUND_MESSAGE,
   WORKFLOW_STATE_TEAM_CREATE_MISMATCH_MESSAGE,
   WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE,
+  WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE,
   WORK_CONTRACT_UPDATE_FORBIDDEN_MESSAGE,
   WORK_REVISION_CONFLICT_MESSAGE,
   PROJECT_NOT_FOUND_MESSAGE,
@@ -250,6 +251,16 @@ export async function updateIssue(
       if (rewritesContract) {
         throw createValidationError(WORK_CONTRACT_UPDATE_FORBIDDEN_MESSAGE);
       }
+    }
+
+    // Commit requires acceptance, so a later edit may not clear it.
+    if (
+      existingIssue.commitmentStatus === 'COMMITTED' &&
+      'acceptance' in input &&
+      input.acceptance !== undefined &&
+      !input.acceptance?.trim()
+    ) {
+      throw createValidationError(WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE);
     }
 
     if (
