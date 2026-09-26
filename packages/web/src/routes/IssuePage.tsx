@@ -789,7 +789,7 @@ export function IssuePage() {
 
             <ContractSection
               values={activeIssue}
-              committed={activeIssue.commitmentStatus !== 'CANDIDATE'}
+              committed={activeIssue.commitmentStatus === 'COMMITTED'}
               saving={isSavingState}
               onSave={(changes) => persistContractChange(activeIssue, changes)}
             />
