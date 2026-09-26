@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 
 import { App } from './App';
 import { AppApolloProvider } from './lib/apollo';
+import { RevisitRefresh } from './lib/revisit-refresh';
 import './styles/app.css';
 import './styles/in-review.css';
 
@@ -17,6 +18,7 @@ ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <AppApolloProvider>
       <BrowserRouter>
+        <RevisitRefresh />
         <App />
       </BrowserRouter>
     </AppApolloProvider>
