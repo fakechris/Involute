@@ -6,6 +6,7 @@ import type { CommentSummary, IssueSummary, TeamSummary, UserSummary } from '../
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ActorBadge } from './ActorBadge';
 import { IssueRelations } from './IssueRelations';
+import { AddSubIssueButton } from './AddSubIssueButton';
 import { RichTextEditor } from './RichTextEditor';
 import { AGENTS_QUERY } from '../board/queries';
 
@@ -596,6 +597,7 @@ export function IssueDetailDrawer({
                     ? `${activeIssue.children.nodes.length} child${activeIssue.children.nodes.length === 1 ? '' : 'ren'}`
                     : 'No child issues.'}
                 </p>
+                <AddSubIssueButton issue={activeIssue} />
               </div>
             </div>
           </aside>

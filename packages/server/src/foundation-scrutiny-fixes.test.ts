@@ -174,6 +174,8 @@ describe('foundation scrutiny fixes', () => {
         variables: {
           input: {
             teamId: manualFixture.team.id,
+            // A PROJECT needs no parent (INV-744); numbering is what is under test.
+            kind: 'PROJECT',
             title: 'First application-created issue',
           },
         },
@@ -184,6 +186,7 @@ describe('foundation scrutiny fixes', () => {
         variables: {
           input: {
             teamId: manualFixture.team.id,
+            kind: 'PROJECT',
             title: 'Second application-created issue',
           },
         },

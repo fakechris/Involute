@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
 import { DependencyGraph, type FocusHops } from '../components/graph/DependencyGraph';
+import { openCreateIssueSurface } from '../app/shellStorage';
 import { GraphOutline } from '../components/graph/GraphOutline';
 import { ProjectTimeline } from '../components/graph/ProjectTimeline';
 import { IcoGraph } from '../components/Icons';
@@ -133,6 +134,15 @@ export function GraphPage() {
   }
 
   const openIssue = (id: string) => navigate(`/issue/${id}`);
+  // New work from a container row lands in it (INV-744); a project row means "No milestone".
+  const graphRepository = graph?.repository ?? null;
+  const createIn = graphRepository
+    ? (container: GraphNode) =>
+        openCreateIssueSurface(navigate, '/graph', {
+          repository: graphRepository,
+          parentId: container.kind === 'PROJECT' ? container.identifier : container.id,
+        })
+    : null;
 
   return (
     <div className="observation-page">
@@ -222,7 +232,13 @@ export function GraphPage() {
               </p>
             ) : null}
             {view === 'outline' ? (
-              <GraphOutline outline={outline} edges={edges} byId={byId} onOpen={openIssue} />
+              <GraphOutline
+                outline={outline}
+                edges={edges}
+                byId={byId}
+                onOpen={openIssue}
+                {...(createIn ? { onCreateIn: createIn } : {})}
+              />
             ) : view === 'timeline' ? (
               timelineQuery.error ? (
                 <div className="empty-state" role="alert">

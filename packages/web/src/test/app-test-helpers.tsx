@@ -24,6 +24,7 @@ import type {
   GraphProjectsQueryData,
   ProjectWorkGraphQueryData,
   ProjectWorkTimelineQueryData,
+  PlacementOptionsQueryData,
   WorkHygieneQueryData,
 } from '../work/types';
 export type {
@@ -478,6 +479,7 @@ type QueryState = {
   graphProjectsData?: GraphProjectsQueryData;
   timelineData?: ProjectWorkTimelineQueryData;
   hygieneData?: WorkHygieneQueryData;
+  placementData?: PlacementOptionsQueryData;
   loading?: boolean;
   refetch?: ReturnType<typeof vi.fn>;
   relationsData?: IssueRelationsQueryData;
@@ -536,6 +538,17 @@ export function renderApp(
     if (source.includes('query GraphProjects')) {
       return {
         data: queryState.graphProjectsData ?? { projectSummary: { totalCount: 0, projects: [] } },
+        error: undefined,
+        loading: false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query PlacementOptions')) {
+      return {
+        data: options?.skip
+          ? undefined
+          : (queryState.placementData ?? { projects: { nodes: [] }, milestones: { nodes: [] }, epics: { nodes: [] } }),
         error: undefined,
         loading: false,
         refetch: vi.fn().mockResolvedValue(undefined),

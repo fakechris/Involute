@@ -553,7 +553,7 @@ The published `involute-web` image is a static production build. It bakes `VITE_
 ```bash
 pnpm --filter @turnkeyai/involute exec node dist/index.js teams list
 pnpm --filter @turnkeyai/involute exec node dist/index.js issues list --team SON
-pnpm --filter @turnkeyai/involute exec node dist/index.js issues create --team SON --title "My issue"
+pnpm --filter @turnkeyai/involute exec node dist/index.js issues create --team SON --parent SON-1 --title "My issue"
 pnpm --filter @turnkeyai/involute exec node dist/index.js comments add SON-1 --body "Hello from Involute"
 pnpm --filter @turnkeyai/involute exec node dist/index.js export --token "$SOURCE_API_TOKEN" --team SON --output .tmp/son-export
 pnpm --filter @turnkeyai/involute exec node dist/index.js import --file .tmp/son-export

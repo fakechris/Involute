@@ -84,6 +84,14 @@ import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { writeStoredShellIssues, writeStoredShellTeams } from '../lib/app-shell-state';
 import { BoardCreateIssueDialog } from '../components/BoardCreateIssueDialog';
+import {
+  noMilestonePlacement,
+  readLastPlacement,
+  rememberPlacement,
+  resolveInitialPlacement,
+  type CreatePlacement,
+  type PlacementSource,
+} from '../work/placement';
 import { BoardLoadMoreNotice } from '../components/BoardLoadMoreNotice';
 import { Column } from '../components/Column';
 import { InlineCreate } from '../components/InlineCreate';
@@ -266,6 +274,14 @@ export function BoardPage() {
   const [isReportBugOpen, setIsReportBugOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
+  const [createPlacement, setCreatePlacement] = useState<CreatePlacement | null>(null);
+  const [placementSource, setPlacementSource] = useState<PlacementSource | null>(null);
+  const [createMore, setCreateMore] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const onPlacementChange = useCallback((placement: CreatePlacement | null) => {
+    setCreatePlacement(placement);
+    setPlacementSource(null);
+  }, []);
   const [dragPreviewStateId, setDragPreviewStateId] = useState<string | null>(null);
   const [dragOriginStateId, setDragOriginStateId] = useState<string | null>(null);
 
@@ -444,6 +460,28 @@ export function BoardPage() {
     teams[0] ??
     null;
   const isTeamSwitching = Boolean(pendingTeamKey && pendingTeamKey !== activeTeamKey);
+  const placeableProjects = queryData?.projectSummary?.projects ?? [];
+  // Where new work starts (INV-744): entry-point context, else the board's
+  // project filter, else this person's last choice on the team.
+  const initialPlacement = (context?: CreatePlacement | null) =>
+    resolveInitialPlacement({
+      context: context ?? null,
+      boardRepository: rawProjectKey && rawProjectKey !== '__none__' ? rawProjectKey : null,
+      last: selectedTeam ? readLastPlacement(selectedTeam.key) : null,
+      projects: placeableProjects,
+    });
+  const openCreateDialog = (context: CreatePlacement | null = null, title = '') => {
+    const initial = initialPlacement(context);
+    setCreateTitle(title);
+    setCreateDescription('');
+    setCreatePlacement(initial?.placement ?? null);
+    setPlacementSource(initial?.source ?? null);
+    setCreateError(null);
+    setMutationError(null);
+    setIsCreateOpen(true);
+  };
+  const openCreateDialogRef = useRef(openCreateDialog);
+  openCreateDialogRef.current = openCreateDialog;
   const allIssues = useMemo(
     () => mergeBoardIssues(baseIssues, issueOverrides, createdIssues, deletedIssueIds),
     [baseIssues, createdIssues, deletedIssueIds, issueOverrides],
@@ -620,11 +658,9 @@ export function BoardPage() {
   }, [isTeamSwitching]);
 
   useEffect(() => {
-    function handleOpenCreateIssue() {
-      setCreateTitle('');
-      setCreateDescription('');
-      setMutationError(null);
-      setIsCreateOpen(true);
+    function handleOpenCreateIssue(event: Event) {
+      const detail = (event as CustomEvent<{ placement?: CreatePlacement; title?: string } | null>).detail;
+      openCreateDialogRef.current(detail?.placement ?? null, detail?.title ?? '');
     }
 
     if (
@@ -634,7 +670,8 @@ export function BoardPage() {
       'openCreateIssue' in location.state &&
       location.state.openCreateIssue
     ) {
-      handleOpenCreateIssue();
+      const state = location.state as { createPlacement?: CreatePlacement };
+      openCreateDialogRef.current(state.createPlacement ?? null);
       navigate(location.pathname, {
         replace: true,
         state: {},
@@ -1653,11 +1690,12 @@ export function BoardPage() {
 
     const nextTitle = createTitle.trim();
 
-    if (!selectedTeam || !nextTitle) {
+    if (!selectedTeam || !nextTitle || !createPlacement) {
       return;
     }
 
     setMutationError(null);
+    setCreateError(null);
     setIsSavingState(true);
 
     try {
@@ -1667,14 +1705,17 @@ export function BoardPage() {
           input: {
             teamId: selectedTeam.id,
             title: nextTitle,
+            parentId: createPlacement.parentId,
             ...(trimmedDescription ? { description: trimmedDescription } : {}),
           },
         },
       });
 
       if (!result.data?.issueCreate.success || !result.data.issueCreate.issue) {
-        throw new Error('Create issue mutation failed');
+        setCreateError(result.data?.issueCreate.message ?? 'We could not create the issue. Please try again.');
+        return;
       }
+      rememberPlacement(selectedTeam.key, createPlacement);
 
       setIssueOverrides((currentOverrides) =>
         replaceIssueOverride(currentOverrides, result.data!.issueCreate.issue!.id, result.data!.issueCreate.issue!),
@@ -1684,12 +1725,17 @@ export function BoardPage() {
         ...currentIssues.filter((issue) => issue.id !== result.data!.issueCreate.issue!.id),
       ]);
       setFocusedIssueId(result.data.issueCreate.issue.id);
-      setSelectedIssueId(result.data.issueCreate.issue.id);
       setCreateTitle('');
       setCreateDescription('');
-      setIsCreateOpen(false);
+      if (createMore) {
+        // Keep the placement for the next one, as Linear's "Create more" does.
+        setPlacementSource(null);
+      } else {
+        setSelectedIssueId(result.data.issueCreate.issue.id);
+        setIsCreateOpen(false);
+      }
     } catch {
-      setMutationError('We could not create the issue. Please try again.');
+      setCreateError('We could not create the issue. Please try again.');
     } finally {
       setIsSavingState(false);
     }
@@ -1697,6 +1743,20 @@ export function BoardPage() {
 
   async function handleInlineCreate(title: string, groupMeta?: BoardIssueGroup['meta']) {
     if (!selectedTeam || !title.trim()) {
+      return;
+    }
+    // Inline create has no picker to catch a remembered milestone that has
+    // since finished, so it goes in at project level ("No milestone").
+    // A list grouped by project creates in that group's project, as in Linear.
+    const groupProject = groupMeta?.repository ? noMilestonePlacement(placeableProjects, groupMeta.repository) : null;
+    const resolved = initialPlacement(groupProject);
+    const placement =
+      resolved?.source === 'last'
+        ? noMilestonePlacement(placeableProjects, resolved.placement.repository)
+        : (resolved?.placement ?? null);
+    if (!placement) {
+      // Nowhere to put it yet: finish in the dialog, which asks for a project.
+      openCreateDialog(null, title.trim());
       return;
     }
 
@@ -1709,6 +1769,7 @@ export function BoardPage() {
           input: {
             teamId: selectedTeam.id,
             title: title.trim(),
+            parentId: placement.parentId,
             ...(groupMeta?.stateId ? { stateId: groupMeta.stateId } : {}),
             ...(groupMeta?.priority !== undefined ? { priority: groupMeta.priority } : {}),
           },
@@ -1716,7 +1777,8 @@ export function BoardPage() {
       });
 
       if (!result.data?.issueCreate.success || !result.data.issueCreate.issue) {
-        throw new Error('Create issue mutation failed');
+        setMutationError(result.data?.issueCreate.message ?? 'We could not create the issue. Please try again.');
+        return;
       }
 
       const newIssue = result.data.issueCreate.issue;
@@ -2056,12 +2118,7 @@ export function BoardPage() {
           icon={<IcoPlus size={12} />}
           kbd="C"
           size="sm"
-          onClick={() => {
-            setCreateTitle('');
-            setCreateDescription('');
-            setMutationError(null);
-            setIsCreateOpen(true);
-          }}
+          onClick={() => openCreateDialog()}
         >Create issue</Btn>
         <Btn
           variant="ghost"
@@ -2684,6 +2741,13 @@ export function BoardPage() {
         selectedTeam={selectedTeam}
         createTitle={createTitle}
         createDescription={createDescription}
+        projects={placeableProjects}
+        placement={createPlacement}
+        placementSource={placementSource}
+        createMore={createMore}
+        errorMessage={createError}
+        onPlacementChange={onPlacementChange}
+        onCreateMoreChange={setCreateMore}
         onClose={() => setIsCreateOpen(false)}
         onSubmit={(event) => void handleCreateIssueSubmit(event)}
         onTitleChange={setCreateTitle}

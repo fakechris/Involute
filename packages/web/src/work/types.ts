@@ -397,6 +397,8 @@ export interface PlacementOption {
   identifier: string;
   title: string;
   kind: WorkKind;
+  /** Containers only; finished ones are not offered for new work (INV-744). */
+  state?: { type: string } | null;
 }
 
 export interface PlacementOptionsQueryData {

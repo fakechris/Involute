@@ -717,6 +717,7 @@ async function fetchTeamStates(teamKey: string): Promise<StateSummary[]> {
 
 async function createIssueViaCli(options: {
   description?: string;
+  parent: string;
   team: string;
   title: string;
 }): Promise<{ id: string; identifier: string; title: string }> {
@@ -730,6 +731,7 @@ async function createIssueViaCli(options: {
   const result = await client.request<{
     issueCreate: {
       success: boolean;
+      message?: string | null;
       issue: { id: string; identifier: string; title: string } | null;
     };
   }>(
@@ -737,6 +739,7 @@ async function createIssueViaCli(options: {
       mutation CliIssueCreate($input: IssueCreateInput!) {
         issueCreate(input: $input) {
           success
+          message
           issue {
             id
             identifier
@@ -750,12 +753,13 @@ async function createIssueViaCli(options: {
         teamId: team.id,
         title: options.title,
         description: options.description ?? null,
+        parentId: options.parent,
       },
     },
   );
 
   if (!result.issueCreate.success || !result.issueCreate.issue) {
-    throw new CliError('Issue creation failed.');
+    throw new CliError(result.issueCreate.message ? `Issue creation failed: ${result.issueCreate.message}` : 'Issue creation failed.');
   }
 
   return result.issueCreate.issue;
@@ -1625,11 +1629,12 @@ export function createProgram(): Command {
     .description('Create an issue')
     .requiredOption('--title <title>', 'Issue title')
     .requiredOption('--team <key>', 'Team key')
+    .requiredOption('--parent <identifier>', 'Where it belongs: its PROJECT (No milestone), a MILESTONE, EPIC or parent ISSUE')
     .option('--description <description>', 'Issue description')
     .option('--json', 'Output machine-readable JSON')
     .action(async function (
       this: Command,
-      options: JsonOption & { description?: string; team: string; title: string },
+      options: JsonOption & { description?: string; parent: string; team: string; title: string },
     ) {
       await runWithCliErrorHandling(async () => {
         const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });

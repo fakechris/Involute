@@ -60,12 +60,13 @@ async function buildFixture(request: APIRequestContext): Promise<Fixture> {
   );
   const team = teams.teams.nodes.find((candidate) => candidate.key === 'INV') ?? teams.teams.nodes[0]!;
   const state = (name: string) => team.states.nodes.find((candidate) => candidate.name === name)!.id;
-  const create = async (title: string, stateName: string, kind = 'ISSUE') =>
+  // Created in place (INV-744): everything but the project names its parent.
+  const create = async (title: string, stateName: string, kind = 'ISSUE', parentId?: string) =>
     (
       await gql<{ issueCreate: { issue: { id: string; identifier: string } } }>(
         request,
         `mutation($input: IssueCreateInput!) { issueCreate(input: $input) { issue { id identifier } } }`,
-        { input: { teamId: team.id, title, stateId: state(stateName), kind, repository: REPOSITORY } },
+        { input: { teamId: team.id, title, stateId: state(stateName), kind, repository: REPOSITORY, ...(parentId ? { parentId } : {}) } },
       )
     ).issueCreate.issue;
   const link = async (fromId: string, toId: string, type: string) => {
@@ -85,12 +86,10 @@ async function buildFixture(request: APIRequestContext): Promise<Fixture> {
     );
 
   const project = await create(REPOSITORY, 'In Progress', 'PROJECT');
-  const milestone = await create('E2E milestone', 'In Progress', 'MILESTONE');
-  const upstream = await create('E2E upstream work', 'Ready');
-  const downstream = await create('E2E downstream work', 'Ready');
-  const other = await create('E2E other work', 'Ready');
-  await link(project.id, milestone.id, 'CONTAINS');
-  for (const child of [upstream, downstream, other]) await link(milestone.id, child.id, 'CONTAINS');
+  const milestone = await create('E2E milestone', 'In Progress', 'MILESTONE', project.id);
+  const upstream = await create('E2E upstream work', 'Ready', 'ISSUE', milestone.id);
+  const downstream = await create('E2E downstream work', 'Ready', 'ISSUE', milestone.id);
+  const other = await create('E2E other work', 'Ready', 'ISSUE', milestone.id);
   await link(upstream.id, downstream.id, 'BLOCKS');
   await move(upstream.id, 'In Progress');
   await move(other.id, 'In Progress');
@@ -100,6 +99,15 @@ async function buildFixture(request: APIRequestContext): Promise<Fixture> {
 
 async function removeFixture(request: APIRequestContext, fixture: Fixture | null) {
   if (!fixture) return;
+  // Work created through the UI during the run sits under the fixture; remove it first.
+  const created = await gql<{ issues: { nodes: Array<{ id: string; title: string }> } }>(
+    request,
+    `query($repository: String!) { issues(first: 50, filter: { repository: { eq: $repository } }) { nodes { id title } } }`,
+    { repository: REPOSITORY },
+  ).catch(() => ({ issues: { nodes: [] } }));
+  for (const item of created.issues.nodes.filter((node) => node.title.startsWith('E2E created'))) {
+    await gql(request, `mutation($id: String!) { issueDelete(id: $id) { success } }`, { id: item.id }, { asHuman: true }).catch(() => undefined);
+  }
   for (const item of [fixture.other, fixture.downstream, fixture.upstream, fixture.milestone, fixture.project]) {
     await gql(request, `mutation($id: String!) { issueDelete(id: $id) { success } }`, { id: item.id }, { asHuman: true }).catch(
       () => undefined,
@@ -259,5 +267,25 @@ test.describe('work graph acceptance', () => {
     expect(errors).toEqual([]);
 
     await gql(request, `mutation($id: String!) { issueDelete(id: $id) { success } }`, { id: proposed.id }, { asHuman: true });
+  });
+
+  test('new work from a milestone row is created in that milestone (INV-744)', async ({ page }) => {
+    const { milestone } = fixture!;
+    await page.goto(`/graph?project=${encodeURIComponent(REPOSITORY)}`);
+    const outline = page.getByRole('tree', { name: 'Project outline' });
+    await outline.getByRole('button', { name: `New issue in ${milestone.identifier}`, exact: true }).click();
+
+    const createDrawer = page.getByRole('dialog', { name: 'Create issue drawer' });
+    await expect(createDrawer).toBeVisible();
+    await expect(createDrawer.getByLabel('Project')).toHaveValue(REPOSITORY);
+    await expect(createDrawer.getByLabel('Location')).toHaveValue(milestone.id);
+    await createDrawer.getByLabel('Issue title').fill('E2E created in milestone');
+    await createDrawer.getByLabel('Issue title').press('ControlOrMeta+Enter');
+    await expect(page.getByRole('dialog', { name: 'Issue detail drawer' }).getByLabel('Issue title')).toHaveValue('E2E created in milestone');
+
+    await page.goto(`/graph?project=${encodeURIComponent(REPOSITORY)}`);
+    const milestoneRow = page.getByRole('tree', { name: 'Project outline' }).getByRole('treeitem', { name: `${milestone.identifier} E2E milestone` });
+    await expect(milestoneRow.getByRole('treeitem', { name: /E2E created in milestone$/ })).toBeVisible();
+    await expect(milestoneRow.getByLabel('1 of 4 done')).toBeVisible();
   });
 });

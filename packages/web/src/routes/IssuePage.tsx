@@ -39,6 +39,7 @@ import type {
 } from '../board/types';
 import { ActorBadge } from '../components/ActorBadge';
 import { IssueRelations } from '../components/IssueRelations';
+import { AddSubIssueButton } from '../components/AddSubIssueButton';
 import { mergeIssueWithPreservedComments } from '../board/utils';
 import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
@@ -784,10 +785,10 @@ export function IssuePage() {
               </div>
             ) : null}
 
-            {/* Sub-issues */}
-            {activeIssue.children.nodes.length > 0 ? (
-              <div className="issue-panel__section">
-                <h2>Sub-issues · {activeIssue.children.nodes.length}</h2>
+            {/* Sub-issues; new ones are created already placed (INV-744) */}
+            <div className="issue-panel__section">
+              <h2>Sub-issues · {activeIssue.children.nodes.length}</h2>
+              {activeIssue.children.nodes.length > 0 ? (
                 <div className="issue-children" role="list">
                   {activeIssue.children.nodes.map((child) => (
                     <button
@@ -803,8 +804,9 @@ export function IssuePage() {
                     </button>
                   ))}
                 </div>
-              </div>
-            ) : null}
+              ) : null}
+              <AddSubIssueButton issue={activeIssue} />
+            </div>
 
             {/* Typed links: blockers, related, duplicates (INV-679). Same section as the board drawer. */}
             <IssueRelations key={activeIssue.id} issueId={activeIssue.id} onOpen={(issueId) => navigate(`/issue/${issueId}`)} />

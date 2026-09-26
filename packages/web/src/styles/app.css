@@ -5518,6 +5518,29 @@ kbd {
 }
 
 .graph-outline__count,
+/* New work in a container, shown on hover (INV-744). */
+.graph-outline__add {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.graph-outline__row:hover .graph-outline__add,
+.graph-outline__add:focus-visible {
+  opacity: 1;
+}
+
+.graph-outline__add:hover {
+  background: var(--bg-hover, rgba(127, 127, 127, 0.15));
+  color: var(--fg);
+}
+
 .graph-outline__state {
   font-size: 12px;
   color: var(--fg-dim);
@@ -6132,4 +6155,42 @@ kbd {
 
 .hygiene-item:hover .hygiene-item__title {
   text-decoration: underline;
+}
+
+/* Create issue: where it belongs (INV-744). */
+.placement-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.placement-picker__hint {
+  color: var(--fg-dim);
+  font-weight: 400;
+}
+
+.placement-picker__empty {
+  font-size: 13px;
+  color: var(--fg-dim);
+}
+
+.create-issue__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.create-issue__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+  font-size: 13px;
+  color: var(--fg-dim);
+}
+
+.add-sub-issue {
+  margin-top: 6px;
+  font-size: 12px;
 }

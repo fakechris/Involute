@@ -326,6 +326,7 @@ export const ISSUE_PAGE_QUERY = gql`
       description
       priority
       kind
+      repository
       createdAt
       updatedAt
       state {
@@ -562,6 +563,7 @@ export const ISSUE_CREATE_MUTATION = gql`
   mutation IssueCreate($input: IssueCreateInput!) {
     issueCreate(input: $input) {
       success
+      message
       issue {
         id
         identifier

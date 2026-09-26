@@ -237,19 +237,22 @@ describe('issue-related CLI commands', () => {
     expect(stdout).toContain(`title: Generated issue ${highIdentifier}`);
   }, 10_000);
 
-  it('creates issues and outputs the identifier', async () => {
+  it('creates issues under their parent and outputs the identifier', async () => {
+    const project = await createIssue(prisma, { teamId: invTeamId, kind: 'PROJECT', title: 'acme/cli', repository: 'acme/cli' });
     const result = await runCli(
-      ['issues', 'create', '--title', 'Created from CLI', '--team', DEFAULT_TEAM_KEY, '--description', 'Created description'],
+      ['issues', 'create', '--title', 'Created from CLI', '--team', DEFAULT_TEAM_KEY, '--parent', project.identifier, '--description', 'Created description'],
       tempDir,
     );
 
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('identifier: INV-2');
+    expect(result.stdout).toContain('identifier: INV-3');
 
-    const created = await prisma.issue.findUniqueOrThrow({ where: { identifier: 'INV-2' } });
+    const created = await prisma.issue.findUniqueOrThrow({ where: { identifier: 'INV-3' } });
     expect(created.title).toBe('Created from CLI');
     expect(created.description).toBe('Created description');
     expect(created.teamId).toBe(invTeamId);
+    expect(created.parentId).toBe(project.id);
+    expect(created.repository).toBe('acme/cli');
   });
 
   it('updates issue state, title, assignee, and labels', async () => {

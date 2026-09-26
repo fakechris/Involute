@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
+import { createIssue } from './issue-service.ts';
 import { createWorkLink } from './link-service.ts';
 import { testParentId } from './test-placement.ts';
 
@@ -19,6 +20,12 @@ let server: StartedServer;
 // Fixture identifiers must never collide within a run (the column is unique).
 let identifierSeq = 0;
 const nextIdentifierSuffix = () => String((identifierSeq += 1)).padStart(4, '0');
+
+// Direct creation needs a parent (INV-744): the repository's project, made on first use.
+async function projectId(teamId: string, repository = 'fakechris/Involute'): Promise<string> {
+  const existing = await prisma.issue.findFirst({ where: { teamId, kind: 'PROJECT', repository }, select: { id: true } });
+  return existing?.id ?? (await createIssue(prisma, { teamId, kind: 'PROJECT', title: repository, repository })).id;
+}
 
 describe('work graph GraphQL facade', () => {
   let team: Team;
@@ -74,6 +81,7 @@ describe('work graph GraphQL facade', () => {
           teamId: team.id,
           title: 'Kernel work node',
           stateId: ready.id,
+          parentId: await projectId(team.id),
         },
       },
     });
@@ -108,6 +116,7 @@ describe('work graph GraphQL facade', () => {
           teamId: team.id,
           title: 'Child work', repository: 'fakechris/Involute',
           stateId: ready.id,
+          parentId: await projectId(team.id),
         },
       },
     });
@@ -226,10 +235,16 @@ describe('work graph GraphQL facade', () => {
           teamId: team.id,
           title: 'Child milestone', kind: 'MILESTONE', repository: 'fakechris/Involute',
           stateId: ready.id,
+          parentId: project.id,
         },
       },
     });
     const task = taskCreate.body.data.issueCreate.issue;
+    // Created in place (INV-744); unlink it to exercise workLink below.
+    const placed = await prisma.workLink.findFirstOrThrow({ where: { fromId: project.id, toId: task.id, type: 'CONTAINS' } });
+    expectGraphQLSuccess(
+      await postGraphQL({ query: `mutation($id: String!) { workLinkDelete(id: $id) { success } }`, variables: { id: placed.id } }),
+    );
 
     const linkCreate = await postGraphQL({
       query: `
@@ -287,7 +302,7 @@ describe('work graph GraphQL facade', () => {
           issueCreate(input: $input) { success issue { id identifier } }
         }
       `,
-      variables: { input: { teamId: team.id, title: 'Parent milestone', kind: 'MILESTONE', repository: 'fakechris/Involute', stateId: ready.id } },
+      variables: { input: { teamId: team.id, title: 'Parent milestone', kind: 'MILESTONE', repository: 'fakechris/Involute', stateId: ready.id, parentId: await projectId(team.id) } },
     });
     expectGraphQLSuccess(parentCreate);
     const parent = parentCreate.body.data.issueCreate.issue as { id: string; identifier: string };
@@ -298,7 +313,7 @@ describe('work graph GraphQL facade', () => {
           issueCreate(input: $input) { success issue { id identifier } }
         }
       `,
-      variables: { input: { teamId: team.id, title: 'Ready child', repository: 'fakechris/Involute', stateId: ready.id } },
+      variables: { input: { teamId: team.id, title: 'Ready child', repository: 'fakechris/Involute', stateId: ready.id, parentId: await projectId(team.id) } },
     });
     expectGraphQLSuccess(childCreate);
     const child = childCreate.body.data.issueCreate.issue as { id: string; identifier: string };
@@ -309,7 +324,7 @@ describe('work graph GraphQL facade', () => {
           issueCreate(input: $input) { success issue { id identifier } }
         }
       `,
-      variables: { input: { teamId: team.id, title: 'Blocker', stateId: ready.id } },
+      variables: { input: { teamId: team.id, title: 'Blocker', stateId: ready.id, parentId: await projectId(team.id) } },
     });
     expectGraphQLSuccess(blockerCreate);
 
@@ -353,6 +368,7 @@ describe('work graph GraphQL facade', () => {
     expectGraphQLSuccess(contextResponse);
     expect(contextResponse.body.data.workContext.work.identifier).toBe(child.identifier);
     expect(contextResponse.body.data.workContext.ancestors).toEqual([
+      { identifier: 'INV-1', title: 'fakechris/Involute' },
       { identifier: parent.identifier, title: 'Parent milestone' },
     ]);
     expect(contextResponse.body.data.workContext.blockedBy).toEqual([

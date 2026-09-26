@@ -1,5 +1,16 @@
 import type { Issue, Prisma, WorkKind } from '@prisma/client';
-import { createValidationError, WORK_LINK_TEAM_MISMATCH_MESSAGE } from './errors.js';
+import {
+  CONTAINS_CROSS_REPOSITORY_MESSAGE,
+  CONTAINS_KINDS_MESSAGE,
+  CONTAINS_MULTIPLE_PARENTS_MESSAGE,
+  CONTAINS_REPOSITORY_REQUIRED_MESSAGE,
+  CONTAINS_REPOSITORY_WHITESPACE_MESSAGE,
+  createValidationError,
+  HIERARCHY_PARENT_MISSING_MESSAGE,
+  WORK_LINK_TEAM_MISMATCH_MESSAGE,
+} from './errors.js';
+
+export { CONTAINS_KINDS_MESSAGE };
 
 type Node = Pick<Issue, 'id' | 'kind' | 'teamId' | 'repository' | 'parentId'>;
 
@@ -12,9 +23,9 @@ export function assertContainsEndpoints(parent: Node, child: Node): void {
   if (parent.teamId !== child.teamId) throw createValidationError(WORK_LINK_TEAM_MISMATCH_MESSAGE);
   const parentRepo = parent.repository;
   const childRepo = child.repository;
-  if (!parentRepo?.trim() || !childRepo?.trim()) throw createValidationError('CONTAINS requires an explicit repository on both endpoints.');
-  if (parentRepo !== parentRepo.trim() || childRepo !== childRepo.trim()) throw createValidationError('CONTAINS repository values must not have surrounding whitespace.');
-  if (parentRepo !== childRepo) throw createValidationError('CONTAINS cannot cross repository boundaries.');
+  if (!parentRepo?.trim() || !childRepo?.trim()) throw createValidationError(CONTAINS_REPOSITORY_REQUIRED_MESSAGE);
+  if (parentRepo !== parentRepo.trim() || childRepo !== childRepo.trim()) throw createValidationError(CONTAINS_REPOSITORY_WHITESPACE_MESSAGE);
+  if (parentRepo !== childRepo) throw createValidationError(CONTAINS_CROSS_REPOSITORY_MESSAGE);
   if (!isLegalContains(parent.kind, child.kind)) throw createValidationError(CONTAINS_KINDS_MESSAGE);
 }
 
@@ -32,9 +43,6 @@ const LEGAL_CONTAINS: Record<WorkKind, readonly WorkKind[]> = {
   DECISION: [],
 };
 
-export const CONTAINS_KINDS_MESSAGE =
-  'CONTAINS allows PROJECT → MILESTONE/DECISION/EPIC/ISSUE, MILESTONE → EPIC/ISSUE, EPIC → ISSUE, ISSUE → ISSUE.';
-
 export function isLegalContains(parentKind: WorkKind, childKind: WorkKind): boolean {
   return LEGAL_CONTAINS[parentKind].includes(childKind);
 }
@@ -46,10 +54,10 @@ export async function assertNodeHierarchy(tx: Prisma.TransactionClient, node: No
   });
   const parents = new Set(incoming.map(link => link.fromId));
   if (node.parentId) parents.add(node.parentId);
-  if (parents.size > 1) throw createValidationError('CONTAINS cannot have multiple parents; use an explicit parent update.');
+  if (parents.size > 1) throw createValidationError(CONTAINS_MULTIPLE_PARENTS_MESSAGE);
   for (const id of parents) {
     const parent = await tx.issue.findUnique({ where: { id } });
-    if (!parent) throw createValidationError('Hierarchy parent does not exist.');
+    if (!parent) throw createValidationError(HIERARCHY_PARENT_MISSING_MESSAGE);
     assertContainsEndpoints(parent, node);
   }
   const links = await tx.workLink.findMany({ where: { type: 'CONTAINS', fromId: node.id }, select: { toId: true } });
