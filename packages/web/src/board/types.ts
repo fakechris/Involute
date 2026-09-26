@@ -364,6 +364,8 @@ export interface IssuePageQueryVariables {
 export interface IssueCreateMutationData {
   issueCreate: {
     success: boolean;
+    /** Why the server refused it, e.g. no parent (INV-744). */
+    message?: string | null;
     issue: IssueSummary | null;
   };
 }
@@ -379,6 +381,9 @@ export interface IssueCreateMutationVariables {
     cycleId?: string;
     kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
     assigneeId?: string | null;
+    /** Required unless kind is PROJECT: id or identifier of where it goes (INV-744). */
+    parentId?: string;
+    repository?: string | null;
   };
 }
 

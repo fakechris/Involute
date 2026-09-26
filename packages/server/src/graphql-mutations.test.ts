@@ -16,7 +16,7 @@ import {
 } from './errors.js';
 import { startServer, type StartedServer } from './index.ts';
 import { createSession } from './session.js';
-import { deleteComment, deleteIssue } from './issue-service.ts';
+import { createIssue, deleteComment, deleteIssue } from './issue-service.ts';
 
 loadProjectEnvironment();
 
@@ -66,6 +66,7 @@ describe('GraphQL mutations', () => {
   });
 
   it('creates an issue with a generated identifier, Backlog state, and retrievable connection fields', async () => {
+    const project = await createIssue(prisma, { teamId: fixture.team.id, kind: 'PROJECT', title: 'acme/app', repository: 'acme/app' });
     const createResponse = await postGraphQL({
       query: `
         mutation IssueCreate($input: IssueCreateInput!) {
@@ -84,6 +85,7 @@ describe('GraphQL mutations', () => {
           teamId: fixture.team.id,
           title: 'Created from mutation',
           description: 'Created description',
+          parentId: project.identifier,
         },
       },
     });
@@ -94,7 +96,7 @@ describe('GraphQL mutations', () => {
       success: true,
       issue: {
         id: expect.any(String),
-        identifier: 'INV-3',
+        identifier: 'INV-4',
         title: 'Created from mutation',
       },
     });
@@ -125,7 +127,7 @@ describe('GraphQL mutations', () => {
     expect(readResponse.body.errors).toBeUndefined();
     expect(readResponse.body.data.issue).toEqual({
       id: createdIssueId,
-      identifier: 'INV-3',
+      identifier: 'INV-4',
       title: 'Created from mutation',
       description: 'Created description',
       state: {
@@ -139,6 +141,37 @@ describe('GraphQL mutations', () => {
         nodes: [],
       },
     });
+  });
+
+  it('places created work under its parent and refuses work without one (INV-744)', async () => {
+    const create = (input: Record<string, unknown>) =>
+      postGraphQL({
+        query: `mutation($input: IssueCreateInput!) { issueCreate(input: $input) { success message issue { id repository parent { id } } } }`,
+        variables: { input: { teamId: fixture.team.id, ...input } },
+      });
+    const project = await createIssue(prisma, { teamId: fixture.team.id, kind: 'PROJECT', title: 'acme/app', repository: 'acme/app' });
+
+    const orphan = await create({ title: 'Nowhere' });
+    expect(orphan.body.errors).toBeUndefined();
+    expect(orphan.body.data.issueCreate).toMatchObject({ success: false, issue: null, message: expect.stringContaining('requires a parent') });
+
+    const placed = await create({ title: 'No milestone work', parentId: project.id });
+    expect(placed.body.data.issueCreate).toMatchObject({ success: true, message: null, issue: { repository: 'acme/app', parent: { id: project.id } } });
+    const link = await prisma.workLink.findFirst({ where: { fromId: project.id, toId: placed.body.data.issueCreate.issue.id, type: 'CONTAINS' } });
+    expect(link).not.toBeNull();
+
+    const project2 = await create({ title: 'acme/other', kind: 'PROJECT', repository: 'acme/other' });
+    expect(project2.body.data.issueCreate.success).toBe(true);
+
+    const illegal = await create({ title: 'Milestone under an issue', kind: 'MILESTONE', parentId: placed.body.data.issueCreate.issue.id });
+    expect(illegal.body.data.issueCreate).toMatchObject({ success: false, message: expect.stringContaining('CONTAINS allows') });
+
+    const crossRepo = await create({ title: 'Wrong repository', parentId: project.id, repository: 'acme/other' });
+    expect(crossRepo.body.data.issueCreate).toMatchObject({ success: false, message: expect.stringContaining('repository') });
+
+    await prisma.issue.update({ where: { id: project.id }, data: { commitmentStatus: 'REJECTED' } });
+    const rejected = await create({ title: 'Under rejected work', parentId: project.id });
+    expect(rejected.body.data.issueCreate).toMatchObject({ success: false, message: expect.stringContaining('rejected') });
   });
 
   it('returns success false for issueCreate with an invalid teamId', async () => {

@@ -1,5 +1,6 @@
 import type { DensityMode, ThemeMode } from './TweaksPanel';
 import { OPEN_CREATE_ISSUE_EVENT } from '../board/utils';
+import type { CreatePlacement } from '../work/placement';
 
 export const THEME_STORAGE_KEY = 'involute.theme';
 export const DENSITY_STORAGE_KEY = 'involute.density';
@@ -71,18 +72,21 @@ export function persistSidebarWidth(nextSidebarWidth: number) {
   }
 }
 
+/** Opens Create issue on the board, optionally already placed (INV-744). */
 export function openCreateIssueSurface(
   navigate: (to: string, options?: { state?: unknown }) => void,
   pathname: string,
+  placement?: CreatePlacement | null,
 ) {
   if (pathname === '/' || pathname === '/backlog') {
-    window.dispatchEvent(new Event(OPEN_CREATE_ISSUE_EVENT));
+    window.dispatchEvent(new CustomEvent(OPEN_CREATE_ISSUE_EVENT, { detail: placement ? { placement } : null }));
     return;
   }
 
   navigate('/', {
     state: {
       openCreateIssue: true,
+      ...(placement ? { createPlacement: placement } : {}),
     },
   });
 }

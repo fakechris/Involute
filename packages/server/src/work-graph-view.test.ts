@@ -116,12 +116,12 @@ describe('workGraph project view (INV-681)', () => {
   });
 
   it('derives each item\'s timeline from real audited state changes', async () => {
-    await make('acme/time', { kind: 'PROJECT', repository: 'acme/time' });
+    const timeProject = await make('acme/time', { kind: 'PROJECT', repository: 'acme/time' });
     const progress = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'STARTED' } });
     const done = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'COMPLETED' } });
     const created = await postGraphQL({
       query: `mutation($input: IssueCreateInput!) { issueCreate(input: $input) { issue { id } } }`,
-      variables: { input: { teamId: team.id, title: 'Tracked', stateId: ready.id, repository: 'acme/time' } },
+      variables: { input: { teamId: team.id, title: 'Tracked', stateId: ready.id, repository: 'acme/time', parentId: timeProject.id } },
     });
     expectGraphQLSuccess(created);
     const tracked = created.body.data.issueCreate.issue.id as string;

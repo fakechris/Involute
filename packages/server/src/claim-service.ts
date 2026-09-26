@@ -4,6 +4,7 @@ import {
   createNotFoundError,
   createValidationError,
   ISSUE_NOT_FOUND_MESSAGE,
+  ISSUE_CREATE_REQUIRES_PARENT_MESSAGE,
   PARENT_ISSUE_NOT_FOUND_MESSAGE,
   WORK_ALREADY_CLAIMED_MESSAGE,
   WORK_ACCEPT_FORBIDDEN_MESSAGE,
@@ -33,7 +34,7 @@ import { enqueueWorkEvent } from './event-outbox.js';
 import { attachDecisionReceipt, type ReceiptInput } from './decision-receipt.js';
 import { createWorkLink } from './link-service.js';
 import { isLegalContains } from './graph-integrity.js';
-import { createIssueWithAudit, mentionTexts } from './issue-service.js';
+import { createIssueWithAudit, mentionTexts, type CreateIssueInput } from './issue-service.js';
 import { linkMentionedWork } from './mention-links.js';
 import { findOrCreateLabelIds } from './labels.js';
 import {
@@ -219,6 +220,22 @@ export async function findInheritableParent(
     current = current.parentId ? await prisma.issue.findUnique({ where: { id: current.parentId } }) : null;
   }
   return null;
+}
+
+/**
+ * The commit gate for direct creation (INV-744): work created already
+ * committed — the board's Create issue — needs a parent unless it is a
+ * PROJECT. Resolves `parentId` given as id or identifier, refuses rejected
+ * parents, and inherits the parent's repository so the CONTAINS edge is legal;
+ * kind, team and repository legality are checked when the edge is written.
+ */
+export async function placeNewWork<T extends CreateIssueInput>(prisma: Prisma.TransactionClient | PrismaClient, input: T): Promise<T> {
+  if ((input.kind ?? 'ISSUE') === 'PROJECT') return input;
+  if (!input.parentId?.trim()) throw createValidationError(ISSUE_CREATE_REQUIRES_PARENT_MESSAGE);
+  const parent = await findWorkByIdOrIdentifier(prisma, input.parentId.trim());
+  if (!parent || parent.teamId !== input.teamId) throw createNotFoundError(PARENT_ISSUE_NOT_FOUND_MESSAGE);
+  if (parent.commitmentStatus === 'REJECTED') throw createValidationError(WORK_COMMIT_PARENT_REJECTED_MESSAGE);
+  return { ...input, parentId: parent.id, repository: input.repository ?? parent.repository };
 }
 
 export async function proposeWork(

@@ -123,6 +123,7 @@ import {
 import {
   claimWork,
   commitWork,
+  placeNewWork,
   proposeWork,
   rejectWork,
   type ClaimWorkInput,
@@ -1227,6 +1228,8 @@ const typeDefs = /* GraphQL */ `
     assigneeId: String
     labelIds: [String!]
     repository: String
+    "Required unless kind is PROJECT (INV-744): id or identifier of the PROJECT (No milestone), MILESTONE, EPIC or ISSUE it goes under. The repository is inherited when omitted."
+    parentId: String
   }
 
   input BugReportInput {
@@ -1384,6 +1387,8 @@ const typeDefs = /* GraphQL */ `
 
   type IssueCreatePayload {
     success: Boolean!
+    "Why the server refused the creation; null on success."
+    message: String
     issue: Issue
   }
 
@@ -2267,12 +2272,12 @@ const resolvers = {
       _parent: unknown,
       args: { input: CreateIssueInput },
       context: GraphQLContext,
-    ): Promise<{ issue: IssueParent | null; success: boolean }> =>
-      runMutation(async () => {
+    ): Promise<{ issue: IssueParent | null; message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
         await assertCanWriteTeam(context.prisma, context, args.input.teamId);
         const issue = await createIssue(
           context.prisma,
-          args.input,
+          await placeNewWork(context.prisma, args.input),
           writeActorFromViewer(context.viewer),
         );
 

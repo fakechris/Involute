@@ -9,10 +9,14 @@ interface GraphOutlineProps {
   edges: GraphEdge[];
   byId: Map<string, GraphNode>;
   onOpen: (id: string) => void;
+  /** New work placed in this project, milestone or epic (INV-744). */
+  onCreateIn?: (container: GraphNode) => void;
 }
 
+const CREATE_CONTAINERS = new Set(['PROJECT', 'MILESTONE', 'EPIC']);
+
 /** The project's CONTAINS tree with per-container progress and blocked markers. */
-export function GraphOutline({ outline, edges, byId, onOpen }: GraphOutlineProps) {
+export function GraphOutline({ outline, edges, byId, onOpen, onCreateIn }: GraphOutlineProps) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const toggle = (id: string) =>
     setCollapsed((current) => {
@@ -31,6 +35,7 @@ export function GraphOutline({ outline, edges, byId, onOpen }: GraphOutlineProps
         collapsed={collapsed}
         onToggle={toggle}
         onOpen={onOpen}
+        {...(onCreateIn ? { onCreateIn } : {})}
         edges={edges}
         byId={byId}
         renderChildren={renderItems}
@@ -59,12 +64,13 @@ interface OutlineRowProps {
   collapsed: Set<string>;
   onToggle: (id: string) => void;
   onOpen: (id: string) => void;
+  onCreateIn?: (container: GraphNode) => void;
   edges: GraphEdge[];
   byId: Map<string, GraphNode>;
   renderChildren: (items: OutlineItem[], depth: number) => React.ReactNode;
 }
 
-function OutlineRow({ item, depth, collapsed, onToggle, onOpen, edges, byId, renderChildren }: OutlineRowProps) {
+function OutlineRow({ item, depth, collapsed, onToggle, onOpen, onCreateIn, edges, byId, renderChildren }: OutlineRowProps) {
   const { node, children } = item;
   const hasChildren = children.length > 0;
   const isCollapsed = collapsed.has(node.id);
@@ -121,6 +127,17 @@ function OutlineRow({ item, depth, collapsed, onToggle, onOpen, edges, byId, ren
         ) : (
           <span className="graph-outline__state">{node.stateName}</span>
         )}
+        {onCreateIn && CREATE_CONTAINERS.has(node.kind) && !node.external ? (
+          <button
+            type="button"
+            className="graph-outline__add"
+            aria-label={node.kind === 'PROJECT' ? `New issue in ${node.identifier} (No milestone)` : `New issue in ${node.identifier}`}
+            title={node.kind === 'PROJECT' ? 'New issue, No milestone' : `New issue in ${node.identifier}`}
+            onClick={() => onCreateIn(node)}
+          >
+            +
+          </button>
+        ) : null}
       </div>
       {hasChildren && !isCollapsed ? (
         node.kind === 'PROJECT' ? (

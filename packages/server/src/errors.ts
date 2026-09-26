@@ -51,6 +51,16 @@ export const WORK_COMMIT_REQUIRES_OWNER_MESSAGE = 'Committed work requires a hum
 export const WORK_COMMIT_REQUIRES_PARENT_MESSAGE =
   'Committed work requires a parent: place it under a PROJECT, MILESTONE, EPIC or parent ISSUE (CONTAINS) before committing, or pass parentId with the commit.';
 export const WORK_COMMIT_PARENT_REJECTED_MESSAGE = 'The parent of committed work cannot be rejected work.';
+// Hierarchy rules (graph-integrity.ts), exposed so mutations can say why.
+export const CONTAINS_KINDS_MESSAGE =
+  'CONTAINS allows PROJECT → MILESTONE/DECISION/EPIC/ISSUE, MILESTONE → EPIC/ISSUE, EPIC → ISSUE, ISSUE → ISSUE.';
+export const CONTAINS_REPOSITORY_REQUIRED_MESSAGE = 'CONTAINS requires an explicit repository on both endpoints.';
+export const CONTAINS_REPOSITORY_WHITESPACE_MESSAGE = 'CONTAINS repository values must not have surrounding whitespace.';
+export const CONTAINS_CROSS_REPOSITORY_MESSAGE = 'CONTAINS cannot cross repository boundaries.';
+export const CONTAINS_MULTIPLE_PARENTS_MESSAGE = 'CONTAINS cannot have multiple parents; use an explicit parent update.';
+export const HIERARCHY_PARENT_MISSING_MESSAGE = 'Hierarchy parent does not exist.';
+export const ISSUE_CREATE_REQUIRES_PARENT_MESSAGE =
+  'New work requires a parent: choose its project (No milestone), a MILESTONE, EPIC or parent ISSUE. Only a PROJECT is created without one.';
 export const WORK_COMMIT_PARENT_CONFLICT_MESSAGE =
   'This candidate already has a different parent; move it with an explicit parent update instead of passing another parentId at commit.';
 export const WORK_OWNER_MUST_BE_HUMAN_MESSAGE = 'Work owner must be a human assignee.';
@@ -145,6 +155,13 @@ const exposedErrorCodes = new Map<string, string>([
   [WORK_COMMIT_REQUIRES_OWNER_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_COMMIT_REQUIRES_PARENT_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_COMMIT_PARENT_REJECTED_MESSAGE, 'BAD_USER_INPUT'],
+  [ISSUE_CREATE_REQUIRES_PARENT_MESSAGE, 'BAD_USER_INPUT'],
+  [CONTAINS_KINDS_MESSAGE, 'BAD_USER_INPUT'],
+  [CONTAINS_REPOSITORY_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [CONTAINS_REPOSITORY_WHITESPACE_MESSAGE, 'BAD_USER_INPUT'],
+  [CONTAINS_CROSS_REPOSITORY_MESSAGE, 'BAD_USER_INPUT'],
+  [CONTAINS_MULTIPLE_PARENTS_MESSAGE, 'BAD_USER_INPUT'],
+  [HIERARCHY_PARENT_MISSING_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_COMMIT_PARENT_CONFLICT_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_OWNER_MUST_BE_HUMAN_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE, 'BAD_USER_INPUT'],

@@ -392,12 +392,13 @@ query Users {
 
 ### `issueCreate`
 
-Creates an issue inside a team.
+Creates committed work inside a team. Everything except a `kind: PROJECT` needs `parentId` (INV-744): the id or identifier of its PROJECT (shown as "No milestone"), a MILESTONE, EPIC or parent ISSUE. The repository is inherited from the parent when omitted. A refusal returns `success: false` with the reason in `message`.
 
 ```graphql
 mutation IssueCreate($input: IssueCreateInput!) {
   issueCreate(input: $input) {
     success
+    message
     issue {
       id
       identifier
@@ -417,7 +418,8 @@ Example variables:
     "teamId": "team-uuid",
     "title": "Refine workspace shell spacing",
     "description": "Tighten toolbar alignment and chip density.",
-    "stateId": "workflow-state-uuid"
+    "stateId": "workflow-state-uuid",
+    "parentId": "INV-80"
   }
 }
 ```
@@ -688,7 +690,7 @@ Use `endCursor` as the next `after` value.
 
 ## Work graph (read-only facade)
 
-Existing issues are work nodes. New fields are queryable; `issueCreate` / `issueUpdate` input shapes are unchanged.
+Existing issues are work nodes. New fields are queryable; `issueCreate` requires `parentId` for every kind except PROJECT (INV-744).
 
 - `kind` defaults to `ISSUE`
 - `kind: PROJECT` means a work-graph project contract. It is not the legacy GraphQL `Project` row and is not synchronized with `projectId`; use `CONTAINS` links for new graph hierarchy.
@@ -699,7 +701,7 @@ Existing issues are work nodes. New fields are queryable; `issueCreate` / `issue
 - `revision` starts at `1` and increments on each domain update
 - `links` returns incident `WorkLink` rows (`CONTAINS`, `BLOCKS`, `DERIVED_FROM`, `DISCOVERED_DURING`, `RELATED_TO`, `DUPLICATE_OF`)
 - setting `parentId` through `issueCreate` or `issueUpdate` also writes a `CONTAINS` link (parent → child) and records a `WorkAudit` row
-- `CONTAINS` requires explicit matching repositories and allows PROJECT → MILESTONE/DECISION/EPIC/ISSUE, MILESTONE → EPIC/ISSUE, EPIC → ISSUE and ISSUE → ISSUE (sub-issues). An ISSUE directly under a PROJECT is shown as "No milestone". Committing a candidate requires a parent (every kind except PROJECT). Adding a second parent fails; use a revision-checked `issueUpdate` for an intentional move. Kind/repository edits validate incident edges. See [graph migration operations](graph-migration.md) for historical repairs.
+- `CONTAINS` requires explicit matching repositories and allows PROJECT → MILESTONE/DECISION/EPIC/ISSUE, MILESTONE → EPIC/ISSUE, EPIC → ISSUE and ISSUE → ISSUE (sub-issues). An ISSUE directly under a PROJECT is shown as "No milestone". Committing a candidate, or creating committed work with `issueCreate`, requires a parent (every kind except PROJECT). Adding a second parent fails; use a revision-checked `issueUpdate` for an intentional move. Kind/repository edits validate incident edges. See [graph migration operations](graph-migration.md) for historical repairs.
 - Mentions of other work (`INV-123` or a project alias prefix) in descriptions, contract fields and comments create `RELATED_TO` automatically when the two are not linked yet. `workPropose` / `work_propose` accept `blockedBy` / `blocks` (`blocked_by` / `blocks`) to record dependencies with the proposal; `Issue.dependencyHints` lists references that read like dependencies but have no `BLOCKS`.
 - `viewer.actorKind` is `HUMAN`, `AGENT`, or `SERVICE`
 

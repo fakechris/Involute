@@ -1,6 +1,8 @@
 import { useEffect, useRef, type FormEvent } from 'react';
 
 import type { TeamSummary } from '../board/types';
+import type { CreatePlacement, PlaceableProject, PlacementSource } from '../work/placement';
+import { PlacementPicker } from './PlacementPicker';
 
 interface BoardCreateIssueDialogProps {
   createDescription: string;
@@ -9,6 +11,13 @@ interface BoardCreateIssueDialogProps {
   isSaving: boolean;
   selectedTeam: TeamSummary | null;
   teams: TeamSummary[];
+  projects: Array<PlaceableProject & { name: string }>;
+  placement: CreatePlacement | null;
+  placementSource: PlacementSource | null;
+  createMore: boolean;
+  errorMessage: string | null;
+  onPlacementChange: (placement: CreatePlacement | null) => void;
+  onCreateMoreChange: (value: boolean) => void;
   onClose: () => void;
   onDescriptionChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -23,6 +32,13 @@ export function BoardCreateIssueDialog({
   isSaving,
   selectedTeam,
   teams,
+  projects,
+  placement,
+  placementSource,
+  createMore,
+  errorMessage,
+  onPlacementChange,
+  onCreateMoreChange,
   onClose,
   onDescriptionChange,
   onSubmit,
@@ -30,10 +46,11 @@ export function BoardCreateIssueDialog({
   onTitleChange,
 }: BoardCreateIssueDialogProps) {
   const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const formRef = useRef<HTMLFormElement | null>(null);
 
   useEffect(() => {
-    titleInputRef.current?.focus();
-  }, []);
+    if (isOpen) titleInputRef.current?.focus();
+  }, [isOpen]);
 
   if (!isOpen) {
     return null;
@@ -58,7 +75,17 @@ export function BoardCreateIssueDialog({
           </button>
         </div>
 
-        <form className="discussion-form" onSubmit={onSubmit}>
+        <form
+          ref={formRef}
+          className="discussion-form"
+          onSubmit={onSubmit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              formRef.current?.requestSubmit();
+            }
+          }}
+        >
           <div className="issue-panel__section">
             <label className="issue-panel__label" htmlFor="create-issue-title">
               Title
@@ -108,13 +135,37 @@ export function BoardCreateIssueDialog({
             </div>
           ) : null}
 
-          <button
-            type="submit"
-            className="ui-action ui-action--accent"
-            disabled={isSaving || !createTitle.trim() || !selectedTeam}
-          >
-            Create issue
-          </button>
+          <div className="issue-panel__section">
+            <PlacementPicker
+              projects={projects}
+              value={placement}
+              source={placementSource}
+              disabled={isSaving}
+              onChange={onPlacementChange}
+            />
+          </div>
+
+          {errorMessage ? (
+            <p className="issue-relations__error" role="alert">
+              {errorMessage}
+            </p>
+          ) : null}
+
+          <div className="create-issue__actions">
+            <label className="create-issue__more">
+              <input type="checkbox" checked={createMore} onChange={(event) => onCreateMoreChange(event.target.checked)} />
+              Create more
+            </label>
+            {!placement ? <span className="observation-hint">Choose where it belongs</span> : null}
+            <button
+              type="submit"
+              className="ui-action ui-action--accent"
+              disabled={isSaving || !createTitle.trim() || !selectedTeam || !placement}
+              title="Create issue (⌘/Ctrl + Enter)"
+            >
+              Create issue
+            </button>
+          </div>
         </form>
       </section>
     </aside>

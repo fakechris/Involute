@@ -447,6 +447,9 @@ export const PLACEMENT_OPTIONS_QUERY = gql`
         identifier
         title
         kind
+        state {
+          type
+        }
       }
     }
     epics: issues(first: 200, filter: { repository: { eq: $repository }, kind: EPIC, commitmentStatus: COMMITTED }) {
@@ -455,6 +458,9 @@ export const PLACEMENT_OPTIONS_QUERY = gql`
         identifier
         title
         kind
+        state {
+          type
+        }
       }
     }
   }
