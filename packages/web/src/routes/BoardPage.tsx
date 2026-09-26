@@ -1469,6 +1469,8 @@ export function BoardPage() {
     setIssueOverrides((currentOverrides) =>
       replaceIssueOverride(currentOverrides, issue.id, optimisticIssue),
     );
+    // Why the server refused, when it said so.
+    let refusal: string | null = null;
 
     try {
       const result = await runIssueUpdate({
@@ -1479,7 +1481,8 @@ export function BoardPage() {
       });
 
       if (!result.data?.issueUpdate.success || !result.data.issueUpdate.issue) {
-        throw new Error('Mutation failed');
+        refusal = result.data?.issueUpdate.message ?? null;
+        throw new Error(refusal ?? 'Mutation failed');
       }
 
       const returnedIssue = result.data.issueUpdate.issue;
@@ -1499,7 +1502,7 @@ export function BoardPage() {
       setIssueOverrides((currentOverrides) =>
         replaceIssueOverride(currentOverrides, issue.id, previousOverride ?? null),
       );
-      setMutationError(ERROR_MESSAGE);
+      setMutationError(refusal ?? ERROR_MESSAGE);
       void refetch();
       throw mutationIssue;
     } finally {

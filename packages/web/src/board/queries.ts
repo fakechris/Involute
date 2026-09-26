@@ -163,6 +163,7 @@ export const ISSUE_UPDATE_MUTATION = gql`
   mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
     issueUpdate(id: $id, input: $input) {
       success
+      message
       issue {
         id
         identifier
@@ -172,6 +173,12 @@ export const ISSUE_UPDATE_MUTATION = gql`
         priority
         kind
         repository
+        commitmentStatus
+        outcome
+        scope
+        constraints
+        acceptance
+        verification
         claim {
           id
           leaseUntil
@@ -327,6 +334,12 @@ export const ISSUE_PAGE_QUERY = gql`
       priority
       kind
       repository
+      commitmentStatus
+      outcome
+      scope
+      constraints
+      acceptance
+      verification
       createdAt
       updatedAt
       state {

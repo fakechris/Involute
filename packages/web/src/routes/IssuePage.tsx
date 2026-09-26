@@ -38,6 +38,7 @@ import type {
   CyclesQueryVariables,
 } from '../board/types';
 import { ActorBadge } from '../components/ActorBadge';
+import { ContractSection, type ContractValues } from '../components/ContractSection';
 import { IssueRelations } from '../components/IssueRelations';
 import { AddSubIssueButton } from '../components/AddSubIssueButton';
 import { mergeIssueWithPreservedComments } from '../board/utils';
@@ -51,6 +52,12 @@ import { Avatar, Btn, Kbd } from '../components/Primitives';
 import { RichTextEditor } from '../components/RichTextEditor';
 
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
+
+class IssueUpdateRefused extends Error {
+  constructor(readonly reason: string | null) {
+    super(reason ?? 'Mutation failed');
+  }
+}
 const CONFLICT_MESSAGE = 'The issue changed while you were editing. The latest version was reloaded; review it and retry.';
 const ISSUE_DELETE_ERROR_MESSAGE = 'We could not delete the issue. Please try again.';
 const COMMENT_DELETE_ERROR_MESSAGE = 'We could not delete the comment. Please try again.';
@@ -264,7 +271,7 @@ export function IssuePage() {
     issue: IssueSummary,
     input: IssueUpdateMutationVariables['input'],
     applyOptimisticIssue: (current: IssueSummary) => IssueSummary,
-  ) {
+  ): Promise<boolean> {
     const previousIssue = localIssue;
     const nextIssue = applyOptimisticIssue(issue);
 
@@ -281,7 +288,7 @@ export function IssuePage() {
       });
 
       if (!result.data?.issueUpdate.success || !result.data.issueUpdate.issue) {
-        throw new Error('Mutation failed');
+        throw new IssueUpdateRefused(result.data?.issueUpdate.message ?? null);
       }
 
       setLocalIssue((currentIssue) =>
@@ -289,15 +296,19 @@ export function IssuePage() {
           ? mergeIssueWithPreservedComments(currentIssue, result.data!.issueUpdate.issue!)
           : result.data!.issueUpdate.issue!,
       );
+      return true;
     } catch (mutationIssue) {
+      // Say why the server refused, when it said; otherwise assume a conflict.
+      const reason = mutationIssue instanceof IssueUpdateRefused ? mutationIssue.reason : null;
       try {
         const refreshed = await refetch();
         setLocalIssue(refreshed.data?.issue ?? previousIssue);
-        setMutationError(CONFLICT_MESSAGE);
+        setMutationError(reason ?? CONFLICT_MESSAGE);
       } catch {
         setLocalIssue(previousIssue);
-        setMutationError(ERROR_MESSAGE);
+        setMutationError(reason ?? ERROR_MESSAGE);
       }
+      return false;
     } finally {
       setIsSavingState(false);
     }
@@ -336,6 +347,11 @@ export function IssuePage() {
       ...current,
       description: desc,
     }));
+  }
+
+  async function persistContractChange(issue: IssueSummary, changes: ContractValues) {
+    const saved = await persistIssueUpdate(issue, changes, (current) => ({ ...current, ...changes }));
+    if (!saved) throw new Error('Contract not saved');
   }
 
   async function persistLabelsChange(issue: IssueSummary, labelIds: string[]) {
@@ -769,6 +785,13 @@ export function IssuePage() {
                 >Edit</button>
               </div>
             )}
+
+            <ContractSection
+              values={activeIssue}
+              committed={activeIssue.commitmentStatus !== 'CANDIDATE'}
+              saving={isSavingState}
+              onSave={(changes) => persistContractChange(activeIssue, changes)}
+            />
 
             {/* Parent issue */}
             {activeIssue.parent ? (

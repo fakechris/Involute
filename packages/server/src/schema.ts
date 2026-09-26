@@ -1315,6 +1315,13 @@ const typeDefs = /* GraphQL */ `
     alias: String
     repository: String
     cascadeRepository: Boolean
+    # Contract fields. Humans may rewrite them on committed work; agents are
+    # refused once the work is committed.
+    outcome: String
+    scope: String
+    constraints: String
+    acceptance: String
+    verification: String
   }
 
   input ProjectCreateInput {
@@ -1394,6 +1401,8 @@ const typeDefs = /* GraphQL */ `
   type IssueUpdatePayload {
     success: Boolean!
     issue: Issue
+    "Why the update was refused (revision conflict, missing acceptance, ...); null on success."
+    message: String
   }
 
   type IssueDeletePayload {
@@ -2323,8 +2332,8 @@ const resolvers = {
       _parent: unknown,
       args: { id: string; input: UpdateIssueInput },
       context: GraphQLContext,
-    ): Promise<{ issue: IssueParent | null; success: boolean }> =>
-      runMutation(async () => {
+    ): Promise<{ issue: IssueParent | null; message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
         await assertCanWriteIssue(context.prisma, context, args.id);
         // GraphQL delivers snoozedUntil as an ISO string while the service
         // layer wants Date|null.
