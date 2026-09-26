@@ -57,6 +57,15 @@ flowchart TD
    - **绝对禁令**：严禁将任何外部竞品（如 Linear、Plane、Jira 等）的调研文档、逆向代码、架构借用分析提交到 Git 版本库，严禁放在 `docs/` 等公开文档目录中。
    - **专属隔离目录**：所有竞品分析与调研报告必须统一存放在仓库根目录的 `research/` 目录中。
    - **强制 Git 忽略**：`research/` 目录必须在 `.gitignore` 中被严格忽略，确保零代码污染、零合规与版权风险。
+8. **Placement — every item has one parent (工作图规范 v1, INV-718)**:
+   - Legal `CONTAINS`: PROJECT → MILESTONE / DECISION / EPIC / ISSUE; MILESTONE → EPIC / ISSUE; EPIC → ISSUE; ISSUE → ISSUE (sub-issue). An ISSUE directly under a PROJECT is shown as **No milestone**.
+   - Pass `parent_id` on `work_propose`. Committing is **refused** without exactly one parent (every kind but PROJECT); a human may place it at commit.
+   - `DISCOVERED_DURING` / `DERIVED_FROM` proposals without `parent_id` inherit the related item's nearest legal same-repository ancestor; the result says where they landed.
+9. **Relations — record what the text says (INV-720)**:
+   - Mentioning `INV-123` (or a project alias prefix) in a description, contract field or comment records `RELATED_TO` automatically.
+   - If the source material says an item depends on / must come after another, record `BLOCKS`: `work_propose(blocked_by: [...], blocks: [...])` or `work_link`. `work_commit` warns about dependency wording without `BLOCKS`. **Never invent dependencies or structure.**
+   - Before proposing several related items, lay out the whole tree (parents, blockers) and check it; when the source is ambiguous, propose an outline for review instead of guessing.
+10. **Research is an ISSUE labelled `research` (INV-721)**: see §11.4.
 
 
 ## 5. First-Time Onboarding Blueprint (首次接入黄金规范)
@@ -66,7 +75,7 @@ When an agent onboards a repository for the first time, it MUST get everything r
 1. **Strict 3-Tier Hierarchy (严谨三层拓扑)**:
    - Root: One `kind: 'PROJECT'` matching `<owner/repo>`.
    - Mid-tier: `kind: 'MILESTONE'` (delivery phases) linked to PROJECT via `CONTAINS`.
-   - Leaf-tier: `kind: 'ISSUE'` (independently acceptable units) linked to corresponding MILESTONE via `CONTAINS`. No orphan issues.
+   - Leaf-tier: `kind: 'ISSUE'` (independently acceptable units) linked to corresponding MILESTONE via `CONTAINS` (or directly under the PROJECT as "No milestone"). No orphan issues — committing an item without a parent is refused (§4.8).
 2. **Mandatory Rich Structured Chinese Descriptions (强制提供结构化中文详细描述)**:
    - **Absolute prohibition**: `description: null`, empty text, or brief `ref docs/...` links.
    - Every proposal MUST structure `description` with:
@@ -120,6 +129,8 @@ Any bugfix or unplanned modification touching product source code MUST adhere to
      - `kind: 'ISSUE'`
      - `related_work_id: <当前处理任务ID 或 所属父里程碑ID>`
      - `related_work_type: 'DISCOVERED_DURING'`
+     - `parent_id`：可省略——省略时自动继承被关联项所在的里程碑（同仓库）；跨仓库发现的问题必须显式给出目标仓库的父级（§4.8）
+     - 若是 bug，带 `labels: ['bug']`（Bug 路线 v1 上线后改为 Type 标签组）
    - 必须自动生成标准的结构化中文描述：
      - `### 1. 目标与架构定位`
      - `### 2. 核心功能与交付范围`
@@ -272,6 +283,7 @@ query {
 
 ### 10.2 创建规范
 - `kind: 'DECISION'`，通过 `CONTAINS` 挂到对应产品的 PROJECT 节点下，不得孤儿化；
+- 由调研得出的决策以 `DERIVED_FROM` 指向该调研工单（§11.4）；
 - 标题即结论，禁止模糊表述：`不做：自动同步竞品定价页（依据：与人工报价流程冲突）`；
 - `description` 沿用三段式结构，其中 `### 2. 核心功能与交付范围` 改写为"决策内容与依据"，必须引用来源（竞品 matrix 行、文章 URL、讨论日期）；
 - 状态语义：`COMPLETED` = 决策生效中；决策被推翻时不得删除节点，转为 `CANCELED` 并在描述顶部追加推翻原因与新决策的 identifier。
@@ -321,6 +333,13 @@ features:
 | feature matrix、竞品笔记、文章日志 | 产品仓库 `research/` |
 | "明确不做"的执行级决策 | Involute DECISION 节点（§10） |
 | 刷新调研、转化行动项、bug、交付 | Involute 工单 |
+
+### 11.4 调研在工作图中的表示（工作图规范 v1 C 条，INV-718 / INV-721）
+- 调研正文留在 `research/`（纳入版本管理的仓库可用 `docs/research/`），不进工单。
+- **每次调研是一张带 `research` 标签的 ISSUE**（`work_propose(labels: ['research'], parent_id: <里程碑或 PROJECT>)`），描述写要点与文档路径；产出文件路径作为 evidence。
+- 可执行点以 ISSUE、"明确不做"以 DECISION 提案，二者均 `DERIVED_FROM` 指向调研工单。
+- 调研进入 Review 前：下游已提案，或在 summary / verification 写明"无可执行点"；否则 `run_report(completed)` 会给出提醒，并出现在 `/hygiene` 巡检视图。
+- `source` 字段不再承担溯源。
 
 ## 12. Bug Management Flow (缺陷上报与处理闭环)
 

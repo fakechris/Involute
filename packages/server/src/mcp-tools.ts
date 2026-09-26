@@ -36,6 +36,7 @@ import {
 import { TEAM_WRITE_FORBIDDEN_MESSAGE } from './errors.js';
 import { mentionTexts, updateIssue } from './issue-service.js';
 import { dependencyHints } from './mention-links.js';
+import { researchLacksDownstream } from './work-hygiene.js';
 import { createWorkLink } from './link-service.js';
 import { buildProtocolGuide } from './protocol-docs.js';
 import { attachEvidence, reportRun } from './run-service.js';
@@ -218,6 +219,7 @@ export async function callMcpTool(
       const stringList = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '') : undefined);
       assignOptional(proposeInput, 'blockedBy', stringList(args.blocked_by));
       assignOptional(proposeInput, 'blocks', stringList(args.blocks));
+      assignOptional(proposeInput, 'labels', stringList(args.labels));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
       assignOptional(proposeInput, 'verification', optionalString(args.verification));
       const kind = optionalString(args.kind);
@@ -383,7 +385,17 @@ export async function callMcpTool(
       if (args.decision_requested === true) {
         runInput.decisionRequested = true;
       }
-      return reportRun(context.prisma, runInput, writeActorFromViewer(context.viewer, 'mcp'));
+      const reported = await reportRun(context.prisma, runInput, writeActorFromViewer(context.viewer, 'mcp'));
+      // Advisory only: the report is already committed, so a failed check is skipped.
+      const lacksDownstream =
+        runInput.status === 'completed' && (await researchLacksDownstream(context.prisma, work.id, runInput.summary).catch(() => false));
+      if (lacksDownstream) {
+        return {
+          ...reported,
+          warning: 'This is research with nothing derived from it yet. Propose its actionable points (DERIVED_FROM this item) and "won\'t do" conclusions as DECISIONs, or state "no actionable points" in the summary or verification.',
+        };
+      }
+      return reported;
     }
     case 'evidence_attach': {
       const work = await requireWork(context.prisma, requiredString(args.work_id, 'work_id'));
@@ -565,6 +577,11 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
           type: 'string',
           enum: ['CONTAINS', 'BLOCKS', 'DERIVED_FROM', 'DISCOVERED_DURING', 'RELATED_TO', 'DUPLICATE_OF'],
           description: 'Relationship type from the new item to related_work_id. If CONTAINS, the related item becomes the parent. Otherwise the typed link is recorded in addition to any parent_id. Defaults to DISCOVERED_DURING.',
+        },
+        labels: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Label names, created when missing. Research or competitive analysis is an ISSUE labelled "research"; work it leads to links back with DERIVED_FROM.',
         },
         blocked_by: {
           type: 'array',

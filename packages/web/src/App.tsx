@@ -104,6 +104,10 @@ const BugsPage = lazy(async () => {
   const module = await import('./routes/BugsPage');
   return { default: module.BugsPage };
 });
+const HygienePage = lazy(async () => {
+  const module = await import('./routes/HygienePage');
+  return { default: module.HygienePage };
+});
 const GraphPage = lazy(async () => {
   const module = await import('./routes/GraphPage');
   return { default: module.GraphPage };
@@ -757,6 +761,7 @@ export function App() {
             n: '/in-review',
             u: '/bugs',
             r: '/graph',
+            h: '/hygiene',
             i: '/inbox',
             m: '/my-issues',
             p: '/projects',
@@ -846,6 +851,14 @@ export function App() {
         group: 'Navigation',
         shortcut: 'G R',
         run: () => navigate('/graph'),
+      },
+      {
+        id: 'go-hygiene',
+        label: 'Go to work graph health',
+        description: 'Unplaced work, unlinked mentions, dependencies without BLOCKS, research with nothing derived',
+        group: 'Navigation',
+        shortcut: 'G H',
+        run: () => navigate('/hygiene'),
       },
       {
         id: 'go-inbox',
@@ -1095,6 +1108,11 @@ export function App() {
               <span className="app-shell__nav-icon"><IcoGraph size={14} /></span>
               <span className="app-shell__link-label">Graph</span>
               <kbd className="app-shell__link-kbd" aria-hidden="true">G R</kbd>
+            </NavLink>
+            <NavLink to="/hygiene" className={getNavLinkClassName} title="Go to work graph health · G H">
+              <span className="app-shell__nav-icon"><IcoCheck size={14} /></span>
+              <span className="app-shell__link-label">Health</span>
+              <kbd className="app-shell__link-kbd" aria-hidden="true">G H</kbd>
             </NavLink>
             <NavLink to="/inbox" className={getNavLinkClassName} title="Go to Inbox · G I">
               <span className="app-shell__nav-icon"><IcoInbox size={14} /></span>
@@ -1437,6 +1455,7 @@ export function App() {
               <Route path="/in-review" element={<InReviewPage />} />
               <Route path="/bugs" element={<BugsPage />} />
               <Route path="/graph" element={<GraphPage />} />
+              <Route path="/hygiene" element={<HygienePage />} />
               <Route path="/work/:id" element={<WorkContextPage />} />
               <Route path="/inbox" element={<InboxPage />} />
               <Route path="/my-issues" element={<MyIssuesPage />} />

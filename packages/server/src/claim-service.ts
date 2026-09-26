@@ -35,6 +35,7 @@ import { createWorkLink } from './link-service.js';
 import { isLegalContains } from './graph-integrity.js';
 import { createIssueWithAudit, mentionTexts } from './issue-service.js';
 import { linkMentionedWork } from './mention-links.js';
+import { findOrCreateLabelIds } from './labels.js';
 import {
   completeWorkIdempotency,
   hashIdempotencyRequest,
@@ -68,6 +69,8 @@ export interface ProposeWorkInput {
   parentId?: string | null;
   relatedWorkId?: string | null;
   relatedWorkType?: WorkLinkType | null;
+  /** Label names, created when missing (e.g. "research", INV-721). */
+  labels?: string[] | null;
   /** Existing work (ids or identifiers) this proposal is blocked by — each becomes X BLOCKS new (INV-720). */
   blockedBy?: string[] | null;
   /** Existing work this proposal blocks — each becomes new BLOCKS X. */
@@ -312,6 +315,9 @@ export async function proposeWork(
       }
     }
 
+    if (input.labels && input.labels.length > 0) {
+      createInput.labelIds = await findOrCreateLabelIds(transaction, input.labels);
+    }
     const { auditId: creationAuditId, issue: created } = await createIssueWithAudit(transaction, createInput, actor, { linkMentions: false });
     if (parentWork) {
       await createWorkLink(transaction, {
