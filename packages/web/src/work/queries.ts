@@ -458,3 +458,51 @@ export const PLACEMENT_OPTIONS_QUERY = gql`
     }
   }
 `;
+
+// Work-graph hygiene for one team (INV-721): what falls short of norm v1.
+export const WORK_HYGIENE_QUERY = gql`
+  query WorkHygiene($teamKey: String!) {
+    workHygiene(teamKey: $teamKey) {
+      unplacedCount
+      unplaced {
+        id
+        identifier
+        title
+        kind
+        repository
+      }
+      unlinkedMentionCount
+      unlinkedMentions {
+        from {
+          id
+          identifier
+          title
+        }
+        to {
+          id
+          identifier
+          title
+        }
+      }
+      dependencyWithoutBlocksCount
+      dependencyWithoutBlocks {
+        from {
+          id
+          identifier
+          title
+        }
+        to {
+          id
+          identifier
+          title
+        }
+      }
+      researchWithoutDownstream {
+        id
+        identifier
+        title
+        repository
+      }
+    }
+  }
+`;

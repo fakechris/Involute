@@ -111,6 +111,7 @@ import { getUploadsDirectory } from './uploads.js';
 import { loadProjectWorkGraph, type ProjectWorkGraph } from './work-graph-view.js';
 import { loadWorkTimelines } from './work-timeline.js';
 import { dependencyHints } from './mention-links.js';
+import { loadWorkHygiene } from './work-hygiene.js';
 import {
   findWorkByIdOrIdentifier,
   getWorkContext,
@@ -327,6 +328,12 @@ const typeDefs = /* GraphQL */ `
     queue uses — and every typed link touching them.
     """
     workGraph(project: String!, includeCandidates: Boolean): WorkGraph!
+    """
+    Where a team's committed work falls short of work-graph norm v1 (INV-718/721):
+    unplaced items, mentions without links, prose dependencies without BLOCKS,
+    finished research nothing derives from. Lists are capped at 200; counts are exact.
+    """
+    workHygiene(teamKey: String!): WorkHygiene!
     candidateSummary(teamFilter: TeamFilter): CandidateSummary!
     projectSummary(teamFilter: TeamFilter): ProjectSummaryResult!
     bugSummary(teamFilter: TeamFilter): BugSummaryResult!
@@ -773,6 +780,21 @@ const typeDefs = /* GraphQL */ `
     transitions: [WorkStateTransition!]!
     """FULL when auditing covers the whole life; PARTIAL when it began later; NONE when there is no trail."""
     history: WorkHistoryCompleteness!
+  }
+
+  type WorkHygiene {
+    unplacedCount: Int!
+    unplaced: [Issue!]!
+    unlinkedMentionCount: Int!
+    unlinkedMentions: [WorkReferencePair!]!
+    dependencyWithoutBlocksCount: Int!
+    dependencyWithoutBlocks: [WorkReferencePair!]!
+    researchWithoutDownstream: [Issue!]!
+  }
+
+  type WorkReferencePair {
+    from: Issue!
+    to: Issue!
   }
 
   type WorkGraphEdge {
@@ -1454,6 +1476,8 @@ const typeDefs = /* GraphQL */ `
     parentId: String
     relatedWorkId: String
     relatedWorkType: WorkLinkType
+    """Label names, created when missing (e.g. research)."""
+    labels: [String!]
     """Existing work this proposal is blocked by (each X BLOCKS the new item)."""
     blockedBy: [String!]
     """Existing work this proposal blocks."""
@@ -2006,6 +2030,18 @@ const resolvers = {
 
       await assertCanReadTeam(context.prisma, context, work.teamId);
       return getWorkContext(context.prisma, work.id);
+    },
+    workHygiene: async (
+      _parent: unknown,
+      args: { teamKey: string },
+      context: GraphQLContext,
+    ) => {
+      const team = await context.prisma.team.findFirst({
+        where: { AND: [{ key: args.teamKey }, buildReadableTeamWhere(context) ?? {}] },
+        select: { id: true, key: true },
+      });
+      if (!team) throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
+      return loadWorkHygiene(context.prisma, { teamId: team.id, teamKey: team.key });
     },
     workGraph: async (
       _parent: unknown,

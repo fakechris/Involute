@@ -404,3 +404,21 @@ export interface PlacementOptionsQueryData {
   milestones: { nodes: PlacementOption[] };
   epics: { nodes: PlacementOption[] };
 }
+
+export interface HygieneRef {
+  id: string;
+  identifier: string;
+  title: string;
+}
+
+export interface WorkHygieneQueryData {
+  workHygiene: {
+    unplacedCount: number;
+    unplaced: Array<HygieneRef & { kind: WorkKind; repository: string | null }>;
+    unlinkedMentionCount: number;
+    unlinkedMentions: Array<{ from: HygieneRef; to: HygieneRef }>;
+    dependencyWithoutBlocksCount: number;
+    dependencyWithoutBlocks: Array<{ from: HygieneRef; to: HygieneRef }>;
+    researchWithoutDownstream: Array<HygieneRef & { repository: string | null }>;
+  };
+}

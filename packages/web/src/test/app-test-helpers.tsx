@@ -24,6 +24,7 @@ import type {
   GraphProjectsQueryData,
   ProjectWorkGraphQueryData,
   ProjectWorkTimelineQueryData,
+  WorkHygieneQueryData,
 } from '../work/types';
 export type {
   AccessPageQueryData,
@@ -476,6 +477,7 @@ type QueryState = {
   graphData?: ProjectWorkGraphQueryData;
   graphProjectsData?: GraphProjectsQueryData;
   timelineData?: ProjectWorkTimelineQueryData;
+  hygieneData?: WorkHygieneQueryData;
   loading?: boolean;
   refetch?: ReturnType<typeof vi.fn>;
   relationsData?: IssueRelationsQueryData;
@@ -537,6 +539,15 @@ export function renderApp(
         error: undefined,
         loading: false,
         refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query WorkHygiene')) {
+      return {
+        data: queryState.hygieneData,
+        error: undefined,
+        loading: false,
+        refetch: queryState.refetch ?? vi.fn().mockResolvedValue(undefined),
       };
     }
 

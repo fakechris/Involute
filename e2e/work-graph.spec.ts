@@ -235,4 +235,29 @@ test.describe('work graph acceptance', () => {
 
     await gql(request, `mutation($id: String!) { issueDelete(id: $id) { success } }`, { id: proposed.id }, { asHuman: true });
   });
+
+  test('research proposals carry the research label and the health page loads (INV-721)', async ({ page, request }) => {
+    const { milestone } = fixture!;
+    const teams = await gql<{ teams: { nodes: Array<{ id: string; key: string }> } }>(request, `{ teams { nodes { id key } } }`);
+    const team = teams.teams.nodes.find((candidate) => candidate.key === 'INV') ?? teams.teams.nodes[0]!;
+    const proposed = (
+      await gql<{ workPropose: { issue: { id: string; labels: { nodes: Array<{ name: string }> } } } }>(
+        request,
+        `mutation($input: WorkProposeInput!) { workPropose(input: $input) { issue { id labels { nodes { name } } } } }`,
+        { input: { teamId: team.id, title: 'E2E research', parentId: milestone.id, labels: ['research'] } },
+      )
+    ).workPropose.issue;
+    expect(proposed.labels.nodes.map((label) => label.name.toLowerCase())).toContain('research');
+
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page.goto('/hygiene');
+    await expect(page.getByRole('heading', { name: 'Work graph health' })).toBeVisible();
+    for (const section of ['Not in any project tree', 'Dependencies without BLOCKS', 'Research with nothing derived', 'Mentions without a link']) {
+      await expect(page.getByRole('region', { name: section })).toBeVisible();
+    }
+    expect(errors).toEqual([]);
+
+    await gql(request, `mutation($id: String!) { issueDelete(id: $id) { success } }`, { id: proposed.id }, { asHuman: true });
+  });
 });

@@ -73,6 +73,37 @@ export async function linkMentionedWork(
 const DEPENDENCY_WORDING = /(依赖|前置|阻塞|阻挡|先行|前提|进入条件|完成后|depends? on|blocked by|prerequisite|after\s)/i;
 
 /**
+ * Identifiers referenced next to dependency wording, within their own clause:
+ * look back at most 20 characters, never past a sentence break or the
+ * previous reference, and a few characters ahead for "X 完成后" / "X first".
+ * Pure, so the hygiene view can scan every item in memory (INV-721).
+ */
+export function dependencyWordedReferences(
+  texts: Array<string | null | undefined>,
+  teamKey: string,
+  aliases: string[],
+): string[] {
+  const worded = new Set<string>();
+  for (const text of texts) {
+    if (!text) continue;
+    let previousEnd = 0;
+    for (const match of text.matchAll(REFERENCE)) {
+      const at = match.index ?? 0;
+      const end = at + match[0].length;
+      let start = Math.max(previousEnd, at - 20);
+      const lastBreak = Math.max(...['。', '；', ';', '. ', '\n', '!', '?', '！', '？'].map((mark) => text.lastIndexOf(mark, at - 1)));
+      if (lastBreak + 1 > start) start = lastBreak + 1;
+      const after = text.slice(end, end + 6).split(/[。；;\n]/)[0] ?? '';
+      const window = text.slice(start, at) + ' ' + after;
+      previousEnd = end;
+      if (!DEPENDENCY_WORDING.test(window) && !/^\s*(完成后|之后|first)/i.test(after)) continue;
+      for (const identifier of extractTeamReferences([match[0]], teamKey, aliases)) worded.add(identifier);
+    }
+  }
+  return [...worded];
+}
+
+/**
  * References that read like dependencies ("依赖 INV-420", "blocked by INV-9")
  * but have no BLOCKS edge either way — a prompt for a human or agent to record
  * the dependency, never an automatic one (the wording can be an example).
@@ -88,26 +119,7 @@ export async function dependencyHints(
     select: { alias: true },
   });
   const aliases = aliasRows.map((row) => row.alias!).filter(Boolean);
-  const worded = new Set<string>();
-  for (const text of work.texts) {
-    if (!text) continue;
-    let previousEnd = 0;
-    for (const match of text.matchAll(REFERENCE)) {
-      const at = match.index ?? 0;
-      const end = at + match[0].length;
-      // Wording belongs to this reference only within its own clause: look back
-      // at most 20 characters, never past a sentence break or the previous
-      // reference, and a few characters ahead for "X 完成后" / "X first".
-      let start = Math.max(previousEnd, at - 20);
-      const lastBreak = Math.max(...['。', '；', ';', '. ', '\n', '!', '?', '！', '？'].map((mark) => text.lastIndexOf(mark, at - 1)));
-      if (lastBreak + 1 > start) start = lastBreak + 1;
-      const after = text.slice(end, end + 6).split(/[。；;\n]/)[0] ?? '';
-      const window = text.slice(start, at) + ' ' + after;
-      previousEnd = end;
-      if (!DEPENDENCY_WORDING.test(window) && !/^\s*(完成后|之后|first)/i.test(after)) continue;
-      for (const identifier of extractTeamReferences([match[0]], team.key, aliases)) worded.add(identifier);
-    }
-  }
+  const worded = new Set(dependencyWordedReferences(work.texts, team.key, aliases));
   if (worded.size === 0) return [];
   const targets = await tx.issue.findMany({
     where: { teamId: work.teamId, identifier: { in: [...worded] }, id: { not: work.id } },
