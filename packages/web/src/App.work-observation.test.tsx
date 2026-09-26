@@ -53,6 +53,7 @@ const candidateQuery: CandidatesPageQueryData = {
         verification: 'unit tests',
         repository: 'fakechris/involute',
         createdAt: '2026-08-31T10:00:00.000Z',
+        parent: { id: 'issue-m', identifier: 'INV-8', title: 'Parser milestone', kind: 'MILESTONE' },
         team: { id: 'team-1', key: 'INV' },
         assignee: null,
         state: { id: 'state-backlog', name: 'Backlog', type: 'BACKLOG', position: 0 },

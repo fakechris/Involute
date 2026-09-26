@@ -47,6 +47,12 @@ export const CANDIDATES_PAGE_QUERY = gql`
         snoozedUntil
         source
         createdAt
+        parent {
+          id
+          identifier
+          title
+          kind
+        }
         team {
           id
           key
@@ -326,6 +332,7 @@ export const WORK_COMMIT_MUTATION = gql`
   mutation WorkCommit($id: String!, $input: WorkCommitInput!) {
     workCommit(id: $id, input: $input) {
       success
+      message
       issue {
         id
         identifier
@@ -414,6 +421,38 @@ export const PROJECT_WORK_TIMELINE_QUERY = gql`
         number
         startsAt
         endsAt
+      }
+    }
+  }
+`;
+
+// Where a candidate can be placed before commit (INV-719): committed containers
+// in the candidate's repository, fetched per kind so a large project's issues
+// cannot crowd them out of one page.
+export const PLACEMENT_OPTIONS_QUERY = gql`
+  query PlacementOptions($repository: String!) {
+    projects: issues(first: 20, filter: { repository: { eq: $repository }, kind: PROJECT, commitmentStatus: COMMITTED }) {
+      nodes {
+        id
+        identifier
+        title
+        kind
+      }
+    }
+    milestones: issues(first: 200, filter: { repository: { eq: $repository }, kind: MILESTONE, commitmentStatus: COMMITTED }) {
+      nodes {
+        id
+        identifier
+        title
+        kind
+      }
+    }
+    epics: issues(first: 200, filter: { repository: { eq: $repository }, kind: EPIC, commitmentStatus: COMMITTED }) {
+      nodes {
+        id
+        identifier
+        title
+        kind
       }
     }
   }

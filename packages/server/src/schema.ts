@@ -1443,6 +1443,8 @@ const typeDefs = /* GraphQL */ `
     verification: String
     repository: String
     kind: WorkKind
+    """Parent that CONTAINS this item (identifier or id). Committing requires one; DISCOVERED_DURING/DERIVED_FROM proposals inherit it when omitted."""
+    parentId: String
     relatedWorkId: String
     relatedWorkType: WorkLinkType
     idempotencyKey: String
@@ -1452,6 +1454,8 @@ const typeDefs = /* GraphQL */ `
 
   input WorkCommitInput {
     expectedRevision: Int!
+    """Place the candidate under this parent (identifier or id) as part of committing it. Committed work needs a parent (INV-719)."""
+    parentId: String
     acceptance: String
     assigneeId: String
     outcome: String
@@ -1495,6 +1499,8 @@ const typeDefs = /* GraphQL */ `
   type WorkCommitPayload {
     success: Boolean!
     issue: Issue
+    """Why the commit was refused (e.g. no parent, no acceptance); null on success."""
+    message: String
   }
 
   type WorkRejectPayload {
@@ -2395,8 +2401,8 @@ const resolvers = {
       _parent: unknown,
       args: { id: string; input: CommitWorkInput },
       context: GraphQLContext,
-    ): Promise<{ issue: IssueParent | null; success: boolean }> =>
-      runMutation(async () => {
+    ): Promise<{ issue: IssueParent | null; message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
         const existing = await findWorkByIdOrIdentifier(context.prisma, args.id);
         if (!existing) {
           throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);

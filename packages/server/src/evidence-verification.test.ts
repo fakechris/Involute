@@ -9,6 +9,7 @@ import { tryAutoAccept } from './auto-accept-gate.ts';
 import { claimWork, commitWork, proposeWork } from './claim-service.ts';
 import { attachEvidence, reportRun, reviewWork } from './run-service.ts';
 import { updateIssue } from './issue-service.ts';
+import { testParentId } from './test-placement.ts';
 
 const repository = 'example/project';
 const sha = 'a'.repeat(40);
@@ -189,7 +190,7 @@ describe('trusted evidence shadow integration', () => {
   const actor = () => ({ actorId: executor.id, actorKind: 'AGENT' as const, surface: 'test' });
   const reviewer = () => ({ actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' });
   async function setup() {
-    const proposed = await proposeWork(prisma, { teamId: team.id, title: 'Verify evidence', repository }, reviewer());
+    const proposed = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id, repository), teamId: team.id, title: 'Verify evidence', repository }, reviewer());
     const committed = await commitWork(prisma, proposed.id, { acceptance: JSON.stringify(acceptance), assigneeId: human.id, expectedRevision: proposed.revision }, reviewer());
     const { claim } = await claimWork(prisma, committed.id, {}, actor());
     const { run } = await reportRun(prisma, { workId: committed.id, status: 'running', commitSha: sha, pullRequestNumber: 4 }, actor());

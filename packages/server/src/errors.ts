@@ -48,6 +48,9 @@ export const WORK_NOT_COMMITTED_MESSAGE = 'Only committed work can be claimed.';
 export const WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE =
   'Committed work requires acceptance criteria.';
 export const WORK_COMMIT_REQUIRES_OWNER_MESSAGE = 'Committed work requires a human owner.';
+export const WORK_COMMIT_REQUIRES_PARENT_MESSAGE =
+  'Committed work requires a parent: place it under a PROJECT, MILESTONE, EPIC or parent ISSUE (CONTAINS) before committing, or pass parentId with the commit.';
+export const WORK_COMMIT_PARENT_REJECTED_MESSAGE = 'The parent of committed work cannot be rejected work.';
 export const WORK_OWNER_MUST_BE_HUMAN_MESSAGE = 'Work owner must be a human assignee.';
 export const WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE = 'Work owner must belong to the work team.';
 export const WORK_READY_STATE_MISSING_MESSAGE = 'Team workflow is missing an unstarted state.';
@@ -138,6 +141,8 @@ const exposedErrorCodes = new Map<string, string>([
   [WORK_NOT_COMMITTED_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_COMMIT_REQUIRES_OWNER_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_COMMIT_REQUIRES_PARENT_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_COMMIT_PARENT_REJECTED_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_OWNER_MUST_BE_HUMAN_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_READY_STATE_MISSING_MESSAGE, 'BAD_USER_INPUT'],

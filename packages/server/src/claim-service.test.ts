@@ -20,6 +20,8 @@ import {
 import { claimWork, commitWork, proposeWork, rejectWork } from './claim-service.ts';
 import { listReadyWork } from './context-service.ts';
 import { updateIssue } from './issue-service.ts';
+import { testParentId } from './test-placement.ts';
+import { createIssue } from './issue-service.ts';
 
 loadProjectEnvironment();
 
@@ -60,13 +62,11 @@ describe('claim service', () => {
   });
 
   it('proposes candidates that stay out of the ready queue and is idempotent', async () => {
-    const first = await proposeWork(prisma, {
-      idempotencyKey: 'discover-cycle',
+    const first = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), idempotencyKey: 'discover-cycle',
       teamId: team.id,
       title: 'History links may contain a cycle',
     });
-    const second = await proposeWork(prisma, {
-      idempotencyKey: 'discover-cycle',
+    const second = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), idempotencyKey: 'discover-cycle',
       teamId: team.id,
       title: 'History links may contain a cycle',
     });
@@ -87,15 +87,12 @@ describe('claim service', () => {
         states: { create: { name: 'Backlog', position: 0, type: 'BACKLOG' } },
       },
     });
-    const first = await proposeWork(prisma, {
-      idempotencyKey: 'same-key', teamId: team.id, title: 'First payload',
+    const first = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), idempotencyKey: 'same-key', teamId: team.id, title: 'First payload',
     });
-    const other = await proposeWork(prisma, {
-      idempotencyKey: 'same-key', teamId: otherTeam.id, title: 'Other team payload',
+    const other = await proposeWork(prisma, { parentId: await testParentId(prisma, otherTeam.id), idempotencyKey: 'same-key', teamId: otherTeam.id, title: 'Other team payload',
     });
     expect(other.id).not.toBe(first.id);
-    await expect(proposeWork(prisma, {
-      idempotencyKey: 'same-key', teamId: team.id, title: 'Changed payload',
+    await expect(proposeWork(prisma, { parentId: await testParentId(prisma, team.id), idempotencyKey: 'same-key', teamId: team.id, title: 'Changed payload',
     })).rejects.toThrow(WORK_IDEMPOTENCY_CONFLICT_MESSAGE);
   });
 
@@ -109,9 +106,92 @@ describe('claim service', () => {
     expect(await prisma.issue.count({ where: { title: 'One candidate' } })).toBe(1);
   });
 
+  describe('placement (norm v1, INV-719)', () => {
+    const repo = 'acme/placement';
+    const humanActor = () => ({ actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' });
+    const commitInput = (revision: number, extra: Record<string, unknown> = {}) => ({
+      acceptance: 'placed', assigneeId: human.id, expectedRevision: revision, ...extra,
+    });
+
+    async function tree() {
+      const project = await createIssue(prisma, { teamId: team.id, kind: 'PROJECT', title: repo, repository: repo });
+      const milestone = await createIssue(prisma, { teamId: team.id, kind: 'MILESTONE', title: 'M1', repository: repo, parentId: project.id });
+      const task = await createIssue(prisma, { teamId: team.id, kind: 'ISSUE', title: 'Task', repository: repo, parentId: milestone.id });
+      return { project, milestone, task };
+    }
+
+    it('refuses to commit work without a parent, but commits a PROJECT', async () => {
+      const loose = await proposeWork(prisma, { teamId: team.id, title: 'Loose', repository: repo });
+      await expect(commitWork(prisma, loose.id, commitInput(loose.revision), humanActor())).rejects.toThrow('requires a parent');
+      expect((await prisma.issue.findUniqueOrThrow({ where: { id: loose.id } })).commitmentStatus).toBe('CANDIDATE');
+
+      const root = await proposeWork(prisma, { teamId: team.id, title: 'acme/other', kind: 'PROJECT', repository: 'acme/other' });
+      await expect(commitWork(prisma, root.id, commitInput(root.revision), humanActor())).resolves.toMatchObject({ commitmentStatus: 'COMMITTED' });
+    });
+
+    it('places a candidate while committing it, directly under a PROJECT when there is no milestone', async () => {
+      const { project } = await tree();
+      const loose = await proposeWork(prisma, { teamId: team.id, title: 'No milestone yet', repository: repo });
+      const committed = await commitWork(prisma, loose.id, commitInput(loose.revision, { parentId: project.identifier }), humanActor());
+      expect(committed).toMatchObject({ commitmentStatus: 'COMMITTED', parentId: project.id });
+      expect(await prisma.workLink.count({ where: { fromId: project.id, toId: loose.id, type: 'CONTAINS' } })).toBe(1);
+    });
+
+    it('refuses a rejected parent', async () => {
+      const { milestone } = await tree();
+      await prisma.issue.update({ where: { id: milestone.id }, data: { commitmentStatus: 'REJECTED' } });
+      const child = await proposeWork(prisma, { teamId: team.id, title: 'Under rejected', parentId: milestone.id });
+      await expect(commitWork(prisma, child.id, commitInput(child.revision), humanActor())).rejects.toThrow('cannot be rejected');
+    });
+
+    it('puts work discovered during an issue in that issue\'s milestone and keeps the typed link', async () => {
+      const { milestone, task } = await tree();
+      const found = await proposeWork(prisma, {
+        teamId: team.id, title: 'Found while doing Task', relatedWorkId: task.identifier, relatedWorkType: 'DISCOVERED_DURING',
+      });
+      expect(found).toMatchObject({ parentId: milestone.id, repository: repo });
+      expect(await prisma.workLink.count({ where: { fromId: found.id, toId: task.id, type: 'DISCOVERED_DURING' } })).toBe(1);
+      await expect(commitWork(prisma, found.id, commitInput(found.revision), humanActor())).resolves.toMatchObject({ commitmentStatus: 'COMMITTED' });
+    });
+
+    it('inherits the nearest legal ancestor for the proposed kind', async () => {
+      const { project, milestone } = await tree();
+      const derived = await proposeWork(prisma, { teamId: team.id, title: 'Derived from M1', relatedWorkId: milestone.id, relatedWorkType: 'DERIVED_FROM' });
+      expect(derived.parentId).toBe(milestone.id);
+      const decision = await proposeWork(prisma, {
+        teamId: team.id, title: 'Decided during M1', kind: 'DECISION', relatedWorkId: milestone.id, relatedWorkType: 'DISCOVERED_DURING',
+      });
+      expect(decision.parentId).toBe(project.id);
+    });
+
+    it('does not inherit across repositories or for other link types', async () => {
+      const { task } = await tree();
+      const elsewhere = await proposeWork(prisma, {
+        teamId: team.id, title: 'Other repo bug', repository: 'acme/other', relatedWorkId: task.id, relatedWorkType: 'DISCOVERED_DURING',
+      });
+      expect(elsewhere.parentId).toBeNull();
+      const related = await proposeWork(prisma, { teamId: team.id, title: 'Just related', relatedWorkId: task.id, relatedWorkType: 'RELATED_TO' });
+      expect(related.parentId).toBeNull();
+    });
+
+    it('records both the parent and the typed link when both are given', async () => {
+      const { milestone, task } = await tree();
+      const both = await proposeWork(prisma, {
+        teamId: team.id, title: 'Both', parentId: milestone.identifier, relatedWorkId: task.identifier, relatedWorkType: 'DISCOVERED_DURING',
+      });
+      expect(both.parentId).toBe(milestone.id);
+      expect(await prisma.workLink.count({ where: { fromId: both.id, toId: task.id, type: 'DISCOVERED_DURING' } })).toBe(1);
+    });
+
+    it('accepts sub-issues under an issue', async () => {
+      const { task } = await tree();
+      const sub = await proposeWork(prisma, { teamId: team.id, title: 'Sub-issue', parentId: task.id });
+      expect(sub).toMatchObject({ parentId: task.id, repository: repo });
+    });
+  });
+
   it('proposes work with explicit parentId establishing correct CONTAINS hierarchy', async () => {
-    const parent = await proposeWork(prisma, {
-      kind: 'MILESTONE',
+    const parent = await proposeWork(prisma, { kind: 'MILESTONE',
       teamId: team.id,
       title: 'M1: Test Milestone', repository: 'fakechris/Involute',
     });
@@ -138,8 +218,7 @@ describe('claim service', () => {
   it('commits only with acceptance and a human owner, then allows claim', async () => {
     const candidate = await proposeWork(
       prisma,
-      {
-        teamId: team.id,
+      { parentId: await testParentId(prisma, team.id), teamId: team.id,
         title: 'Add ready queue',
       },
       { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
@@ -203,7 +282,7 @@ describe('claim service', () => {
   });
 
   it('atomically rejects concurrent commits with the same expected revision', async () => {
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'CAS commit' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'CAS commit' });
     const mutation = () => commitWork(
       prisma,
       candidate.id,
@@ -223,7 +302,7 @@ describe('claim service', () => {
     const outsider = await prisma.user.create({
       data: { actorKind: 'HUMAN', email: 'outsider@example.test', name: 'Outsider' },
     });
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Team-scoped ownership' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Team-scoped ownership' });
 
     await expect(commitWork(
       prisma,
@@ -240,7 +319,7 @@ describe('claim service', () => {
   it('refuses to commit when the team has no unstarted state', async () => {
     // Candidates now default to Ready, which would hold an FK reference and
     // block the delete below; park this one in Backlog explicitly instead.
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'No ready state', initialState: 'BACKLOG' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'No ready state', initialState: 'BACKLOG' });
     await prisma.workflowState.delete({ where: { id: ready.id } });
 
     await expect(commitWork(
@@ -252,7 +331,7 @@ describe('claim service', () => {
   });
 
   it('lists and claims ready committed work of every work kind', async () => {
-    const candidate = await proposeWork(prisma, { kind: 'EPIC', teamId: team.id, title: 'Claimable epic' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), kind: 'EPIC', teamId: team.id, title: 'Claimable epic' });
     const committed = await commitWork(
       prisma,
       candidate.id,
@@ -272,8 +351,7 @@ describe('claim service', () => {
   it('forbids agents from committing and does not treat In Progress as a claim', async () => {
     const candidate = await proposeWork(
       prisma,
-      {
-        teamId: team.id,
+      { parentId: await testParentId(prisma, team.id), teamId: team.id,
         title: 'Agent discovered',
         description: '### 1. 目标与架构定位\n测试定位\n### 2. 核心功能与交付范围\n测试范围\n### 3. 验收标准与验证方案\n测试验证',
       },
@@ -329,7 +407,7 @@ describe('claim service', () => {
   });
 
   it('rejects committing work that is already committed', async () => {
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Once' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Once' });
     await commitWork(
       prisma,
       candidate.id,
@@ -356,8 +434,7 @@ describe('claim service', () => {
   });
 
   it('rejects candidates without putting them on the ready queue', async () => {
-    const candidate = await proposeWork(prisma, {
-      teamId: team.id,
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id,
       title: 'Noise from a failed probe',
     });
 
@@ -401,8 +478,7 @@ describe('claim service', () => {
 
   describe('defensive title sanitization and agent description gate', () => {
     it('sanitizes status prefixes from titles automatically in proposeWork and updateIssue', async () => {
-      const candidate = await proposeWork(prisma, {
-        teamId: team.id,
+      const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id,
         title: '[已交付] 修复底层通信协议',
       });
       expect(candidate.title).toBe('修复底层通信协议');
@@ -418,7 +494,7 @@ describe('claim service', () => {
       await expect(
         proposeWork(
           prisma,
-          { teamId: team.id, title: 'Lazy work', description: 'ref docs/milestones/INV-2.md' },
+          { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Lazy work', description: 'ref docs/milestones/INV-2.md' },
           { actorId: human.id, actorKind: 'HUMAN', surface: 'web' },
         ),
       ).rejects.toThrow(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
@@ -429,14 +505,14 @@ describe('claim service', () => {
 
       // Empty description rejected for agent
       await expect(
-        proposeWork(prisma, { teamId: team.id, title: 'Agent work with no desc' }, agentActor),
+        proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Agent work with no desc' }, agentActor),
       ).rejects.toThrow(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
 
       // Incomplete description missing 3 sections rejected for agent
       await expect(
         proposeWork(
           prisma,
-          { teamId: team.id, title: 'Agent work', description: 'Just a short note' },
+          { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Agent work', description: 'Just a short note' },
           agentActor,
         ),
       ).rejects.toThrow(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
@@ -453,7 +529,7 @@ describe('claim service', () => {
 
       const proposed = await proposeWork(
         prisma,
-        { teamId: team.id, title: 'Agent valid work', description: validDesc },
+        { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Agent valid work', description: validDesc },
         agentActor,
       );
       expect(proposed.description).toBe(validDesc);
@@ -472,7 +548,7 @@ describe('claim service', () => {
 
       const candidate = await proposeWork(
         prisma,
-        { teamId: team.id, title: 'Candidate for update', description: validDesc },
+        { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Candidate for update', description: validDesc },
         agentActor,
       );
 
@@ -500,8 +576,7 @@ describe('claim service', () => {
 
   describe('candidate initial_state and direct commit workflow', () => {
     it('defaults candidates without initialState to Ready, not the team default Backlog', async () => {
-      const candidate = await proposeWork(prisma, {
-        teamId: team.id,
+      const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id,
         title: 'Work without explicit initial state',
       });
 
@@ -521,8 +596,7 @@ describe('claim service', () => {
     });
 
     it('proposes work with initialState REVIEW and commits directly into REVIEW state', async () => {
-      const candidate = await proposeWork(prisma, {
-        teamId: team.id,
+      const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id,
         title: 'Work targeting review',
         initialState: 'REVIEW',
       });
@@ -547,8 +621,7 @@ describe('claim service', () => {
     });
 
     it('proposes work with initialState STARTED and commits directly into STARTED state', async () => {
-      const candidate = await proposeWork(prisma, {
-        teamId: team.id,
+      const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id,
         title: 'Work targeting started',
         initialState: 'IN_PROGRESS',
       });
@@ -572,8 +645,7 @@ describe('claim service', () => {
     });
 
     it('proposes work with initialState BACKLOG and commits directly into BACKLOG state', async () => {
-      const candidate = await proposeWork(prisma, {
-        teamId: team.id,
+      const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id,
         title: 'Work targeting backlog',
         initialState: 'BACKLOG',
       });
@@ -599,16 +671,14 @@ describe('claim service', () => {
 
     it('rejects proposing candidate with COMPLETED or CANCELED initial_state', async () => {
       await expect(
-        proposeWork(prisma, {
-          teamId: team.id,
+        proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id,
           title: 'Illegal completed proposal',
           initialState: 'COMPLETED',
         }),
       ).rejects.toThrow('Candidate initial_state cannot be COMPLETED or CANCELED');
 
       await expect(
-        proposeWork(prisma, {
-          teamId: team.id,
+        proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id,
           title: 'Illegal canceled proposal',
           initialState: 'CANCELED',
         }),
@@ -616,8 +686,7 @@ describe('claim service', () => {
     });
 
     it('allows commitWork to explicitly specify stateId override', async () => {
-      const candidate = await proposeWork(prisma, {
-        teamId: team.id,
+      const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id,
         title: 'Default candidate',
       });
 

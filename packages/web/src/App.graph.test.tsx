@@ -36,6 +36,7 @@ const graphData: ProjectWorkGraphQueryData = {
       record('inv-637', 'Result contract', states.done),
       record('inv-638', 'Semantic execution adapter', states.progress),
       record('inv-700', 'Loose item', states.ready),
+      record('inv-701', 'Directly under the project', states.ready),
     ],
     externalNodes: [record('inv-900', 'Other project blocker', states.ready)],
     edges: [
@@ -47,6 +48,7 @@ const graphData: ProjectWorkGraphQueryData = {
       { id: 'b2', type: 'BLOCKS', fromId: 'inv-637', toId: 'inv-638' },
       { id: 'b3', type: 'BLOCKS', fromId: 'inv-900', toId: 'inv-636' },
       { id: 'r1', type: 'RELATED_TO', fromId: 'inv-700', toId: 'inv-638' },
+      { id: 'c5', type: 'CONTAINS', fromId: 'inv-96', toId: 'inv-701' },
     ],
   },
 };
@@ -189,5 +191,15 @@ describe('project graph page (INV-681)', () => {
     await screen.findByRole('region', { name: 'Project timeline' });
     fireEvent.change(screen.getByLabelText('Timeline scale'), { target: { value: 'month' } });
     expect(await screen.findByDisplayValue('Months')).toBeInTheDocument();
+  });
+
+  it('groups issues placed directly under the project as No milestone (INV-719)', async () => {
+    renderGraph('/graph?project=fakechris/lumenbox');
+    const outline = await screen.findByRole('tree', { name: 'Project outline' });
+    const group = within(outline).getByRole('group', { name: 'No milestone' });
+    expect(group).toHaveTextContent('No milestone · 1');
+    expect(within(group).getByRole('treeitem', { name: 'INV-701 Directly under the project' })).toBeInTheDocument();
+    // Milestones are not in that group.
+    expect(within(group).queryByText('INV-141')).not.toBeInTheDocument();
   });
 });

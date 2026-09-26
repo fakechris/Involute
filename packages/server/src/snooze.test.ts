@@ -8,6 +8,7 @@ import { loadProjectEnvironment } from '../prisma/env.ts';
 import { proposeWork } from './claim-service.js';
 import { SNOOZE_REQUIRES_CANDIDATE_MESSAGE } from './errors.js';
 import { updateIssue } from './issue-service.js';
+import { testParentId } from './test-placement.ts';
 
 loadProjectEnvironment();
 
@@ -41,7 +42,7 @@ describe('candidate snooze', () => {
   });
 
   it('snoozes and wakes candidate work', async () => {
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Snooze target' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Snooze target' });
     const until = new Date(Date.now() + 7 * 24 * 60 * 60_000);
     const snoozed = await updateIssue(
       prisma,
@@ -61,7 +62,7 @@ describe('candidate snooze', () => {
   });
 
   it('rejects snoozing committed work', async () => {
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Committed snooze' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Committed snooze' });
     const { commitWork } = await import('./claim-service.js');
     const committed = await commitWork(
       prisma,

@@ -10,6 +10,7 @@ import { loadProjectEnvironment } from '../prisma/env.ts';
 import { claimWork, commitWork, proposeWork } from './claim-service.ts';
 import { collectOutboundWebhookTargets, flushEventOutbox } from './event-outbox.ts';
 import { attachEvidence, reportRun, reviewWork } from './run-service.ts';
+import { testParentId } from './test-placement.ts';
 
 loadProjectEnvironment();
 
@@ -52,7 +53,7 @@ describe('run and evidence', () => {
   it('completes a run into In Review, never Done, and emits signed webhook events', async () => {
     const candidate = await proposeWork(
       prisma,
-      { teamId: team.id, title: 'Ship run kernel' },
+      { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Ship run kernel' },
       { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
     );
     const committed = await commitWork(
@@ -335,7 +336,7 @@ describe('run and evidence', () => {
   });
 
   it('rejects updates to a running run after its bound claim is gone', async () => {
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Claim-bound run' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Claim-bound run' });
     const committed = await commitWork(
       prisma,
       candidate.id,
@@ -358,7 +359,7 @@ describe('run and evidence', () => {
   });
 
   it('replays run_report and evidence_attach on idempotency key retry', async () => {
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Idempotent run' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Idempotent run' });
     const committed = await commitWork(
       prisma,
       candidate.id,
@@ -396,7 +397,7 @@ describe('run and evidence', () => {
   });
 
   it('completes the idempotency reservation on terminal-run no-op retries', async () => {
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Terminal replay' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Terminal replay' });
     const committed = await commitWork(
       prisma,
       candidate.id,
@@ -482,7 +483,7 @@ describe('run and evidence', () => {
     });
 
     // work.proposed for the subscribed team → both endpoints fire.
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Routed work' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Routed work' });
     const targets = await collectOutboundWebhookTargets(prisma, 'https://env.example.test/hook', 'env-secret');
     expect(targets.map((target) => target.url).sort()).toEqual([
       'https://global.example.test/hook',
@@ -553,7 +554,7 @@ describe('run and evidence', () => {
     await prisma.webhookSubscription.create({
       data: { eventTypes: [], secret: 'team-secret', teamId: team.id, url: 'https://scoped.example.test/hook' },
     });
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Fan-out work' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Fan-out work' });
     const committed = await commitWork(
       prisma,
       candidate.id,
@@ -581,7 +582,7 @@ describe('run and evidence', () => {
         url: 'https://iql-filter.example.test/hook',
       },
     });
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'IQL routed' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'IQL routed' });
     const startedStateRow = await prisma.workflowState.findFirstOrThrow({
       where: { teamId: team.id, type: 'STARTED' },
     });
@@ -677,7 +678,7 @@ describe('run and evidence', () => {
   });
 
   it('completing the same run twice does not duplicate the review transition', async () => {
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Double complete' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Double complete' });
     const committed = await commitWork(
       prisma,
       candidate.id,
@@ -706,7 +707,7 @@ describe('run and evidence', () => {
   });
 
   it('forgivingly starts a new run when agent mistakenly passes claimId as runId on initial run', async () => {
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Mistaken run_id test' });
+    const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Mistaken run_id test' });
     const committed = await commitWork(
       prisma,
       candidate.id,
@@ -725,7 +726,7 @@ describe('run and evidence', () => {
 
   describe('Claim-Scoped Run Resolution & Adversarial DX Matrix', () => {
     it('Scenario A: Agent passes claim.id for both running and completed reports -> exactly 1 run, transitions to REVIEW', async () => {
-      const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Scenario A claim.id test' });
+      const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Scenario A claim.id test' });
       const committed = await commitWork(
         prisma,
         candidate.id,
@@ -755,7 +756,7 @@ describe('run and evidence', () => {
     });
 
     it('Scenario B: Agent passes same random UUID for both running and completed reports -> exactly 1 run, transitions to REVIEW', async () => {
-      const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Scenario B client UUID test' });
+      const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Scenario B client UUID test' });
       const committed = await commitWork(
         prisma,
         candidate.id,
@@ -780,7 +781,7 @@ describe('run and evidence', () => {
     });
 
     it('Scenario C: Agent omits runId for both running and completed reports -> reuses open run, exactly 1 run', async () => {
-      const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Scenario C omitted runId test' });
+      const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Scenario C omitted runId test' });
       const committed = await commitWork(
         prisma,
         candidate.id,
@@ -804,7 +805,7 @@ describe('run and evidence', () => {
     });
 
     it('Scenario D: Retrying completed report when claim is deleted returns existing completed run idempotently', async () => {
-      const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Scenario D retry idempotency test' });
+      const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Scenario D retry idempotency test' });
       const committed = await commitWork(
         prisma,
         candidate.id,
@@ -838,8 +839,8 @@ describe('run and evidence', () => {
     });
 
     it('Scenario E: Passing a runId belonging to a different work item is rejected with validation error', async () => {
-      const workA = await proposeWork(prisma, { teamId: team.id, title: 'Work A' });
-      const workB = await proposeWork(prisma, { teamId: team.id, title: 'Work B' });
+      const workA = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Work A' });
+      const workB = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Work B' });
       const committedA = await commitWork(
         prisma,
         workA.id,
@@ -870,7 +871,7 @@ describe('run and evidence', () => {
     });
 
     it('Scenario F: Concurrent initial reports under the same claim serialize and produce exactly 1 run', async () => {
-      const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Scenario F concurrency test' });
+      const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Scenario F concurrency test' });
       const committed = await commitWork(
         prisma,
         candidate.id,
@@ -892,7 +893,7 @@ describe('run and evidence', () => {
     });
 
     it('Scenario G: BLOCKED continuation reuses the open run when reporting completed', async () => {
-      const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Scenario G blocked continuation' });
+      const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Scenario G blocked continuation' });
       const committed = await commitWork(
         prisma,
         candidate.id,

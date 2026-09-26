@@ -26,6 +26,7 @@ import {
   processGitHubCreateEvent,
   processGitHubPrEvent,
 } from './github-webhook-handler.ts';
+import { testParentId } from './test-placement.ts';
 
 loadProjectEnvironment();
 
@@ -60,10 +61,10 @@ describe('GitHub Webhook & Dual-Track CAS State Machine (Phase 2)', () => {
     human = await prisma.user.findUniqueOrThrow({ where: { email: DEFAULT_ADMIN_EMAIL } });
   });
 
-  async function createTestIssue(title: string): Promise<Issue> {
+  async function createTestIssue(title: string, repository?: string): Promise<Issue> {
     const candidate = await proposeWork(
       prisma,
-      { teamId: team.id, title },
+      { parentId: await testParentId(prisma, team.id, repository), teamId: team.id, title },
       { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
     );
     return commitWork(
@@ -913,8 +914,7 @@ describe('GitHub Webhook & Dual-Track CAS State Machine (Phase 2)', () => {
 
     it('drives the canonical issue through the state machine for an alias reference with matching membership', async () => {
       await createLumenboxProject();
-      const issue = await createTestIssue('Alias routed work');
-      await updateIssue(prisma, issue.id, { repository: LUMENBOX_REPO });
+      const issue = await createTestIssue('Alias routed work', LUMENBOX_REPO);
 
       await processLumenboxPrOpened(issue, 31001);
 

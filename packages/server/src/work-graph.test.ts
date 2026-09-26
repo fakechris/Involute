@@ -7,6 +7,7 @@ import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/s
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
 import { createWorkLink } from './link-service.ts';
+import { testParentId } from './test-placement.ts';
 
 loadProjectEnvironment();
 
@@ -472,6 +473,7 @@ describe('work graph GraphQL facade', () => {
         input: {
           teamId: team.id,
           title: 'Parser should ignore aborted turns',
+          parentId: await testParentId(prisma, team.id),
           idempotencyKey: 'parser-aborted-turns',
         },
       },
@@ -494,6 +496,7 @@ describe('work graph GraphQL facade', () => {
         input: {
           teamId: team.id,
           title: 'Parser should ignore aborted turns',
+          parentId: await testParentId(prisma, team.id),
           idempotencyKey: 'parser-aborted-turns',
         },
       },
@@ -553,6 +556,30 @@ describe('work graph GraphQL facade', () => {
     expect(
       readyAfter.body.data.readyWork.nodes.map((issue: { identifier: string }) => issue.identifier),
     ).not.toContain(identifier);
+  });
+
+  it('says why a commit was refused and commits once a parent is given (INV-719)', async () => {
+    const propose = await postGraphQL({
+      query: `mutation($input: WorkProposeInput!) { workPropose(input: $input) { issue { id revision } } }`,
+      variables: { input: { teamId: team.id, title: 'Unplaced', repository: 'test/placement' } },
+    });
+    expectGraphQLSuccess(propose);
+    const { id, revision } = propose.body.data.workPropose.issue as { id: string; revision: number };
+    const commit = (input: Record<string, unknown>) =>
+      postGraphQL({
+        query: `mutation($id: String!, $input: WorkCommitInput!) { workCommit(id: $id, input: $input) { success message issue { parent { id } } } }`,
+        variables: { id, input: { expectedRevision: revision, acceptance: 'placed', assigneeId: viewer.id, ...input } },
+      });
+
+    const refused = await commit({});
+    expectGraphQLSuccess(refused);
+    expect(refused.body.data.workCommit).toMatchObject({ success: false, issue: null });
+    expect(refused.body.data.workCommit.message).toContain('requires a parent');
+
+    const parentId = await testParentId(prisma, team.id);
+    const placed = await commit({ parentId });
+    expectGraphQLSuccess(placed);
+    expect(placed.body.data.workCommit).toMatchObject({ success: true, message: null, issue: { parent: { id: parentId } } });
   });
 
   it('rejects candidates and lets issues filter by commitmentStatus', async () => {
