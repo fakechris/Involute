@@ -1159,6 +1159,7 @@ async function proposeWorkViaCli(options: {
   acceptance?: string;
   description?: string;
   idempotencyKey?: string;
+  parent?: string;
   related?: string;
   team: string;
   title: string;
@@ -1190,6 +1191,7 @@ async function proposeWorkViaCli(options: {
         title: options.title,
         ...(options.description ? { description: options.description } : {}),
         ...(options.acceptance ? { acceptance: options.acceptance } : {}),
+        ...(options.parent ? { parentId: options.parent } : {}),
         ...(options.related ? { relatedWorkId: options.related } : {}),
         ...(options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}),
       },
@@ -1205,7 +1207,7 @@ async function proposeWorkViaCli(options: {
 
 async function commitWorkViaCli(
   id: string,
-  options: { acceptance: string; assignee?: string },
+  options: { acceptance: string; assignee?: string; parent?: string },
 ): Promise<{ commitmentStatus: string; identifier: string; revision: number }> {
   const client = await createConfiguredGraphQLClient();
   const bundle = await fetchWorkContext(id);
@@ -1217,6 +1219,7 @@ async function commitWorkViaCli(
   const result = await client.request<{
     workCommit: {
       issue: { commitmentStatus: string; identifier: string; revision: number } | null;
+      message: string | null;
       success: boolean;
     };
   }>(
@@ -1224,6 +1227,7 @@ async function commitWorkViaCli(
       mutation CliWorkCommit($id: String!, $input: WorkCommitInput!) {
         workCommit(id: $id, input: $input) {
           success
+          message
           issue { identifier commitmentStatus revision }
         }
       }
@@ -1234,12 +1238,13 @@ async function commitWorkViaCli(
         expectedRevision: bundle.work.revision,
         acceptance: options.acceptance,
         ...(options.assignee ? { assigneeId: options.assignee } : {}),
+        ...(options.parent ? { parentId: options.parent } : {}),
       },
     },
   );
 
   if (!result.workCommit.success || !result.workCommit.issue) {
-    throw new CliError('Work commit failed.');
+    throw new CliError(result.workCommit.message ? `Work commit failed: ${result.workCommit.message}` : 'Work commit failed.');
   }
 
   return result.workCommit.issue;
@@ -1761,6 +1766,7 @@ export function createProgram(): Command {
     .requiredOption('--team <key>', 'Team key')
     .option('--description <description>', 'Problem or notes')
     .option('--acceptance <acceptance>', 'Acceptance criteria')
+    .option('--parent <id>', 'Parent (PROJECT, MILESTONE, EPIC or ISSUE) that contains this work')
     .option('--related <id>', 'Related work identifier')
     .option('--idempotency-key <key>', 'Idempotency key')
     .option('--json', 'Output machine-readable JSON')
@@ -1770,6 +1776,7 @@ export function createProgram(): Command {
         acceptance?: string;
         description?: string;
         idempotencyKey?: string;
+        parent?: string;
         related?: string;
         team: string;
         title: string;
@@ -1793,11 +1800,12 @@ export function createProgram(): Command {
     .argument('<id>', 'Issue identifier or UUID')
     .requiredOption('--acceptance <acceptance>', 'Acceptance criteria')
     .option('--assignee <userId>', 'Human owner user id')
+    .option('--parent <id>', 'Place the work under this parent while committing (committed work needs one)')
     .option('--json', 'Output machine-readable JSON')
     .action(async function (
       this: Command,
       id: string,
-      options: JsonOption & { acceptance: string; assignee?: string },
+      options: JsonOption & { acceptance: string; assignee?: string; parent?: string },
     ) {
       await runWithCliErrorHandling(async () => {
         const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });

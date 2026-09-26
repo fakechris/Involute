@@ -170,19 +170,28 @@ describe('work CLI commands', () => {
     expect(proposed.commitmentStatus).toBe('CANDIDATE');
 
     const viewer = await prisma.user.findUniqueOrThrow({ where: { email: DEFAULT_ADMIN_EMAIL } });
-    const { stdout: commitOut, exitCode: commitCode } = await runCli(
-      [
-        'work',
-        'commit',
-        proposed.identifier,
-        '--acceptance',
-        'CLI can round-trip propose/commit/claim',
-        '--assignee',
-        viewer.id,
-        '--json',
-      ],
-      tempDir,
-    );
+    const commitArgs = [
+      'work',
+      'commit',
+      proposed.identifier,
+      '--acceptance',
+      'CLI can round-trip propose/commit/claim',
+      '--assignee',
+      viewer.id,
+      '--json',
+    ];
+    // Committed work needs a parent (INV-719); the refusal says so.
+    const refused = await runCli(commitArgs, tempDir);
+    expect(refused.exitCode).not.toBe(0);
+    expect(refused.stderr + refused.stdout).toContain('requires a parent');
+
+    const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
+    const project = await createIssue(prisma, { teamId: team.id, kind: 'PROJECT', title: 'cli/placement', repository: 'cli/placement' });
+    const milestone = await createIssue(prisma, {
+      teamId: team.id, kind: 'MILESTONE', title: 'CLI milestone', repository: 'cli/placement', parentId: project.id,
+    });
+    await prisma.issue.update({ where: { identifier: proposed.identifier }, data: { repository: 'cli/placement' } });
+    const { stdout: commitOut, exitCode: commitCode } = await runCli([...commitArgs, '--parent', milestone.identifier], tempDir);
     expect(commitCode).toBe(0);
     const committed = JSON.parse(commitOut) as { commitmentStatus: string; identifier: string };
     expect(committed.commitmentStatus).toBe('COMMITTED');

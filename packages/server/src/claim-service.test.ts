@@ -137,6 +137,15 @@ describe('claim service', () => {
       expect(await prisma.workLink.count({ where: { fromId: project.id, toId: loose.id, type: 'CONTAINS' } })).toBe(1);
     });
 
+    it('keeps an existing parent: the same parentId is fine, a different one is refused clearly', async () => {
+      const { project, milestone } = await tree();
+      const placed = await proposeWork(prisma, { teamId: team.id, title: 'Already placed', parentId: milestone.id });
+      await expect(commitWork(prisma, placed.id, commitInput(placed.revision, { parentId: project.id }), humanActor()))
+        .rejects.toThrow('already has a different parent');
+      await expect(commitWork(prisma, placed.id, commitInput(placed.revision, { parentId: milestone.identifier }), humanActor()))
+        .resolves.toMatchObject({ commitmentStatus: 'COMMITTED', parentId: milestone.id });
+    });
+
     it('refuses a rejected parent', async () => {
       const { milestone } = await tree();
       await prisma.issue.update({ where: { id: milestone.id }, data: { commitmentStatus: 'REJECTED' } });

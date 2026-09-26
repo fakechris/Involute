@@ -14,6 +14,7 @@ import {
   WORK_COMMIT_REQUIRES_OWNER_MESSAGE,
   WORK_COMMIT_REQUIRES_PARENT_MESSAGE,
   WORK_COMMIT_PARENT_REJECTED_MESSAGE,
+  WORK_COMMIT_PARENT_CONFLICT_MESSAGE,
   WORK_NOT_CANDIDATE_MESSAGE,
   WORK_NOT_COMMITTED_MESSAGE,
   WORK_NOT_READY_MESSAGE,
@@ -359,16 +360,24 @@ async function placeForCommit(
   actor: WriteActor,
 ): Promise<void> {
   if (work.kind === 'PROJECT') return;
+  const currentParentId = async () => {
+    const current = await transaction.issue.findUniqueOrThrow({ where: { id: work.id }, select: { parentId: true } });
+    if (current.parentId) return current.parentId;
+    const link = await transaction.workLink.findFirst({ where: { toId: work.id, type: 'CONTAINS' }, select: { fromId: true } });
+    return link?.fromId ?? null;
+  };
   if (parentId) {
     const parent = await findWorkByIdOrIdentifier(transaction, parentId);
     if (!parent) throw createNotFoundError(PARENT_ISSUE_NOT_FOUND_MESSAGE);
-    await createWorkLink(transaction, { actor, fromId: parent.id, toId: work.id, type: 'CONTAINS' });
+    const existing = await currentParentId();
+    if (existing && existing !== parent.id) {
+      // Committing is not a move: an already-placed candidate keeps its parent
+      // unless someone moves it on purpose (revision-checked parent update).
+      throw createValidationError(WORK_COMMIT_PARENT_CONFLICT_MESSAGE);
+    }
+    if (!existing) await createWorkLink(transaction, { actor, fromId: parent.id, toId: work.id, type: 'CONTAINS' });
   }
-  const current = await transaction.issue.findUniqueOrThrow({ where: { id: work.id }, select: { parentId: true } });
-  const parentLink = current.parentId
-    ? null
-    : await transaction.workLink.findFirst({ where: { toId: work.id, type: 'CONTAINS' }, select: { fromId: true } });
-  const placedUnder = current.parentId ?? parentLink?.fromId ?? null;
+  const placedUnder = await currentParentId();
   if (!placedUnder) throw createValidationError(WORK_COMMIT_REQUIRES_PARENT_MESSAGE);
   const parent = await transaction.issue.findUnique({ where: { id: placedUnder }, select: { commitmentStatus: true } });
   if (!parent || parent.commitmentStatus === 'REJECTED') throw createValidationError(WORK_COMMIT_PARENT_REJECTED_MESSAGE);
