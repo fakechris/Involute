@@ -307,4 +307,31 @@ test.describe('work graph acceptance', () => {
     const noMilestone = page.getByRole('tree', { name: 'Project outline' }).getByRole('group', { name: 'No milestone' });
     await expect(noMilestone.getByRole('treeitem', { name: /E2E created bug from report$/ })).toBeVisible();
   });
+
+  test('a triaged bug is committed with a priority and shows its SLA (INV-750)', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Report bug' }).click();
+    const drawer = page.getByRole('dialog', { name: 'Report bug drawer' });
+    await drawer.getByLabel('Bug title').fill('E2E created triage bug');
+    await drawer.getByLabel('Steps to reproduce').fill('1. Somewhere\n2. It breaks');
+    await drawer.getByLabel('Bug priority').selectOption({ label: 'Low' });
+    await drawer.getByLabel('Not sure where it belongs — send to triage').check();
+    await drawer.getByRole('button', { name: 'Report bug', exact: true }).click();
+    await expect(drawer.getByRole('status')).toContainText('sent to triage');
+
+    await page.goto('/candidates?type=bug');
+    const card = page.getByRole('article').filter({ hasText: 'E2E created triage bug' });
+    const identifier = ((await card.getAttribute('aria-label')) ?? '').replace(' candidate', '');
+    const commit = card.getByRole('button', { name: /Commit/ });
+    await card.getByLabel(`Parent for ${identifier}`).getByLabel('Project').selectOption(REPOSITORY);
+    await card.getByLabel(`Acceptance for ${identifier}`).fill('The breakage is gone.');
+    await card.getByLabel(`Priority for ${identifier}`).selectOption('2');
+    await expect(commit).toBeEnabled();
+    await commit.click();
+    await expect(page.getByRole('article').filter({ hasText: 'E2E created triage bug' })).toHaveCount(0);
+
+    await page.goto(`/?project=${encodeURIComponent(REPOSITORY)}`);
+    const bugCard = page.locator('[data-testid^="issue-card-"]').filter({ hasText: 'E2E created triage bug' });
+    await expect(bugCard.getByText(/^SLA (47|48)h left$/)).toBeVisible();
+  });
 });

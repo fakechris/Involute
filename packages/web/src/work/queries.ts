@@ -46,6 +46,13 @@ export const CANDIDATES_PAGE_QUERY = gql`
         repository
         snoozedUntil
         source
+        priority
+        labels {
+          nodes {
+            id
+            name
+          }
+        }
         createdAt
         parent {
           id
@@ -347,6 +354,7 @@ export const WORK_REJECT_MUTATION = gql`
   mutation WorkReject($id: String!, $input: WorkRejectInput!) {
     workReject(id: $id, input: $input) {
       success
+      message
       issue {
         id
         identifier

@@ -20,6 +20,8 @@ export const WORK_EVENT_TYPES = [
   'work.review_rejected',
   'work.accepted',
   'bug.reported',
+  'bug.sla_at_risk',
+  'bug.sla_breached',
   'comment.created',
   'agent.mentioned',
   'agent.request_expired',

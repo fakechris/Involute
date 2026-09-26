@@ -62,6 +62,10 @@ export const HIERARCHY_PARENT_MISSING_MESSAGE = 'Hierarchy parent does not exist
 export const ISSUE_TYPE_EXCLUSIVE_MESSAGE = 'An item has at most one Type: Bug, Feature or Improvement.';
 export const BUG_REPORT_PRIORITY_REQUIRED_MESSAGE = 'A bug report needs a priority (Urgent, High, Medium or Low).';
 export const BUG_REPORT_STEPS_REQUIRED_MESSAGE = 'A bug report needs steps to reproduce.';
+export const BUG_COMMIT_PRIORITY_REQUIRED_MESSAGE = 'Committing a bug needs a priority (Urgent, High, Medium or Low): it sets the SLA.';
+export const BUG_REJECT_REASON_REQUIRED_MESSAGE = 'Declining a bug needs a reason (zero-bug: fix it or say why not).';
+export const BUG_NO_BACKLOG_MESSAGE = 'Bugs do not go to the backlog (zero-bug): commit to fixing it, or decline it with a reason.';
+export const TRIAGE_ROTATION_INVALID_MESSAGE = 'A triage rotation lists human members of the team and a valid start date.';
 export const ISSUE_CREATE_REQUIRES_PARENT_MESSAGE =
   'New work requires a parent: choose its project (No milestone), a MILESTONE, EPIC or parent ISSUE. Only a PROJECT is created without one.';
 export const WORK_COMMIT_PARENT_CONFLICT_MESSAGE =
@@ -160,6 +164,10 @@ const exposedErrorCodes = new Map<string, string>([
   [WORK_COMMIT_PARENT_REJECTED_MESSAGE, 'BAD_USER_INPUT'],
   [ISSUE_CREATE_REQUIRES_PARENT_MESSAGE, 'BAD_USER_INPUT'],
   [ISSUE_TYPE_EXCLUSIVE_MESSAGE, 'BAD_USER_INPUT'],
+  [BUG_COMMIT_PRIORITY_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [BUG_REJECT_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [BUG_NO_BACKLOG_MESSAGE, 'BAD_USER_INPUT'],
+  [TRIAGE_ROTATION_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_REPORT_PRIORITY_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_REPORT_STEPS_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [CONTAINS_KINDS_MESSAGE, 'BAD_USER_INPUT'],

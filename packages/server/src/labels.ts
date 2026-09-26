@@ -53,3 +53,11 @@ export function assertSingleType(labels: Array<{ name: string }>): void {
   // Counted per label record: "Bug" and "bug" as two labels are two Types too.
   if (labels.filter((label) => isTypeLabel(label.name)).length > 1) throw createValidationError(ISSUE_TYPE_EXCLUSIVE_MESSAGE);
 }
+
+/** Whether the work carries Type: Bug (INV-750 zero-bug rules apply). */
+export async function isBugWork(prisma: DatabaseClient, workId: string): Promise<boolean> {
+  const count = await prisma.issueLabel.count({
+    where: { name: { equals: 'Bug', mode: 'insensitive' }, issues: { some: { id: workId } } },
+  });
+  return count > 0;
+}

@@ -436,6 +436,8 @@ mutation BugReport($input: BugReportInput!) {
 
 `similarBugs(teamId, title, first)` returns open bugs whose titles share words with `title` (CJK by character pairs), best match first.
 
+Zero-bug triage (INV-750): `workCommit` of a bug needs `priority` (1–4) and never lands in Backlog; `workReject` of a bug needs `reason` (refusals in `message`); `issueUpdate` refuses moving a committed bug to a Backlog state. `Issue.bugSla { status budgetHours elapsedMs remainingMs dueAt startedAt }` (ON_TRACK / AT_RISK / BREACHED / PAUSED / MET) — Urgent 24h, High 48h, otherwise 7 days, paused in Review. `Team.triageRotation` / `Team.currentTriager`, set with `teamTriageRotationUpdate(input: { teamId, userIds, startsAt })` (team managers; empty `userIds` clears). Events `bug.sla_at_risk` and `bug.sla_breached` fire once per bug.
+
 ### `issueUpdate`
 
 Updates any combination of:

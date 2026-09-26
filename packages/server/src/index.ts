@@ -1,5 +1,6 @@
 import { startEvidenceVerifier } from './evidence-verification.js';
 import { expireOverdueAgentRequests } from './agent-request-expiry.js';
+import { sweepBugSlas } from './bug-sla.js';
 import type { PrismaClient } from '@prisma/client';
 
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
@@ -387,6 +388,15 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   }, 30_000);
   requestExpiryTimer?.unref();
 
+  // Bug SLA reminders (INV-750): at risk (20% left) and breached, once each per bug.
+  const bugSlaTimer = setInterval(() => {
+    void sweepBugSlas(prisma).catch((error: unknown) => {
+      console.error('Failed to sweep bug SLAs.');
+      console.error(error);
+    });
+  }, 10 * 60_000);
+  bugSlaTimer?.unref();
+
   // Daily retention sweep: read notifications older than 90 days and unread
   // notifications older than 180 days are removed.
   let retentionTimer: NodeJS.Timeout | undefined;
@@ -462,6 +472,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       }
       if (requestExpiryTimer) {
         clearInterval(requestExpiryTimer);
+        clearInterval(bugSlaTimer);
       }
 
       await new Promise<void>((resolve, reject) => {

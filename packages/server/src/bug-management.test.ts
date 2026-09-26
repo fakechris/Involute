@@ -153,7 +153,7 @@ describe('bug management', () => {
   }
 
   describe('bugReport', () => {
-    it('creates a COMMITTED bug issue with the bug label, source, and backlog state', async () => {
+    it('creates a COMMITTED bug issue with the bug label and source, in Ready (zero-bug: never the backlog)', async () => {
       const cookie = await login(human);
       const { body } = await reportBug(cookie, {
         title: 'Board crashes on drag',
@@ -170,7 +170,7 @@ describe('bug management', () => {
       expect(issue.source).toBe('bug-report');
       expect(issue.priority).toBe(1);
       expect(issue.repository).toBe('fakechris/Involute');
-      expect(issue.state.type).toBe('BACKLOG');
+      expect(issue.state.type).toBe('UNSTARTED');
       expect(issue.labels.nodes.map((label: { name: string }) => label.name.toLowerCase())).toContain('bug');
       expect(issue.description).toBe('Drop a card on the Done column.\n\n### Steps to reproduce\n\n1. Drag a card\n2. Drop it on Done');
       const project = await prisma.issue.findFirstOrThrow({ where: { kind: 'PROJECT', repository: 'fakechris/Involute' } });
