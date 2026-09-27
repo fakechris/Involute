@@ -48,6 +48,7 @@ export type McpToolName =
   | 'work_list_ready'
   | 'protocol_get_guide'
   | 'work_propose'
+  | 'work_file_bug'
   | 'work_commit'
   | 'work_update'
   | 'work_link'
@@ -70,6 +71,7 @@ export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
 
 export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
   'work_propose',
+  'work_file_bug',
   'work_commit',
   'work_update',
   'work_link',
@@ -251,6 +253,34 @@ export async function callMcpTool(
         notes.push('This candidate has no parent. Committing it requires one: pass parent_id now (work_link CONTAINS later), or the human will place it at commit.');
       }
       return notes.length ? { ...created, warning: notes.join(' ') } : created;
+    }
+    case 'work_file_bug': {
+      const teamId = await resolveTeamId(context.prisma, requiredString(args.team, 'team'));
+      await assertCanWriteTeam(context.prisma, context, teamId);
+      const rawTitle = requiredString(args.title, 'title');
+      const proposeInput: Parameters<typeof proposeWork>[1] = {
+        teamId,
+        title: rawTitle,
+        labels: ['bug'],
+        priority: requiredNumber(args.priority, 'priority'),
+        stepsToReproduce: requiredString(args.steps_to_reproduce, 'steps_to_reproduce'),
+        source: optionalString(args.source) ?? 'agent',
+      };
+      assignOptional(proposeInput, 'description', optionalString(args.description));
+      assignOptional(proposeInput, 'parentId', optionalString(args.parent_id));
+      assignOptional(proposeInput, 'relatedWorkId', optionalString(args.related_work_id));
+      assignOptional(proposeInput, 'repository', optionalString(args.repository));
+      assignOptional(proposeInput, 'idempotencyKey', optionalString(args.idempotency_key));
+      const relatedType = optionalString(args.related_work_type);
+      if (relatedType) proposeInput.relatedWorkType = parseWorkLinkType(relatedType, 'related_work_type');
+      else if (proposeInput.relatedWorkId) proposeInput.relatedWorkType = 'DISCOVERED_DURING';
+      assignOptional(proposeInput, 'initialState', optionalString(args.initial_state));
+      const created = await proposeWork(context.prisma, proposeInput, writeActorFromViewer(context.viewer, 'mcp'));
+      return {
+        ...created,
+        warning:
+          'Bug committed directly (INV-787): it does not go to Candidates. Priority set the SLA. Fix it or have it declined with a reason.',
+      };
     }
     case 'work_commit': {
       const work = await requireWork(context.prisma, requiredString(args.id, 'id'));
@@ -620,6 +650,54 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'work_file_bug',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    description:
+      'File a Type: Bug. It is committed directly and never enters Candidates. Priority is required because it sets the SLA (1 Urgent 24h, 2 High 48h, 3 Medium / 4 Low = 7 days). Missing parent, priority or steps_to_reproduce refuses the call. Prefer this over work_propose for bugs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        team: { type: 'string', description: 'Team key or UUID' },
+        title: { type: 'string', description: 'What is broken.' },
+        description: {
+          type: 'string',
+          description: 'Structured Chinese Markdown: ### 1. 目标与架构定位, ### 2. 核心功能与交付范围, ### 3. 验收标准与验证方案.',
+        },
+        priority: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 4,
+          description: 'Required. Sets the SLA: 1 Urgent 24h, 2 High 48h, 3 Medium 7 days, 4 Low 7 days.',
+        },
+        steps_to_reproduce: {
+          type: 'string',
+          description: 'Required. How to reproduce it.',
+        },
+        parent_id: {
+          type: 'string',
+          description: 'Parent PROJECT/MILESTONE/EPIC/ISSUE. Required unless related_work_id can inherit one.',
+        },
+        related_work_id: {
+          type: 'string',
+          description: 'Work this was found during; inherits that item\'s parent when parent_id is omitted.',
+        },
+        related_work_type: {
+          type: 'string',
+          enum: ['DISCOVERED_DURING', 'DERIVED_FROM', 'RELATED_TO'],
+          description: 'Defaults to DISCOVERED_DURING when related_work_id is set.',
+        },
+        repository: { type: 'string' },
+        initial_state: {
+          type: 'string',
+          description: 'UNSTARTED (Ready, default), STARTED, or REVIEW if already fixed. BACKLOG is ignored for bugs.',
+        },
+        idempotency_key: { type: 'string' },
+        source: { type: 'string' },
+      },
+      required: ['team', 'title', 'priority', 'steps_to_reproduce'],
+    },
+  },
+  {
     name: 'work_commit',
     annotations: { readOnlyHint: false, destructiveHint: false },
     description: 'Promote candidate work to a committed contract. Humans only. Requires acceptance, a human owner and a parent (every kind except PROJECT); pass parent_id to place it while committing.',
@@ -977,6 +1055,7 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_list_ready: 'read',
   protocol_get_guide: 'read',
   work_propose: 'propose',
+  work_file_bug: 'propose',
   work_commit: null,
   work_update: 'update',
   work_link: 'link',

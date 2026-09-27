@@ -9,6 +9,7 @@ Layout: `skills/<slug>/SKILL.md`. Overview: [involute](involute/SKILL.md). Setup
 | [get-context](get-context/SKILL.md) | `work_get_context` | Load one work item’s contract |
 | [list-ready](list-ready/SKILL.md) | `work_list_ready` | Show claimable ready work |
 | [propose-work](propose-work/SKILL.md) | `work_propose` | Create a candidate (human commits) |
+| [file-bug](file-bug/SKILL.md) | `work_file_bug` | Type: Bug — committed directly; priority sets SLA |
 | [claim-work](claim-work/SKILL.md) | `work_claim` | Lease one ready item |
 | [update-work](update-work/SKILL.md) | `work_update` | Change contract with `expected_revision` |
 | [report-run](report-run/SKILL.md) | `run_report` | running / blocked / completed → In Review |
