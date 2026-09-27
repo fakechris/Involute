@@ -244,15 +244,8 @@ export async function callMcpTool(
         notes.push(`No parent_id given: placed under ${parent?.kind ?? 'parent'} ${parent?.identifier ?? created.parentId}, inherited from the related work (norm v1, INV-718).`);
       }
       const isBug = (proposeInput.labels ?? []).some((label) => label.trim().toLowerCase() === 'bug');
-      if (isBug && created.commitmentStatus === 'COMMITTED') {
-        notes.push('Bug committed directly (INV-787): it has a parent, a priority and steps, so its SLA is running. Fix it or have it declined with a reason; it never goes to the backlog.');
-      } else if (isBug) {
-        const missing = [!created.parentId && 'parent_id', !proposeInput.stepsToReproduce && 'steps_to_reproduce'].filter(Boolean);
-        notes.push(
-          missing.length
-            ? `Bug sent to triage as a candidate (priority is set; SLA starts when a human commits). To file a bug directly next time, pass ${missing.join(', ')}.`
-            : 'Bug sent to triage as a candidate (priority is set; SLA starts when a human commits).',
-        );
+      if (isBug) {
+        notes.push('Bug committed directly (INV-787): it does not go to Candidates. Its SLA is running. Fix it or have it declined with a reason; it never goes to the backlog.');
       }
       if (!created.parentId && created.kind !== 'PROJECT') {
         notes.push('This candidate has no parent. Committing it requires one: pass parent_id now (work_link CONTAINS later), or the human will place it at commit.');
@@ -563,7 +556,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_propose',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    description: 'Create candidate work. Does not enter the ready queue. Search for duplicates first. A bug (labels ["bug"]) requires priority 1–4 (it sets the SLA); omitting it refuses the proposal.',
+    description: 'Create candidate work. Does not enter the ready queue. Search for duplicates first. A bug (labels ["bug"]) is committed directly and never enters Candidates; it requires parent_id (or an inheritable related_work_id), priority 1–4, and steps_to_reproduce — omit any and the proposal is refused.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -595,11 +588,11 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         labels: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Label names, created when missing. Research or competitive analysis is an ISSUE labelled "research"; work it leads to links back with DERIVED_FROM. A bug carries "bug" (Type: Bug; at most one of bug / feature / improvement) and must also pass priority 1–4.',
+          description: 'Label names, created when missing. Research or competitive analysis is an ISSUE labelled "research"; work it leads to links back with DERIVED_FROM. A bug carries "bug" (Type: Bug; at most one of bug / feature / improvement), is committed directly, and must also pass priority 1–4, a parent, and steps_to_reproduce.',
         },
         priority: {
           type: 'number',
-          description: 'Required with labels ["bug"]: 1 (Urgent, 24h SLA), 2 (High, 48h), 3 (Medium) or 4 (Low, 7 days). Without it the proposal is refused. With a parent and steps_to_reproduce the bug is committed directly; otherwise it goes to triage with the SLA already set.',
+          description: 'Required with labels ["bug"]: 1 (Urgent, 24h SLA), 2 (High, 48h), 3 (Medium) or 4 (Low, 7 days). The bug is committed directly (it does not go to Candidates). Without parent, priority or steps_to_reproduce the proposal is refused.',
         },
         steps_to_reproduce: {
           type: 'string',

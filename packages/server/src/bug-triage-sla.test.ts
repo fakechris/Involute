@@ -72,26 +72,30 @@ describe('zero-bug triage (INV-750)', () => {
     await prisma.$disconnect();
   });
 
-  const bugCandidate = (extra: Record<string, unknown> = {}) =>
-    proposeWork(prisma, { teamId: team.id, title: 'Crash', labels: ['bug'], parentId: projectId, acceptance: 'No crash', priority: 2, ...extra });
+  const bugCandidate = () =>
+    reportBug(prisma, { teamId: team.id, title: 'Crash', priority: 2, stepsToReproduce: 'x' }, human());
 
   it('commits a bug only with a priority, and never into the backlog', async () => {
-    await expect(bugCandidate({ priority: null })).rejects.toThrow(/Proposing a bug needs a priority/);
-    const bug = await bugCandidate({ initialState: 'BACKLOG' });
+    await expect(
+      proposeWork(prisma, { teamId: team.id, title: 'Crash', labels: ['bug'], parentId: projectId, acceptance: 'No crash' }),
+    ).rejects.toThrow(/Proposing a bug needs a priority/);
+    const bug = await bugCandidate();
     await prisma.issue.update({ where: { id: bug.id }, data: { priority: 0 } });
-    await expect(commitWork(prisma, bug.id, { expectedRevision: 1, assigneeId: admin.id }, human())).rejects.toThrow(/needs a priority/);
+    await expect(
+      commitWork(prisma, bug.id, { expectedRevision: 1, assigneeId: admin.id, acceptance: 'No crash', parentId: projectId }, human()),
+    ).rejects.toThrow(/needs a priority/);
 
     const backlog = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'BACKLOG' } });
     const fresh = await prisma.issue.findUniqueOrThrow({ where: { id: bug.id } });
     await expect(
-      commitWork(prisma, bug.id, { expectedRevision: fresh.revision, assigneeId: admin.id, priority: 2, stateId: backlog.id }, human()),
+      commitWork(prisma, bug.id, { expectedRevision: fresh.revision, assigneeId: admin.id, acceptance: 'No crash', parentId: projectId, priority: 2, stateId: backlog.id }, human()),
     ).rejects.toThrow(/do not go to the backlog/);
 
     const again = await prisma.issue.findUniqueOrThrow({ where: { id: bug.id } });
-    const committed = await commitWork(prisma, bug.id, { expectedRevision: again.revision, assigneeId: admin.id, priority: 2 }, human());
+    const committed = await commitWork(prisma, bug.id, { expectedRevision: again.revision, assigneeId: admin.id, acceptance: 'No crash', parentId: projectId, priority: 2 }, human());
     const state = await prisma.workflowState.findUniqueOrThrow({ where: { id: committed.stateId } });
     expect(committed.priority).toBe(2);
-    expect(state.type).toBe('UNSTARTED'); // initial_state=BACKLOG is ignored for bugs
+    expect(state.type).toBe('UNSTARTED');
 
     await expect(updateIssue(prisma, bug.id, { stateId: backlog.id }, human())).rejects.toThrow(/do not go to the backlog/);
     const plain = await proposeWork(prisma, { teamId: team.id, title: 'Chore', parentId: projectId, acceptance: 'Done' });

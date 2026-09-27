@@ -58,23 +58,17 @@ describe('agent-filed bugs and bug metrics (INV-751 / INV-787)', () => {
     expect(state.type).toBe('REVIEW');
   });
 
-  it('sends an agent bug without a parent or steps to triage, and refuses one with no priority', async () => {
+  it('commits an agent bug directly, and refuses one that cannot be committed (it does not go to Candidates)', async () => {
     await expect(fileBug({ parentId: projectId, stepsToReproduce: 'x' })).rejects.toThrow(/Proposing a bug needs a priority/);
-    const noSteps = await fileBug({ parentId: projectId, priority: 1 });
-    expect(noSteps).toMatchObject({ commitmentStatus: 'CANDIDATE', priority: 1 });
-    const noParent = await fileBug({ priority: 1, stepsToReproduce: 'x' });
-    expect(noParent.commitmentStatus).toBe('CANDIDATE');
-    const reported = await prisma.eventOutbox.findFirstOrThrow({ where: { type: 'bug.reported', payload: { path: ['work', 'id'], equals: noParent.id } } });
-    expect((reported.payload as { data: { triage: boolean } }).data.triage).toBe(true);
+    await expect(fileBug({ parentId: projectId, priority: 1 })).rejects.toThrow(/does not go to Candidates/);
+    await expect(fileBug({ priority: 1, stepsToReproduce: 'x' })).rejects.toThrow(/does not go to Candidates/);
     await expect(fileBug({ parentId: projectId, priority: 9, stepsToReproduce: 'x' })).rejects.toThrow(/needs a priority/);
-    // An owner who is not on the team, or a rejected parent, sends it to triage too.
     await prisma.teamMembership.deleteMany({ where: { teamId: team.id, userId: admin.id } });
-    expect((await fileBug({ parentId: projectId, priority: 1, stepsToReproduce: 'x' })).commitmentStatus).toBe('CANDIDATE');
+    await expect(fileBug({ parentId: projectId, priority: 1, stepsToReproduce: 'x' })).rejects.toThrow(/human owner on this team/);
     await prisma.teamMembership.create({ data: { teamId: team.id, userId: admin.id, role: 'OWNER' } });
     const rejectedParent = await createIssue(prisma, { teamId: team.id, title: 'Dropped', repository: 'acme/app', parentId: projectId });
     await prisma.issue.update({ where: { id: rejectedParent.id }, data: { commitmentStatus: 'REJECTED' } });
-    expect((await fileBug({ parentId: rejectedParent.id, priority: 1, stepsToReproduce: 'x' })).commitmentStatus).toBe('CANDIDATE');
-    // Non-bug proposals are untouched.
+    await expect(fileBug({ parentId: rejectedParent.id, priority: 1, stepsToReproduce: 'x' })).rejects.toThrow(/does not go to Candidates/);
     const plain = await proposeWork(prisma, { teamId: team.id, title: 'Idea', description: DESCRIPTION, parentId: projectId, priority: 1, stepsToReproduce: 'x' }, asAgent());
     expect(plain.commitmentStatus).toBe('CANDIDATE');
   });
@@ -87,7 +81,7 @@ describe('agent-filed bugs and bug metrics (INV-751 / INV-787)', () => {
     await reportBug(prisma, { teamId: team.id, title: 'Human placed', priority: 3, stepsToReproduce: 'x', parentId: projectId }, asHuman());
     const agentBug = await fileBug({ parentId: projectId, priority: 2, stepsToReproduce: 'x' });
     const triaged = await reportBug(prisma, { teamId: team.id, title: 'Human triaged', priority: 3, stepsToReproduce: 'x' }, asHuman());
-    const declined = await fileBug({ title: 'Agent triaged', priority: 3 });
+    const declined = await reportBug(prisma, { teamId: team.id, title: 'Human declined', priority: 3, stepsToReproduce: 'x' }, asHuman());
     await prisma.workAudit.updateMany({ where: { workId: { in: [triaged.id, declined.id] } }, data: { createdAt: new Date(Date.now() - 10 * HOUR) } });
     await commitWork(prisma, triaged.id, { expectedRevision: 1, assigneeId: admin.id, acceptance: 'fixed', parentId: projectId }, asHuman());
     await rejectWork(prisma, declined.id, { expectedRevision: 1, reason: 'Not a bug' }, asHuman());
@@ -103,7 +97,7 @@ describe('agent-filed bugs and bug metrics (INV-751 / INV-787)', () => {
     expect(metrics.triageHoursP50).toBeGreaterThanOrEqual(9.9);
     expect(metrics.untriagedCount).toBe(0);
     expect(metrics).toMatchObject({ slaMetCount: 1, slaBreachedClosedCount: 0, slaMetRate: 1, unplacedOpenCount: 1 });
-    expect(Object.fromEntries(metrics.bySource.map((entry) => [entry.source, entry.count]))).toEqual({ HUMAN_REPORT: 2, AGENT: 2, OTHER: 1 });
+    expect(Object.fromEntries(metrics.bySource.map((entry) => [entry.source, entry.count]))).toEqual({ HUMAN_REPORT: 3, AGENT: 1, OTHER: 1 });
   });
 
   it('lists open bugs past their SLA, most overdue first', async () => {
