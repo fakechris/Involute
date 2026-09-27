@@ -73,10 +73,12 @@ describe('zero-bug triage (INV-750)', () => {
   });
 
   const bugCandidate = (extra: Record<string, unknown> = {}) =>
-    proposeWork(prisma, { teamId: team.id, title: 'Crash', labels: ['bug'], parentId: projectId, acceptance: 'No crash', ...extra });
+    proposeWork(prisma, { teamId: team.id, title: 'Crash', labels: ['bug'], parentId: projectId, acceptance: 'No crash', priority: 2, ...extra });
 
   it('commits a bug only with a priority, and never into the backlog', async () => {
+    await expect(bugCandidate({ priority: null })).rejects.toThrow(/Proposing a bug needs a priority/);
     const bug = await bugCandidate({ initialState: 'BACKLOG' });
+    await prisma.issue.update({ where: { id: bug.id }, data: { priority: 0 } });
     await expect(commitWork(prisma, bug.id, { expectedRevision: 1, assigneeId: admin.id }, human())).rejects.toThrow(/needs a priority/);
 
     const backlog = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'BACKLOG' } });

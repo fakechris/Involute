@@ -275,6 +275,7 @@ function CandidateCard({
   onCommitted,
   onRejected,
   onRefresh,
+  onPriorityChange,
 }: {
   candidate: CandidateWork;
   humans: WorkUserSummary[];
@@ -284,6 +285,7 @@ function CandidateCard({
   onCommitted: () => void;
   onRejected: () => void;
   onRefresh: () => void;
+  onPriorityChange?: (priority: number) => void;
 }) {
   const navigate = useNavigate();
   const [acceptance, setAcceptance] = useState(candidate.acceptance ?? '');
@@ -515,7 +517,11 @@ function CandidateCard({
           <select
             aria-label={`Priority for ${candidate.identifier}`}
             value={priority}
-            onChange={(event) => setPriority(Number(event.target.value))}
+            onChange={(event) => {
+              const next = Number(event.target.value);
+              setPriority(next);
+              onPriorityChange?.(next);
+            }}
           >
             <option value={0} disabled>
               Choose a priority
@@ -634,6 +640,7 @@ export function CandidatesPage() {
   // Bug triage (INV-750): only candidates carrying Type: Bug.
   const bugsOnly = searchParams.get('type') === 'bug';
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [priorityById, setPriorityById] = useState<Record<string, number>>({});
   const [bulkAssigneeId, setBulkAssigneeId] = useState('');
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
   const [bulkAction, setBulkAction] = useState<'commit' | 'reject' | null>(null);
@@ -775,8 +782,25 @@ export function CandidatesPage() {
     setSelectedIds([]);
   }
 
+  const effectivePriority = (candidate: CandidateWork) => priorityById[candidate.id] ?? candidate.priority ?? 0;
+  const selectedBugsNeedingPriority = useMemo(
+    () =>
+      candidates.filter(
+        (c) => selectedIds.includes(c.id) && isBugCandidate(c) && !(effectivePriority(c) >= 1 && effectivePriority(c) <= 4),
+      ),
+    [candidates, selectedIds, priorityById],
+  );
+
   async function handleBatchCommit() {
     if (selectedIds.length === 0 || isBulkProcessing) return;
+    if (selectedBugsNeedingPriority.length > 0) {
+      setBulkError(
+        `Committed 0, failed ${selectedBugsNeedingPriority.length}. ${selectedBugsNeedingPriority
+          .map((c) => `${c.identifier}: Committing a bug needs a priority (Urgent, High, Medium or Low): it sets the SLA.`)
+          .join(' · ')}`,
+      );
+      return;
+    }
     setIsBulkProcessing(true);
     setBulkAction('commit');
     setBulkError(null);
@@ -806,6 +830,9 @@ export function CandidatesPage() {
               expectedRevision: candidate.revision,
               acceptance,
               ...(assigneeId ? { assigneeId } : {}),
+              ...(isBugCandidate(candidate) && effectivePriority(candidate) >= 1 && effectivePriority(candidate) <= 4
+                ? { priority: effectivePriority(candidate) }
+                : {}),
             },
           },
         });
@@ -1038,6 +1065,9 @@ export function CandidatesPage() {
                 onCommitted={() => void refetch()}
                 onRejected={() => void refetch()}
                 onRefresh={() => void refetch()}
+                onPriorityChange={(priority) =>
+                  setPriorityById((curr) => ({ ...curr, [candidate.id]: priority }))
+                }
               />
             ))}
 
@@ -1067,7 +1097,10 @@ export function CandidatesPage() {
                   <Btn
                     variant="accent"
                     icon={<IcoCheck size={14} />}
-                    disabled={isBulkProcessing}
+                    disabled={isBulkProcessing || selectedBugsNeedingPriority.length > 0}
+                    {...(selectedBugsNeedingPriority.length > 0
+                      ? { title: 'Choose a priority on each bug card first: it sets the SLA.' }
+                      : {})}
                     onClick={() => void handleBatchCommit()}
                   >
                     {isBulkProcessing && bulkAction === 'commit'

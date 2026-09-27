@@ -1579,7 +1579,7 @@ const typeDefs = /* GraphQL */ `
     relatedWorkType: WorkLinkType
     """Label names, created when missing (e.g. research)."""
     labels: [String!]
-    """1 (Urgent) to 4 (Low). A bug (labels include bug) with a parent, priority and steps is committed directly (INV-787)."""
+    """Required when labels include bug: 1 (Urgent) to 4 (Low). Sets the SLA. With a parent and steps the bug is committed directly (INV-787)."""
     priority: Int
     """Steps to reproduce a bug; appended to the description."""
     stepsToReproduce: String

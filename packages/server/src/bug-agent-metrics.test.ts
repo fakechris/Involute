@@ -58,7 +58,8 @@ describe('agent-filed bugs and bug metrics (INV-751 / INV-787)', () => {
     expect(state.type).toBe('REVIEW');
   });
 
-  it('sends an agent bug without priority or steps to triage, keeping what it was given', async () => {
+  it('sends an agent bug without a parent or steps to triage, and refuses one with no priority', async () => {
+    await expect(fileBug({ parentId: projectId, stepsToReproduce: 'x' })).rejects.toThrow(/Proposing a bug needs a priority/);
     const noSteps = await fileBug({ parentId: projectId, priority: 1 });
     expect(noSteps).toMatchObject({ commitmentStatus: 'CANDIDATE', priority: 1 });
     const noParent = await fileBug({ priority: 1, stepsToReproduce: 'x' });
@@ -86,7 +87,7 @@ describe('agent-filed bugs and bug metrics (INV-751 / INV-787)', () => {
     await reportBug(prisma, { teamId: team.id, title: 'Human placed', priority: 3, stepsToReproduce: 'x', parentId: projectId }, asHuman());
     const agentBug = await fileBug({ parentId: projectId, priority: 2, stepsToReproduce: 'x' });
     const triaged = await reportBug(prisma, { teamId: team.id, title: 'Human triaged', priority: 3, stepsToReproduce: 'x' }, asHuman());
-    const declined = await fileBug({ title: 'Agent triaged' });
+    const declined = await fileBug({ title: 'Agent triaged', priority: 3 });
     await prisma.workAudit.updateMany({ where: { workId: { in: [triaged.id, declined.id] } }, data: { createdAt: new Date(Date.now() - 10 * HOUR) } });
     await commitWork(prisma, triaged.id, { expectedRevision: 1, assigneeId: admin.id, acceptance: 'fixed', parentId: projectId }, asHuman());
     await rejectWork(prisma, declined.id, { expectedRevision: 1, reason: 'Not a bug' }, asHuman());

@@ -5,6 +5,7 @@ import {
   createValidationError,
   ISSUE_NOT_FOUND_MESSAGE,
   BUG_COMMIT_PRIORITY_REQUIRED_MESSAGE,
+  BUG_PROPOSE_PRIORITY_REQUIRED_MESSAGE,
   BUG_NO_BACKLOG_MESSAGE,
   BUG_REJECT_REASON_REQUIRED_MESSAGE,
   ISSUE_CREATE_REQUIRES_PARENT_MESSAGE,
@@ -363,10 +364,10 @@ export async function proposeWork(
     const isBug = (input.labels ?? []).some((label) => label.trim().toLowerCase() === 'bug');
     const steps = nonEmpty(input.stepsToReproduce);
     const priority = input.priority ?? null;
-    if (isBug && priority !== null) {
-      if (priority < 1 || priority > 4) throw createValidationError(BUG_COMMIT_PRIORITY_REQUIRED_MESSAGE);
-      createInput.priority = priority;
+    if (isBug && (priority === null || priority < 1 || priority > 4)) {
+      throw createValidationError(BUG_PROPOSE_PRIORITY_REQUIRED_MESSAGE);
     }
+    if (isBug && priority !== null) createInput.priority = priority;
     if (isBug && steps) createInput.description = composeDescription(input.description, steps);
     // The same bar a person's commit meets: a live parent, an owner on the
     // team, and — zero-bug — a Ready state unless it is under way or fixed.
