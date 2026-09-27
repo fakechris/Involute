@@ -32,7 +32,10 @@ export async function attachEvidence(
   const kind = parseEvidenceKind(input.kind);
   const actorId = actor.actorId;
   if (!actorId) throw createValidationError(WORK_CLAIM_REQUIRES_ACTOR_MESSAGE);
-  if (!input.runId) throw createValidationError(WORK_EVIDENCE_REQUIRES_RUN_MESSAGE);
+  // A person recording evidence after the fact — the merged PR the
+  // traceability audit found unrecorded (INV-796) — has no run to cite. Agents
+  // still attach to their own run; unbound evidence never verifies as trusted.
+  if (!input.runId && actor.actorKind !== 'HUMAN') throw createValidationError(WORK_EVIDENCE_REQUIRES_RUN_MESSAGE);
 
   return prisma.$transaction(async (transaction) => {
     const initial = await requireWork(transaction, input.workId);
@@ -65,16 +68,16 @@ export async function attachEvidence(
       }
       evidenceIdempotencyId = reservation.record.id;
     }
-    const run = await findRun(transaction, input.runId as string, work.id);
-    if (!run) throw createNotFoundError(WORK_RUN_NOT_FOUND_MESSAGE);
-    if (run.actorId !== actorId) throw createValidationError(WORK_RUN_ACTOR_MISMATCH_MESSAGE);
+    const run = input.runId ? await findRun(transaction, input.runId, work.id) : null;
+    if (input.runId && !run) throw createNotFoundError(WORK_RUN_NOT_FOUND_MESSAGE);
+    if (run && run.actorId !== actorId) throw createValidationError(WORK_RUN_ACTOR_MISMATCH_MESSAGE);
 
     const evidence = await transaction.workEvidence.create({
       data: {
         kind,
         verificationNextAt: kind === 'PR' || kind === 'TEST' ? new Date() : null,
         actorId,
-        runId: run.id,
+        runId: run?.id ?? null,
         summary: input.summary ?? null,
         url: input.url,
         workId: work.id,

@@ -843,6 +843,21 @@ model SyncWatermark {
   updatedAt DateTime @updatedAt
 }
 
+// Who did what on the ops page (INV-796): clearing a sync dead letter,
+// replaying an inbound delivery, managing a webhook. No foreign key on the
+// actor, so the record outlives the user and never blocks deleting one.
+model OpsAudit {
+  id        String   @id @default(uuid()) @db.Uuid
+  action    String
+  subject   String
+  byActorId String?  @db.Uuid
+  reason    String?
+  details   Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 // Phase 3: Dead-letter quarantine for poisoned PR events that repeatedly fail.
 model SyncDeadLetter {
   id           String   @id @default(uuid()) @db.Uuid

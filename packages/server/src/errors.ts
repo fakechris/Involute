@@ -166,6 +166,13 @@ export const WORKFLOW_STATE_LAST_OF_TYPE_MESSAGE =
 export const GLOBAL_ROLE_TARGET_HUMAN_MESSAGE = 'Admin rights go to people; agents and services act through their credentials.';
 export const GLOBAL_ROLE_LAST_ADMIN_MESSAGE = 'The workspace needs at least one admin.';
 
+// The ops page (INV-796).
+export const OPS_ADMIN_ONLY_MESSAGE = 'The ops page and its actions are for workspace admins.';
+export const OPS_REASON_REQUIRED_MESSAGE = 'Say why, in 1 to 2000 characters: it is kept on the ops audit.';
+export const OPS_DEAD_LETTER_NOT_FOUND_MESSAGE = 'That sync dead letter no longer exists; it may already have been cleared.';
+export const OPS_INBOUND_NOT_REPLAYABLE_MESSAGE =
+  'Only a dead inbound delivery that still has its payload can be replayed, and it changed since the page loaded; refresh and try again.';
+
 export function createScopeForbiddenError(scope: string): GraphQLError {
   return new GraphQLError(`Agent credential lacks required scope: ${scope}.`, {
     extensions: { code: 'FORBIDDEN' },
@@ -294,6 +301,10 @@ const exposedErrorCodes = new Map<string, string>([
   [WORKFLOW_STATE_LAST_OF_TYPE_MESSAGE, 'BAD_USER_INPUT'],
   [GLOBAL_ROLE_TARGET_HUMAN_MESSAGE, 'BAD_USER_INPUT'],
   [GLOBAL_ROLE_LAST_ADMIN_MESSAGE, 'BAD_USER_INPUT'],
+  [OPS_ADMIN_ONLY_MESSAGE, 'FORBIDDEN'],
+  [OPS_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [OPS_DEAD_LETTER_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [OPS_INBOUND_NOT_REPLAYABLE_MESSAGE, 'BAD_USER_INPUT'],
 ]);
 
 export function createNotAuthenticatedError(): GraphQLError {

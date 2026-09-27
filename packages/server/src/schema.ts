@@ -23,6 +23,7 @@ import type {
   WorkEvidence,
 } from '@prisma/client';
 
+import { assertOpsAdmin, clearSyncDeadLetter, readOpsOverview, recordOpsAudit, replayInboundDelivery } from './ops-service.js';
 import { makeExecutableSchema } from '@graphql-tools/schema';
 
 import {
@@ -360,6 +361,8 @@ const typeDefs = /* GraphQL */ `
     agentProfile(handle: String!): AgentProfile
     agentCredentials(teamId: String!): [AgentCredentialRecord!]!
     webhooks(teamId: String!): [WebhookSubscriptionRecord!]!
+    "Sync, inbound queue, outbox and webhooks at a glance; admins only (INV-796)."
+    opsOverview: OpsOverview!
     notifications(first: Int, after: String, unreadOnly: Boolean): NotificationConnection!
     unreadNotificationCount: Int!
   }
@@ -375,6 +378,10 @@ const typeDefs = /* GraphQL */ `
     teamTriageRotationUpdate(input: TeamTriageRotationInput!): TeamTriageRotationPayload!
     "A person ends an agent's claim now, with a reason (INV-789); open runs under it are closed."
     workClaimRelease(workId: String!, reason: String!): WorkClaimReleasePayload!
+    "Clear a sync dead letter so the next reconciliation retries that PR; admins only, audited (INV-796)."
+    opsSyncDeadLetterClear(id: String!, reason: String!): OpsMutationPayload!
+    "Replay a dead inbound GitHub delivery; admins only, audited (INV-796)."
+    opsInboundReplay(id: String!, reason: String!, expectedAttempts: Int!): OpsMutationPayload!
     "A person turns rejected work back into a candidate, with a reason (INV-792)."
     workRestore(id: String!, reason: String!): WorkRestorePayload!
     teamMembershipUpsert(input: TeamMembershipUpsertInput!): TeamMembershipUpsertPayload!
@@ -474,6 +481,80 @@ const typeDefs = /* GraphQL */ `
     "Why the restore was refused; null on success."
     message: String
     issue: Issue
+  }
+
+  type OpsMutationPayload {
+    success: Boolean!
+    "Why it was refused; null on success."
+    message: String
+  }
+
+  type OpsWatermark {
+    key: String!
+    repository: String!
+    watermark: DateTime!
+    updatedAt: DateTime!
+  }
+
+  type OpsSyncDeadLetter {
+    id: ID!
+    repository: String!
+    itemRef: String!
+    error: String!
+    attempts: Int!
+    lastFailedAt: DateTime!
+  }
+
+  type OpsInboundCount {
+    status: String!
+    count: Int!
+  }
+
+  type OpsInboundDelivery {
+    id: ID!
+    deliveryId: String!
+    eventType: String!
+    repository: String!
+    attempts: Int!
+    lastErrorCode: String
+    receivedAt: DateTime!
+    "False once the payload was compacted away; such a delivery cannot be replayed."
+    replayable: Boolean!
+  }
+
+  type OpsInbound {
+    counts: [OpsInboundCount!]!
+    oldestPendingAt: DateTime
+    dead: [OpsInboundDelivery!]!
+  }
+
+  type OpsOutboxFailure {
+    id: ID!
+    type: String!
+    attempts: Int!
+    lastError: String
+    createdAt: DateTime!
+    deadLetteredAt: DateTime
+  }
+
+  type OpsAuditRecord {
+    id: ID!
+    action: String!
+    subject: String!
+    byActor: User
+    reason: String
+    createdAt: DateTime!
+  }
+
+  type OpsOverview {
+    watermarks: [OpsWatermark!]!
+    syncDeadLetters: [OpsSyncDeadLetter!]!
+    inbound: OpsInbound!
+    outboxFailures: [OpsOutboxFailure!]!
+    "Every subscription, all teams and global."
+    webhooks: [WebhookSubscriptionRecord!]!
+    "The latest ops actions, newest first."
+    audits: [OpsAuditRecord!]!
   }
 
   type WorkClaimReleasePayload {
@@ -1848,7 +1929,8 @@ const typeDefs = /* GraphQL */ `
 
   input EvidenceAttachInput {
     workId: String!
-    runId: String!
+    "The run the evidence backs. Required for agents; a person recording evidence after the fact may omit it (INV-796)."
+    runId: String
     kind: String!
     url: String!
     summary: String
@@ -2457,6 +2539,14 @@ const resolvers = {
         include: { user: true },
         orderBy: { createdAt: 'desc' },
       });
+    },
+    opsOverview: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      assertOpsAdmin(context);
+      const [overview, webhooks] = await Promise.all([
+        readOpsOverview(context.prisma),
+        context.prisma.webhookSubscription.findMany({ orderBy: { createdAt: 'asc' } }),
+      ]);
+      return { ...overview, webhooks };
     },
     webhooks: async (
       _parent: unknown,
@@ -3191,6 +3281,7 @@ const resolvers = {
             url: normalizeWebhookUrl(args.input.url),
           },
         });
+        await auditWebhook(context, 'webhook-created', subscription);
         return { secret, subscription, success: true as const };
       }, { secret: null, subscription: null, success: false as const }),
     webhookUpdate: async (
@@ -3232,6 +3323,7 @@ const resolvers = {
           where: { id: existing.id },
           data,
         });
+        await auditWebhook(context, 'webhook-updated', subscription, { changed: Object.keys(data) });
         return { secret: null, subscription, success: true as const };
       }, { secret: null, subscription: null, success: false as const }),
     webhookDelete: async (
@@ -3242,6 +3334,7 @@ const resolvers = {
       runMutation(async () => {
         const existing = await requireWebhookSubscription(context, args.id);
         await context.prisma.webhookSubscription.delete({ where: { id: existing.id } });
+        await auditWebhook(context, 'webhook-deleted', existing);
         return { secret: null, subscription: null, success: true as const };
       }, { secret: null, subscription: null, success: false as const }),
     webhookRotateSecret: async (
@@ -3256,6 +3349,7 @@ const resolvers = {
           where: { id: existing.id },
           data: { consecutiveFailures: 0, secret },
         });
+        await auditWebhook(context, 'webhook-secret-rotated', subscription);
         return { secret, subscription, success: true as const };
       }, { secret: null, subscription: null, success: false as const }),
     notificationMarkRead: async (
@@ -3459,6 +3553,31 @@ const resolvers = {
         const restored = await restoreWork(context.prisma, { id: work.id, reason: args.reason }, writeActorFromViewer(context.viewer));
         return { issue: await getIssueById(context.prisma, restored.id), success: true as const };
       }, { issue: null, success: false as const }),
+    opsSyncDeadLetterClear: async (
+      _parent: unknown,
+      args: { id: string; reason: string },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
+        assertOpsAdmin(context);
+        await clearSyncDeadLetter(context.prisma, { id: args.id, reason: args.reason, byActorId: context.viewer?.id ?? null });
+        return { success: true as const };
+      }, { success: false as const }),
+    opsInboundReplay: async (
+      _parent: unknown,
+      args: { id: string; reason: string; expectedAttempts: number },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
+        assertOpsAdmin(context);
+        await replayInboundDelivery(context.prisma, {
+          id: args.id,
+          reason: args.reason,
+          expectedAttempts: args.expectedAttempts,
+          byActorId: context.viewer?.id ?? null,
+        });
+        return { success: true as const };
+      }, { success: false as const }),
     workClaimRelease: async (
       _parent: unknown,
       args: { workId: string; reason: string },
@@ -3752,6 +3871,10 @@ const resolvers = {
         }
       }, { attachment: null, success: false as const });
     },
+  },
+  OpsAuditRecord: {
+    byActor: (parent: { byActorId: string | null }, _args: unknown, context: GraphQLContext) =>
+      parent.byActorId ? context.prisma.user.findUnique({ where: { id: parent.byActorId } }) : null,
   },
   WorkRunRecord: {
     actor: (parent: { actorId?: string | null }, _args: Record<string, never>, context: GraphQLContext) =>
@@ -4410,6 +4533,21 @@ async function resolveWebhookTeamId(context: GraphQLContext, team: string | null
   if (!record) throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
   await assertCanManageTeam(context.prisma, context, record.id);
   return record.id;
+}
+
+/** Webhook changes go on the ops audit (INV-796); the secret never does. */
+async function auditWebhook(
+  context: GraphQLContext,
+  action: string,
+  subscription: WebhookSubscription,
+  details: Record<string, unknown> = {},
+): Promise<void> {
+  await recordOpsAudit(context.prisma, {
+    action,
+    subject: subscription.label ? `${subscription.label} (${subscription.url})` : subscription.url,
+    byActorId: context.viewer?.id ?? null,
+    details: { subscriptionId: subscription.id, teamId: subscription.teamId, ...details } as Prisma.InputJsonValue,
+  });
 }
 
 async function requireWebhookSubscription(

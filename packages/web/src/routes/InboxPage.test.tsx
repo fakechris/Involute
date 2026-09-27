@@ -92,6 +92,7 @@ describe('InboxPage', () => {
       'https://github.com/acme/app/pull/64',
     );
     expect(screen.getByRole('link', { name: 'INV-391' })).toHaveAttribute('href', '/issue/INV-391');
+    expect(screen.getByRole('link', { name: 'Open in Ops' })).toHaveAttribute('href', '/ops#traceability');
   });
 
   it('renders real notifications and shows unread badge', () => {
