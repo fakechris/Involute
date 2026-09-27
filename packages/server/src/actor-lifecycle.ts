@@ -1,5 +1,12 @@
 import { assertHumanOwner } from './agent-credentials.js';
-import { createNotFoundError, createValidationError } from './errors.js';
+import {
+  ACTOR_LIFECYCLE_HUMAN_ONLY_MESSAGE,
+  ACTOR_SUCCESSOR_INVALID_MESSAGE,
+  createNotFoundError,
+  createValidationError,
+} from './errors.js';
+
+export { ACTOR_LIFECYCLE_HUMAN_ONLY_MESSAGE, ACTOR_SUCCESSOR_INVALID_MESSAGE };
 
 import type { Prisma, PrismaClient, User } from '@prisma/client';
 
@@ -8,8 +15,7 @@ type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 export const ACTOR_NOT_FOUND_MESSAGE = 'Actor not found.';
 export const ACTOR_ALREADY_DEACTIVATED_MESSAGE = 'Actor is already deactivated.';
 export const ACTOR_NOT_DEACTIVATED_MESSAGE = 'Actor is not deactivated.';
-export const ACTOR_LIFECYCLE_HUMAN_ONLY_MESSAGE =
-  'Only a human may deactivate or reactivate an actor, or transfer its ownership.';
+
 export const ACTOR_DELETE_FORBIDDEN_MESSAGE =
   'Actors are never deleted: their id must stay valid for the audit trail. Deactivate instead.';
 
@@ -173,5 +179,49 @@ export async function recordActorAudit(
       reason: input.reason ?? null,
       subjectId: input.subjectId,
     },
+  });
+}
+
+
+/**
+ * Who takes over when an agent stops answering (INV-794): the expiry notice
+ * names the declared successor, and this is where a person declares one.
+ * Human-only, recorded in ActorAudit; null clears it.
+ */
+export async function setActorSuccessor(
+  prisma: PrismaClient,
+  input: { actorId: string; by: LifecycleActor; successorId: string | null; reason?: string | null },
+): Promise<User> {
+  if (input.by.actorKind !== 'HUMAN') {
+    throw createValidationError(ACTOR_LIFECYCLE_HUMAN_ONLY_MESSAGE);
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const actor = await tx.user.findUnique({ where: { id: input.actorId } });
+    if (!actor) {
+      throw createNotFoundError(ACTOR_NOT_FOUND_MESSAGE);
+    }
+    if (input.successorId) {
+      const successor = await tx.user.findUnique({ where: { id: input.successorId }, select: { id: true, deactivatedAt: true } });
+      if (!successor || successor.deactivatedAt || successor.id === actor.id) {
+        throw createValidationError(ACTOR_SUCCESSOR_INVALID_MESSAGE);
+      }
+    }
+
+    const updated = await tx.user.update({
+      where: { id: actor.id },
+      data: { successorActorId: input.successorId },
+    });
+
+    await recordActorAudit(tx, {
+      action: 'successor-set',
+      after: { successorActorId: input.successorId },
+      before: { successorActorId: actor.successorActorId },
+      byActorId: input.by.actorId,
+      reason: input.reason ?? null,
+      subjectId: actor.id,
+    });
+
+    return updated;
   });
 }

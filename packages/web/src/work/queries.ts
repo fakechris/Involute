@@ -219,7 +219,15 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
           handedOffFromId
           failureReason
           answeredCommentId
+          body
+          requestedByActor { id name handle actorKind }
           targetActor { id name handle actorKind }
+        }
+        labels {
+          nodes {
+            id
+            name
+          }
         }
         id
         identifier
@@ -285,6 +293,7 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
         status
         phase
         summary
+        actor { id name handle actorKind }
         externalUrl
         startedAt
         endedAt

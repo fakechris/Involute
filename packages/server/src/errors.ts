@@ -74,6 +74,10 @@ export const BUG_REJECT_REASON_REQUIRED_MESSAGE = 'Declining a bug needs a reaso
 export const BUG_NO_BACKLOG_MESSAGE = 'Bugs do not go to the backlog (zero-bug): commit to fixing it, or decline it with a reason.';
 export const TRIAGE_ROTATION_INVALID_MESSAGE = 'A triage rotation lists human members of the team and a valid start date.';
 export const CLAIM_RELEASE_FORBIDDEN_MESSAGE = 'Only a person can release a claim.';
+export const ACTOR_LIFECYCLE_HUMAN_ONLY_MESSAGE =
+  'Only a human may deactivate or reactivate an actor, transfer its ownership, or declare its successor.';
+export const REQUEST_ANSWER_STATE_INVALID_MESSAGE = 'An answer state is completed, failed or input-required.';
+export const ACTOR_SUCCESSOR_INVALID_MESSAGE = 'A successor is another active actor, not the actor itself.';
 export const WORK_RESTORE_FORBIDDEN_MESSAGE = 'Only a person can restore a rejected candidate.';
 export const WORK_RESTORE_NOT_REJECTED_MESSAGE = 'Only rejected work can be restored to a candidate.';
 export const WORK_RESTORE_REASON_REQUIRED_MESSAGE = 'Restoring rejected work needs a reason.';
@@ -200,6 +204,9 @@ const exposedErrorCodes = new Map<string, string>([
   [ISSUE_TYPE_EXCLUSIVE_MESSAGE, 'BAD_USER_INPUT'],
   [CLAIM_RELEASE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
   [WORK_RESTORE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
+  [ACTOR_LIFECYCLE_HUMAN_ONLY_MESSAGE, 'FORBIDDEN'],
+  [ACTOR_SUCCESSOR_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [REQUEST_ANSWER_STATE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_RESTORE_NOT_REJECTED_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_RESTORE_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [CLAIM_RELEASE_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],

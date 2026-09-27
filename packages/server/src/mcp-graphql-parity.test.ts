@@ -43,7 +43,6 @@ const AGENT_ONLY_FIELDS: Record<string, Record<string, string>> = {
     session_id: 'Identifies the agent execution that answers.',
     receipt: 'Agent decision receipt (INV-588); a person\'s answer is the comment itself.',
     evidence: 'Agent-attached references backing its answer.',
-    state: 'INV-794 tracks letting a person answer "failed" or "input-required"; until then a person always completes.',
   },
   run_report: { receipt: 'Agent decision receipt (INV-588); people do not report runs.' },
   work_file_bug: {

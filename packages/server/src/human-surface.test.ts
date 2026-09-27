@@ -111,7 +111,7 @@ function producedNotificationTypes(files: Map<string, string>): Set<string> {
 }
 
 /** Dotted literals in notification producers that are outbox events, not inbox notifications. */
-const NOT_INBOX = new Set(['work.review_submitted']);
+const NOT_INBOX = new Set(['work.review_submitted', 'agent.request_answered', 'agent.request_replied']);
 
 describe('human surface registry (INV-795)', () => {
   const mutations = Object.keys(createGraphQLSchema(null as never).getMutationType()!.getFields()).sort();
@@ -168,7 +168,13 @@ describe('human surface registry (INV-795)', () => {
     expect(produced).toEqual(Object.keys(NOTIFICATION_SURFACES).sort());
     const workPage = web.get('routes/WorkContextPage.tsx') ?? '';
     for (const [type, landing] of Object.entries(NOTIFICATION_SURFACES)) {
-      if (landing.kind === 'work') expect(workPage.includes(landing.action), `${type}: "${landing.action}"`).toBe(true);
+      if (landing.kind !== 'work') continue;
+      if (landing.component) {
+        const name = landing.component.replace(/^.*\//, '').replace(/\.tsx$/, '');
+        expect(workPage.includes(`<${name}`), `${type}: work page renders ${name}`).toBe(true);
+      }
+      const source = landing.component ? (web.get(landing.component) ?? '') : workPage;
+      expect(source.includes(landing.action), `${type}: "${landing.action}"`).toBe(true);
     }
   });
 

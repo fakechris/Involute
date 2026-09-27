@@ -74,6 +74,8 @@ export interface WorkRunSummary {
   externalUrl?: string | null;
   startedAt: string;
   endedAt?: string | null;
+  /** Who ran it (INV-794). */
+  actor?: { id: string; name: string | null; handle: string | null; actorKind: string } | null;
   /** What the run was bound to (INV-474/790). */
   repository?: string | null;
   commitSha?: string | null;
@@ -168,6 +170,9 @@ export interface WorkContextRequest {
   failureReason: string | null;
   answeredCommentId: string | null;
   targetActor: { id: string; name: string | null; handle: string | null; actorKind: string };
+  /** The question, and who asked it (INV-794). */
+  body?: string;
+  requestedByActor?: { id: string; name: string | null; handle: string | null; actorKind: string } | null;
 }
 
 export interface WorkContextWork {
@@ -178,6 +183,8 @@ export interface WorkContextWork {
   contractDigest?: string | null;
   /** Requests to agents on this work, with their hand-off chain (INV-597). */
   agentRequests?: WorkContextRequest[];
+  /** A bug candidate is triaged from the bug filter (INV-794). */
+  labels?: { nodes: Array<{ id: string; name: string }> };
   description?: string | null;
   kind: WorkKind;
   commitmentStatus: CommitmentStatus;

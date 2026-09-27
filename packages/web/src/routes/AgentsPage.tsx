@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AGENTS_QUERY, AGENT_CREDENTIAL_REVOKE_MUTATION, AGENT_PROFILE_QUERY } from '../board/queries';
 import type { UserSummary } from '../board/types';
 import { ActorBadge } from '../components/ActorBadge';
+import { ActorSuccessorControl } from '../components/ActorSuccessorControl';
 import { AgentLifecycleActions } from '../components/AgentLifecycleActions';
 import { Btn } from '../components/Primitives';
 
@@ -230,7 +231,10 @@ function AgentProfile({ handle }: { handle: string }) {
       </header>
 
       {viewerCanManage ? (
-        <AgentLifecycleActions actor={actor} onChanged={() => refetch()} />
+        <>
+          <AgentLifecycleActions actor={actor} onChanged={() => refetch()} />
+          <ActorSuccessorControl actor={actor} onChanged={() => refetch()} />
+        </>
       ) : null}
 
       <div className="agent-directory__counts" aria-label="Activity counts">

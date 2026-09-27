@@ -36,7 +36,8 @@ export async function emitOpsAlert(
     if (admins.length > 0) {
       await prisma.notification.createMany({
         data: admins.map((admin) => ({
-          payload: alert.details as Prisma.InputJsonValue,
+          // The summary is what a person reads first; keep it with the details (INV-794).
+          payload: { summary: alert.summary, ...alert.details } as Prisma.InputJsonValue,
           type: `ops.${alert.kind}`,
           userId: admin.id,
         })),

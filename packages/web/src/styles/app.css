@@ -6320,3 +6320,35 @@ a.bugs-stat {
   align-items: center;
   font-size: 13px;
 }
+
+/* Inbox details for notifications without a work item (INV-794). */
+.inbox-item__details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 10px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.inbox-item__details > div {
+  display: contents;
+}
+
+.inbox-item__details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Answering and replying to requests on the work page (INV-794). */
+.request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: 6px;
+}
+
+.request-actions textarea {
+  flex: 1 1 260px;
+}

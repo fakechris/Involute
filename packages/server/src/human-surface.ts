@@ -38,7 +38,14 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   actorTransferOwner: { kind: 'web', doc: 'ACTOR_TRANSFER_OWNER_MUTATION', components: ['components/AgentLifecycleActions.tsx'], label: 'Transfer owner' },
   agentCredentialCreate: { kind: 'web', components: ['routes/AgentsTab.tsx'] },
   agentCredentialRevoke: { kind: 'web', doc: 'AGENT_CREDENTIAL_REVOKE_MUTATION', components: ['routes/AgentsPage.tsx'], label: 'Revoke' },
-  agentRequestAnswer: { kind: 'web', doc: 'AGENT_REQUEST_ANSWER_MUTATION', components: ['routes/IssuePage.tsx'], label: 'Answer' },
+  agentRequestAnswer: {
+    kind: 'web',
+    doc: 'AGENT_REQUEST_ANSWER_MUTATION',
+    components: ['routes/IssuePage.tsx', 'components/AgentRequestActions.tsx'],
+    label: 'Answer',
+  },
+  agentRequestReply: { kind: 'web', doc: 'AGENT_REQUEST_REPLY_MUTATION', components: ['components/AgentRequestActions.tsx'], label: 'Reply to agent' },
+  actorSetSuccessor: { kind: 'web', doc: 'ACTOR_SET_SUCCESSOR_MUTATION', components: ['components/ActorSuccessorControl.tsx'], label: 'Successor' },
   bugReport: { kind: 'web', doc: 'BUG_REPORT_MUTATION', components: ['components/ReportBugDialog.tsx'], label: 'Report bug' },
   commentCreate: { kind: 'web', doc: 'COMMENT_CREATE_MUTATION', components: ['routes/IssuePage.tsx'] },
   commentDelete: { kind: 'web', doc: 'COMMENT_DELETE_MUTATION', components: ['routes/IssuePage.tsx'] },
@@ -146,7 +153,8 @@ export const HUMAN_GATES: Array<{ text: string; mutation: string } | { text: str
   { text: 'A triage rotation lists human members', mutation: 'teamTriageRotationUpdate' },
   { text: 'Only a human may provision a service actor', mutation: 'serviceActorCreate' },
   { text: 'Provision a SERVICE actor for an external program (CI, cron, a bridge). Human-only.', mutation: 'serviceActorCreate' },
-  { text: 'or declare a successor', tracking: 'INV-794' },
+  { text: 'or declare a successor', mutation: 'actorSetSuccessor' },
+  { text: 'Only the person who asked may reply', mutation: 'agentRequestReply' },
 ];
 
 /** Recognises text that tells someone a person must act; every match must be in HUMAN_GATES. */
@@ -154,8 +162,13 @@ export const HUMAN_GATE_PATTERN =
   /Only (?:a|the) (?:human|person)|[Hh]umans? only|[Hh]uman-only|ask a (?:human|person)|Agents? (?:cannot|may not|can't)|declare a successor|human (?:owner|roster|members)/;
 
 export type NotificationLanding =
-  /** Opens the work page, where the person can act on it. */
-  | { kind: 'work'; action: string }
+  /**
+   * Opens the work page, where the person can act on it. The action text is on
+   * the work page, or in `component` when the page renders it through one.
+   */
+  | { kind: 'work'; action: string; component?: string }
+  /** No work item: the inbox row shows the details and links itself. */
+  | { kind: 'inbox' }
   /** Opens the work page to show what happened; nothing to do. */
   | { kind: 'info' }
   | { kind: 'gap'; tracking: string; note: string };
@@ -168,19 +181,16 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationLanding> = {
   'work.claim_released': { kind: 'info' },
   'bug.sla_at_risk': { kind: 'info' },
   'bug.sla_breached': { kind: 'info' },
-  'decision.requested': {
-    kind: 'gap',
-    tracking: 'INV-794',
-    note: 'Usually arrives while work is running; the work page has no way to respond.',
-  },
-  'bug.reported': { kind: 'gap', tracking: 'INV-794', note: 'A triage bug is a candidate; the work page cannot commit or reject it.' },
-  'agent.request_expired': { kind: 'gap', tracking: 'INV-794', note: 'Requests are read-only on the work page; answering needs the issue page.' },
-  'agent.request_handed_off': { kind: 'gap', tracking: 'INV-794', note: 'Requests are read-only on the work page; answering needs the issue page.' },
-  'webhook.disabled': { kind: 'gap', tracking: 'INV-796', note: 'No work item and no webhook screen: the notification opens nothing.' },
-  'ops.event.dead_letter': { kind: 'gap', tracking: 'INV-796', note: 'No ops screen: the notification opens nothing.' },
-  'ops.webhook.disabled': { kind: 'gap', tracking: 'INV-796', note: 'No ops screen: the notification opens nothing.' },
-  'ops.github_sync.dead_letter': { kind: 'gap', tracking: 'INV-796', note: 'No ops screen: the notification opens nothing.' },
-  'ops.github_inbound.dead_letter': { kind: 'gap', tracking: 'INV-796', note: 'No ops screen: the notification opens nothing.' },
-  'ops.github_inbound.payload_conflict': { kind: 'gap', tracking: 'INV-796', note: 'No ops screen: the notification opens nothing.' },
-  'ops.github.pr_unverified_reference': { kind: 'gap', tracking: 'INV-794', note: 'The PR link and identifier are stored but not shown as links.' },
+  'decision.requested': { kind: 'work', action: 'Respond to the agent', component: 'components/RespondToAgent.tsx' },
+  'agent.request_input_required': { kind: 'work', action: 'Reply to agent', component: 'components/AgentRequestActions.tsx' },
+  'bug.reported': { kind: 'work', action: 'Triage this candidate' },
+  'agent.request_expired': { kind: 'work', action: 'Answer', component: 'components/AgentRequestActions.tsx' },
+  'agent.request_handed_off': { kind: 'work', action: 'Answer', component: 'components/AgentRequestActions.tsx' },
+  'webhook.disabled': { kind: 'inbox' },
+  'ops.event.dead_letter': { kind: 'inbox' },
+  'ops.webhook.disabled': { kind: 'inbox' },
+  'ops.github_sync.dead_letter': { kind: 'inbox' },
+  'ops.github_inbound.dead_letter': { kind: 'inbox' },
+  'ops.github_inbound.payload_conflict': { kind: 'inbox' },
+  'ops.github.pr_unverified_reference': { kind: 'inbox' },
 };
