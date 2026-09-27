@@ -29,11 +29,14 @@ export function ActorSuccessorControl({
   const options = (candidates.data?.users.nodes ?? []).filter((user) => !user.deactivatedAt && user.id !== actor.id);
 
   async function save(next: string) {
+    const previous = successorId;
     setError(null);
     setSuccessorId(next);
     try {
       const result = await runSet({ variables: { id: actor.id, successorId: next || null } });
       if (!result.data?.actorSetSuccessor.success) {
+        // Refused: nothing changed, so show what is still set.
+        setSuccessorId(previous);
         setError(result.data?.actorSetSuccessor.message ?? 'Could not set the successor.');
         return;
       }

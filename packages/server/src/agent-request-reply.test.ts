@@ -103,6 +103,8 @@ describe('asking back and replying to a request (INV-794)', () => {
 
     const asked = await answerAgentRequestAsHuman(prisma, { id: request.id, body: 'Which release?', by, state: 'input-required' });
     expect(asked.request.state).toBe('INPUT_REQUIRED');
+    // Nobody closes it while it waits on the asker's reply.
+    await expect(answerAgentRequestAsHuman(prisma, { id: request.id, body: 'Never mind', by, state: 'failed' })).rejects.toThrow(/waiting for the reply/);
     expect(await prisma.notification.count({ where: { type: 'agent.request_input_required', userId: asker.id } })).toBe(1);
 
     await replyToAgentRequest(prisma, { id: request.id, body: 'The next one.', by: { actorId: asker.id, actorKind: 'HUMAN', globalRole: 'USER' } });

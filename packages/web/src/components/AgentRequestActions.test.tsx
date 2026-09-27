@@ -117,3 +117,14 @@ describe('declaring a successor (INV-794)', () => {
     await waitFor(() => expect(mockReply).toHaveBeenCalledWith({ variables: { id: 'agent-1', successorId: 'agent-2' } }));
   });
 });
+
+describe('a refused successor (INV-794)', () => {
+  it('goes back to what is still set', async () => {
+    mockReply.mockResolvedValueOnce({ data: { actorSetSuccessor: { success: false, message: 'Pick an active actor.' } } });
+    render(<ActorSuccessorControl actor={{ id: 'agent-1', successorActor: null }} />);
+    const select = screen.getByLabelText('Successor') as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'agent-2' } });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Pick an active actor.');
+    expect(select.value).toBe('');
+  });
+});

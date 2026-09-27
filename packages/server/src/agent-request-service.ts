@@ -511,6 +511,9 @@ export async function answerAgentRequestAsHuman(
     if (isTerminalState(request.state)) {
       throw createValidationError(REQUEST_ALREADY_TERMINAL_MESSAGE);
     }
+    if (request.state === 'INPUT_REQUIRED') {
+      throw createValidationError(REQUEST_AWAITING_REPLY_MESSAGE);
+    }
 
     const isTarget = request.targetActorId === input.by.actorId;
     const override = !isTarget;
@@ -530,8 +533,9 @@ export async function answerAgentRequestAsHuman(
 
     const humanState: AgentRequestState =
       input.state === 'failed' ? 'FAILED' : input.state === 'input-required' ? 'INPUT_REQUIRED' : 'COMPLETED';
+    // Not while it waits on the requester: their reply would then be refused.
     const moved = await tx.agentRequest.updateMany({
-      where: { id: request.id, state: { in: [...CLAIMABLE_REQUEST_STATES] } },
+      where: { id: request.id, state: { in: CLAIMABLE_REQUEST_STATES.filter((state) => state !== 'INPUT_REQUIRED') } },
       data: {
         answeredCommentId: comment.id,
         claimExpiresAt: null,
@@ -639,6 +643,7 @@ async function notifyRequesterAskedBack(
 
 export const REPLY_NOT_REQUESTER_MESSAGE =
   'Only the person who asked may reply to this request. An admin may reply on their behalf with an override reason.';
+export const REQUEST_AWAITING_REPLY_MESSAGE = 'This request asked back and is waiting for the reply of the person who asked.';
 export const REPLY_REQUIRES_INPUT_REQUIRED_MESSAGE = 'Only a request that asked back (input-required) takes a reply.';
 
 /**
