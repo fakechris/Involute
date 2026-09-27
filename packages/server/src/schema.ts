@@ -117,6 +117,7 @@ import { loadBugSlas } from './bug-sla.js';
 import { snapshotContract } from './evidence-contract.js';
 import { loadBugMetrics, type BugMetrics } from './bug-metrics.js';
 import { currentTriager, parseRotation, setTriageRotation } from './bug-triage.js';
+import { releaseClaim } from './claim-release.js';
 import {
   findWorkByIdOrIdentifier,
   getWorkContext,
@@ -355,6 +356,8 @@ const typeDefs = /* GraphQL */ `
     commentDelete(id: String!): CommentDeletePayload!
     teamUpdateAccess(input: TeamUpdateAccessInput!): TeamUpdateAccessPayload!
     teamTriageRotationUpdate(input: TeamTriageRotationInput!): TeamTriageRotationPayload!
+    "A person ends an agent's claim now, with a reason (INV-789); open runs under it are closed."
+    workClaimRelease(workId: String!, reason: String!): WorkClaimReleasePayload!
     teamMembershipUpsert(input: TeamMembershipUpsertInput!): TeamMembershipUpsertPayload!
     teamMembershipRemove(input: TeamMembershipRemoveInput!): TeamMembershipRemovePayload!
     projectCreate(input: ProjectCreateInput!): ProjectCreatePayload! @deprecated(reason: "Use issueCreate with kind: PROJECT instead.")
@@ -433,6 +436,13 @@ const typeDefs = /* GraphQL */ `
     BREACHED
     PAUSED
     MET
+  }
+
+  type WorkClaimReleasePayload {
+    success: Boolean!
+    "Why the release was refused; null on success."
+    message: String
+    issue: Issue
   }
 
   input TeamTriageRotationInput {
@@ -3163,6 +3173,19 @@ const resolvers = {
         success: false as const,
         team: null,
       }),
+    workClaimRelease: async (
+      _parent: unknown,
+      args: { workId: string; reason: string },
+      context: GraphQLContext,
+    ): Promise<{ issue: IssueParent | null; message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
+        requireAuthentication(context);
+        const work = await findWorkByIdOrIdentifier(context.prisma, args.workId);
+        if (!work) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+        await assertCanWriteIssue(context.prisma, context, work.id);
+        await releaseClaim(context.prisma, { workId: work.id, reason: args.reason }, writeActorFromViewer(context.viewer));
+        return { issue: await getIssueById(context.prisma, work.id), success: true as const };
+      }, { issue: null, success: false as const }),
     teamTriageRotationUpdate: async (
       _parent: unknown,
       args: { input: { teamId: string; userIds: string[]; startsAt?: string | null } },

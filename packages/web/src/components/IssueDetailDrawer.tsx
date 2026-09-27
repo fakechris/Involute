@@ -8,6 +8,7 @@ import { ActorBadge } from './ActorBadge';
 import { IssueRelations } from './IssueRelations';
 import { AddSubIssueButton } from './AddSubIssueButton';
 import { BugSlaBadge } from './BugSlaBadge';
+import { ClaimControl } from './ClaimControl';
 import { toggleLabelId } from '../work/labels';
 import { RichTextEditor } from './RichTextEditor';
 import { AGENTS_QUERY } from '../board/queries';
@@ -603,6 +604,13 @@ export function IssueDetailDrawer({
               <div className="issue-panel__property-group">
                 <span className="issue-panel__label">Parent</span>
                 <p>{parentSummary}</p>
+              </div>
+
+              <div className="issue-panel__property-group">
+                <span className="issue-panel__label">Claim</span>
+                <p>
+                  <ClaimControl workId={activeIssue.id} claim={activeIssue.claim} />
+                </p>
               </div>
 
               {activeIssue.bugSla ? (
