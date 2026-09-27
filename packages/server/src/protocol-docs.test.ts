@@ -22,6 +22,7 @@ const NORM_RULES: Array<[string, RegExp]> = [
   ['bugs carry the Type label', /labels: \['bug'\]/],
   ['one Type per item', /at most one per item/],
   ['zero-bug: priority or reason, never backlog', /[Zz]ero-bug/],
+  ['agent bugs with parent, priority and steps are committed directly', /steps_to_reproduce/],
 ];
 
 describe('protocol guide and AGENTS.md agree on norm v1 (INV-721)', () => {

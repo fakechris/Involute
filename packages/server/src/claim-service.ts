@@ -40,6 +40,7 @@ import { isLegalContains } from './graph-integrity.js';
 import { createIssueWithAudit, mentionTexts, type CreateIssueInput } from './issue-service.js';
 import { linkMentionedWork } from './mention-links.js';
 import { findOrCreateLabelIds, isBugWork } from './labels.js';
+import { announceBug, composeDescription } from './bug-report.js';
 import {
   completeWorkIdempotency,
   hashIdempotencyRequest,
@@ -75,6 +76,10 @@ export interface ProposeWorkInput {
   relatedWorkType?: WorkLinkType | null;
   /** Label names, created when missing (e.g. "research", INV-721). */
   labels?: string[] | null;
+  /** 1 (Urgent) to 4 (Low). With labels ['bug'], a parent and steps, the bug is committed directly (INV-787). */
+  priority?: number | null;
+  /** Steps to reproduce a bug; appended to the description (INV-751). */
+  stepsToReproduce?: string | null;
   /** Existing work (ids or identifiers) this proposal is blocked by — each becomes X BLOCKS new (INV-720). */
   blockedBy?: string[] | null;
   /** Existing work this proposal blocks — each becomes new BLOCKS X. */
@@ -243,6 +248,17 @@ export async function placeNewWork<T extends CreateIssueInput>(prisma: Prisma.Tr
   return { ...input, parentId: parent.id, repository: input.repository ?? parent.repository };
 }
 
+/** The person answerable for work an actor files: a human themself, an agent's owner. */
+async function humanOwnerOf(transaction: Prisma.TransactionClient, actor: WriteActor): Promise<string | null> {
+  if (!actor.actorId) return null;
+  const user = await transaction.user.findUnique({ where: { id: actor.actorId }, select: { id: true, actorKind: true, ownerId: true } });
+  if (!user) return null;
+  if (user.actorKind === 'HUMAN') return user.id;
+  if (!user.ownerId) return null;
+  const owner = await transaction.user.findUnique({ where: { id: user.ownerId }, select: { id: true, actorKind: true } });
+  return owner?.actorKind === 'HUMAN' ? owner.id : null;
+}
+
 export async function proposeWork(
   prisma: PrismaClient,
   input: ProposeWorkInput,
@@ -340,6 +356,44 @@ export async function proposeWork(
     if (input.labels && input.labels.length > 0) {
       createInput.labelIds = await findOrCreateLabelIds(transaction, input.labels);
     }
+
+    // Bugs an agent files (INV-751 / decision INV-787): with a parent, a
+    // priority and steps to reproduce they are committed at once, like a human
+    // report placed in its project; otherwise they wait in triage.
+    const isBug = (input.labels ?? []).some((label) => label.trim().toLowerCase() === 'bug');
+    const steps = nonEmpty(input.stepsToReproduce);
+    const priority = input.priority ?? null;
+    if (isBug && priority !== null) {
+      if (priority < 1 || priority > 4) throw createValidationError(BUG_COMMIT_PRIORITY_REQUIRED_MESSAGE);
+      createInput.priority = priority;
+    }
+    if (isBug && steps) createInput.description = composeDescription(input.description, steps);
+    // The same bar a person's commit meets: a live parent, an owner on the
+    // team, and — zero-bug — a Ready state unless it is under way or fixed.
+    let directBug = isBug && Boolean(parentWork) && parentWork?.commitmentStatus !== 'REJECTED' && priority !== null && Boolean(steps);
+    const owner = directBug ? await humanOwnerOf(transaction, actor) : null;
+    if (directBug && (!owner || !(await transaction.teamMembership.findFirst({ where: { teamId: input.teamId, userId: owner }, select: { id: true } })))) {
+      directBug = false;
+    }
+    const underWay = targetType === 'STARTED' || targetType === 'REVIEW';
+    const ready = directBug && !underWay
+      ? await transaction.workflowState.findFirst({
+          where: { teamId: input.teamId, type: 'UNSTARTED' },
+          orderBy: { position: 'asc' },
+          select: { id: true },
+        })
+      : null;
+    if (directBug && !underWay && !ready) directBug = false;
+    if (directBug) {
+      createInput.commitmentStatus = 'COMMITTED';
+      createInput.assigneeId = owner;
+      if (ready) {
+        createInput.stateId = ready.id;
+        if (createInput.source?.includes('initial_state=BACKLOG')) {
+          createInput.source = createInput.source.replace(/;?initial_state=BACKLOG;?/, '').trim() || null;
+        }
+      }
+    }
     const { auditId: creationAuditId, issue: created } = await createIssueWithAudit(transaction, createInput, actor, { linkMentions: false });
     if (parentWork) {
       await createWorkLink(transaction, {
@@ -379,10 +433,11 @@ export async function proposeWork(
     }
     await enqueueWorkEvent(transaction, {
       payload: { title: created.title, actorId: actor.actorId ?? null },
-      type: 'work.proposed',
+      type: directBug ? 'work.committed' : 'work.proposed',
       workId: created.id,
       workIdentifier: created.identifier,
     });
+    if (isBug) await announceBug(transaction, created, { triage: !directBug });
     if (input.receipt) {
       // Same transaction as the write: a proposal and its receipt land
       // together or not at all.

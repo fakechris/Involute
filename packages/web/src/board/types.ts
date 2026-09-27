@@ -252,6 +252,22 @@ export interface BugSummaryData {
   oldestOpenAgeDays: number | null;
   avgOpenAgeDays: number | null;
   createdPerWeek: Array<{ weekStart: string; count: number }>;
+  /** Triage, SLA, source and placement (INV-751); absent from older servers. */
+  metrics?: BugMetricsData;
+}
+
+export interface BugMetricsData {
+  triageHoursP50: number | null;
+  triageHoursP90: number | null;
+  triagedCount: number;
+  untriagedCount: number;
+  slaMetCount: number;
+  slaBreachedClosedCount: number;
+  slaMetRate: number | null;
+  atRiskOpenCount: number;
+  breachedOpen: Array<{ id: string; identifier: string; title: string; overdueHours: number }>;
+  bySource: Array<{ source: 'HUMAN_REPORT' | 'AGENT' | 'OTHER'; count: number }>;
+  unplacedOpenCount: number;
 }
 
 export interface BugsPageQueryData {

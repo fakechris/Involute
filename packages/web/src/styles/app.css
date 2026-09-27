@@ -6248,3 +6248,32 @@ kbd {
 .triage-rotation li > span {
   flex: 1;
 }
+
+/* /bugs triage and SLA (INV-751). */
+a.bugs-stat {
+  color: inherit;
+  text-decoration: none;
+}
+
+.bugs-stat--alert .bugs-stat__value {
+  color: var(--danger);
+}
+
+.bugs-breaches {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bugs-breaches li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.bugs-breaches__overdue {
+  color: var(--danger);
+  font-size: 12px;
+  white-space: nowrap;
+}

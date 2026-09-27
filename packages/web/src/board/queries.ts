@@ -729,6 +729,27 @@ export const BUGS_PAGE_QUERY = gql`
         weekStart
         count
       }
+      metrics {
+        triageHoursP50
+        triageHoursP90
+        triagedCount
+        untriagedCount
+        slaMetCount
+        slaBreachedClosedCount
+        slaMetRate
+        atRiskOpenCount
+        breachedOpen {
+          id
+          identifier
+          title
+          overdueHours
+        }
+        bySource {
+          source
+          count
+        }
+        unplacedOpenCount
+      }
     }
     issues(first: 100, filter: $issueFilter) {
       nodes {

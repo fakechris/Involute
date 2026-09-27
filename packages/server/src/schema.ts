@@ -114,6 +114,7 @@ import { dependencyHints } from './mention-links.js';
 import { loadWorkHygiene } from './work-hygiene.js';
 import { BUG_LABEL_NAME, findSimilarBugs, reportBug, type BugReportInput } from './bug-report.js';
 import { loadBugSlas } from './bug-sla.js';
+import { loadBugMetrics, type BugMetrics } from './bug-metrics.js';
 import { currentTriager, parseRotation, setTriageRotation } from './bug-triage.js';
 import {
   findWorkByIdOrIdentifier,
@@ -193,6 +194,7 @@ interface BugSummaryResultShape {
   oldestOpenAgeDays: number | null;
   avgOpenAgeDays: number | null;
   createdPerWeek: Array<{ weekStart: string; count: number }>;
+  metrics: BugMetrics;
 }
 
 type CommentOrderByInput = 'createdAt';
@@ -1323,6 +1325,44 @@ const typeDefs = /* GraphQL */ `
     oldestOpenAgeDays: Float
     avgOpenAgeDays: Float
     createdPerWeek: [BugWeekCount!]!
+    "Triage, SLA, source and placement (INV-751)."
+    metrics: BugMetrics!
+  }
+
+  type BugMetrics {
+    "Hours from report to commit or decline, for bugs that went through triage."
+    triageHoursP50: Float
+    triageHoursP90: Float
+    triagedCount: Int!
+    "Bug candidates waiting in triage."
+    untriagedCount: Int!
+    slaMetCount: Int!
+    slaBreachedClosedCount: Int!
+    "Share of closed bugs fixed within their SLA; null before any closed."
+    slaMetRate: Float
+    atRiskOpenCount: Int!
+    breachedOpen: [BugBreach!]!
+    bySource: [BugSourceCount!]!
+    "Committed open bugs no parent contains; the goal is zero."
+    unplacedOpenCount: Int!
+  }
+
+  type BugBreach {
+    id: ID!
+    identifier: String!
+    title: String!
+    overdueHours: Float!
+  }
+
+  enum BugSource {
+    HUMAN_REPORT
+    AGENT
+    OTHER
+  }
+
+  type BugSourceCount {
+    source: BugSource!
+    count: Int!
   }
 
   type TraceabilityAnomaly {
@@ -1539,6 +1579,10 @@ const typeDefs = /* GraphQL */ `
     relatedWorkType: WorkLinkType
     """Label names, created when missing (e.g. research)."""
     labels: [String!]
+    """1 (Urgent) to 4 (Low). A bug (labels include bug) with a parent, priority and steps is committed directly (INV-787)."""
+    priority: Int
+    """Steps to reproduce a bug; appended to the description."""
+    stepsToReproduce: String
     """Existing work this proposal is blocked by (each X BLOCKS the new item)."""
     blockedBy: [String!]
     """Existing work this proposal blocks."""
@@ -1948,6 +1992,7 @@ const resolvers = {
           : {};
 
       const now = new Date();
+      const metrics = await loadBugMetrics(context.prisma, { ...teamClause, ...(readableWhere ? readableWhere : {}) }, now);
       const emptyWeeks = [...buildBugWeekBuckets().entries()].map(([weekStart, count]) => ({ weekStart, count }));
       const bugLabel = await context.prisma.issueLabel.findFirst({
         where: { name: { equals: BUG_LABEL_NAME, mode: 'insensitive' } },
@@ -1964,6 +2009,7 @@ const resolvers = {
           oldestOpenAgeDays: null,
           avgOpenAgeDays: null,
           createdPerWeek: emptyWeeks,
+          metrics,
         };
       }
 
@@ -2083,6 +2129,7 @@ const resolvers = {
           : null,
         avgOpenAgeDays: openCount > 0 ? Math.round((ageSumDays / openCount) * 10) / 10 : null,
         createdPerWeek,
+        metrics,
       };
     },
     traceabilityAudit: async (

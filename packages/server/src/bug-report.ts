@@ -41,7 +41,7 @@ export async function findOrCreateBugLabel(prisma: DatabaseClient): Promise<Issu
   return created;
 }
 
-function composeDescription(description: string | null | undefined, steps: string): string {
+export function composeDescription(description: string | null | undefined, steps: string): string {
   const body = description?.trim();
   return `${body ? `${body}\n\n` : ''}### Steps to reproduce\n\n${steps}`;
 }
@@ -88,30 +88,7 @@ export async function reportBug(prisma: PrismaClient, input: BugReportInput, act
         : await placeNewWork(transaction, { ...base, parentId: input.parentId!.trim(), ...(ready ? { stateId: ready.id } : {}) }),
       actor,
     );
-    const payload = {
-      identifier: issue.identifier,
-      priority: issue.priority,
-      repository: issue.repository,
-      title: issue.title,
-      triage,
-    };
-    const event = await enqueueWorkEvent(transaction, {
-      payload,
-      type: 'bug.reported',
-      workId: issue.id,
-      workIdentifier: issue.identifier,
-    });
-    // Triage goes to this week's triager when the team has a rotation (INV-750).
-    const team = await transaction.team.findUniqueOrThrow({ where: { id: input.teamId }, select: { triageRotation: true } });
-    const triager = triage ? currentTriager(team.triageRotation, new Date()) : null;
-    if (triager) {
-      await transaction.notification.createMany({
-        data: [{ payload, sourceEventId: event.id, teamId: issue.teamId, type: 'bug.reported', userId: triager, workId: issue.id }],
-        skipDuplicates: true,
-      });
-    } else {
-      await projectWorkNotifications(transaction, { eventId: event.id, payload, type: 'bug.reported', work: issue });
-    }
+    await announceBug(transaction, issue, { triage });
     return issue;
   });
 }
@@ -166,4 +143,35 @@ export async function findSimilarBugs(
     .sort((left, right) => right.score - left.score)
     .slice(0, input.limit ?? 5)
     .map((entry) => entry.issue);
+}
+
+/**
+ * Tell the team a bug arrived (INV-749/750/751): the bug.reported outbox event,
+ * and an Inbox notification — to this week's triager for triage, otherwise to
+ * the team's humans. Shared by human reports and agent-filed bugs.
+ */
+export async function announceBug(transaction: Prisma.TransactionClient, issue: Issue, options: { triage: boolean }): Promise<void> {
+  const payload = {
+    identifier: issue.identifier,
+    priority: issue.priority,
+    repository: issue.repository,
+    title: issue.title,
+    triage: options.triage,
+  };
+  const event = await enqueueWorkEvent(transaction, {
+    payload,
+    type: 'bug.reported',
+    workId: issue.id,
+    workIdentifier: issue.identifier,
+  });
+  const team = await transaction.team.findUniqueOrThrow({ where: { id: issue.teamId }, select: { triageRotation: true } });
+  const triager = options.triage ? currentTriager(team.triageRotation, new Date()) : null;
+  if (triager) {
+    await transaction.notification.createMany({
+      data: [{ payload, sourceEventId: event.id, teamId: issue.teamId, type: 'bug.reported', userId: triager, workId: issue.id }],
+      skipDuplicates: true,
+    });
+  } else {
+    await projectWorkNotifications(transaction, { eventId: event.id, payload, type: 'bug.reported', work: issue });
+  }
 }

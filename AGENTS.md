@@ -48,7 +48,7 @@ flowchart TD
 ## 4. Agent Operational Rules
 
 1. **Search Before Proposing**: Always execute `work_search` to avoid duplicate titles or redundant milestones.
-2. **Propose, Never Unilaterally Commit**: Agents propose candidates (`kind: 'MILESTONE'` or `'ISSUE'`); only humans commit them. Specify `initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED'` on `work_propose` so committed items route directly to the proper phase upon human approval.
+2. **Propose, Never Unilaterally Commit**: Agents propose candidates (`kind: 'MILESTONE'` or `'ISSUE'`); only humans commit them. Specify `initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED'` on `work_propose` so committed items route directly to the proper phase upon human approval. **One exception — bugs (decision INV-787, §12.5)**: a bug filed with a parent, a priority and steps to reproduce is committed at once.
 3. **No Scratchpad Pollution**: Do not dump local grep output, shell logs, or transient scratchpad thoughts into Involute. Only track discrete, independently acceptable deliverables.
 4. **Claim-Driven Execution**: Call `work_claim` to lease a specific task after confirmation.
 5. **Report Runs with Evidence**: As execution progresses, record phases with `run_report`. On completion, attach durable evidence (PR, commit SHA, test exit code, or artifact URL) with `evidence_attach`.
@@ -131,7 +131,7 @@ Any bugfix or unplanned modification touching product source code MUST adhere to
      - `related_work_id: <当前处理任务ID 或 所属父里程碑ID>`
      - `related_work_type: 'DISCOVERED_DURING'`
      - `parent_id`：可省略——省略时自动继承被关联项所在的里程碑（同仓库）；跨仓库发现的问题必须显式给出目标仓库的父级（§4.8）
-     - 若是 bug，带 `labels: ['bug']`（即 Type 标签 Bug，见 §12）
+     - 若是 bug，带 `labels: ['bug']`（即 Type 标签 Bug）、`priority`（1–4）与 `steps_to_reproduce`：有父级（显式或继承）时直接承诺，无需人工 commit；缺任一项则进分诊候选（见 §12.5）。当场已修好的再加 `initial_state: 'REVIEW'`
    - 必须自动生成标准的结构化中文描述：
      - `### 1. 目标与架构定位`
      - `### 2. 核心功能与交付范围`
@@ -357,7 +357,8 @@ Involute ships a Linear-style bug pipeline: humans report through the UI, agents
 2. **Discovery by agents**: Every report emits a `bug.reported` inbox notification to team humans **and** a `bug.reported` outbox webhook event (subscribable via `WORK_EVENT_TYPES`), so external agents can discover new bugs and `work_claim` them like any other committed work.
 3. **Fixing agents follow the standard protocol**: claim → `run_report` → `evidence_attach` → In Review. Bugs are ordinary committed issues; `Done` remains strictly human-gated.
 4. **Statistics**: The `/bugs` page (backed by the `bugSummary` query) shows open/closed counts, per-project and per-type-label breakdowns, unclaimed open count, open-age stats, and an 8-week creation trend for triage.
-5. **Agent-discovered bugs**: Bugs an agent finds while working still follow the §7 DISCOVERED_DURING protocol (`work_propose` with `related_work_type: 'DISCOVERED_DURING'`) — the Report Bug UI flow is for human-reported defects.
+5. **Bugs filed by agents (INV-751, decision INV-787)** — whether the agent found it or a person told it: `work_propose` with `labels: ['bug']`, `priority` (1–4) and `steps_to_reproduce`, placed like any work (`parent_id`, or `related_work_id` + `DISCOVERED_DURING` to inherit the parent). **With a parent, a priority and steps it is committed directly** — owner is the agent's human owner, it starts in Ready (or Review with `initial_state: 'REVIEW'` when already fixed), its SLA runs and `bug.reported` + `work.committed` are emitted. Missing any of them, it goes to triage as a candidate and the result says what was missing. Committed bugs are fixed or declined with a reason, never parked (zero-bug).
+6. **Metrics**: `/bugs` (the `bugSummary.metrics` block) adds triage time p50/p90, bugs waiting in triage, SLA met rate, open bugs past their SLA and at risk, source (people / agents / other) and open bugs with no parent (goal 0).
 
 
 ## 13. 可信证据验证（INV-474）
