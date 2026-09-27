@@ -10,6 +10,7 @@ import { DEADLINE_FAILURE_REASON } from './agent-request-expiry.ts';
 import { MAX_HANDOFF_HOPS } from './agent-request-handoff.ts';
 import { answerAgentRequest, claimAgentRequest } from './agent-request-service.ts';
 import { createComment } from './issue-service.ts';
+import { callMcpTool } from './mcp-tools.ts';
 
 loadProjectEnvironment();
 
@@ -45,6 +46,35 @@ describe('successor hand-off (INV-589)', () => {
     const notice = await prisma.comment.findFirstOrThrow({ where: { parentCommentId: rootCommentId } });
     expect(notice.body).toContain('Handed to @kai (its declared successor)');
     expect(notice.body).toContain('in their own name');
+  });
+
+  it('tells the receiver it was handed off, and from whom, in agent_inbox and agent_request_claim (INV-609)', async () => {
+    const { admin, mia, request } = await overdueRequest(prisma);
+    const kai = await agent(prisma, 'kai', admin.id);
+    await prisma.user.update({ where: { id: mia.id }, data: { successorActorId: kai.id } });
+    const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
+    const asAgent = (viewer: User) => ({
+      agentScopes: ['read', 'claim', 'answer'],
+      agentTeamId: team.id,
+      authMode: 'agent-token' as const,
+      isTrustedSystem: false,
+      prisma,
+      viewer,
+    });
+
+    // A2: a request that was not handed off carries nulls.
+    const before = (await callMcpTool(asAgent(mia), 'agent_inbox', {}, false)) as { requests: Array<Record<string, unknown>> };
+    expect(before.requests[0]).toMatchObject({ handed_off_from_id: null, handed_off_from_handle: null, hop_count: null, root_request_id: null });
+
+    await expireOverdueAgentRequests(prisma);
+
+    // A1: the successor sees where it came from.
+    const inbox = (await callMcpTool(asAgent(kai), 'agent_inbox', {}, false)) as { requests: Array<Record<string, unknown>> };
+    expect(inbox.requests).toHaveLength(1);
+    expect(inbox.requests[0]).toMatchObject({ handed_off_from_id: request.id, handed_off_from_handle: 'mia', hop_count: 1, root_request_id: request.id });
+
+    const claimed = (await callMcpTool(asAgent(kai), 'agent_request_claim', { id: inbox.requests[0]!.id }, false)) as Record<string, unknown>;
+    expect(claimed).toMatchObject({ handed_off_from_id: request.id, handed_off_from_handle: 'mia', hop_count: 1 });
   });
 
   it('falls back to the owner, then to team owners, when there is no eligible successor', async () => {

@@ -105,6 +105,44 @@ export interface AgentInboxItem {
   state: A2aRequestState;
   workId: string;
   workIdentifier: string;
+  /** Set only on a request handed off from another (INV-609); null otherwise. */
+  handOff: HandOffOrigin | null;
+}
+
+/**
+ * Where a handed-off request came from (INV-609), so whoever receives it can
+ * answer in their own name and say who they stand in for (docs/54 §D).
+ */
+export interface HandOffOrigin {
+  handedOffFromId: string;
+  /** The previous target's handle — "standing in for @ada". Null if it had none. */
+  handedOffFromHandle: string | null;
+  hopCount: number;
+  rootRequestId: string | null;
+}
+
+/** The hand-off origin of each request that has one, keyed by request id. */
+export async function readHandOffOrigins(
+  db: DatabaseClient,
+  requests: Array<Pick<AgentRequest, 'id' | 'handedOffFromId' | 'hopCount' | 'rootRequestId'>>,
+): Promise<Map<string, HandOffOrigin>> {
+  const handedOff = requests.filter((request) => request.handedOffFromId);
+  const origins = new Map<string, HandOffOrigin>();
+  if (handedOff.length === 0) return origins;
+  const previous = await db.agentRequest.findMany({
+    where: { id: { in: handedOff.map((request) => request.handedOffFromId!) } },
+    select: { id: true, targetActor: { select: { handle: true } } },
+  });
+  const handles = new Map(previous.map((request) => [request.id, request.targetActor.handle]));
+  for (const request of handedOff) {
+    origins.set(request.id, {
+      handedOffFromId: request.handedOffFromId!,
+      handedOffFromHandle: handles.get(request.handedOffFromId!) ?? null,
+      hopCount: request.hopCount,
+      rootRequestId: request.rootRequestId,
+    });
+  }
+  return origins;
 }
 
 export interface AgentInboxPage {
@@ -150,6 +188,7 @@ export async function readAgentInbox(
 
   const page = requests.slice(0, take);
   const hasMore = requests.length > take;
+  const origins = await readHandOffOrigins(db, page);
 
   return {
     cursor: hasMore ? page[page.length - 1]?.id ?? null : null,
@@ -164,6 +203,7 @@ export async function readAgentInbox(
       state: toWireState(request.state),
       workId: request.workId,
       workIdentifier: request.work.identifier,
+      handOff: origins.get(request.id) ?? null,
     })),
   };
 }
