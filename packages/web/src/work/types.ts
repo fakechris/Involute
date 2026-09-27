@@ -100,7 +100,7 @@ export interface WorkEvidenceSummary {
   retractReason?: string | null;
   retractedBy?: { id: string; name: string | null; handle: string | null } | null;
   supersededByWork?: { id: string; identifier: string } | null;
-  /** Server observations of this evidence, newest last (INV-474); shown before acceptance (INV-790). */
+  /** Server observations of this evidence, newest first (INV-474); shown before acceptance (INV-790). */
   verifications?: EvidenceVerificationSummary[];
 }
 

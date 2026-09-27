@@ -870,7 +870,7 @@ async function recordStateChangeAcceptance(
       reason: decision.reason,
       reviewerId: input.reviewerId,
       runId: decision.runId,
-      selfReviewed: input.before.assigneeId === input.reviewerId || run?.actorId === input.reviewerId,
+      selfReviewed: input.after.assigneeId === input.reviewerId || run?.actorId === input.reviewerId,
       viaStateChange: true,
     },
     type: 'work.accepted',

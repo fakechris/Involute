@@ -277,9 +277,10 @@ describe('K6 observation UI', () => {
             evidence: [
               {
                 ...bundle.evidence[0]!,
+                // Newest first, as the server returns them.
                 verifications: [
-                  { id: 'v1', status: 'STALE', failureCode: null, observedAt: '2026-08-31T16:00:00.000Z' },
                   { id: 'v2', status: 'VERIFIED', failureCode: null, observedAt: '2026-08-31T17:00:00.000Z' },
+                  { id: 'v1', status: 'STALE', failureCode: null, observedAt: '2026-08-31T16:00:00.000Z' },
                 ],
               },
             ],
@@ -300,6 +301,19 @@ describe('K6 observation UI', () => {
     fireEvent.change(screen.getByLabelText('Why retract https://example.test/pr/1'), { target: { value: 'Wrong PR' } });
     fireEvent.click(confirm);
     await waitFor(() => expect(retract).toHaveBeenCalledWith({ variables: { input: { evidenceId: 'ev-1', reason: 'Wrong PR' } } }));
+  });
+
+  it('keeps the retract form open with an error when the request fails (INV-790)', async () => {
+    const retract = vi.fn().mockRejectedValue(new Error('network down'));
+    apolloMocks.useMutation.mockImplementation((document) =>
+      documentSource(document).includes('mutation EvidenceRetract') ? [retract, { loading: false }] : [vi.fn()],
+    );
+    renderApp({ data: boardQueryResult, loading: false, workContextData: workContextQuery }, ['/work/issue-2']);
+    fireEvent.click(await screen.findByRole('button', { name: 'Retract evidence https://example.test/pr/1' }));
+    fireEvent.change(screen.getByLabelText('Why retract https://example.test/pr/1'), { target: { value: 'Wrong PR' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm retract' }));
+    expect(await screen.findByText('Could not retract this evidence.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirm retract' })).toBeInTheDocument();
   });
 
   it('loads the next candidate page only from the advertised cursor', async () => {

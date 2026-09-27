@@ -46,7 +46,8 @@ const STATUS_CLASS: Record<string, string> = {
 };
 
 export function EvidenceVerificationStatus({ evidence }: { evidence: WorkEvidenceSummary }) {
-  const latest = (evidence.verifications ?? []).at(-1);
+  // The server lists verifications newest first.
+  const latest = (evidence.verifications ?? [])[0];
   if (!latest) return <span className="observation-card__meta">not verified</span>;
   return (
     <span
@@ -80,9 +81,14 @@ export function RetractEvidence({ evidence, onRetracted }: { evidence: WorkEvide
 
   async function submit() {
     setError(null);
-    const result = await runRetract({ variables: { input: { evidenceId: evidence.id, reason: reason.trim() } } });
-    if (!result.data?.evidenceRetract.success) {
-      setError(result.data?.evidenceRetract.message ?? 'Could not retract this evidence.');
+    try {
+      const result = await runRetract({ variables: { input: { evidenceId: evidence.id, reason: reason.trim() } } });
+      if (!result.data?.evidenceRetract.success) {
+        setError(result.data?.evidenceRetract.message ?? 'Could not retract this evidence.');
+        return;
+      }
+    } catch {
+      setError('Could not retract this evidence.');
       return;
     }
     setOpen(false);
