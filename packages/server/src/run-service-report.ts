@@ -386,6 +386,7 @@ export async function moveToInReview(
       teamId: work.teamId,
       type: 'REVIEW',
     },
+    orderBy: { position: 'asc' },
     select: { id: true },
   });
 

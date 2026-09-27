@@ -5,13 +5,22 @@ import { IcoPlus, IcoTeam } from '../components/Icons';
 import { Avatar, Btn } from '../components/Primitives';
 import { AgentsTab } from './AgentsTab';
 import { BugTriageTab } from './BugTriageTab';
+import { AdminsTab, EmailNotificationsField, LabelsTab, ServerFeaturesTab, ServiceActorForm, WorkflowStatesTab } from './WorkspaceSettingsTabs';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { BOARD_PAGE_QUERY, USER_UPDATE_MUTATION, FILE_UPLOAD_MUTATION } from '../board/queries';
 import type { BoardPageQueryData, BoardPageQueryVariables, UserSummary, UserUpdateMutationData, UserUpdateMutationVariables, FileUploadMutationData, FileUploadMutationVariables } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 
-type SettingsTab = 'profile' | 'preferences' | 'access' | 'agents' | 'triage';
+type SettingsTab = 'profile' | 'preferences' | 'access' | 'agents' | 'triage' | 'labels' | 'states' | 'admins' | 'features';
+
+/** Workspace settings for admins (INV-797); the server refuses everyone else. */
+const ADMIN_TABS: ReadonlyArray<{ id: SettingsTab; label: string }> = [
+  { id: 'labels', label: 'Labels' },
+  { id: 'states', label: 'Workflow states' },
+  { id: 'admins', label: 'Admins' },
+  { id: 'features', label: 'Server features' },
+];
 
 const THEME_STORAGE_KEY = 'involute.theme';
 const DENSITY_STORAGE_KEY = 'involute.density';
@@ -43,18 +52,25 @@ const inputStyle: React.CSSProperties = {
 
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchSessionState()
+      .then((session) => { if (!cancelled) setIsAdmin(session.viewer?.globalRole === 'ADMIN'); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
   const requested = searchParams.get('tab');
-  const tab: SettingsTab =
-    requested === 'preferences' || requested === 'access' || requested === 'agents' || requested === 'triage' ? requested : 'profile';
-  const setTab = (next: SettingsTab) => setSearchParams(next === 'profile' ? {} : { tab: next }, { replace: true });
-
   const tabs: Array<{ id: SettingsTab; label: string }> = [
     { id: 'profile', label: 'Profile' },
     { id: 'preferences', label: 'Preferences' },
     { id: 'access', label: 'Members & access' },
     { id: 'agents', label: 'Agents' },
     { id: 'triage', label: 'Bug triage' },
+    ...(isAdmin ? ADMIN_TABS : []),
   ];
+  const tab: SettingsTab = tabs.find((candidate) => candidate.id === requested)?.id ?? 'profile';
+  const setTab = (next: SettingsTab) => setSearchParams(next === 'profile' ? {} : { tab: next }, { replace: true });
 
   return (
     <div style={{ display: 'flex', height: '100%', background: 'var(--bg)' }}>
@@ -98,8 +114,17 @@ export function SettingsPage() {
           {tab === 'profile' && <ProfileTab />}
           {tab === 'preferences' && <PreferencesTab />}
           {tab === 'access' && <AccessTab />}
-          {tab === 'agents' && <AgentsTab />}
+          {tab === 'agents' && (
+            <>
+              <AgentsTab />
+              <ServiceActorForm />
+            </>
+          )}
           {tab === 'triage' && <BugTriageTab />}
+          {tab === 'labels' && <LabelsTab />}
+          {tab === 'states' && <WorkflowStatesTab />}
+          {tab === 'admins' && <AdminsTab />}
+          {tab === 'features' && <ServerFeaturesTab />}
         </div>
       </div>
     </div>
@@ -322,6 +347,9 @@ function PreferencesTab() {
             );
           })}
         </div>
+      </Field>
+      <Field label="Email notifications" hint="Also send inbox notifications to your email address.">
+        <EmailNotificationsField />
       </Field>
       <Field label="Keyboard shortcuts" hint="Enable single-key navigation shortcuts.">
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>

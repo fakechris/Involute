@@ -292,6 +292,10 @@ export interface InReviewPageQueryVariables {
       name?: {
         eq: string;
       };
+      /** Match by lifecycle type; names can be renamed (INV-797). */
+      type?: {
+        eq: 'BACKLOG' | 'UNSTARTED' | 'STARTED' | 'REVIEW' | 'COMPLETED' | 'CANCELED';
+      };
     };
     team?: {
       key?: {

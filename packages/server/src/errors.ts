@@ -130,6 +130,22 @@ export const PROJECT_ALIAS_FORMAT_MESSAGE = 'A project alias is 2 to 10 letters,
 export const PROJECT_ALIAS_KIND_MESSAGE = 'Only a PROJECT can have a reference alias.';
 export const PROJECT_ALIAS_TAKEN_MESSAGE = 'That alias is already a team key or another project\'s alias.';
 
+// Workspace settings (INV-797).
+export const SETTINGS_ADMIN_ONLY_MESSAGE = 'Workspace settings can be changed by admins only.';
+export const LABEL_NOT_FOUND_MESSAGE = 'Label not found.';
+export const LABEL_NAME_INVALID_MESSAGE = 'A label name is 1 to 50 characters.';
+export const LABEL_NAME_TAKEN_MESSAGE = 'A label with that name already exists (names ignore case).';
+export const LABEL_PROTECTED_MESSAGE =
+  'Bug, Feature, Improvement and research are built in: the Type group and the research rules depend on them, so they cannot be renamed or deleted.';
+export const LABEL_TYPE_NAME_RESERVED_MESSAGE = 'Bug, Feature and Improvement are the Type labels; another label cannot take those names.';
+export const USER_NOT_FOUND_MESSAGE = 'User not found.';
+export const WORKFLOW_STATE_NAME_INVALID_MESSAGE = 'A state name is 1 to 40 characters and unique within its team.';
+export const WORKFLOW_STATE_IN_USE_MESSAGE = 'This state still holds work; move that work to another state first.';
+export const WORKFLOW_STATE_LAST_OF_TYPE_MESSAGE =
+  'Each team keeps at least one state of every type: agents and GitHub move work by type, not by name.';
+export const GLOBAL_ROLE_TARGET_HUMAN_MESSAGE = 'Admin rights go to people; agents and services act through their credentials.';
+export const GLOBAL_ROLE_LAST_ADMIN_MESSAGE = 'The workspace needs at least one admin.';
+
 export function createScopeForbiddenError(scope: string): GraphQLError {
   return new GraphQLError(`Agent credential lacks required scope: ${scope}.`, {
     extensions: { code: 'FORBIDDEN' },
@@ -235,6 +251,18 @@ const exposedErrorCodes = new Map<string, string>([
   [PROJECT_ALIAS_FORMAT_MESSAGE, 'BAD_USER_INPUT'],
   [PROJECT_ALIAS_KIND_MESSAGE, 'BAD_USER_INPUT'],
   [PROJECT_ALIAS_TAKEN_MESSAGE, 'BAD_USER_INPUT'],
+  [SETTINGS_ADMIN_ONLY_MESSAGE, 'FORBIDDEN'],
+  [LABEL_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [LABEL_NAME_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [LABEL_NAME_TAKEN_MESSAGE, 'BAD_USER_INPUT'],
+  [LABEL_PROTECTED_MESSAGE, 'BAD_USER_INPUT'],
+  [LABEL_TYPE_NAME_RESERVED_MESSAGE, 'BAD_USER_INPUT'],
+  [USER_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [WORKFLOW_STATE_NAME_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [WORKFLOW_STATE_IN_USE_MESSAGE, 'BAD_USER_INPUT'],
+  [WORKFLOW_STATE_LAST_OF_TYPE_MESSAGE, 'BAD_USER_INPUT'],
+  [GLOBAL_ROLE_TARGET_HUMAN_MESSAGE, 'BAD_USER_INPUT'],
+  [GLOBAL_ROLE_LAST_ADMIN_MESSAGE, 'BAD_USER_INPUT'],
 ]);
 
 export function createNotAuthenticatedError(): GraphQLError {
