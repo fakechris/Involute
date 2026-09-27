@@ -8,6 +8,7 @@ import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
 import { createIssue } from './issue-service.ts';
 import { createWorkLink } from './link-service.ts';
+import { extractIssueIdentifiers, resolveRepoRoute } from './github-repo-routes.ts';
 import { testParentId } from './test-placement.ts';
 
 loadProjectEnvironment();
@@ -658,6 +659,37 @@ describe('work graph GraphQL facade', () => {
     const stale = await update({ expectedRevision: work.revision, scope: 'stale write' });
     expect(stale.body.data.issueUpdate.success).toBe(false);
     expect(stale.body.data.issueUpdate.message).toBeTruthy();
+  });
+
+  it('sets a project alias that routes references, and says why a bad alias is refused (INV-793)', async () => {
+    const project = await projectId(team.id, 'fakechris/alias-test');
+    const setAlias = (id: string, alias: string | null) =>
+      postGraphQL({
+        query: `mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success message issue { alias } } }`,
+        variables: { id, input: { alias } },
+      });
+
+    const saved = await setAlias(project, ' lum ');
+    expectGraphQLSuccess(saved);
+    expect(saved.body.data.issueUpdate).toEqual({ success: true, message: null, issue: { alias: 'LUM' } });
+    const route = await resolveRepoRoute(prisma, 'fakechris/alias-test');
+    expect(route?.alias).toBe('LUM');
+    expect(extractIssueIdentifiers('fix LUM-12', route!)).toEqual(['LUM-12']);
+
+    for (const [alias, reason] of [['L1', 'letters'], [team.key.toLowerCase(), 'already'], ['X', 'letters']] as const) {
+      const refused = await setAlias(project, alias);
+      expect(refused.body.data.issueUpdate.success, alias).toBe(false);
+      expect(refused.body.data.issueUpdate.message, alias).toContain(reason);
+    }
+
+    const other = await projectId(team.id, 'fakechris/alias-other');
+    expect((await setAlias(other, 'Lum')).body.data.issueUpdate.message).toContain('already');
+
+    const issue = await createIssue(prisma, { teamId: team.id, title: 'Not a project', parentId: project, repository: 'fakechris/alias-test' });
+    expect((await setAlias(issue.id, 'ABC')).body.data.issueUpdate.message).toContain('Only a PROJECT');
+
+    const cleared = await setAlias(project, null);
+    expect(cleared.body.data.issueUpdate).toMatchObject({ success: true, issue: { alias: null } });
   });
 
   it('rejects candidates and lets issues filter by commitmentStatus', async () => {

@@ -21,6 +21,9 @@ import {
   WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE,
   WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE,
   WORK_CONTRACT_UPDATE_FORBIDDEN_MESSAGE,
+  PROJECT_ALIAS_FORMAT_MESSAGE,
+  PROJECT_ALIAS_KIND_MESSAGE,
+  PROJECT_ALIAS_TAKEN_MESSAGE,
   WORK_REVISION_CONFLICT_MESSAGE,
   PROJECT_NOT_FOUND_MESSAGE,
   CYCLE_NOT_FOUND_MESSAGE,
@@ -497,7 +500,7 @@ export async function updateIssue(
     }
 
     if ('alias' in input) {
-      data.alias = input.alias ?? null;
+      data.alias = await validProjectAlias(transaction, existingIssue, input);
     }
 
     if ('kind' in input && input.kind) {
@@ -591,6 +594,30 @@ export async function updateIssue(
 }
 
 /** The fields whose references to other work become RELATED_TO edges (INV-720). */
+/**
+ * A PROJECT's reference alias (INV-459, INV-793): PRs may reference its work as
+ * `<ALIAS>-123`. The CI lint and the webhook match letter prefixes only, and a
+ * prefix must point at one place, so an alias is 2 to 10 letters (stored
+ * uppercase), belongs to a PROJECT, and is neither a team key nor another
+ * project's alias. Empty clears it.
+ */
+async function validProjectAlias(
+  db: Prisma.TransactionClient,
+  existing: Pick<Issue, 'id' | 'kind'>,
+  input: Pick<UpdateIssueInput, 'alias' | 'kind'>,
+): Promise<string | null> {
+  const alias = input.alias?.trim().toUpperCase() ?? '';
+  if (!alias) return null;
+  if (!/^[A-Z]{2,10}$/.test(alias)) throw createValidationError(PROJECT_ALIAS_FORMAT_MESSAGE);
+  if ((input.kind ?? existing.kind) !== 'PROJECT') throw createValidationError(PROJECT_ALIAS_KIND_MESSAGE);
+  const [team, project] = await Promise.all([
+    db.team.findFirst({ where: { key: { equals: alias, mode: 'insensitive' } }, select: { id: true } }),
+    db.issue.findFirst({ where: { alias: { equals: alias, mode: 'insensitive' }, id: { not: existing.id } }, select: { id: true } }),
+  ]);
+  if (team || project) throw createValidationError(PROJECT_ALIAS_TAKEN_MESSAGE);
+  return alias;
+}
+
 export function mentionTexts(issue: Pick<Issue, 'description' | 'outcome' | 'scope' | 'constraints' | 'acceptance' | 'verification'>): Array<string | null> {
   return [issue.description, issue.outcome, issue.scope, issue.constraints, issue.acceptance, issue.verification];
 }

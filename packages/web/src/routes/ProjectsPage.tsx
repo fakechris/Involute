@@ -116,6 +116,9 @@ function ProjectProgressBar({
   );
 }
 
+const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+const ALIAS_PATTERN = /^[A-Z]{2,10}$/;
+
 export function ProjectsPage() {
   const navigate = useNavigate();
   const teamKey = readStoredTeamKey();
@@ -126,6 +129,14 @@ export function ProjectsPage() {
   const [formDesc, setFormDesc] = useState('');
   const [formStateId, setFormStateId] = useState('');
   const [formLeadId, setFormLeadId] = useState('');
+  // GitHub routing (INV-793): which repository the project owns, and the
+  // extra reference prefix its PRs may use (LUM-398 for lumenbox).
+  const [formRepository, setFormRepository] = useState('');
+  const [formAlias, setFormAlias] = useState('');
+  const [formCascade, setFormCascade] = useState(true);
+  const [editingOriginal, setEditingOriginal] = useState<{ repository: string; alias: string } | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const { data: boardData } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
     variables: { first: 1, ...(teamKey ? { filter: { team: { key: { eq: teamKey } } } } : {}) },
@@ -156,6 +167,11 @@ export function ProjectsPage() {
     setFormDesc('');
     setFormStateId(teamStates[0]?.id ?? '');
     setFormLeadId('');
+    setFormRepository('');
+    setFormAlias('');
+    setFormCascade(true);
+    setEditingOriginal(null);
+    setFormError(null);
     dialogRef.current?.showModal();
   }
 
@@ -166,47 +182,92 @@ export function ProjectsPage() {
     setFormDesc(project.description ?? '');
     setFormStateId(project.state?.id ?? '');
     setFormLeadId(project.assignee?.id ?? '');
+    setFormRepository(project.repository ?? '');
+    setFormAlias(project.alias ?? '');
+    setFormCascade(true);
+    setEditingOriginal({ repository: project.repository ?? '', alias: project.alias ?? '' });
+    setFormError(null);
     dialogRef.current?.showModal();
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!formName.trim()) return;
-
-    if (dialogMode === 'create') {
-      const targetStateId = formStateId || teamStates[0]?.id;
-      const input: IssueCreateMutationVariables['input'] = {
-        teamId,
-        title: formName.trim(),
-        description: formDesc || null,
-        kind: 'PROJECT',
-        assigneeId: formLeadId || null,
-      };
-      if (targetStateId) {
-        input.stateId = targetStateId;
-      }
-      await runCreate({
-        variables: { input },
-        refetchQueries: [{ query: PROJECT_ISSUES_QUERY, variables: { teamKey: currentTeamKey } }],
-      });
-    } else if (selectedProjectId) {
-      const input: IssueUpdateMutationVariables['input'] = {
-        title: formName.trim(),
-        description: formDesc || null,
-        assigneeId: formLeadId || null,
-      };
-      if (formStateId) {
-        input.stateId = formStateId;
-      }
-      await runUpdate({
-        variables: {
-          id: selectedProjectId,
-          input,
-        },
-        refetchQueries: [{ query: PROJECT_ISSUES_QUERY, variables: { teamKey: currentTeamKey } }],
-      });
+    const repository = formRepository.trim();
+    const alias = formAlias.trim().toUpperCase();
+    if (repository && !REPOSITORY_PATTERN.test(repository)) {
+      setFormError('Repository is owner/name, such as fakechris/lumenbox.');
+      return;
     }
-    dialogRef.current?.close();
+    if (alias && !ALIAS_PATTERN.test(alias)) {
+      setFormError('Alias is 2 to 10 letters, such as LUM.');
+      return;
+    }
+    setFormError(null);
+    setSaving(true);
+    const refetchQueries = [{ query: PROJECT_ISSUES_QUERY, variables: { teamKey: currentTeamKey } }];
+
+    try {
+      let projectId = selectedProjectId;
+      if (dialogMode === 'create') {
+        const targetStateId = formStateId || teamStates[0]?.id;
+        const input: IssueCreateMutationVariables['input'] = {
+          teamId,
+          title: formName.trim(),
+          description: formDesc || null,
+          kind: 'PROJECT',
+          assigneeId: formLeadId || null,
+          ...(repository ? { repository } : {}),
+        };
+        if (targetStateId) {
+          input.stateId = targetStateId;
+        }
+        const created = await runCreate({ variables: { input }, refetchQueries });
+        const payload = created.data?.issueCreate;
+        if (!payload?.success || !payload.issue) {
+          setFormError(payload?.message ?? 'The project was not created.');
+          return;
+        }
+        projectId = payload.issue.id;
+        // issueCreate has no alias; set it on the new project.
+        if (alias) {
+          const aliased = await runUpdate({ variables: { id: projectId, input: { alias } }, refetchQueries });
+          if (!aliased.data?.issueUpdate.success) {
+            setFormError(`The project was created, but its alias was not saved: ${aliased.data?.issueUpdate.message ?? 'refused.'}`);
+            setDialogMode('edit');
+            setSelectedProjectId(projectId);
+            setEditingOriginal({ repository, alias: '' });
+            return;
+          }
+        }
+      } else if (projectId) {
+        const input: IssueUpdateMutationVariables['input'] = {
+          title: formName.trim(),
+          description: formDesc || null,
+          assigneeId: formLeadId || null,
+        };
+        if (formStateId) {
+          input.stateId = formStateId;
+        }
+        if (repository !== (editingOriginal?.repository ?? '')) {
+          input.repository = repository || null;
+          input.cascadeRepository = formCascade;
+        }
+        if (alias !== (editingOriginal?.alias ?? '')) {
+          input.alias = alias || null;
+        }
+        const updated = await runUpdate({ variables: { id: projectId, input }, refetchQueries });
+        if (!updated.data?.issueUpdate.success) {
+          setFormError(updated.data?.issueUpdate.message ?? 'The project was not saved.');
+          return;
+        }
+      }
+      dialogRef.current?.close();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'The project was not saved.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleDelete(projectId: string) {
@@ -218,15 +279,112 @@ export function ProjectsPage() {
     if (selectedProjectId === projectId) setSelectedProjectId(null);
   }
 
+  // Rendered in both views: Edit lives in the detail view's menu (INV-793).
+  const projectDialog = (
+    <dialog ref={dialogRef} className="dialog-modal" onClick={(e) => { if (e.target === dialogRef.current) dialogRef.current?.close(); }}>
+      <form onSubmit={handleSubmit} style={{ padding: 20, minWidth: 380 }}>
+        <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 500 }}>
+          {dialogMode === 'create' ? 'New project' : 'Edit project'}
+        </h3>
+        <label style={{ display: 'block', marginBottom: 12 }}>
+          <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Name</span>
+          <input
+            style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)' }}
+            value={formName}
+            onChange={(e) => setFormName(e.target.value)}
+            placeholder="Project name"
+            required
+          />
+        </label>
+        <label style={{ display: 'block', marginBottom: 12 }}>
+          <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Description</span>
+          <textarea
+            style={{ width: '100%', height: 60, padding: '6px 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)', resize: 'vertical' }}
+            value={formDesc}
+            onChange={(e) => setFormDesc(e.target.value)}
+            placeholder="Optional description"
+          />
+        </label>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
+          <label style={{ flex: 2 }}>
+            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>GitHub repository</span>
+            <input
+              aria-label="GitHub repository"
+              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)' }}
+              value={formRepository}
+              onChange={(e) => setFormRepository(e.target.value)}
+              placeholder="owner/name"
+            />
+          </label>
+          <label style={{ flex: 1 }}>
+            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Reference alias</span>
+            <input
+              aria-label="Reference alias"
+              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)', textTransform: 'uppercase' }}
+              value={formAlias}
+              onChange={(e) => setFormAlias(e.target.value)}
+              placeholder="e.g. LUM"
+            />
+          </label>
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--fg-dim)', margin: '0 0 12px', lineHeight: 1.4 }}>
+          PRs and branches in this repository are routed to this project. With an alias, they may reference work as{' '}
+          <span className="mono">{(formAlias.trim() || 'ALIAS').toUpperCase()}-123</span> as well as by the team key.
+        </p>
+        {dialogMode === 'edit' && editingOriginal?.repository && formRepository.trim() !== editingOriginal.repository ? (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 14 }}>
+            <input type="checkbox" checked={formCascade} onChange={(e) => setFormCascade(e.target.checked)} />
+            Move the project&apos;s work from {editingOriginal.repository} to the new repository too
+          </label>
+        ) : null}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+          <label style={{ flex: 1 }}>
+            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Status</span>
+            <select
+              style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
+              value={formStateId}
+              onChange={(e) => setFormStateId(e.target.value)}
+            >
+              {teamStates.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </label>
+          <label style={{ flex: 1 }}>
+            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Lead</span>
+            <select
+              style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
+              value={formLeadId}
+              onChange={(e) => setFormLeadId(e.target.value)}
+            >
+              <option value="">No lead</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email ?? u.id}</option>)}
+            </select>
+          </label>
+        </div>
+        {formError ? (
+          <p role="alert" style={{ fontSize: 14, color: 'var(--danger)', margin: '0 0 12px' }}>{formError}</p>
+        ) : null}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button type="button" className="btn btn--subtle btn--md" onClick={() => dialogRef.current?.close()}>Cancel</button>
+          <button type="submit" className="btn btn--accent btn--md" disabled={saving}>
+            {dialogMode === 'create' ? 'Create' : 'Save'}
+          </button>
+        </div>
+      </form>
+    </dialog>
+  );
+
   if (selectedProject) {
     return (
-      <ProjectDetailView
-        project={selectedProject}
-        onBack={() => setSelectedProjectId(null)}
-        onEdit={() => openEditDialog(selectedProject)}
-        onDelete={() => handleDelete(selectedProject.id)}
-        navigate={navigate}
-      />
+      <>
+        <ProjectDetailView
+          project={selectedProject}
+          onBack={() => setSelectedProjectId(null)}
+          onEdit={() => openEditDialog(selectedProject)}
+          onDelete={() => handleDelete(selectedProject.id)}
+          navigate={navigate}
+        />
+        {projectDialog}
+      </>
     );
   }
 
@@ -302,6 +460,11 @@ export function ProjectsPage() {
                           {project.repository.includes('/') ? project.repository.split('/')[1] : project.repository}
                         </span>
                       )}
+                      {project.alias && (
+                        <span className="mono" title={`PRs may reference this project's work as ${project.alias}-123`} style={{ fontSize: 12, color: 'var(--fg-dim)' }}>
+                          {project.alias}
+                        </span>
+                      )}
                     </div>
 
                     <ProjectProgressBar issues={childIssues} />
@@ -371,61 +534,7 @@ export function ProjectsPage() {
         )}
       </div>
 
-      <dialog ref={dialogRef} className="dialog-modal" onClick={(e) => { if (e.target === dialogRef.current) dialogRef.current?.close(); }}>
-        <form onSubmit={handleSubmit} style={{ padding: 20, minWidth: 380 }}>
-          <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 500 }}>
-            {dialogMode === 'create' ? 'New project' : 'Edit project'}
-          </h3>
-          <label style={{ display: 'block', marginBottom: 12 }}>
-            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Name</span>
-            <input
-              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)' }}
-              value={formName}
-              onChange={(e) => setFormName(e.target.value)}
-              placeholder="Project name"
-              required
-            />
-          </label>
-          <label style={{ display: 'block', marginBottom: 12 }}>
-            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Description</span>
-            <textarea
-              style={{ width: '100%', height: 60, padding: '6px 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)', resize: 'vertical' }}
-              value={formDesc}
-              onChange={(e) => setFormDesc(e.target.value)}
-              placeholder="Optional description"
-            />
-          </label>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-            <label style={{ flex: 1 }}>
-              <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Status</span>
-              <select
-                style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
-                value={formStateId}
-                onChange={(e) => setFormStateId(e.target.value)}
-              >
-                {teamStates.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </label>
-            <label style={{ flex: 1 }}>
-              <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Lead</span>
-              <select
-                style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
-                value={formLeadId}
-                onChange={(e) => setFormLeadId(e.target.value)}
-              >
-                <option value="">No lead</option>
-                {users.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email ?? u.id}</option>)}
-              </select>
-            </label>
-          </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn--subtle btn--md" onClick={() => dialogRef.current?.close()}>Cancel</button>
-            <button type="submit" className="btn btn--accent btn--md">
-              {dialogMode === 'create' ? 'Create' : 'Save'}
-            </button>
-          </div>
-        </form>
-      </dialog>
+      {projectDialog}
     </div>
   );
 }
@@ -480,7 +589,7 @@ function ProjectDetailView({
           Work context
         </Btn>
         <div style={{ position: 'relative' }}>
-          <Btn variant="ghost" icon={<IcoMore size={14} />} size="sm" onClick={() => setMenuOpen(!menuOpen)} />
+          <Btn variant="ghost" icon={<IcoMore size={14} />} size="sm" title="Project actions" onClick={() => setMenuOpen(!menuOpen)} />
           {menuOpen && (
             <div style={{
               position: 'absolute', top: '100%', right: 0, marginTop: 4,
@@ -524,6 +633,8 @@ function ProjectDetailView({
               Lead: {project.assignee.name}
             </span>
           )}
+          {project.repository && <span>Repository: {project.repository}</span>}
+          {project.alias && <span>Alias: <span className="mono">{project.alias}</span></span>}
           <span>{issues.length} child issues (CONTAINS)</span>
         </div>
 
