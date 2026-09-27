@@ -810,6 +810,7 @@ export const PROJECT_ISSUES_QUERY = gql`
         priority
         kind
         repository
+        alias
         createdAt
         updatedAt
         state {

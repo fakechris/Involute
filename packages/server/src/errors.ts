@@ -125,6 +125,11 @@ export const AGENT_DESCRIPTION_REQUIRED_MESSAGE =
 // agents see exactly which term failed to parse.
 export const IQL_PARSE_ERROR_PREFIX = 'Invalid IQL query:';
 
+// Project reference alias (INV-793): the prefix PRs may use instead of the team key.
+export const PROJECT_ALIAS_FORMAT_MESSAGE = 'A project alias is 2 to 10 letters, such as LUM.';
+export const PROJECT_ALIAS_KIND_MESSAGE = 'Only a PROJECT can have a reference alias.';
+export const PROJECT_ALIAS_TAKEN_MESSAGE = 'That alias is already a team key or another project\'s alias.';
+
 // Workspace settings (INV-797).
 export const SETTINGS_ADMIN_ONLY_MESSAGE = 'Workspace settings can be changed by admins only.';
 export const LABEL_NOT_FOUND_MESSAGE = 'Label not found.';
@@ -243,6 +248,9 @@ const exposedErrorCodes = new Map<string, string>([
   [NOTIFICATION_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [SNOOZE_REQUIRES_CANDIDATE_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_DESCRIPTION_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [PROJECT_ALIAS_FORMAT_MESSAGE, 'BAD_USER_INPUT'],
+  [PROJECT_ALIAS_KIND_MESSAGE, 'BAD_USER_INPUT'],
+  [PROJECT_ALIAS_TAKEN_MESSAGE, 'BAD_USER_INPUT'],
   [SETTINGS_ADMIN_ONLY_MESSAGE, 'FORBIDDEN'],
   [LABEL_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [LABEL_NAME_INVALID_MESSAGE, 'BAD_USER_INPUT'],

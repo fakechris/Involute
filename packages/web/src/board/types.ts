@@ -463,6 +463,9 @@ export interface IssueUpdateMutationVariables {
     cycleId?: string | null;
     parentId?: string | null;
     repository?: string | null;
+    /** Move the CONTAINS subtree to the new repository too. */
+    cascadeRepository?: boolean;
+    alias?: string | null;
     kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
     outcome?: string | null;
     scope?: string | null;
@@ -650,6 +653,8 @@ export interface ProjectIssueSummary {
   title: string;
   description?: string | null;
   repository?: string | null;
+  /** Reference prefix PRs may use instead of the team key, e.g. LUM (INV-459). */
+  alias?: string | null;
   priority: number;
   kind: 'PROJECT';
   createdAt: string;
