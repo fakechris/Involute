@@ -779,7 +779,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_claim',
     annotations: { readOnlyHint: false, destructiveHint: false },
-    description: 'Atomically claim committed work for the current actor. Does not change the human assignee. The response includes suggested_branch — a harness-issued branch name you MUST use verbatim for your git branch; never invent branch names containing issue identifiers.',
+    description: 'Atomically claim committed work for the current actor. Does not change the human assignee. The response includes suggested_branch — a harness-issued branch name you MUST use verbatim for your git branch; never invent branch names containing issue identifiers. Work in Backlog is not claimable until it is in Ready: move it with work_update (state "UNSTARTED"). A refusal says which rule failed and what to do.',
     inputSchema: {
       type: 'object',
       properties: {

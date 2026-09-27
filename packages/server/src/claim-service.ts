@@ -25,7 +25,6 @@ import {
   WORK_COMMIT_PARENT_CONFLICT_MESSAGE,
   WORK_NOT_CANDIDATE_MESSAGE,
   WORK_NOT_COMMITTED_MESSAGE,
-  WORK_NOT_READY_MESSAGE,
   WORK_OWNER_MUST_BE_HUMAN_MESSAGE,
   WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE,
   WORK_READY_STATE_MISSING_MESSAGE,
@@ -36,7 +35,8 @@ import {
   AGENT_DESCRIPTION_REQUIRED_MESSAGE,
   WORKFLOW_STATE_NOT_FOUND_MESSAGE,
 } from './errors.js';
-import { findWorkByIdOrIdentifier, isWorkReadyForClaim } from './context-service.js';
+import { findWorkByIdOrIdentifier, explainWorkNotReady,
+  isWorkReadyForClaim } from './context-service.js';
 import { enqueueWorkEvent } from './event-outbox.js';
 import { attachDecisionReceipt, type ReceiptInput } from './decision-receipt.js';
 import { createWorkLink } from './link-service.js';
@@ -782,7 +782,7 @@ export async function claimWork(
       currentClaim && currentClaim.actorId === actor.actorId && currentClaim.leaseUntil > new Date(),
     );
     if (!renewingOwnClaim && !(await isWorkReadyForClaim(transaction, work.id))) {
-      throw createValidationError(WORK_NOT_READY_MESSAGE);
+      throw createValidationError(await explainWorkNotReady(transaction, work.id));
     }
 
     let idempotencyId: string | null = null;
