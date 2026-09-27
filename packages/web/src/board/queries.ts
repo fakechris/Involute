@@ -340,6 +340,16 @@ export const ISSUE_PAGE_QUERY = gql`
       priority
       kind
       repository
+      claim {
+        id
+        leaseUntil
+        actor {
+          id
+          name
+          email
+          actorKind
+        }
+      }
       commitmentStatus
       outcome
       scope
@@ -1389,6 +1399,16 @@ export const TEAM_TRIAGE_QUERY = gql`
 export const TEAM_TRIAGE_ROTATION_MUTATION = gql`
   mutation TeamTriageRotationUpdate($input: TeamTriageRotationInput!) {
     teamTriageRotationUpdate(input: $input) {
+      success
+      message
+    }
+  }
+`;
+
+// A person ends an agent's claim now, with a reason (INV-789).
+export const WORK_CLAIM_RELEASE_MUTATION = gql`
+  mutation WorkClaimRelease($workId: String!, $reason: String!) {
+    workClaimRelease(workId: $workId, reason: $reason) {
       success
       message
     }

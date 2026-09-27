@@ -42,6 +42,7 @@ import { ContractSection, type ContractValues } from '../components/ContractSect
 import { IssueRelations } from '../components/IssueRelations';
 import { AddSubIssueButton } from '../components/AddSubIssueButton';
 import { BugSlaBadge } from '../components/BugSlaBadge';
+import { ClaimControl } from '../components/ClaimControl';
 import { mergeIssueWithPreservedComments } from '../board/utils';
 import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
@@ -793,6 +794,11 @@ export function IssuePage() {
               saving={isSavingState}
               onSave={(changes) => persistContractChange(activeIssue, changes)}
             />
+            <div className="issue-panel__section">
+              <h2>Claim</h2>
+              <ClaimControl workId={activeIssue.id} claim={activeIssue.claim} />
+            </div>
+
             {activeIssue.bugSla ? (
               <div className="issue-panel__section">
                 <h2>Bug SLA</h2>

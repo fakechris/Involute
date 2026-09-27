@@ -6311,3 +6311,12 @@ a.bugs-stat {
   gap: 6px;
   align-items: center;
 }
+
+/* Claim holder and release (INV-789). */
+.claim-control {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+}

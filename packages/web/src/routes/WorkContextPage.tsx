@@ -5,6 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { IcoChevL } from '../components/Icons';
 import { Btn } from '../components/Primitives';
 import { EvidenceVerificationStatus, RetractEvidence, RunBinding } from '../components/ReviewEvidence';
+import { ClaimControl } from '../components/ClaimControl';
 import { WORK_CONTEXT_PAGE_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
 import type {
   ReceiptReferenceSummary,
@@ -191,13 +192,7 @@ export function WorkContextPage() {
         <RelatedList label="Blocks" items={bundle.blocks} onOpen={(workId) => navigate(`/work/${workId}`)} />
         <section className="work-context__section">
           <h2>Claim</h2>
-          {bundle.claim ? (
-            <p>
-              {bundle.claim.actor.name ?? bundle.claim.actor.email ?? 'Actor'} until {formatWhen(bundle.claim.leaseUntil)}
-            </p>
-          ) : (
-            <p className="observation-empty">Unclaimed</p>
-          )}
+          <ClaimControl workId={bundle.work.id} claim={bundle.claim} />
         </section>
         {work.state.type === 'REVIEW' ? (
           <section className="work-context__section" aria-label="Human review">

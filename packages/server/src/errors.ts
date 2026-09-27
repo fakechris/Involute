@@ -73,6 +73,9 @@ export const BUG_PROPOSE_OWNER_REQUIRED_MESSAGE =
 export const BUG_REJECT_REASON_REQUIRED_MESSAGE = 'Declining a bug needs a reason (zero-bug: fix it or say why not).';
 export const BUG_NO_BACKLOG_MESSAGE = 'Bugs do not go to the backlog (zero-bug): commit to fixing it, or decline it with a reason.';
 export const TRIAGE_ROTATION_INVALID_MESSAGE = 'A triage rotation lists human members of the team and a valid start date.';
+export const CLAIM_RELEASE_FORBIDDEN_MESSAGE = 'Only a person can release a claim.';
+export const CLAIM_RELEASE_REASON_REQUIRED_MESSAGE = 'Releasing a claim needs a reason; the agent and its owner are told.';
+export const CLAIM_RELEASE_NO_CLAIM_MESSAGE = 'This work has no claim to release.';
 export const ISSUE_CREATE_REQUIRES_PARENT_MESSAGE =
   'New work requires a parent: choose its project (No milestone), a MILESTONE, EPIC or parent ISSUE. Only a PROJECT is created without one.';
 export const WORK_COMMIT_PARENT_CONFLICT_MESSAGE =
@@ -171,6 +174,9 @@ const exposedErrorCodes = new Map<string, string>([
   [WORK_COMMIT_PARENT_REJECTED_MESSAGE, 'BAD_USER_INPUT'],
   [ISSUE_CREATE_REQUIRES_PARENT_MESSAGE, 'BAD_USER_INPUT'],
   [ISSUE_TYPE_EXCLUSIVE_MESSAGE, 'BAD_USER_INPUT'],
+  [CLAIM_RELEASE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
+  [CLAIM_RELEASE_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [CLAIM_RELEASE_NO_CLAIM_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_COMMIT_PRIORITY_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_PROPOSE_PRIORITY_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_PROPOSE_PARENT_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],

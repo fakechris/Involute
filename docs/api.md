@@ -444,6 +444,8 @@ Agent-filed bugs (INV-751 / decision INV-787): `workPropose` / `work_propose` ac
 
 A person moving work into a Done (COMPLETED) state through `issueUpdate` — status dropdown, drawer, board drag or API — is an acceptance (INV-790): it records an `ACCEPTED` review decision bound to the latest completed run and emits `work.accepted` (payload `viaStateChange: true`), exactly like `workReview`. `Issue.contractDigest` is the current contract hash; a run whose `contractRevision` differs ran against an older contract. `workReview`, `workReject` and `evidenceRetract` return the refusal reason in `message`.
 
+`workClaimRelease(workId, reason)` (INV-789): a person ends an agent's claim now instead of waiting for the lease. Open runs under the claim are closed as `FAILED` ("Claim released by …: reason"), so the agent's next `run_report` is refused; the holder and its owner get a `work.claim_released` Inbox notification and outbox event; the work can be claimed again. Agents cannot release claims (`FORBIDDEN`); a reason is required.
+
 Updates any combination of:
 
 - `stateId`
