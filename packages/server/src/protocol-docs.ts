@@ -20,6 +20,7 @@ primary entrypoint; the web board is an observation and governance surface.
 7. Ready project selectors accept a Work Graph PROJECT UUID/identifier or a legacy Project UUID. A PROJECT with a repository shares the repository query scope; a PROJECT without one uses its CONTAINS/parentId subtree. Ambiguous repository declarations or conflicting selectors fail. Ready stays all-kind unless explicitly filtered (e.g. kind:ISSUE).
 8. Pass \`expected_revision\` on updates; conflicts mean someone moved first — re-read.
 9. Every production code modification MUST be bound to an Involute work item (INV-xxx). Unlinked PRs are blocked by CI offline lint and synchronized via GitHub Webhooks.
+10. A change that makes something a person's job (a rule refusing agents, a mutation, a notification sent to people) ships with the web screen where a person does it, registered in \`packages/server/src/human-surface.ts\`. A field agents can write through MCP must be writable through GraphQL too. \`human-surface.test.ts\` and \`mcp-graphql-parity.test.ts\` fail otherwise (INV-795).
 
 ## Work-graph norm v1 (INV-718)
 
