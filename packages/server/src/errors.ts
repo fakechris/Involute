@@ -97,6 +97,19 @@ export const WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE =
   'Idempotent operation result is no longer available.';
 export const WORK_ALREADY_CLAIMED_MESSAGE = 'Work is already claimed.';
 export const WORK_NOT_READY_MESSAGE = 'Work is not ready to be claimed.';
+// Why it is not ready, and what to do about it (INV-808): one generic refusal
+// left agents guessing — a Backlog item looked unclaimable when one work_update
+// would have made it ready.
+export const WORK_NOT_READY_STATE_MESSAGE =
+  'Work is not ready to be claimed: it is not in Ready or In Progress (for example it is in Backlog). Move it to Ready first: MCP work_update with state "UNSTARTED", or the state menu in the web app.';
+export const WORK_NOT_READY_ACCEPTANCE_MESSAGE =
+  'Work is not ready to be claimed: it has no acceptance criteria. Add them first (work_update acceptance).';
+export const WORK_NOT_READY_OWNER_MESSAGE =
+  'Work is not ready to be claimed: it is not assigned to a person. Assign it in the web app first.';
+export const WORK_NOT_READY_BLOCKED_MESSAGE =
+  'Work is not ready to be claimed: an open item blocks it. Finish the blocker, or remove the BLOCKS link if it no longer applies.';
+export const WORK_NOT_READY_LABEL_MESSAGE =
+  'Work is not ready to be claimed: it carries the "blocked" or "needs-clarification" label. Remove the label once it is resolved.';
 export const WORK_CLAIM_REQUIRES_ACTOR_MESSAGE = 'Claiming work requires an authenticated actor.';
 export const WORK_RELATED_NOT_FOUND_MESSAGE = 'Related work not found.';
 export const WORK_RUN_NOT_FOUND_MESSAGE =
@@ -236,6 +249,11 @@ const exposedErrorCodes = new Map<string, string>([
   [WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_ALREADY_CLAIMED_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_NOT_READY_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_NOT_READY_STATE_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_NOT_READY_ACCEPTANCE_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_NOT_READY_OWNER_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_NOT_READY_BLOCKED_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_NOT_READY_LABEL_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_CLAIM_REQUIRES_ACTOR_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_RELATED_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [WORK_RUN_NOT_FOUND_MESSAGE, 'NOT_FOUND'],

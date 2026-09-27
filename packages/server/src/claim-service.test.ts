@@ -678,6 +678,43 @@ describe('claim service', () => {
       expect(committed.stateId).toBe(backlogState.id);
     });
 
+    it('says why Backlog work cannot be claimed, and an agent can move it to Ready and claim it (INV-808)', async () => {
+      const candidate = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id,
+        title: 'Parked in backlog',
+        initialState: 'BACKLOG',
+      });
+      const committed = await commitWork(
+        prisma,
+        candidate.id,
+        { acceptance: 'Claimable once ready', assigneeId: human.id, expectedRevision: candidate.revision },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'web' },
+      );
+      const asAgent = { actorId: agent.id, actorKind: 'AGENT' as const, surface: 'test' as const };
+      await expect(claimWork(prisma, committed.id, {}, asAgent)).rejects.toThrow(/in Backlog\). Move it to Ready first: MCP work_update with state "UNSTARTED"/);
+
+      const ready = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'UNSTARTED' }, orderBy: { position: 'asc' } });
+      await updateIssue(prisma, committed.id, { stateId: ready.id }, asAgent);
+      const claimed = await claimWork(prisma, committed.id, {}, asAgent);
+      expect(claimed.claim.actorId).toBe(agent.id);
+    });
+
+    it('names the missing owner or the blocker instead of a bare "not ready" (INV-808)', async () => {
+      const asAgent = { actorId: agent.id, actorKind: 'AGENT' as const, surface: 'test' as const };
+      const make = async (title: string) => {
+        const proposed = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title });
+        return commitWork(prisma, proposed.id, { acceptance: 'done', assigneeId: human.id, expectedRevision: proposed.revision },
+          { actorId: human.id, actorKind: 'HUMAN', surface: 'web' });
+      };
+      const unowned = await make('No owner');
+      await prisma.issue.update({ where: { id: unowned.id }, data: { assigneeId: null } });
+      await expect(claimWork(prisma, unowned.id, {}, asAgent)).rejects.toThrow(/not assigned to a person/);
+
+      const blocker = await make('Blocker');
+      const blocked = await make('Blocked');
+      await prisma.workLink.create({ data: { type: 'BLOCKS', fromId: blocker.id, toId: blocked.id } });
+      await expect(claimWork(prisma, blocked.id, {}, asAgent)).rejects.toThrow(/an open item blocks it/);
+    });
+
     it('rejects proposing candidate with COMPLETED or CANCELED initial_state', async () => {
       await expect(
         proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id,

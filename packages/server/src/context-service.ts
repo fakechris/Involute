@@ -14,7 +14,16 @@ import type {
   WorkflowStateType,
 } from '@prisma/client';
 
-import { ISSUE_NOT_FOUND_MESSAGE, createNotFoundError } from './errors.js';
+import {
+  ISSUE_NOT_FOUND_MESSAGE,
+  WORK_NOT_READY_ACCEPTANCE_MESSAGE,
+  WORK_NOT_READY_BLOCKED_MESSAGE,
+  WORK_NOT_READY_LABEL_MESSAGE,
+  WORK_NOT_READY_MESSAGE,
+  WORK_NOT_READY_OWNER_MESSAGE,
+  WORK_NOT_READY_STATE_MESSAGE,
+  createNotFoundError,
+} from './errors.js';
 import { resolveProjectScope } from './project-scope.js';
 import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
 
@@ -254,6 +263,30 @@ export async function isWorkReadyForClaim(
     where: combineWhere({ id: workId }, buildReadyWorkWhere({}, { allowStarted: true })),
     select: { id: true },
   }));
+}
+
+/**
+ * The first readiness rule this work fails, as a refusal that says what to do
+ * (INV-808). Mirrors buildReadyWorkWhere; the generic message is the fallback
+ * if the two ever drift apart.
+ */
+export async function explainWorkNotReady(prisma: DatabaseClient, workId: string): Promise<string> {
+  const work = await prisma.issue.findUnique({
+    where: { id: workId },
+    select: {
+      acceptance: true,
+      assignee: { select: { actorKind: true } },
+      labels: { select: { name: true } },
+      state: { select: { type: true } },
+    },
+  });
+  if (!work) return WORK_NOT_READY_MESSAGE;
+  if (work.state.type !== 'UNSTARTED' && work.state.type !== 'STARTED') return WORK_NOT_READY_STATE_MESSAGE;
+  if (work.acceptance === null) return WORK_NOT_READY_ACCEPTANCE_MESSAGE;
+  if (work.assignee?.actorKind !== 'HUMAN') return WORK_NOT_READY_OWNER_MESSAGE;
+  if (await prisma.workLink.count({ where: { toId: workId, ...OPEN_BLOCKER_LINK_WHERE } })) return WORK_NOT_READY_BLOCKED_MESSAGE;
+  if (work.labels.some((label) => (READY_EXCLUDED_LABELS as readonly string[]).includes(label.name))) return WORK_NOT_READY_LABEL_MESSAGE;
+  return WORK_NOT_READY_MESSAGE;
 }
 
 export function compareReadyWork(
