@@ -334,4 +334,24 @@ test.describe('work graph acceptance', () => {
     const bugCard = page.locator('[data-testid^="issue-card-"]').filter({ hasText: 'E2E created triage bug' });
     await expect(bugCard.getByText(/^SLA (47|48)h left$/)).toBeVisible();
   });
+
+  test('the work page of a candidate leads to where it is triaged (INV-794)', async ({ page, request }) => {
+    const { milestone } = fixture!;
+    const teams = await gql<{ teams: { nodes: Array<{ id: string; key: string }> } }>(request, `{ teams { nodes { id key } } }`);
+    const team = teams.teams.nodes.find((candidate) => candidate.key === 'INV') ?? teams.teams.nodes[0]!;
+    const proposed = (
+      await gql<{ workPropose: { issue: { id: string; identifier: string } } }>(
+        request,
+        `mutation($input: WorkProposeInput!) { workPropose(input: $input) { issue { id identifier } } }`,
+        { input: { teamId: team.id, title: 'E2E candidate to triage', repository: REPOSITORY, parentId: milestone.id } },
+      )
+    ).workPropose.issue;
+
+    await page.goto(`/work/${proposed.identifier}`);
+    await page.getByRole('link', { name: 'Triage this candidate' }).click();
+    await expect(page).toHaveURL(/\/candidates$/);
+    await expect(page.getByRole('article', { name: `${proposed.identifier} candidate` })).toBeVisible();
+
+    await gql(request, `mutation($id: String!) { issueDelete(id: $id) { success } }`, { id: proposed.id }, { asHuman: true });
+  });
 });

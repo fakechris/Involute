@@ -287,6 +287,7 @@ export const AGENT_REQUEST_ANSWER_MUTATION = gql`
   mutation AgentRequestAnswer($input: AgentRequestAnswerInput!) {
     agentRequestAnswer(input: $input) {
       success
+      message
       request { id state answeredCommentId }
       comment { id }
     }
@@ -1224,6 +1225,11 @@ export const AGENT_PROFILE_QUERY = gql`
           name
           handle
         }
+        successorActor {
+          id
+          name
+          handle
+        }
       }
       viewerCanManage
       counts {
@@ -1412,6 +1418,28 @@ export const WORK_CLAIM_RELEASE_MUTATION = gql`
     workClaimRelease(workId: $workId, reason: $reason) {
       success
       message
+    }
+  }
+`;
+
+// The requester answers a request that asked back (INV-794).
+export const AGENT_REQUEST_REPLY_MUTATION = gql`
+  mutation AgentRequestReply($requestId: String!, $body: String!, $overrideReason: String) {
+    agentRequestReply(requestId: $requestId, body: $body, overrideReason: $overrideReason) {
+      success
+      message
+      request { id state }
+    }
+  }
+`;
+
+// Who takes over when an actor stops answering (INV-794).
+export const ACTOR_SET_SUCCESSOR_MUTATION = gql`
+  mutation ActorSetSuccessor($id: String!, $successorId: String, $reason: String) {
+    actorSetSuccessor(id: $id, successorId: $successorId, reason: $reason) {
+      success
+      message
+      actor { id successorActor { id name handle } }
     }
   }
 `;

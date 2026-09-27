@@ -30,6 +30,8 @@ export const WORK_EVENT_TYPES = [
   'agent.request_handed_off',
   'evidence.retracted',
   'agent.request_answered',
+  'agent.request_input_required',
+  'agent.request_replied',
   'webhook.disabled',
 ] as const;
 

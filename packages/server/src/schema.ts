@@ -71,6 +71,7 @@ import {
   AGENT_EMAIL_INVALID_MESSAGE,
   AGENT_HANDLE_INVALID_MESSAGE,
   AGENT_HANDLE_TAKEN_MESSAGE,
+  REQUEST_ANSWER_STATE_INVALID_MESSAGE,
 } from './errors.js';
 import {
   assertCanDeleteComment,
@@ -102,10 +103,10 @@ import { WORK_EVENT_TYPES, enqueueWorkEvent } from './event-outbox.js';
 import { toWireState } from './agent-request-state.js';
 import { PRESENCE_COPY, agentRequestPresence } from './agent-request-presence.js';
 import { ACTOR_PRESENCE_COPY, actorPresence } from './actor-presence.js';
-import { deactivateActor, transferActorOwner, reactivateActor, recordActorAudit } from './actor-lifecycle.js';
+import { deactivateActor, transferActorOwner, reactivateActor, recordActorAudit, setActorSuccessor } from './actor-lifecycle.js';
 import { isValidHandle, normalizeHandle } from './mention-parser.js';
 import { EVIDENCE_NOT_FOUND_MESSAGE, retractEvidence } from './evidence-retract.js';
-import { answerAgentRequestAsHuman } from './agent-request-service.js';
+import { answerAgentRequestAsHuman, replyToAgentRequest } from './agent-request-service.js';
 import { provisionServiceActor } from './service-actors.js';
 import {
   findWorkProvenance,
@@ -404,6 +405,10 @@ const typeDefs = /* GraphQL */ `
     evidenceRetract(input: EvidenceRetractInput!): EvidenceRetractPayload!
     """A person completes a request addressed to them (INV-596): comment, answeredCommentId, COMPLETED, audit and event in one transaction. An ADMIN may answer for someone else with an overrideReason."""
     agentRequestAnswer(input: AgentRequestAnswerInput!): AgentRequestAnswerPayload!
+    "The requester answers a request that asked back (input-required); it goes back to its target (INV-794)."
+    agentRequestReply(requestId: String!, body: String!, overrideReason: String): AgentRequestAnswerPayload!
+    "Declare who takes over when this actor stops answering; null clears it. Set by people, recorded in ActorAudit (INV-794)."
+    actorSetSuccessor(id: String!, successorId: String, reason: String): ActorLifecyclePayload!
     """Transfer accountability for a non-human actor to another human. Human-only, recorded in ActorAudit."""
     actorTransferOwner(id: String!, ownerId: String!, reason: String): ActorLifecyclePayload!
     """Provision a SERVICE actor for an external program (CI, cron, a bridge). Human-only."""
@@ -987,6 +992,8 @@ const typeDefs = /* GraphQL */ `
     id: ID!
     publicId: String!
     actorId: String
+    "Who ran it — e.g. the agent to reply to about a decision it asked for (INV-794)."
+    actor: User
     claimId: String
     baseRevision: Int
     contractRevision: String
@@ -1084,6 +1091,8 @@ const typeDefs = /* GraphQL */ `
     requestId: String!
     body: String!
     overrideReason: String
+    "completed (default), failed, or input-required to ask the requester back — the same choices an agent has (INV-794)."
+    state: String
   }
 
   type AgentRequestAnswerPayload {
@@ -2923,21 +2932,58 @@ const resolvers = {
       }, { evidence: null, success: false as const }),
     agentRequestAnswer: async (
       _parent: unknown,
-      args: { input: { body: string; overrideReason?: string | null; requestId: string } },
+      args: { input: { body: string; overrideReason?: string | null; requestId: string; state?: string | null } },
       context: GraphQLContext,
-    ): Promise<{ comment: Comment | null; request: AgentRequestParent | null; success: boolean }> =>
-      runMutation(async () => {
+    ): Promise<{ comment: Comment | null; message?: string | null; request: AgentRequestParent | null; success: boolean }> =>
+      runMutationWithReason(async () => {
         const viewer = requireAuthentication(context);
         await assertCanActOnRequest(context.prisma, context, args.input.requestId);
+        const state = args.input.state ?? 'completed';
+        if (state !== 'completed' && state !== 'failed' && state !== 'input-required') {
+          throw createValidationError(REQUEST_ANSWER_STATE_INVALID_MESSAGE);
+        }
         const answered = await answerAgentRequestAsHuman(context.prisma, {
           body: args.input.body,
           by: { actorId: viewer.id, actorKind: viewer.actorKind, globalRole: viewer.globalRole },
           id: args.input.requestId,
           overrideReason: args.input.overrideReason ?? null,
+          state,
         });
         const comment = await context.prisma.comment.findUniqueOrThrow({ where: { id: answered.commentId } });
         return { comment, request: answered.request, success: true as const };
       }, { comment: null, request: null, success: false as const }),
+    agentRequestReply: async (
+      _parent: unknown,
+      args: { requestId: string; body: string; overrideReason?: string | null },
+      context: GraphQLContext,
+    ): Promise<{ comment: Comment | null; message?: string | null; request: AgentRequestParent | null; success: boolean }> =>
+      runMutationWithReason(async () => {
+        const viewer = requireAuthentication(context);
+        await assertCanActOnRequest(context.prisma, context, args.requestId);
+        const request = await replyToAgentRequest(context.prisma, {
+          body: args.body,
+          by: { actorId: viewer.id, actorKind: viewer.actorKind, globalRole: viewer.globalRole },
+          id: args.requestId,
+          overrideReason: args.overrideReason ?? null,
+        });
+        return { comment: null, request, success: true as const };
+      }, { comment: null, request: null, success: false as const }),
+    actorSetSuccessor: async (
+      _parent: unknown,
+      args: { id: string; successorId?: string | null; reason?: string | null },
+      context: GraphQLContext,
+    ): Promise<{ actor: User | null; message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
+        const viewer = requireAuthentication(context);
+        await assertCanManageActor(context.prisma, context, args.id);
+        const actor = await setActorSuccessor(context.prisma, {
+          actorId: args.id,
+          by: { actorId: viewer.id, actorKind: viewer.actorKind },
+          successorId: args.successorId ?? null,
+          reason: args.reason ?? null,
+        });
+        return { actor, success: true as const };
+      }, { actor: null, success: false as const }),
     actorDeactivate: async (
       _parent: unknown,
       args: { id: string; reason?: string | null },
@@ -3706,6 +3752,10 @@ const resolvers = {
         }
       }, { attachment: null, success: false as const });
     },
+  },
+  WorkRunRecord: {
+    actor: (parent: { actorId?: string | null }, _args: Record<string, never>, context: GraphQLContext) =>
+      parent.actorId ? context.prisma.user.findUnique({ where: { id: parent.actorId } }) : null,
   },
   Team: {
     triageRotation: async (parent: TeamParent, _args: Record<string, never>, context: GraphQLContext) => {

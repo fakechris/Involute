@@ -168,7 +168,7 @@ export async function readAgentInbox(
   };
 }
 
-export type AgentRequestEvent = 'claimed' | 'renewed' | 'answered' | 'canceled' | 'expired' | 'handed-off';
+export type AgentRequestEvent = 'claimed' | 'renewed' | 'answered' | 'canceled' | 'expired' | 'handed-off' | 'replied';
 
 /**
  * Audit a request event on its work item (INV-587). The issue itself is not
@@ -449,6 +449,9 @@ export async function answerAgentRequest(
     if (input.receipt) {
       await attachDecisionReceipt(tx, { auditId: answeredAuditId, receipt: input.receipt });
     }
+    if (nextState === 'INPUT_REQUIRED') {
+      await notifyRequesterAskedBack(tx, request, { commentId: comment.id, askedById: input.actorId });
+    }
 
     return {
       commentId: comment.id,
@@ -467,6 +470,11 @@ export interface HumanAnswerInput {
   id: string;
   /** Required when an ADMIN answers a request addressed to someone else. Recorded on the audit. */
   overrideReason?: string | null;
+  /**
+   * `completed` (default); `failed` when it cannot be done; `input-required`
+   * to ask the requester back — the same choices an agent has (INV-794).
+   */
+  state?: 'completed' | 'failed' | 'input-required' | null;
 }
 
 /**
@@ -503,6 +511,9 @@ export async function answerAgentRequestAsHuman(
     if (isTerminalState(request.state)) {
       throw createValidationError(REQUEST_ALREADY_TERMINAL_MESSAGE);
     }
+    if (request.state === 'INPUT_REQUIRED') {
+      throw createValidationError(REQUEST_AWAITING_REPLY_MESSAGE);
+    }
 
     const isTarget = request.targetActorId === input.by.actorId;
     const override = !isTarget;
@@ -520,14 +531,17 @@ export async function answerAgentRequestAsHuman(
     });
     await syncCommentMentions(tx, comment.id, comment.body);
 
+    const humanState: AgentRequestState =
+      input.state === 'failed' ? 'FAILED' : input.state === 'input-required' ? 'INPUT_REQUIRED' : 'COMPLETED';
+    // Not while it waits on the requester: their reply would then be refused.
     const moved = await tx.agentRequest.updateMany({
-      where: { id: request.id, state: { in: [...CLAIMABLE_REQUEST_STATES] } },
+      where: { id: request.id, state: { in: CLAIMABLE_REQUEST_STATES.filter((state) => state !== 'INPUT_REQUIRED') } },
       data: {
         answeredCommentId: comment.id,
         claimExpiresAt: null,
         claimTokenHash: null,
         claimedBy: null,
-        state: 'COMPLETED',
+        state: humanState,
       },
     });
     if (moved.count === 0) {
@@ -557,6 +571,9 @@ export async function answerAgentRequestAsHuman(
       workId: request.work.id,
       workIdentifier: request.work.identifier,
     });
+    if (humanState === 'INPUT_REQUIRED') {
+      await notifyRequesterAskedBack(tx, request, { commentId: comment.id, askedById: input.by.actorId });
+    }
 
     return {
       commentId: comment.id,
@@ -587,5 +604,90 @@ export async function cancelAgentRequest(
     const request = await tx.agentRequest.findUniqueOrThrow({ where: { id: input.id } });
     await recordRequestAudit(tx, { actor: input.by, event: 'canceled', request });
     return request;
+  });
+}
+
+/**
+ * The target asked the requester back (INV-794): tell the requester, who can
+ * then reply in the thread from the work page (agentRequestReply).
+ */
+async function notifyRequesterAskedBack(
+  tx: Prisma.TransactionClient,
+  request: Pick<AgentRequest, 'id' | 'workId' | 'requestedByActorId' | 'rootCommentId'>,
+  input: { commentId: string; askedById: string },
+): Promise<void> {
+  const [requester, work] = await Promise.all([
+    tx.user.findUnique({ where: { id: request.requestedByActorId }, select: { id: true, actorKind: true } }),
+    tx.issue.findUniqueOrThrow({ where: { id: request.workId }, select: { id: true, identifier: true, teamId: true, title: true } }),
+  ]);
+  const payload = { requestId: request.id, commentId: input.commentId, askedById: input.askedById, rootCommentId: request.rootCommentId };
+  const event = await enqueueWorkEvent(tx, {
+    payload,
+    type: 'agent.request_input_required',
+    workId: work.id,
+    workIdentifier: work.identifier,
+  });
+  if (requester?.actorKind !== 'HUMAN' || requester.id === input.askedById) return;
+  await tx.notification.createMany({
+    data: [{
+      payload: { ...payload, identifier: work.identifier, title: work.title },
+      sourceEventId: event.id,
+      teamId: work.teamId,
+      type: 'agent.request_input_required',
+      userId: requester.id,
+      workId: work.id,
+    }],
+    skipDuplicates: true,
+  });
+}
+
+export const REPLY_NOT_REQUESTER_MESSAGE =
+  'Only the person who asked may reply to this request. An admin may reply on their behalf with an override reason.';
+export const REQUEST_AWAITING_REPLY_MESSAGE = 'This request asked back and is waiting for the reply of the person who asked.';
+export const REPLY_REQUIRES_INPUT_REQUIRED_MESSAGE = 'Only a request that asked back (input-required) takes a reply.';
+
+/**
+ * The requester answers a question asked back (INV-794): the reply lands in
+ * the request's thread and the request goes back to SUBMITTED for its target
+ * to pick up again. Only the requester, or an ADMIN on the record.
+ */
+export async function replyToAgentRequest(
+  prisma: PrismaClient,
+  input: { id: string; body: string; by: HumanAnswerInput['by']; overrideReason?: string | null },
+): Promise<AgentRequest> {
+  const body = input.body.trim();
+  if (!body) throw createValidationError(ANSWER_REQUIRES_BODY_MESSAGE);
+  if (input.by.actorKind !== 'HUMAN') throw createValidationError(REPLY_NOT_REQUESTER_MESSAGE);
+
+  return prisma.$transaction(async (tx) => {
+    const request = await tx.agentRequest.findUnique({ where: { id: input.id }, include: { work: { select: { id: true, identifier: true } } } });
+    if (!request) throw createNotFoundError(REQUEST_NOT_FOUND_MESSAGE);
+    if (request.state !== 'INPUT_REQUIRED') throw createValidationError(REPLY_REQUIRES_INPUT_REQUIRED_MESSAGE);
+    const override = request.requestedByActorId !== input.by.actorId;
+    if (override) {
+      if (input.by.globalRole !== 'ADMIN') throw createValidationError(REPLY_NOT_REQUESTER_MESSAGE);
+      if (!input.overrideReason?.trim()) throw createValidationError(HUMAN_ANSWER_OVERRIDE_REASON_REQUIRED_MESSAGE);
+    }
+    const comment = await tx.comment.create({
+      data: { body, issueId: request.workId, parentCommentId: request.rootCommentId, userId: input.by.actorId },
+    });
+    await syncCommentMentions(tx, comment.id, comment.body);
+    const moved = await tx.agentRequest.updateMany({
+      where: { id: request.id, state: 'INPUT_REQUIRED' },
+      data: { state: 'SUBMITTED', answeredCommentId: null },
+    });
+    if (moved.count === 0) throw createValidationError(REPLY_REQUIRES_INPUT_REQUIRED_MESSAGE);
+    await recordRequestAudit(tx, {
+      actor: { actorId: input.by.actorId, actorKind: 'HUMAN', ...(override ? { reason: `override: ${input.overrideReason!.trim()}` } : {}) },
+      event: 'replied',
+      request,
+    });
+    await enqueueWorkEvent(tx, {
+      payload: { requestId: request.id, commentId: comment.id, repliedByActorId: input.by.actorId, targetActorId: request.targetActorId },
+      type: 'agent.request_replied',
+      workId: request.work.id,
+      workIdentifier: request.work.identifier,
+    });
+    return tx.agentRequest.findUniqueOrThrow({ where: { id: request.id } });
   });
 }

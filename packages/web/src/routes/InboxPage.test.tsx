@@ -48,6 +48,19 @@ vi.mock('@apollo/client/react', () => ({
               state: { id: 'state-2', name: 'Done', type: 'COMPLETED' },
             },
           },
+          {
+            id: 'notif-3',
+            type: 'ops.github.pr_unverified_reference',
+            payload: {
+              summary: 'PR #64 references an unrelated issue',
+              prUrl: 'https://github.com/acme/app/pull/64',
+              identifier: 'INV-391',
+              reason: 'team-mismatch',
+            },
+            readAt: '2026-04-02T07:00:00.000Z',
+            createdAt: '2026-04-02T07:00:00.000Z',
+            work: null,
+          },
         ],
       },
       unreadNotificationCount: 1,
@@ -66,6 +79,21 @@ vi.mock('@apollo/client/react', () => ({
 }));
 
 describe('InboxPage', () => {
+  it('shows the details and links of a notification with no work item (INV-794)', () => {
+    render(
+      <MemoryRouter>
+        <InboxPage />
+      </MemoryRouter>,
+    );
+    const details = screen.getByLabelText('Notification details');
+    expect(details).toHaveTextContent('team-mismatch');
+    expect(screen.getByRole('link', { name: 'https://github.com/acme/app/pull/64' })).toHaveAttribute(
+      'href',
+      'https://github.com/acme/app/pull/64',
+    );
+    expect(screen.getByRole('link', { name: 'INV-391' })).toHaveAttribute('href', '/issue/INV-391');
+  });
+
   it('renders real notifications and shows unread badge', () => {
     render(
       <MemoryRouter>

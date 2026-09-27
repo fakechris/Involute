@@ -1,11 +1,14 @@
 import { useMutation, useQuery } from '@apollo/client/react';
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { IcoChevL } from '../components/Icons';
 import { Btn } from '../components/Primitives';
 import { EvidenceVerificationStatus, RetractEvidence, RunBinding } from '../components/ReviewEvidence';
 import { ClaimControl } from '../components/ClaimControl';
+import { AgentRequestActions } from '../components/AgentRequestActions';
+import { RespondToAgent } from '../components/RespondToAgent';
+import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { WORK_CONTEXT_PAGE_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
 import type {
   ReceiptReferenceSummary,
@@ -70,6 +73,13 @@ export function WorkContextPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const [reviewReason, setReviewReason] = useState('');
+  // Who is looking decides which request actions apply (INV-794).
+  const [viewer, setViewer] = useState<SessionViewer | null>(null);
+  useEffect(() => {
+    fetchSessionState()
+      .then((session) => setViewer(session.viewer))
+      .catch(() => setViewer(null));
+  }, []);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewPending, setReviewPending] = useState<'ACCEPTED' | 'REJECTED' | null>(null);
   const [runReview] = useMutation<WorkReviewMutationData, WorkReviewMutationVariables>(WORK_REVIEW_MUTATION);
@@ -81,6 +91,11 @@ export function WorkContextPage() {
     },
   );
   const bundle = data?.workContext ?? null;
+  // The agent that ran it most recently: who a decision it asked for goes back to (INV-794).
+  // Runs arrive newest first.
+  const latestAgent = (bundle?.runs ?? [])
+    .map((run) => run.actor)
+    .find((actor) => actor && actor.actorKind === 'AGENT' && actor.handle) ?? null;
 
   if (loading && !bundle) {
     return (
@@ -168,6 +183,18 @@ export function WorkContextPage() {
         </Btn>
       </div>
       <div className="page-content observation-content work-context">
+        {work.commitmentStatus === 'CANDIDATE' ? (
+          <section className="work-context__section">
+            <h2>Candidate</h2>
+            <p>Nobody has committed to this yet. Committing or declining it happens in the candidate queue.</p>
+            <Link
+              className="ui-action ui-action--accent"
+              to={(work.labels?.nodes ?? []).some((label) => label.name.toLowerCase() === 'bug') ? '/candidates?type=bug' : '/candidates'}
+            >
+              Triage this candidate
+            </Link>
+          </section>
+        ) : null}
         <section className="work-context__section">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h2>Contract</h2>
@@ -228,6 +255,7 @@ export function WorkContextPage() {
         ) : null}
         <section className="work-context__section">
           <h2>Runs</h2>
+          {latestAgent ? <RespondToAgent workId={bundle.work.id} agent={latestAgent} /> : null}
           {bundle.runs.length === 0 ? (
             <p className="observation-empty">No runs</p>
           ) : (
@@ -321,6 +349,8 @@ export function WorkContextPage() {
                     {request.handedOffFromId ? <a href={`#request-${request.handedOffFromId}`}>← from previous</a> : null}
                     {request.failureReason ? <span>{request.failureReason}</span> : null}
                     <span className="observation-card__meta">due {formatWhen(request.deadlineAt)}</span>
+                    {request.body ? <p className="observation-card__body">{request.body}</p> : null}
+                    <AgentRequestActions request={request} viewer={viewer} />
                   </li>
                 ))}
             </ul>

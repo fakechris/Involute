@@ -244,6 +244,7 @@ export function InboxPage() {
                       {item.work.title}
                     </div>
                   )}
+                  {!item.work ? <NotificationDetails payload={item.payload} /> : null}
                   {summary && (
                     <div
                       style={{
@@ -290,5 +291,42 @@ export function InboxPage() {
         )}
       </div>
     </main>
+  );
+}
+
+const IDENTIFIER = /^[A-Z][A-Z0-9]*-\d+$/;
+
+/**
+ * A notification with no work item — ops alerts, a disabled webhook — opens
+ * nothing, so its details and links are shown in the row itself (INV-794).
+ */
+function NotificationDetails({ payload }: { payload: Record<string, unknown> | null }) {
+  if (!payload) return null;
+  const entries = Object.entries(payload).filter(
+    ([key, value]) => key !== 'summary' && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'),
+  );
+  if (entries.length === 0) return null;
+  return (
+    <dl className="inbox-item__details" aria-label="Notification details" onClick={(event) => event.stopPropagation()}>
+      {entries.map(([key, value]) => {
+        const text = String(value);
+        return (
+          <div key={key}>
+            <dt>{key}</dt>
+            <dd>
+              {/^https?:\/\//.test(text) ? (
+                <a href={text} target="_blank" rel="noreferrer">
+                  {text}
+                </a>
+              ) : IDENTIFIER.test(text) ? (
+                <a href={`/issue/${text}`}>{text}</a>
+              ) : (
+                text
+              )}
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
   );
 }
