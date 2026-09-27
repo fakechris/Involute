@@ -66,6 +66,13 @@ describe('agent-filed bugs and bug metrics (INV-751 / INV-787)', () => {
     const reported = await prisma.eventOutbox.findFirstOrThrow({ where: { type: 'bug.reported', payload: { path: ['work', 'id'], equals: noParent.id } } });
     expect((reported.payload as { data: { triage: boolean } }).data.triage).toBe(true);
     await expect(fileBug({ parentId: projectId, priority: 9, stepsToReproduce: 'x' })).rejects.toThrow(/needs a priority/);
+    // An owner who is not on the team, or a rejected parent, sends it to triage too.
+    await prisma.teamMembership.deleteMany({ where: { teamId: team.id, userId: admin.id } });
+    expect((await fileBug({ parentId: projectId, priority: 1, stepsToReproduce: 'x' })).commitmentStatus).toBe('CANDIDATE');
+    await prisma.teamMembership.create({ data: { teamId: team.id, userId: admin.id, role: 'OWNER' } });
+    const rejectedParent = await createIssue(prisma, { teamId: team.id, title: 'Dropped', repository: 'acme/app', parentId: projectId });
+    await prisma.issue.update({ where: { id: rejectedParent.id }, data: { commitmentStatus: 'REJECTED' } });
+    expect((await fileBug({ parentId: rejectedParent.id, priority: 1, stepsToReproduce: 'x' })).commitmentStatus).toBe('CANDIDATE');
     // Non-bug proposals are untouched.
     const plain = await proposeWork(prisma, { teamId: team.id, title: 'Idea', description: DESCRIPTION, parentId: projectId, priority: 1, stepsToReproduce: 'x' }, asAgent());
     expect(plain.commitmentStatus).toBe('CANDIDATE');

@@ -368,18 +368,27 @@ export async function proposeWork(
       createInput.priority = priority;
     }
     if (isBug && steps) createInput.description = composeDescription(input.description, steps);
-    const directBug = isBug && Boolean(parentWork) && priority !== null && Boolean(steps);
-    if (directBug) {
-      createInput.commitmentStatus = 'COMMITTED';
-      createInput.assigneeId = await humanOwnerOf(transaction, actor);
-      // Zero-bug: never the backlog; Ready unless the proposer says it is under way or fixed.
-      if (targetType !== 'STARTED' && targetType !== 'REVIEW') {
-        const ready = await transaction.workflowState.findFirst({
+    // The same bar a person's commit meets: a live parent, an owner on the
+    // team, and — zero-bug — a Ready state unless it is under way or fixed.
+    let directBug = isBug && Boolean(parentWork) && parentWork?.commitmentStatus !== 'REJECTED' && priority !== null && Boolean(steps);
+    const owner = directBug ? await humanOwnerOf(transaction, actor) : null;
+    if (directBug && (!owner || !(await transaction.teamMembership.findFirst({ where: { teamId: input.teamId, userId: owner }, select: { id: true } })))) {
+      directBug = false;
+    }
+    const underWay = targetType === 'STARTED' || targetType === 'REVIEW';
+    const ready = directBug && !underWay
+      ? await transaction.workflowState.findFirst({
           where: { teamId: input.teamId, type: 'UNSTARTED' },
           orderBy: { position: 'asc' },
           select: { id: true },
-        });
-        if (ready) createInput.stateId = ready.id;
+        })
+      : null;
+    if (directBug && !underWay && !ready) directBug = false;
+    if (directBug) {
+      createInput.commitmentStatus = 'COMMITTED';
+      createInput.assigneeId = owner;
+      if (ready) {
+        createInput.stateId = ready.id;
         if (createInput.source?.includes('initial_state=BACKLOG')) {
           createInput.source = createInput.source.replace(/;?initial_state=BACKLOG;?/, '').trim() || null;
         }
