@@ -13,6 +13,10 @@ import {
   ISSUE_DELETE_MUTATION,
   MILESTONE_ISSUES_QUERY,
 } from '../board/queries';
+import { PlacementPicker } from '../components/PlacementPicker';
+import { GRAPH_PROJECTS_QUERY } from '../work/queries';
+import type { GraphProjectsQueryData } from '../work/types';
+import type { CreatePlacement } from '../work/placement';
 import type {
   BoardPageQueryData,
   BoardPageQueryVariables,
@@ -112,6 +116,13 @@ export function CyclesPage() {
   const [milestoneTitle, setMilestoneTitle] = useState('');
   const [milestoneDescription, setMilestoneDescription] = useState('');
   const [milestoneOutcome, setMilestoneOutcome] = useState('');
+  // A new milestone goes directly under its project (INV-744/792).
+  const [milestonePlacement, setMilestonePlacement] = useState<CreatePlacement | null>(null);
+  const [milestoneError, setMilestoneError] = useState<string | null>(null);
+  const { data: milestoneProjectsData } = useQuery<GraphProjectsQueryData>(GRAPH_PROJECTS_QUERY, {
+    variables: teamKey ? { teamFilter: { key: { eq: teamKey } } } : {},
+  });
+  const milestoneProjects = milestoneProjectsData?.projectSummary?.projects ?? [];
 
   const { data: boardData } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
     variables: { first: 1, ...(teamKey ? { filter: { team: { key: { eq: teamKey } } } } : {}) },
@@ -181,6 +192,9 @@ export function CyclesPage() {
     setMilestoneTitle('');
     setMilestoneDescription('');
     setMilestoneOutcome('');
+    setMilestonePlacement(null);
+    setMilestoneError(null);
+    setMilestoneOutcome('');
     milestoneDialogRef.current?.showModal();
   }
 
@@ -190,36 +204,50 @@ export function CyclesPage() {
     setMilestoneTitle(milestone.title);
     setMilestoneDescription(milestone.description ?? '');
     setMilestoneOutcome(milestone.outcome ?? '');
+    setMilestoneError(null);
     milestoneDialogRef.current?.showModal();
   }
 
   async function handleMilestoneSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!milestoneTitle.trim() || !teamId) return;
+    setMilestoneError(null);
 
     if (milestoneDialogMode === 'create') {
+      if (!milestonePlacement) return;
       const defaultState = selectedTeam?.states.nodes[0];
-      await runIssueCreate({
+      const result = await runIssueCreate({
         variables: {
           input: {
             teamId,
             title: milestoneTitle.trim(),
             description: milestoneDescription.trim() || null,
             kind: 'MILESTONE',
+            parentId: milestonePlacement.parentId,
+            ...(milestoneOutcome.trim() ? { outcome: milestoneOutcome.trim() } : {}),
             ...(defaultState ? { stateId: defaultState.id } : {}),
           },
         },
       });
+      if (!result.data?.issueCreate.success) {
+        setMilestoneError(result.data?.issueCreate.message ?? 'Could not create the milestone.');
+        return;
+      }
     } else if (editingMilestoneId) {
-      await runIssueUpdate({
+      const result = await runIssueUpdate({
         variables: {
           id: editingMilestoneId,
           input: {
             title: milestoneTitle.trim(),
             description: milestoneDescription.trim() || null,
+            outcome: milestoneOutcome.trim() || null,
           },
         },
       });
+      if (!result.data?.issueUpdate.success) {
+        setMilestoneError(result.data?.issueUpdate.message ?? 'Could not save the milestone.');
+        return;
+      }
     }
 
     void refetchMilestones();
@@ -633,9 +661,35 @@ export function CyclesPage() {
               placeholder="Milestone goals and deliverables"
             />
           </label>
+          <label style={{ display: 'block', marginBottom: 16 }}>
+            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Outcome</span>
+            <textarea
+              aria-label="Milestone outcome"
+              style={{ width: '100%', minHeight: 48, padding: '6px 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)', resize: 'vertical' }}
+              value={milestoneOutcome}
+              onChange={(e) => setMilestoneOutcome(e.target.value)}
+              placeholder="What is true once this milestone is done"
+            />
+          </label>
+          {milestoneDialogMode === 'create' ? (
+            <div style={{ marginBottom: 16 }}>
+              <PlacementPicker
+                projects={milestoneProjects}
+                value={milestonePlacement}
+                source={null}
+                kind="MILESTONE"
+                onChange={setMilestonePlacement}
+              />
+            </div>
+          ) : null}
+          {milestoneError ? (
+            <p role="alert" className="issue-relations__error" style={{ marginBottom: 12 }}>
+              {milestoneError}
+            </p>
+          ) : null}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn--subtle btn--md" onClick={() => milestoneDialogRef.current?.close()}>Cancel</button>
-            <button type="submit" className="btn btn--accent btn--md">
+            <button type="submit" className="btn btn--accent btn--md" disabled={milestoneDialogMode === 'create' && !milestonePlacement}>
               {milestoneDialogMode === 'create' ? 'Create' : 'Save'}
             </button>
           </div>

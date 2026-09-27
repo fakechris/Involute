@@ -413,6 +413,7 @@ export interface IssueCreateMutationVariables {
     teamId: string;
     title: string;
     description?: string | null;
+    outcome?: string | null;
     stateId?: string;
     priority?: number;
     projectId?: string;

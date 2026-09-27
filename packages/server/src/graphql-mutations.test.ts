@@ -160,6 +160,13 @@ describe('GraphQL mutations', () => {
     const link = await prisma.workLink.findFirst({ where: { fromId: project.id, toId: placed.body.data.issueCreate.issue.id, type: 'CONTAINS' } });
     expect(link).not.toBeNull();
 
+    // A milestone is created directly in its project, with its outcome (INV-792).
+    const milestone = await postGraphQL({
+      query: `mutation($input: IssueCreateInput!) { issueCreate(input: $input) { success message issue { id kind outcome parent { id } } } }`,
+      variables: { input: { teamId: fixture.team.id, title: 'M1', kind: 'MILESTONE', parentId: project.identifier, outcome: 'Beta ships' } },
+    });
+    expect(milestone.body.data.issueCreate).toMatchObject({ success: true, issue: { kind: 'MILESTONE', outcome: 'Beta ships', parent: { id: project.id } } });
+
     const project2 = await create({ title: 'acme/other', kind: 'PROJECT', repository: 'acme/other' });
     expect(project2.body.data.issueCreate.success).toBe(true);
 

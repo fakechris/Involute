@@ -16,6 +16,13 @@ export const CANDIDATES_PAGE_QUERY = gql`
         key
         name
         issueCount
+        states {
+          nodes {
+            id
+            name
+            type
+          }
+        }
         memberships {
           nodes {
             id
@@ -534,6 +541,32 @@ export const WORK_HYGIENE_QUERY = gql`
 export const EVIDENCE_RETRACT_MUTATION = gql`
   mutation EvidenceRetract($input: EvidenceRetractInput!) {
     evidenceRetract(input: $input) {
+      success
+      message
+    }
+  }
+`;
+
+// Rejected work, for people to review and restore (INV-792).
+export const REJECTED_WORK_QUERY = gql`
+  query RejectedWork($filter: IssueFilter) {
+    issues(first: 100, filter: $filter) {
+      nodes {
+        id
+        identifier
+        title
+        kind
+        repository
+        updatedAt
+        rejectionReason
+      }
+    }
+  }
+`;
+
+export const WORK_RESTORE_MUTATION = gql`
+  mutation WorkRestore($id: String!, $reason: String!) {
+    workRestore(id: $id, reason: $reason) {
       success
       message
     }

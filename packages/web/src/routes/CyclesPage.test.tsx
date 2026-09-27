@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,6 +14,11 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // jsdom has no <dialog> modal support.
+  HTMLDialogElement.prototype.showModal = vi.fn();
+  HTMLDialogElement.prototype.close = vi.fn();
+  mockRunIssueCreate.mockResolvedValue({ data: { issueCreate: { success: true, message: null, issue: { id: 'm-new' } } } });
+  mockRunIssueUpdate.mockResolvedValue({ data: { issueUpdate: { success: true, message: null, issue: { id: 'milestone-1' } } } });
 });
 
 vi.mock('@apollo/client/react', () => ({
@@ -93,6 +98,17 @@ vi.mock('@apollo/client/react', () => ({
       };
     }
 
+    if (docStr.includes('GraphProjects')) {
+      return {
+        data: { projectSummary: { totalCount: 1, projects: [{ repository: 'acme/app', name: 'App', identifier: 'INV-1', totalCount: 3 }] } },
+        loading: false,
+      };
+    }
+
+    if (docStr.includes('PlacementOptions')) {
+      return { data: { projects: { nodes: [] }, milestones: { nodes: [] }, epics: { nodes: [] } }, loading: false };
+    }
+
     // Default CYCLES_QUERY
     return {
       data: {
@@ -144,6 +160,53 @@ describe('CyclesPage', () => {
     expect(screen.getByText('Implement auth')).toBeInTheDocument();
     expect(screen.getByText('1/2 (50%)')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Work context' })).toBeInTheDocument();
+  });
+
+  it('creates a milestone in its project with an outcome, and shows why a create was refused (INV-792)', async () => {
+    render(
+      <MemoryRouter>
+        <CyclesPage />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getAllByRole('button', { name: 'New milestone' })[0]!);
+    const form = screen.getByRole('heading', { name: 'New milestone', hidden: true }).closest('form')!;
+    const create = within(form).getByRole('button', { name: 'Create', hidden: true });
+    expect(create).toBeDisabled();
+    fireEvent.change(screen.getByPlaceholderText('e.g. Release v1.0 or Core Engine'), { target: { value: 'GA' } });
+    fireEvent.change(screen.getByLabelText('Milestone outcome'), { target: { value: 'Customers on v1' } });
+    fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'acme/app' } });
+    expect((screen.getByLabelText('Location') as HTMLSelectElement).selectedOptions[0]?.textContent).toBe('Directly in the project');
+    fireEvent.click(create);
+    await waitFor(() => expect(mockRunIssueCreate).toHaveBeenCalledTimes(1));
+    expect(mockRunIssueCreate.mock.calls[0]![0].variables.input).toMatchObject({
+      title: 'GA',
+      kind: 'MILESTONE',
+      parentId: 'INV-1',
+      outcome: 'Customers on v1',
+    });
+
+    mockRunIssueCreate.mockResolvedValueOnce({ data: { issueCreate: { success: false, message: 'CONTAINS cannot cross repository boundaries.', issue: null } } });
+    fireEvent.click(create);
+    expect(await within(form).findByRole('alert', { hidden: true })).toHaveTextContent('CONTAINS cannot cross repository boundaries.');
+  });
+
+  it('edits a milestone outcome', async () => {
+    render(
+      <MemoryRouter>
+        <CyclesPage />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getAllByRole('button', { name: 'Configure' })[0]!);
+    const outcome = screen.getByLabelText('Milestone outcome') as HTMLTextAreaElement;
+    expect(outcome.value).toBe('Beta ready');
+    fireEvent.change(outcome, { target: { value: 'Beta ready for 10 teams' } });
+    const form = screen.getByRole('heading', { name: 'Edit milestone', hidden: true }).closest('form')!;
+    fireEvent.click(within(form).getByRole('button', { name: 'Save', hidden: true }));
+    await waitFor(() =>
+      expect(mockRunIssueUpdate).toHaveBeenCalledWith({
+        variables: { id: 'milestone-1', input: expect.objectContaining({ outcome: 'Beta ready for 10 teams' }) },
+      }),
+    );
   });
 
   it('switches to Legacy Cycles tab when clicked', () => {
