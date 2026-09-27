@@ -996,11 +996,15 @@ const typeDefs = /* GraphQL */ `
     success: Boolean!
     request: AgentRequest
     comment: Comment
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type ActorLifecyclePayload {
     success: Boolean!
     actor: User
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   input ServiceActorCreateInput {
@@ -1031,11 +1035,15 @@ const typeDefs = /* GraphQL */ `
     success: Boolean!
     credential: AgentCredentialRecord
     token: String
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type AgentCredentialRevokePayload {
     success: Boolean!
     credential: AgentCredentialRecord
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type WebhookSubscriptionRecord {
@@ -1071,6 +1079,8 @@ const typeDefs = /* GraphQL */ `
     success: Boolean!
     subscription: WebhookSubscriptionRecord
     secret: String
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   scalar Json
@@ -1092,16 +1102,22 @@ const typeDefs = /* GraphQL */ `
   type NotificationMutationPayload {
     success: Boolean!
     notification: NotificationRecord
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type NotificationMarkAllPayload {
     success: Boolean!
     count: Int!
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type NotificationPreferencesPayload {
     success: Boolean!
     emailNotifications: Boolean!
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type Project {
@@ -1510,71 +1526,99 @@ const typeDefs = /* GraphQL */ `
   type IssueDeletePayload {
     success: Boolean!
     issueId: ID
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type CommentCreatePayload {
     success: Boolean!
     comment: Comment
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type CommentDeletePayload {
     success: Boolean!
     commentId: ID
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type TeamUpdateAccessPayload {
     success: Boolean!
     team: Team
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type TeamMembershipUpsertPayload {
     success: Boolean!
     membership: TeamMembership
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type TeamMembershipRemovePayload {
     success: Boolean!
     membershipId: ID
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type ProjectCreatePayload {
     success: Boolean!
     project: Project
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type ProjectUpdatePayload {
     success: Boolean!
     project: Project
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type ProjectDeletePayload {
     success: Boolean!
     projectId: ID
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type CycleCreatePayload {
     success: Boolean!
     cycle: Cycle
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type CycleUpdatePayload {
     success: Boolean!
     cycle: Cycle
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type CycleDeletePayload {
     success: Boolean!
     cycleId: ID
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type UserUpdatePayload {
     success: Boolean!
     user: User
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type FileUploadPayload {
     success: Boolean!
     attachment: Attachment
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   input WorkProposeInput {
@@ -1637,6 +1681,8 @@ const typeDefs = /* GraphQL */ `
   type WorkProposePayload {
     success: Boolean!
     issue: Issue
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type WorkLinkMutationPayload {
@@ -1672,6 +1718,8 @@ const typeDefs = /* GraphQL */ `
     issue: Issue
     claim: WorkClaimRecord
     suggestedBranch: String
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   input RunReportInput {
@@ -1708,12 +1756,16 @@ const typeDefs = /* GraphQL */ `
     success: Boolean!
     issue: Issue
     run: WorkRunRecord
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type EvidenceAttachPayload {
     success: Boolean!
     issue: Issue
     evidence: WorkEvidenceRecord
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type WorkReviewPayload {
@@ -4350,25 +4402,15 @@ function buildCommentWhere(
   };
 }
 
+/**
+ * Every refusal carries its exposed reason in `message` (INV-795): a client
+ * that gets a bare `success: false` cannot tell a person what to fix.
+ */
 async function runMutation<TResult extends { success: true }, TFallback extends { success: false }>(
   operation: () => Promise<TResult>,
   fallback: TFallback,
-): Promise<TResult | TFallback> {
-  try {
-    return await operation();
-  } catch (error) {
-    const exposedError = getExposedError(error);
-
-    if (exposedError?.extensions.code === 'FORBIDDEN') {
-      throw exposedError;
-    }
-
-    if (exposedError || isPrismaInvalidInputError(error)) {
-      return fallback;
-    }
-
-    throw error;
-  }
+): Promise<TResult | (TFallback & { message: string | null })> {
+  return runMutationWithReason(operation, fallback);
 }
 
 /**

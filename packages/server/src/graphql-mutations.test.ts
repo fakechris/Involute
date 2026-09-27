@@ -174,6 +174,16 @@ describe('GraphQL mutations', () => {
     expect(rejected.body.data.issueCreate).toMatchObject({ success: false, message: expect.stringContaining('rejected') });
   });
 
+  it('says why a refused mutation was refused, not only success false (INV-795)', async () => {
+    const response = await postGraphQL({
+      query: `mutation { commentDelete(id: "00000000-0000-0000-0000-000000000000") { success message } }`,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.errors).toBeUndefined();
+    expect(response.body.data.commentDelete).toEqual({ success: false, message: 'Comment not found.' });
+  });
+
   it('returns success false for issueCreate with an invalid teamId', async () => {
     const response = await postGraphQL({
       query: `
