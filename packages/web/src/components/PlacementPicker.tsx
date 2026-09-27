@@ -3,7 +3,7 @@ import { useQuery } from '@apollo/client/react';
 import { Link } from 'react-router-dom';
 
 import { PLACEMENT_OPTIONS_QUERY } from '../work/queries';
-import type { PlacementOptionsQueryData } from '../work/types';
+import type { PlacementOptionsQueryData, WorkKind } from '../work/types';
 import { noMilestonePlacement, type CreatePlacement, type PlaceableProject, type PlacementSource } from '../work/placement';
 
 interface PlacementPickerProps {
@@ -12,7 +12,25 @@ interface PlacementPickerProps {
   source: PlacementSource | null;
   disabled?: boolean;
   onChange: (placement: CreatePlacement | null) => void;
+  /** What is being placed; only legal parents are offered (INV-791). Defaults to ISSUE. */
+  kind?: WorkKind;
+  /** The item being moved, which cannot contain itself. */
+  excludeId?: string;
+  /**
+   * Creating: a remembered location that is gone falls back to No milestone.
+   * Editing passes false — the current parent is shown as it is, never moved.
+   */
+  autoCorrect?: boolean;
 }
+
+// Legal CONTAINS parents below the project (norm v1, INV-718).
+const CONTAINER_KINDS: Record<WorkKind, ReadonlySet<string>> = {
+  ISSUE: new Set(['MILESTONE', 'EPIC']),
+  EPIC: new Set(['MILESTONE']),
+  MILESTONE: new Set(),
+  DECISION: new Set(),
+  PROJECT: new Set(),
+};
 
 const FINISHED = new Set(['COMPLETED', 'CANCELED']);
 
@@ -21,7 +39,16 @@ const FINISHED = new Set(['COMPLETED', 'CANCELED']);
  * the location inside it — "No milestone" first, then its open milestones and
  * epics. Changing the project starts again at "No milestone".
  */
-export function PlacementPicker({ projects, value, source, disabled, onChange }: PlacementPickerProps) {
+export function PlacementPicker({
+  projects,
+  value,
+  source,
+  disabled,
+  onChange,
+  kind = 'ISSUE',
+  excludeId,
+  autoCorrect = true,
+}: PlacementPickerProps) {
   const placeable = projects.filter((project) => project.identifier);
   const repository = value?.repository ?? '';
   const { data, loading } = useQuery<PlacementOptionsQueryData, { repository: string }>(PLACEMENT_OPTIONS_QUERY, {
@@ -29,13 +56,18 @@ export function PlacementPicker({ projects, value, source, disabled, onChange }:
     skip: !repository,
   });
   const containers = [...(data?.milestones?.nodes ?? []), ...(data?.epics?.nodes ?? [])].filter(
-    (option) => !FINISHED.has(option.state?.type ?? ''),
+    (option) =>
+      !FINISHED.has(option.state?.type ?? '') &&
+      CONTAINER_KINDS[kind].has(option.kind) &&
+      option.id !== excludeId &&
+      // A labelled current parent is already listed once.
+      !(value?.parentLabel && option.id === value.parentId),
   );
   const project = placeable.find((candidate) => candidate.repository === repository);
   // A remembered milestone may have been finished or removed since.
   const knownLocation =
     !value || value.parentLabel || value.parentId === project?.identifier || containers.some((option) => option.id === value.parentId);
-  const stale = Boolean(data) && !loading && !knownLocation && Boolean(project?.identifier);
+  const stale = autoCorrect && Boolean(data) && !loading && !knownLocation && Boolean(project?.identifier);
   useEffect(() => {
     if (stale && project?.identifier) onChange({ repository, parentId: project.identifier });
   }, [stale, project?.identifier, repository, onChange]);
@@ -79,7 +111,9 @@ export function PlacementPicker({ projects, value, source, disabled, onChange }:
         >
           {!repository ? <option value="">Choose a project first</option> : null}
           {value?.parentLabel ? <option value={value.parentId}>{value.parentLabel}</option> : null}
-          {project?.identifier ? <option value={project.identifier}>No milestone</option> : null}
+          {project?.identifier ? (
+            <option value={project.identifier}>{kind === 'ISSUE' || kind === 'EPIC' ? 'No milestone' : 'Directly in the project'}</option>
+          ) : null}
           {containers.map((option) => (
             <option key={option.id} value={option.id}>
               {option.kind === 'EPIC' ? 'Epic · ' : ''}
