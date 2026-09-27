@@ -114,6 +114,7 @@ import { dependencyHints } from './mention-links.js';
 import { loadWorkHygiene } from './work-hygiene.js';
 import { BUG_LABEL_NAME, findSimilarBugs, reportBug, type BugReportInput } from './bug-report.js';
 import { loadBugSlas } from './bug-sla.js';
+import { snapshotContract } from './evidence-contract.js';
 import { loadBugMetrics, type BugMetrics } from './bug-metrics.js';
 import { currentTriager, parseRotation, setTriageRotation } from './bug-triage.js';
 import {
@@ -715,6 +716,8 @@ const typeDefs = /* GraphQL */ `
     dependencyHints: [String!]!
     "SLA for committed Type: Bug work; null otherwise (INV-750)."
     bugSla: BugSla
+    "Hash of the current execution contract (scope, constraints, repository, acceptance); a run whose contractRevision differs ran against an older contract (INV-790)."
+    contractDigest: String!
     claim: WorkClaimRecord
     comments(first: Int, after: String, orderBy: CommentOrderBy, rootsOnly: Boolean): CommentConnection!
     """
@@ -933,6 +936,8 @@ const typeDefs = /* GraphQL */ `
 
   type EvidenceRetractPayload {
     success: Boolean!
+    "Why the retraction was refused; null on success."
+    message: String
     evidence: WorkEvidenceRecord
   }
 
@@ -1703,6 +1708,8 @@ const typeDefs = /* GraphQL */ `
 
   type WorkReviewPayload {
     success: Boolean!
+    "Why the review was refused (e.g. revision changed, not in Review); null on success."
+    message: String
     issue: Issue
     decision: WorkReviewDecisionRecord
   }
@@ -2705,7 +2712,7 @@ const resolvers = {
         };
       },
       context: GraphQLContext,
-    ) => runMutation(async () => {
+    ) => runMutationWithReason(async () => {
       const existing = await findWorkByIdOrIdentifier(context.prisma, args.id);
       if (!existing) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
       await assertCanWriteIssue(context.prisma, context, existing.id);
@@ -2728,8 +2735,8 @@ const resolvers = {
       _parent: unknown,
       args: { input: { correctWorkId?: string | null; evidenceId: string; reason: string } },
       context: GraphQLContext,
-    ): Promise<{ evidence: WorkEvidence | null; success: boolean }> =>
-      runMutation(async () => {
+    ): Promise<{ evidence: WorkEvidence | null; message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
         const viewer = requireAuthentication(context);
         const evidence = await context.prisma.workEvidence.findUnique({ where: { id: args.input.evidenceId }, select: { workId: true } });
         if (!evidence) throw createNotFoundError(EVIDENCE_NOT_FOUND_MESSAGE);
@@ -3784,6 +3791,7 @@ const resolvers = {
     }),
     dependencyHints: (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext): Promise<string[]> =>
       dependencyHints(context.prisma, { id: parent.id, teamId: parent.teamId, texts: mentionTexts(parent) }),
+    contractDigest: (parent: IssueParent) => snapshotContract(parent).contractRevision,
     bugSla: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
       if (parent.commitmentStatus !== 'COMMITTED') return null;
       // Labels are usually loaded with the issue: skip non-bugs without a query.

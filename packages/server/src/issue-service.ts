@@ -31,6 +31,7 @@ import { assertNoWorkLinkCycle, syncContainsFromParentId } from './link-service.
 import { syncCommentMentions } from './mention-service.js';
 import { linkMentionedWork } from './mention-links.js';
 import { enqueueCommentEvents } from './comment-events.js';
+import { enqueueWorkEvent } from './event-outbox.js';
 import { openAgentRequestsForMentions } from './agent-request-from-mention.js';
 import { assertNodeHierarchy, getContainsDescendantIds, lockWorkGraph } from './graph-integrity.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
@@ -283,6 +284,9 @@ export async function updateIssue(
     let nextParentId: string | null | undefined;
 
     const data: Prisma.IssueUpdateInput = {};
+    // A person moving work into Done is an acceptance (INV-790): it is recorded
+    // like workReview, whichever control did it (dropdown, drawer, drag, API).
+    let acceptedByPerson = false;
 
     if ('stateId' in input && input.stateId) {
       const state = await transaction.workflowState.findUnique({
@@ -307,6 +311,11 @@ export async function updateIssue(
 
       if (isAcceptStateType(state.type)) {
         assertActorCan(actor.actorKind, 'accept');
+      }
+
+      if (state.type === 'COMPLETED' && state.id !== existingIssue.stateId && actor.actorKind === 'HUMAN' && actor.actorId) {
+        const current = await transaction.workflowState.findUnique({ where: { id: existingIssue.stateId }, select: { type: true } });
+        acceptedByPerson = current?.type !== 'COMPLETED';
       }
 
       // Zero-bug (INV-750): a committed bug is fixed or declined, never parked.
@@ -573,6 +582,9 @@ export async function updateIssue(
     if (mentionTexts(updated).join('\u0000') !== mentionTexts(existingIssue).join('\u0000')) {
       await linkMentionedWork(transaction, { workId: id, teamId: updated.teamId, texts: mentionTexts(updated), actor });
     }
+    if (acceptedByPerson) {
+      await recordStateChangeAcceptance(transaction, { before: existingIssue, after: updated, reviewerId: actor.actorId! });
+    }
 
     return updated;
   });
@@ -825,4 +837,45 @@ async function resolveCreateState(
   }
 
   return initialState;
+}
+
+/**
+ * The review record for a person moving work into Done outside workReview
+ * (INV-790): an ACCEPTED decision bound to the latest completed run, and the
+ * same work.accepted event, so acceptance is audited whatever control was used.
+ */
+async function recordStateChangeAcceptance(
+  transaction: Prisma.TransactionClient,
+  input: { before: Issue; after: Issue; reviewerId: string },
+): Promise<void> {
+  const run = await transaction.workRun.findFirst({
+    where: { status: 'COMPLETED', workId: input.after.id },
+    orderBy: { endedAt: 'desc' },
+    select: { id: true, actorId: true },
+  });
+  const decision = await transaction.workReviewDecision.create({
+    data: {
+      decision: 'ACCEPTED',
+      fromRevision: input.before.revision,
+      reason: 'Accepted by moving it to Done.',
+      reviewerId: input.reviewerId,
+      runId: run?.id ?? null,
+      toRevision: input.after.revision,
+      workId: input.after.id,
+    },
+  });
+  await enqueueWorkEvent(transaction, {
+    payload: {
+      decisionId: decision.id,
+      reason: decision.reason,
+      reviewerId: input.reviewerId,
+      runId: decision.runId,
+      selfReviewed: input.before.assigneeId === input.reviewerId || run?.actorId === input.reviewerId,
+      viaStateChange: true,
+    },
+    type: 'work.accepted',
+    updatedFrom: { revision: input.before.revision, stateId: input.before.stateId },
+    workId: input.after.id,
+    workIdentifier: input.after.identifier,
+  });
 }

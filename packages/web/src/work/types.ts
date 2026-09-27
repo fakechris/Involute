@@ -74,6 +74,18 @@ export interface WorkRunSummary {
   externalUrl?: string | null;
   startedAt: string;
   endedAt?: string | null;
+  /** What the run was bound to (INV-474/790). */
+  repository?: string | null;
+  commitSha?: string | null;
+  pullRequestNumber?: number | null;
+  contractRevision?: string | null;
+}
+
+export interface EvidenceVerificationSummary {
+  id: string;
+  status: string;
+  failureCode?: string | null;
+  observedAt: string;
 }
 
 export interface WorkEvidenceSummary {
@@ -88,6 +100,8 @@ export interface WorkEvidenceSummary {
   retractReason?: string | null;
   retractedBy?: { id: string; name: string | null; handle: string | null } | null;
   supersededByWork?: { id: string; identifier: string } | null;
+  /** Server observations of this evidence, newest last (INV-474); shown before acceptance (INV-790). */
+  verifications?: EvidenceVerificationSummary[];
 }
 
 export interface WorkReviewDecisionSummary {
@@ -160,6 +174,8 @@ export interface WorkContextWork {
   id: string;
   identifier: string;
   title: string;
+  /** Current contract hash; compare with a run's contractRevision (INV-790). */
+  contractDigest?: string | null;
   /** Requests to agents on this work, with their hand-off chain (INV-597). */
   agentRequests?: WorkContextRequest[];
   description?: string | null;
@@ -366,6 +382,7 @@ export interface WorkRejectMutationVariables {
 export interface WorkReviewMutationData {
   workReview: {
     success: boolean;
+    message?: string | null;
     issue: { id: string; identifier: string; revision: number } | null;
     decision: { id: string; decision: 'ACCEPTED' | 'REJECTED' } | null;
   };

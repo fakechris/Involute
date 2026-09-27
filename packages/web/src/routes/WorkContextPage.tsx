@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { IcoChevL } from '../components/Icons';
 import { Btn } from '../components/Primitives';
+import { EvidenceVerificationStatus, RetractEvidence, RunBinding } from '../components/ReviewEvidence';
 import { WORK_CONTEXT_PAGE_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
 import type {
   ReceiptReferenceSummary,
@@ -137,7 +138,7 @@ export function WorkContextPage() {
         },
       });
       if (!result.data?.workReview.success || !result.data.workReview.issue) {
-        setReviewError('The review decision was not accepted. Refresh and check the current revision.');
+        setReviewError(result.data?.workReview.message ?? 'The review decision was not accepted. Refresh and check the current revision.');
         return;
       }
       setReviewReason('');
@@ -253,6 +254,7 @@ export function WorkContextPage() {
                       {run.externalUrl}
                     </a>
                   ) : null}
+                  <RunBinding run={run} contractDigest={bundle.work.contractDigest ?? null} />
                 </li>
               ))}
             </ul>
@@ -278,6 +280,8 @@ export function WorkContextPage() {
                     </span>
                   ) : null}
                   {item.summary ? <span>{item.summary}</span> : null}
+                  {item.retractedAt ? null : <EvidenceVerificationStatus evidence={item} />}
+                  <RetractEvidence evidence={item} onRetracted={() => void refetch()} />
                   <span className="observation-card__meta">run {item.runId ?? '—'}</span>
                   <span className="observation-card__meta">actor {item.actorId ?? '—'}</span>
                   <span className="observation-card__meta">{formatWhen(item.createdAt)}</span>
