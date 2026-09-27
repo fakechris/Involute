@@ -131,7 +131,7 @@ Any bugfix or unplanned modification touching product source code MUST adhere to
      - `related_work_id: <当前处理任务ID 或 所属父里程碑ID>`
      - `related_work_type: 'DISCOVERED_DURING'`
      - `parent_id`：可省略——省略时自动继承被关联项所在的里程碑（同仓库）；跨仓库发现的问题必须显式给出目标仓库的父级（§4.8）
-     - 若是 bug，带 `labels: ['bug']`（即 Type 标签 Bug）、`priority`（1–4）与 `steps_to_reproduce`：有父级（显式或继承）时直接承诺，无需人工 commit；缺任一项则进分诊候选（见 §12.5）。当场已修好的再加 `initial_state: 'REVIEW'`
+     - 若是 bug，调用 `work_file_bug`（或 `work_propose` 带 `labels: ['bug']`），必带 `priority`（1–4，设 SLA）与 `steps_to_reproduce`：有父级（显式或继承）时直接承诺，不进 Candidates；缺任一项则拒绝（见 §12.5）。当场已修好的再加 `initial_state: 'REVIEW'`
    - 必须自动生成标准的结构化中文描述：
      - `### 1. 目标与架构定位`
      - `### 2. 核心功能与交付范围`
@@ -357,7 +357,7 @@ Involute ships a Linear-style bug pipeline: humans report through the UI, agents
 2. **Discovery by agents**: Every report emits a `bug.reported` inbox notification to team humans **and** a `bug.reported` outbox webhook event (subscribable via `WORK_EVENT_TYPES`), so external agents can discover new bugs and `work_claim` them like any other committed work.
 3. **Fixing agents follow the standard protocol**: claim → `run_report` → `evidence_attach` → In Review. Bugs are ordinary committed issues; `Done` remains strictly human-gated.
 4. **Statistics**: The `/bugs` page (backed by the `bugSummary` query) shows open/closed counts, per-project and per-type-label breakdowns, unclaimed open count, open-age stats, and an 8-week creation trend for triage.
-5. **Bugs filed by agents (INV-751, decision INV-787)** — whether the agent found it or a person told it: `work_propose` with `labels: ['bug']`, `priority` (1–4) and `steps_to_reproduce`, placed like any work (`parent_id`, or `related_work_id` + `DISCOVERED_DURING` to inherit the parent). **With a parent, a priority and steps it is committed directly** — owner is the agent's human owner, it starts in Ready (or Review with `initial_state: 'REVIEW'` when already fixed), its SLA runs and `bug.reported` + `work.committed` are emitted. Missing any of them, it goes to triage as a candidate and the result says what was missing. Committed bugs are fixed or declined with a reason, never parked (zero-bug).
+5. **Bugs filed by agents (INV-751, decision INV-787)** — whether the agent found it or a person told it: prefer MCP `work_file_bug` (required `priority` 1–4 and `steps_to_reproduce`; JSON schema rejects omit). Equivalent: `work_propose` with `labels: ['bug']`, **`priority` (1–4 — it sets the SLA: Urgent 24h / High 48h / otherwise 7 days)**, and `steps_to_reproduce`, placed like any work (`parent_id`, or `related_work_id` + `DISCOVERED_DURING` to inherit the parent). **It is committed directly and does not go to Candidates** — owner is the agent's human owner, it starts in Ready (or Review with `initial_state: 'REVIEW'` when already fixed), its SLA runs and `bug.reported` + `work.committed` are emitted. Missing parent, priority or steps, **the proposal is refused**. Committed bugs are fixed or declined with a reason, never parked (zero-bug). Humans who are unsure where a bug belongs still use Report bug, which may send that report to triage.
 6. **Metrics**: `/bugs` (the `bugSummary.metrics` block) adds triage time p50/p90, bugs waiting in triage, SLA met rate, open bugs past their SLA and at risk, source (people / agents / other) and open bugs with no parent (goal 0).
 
 

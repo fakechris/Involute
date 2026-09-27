@@ -48,6 +48,7 @@ export type McpToolName =
   | 'work_list_ready'
   | 'protocol_get_guide'
   | 'work_propose'
+  | 'work_file_bug'
   | 'work_commit'
   | 'work_update'
   | 'work_link'
@@ -70,6 +71,7 @@ export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
 
 export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
   'work_propose',
+  'work_file_bug',
   'work_commit',
   'work_update',
   'work_link',
@@ -244,16 +246,41 @@ export async function callMcpTool(
         notes.push(`No parent_id given: placed under ${parent?.kind ?? 'parent'} ${parent?.identifier ?? created.parentId}, inherited from the related work (norm v1, INV-718).`);
       }
       const isBug = (proposeInput.labels ?? []).some((label) => label.trim().toLowerCase() === 'bug');
-      if (isBug && created.commitmentStatus === 'COMMITTED') {
-        notes.push('Bug committed directly (INV-787): it has a parent, a priority and steps, so its SLA is running. Fix it or have it declined with a reason; it never goes to the backlog.');
-      } else if (isBug) {
-        const missing = [!created.parentId && 'parent_id', !proposeInput.priority && 'priority', !proposeInput.stepsToReproduce && 'steps_to_reproduce'].filter(Boolean);
-        notes.push(`Bug sent to triage as a candidate. To file a bug directly next time, pass ${missing.join(', ')}.`);
+      if (isBug) {
+        notes.push('Bug committed directly (INV-787): it does not go to Candidates. Its SLA is running. Fix it or have it declined with a reason; it never goes to the backlog.');
       }
       if (!created.parentId && created.kind !== 'PROJECT') {
         notes.push('This candidate has no parent. Committing it requires one: pass parent_id now (work_link CONTAINS later), or the human will place it at commit.');
       }
       return notes.length ? { ...created, warning: notes.join(' ') } : created;
+    }
+    case 'work_file_bug': {
+      const teamId = await resolveTeamId(context.prisma, requiredString(args.team, 'team'));
+      await assertCanWriteTeam(context.prisma, context, teamId);
+      const rawTitle = requiredString(args.title, 'title');
+      const proposeInput: Parameters<typeof proposeWork>[1] = {
+        teamId,
+        title: rawTitle,
+        labels: ['bug'],
+        priority: requiredNumber(args.priority, 'priority'),
+        stepsToReproduce: requiredString(args.steps_to_reproduce, 'steps_to_reproduce'),
+        source: optionalString(args.source) ?? 'agent',
+      };
+      assignOptional(proposeInput, 'description', optionalString(args.description));
+      assignOptional(proposeInput, 'parentId', optionalString(args.parent_id));
+      assignOptional(proposeInput, 'relatedWorkId', optionalString(args.related_work_id));
+      assignOptional(proposeInput, 'repository', optionalString(args.repository));
+      assignOptional(proposeInput, 'idempotencyKey', optionalString(args.idempotency_key));
+      const relatedType = optionalString(args.related_work_type);
+      if (relatedType) proposeInput.relatedWorkType = parseWorkLinkType(relatedType, 'related_work_type');
+      else if (proposeInput.relatedWorkId) proposeInput.relatedWorkType = 'DISCOVERED_DURING';
+      assignOptional(proposeInput, 'initialState', optionalString(args.initial_state));
+      const created = await proposeWork(context.prisma, proposeInput, writeActorFromViewer(context.viewer, 'mcp'));
+      return {
+        ...created,
+        warning:
+          'Bug committed directly (INV-787): it does not go to Candidates. Priority set the SLA. Fix it or have it declined with a reason.',
+      };
     }
     case 'work_commit': {
       const work = await requireWork(context.prisma, requiredString(args.id, 'id'));
@@ -559,7 +586,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_propose',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    description: 'Create candidate work. Does not enter the ready queue. Search for duplicates first.',
+    description: 'Create candidate work. Does not enter the ready queue. Search for duplicates first. A bug (labels ["bug"]) is committed directly and never enters Candidates; it requires parent_id (or an inheritable related_work_id), priority 1–4, and steps_to_reproduce — omit any and the proposal is refused.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -591,11 +618,11 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         labels: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Label names, created when missing. Research or competitive analysis is an ISSUE labelled "research"; work it leads to links back with DERIVED_FROM. A bug carries "bug" (Type: Bug; at most one of bug / feature / improvement).',
+          description: 'Label names, created when missing. Research or competitive analysis is an ISSUE labelled "research"; work it leads to links back with DERIVED_FROM. A bug carries "bug" (Type: Bug; at most one of bug / feature / improvement), is committed directly, and must also pass priority 1–4, a parent, and steps_to_reproduce.',
         },
         priority: {
           type: 'number',
-          description: 'Bugs: 1 (Urgent, 24h SLA), 2 (High, 48h), 3 (Medium) or 4 (Low), 7 days. With labels ["bug"], a parent (parent_id or inherited) and steps_to_reproduce, the bug is committed directly; otherwise it goes to triage.',
+          description: 'Required with labels ["bug"]: 1 (Urgent, 24h SLA), 2 (High, 48h), 3 (Medium) or 4 (Low, 7 days). The bug is committed directly (it does not go to Candidates). Without parent, priority or steps_to_reproduce the proposal is refused.',
         },
         steps_to_reproduce: {
           type: 'string',
@@ -620,6 +647,54 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         },
       },
       required: ['team', 'title'],
+    },
+  },
+  {
+    name: 'work_file_bug',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    description:
+      'File a Type: Bug. It is committed directly and never enters Candidates. Priority is required because it sets the SLA (1 Urgent 24h, 2 High 48h, 3 Medium / 4 Low = 7 days). Missing parent, priority or steps_to_reproduce refuses the call. Prefer this over work_propose for bugs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        team: { type: 'string', description: 'Team key or UUID' },
+        title: { type: 'string', description: 'What is broken.' },
+        description: {
+          type: 'string',
+          description: 'Structured Chinese Markdown: ### 1. 目标与架构定位, ### 2. 核心功能与交付范围, ### 3. 验收标准与验证方案.',
+        },
+        priority: {
+          type: 'integer',
+          minimum: 1,
+          maximum: 4,
+          description: 'Required. Sets the SLA: 1 Urgent 24h, 2 High 48h, 3 Medium 7 days, 4 Low 7 days.',
+        },
+        steps_to_reproduce: {
+          type: 'string',
+          description: 'Required. How to reproduce it.',
+        },
+        parent_id: {
+          type: 'string',
+          description: 'Parent PROJECT/MILESTONE/EPIC/ISSUE. Required unless related_work_id can inherit one.',
+        },
+        related_work_id: {
+          type: 'string',
+          description: 'Work this was found during; inherits that item\'s parent when parent_id is omitted.',
+        },
+        related_work_type: {
+          type: 'string',
+          enum: ['DISCOVERED_DURING', 'DERIVED_FROM', 'RELATED_TO'],
+          description: 'Defaults to DISCOVERED_DURING when related_work_id is set.',
+        },
+        repository: { type: 'string' },
+        initial_state: {
+          type: 'string',
+          description: 'UNSTARTED (Ready, default), STARTED, or REVIEW if already fixed. BACKLOG is ignored for bugs.',
+        },
+        idempotency_key: { type: 'string' },
+        source: { type: 'string' },
+      },
+      required: ['team', 'title', 'priority', 'steps_to_reproduce'],
     },
   },
   {
@@ -980,6 +1055,7 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_list_ready: 'read',
   protocol_get_guide: 'read',
   work_propose: 'propose',
+  work_file_bug: 'propose',
   work_commit: null,
   work_update: 'update',
   work_link: 'link',

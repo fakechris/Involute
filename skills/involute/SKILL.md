@@ -17,6 +17,7 @@ Connect: Streamable HTTP MCP at `http://127.0.0.1:4200/mcp` (local) with `Author
 | [get-context](../get-context/SKILL.md) | Load contract, ancestors, blockers, claim, audits |
 | [list-ready](../list-ready/SKILL.md) | Committed, unblocked, unclaimed work |
 | [propose-work](../propose-work/SKILL.md) | Candidate proposal with optional initial_state ('REVIEW'/'STARTED'/'UNSTARTED') |
+| [file-bug](../file-bug/SKILL.md) | Type: Bug — committed directly, never Candidates; priority required for SLA |
 | [claim-work](../claim-work/SKILL.md) | Lease ready work after the user chooses it |
 | [update-work](../update-work/SKILL.md) | Contract fields with `expected_revision` |
 | [report-run](../report-run/SKILL.md) | Phase / block / complete (In Review, never Done) |
@@ -27,7 +28,7 @@ Connect: Streamable HTTP MCP at `http://127.0.0.1:4200/mcp` (local) with `Author
 ## Hard rules (all skills)
 
 1. Search before propose. Duplicate titles are a failure.
-2. Fuzzy discoveries go through `work_propose`, never straight to committed issues. Set `initial_state: 'REVIEW'` for completed features so they commit directly to `In Review`; candidate `initial_state` cannot be `COMPLETED` or `CANCELED`.
+2. Fuzzy discoveries go through `work_propose`, never straight to committed issues — **except Type: Bug** (`work_file_bug` or `work_propose` with `labels: ['bug']`, `priority` 1–4, `steps_to_reproduce`, and a parent): that is committed directly and does not go to Candidates. Set `initial_state: 'REVIEW'` for completed features so they commit directly to `In Review`; candidate `initial_state` cannot be `COMPLETED` or `CANCELED`.
 3. Do not create a child unless it can be independently accepted.
 4. Do not write local TODOs, grep results, or shell steps into Involute.
 5. `work_claim` after the user chooses a ready item — do not grab the whole queue. Use the returned `suggested_branch` verbatim as your git branch name; never invent branch names containing issue identifiers. Alias-prefixed references (e.g. `LUM-398` on a repo whose PROJECT node has `alias: LUM`) are also accepted and canonicalize to the team key (`INV-398`).
@@ -50,6 +51,7 @@ Any bugfix or unplanned modification touching product source code MUST adhere to
      - `kind: 'ISSUE'`
      - `related_work_id: <当前任务/父里程碑>`
      - `related_work_type: 'DISCOVERED_DURING'`
+     - 若是 bug：`work_file_bug`（必带 `priority` 1–4 与 `steps_to_reproduce`），直接承诺、不进 Candidates
    - 自动生成标准的结构化中文描述（定位、根因与范围、验证方案）。
 4. **汇报义务 (Reporting Accountability)**:
    在最终向用户回复时，必须附带一条：

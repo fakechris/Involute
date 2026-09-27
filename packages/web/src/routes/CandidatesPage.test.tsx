@@ -361,6 +361,48 @@ describe('CandidatesPage', () => {
       teams: { nodes: mockTeams },
     });
 
+    it('does not batch-commit bugs that have no priority', async () => {
+      queryDataHolder.current = bugData();
+      try {
+        render(
+          <MemoryRouter>
+            <CandidatesPage />
+          </MemoryRouter>,
+        );
+        fireEvent.click(screen.getByLabelText(/Select all visible/));
+        const batch = screen.getByRole('button', { name: /Batch Commit \(1\)/ });
+        expect(batch).toBeDisabled();
+        expect(batch).toHaveAttribute('title', 'Choose a priority on each bug card first: it sets the SLA.');
+        expect(mockRunCommit).not.toHaveBeenCalled();
+      } finally {
+        queryDataHolder.current = null;
+      }
+    });
+
+    it('batch-commits a bug after a priority is chosen on its card', async () => {
+      queryDataHolder.current = bugData();
+      try {
+        render(
+          <MemoryRouter>
+            <CandidatesPage />
+          </MemoryRouter>,
+        );
+        fireEvent.click(screen.getByLabelText(/Select all visible/));
+        const card = screen.getByRole('article', { name: 'INV-60 candidate' });
+        fireEvent.change(within(card).getByLabelText('Priority for INV-60'), { target: { value: '2' } });
+        const batch = screen.getByRole('button', { name: /Batch Commit \(1\)/ });
+        expect(batch).toBeEnabled();
+        fireEvent.click(batch);
+        await waitFor(() =>
+          expect(mockRunCommit).toHaveBeenCalledWith({
+            variables: { id: 'cand-bug', input: expect.objectContaining({ priority: 2 }) },
+          }),
+        );
+      } finally {
+        queryDataHolder.current = null;
+      }
+    });
+
     it('commits a bug only with a priority and declines it only with a reason', async () => {
       queryDataHolder.current = bugData();
       try {

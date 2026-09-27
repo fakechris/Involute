@@ -27,7 +27,7 @@ primary entrypoint; the web board is an observation and governance surface.
 2. **Relations.** Mentions of other work (\`INV-123\` or a project alias prefix) become RELATED_TO automatically. Dependencies the source material states must be BLOCKS (\`blocked_by\` / \`blocks\` on \`work_propose\`, or \`work_link\`). Never invent dependencies or structure.
 3. **Preview before bulk.** Before proposing several related items, lay out the whole tree (parents, blockers) and check it; if the source is ambiguous, propose an outline for review instead of guessing.
 4. **Research.** Research / competitive analysis is an ISSUE labelled \`research\` (\`labels: ['research']\`); its body stays in \`research/\`. Actionable points are ISSUEs and "won't do" conclusions DECISIONs, each DERIVED_FROM the research item. Before research reaches Review, its downstream is proposed or it states "no actionable points"; otherwise \`run_report(completed)\` warns and \`workHygiene\` lists it.
-5. **Bugs (Bug route v1, INV-748).** A bug is an ISSUE with the Type label \`Bug\` (\`labels: ['bug']\`, any casing). Type is one of Bug / Feature / Improvement, at most one per item; a second Type is refused. An agent filing a bug (found itself or told by a person) passes \`labels: ['bug']\`, \`priority\` (1–4) and \`steps_to_reproduce\`, placed like any work; with a parent (given or inherited) it is committed directly (decision INV-787), otherwise it goes to triage. Fixed on the spot: add \`initial_state: 'REVIEW'\`. Humans report through Report bug, which places the bug in its project or sends it to triage. Zero-bug (INV-750): a bug is committed with a priority — its SLA, Urgent 24h / High 48h / otherwise 7 days, paused in Review — or declined with a reason; it never goes to the backlog. Pass \`priority\` to \`work_commit\` for bugs.
+5. **Bugs (Bug route v1, INV-748).** A bug is an ISSUE with the Type label \`Bug\` (\`labels: ['bug']\`, any casing). Type is one of Bug / Feature / Improvement, at most one per item; a second Type is refused. An agent filing a bug (found itself or told by a person) must pass \`labels: ['bug']\`, \`priority\` (1–4) and \`steps_to_reproduce\`, plus a parent (\`parent_id\` or inherited): it is committed directly (decision INV-787) and **does not go to Candidates**. Missing any of those, the proposal is refused. Fixed on the spot: add \`initial_state: 'REVIEW'\`. Humans report through Report bug, which places the bug in its project or sends it to triage. Zero-bug (INV-750): a bug is committed with a priority — its SLA, Urgent 24h / High 48h / otherwise 7 days, paused in Review — or declined with a reason; it never goes to the backlog. Pass \`priority\` to \`work_commit\` for bugs.
 
 ## Three-Layer Defense Pyramid (三层防御金字塔)
 
@@ -83,7 +83,7 @@ Agent credentials carry scopes. Scope enforcement happens on MCP tools:
 | Scope | Unlocks |
 |---|---|
 | \`read\` | \`work_search\`, \`work_get_context\`, \`work_list_ready\`, \`protocol_get_guide\` (always granted) |
-| \`propose\` | \`work_propose\` |
+| \`propose\` | \`work_propose\`, \`work_file_bug\` |
 | \`update\` | \`work_update\` |
 | \`link\` | \`work_link\` |
 | \`claim\` | \`work_claim\` |
@@ -123,7 +123,8 @@ Read-only:
 - \`protocol_get_guide\` — fetch this document verbatim.
 
 Write:
-- \`work_propose\` — create candidate work. Pass \`parent_id\` to nest under project/milestone. Pass \`initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED' | 'BACKLOG'\` to direct-route upon human commitment.
+- \`work_propose\` — create candidate work. Pass \`parent_id\` to nest under project/milestone. Pass \`initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED' | 'BACKLOG'\` to direct-route upon human commitment. Type: Bug via \`labels: ['bug']\` is committed directly and never enters Candidates; it requires \`priority\` (SLA), \`steps_to_reproduce\`, and a parent.
+- \`work_file_bug\` — file a Type: Bug. Required: \`priority\` (1–4, sets the SLA) and \`steps_to_reproduce\`. Committed directly; missing parent/priority/steps is refused. Prefer this over \`work_propose\` for bugs.
 - \`work_update\` — update contract fields with \`expected_revision\`.
 - \`work_link\` — create typed work link.
 - \`work_claim\` — atomically claim committed work for the current agent actor.

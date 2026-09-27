@@ -100,6 +100,14 @@ async function main(): Promise<void> {
   const teamFlag = readFlag(args, 'team');
   const repo = readFlag(args, 'repo') ?? 'fakechris/Involute';
   const customDesc = readFlag(args, 'desc');
+  const isBug = args.includes('--bug');
+  const priorityRaw = readFlag(args, 'priority');
+  const steps = readFlag(args, 'steps');
+  const bugPriority = isBug ? Number(priorityRaw) : null;
+  if (isBug && (bugPriority === null || Number.isNaN(bugPriority) || bugPriority < 1 || bugPriority > 4)) {
+    console.error('[Involute Hotfix Reflex] --bug requires --priority 1-4 (it sets the SLA: 1 Urgent 24h, 2 High 48h, 3/4 = 7 days).');
+    process.exit(1);
+  }
 
   if (!title || title.trim() === '') {
     console.error(`
@@ -109,11 +117,14 @@ Usage:
   pnpm hotfix:reflex --title "Fix memory leak in link query" [--parent <INV-xxx>]
 
 Options:
-  --title   Description of the fix (required)
-  --parent  Parent issue or milestone identifier/UUID (e.g. INV-2)
-  --team    Team key (default: INV)
-  --repo    Repository (default: fakechris/Involute)
-  --desc    Custom detailed description
+  --title    Description of the fix (required)
+  --parent   Parent issue or milestone identifier/UUID (e.g. INV-2)
+  --team     Team key (default: INV)
+  --repo     Repository (default: fakechris/Involute)
+  --desc     Custom detailed description
+  --bug      File as Type: Bug (committed directly, never Candidates)
+  --priority 1-4, required with --bug; sets the SLA
+  --steps    Steps to reproduce; required in practice for --bug (defaults to the title)
 
 Identity:
   INV_AGENT_TOKEN                 credential of the agent running this session (preferred)
@@ -192,6 +203,13 @@ ${title.trim()}
     teamId: team.id,
     title: title.trim(),
     verification: 'Automated test suite and typecheck pass cleanly.',
+    ...(isBug
+      ? {
+          labels: ['bug'],
+          priority: bugPriority,
+          stepsToReproduce: (steps && steps.trim()) || title.trim(),
+        }
+      : {}),
   }, reflexActor);
 
   console.log(`\n✓ Successfully created Involute Hotfix Item: [${candidate.identifier}] (${candidate.id})`);
@@ -200,7 +218,11 @@ ${title.trim()}
   if (parentItem) {
     console.log(`  Parent / Discovered During: [${parentItem.identifier}] ${parentItem.title}`);
   }
-  console.log('  Status: CANDIDATE — a human commits it via /candidates or candidates:batch-commit.');
+  if (candidate.commitmentStatus === 'COMMITTED') {
+    console.log('  Status: COMMITTED — Type: Bug, SLA running; it did not go to Candidates.');
+  } else {
+    console.log('  Status: CANDIDATE — a human commits it via /candidates or candidates:batch-commit.');
+  }
 }
 
 main()

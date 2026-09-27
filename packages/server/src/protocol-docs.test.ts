@@ -23,6 +23,9 @@ const NORM_RULES: Array<[string, RegExp]> = [
   ['one Type per item', /at most one per item/],
   ['zero-bug: priority or reason, never backlog', /[Zz]ero-bug/],
   ['agent bugs with parent, priority and steps are committed directly', /steps_to_reproduce/],
+  ['agent bug proposal refused without a priority', /proposal is refused/],
+  ['agent-filed bugs never enter Candidates', /does not go to Candidates/],
+  ['work_file_bug is the agent bug harness', /work_file_bug/],
 ];
 
 describe('protocol guide and AGENTS.md agree on norm v1 (INV-721)', () => {
