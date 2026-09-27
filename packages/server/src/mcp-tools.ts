@@ -4,6 +4,8 @@ import {
   answerAgentRequest,
   claimAgentRequest,
   readAgentInbox,
+  readHandOffOrigins,
+  type HandOffOrigin,
   type AnswerEvidenceInput,
 } from './agent-request-service.js';
 import { toWireState } from './agent-request-state.js';
@@ -478,6 +480,7 @@ export async function callMcpTool(
           state: item.state,
           work_id: item.workId,
           work_identifier: item.workIdentifier,
+          ...handOffFields(item.handOff),
         })),
       };
     }
@@ -500,6 +503,7 @@ export async function callMcpTool(
         id: claimed.request.id,
         state: toWireState(claimed.request.state),
         work_id: claimed.request.workId,
+        ...handOffFields((await readHandOffOrigins(context.prisma, [claimed.request])).get(claimed.request.id) ?? null),
       };
     }
     case 'agent_request_answer': {
@@ -832,7 +836,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     name: 'agent_inbox',
     annotations: { readOnlyHint: true, destructiveHint: false },
     description:
-      'Open requests addressed to you: questions put to this actor that are still submitted, working, or awaiting your input. Poll with `since` or page with `cursor`. Reading does not reserve anything — call agent_request_claim before you start work.',
+      'Open requests addressed to you: questions put to this actor that are still submitted, working, or awaiting your input. Poll with `since` or page with `cursor`. Reading does not reserve anything — call agent_request_claim before you start work. A row with `handed_off_from_id` was handed to you after its previous target did not answer: answer in your own name, standing in for @`handed_off_from_handle`.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1078,4 +1082,18 @@ export function assertToolScope(context: GraphQLContext, name: McpToolName): voi
   if (!context.agentScopes?.includes(scope)) {
     throw createScopeForbiddenError(scope);
   }
+}
+
+/**
+ * A handed-off request says where it came from (INV-609): the receiver answers
+ * in its own name, "standing in for @<handed_off_from_handle>". All null on a
+ * request that was not handed off, so older consumers see nothing new.
+ */
+function handOffFields(origin: HandOffOrigin | null) {
+  return {
+    handed_off_from_handle: origin?.handedOffFromHandle ?? null,
+    handed_off_from_id: origin?.handedOffFromId ?? null,
+    hop_count: origin?.hopCount ?? null,
+    root_request_id: origin?.rootRequestId ?? null,
+  };
 }

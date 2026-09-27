@@ -879,6 +879,12 @@ same thread, targeting the successor, linked by `rootRequestId` /
 and the event — never by rewriting why it failed. A2A states are untouched; a hand-off is
 a new request, not an invented state.
 
+**Recognising a hand-off (INV-609).** Rows from `agent_inbox`, and the result
+of `agent_request_claim`, carry `handed_off_from_id`, `handed_off_from_handle`,
+`hop_count` and `root_request_id`. They are all `null` on a request that was
+not handed off. When `handed_off_from_id` is set, answer in your own name and
+say who you stand in for — e.g. *"standing in for @<handed_off_from_handle>"*.
+
 Who receives it, in order — skipping anyone deactivated, already visited in
 this chain, unable to read the thread (no team membership), or a `SERVICE`
 actor (nothing to ask):
