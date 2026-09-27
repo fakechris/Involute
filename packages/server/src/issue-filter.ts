@@ -1,4 +1,4 @@
-import type { CommitmentStatus, Prisma, WorkKind } from '@prisma/client';
+import type { CommitmentStatus, Prisma, WorkflowStateType, WorkKind } from '@prisma/client';
 
 export interface StringComparatorInput {
   eq?: string | null;
@@ -25,6 +25,7 @@ export interface TeamFilterInput {
 
 export interface WorkflowStateFilterRefInput {
   name?: StringComparatorInput | null;
+  type?: { eq?: WorkflowStateType | null } | null;
 }
 
 export interface UserFilterRefInput {
@@ -79,6 +80,12 @@ export function buildIssueWhere(
         },
       },
     });
+  }
+
+  const stateType = filter?.state?.type?.eq;
+
+  if (stateType !== undefined && stateType !== null) {
+    clauses.push({ state: { is: { type: stateType } } });
   }
 
   const stateName = filter?.state?.name?.eq;

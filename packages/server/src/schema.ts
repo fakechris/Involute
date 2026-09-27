@@ -24,6 +24,19 @@ import type {
 } from '@prisma/client';
 
 import { makeExecutableSchema } from '@graphql-tools/schema';
+
+import {
+  assertSettingsAdmin,
+  createLabel,
+  createWorkflowState,
+  deleteLabel,
+  deleteWorkflowState,
+  listServerFeatures,
+  renameLabel,
+  setGlobalRole,
+  updateWorkflowState,
+  type ServerFeature,
+} from './admin-settings.js';
 import {
   GraphQLError,
   GraphQLScalarType,
@@ -312,6 +325,8 @@ const typeDefs = /* GraphQL */ `
     issues(first: Int!, after: String, filter: IssueFilter, query: String): IssueConnection!
     teams(filter: TeamFilter): TeamConnection!
     issueLabels(filter: IssueLabelFilter): IssueLabelConnection!
+    "Optional server features this deployment runs (on/off only; never URLs or secrets). Admins only."
+    serverFeatures: [ServerFeature!]!
     users: UserConnection!
     projects(teamId: String!): ProjectConnection! @deprecated(reason: "Use issues query with kind: PROJECT and CONTAINS links instead.")
     project(id: String!): Project @deprecated(reason: "Use issue query with kind: PROJECT instead.")
@@ -398,6 +413,14 @@ const typeDefs = /* GraphQL */ `
     notificationMarkRead(id: String!): NotificationMutationPayload!
     notificationsMarkAllRead: NotificationMarkAllPayload!
     notificationPreferencesUpdate(emailNotifications: Boolean!): NotificationPreferencesPayload!
+    "Workspace settings (INV-797), admins only."
+    labelCreate(name: String!): LabelMutationPayload!
+    labelUpdate(id: String!, name: String!): LabelMutationPayload!
+    labelDelete(id: String!): LabelDeletePayload!
+    workflowStateCreate(input: WorkflowStateCreateInput!): WorkflowStateMutationPayload!
+    workflowStateUpdate(id: String!, input: WorkflowStateUpdateInput!): WorkflowStateMutationPayload!
+    workflowStateDelete(id: String!): WorkflowStateDeletePayload!
+    userSetGlobalRole(userId: String!, role: GlobalRole!, reason: String): UserRolePayload!
   }
 
   type Team {
@@ -490,11 +513,68 @@ const typeDefs = /* GraphQL */ `
     name: String!
     type: WorkflowStateType!
     position: Int!
+    "How many work items are in this state."
+    issueCount: Int!
   }
 
   type IssueLabel {
     id: ID!
     name: String!
+    "How many work items carry the label."
+    issueCount: Int!
+  }
+
+  type ServerFeature {
+    key: String!
+    label: String!
+    enabled: Boolean!
+    detail: String!
+  }
+
+  type LabelMutationPayload {
+    success: Boolean!
+    label: IssueLabel
+    "Why the mutation was refused; null on success."
+    message: String
+  }
+
+  type LabelDeletePayload {
+    success: Boolean!
+    labelId: String
+    "Why the mutation was refused; null on success."
+    message: String
+  }
+
+  input WorkflowStateCreateInput {
+    teamId: String!
+    name: String!
+    type: WorkflowStateType!
+  }
+
+  input WorkflowStateUpdateInput {
+    name: String
+    position: Int
+  }
+
+  type WorkflowStateMutationPayload {
+    success: Boolean!
+    state: WorkflowState
+    "Why the mutation was refused; null on success."
+    message: String
+  }
+
+  type WorkflowStateDeletePayload {
+    success: Boolean!
+    stateId: String
+    "Why the mutation was refused; null on success."
+    message: String
+  }
+
+  type UserRolePayload {
+    success: Boolean!
+    user: User
+    "Why the mutation was refused; null on success."
+    message: String
   }
 
   type User {
@@ -502,6 +582,8 @@ const typeDefs = /* GraphQL */ `
     name: String
     email: String
     isMe: Boolean
+    "Whether inbox notifications are also emailed. Only readable for yourself; null for anyone else."
+    emailNotifications: Boolean
     globalRole: GlobalRole!
     actorKind: ActorKind!
     """Who picks up this actor's unanswered requests (INV-562)."""
@@ -1239,6 +1321,12 @@ const typeDefs = /* GraphQL */ `
 
   input WorkflowStateFilterRef {
     name: StringComparator
+    "Match by lifecycle type: names can be renamed, types cannot."
+    type: WorkflowStateTypeComparator
+  }
+
+  input WorkflowStateTypeComparator {
+    eq: WorkflowStateType
   }
 
   input UserFilterRef {
@@ -1804,6 +1892,10 @@ const resolvers = {
     parseLiteral: (ast) => valueFromASTUntyped(ast),
   }),
   Query: {
+    serverFeatures: (_parent: unknown, _args: unknown, context: GraphQLContext): ServerFeature[] => {
+      assertSettingsAdmin(context);
+      return listServerFeatures();
+    },
     viewer: (_parent: unknown, _args: Record<string, never>, context: GraphQLContext): User | null =>
       context.viewer,
     issue: async (
@@ -3146,6 +3238,75 @@ const resolvers = {
         });
         return { count, success: true as const };
       }, { count: 0, success: false as const }),
+    labelCreate: async (
+      _parent: unknown,
+      args: { name: string },
+      context: GraphQLContext,
+    ): Promise<{ label: IssueLabel | null; message?: string | null; success: boolean }> =>
+      runMutation(async () => {
+        assertSettingsAdmin(context);
+        return { label: await createLabel(context.prisma, args.name), success: true as const };
+      }, { label: null, success: false as const }),
+    labelUpdate: async (
+      _parent: unknown,
+      args: { id: string; name: string },
+      context: GraphQLContext,
+    ): Promise<{ label: IssueLabel | null; message?: string | null; success: boolean }> =>
+      runMutation(async () => {
+        assertSettingsAdmin(context);
+        return { label: await renameLabel(context.prisma, args.id, args.name), success: true as const };
+      }, { label: null, success: false as const }),
+    labelDelete: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<{ labelId: string | null; message?: string | null; success: boolean }> =>
+      runMutation(async () => {
+        assertSettingsAdmin(context);
+        return { labelId: (await deleteLabel(context.prisma, args.id)).id, success: true as const };
+      }, { labelId: null, success: false as const }),
+    workflowStateCreate: async (
+      _parent: unknown,
+      args: { input: { name: string; teamId: string; type: WorkflowState['type'] } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; state: WorkflowState | null; success: boolean }> =>
+      runMutation(async () => {
+        assertSettingsAdmin(context);
+        return { state: await createWorkflowState(context.prisma, args.input), success: true as const };
+      }, { state: null, success: false as const }),
+    workflowStateUpdate: async (
+      _parent: unknown,
+      args: { id: string; input: { name?: string | null; position?: number | null } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; state: WorkflowState | null; success: boolean }> =>
+      runMutation(async () => {
+        assertSettingsAdmin(context);
+        return { state: await updateWorkflowState(context.prisma, args.id, args.input), success: true as const };
+      }, { state: null, success: false as const }),
+    workflowStateDelete: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; stateId: string | null; success: boolean }> =>
+      runMutation(async () => {
+        assertSettingsAdmin(context);
+        return { stateId: (await deleteWorkflowState(context.prisma, args.id)).id, success: true as const };
+      }, { stateId: null, success: false as const }),
+    userSetGlobalRole: async (
+      _parent: unknown,
+      args: { reason?: string | null; role: User['globalRole']; userId: string },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; user: User | null }> =>
+      runMutation(async () => {
+        assertSettingsAdmin(context);
+        const user = await setGlobalRole(context.prisma, {
+          byActorId: context.viewer?.id ?? null,
+          reason: args.reason ?? null,
+          role: args.role,
+          userId: args.userId,
+        });
+        return { success: true as const, user };
+      }, { success: false as const, user: null }),
     notificationPreferencesUpdate: async (
       _parent: unknown,
       args: { emailNotifications: boolean },
@@ -3588,9 +3749,22 @@ const resolvers = {
       });
     },
   },
+  IssueLabel: {
+    issueCount: (parent: { id: string }, _args: unknown, context: GraphQLContext): Promise<number> =>
+      context.prisma.issue.count({ where: { labels: { some: { id: parent.id } } } }),
+  },
+  WorkflowState: {
+    issueCount: (parent: { id: string }, _args: unknown, context: GraphQLContext): Promise<number> =>
+      context.prisma.issue.count({ where: { stateId: parent.id } }),
+  },
   User: {
     isMe: (parent: UserParent, _args: Record<string, never>, context: GraphQLContext): boolean =>
       context.viewer?.id === parent.id,
+    emailNotifications: (parent: UserParent, _args: Record<string, never>, context: GraphQLContext): boolean | null => {
+      if (context.viewer?.id !== parent.id) return null;
+      const prefs = parent.notificationPrefs as { emailNotifications?: unknown } | null;
+      return prefs?.emailNotifications !== false;
+    },
     globalRole: (parent: UserParent): User['globalRole'] => parent.globalRole,
     actorKind: (parent: UserParent): User['actorKind'] => parent.actorKind,
     successorActor: async (
