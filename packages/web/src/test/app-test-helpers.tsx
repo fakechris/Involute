@@ -292,9 +292,10 @@ export function mockSessionState(
     viewer?: { email: string; globalRole: 'ADMIN' | 'USER'; id: string; name: string } | null;
   },
 ) {
+  // A fresh Response per call: a body can be read once, and several screens ask for the session.
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue(
+    vi.fn().mockImplementation(async () =>
       new Response(
         JSON.stringify({
           authMode: state.authMode ?? 'none',

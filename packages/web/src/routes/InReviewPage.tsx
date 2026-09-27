@@ -39,7 +39,8 @@ function writeStoredIql(query: string) {
 function buildFilter(teamKey: string | null): InReviewPageQueryVariables['filter'] {
   return {
     commitmentStatus: 'COMMITTED',
-    state: { name: { eq: 'In Review' } },
+    // By type: an admin may rename the state (INV-797).
+    state: { type: { eq: 'REVIEW' } },
     ...(teamKey ? { team: { key: { eq: teamKey } } } : {}),
   };
 }

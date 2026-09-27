@@ -169,6 +169,7 @@ export async function applyMonotonicForward(
       teamId: input.teamId,
       type: input.targetStateType,
     },
+    orderBy: { position: 'asc' },
   });
 
   if (!targetState) {
@@ -303,6 +304,7 @@ export async function applyProvenanceRollback(
       teamId: input.teamId,
       type: 'STARTED',
     },
+    orderBy: { position: 'asc' },
   });
 
   if (!startedState) {
