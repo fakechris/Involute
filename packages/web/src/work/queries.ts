@@ -227,6 +227,7 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
         acceptance
         verification
         repository
+        contractDigest
         state {
           id
           name
@@ -280,6 +281,10 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
         externalUrl
         startedAt
         endedAt
+        repository
+        commitSha
+        pullRequestNumber
+        contractRevision
       }
       evidence {
         id
@@ -293,6 +298,7 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
         retractReason
         retractedBy { id name handle }
         supersededByWork { id identifier }
+        verifications { id status failureCode observedAt }
       }
       reviewDecisions {
         id
@@ -368,6 +374,7 @@ export const WORK_REVIEW_MUTATION = gql`
   mutation WorkReview($id: String!, $input: WorkReviewInput!) {
     workReview(id: $id, input: $input) {
       success
+      message
       issue {
         id
         identifier
@@ -519,6 +526,16 @@ export const WORK_HYGIENE_QUERY = gql`
         title
         repository
       }
+    }
+  }
+`;
+
+// A person marks evidence as wrongly attached (INV-598); exposed in the UI by INV-790.
+export const EVIDENCE_RETRACT_MUTATION = gql`
+  mutation EvidenceRetract($input: EvidenceRetractInput!) {
+    evidenceRetract(input: $input) {
+      success
+      message
     }
   }
 `;

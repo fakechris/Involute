@@ -53,6 +53,9 @@ export function InReviewPage() {
   const [bulkReason, setBulkReason] = useState('');
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<'accept' | 'reject' | null>(null);
+  // One item at a time (INV-790): accept or return a single card.
+  const [itemPending, setItemPending] = useState<Record<string, 'ACCEPTED' | 'REJECTED'>>({});
+  const [itemErrors, setItemErrors] = useState<Record<string, string>>({});
   const [loadingMore, setLoadingMore] = useState(false);
   const [paginationError, setPaginationError] = useState(false);
 
@@ -130,6 +133,27 @@ export function InReviewPage() {
       setPaginationError(true);
     } finally {
       setLoadingMore(false);
+    }
+  }
+
+  async function reviewOne(item: InReviewWork, decision: 'ACCEPTED' | 'REJECTED') {
+    setItemErrors(({ [item.id]: _cleared, ...rest }) => rest);
+    setItemPending((current) => ({ ...current, [item.id]: decision }));
+    try {
+      const result = await runReview({ variables: { id: item.id, input: { decision, expectedRevision: item.revision } } });
+      if (!result.data?.workReview.success || !result.data.workReview.issue) {
+        setItemErrors((current) => ({
+          ...current,
+          [item.id]: result.data?.workReview.message ?? (decision === 'ACCEPTED' ? BULK_ACCEPT_ERROR : BULK_REJECT_ERROR),
+        }));
+        return;
+      }
+      setSelectedIds((current) => current.filter((id) => id !== item.id));
+      await refetch();
+    } catch {
+      setItemErrors((current) => ({ ...current, [item.id]: decision === 'ACCEPTED' ? BULK_ACCEPT_ERROR : BULK_REJECT_ERROR }));
+    } finally {
+      setItemPending(({ [item.id]: _done, ...rest }) => rest);
     }
   }
 
@@ -353,7 +377,28 @@ export function InReviewPage() {
                       <dd>{item.repository || '-'}</dd>
                     </div>
                   </dl>
+                  {itemErrors[item.id] ? (
+                    <p className="observation-error" role="alert">
+                      {itemErrors[item.id]}
+                    </p>
+                  ) : null}
                   <div className="observation-card__actions">
+                    <Btn
+                      variant="accent"
+                      icon={<IcoCheck size={12} />}
+                      disabled={Boolean(itemPending[item.id]) || pendingAction !== null}
+                      onClick={() => void reviewOne(item, 'ACCEPTED')}
+                    >
+                      {itemPending[item.id] === 'ACCEPTED' ? 'Accepting...' : 'Accept'}
+                    </Btn>
+                    <Btn
+                      variant="danger"
+                      icon={<IcoClose size={12} />}
+                      disabled={Boolean(itemPending[item.id]) || pendingAction !== null}
+                      onClick={() => void reviewOne(item, 'REJECTED')}
+                    >
+                      {itemPending[item.id] === 'REJECTED' ? 'Returning...' : 'Return'}
+                    </Btn>
                     <Btn variant="ghost" onClick={() => navigate(`/work/${item.id}`)}>
                       Open context
                     </Btn>

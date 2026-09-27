@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -136,6 +136,26 @@ describe('InReviewPage', () => {
         input: { decision: 'REJECTED', expectedRevision: 3 },
       },
     });
+  });
+
+  it('accepts or returns a single item and shows why a review was refused (INV-790)', async () => {
+    render(
+      <MemoryRouter>
+        <InReviewPage />
+      </MemoryRouter>,
+    );
+    const first = screen.getByRole('listitem', { name: 'INV-101 in review' });
+    fireEvent.click(within(first).getByRole('button', { name: 'Accept' }));
+    await waitFor(() =>
+      expect(mockRunReview).toHaveBeenCalledWith({ variables: { id: 'issue-r1', input: { decision: 'ACCEPTED', expectedRevision: 3 } } }),
+    );
+    await waitFor(() => expect(mockRefetch).toHaveBeenCalled());
+
+    mockRunReview.mockResolvedValueOnce({ data: { workReview: { success: false, message: 'Work revision changed.', issue: null, decision: null } } });
+    const second = screen.getByRole('listitem', { name: 'INV-102 in review' });
+    fireEvent.click(within(second).getByRole('button', { name: 'Return' }));
+    expect(await within(second).findByRole('alert')).toHaveTextContent('Work revision changed.');
+    expect(mockRunReview).toHaveBeenLastCalledWith({ variables: { id: 'issue-r2', input: { decision: 'REJECTED', expectedRevision: 2 } } });
   });
 
   it('applies a custom IQL filter from the view bar', () => {

@@ -442,6 +442,8 @@ Agent-filed bugs (INV-751 / decision INV-787): `workPropose` / `work_propose` ac
 
 ### `issueUpdate`
 
+A person moving work into a Done (COMPLETED) state through `issueUpdate` — status dropdown, drawer, board drag or API — is an acceptance (INV-790): it records an `ACCEPTED` review decision bound to the latest completed run and emits `work.accepted` (payload `viaStateChange: true`), exactly like `workReview`. `Issue.contractDigest` is the current contract hash; a run whose `contractRevision` differs ran against an older contract. `workReview`, `workReject` and `evidenceRetract` return the refusal reason in `message`.
+
 Updates any combination of:
 
 - `stateId`

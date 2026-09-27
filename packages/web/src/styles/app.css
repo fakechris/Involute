@@ -6277,3 +6277,37 @@ a.bugs-stat {
   font-size: 12px;
   white-space: nowrap;
 }
+
+/* Review evidence (INV-790). */
+.review-binding {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.review-binding__stale,
+.review-verification--warn {
+  color: #b45309;
+}
+
+.review-verification {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.review-verification--ok {
+  color: #15803d;
+}
+
+.review-verification--bad {
+  color: var(--danger);
+}
+
+.review-retract {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
