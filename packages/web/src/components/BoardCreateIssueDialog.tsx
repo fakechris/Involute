@@ -4,6 +4,11 @@ import type { TeamSummary } from '../board/types';
 import type { CreatePlacement, PlaceableProject, PlacementSource } from '../work/placement';
 import { PlacementPicker } from './PlacementPicker';
 
+export type CreatableKind = 'ISSUE' | 'EPIC' | 'DECISION';
+
+/** A decision records what was decided and why (AGENTS.md §10); it starts from the three-part outline. */
+export const DECISION_TEMPLATE = '### 1. 目标与架构定位\n\n### 2. 决策内容与依据\n\n### 3. 验收标准与验证方案\n';
+
 interface BoardCreateIssueDialogProps {
   createDescription: string;
   createTitle: string;
@@ -15,6 +20,9 @@ interface BoardCreateIssueDialogProps {
   placement: CreatePlacement | null;
   placementSource: PlacementSource | null;
   createMore: boolean;
+  /** Issue, Epic or Decision (INV-791); milestones are created on the Cycles page. */
+  createKind: CreatableKind;
+  onCreateKindChange: (kind: CreatableKind) => void;
   errorMessage: string | null;
   onPlacementChange: (placement: CreatePlacement | null) => void;
   onCreateMoreChange: (value: boolean) => void;
@@ -36,6 +44,8 @@ export function BoardCreateIssueDialog({
   placement,
   placementSource,
   createMore,
+  createKind,
+  onCreateKindChange,
   errorMessage,
   onPlacementChange,
   onCreateMoreChange,
@@ -86,6 +96,17 @@ export function BoardCreateIssueDialog({
             }
           }}
         >
+          <div className="issue-panel__section">
+            <label className="field-stack">
+              <span>Type</span>
+              <select aria-label="Work type" value={createKind} disabled={isSaving} onChange={(event) => onCreateKindChange(event.target.value as CreatableKind)}>
+                <option value="ISSUE">Issue</option>
+                <option value="EPIC">Epic</option>
+                <option value="DECISION">Decision</option>
+              </select>
+            </label>
+          </div>
+
           <div className="issue-panel__section">
             <label className="issue-panel__label" htmlFor="create-issue-title">
               Title
@@ -140,6 +161,7 @@ export function BoardCreateIssueDialog({
               projects={projects}
               value={placement}
               source={placementSource}
+              kind={createKind}
               disabled={isSaving}
               onChange={onPlacementChange}
             />

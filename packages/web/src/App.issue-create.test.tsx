@@ -274,6 +274,21 @@ describe('App issue creation', () => {
     expect(createIssue).not.toHaveBeenCalled();
   });
 
+  it('creates a decision directly in the project, starting from the decision outline (INV-791)', async () => {
+    const createIssue = mockCreate();
+    renderApp(placedState(), ['/?project=fakechris/Involute']);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create issue' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Create issue drawer' });
+    fireEvent.change(within(dialog).getByLabelText('Work type'), { target: { value: 'DECISION' } });
+    expect((within(dialog).getByLabelText('Issue description') as HTMLTextAreaElement).value).toContain('### 2. 决策内容与依据');
+    const location = within(dialog).getByLabelText('Location') as HTMLSelectElement;
+    expect(within(location).getAllByRole('option').map((option) => option.textContent)).toEqual(['Directly in the project']);
+    fireEvent.change(within(dialog).getByLabelText('Issue title'), { target: { value: '不做：自动同步定价页' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create issue' }));
+    await waitFor(() => expect(createIssue).toHaveBeenCalledTimes(1));
+    expect(createIssue.mock.calls[0]![0].variables.input).toMatchObject({ title: '不做：自动同步定价页', kind: 'DECISION', parentId: 'INV-79' });
+  });
+
   it('asks for a project first when the team has none', async () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
     fireEvent.click(await screen.findByRole('button', { name: 'Create issue' }));

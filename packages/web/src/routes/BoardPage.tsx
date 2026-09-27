@@ -83,7 +83,8 @@ import {
 import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { writeStoredShellIssues, writeStoredShellTeams } from '../lib/app-shell-state';
-import { BoardCreateIssueDialog } from '../components/BoardCreateIssueDialog';
+import { BoardCreateIssueDialog, DECISION_TEMPLATE, type CreatableKind } from '../components/BoardCreateIssueDialog';
+import type { StructureUpdate } from '../components/WorkStructureEditor';
 import {
   noMilestonePlacement,
   readLastPlacement,
@@ -277,6 +278,7 @@ export function BoardPage() {
   const [createPlacement, setCreatePlacement] = useState<CreatePlacement | null>(null);
   const [placementSource, setPlacementSource] = useState<PlacementSource | null>(null);
   const [createMore, setCreateMore] = useState(false);
+  const [createKind, setCreateKind] = useState<CreatableKind>('ISSUE');
   const [createError, setCreateError] = useState<string | null>(null);
   const onPlacementChange = useCallback((placement: CreatePlacement | null) => {
     setCreatePlacement(placement);
@@ -474,6 +476,7 @@ export function BoardPage() {
     const initial = initialPlacement(context);
     setCreateTitle(title);
     setCreateDescription('');
+    setCreateKind('ISSUE');
     setCreatePlacement(initial?.placement ?? null);
     setPlacementSource(initial?.source ?? null);
     setCreateError(null);
@@ -1563,6 +1566,14 @@ export function BoardPage() {
     }));
   }
 
+  async function persistStructureChange(issue: IssueSummary, update: StructureUpdate) {
+    await persistIssueUpdate(issue, update, (current) => ({
+      ...current,
+      ...(update.priority !== undefined ? { priority: update.priority } : {}),
+      ...(update.kind ? { kind: update.kind } : {}),
+    }));
+  }
+
   async function persistAssigneeChange(issue: IssueSummary, assigneeId: string | null) {
     if ((issue.assignee?.id ?? null) === assigneeId) {
       return;
@@ -1709,6 +1720,7 @@ export function BoardPage() {
             teamId: selectedTeam.id,
             title: nextTitle,
             parentId: createPlacement.parentId,
+            ...(createKind !== 'ISSUE' ? { kind: createKind } : {}),
             ...(trimmedDescription ? { description: trimmedDescription } : {}),
           },
         },
@@ -1729,7 +1741,7 @@ export function BoardPage() {
       ]);
       setFocusedIssueId(result.data.issueCreate.issue.id);
       setCreateTitle('');
-      setCreateDescription('');
+      setCreateDescription(createKind === 'DECISION' ? DECISION_TEMPLATE : '');
       if (createMore) {
         // Keep the placement for the next one, as Linear's "Create more" does.
         setPlacementSource(null);
@@ -1824,6 +1836,13 @@ export function BoardPage() {
     }
 
     const issue = visibleIssues.find((item) => item.id === issueId);
+
+    // Dropped on a priority group (INV-791): the drop sets the priority.
+    const overPriority = (event.over?.data.current as { priority?: unknown } | undefined)?.priority;
+    if (issue && typeof overPriority === 'number') {
+      if (overPriority !== issue.priority) await persistStructureChange(issue, { priority: overPriority }).catch(() => undefined);
+      return;
+    }
 
     if (!targetStateId) {
       if (issue && originState && issue.state.id !== originState.id) {
@@ -2621,6 +2640,10 @@ export function BoardPage() {
               onNativeDropIssue={(payload, targetStateId) => {
                 void handleNativeDropIssue(payload, targetStateId);
               }}
+              onNativeDropPriority={(payload, priority) => {
+                const dropped = visibleIssues.find((item) => item.id === payload.issueId);
+                if (dropped && dropped.priority !== priority) void persistStructureChange(dropped, { priority }).catch(() => undefined);
+              }}
               onFilterProject={handleSelectProject}
             />
           ) : (
@@ -2728,6 +2751,7 @@ export function BoardPage() {
         onTitleSave={persistTitleChange}
         onDescriptionSave={persistDescriptionChange}
         onLabelsChange={persistLabelsChange}
+        onStructureChange={persistStructureChange}
         onAssigneeChange={persistAssigneeChange}
         onCommentCreate={persistCommentCreate}
         onCommentDelete={persistCommentDelete}
@@ -2751,6 +2775,12 @@ export function BoardPage() {
         errorMessage={createError}
         onPlacementChange={onPlacementChange}
         onCreateMoreChange={setCreateMore}
+        createKind={createKind}
+        onCreateKindChange={(kind) => {
+          setCreateKind(kind);
+          if (kind === 'DECISION' && !createDescription.trim()) setCreateDescription(DECISION_TEMPLATE);
+          if (kind !== 'DECISION' && createDescription === DECISION_TEMPLATE) setCreateDescription('');
+        }}
         onClose={() => setIsCreateOpen(false)}
         onSubmit={(event) => void handleCreateIssueSubmit(event)}
         onTitleChange={setCreateTitle}
