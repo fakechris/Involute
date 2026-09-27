@@ -17,6 +17,7 @@ interface KanbanViewProps {
   onToggleIssueSelection: (issue: IssueSummary) => void;
   onInlineCreate: (title: string, groupMeta?: BoardIssueGroup['meta']) => void;
   onNativeDropIssue?: ((payload: Html5BoardDragPayload, targetStateId: string) => void) | undefined;
+  onNativeDropPriority?: ((payload: Html5BoardDragPayload, priority: number) => void) | undefined;
   onNativeDragStart?: ((payload: Html5BoardDragPayload) => void) | undefined;
   onNativeDragEnd?: (() => void) | undefined;
   onFilterProject?: ((projectKey: string) => void) | undefined;
@@ -30,6 +31,7 @@ function KanbanColumn({
   onToggleIssueSelection,
   onInlineCreate,
   onNativeDropIssue,
+  onNativeDropPriority,
   onNativeDragStart,
   onNativeDragEnd,
   onFilterProject,
@@ -41,6 +43,7 @@ function KanbanColumn({
   onToggleIssueSelection: (issue: IssueSummary) => void;
   onInlineCreate: (title: string) => void;
   onNativeDropIssue?: ((payload: Html5BoardDragPayload, targetStateId: string) => void) | undefined;
+  onNativeDropPriority?: ((payload: Html5BoardDragPayload, priority: number) => void) | undefined;
   onNativeDragStart?: ((payload: Html5BoardDragPayload) => void) | undefined;
   onNativeDragEnd?: (() => void) | undefined;
   onFilterProject?: ((projectKey: string) => void) | undefined;
@@ -52,6 +55,8 @@ function KanbanColumn({
     id: droppableId,
     data: {
       stateId: group.meta?.stateId ?? null,
+      // Priority groups (INV-791): dropping here sets the priority.
+      priority: group.meta?.priority ?? null,
       title: group.label,
       type: 'column',
     },
@@ -106,7 +111,13 @@ function KanbanColumn({
             const payload = parseHtml5BoardDragPayload(
               event.dataTransfer.getData('application/x-involute-issue'),
             );
-            if (!payload || !group.meta?.stateId) return;
+            if (!payload) return;
+            if (group.meta?.priority !== undefined && onNativeDropPriority) {
+              event.preventDefault();
+              onNativeDropPriority(payload, group.meta.priority);
+              return;
+            }
+            if (!group.meta?.stateId) return;
             event.preventDefault();
             onNativeDropIssue?.(payload, group.meta.stateId);
           }}
@@ -150,6 +161,7 @@ export function KanbanView({
   onToggleIssueSelection,
   onInlineCreate,
   onNativeDropIssue,
+  onNativeDropPriority,
   onNativeDragStart,
   onNativeDragEnd,
   onFilterProject,
@@ -166,6 +178,7 @@ export function KanbanView({
           onToggleIssueSelection={onToggleIssueSelection}
           onInlineCreate={(title) => onInlineCreate(title, group.meta)}
           onNativeDropIssue={onNativeDropIssue}
+          onNativeDropPriority={onNativeDropPriority}
           onNativeDragStart={onNativeDragStart}
           onNativeDragEnd={onNativeDragEnd}
           {...(onFilterProject ? { onFilterProject } : {})}

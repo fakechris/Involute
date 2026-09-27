@@ -462,6 +462,7 @@ export interface IssueUpdateMutationVariables {
     projectId?: string | null;
     cycleId?: string | null;
     parentId?: string | null;
+    repository?: string | null;
     kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
     outcome?: string | null;
     scope?: string | null;

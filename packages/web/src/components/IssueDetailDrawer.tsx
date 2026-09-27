@@ -9,6 +9,7 @@ import { IssueRelations } from './IssueRelations';
 import { AddSubIssueButton } from './AddSubIssueButton';
 import { BugSlaBadge } from './BugSlaBadge';
 import { ClaimControl } from './ClaimControl';
+import { WorkStructureEditor, type StructureUpdate } from './WorkStructureEditor';
 import { toggleLabelId } from '../work/labels';
 import { RichTextEditor } from './RichTextEditor';
 import { AGENTS_QUERY } from '../board/queries';
@@ -32,6 +33,8 @@ interface IssueDetailDrawerProps {
   onTitleSave: (issue: IssueSummary, title: string) => Promise<void>;
   onDescriptionSave: (issue: IssueSummary, description: string) => Promise<void>;
   onLabelsChange: (issue: IssueSummary, labelIds: string[]) => Promise<void>;
+  /** Placement, priority and kind (INV-791). */
+  onStructureChange?: (issue: IssueSummary, update: StructureUpdate) => Promise<void>;
   onAssigneeChange: (issue: IssueSummary, assigneeId: string | null) => Promise<void>;
   onCommentCreate: (issue: IssueSummary, body: string) => Promise<void>;
   onCommentDelete: (issue: IssueSummary, commentId: string) => Promise<void>;
@@ -55,6 +58,7 @@ export function IssueDetailDrawer({
   onTitleSave,
   onDescriptionSave,
   onLabelsChange,
+  onStructureChange,
   onAssigneeChange,
   onCommentCreate,
   onCommentDelete,
@@ -605,6 +609,17 @@ export function IssueDetailDrawer({
                 <span className="issue-panel__label">Parent</span>
                 <p>{parentSummary}</p>
               </div>
+
+              {onStructureChange ? (
+                <div className="issue-panel__property-group">
+                  <span className="issue-panel__label">Structure</span>
+                  <WorkStructureEditor
+                    work={activeIssue}
+                    disabled={savingState}
+                    onUpdate={(update) => void onStructureChange(activeIssue, update).catch(() => undefined)}
+                  />
+                </div>
+              ) : null}
 
               <div className="issue-panel__property-group">
                 <span className="issue-panel__label">Claim</span>

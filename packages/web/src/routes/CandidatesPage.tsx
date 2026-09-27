@@ -254,7 +254,7 @@ function UnscopedParentField({ candidate, onChange }: { candidate: CandidateWork
     <div className="observation-field observation-parent observation-parent--missing" aria-label={`Parent for ${candidate.identifier}`}>
       <span>Parent (required to commit)</span>
       <PlacementPicker
-        projects={data?.projectSummary.projects ?? []}
+        projects={data?.projectSummary?.projects ?? []}
         value={placement}
         source={null}
         onChange={(next) => {
