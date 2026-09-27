@@ -10,8 +10,6 @@ import {
   ISSUE_PAGE_QUERY,
   ISSUE_UPDATE_MUTATION,
   PROJECTS_QUERY,
-  PROJECT_ISSUES_QUERY,
-  WORK_LINK_MUTATION,
   CYCLES_QUERY,
 } from '../board/queries';
 import type {
@@ -30,10 +28,6 @@ import type {
   CommentSummary,
   ProjectsQueryData,
   ProjectsQueryVariables,
-  ProjectIssuesQueryData,
-  ProjectIssuesQueryVariables,
-  WorkLinkMutationData,
-  WorkLinkMutationVariables,
   CyclesQueryData,
   CyclesQueryVariables,
 } from '../board/types';
@@ -43,6 +37,8 @@ import { IssueRelations } from '../components/IssueRelations';
 import { AddSubIssueButton } from '../components/AddSubIssueButton';
 import { BugSlaBadge } from '../components/BugSlaBadge';
 import { ClaimControl } from '../components/ClaimControl';
+import { WorkStructureEditor } from '../components/WorkStructureEditor';
+import { toggleLabelId } from '../work/labels';
 import { mergeIssueWithPreservedComments } from '../board/utils';
 import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
@@ -97,15 +93,6 @@ export function IssuePage() {
   );
 
   const teamId = data?.issue?.team.id ?? '';
-  const teamKey = data?.issue?.team.key ?? '';
-  const { data: projectIssuesData } = useQuery<ProjectIssuesQueryData, ProjectIssuesQueryVariables>(
-    PROJECT_ISSUES_QUERY,
-    {
-      skip: !teamKey,
-      variables: { teamKey },
-    },
-  );
-  const [runWorkLink] = useMutation<WorkLinkMutationData, WorkLinkMutationVariables>(WORK_LINK_MUTATION);
   const [runAgentRequestAnswer] = useMutation<{ agentRequestAnswer: { success: boolean } }, { input: { body: string; overrideReason?: string | null; requestId: string } }>(AGENT_REQUEST_ANSWER_MUTATION);
   // Who is looking: decides whether a request row offers "Answer" (INV-596).
   const [sessionViewer, setSessionViewer] = useState<SessionViewer | null>(null);
@@ -1074,9 +1061,8 @@ export function IssuePage() {
                         checked={checked}
                         disabled={isSavingState}
                         onChange={(e) => {
-                          const next = e.target.checked
-                            ? [...selectedLabelIds, label.id]
-                            : selectedLabelIds.filter((lid) => lid !== label.id);
+                          // One Type per item (INV-749): turning a Type on replaces the other.
+                          const next = toggleLabelId(selectedLabelIds, label.id, e.target.checked, allLabels);
                           setSelectedLabelIds(next);
                           void persistLabelsChange(activeIssue, next).catch(() => undefined);
                         }}
@@ -1089,50 +1075,21 @@ export function IssuePage() {
             </div>
           </div>
 
-          {/* Project */}
-          <div className="issue-panel__prop-row">
-            <div className="issue-panel__prop-label">Project</div>
+          {/* Where it sits, priority and kind (INV-791) */}
+          <div className="issue-panel__prop-row" style={{ alignItems: 'flex-start' }}>
+            <div className="issue-panel__prop-label">Structure</div>
             <div className="issue-panel__prop-value">
-              <select
-                aria-label="Issue project"
-                className="issue-panel__prop-select"
-                value={activeIssue.parent?.kind === 'PROJECT' ? activeIssue.parent.id : (activeIssue.projectId ?? '')}
+              <WorkStructureEditor
+                work={activeIssue}
                 disabled={isSavingState}
-                onChange={async (e) => {
-                  const val = e.target.value;
-                  const projectList = projectIssuesData?.issues?.nodes ?? [];
-                  if (!val) {
-                    await persistIssueUpdate(activeIssue, { parentId: null }, (current) => ({
-                      ...current,
-                      parent: null,
-                      projectId: null,
-                    }));
-                  } else {
-                    const selectedProj = projectList.find((p) => p.id === val);
-                    await runWorkLink({
-                      variables: {
-                        fromId: val,
-                        toId: activeIssue.id,
-                        type: 'CONTAINS',
-                      },
-                    });
-                    setLocalIssue((current) => current ? {
-                      ...current,
-                      parent: selectedProj ? {
-                        id: selectedProj.id,
-                        identifier: selectedProj.identifier,
-                        title: selectedProj.title,
-                        kind: 'PROJECT',
-                      } : null,
-                    } : null);
-                  }
+                onUpdate={(update) => {
+                  void persistIssueUpdate(activeIssue, update, (current) => ({
+                    ...current,
+                    ...(update.priority !== undefined ? { priority: update.priority } : {}),
+                    ...(update.kind ? { kind: update.kind } : {}),
+                  })).catch(() => undefined);
                 }}
-              >
-                <option value="">No project</option>
-                {(projectIssuesData?.issues?.nodes ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>{p.identifier} — {p.title}</option>
-                ))}
-              </select>
+              />
             </div>
           </div>
 

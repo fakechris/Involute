@@ -5,7 +5,10 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Html5BoardDragPayload, IssueSummary } from '../board/types';
 import { createHtml5BoardDragPayload } from '../board/utils';
 import { BugSlaBadge } from './BugSlaBadge';
+import { PriorityIcon } from './Primitives';
 import { StatusIcon } from './StatusIcon';
+
+const PRIORITY_NAMES: Record<number, string> = { 1: 'Urgent', 2: 'High', 3: 'Medium', 4: 'Low' };
 
 interface IssueCardProps {
   issue: IssueSummary;
@@ -169,6 +172,11 @@ export function IssueCard({
         <div className="issue-card__header">
           <span className="issue-card__identifier">
             <StatusIcon stateName={issue.state.name} size={12} />
+            {issue.priority > 0 ? (
+              <span title={`Priority: ${PRIORITY_NAMES[issue.priority] ?? issue.priority}`} aria-label={`Priority ${PRIORITY_NAMES[issue.priority] ?? issue.priority}`}>
+                <PriorityIcon level={issue.priority} size={12} />
+              </span>
+            ) : null}
             {issue.identifier}
           </span>
           <div className="issue-card__header-tags">
