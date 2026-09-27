@@ -23,6 +23,7 @@ export const WORK_EVENT_TYPES = [
   'bug.sla_at_risk',
   'bug.sla_breached',
   'work.claim_released',
+  'work.restored',
   'comment.created',
   'agent.mentioned',
   'agent.request_expired',

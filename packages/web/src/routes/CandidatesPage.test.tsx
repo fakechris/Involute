@@ -439,6 +439,71 @@ describe('CandidatesPage', () => {
     });
   });
 
+  describe('settling the whole contract at commit, and undoing a rejection (INV-792)', () => {
+    it('commits with edited contract fields and a chosen starting state', async () => {
+      queryDataHolder.current = {
+        issues: { nodes: [candidateItems[0]], pageInfo: { endCursor: null, hasNextPage: false } },
+        teams: {
+          nodes: [
+            {
+              ...mockTeams[0],
+              states: { nodes: [{ id: 'state-ready', name: 'Ready', type: 'UNSTARTED' }, { id: 'state-progress', name: 'In Progress', type: 'STARTED' }, { id: 'state-done', name: 'Done', type: 'COMPLETED' }] },
+            },
+          ],
+        },
+      };
+      try {
+        render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
+        const card = screen.getByRole('article', { name: 'INV-40 candidate' });
+        fireEvent.change(within(card).getByLabelText('Scope for INV-40'), { target: { value: 'ops and docs' } });
+        const start = within(card).getByLabelText('Starting state for INV-40');
+        expect(within(start).getAllByRole('option').map((option) => option.textContent)).toEqual([
+          'Default (as proposed, or Ready)',
+          'Ready',
+          'In Progress',
+        ]);
+        fireEvent.change(start, { target: { value: 'state-progress' } });
+        fireEvent.change(within(card).getByLabelText('Owner for INV-40'), { target: { value: 'user-admin' } });
+        fireEvent.click(within(card).getByRole('button', { name: /Commit/ }));
+        await waitFor(() => expect(mockRunCommit).toHaveBeenCalledTimes(1));
+        const input = mockRunCommit.mock.calls[0]![0].variables.input;
+        expect(input).toMatchObject({ scope: 'ops and docs', stateId: 'state-progress' });
+        // Unchanged fields are not re-sent.
+        expect(input).not.toHaveProperty('outcome');
+      } finally {
+        queryDataHolder.current = null;
+      }
+    });
+
+    it('lists rejected work with why, and restores it with a reason', async () => {
+      const { useQuery, useMutation } = await import('@apollo/client/react');
+      const restore = vi.fn().mockResolvedValue({ data: { workRestore: { success: true, message: null } } });
+      const originalQuery = vi.mocked(useQuery).getMockImplementation()!;
+      const originalMutation = vi.mocked(useMutation).getMockImplementation()!;
+      vi.mocked(useQuery).mockImplementation(((document: { loc?: { source?: { body?: string } } }, options: unknown) =>
+        document.loc?.source?.body?.includes('query RejectedWork')
+          ? { data: { issues: { nodes: [{ id: 'rej-1', identifier: 'INV-77', title: 'Old idea', kind: 'ISSUE', repository: 'acme/app', updatedAt: '2026-09-20T00:00:00.000Z', rejectionReason: 'Not now' }] } }, loading: false, refetch: mockRefetch }
+          : originalQuery(document as never, options as never)) as never);
+      vi.mocked(useMutation).mockImplementation(((document: { loc?: { source?: { body?: string } } }) =>
+        document.loc?.source?.body?.includes('mutation WorkRestore') ? [restore, { loading: false }] : [mockRunCommit, { loading: false }]) as never);
+      try {
+        render(<MemoryRouter initialEntries={['/candidates?view=rejected']}><CandidatesPage /></MemoryRouter>);
+        expect(screen.getByRole('button', { name: 'Rejected' })).toHaveAttribute('aria-pressed', 'true');
+        const row = screen.getByRole('listitem', { name: 'INV-77 rejected' });
+        expect(row).toHaveTextContent('Why: Not now');
+        const button = within(row).getByRole('button', { name: 'Restore to candidate' });
+        expect(button).toBeDisabled();
+        fireEvent.change(within(row).getByLabelText('Reason to restore INV-77'), { target: { value: 'Rejected by mistake' } });
+        fireEvent.click(button);
+        await waitFor(() => expect(restore).toHaveBeenCalledWith({ variables: { id: 'rej-1', reason: 'Rejected by mistake' } }));
+        await waitFor(() => expect(mockRefetch).toHaveBeenCalled());
+      } finally {
+        vi.mocked(useQuery).mockImplementation(originalQuery);
+        vi.mocked(useMutation).mockImplementation(originalMutation);
+      }
+    });
+  });
+
   it('offers to record a dependency the text names but no BLOCKS link records (INV-720)', async () => {
     mockRunCommit.mockClear();
     queryDataHolder.current = {

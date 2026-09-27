@@ -131,6 +131,7 @@ import { snapshotContract } from './evidence-contract.js';
 import { loadBugMetrics, type BugMetrics } from './bug-metrics.js';
 import { currentTriager, parseRotation, setTriageRotation } from './bug-triage.js';
 import { releaseClaim } from './claim-release.js';
+import { restoreWork } from './work-restore.js';
 import {
   findWorkByIdOrIdentifier,
   getWorkContext,
@@ -373,6 +374,8 @@ const typeDefs = /* GraphQL */ `
     teamTriageRotationUpdate(input: TeamTriageRotationInput!): TeamTriageRotationPayload!
     "A person ends an agent's claim now, with a reason (INV-789); open runs under it are closed."
     workClaimRelease(workId: String!, reason: String!): WorkClaimReleasePayload!
+    "A person turns rejected work back into a candidate, with a reason (INV-792)."
+    workRestore(id: String!, reason: String!): WorkRestorePayload!
     teamMembershipUpsert(input: TeamMembershipUpsertInput!): TeamMembershipUpsertPayload!
     teamMembershipRemove(input: TeamMembershipRemoveInput!): TeamMembershipRemovePayload!
     projectCreate(input: ProjectCreateInput!): ProjectCreatePayload! @deprecated(reason: "Use issueCreate with kind: PROJECT instead.")
@@ -459,6 +462,13 @@ const typeDefs = /* GraphQL */ `
     BREACHED
     PAUSED
     MET
+  }
+
+  type WorkRestorePayload {
+    success: Boolean!
+    "Why the restore was refused; null on success."
+    message: String
+    issue: Issue
   }
 
   type WorkClaimReleasePayload {
@@ -810,6 +820,8 @@ const typeDefs = /* GraphQL */ `
     bugSla: BugSla
     "Hash of the current execution contract (scope, constraints, repository, acceptance); a run whose contractRevision differs ran against an older contract (INV-790)."
     contractDigest: String!
+    "Why it was rejected, from the audit that rejected it; null unless REJECTED (INV-792)."
+    rejectionReason: String
     claim: WorkClaimRecord
     comments(first: Int, after: String, orderBy: CommentOrderBy, rootsOnly: Boolean): CommentConnection!
     """
@@ -1380,6 +1392,8 @@ const typeDefs = /* GraphQL */ `
     teamId: String!
     title: String!
     description: String
+    "What is true once it is done (e.g. a milestone's outcome, INV-792)."
+    outcome: String
     stateId: String
     priority: Int
     projectId: String
@@ -3386,6 +3400,19 @@ const resolvers = {
         success: false as const,
         team: null,
       }),
+    workRestore: async (
+      _parent: unknown,
+      args: { id: string; reason: string },
+      context: GraphQLContext,
+    ): Promise<{ issue: IssueParent | null; message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
+        requireAuthentication(context);
+        const work = await findWorkByIdOrIdentifier(context.prisma, args.id);
+        if (!work) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+        await assertCanWriteIssue(context.prisma, context, work.id);
+        const restored = await restoreWork(context.prisma, { id: work.id, reason: args.reason }, writeActorFromViewer(context.viewer));
+        return { issue: await getIssueById(context.prisma, restored.id), success: true as const };
+      }, { issue: null, success: false as const }),
     workClaimRelease: async (
       _parent: unknown,
       args: { workId: string; reason: string },
@@ -4041,6 +4068,15 @@ const resolvers = {
     dependencyHints: (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext): Promise<string[]> =>
       dependencyHints(context.prisma, { id: parent.id, teamId: parent.teamId, texts: mentionTexts(parent) }),
     contractDigest: (parent: IssueParent) => snapshotContract(parent).contractRevision,
+    rejectionReason: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
+      if (parent.commitmentStatus !== 'REJECTED') return null;
+      const audit = await context.prisma.workAudit.findFirst({
+        where: { workId: parent.id, after: { path: ['commitmentStatus'], equals: 'REJECTED' } },
+        orderBy: { createdAt: 'desc' },
+        select: { reason: true },
+      });
+      return audit?.reason ?? null;
+    },
     bugSla: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
       if (parent.commitmentStatus !== 'COMMITTED') return null;
       // Labels are usually loaded with the issue: skip non-bugs without a query.

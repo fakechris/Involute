@@ -12,9 +12,11 @@ import {
   GRAPH_PROJECTS_QUERY,
   ISSUE_SNOOZE_MUTATION,
   PLACEMENT_OPTIONS_QUERY,
+  REJECTED_WORK_QUERY,
   WORK_COMMIT_MUTATION,
   WORK_LINK_MUTATION,
   WORK_REJECT_MUTATION,
+  WORK_RESTORE_MUTATION,
 } from '../work/queries';
 import type {
   CandidateWork,
@@ -244,6 +246,86 @@ function isBugCandidate(candidate: CandidateWork): boolean {
   return (candidate.labels?.nodes ?? []).some((label) => label.name.trim().toLowerCase() === 'bug');
 }
 
+/** Rejected work with why, and "Restore to candidate" with a reason (INV-792). */
+function RejectedWorkList({ teamKey }: { teamKey: string | null }) {
+  const { data, loading, error, refetch } = useQuery<
+    { issues: { nodes: Array<{ id: string; identifier: string; title: string; kind: WorkKind; repository?: string | null; updatedAt: string; rejectionReason?: string | null }> } },
+    { filter: Record<string, unknown> }
+  >(REJECTED_WORK_QUERY, {
+    variables: { filter: { commitmentStatus: 'REJECTED', ...(teamKey ? { team: { key: { eq: teamKey } } } : {}) } },
+  });
+  const items = data?.issues.nodes ?? [];
+  if (error) return <p className="observation-error" role="alert">Could not load rejected work.</p>;
+  if (loading && items.length === 0) return <p className="observation-empty">Loading rejected work…</p>;
+  if (items.length === 0) {
+    return (
+      <div className="empty-state">
+        <h3>No rejected work</h3>
+        <p>Rejected candidates appear here, with the reason, so a wrong call can be undone.</p>
+      </div>
+    );
+  }
+  return (
+    <div className="observation-list" role="list" aria-label="Rejected work">
+      {items.map((item) => (
+        <RejectedWorkRow key={item.id} item={item} onRestored={() => void refetch()} />
+      ))}
+    </div>
+  );
+}
+
+function RejectedWorkRow({
+  item,
+  onRestored,
+}: {
+  item: { id: string; identifier: string; title: string; repository?: string | null; rejectionReason?: string | null };
+  onRestored: () => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [runRestore, state] = useMutation<{ workRestore: { success: boolean; message?: string | null } }, { id: string; reason: string }>(
+    WORK_RESTORE_MUTATION,
+  );
+  async function restore() {
+    setError(null);
+    try {
+      const result = await runRestore({ variables: { id: item.id, reason: reason.trim() } });
+      if (!result.data?.workRestore.success) {
+        setError(result.data?.workRestore.message ?? 'Could not restore this work.');
+        return;
+      }
+      onRestored();
+    } catch {
+      setError('Could not restore this work.');
+    }
+  }
+  return (
+    <article className="observation-card" role="listitem" aria-label={`${item.identifier} rejected`}>
+      <header className="observation-card__header">
+        <span className="observation-card__id">{item.identifier}</span>
+        <span className="observation-card__status">rejected</span>
+        {item.repository ? <span className="observation-card__meta">{item.repository}</span> : null}
+      </header>
+      <h2 className="observation-card__title">{item.title}</h2>
+      <p className="observation-card__body">Why: {item.rejectionReason ?? 'no reason recorded'}</p>
+      <label className="observation-field">
+        <span>Reason to restore</span>
+        <input aria-label={`Reason to restore ${item.identifier}`} value={reason} onChange={(event) => setReason(event.target.value)} />
+      </label>
+      {error ? (
+        <p className="observation-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="observation-card__actions">
+        <Btn variant="accent" disabled={!reason.trim() || Boolean(state?.loading)} onClick={() => void restore()}>
+          Restore to candidate
+        </Btn>
+      </div>
+    </article>
+  );
+}
+
 function UnscopedParentField({ candidate, onChange }: { candidate: CandidateWork; onChange: (parentId: string) => void }) {
   const teamKey = readStoredTeamKey();
   const [placement, setPlacement] = useState<CreatePlacement | null>(null);
@@ -269,6 +351,7 @@ function UnscopedParentField({ candidate, onChange }: { candidate: CandidateWork
 function CandidateCard({
   candidate,
   humans,
+  states = [],
   otherCandidates,
   isSelected,
   onToggleSelect,
@@ -279,6 +362,8 @@ function CandidateCard({
 }: {
   candidate: CandidateWork;
   humans: WorkUserSummary[];
+  /** The team's workflow states; committing may start the work in any of the open ones (INV-792). */
+  states?: Array<{ id: string; name: string; type: string }>;
   otherCandidates: CandidateWork[];
   isSelected?: boolean;
   onToggleSelect?: (id: string) => void;
@@ -289,6 +374,15 @@ function CandidateCard({
 }) {
   const navigate = useNavigate();
   const [acceptance, setAcceptance] = useState(candidate.acceptance ?? '');
+  // The whole contract can be settled at commit, not only acceptance (INV-792).
+  const [contract, setContract] = useState({
+    outcome: candidate.outcome ?? '',
+    scope: candidate.scope ?? '',
+    constraints: candidate.constraints ?? '',
+    verification: candidate.verification ?? '',
+  });
+  const [targetStateId, setTargetStateId] = useState('');
+  const startStates = states.filter((state) => state.type === 'UNSTARTED' || state.type === 'STARTED' || state.type === 'REVIEW' || state.type === 'BACKLOG');
   const [assigneeId, setAssigneeId] = useState(candidate.assignee?.id ?? humans[0]?.id ?? '');
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -385,6 +479,12 @@ function CandidateCard({
             ...(assigneeId ? { assigneeId } : {}),
             ...(missingParent && parentChoice ? { parentId: parentChoice } : {}),
             ...(isBug ? { priority } : {}),
+            ...(Object.fromEntries(
+              (Object.keys(contract) as Array<keyof typeof contract>)
+                .filter((field) => contract[field].trim() !== (candidate[field] ?? '').trim())
+                .map((field) => [field, contract[field].trim()]),
+            ) as Partial<typeof contract>),
+            ...(targetStateId ? { stateId: targetStateId } : {}),
           },
         },
       });
@@ -468,24 +568,26 @@ function CandidateCard({
       </header>
       <h2 className="observation-card__title">{candidate.title}</h2>
       {candidate.description ? <p className="observation-card__body">{candidate.description}</p> : null}
-      <dl className="observation-contract">
-        <div>
-          <dt>Outcome</dt>
-          <dd>{candidate.outcome || '—'}</dd>
-        </div>
-        <div>
-          <dt>Scope</dt>
-          <dd>{candidate.scope || '—'}</dd>
-        </div>
-        <div>
-          <dt>Constraints</dt>
-          <dd>{candidate.constraints || '—'}</dd>
-        </div>
-        <div>
-          <dt>Verification</dt>
-          <dd>{candidate.verification || '—'}</dd>
-        </div>
-      </dl>
+      <div className="observation-contract observation-contract--edit">
+        {(
+          [
+            ['outcome', 'Outcome'],
+            ['scope', 'Scope'],
+            ['constraints', 'Constraints'],
+            ['verification', 'Verification'],
+          ] as const
+        ).map(([field, label]) => (
+          <label key={field} className="observation-field">
+            <span>{label}</span>
+            <textarea
+              aria-label={`${label} for ${candidate.identifier}`}
+              value={contract[field]}
+              rows={2}
+              onChange={(event) => setContract((current) => ({ ...current, [field]: event.target.value }))}
+            />
+          </label>
+        ))}
+      </div>
       <label className="observation-field">
         <span>Acceptance</span>
         <textarea
@@ -495,6 +597,23 @@ function CandidateCard({
           rows={3}
         />
       </label>
+      {startStates.length > 0 ? (
+        <label className="observation-field">
+          <span>Starts in</span>
+          <select
+            aria-label={`Starting state for ${candidate.identifier}`}
+            value={targetStateId}
+            onChange={(event) => setTargetStateId(event.target.value)}
+          >
+            <option value="">Default (as proposed, or Ready)</option>
+            {startStates.map((state) => (
+              <option key={state.id} value={state.id}>
+                {state.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       <label className="observation-field">
         <span>Human owner</span>
         <select
@@ -639,6 +758,8 @@ export function CandidatesPage() {
   const selectedProject = searchParams.get('project');
   // Bug triage (INV-750): only candidates carrying Type: Bug.
   const bugsOnly = searchParams.get('type') === 'bug';
+  // Rejected work, to review and restore (INV-792).
+  const showRejected = searchParams.get('view') === 'rejected';
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [priorityById, setPriorityById] = useState<Record<string, number>>({});
   const [bulkAssigneeId, setBulkAssigneeId] = useState('');
@@ -690,6 +811,11 @@ export function CandidatesPage() {
     }
     return result;
   }, [data?.teams.nodes]);
+
+  const statesByTeam = useMemo(
+    () => new Map((data?.teams.nodes ?? []).map((team) => [team.id, team.states?.nodes ?? []])),
+    [data?.teams.nodes],
+  );
 
   const allHumans = useMemo(() => {
     const all = Array.from(humansByTeam.values()).flat();
@@ -953,6 +1079,21 @@ export function CandidatesPage() {
         >
           Bugs only
         </button>
+        <button
+          type="button"
+          className={`board-project-pill${showRejected ? ' board-project-pill--active' : ''}`}
+          aria-pressed={showRejected}
+          onClick={() =>
+            setSearchParams((previous) => {
+              const next = new URLSearchParams(previous);
+              if (showRejected) next.delete('view');
+              else next.set('view', 'rejected');
+              return next;
+            })
+          }
+        >
+          Rejected
+        </button>
         <div style={{ flex: 1 }} />
         <span className="observation-hint">Proposed work waits here until a human commits it.</span>
       </div>
@@ -1003,7 +1144,9 @@ export function CandidatesPage() {
       ) : null}
 
       <div className="page-content observation-content">
-        {error ? (
+        {showRejected ? (
+          <RejectedWorkList teamKey={teamKey} />
+        ) : error ? (
           <div className="empty-state" role="alert">
             <h3>Could not load candidates</h3>
             <p>The request failed before the candidate queue could be read.</p>
@@ -1059,6 +1202,7 @@ export function CandidatesPage() {
                 key={candidate.id}
                 candidate={candidate}
                 humans={humansByTeam.get(candidate.team.id) ?? []}
+                states={statesByTeam.get(candidate.team.id) ?? []}
                 otherCandidates={candidates.filter((other) => other.id !== candidate.id)}
                 isSelected={selectedIds.includes(candidate.id)}
                 onToggleSelect={toggleSelect}
@@ -1134,6 +1278,7 @@ export function CandidatesPage() {
                     key={candidate.id}
                     candidate={candidate}
                     humans={humansByTeam.get(candidate.team.id) ?? []}
+                    states={statesByTeam.get(candidate.team.id) ?? []}
                     otherCandidates={candidates.filter((other) => other.id !== candidate.id)}
                     isSelected={selectedIds.includes(candidate.id)}
                     onToggleSelect={toggleSelect}

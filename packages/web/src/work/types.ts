@@ -227,6 +227,8 @@ export interface CandidatesPageQueryData {
       id: string;
       key: string;
       name: string;
+      /** Workflow states, for choosing where committed work starts (INV-792). */
+      states?: { nodes: Array<{ id: string; name: string; type: string }> };
       memberships: {
         nodes: Array<{
           id: string;
@@ -364,6 +366,12 @@ export interface WorkCommitMutationVariables {
     parentId?: string;
     /** Required for bugs: 1 (Urgent) to 4 (Low), sets the SLA (INV-750). */
     priority?: number;
+    /** The rest of the contract and where it starts, settled at commit (INV-792). */
+    outcome?: string;
+    scope?: string;
+    constraints?: string;
+    verification?: string;
+    stateId?: string;
   };
 }
 
