@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { useQuery } from '@apollo/client/react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { BUGS_PAGE_QUERY } from '../board/queries';
-import type { BugsPageQueryData, BugsPageQueryVariables } from '../board/types';
+import type { BugMetricsData, BugsPageQueryData, BugsPageQueryVariables } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 import { IcoBug } from '../components/Icons';
 import { Btn, PriorityIcon } from '../components/Primitives';
@@ -110,6 +110,8 @@ export function BugsPage() {
               </div>
             </section>
 
+            {summary.metrics ? <BugTriageMetrics metrics={summary.metrics} onOpen={(id) => navigate(`/issue/${id}`)} /> : null}
+
             <div className="bugs-grid">
               <section className="bugs-panel" aria-label="Bugs by project">
                 <h2 className="bugs-panel__title">By project</h2>
@@ -208,5 +210,91 @@ export function BugsPage() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+const SOURCE_LABEL: Record<BugMetricsData['bySource'][number]['source'], string> = {
+  HUMAN_REPORT: 'Reported by people',
+  AGENT: 'Filed by agents',
+  OTHER: 'Other',
+};
+
+function formatHours(hours: number | null): string {
+  if (hours === null) return '—';
+  return hours < 48 ? `${hours}h` : `${Math.round(hours / 24)}d`;
+}
+
+/** Bug route v1 health (INV-751): how fast bugs are triaged and fixed, and where they come from. */
+function BugTriageMetrics({ metrics, onOpen }: { metrics: BugMetricsData; onOpen: (id: string) => void }) {
+  const slaClosed = metrics.slaMetCount + metrics.slaBreachedClosedCount;
+  return (
+    <>
+      <section className="bugs-stats" aria-label="Triage and SLA">
+        <Link className="bugs-stat" to="/candidates?type=bug">
+          <span className="bugs-stat__value">{metrics.untriagedCount}</span>
+          <span className="bugs-stat__label">Waiting in triage</span>
+        </Link>
+        <div className="bugs-stat">
+          <span className="bugs-stat__value">
+            {formatHours(metrics.triageHoursP50)} / {formatHours(metrics.triageHoursP90)}
+          </span>
+          <span className="bugs-stat__label">Triage time p50 / p90 ({metrics.triagedCount} triaged)</span>
+        </div>
+        <div className="bugs-stat">
+          <span className="bugs-stat__value">{metrics.slaMetRate === null ? '—' : `${Math.round(metrics.slaMetRate * 100)}%`}</span>
+          <span className="bugs-stat__label">
+            Fixed within SLA ({metrics.slaMetCount} of {slaClosed})
+          </span>
+        </div>
+        <div className={`bugs-stat${metrics.breachedOpen.length ? ' bugs-stat--alert' : ''}`}>
+          <span className="bugs-stat__value">
+            {metrics.breachedOpen.length} / {metrics.atRiskOpenCount}
+          </span>
+          <span className="bugs-stat__label">Open past SLA / at risk</span>
+        </div>
+        <div className={`bugs-stat${metrics.unplacedOpenCount ? ' bugs-stat--alert' : ''}`}>
+          <span className="bugs-stat__value">{metrics.unplacedOpenCount}</span>
+          <span className="bugs-stat__label">Open bugs with no parent (goal 0)</span>
+        </div>
+      </section>
+
+      <div className="bugs-grid">
+        <section className="bugs-panel" aria-label="Open bugs past their SLA">
+          <h2 className="bugs-panel__title">Past their SLA</h2>
+          {metrics.breachedOpen.length === 0 ? (
+            <p className="bugs-panel__empty">None — every open bug is within its SLA.</p>
+          ) : (
+            <ul className="bugs-breaches">
+              {metrics.breachedOpen.map((bug) => (
+                <li key={bug.id}>
+                  <button type="button" className="hygiene-item" onClick={() => onOpen(bug.id)}>
+                    <span className="mono">{bug.identifier}</span>
+                    <span className="hygiene-item__title">{bug.title}</span>
+                  </button>
+                  <span className="bugs-breaches__overdue">{formatHours(bug.overdueHours)} over</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section className="bugs-panel" aria-label="Bugs by source">
+          <h2 className="bugs-panel__title">Where bugs come from</h2>
+          {metrics.bySource.length === 0 ? (
+            <p className="bugs-panel__empty">No bugs yet.</p>
+          ) : (
+            <table className="bugs-table">
+              <tbody>
+                {metrics.bySource.map((entry) => (
+                  <tr key={entry.source}>
+                    <td>{SOURCE_LABEL[entry.source]}</td>
+                    <td className="mono">{entry.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </section>
+      </div>
+    </>
   );
 }

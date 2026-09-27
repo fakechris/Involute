@@ -31,6 +31,22 @@ const bugsPageData = {
       { weekStart: '2026-08-31', count: 1 },
       { weekStart: '2026-09-07', count: 2 },
     ],
+    metrics: {
+      triageHoursP50: 3.5,
+      triageHoursP90: 70,
+      triagedCount: 4,
+      untriagedCount: 2,
+      slaMetCount: 3,
+      slaBreachedClosedCount: 1,
+      slaMetRate: 0.75,
+      atRiskOpenCount: 1,
+      breachedOpen: [{ id: 'issue-urgent', identifier: 'INV-30', title: 'Urgent crash on save', overdueHours: 5.5 }],
+      bySource: [
+        { source: 'HUMAN_REPORT', count: 3 },
+        { source: 'AGENT', count: 2 },
+      ],
+      unplacedOpenCount: 1,
+    },
   },
   issues: {
     nodes: [
@@ -106,6 +122,26 @@ vi.mock('@apollo/client/react', () => ({
 }));
 
 describe('BugsPage', () => {
+  it('shows triage time, SLA outcomes, breaches, sources and unplaced bugs (INV-751)', () => {
+    render(
+      <MemoryRouter>
+        <BugsPage />
+      </MemoryRouter>,
+    );
+    const triage = screen.getByLabelText('Triage and SLA');
+    expect(triage).toHaveTextContent('2Waiting in triage');
+    expect(triage).toHaveTextContent('3.5h / 3dTriage time p50 / p90 (4 triaged)');
+    expect(triage).toHaveTextContent('75%Fixed within SLA (3 of 4)');
+    expect(triage).toHaveTextContent('1 / 1Open past SLA / at risk');
+    expect(triage).toHaveTextContent('1Open bugs with no parent (goal 0)');
+    expect(within(triage).getByRole('link', { name: /Waiting in triage/ })).toHaveAttribute('href', '/candidates?type=bug');
+    const breaches = screen.getByLabelText('Open bugs past their SLA');
+    expect(breaches).toHaveTextContent('INV-30');
+    expect(breaches).toHaveTextContent('5.5h over');
+    expect(screen.getByLabelText('Bugs by source')).toHaveTextContent('Reported by people3Filed by agents2');
+  });
+
+
   it('renders the header stat cards', () => {
     render(
       <MemoryRouter>
@@ -160,7 +196,7 @@ describe('BugsPage', () => {
       </MemoryRouter>,
     );
 
-    const list = screen.getByRole('list');
+    const list = within(screen.getByRole('region', { name: 'Open bugs' })).getByRole('list');
     const items = within(list).getAllByRole('listitem');
     expect(items).toHaveLength(3);
     expect(items[0]).toHaveTextContent('INV-30');

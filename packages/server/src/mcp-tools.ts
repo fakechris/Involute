@@ -220,6 +220,8 @@ export async function callMcpTool(
       assignOptional(proposeInput, 'blockedBy', stringList(args.blocked_by));
       assignOptional(proposeInput, 'blocks', stringList(args.blocks));
       assignOptional(proposeInput, 'labels', stringList(args.labels));
+      assignOptional(proposeInput, 'priority', optionalNumber(args.priority));
+      assignOptional(proposeInput, 'stepsToReproduce', optionalString(args.steps_to_reproduce));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
       assignOptional(proposeInput, 'verification', optionalString(args.verification));
       const kind = optionalString(args.kind);
@@ -240,6 +242,13 @@ export async function callMcpTool(
       if (!proposeInput.parentId && created.parentId) {
         const parent = await context.prisma.issue.findUnique({ where: { id: created.parentId }, select: { identifier: true, kind: true } });
         notes.push(`No parent_id given: placed under ${parent?.kind ?? 'parent'} ${parent?.identifier ?? created.parentId}, inherited from the related work (norm v1, INV-718).`);
+      }
+      const isBug = (proposeInput.labels ?? []).some((label) => label.trim().toLowerCase() === 'bug');
+      if (isBug && created.commitmentStatus === 'COMMITTED') {
+        notes.push('Bug committed directly (INV-787): it has a parent, a priority and steps, so its SLA is running. Fix it or have it declined with a reason; it never goes to the backlog.');
+      } else if (isBug) {
+        const missing = [!created.parentId && 'parent_id', !proposeInput.priority && 'priority', !proposeInput.stepsToReproduce && 'steps_to_reproduce'].filter(Boolean);
+        notes.push(`Bug sent to triage as a candidate. To file a bug directly next time, pass ${missing.join(', ')}.`);
       }
       if (!created.parentId && created.kind !== 'PROJECT') {
         notes.push('This candidate has no parent. Committing it requires one: pass parent_id now (work_link CONTAINS later), or the human will place it at commit.');
@@ -582,7 +591,15 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         labels: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Label names, created when missing. Research or competitive analysis is an ISSUE labelled "research"; work it leads to links back with DERIVED_FROM.',
+          description: 'Label names, created when missing. Research or competitive analysis is an ISSUE labelled "research"; work it leads to links back with DERIVED_FROM. A bug carries "bug" (Type: Bug; at most one of bug / feature / improvement).',
+        },
+        priority: {
+          type: 'number',
+          description: 'Bugs: 1 (Urgent, 24h SLA), 2 (High, 48h), 3 (Medium) or 4 (Low), 7 days. With labels ["bug"], a parent (parent_id or inherited) and steps_to_reproduce, the bug is committed directly; otherwise it goes to triage.',
+        },
+        steps_to_reproduce: {
+          type: 'string',
+          description: 'Bugs: how to reproduce it; appended to the description under "Steps to reproduce". Fixed on the spot? Also pass initial_state REVIEW.',
         },
         blocked_by: {
           type: 'array',

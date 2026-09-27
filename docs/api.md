@@ -438,6 +438,8 @@ mutation BugReport($input: BugReportInput!) {
 
 Zero-bug triage (INV-750): `workCommit` of a bug needs `priority` (1–4) and never lands in Backlog; `workReject` of a bug needs `reason` (refusals in `message`); `issueUpdate` refuses moving a committed bug to a Backlog state. `Issue.bugSla { status budgetHours elapsedMs remainingMs dueAt startedAt }` (ON_TRACK / AT_RISK / BREACHED / PAUSED / MET) — Urgent 24h, High 48h, otherwise 7 days, paused in Review. `Team.triageRotation` / `Team.currentTriager`, set with `teamTriageRotationUpdate(input: { teamId, userIds, startsAt })` (team managers; empty `userIds` clears). Events `bug.sla_at_risk` and `bug.sla_breached` fire once per bug.
 
+Agent-filed bugs (INV-751 / decision INV-787): `workPropose` / `work_propose` accept `priority` and `stepsToReproduce` (`steps_to_reproduce`). A proposal labelled `bug` with a parent (explicit or inherited), a priority and steps is created **COMMITTED** (owner: the agent's human owner; Ready, or `initial_state` STARTED / REVIEW; never Backlog) and emits `work.committed` + `bug.reported`; otherwise it is a triage candidate. `bugSummary.metrics { triageHoursP50 triageHoursP90 triagedCount untriagedCount slaMetCount slaBreachedClosedCount slaMetRate atRiskOpenCount breachedOpen { identifier overdueHours } bySource { source count } unplacedOpenCount }`.
+
 ### `issueUpdate`
 
 Updates any combination of:
