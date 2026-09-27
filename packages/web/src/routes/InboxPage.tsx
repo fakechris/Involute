@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@apollo/client/react';
 
 import {
@@ -245,6 +245,11 @@ export function InboxPage() {
                     </div>
                   )}
                   {!item.work ? <NotificationDetails payload={item.payload} /> : null}
+                  {!item.work && OPS_SECTION[item.type] ? (
+                    <Link className="inbox-item__ops-link" to={`/ops#${OPS_SECTION[item.type]}`} onClick={(event) => event.stopPropagation()}>
+                      Open in Ops
+                    </Link>
+                  ) : null}
                   {summary && (
                     <div
                       style={{
@@ -295,6 +300,17 @@ export function InboxPage() {
 }
 
 const IDENTIFIER = /^[A-Z][A-Z0-9]*-\d+$/;
+
+/** Where on the ops page each ops notification is handled (INV-796). */
+const OPS_SECTION: Record<string, string> = {
+  'webhook.disabled': 'webhooks',
+  'ops.webhook.disabled': 'webhooks',
+  'ops.event.dead_letter': 'outbox',
+  'ops.github_sync.dead_letter': 'sync-dead-letters',
+  'ops.github_inbound.dead_letter': 'inbound',
+  'ops.github_inbound.payload_conflict': 'inbound',
+  'ops.github.pr_unverified_reference': 'traceability',
+};
 
 /**
  * A notification with no work item — ops alerts, a disabled webhook — opens

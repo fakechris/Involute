@@ -64,6 +64,7 @@ const CandidatesPage = lazyRoute(async () => (await import('./routes/CandidatesP
 const InReviewPage = lazyRoute(async () => (await import('./routes/InReviewPage')).InReviewPage);
 const BugsPage = lazyRoute(async () => (await import('./routes/BugsPage')).BugsPage);
 const HygienePage = lazyRoute(async () => (await import('./routes/HygienePage')).HygienePage);
+const OpsPage = lazyRoute(async () => (await import('./routes/OpsPage')).OpsPage);
 const GraphPage = lazyRoute(async () => (await import('./routes/GraphPage')).GraphPage);
 const WorkContextPage = lazyRoute(async () => (await import('./routes/WorkContextPage')).WorkContextPage);
 
@@ -1123,6 +1124,12 @@ export function App() {
                 <span className="app-shell__link-label">Settings</span>
                 <kbd className="app-shell__link-kbd" aria-hidden="true">G S</kbd>
               </NavLink>
+              {session?.viewer?.globalRole === 'ADMIN' ? (
+                <NavLink to="/ops" className={getNavLinkClassName} title="Go to Ops: sync, webhooks, traceability">
+                  <span className="app-shell__nav-icon"><IcoSettings size={14} /></span>
+                  <span className="app-shell__link-label">Ops</span>
+                </NavLink>
+              ) : null}
             </nav>
           </div>
 
@@ -1407,6 +1414,7 @@ export function App() {
               <Route path="/bugs" element={<BugsPage />} />
               <Route path="/graph" element={<GraphPage />} />
               <Route path="/hygiene" element={<HygienePage />} />
+              <Route path="/ops" element={<OpsPage />} />
               <Route path="/work/:id" element={<WorkContextPage />} />
               <Route path="/inbox" element={<InboxPage />} />
               <Route path="/my-issues" element={<MyIssuesPage />} />

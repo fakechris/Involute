@@ -6352,3 +6352,29 @@ a.bugs-stat {
 .request-actions textarea {
   flex: 1 1 260px;
 }
+
+/* The ops page (INV-796). */
+.ops-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.ops-table th,
+.ops-table td {
+  text-align: left;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.2));
+  vertical-align: top;
+}
+
+.ops-secret code {
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
+.inbox-item__ops-link {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+}
