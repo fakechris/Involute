@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@apollo/client/react';
 
+import { ContractSection, type ContractValues } from './ContractSection';
 import type { CommentSummary, IssueSummary, TeamSummary, UserSummary } from '../board/types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ActorBadge } from './ActorBadge';
@@ -32,6 +33,8 @@ interface IssueDetailDrawerProps {
   onStateChange: (issue: IssueSummary, stateId: string) => Promise<void>;
   onTitleSave: (issue: IssueSummary, title: string) => Promise<void>;
   onDescriptionSave: (issue: IssueSummary, description: string) => Promise<void>;
+  /** Saves contract fields (outcome … verification); absent where the drawer is read-only. */
+  onContractSave?: (issue: IssueSummary, changes: ContractValues) => Promise<void>;
   onLabelsChange: (issue: IssueSummary, labelIds: string[]) => Promise<void>;
   /** Placement, priority and kind (INV-791). */
   onStructureChange?: (issue: IssueSummary, update: StructureUpdate) => Promise<void>;
@@ -57,6 +60,7 @@ export function IssueDetailDrawer({
   onStateChange,
   onTitleSave,
   onDescriptionSave,
+  onContractSave,
   onLabelsChange,
   onStructureChange,
   onAssigneeChange,
@@ -413,13 +417,24 @@ export function IssueDetailDrawer({
               )}
             </div>
 
-            {/* The contract, runs, evidence and audit live on full pages; link to them. */}
+            {/* The contract is what a claim is checked against, so it is edited here,
+                where people actually open work; runs, evidence and audit stay on the full page. */}
+            {onContractSave ? (
+              <ContractSection
+                values={activeIssue}
+                committed={activeIssue.commitmentStatus === 'COMMITTED'}
+                saving={savingState}
+                onSave={(changes) => onContractSave(activeIssue, changes)}
+              />
+            ) : null}
             <div className="issue-panel__section" style={{ display: 'flex', gap: 6 }}>
-              <button
-                type="button"
-                className="ui-action ui-action--subtle"
-                onClick={() => navigate(`/issue/${activeIssue.id}#contract`)}
-              >Contract</button>
+              {onContractSave ? null : (
+                <button
+                  type="button"
+                  className="ui-action ui-action--subtle"
+                  onClick={() => navigate(`/issue/${activeIssue.id}#contract`)}
+                >Contract</button>
+              )}
               <button
                 type="button"
                 className="ui-action ui-action--subtle"
