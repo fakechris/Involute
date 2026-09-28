@@ -5,20 +5,23 @@ import { IcoPlus, IcoTeam } from '../components/Icons';
 import { Avatar, Btn } from '../components/Primitives';
 import { AgentsTab } from './AgentsTab';
 import { BugTriageTab } from './BugTriageTab';
-import { AdminsTab, EmailNotificationsField, LabelsTab, ServerFeaturesTab, ServiceActorForm, WorkflowStatesTab } from './WorkspaceSettingsTabs';
+import { AdminMembersTab, AdminSecurityTab, AdminTeamsTab } from './AdministrationTabs';
+import { EmailNotificationsField, LabelsTab, ServerFeaturesTab, ServiceActorForm, WorkflowStatesTab } from './WorkspaceSettingsTabs';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { BOARD_PAGE_QUERY, USER_UPDATE_MUTATION, FILE_UPLOAD_MUTATION } from '../board/queries';
 import type { BoardPageQueryData, BoardPageQueryVariables, UserSummary, UserUpdateMutationData, UserUpdateMutationVariables, FileUploadMutationData, FileUploadMutationVariables } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 
-type SettingsTab = 'profile' | 'preferences' | 'access' | 'agents' | 'triage' | 'labels' | 'states' | 'admins' | 'features';
+type SettingsTab = 'profile' | 'preferences' | 'agents' | 'triage' | 'members' | 'teams' | 'security' | 'labels' | 'states' | 'features';
 
-/** Workspace settings for admins (INV-797); the server refuses everyone else. */
+/** Settings → Administration (docs/permissions.md §7); the server refuses everyone else. */
 const ADMIN_TABS: ReadonlyArray<{ id: SettingsTab; label: string }> = [
+  { id: 'members', label: 'Members' },
+  { id: 'teams', label: 'Teams' },
+  { id: 'security', label: 'Security' },
   { id: 'labels', label: 'Labels' },
   { id: 'states', label: 'Workflow states' },
-  { id: 'admins', label: 'Admins' },
   { id: 'features', label: 'Server features' },
 ];
 
@@ -64,7 +67,6 @@ export function SettingsPage() {
   const tabs: Array<{ id: SettingsTab; label: string }> = [
     { id: 'profile', label: 'Profile' },
     { id: 'preferences', label: 'Preferences' },
-    { id: 'access', label: 'Members & access' },
     { id: 'agents', label: 'Agents' },
     { id: 'triage', label: 'Bug triage' },
     ...(isAdmin ? ADMIN_TABS : []),
@@ -87,6 +89,12 @@ export function SettingsPage() {
           SETTINGS
         </div>
         {tabs.map((t) => (
+          <div key={`group-${t.id}`}>
+          {t.id === ADMIN_TABS[0]!.id ? (
+            <div style={{ padding: '14px 8px 6px', fontSize: 12, fontWeight: 500, color: 'var(--fg-dim)', letterSpacing: '0.04em' }}>
+              ADMINISTRATION
+            </div>
+          ) : null}
           <button
             key={t.id}
             type="button"
@@ -106,6 +114,7 @@ export function SettingsPage() {
           >
             {t.label}
           </button>
+          </div>
         ))}
       </div>
 
@@ -113,7 +122,6 @@ export function SettingsPage() {
         <div style={{ maxWidth: 640 }}>
           {tab === 'profile' && <ProfileTab />}
           {tab === 'preferences' && <PreferencesTab />}
-          {tab === 'access' && <AccessTab />}
           {tab === 'agents' && (
             <>
               <AgentsTab />
@@ -123,7 +131,9 @@ export function SettingsPage() {
           {tab === 'triage' && <BugTriageTab />}
           {tab === 'labels' && <LabelsTab />}
           {tab === 'states' && <WorkflowStatesTab />}
-          {tab === 'admins' && <AdminsTab />}
+          {tab === 'members' && <AdminMembersTab />}
+          {tab === 'teams' && <AdminTeamsTab />}
+          {tab === 'security' && <AdminSecurityTab />}
           {tab === 'features' && <ServerFeaturesTab />}
         </div>
       </div>
@@ -386,134 +396,3 @@ function resolveDisplayRole(user: UserSummary, teamRole?: string): string {
   }
 }
 
-function AccessTab() {
-  const navigate = useNavigate();
-  const teamKey = readStoredTeamKey();
-  const { data, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
-    variables: {
-      first: 200,
-      ...(teamKey ? { filter: { team: { key: { eq: teamKey } } } } : {}),
-    },
-  });
-
-  const allUsers = data?.users.nodes ?? [];
-  const humanUsers = useMemo(() => {
-    return allUsers.filter((user) => user.actorKind !== 'AGENT' && user.actorKind !== 'SERVICE');
-  }, [allUsers]);
-
-  const agentCount = allUsers.length - humanUsers.length;
-  const managedTeam = (data?.teams.nodes ?? []).find((team) => team.viewerCanManage) ?? null;
-  const canManageAnyTeam = managedTeam !== null;
-
-  const teamRoleByUser = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const team of data?.teams.nodes ?? []) {
-      if (!team.memberships) continue;
-      for (const m of team.memberships.nodes) {
-        const prev = map.get(m.user.id);
-        if (!prev || roleRank(m.role) > roleRank(prev)) {
-          map.set(m.user.id, m.role);
-        }
-      }
-    }
-    return map;
-  }, [data?.teams.nodes]);
-
-  return (
-    <>
-      <SectionHeading>Members &amp; access</SectionHeading>
-      <SectionSub>Team membership, roles, and access controls.</SectionSub>
-
-      {loading ? (
-        <div style={{ padding: 20, color: 'var(--fg-dim)', fontSize: 14 }}>Loading members…</div>
-      ) : humanUsers.length === 0 ? (
-        <div style={{ padding: 20, color: 'var(--fg-dim)', fontSize: 14 }}>
-          No members found. Sign in to manage team access.
-        </div>
-      ) : (
-        <div style={{
-          border: '1px solid var(--border)', borderRadius: 'var(--r-3)',
-          overflow: 'hidden',
-        }}>
-          <div style={{
-            display: 'grid', gridTemplateColumns: '1fr 140px 100px',
-            padding: '8px 12px', background: 'var(--bg-sunken)',
-            fontSize: 13, color: 'var(--fg-dim)', fontWeight: 500,
-            borderBottom: '1px solid var(--border-subtle)',
-          }}>
-            <div>Member</div>
-            <div>Role</div>
-            <div>Status</div>
-          </div>
-          {humanUsers.map((user, i) => {
-            const displayRole = resolveDisplayRole(user, teamRoleByUser.get(user.id));
-            const isAdmin = user.globalRole === 'ADMIN';
-
-            return (
-              <div key={user.id} style={{
-                display: 'grid', gridTemplateColumns: '1fr 140px 100px',
-                padding: '10px 12px', alignItems: 'center',
-                borderBottom: i < humanUsers.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-                fontSize: 14.5,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <Avatar user={{ name: user.name ?? undefined }} size={24} />
-                  <div>
-                    <div style={{ color: 'var(--fg)', fontWeight: 500 }}>{user.name ?? 'Unknown'}</div>
-                    <div style={{ color: 'var(--fg-dim)', fontSize: 13 }}>{user.email ?? '—'}</div>
-                  </div>
-                </div>
-                <div style={{
-                  color: isAdmin ? 'var(--accent, #3b82f6)' : 'var(--fg-muted)',
-                  fontWeight: isAdmin ? 500 : 400,
-                }}>
-                  {displayRole}
-                </div>
-                <div className="mono" style={{ color: 'var(--fg-dim)', fontSize: 13 }}>
-                  Active
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {agentCount > 0 && (
-        <div style={{
-          marginTop: 16,
-          padding: '12px 16px',
-          background: 'var(--bg-sunken)',
-          border: '1px solid var(--border-subtle)',
-          borderRadius: 'var(--r-2)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          fontSize: 13.5,
-        }}>
-          <div style={{ color: 'var(--fg-dim)' }}>
-            <strong style={{ color: 'var(--fg)' }}>{agentCount} AI Agent actors</strong> are connected to this workspace.
-          </div>
-          <Btn variant="subtle" size="sm" onClick={() => navigate('/agents')}>
-            View Agents →
-          </Btn>
-        </div>
-      )}
-
-      {canManageAnyTeam ? (
-        <div style={{ marginTop: 20, display: 'flex', gap: 12, alignItems: 'center' }}>
-          <Btn variant="primary" size="md" onClick={() => navigate('/settings/access')}>
-            Manage Team Access &amp; RBAC
-          </Btn>
-          <Btn variant="subtle" icon={<IcoPlus />} size="md" onClick={() => navigate(`/members?team=${encodeURIComponent(managedTeam?.key ?? '')}`)}>
-            Invite members
-          </Btn>
-        </div>
-      ) : (
-        <p style={{ marginTop: 20, fontSize: 14, color: 'var(--fg-dim)' }}>
-          Only a team owner can change access or invite people.
-        </p>
-      )}
-    </>
-  );
-}

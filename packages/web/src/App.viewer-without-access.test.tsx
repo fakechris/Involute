@@ -39,13 +39,13 @@ describe('a viewer who may neither write nor manage', () => {
     expect(screen.queryByRole('button', { name: 'Invite' })).not.toBeInTheDocument();
   });
 
-  it('is told who can change access instead of being offered the RBAC buttons', async () => {
+  it('does not see the Administration settings', async () => {
     signInWithoutAccess();
-    renderApp({ data: noAccess, loading: false }, ['/settings?tab=access']);
+    renderApp({ data: noAccess, loading: false }, ['/settings']);
 
-    expect(await screen.findByText('Only a team owner can change access or invite people.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Manage Team Access/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Invite members/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Preferences' })).toBeInTheDocument();
+    expect(screen.queryByText('ADMINISTRATION')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Security' })).not.toBeInTheDocument();
   });
 
   it('is not offered the agent credential form in Settings → Agents', async () => {
