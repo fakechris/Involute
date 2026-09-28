@@ -1,3 +1,4 @@
+import { SignInRefusedError } from './workspace-access.js';
 import { randomBytes } from 'node:crypto';
 
 import type { PrismaClient } from '@prisma/client';
@@ -147,8 +148,9 @@ async function handleGoogleCallback({
       }),
     ]);
     response.end();
-  } catch {
-    redirectToApp(response, appOrigin, 'oauth_callback_failed');
+  } catch (error) {
+    // Refusals say why (not invited, suspended); anything else stays generic.
+    redirectToApp(response, appOrigin, error instanceof SignInRefusedError ? error.reason : 'oauth_callback_failed');
   }
 }
 

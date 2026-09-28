@@ -126,6 +126,8 @@ export async function exchangeGoogleCodeForUserProfile(
   };
 }
 
+import { admitGoogleUser } from './workspace-access.js';
+
 export async function upsertGoogleOAuthUser(
   prisma: PrismaClient,
   profile: GoogleOAuthUserProfile,
@@ -135,7 +137,6 @@ export async function upsertGoogleOAuthUser(
     throw new Error('Google account email must be verified.');
   }
 
-  const isAdminEmail = configuration.adminEmails.includes(profile.email);
   const existingBySubject = await prisma.user.findUnique({
     where: {
       googleSubject: profile.subject,
@@ -155,56 +156,8 @@ export async function upsertGoogleOAuthUser(
     throw new Error(GOOGLE_ACCOUNT_CONFLICT_MESSAGE);
   }
 
-  if (existingBySubject) {
-    return prisma.user.update({
-      where: {
-        id: existingBySubject.id,
-      },
-      data: {
-        avatarUrl: profile.picture,
-        email: profile.email,
-        globalRole: isAdminEmail ? 'ADMIN' : existingBySubject.globalRole,
-        name: profile.name,
-      },
-      select: {
-        email: true,
-        id: true,
-        name: true,
-      },
-    });
-  }
-
-  if (existingByEmail) {
-    return prisma.user.update({
-      where: {
-        id: existingByEmail.id,
-      },
-      data: {
-        avatarUrl: profile.picture,
-        globalRole: isAdminEmail ? 'ADMIN' : existingByEmail.globalRole,
-        googleSubject: profile.subject,
-        name: profile.name,
-      },
-      select: {
-        email: true,
-        id: true,
-        name: true,
-      },
-    });
-  }
-
-  return prisma.user.create({
-    data: {
-      avatarUrl: profile.picture,
-      email: profile.email,
-      globalRole: isAdminEmail ? 'ADMIN' : 'USER',
-      googleSubject: profile.subject,
-      name: profile.name,
-    },
-    select: {
-      email: true,
-      id: true,
-      name: true,
-    },
-  });
+  // Sign-in is invite-only (docs/permissions.md §1): link an existing row,
+  // admit an approved domain or the bootstrap allowlist, or refuse.
+  const user = await admitGoogleUser(prisma, profile, existingBySubject ?? existingByEmail, configuration.adminEmails);
+  return { email: user.email, id: user.id, name: user.name };
 }
