@@ -44,6 +44,13 @@ import type {
   IssueUpdateMutationVariables,
 } from '../board/types';
 import {
+  recordStatusGesture,
+  registerStatusUndoApply,
+  type StatusUndoApplied,
+  type StatusUndoApply,
+  type StatusUndoChange,
+} from '../undo/status-undo';
+import {
   ACTIVE_TEAM_STORAGE_KEY,
   buildCommittedIssueFilter,
   normalizeRepositoryFilterKey,
@@ -633,6 +640,89 @@ export function BoardPage() {
     [boardViewState, labels, selectedTeam, users],
   );
 
+  const statusUndoApplyRef = useRef<StatusUndoApply>(async () => ({ applied: [], conflicts: [] }));
+  statusUndoApplyRef.current = async (changes) => {
+    const applied: StatusUndoApplied[] = [];
+    const conflicts: string[] = [];
+    const returnedIssues = await Promise.all(
+      changes.map(async (change) => {
+        try {
+          const result = await runIssueUpdate({
+            variables: {
+              id: change.issueId,
+              input: {
+                expectedRevision: change.expectedRevision,
+                stateId: change.stateId,
+              },
+            },
+          });
+          const issue = result.data?.issueUpdate.issue ?? null;
+          if (!result.data?.issueUpdate.success || !issue) {
+            conflicts.push(change.identifier);
+            return null;
+          }
+          applied.push({ issueId: issue.id, revision: issue.revision, stateId: issue.state.id });
+          return issue;
+        } catch {
+          conflicts.push(change.identifier);
+          return null;
+        }
+      }),
+    );
+
+    setIssueOverrides((currentOverrides) => {
+      let nextOverrides = currentOverrides;
+      for (const issue of returnedIssues) {
+        if (!issue) {
+          continue;
+        }
+        const previous = nextOverrides[issue.id] ?? visibleIssues.find((item) => item.id === issue.id);
+        if (!previous) {
+          continue;
+        }
+        nextOverrides = replaceIssueOverride(
+          nextOverrides,
+          issue.id,
+          mergeIssueWithPreservedComments(previous, issue),
+        );
+      }
+      return nextOverrides;
+    });
+
+    const issueIds = changes.map((change) => change.issueId);
+    setSelectedIssueIds(issueIds);
+    setFocusedIssueId(issueIds[0] ?? null);
+    setCollapsedColumns((current) => {
+      const next = { ...current };
+      for (const change of changes) {
+        for (const stateId of change.revealStateIds) {
+          next[stateId] = false;
+        }
+      }
+      return next;
+    });
+    if (isBacklogView) {
+      const teamQuery = selectedTeam ? `?team=${encodeURIComponent(selectedTeam.key)}` : '';
+      navigate(`/${teamQuery}`, { state: { selectIssueIds: issueIds } });
+    }
+    return { applied, conflicts };
+  };
+
+  useEffect(() => registerStatusUndoApply((changes) => statusUndoApplyRef.current(changes)), []);
+
+  useEffect(() => {
+    const state = location.state as { selectIssueIds?: unknown } | null;
+    const issueIds = state && Array.isArray(state.selectIssueIds)
+      ? state.selectIssueIds.filter((issueId): issueId is string => typeof issueId === 'string')
+      : [];
+    if (issueIds.length === 0) {
+      return;
+    }
+    setSelectedIssueIds(issueIds);
+    setFocusedIssueId(issueIds[0] ?? null);
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: {} });
+  }, [location.pathname, location.search, location.state, navigate]);
+
   useEffect(() => {
     if (visibleIssues.length === 0) {
       return;
@@ -980,6 +1070,32 @@ export function BoardPage() {
     );
 
     let hadFailure = false;
+    const undoChanges: StatusUndoChange[] = [];
+    const returnedById = new Map<string, IssueSummary>();
+
+    results.forEach((result, index) => {
+      const issue = issuesToUpdate[index]!;
+      const previousIssue = previousIssuesById.get(issue.id) ?? issue;
+      if (
+        result.status === 'fulfilled' &&
+        result.value.data?.issueUpdate.success &&
+        result.value.data.issueUpdate.issue
+      ) {
+        const returnedIssue = result.value.data.issueUpdate.issue;
+        returnedById.set(issue.id, returnedIssue);
+        undoChanges.push({
+          issueId: issue.id,
+          identifier: issue.identifier,
+          stateId: targetState.id,
+          stateName: targetState.name,
+          previousStateId: previousIssue.state.id,
+          previousStateName: previousIssue.state.name,
+          revision: returnedIssue.revision,
+        });
+        return;
+      }
+      hadFailure = true;
+    });
 
     setIssueOverrides((currentOverrides) => {
       let nextOverrides = currentOverrides;
@@ -988,27 +1104,25 @@ export function BoardPage() {
         const issue = issuesToUpdate[index]!;
         const previousIssue = previousIssuesById.get(issue.id) ?? issue;
         const optimisticIssue = optimisticIssuesById.get(issue.id) ?? issue;
+        const returnedIssue = returnedById.get(issue.id);
 
-        if (
-          result.status === 'fulfilled' &&
-          result.value.data?.issueUpdate.success &&
-          result.value.data.issueUpdate.issue
-        ) {
+        if (returnedIssue) {
           const currentIssue = nextOverrides[issue.id] ?? optimisticIssue;
           nextOverrides = replaceIssueOverride(
             nextOverrides,
             issue.id,
-            mergeIssueWithPreservedComments(currentIssue, result.value.data.issueUpdate.issue),
+            mergeIssueWithPreservedComments(currentIssue, returnedIssue),
           );
           return;
         }
 
-        hadFailure = true;
         nextOverrides = replaceIssueOverride(nextOverrides, issue.id, previousIssue);
       });
 
       return nextOverrides;
     });
+
+    recordStatusGesture(undoChanges);
 
     setIsSavingState(false);
     setSelectedIssueIds([]);
@@ -1458,9 +1572,9 @@ export function BoardPage() {
     issue: IssueSummary,
     input: IssueUpdateMutationVariables['input'],
     applyOptimisticIssue: (current: IssueSummary) => IssueSummary,
-  ) {
+  ): Promise<IssueSummary | null> {
     if (inFlightUpdatesRef.current.has(issue.id)) {
-      return;
+      return null;
     }
     inFlightUpdatesRef.current.add(issue.id);
 
@@ -1489,10 +1603,11 @@ export function BoardPage() {
       }
 
       const returnedIssue = result.data.issueUpdate.issue;
+      let merged = returnedIssue;
 
       setIssueOverrides((currentOverrides) => {
         const currentIssue = currentOverrides[issue.id] ?? optimisticIssue;
-        const merged = mergeIssueWithPreservedComments(currentIssue, returnedIssue);
+        merged = mergeIssueWithPreservedComments(currentIssue, returnedIssue);
 
         const baseIssue = baseIssues.find((b) => b.id === issue.id);
         if (baseIssue && areIssuesEquivalent(baseIssue, merged)) {
@@ -1501,6 +1616,7 @@ export function BoardPage() {
 
         return replaceIssueOverride(currentOverrides, issue.id, merged);
       });
+      return merged;
     } catch (mutationIssue) {
       setIssueOverrides((currentOverrides) =>
         replaceIssueOverride(currentOverrides, issue.id, previousOverride ?? null),
@@ -1888,10 +2004,23 @@ export function BoardPage() {
       // Call persistIssueUpdate directly instead of persistStateChange because
       // handleDragOver already updated issue.state optimistically, which would
       // cause persistStateChange to skip the mutation.
-      await persistIssueUpdate(issue, { stateId: targetStateId }, (current) => ({
+      const updated = await persistIssueUpdate(issue, { stateId: targetStateId }, (current) => ({
         ...current,
         state: targetState,
       }));
+      if (updated && originState && originStateId !== targetStateId) {
+        recordStatusGesture([
+          {
+            issueId: issue.id,
+            identifier: updated.identifier,
+            stateId: targetState.id,
+            stateName: targetState.name,
+            previousStateId: originState.id,
+            previousStateName: originState.name,
+            revision: updated.revision,
+          },
+        ]);
+      }
     } catch {
       if (originState) {
         setIssueOverrides((currentOverrides) =>
@@ -2007,11 +2136,27 @@ export function BoardPage() {
       return;
     }
 
+    const originState =
+      selectedTeam?.states.nodes.find((state) => state.id === payload.stateId) ?? null;
+
     try {
-      await persistIssueUpdate(issue, { stateId: targetStateId }, (current) => ({
+      const updated = await persistIssueUpdate(issue, { stateId: targetStateId }, (current) => ({
         ...current,
         state: targetState,
       }));
+      if (updated && originState) {
+        recordStatusGesture([
+          {
+            issueId: issue.id,
+            identifier: updated.identifier,
+            stateId: targetState.id,
+            stateName: targetState.name,
+            previousStateId: originState.id,
+            previousStateName: originState.name,
+            revision: updated.revision,
+          },
+        ]);
+      }
     } catch {
       // persistIssueUpdate already restored the previous issue override.
     }
