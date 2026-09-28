@@ -6,13 +6,116 @@ on:
   push:
     branches:
       - main
+  # Ready for a merge queue: GitHub runs the same checks on the queued merge.
+  merge_group:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# The checks run as parallel jobs; `verify` at the end is the one branch
+# protection requires, so the rule does not change when jobs are split or
+# added. A pull request that only touches docs skips the heavy jobs.
+
+env:
+  AUTH_TOKEN: ci-auth-token
+  CI: "true"
+  DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/involute_test?schema=public
+  VIEWER_ASSERTION_SECRET: ci-viewer-assertion-secret
+
 jobs:
-  verify:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify PR Work Graph Reference
+        if: github.event_name == 'pull_request'
+        run: bash scripts/ci-pr-lint.sh
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BRANCH: ${{ github.head_ref }}
+
+      - name: Detect docs-only changes
+        id: diff
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}")
+          echo "$changed"
+          # Anything outside docs, research notes, markdown and skills counts as code.
+          if echo "$changed" | grep -qvE '^(docs/|research/|skills/)|\.md$'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  typecheck:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.1
+      - uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      # `pnpm lint` runs the same tsc commands in every package; one pass is enough.
+      - name: Typecheck
+        run: pnpm typecheck
+
+  server-tests:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: involute_test
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d involute_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.1
+      - uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - name: Deploy test database migrations
+        run: pnpm --filter @turnkeyai/involute-server prisma:migrate:deploy
+      # Server tests share one database, so each shard gets its own Postgres.
+      - name: Server tests (shard ${{ matrix.shard }}/3)
+        run: pnpm --filter @turnkeyai/involute-server test --shard=${{ matrix.shard }}/3
+
+  other-tests:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -28,56 +131,81 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    env:
-      AUTH_TOKEN: ci-auth-token
-      CI: "true"
-      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/involute_test?schema=public
-      VIEWER_ASSERTION_SECRET: ci-viewer-assertion-secret
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Verify PR Work Graph Reference
-        if: github.event_name == 'pull_request'
-        run: bash scripts/ci-pr-lint.sh
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BRANCH: ${{ github.head_ref }}
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
         with:
           version: 10.30.1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           cache: pnpm
           node-version: 22
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Playwright browser
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Lint
-        run: pnpm lint
-
+      - run: pnpm install --frozen-lockfile
       - name: Deploy test database migrations
         run: pnpm --filter @turnkeyai/involute-server prisma:migrate:deploy
+      - name: Shared, CLI and web tests
+        run: |
+          pnpm --filter @turnkeyai/involute-shared test --run
+          pnpm --filter @turnkeyai/involute test --run
+          pnpm --filter @turnkeyai/involute-web test --run
 
-      - name: Test
-        run: pnpm test
-
+  e2e:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.1
+      - uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+      # The e2e servers run from source (tsx, vite) against their own compose
+      # database; they need the shared package built and the Prisma client.
+      - name: Build shared package and Prisma client
+        run: |
+          pnpm --filter @turnkeyai/involute-shared build
+          pnpm --filter @turnkeyai/involute-server prisma:generate
       - name: End-to-end tests
         run: pnpm e2e
 
+  build:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.1
+      - uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
       - name: Build
         run: pnpm build
-
       - name: Docker Compose build
         run: docker compose build
+
+  verify:
+    needs: [changes, typecheck, server-tests, other-tests, e2e, build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: All checks passed or were skipped for a docs-only change
+        run: |
+          echo '${{ toJSON(needs) }}' | python3 -c "
+          import json, sys
+          needs = json.load(sys.stdin)
+          bad = {name: job['result'] for name, job in needs.items() if job['result'] not in ('success', 'skipped')}
+          if needs['changes']['result'] != 'success':
+              bad['changes'] = needs['changes']['result']
+          print(json.dumps({name: job['result'] for name, job in needs.items()}, indent=2))
+          sys.exit(1 if bad else 0)
+          "
