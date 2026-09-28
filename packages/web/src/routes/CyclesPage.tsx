@@ -129,6 +129,7 @@ export function CyclesPage() {
   });
 
   const selectedTeam = boardData?.teams.nodes.find((t) => t.key === teamKey) ?? boardData?.teams.nodes[0] ?? null;
+  const canWriteTeam = selectedTeam?.viewerCanWrite ?? false;
   const teamId = selectedTeam?.id ?? '';
 
   const milestoneQueryVariables: MilestoneIssuesQueryVariables = {};
@@ -407,7 +408,7 @@ export function CyclesPage() {
         </div>
 
         <div style={{ flex: 1 }} />
-        {activeTab === 'milestones' ? (
+        {!canWriteTeam ? null : activeTab === 'milestones' ? (
           <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={openCreateMilestone}>
             New milestone
           </Btn>
@@ -435,9 +436,9 @@ export function CyclesPage() {
               </div>
               <h3>No milestones configured</h3>
               <p>Milestones group work nodes into deliverables with outcome criteria and child tasks.</p>
-              <Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateMilestone} style={{ marginTop: 12 }}>
+              {canWriteTeam ? (<Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateMilestone} style={{ marginTop: 12 }}>
                 New milestone
-              </Btn>
+              </Btn>) : null}
             </div>
           ) : (
             <div style={{ padding: '20px var(--pad-x)' }}>
@@ -560,9 +561,9 @@ export function CyclesPage() {
               </div>
               <h3>No cycles configured</h3>
               <p>Create a cycle to group issues into time-boxed sprints.</p>
-              <Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateCycleDialog} style={{ marginTop: 12 }}>
+              {canWriteTeam ? (<Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateCycleDialog} style={{ marginTop: 12 }}>
                 New cycle
-              </Btn>
+              </Btn>) : null}
             </div>
           ) : (
             <div style={{ padding: '20px var(--pad-x)' }}>

@@ -34,6 +34,7 @@ vi.mock('@apollo/client/react', () => ({
                 id: 'team-1',
                 key: 'INV',
                 name: 'Involute',
+                viewerCanWrite: true,
                 states: {
                   nodes: [
                     { id: 'state-1', name: 'Backlog', type: 'BACKLOG' },
