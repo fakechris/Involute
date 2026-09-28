@@ -28,9 +28,9 @@ import {
 // Workspace settings a person used to change with SQL, env edits or the CLI
 // (INV-797). The server refuses non-admins; these tabs are shown to admins.
 
-type Notice = { ok: boolean; text: string } | null;
+export type Notice = { ok: boolean; text: string } | null;
 
-function NoticeLine({ notice }: { notice: Notice }) {
+export function NoticeLine({ notice }: { notice: Notice }) {
   if (!notice) return null;
   return (
     <p role={notice.ok ? 'status' : 'alert'} style={{ fontSize: 14, color: notice.ok ? 'var(--fg-muted)' : 'var(--danger, #d14343)' }}>
@@ -39,17 +39,17 @@ function NoticeLine({ notice }: { notice: Notice }) {
   );
 }
 
-const inputStyle: React.CSSProperties = {
+export const inputStyle: React.CSSProperties = {
   height: 28, padding: '0 8px', fontSize: 14, color: 'var(--fg)',
   background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)',
 };
 
-const rowStyle: React.CSSProperties = {
+export const rowStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border-subtle)',
 };
 
 /** Runs a settings mutation and turns its payload into a notice: the server's reason when refused. */
-async function attempt<T>(
+export async function attempt<T>(
   run: () => Promise<{ data?: T | null }>,
   pick: (data: NonNullable<T>) => Refusable<object> | undefined,
   done: string,
@@ -275,57 +275,6 @@ export function WorkflowStatesTab() {
 }
 
 // --- Admins ------------------------------------------------------------------
-
-export function AdminsTab() {
-  const { data, loading, error, refetch } = useQuery<{ users: { nodes: SettingsUser[] } }>(SETTINGS_PEOPLE_QUERY);
-  const [runSetRole] = useMutation<
-    { userSetGlobalRole: Refusable<object> },
-    { userId: string; role: 'ADMIN' | 'USER'; reason?: string | null }
-  >(USER_SET_GLOBAL_ROLE_MUTATION);
-  const [notice, setNotice] = useState<Notice>(null);
-
-  if (error) return <p role="alert">Could not load people: {error.message}</p>;
-  if (loading && !data) return <p role="status">Loading…</p>;
-  const people = (data?.users.nodes ?? [])
-    .filter((user) => user.actorKind === 'HUMAN' && !user.deactivatedAt)
-    .sort((a, b) => (a.name ?? a.email ?? '').localeCompare(b.name ?? b.email ?? ''));
-
-  function change(user: SettingsUser, role: 'ADMIN' | 'USER') {
-    const who = user.name ?? user.email ?? 'this person';
-    const reason = window.prompt(role === 'ADMIN' ? `Why make ${who} an admin?` : `Why remove ${who}'s admin rights?`);
-    if (reason === null) return;
-    void attempt(
-      () => runSetRole({ variables: { userId: user.id, role, reason: reason.trim() || null } }),
-      (d) => d.userSetGlobalRole,
-      role === 'ADMIN' ? `${who} is now an admin.` : `${who} is no longer an admin.`,
-      setNotice,
-    ).then((ok) => { if (ok) void refetch(); });
-  }
-
-  return (
-    <section aria-label="Admins">
-      <h2 style={{ fontSize: 17, fontWeight: 500, margin: '0 0 4px' }}>Admins</h2>
-      <p style={{ fontSize: 14, color: 'var(--fg-muted)', margin: '0 0 12px' }}>
-        Admins see every team and change workspace settings. Agents and services never get admin rights; the workspace always
-        keeps at least one admin. Each change is recorded with its reason.
-      </p>
-      <NoticeLine notice={notice} />
-      <div role="list" aria-label="People">
-        {people.map((user) => (
-          <div key={user.id} role="listitem" style={rowStyle}>
-            <span style={{ flex: 1, fontSize: 14.5 }}>{user.name ?? user.email}</span>
-            <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{user.email}</span>
-            {user.globalRole === 'ADMIN' ? (
-              <button type="button" className="ui-action ui-action--subtle" onClick={() => change(user, 'USER')}>Remove admin</button>
-            ) : (
-              <button type="button" className="ui-action ui-action--subtle" onClick={() => change(user, 'ADMIN')}>Make admin</button>
-            )}
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
 
 // --- Server features (read only) ------------------------------------------------
 

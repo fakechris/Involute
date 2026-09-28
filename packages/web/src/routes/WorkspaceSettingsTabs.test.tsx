@@ -2,7 +2,6 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  AdminsTab,
   EmailNotificationsField,
   LabelsTab,
   ServerFeaturesTab,
@@ -136,23 +135,6 @@ describe('workflow states', () => {
     mutations.WorkflowStateDelete!.mockResolvedValue(refused('workflowStateDelete', 'This state still holds work; move that work to another state first.'));
     fireEvent.click(screen.getByRole('button', { name: 'Delete state Ready' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('still holds work');
-  });
-});
-
-describe('admins', () => {
-  it('lists people only and records a reason with each change', async () => {
-    render(<AdminsTab />);
-    const people = screen.getByRole('list', { name: 'People' });
-    expect(within(people).queryByText('Bot')).not.toBeInTheDocument();
-
-    vi.spyOn(window, 'prompt').mockReturnValue('covers on-call');
-    mutations.UserSetGlobalRole!.mockResolvedValue(payload('userSetGlobalRole'));
-    const boRow = within(people).getByText('Bo').closest('[role="listitem"]') as HTMLElement;
-    fireEvent.click(within(boRow).getByRole('button', { name: 'Make admin' }));
-    await waitFor(() =>
-      expect(mutations.UserSetGlobalRole).toHaveBeenCalledWith({ variables: { userId: 'u-bo', role: 'ADMIN', reason: 'covers on-call' } }),
-    );
-    expect(await screen.findByText('Bo is now an admin.')).toBeInTheDocument();
   });
 });
 

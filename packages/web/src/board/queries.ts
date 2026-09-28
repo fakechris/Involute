@@ -1483,3 +1483,100 @@ export const WORK_SHARE_REMOVE_MUTATION = gql`
     }
   }
 `;
+
+// --- Administration (INV-849, docs/permissions.md §7) ---
+
+export const ADMIN_MEMBERS_QUERY = gql`
+  query AdminMembers {
+    users {
+      nodes {
+        id
+        name
+        email
+        actorKind
+        globalRole
+        accessStatus
+        lastSeenAt
+        invitedAt
+        teamMemberships { role team { id key name } }
+      }
+    }
+    teams(includeArchived: false) { nodes { id key name } }
+    viewer { id }
+  }
+`;
+
+export const USER_INVITE_MUTATION = gql`
+  mutation UserInvite($input: UserInviteInput!) {
+    userInvite(input: $input) { success message user { id email accessStatus } }
+  }
+`;
+
+export const USER_INVITE_REVOKE_MUTATION = gql`
+  mutation UserInviteRevoke($id: String!) {
+    userInviteRevoke(id: $id) { success message }
+  }
+`;
+
+export const USER_SUSPEND_MUTATION = gql`
+  mutation UserSuspend($id: String!, $reason: String) {
+    userSuspend(id: $id, reason: $reason) { success message }
+  }
+`;
+
+export const USER_REACTIVATE_MUTATION = gql`
+  mutation UserReactivate($id: String!, $reason: String) {
+    userReactivate(id: $id, reason: $reason) { success message }
+  }
+`;
+
+export const ADMIN_TEAMS_QUERY = gql`
+  query AdminTeams {
+    teams(includeArchived: true) {
+      nodes {
+        id
+        key
+        name
+        visibility
+        archivedAt
+        memberships { nodes { role user { id name email } } }
+      }
+    }
+  }
+`;
+
+export const TEAM_CREATE_MUTATION = gql`
+  mutation TeamCreate($input: TeamCreateInput!) {
+    teamCreate(input: $input) { success message team { id key } }
+  }
+`;
+
+export const TEAM_ARCHIVE_MUTATION = gql`
+  mutation TeamArchive($teamId: String!) {
+    teamArchive(teamId: $teamId) { success message }
+  }
+`;
+
+export const TEAM_UNARCHIVE_MUTATION = gql`
+  mutation TeamUnarchive($teamId: String!) {
+    teamUnarchive(teamId: $teamId) { success message }
+  }
+`;
+
+export const WORKSPACE_SECURITY_QUERY = gql`
+  query WorkspaceSecurity {
+    workspaceSettings {
+      approvedDomains
+      defaultTeams { id }
+      membersCanInvite
+      membersCanCreateTeams
+    }
+    teams(includeArchived: false) { nodes { id key name } }
+  }
+`;
+
+export const WORKSPACE_SETTINGS_UPDATE_MUTATION = gql`
+  mutation WorkspaceSettingsUpdate($input: WorkspaceSettingsUpdateInput!) {
+    workspaceSettingsUpdate(input: $input) { success message }
+  }
+`;
