@@ -35,7 +35,7 @@ describe('agent-filed bugs and bug metrics (INV-751 / INV-787)', () => {
   });
 
   const fileBug = (extra: Record<string, unknown> = {}) =>
-    proposeWork(prisma, { teamId: team.id, title: 'Crash on save', description: DESCRIPTION, labels: ['bug'], ...extra }, asAgent());
+    proposeWork(prisma, { teamId: team.id, title: 'Crash on save', description: DESCRIPTION, labels: ['bug'], acceptance: 'Saving no longer crashes.', ...extra }, asAgent());
 
   it('commits an agent bug with a parent, priority and steps at once, owned by the agent\'s human', async () => {
     const bug = await fileBug({ parentId: projectId, priority: 2, stepsToReproduce: '1. Save\n2. Crash', initialState: 'BACKLOG' });
@@ -63,6 +63,8 @@ describe('agent-filed bugs and bug metrics (INV-751 / INV-787)', () => {
     await expect(fileBug({ parentId: projectId, priority: 1 })).rejects.toThrow(/does not go to Candidates/);
     await expect(fileBug({ priority: 1, stepsToReproduce: 'x' })).rejects.toThrow(/does not go to Candidates/);
     await expect(fileBug({ parentId: projectId, priority: 9, stepsToReproduce: 'x' })).rejects.toThrow(/needs a priority/);
+    // Committed on filing and agents cannot add acceptance later, so it is required here (INV-836).
+    await expect(fileBug({ parentId: projectId, priority: 2, stepsToReproduce: 'x', acceptance: '  ' })).rejects.toThrow(/needs acceptance/);
     await prisma.teamMembership.deleteMany({ where: { teamId: team.id, userId: admin.id } });
     await expect(fileBug({ parentId: projectId, priority: 1, stepsToReproduce: 'x' })).rejects.toThrow(/human owner on this team/);
     await prisma.teamMembership.create({ data: { teamId: team.id, userId: admin.id, role: 'OWNER' } });

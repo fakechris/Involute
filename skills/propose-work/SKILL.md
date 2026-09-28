@@ -28,7 +28,7 @@ New independently acceptable work discovered during a run, or a scoped follow-up
   - `'STARTED'`: For active / in-progress tasks. Lands in **`In Progress`**.
   - `'UNSTARTED'`: For pending unstarted tasks (default). Lands in **`Ready`**.
 - Candidates do **not** enter the ready queue until committed by a human (via Web UI `/candidates` or `pnpm candidates:batch-commit`).
-- **Bugs are not candidates.** File them with MCP `work_file_bug` (required `priority` 1–4 and `steps_to_reproduce`). That call commits the bug directly and starts the SLA (1 Urgent 24h, 2 High 48h, 3/4 = 7 days). `work_propose` with `labels: ['bug']` does the same, and **refuses** if parent, priority or steps are missing. Do not put Type: Bug through `/candidates`.
+- **Bugs are not candidates.** File them with MCP `work_file_bug` (required `priority` 1–4, `steps_to_reproduce` and `acceptance`). That call commits the bug directly and starts the SLA (1 Urgent 24h, 2 High 48h, 3/4 = 7 days). `work_propose` with `labels: ['bug']` does the same, and **refuses** if parent, priority, steps or acceptance are missing. Do not put Type: Bug through `/candidates`.
 
 ## Rules
 
