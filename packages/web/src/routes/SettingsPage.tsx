@@ -402,7 +402,8 @@ function AccessTab() {
   }, [allUsers]);
 
   const agentCount = allUsers.length - humanUsers.length;
-  const canManageAnyTeam = (data?.teams.nodes ?? []).some((team) => team.viewerCanManage);
+  const managedTeam = (data?.teams.nodes ?? []).find((team) => team.viewerCanManage) ?? null;
+  const canManageAnyTeam = managedTeam !== null;
 
   const teamRoleByUser = useMemo(() => {
     const map = new Map<string, string>();
@@ -504,7 +505,7 @@ function AccessTab() {
           <Btn variant="primary" size="md" onClick={() => navigate('/settings/access')}>
             Manage Team Access &amp; RBAC
           </Btn>
-          <Btn variant="subtle" icon={<IcoPlus />} size="md" onClick={() => navigate('/members')}>
+          <Btn variant="subtle" icon={<IcoPlus />} size="md" onClick={() => navigate(`/members?team=${encodeURIComponent(managedTeam?.key ?? '')}`)}>
             Invite members
           </Btn>
         </div>
