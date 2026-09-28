@@ -16,6 +16,7 @@ import {
   ISSUE_NOT_FOUND_MESSAGE,
   REQUEST_NOT_FOUND_MESSAGE,
   TEAM_NOT_FOUND_MESSAGE,
+  TEAM_ARCHIVED_MESSAGE,
 } from './errors.js';
 import { EMPTY_SHARE_SCOPE, shareScopeIssueWhere, type ShareScope } from './project-sharing.js';
 
@@ -142,11 +143,36 @@ export async function assertCanReadTeam(
   }
 }
 
+/** Archived teams are read-only for everyone, admins included (docs/permissions.md §5). */
+async function assertTeamNotArchived(prisma: PrismaClient, teamId: string): Promise<void> {
+  const team = await prisma.team.findUnique({ where: { id: teamId }, select: { archivedAt: true } });
+  if (team?.archivedAt) throw createValidationError(TEAM_ARCHIVED_MESSAGE);
+}
+
+/**
+ * Who may see a team's roster with roles: its members, admins, and — for a
+ * public team — any workspace member who could join it. Not share holders,
+ * not guests outside the team (docs/permissions.md §3).
+ */
+export async function canSeeTeamRoster(prisma: PrismaClient, context: GraphQLContext, teamId: string): Promise<boolean> {
+  if (context.isTrustedSystem || context.viewer?.globalRole === 'ADMIN') return true;
+  const viewer = context.viewer;
+  if (!viewer || viewer.actorKind !== 'HUMAN') return false;
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: { visibility: true, memberships: { where: { userId: viewer.id }, select: { id: true } } },
+  });
+  if (!team) return false;
+  if (team.memberships.length > 0) return true;
+  return team.visibility === 'PUBLIC' && viewer.globalRole !== 'GUEST';
+}
+
 export async function assertCanWriteTeam(
   prisma: PrismaClient,
   context: GraphQLContext,
   teamId: string,
 ): Promise<void> {
+  await assertTeamNotArchived(prisma, teamId);
   if (context.isTrustedSystem || context.viewer?.globalRole === 'ADMIN') {
     return;
   }
@@ -385,6 +411,7 @@ export async function assertCanWriteIssue(
 
   // An EDITOR share is a write grant over exactly the shared scope (INV-832).
   if (await isInShareScope(prisma, context, issueId, 'write')) {
+    await assertTeamNotArchived(prisma, issue.teamId);
     return;
   }
 

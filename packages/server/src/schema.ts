@@ -77,6 +77,7 @@ import {
   AGENT_HANDLE_TAKEN_MESSAGE,
   REQUEST_ANSWER_STATE_INVALID_MESSAGE,
   GUEST_CANNOT_OWN_TEAM_MESSAGE,
+  WORKFLOW_STATE_NOT_FOUND_MESSAGE,
 } from './errors.js';
 import {
   assertCanDeleteComment,
@@ -92,6 +93,7 @@ import {
   buildReadableIssueWhere,
   buildReadableTeamWhere,
   buildVisibleUsersWhere,
+  canSeeTeamRoster,
 } from './access-control.js';
 import type {
   CreateCommentInput,
@@ -111,6 +113,7 @@ import { ACTOR_PRESENCE_COPY, actorPresence } from './actor-presence.js';
 import { deactivateActor, transferActorOwner, reactivateActor, recordActorAudit, setActorSuccessor } from './actor-lifecycle.js';
 import { isValidHandle, normalizeHandle } from './mention-parser.js';
 import { listWorkShares, removeWorkShare, upsertWorkShare } from './project-sharing.js';
+import { createTeam, joinTeam, leaveTeam, setTeamArchived, updateTeam } from './team-lifecycle.js';
 import {
   canInvite,
   getWorkspaceSettings,
@@ -344,7 +347,8 @@ const typeDefs = /* GraphQL */ `
     workspaceSettings: WorkspaceSettings!
     issue(id: String!): Issue
     issues(first: Int!, after: String, filter: IssueFilter, query: String): IssueConnection!
-    teams(filter: TeamFilter): TeamConnection!
+    "Archived teams are left out unless includeArchived is true."
+    teams(filter: TeamFilter, includeArchived: Boolean): TeamConnection!
     issueLabels(filter: IssueLabelFilter): IssueLabelConnection!
     "Optional server features this deployment runs (on/off only; never URLs or secrets). Admins only."
     serverFeatures: [ServerFeature!]!
@@ -425,6 +429,16 @@ const typeDefs = /* GraphQL */ `
     userSuspend(id: String!, reason: String): UserAccessPayload!
     userReactivate(id: String!, reason: String): UserAccessPayload!
     workspaceSettingsUpdate(input: WorkspaceSettingsUpdateInput!): WorkspaceSettingsPayload!
+    """Create a team; the creator becomes its Owner (INV-848). Admins, or members when allowed."""
+    teamCreate(input: TeamCreateInput!): TeamLifecyclePayload!
+    """Rename a team or change its visibility. Team Owner or Admin."""
+    teamUpdate(input: TeamUpdateInput!): TeamLifecyclePayload!
+    teamArchive(teamId: String!): TeamLifecyclePayload!
+    teamUnarchive(teamId: String!): TeamLifecyclePayload!
+    """Join a public team as a Member."""
+    teamJoin(teamId: String!): TeamLifecyclePayload!
+    """Leave a team; its last Owner cannot."""
+    teamLeave(teamId: String!): TeamLifecyclePayload!
     workCommit(id: String!, input: WorkCommitInput!): WorkCommitPayload!
     workReject(id: String!, input: WorkRejectInput!): WorkRejectPayload!
     workClaim(id: String!, input: WorkClaimInput): WorkClaimPayload!
@@ -482,6 +496,12 @@ const typeDefs = /* GraphQL */ `
     viewerCanWrite: Boolean!
     "Whether the viewer may manage this team's roster, access and agents (OWNER or ADMIN)."
     viewerCanManage: Boolean!
+    "When the team was archived (read-only, hidden from the sidebar); null while active."
+    archivedAt: DateTime
+    "Whether the viewer may join this team themself (a public team they are not on)."
+    viewerCanJoin: Boolean!
+    "Whether the viewer is on this team's roster."
+    viewerIsMember: Boolean!
   }
 
   type TriageRotation {
@@ -1957,6 +1977,24 @@ const typeDefs = /* GraphQL */ `
     settings: WorkspaceSettings
   }
 
+  input TeamCreateInput {
+    key: String!
+    name: String!
+    visibility: TeamVisibility
+  }
+
+  input TeamUpdateInput {
+    teamId: String!
+    name: String
+    visibility: TeamVisibility
+  }
+
+  type TeamLifecyclePayload {
+    success: Boolean!
+    message: String
+    team: Team
+  }
+
   """What the viewer may do at workspace level; the UI shows controls from this."""
   type ViewerCapabilities {
     isAdmin: Boolean!
@@ -2206,10 +2244,13 @@ const resolvers = {
     },
     teams: async (
       _parent: unknown,
-      args: { filter?: TeamFilterInput | null },
+      args: { filter?: TeamFilterInput | null; includeArchived?: boolean | null },
       context: GraphQLContext,
     ): Promise<{ nodes: Team[] }> => {
-      const where = combineTeamWhere(buildTeamWhere(args.filter), buildReadableTeamWhere(context));
+      const where = combineTeamWhere(
+        combineTeamWhere(buildTeamWhere(args.filter), buildReadableTeamWhere(context)),
+        args.includeArchived ? undefined : { archivedAt: null },
+      );
 
       return {
         nodes: await context.prisma.team.findMany({
@@ -2920,6 +2961,52 @@ const resolvers = {
         });
         return { link, success: true as const };
       }, { link: null, success: false as const }),
+    teamCreate: async (
+      _parent: unknown,
+      args: { input: { key: string; name: string; visibility?: TeamVisibility | null } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; team: Team | null }> =>
+      runMutationWithReason(async () => {
+        const viewer = requireAuthentication(context);
+        const team = await createTeam(context.prisma, {
+          creator: viewer,
+          key: args.input.key,
+          name: args.input.name,
+          ...(args.input.visibility ? { visibility: args.input.visibility } : {}),
+        });
+        return { success: true as const, team };
+      }, { success: false as const, team: null }),
+    teamUpdate: async (
+      _parent: unknown,
+      args: { input: { name?: string | null; teamId: string; visibility?: TeamVisibility | null } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; team: Team | null }> =>
+      runMutationWithReason(async () => {
+        await assertCanManageTeam(context.prisma, context, args.input.teamId);
+        return { success: true as const, team: await updateTeam(context.prisma, args.input) };
+      }, { success: false as const, team: null }),
+    teamArchive: async (_parent: unknown, args: { teamId: string }, context: GraphQLContext): Promise<{ message?: string | null; success: boolean; team: Team | null }> =>
+      runMutationWithReason(async () => {
+        await assertCanManageTeam(context.prisma, context, args.teamId);
+        return { success: true as const, team: await setTeamArchived(context.prisma, args.teamId, true) };
+      }, { success: false as const, team: null }),
+    teamUnarchive: async (_parent: unknown, args: { teamId: string }, context: GraphQLContext): Promise<{ message?: string | null; success: boolean; team: Team | null }> =>
+      runMutationWithReason(async () => {
+        await assertCanManageTeam(context.prisma, context, args.teamId);
+        return { success: true as const, team: await setTeamArchived(context.prisma, args.teamId, false) };
+      }, { success: false as const, team: null }),
+    teamJoin: async (_parent: unknown, args: { teamId: string }, context: GraphQLContext): Promise<{ message?: string | null; success: boolean; team: Team | null }> =>
+      runMutationWithReason(async () => {
+        const viewer = requireAuthentication(context);
+        await joinTeam(context.prisma, { teamId: args.teamId, user: viewer });
+        return { success: true as const, team: await context.prisma.team.findUniqueOrThrow({ where: { id: args.teamId } }) };
+      }, { success: false as const, team: null }),
+    teamLeave: async (_parent: unknown, args: { teamId: string }, context: GraphQLContext): Promise<{ message?: string | null; success: boolean; team: Team | null }> =>
+      runMutationWithReason(async () => {
+        const viewer = requireAuthentication(context);
+        await leaveTeam(context.prisma, { teamId: args.teamId, userId: viewer.id });
+        return { success: true as const, team: await context.prisma.team.findUniqueOrThrow({ where: { id: args.teamId } }) };
+      }, { success: false as const, team: null }),
     userInvite: async (
       _parent: unknown,
       args: { input: { email: string; name?: string | null; role: GlobalRole; teams?: Array<{ role: TeamMembershipRole; teamId: string }> | null } },
@@ -3658,7 +3745,8 @@ const resolvers = {
       context: GraphQLContext,
     ): Promise<{ message?: string | null; state: WorkflowState | null; success: boolean }> =>
       runMutation(async () => {
-        assertSettingsAdmin(context);
+        // A team's workflow is the team's: its owners manage it (docs/permissions.md §3).
+        await assertCanManageTeam(context.prisma, context, args.input.teamId);
         return { state: await createWorkflowState(context.prisma, args.input), success: true as const };
       }, { state: null, success: false as const }),
     workflowStateUpdate: async (
@@ -3667,7 +3755,7 @@ const resolvers = {
       context: GraphQLContext,
     ): Promise<{ message?: string | null; state: WorkflowState | null; success: boolean }> =>
       runMutation(async () => {
-        assertSettingsAdmin(context);
+        await assertCanManageTeam(context.prisma, context, await workflowStateTeamId(context.prisma, args.id));
         return { state: await updateWorkflowState(context.prisma, args.id, args.input), success: true as const };
       }, { state: null, success: false as const }),
     workflowStateDelete: async (
@@ -3676,7 +3764,7 @@ const resolvers = {
       context: GraphQLContext,
     ): Promise<{ message?: string | null; stateId: string | null; success: boolean }> =>
       runMutation(async () => {
-        assertSettingsAdmin(context);
+        await assertCanManageTeam(context.prisma, context, await workflowStateTeamId(context.prisma, args.id));
         return { stateId: (await deleteWorkflowState(context.prisma, args.id)).id, success: true as const };
       }, { stateId: null, success: false as const }),
     userSetGlobalRole: async (
@@ -4134,6 +4222,21 @@ const resolvers = {
       assertCanWriteTeam(context.prisma, context, parent.id).then(() => true, () => false),
     viewerCanManage: (parent: TeamParent, _args: Record<string, never>, context: GraphQLContext): Promise<boolean> =>
       assertCanManageTeam(context.prisma, context, parent.id).then(() => true, () => false),
+    viewerIsMember: async (parent: TeamParent, _args: Record<string, never>, context: GraphQLContext): Promise<boolean> =>
+      Boolean(context.viewer && await context.prisma.teamMembership.findUnique({
+        where: { teamId_userId: { teamId: parent.id, userId: context.viewer.id } },
+        select: { id: true },
+      })),
+    viewerCanJoin: async (parent: TeamParent, _args: Record<string, never>, context: GraphQLContext): Promise<boolean> => {
+      const viewer = context.viewer;
+      if (!viewer || viewer.actorKind !== 'HUMAN' || viewer.globalRole === 'GUEST') return false;
+      if (parent.visibility !== 'PUBLIC' || parent.archivedAt) return false;
+      const member = await context.prisma.teamMembership.findUnique({
+        where: { teamId_userId: { teamId: parent.id, userId: viewer.id } },
+        select: { id: true },
+      });
+      return !member;
+    },
     triageRotation: async (parent: TeamParent, _args: Record<string, never>, context: GraphQLContext) => {
       const rotation = parseRotation((parent as TeamParent & { triageRotation?: Prisma.JsonValue | null }).triageRotation);
       if (!rotation) return null;
@@ -4167,9 +4270,10 @@ const resolvers = {
       _args: Record<string, never>,
       context: GraphQLContext,
     ): Promise<{ nodes: TeamMembershipParent[] }> => {
-      const canManage = await canManageTeamMemberships(context.prisma, context, parent.id);
+      // Every member sees the roster with roles; changing it stays with owners (docs/permissions.md §3).
+      const canSee = await canSeeTeamRoster(context.prisma, context, parent.id);
 
-      if (!canManage) {
+      if (!canSee) {
         return {
           nodes: [],
         };
@@ -5117,6 +5221,12 @@ async function runMutationWithReason<TResult extends { success: true }, TFallbac
     }
     throw error;
   }
+}
+
+async function workflowStateTeamId(prisma: DatabaseClient, stateId: string): Promise<string> {
+  const state = await prisma.workflowState.findUnique({ where: { id: stateId }, select: { teamId: true } });
+  if (!state) throw createNotFoundError(WORKFLOW_STATE_NOT_FOUND_MESSAGE);
+  return state.teamId;
 }
 
 async function upsertTeamMemberUser(
