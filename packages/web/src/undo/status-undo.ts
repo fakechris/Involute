@@ -43,16 +43,41 @@ export interface StatusUndoApplyResult {
 
 export type StatusUndoApply = (changes: StatusUndoApplyChange[]) => Promise<StatusUndoApplyResult>;
 
+export interface CommitUndoItem {
+  acceptance: string;
+  assigneeId: string | null;
+  identifier: string;
+  issueId: string;
+  phase: 'committed' | 'candidate';
+  priority: number | null;
+  /** Revision to send as expectedRevision when reversing this phase. */
+  revision: number;
+}
+
+export interface CommitUndoEntry {
+  id: string;
+  items: CommitUndoItem[];
+}
+
+export type SessionUndoEntry = StatusUndoEntry | CommitUndoEntry;
+
+export interface CommitUndoApplyResult {
+  applied: Array<{ issueId: string; revision: number }>;
+  conflicts: string[];
+}
+
+export type CommitUndoApply = (items: CommitUndoItem[]) => Promise<CommitUndoApplyResult>;
+
 export interface StatusUndoToast {
-  entry: StatusUndoEntry;
+  entry: SessionUndoEntry;
   action: 'undo' | 'redo' | 'none';
   conflicts: string[];
   message?: string;
 }
 
 export interface StatusUndoSnapshot {
-  undo: StatusUndoEntry[];
-  redo: StatusUndoEntry[];
+  undo: SessionUndoEntry[];
+  redo: SessionUndoEntry[];
   toast: StatusUndoToast | null;
 }
 
@@ -60,6 +85,7 @@ const EMPTY: StatusUndoSnapshot = { undo: [], redo: [], toast: null };
 
 let snapshot: StatusUndoSnapshot = EMPTY;
 let applyStatus: StatusUndoApply | null = null;
+let applyCommit: CommitUndoApply | null = null;
 const listeners = new Set<() => void>();
 let toastTimer: number | null = null;
 let chain: Promise<void> = Promise.resolve();
@@ -100,6 +126,7 @@ export function resetStatusUndo() {
     toastTimer = null;
   }
   applyStatus = null;
+  applyCommit = null;
   chain = Promise.resolve();
   emit(EMPTY);
 }
@@ -109,6 +136,15 @@ export function registerStatusUndoApply(apply: StatusUndoApply) {
   return () => {
     if (applyStatus === apply) {
       applyStatus = null;
+    }
+  };
+}
+
+export function registerCommitUndoApply(apply: CommitUndoApply) {
+  applyCommit = apply;
+  return () => {
+    if (applyCommit === apply) {
+      applyCommit = null;
     }
   };
 }
@@ -136,17 +172,57 @@ export function formatStatusMove(entry: StatusUndoEntry): string {
   return `${who} moved to ${stateLabel}`;
 }
 
+export function formatCommitGesture(entry: CommitUndoEntry): string {
+  const ids = entry.items.map((item) => item.identifier);
+  const shown = ids.slice(0, 3);
+  const extra = ids.length - shown.length;
+  const who = extra > 0 ? `${shown.join(', ')} and ${extra} more` : shown.join(', ');
+  return entry.items[0]?.phase === 'candidate' ? `${who} returned to candidates` : `${who} committed`;
+}
+
+export function formatUndoEntry(entry: SessionUndoEntry): string {
+  return 'items' in entry ? formatCommitGesture(entry) : formatStatusMove(entry);
+}
+
 export function formatStatusToast(toast: StatusUndoToast): string {
-  if (toast.message && toast.entry.changes.length === 0 && toast.conflicts.length === 0) {
+  const described = 'items' in toast.entry ? toast.entry.items.length > 0 : toast.entry.changes.length > 0;
+  if (toast.message && !described && toast.conflicts.length === 0) {
     return toast.message;
   }
-  const move = toast.entry.changes.length > 0 ? formatStatusMove(toast.entry) : '';
+  const move = 'items' in toast.entry
+    ? (toast.entry.items.length > 0 ? formatCommitGesture(toast.entry) : '')
+    : (toast.entry.changes.length > 0 ? formatStatusMove(toast.entry) : '');
   const conflict = toast.conflicts.length > 0 ? `Could not change ${toast.conflicts.join(', ')}.` : '';
   return [toast.message, move, conflict].filter(Boolean).join(' ');
 }
 
+export function handleSessionUndoKey(event: KeyboardEvent): boolean {
+  if (!((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'z')) {
+    return false;
+  }
+  if (isTextEditingTarget(event.target)) {
+    return false;
+  }
+  event.preventDefault();
+  void (event.shiftKey ? redoStatusGesture() : undoStatusGesture());
+  return true;
+}
+
 function entryId() {
   return globalThis.crypto?.randomUUID?.() ?? `undo-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+export function recordCommitGesture(items: CommitUndoItem[]) {
+  if (items.length === 0) {
+    return;
+  }
+  const entry: CommitUndoEntry = { id: entryId(), items };
+  emit({
+    undo: [...snapshot.undo, entry].slice(-STATUS_UNDO_LIMIT),
+    redo: [],
+    toast: { entry, action: 'undo', conflicts: [] },
+  });
+  scheduleToastDismiss();
 }
 
 export function recordStatusGesture(changes: StatusUndoChange[]) {
@@ -231,6 +307,11 @@ async function perform(direction: 'undo' | 'redo') {
   const poppedRedo = direction === 'redo' ? source.slice(0, -1) : snapshot.redo;
   emit({ undo: poppedUndo, redo: poppedRedo, toast: snapshot.toast });
 
+  if ('items' in entry) {
+    await performCommit(entry, direction, poppedUndo, poppedRedo);
+    return;
+  }
+
   const apply = await waitForApply();
   if (!apply) {
     emit({
@@ -269,6 +350,59 @@ async function perform(direction: 'undo' | 'redo') {
     {
       entry: reversed.changes.length > 0 ? reversed : { id: entry.id, changes: [] },
       action: reversed.changes.length > 0 ? (direction === 'undo' ? 'redo' : 'undo') : 'none',
+      conflicts: result.conflicts,
+    },
+    { undo, redo },
+  );
+}
+
+async function performCommit(
+  entry: CommitUndoEntry,
+  direction: 'undo' | 'redo',
+  poppedUndo: SessionUndoEntry[],
+  poppedRedo: SessionUndoEntry[],
+) {
+  const apply = applyCommit;
+  if (!apply) {
+    emit({
+      undo: direction === 'undo' ? [...snapshot.undo, entry].slice(-STATUS_UNDO_LIMIT) : snapshot.undo,
+      redo: direction === 'redo' ? [...snapshot.redo, entry].slice(-STATUS_UNDO_LIMIT) : snapshot.redo,
+      toast: {
+        entry: { id: 'unavailable', changes: [] },
+        action: 'none',
+        conflicts: [],
+        message: 'Undo commit is not ready',
+      },
+    });
+    scheduleToastDismiss();
+    return;
+  }
+
+  const result = await apply(entry.items);
+  const appliedById = new Map(result.applied.map((item) => [item.issueId, item]));
+  const reversed: CommitUndoEntry = {
+    id: entryId(),
+    items: entry.items.flatMap((item) => {
+      const next = appliedById.get(item.issueId);
+      if (!next) return [];
+      return [{
+        ...item,
+        phase: item.phase === 'committed' ? 'candidate' as const : 'committed' as const,
+        revision: next.revision,
+      }];
+    }),
+  };
+  const gestureArrived = snapshot.undo.length > poppedUndo.length || snapshot.redo.length !== poppedRedo.length;
+  const undo = direction === 'redo' && reversed.items.length > 0 && !gestureArrived
+    ? [...snapshot.undo, reversed].slice(-STATUS_UNDO_LIMIT)
+    : snapshot.undo;
+  const redo = direction === 'undo' && reversed.items.length > 0 && !gestureArrived
+    ? [...snapshot.redo, reversed].slice(-STATUS_UNDO_LIMIT)
+    : snapshot.redo;
+  showToast(
+    {
+      entry: reversed.items.length > 0 ? reversed : { id: entry.id, items: [] },
+      action: reversed.items.length > 0 ? (direction === 'undo' ? 'redo' : 'undo') : 'none',
       conflicts: result.conflicts,
     },
     { undo, redo },

@@ -8,6 +8,9 @@ import { loadProjectEnvironment } from '../prisma/env.ts';
 import {
   WORK_ALREADY_CLAIMED_MESSAGE,
   WORK_COMMIT_FORBIDDEN_MESSAGE,
+  WORK_UNCOMMIT_CLAIMED_MESSAGE,
+  WORK_UNCOMMIT_FORBIDDEN_MESSAGE,
+  WORK_UNCOMMIT_RUN_MESSAGE,
   WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE,
   WORK_NOT_CANDIDATE_MESSAGE,
   WORK_OWNER_MUST_BELONG_TO_TEAM_MESSAGE,
@@ -18,6 +21,7 @@ import {
   AGENT_DESCRIPTION_REQUIRED_MESSAGE,
 } from './errors.ts';
 import { claimWork, commitWork, proposeWork, rejectWork } from './claim-service.ts';
+import { uncommitWork } from './work-uncommit.ts';
 import { listReadyWork } from './context-service.ts';
 import { updateIssue } from './issue-service.ts';
 import { testParentId } from './test-placement.ts';
@@ -196,6 +200,51 @@ describe('claim service', () => {
       const { task } = await tree();
       const sub = await proposeWork(prisma, { teamId: team.id, title: 'Sub-issue', parentId: task.id });
       expect(sub).toMatchObject({ parentId: task.id, repository: repo });
+    });
+
+    it('returns a commit to the candidate it was, including a parent the commit added', async () => {
+      const { project } = await tree();
+      const loose = await proposeWork(prisma, { teamId: team.id, title: 'No milestone yet', repository: repo });
+      const before = await prisma.issue.findUniqueOrThrow({ where: { id: loose.id } });
+      const committed = await commitWork(prisma, loose.id, commitInput(loose.revision, { parentId: project.identifier }), humanActor());
+
+      const restored = await uncommitWork(prisma, loose.id, { expectedRevision: committed.revision }, humanActor());
+
+      expect(restored).toMatchObject({
+        acceptance: before.acceptance,
+        assigneeId: before.assigneeId,
+        commitmentStatus: 'CANDIDATE',
+        parentId: before.parentId,
+        priority: before.priority,
+        stateId: before.stateId,
+      });
+      expect(await prisma.workLink.count({ where: { toId: loose.id, type: 'CONTAINS' } })).toBe(0);
+      const event = await prisma.eventOutbox.findFirst({ where: { type: 'work.uncommitted' }, orderBy: { createdAt: 'desc' } });
+      expect(JSON.stringify(event?.payload)).toContain(loose.identifier);
+    });
+
+    it('refuses to uncommit for an agent, a lease, a run, or a stale revision', async () => {
+      const { project } = await tree();
+      const loose = await proposeWork(prisma, { teamId: team.id, title: 'Stay committed', repository: repo });
+      const committed = await commitWork(prisma, loose.id, commitInput(loose.revision, { parentId: project.identifier }), humanActor());
+      await expect(uncommitWork(prisma, loose.id, { expectedRevision: committed.revision }, { actorId: agent.id, actorKind: 'AGENT' }))
+        .rejects.toThrow(WORK_UNCOMMIT_FORBIDDEN_MESSAGE);
+
+      await prisma.workClaim.create({
+        data: { actorId: agent.id, leaseUntil: new Date(Date.now() + 60_000), workId: committed.id },
+      });
+      await expect(uncommitWork(prisma, loose.id, { expectedRevision: committed.revision }, humanActor()))
+        .rejects.toThrow(WORK_UNCOMMIT_CLAIMED_MESSAGE);
+      await prisma.workClaim.deleteMany({ where: { workId: committed.id } });
+
+      await prisma.workRun.create({ data: { publicId: `RUN-${committed.id.slice(0, 8)}`, workId: committed.id } });
+      await expect(uncommitWork(prisma, loose.id, { expectedRevision: committed.revision }, humanActor()))
+        .rejects.toThrow(WORK_UNCOMMIT_RUN_MESSAGE);
+      await prisma.workRun.deleteMany({ where: { workId: committed.id } });
+
+      await expect(uncommitWork(prisma, loose.id, { expectedRevision: committed.revision + 3 }, humanActor()))
+        .rejects.toThrow(WORK_REVISION_CONFLICT_MESSAGE);
+      expect((await prisma.issue.findUniqueOrThrow({ where: { id: loose.id } })).commitmentStatus).toBe('COMMITTED');
     });
   });
 

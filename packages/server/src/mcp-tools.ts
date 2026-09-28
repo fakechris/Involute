@@ -43,6 +43,7 @@ import { researchLacksDownstream } from './work-hygiene.js';
 import { createWorkLink } from './link-service.js';
 import { buildProtocolGuide } from './protocol-docs.js';
 import { attachEvidence, reportRun } from './run-service.js';
+import { uncommitWork } from './work-uncommit.js';
 import { writeActorFromViewer } from './work-service.js';
 
 export type McpToolName =
@@ -53,6 +54,7 @@ export type McpToolName =
   | 'work_propose'
   | 'work_file_bug'
   | 'work_commit'
+  | 'work_uncommit'
   | 'work_update'
   | 'work_link'
   | 'work_claim'
@@ -76,6 +78,7 @@ export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
   'work_propose',
   'work_file_bug',
   'work_commit',
+  'work_uncommit',
   'work_update',
   'work_link',
   'work_claim',
@@ -316,6 +319,16 @@ export async function callMcpTool(
       return hints.length
         ? { ...committed, warning: `Its text reads like it depends on ${hints.join(', ')} but no BLOCKS link records that. If it does, add one (work_link BLOCKS); if not, ignore this.` }
         : committed;
+    }
+    case 'work_uncommit': {
+      const work = await requireWork(context.prisma, requiredString(args.id, 'id'));
+      await assertCanWriteIssue(context.prisma, context, work.id);
+      return uncommitWork(
+        context.prisma,
+        work.id,
+        { expectedRevision: requiredNumber(args.expected_revision, 'expected_revision') },
+        writeActorFromViewer(context.viewer, 'mcp'),
+      );
     }
     case 'work_update': {
       const work = await requireWork(context.prisma, requiredString(args.id, 'id'));
@@ -739,6 +752,19 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'work_uncommit',
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    description: 'Return committed work to the candidate queue, reversing the commit at this revision. Refuses when the work is leased, has a run, or has been edited since that commit.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        expected_revision: { type: 'integer' },
+      },
+      required: ['id', 'expected_revision'],
+    },
+  },
+  {
     name: 'work_update',
     annotations: { readOnlyHint: false, destructiveHint: false },
     description: 'Update work contract fields. Requires expected_revision. Does not mark work Done.',
@@ -1072,6 +1098,7 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_propose: 'propose',
   work_file_bug: 'propose',
   work_commit: null,
+  work_uncommit: null,
   work_update: 'update',
   work_link: 'link',
   work_claim: 'claim',

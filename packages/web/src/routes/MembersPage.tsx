@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import { BOARD_PAGE_QUERY, TEAM_MEMBERSHIP_UPSERT_MUTATION, TEAM_MEMBERSHIP_REMOVE_MUTATION } from '../board/queries';
 import type {
@@ -37,7 +38,9 @@ function formatRole(role: string | undefined, globalRole?: string): string {
 }
 
 export function MembersPage() {
-  const teamKey = readStoredTeamKey();
+  // The team comes from the link (Teams → <team> → Members); the last board team is only a fallback.
+  const [searchParams] = useSearchParams();
+  const teamKey = searchParams.get('team') ?? readStoredTeamKey();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
