@@ -285,7 +285,8 @@ export function AdminTeamsTab() {
                   {team.archivedAt ? ` · archived ${formatDate(team.archivedAt)}` : ''}
                 </span>
               </span>
-              <Link to={`/members?team=${encodeURIComponent(team.key)}`} style={{ fontSize: 13.5 }}>Members</Link>
+              <Link to={`/teams/${encodeURIComponent(team.key)}/members`} style={{ fontSize: 13.5 }}>Members</Link>
+              <Link to={`/teams/${encodeURIComponent(team.key)}/settings`} style={{ fontSize: 13.5 }}>Settings</Link>
               {team.archivedAt ? (
                 <button type="button" className="ui-action ui-action--subtle" onClick={() => void attempt(() => runUnarchive({ variables: { teamId: team.id } }), (d) => d.teamUnarchive, `${team.key} is active again.`, setNotice).then(refreshOn)}>Unarchive</button>
               ) : (

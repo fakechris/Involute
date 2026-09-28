@@ -3845,7 +3845,7 @@ const resolvers = {
       args: { input: { teamId: string; visibility: TeamVisibility } },
       context: GraphQLContext,
     ): Promise<{ success: boolean; team: TeamParent | null }> =>
-      runMutation(async () => {
+      runMutationWithReason(async () => {
         await assertCanManageTeam(context.prisma, context, args.input.teamId);
         const team = await context.prisma.team.update({
           where: {
@@ -3954,7 +3954,7 @@ const resolvers = {
       args: { input: { email: string; name?: string | null; role: TeamMembershipRole; teamId: string } },
       context: GraphQLContext,
     ): Promise<{ membership: TeamMembershipParent | null; success: boolean }> =>
-      runMutation(async () => {
+      runMutationWithReason(async () => {
         await assertCanManageTeam(context.prisma, context, args.input.teamId);
         // Adding an email nobody has used yet is an invite, and follows the
         // invite rules (docs/permissions.md §2.2).
@@ -4031,7 +4031,7 @@ const resolvers = {
       args: { input: { teamId: string; userId: string } },
       context: GraphQLContext,
     ): Promise<{ membershipId: string | null; success: boolean }> =>
-      runMutation(async () => {
+      runMutationWithReason(async () => {
         await assertCanManageTeam(context.prisma, context, args.input.teamId);
         const membershipId = await context.prisma.$transaction(async (transaction) => {
           const membership = await transaction.teamMembership.findUnique({

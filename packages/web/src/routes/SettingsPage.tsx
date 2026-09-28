@@ -3,25 +3,23 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { IcoPlus, IcoTeam } from '../components/Icons';
 import { Avatar, Btn } from '../components/Primitives';
-import { AgentsTab } from './AgentsTab';
-import { BugTriageTab } from './BugTriageTab';
 import { AdminMembersTab, AdminSecurityTab, AdminTeamsTab } from './AdministrationTabs';
-import { EmailNotificationsField, LabelsTab, ServerFeaturesTab, ServiceActorForm, WorkflowStatesTab } from './WorkspaceSettingsTabs';
+import { EmailNotificationsField, LabelsTab, ServerFeaturesTab, ServiceActorForm } from './WorkspaceSettingsTabs';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { BOARD_PAGE_QUERY, USER_UPDATE_MUTATION, FILE_UPLOAD_MUTATION } from '../board/queries';
 import type { BoardPageQueryData, BoardPageQueryVariables, UserSummary, UserUpdateMutationData, UserUpdateMutationVariables, FileUploadMutationData, FileUploadMutationVariables } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 
-type SettingsTab = 'profile' | 'preferences' | 'agents' | 'triage' | 'members' | 'teams' | 'security' | 'labels' | 'states' | 'features';
+type SettingsTab = 'profile' | 'preferences' | 'members' | 'teams' | 'security' | 'services' | 'labels' | 'features';
 
 /** Settings → Administration (docs/permissions.md §7); the server refuses everyone else. */
 const ADMIN_TABS: ReadonlyArray<{ id: SettingsTab; label: string }> = [
   { id: 'members', label: 'Members' },
   { id: 'teams', label: 'Teams' },
   { id: 'security', label: 'Security' },
+  { id: 'services', label: 'Service actors' },
   { id: 'labels', label: 'Labels' },
-  { id: 'states', label: 'Workflow states' },
   { id: 'features', label: 'Server features' },
 ];
 
@@ -67,8 +65,6 @@ export function SettingsPage() {
   const tabs: Array<{ id: SettingsTab; label: string }> = [
     { id: 'profile', label: 'Profile' },
     { id: 'preferences', label: 'Preferences' },
-    { id: 'agents', label: 'Agents' },
-    { id: 'triage', label: 'Bug triage' },
     ...(isAdmin ? ADMIN_TABS : []),
   ];
   const tab: SettingsTab = tabs.find((candidate) => candidate.id === requested)?.id ?? 'profile';
@@ -122,18 +118,11 @@ export function SettingsPage() {
         <div style={{ maxWidth: 640 }}>
           {tab === 'profile' && <ProfileTab />}
           {tab === 'preferences' && <PreferencesTab />}
-          {tab === 'agents' && (
-            <>
-              <AgentsTab />
-              {isAdmin ? <ServiceActorForm /> : null}
-            </>
-          )}
-          {tab === 'triage' && <BugTriageTab />}
           {tab === 'labels' && <LabelsTab />}
-          {tab === 'states' && <WorkflowStatesTab />}
           {tab === 'members' && <AdminMembersTab />}
           {tab === 'teams' && <AdminTeamsTab />}
           {tab === 'security' && <AdminSecurityTab />}
+          {tab === 'services' && <ServiceActorForm />}
           {tab === 'features' && <ServerFeaturesTab />}
         </div>
       </div>

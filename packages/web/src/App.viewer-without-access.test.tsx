@@ -31,12 +31,12 @@ describe('a viewer who may neither write nor manage', () => {
     expect(screen.queryByRole('button', { name: /New project/ })).not.toBeInTheDocument();
   });
 
-  it('is not offered Invite on Members', async () => {
+  it('is not offered Add to team on the team members page', async () => {
     signInWithoutAccess();
-    renderApp({ data: noAccess, loading: false }, ['/members']);
+    renderApp({ data: noAccess, loading: false }, ['/teams/INV/members']);
 
-    expect(await screen.findByText('Members')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Invite' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('table', { name: 'Team members' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add to team' })).not.toBeInTheDocument();
   });
 
   it('does not see the Administration settings', async () => {
@@ -48,22 +48,22 @@ describe('a viewer who may neither write nor manage', () => {
     expect(screen.queryByRole('button', { name: 'Security' })).not.toBeInTheDocument();
   });
 
-  it('is not offered the agent credential form in Settings → Agents', async () => {
+  it('is not offered team settings, including agent credentials', async () => {
     signInWithoutAccess();
-    renderApp({ data: noAccess, agentsTabCanManage: false, loading: false }, ['/settings?tab=agents']);
+    renderApp({ data: noAccess, agentsTabCanManage: false, loading: false }, ['/teams/INV/settings?section=agents']);
 
-    expect(await screen.findByText(/Only a team owner can issue or revoke agent credentials/)).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Issue a credential' })).not.toBeInTheDocument();
+    expect(await screen.findByText(/Only this team.s owners and workspace admins change its settings/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Issue credential' })).not.toBeInTheDocument();
   });
 
-  it('sees whose members these are, what the roles mean, and cannot change roles or remove anyone', async () => {
+  it('sees which team the roster belongs to, what the roles mean, and cannot change roles or remove anyone', async () => {
     signInWithoutAccess();
-    renderApp({ data: noAccess, loading: false }, ['/members']);
+    renderApp({ data: noAccess, loading: false }, ['/teams/INV/members']);
 
-    expect(await screen.findByText(/of team Involute \(INV\)/)).toBeInTheDocument();
+    expect(await screen.findByRole('navigation', { name: 'Team pages' })).toBeInTheDocument();
+    expect(screen.getAllByText('Involute').length).toBeGreaterThan(0);
     expect(screen.getByText(/Roles are per team/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /role$/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Team role for/)).not.toBeInTheDocument();
     expect(screen.queryByText('Remove')).not.toBeInTheDocument();
   });
 
@@ -77,7 +77,7 @@ describe('a viewer who may neither write nor manage', () => {
   });
 
   it('still sees the buttons as a team owner', async () => {
-    renderApp({ data: boardQueryResult, loading: false }, ['/members']);
-    expect(await screen.findByRole('button', { name: 'Invite' })).toBeInTheDocument();
+    renderApp({ data: boardQueryResult, loading: false }, ['/teams/INV/members']);
+    expect(await screen.findByRole('button', { name: 'Add to team' })).toBeInTheDocument();
   });
 });

@@ -3,6 +3,7 @@ import { NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } fro
 
 import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon, IcoCheck, IcoGraph, IcoFilter, IcoBug, IcoHistory, IcoKeyboard } from './components/Icons';
 import { KeyboardShortcutsDialog } from './app/KeyboardShortcutsDialog';
+import { LegacyTeamRedirect } from './routes/LegacyTeamRedirect';
 import { NotificationsBell } from './components/NotificationsBell';
 import { Avatar } from './components/Primitives';
 import {
@@ -59,7 +60,6 @@ import {
   undoStatusGesture,
 } from './undo/status-undo';
 
-const AccessPage = lazyRoute(async () => (await import('./routes/AccessPage')).AccessPage);
 const BoardPage = lazyRoute(async () => (await import('./routes/BoardPage')).BoardPage);
 const InboxPage = lazyRoute(async () => (await import('./routes/InboxPage')).InboxPage);
 const IssuePage = lazyRoute(async () => (await import('./routes/IssuePage')).IssuePage);
@@ -68,7 +68,8 @@ const ViewsPage = lazyRoute(async () => (await import('./routes/ViewsPage')).Vie
 const ProjectsPage = lazyRoute(async () => (await import('./routes/ProjectsPage')).ProjectsPage);
 const AgentsPage = lazyRoute(async () => (await import('./routes/AgentsPage')).AgentsPage);
 
-const MembersPage = lazyRoute(async () => (await import('./routes/MembersPage')).MembersPage);
+const TeamMembersPage = lazyRoute(async () => (await import('./routes/TeamPages')).TeamMembersPage);
+const TeamSettingsPage = lazyRoute(async () => (await import('./routes/TeamPages')).TeamSettingsPage);
 const SettingsPage = lazyRoute(async () => (await import('./routes/SettingsPage')).SettingsPage);
 const CyclesPage = lazyRoute(async () => (await import('./routes/CyclesPage')).CyclesPage);
 const CandidatesPage = lazyRoute(async () => (await import('./routes/CandidatesPage')).CandidatesPage);
@@ -885,8 +886,8 @@ export function App() {
       },
       {
         id: 'go-members',
-        label: 'Go to members',
-        description: 'Open workspace members',
+        label: 'Go to team members',
+        description: 'Open the current team\'s roster',
         group: 'Navigation',
         shortcut: 'G E',
         run: () => navigate('/members'),
@@ -961,8 +962,8 @@ export function App() {
     if (session?.authenticated) {
       actions.push({
         id: 'go-access',
-        label: 'Open access settings',
-        description: 'Manage team visibility and memberships',
+        label: 'Open team settings',
+        description: 'Visibility, workflow, triage and agents of the current team',
         group: 'Navigation',
         shortcut: 'G A',
         run: () => navigate('/settings/access'),
@@ -1245,8 +1246,8 @@ export function App() {
                           </NavLink>
                           {/* Members are a team's roster, so they live under the team (not in Workspace). */}
                           <NavLink
-                            to={`/members?team=${encodeURIComponent(team.key)}`}
-                            className={`app-shell__team-subnav-link${location.pathname === '/members' && isActive ? ' app-shell__team-subnav-link--active' : ''}`}
+                            to={`/teams/${encodeURIComponent(team.key)}/members`}
+                            className={`app-shell__team-subnav-link${location.pathname === `/teams/${team.key}/members` ? ' app-shell__team-subnav-link--active' : ''}`}
                             onClick={() => {
                               writeStoredTeamKey(team.key);
                               setActiveTeamKey(team.key);
@@ -1255,6 +1256,19 @@ export function App() {
                             <span className="app-shell__subnav-icon"><IcoTeam size={12} /></span>
                             Members
                           </NavLink>
+                          {team.viewerCanManage ? (
+                            <NavLink
+                              to={`/teams/${encodeURIComponent(team.key)}/settings`}
+                              className={`app-shell__team-subnav-link${location.pathname === `/teams/${team.key}/settings` ? ' app-shell__team-subnav-link--active' : ''}`}
+                              onClick={() => {
+                                writeStoredTeamKey(team.key);
+                                setActiveTeamKey(team.key);
+                              }}
+                            >
+                              <span className="app-shell__subnav-icon"><IcoSettings size={12} /></span>
+                              Settings
+                            </NavLink>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>
@@ -1470,10 +1484,13 @@ export function App() {
               <Route path="/my-issues" element={<MyIssuesPage />} />
               <Route path="/views" element={<ViewsPage />} />
               <Route path="/projects" element={<ProjectsPage />} />
-              <Route path="/members" element={<MembersPage />} />
+              <Route path="/teams/:key/members" element={<TeamMembersPage />} />
+              <Route path="/teams/:key/settings" element={<TeamSettingsPage />} />
+              {/* Old addresses of a team's roster and settings (INV-850). */}
+              <Route path="/members" element={<LegacyTeamRedirect to="members" />} />
               <Route path="/agents" element={<AgentsPage />} />
               <Route path="/agents/:handle" element={<AgentsPage />} />
-              <Route path="/settings/access" element={<AccessPage />} />
+              <Route path="/settings/access" element={<LegacyTeamRedirect to="settings" />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/settings/*" element={<SettingsPage />} />
               <Route path="/cycles" element={<CyclesPage />} />

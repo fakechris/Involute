@@ -105,7 +105,7 @@ const inputStyle: React.CSSProperties = {
   borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)',
 };
 
-export function AgentsTab() {
+export function AgentsTab({ teamKey: fixedTeamKey }: { teamKey?: string } = {}) {
   const teamsQuery = useQuery<{ teams: AgentsQueryData['teams'] }>(gql`
     query AgentsTeams {
       teams {
@@ -124,7 +124,8 @@ export function AgentsTab() {
   const storedKey = readStoredTeamKey();
   const [teamKey, setTeamKey] = useState('');
   const manageableKeys = new Set(teams.map((team) => team.key));
-  const effectiveKey = [teamKey, storedKey, teams[0]?.key].find((key): key is string => Boolean(key && manageableKeys.has(key))) ?? '';
+  // On a team's settings page the team is fixed; in Settings it can be chosen.
+  const effectiveKey = [fixedTeamKey, teamKey, storedKey, teams[0]?.key].find((key): key is string => Boolean(key && manageableKeys.has(key))) ?? '';
 
   const { data, loading, refetch } = useQuery<AgentsQueryData>(AGENTS_TAB_QUERY, {
     variables: { teamId: effectiveKey },
@@ -248,7 +249,7 @@ export function AgentsTab() {
         <span className="mono"> /mcp </span> only. Only team owners can manage them.
       </p>
 
-      {teams.length > 1 && (
+      {teams.length > 1 && !fixedTeamKey && (
         <div style={{ marginBottom: 20 }}>
           <label style={{ fontSize: 13.5, color: 'var(--fg-dim)', display: 'block', marginBottom: 6 }}>Team</label>
           <select value={effectiveKey} onChange={(e) => setTeamKey(e.target.value)} style={inputStyle}>

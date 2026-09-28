@@ -165,8 +165,8 @@ const TYPE_LABELS: Record<WorkflowStateType, string> = {
   BACKLOG: 'Backlog', UNSTARTED: 'Ready', STARTED: 'In progress', REVIEW: 'Review', COMPLETED: 'Done', CANCELED: 'Canceled',
 };
 
-export function WorkflowStatesTab() {
-  const teamKey = readStoredTeamKey() ?? 'INV';
+export function WorkflowStatesTab({ teamKey: fixedTeamKey }: { teamKey?: string } = {}) {
+  const teamKey = fixedTeamKey ?? readStoredTeamKey() ?? 'INV';
   const { data, loading, error, refetch } = useQuery<
     { teams: { nodes: Array<{ id: string; name: string; states: { nodes: SettingsState[] } }> } },
     { teamKey: string }

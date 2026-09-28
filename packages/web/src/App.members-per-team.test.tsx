@@ -30,7 +30,9 @@ describe('Members belongs to a team', () => {
     signIn();
     renderApp({ data: twoTeams, loading: false }, ['/members?team=LUM']);
 
-    expect(await screen.findByText(/of team LumenBox \(LUM\)/)).toBeInTheDocument();
+    // The old address redirects to the team's own page (INV-850).
+    expect(await screen.findByRole('navigation', { name: 'Team pages' })).toBeInTheDocument();
+    expect(screen.getAllByText('LumenBox').length).toBeGreaterThan(0);
   });
 
   it('is not a Workspace item', async () => {

@@ -574,6 +574,7 @@ export const TEAM_MEMBERSHIP_UPSERT_MUTATION = gql`
   mutation TeamMembershipUpsert($input: TeamMembershipUpsertInput!) {
     teamMembershipUpsert(input: $input) {
       success
+      message
       membership {
         id
         role
@@ -592,6 +593,7 @@ export const TEAM_MEMBERSHIP_REMOVE_MUTATION = gql`
   mutation TeamMembershipRemove($input: TeamMembershipRemoveInput!) {
     teamMembershipRemove(input: $input) {
       success
+      message
       membershipId
     }
   }
@@ -1578,5 +1580,50 @@ export const WORKSPACE_SECURITY_QUERY = gql`
 export const WORKSPACE_SETTINGS_UPDATE_MUTATION = gql`
   mutation WorkspaceSettingsUpdate($input: WorkspaceSettingsUpdateInput!) {
     workspaceSettingsUpdate(input: $input) { success message }
+  }
+`;
+
+// --- Team pages (INV-850) ---
+
+export const TEAM_PAGE_QUERY = gql`
+  query TeamPage($key: String!) {
+    teams(filter: { key: { eq: $key } }, includeArchived: true) {
+      nodes {
+        id
+        key
+        name
+        visibility
+        archivedAt
+        viewerCanManage
+        viewerCanJoin
+        viewerIsMember
+        memberships {
+          nodes {
+            id
+            role
+            user { id name email globalRole accessStatus }
+          }
+        }
+      }
+    }
+    viewer { id }
+  }
+`;
+
+export const TEAM_UPDATE_MUTATION = gql`
+  mutation TeamUpdate($input: TeamUpdateInput!) {
+    teamUpdate(input: $input) { success message }
+  }
+`;
+
+export const TEAM_JOIN_MUTATION = gql`
+  mutation TeamJoin($teamId: String!) {
+    teamJoin(teamId: $teamId) { success message }
+  }
+`;
+
+export const TEAM_LEAVE_MUTATION = gql`
+  mutation TeamLeave($teamId: String!) {
+    teamLeave(teamId: $teamId) { success message }
   }
 `;

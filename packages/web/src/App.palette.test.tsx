@@ -113,7 +113,8 @@ describe('App command palette', () => {
 
     fireEvent.keyDown(window, { key: 'g' });
     fireEvent.keyDown(window, { key: 'a' });
-    expect(await screen.findByRole('heading', { name: 'Access' })).toBeInTheDocument();
+    // G A opens the current team's settings (INV-850).
+    expect(await screen.findByRole('navigation', { name: 'Team settings sections' })).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: 'g' });
     fireEvent.keyDown(window, { key: 'b' });
