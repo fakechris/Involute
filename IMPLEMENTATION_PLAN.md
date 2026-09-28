@@ -130,24 +130,24 @@ Members. One PR per stage, each deployed before the next starts.
 ## Stage 1: Workspace access (server)
 **Goal**: sign-in gate, Guest role, invites as pending users, allowlist bootstrap-only, suspend/reactivate people.
 **Success Criteria**: an uninvited Google account is refused; an approved-domain account joins as Member in the default teams; a demoted allowlisted admin stays demoted; suspending signs a person out and blocks sign-in; the last Admin cannot be demoted or suspended; Guests do not see public teams. Server suite exits 0.
-**Status**: Not Started
+**Status**: Complete — PR #150
 
 ## Stage 2: Team lifecycle and roles (server)
 **Goal**: teamCreate / teamUpdate / archive, join public team, leave team, roster visible to members, Guests never Owner, workflow states gated by team Owner.
 **Success Criteria**: creator becomes Owner with default states; archived team refuses writes; last Owner cannot leave; a Viewer sees roles of teammates; Member toggle for team creation honoured. Server suite exits 0.
-**Status**: Not Started
+**Status**: Complete — PR #151
 
 ## Stage 3: Administration UI
 **Goal**: Settings → Administration → Members, Teams, Security; retire AdminsTab and "Members & access".
 **Success Criteria**: Admin invites, changes role, suspends and reactivates from Members; creates and archives teams from Teams; edits domains and toggles in Security; non-admins see none of it. Web suite exits 0.
-**Status**: Not Started
+**Status**: Complete — PR #152
 
 ## Stage 4: Team pages
 **Goal**: /teams/<KEY>/members and /teams/<KEY>/settings; redirect /settings/access and /members; fix the old roster bugs (non-members listed, unchecked results).
 **Success Criteria**: roster shows only team members with roles; Owner actions only for Owners/Admins; Join/Leave work; workflow states, triage, agents and webhooks live under team settings. Web suite exits 0.
-**Status**: Not Started
+**Status**: Complete — PR #153
 
 ## Stage 5: Hardening and rollout
 **Goal**: human-surface registry and MCP parity updated, e2e for invite → sign-in → join, AGENTS.md pointer, production migration check (existing users keep access, songsr008 stays Member with no team).
 **Success Criteria**: CI green including e2e; production verified with a real sign-in by an invited and an uninvited account.
-**Status**: Not Started
+**Status**: In Progress — docs aligned; production rollout pending

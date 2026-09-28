@@ -133,10 +133,14 @@ never hold a workspace role.
   Suspended), last seen. Invite, change role, suspend, reactivate, revoke
   a pending invite.
 - **Teams** — every team including private and archived: members count,
-  visibility, Owners. Create team; open a team's settings.
+  visibility, Owners. Create, archive and unarchive; open a team's members
+  or settings.
 - **Security** — approved domains, default teams for people who join by
   domain, "Members can invite", "Members can create teams".
-- **Labels**, **Server features** (unchanged).
+- **Service actors** — provision a service identity (admins only).
+- **Labels**, **Server features** (unchanged). Webhooks stay on the Ops page
+  for admins; team-scoped webhooks can also be managed by team Owners
+  through the API.
 
 **Team → Members** (`/teams/<KEY>/members`, in the sidebar under each team):
 the roster with roles. Owners and Admins add, change roles and remove;
@@ -144,7 +148,24 @@ members leave; non-members of a public team join.
 
 **Team → Settings** (`/teams/<KEY>/settings`, Owners and Admins): General
 (name, visibility, archive), Workflow states, Bug triage, Agents (credentials
-for this team), Webhooks.
+for this team).
 
-Retired: the "Members & access" settings tab, `/settings/access` and the
-workspace-level `/members` page; their links redirect to the pages above.
+Retired: the "Members & access" and "Admins" settings tabs, the workspace
+Settings tabs for Agents, Bug triage and Workflow states (now per team),
+`/settings/access` and the workspace-level `/members` page. The old addresses
+redirect to the team pages above.
+
+## 8. Where it is enforced
+
+| Rule | Code |
+|---|---|
+| Sign-in admission, invites, suspension | `packages/server/src/workspace-access.ts` |
+| Team create, archive, join, leave | `packages/server/src/team-lifecycle.ts` |
+| Read and write scope (teams, issues, people, guests, archived teams) | `packages/server/src/access-control.ts` |
+| Project shares | `packages/server/src/project-sharing.ts` (`docs/project-sharing.md`) |
+| Every person's action has a screen | `packages/server/src/human-surface.ts` and its test |
+
+Tests that pin these rules: `workspace-access.test.ts`,
+`team-lifecycle.test.ts`, `project-sharing.test.ts`,
+`viewer-without-access.test.ts` (server) and `App.team-pages.test.tsx`,
+`AdministrationTabs.test.tsx`, `App.viewer-without-access.test.tsx` (web).
