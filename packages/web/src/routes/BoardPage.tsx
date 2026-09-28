@@ -88,6 +88,7 @@ import {
   writeStoredBoardViewState,
 } from '../board/views';
 import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
+import type { ContractValues } from '../components/ContractSection';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { writeStoredShellIssues, writeStoredShellTeams } from '../lib/app-shell-state';
 import { BoardCreateIssueDialog, DECISION_TEMPLATE, type CreatableKind } from '../components/BoardCreateIssueDialog';
@@ -620,11 +621,14 @@ export function BoardPage() {
   const prevUrlIssueRef = useRef<string | null>(null);
   useEffect(() => {
     if (urlIssue && urlIssue !== prevUrlIssueRef.current) {
-      prevUrlIssueRef.current = urlIssue;
       const match = allIssues.find(
         (i) => i.identifier.toLowerCase() === urlIssue.toLowerCase() || i.id === urlIssue,
       );
+      // Only remember the link once it has opened: on first render the issues
+      // have not loaded yet, and marking it handled then meant a shared
+      // ?issue= link never opened its drawer.
       if (match) {
+        prevUrlIssueRef.current = urlIssue;
         setFocusedIssueId(match.id);
         setSelectedIssueId(match.id);
       }
@@ -1665,6 +1669,11 @@ export function BoardPage() {
       ...current,
       description,
     }));
+  }
+
+  async function persistContractChange(issue: IssueSummary, changes: ContractValues) {
+    const saved = await persistIssueUpdate(issue, changes, (current) => ({ ...current, ...changes }));
+    if (!saved) throw new Error('Contract not saved');
   }
 
   async function persistLabelsChange(issue: IssueSummary, labelIds: string[]) {
@@ -2901,6 +2910,7 @@ export function BoardPage() {
         onStateChange={persistStateChange}
         onTitleSave={persistTitleChange}
         onDescriptionSave={persistDescriptionChange}
+        onContractSave={persistContractChange}
         onLabelsChange={persistLabelsChange}
         onStructureChange={persistStructureChange}
         onAssigneeChange={persistAssigneeChange}

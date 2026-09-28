@@ -6455,3 +6455,14 @@ a.bugs-stat {
   font-size: 14px;
   color: var(--danger);
 }
+
+/* Committed work with no acceptance cannot be claimed (INV-836) */
+.contract-section__missing {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--warning, #d97706) 45%, var(--border));
+  border-radius: var(--r-2);
+  background: color-mix(in srgb, var(--warning, #d97706) 10%, var(--bg-raised));
+  font-size: 13.5px;
+  color: var(--fg);
+}
