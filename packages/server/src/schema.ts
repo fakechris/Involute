@@ -172,6 +172,7 @@ import {
   type RejectWorkInput,
 } from './claim-service.js';
 import { attachEvidence, reportRun, reviewWork } from './run-service.js';
+import { uncommitWork } from './work-uncommit.js';
 import { createProject, updateProject, deleteProject, type CreateProjectInput, type UpdateProjectInput } from './project-service.js';
 import { createCycle, updateCycle, deleteCycle, type CreateCycleInput, type UpdateCycleInput } from './cycle-service.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
@@ -440,6 +441,8 @@ const typeDefs = /* GraphQL */ `
     """Leave a team; its last Owner cannot."""
     teamLeave(teamId: String!): TeamLifecyclePayload!
     workCommit(id: String!, input: WorkCommitInput!): WorkCommitPayload!
+    "A person reverses one commit, returning the work to the candidate queue (INV-844)."
+    workUncommit(id: String!, expectedRevision: Int!): WorkCommitPayload!
     workReject(id: String!, input: WorkRejectInput!): WorkRejectPayload!
     workClaim(id: String!, input: WorkClaimInput): WorkClaimPayload!
     runReport(input: RunReportInput!): RunReportPayload!
@@ -3861,6 +3864,24 @@ const resolvers = {
         success: false as const,
         team: null,
       }),
+    workUncommit: async (
+      _parent: unknown,
+      args: { id: string; expectedRevision: number },
+      context: GraphQLContext,
+    ): Promise<{ issue: IssueParent | null; message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
+        requireAuthentication(context);
+        const work = await findWorkByIdOrIdentifier(context.prisma, args.id);
+        if (!work) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+        await assertCanWriteIssue(context.prisma, context, work.id);
+        const restored = await uncommitWork(
+          context.prisma,
+          work.id,
+          { expectedRevision: args.expectedRevision },
+          writeActorFromViewer(context.viewer),
+        );
+        return { issue: await getIssueById(context.prisma, restored.id), success: true as const };
+      }, { issue: null, success: false as const }),
     workRestore: async (
       _parent: unknown,
       args: { id: string; reason: string },

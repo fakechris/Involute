@@ -614,9 +614,11 @@ describe('status undo stack', () => {
       ]);
     }
     const capped = getStatusUndoSnapshot();
+    const first = capped.undo[0];
+    const last = capped.undo[49];
     expect(capped.undo).toHaveLength(50);
-    expect(capped.undo[0]?.changes[0]?.identifier).toBe('INV-1');
-    expect(capped.undo[49]?.changes[0]?.identifier).toBe('INV-50');
+    expect(first && 'changes' in first ? first.changes[0]?.identifier : '').toBe('INV-1');
+    expect(last && 'changes' in last ? last.changes[0]?.identifier : '').toBe('INV-50');
     expect(capped.redo).toHaveLength(0);
   });
 });
