@@ -1153,11 +1153,6 @@ export function App() {
                 <span className="app-shell__link-label">Projects</span>
                 <kbd className="app-shell__link-kbd" aria-hidden="true">G P</kbd>
               </NavLink>
-              <NavLink to="/members" className={getNavLinkClassName} title="Go to Members · G E">
-                <span className="app-shell__nav-icon"><IcoTeam size={14} /></span>
-                <span className="app-shell__link-label">Members</span>
-                <kbd className="app-shell__link-kbd" aria-hidden="true">G E</kbd>
-              </NavLink>
               <NavLink to="/agents" className={getNavLinkClassName} title="Go to Agents">
                 <span className="app-shell__nav-icon"><IcoTeam size={14} /></span>
                 <span className="app-shell__link-label">Agents</span>
@@ -1247,6 +1242,18 @@ export function App() {
                           >
                             <span className="app-shell__subnav-icon"><IcoCycle size={12} /></span>
                             Milestones
+                          </NavLink>
+                          {/* Members are a team's roster, so they live under the team (not in Workspace). */}
+                          <NavLink
+                            to={`/members?team=${encodeURIComponent(team.key)}`}
+                            className={`app-shell__team-subnav-link${location.pathname === '/members' && isActive ? ' app-shell__team-subnav-link--active' : ''}`}
+                            onClick={() => {
+                              writeStoredTeamKey(team.key);
+                              setActiveTeamKey(team.key);
+                            }}
+                          >
+                            <span className="app-shell__subnav-icon"><IcoTeam size={12} /></span>
+                            Members
                           </NavLink>
                         </div>
                       ) : null}
