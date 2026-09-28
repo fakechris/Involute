@@ -40,7 +40,7 @@ interface AgentCredentialSummary {
 }
 
 interface AgentsQueryData {
-  teams: { nodes: Array<{ id: string; key: string; name: string }> };
+  teams: { nodes: Array<{ id: string; key: string; name: string; viewerCanManage?: boolean }> };
   agentCredentials: AgentCredentialSummary[];
 }
 
@@ -113,14 +113,18 @@ export function AgentsTab() {
           id
           key
           name
+          viewerCanManage
         }
       }
     }
   `);
-  const teams = teamsQuery.data?.teams.nodes ?? [];
+  // Issuing and revoking credentials is managing a team (OWNER or ADMIN);
+  // only teams the server says this viewer manages are offered here.
+  const teams = (teamsQuery.data?.teams.nodes ?? []).filter((team) => team.viewerCanManage);
   const storedKey = readStoredTeamKey();
-  const [teamKey, setTeamKey] = useState(storedKey ?? teams[0]?.key ?? '');
-  const effectiveKey = teamKey || storedKey || teams[0]?.key || '';
+  const [teamKey, setTeamKey] = useState('');
+  const manageableKeys = new Set(teams.map((team) => team.key));
+  const effectiveKey = [teamKey, storedKey, teams[0]?.key].find((key): key is string => Boolean(key && manageableKeys.has(key))) ?? '';
 
   const { data, loading, refetch } = useQuery<AgentsQueryData>(AGENTS_TAB_QUERY, {
     variables: { teamId: effectiveKey },
@@ -223,6 +227,17 @@ export function AgentsTab() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not revoke the credential.');
     }
+  }
+
+  if (!teamsQuery.loading && teams.length === 0) {
+    return (
+      <>
+        <h2 style={{ fontSize: 17, fontWeight: 500, margin: '0 0 4px', color: 'var(--fg)' }}>Agents</h2>
+        <p style={{ fontSize: 14.5, color: 'var(--fg-dim)', margin: '0 0 24px' }}>
+          Only a team owner can issue or revoke agent credentials. You do not manage any team.
+        </p>
+      </>
+    );
   }
 
   return (

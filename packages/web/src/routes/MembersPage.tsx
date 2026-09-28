@@ -93,6 +93,9 @@ export function MembersPage() {
       <div className="page-header">
         <span style={{ color: 'var(--fg-dim)', display: 'inline-flex' }}><IcoTeam /></span>
         <span style={{ fontSize: 15, fontWeight: 500 }}>Members</span>
+        {activeTeam ? (
+          <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>of team {activeTeam.name} ({activeTeam.key})</span>
+        ) : null}
         <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{users.length}</span>
         <div style={{ flex: 1 }} />
         {canInvite ? (
@@ -106,6 +109,11 @@ export function MembersPage() {
       </div>
 
       <div className="page-content">
+        <p style={{ margin: '12px var(--pad-x) 0', fontSize: 13.5, color: 'var(--fg-dim)' }}>
+          Roles are per team: a Viewer reads the team&apos;s work, an Editor also creates and edits it, an Owner also
+          manages members and agents. To give someone a single project instead, share it from the Projects page.
+          {canInvite ? '' : ' Only a team owner can invite people or change roles.'}
+        </p>
         {loading ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 14 }}>
             Loading members…
@@ -129,13 +137,13 @@ export function MembersPage() {
                   issueCount={issueCountByUser.get(user.id) ?? 0}
                   role={formatRole(roleByUser.get(user.id), user.globalRole)}
                   teamId={teamId}
-                  onChangeRole={async (userId, role) => {
+                  onChangeRole={!canInvite ? undefined : async (userId, role) => {
                     await runUpsert({
                       variables: { input: { teamId, email: user.email ?? '', role } },
                       refetchQueries: [{ query: BOARD_PAGE_QUERY, variables: { first: 200, ...(teamKey ? { filter: { team: { key: { eq: teamKey } } } } : {}) } }],
                     });
                   }}
-                  onRemove={async (userId) => {
+                  onRemove={!canInvite ? undefined : async (userId) => {
                     if (!window.confirm(`Remove ${user.name ?? user.email} from team?`)) return;
                     await runRemove({
                       variables: { input: { teamId, userId } },
@@ -217,8 +225,9 @@ function MemberCard({
   issueCount: number;
   role: string;
   teamId: string;
-  onChangeRole: (userId: string, role: 'VIEWER' | 'EDITOR' | 'OWNER') => void;
-  onRemove: (userId: string) => void;
+  /** Absent when the viewer may not manage the team: then there is no menu at all. */
+  onChangeRole?: ((userId: string, role: 'VIEWER' | 'EDITOR' | 'OWNER') => void) | undefined;
+  onRemove?: ((userId: string) => void) | undefined;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -245,14 +254,17 @@ function MemberCard({
             {user.email ?? '—'}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setMenuOpen(!menuOpen)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-dim)', padding: 4, borderRadius: 'var(--r-1)' }}
-        >
-          <IcoMore size={14} />
-        </button>
-        {menuOpen && (
+        {onChangeRole && onRemove ? (
+          <button
+            type="button"
+            aria-label={`Change ${user.name ?? user.email ?? 'member'}'s role`}
+            onClick={() => setMenuOpen(!menuOpen)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg-dim)', padding: 4, borderRadius: 'var(--r-1)' }}
+          >
+            <IcoMore size={14} />
+          </button>
+        ) : null}
+        {menuOpen && onChangeRole && onRemove && (
           <div style={{
             position: 'absolute', top: 40, right: 10, zIndex: 10,
             background: 'var(--bg-raised)', border: '1px solid var(--border)',
