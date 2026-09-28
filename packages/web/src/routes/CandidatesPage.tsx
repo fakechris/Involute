@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
+import { recordCommitGesture, type CommitUndoItem } from '../undo/status-undo';
+import { selectCandidatesEventName } from '../undo/CommitUndoHost';
 import { IcoCheck, IcoClose } from '../components/Icons';
 import { Btn } from '../components/Primitives';
 import { PlacementPicker } from '../components/PlacementPicker';
@@ -33,6 +35,22 @@ import type {
 } from '../work/types';
 
 const COMMIT_ERROR_MESSAGE = 'We could not commit this candidate. Check acceptance, owner, and revision.';
+
+function commitUndoItem(
+  candidate: CandidateWork,
+  revision: number,
+  input: { acceptance: string; assigneeId: string | null; priority: number | null },
+): CommitUndoItem {
+  return {
+    acceptance: input.acceptance,
+    assigneeId: input.assigneeId,
+    identifier: candidate.identifier,
+    issueId: candidate.id,
+    phase: 'committed',
+    priority: input.priority,
+    revision,
+  };
+}
 const REJECT_ERROR_MESSAGE = 'We could not reject this candidate. Please try again.';
 
 function humanUsers(users: WorkUserSummary[]): WorkUserSummary[] {
@@ -489,11 +507,21 @@ function CandidateCard({
         },
       });
 
-      if (!result.data?.workCommit.success || !result.data.workCommit.issue) {
+      const committedIssue = result.data?.workCommit.issue;
+      if (!result.data?.workCommit.success || !committedIssue) {
         setError(result.data?.workCommit.message || COMMIT_ERROR_MESSAGE);
         return;
       }
 
+      if (committedIssue.revision) {
+        recordCommitGesture([
+          commitUndoItem(candidate, committedIssue.revision, {
+            acceptance: acceptance.trim() || candidate.acceptance || '',
+            assigneeId: assigneeId || candidate.assignee?.id || null,
+            priority: isBug ? priority : (candidate.priority ?? null),
+          }),
+        ]);
+      }
       onCommitted();
     } catch {
       setError(COMMIT_ERROR_MESSAGE);
@@ -761,6 +789,15 @@ export function CandidatesPage() {
   // Rejected work, to review and restore (INV-792).
   const showRejected = searchParams.get('view') === 'rejected';
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    function onSelect(event: Event) {
+      const ids = (event as CustomEvent<{ ids?: string[] }>).detail?.ids ?? [];
+      setSelectedIds(ids.filter((id) => typeof id === 'string'));
+    }
+    window.addEventListener(selectCandidatesEventName(), onSelect);
+    return () => window.removeEventListener(selectCandidatesEventName(), onSelect);
+  }, []);
   const [priorityById, setPriorityById] = useState<Record<string, number>>({});
   const [bulkAssigneeId, setBulkAssigneeId] = useState('');
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
@@ -937,6 +974,7 @@ export function CandidatesPage() {
     let failCount = 0;
     const failures: string[] = [];
     const committedCandidates: CandidateWork[] = [];
+    const undoItems: CommitUndoItem[] = [];
 
     for (let i = 0; i < toCommit.length; i++) {
       const candidate = toCommit[i];
@@ -963,9 +1001,16 @@ export function CandidatesPage() {
           },
         });
         // A refused commit comes back as success:false, not as an exception.
-        if (result.data?.workCommit.success) {
+        if (result.data?.workCommit.success && result.data.workCommit.issue) {
           successCount++;
           committedCandidates.push(candidate);
+          if (result.data.workCommit.issue.revision) {
+            undoItems.push(commitUndoItem(candidate, result.data.workCommit.issue.revision, {
+              acceptance,
+              assigneeId: assigneeId ?? null,
+              priority: isBugCandidate(candidate) ? effectivePriority(candidate) : (candidate.priority ?? null),
+            }));
+          }
         } else {
           failCount++;
           failures.push(`${candidate.identifier}: ${result.data?.workCommit.message ?? 'refused'}`);
@@ -984,6 +1029,7 @@ export function CandidatesPage() {
       setBulkError(`Committed ${successCount}, failed ${failCount}. ${failures.join(' · ')}`);
     }
     if (successCount > 0) {
+      recordCommitGesture(undoItems);
       setCommitGlance({ committed: committedCandidates, failCount });
     }
     void refetch();

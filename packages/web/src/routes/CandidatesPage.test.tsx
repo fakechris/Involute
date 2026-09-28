@@ -3,6 +3,9 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CandidatesPage } from './CandidatesPage';
+import { CommitUndoHost } from '../undo/CommitUndoHost';
+import { StatusUndoToast } from '../undo/StatusUndoToast';
+import { handleSessionUndoKey, resetStatusUndo } from '../undo/status-undo';
 
 function LocationProbe() {
   const location = useLocation();
@@ -10,6 +13,7 @@ function LocationProbe() {
 }
 
 const mockRunCommit = vi.fn();
+const mockRunUncommit = vi.fn();
 const mockRunReject = vi.fn();
 const mockRunSnooze = vi.fn();
 const mockRunLink = vi.fn();
@@ -90,7 +94,16 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  resetStatusUndo();
   vi.clearAllMocks();
+  mockRunUncommit.mockImplementation(async (options: { variables: { id: string; expectedRevision: number } }) => ({
+    data: {
+      workUncommit: {
+        success: true,
+        issue: { id: options.variables.id, identifier: options.variables.id, revision: options.variables.expectedRevision + 1, commitmentStatus: 'CANDIDATE' },
+      },
+    },
+  }));
   mockRunCommit.mockResolvedValue({
     data: {
       workCommit: {
@@ -137,8 +150,9 @@ vi.mock('@apollo/client/react', () => ({
     refetch: mockRefetch,
     fetchMore: mockFetchMore,
   })),
-  useMutation: vi.fn((mutation) => {
-    // If it's commit mutation
+  useMutation: vi.fn((mutation: { loc?: { source?: { body?: string } } }) => {
+    const body = mutation.loc?.source?.body ?? '';
+    if (body.includes('workUncommit')) return [mockRunUncommit, { loading: false }];
     return [mockRunCommit, { loading: false }];
   }),
 }));
@@ -205,6 +219,64 @@ describe('CandidatesPage', () => {
         },
       },
     });
+  });
+
+  it('undoes one batch commit as a single gesture and redoes it', async () => {
+    const third = {
+      ...candidateItems[0],
+      id: 'cand-3',
+      identifier: 'INV-41',
+      title: 'Third candidate',
+      acceptance: 'Third accepted',
+    };
+    queryDataHolder.current = {
+      issues: { nodes: [...candidateItems, third], pageInfo: { endCursor: null, hasNextPage: false } },
+      teams: { nodes: mockTeams },
+    };
+    mockRunUncommit.mockImplementation(async (options: { variables: { id: string; expectedRevision: number } }) => {
+      if (options.variables.id === 'cand-2') {
+        return { data: { workUncommit: { success: false, message: 'edited', issue: null } } };
+      }
+      return {
+        data: {
+          workUncommit: {
+            success: true,
+            issue: { id: options.variables.id, identifier: options.variables.id, revision: 3, commitmentStatus: 'CANDIDATE' },
+          },
+        },
+      };
+    });
+
+    render(
+      <MemoryRouter>
+        <CandidatesPage />
+        <StatusUndoToast />
+        <CommitUndoHost />
+      </MemoryRouter>,
+    );
+    window.addEventListener('keydown', handleSessionUndoKey);
+
+    fireEvent.click(screen.getByLabelText(/Select all visible/));
+    fireEvent.click(screen.getByRole('button', { name: /Batch Commit \(3\)/ }));
+    const toast = await screen.findByTestId('status-undo-toast');
+    expect(toast).toHaveTextContent('INV-40, INV-21, INV-41 committed');
+
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    fireEvent.keyDown(input, { key: 'z', metaKey: true });
+    expect(mockRunUncommit).not.toHaveBeenCalled();
+    input.remove();
+
+    fireEvent.keyDown(window, { key: 'z', metaKey: true });
+    await waitFor(() => expect(mockRunUncommit).toHaveBeenCalledTimes(3));
+    expect(await screen.findByTestId('status-undo-toast')).toHaveTextContent('Could not change INV-21');
+    expect(screen.getByTitle('Select INV-40')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'z', metaKey: true, shiftKey: true });
+    await waitFor(() => expect(mockRunCommit.mock.calls.length).toBeGreaterThan(3));
+    window.removeEventListener('keydown', handleSessionUndoKey);
+    queryDataHolder.current = null;
   });
 
   it('shows commit-target badges for backlog candidates, distinguishing parked from default', () => {
