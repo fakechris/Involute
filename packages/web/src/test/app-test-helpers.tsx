@@ -477,6 +477,7 @@ type QueryState = {
   projectSharesData?: unknown;
   agentProfileData?: unknown;
   agentsData?: { agents: unknown[] };
+  agentsTabCanManage?: boolean;
   candidatesData?: CandidatesPageQueryData;
   data?: BoardPageQueryData;
   error?: Error;
@@ -650,7 +651,7 @@ export function renderApp(
     if (source.includes('query AgentsTeams') || source.includes('query AgentsTab')) {
       return {
         data: {
-          teams: { nodes: [{ id: 'team-1', key: 'INV', name: 'Involute' }] },
+          teams: { nodes: [{ id: 'team-1', key: 'INV', name: 'Involute', viewerCanManage: queryState.agentsTabCanManage ?? true }] },
           agentCredentials: [],
         },
         error: undefined,
