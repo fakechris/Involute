@@ -88,6 +88,7 @@ import {
   writeStoredBoardViewState,
 } from '../board/views';
 import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
+import type { ContractValues } from '../components/ContractSection';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { writeStoredShellIssues, writeStoredShellTeams } from '../lib/app-shell-state';
 import { BoardCreateIssueDialog, DECISION_TEMPLATE, type CreatableKind } from '../components/BoardCreateIssueDialog';
@@ -468,6 +469,8 @@ export function BoardPage() {
     teams.find((team) => team.key === queryTeamKey) ??
     teams[0] ??
     null;
+  // Creating work is a write on the team; the server decides who may (INV-836).
+  const canWriteTeam = selectedTeam?.viewerCanWrite ?? false;
   const isTeamSwitching = Boolean(pendingTeamKey && pendingTeamKey !== activeTeamKey);
   const placeableProjects = queryData?.projectSummary?.projects ?? [];
   // Where new work starts (INV-744): entry-point context, else the board's
@@ -618,11 +621,14 @@ export function BoardPage() {
   const prevUrlIssueRef = useRef<string | null>(null);
   useEffect(() => {
     if (urlIssue && urlIssue !== prevUrlIssueRef.current) {
-      prevUrlIssueRef.current = urlIssue;
       const match = allIssues.find(
         (i) => i.identifier.toLowerCase() === urlIssue.toLowerCase() || i.id === urlIssue,
       );
+      // Only remember the link once it has opened: on first render the issues
+      // have not loaded yet, and marking it handled then meant a shared
+      // ?issue= link never opened its drawer.
       if (match) {
+        prevUrlIssueRef.current = urlIssue;
         setFocusedIssueId(match.id);
         setSelectedIssueId(match.id);
       }
@@ -1665,6 +1671,11 @@ export function BoardPage() {
     }));
   }
 
+  async function persistContractChange(issue: IssueSummary, changes: ContractValues) {
+    const saved = await persistIssueUpdate(issue, changes, (current) => ({ ...current, ...changes }));
+    if (!saved) throw new Error('Contract not saved');
+  }
+
   async function persistLabelsChange(issue: IssueSummary, labelIds: string[]) {
     const nextLabels = labels.filter((label) => labelIds.includes(label.id));
     const currentLabelIds = issue.labels.nodes.map((label) => label.id).sort();
@@ -2280,22 +2291,26 @@ export function BoardPage() {
         ) : null}
         <Btn variant="ghost" icon={<IcoFilter size={14} />} size="sm" onClick={() => setFilterBarVisible((v) => !v)}>{filterBarVisible ? 'Hide filters' : 'Filter'}</Btn>
         <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
-        <Btn
-          variant="subtle"
-          icon={<IcoPlus size={12} />}
-          kbd="C"
-          size="sm"
-          onClick={() => openCreateDialog()}
-        >Create issue</Btn>
-        <Btn
-          variant="ghost"
-          icon={<IcoBug size={12} />}
-          size="sm"
-          onClick={() => {
-            setMutationError(null);
-            setIsReportBugOpen(true);
-          }}
-        >Report bug</Btn>
+        {canWriteTeam ? (
+          <>
+            <Btn
+              variant="subtle"
+              icon={<IcoPlus size={12} />}
+              kbd="C"
+              size="sm"
+              onClick={() => openCreateDialog()}
+            >Create issue</Btn>
+            <Btn
+              variant="ghost"
+              icon={<IcoBug size={12} />}
+              size="sm"
+              onClick={() => {
+                setMutationError(null);
+                setIsReportBugOpen(true);
+              }}
+            >Report bug</Btn>
+          </>
+        ) : null}
       </header>
 
       {availableProjects.length > 0 && (
@@ -2895,6 +2910,7 @@ export function BoardPage() {
         onStateChange={persistStateChange}
         onTitleSave={persistTitleChange}
         onDescriptionSave={persistDescriptionChange}
+        onContractSave={persistContractChange}
         onLabelsChange={persistLabelsChange}
         onStructureChange={persistStructureChange}
         onAssigneeChange={persistAssigneeChange}
@@ -2907,7 +2923,9 @@ export function BoardPage() {
         {...(nextBoardIssue ? { onNextIssue: () => openIssue(nextBoardIssue) } : {})}
       />
       <BoardCreateIssueDialog
-        isOpen={isCreateOpen}
+        // Open state is kept as requested (a shortcut or the graph page may ask before
+        // teams load); it only shows for someone who may write in the team.
+        isOpen={isCreateOpen && canWriteTeam}
         isSaving={isSavingState}
         teams={teams}
         selectedTeam={selectedTeam}

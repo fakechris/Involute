@@ -50,6 +50,8 @@ export function ContractSection({
   onSave: (changes: ContractValues) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
+  // A committed item without acceptance cannot be claimed, and only a person can add it (INV-836).
+  const missingAcceptance = committed && !values.acceptance?.trim();
   const [draft, setDraft] = useState(() => draftFrom(values));
   const [error, setError] = useState<string | null>(null);
   const sectionRef = useRef<HTMLElement>(null);
@@ -89,10 +91,16 @@ export function ContractSection({
         <div style={{ flex: 1 }} />
         {editing ? null : (
           <button type="button" className="ui-action ui-action--subtle" onClick={() => setEditing(true)}>
-            Edit contract
+            {missingAcceptance ? 'Add acceptance' : 'Edit contract'}
           </button>
         )}
       </div>
+      {missingAcceptance && !editing ? (
+        <p role="status" className="contract-section__missing">
+          No acceptance criteria yet, so nobody can claim this work. Agents are not allowed to write it on committed
+          work; add what must be true when it is done.
+        </p>
+      ) : null}
       {editing ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
           {committed ? (

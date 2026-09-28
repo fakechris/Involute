@@ -270,8 +270,13 @@ export async function callMcpTool(
         labels: ['bug'],
         priority: requiredNumber(args.priority, 'priority'),
         stepsToReproduce: requiredString(args.steps_to_reproduce, 'steps_to_reproduce'),
+        // A bug is committed on filing, and an agent may not add acceptance to
+        // committed work afterwards; without it here the bug could never be
+        // claimed (INV-836 was filed that way on 2026-09-28).
+        acceptance: requiredString(args.acceptance, 'acceptance'),
         source: optionalString(args.source) ?? 'agent',
       };
+      assignOptional(proposeInput, 'verification', optionalString(args.verification));
       assignOptional(proposeInput, 'description', optionalString(args.description));
       assignOptional(proposeInput, 'parentId', optionalString(args.parent_id));
       assignOptional(proposeInput, 'relatedWorkId', optionalString(args.related_work_id));
@@ -671,7 +676,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     name: 'work_file_bug',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     description:
-      'File a Type: Bug. It is committed directly and never enters Candidates. Priority is required because it sets the SLA (1 Urgent 24h, 2 High 48h, 3 Medium / 4 Low = 7 days). Missing parent, priority or steps_to_reproduce refuses the call. Prefer this over work_propose for bugs.',
+      'File a Type: Bug. It is committed directly and never enters Candidates. Priority is required because it sets the SLA (1 Urgent 24h, 2 High 48h, 3 Medium / 4 Low = 7 days). Missing parent, priority, steps_to_reproduce or acceptance refuses the call. Prefer this over work_propose for bugs.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -691,6 +696,11 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
           type: 'string',
           description: 'Required. How to reproduce it.',
         },
+        acceptance: {
+          type: 'string',
+          description: 'Required. What must be true when it is fixed. The bug is committed on filing and agents cannot add acceptance later, so without it the bug cannot be claimed.',
+        },
+        verification: { type: 'string', description: 'How the fix will be checked (tests, manual steps).' },
         parent_id: {
           type: 'string',
           description: 'Parent PROJECT/MILESTONE/EPIC/ISSUE. Required unless related_work_id can inherit one.',
@@ -712,7 +722,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         idempotency_key: { type: 'string' },
         source: { type: 'string' },
       },
-      required: ['team', 'title', 'priority', 'steps_to_reproduce'],
+      required: ['team', 'title', 'priority', 'steps_to_reproduce', 'acceptance'],
     },
   },
   {

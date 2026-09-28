@@ -117,7 +117,7 @@ export function SettingsPage() {
           {tab === 'agents' && (
             <>
               <AgentsTab />
-              <ServiceActorForm />
+              {isAdmin ? <ServiceActorForm /> : null}
             </>
           )}
           {tab === 'triage' && <BugTriageTab />}

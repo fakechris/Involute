@@ -66,6 +66,8 @@ export const BUG_COMMIT_PRIORITY_REQUIRED_MESSAGE = 'Committing a bug needs a pr
 export const BUG_PROPOSE_PRIORITY_REQUIRED_MESSAGE = 'Proposing a bug needs a priority (Urgent, High, Medium or Low): it sets the SLA.';
 export const BUG_PROPOSE_PARENT_REQUIRED_MESSAGE =
   'A bug is committed directly (it does not go to Candidates): pass parent_id, or related_work_id so it can inherit a parent.';
+export const BUG_PROPOSE_ACCEPTANCE_REQUIRED_MESSAGE =
+  'A bug needs acceptance: what must be true when it is fixed. It is committed on filing and agents cannot add acceptance later, so without it nobody could claim it.';
 export const BUG_PROPOSE_STEPS_REQUIRED_MESSAGE =
   'A bug is committed directly (it does not go to Candidates): pass steps_to_reproduce.';
 export const BUG_PROPOSE_OWNER_REQUIRED_MESSAGE =
@@ -248,6 +250,7 @@ const exposedErrorCodes = new Map<string, string>([
   [BUG_PROPOSE_PRIORITY_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_PROPOSE_PARENT_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_PROPOSE_STEPS_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [BUG_PROPOSE_ACCEPTANCE_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_PROPOSE_OWNER_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_REJECT_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_NO_BACKLOG_MESSAGE, 'BAD_USER_INPUT'],

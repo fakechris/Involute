@@ -48,6 +48,34 @@ describe('a viewer who may neither write nor manage', () => {
     expect(screen.queryByRole('button', { name: /Invite members/ })).not.toBeInTheDocument();
   });
 
+  it('is not offered the agent credential form in Settings → Agents', async () => {
+    signInWithoutAccess();
+    renderApp({ data: noAccess, agentsTabCanManage: false, loading: false }, ['/settings?tab=agents']);
+
+    expect(await screen.findByText(/Only a team owner can issue or revoke agent credentials/)).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Issue a credential' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Issue credential' })).not.toBeInTheDocument();
+  });
+
+  it('sees whose members these are, what the roles mean, and cannot change roles or remove anyone', async () => {
+    signInWithoutAccess();
+    renderApp({ data: noAccess, loading: false }, ['/members']);
+
+    expect(await screen.findByText(/of team Involute \(INV\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Roles are per team/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /role$/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Remove')).not.toBeInTheDocument();
+  });
+
+  it('is not offered Create issue or Report bug on the board', async () => {
+    signInWithoutAccess();
+    renderApp({ data: noAccess, loading: false }, ['/']);
+
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Create issue/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Report bug/ })).not.toBeInTheDocument();
+  });
+
   it('still sees the buttons as a team owner', async () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/members']);
     expect(await screen.findByRole('button', { name: 'Invite' })).toBeInTheDocument();
