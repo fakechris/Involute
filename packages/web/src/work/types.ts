@@ -360,7 +360,7 @@ export interface WorkCommitMutationData {
     success: boolean;
     /** Why the commit was refused; null on success. */
     message?: string | null;
-    issue: { id: string; identifier: string; commitmentStatus: CommitmentStatus } | null;
+    issue: { id: string; identifier: string; revision?: number; commitmentStatus: CommitmentStatus } | null;
   };
 }
 

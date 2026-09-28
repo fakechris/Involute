@@ -8,6 +8,7 @@ import type { Issue, Prisma, PrismaClient, WorkflowStateType } from '@prisma/cli
 export const WORK_EVENT_TYPES = [
   'work.proposed',
   'work.committed',
+  'work.uncommitted',
   'work.rejected',
   'work.claimed',
   'work.state_changed',

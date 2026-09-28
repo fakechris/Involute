@@ -111,6 +111,7 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   },
   workReject: { kind: 'web', doc: 'WORK_REJECT_MUTATION', components: ['routes/CandidatesPage.tsx'], label: 'Reject reason' },
   workRestore: { kind: 'web', doc: 'WORK_RESTORE_MUTATION', components: ['routes/CandidatesPage.tsx'], label: 'Restore to candidate' },
+  workUncommit: { kind: 'web', doc: 'WORK_UNCOMMIT_MUTATION', components: ['undo/CommitUndoHost.tsx'], label: 'Undo commit' },
   workReview: {
     kind: 'web',
     doc: 'WORK_REVIEW_MUTATION',
@@ -135,6 +136,7 @@ export const HUMAN_GATES: Array<{ text: string; mutation: string } | { text: str
   { text: 'Work owner must be a human assignee', mutation: 'issueUpdate' },
   { text: 'Only a person can release a claim', mutation: 'workClaimRelease' },
   { text: 'Only a person can restore a rejected candidate', mutation: 'workRestore' },
+  { text: 'Only a person can return committed work to the candidate queue', mutation: 'workUncommit' },
   { text: 'Only a person may retract evidence', mutation: 'evidenceRetract' },
   { text: 'Human-only (delegated CLI or Web UI):', mutation: 'workCommit' },
   { text: 'gated on actor kind (humans only)', mutation: 'workCommit' },

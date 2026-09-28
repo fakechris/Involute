@@ -366,6 +366,22 @@ export const WORK_COMMIT_MUTATION = gql`
       issue {
         id
         identifier
+        revision
+        commitmentStatus
+      }
+    }
+  }
+`;
+
+export const WORK_UNCOMMIT_MUTATION = gql`
+  mutation WorkUncommit($id: String!, $expectedRevision: Int!) {
+    workUncommit(id: $id, expectedRevision: $expectedRevision) {
+      success
+      message
+      issue {
+        id
+        identifier
+        revision
         commitmentStatus
       }
     }
