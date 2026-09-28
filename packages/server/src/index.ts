@@ -562,7 +562,7 @@ async function handleUploadDownload(options: {
     }
     const issue = await options.auth.prisma.issue.findUnique({
       where: { id: issueId },
-      select: { teamId: true },
+      select: { id: true, teamId: true },
     });
     if (!issue) {
       response.statusCode = 404;
@@ -570,8 +570,8 @@ async function handleUploadDownload(options: {
       return;
     }
     try {
-      const { assertCanReadTeam } = await import('./access-control.js');
-      await assertCanReadTeam(options.auth.prisma, context, issue.teamId);
+      const { assertCanReadIssue } = await import('./access-control.js');
+      await assertCanReadIssue(options.auth.prisma, context, issue.id);
     } catch {
       response.statusCode = 403;
       response.end('Forbidden');

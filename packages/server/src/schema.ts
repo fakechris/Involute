@@ -21,6 +21,8 @@ import type {
   WorkLinkType,
   WorkflowState,
   WorkEvidence,
+  WorkShare,
+  WorkShareRole,
 } from '@prisma/client';
 
 import { assertOpsAdmin, clearSyncDeadLetter, readOpsOverview, recordOpsAudit, replayInboundDelivery } from './ops-service.js';
@@ -106,6 +108,7 @@ import { PRESENCE_COPY, agentRequestPresence } from './agent-request-presence.js
 import { ACTOR_PRESENCE_COPY, actorPresence } from './actor-presence.js';
 import { deactivateActor, transferActorOwner, reactivateActor, recordActorAudit, setActorSuccessor } from './actor-lifecycle.js';
 import { isValidHandle, normalizeHandle } from './mention-parser.js';
+import { listWorkShares, removeWorkShare, upsertWorkShare } from './project-sharing.js';
 import { EVIDENCE_NOT_FOUND_MESSAGE, retractEvidence } from './evidence-retract.js';
 import { answerAgentRequestAsHuman, replyToAgentRequest } from './agent-request-service.js';
 import { provisionServiceActor } from './service-actors.js';
@@ -187,6 +190,7 @@ type IssueParent = Issue & {
 type WorkLinkParent = WorkLink & { from?: Issue | null; to?: Issue | null };
 type WorkClaimParent = WorkClaim & { actor?: User | null };
 type AgentCredentialParent = AgentCredential & { user?: User | null };
+type WorkShareParent = WorkShare & { createdBy?: User | null; user?: User | null };
 
 interface StringComparatorInput {
   eq?: string | null;
@@ -397,6 +401,9 @@ const typeDefs = /* GraphQL */ `
     workPropose(input: WorkProposeInput!): WorkProposePayload!
     workLink(fromId: String!, toId: String!, type: WorkLinkType!): WorkLinkMutationPayload!
     workLinkDelete(id: String!): WorkLinkDeletePayload!
+    """Share a PROJECT node with a person or agent, or change their role. Team OWNER or ADMIN only."""
+    workShareUpsert(workId: String!, userId: String!, role: WorkShareRole!): WorkShareMutationPayload!
+    workShareRemove(workId: String!, userId: String!): WorkShareMutationPayload!
     workCommit(id: String!, input: WorkCommitInput!): WorkCommitPayload!
     workReject(id: String!, input: WorkRejectInput!): WorkRejectPayload!
     workClaim(id: String!, input: WorkClaimInput): WorkClaimPayload!
@@ -918,6 +925,8 @@ const typeDefs = /* GraphQL */ `
     (INV-597 follow-up).
     """
     agentRequests(first: Int): [AgentRequest!]!
+    """Who this PROJECT node is shared with beyond its team (INV-832). Empty unless the viewer may manage the team."""
+    shares: [WorkShare!]!
     """The actor that created this work — human or agent (INV-573)."""
     proposedByActor: User
     """How this work got here. Always answerable, even when no actor was recorded."""
@@ -1877,6 +1886,26 @@ const typeDefs = /* GraphQL */ `
     message: String
   }
 
+  enum WorkShareRole {
+    VIEWER
+    EDITOR
+  }
+
+  """A PROJECT node shared with one person or agent outside its team (INV-832)."""
+  type WorkShare {
+    id: ID!
+    role: WorkShareRole!
+    user: User!
+    createdBy: User
+    createdAt: DateTime!
+  }
+
+  type WorkShareMutationPayload {
+    success: Boolean!
+    message: String
+    share: WorkShare
+  }
+
   type WorkLinkMutationPayload {
     success: Boolean!
     link: WorkLink
@@ -2017,7 +2046,7 @@ const resolvers = {
         });
 
         if (issue) {
-          await assertCanReadTeam(context.prisma, context, issue.teamId);
+          await assertCanReadIssue(context.prisma, context, issue.id);
           return issue;
         }
       } catch (error) {
@@ -2034,7 +2063,7 @@ const resolvers = {
       });
 
       if (issue) {
-        await assertCanReadTeam(context.prisma, context, issue.teamId);
+        await assertCanReadIssue(context.prisma, context, issue.id);
       }
 
       return issue;
@@ -2420,7 +2449,7 @@ const resolvers = {
         return null;
       }
 
-      await assertCanReadTeam(context.prisma, context, work.teamId);
+      await assertCanReadIssue(context.prisma, context, work.id);
       return getWorkContext(context.prisma, work.id);
     },
     workHygiene: async (
@@ -2788,6 +2817,43 @@ const resolvers = {
         });
         return { link, success: true as const };
       }, { link: null, success: false as const }),
+    workShareUpsert: async (
+      _parent: unknown,
+      args: { role: WorkShareRole; userId: string; workId: string },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; share: WorkShareParent | null; success: boolean }> =>
+      runMutationWithReason(async () => {
+        const work = await findWorkByIdOrIdentifier(context.prisma, args.workId);
+        if (!work) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+        // Sharing outward is a team-management act, like adding a member.
+        await assertCanManageTeam(context.prisma, context, work.teamId);
+        const share = await upsertWorkShare(context.prisma, {
+          actor: writeActorFromViewer(context.viewer),
+          role: args.role,
+          userId: args.userId,
+          workId: work.id,
+        });
+        return {
+          share: await context.prisma.workShare.findUniqueOrThrow({ where: { id: share.id }, include: { createdBy: true, user: true } }),
+          success: true as const,
+        };
+      }, { share: null, success: false as const }),
+    workShareRemove: async (
+      _parent: unknown,
+      args: { userId: string; workId: string },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; share: WorkShareParent | null; success: boolean }> =>
+      runMutationWithReason(async () => {
+        const work = await findWorkByIdOrIdentifier(context.prisma, args.workId);
+        if (!work) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+        await assertCanManageTeam(context.prisma, context, work.teamId);
+        await removeWorkShare(context.prisma, {
+          actor: writeActorFromViewer(context.viewer),
+          userId: args.userId,
+          workId: work.id,
+        });
+        return { share: null, success: true as const };
+      }, { share: null, success: false as const }),
     workLinkDelete: async (
       _parent: unknown,
       args: { id: string },
@@ -4349,6 +4415,15 @@ const resolvers = {
     ): Promise<WorkProvenanceResult> => {
       const provenance = await findWorkProvenance(context.prisma, parent.id);
       return { ...provenance, source: parent.source ?? null };
+    },
+    shares: async (
+      parent: IssueParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<WorkShareParent[]> => {
+      if (parent.kind !== 'PROJECT') return [];
+      const canManage = await assertCanManageTeam(context.prisma, context, parent.teamId).then(() => true, () => false);
+      return canManage ? listWorkShares(context.prisma, parent.id) : [];
     },
     agentRequests: async (
       parent: IssueParent,

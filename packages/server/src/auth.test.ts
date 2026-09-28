@@ -118,6 +118,7 @@ describe('auth', () => {
     const context = await createGraphQLContext({
       authToken: 'shared-secret',
       prisma: {
+        workShare: { findMany: vi.fn().mockResolvedValue([]) },
         session: {
           findUnique: vi.fn().mockResolvedValue({
             expiresAt: new Date(Date.now() + 60_000),

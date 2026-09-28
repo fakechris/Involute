@@ -9,6 +9,7 @@ import { DEFAULT_ADMIN_EMAIL } from './constants.js';
 import { createNotAuthenticatedError, NOT_AUTHENTICATED_MESSAGE } from './errors.js';
 import { getSessionRecord, readCookieValue, SESSION_COOKIE_NAME } from './session.js';
 import { resolveAgentPrincipal } from './agent-credentials.js';
+import { EMPTY_SHARE_SCOPE, resolveShareScope, type ShareScope } from './project-sharing.js';
 
 export interface GraphQLContext {
   authMode: 'agent-token' | 'none' | 'session' | 'token';
@@ -17,6 +18,8 @@ export interface GraphQLContext {
   agentTeamId?: string | null;
   isTrustedSystem: boolean;
   prisma: PrismaClient;
+  /** What the viewer may reach through project shares (INV-832); resolved once per request. */
+  shareScope?: ShareScope;
   viewer: User | null;
 }
 
@@ -87,12 +90,20 @@ export async function createGraphQLContext({
     viewerAssertionSecret: viewerAssertionSecret ?? null,
   });
 
+  // ADMIN and trusted-system callers read everything anyway; only a real,
+  // bounded viewer needs its shares resolved.
+  const shareScope =
+    authentication.viewer && !authentication.isTrustedSystem && authentication.viewer.globalRole !== 'ADMIN'
+      ? await resolveShareScope(prisma, authentication.viewer.id)
+      : EMPTY_SHARE_SCOPE;
+
   return {
     authMode: authentication.authMode,
     agentScopes: authentication.authMode === 'agent-token' ? authentication.agentScopes ?? null : null,
     agentTeamId: authentication.authMode === 'agent-token' ? authentication.agentTeamId ?? null : null,
     isTrustedSystem: authentication.isTrustedSystem,
     prisma,
+    shareScope,
     viewer: authentication.viewer,
   };
 }
