@@ -46,8 +46,9 @@ only when "Members can invite" is on (Security); Members can invite Members
 and Guests, never Admins. An invite names an email, a workspace role and the
 teams (with team roles) the person joins. It creates the user row with no
 Google identity yet: that row is the invite, shown as **Pending** until the
-person first signs in. Revoking a pending invite deletes that row and its
-memberships; nothing else refers to it yet.
+person first signs in. Revoking a pending invite suspends that row, so its
+email is refused at sign-in; the invite and its revocation stay in the audit
+trail. Inviting the same email again brings it back.
 
 A team Owner can also add an existing workspace member to their team from the
 team's Members page; adding a brand-new email there is an invite and follows
