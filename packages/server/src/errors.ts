@@ -81,6 +81,11 @@ export const ACTOR_LIFECYCLE_HUMAN_ONLY_MESSAGE =
 export const REQUEST_ANSWER_STATE_INVALID_MESSAGE = 'An answer state is completed, failed or input-required.';
 export const ACTOR_SUCCESSOR_INVALID_MESSAGE = 'A successor is another active actor, not the actor itself.';
 export const WORK_RESTORE_FORBIDDEN_MESSAGE = 'Only a person can restore a rejected candidate.';
+export const WORK_UNCOMMIT_FORBIDDEN_MESSAGE = 'Only a person can return committed work to the candidate queue.';
+export const WORK_UNCOMMIT_NOT_COMMITTED_MESSAGE = 'Only committed work can be returned to the candidate queue.';
+export const WORK_UNCOMMIT_CLAIMED_MESSAGE = 'This work is leased. Release the claim before returning it to candidates.';
+export const WORK_UNCOMMIT_RUN_MESSAGE = 'This work already has a run. It stays committed.';
+export const WORK_UNCOMMIT_NO_SNAPSHOT_MESSAGE = 'This commit has no snapshot to reverse.';
 export const WORK_RESTORE_NOT_REJECTED_MESSAGE = 'Only rejected work can be restored to a candidate.';
 export const WORK_RESTORE_REASON_REQUIRED_MESSAGE = 'Restoring rejected work needs a reason.';
 export const CLAIM_RELEASE_REASON_REQUIRED_MESSAGE = 'Releasing a claim needs a reason; the agent and its owner are told.';
@@ -242,6 +247,11 @@ const exposedErrorCodes = new Map<string, string>([
   [ISSUE_TYPE_EXCLUSIVE_MESSAGE, 'BAD_USER_INPUT'],
   [CLAIM_RELEASE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
   [WORK_RESTORE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
+  [WORK_UNCOMMIT_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
+  [WORK_UNCOMMIT_NOT_COMMITTED_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_UNCOMMIT_CLAIMED_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_UNCOMMIT_RUN_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_UNCOMMIT_NO_SNAPSHOT_MESSAGE, 'BAD_USER_INPUT'],
   [ACTOR_LIFECYCLE_HUMAN_ONLY_MESSAGE, 'FORBIDDEN'],
   [ACTOR_SUCCESSOR_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [REQUEST_ANSWER_STATE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
