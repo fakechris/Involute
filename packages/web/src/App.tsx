@@ -47,10 +47,12 @@ import {
 } from './lib/app-shell-state';
 import { fetchSessionState, getGoogleLoginUrl, logoutSession, type SessionState } from './lib/session';
 import { lazyRoute, RouteErrorBoundary } from './lib/lazy-route';
+import { CommitUndoHost } from './undo/CommitUndoHost';
 import { StatusUndoToast } from './undo/StatusUndoToast';
 import {
-  formatStatusMove,
+  formatUndoEntry,
   getStatusUndoSnapshot,
+  handleSessionUndoKey,
   isTextEditingTarget,
   redoStatusGesture,
   subscribeStatusUndo,
@@ -668,16 +670,14 @@ export function App() {
     function handleGlobalKeyDown(event: KeyboardEvent) {
       const isTypingField = isTextEditingTarget(event.target);
 
-      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'z') {
-        if (isTypingField) {
-          return;
+      if (handleSessionUndoKey(event)) {
+        if (!isTextEditingTarget(event.target)) {
+          const top = getStatusUndoSnapshot().undo.at(-1) ?? getStatusUndoSnapshot().redo.at(-1);
+          const path = locationPathnameRef.current;
+          if (top && !('items' in top) && path !== '/' && path !== '/backlog') {
+            navigate('/');
+          }
         }
-        event.preventDefault();
-        const path = locationPathnameRef.current;
-        if (path !== '/' && path !== '/backlog') {
-          navigate('/');
-        }
-        void (event.shiftKey ? redoStatusGesture() : undoStatusGesture());
         return;
       }
 
@@ -909,27 +909,27 @@ export function App() {
       },
       {
         id: 'undo-status',
-        label: statusUndo.undo.length > 0 ? `Undo · ${formatStatusMove(statusUndo.undo[statusUndo.undo.length - 1]!)}` : 'Undo',
+        label: statusUndo.undo.length > 0 ? `Undo · ${formatUndoEntry(statusUndo.undo[statusUndo.undo.length - 1]!)}` : 'Undo',
         description: statusUndo.undo.length > 0 ? 'Revert the latest status change' : 'Nothing to undo',
         group: 'Actions',
         shortcut: '⌘ Z',
         run: () => {
-          if (location.pathname !== '/' && location.pathname !== '/backlog') {
-            navigate('/');
-          }
+          const top = statusUndo.undo.at(-1);
+          if (top && 'items' in top) navigate('/candidates');
+          else if (location.pathname !== '/' && location.pathname !== '/backlog') navigate('/');
           void undoStatusGesture();
         },
       },
       {
         id: 'redo-status',
-        label: statusUndo.redo.length > 0 ? `Redo · ${formatStatusMove(statusUndo.redo[statusUndo.redo.length - 1]!)}` : 'Redo',
+        label: statusUndo.redo.length > 0 ? `Redo · ${formatUndoEntry(statusUndo.redo[statusUndo.redo.length - 1]!)}` : 'Redo',
         description: statusUndo.redo.length > 0 ? 'Repeat the latest undone status change' : 'Nothing to redo',
         group: 'Actions',
         shortcut: '⇧ ⌘ Z',
         run: () => {
-          if (location.pathname !== '/' && location.pathname !== '/backlog') {
-            navigate('/');
-          }
+          const top = statusUndo.redo.at(-1);
+          if (top && 'items' in top) navigate('/candidates');
+          else if (location.pathname !== '/' && location.pathname !== '/backlog') navigate('/');
           void redoStatusGesture();
         },
       },
@@ -1153,11 +1153,6 @@ export function App() {
                 <span className="app-shell__link-label">Projects</span>
                 <kbd className="app-shell__link-kbd" aria-hidden="true">G P</kbd>
               </NavLink>
-              <NavLink to="/members" className={getNavLinkClassName} title="Go to Members · G E">
-                <span className="app-shell__nav-icon"><IcoTeam size={14} /></span>
-                <span className="app-shell__link-label">Members</span>
-                <kbd className="app-shell__link-kbd" aria-hidden="true">G E</kbd>
-              </NavLink>
               <NavLink to="/agents" className={getNavLinkClassName} title="Go to Agents">
                 <span className="app-shell__nav-icon"><IcoTeam size={14} /></span>
                 <span className="app-shell__link-label">Agents</span>
@@ -1247,6 +1242,18 @@ export function App() {
                           >
                             <span className="app-shell__subnav-icon"><IcoCycle size={12} /></span>
                             Milestones
+                          </NavLink>
+                          {/* Members are a team's roster, so they live under the team (not in Workspace). */}
+                          <NavLink
+                            to={`/members?team=${encodeURIComponent(team.key)}`}
+                            className={`app-shell__team-subnav-link${location.pathname === '/members' && isActive ? ' app-shell__team-subnav-link--active' : ''}`}
+                            onClick={() => {
+                              writeStoredTeamKey(team.key);
+                              setActiveTeamKey(team.key);
+                            }}
+                          >
+                            <span className="app-shell__subnav-icon"><IcoTeam size={12} /></span>
+                            Members
                           </NavLink>
                         </div>
                       ) : null}
@@ -1505,6 +1512,7 @@ export function App() {
         onClose={() => setIsShortcutsOpen(false)}
       />
       <StatusUndoToast />
+      <CommitUndoHost />
     </div>
   );
 }

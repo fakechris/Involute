@@ -117,3 +117,37 @@ Merged so far: INV-590 #94, INV-591 #95, INV-592 #96, INV-593 #97 (main 7fbeb5e,
 **Status**: Code complete — PR pending (stacked on INV-597). Third-review fixes applied on each branch: #103 (reflex unbound token, run fallback, precheck expiry; merged 59f1793), #100 (successor must be able to answer: answer scope only, global ADMIN counts), #101 (profile bounded by readable teams; request cap keeps the newest chains whole), #102 (target write/read authorization, CAS, verifier ignores retracted). Fourth review cleared #103; #100–#102 wait on CI, then final merge and deploy review; the data actions follow the deploy.
 **Local DB note**: the shared `involute_test` database is a hazard for parallel sessions until each session gets its own schema.
 **Flaky test finding (2026-09-17)**: two 12-run loops of `graphql-mutations.test.ts` were saved. Every failure was `PrismaClientInitializationError: Can't reach database server` from `test-setup.ts`, and Docker's event log shows the local DB compose project stopped and the `involute-db-localproxy` container killed/destroyed at 09:12 UTC while a run was in flight — the operator's own manual stop, not an unknown external action. The earlier "non-JSON body / 404 / fetch failed" failures on this machine are consistent with the same cause (the server losing its DB mid-request), not with ephemeral-port reuse. No failure has yet been reproduced with the DB stable; the loop must be rerun on a machine where nothing else manages these containers before the file is called flaky.
+
+---
+
+# Implementation plan — Permissions redesign (docs/permissions.md)
+
+Decisions (2026-09-28): invite-only sign-in plus approved domains; workspace
+roles Admin / Member / Guest; team roles stay Viewer / Editor / Owner (shown as
+Viewer / Member / Owner); only Admins create teams unless a toggle allows
+Members. One PR per stage, each deployed before the next starts.
+
+## Stage 1: Workspace access (server)
+**Goal**: sign-in gate, Guest role, invites as pending users, allowlist bootstrap-only, suspend/reactivate people.
+**Success Criteria**: an uninvited Google account is refused; an approved-domain account joins as Member in the default teams; a demoted allowlisted admin stays demoted; suspending signs a person out and blocks sign-in; the last Admin cannot be demoted or suspended; Guests do not see public teams. Server suite exits 0.
+**Status**: Not Started
+
+## Stage 2: Team lifecycle and roles (server)
+**Goal**: teamCreate / teamUpdate / archive, join public team, leave team, roster visible to members, Guests never Owner, workflow states gated by team Owner.
+**Success Criteria**: creator becomes Owner with default states; archived team refuses writes; last Owner cannot leave; a Viewer sees roles of teammates; Member toggle for team creation honoured. Server suite exits 0.
+**Status**: Not Started
+
+## Stage 3: Administration UI
+**Goal**: Settings → Administration → Members, Teams, Security; retire AdminsTab and "Members & access".
+**Success Criteria**: Admin invites, changes role, suspends and reactivates from Members; creates and archives teams from Teams; edits domains and toggles in Security; non-admins see none of it. Web suite exits 0.
+**Status**: Not Started
+
+## Stage 4: Team pages
+**Goal**: /teams/<KEY>/members and /teams/<KEY>/settings; redirect /settings/access and /members; fix the old roster bugs (non-members listed, unchecked results).
+**Success Criteria**: roster shows only team members with roles; Owner actions only for Owners/Admins; Join/Leave work; workflow states, triage, agents and webhooks live under team settings. Web suite exits 0.
+**Status**: Not Started
+
+## Stage 5: Hardening and rollout
+**Goal**: human-surface registry and MCP parity updated, e2e for invite → sign-in → join, AGENTS.md pointer, production migration check (existing users keep access, songsr008 stays Member with no team).
+**Success Criteria**: CI green including e2e; production verified with a real sign-in by an invited and an uninvited account.
+**Status**: Not Started
