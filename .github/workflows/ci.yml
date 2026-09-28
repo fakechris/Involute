@@ -143,11 +143,42 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Deploy test database migrations
         run: pnpm --filter @turnkeyai/involute-server prisma:migrate:deploy
-      - name: Shared, CLI and web tests
+      - name: Shared and CLI tests
         run: |
           pnpm --filter @turnkeyai/involute-shared test --run
           pnpm --filter @turnkeyai/involute test --run
-          pnpm --filter @turnkeyai/involute-web test --run
+
+  web-tests:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.1
+      - uses: actions/setup-node@v4
+        with:
+          cache: pnpm
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      # Same as `pnpm --filter @turnkeyai/involute-web test` (one vitest process
+      # per file, which the suite relies on), with the files split into shards.
+      - name: Web tests (shard ${{ matrix.shard }}/3)
+        working-directory: packages/web
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+          SHARD: ${{ matrix.shard }}
+        run: |
+          pnpm --filter @turnkeyai/involute-shared build
+          files=$(find src -type f \( -name "*.test.ts" -o -name "*.test.tsx" \) | sort | awk -v k="$SHARD" 'NR % 3 == k % 3')
+          for file in $files; do
+            pnpm exec vitest --config vitest.config.ts --reporter=dot --passWithNoTests --run "$file" || exit 1
+          done
 
   e2e:
     needs: changes
@@ -194,7 +225,7 @@ jobs:
         run: docker compose build
 
   verify:
-    needs: [changes, typecheck, server-tests, other-tests, e2e, build]
+    needs: [changes, typecheck, server-tests, other-tests, web-tests, e2e, build]
     if: always()
     runs-on: ubuntu-latest
     steps:
