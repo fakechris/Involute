@@ -43,10 +43,11 @@ describe('Agent directory (INV-607)', () => {
     expect(await screen.findByText(/No agent matches “8759ae98-0000-4000-8000-000000000001”/)).toBeInTheDocument();
   });
 
-  it('opens Settings on the Agents tab from the directory link', async () => {
+  it('links credential issuing to the team settings Agents section (INV-850)', async () => {
     signIn();
-    renderApp({ data: boardQueryResult, agentsData: { agents }, loading: false }, ['/settings?tab=agents']);
+    renderApp({ data: boardQueryResult, agentsData: { agents }, loading: false }, ['/agents']);
 
-    expect(await screen.findByRole('heading', { name: 'Issue a credential' })).toBeInTheDocument();
+    const link = await screen.findByRole('link', { name: 'Settings → Agents' });
+    expect(link.getAttribute('href')).toMatch(/^\/teams\/[^/]+\/settings\?section=agents$/);
   });
 });

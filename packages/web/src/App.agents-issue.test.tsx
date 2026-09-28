@@ -9,12 +9,12 @@ const existingAgents = [
 
 async function openAgentsTab() {
   mockSessionState({ authMode: 'session', authenticated: true, googleOAuthConfigured: true, viewer: { id: 'user-1', email: 'admin@example.com', name: 'Admin', globalRole: 'ADMIN' } });
-  renderApp({ data: boardQueryResult, agentsData: { agents: existingAgents }, loading: false }, ['/settings']);
-  fireEvent.click(await screen.findByRole('button', { name: 'Agents' }));
+  // Credentials are issued from the team's own settings (INV-850).
+  renderApp({ data: boardQueryResult, agentsData: { agents: existingAgents }, loading: false }, ['/teams/INV/settings?section=agents']);
   await screen.findByRole('heading', { name: 'Issue a credential' });
 }
 
-describe('Settings → Agents issuance form (INV-606)', () => {
+describe('Team settings → Agents issuance form (INV-606)', () => {
   it('derives the handle from the name and sends the profile fields and the answer scope', async () => {
     await openAgentsTab();
 

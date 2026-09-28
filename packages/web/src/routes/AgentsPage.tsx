@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { AGENTS_QUERY, AGENT_CREDENTIAL_REVOKE_MUTATION, AGENT_PROFILE_QUERY } from '../board/queries';
 import type { UserSummary } from '../board/types';
+import { readStoredTeamKey } from '../board/utils';
 import { ActorBadge } from '../components/ActorBadge';
 import { ActorSuccessorControl } from '../components/ActorSuccessorControl';
 import { AgentLifecycleActions } from '../components/AgentLifecycleActions';
@@ -96,7 +97,7 @@ function AgentList() {
         <h1>Agents</h1>
         <p className="agent-directory__meta">
           {agents.length} actor{agents.length === 1 ? '' : 's'}. Only agents with a handle can be
-          mentioned. Credentials are issued in <Link to="/settings?tab=agents">Settings → Agents</Link>.
+          mentioned. Credentials are issued by team owners in the team's <Link to={`/teams/${encodeURIComponent(readStoredTeamKey() ?? 'INV')}/settings?section=agents`}>Settings → Agents</Link>.
         </p>
         <label className="agent-directory__toggle">
           <input
@@ -248,7 +249,7 @@ function AgentProfile({ handle }: { handle: string }) {
       <section className="issue-panel__section">
         <span className="issue-panel__label">Origin</span>
         <p className="agent-directory__meta" style={{ marginTop: 0 }}>
-          Issue a new credential for this actor in <Link to="/settings?tab=agents">Settings → Agents</Link>.
+          Issue a new credential for this actor in a team's <Link to={`/teams/${encodeURIComponent(credentials[0]?.teamKey ?? readStoredTeamKey() ?? 'INV')}/settings?section=agents`}>Settings → Agents</Link>.
         </p>
         {revokeError ? <p className="agent-lifecycle__error" role="alert">{revokeError}</p> : null}
         {credentials.length === 0 ? (

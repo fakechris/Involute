@@ -30,8 +30,11 @@ export function deriveViewLabel(pathname: string, search: string): string | null
   let baseLabel = PATHNAME_LABELS[pathname];
 
   if (!baseLabel) {
+    const teamPage = /^\/teams\/([^/]+)\/(members|settings)$/.exec(pathname);
     if (/^\/(issue|issues|work)\/[^/]+$/.test(pathname)) {
       baseLabel = 'Work';
+    } else if (teamPage) {
+      return `${teamPage[2] === 'members' ? 'Members' : 'Team settings'} · ${decodeURIComponent(teamPage[1]!)}`;
     } else {
       return null;
     }

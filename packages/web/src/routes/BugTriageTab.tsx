@@ -17,8 +17,8 @@ const personName = (person: TriagePerson) => person.name ?? person.email ?? pers
  * reports that have no place yet. The rotation advances one person a week from
  * the start date; triage reports and SLA reminders go to the person on duty.
  */
-export function BugTriageTab() {
-  const teamKey = readStoredTeamKey() ?? 'INV';
+export function BugTriageTab({ teamKey: fixedTeamKey }: { teamKey?: string } = {}) {
+  const teamKey = fixedTeamKey ?? readStoredTeamKey() ?? 'INV';
   const { data, loading, error, refetch } = useQuery<TeamTriageQueryData, { teamKey: string }>(TEAM_TRIAGE_QUERY, {
     variables: { teamKey },
   });

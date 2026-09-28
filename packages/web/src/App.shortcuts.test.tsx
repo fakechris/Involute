@@ -53,7 +53,7 @@ describe('App keyboard shortcuts and help dialog', () => {
     // Members is a team's roster: it sits under the team (Teams → INV → Members), not in Workspace.
     // G E still opens it for the current team.
     const membersLinks = screen.queryAllByRole('link', { name: /^Members/i });
-    expect(membersLinks.every((link) => link.getAttribute('href')?.startsWith('/members?team='))).toBe(true);
+    expect(membersLinks.every((link) => /^\/teams\/[^/]+\/members$/.test(link.getAttribute('href') ?? ''))).toBe(true);
   });
 
   it('navigates to Candidates via G then C chord, showing chord indicator', async () => {

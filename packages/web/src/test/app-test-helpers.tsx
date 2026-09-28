@@ -474,6 +474,8 @@ export const accessQueryResult: AccessPageQueryData = {
 
 type QueryState = {
   accessData?: AccessPageQueryData;
+  /** Overrides the TeamPage query (INV-850); otherwise derived from data.teams by key. */
+  teamPageData?: unknown;
   projectSharesData?: unknown;
   agentProfileData?: unknown;
   agentsData?: { agents: unknown[] };
@@ -605,6 +607,32 @@ export function renderApp(
         error: queryState.error,
         loading: queryState.loading ?? false,
         refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query TeamPage')) {
+      const key = String(options?.variables?.key ?? '');
+      const derived = {
+        teams: {
+          nodes: (queryState.data?.teams.nodes ?? [])
+            .filter((team) => team.key === key)
+            .map((team) => ({
+              visibility: 'PRIVATE',
+              archivedAt: null,
+              viewerCanJoin: false,
+              viewerIsMember: true,
+              memberships: { nodes: [] },
+              ...team,
+              viewerCanManage: team.viewerCanManage ?? false,
+            })),
+        },
+        viewer: { id: 'user-1' },
+      };
+      return {
+        data: queryState.teamPageData ?? derived,
+        error: queryState.error,
+        loading: queryState.loading ?? false,
+        refetch: queryState.refetch ?? vi.fn().mockResolvedValue(undefined),
       };
     }
 

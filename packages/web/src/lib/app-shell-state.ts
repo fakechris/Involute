@@ -11,6 +11,8 @@ export interface AppShellTeamSummary {
   key: string;
   name: string;
   issueCount?: number | undefined;
+  /** Owners and admins get the team's Settings link in the sidebar. */
+  viewerCanManage?: boolean | undefined;
 }
 
 export interface AppShellIssueSummary {
@@ -27,6 +29,7 @@ function normalizeTeams(teams: TeamSummary[]): AppShellTeamSummary[] {
     key: team.key,
     name: team.name,
     issueCount: team.issueCount,
+    viewerCanManage: team.viewerCanManage,
   }));
 }
 

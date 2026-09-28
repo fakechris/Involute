@@ -16,7 +16,7 @@ describe('workspace settings tabs', () => {
   it('shows the Administration group to admins (INV-849)', async () => {
     session('ADMIN');
     renderApp({ data: boardQueryResult, loading: false }, ['/settings']);
-    for (const name of ['Members', 'Teams', 'Security', 'Labels', 'Workflow states', 'Server features']) {
+    for (const name of ['Members', 'Teams', 'Security', 'Service actors', 'Labels', 'Server features']) {
       expect(await screen.findByRole('button', { name })).toBeInTheDocument();
     }
   });
@@ -25,6 +25,6 @@ describe('workspace settings tabs', () => {
     session('USER');
     renderApp({ data: boardQueryResult, loading: false }, ['/settings']);
     expect(await screen.findByRole('button', { name: 'Preferences' })).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Workflow states' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Security' })).not.toBeInTheDocument());
   });
 });
