@@ -472,6 +472,7 @@ export const accessQueryResult: AccessPageQueryData = {
 
 type QueryState = {
   accessData?: AccessPageQueryData;
+  projectSharesData?: unknown;
   agentProfileData?: unknown;
   agentsData?: { agents: unknown[] };
   candidatesData?: CandidatesPageQueryData;
@@ -600,6 +601,15 @@ export function renderApp(
         data: queryState.workContextData ?? { workContext: null },
         error: queryState.error,
         loading: queryState.loading ?? false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query ProjectShares')) {
+      return {
+        data: queryState.projectSharesData ?? { issue: null, users: { nodes: [] } },
+        error: undefined,
+        loading: false,
         refetch: vi.fn().mockResolvedValue(undefined),
       };
     }

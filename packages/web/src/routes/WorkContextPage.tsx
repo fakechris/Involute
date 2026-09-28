@@ -8,6 +8,7 @@ import { EvidenceVerificationStatus, RetractEvidence, RunBinding } from '../comp
 import { ClaimControl } from '../components/ClaimControl';
 import { AgentRequestActions } from '../components/AgentRequestActions';
 import { RespondToAgent } from '../components/RespondToAgent';
+import { EvidenceAttachForm } from '../components/EvidenceAttachForm';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { WORK_CONTEXT_PAGE_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
 import type {
@@ -285,6 +286,7 @@ export function WorkContextPage() {
         </section>
         <section className="work-context__section">
           <h2>Evidence</h2>
+          <EvidenceAttachForm workId={bundle.work.id} />
           {bundle.evidence.length === 0 ? (
             <p className="observation-empty">No evidence</p>
           ) : (

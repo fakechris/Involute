@@ -38,6 +38,11 @@ enum ActorKind {
   SERVICE
 }
 
+enum WorkShareRole {
+  VIEWER
+  EDITOR
+}
+
 enum WorkKind {
   ISSUE
   PROJECT
@@ -190,6 +195,8 @@ model User {
   // and left no earlier trace; never backfilled with a guess.
   createdAt      DateTime? @default(now())
   issuedCredentials AgentCredential[] @relation("CredentialIssuer")
+  workShares     WorkShare[] @relation("WorkShareUser")
+  workSharesMade WorkShare[] @relation("WorkShareCreator")
   notificationPrefs Json    @default("{}")
   assignedIssues Issue[]   @relation("IssueAssignee")
   comments       Comment[]
@@ -276,6 +283,8 @@ model Issue {
   state             WorkflowState     @relation(fields: [stateId, teamId], references: [id, teamId], onDelete: Restrict)
   assigneeId        String?           @db.Uuid
   assignee          User?             @relation("IssueAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  // Who this PROJECT node is shared with beyond its team (INV-832).
+  shares            WorkShare[]
   parentId          String?           @db.Uuid
   parent            Issue?            @relation("IssueParentChild", fields: [parentId], references: [id], onDelete: SetNull)
   children          Issue[]           @relation("IssueParentChild")
@@ -545,6 +554,28 @@ model LegacyLinearMapping {
   @@unique([oldId, entityType])
   @@unique([newId, entityType])
   @@index([entityType])
+}
+
+/**
+ * A PROJECT node shared with one person or agent outside its team (INV-832).
+ * The share is the permission carrier: it grants read (VIEWER) or write
+ * (EDITOR) over the node, its CONTAINS subtree and the team's issues on the
+ * same repository. Nothing moves, nothing is renumbered.
+ */
+model WorkShare {
+  id          String        @id @default(uuid()) @db.Uuid
+  workId      String        @db.Uuid
+  work        Issue         @relation(fields: [workId], references: [id], onDelete: Cascade)
+  userId      String        @db.Uuid
+  user        User          @relation("WorkShareUser", fields: [userId], references: [id], onDelete: Cascade)
+  role        WorkShareRole @default(VIEWER)
+  createdById String?       @db.Uuid
+  createdBy   User?         @relation("WorkShareCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([workId, userId])
+  @@index([userId])
 }
 
 model WorkLink {
@@ -841,6 +872,21 @@ model SyncWatermark {
   key       String   @id
   watermark DateTime
   updatedAt DateTime @updatedAt
+}
+
+// Who did what on the ops page (INV-796): clearing a sync dead letter,
+// replaying an inbound delivery, managing a webhook. No foreign key on the
+// actor, so the record outlives the user and never blocks deleting one.
+model OpsAudit {
+  id        String   @id @default(uuid()) @db.Uuid
+  action    String
+  subject   String
+  byActorId String?  @db.Uuid
+  reason    String?
+  details   Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 // Phase 3: Dead-letter quarantine for poisoned PR events that repeatedly fail.

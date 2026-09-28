@@ -17,6 +17,12 @@ import {
   REQUEST_NOT_FOUND_MESSAGE,
   TEAM_NOT_FOUND_MESSAGE,
 } from './errors.js';
+import { EMPTY_SHARE_SCOPE, shareScopeIssueWhere, type ShareScope } from './project-sharing.js';
+
+function shareScopeOf(context: GraphQLContext): ShareScope {
+  return context.shareScope ?? EMPTY_SHARE_SCOPE;
+}
+
 const NEVER_MATCHING_UUID = '00000000-0000-0000-0000-000000000000';
 
 /**
@@ -48,12 +54,19 @@ export function buildReadableTeamWhere(context: GraphQLContext): Prisma.TeamWher
     };
   }
 
+  // A team with a shared project in it becomes visible (name, key, states)
+  // so the board can render the project; its roster stays behind
+  // canManageTeamMemberships, and nothing else in it is readable (INV-832).
+  const sharedTeams: Prisma.TeamWhereInput[] =
+    shareScopeOf(context).teamIds.length > 0 ? [{ id: { in: shareScopeOf(context).teamIds } }] : [];
+
   if (isAgentRequest(context)) {
     const teamId = boundTeamId(context);
     return {
       OR: [
         { visibility: 'PUBLIC' satisfies Visibility },
         { id: teamId ?? NEVER_MATCHING_UUID },
+        ...sharedTeams,
       ],
     };
   }
@@ -68,19 +81,36 @@ export function buildReadableTeamWhere(context: GraphQLContext): Prisma.TeamWher
           },
         },
       },
+      ...sharedTeams,
     ],
   };
 }
 
 export function buildReadableIssueWhere(context: GraphQLContext): Prisma.IssueWhereInput | undefined {
-  const readableTeamWhere = buildReadableTeamWhere(context);
+  const readableTeamWhere = buildMemberTeamWhere(context);
 
   if (!readableTeamWhere) {
     return undefined;
   }
 
+  // Readable = in a team you are on, or inside a project shared with you.
+  const shared = shareScopeIssueWhere(shareScopeOf(context), 'read');
+  return shared ? { OR: [{ team: readableTeamWhere }, shared] } : { team: readableTeamWhere };
+}
+
+/**
+ * The team-shaped part of readability alone: membership, binding or PUBLIC,
+ * without the teams that are visible only because a project in them is
+ * shared. Issues in those teams are readable through the share scope, not
+ * through the team.
+ */
+function buildMemberTeamWhere(context: GraphQLContext): Prisma.TeamWhereInput | undefined {
+  const where = buildReadableTeamWhere(context);
+  if (!where || shareScopeOf(context).teamIds.length === 0) {
+    return where;
+  }
   return {
-    team: readableTeamWhere,
+    OR: (where.OR ?? []).filter((clause) => !('id' in clause && typeof clause.id === 'object' && clause.id !== null && 'in' in clause.id)),
   };
 }
 
@@ -297,7 +327,37 @@ export async function assertCanReadIssue(
     throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
   }
 
-  await assertCanReadTeam(prisma, context, issue.teamId);
+  if (await isInShareScope(prisma, context, issueId, 'read')) {
+    return;
+  }
+
+  // Not through a share: then only membership, binding or PUBLIC counts. A
+  // team that is visible merely because a project in it is shared does not
+  // make its other issues readable.
+  if (context.isTrustedSystem || context.viewer?.globalRole === 'ADMIN') {
+    return;
+  }
+  const memberWhere = buildMemberTeamWhere(context);
+  const readable = memberWhere
+    ? await prisma.team.findFirst({ where: { id: issue.teamId, ...memberWhere }, select: { id: true } })
+    : { id: issue.teamId };
+  if (!readable) {
+    throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
+  }
+}
+
+async function isInShareScope(
+  prisma: PrismaClient,
+  context: GraphQLContext,
+  issueId: string,
+  mode: 'read' | 'write',
+): Promise<boolean> {
+  const shared = shareScopeIssueWhere(shareScopeOf(context), mode);
+  if (!shared) {
+    return false;
+  }
+  const hit = await prisma.issue.findFirst({ where: { AND: [{ id: issueId }, shared] }, select: { id: true } });
+  return hit !== null;
 }
 
 export async function assertCanWriteIssue(
@@ -316,6 +376,11 @@ export async function assertCanWriteIssue(
 
   if (!issue) {
     throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+  }
+
+  // An EDITOR share is a write grant over exactly the shared scope (INV-832).
+  if (await isInShareScope(prisma, context, issueId, 'write')) {
+    return;
   }
 
   await assertCanWriteTeam(prisma, context, issue.teamId);

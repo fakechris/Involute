@@ -159,7 +159,7 @@ export async function compactGitHubReceipts(prisma: PrismaClient, retentionDays 
   });
 }
 
-export async function replayGitHubDelivery(prisma: PrismaClient, id: string, reason: string, expectedAttempts: number) {
+export async function replayGitHubDelivery(prisma: PrismaClient, id: string, reason: string, expectedAttempts: number, source = 'operator-cli') {
   if (!reason.trim() || reason.length > 2_000) throw new Error('A replay reason of 1–2000 characters is required');
   if (!Number.isInteger(expectedAttempts) || expectedAttempts < 0) throw new Error('expectedAttempts must be nonnegative');
   return prisma.$transaction(async tx => {
@@ -168,7 +168,7 @@ export async function replayGitHubDelivery(prisma: PrismaClient, id: string, rea
       data: { status: 'PENDING', failureCount: 0, availableAt: new Date(), lastErrorCode: null, leaseOwner: null, leaseUntil: null },
     });
     if (!changed.count) throw new Error('Replay conflict: receipt must be DEAD with the expected attempt count and retained payload');
-    await tx.inboundGitHubReplay.create({ data: { deliveryId: id, reason: reason.trim(), previousAttempts: expectedAttempts } });
+    await tx.inboundGitHubReplay.create({ data: { deliveryId: id, reason: reason.trim(), previousAttempts: expectedAttempts, source } });
     return tx.inboundGitHubDelivery.findUniqueOrThrow({ where: { id } });
   });
 }

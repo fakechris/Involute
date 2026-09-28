@@ -354,4 +354,26 @@ test.describe('work graph acceptance', () => {
 
     await gql(request, `mutation($id: String!) { issueDelete(id: $id) { success } }`, { id: proposed.id }, { asHuman: true });
   });
+
+  test('an admin manages a webhook on the ops page and it lands on the ops audit (INV-796)', async ({ page, request }) => {
+    const url = `https://hooks.example.com/e2e-${Date.now().toString(36)}`;
+    await page.goto('/ops');
+    await expect(page.getByRole('heading', { name: 'GitHub sync' })).toBeVisible();
+
+    await page.getByLabel('Webhook URL').fill(url);
+    await page.getByLabel('Webhook label').fill('E2E hook');
+    await page.getByRole('button', { name: 'Add webhook' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Signing secret, shown once' })).toBeVisible();
+
+    const row = page.getByRole('listitem', { name: 'Webhook E2E hook' });
+    await row.getByRole('button', { name: 'Disable' }).click();
+    await expect(row.getByText('disabled')).toBeVisible();
+    await row.getByRole('button', { name: 'Re-enable' }).click();
+    await expect(row.getByText('enabled', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Ops audit')).toContainText('webhook-created');
+
+    const hooks = await gql<{ opsOverview: { webhooks: Array<{ id: string; url: string }> } }>(request, '{ opsOverview { webhooks { id url } } }');
+    const created = hooks.opsOverview.webhooks.find((hook) => hook.url === url)!;
+    await gql(request, `mutation($id: String!) { webhookDelete(id: $id) { success } }`, { id: created.id });
+  });
 });

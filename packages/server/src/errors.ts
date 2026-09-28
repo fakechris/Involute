@@ -132,6 +132,9 @@ export const WEBHOOK_NOT_FOUND_MESSAGE = 'Webhook subscription not found.';
 export const WEBHOOK_URL_INVALID_MESSAGE = 'Webhook URL must be a valid absolute http(s) URL.';
 export const WEBHOOK_EVENT_TYPE_INVALID_MESSAGE = 'Unknown webhook event type.';
 export const AGENT_SCOPE_INVALID_MESSAGE = 'Unknown agent scope.';
+export const WORK_SHARE_NOT_PROJECT_MESSAGE = 'Only a PROJECT node can be shared; share the project that contains this work.';
+export const WORK_SHARE_NOT_FOUND_MESSAGE = 'Share not found.';
+export const WORK_SHARE_SELF_MESSAGE = 'You cannot share a project with yourself.';
 export const AGENT_EMAIL_INVALID_MESSAGE = 'Agent email must look like an email address (name@host).';
 export const AGENT_HANDLE_INVALID_MESSAGE = 'Agent handle must be 1–32 characters of a-z, 0-9, _ or -, starting with a letter or digit.';
 export const AGENT_HANDLE_TAKEN_MESSAGE = 'That handle already belongs to another actor.';
@@ -165,6 +168,13 @@ export const WORKFLOW_STATE_LAST_OF_TYPE_MESSAGE =
   'Each team keeps at least one state of every type: agents and GitHub move work by type, not by name.';
 export const GLOBAL_ROLE_TARGET_HUMAN_MESSAGE = 'Admin rights go to people; agents and services act through their credentials.';
 export const GLOBAL_ROLE_LAST_ADMIN_MESSAGE = 'The workspace needs at least one admin.';
+
+// The ops page (INV-796).
+export const OPS_ADMIN_ONLY_MESSAGE = 'The ops page and its actions are for workspace admins.';
+export const OPS_REASON_REQUIRED_MESSAGE = 'Say why, in 1 to 2000 characters: it is kept on the ops audit.';
+export const OPS_DEAD_LETTER_NOT_FOUND_MESSAGE = 'That sync dead letter no longer exists; it may already have been cleared.';
+export const OPS_INBOUND_NOT_REPLAYABLE_MESSAGE =
+  'Only a dead inbound delivery that still has its payload can be replayed, and it changed since the page loaded; refresh and try again.';
 
 export function createScopeForbiddenError(scope: string): GraphQLError {
   return new GraphQLError(`Agent credential lacks required scope: ${scope}.`, {
@@ -273,6 +283,9 @@ const exposedErrorCodes = new Map<string, string>([
   [WEBHOOK_EVENT_TYPE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_SCOPE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_EMAIL_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_SHARE_NOT_PROJECT_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_SHARE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [WORK_SHARE_SELF_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_HANDLE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_HANDLE_TAKEN_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_CREDENTIAL_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
@@ -294,6 +307,10 @@ const exposedErrorCodes = new Map<string, string>([
   [WORKFLOW_STATE_LAST_OF_TYPE_MESSAGE, 'BAD_USER_INPUT'],
   [GLOBAL_ROLE_TARGET_HUMAN_MESSAGE, 'BAD_USER_INPUT'],
   [GLOBAL_ROLE_LAST_ADMIN_MESSAGE, 'BAD_USER_INPUT'],
+  [OPS_ADMIN_ONLY_MESSAGE, 'FORBIDDEN'],
+  [OPS_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [OPS_DEAD_LETTER_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [OPS_INBOUND_NOT_REPLAYABLE_MESSAGE, 'BAD_USER_INPUT'],
 ]);
 
 export function createNotAuthenticatedError(): GraphQLError {

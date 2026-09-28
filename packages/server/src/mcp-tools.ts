@@ -17,6 +17,7 @@ import {
   assertCanWriteIssue,
   assertCanWriteTeam,
   buildReadableIssueWhere,
+ assertCanReadIssue,
 } from './access-control.js';
 import type { GraphQLContext } from './auth.js';
 import { claimWork, commitWork, normalizeInitialStateType, proposeWork } from './claim-service.js';
@@ -190,7 +191,7 @@ export async function callMcpTool(
       if (!work) {
         throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
       }
-      await assertCanReadTeam(context.prisma, context, work.teamId);
+      await assertCanReadIssue(context.prisma, context, work.id);
       return getWorkContext(context.prisma, work.id);
     }
     case 'work_list_ready': {
