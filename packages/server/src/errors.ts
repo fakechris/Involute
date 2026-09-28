@@ -132,6 +132,9 @@ export const WEBHOOK_NOT_FOUND_MESSAGE = 'Webhook subscription not found.';
 export const WEBHOOK_URL_INVALID_MESSAGE = 'Webhook URL must be a valid absolute http(s) URL.';
 export const WEBHOOK_EVENT_TYPE_INVALID_MESSAGE = 'Unknown webhook event type.';
 export const AGENT_SCOPE_INVALID_MESSAGE = 'Unknown agent scope.';
+export const WORK_SHARE_NOT_PROJECT_MESSAGE = 'Only a PROJECT node can be shared; share the project that contains this work.';
+export const WORK_SHARE_NOT_FOUND_MESSAGE = 'Share not found.';
+export const WORK_SHARE_SELF_MESSAGE = 'You cannot share a project with yourself.';
 export const AGENT_EMAIL_INVALID_MESSAGE = 'Agent email must look like an email address (name@host).';
 export const AGENT_HANDLE_INVALID_MESSAGE = 'Agent handle must be 1–32 characters of a-z, 0-9, _ or -, starting with a letter or digit.';
 export const AGENT_HANDLE_TAKEN_MESSAGE = 'That handle already belongs to another actor.';
@@ -280,6 +283,9 @@ const exposedErrorCodes = new Map<string, string>([
   [WEBHOOK_EVENT_TYPE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_SCOPE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_EMAIL_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_SHARE_NOT_PROJECT_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_SHARE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [WORK_SHARE_SELF_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_HANDLE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_HANDLE_TAKEN_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_CREDENTIAL_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
