@@ -148,6 +148,8 @@ export function ProjectsPage() {
   const teamId = activeTeam?.id ?? '';
   const currentTeamKey = activeTeam?.key ?? teamKey ?? null;
   const teamStates = activeTeam?.states?.nodes ?? [];
+  // Creating a project is a write on the team; the server decides who may.
+  const canCreate = activeTeam?.viewerCanWrite ?? false;
   const users: UserSummary[] = boardData?.users.nodes ?? [];
 
   const { data, loading, error, refetch } = useQuery<ProjectIssuesQueryData, ProjectIssuesQueryVariables>(PROJECT_ISSUES_QUERY, {
@@ -398,7 +400,7 @@ export function ProjectsPage() {
         <span style={{ fontSize: 15, fontWeight: 500 }}>Projects</span>
         <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{projects.length}</span>
         <div style={{ flex: 1 }} />
-        <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={openCreateDialog}>New project</Btn>
+        {canCreate ? <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={openCreateDialog}>New project</Btn> : null}
       </div>
 
       <div className="page-content">
@@ -424,10 +426,16 @@ export function ProjectsPage() {
               <IcoProject size={22} style={{ color: 'var(--fg-faint)' }} />
             </div>
             <h3>No projects yet</h3>
-            <p>Create a project work node (kind: PROJECT) to organize related tasks towards a goal.</p>
-            <Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateDialog} style={{ marginTop: 12 }}>
-              New project
-            </Btn>
+            {canCreate ? (
+              <>
+                <p>Create a project work node (kind: PROJECT) to organize related tasks towards a goal.</p>
+                <Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateDialog} style={{ marginTop: 12 }}>
+                  New project
+                </Btn>
+              </>
+            ) : (
+              <p>You have no access to a team&apos;s projects yet. Ask a team owner to add you, or to share a project with you.</p>
+            )}
           </div>
         ) : (
           <div style={{ padding: '20px var(--pad-x)' }}>

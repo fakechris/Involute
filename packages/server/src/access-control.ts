@@ -441,6 +441,8 @@ export function buildVisibleUsersWhere(context: GraphQLContext): Prisma.UserWher
   return {
     OR: [
       { id: context.viewer.id },
+      // actors this viewer is accountable for, wherever they are bound
+      { ownerId: context.viewer.id },
       // humans: on the roster of a visible team
       { memberships: { some: { team: visibleTeam } } },
       // agents and services: bound to a visible team by a live credential

@@ -68,10 +68,17 @@ export interface AgentReceiptEntry {
  */
 export async function listAgentActors(
   prisma: PrismaClient,
-  input: { includeDeactivated?: boolean; kinds?: Array<'AGENT' | 'SERVICE'>; teamKey?: string | null } = {},
+  input: {
+    includeDeactivated?: boolean;
+    kinds?: Array<'AGENT' | 'SERVICE'>;
+    teamKey?: string | null;
+    /** The users the caller may see (buildVisibleUsersWhere); undefined = unrestricted. */
+    visible?: Prisma.UserWhereInput | undefined;
+  } = {},
 ): Promise<User[]> {
   return prisma.user.findMany({
     where: {
+      ...(input.visible ? { AND: [input.visible] } : {}),
       actorKind: { in: input.kinds ?? ['AGENT', 'SERVICE'] },
       ...(input.includeDeactivated ? {} : { deactivatedAt: null }),
       // Bound to the team by a live credential — or, for rows that predate

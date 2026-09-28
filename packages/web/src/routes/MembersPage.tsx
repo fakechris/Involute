@@ -59,7 +59,10 @@ export function MembersPage() {
   }, [data?.users.nodes]);
   const issues = data?.issues.nodes ?? [];
   const teams = data?.teams.nodes ?? [];
-  const teamId = teams.find((t) => t.key === teamKey)?.id ?? teams[0]?.id ?? '';
+  const activeTeam = teams.find((t) => t.key === teamKey) ?? teams[0];
+  const teamId = activeTeam?.id ?? '';
+  // Inviting is managing the roster: team OWNER or ADMIN, decided by the server.
+  const canInvite = activeTeam?.viewerCanManage ?? false;
 
   const issueCountByUser = useMemo(() => {
     const map = new Map<string, number>();
@@ -92,12 +95,14 @@ export function MembersPage() {
         <span style={{ fontSize: 15, fontWeight: 500 }}>Members</span>
         <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{users.length}</span>
         <div style={{ flex: 1 }} />
-        <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={() => {
-          setInviteEmail('');
-          setInviteName('');
-          setInviteRole('EDITOR');
-          dialogRef.current?.showModal();
-        }}>Invite</Btn>
+        {canInvite ? (
+          <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={() => {
+            setInviteEmail('');
+            setInviteName('');
+            setInviteRole('EDITOR');
+            dialogRef.current?.showModal();
+          }}>Invite</Btn>
+        ) : null}
       </div>
 
       <div className="page-content">

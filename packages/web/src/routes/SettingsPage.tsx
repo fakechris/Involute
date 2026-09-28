@@ -402,6 +402,7 @@ function AccessTab() {
   }, [allUsers]);
 
   const agentCount = allUsers.length - humanUsers.length;
+  const canManageAnyTeam = (data?.teams.nodes ?? []).some((team) => team.viewerCanManage);
 
   const teamRoleByUser = useMemo(() => {
     const map = new Map<string, string>();
@@ -498,14 +499,20 @@ function AccessTab() {
         </div>
       )}
 
-      <div style={{ marginTop: 20, display: 'flex', gap: 12, alignItems: 'center' }}>
-        <Btn variant="primary" size="md" onClick={() => navigate('/settings/access')}>
-          Manage Team Access &amp; RBAC
-        </Btn>
-        <Btn variant="subtle" icon={<IcoPlus />} size="md" onClick={() => navigate('/members')}>
-          Invite members
-        </Btn>
-      </div>
+      {canManageAnyTeam ? (
+        <div style={{ marginTop: 20, display: 'flex', gap: 12, alignItems: 'center' }}>
+          <Btn variant="primary" size="md" onClick={() => navigate('/settings/access')}>
+            Manage Team Access &amp; RBAC
+          </Btn>
+          <Btn variant="subtle" icon={<IcoPlus />} size="md" onClick={() => navigate('/members')}>
+            Invite members
+          </Btn>
+        </div>
+      ) : (
+        <p style={{ marginTop: 20, fontSize: 14, color: 'var(--fg-dim)' }}>
+          Only a team owner can change access or invite people.
+        </p>
+      )}
     </>
   );
 }
