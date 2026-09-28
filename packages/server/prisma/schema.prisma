@@ -121,6 +121,8 @@ model Team {
   key             String          @unique
   name            String
   visibility      TeamVisibility  @default(PRIVATE)
+  // Archived teams are read-only and hidden from the sidebar; never deleted (docs/permissions.md §5).
+  archivedAt      DateTime?
   nextIssueNumber Int             @default(1)
   states          WorkflowState[]
   issues          Issue[]

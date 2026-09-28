@@ -902,7 +902,7 @@ describe('GraphQL server core', () => {
     ]);
   });
 
-  it('hides team membership details from readable teams when the viewer lacks manage access', async () => {
+  it('shows a public team roster to a workspace member who could join it (INV-848)', async () => {
     const publicTeam = await createTeamWithStates(prisma, {
       key: 'PUB',
       name: 'Public Team',
@@ -932,11 +932,13 @@ describe('GraphQL server core', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.errors).toBeUndefined();
+    // docs/permissions.md §3: every member sees the roster with roles, and a
+    // public team is visible to any workspace member who could join it.
     expect(response.body.data.teams.nodes).toEqual([
       {
         key: 'PUB',
         memberships: {
-          nodes: [],
+          nodes: [expect.objectContaining({ user: expect.objectContaining({ email: fixture.admin.email }) })],
         },
       },
     ]);

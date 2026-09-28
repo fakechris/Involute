@@ -10,6 +10,8 @@ describe('access control', () => {
     await expect(
       assertCanWriteTeam(
         {
+          // Writes first check the team is not archived (INV-848).
+          team: { findUnique: vi.fn().mockResolvedValue({ archivedAt: null }) },
           teamMembership: {
             findUnique,
           },
@@ -32,6 +34,8 @@ describe('access control', () => {
     await expect(
       assertCanWriteTeam(
         {
+          // Writes first check the team is not archived (INV-848).
+          team: { findUnique: vi.fn().mockResolvedValue({ archivedAt: null }) },
           teamMembership: {
             findUnique,
           },
@@ -57,6 +61,8 @@ describe('access control', () => {
     await expect(
       assertCanWriteTeam(
         {
+          // Writes first check the team is not archived (INV-848).
+          team: { findUnique: vi.fn().mockResolvedValue({ archivedAt: null }) },
           teamMembership: {
             findUnique: vi.fn().mockResolvedValue(null),
           },
@@ -83,6 +89,8 @@ describe('access control', () => {
     await expect(
       assertCanWriteTeam(
         {
+          // Writes first check the team is not archived (INV-848).
+          team: { findUnique: vi.fn().mockResolvedValue({ archivedAt: null }) },
           teamMembership: {
             findUnique: vi.fn().mockResolvedValue({ role: 'EDITOR' }),
           },

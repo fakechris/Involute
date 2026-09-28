@@ -152,6 +152,14 @@ export const USER_NOT_SUSPENDED_MESSAGE = "This person is not suspended.";
 export const USER_SUSPEND_SELF_MESSAGE = "You cannot suspend yourself.";
 export const WORKSPACE_DOMAIN_INVALID_MESSAGE = "Approved domains must look like example.com.";
 export const WORKSPACE_DEFAULT_TEAM_INVALID_MESSAGE = "A default team does not exist.";
+export const TEAM_CREATE_FORBIDDEN_MESSAGE = "Only admins can create teams, unless an admin allows members to (Settings → Administration → Security).";
+export const TEAM_KEY_FORMAT_MESSAGE = "A team key is 2 to 10 letters, such as INV. It becomes the prefix of every identifier and cannot change.";
+export const TEAM_KEY_TAKEN_MESSAGE = "That key is already a team key or a project alias.";
+export const TEAM_NAME_REQUIRED_MESSAGE = "A team needs a name.";
+export const TEAM_ARCHIVED_MESSAGE = "This team is archived and read-only. An owner can unarchive it.";
+export const TEAM_JOIN_FORBIDDEN_MESSAGE = "Only public teams can be joined; private teams add people from their Members page.";
+export const TEAM_NOT_A_MEMBER_MESSAGE = "You are not a member of this team.";
+export const TEAM_LAST_OWNER_LEAVE_MESSAGE = "You are this team's last owner. Make someone else an owner before leaving.";
 export const WORK_SHARE_NOT_PROJECT_MESSAGE = 'Only a PROJECT node can be shared; share the project that contains this work.';
 export const WORK_SHARE_NOT_FOUND_MESSAGE = 'Share not found.';
 export const WORK_SHARE_SELF_MESSAGE = 'You cannot share a project with yourself.';
@@ -310,6 +318,14 @@ const exposedErrorCodes = new Map<string, string>([
   [AGENT_SCOPE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_EMAIL_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_SHARE_NOT_PROJECT_MESSAGE, 'BAD_USER_INPUT'],
+  [TEAM_CREATE_FORBIDDEN_MESSAGE, 'BAD_USER_INPUT'],
+  [TEAM_KEY_FORMAT_MESSAGE, 'BAD_USER_INPUT'],
+  [TEAM_KEY_TAKEN_MESSAGE, 'BAD_USER_INPUT'],
+  [TEAM_NAME_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [TEAM_ARCHIVED_MESSAGE, 'BAD_USER_INPUT'],
+  [TEAM_JOIN_FORBIDDEN_MESSAGE, 'BAD_USER_INPUT'],
+  [TEAM_NOT_A_MEMBER_MESSAGE, 'BAD_USER_INPUT'],
+  [TEAM_LAST_OWNER_LEAVE_MESSAGE, 'BAD_USER_INPUT'],
   [INVITE_FORBIDDEN_MESSAGE, 'BAD_USER_INPUT'],
   [INVITE_ADMIN_FORBIDDEN_MESSAGE, 'BAD_USER_INPUT'],
   [INVITE_EMAIL_INVALID_MESSAGE, 'BAD_USER_INPUT'],
