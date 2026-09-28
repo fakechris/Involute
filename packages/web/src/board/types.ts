@@ -5,6 +5,10 @@ export interface TeamSummary {
   key: string;
   name: string;
   visibility?: 'PRIVATE' | 'PUBLIC';
+  /** May the viewer create and edit work here (server-decided). */
+  viewerCanWrite?: boolean;
+  /** May the viewer manage roster, access and agents here (server-decided). */
+  viewerCanManage?: boolean;
   memberships?: {
     nodes: TeamMembershipSummary[];
   };

@@ -457,6 +457,10 @@ const typeDefs = /* GraphQL */ `
     triageRotation: TriageRotation
     "Who triages bugs this week under the rotation."
     currentTriager: User
+    "Whether the viewer may create and edit work in this team (EDITOR, OWNER, bound agent or ADMIN)."
+    viewerCanWrite: Boolean!
+    "Whether the viewer may manage this team's roster, access and agents (OWNER or ADMIN)."
+    viewerCanManage: Boolean!
   }
 
   type TriageRotation {
@@ -2434,7 +2438,7 @@ const resolvers = {
       args: { days?: number | null },
       context: GraphQLContext,
     ) => {
-      requireAuthentication(context);
+      assertOpsAdmin(context);
       return auditMergedPrTraceability({
         prisma: context.prisma,
         ...(args.days !== undefined && args.days !== null ? { days: args.days } : {}),
@@ -2528,9 +2532,11 @@ const resolvers = {
       context: GraphQLContext,
     ): Promise<User[]> => {
       requireAuthentication(context);
+      // Only the actors this viewer may see: someone on no team sees none.
       return listAgentActors(context.prisma, {
         includeDeactivated: args.includeDeactivated ?? false,
         teamKey: args.teamKey ?? null,
+        visible: buildVisibleUsersWhere(context),
       });
     },
     agentProfile: async (
@@ -2546,6 +2552,11 @@ const resolvers = {
         readableWork: buildReadableIssueWhere(context),
       });
       if (!profile) return null;
+      // An actor outside the viewer's visible set has no page for them.
+      const visible = buildVisibleUsersWhere(context);
+      if (visible && !(await context.prisma.user.findFirst({ where: { AND: [{ id: profile.actor.id }, visible] }, select: { id: true } }))) {
+        return null;
+      }
       const viewerCanManage = await assertCanManageActor(context.prisma, context, profile.actor.id)
         .then(() => true, () => false);
       return { ...profile, viewerCanManage };
@@ -3949,6 +3960,10 @@ const resolvers = {
       parent.actorId ? context.prisma.user.findUnique({ where: { id: parent.actorId } }) : null,
   },
   Team: {
+    viewerCanWrite: (parent: TeamParent, _args: Record<string, never>, context: GraphQLContext): Promise<boolean> =>
+      assertCanWriteTeam(context.prisma, context, parent.id).then(() => true, () => false),
+    viewerCanManage: (parent: TeamParent, _args: Record<string, never>, context: GraphQLContext): Promise<boolean> =>
+      assertCanManageTeam(context.prisma, context, parent.id).then(() => true, () => false),
     triageRotation: async (parent: TeamParent, _args: Record<string, never>, context: GraphQLContext) => {
       const rotation = parseRotation((parent as TeamParent & { triageRotation?: Prisma.JsonValue | null }).triageRotation);
       if (!rotation) return null;

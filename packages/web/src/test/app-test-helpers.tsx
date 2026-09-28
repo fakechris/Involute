@@ -322,6 +322,8 @@ export const boardQueryResult: BoardPageQueryData = {
       {
         id: 'team-1',
         key: 'INV',
+        viewerCanWrite: true,
+        viewerCanManage: true,
         name: 'Involute',
         states: {
           nodes: [
