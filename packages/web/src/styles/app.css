@@ -4747,6 +4747,28 @@ kbd {
   color: var(--fg-muted);
 }
 
+.status-undo-toast {
+  position: fixed;
+  z-index: 70;
+  left: 24px;
+  bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(520px, calc(100vw - 48px));
+  padding: 8px 10px 8px 14px;
+  border-radius: var(--r-2);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  color: var(--fg);
+  font-size: 13px;
+}
+
+.status-undo-toast p {
+  margin: 0;
+}
+
 @keyframes goto-chord-slide-up {
   from {
     opacity: 0;

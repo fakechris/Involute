@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, vi } from 'vitest';
 
 import { App } from '../App';
+import { resetStatusUndo } from '../undo/status-undo';
 import type {
   AccessPageQueryData,
   BoardPageQueryData,
@@ -182,6 +183,7 @@ vi.mock('@dnd-kit/core', async () => {
 });
 
 beforeEach(() => {
+  resetStatusUndo();
   const storage = new Map<string, string>();
 
   Object.defineProperty(window, 'localStorage', {

@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon, IcoCheck, IcoGraph, IcoFilter, IcoBug, IcoHistory, IcoKeyboard } from './components/Icons';
@@ -47,6 +47,15 @@ import {
 } from './lib/app-shell-state';
 import { fetchSessionState, getGoogleLoginUrl, logoutSession, type SessionState } from './lib/session';
 import { lazyRoute, RouteErrorBoundary } from './lib/lazy-route';
+import { StatusUndoToast } from './undo/StatusUndoToast';
+import {
+  formatStatusMove,
+  getStatusUndoSnapshot,
+  isTextEditingTarget,
+  redoStatusGesture,
+  subscribeStatusUndo,
+  undoStatusGesture,
+} from './undo/status-undo';
 
 const AccessPage = lazyRoute(async () => (await import('./routes/AccessPage')).AccessPage);
 const BoardPage = lazyRoute(async () => (await import('./routes/BoardPage')).BoardPage);
@@ -465,6 +474,7 @@ export function App() {
   const [recentViews, setRecentViews] = useState<RecentViewEntry[]>(() => getStoredRecentViews());
   const [searchParams] = useSearchParams();
   const urlTeam = searchParams.get('team');
+  const statusUndo = useSyncExternalStore(subscribeStatusUndo, getStatusUndoSnapshot, getStatusUndoSnapshot);
 
   useEffect(() => {
     if (!session?.authenticated) {
@@ -655,14 +665,20 @@ export function App() {
 
   useEffect(() => {
     function handleGlobalKeyDown(event: KeyboardEvent) {
-      const target = event.target;
-      const isElementTarget = target instanceof HTMLElement;
-      const tagName = isElementTarget ? target.tagName : null;
-      const isTypingField =
-        tagName === 'INPUT' ||
-        tagName === 'TEXTAREA' ||
-        tagName === 'SELECT' ||
-        (isElementTarget && target.getAttribute('contenteditable') === 'true');
+      const isTypingField = isTextEditingTarget(event.target);
+
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'z') {
+        if (isTypingField) {
+          return;
+        }
+        event.preventDefault();
+        const path = locationPathnameRef.current;
+        if (path !== '/' && path !== '/backlog') {
+          navigate('/');
+        }
+        void (event.shiftKey ? redoStatusGesture() : undoStatusGesture());
+        return;
+      }
 
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
@@ -891,6 +907,32 @@ export function App() {
         run: () => openCreateIssueSurface(navigate, location.pathname),
       },
       {
+        id: 'undo-status',
+        label: statusUndo.undo.length > 0 ? `Undo · ${formatStatusMove(statusUndo.undo[statusUndo.undo.length - 1]!)}` : 'Undo',
+        description: statusUndo.undo.length > 0 ? 'Revert the latest status change' : 'Nothing to undo',
+        group: 'Actions',
+        shortcut: '⌘ Z',
+        run: () => {
+          if (location.pathname !== '/' && location.pathname !== '/backlog') {
+            navigate('/');
+          }
+          void undoStatusGesture();
+        },
+      },
+      {
+        id: 'redo-status',
+        label: statusUndo.redo.length > 0 ? `Redo · ${formatStatusMove(statusUndo.redo[statusUndo.redo.length - 1]!)}` : 'Redo',
+        description: statusUndo.redo.length > 0 ? 'Repeat the latest undone status change' : 'Nothing to redo',
+        group: 'Actions',
+        shortcut: '⇧ ⌘ Z',
+        run: () => {
+          if (location.pathname !== '/' && location.pathname !== '/backlog') {
+            navigate('/');
+          }
+          void redoStatusGesture();
+        },
+      },
+      {
         id: 'toggle-theme',
         label: `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`,
         description: 'Toggle the workspace theme',
@@ -995,6 +1037,7 @@ export function App() {
     session?.authenticated,
     shellIssues,
     shellTeams,
+    statusUndo,
     theme,
   ]);
 
@@ -1453,6 +1496,7 @@ export function App() {
         open={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
       />
+      <StatusUndoToast />
     </div>
   );
 }

@@ -40,6 +40,8 @@ export const SHORTCUT_SECTIONS: ShortcutSection[] = [
     title: 'Global Actions',
     items: [
       { id: 'act-create', label: 'Create issue', description: 'Open quick issue composer anywhere', keys: ['C'] },
+      { id: 'act-undo', label: 'Undo', description: 'Revert the latest status change', keys: ['⌘', 'Z'] },
+      { id: 'act-redo', label: 'Redo', description: 'Repeat the latest undone status change', keys: ['⇧', '⌘', 'Z'] },
       { id: 'act-palette', label: 'Command palette', description: 'Open search and action launcher', keys: ['⌘', 'K'] },
       { id: 'act-search', label: 'Search in view', description: 'Focus search input on active board or backlog', keys: ['/'] },
       { id: 'act-number', label: 'Find by issue number', description: 'Type a digit on the board to filter by identifier number', keys: ['0–9'] },

@@ -1,9 +1,11 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { apolloMocks, boardQueryResult, dndMocks, renderApp } from './test/app-test-helpers';
+import { SHORTCUT_SECTIONS } from './app/KeyboardShortcutsDialog';
 import { App } from './App';
-import type { BoardPageQueryData, IssueUpdateMutationData, IssueSummary } from './board/types';
+import type { BoardPageQueryData, IssueSummary, IssueUpdateMutationData } from './board/types';
+import { getStatusUndoSnapshot, recordStatusGesture, resetStatusUndo } from './undo/status-undo';
 
 function renderTestApp(
   queryState: {
@@ -397,5 +399,224 @@ describe('App board UI', () => {
       expect(within(screen.getByTestId('column-Done')).getByText('INV-104')).toBeInTheDocument();
       expect(within(screen.getByTestId('column-Done')).getByText('INV-105')).toBeInTheDocument();
     });
+  });
+});
+
+function mutationSource(document: unknown) {
+  return typeof document === 'string'
+    ? document
+    : document && typeof document === 'object' && 'loc' in document && document.loc && typeof document.loc === 'object' && 'source' in document.loc && document.loc.source && typeof document.loc.source === 'object' && 'body' in document.loc.source
+      ? String(document.loc.source.body)
+      : String(document);
+}
+
+function installStatusUpdateMock(
+  conflictOn?: (variables: { id: string; input: { stateId?: string } }) => boolean,
+  extras: IssueSummary[] = [],
+) {
+  const catalog = [...boardQueryResult.issues.nodes, ...extras];
+  const updateIssue = vi.fn(async (options: { variables: { id: string; input: { stateId?: string; expectedRevision?: number } } }) => {
+    const variables = options.variables;
+    const sourceIssue = catalog.find((issue) => issue.id === variables.id);
+    const state = boardQueryResult.teams.nodes
+      .flatMap((team) => team.states.nodes)
+      .find((item) => item.id === variables.input.stateId);
+    if (!sourceIssue || !state || conflictOn?.(variables)) {
+      return { data: { issueUpdate: { success: false, message: 'revision conflict', issue: null } } };
+    }
+    return {
+      data: {
+        issueUpdate: {
+          success: true,
+          message: null,
+          issue: {
+            ...sourceIssue,
+            revision: (variables.input.expectedRevision ?? sourceIssue.revision) + 1,
+            state,
+          },
+        },
+      },
+    };
+  });
+
+  apolloMocks.useMutation.mockImplementation((document: unknown) => {
+    if (mutationSource(document).includes('mutation IssueUpdate')) {
+      return [updateIssue];
+    }
+    return [vi.fn()];
+  });
+  return updateIssue;
+}
+
+async function dragIssue(issueId: string, targetStateId: string) {
+  const props = () => dndMocks.lastContextProps as {
+    onDragStart?: (event: unknown) => void;
+    onDragOver?: (event: unknown) => void;
+    onDragEnd?: (event: unknown) => void;
+  } | null;
+  const over = {
+    id: targetStateId,
+    data: { current: { stateId: targetStateId, type: 'column' } },
+  };
+  await act(async () => {
+    props()?.onDragStart?.({ active: { id: issueId } });
+  });
+  await act(async () => {
+    props()?.onDragOver?.({ active: { id: issueId }, over });
+  });
+  await act(async () => {
+    props()?.onDragEnd?.({ active: { id: issueId }, over });
+  });
+}
+
+describe('board status undo', () => {
+  it('names a dragged issue and puts it back, selected, from the toast or ⌘Z', async () => {
+    const updateIssue = installStatusUpdateMock();
+    renderTestApp();
+    expect(await screen.findByText('INV-1')).toBeInTheDocument();
+
+    await dragIssue('issue-1', 'state-ready');
+
+    const toast = await screen.findByTestId('status-undo-toast');
+    expect(toast).toHaveTextContent('INV-1 moved to Ready');
+    expect(within(screen.getByTestId('column-Ready')).getByText('INV-1')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Open command palette/i }));
+    const palette = await screen.findByRole('dialog', { name: 'Command palette' });
+    expect(within(palette).getByRole('button', { name: /Undo · INV-1 moved to Ready/ })).toBeInTheDocument();
+    expect(within(palette).getByRole('button', { name: /^Redo/ })).toBeInTheDocument();
+    fireEvent.click(within(palette).getByRole('button', { name: 'Close command palette' }));
+
+    fireEvent.click(within(toast).getByRole('button', { name: 'Undo' }));
+
+    await waitFor(() => {
+      expect(within(screen.getByTestId('column-Backlog')).getByText('INV-1')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('data-selected', 'true');
+    expect(updateIssue).toHaveBeenLastCalledWith({
+      variables: {
+        id: 'issue-1',
+        input: { expectedRevision: 2, stateId: 'state-backlog' },
+      },
+    });
+
+    fireEvent.keyDown(window, { key: 'z', metaKey: true, shiftKey: true });
+    await waitFor(() => {
+      expect(within(screen.getByTestId('column-Ready')).getByText('INV-1')).toBeInTheDocument();
+    });
+    expect(updateIssue).toHaveBeenLastCalledWith({
+      variables: {
+        id: 'issue-1',
+        input: { expectedRevision: 3, stateId: 'state-ready' },
+      },
+    });
+
+    const callsBeforeTyping = updateIssue.mock.calls.length;
+    const search = document.createElement('input');
+    document.body.appendChild(search);
+    search.focus();
+    fireEvent.keyDown(search, { key: 'z', metaKey: true });
+    search.remove();
+    expect(updateIssue.mock.calls.length).toBe(callsBeforeTyping);
+    expect(within(screen.getByTestId('column-Ready')).getByText('INV-1')).toBeInTheDocument();
+
+    const labels = SHORTCUT_SECTIONS.flatMap((section) => section.items.map((item) => item.label));
+    expect(labels).toEqual(expect.arrayContaining(['Undo', 'Redo']));
+  });
+
+  it('undoes only the latest drag when several issues were moved', async () => {
+    installStatusUpdateMock();
+    renderTestApp();
+    expect(await screen.findByText('INV-1')).toBeInTheDocument();
+
+    await dragIssue('issue-1', 'state-ready');
+    await screen.findByText('INV-1 moved to Ready');
+    await dragIssue('issue-2', 'state-progress');
+    expect(await screen.findByTestId('status-undo-toast')).toHaveTextContent('INV-2 moved to In Progress');
+
+    fireEvent.keyDown(window, { key: 'z', metaKey: true });
+
+    await waitFor(() => {
+      expect(within(screen.getByTestId('column-Ready')).getByText('INV-2')).toBeInTheDocument();
+    });
+    expect(within(screen.getByTestId('column-Ready')).getByText('INV-1')).toBeInTheDocument();
+    expect(within(screen.getByTestId('column-In Progress')).queryByText('INV-2')).not.toBeInTheDocument();
+  });
+
+  it('treats a bulk move as one undo and names the issue that conflicted', async () => {
+    const issue4: IssueSummary = {
+      ...(boardQueryResult.issues.nodes[0] as IssueSummary),
+      id: 'issue-4',
+      identifier: 'INV-4',
+      title: 'Fourth backlog item',
+    };
+    const updateIssue = installStatusUpdateMock(
+      (variables) => variables.id === 'issue-2' && variables.input.stateId === 'state-ready',
+      [issue4],
+    );
+    renderTestApp({
+      data: {
+        ...boardQueryResult,
+        issues: {
+          ...boardQueryResult.issues,
+          nodes: [...boardQueryResult.issues.nodes, issue4],
+        },
+      },
+      loading: false,
+    });
+    expect(await screen.findByText('INV-4')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select INV-1' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select INV-2' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select INV-4' }));
+    fireEvent.change(screen.getByLabelText('Bulk move selected issues to state'), {
+      target: { value: 'state-canceled' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to selected' }));
+
+    const moved = await screen.findByTestId('status-undo-toast');
+    expect(moved).toHaveTextContent('moved to Canceled');
+    expect(moved).toHaveTextContent('INV-1');
+    expect(moved).toHaveTextContent('INV-2');
+    expect(moved).toHaveTextContent('INV-4');
+    expect(updateIssue).toHaveBeenCalledTimes(3);
+
+    fireEvent.click(within(screen.getByTestId('status-undo-toast')).getByRole('button', { name: 'Undo' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('status-undo-toast')).toHaveTextContent('Could not change INV-2');
+    });
+    expect(within(screen.getByTestId('column-Backlog')).getByText('INV-1')).toBeInTheDocument();
+    expect(within(screen.getByTestId('column-Backlog')).getByText('INV-4')).toBeInTheDocument();
+    expect(within(screen.getByTestId('column-Canceled')).getByText('INV-2')).toBeInTheDocument();
+    expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('data-selected', 'true');
+    expect(screen.getByTestId('issue-card-issue-2')).toHaveAttribute('data-selected', 'true');
+    expect(screen.getByTestId('issue-card-issue-4')).toHaveAttribute('data-selected', 'true');
+    expect(updateIssue).toHaveBeenCalledTimes(6);
+  });
+});
+
+describe('status undo stack', () => {
+  it('keeps the latest fifty gestures', () => {
+    resetStatusUndo();
+    for (let index = 0; index < 51; index += 1) {
+      recordStatusGesture([
+        {
+          issueId: `issue-${index}`,
+          identifier: `INV-${index}`,
+          stateId: 'state-ready',
+          stateName: 'Ready',
+          previousStateId: 'state-backlog',
+          previousStateName: 'Backlog',
+          revision: 2,
+        },
+      ]);
+    }
+    const capped = getStatusUndoSnapshot();
+    expect(capped.undo).toHaveLength(50);
+    expect(capped.undo[0]?.changes[0]?.identifier).toBe('INV-1');
+    expect(capped.undo[49]?.changes[0]?.identifier).toBe('INV-50');
+    expect(capped.redo).toHaveLength(0);
   });
 });
