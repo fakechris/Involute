@@ -8,6 +8,7 @@ import {
   BUG_PROPOSE_PRIORITY_REQUIRED_MESSAGE,
   BUG_PROPOSE_PARENT_REQUIRED_MESSAGE,
   BUG_PROPOSE_STEPS_REQUIRED_MESSAGE,
+  BUG_PROPOSE_ACCEPTANCE_REQUIRED_MESSAGE,
   BUG_PROPOSE_OWNER_REQUIRED_MESSAGE,
   BUG_NO_BACKLOG_MESSAGE,
   BUG_REJECT_REASON_REQUIRED_MESSAGE,
@@ -378,6 +379,9 @@ export async function proposeWork(
         throw createValidationError(BUG_PROPOSE_PARENT_REQUIRED_MESSAGE);
       }
       if (!steps) throw createValidationError(BUG_PROPOSE_STEPS_REQUIRED_MESSAGE);
+      // Committed on filing, and an agent may not add acceptance to committed
+      // work afterwards: without it the bug could never be claimed (INV-836).
+      if (!nonEmpty(input.acceptance)) throw createValidationError(BUG_PROPOSE_ACCEPTANCE_REQUIRED_MESSAGE);
       const owner = await humanOwnerOf(transaction, actor);
       if (!owner || !(await transaction.teamMembership.findFirst({ where: { teamId: input.teamId, userId: owner }, select: { id: true } }))) {
         throw createValidationError(BUG_PROPOSE_OWNER_REQUIRED_MESSAGE);

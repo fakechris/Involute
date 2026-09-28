@@ -49,6 +49,8 @@ const AGENT_ONLY_FIELDS: Record<string, Record<string, string>> = {
     related_work_id: 'Agents file a bug they found while working on another item (DISCOVERED_DURING).',
     related_work_type: 'Agents file a bug they found while working on another item (DISCOVERED_DURING).',
     initial_state: 'An agent that fixed the bug on the spot files it straight into Review.',
+    acceptance: 'A bug is committed on filing and agents cannot edit acceptance on committed work; a person sets it on the issue page instead.',
+    verification: 'Same as acceptance: a person edits it on the issue page after reporting.',
     idempotency_key: 'Lets an agent retry a filing without duplicating it; the web app submits once.',
     source: 'Tags where an agent found the bug; a person\'s report is tagged bug-report by the server.',
   },
