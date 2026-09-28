@@ -1443,3 +1443,41 @@ export const ACTOR_SET_SUCCESSOR_MUTATION = gql`
     }
   }
 `;
+
+/** Who a PROJECT node is shared with (INV-833). `shares` is empty unless the viewer may manage the team. */
+export const PROJECT_SHARES_QUERY = gql`
+  query ProjectShares($id: String!) {
+    issue(id: $id) {
+      id
+      viewerCanShare
+      shares {
+        id
+        role
+        createdAt
+        user { id name email handle actorKind }
+      }
+    }
+    users {
+      nodes { id name email handle actorKind deactivatedAt }
+    }
+  }
+`;
+
+export const WORK_SHARE_UPSERT_MUTATION = gql`
+  mutation WorkShareUpsert($workId: String!, $userId: String!, $role: WorkShareRole!) {
+    workShareUpsert(workId: $workId, userId: $userId, role: $role) {
+      success
+      message
+      share { id role }
+    }
+  }
+`;
+
+export const WORK_SHARE_REMOVE_MUTATION = gql`
+  mutation WorkShareRemove($workId: String!, $userId: String!) {
+    workShareRemove(workId: $workId, userId: $userId) {
+      success
+      message
+    }
+  }
+`;

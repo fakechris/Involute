@@ -1,4 +1,6 @@
 import { useMutation, useQuery } from '@apollo/client/react';
+
+import { ProjectSharing } from '../components/ProjectSharing';
 import { useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -382,6 +384,7 @@ export function ProjectsPage() {
           onEdit={() => openEditDialog(selectedProject)}
           onDelete={() => handleDelete(selectedProject.id)}
           navigate={navigate}
+          teamKey={currentTeamKey}
         />
         {projectDialog}
       </>
@@ -545,13 +548,21 @@ function ProjectDetailView({
   onEdit,
   onDelete,
   navigate,
+  teamKey,
 }: {
   project: ProjectIssueSummary;
   onBack: () => void;
   onEdit: () => void;
   onDelete: () => void;
   navigate: ReturnType<typeof useNavigate>;
+  teamKey: string | null;
 }) {
+  // What a share holder opens: the board, scoped to this team and project.
+  const shareParams = new URLSearchParams({
+    ...(teamKey ? { team: teamKey } : {}),
+    project: project.repository || project.identifier,
+  });
+  const shareUrl = `${window.location.origin}/?${shareParams.toString()}`;
   const [menuOpen, setMenuOpen] = useState(false);
   const issues = project.children?.nodes ?? [];
 
@@ -641,6 +652,8 @@ function ProjectDetailView({
         <div style={{ marginBottom: 20 }}>
           <ProjectProgressBar issues={issues} />
         </div>
+
+        <ProjectSharing projectId={project.id} shareUrl={shareUrl} />
 
         {issues.length > 0 ? (
           <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-3)', overflow: 'hidden' }}>
