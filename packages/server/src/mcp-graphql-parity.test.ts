@@ -16,6 +16,7 @@ const PAIRS: Record<string, string> = {
   run_report: 'runReport',
   work_claim: 'workClaim',
   work_commit: 'workCommit',
+  work_uncommit: 'workUncommit',
   work_file_bug: 'bugReport',
   work_link: 'workLink',
   work_propose: 'workPropose',
