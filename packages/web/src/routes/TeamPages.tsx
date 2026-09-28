@@ -112,7 +112,7 @@ export function TeamMembersPage() {
     void attempt(
       () => runUpsert({ variables: { input: { teamId: team!.id, email: address, role } } }),
       (d) => d.teamMembershipUpsert,
-      `${address} is on ${team!.key} as ${TEAM_ROLE_LABEL[role]}.`,
+      `${address} is on ${team!.key} as ${TEAM_ROLE_LABEL[role]}. If they have never signed in, no email was sent: send them ${window.location.origin} and ask them to sign in with Google as ${address}.`,
       setNotice,
     ).then((ok) => {
       if (!ok) return;

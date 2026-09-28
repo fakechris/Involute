@@ -1510,7 +1510,7 @@ export const ADMIN_MEMBERS_QUERY = gql`
 
 export const USER_INVITE_MUTATION = gql`
   mutation UserInvite($input: UserInviteInput!) {
-    userInvite(input: $input) { success message user { id email accessStatus } }
+    userInvite(input: $input) { success message emailSent emailNote signInUrl user { id email accessStatus } }
   }
 `;
 
@@ -1625,5 +1625,14 @@ export const TEAM_JOIN_MUTATION = gql`
 export const TEAM_LEAVE_MUTATION = gql`
   mutation TeamLeave($teamId: String!) {
     teamLeave(teamId: $teamId) { success message }
+  }
+`;
+
+/** The sidebar's team list, straight from the server (INV-853) rather than from the last board visit. */
+export const SHELL_TEAMS_QUERY = gql`
+  query ShellTeams {
+    teams {
+      nodes { id key name issueCount viewerCanManage viewerCanWrite }
+    }
   }
 `;

@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 
 import {
   ADMIN_MEMBERS_QUERY,
+  TEAM_MEMBERSHIP_REMOVE_MUTATION,
+  TEAM_MEMBERSHIP_UPSERT_MUTATION,
   ADMIN_TEAMS_QUERY,
   TEAM_ARCHIVE_MUTATION,
   TEAM_CREATE_MUTATION,
@@ -59,11 +61,15 @@ function formatDate(iso: string | null): string {
 
 export function AdminMembersTab() {
   const { data, loading, error, refetch } = useQuery<{ users: { nodes: AdminPerson[] }; teams: { nodes: TeamOption[] }; viewer: { id: string } | null }>(ADMIN_MEMBERS_QUERY);
-  const [runInvite] = useMutation<{ userInvite: Refusable<object> }>(USER_INVITE_MUTATION);
+  const [runInvite] = useMutation<{ userInvite: Refusable<{ emailSent?: boolean | null; emailNote?: string | null; signInUrl?: string | null }> }>(USER_INVITE_MUTATION);
+  const [lastInvite, setLastInvite] = useState<{ email: string; emailSent: boolean; emailNote: string | null; signInUrl: string } | null>(null);
+  const [copied, setCopied] = useState(false);
   const [runRevoke] = useMutation<{ userInviteRevoke: Refusable<object> }>(USER_INVITE_REVOKE_MUTATION);
   const [runSuspend] = useMutation<{ userSuspend: Refusable<object> }>(USER_SUSPEND_MUTATION);
   const [runReactivate] = useMutation<{ userReactivate: Refusable<object> }>(USER_REACTIVATE_MUTATION);
   const [runSetRole] = useMutation<{ userSetGlobalRole: Refusable<object> }>(USER_SET_GLOBAL_ROLE_MUTATION);
+  const [runTeamUpsert] = useMutation<{ teamMembershipUpsert: Refusable<object> }>(TEAM_MEMBERSHIP_UPSERT_MUTATION);
+  const [runTeamRemove] = useMutation<{ teamMembershipRemove: Refusable<object> }>(TEAM_MEMBERSHIP_REMOVE_MUTATION);
   const [notice, setNotice] = useState<Notice>(null);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<WorkspaceRole>('USER');
@@ -95,6 +101,25 @@ export function AdminMembersTab() {
     ).then(refreshOn);
   }
 
+  function changeTeamRole(user: AdminPerson, team: { id: string; key: string }, role: TeamRole) {
+    void attempt(
+      () => runTeamUpsert({ variables: { input: { teamId: team.id, email: user.email ?? '', role } } }),
+      (d) => d.teamMembershipUpsert,
+      `${who(user)} is now ${TEAM_ROLE_LABEL[role]} in ${team.key}.`,
+      setNotice,
+    ).then(refreshOn);
+  }
+
+  function removeFromTeam(user: AdminPerson, team: { id: string; key: string }) {
+    if (!window.confirm(`Remove ${who(user)} from ${team.key}?`)) return;
+    void attempt(
+      () => runTeamRemove({ variables: { input: { teamId: team.id, userId: user.id } } }),
+      (d) => d.teamMembershipRemove,
+      `${who(user)} is no longer on ${team.key}.`,
+      setNotice,
+    ).then(refreshOn);
+  }
+
   function suspend(user: AdminPerson) {
     const reason = window.prompt(`Why suspend ${who(user)}? They are signed out now and cannot sign in until reactivated.`);
     if (reason === null) return;
@@ -116,23 +141,62 @@ export function AdminMembersTab() {
     const chosen = Object.entries(inviteTeams)
       .filter((entry): entry is [string, TeamRole] => Boolean(entry[1]))
       .map(([teamId, role]) => ({ role, teamId }));
-    void attempt(
-      () => runInvite({ variables: { input: { email, role: inviteRole, teams: chosen } } }),
-      (d) => d.userInvite,
-      `${email} is invited. They can sign in with Google using that address.`,
-      setNotice,
-    ).then((ok) => {
+    setLastInvite(null);
+    setCopied(false);
+    void (async () => {
+      let payload: { emailSent?: boolean | null; emailNote?: string | null; signInUrl?: string | null } | undefined;
+      const ok = await attempt(
+        async () => {
+          const result = await runInvite({ variables: { input: { email, role: inviteRole, teams: chosen } } });
+          payload = result.data?.userInvite ?? undefined;
+          return result;
+        },
+        (d) => d.userInvite,
+        `${email} is invited.`,
+        setNotice,
+      );
       if (!ok) return;
+      // Say exactly what happened: an email left the server, or it did not and the link has to be sent by hand.
+      setLastInvite({
+        email,
+        emailNote: payload?.emailNote ?? null,
+        emailSent: Boolean(payload?.emailSent),
+        signInUrl: payload?.signInUrl ?? window.location.origin,
+      });
       setInviteEmail('');
       setInviteTeams({});
       void refetch();
-    });
+    })();
   }
 
   return (
     <section aria-label="Members">
-      {sectionIntro('Members', 'Everyone in the workspace. Only invited people and approved domains can sign in; suspended people are signed out and refused. Each change is recorded with who made it.')}
+      {sectionIntro('Members', 'Everyone in the workspace. Only invited people and approved domains can sign in; suspended people are signed out and refused. An invite lets the address sign in; an email is sent only if this server has mail configured. Each change is recorded with who made it.')}
       <NoticeLine notice={notice} />
+
+      {lastInvite ? (
+        <div role="status" className="admin-invite__result">
+          {lastInvite.emailSent ? (
+            <p>An invitation email was sent to <strong>{lastInvite.email}</strong>.</p>
+          ) : (
+            <>
+              <p><strong>{lastInvite.email}</strong> can now sign in, but {lastInvite.emailNote ?? 'no email was sent.'}</p>
+              <p>
+                Send them this link and ask them to sign in with Google as {lastInvite.email}:{' '}
+                <span className="mono">{lastInvite.signInUrl}</span>{' '}
+                <button
+                  type="button"
+                  className="ui-action ui-action--subtle"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(`Sign in to Involute with Google as ${lastInvite.email}: ${lastInvite.signInUrl}`);
+                    setCopied(true);
+                  }}
+                >{copied ? 'Copied' : 'Copy invite message'}</button>
+              </p>
+            </>
+          )}
+        </div>
+      ) : null}
 
       <div className="admin-invite" aria-label="Invite">
         <h3 style={{ fontSize: 15, fontWeight: 500, margin: '0 0 8px' }}>Invite</h3>
@@ -145,6 +209,11 @@ export function AdminMembersTab() {
           </select>
           <button type="button" className="ui-action ui-action--primary" disabled={!inviteEmail.trim()} onClick={invite}>Send invite</button>
         </div>
+        <p style={{ fontSize: 13, color: 'var(--fg-dim)', margin: '8px 0 0' }}>
+          A team role gives access to all of that team&apos;s work. To give someone a single project only, invite them as
+          a <strong>Guest</strong> with no team, then share the project from{' '}
+          <Link to="/projects">Projects</Link> → the project → Sharing.
+        </p>
         {teams.length > 0 ? (
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8, fontSize: 13.5, color: 'var(--fg-dim)' }}>
             <span>Add to teams:</span>
@@ -175,10 +244,35 @@ export function AdminMembersTab() {
               <span style={{ fontSize: 14.5 }}>{user.name ?? user.email}</span>
               <span style={{ display: 'block', fontSize: 12.5, color: 'var(--fg-dim)' }}>{user.email}</span>
             </span>
-            <span role="cell" style={{ flex: '1 1 140px', fontSize: 12.5, color: 'var(--fg-dim)' }}>
-              {user.teamMemberships.length === 0
-                ? 'No team'
-                : user.teamMemberships.map((m) => `${m.team.key} · ${TEAM_ROLE_LABEL[m.role]}`).join(', ')}
+            <span role="cell" style={{ flex: '1 1 180px', fontSize: 12.5, color: 'var(--fg-dim)' }}>
+              {user.teamMemberships.length === 0 ? 'No team' : null}
+              {/* Team access is edited here too, so changing someone's reach is one place (INV-853). */}
+              {user.teamMemberships.map((m) => (
+                <span key={m.team.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 8 }}>
+                  {m.team.key}
+                  <select
+                    aria-label={`${who(user)} role in ${m.team.key}`}
+                    style={{ ...inputStyle, height: 22, fontSize: 12.5 }}
+                    value={m.role}
+                    onChange={(e) => changeTeamRole(user, m.team, e.target.value as TeamRole)}
+                  >
+                    <option value="VIEWER">Viewer</option>
+                    <option value="EDITOR">Member</option>
+                    {user.globalRole !== 'GUEST' ? <option value="OWNER">Owner</option> : null}
+                  </select>
+                  <button
+                    type="button"
+                    className="ui-action ui-action--subtle"
+                    aria-label={`Remove ${who(user)} from ${m.team.key}`}
+                    onClick={() => removeFromTeam(user, m.team)}
+                  >×</button>
+                </span>
+              ))}
+              {user.globalRole === 'GUEST' && user.teamMemberships.length > 0 ? (
+                <span style={{ display: 'block', color: 'var(--warning, #b45309)' }}>
+                  A guest still sees all work of the teams listed here.
+                </span>
+              ) : null}
             </span>
             <span role="cell" style={{ width: 110, fontSize: 12.5, color: user.accessStatus === 'ACTIVE' ? 'var(--fg-dim)' : 'var(--warning, #b45309)' }}>
               {STATUS_LABEL[user.accessStatus] ?? user.accessStatus}

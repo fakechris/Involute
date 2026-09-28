@@ -59,10 +59,10 @@ const inRouter = (node: React.ReactNode) => render(<MemoryRouter>{node}</MemoryR
 
 describe('Administration → Members', () => {
   it('lists people (not agents) with their teams and status, and invites with a role and team', async () => {
-    render(<AdminMembersTab />);
+    inRouter(<AdminMembersTab />);
     const table = screen.getByRole('table', { name: 'People' });
     expect(within(table).queryByText('Bot')).not.toBeInTheDocument();
-    expect(within(table).getByText('INV · Owner')).toBeInTheDocument();
+    expect(within(table).getByLabelText('Ana role in INV')).toHaveValue('OWNER');
     expect(within(table).getByText('Pending invite')).toBeInTheDocument();
 
     mutations.UserInvite!.mockResolvedValue(ok('userInvite'));
@@ -74,10 +74,22 @@ describe('Administration → Members', () => {
       variables: { input: { email: 'dee@x.com', role: 'GUEST', teams: [{ role: 'VIEWER', teamId: 'team-inv' }] } },
     }));
     expect(await screen.findByText(/dee@x.com is invited/)).toBeInTheDocument();
+    // No mail on this server: the page says so and offers the message to send by hand (INV-853).
+    expect(screen.getByText(/can now sign in, but/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy invite message' })).toBeInTheDocument();
+  });
+
+  it('says an email went out when the server sent one', async () => {
+    inRouter(<AdminMembersTab />);
+    mutations.UserInvite!.mockResolvedValue({ data: { userInvite: { success: true, message: null, emailSent: true, emailNote: null, signInUrl: 'https://involute.example' } } });
+    fireEvent.change(screen.getByLabelText('Invite email'), { target: { value: 'eve@x.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send invite' }));
+    expect(await screen.findByText(/An invitation email was sent to/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Copy invite message' })).not.toBeInTheDocument();
   });
 
   it('changes a role with a reason, suspends, and revokes a pending invite; never offers to suspend yourself', async () => {
-    render(<AdminMembersTab />);
+    inRouter(<AdminMembersTab />);
     const rowOf = (name: string) => screen.getByText(name).closest('[role="row"]') as HTMLElement;
     expect(within(rowOf('Ana')).queryByRole('button', { name: 'Suspend' })).not.toBeInTheDocument();
     expect(within(rowOf('Ana')).getByLabelText('Workspace role for Ana')).toBeDisabled();
@@ -125,5 +137,32 @@ describe('Administration → Security', () => {
     await waitFor(() => expect(mutations.WorkspaceSettingsUpdate).toHaveBeenCalledWith({
       variables: { input: { approvedDomains: ['x.com', 'lumenopen.com'], defaultTeamIds: ['team-inv'], membersCanCreateTeams: false, membersCanInvite: true } },
     }));
+  });
+});
+
+describe('Administration → Members team access (INV-853)', () => {
+  it('changes a person\'s team role and removes them from a team from the same row', async () => {
+    queryData.AdminMembers = {
+      ...(queryData.AdminMembers as object),
+      users: {
+        nodes: [
+          { id: 'u-ana', name: 'Ana', email: 'ana@x.com', actorKind: 'HUMAN', globalRole: 'ADMIN', accessStatus: 'ACTIVE', lastSeenAt: null, invitedAt: null, teamMemberships: [] },
+          { id: 'u-mr', name: 'mr', email: 'mr@gmail.com', actorKind: 'HUMAN', globalRole: 'GUEST', accessStatus: 'PENDING', lastSeenAt: null, invitedAt: null, teamMemberships: [{ role: 'EDITOR', team: teamInv }] },
+        ],
+      },
+    };
+    inRouter(<AdminMembersTab />);
+    expect(screen.getByText('A guest still sees all work of the teams listed here.')).toBeInTheDocument();
+    const roleSelect = screen.getByLabelText('mr role in INV');
+    expect(within(roleSelect).queryByRole('option', { name: 'Owner' })).not.toBeInTheDocument();
+
+    mutations.TeamMembershipUpsert!.mockResolvedValue(ok('teamMembershipUpsert'));
+    fireEvent.change(roleSelect, { target: { value: 'VIEWER' } });
+    await waitFor(() => expect(mutations.TeamMembershipUpsert).toHaveBeenCalledWith({ variables: { input: { teamId: 'team-inv', email: 'mr@gmail.com', role: 'VIEWER' } } }));
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mutations.TeamMembershipRemove!.mockResolvedValue(ok('teamMembershipRemove'));
+    fireEvent.click(screen.getByRole('button', { name: 'Remove mr from INV' }));
+    await waitFor(() => expect(mutations.TeamMembershipRemove).toHaveBeenCalledWith({ variables: { input: { teamId: 'team-inv', userId: 'u-mr' } } }));
   });
 });

@@ -1,7 +1,7 @@
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
 import type { Team, User } from '@prisma/client';
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_TEAM_KEY, resetAndSeed } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
@@ -20,6 +20,7 @@ import { startServer, type StartedServer } from './index.ts';
 import { SESSION_COOKIE_NAME, createSession } from './session.ts';
 import {
   SignInRefusedError,
+  deliverInvite,
   inviteUser,
   reactivateUser,
   revokeInvite,
@@ -138,6 +139,29 @@ describe('workspace access (INV-847, docs/permissions.md)', () => {
     });
   });
 
+  describe('invite delivery (INV-853)', () => {
+    it('says plainly that no email was sent when the server has no mail, and gives the link', async () => {
+      const result = await deliverInvite({ email: 'x@example.com', inviterName: 'Ana' }, { appOrigin: 'https://involute.example', send: null });
+      expect(result).toMatchObject({ emailSent: false, signInUrl: 'https://involute.example' });
+      expect(result.emailNote).toMatch(/No email was sent/);
+    });
+
+    it('sends the invite when mail is configured, and keeps the invite when sending fails', async () => {
+      const send = vi.fn().mockResolvedValue(undefined);
+      const sent = await deliverInvite({ email: 'x@example.com', inviterName: 'Ana' }, { appOrigin: 'https://involute.example', send });
+      expect(sent.emailSent).toBe(true);
+      expect(send).toHaveBeenCalledWith(expect.objectContaining({ subject: 'Ana invited you to Involute', to: 'x@example.com' }));
+      expect(send.mock.calls[0]![0].text).toContain('https://involute.example');
+
+      const failed = await deliverInvite(
+        { email: 'x@example.com', inviterName: 'Ana' },
+        { appOrigin: 'https://involute.example', send: vi.fn().mockRejectedValue(new Error('connection refused')) },
+      );
+      expect(failed).toMatchObject({ emailSent: false });
+      expect(failed.emailNote).toMatch(/connection refused/);
+    });
+  });
+
   describe('suspending and roles', () => {
     it('signs the person out, refuses suspending yourself or the last admin, and reactivates', async () => {
       const member = await inviteUser(prisma, { by: asAdmin(), email: 'sus@example.com', role: 'USER' });
@@ -211,10 +235,13 @@ describe('workspace access (INV-847, docs/permissions.md)', () => {
     it('invites with teams and reports the pending status', async () => {
       const result = await graphql(
         admin,
-        'mutation Invite($input: UserInviteInput!) { userInvite(input: $input) { success message user { email accessStatus globalRole teamMemberships { role team { key } } } } }',
+        'mutation Invite($input: UserInviteInput!) { userInvite(input: $input) { success message emailSent emailNote signInUrl user { email accessStatus globalRole teamMemberships { role team { key } } } } }',
         { input: { email: 'new@partner.io', role: 'GUEST', teams: [{ role: 'VIEWER', teamId: team.id }] } },
       );
       expect(result.errors).toBeUndefined();
+      // CI has no SMTP: the answer must say so and hand over the link.
+      expect(result.data.userInvite.emailSent).toBe(false);
+      expect(result.data.userInvite.signInUrl).toBeTruthy();
       expect(result.data.userInvite).toMatchObject({
         success: true,
         user: { accessStatus: 'PENDING', email: 'new@partner.io', globalRole: 'GUEST', teamMemberships: [{ role: 'VIEWER', team: { key: DEFAULT_TEAM_KEY } }] },

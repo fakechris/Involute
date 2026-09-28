@@ -11,6 +11,7 @@ import {
   ACTOR_MANAGE_FORBIDDEN_MESSAGE,
   TEAM_MANAGE_FORBIDDEN_MESSAGE,
   TEAM_WRITE_FORBIDDEN_MESSAGE,
+  createNotAuthenticatedError,
   createNotFoundError,
   createValidationError,
   ISSUE_NOT_FOUND_MESSAGE,
@@ -178,7 +179,9 @@ export async function assertCanWriteTeam(
   }
 
   if (!context.viewer) {
-    throw createValidationError(TEAM_WRITE_FORBIDDEN_MESSAGE);
+    // No one is signed in (an expired session, a token without a viewer):
+    // say that, rather than blaming team rights the person may well have.
+    throw createNotAuthenticatedError();
   }
 
   if (isAgentRequest(context)) {

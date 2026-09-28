@@ -8,7 +8,7 @@ import type { Plugin } from 'graphql-yoga';
 import { DEFAULT_ADMIN_EMAIL } from './constants.js';
 import { createNotAuthenticatedError, NOT_AUTHENTICATED_MESSAGE } from './errors.js';
 import { getSessionRecord, readCookieValue, SESSION_COOKIE_NAME } from './session.js';
-import { resolveAgentPrincipal } from './agent-credentials.js';
+import { resolveAgentPrincipal, touchLastSeen } from './agent-credentials.js';
 import { EMPTY_SHARE_SCOPE, resolveShareScope, type ShareScope } from './project-sharing.js';
 
 export interface GraphQLContext {
@@ -188,6 +188,8 @@ async function computeRequestAuthentication({
   const session = await getSessionRecord(prisma, sessionToken);
 
   if (session) {
+    // People show "last seen" in Administration → Members like agents do (INV-853).
+    await touchLastSeen(prisma, session.user, new Date());
     return {
       authMode: 'session',
       authorized: true,

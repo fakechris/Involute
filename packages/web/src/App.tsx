@@ -5,6 +5,7 @@ import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSea
 import { KeyboardShortcutsDialog } from './app/KeyboardShortcutsDialog';
 import { LegacyTeamRedirect } from './routes/LegacyTeamRedirect';
 import { NotificationsBell } from './components/NotificationsBell';
+import { ShellTeamsSync } from './app/ShellTeamsSync';
 import { Avatar } from './components/Primitives';
 import {
   deriveViewLabel,
@@ -1502,6 +1503,9 @@ export function App() {
           </RouteErrorBoundary>
         </div>
       </div>
+
+      {/* The sidebar's team list comes from the server, not only from the last board visit (INV-853). */}
+      {session?.authenticated ? <ShellTeamsSync /> : null}
 
       <CommandPalette
         actions={paletteActions}

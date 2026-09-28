@@ -113,9 +113,13 @@ import { ACTOR_PRESENCE_COPY, actorPresence } from './actor-presence.js';
 import { deactivateActor, transferActorOwner, reactivateActor, recordActorAudit, setActorSuccessor } from './actor-lifecycle.js';
 import { isValidHandle, normalizeHandle } from './mention-parser.js';
 import { listWorkShares, removeWorkShare, upsertWorkShare } from './project-sharing.js';
+import { getServerEnvironment } from './environment.js';
+import { isNotificationEmailReady } from './notification-email.js';
+import { createNotificationEmailSender } from './notification-email.js';
 import { createTeam, joinTeam, leaveTeam, setTeamArchived, updateTeam } from './team-lifecycle.js';
 import {
   canInvite,
+  deliverInvite,
   getWorkspaceSettings,
   inviteUser,
   reactivateUser,
@@ -2021,6 +2025,10 @@ const typeDefs = /* GraphQL */ `
     success: Boolean!
     message: String
     user: User
+    """Invites only: whether an email left the server (needs SMTP), why not, and the link to send by hand."""
+    emailSent: Boolean
+    emailNote: String
+    signInUrl: String
   }
 
   type WorkShareMutationPayload {
@@ -3027,7 +3035,16 @@ const resolvers = {
           role: args.input.role,
           teams,
         });
-        return { success: true as const, user };
+        const environment = getServerEnvironment();
+        const mailRuntime = { appOrigin: environment.appOrigin, email: environment.notificationEmail };
+        const delivery = await deliverInvite(
+          { email: user.email, inviterName: viewer.name },
+          {
+            appOrigin: environment.appOrigin,
+            send: isNotificationEmailReady(mailRuntime) ? createNotificationEmailSender(environment.notificationEmail) : null,
+          },
+        );
+        return { ...delivery, success: true as const, user };
       }, { success: false as const, user: null }),
     userInviteRevoke: async (_parent: unknown, args: { id: string }, context: GraphQLContext): Promise<{ message?: string | null; success: boolean; user: User | null }> =>
       runMutationWithReason(async () => {

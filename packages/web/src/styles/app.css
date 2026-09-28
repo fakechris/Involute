@@ -6466,3 +6466,17 @@ a.bugs-stat {
   font-size: 13.5px;
   color: var(--fg);
 }
+
+/* Invite result (INV-853): say whether an email was sent */
+.admin-invite__result {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--bg-raised);
+  font-size: 14px;
+}
+
+.admin-invite__result p {
+  margin: 0 0 6px;
+}

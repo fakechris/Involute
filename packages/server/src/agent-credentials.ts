@@ -302,7 +302,7 @@ export async function resolveAgentPrincipal(
  * a stale-by-a-minute presence is fine, a failed presence write blocking an
  * authenticated request is not.
  */
-async function touchLastSeen(
+export async function touchLastSeen(
   prisma: PrismaClient,
   user: User,
   now: Date,
