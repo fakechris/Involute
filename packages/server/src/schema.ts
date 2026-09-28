@@ -927,6 +927,8 @@ const typeDefs = /* GraphQL */ `
     agentRequests(first: Int): [AgentRequest!]!
     """Who this PROJECT node is shared with beyond its team (INV-832). Empty unless the viewer may manage the team."""
     shares: [WorkShare!]!
+    """Whether the viewer may share this PROJECT node (team OWNER or ADMIN)."""
+    viewerCanShare: Boolean!
     """The actor that created this work — human or agent (INV-573)."""
     proposedByActor: User
     """How this work got here. Always answerable, even when no actor was recorded."""
@@ -4425,6 +4427,13 @@ const resolvers = {
       const canManage = await assertCanManageTeam(context.prisma, context, parent.teamId).then(() => true, () => false);
       return canManage ? listWorkShares(context.prisma, parent.id) : [];
     },
+    viewerCanShare: async (
+      parent: IssueParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<boolean> =>
+      parent.kind === 'PROJECT'
+        && assertCanManageTeam(context.prisma, context, parent.teamId).then(() => true, () => false),
     agentRequests: async (
       parent: IssueParent,
       args: { first?: number | null },

@@ -6378,3 +6378,58 @@ a.bugs-stat {
   margin-top: 4px;
   font-size: 12px;
 }
+
+/* Project sharing (INV-833) */
+.project-sharing {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  background: var(--bg-raised);
+}
+
+.project-sharing__title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.project-sharing__hint,
+.project-sharing__empty {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  color: var(--fg-dim);
+}
+
+.project-sharing__link,
+.project-sharing__add,
+.project-sharing__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-sharing__link {
+  margin-bottom: 12px;
+}
+
+.project-sharing__list {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.project-sharing__who {
+  flex: 1;
+  min-width: 160px;
+  font-size: 14px;
+}
+
+.project-sharing__error {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: var(--danger);
+}

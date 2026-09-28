@@ -103,8 +103,8 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   workCommit: { kind: 'web', doc: 'WORK_COMMIT_MUTATION', components: ['routes/CandidatesPage.tsx'], label: 'Commit' },
   workLink: { kind: 'web', doc: 'WORK_LINK_MUTATION', components: ['components/IssueRelations.tsx'], label: 'Relation type' },
   workLinkDelete: { kind: 'web', doc: 'WORK_LINK_DELETE_MUTATION', components: ['components/IssueRelations.tsx'], label: 'Remove ' },
-  workShareRemove: { kind: 'gap', tracking: 'INV-833', note: 'Projects page Sharing section ships with INV-833.' },
-  workShareUpsert: { kind: 'gap', tracking: 'INV-833', note: 'Projects page Sharing section ships with INV-833.' },
+  workShareRemove: { kind: 'web', doc: 'WORK_SHARE_REMOVE_MUTATION', components: ['components/ProjectSharing.tsx'], label: 'Remove' },
+  workShareUpsert: { kind: 'web', doc: 'WORK_SHARE_UPSERT_MUTATION', components: ['components/ProjectSharing.tsx'], label: 'Share' },
   workPropose: {
     kind: 'api-only',
     reason: 'Agents propose candidates; people create committed work directly (issueCreate) or report bugs (bugReport).',
