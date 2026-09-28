@@ -482,8 +482,6 @@ export function BoardPage() {
       projects: placeableProjects,
     });
   const openCreateDialog = (context: CreatePlacement | null = null, title = '') => {
-    // The C shortcut and the palette reach here too; nothing opens for someone who may not write.
-    if (!canWriteTeam) return;
     const initial = initialPlacement(context);
     setCreateTitle(title);
     setCreateDescription('');
@@ -2915,7 +2913,9 @@ export function BoardPage() {
         {...(nextBoardIssue ? { onNextIssue: () => openIssue(nextBoardIssue) } : {})}
       />
       <BoardCreateIssueDialog
-        isOpen={isCreateOpen}
+        // Open state is kept as requested (a shortcut or the graph page may ask before
+        // teams load); it only shows for someone who may write in the team.
+        isOpen={isCreateOpen && canWriteTeam}
         isSaving={isSavingState}
         teams={teams}
         selectedTeam={selectedTeam}
