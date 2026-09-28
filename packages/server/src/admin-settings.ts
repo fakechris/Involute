@@ -6,6 +6,7 @@ import {
   createNotFoundError,
   createValidationError,
   GLOBAL_ROLE_LAST_ADMIN_MESSAGE,
+  GUEST_HAS_TEAM_OWNERSHIP_MESSAGE,
   GLOBAL_ROLE_TARGET_HUMAN_MESSAGE,
   LABEL_NAME_INVALID_MESSAGE,
   LABEL_NAME_TAKEN_MESSAGE,
@@ -164,9 +165,13 @@ export async function setGlobalRole(
     if (!user) throw createNotFoundError(USER_NOT_FOUND_MESSAGE);
     if (user.actorKind !== 'HUMAN') throw createValidationError(GLOBAL_ROLE_TARGET_HUMAN_MESSAGE);
     if (user.globalRole === input.role) return user;
-    if (input.role !== 'ADMIN') {
+    if (user.globalRole === 'ADMIN' && input.role !== 'ADMIN') {
       const admins = await tx.user.count({ where: { actorKind: 'HUMAN', deactivatedAt: null, globalRole: 'ADMIN' } });
       if (admins <= 1) throw createValidationError(GLOBAL_ROLE_LAST_ADMIN_MESSAGE);
+    }
+    // A guest cannot own a team; ownership is handed over first.
+    if (input.role === 'GUEST' && (await tx.teamMembership.count({ where: { role: 'OWNER', userId: user.id } })) > 0) {
+      throw createValidationError(GUEST_HAS_TEAM_OWNERSHIP_MESSAGE);
     }
     const updated = await tx.user.update({ where: { id: user.id }, data: { globalRole: input.role } });
     await recordActorAudit(tx, {

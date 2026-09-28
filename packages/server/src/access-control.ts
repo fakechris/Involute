@@ -71,9 +71,14 @@ export function buildReadableTeamWhere(context: GraphQLContext): Prisma.TeamWher
     };
   }
 
+  // Guests never see public teams by being in the workspace; only the teams
+  // they were added to and what was shared with them (docs/permissions.md §2).
+  const publicTeams: Prisma.TeamWhereInput[] =
+    context.viewer.globalRole === 'GUEST' ? [] : [{ visibility: 'PUBLIC' satisfies Visibility }];
+
   return {
     OR: [
-      { visibility: 'PUBLIC' satisfies Visibility },
+      ...publicTeams,
       {
         memberships: {
           some: {
@@ -436,7 +441,9 @@ export function buildVisibleUsersWhere(context: GraphQLContext): Prisma.UserWher
   // plus the ones it is in — by membership for a human, by binding for an agent.
   const visibleTeam: Prisma.TeamWhereInput = isAgentRequest(context)
     ? { OR: [{ visibility: 'PUBLIC' }, { id: boundTeamId(context) ?? NEVER_MATCHING_UUID }] }
-    : { OR: [{ visibility: 'PUBLIC' }, { memberships: { some: { userId: context.viewer.id } } }] };
+    : context.viewer.globalRole === 'GUEST'
+      ? { memberships: { some: { userId: context.viewer.id } } }
+      : { OR: [{ visibility: 'PUBLIC' }, { memberships: { some: { userId: context.viewer.id } } }] };
 
   return {
     OR: [

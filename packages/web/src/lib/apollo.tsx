@@ -164,6 +164,21 @@ export function getBoardBootstrapErrorMessage(error: Error): BoardBootstrapError
       // Production visitors never set tokens by hand; the only thing they
       // can do is sign in, so say that and hand them the link. The token
       // hints stay for local development, where they are the real fix.
+      // The sign-in callback says why it refused (docs/permissions.md §1).
+      const refusal = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('authError');
+      if (refusal === 'not_invited') {
+        return {
+          title: 'This workspace is invite-only',
+          description: 'The Google account you used has not been invited. Ask an admin to invite it, or sign in with the account you were invited with.',
+          action: { label: 'Sign in with another account', href: `${getServerBaseUrl()}/auth/google/start` },
+        };
+      }
+      if (refusal === 'suspended') {
+        return {
+          title: 'This account is suspended',
+          description: 'An admin has suspended this account. Ask them to reactivate it.',
+        };
+      }
       if (!import.meta.env.DEV) {
         return {
           title: 'Sign in to continue',

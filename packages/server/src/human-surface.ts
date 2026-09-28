@@ -105,6 +105,11 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   workLinkDelete: { kind: 'web', doc: 'WORK_LINK_DELETE_MUTATION', components: ['components/IssueRelations.tsx'], label: 'Remove ' },
   workShareRemove: { kind: 'web', doc: 'WORK_SHARE_REMOVE_MUTATION', components: ['components/ProjectSharing.tsx'], label: 'Remove' },
   workShareUpsert: { kind: 'web', doc: 'WORK_SHARE_UPSERT_MUTATION', components: ['components/ProjectSharing.tsx'], label: 'Share' },
+  userInvite: { kind: 'gap', tracking: 'INV-849', note: 'Settings → Administration ships with INV-849 (stage 3).' },
+  userInviteRevoke: { kind: 'gap', tracking: 'INV-849', note: 'Settings → Administration ships with INV-849 (stage 3).' },
+  userReactivate: { kind: 'gap', tracking: 'INV-849', note: 'Settings → Administration ships with INV-849 (stage 3).' },
+  userSuspend: { kind: 'gap', tracking: 'INV-849', note: 'Settings → Administration ships with INV-849 (stage 3).' },
+  workspaceSettingsUpdate: { kind: 'gap', tracking: 'INV-849', note: 'Settings → Administration ships with INV-849 (stage 3).' },
   workPropose: {
     kind: 'api-only',
     reason: 'Agents propose candidates; people create committed work directly (issueCreate) or report bugs (bugReport).',

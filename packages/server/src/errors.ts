@@ -139,6 +139,19 @@ export const WEBHOOK_NOT_FOUND_MESSAGE = 'Webhook subscription not found.';
 export const WEBHOOK_URL_INVALID_MESSAGE = 'Webhook URL must be a valid absolute http(s) URL.';
 export const WEBHOOK_EVENT_TYPE_INVALID_MESSAGE = 'Unknown webhook event type.';
 export const AGENT_SCOPE_INVALID_MESSAGE = 'Unknown agent scope.';
+export const INVITE_FORBIDDEN_MESSAGE = "Only admins can invite people, unless an admin allows members to invite (Settings → Administration → Security).";
+export const INVITE_ADMIN_FORBIDDEN_MESSAGE = "Only an admin can invite someone as an admin.";
+export const INVITE_EMAIL_INVALID_MESSAGE = "An invite needs a valid email address.";
+export const INVITE_ALREADY_MEMBER_MESSAGE = "This person is already in the workspace. Add them to a team from the team's Members page.";
+export const INVITE_NOT_PENDING_MESSAGE = "Only a pending invite can be revoked. To stop someone who has signed in, suspend them.";
+export const GUEST_CANNOT_OWN_TEAM_MESSAGE = "A guest cannot be a team owner.";
+export const GUEST_HAS_TEAM_OWNERSHIP_MESSAGE = "This person owns a team. Hand the team to another owner before making them a guest.";
+export const USER_SUSPEND_HUMANS_ONLY_MESSAGE = "Only people are suspended. Deactivate an agent from its page.";
+export const USER_ALREADY_SUSPENDED_MESSAGE = "This person is already suspended.";
+export const USER_NOT_SUSPENDED_MESSAGE = "This person is not suspended.";
+export const USER_SUSPEND_SELF_MESSAGE = "You cannot suspend yourself.";
+export const WORKSPACE_DOMAIN_INVALID_MESSAGE = "Approved domains must look like example.com.";
+export const WORKSPACE_DEFAULT_TEAM_INVALID_MESSAGE = "A default team does not exist.";
 export const WORK_SHARE_NOT_PROJECT_MESSAGE = 'Only a PROJECT node can be shared; share the project that contains this work.';
 export const WORK_SHARE_NOT_FOUND_MESSAGE = 'Share not found.';
 export const WORK_SHARE_SELF_MESSAGE = 'You cannot share a project with yourself.';
@@ -297,6 +310,19 @@ const exposedErrorCodes = new Map<string, string>([
   [AGENT_SCOPE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_EMAIL_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_SHARE_NOT_PROJECT_MESSAGE, 'BAD_USER_INPUT'],
+  [INVITE_FORBIDDEN_MESSAGE, 'BAD_USER_INPUT'],
+  [INVITE_ADMIN_FORBIDDEN_MESSAGE, 'BAD_USER_INPUT'],
+  [INVITE_EMAIL_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [INVITE_ALREADY_MEMBER_MESSAGE, 'BAD_USER_INPUT'],
+  [INVITE_NOT_PENDING_MESSAGE, 'BAD_USER_INPUT'],
+  [GUEST_CANNOT_OWN_TEAM_MESSAGE, 'BAD_USER_INPUT'],
+  [GUEST_HAS_TEAM_OWNERSHIP_MESSAGE, 'BAD_USER_INPUT'],
+  [USER_SUSPEND_HUMANS_ONLY_MESSAGE, 'BAD_USER_INPUT'],
+  [USER_ALREADY_SUSPENDED_MESSAGE, 'BAD_USER_INPUT'],
+  [USER_NOT_SUSPENDED_MESSAGE, 'BAD_USER_INPUT'],
+  [USER_SUSPEND_SELF_MESSAGE, 'BAD_USER_INPUT'],
+  [WORKSPACE_DOMAIN_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [WORKSPACE_DEFAULT_TEAM_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_SHARE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [WORK_SHARE_SELF_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_HANDLE_INVALID_MESSAGE, 'BAD_USER_INPUT'],

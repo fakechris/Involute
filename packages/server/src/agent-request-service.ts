@@ -506,7 +506,7 @@ export const HUMAN_ANSWER_OVERRIDE_REASON_REQUIRED_MESSAGE = 'Answering on someo
 
 export interface HumanAnswerInput {
   body: string;
-  by: { actorId: string; actorKind: WriteActor['actorKind']; globalRole: 'ADMIN' | 'USER' };
+  by: { actorId: string; actorKind: WriteActor['actorKind']; globalRole: 'ADMIN' | 'USER' | 'GUEST' };
   id: string;
   /** Required when an ADMIN answers a request addressed to someone else. Recorded on the audit. */
   overrideReason?: string | null;

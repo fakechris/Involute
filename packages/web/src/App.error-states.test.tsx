@@ -76,4 +76,15 @@ describe('App error states', () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it('says an uninvited account was refused, and offers to sign in with another one', async () => {
+    vi.stubEnv('DEV', false);
+    window.history.replaceState({}, '', '/?authError=not_invited');
+
+    renderTestApp({ error: new Error('Not authenticated'), loading: false });
+
+    expect(await screen.findByText('This workspace is invite-only')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Sign in with another account' })).toBeInTheDocument();
+    window.history.replaceState({}, '', '/');
+  });
 });

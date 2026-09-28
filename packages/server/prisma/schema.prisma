@@ -9,7 +9,10 @@ datasource db {
 
 enum GlobalRole {
   ADMIN
+  // Shown as "Member".
   USER
+  // Sees only the teams it was added to and projects shared with it (docs/permissions.md).
+  GUEST
 }
 
 enum TeamVisibility {
@@ -191,6 +194,12 @@ model User {
   // audit trail keeps pointing at a real row. A deactivated actor cannot
   // authenticate and is not mentionable.
   deactivatedAt  DateTime?
+  // An invite is a user row created before its first sign-in (docs/permissions.md §2.2).
+  // Pending while googleSubject is null.
+  invitedAt      DateTime?
+  invitedById    String?   @db.Uuid
+  invitedBy      User?     @relation("UserInviter", fields: [invitedById], references: [id], onDelete: SetNull)
+  invitees       User[]    @relation("UserInviter")
   // When the row was made (INV-604). Null for actors that predate the column
   // and left no earlier trace; never backfilled with a guess.
   createdAt      DateTime? @default(now())
@@ -654,6 +663,17 @@ model WorkIdempotency {
   @@unique([teamId, actorKey, operation, key], name: "work_idempotency_scope")
   @@index([teamId])
   @@index([workId])
+}
+
+/// Workspace-wide access switches (docs/permissions.md). A single row, id "workspace".
+model WorkspaceSettings {
+  id                    String   @id
+  approvedDomains       String[] @default([])
+  defaultTeamIds        String[] @default([])
+  membersCanInvite      Boolean  @default(false)
+  membersCanCreateTeams Boolean  @default(false)
+  updatedAt             DateTime @default(now()) @updatedAt
+  updatedById           String?  @db.Uuid
 }
 
 model AppSequence {

@@ -23,6 +23,7 @@ import type {
   WorkEvidence,
   WorkShare,
   WorkShareRole,
+  GlobalRole,
 } from '@prisma/client';
 
 import { assertOpsAdmin, clearSyncDeadLetter, readOpsOverview, recordOpsAudit, replayInboundDelivery } from './ops-service.js';
@@ -75,6 +76,7 @@ import {
   AGENT_HANDLE_INVALID_MESSAGE,
   AGENT_HANDLE_TAKEN_MESSAGE,
   REQUEST_ANSWER_STATE_INVALID_MESSAGE,
+  GUEST_CANNOT_OWN_TEAM_MESSAGE,
 } from './errors.js';
 import {
   assertCanDeleteComment,
@@ -109,6 +111,16 @@ import { ACTOR_PRESENCE_COPY, actorPresence } from './actor-presence.js';
 import { deactivateActor, transferActorOwner, reactivateActor, recordActorAudit, setActorSuccessor } from './actor-lifecycle.js';
 import { isValidHandle, normalizeHandle } from './mention-parser.js';
 import { listWorkShares, removeWorkShare, upsertWorkShare } from './project-sharing.js';
+import {
+  canInvite,
+  getWorkspaceSettings,
+  inviteUser,
+  reactivateUser,
+  revokeInvite,
+  suspendUser,
+  updateWorkspaceSettings,
+  userAccessStatus,
+} from './workspace-access.js';
 import { EVIDENCE_NOT_FOUND_MESSAGE, retractEvidence } from './evidence-retract.js';
 import { answerAgentRequestAsHuman, replyToAgentRequest } from './agent-request-service.js';
 import { provisionServiceActor } from './service-actors.js';
@@ -329,6 +341,8 @@ const typeDefs = /* GraphQL */ `
 
   type Query {
     viewer: User
+    viewerCapabilities: ViewerCapabilities!
+    workspaceSettings: WorkspaceSettings!
     issue(id: String!): Issue
     issues(first: Int!, after: String, filter: IssueFilter, query: String): IssueConnection!
     teams(filter: TeamFilter): TeamConnection!
@@ -405,6 +419,13 @@ const typeDefs = /* GraphQL */ `
     """Share a PROJECT node with a person or agent, or change their role. Team OWNER or ADMIN only."""
     workShareUpsert(workId: String!, userId: String!, role: WorkShareRole!): WorkShareMutationPayload!
     workShareRemove(workId: String!, userId: String!): WorkShareMutationPayload!
+    """Invite a person by email: a pending user with a workspace role and teams. Admins, or members when allowed."""
+    userInvite(input: UserInviteInput!): UserAccessPayload!
+    userInviteRevoke(id: String!): UserAccessPayload!
+    """Sign a person out and refuse their sign-in. Admins only; never the last admin."""
+    userSuspend(id: String!, reason: String): UserAccessPayload!
+    userReactivate(id: String!, reason: String): UserAccessPayload!
+    workspaceSettingsUpdate(input: WorkspaceSettingsUpdateInput!): WorkspaceSettingsPayload!
     workCommit(id: String!, input: WorkCommitInput!): WorkCommitPayload!
     "A person reverses one commit, returning the work to the candidate queue (INV-844)."
     workUncommit(id: String!, expectedRevision: Int!): WorkCommitPayload!
@@ -607,6 +628,7 @@ const typeDefs = /* GraphQL */ `
     id: ID!
     role: TeamMembershipRole!
     user: User!
+    team: Team!
   }
 
   enum WorkflowStateType {
@@ -718,6 +740,11 @@ const typeDefs = /* GraphQL */ `
     presenceDetail: String!
     """How many credentials can act as this actor, and how many were revoked (INV-607)."""
     credentialCounts: AgentCredentialCounts!
+    """ACTIVE, PENDING (invited, never signed in) or SUSPENDED (INV-847)."""
+    accessStatus: String!
+    invitedAt: DateTime
+    """Teams this person is on that the viewer may see, with their role."""
+    teamMemberships: [TeamMembership!]!
     """When the row was made; null for actors older than INV-604 with no earlier trace."""
     createdAt: DateTime
   }
@@ -729,7 +756,10 @@ const typeDefs = /* GraphQL */ `
 
   enum GlobalRole {
     ADMIN
+    "Shown as Member."
     USER
+    "Sees only the teams they were added to and projects shared with them."
+    GUEST
   }
 
   enum ActorKind {
@@ -1909,6 +1939,52 @@ const typeDefs = /* GraphQL */ `
     createdAt: DateTime!
   }
 
+  """Workspace-wide access switches (docs/permissions.md). Admins only."""
+  type WorkspaceSettings {
+    approvedDomains: [String!]!
+    defaultTeams: [Team!]!
+    membersCanInvite: Boolean!
+    membersCanCreateTeams: Boolean!
+  }
+
+  input WorkspaceSettingsUpdateInput {
+    approvedDomains: [String!]
+    defaultTeamIds: [String!]
+    membersCanInvite: Boolean
+    membersCanCreateTeams: Boolean
+  }
+
+  type WorkspaceSettingsPayload {
+    success: Boolean!
+    message: String
+    settings: WorkspaceSettings
+  }
+
+  """What the viewer may do at workspace level; the UI shows controls from this."""
+  type ViewerCapabilities {
+    isAdmin: Boolean!
+    canInvite: Boolean!
+    canCreateTeams: Boolean!
+  }
+
+  input InviteTeamInput {
+    teamId: String!
+    role: TeamMembershipRole!
+  }
+
+  input UserInviteInput {
+    email: String!
+    name: String
+    role: GlobalRole!
+    teams: [InviteTeamInput!]
+  }
+
+  type UserAccessPayload {
+    success: Boolean!
+    message: String
+    user: User
+  }
+
   type WorkShareMutationPayload {
     success: Boolean!
     message: String
@@ -2041,6 +2117,20 @@ const resolvers = {
     },
     viewer: (_parent: unknown, _args: Record<string, never>, context: GraphQLContext): User | null =>
       context.viewer,
+    viewerCapabilities: async (_parent: unknown, _args: Record<string, never>, context: GraphQLContext) => {
+      const viewer = context.viewer;
+      const human = viewer && viewer.actorKind === 'HUMAN' ? viewer : null;
+      const settings = await getWorkspaceSettings(context.prisma);
+      return {
+        canCreateTeams: human?.globalRole === 'ADMIN' || (human?.globalRole === 'USER' && settings.membersCanCreateTeams),
+        canInvite: await canInvite(context.prisma, human ? { actorId: human.id, actorKind: human.actorKind, globalRole: human.globalRole } : null),
+        isAdmin: human?.globalRole === 'ADMIN',
+      };
+    },
+    workspaceSettings: async (_parent: unknown, _args: Record<string, never>, context: GraphQLContext) => {
+      assertSettingsAdmin(context);
+      return getWorkspaceSettings(context.prisma);
+    },
     issue: async (
       _parent: unknown,
       args: { id: string },
@@ -2833,6 +2923,66 @@ const resolvers = {
         });
         return { link, success: true as const };
       }, { link: null, success: false as const }),
+    userInvite: async (
+      _parent: unknown,
+      args: { input: { email: string; name?: string | null; role: GlobalRole; teams?: Array<{ role: TeamMembershipRole; teamId: string }> | null } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; user: User | null }> =>
+      runMutationWithReason(async () => {
+        const viewer = requireAuthentication(context);
+        const teams = args.input.teams ?? [];
+        // Placing someone in a team is managing that team.
+        for (const team of teams) await assertCanManageTeam(context.prisma, context, team.teamId);
+        const user = await inviteUser(context.prisma, {
+          by: { actorId: viewer.id, actorKind: viewer.actorKind, globalRole: viewer.globalRole },
+          email: args.input.email,
+          name: args.input.name ?? null,
+          role: args.input.role,
+          teams,
+        });
+        return { success: true as const, user };
+      }, { success: false as const, user: null }),
+    userInviteRevoke: async (_parent: unknown, args: { id: string }, context: GraphQLContext): Promise<{ message?: string | null; success: boolean; user: User | null }> =>
+      runMutationWithReason(async () => {
+        const viewer = requireAuthentication(context);
+        const user = await revokeInvite(context.prisma, {
+          by: { actorId: viewer.id, actorKind: viewer.actorKind, globalRole: viewer.globalRole },
+          userId: args.id,
+        });
+        return { success: true as const, user };
+      }, { success: false as const, user: null }),
+    userSuspend: async (_parent: unknown, args: { id: string; reason?: string | null }, context: GraphQLContext): Promise<{ message?: string | null; success: boolean; user: User | null }> =>
+      runMutationWithReason(async () => {
+        assertSettingsAdmin(context);
+        const viewer = requireAuthentication(context);
+        const user = await suspendUser(context.prisma, { byActorId: viewer.id, reason: args.reason ?? null, userId: args.id });
+        return { success: true as const, user };
+      }, { success: false as const, user: null }),
+    userReactivate: async (_parent: unknown, args: { id: string; reason?: string | null }, context: GraphQLContext): Promise<{ message?: string | null; success: boolean; user: User | null }> =>
+      runMutationWithReason(async () => {
+        assertSettingsAdmin(context);
+        const viewer = requireAuthentication(context);
+        const user = await reactivateUser(context.prisma, { byActorId: viewer.id, reason: args.reason ?? null, userId: args.id });
+        return { success: true as const, user };
+      }, { success: false as const, user: null }),
+    workspaceSettingsUpdate: async (
+      _parent: unknown,
+      args: { input: { approvedDomains?: string[] | null; defaultTeamIds?: string[] | null; membersCanCreateTeams?: boolean | null; membersCanInvite?: boolean | null } },
+      context: GraphQLContext,
+    ) =>
+      runMutationWithReason(async () => {
+        assertSettingsAdmin(context);
+        const viewer = requireAuthentication(context);
+        const input = args.input;
+        const settings = await updateWorkspaceSettings(context.prisma, {
+          byActorId: viewer.id,
+          ...(input.approvedDomains != null ? { approvedDomains: input.approvedDomains } : {}),
+          ...(input.defaultTeamIds != null ? { defaultTeamIds: input.defaultTeamIds } : {}),
+          ...(input.membersCanCreateTeams != null ? { membersCanCreateTeams: input.membersCanCreateTeams } : {}),
+          ...(input.membersCanInvite != null ? { membersCanInvite: input.membersCanInvite } : {}),
+        });
+        return { settings, success: true as const };
+      }, { settings: null, success: false as const }),
     workShareUpsert: async (
       _parent: unknown,
       args: { role: WorkShareRole; userId: string; workId: string },
@@ -3211,6 +3361,10 @@ const resolvers = {
         const viewer = requireAuthentication(context);
         if (viewer.actorKind !== 'HUMAN') {
           throw createValidationError('Only a human may provision a service actor.');
+        }
+        // A service writes on behalf of the whole workspace: provisioning one is an admin act (docs/permissions.md §7).
+        if (viewer.globalRole !== 'ADMIN') {
+          throw createValidationError(ACTOR_MANAGE_FORBIDDEN_MESSAGE);
         }
         const ownerId = args.input.ownerId ?? viewer.id;
         // Making someone else accountable for a new service is an admin act.
@@ -3714,10 +3868,26 @@ const resolvers = {
     ): Promise<{ membership: TeamMembershipParent | null; success: boolean }> =>
       runMutation(async () => {
         await assertCanManageTeam(context.prisma, context, args.input.teamId);
+        // Adding an email nobody has used yet is an invite, and follows the
+        // invite rules (docs/permissions.md §2.2).
+        const email = args.input.email.trim().toLowerCase();
+        const known = await context.prisma.user.findUnique({ where: { email }, select: { id: true } });
+        if (!known) {
+          const viewer = requireAuthentication(context);
+          await inviteUser(context.prisma, {
+            by: { actorId: viewer.id, actorKind: viewer.actorKind, globalRole: viewer.globalRole },
+            email,
+            name: args.input.name ?? null,
+            role: 'USER',
+          });
+        }
         const membership = await context.prisma.$transaction(async (transaction) => {
           const user = await upsertTeamMemberUser(transaction, args.input.email, args.input.name ?? null);
           if (user.actorKind !== 'HUMAN') {
             throw createValidationError(TEAM_ROSTER_HUMANS_ONLY_MESSAGE);
+          }
+          if (user.globalRole === 'GUEST' && args.input.role === 'OWNER') {
+            throw createValidationError(GUEST_CANNOT_OWN_TEAM_MESSAGE);
           }
           const existingMembership = await transaction.teamMembership.findUnique({
             where: {
@@ -4061,7 +4231,21 @@ const resolvers = {
     issueCount: (parent: { id: string }, _args: unknown, context: GraphQLContext): Promise<number> =>
       context.prisma.issue.count({ where: { stateId: parent.id } }),
   },
+  WorkspaceSettings: {
+    defaultTeams: (parent: { defaultTeamIds: string[] }, _args: Record<string, never>, context: GraphQLContext) =>
+      parent.defaultTeamIds.length === 0 ? [] : context.prisma.team.findMany({ where: { id: { in: parent.defaultTeamIds } }, orderBy: { key: 'asc' } }),
+  },
   User: {
+    accessStatus: (parent: UserParent): string => userAccessStatus(parent),
+    invitedAt: (parent: UserParent): Date | null => parent.invitedAt ?? null,
+    teamMemberships: async (parent: UserParent, _args: Record<string, never>, context: GraphQLContext) => {
+      const readableTeam = buildReadableTeamWhere(context);
+      return context.prisma.teamMembership.findMany({
+        where: { userId: parent.id, ...(readableTeam ? { team: readableTeam } : {}) },
+        include: { team: true, user: true },
+        orderBy: { team: { key: 'asc' } },
+      });
+    },
     isMe: (parent: UserParent, _args: Record<string, never>, context: GraphQLContext): boolean =>
       context.viewer?.id === parent.id,
     emailNotifications: (parent: UserParent, _args: Record<string, never>, context: GraphQLContext): boolean | null => {
@@ -4156,6 +4340,8 @@ const resolvers = {
       }),
   },
   TeamMembership: {
+    team: (parent: TeamMembershipParent & { team?: Team | null }, _args: Record<string, never>, context: GraphQLContext) =>
+      parent.team ?? context.prisma.team.findUniqueOrThrow({ where: { id: parent.teamId } }),
     user: async (
       parent: TeamMembershipParent,
       _args: Record<string, never>,
