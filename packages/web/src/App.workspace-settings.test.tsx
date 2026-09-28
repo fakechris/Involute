@@ -13,10 +13,10 @@ const session = (globalRole: 'ADMIN' | 'USER') =>
   });
 
 describe('workspace settings tabs', () => {
-  it('shows labels, workflow states, admins and server features to admins', async () => {
+  it('shows the Administration group to admins (INV-849)', async () => {
     session('ADMIN');
     renderApp({ data: boardQueryResult, loading: false }, ['/settings']);
-    for (const name of ['Labels', 'Workflow states', 'Admins', 'Server features']) {
+    for (const name of ['Members', 'Teams', 'Security', 'Labels', 'Workflow states', 'Server features']) {
       expect(await screen.findByRole('button', { name })).toBeInTheDocument();
     }
   });
