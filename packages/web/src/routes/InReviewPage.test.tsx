@@ -46,6 +46,7 @@ const reviewItems = [
     team: { id: 'team-1', key: 'INV' },
     assignee: null,
     state: { id: 'state-review', name: 'In Review', type: 'REVIEW', position: 3 },
+    pendingContractAmendment: { id: 'amend-1' },
   },
 ];
 
@@ -83,6 +84,18 @@ vi.mock('@apollo/client/react', () => ({
 }));
 
 describe('InReviewPage', () => {
+  it('marks work whose contract has a proposed change waiting (INV-869)', () => {
+    render(
+      <MemoryRouter>
+        <InReviewPage />
+      </MemoryRouter>,
+    );
+    const marked = screen.getByRole('listitem', { name: 'INV-102 in review' });
+    expect(within(marked).getByRole('button', { name: 'contract change proposed' })).toBeInTheDocument();
+    const unmarked = screen.getByRole('listitem', { name: 'INV-101 in review' });
+    expect(within(unmarked).queryByRole('button', { name: 'contract change proposed' })).toBeNull();
+  });
+
   it('filters In Review and supports multi-select plus bulk accept', async () => {
     render(
       <MemoryRouter>

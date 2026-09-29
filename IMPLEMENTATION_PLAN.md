@@ -151,3 +151,36 @@ Members. One PR per stage, each deployed before the next starts.
 **Goal**: human-surface registry and MCP parity updated, e2e for invite → sign-in → join, AGENTS.md pointer, production migration check (existing users keep access, songsr008 stays Member with no team).
 **Success Criteria**: CI green including e2e; production verified with a real sign-in by an invited and an uninvited account.
 **Status**: In Progress — docs aligned; production rollout pending
+
+---
+
+# Implementation plan — Contract amendments (INV-869)
+
+Agents may not rewrite a committed contract (issue-service guard, #40). They can
+now *propose* a change; a person accepts or rejects it in one click, and
+acceptance goes through the same `updateIssue` path as a manual edit. One PR.
+
+Staleness is judged on the amended fields, not on `revision`: revision moves on
+every update (a `run_report` moving work to Review bumps it), so a revision check
+would make almost every amendment stale. Each amendment stores the values it
+replaces; accept refuses if any of those fields changed since.
+
+## Stage 1: Server core
+**Goal**: `ContractAmendment` model + migration; propose / accept / reject service; `updateIssue` accepts a transaction client.
+**Success Criteria**: only the five contract fields, reason required, committed work only, no-op and empty-acceptance refused; a second proposal supersedes the first; accept writes the same fields, revision and audit as a manual edit; accept refused when an amended field changed; agents refused on accept/reject; the old guard still refuses `work_update` and names the new tool.
+**Status**: Complete
+
+## Stage 2: Surfaces
+**Goal**: MCP `work_propose_amendment`; GraphQL `Issue.pendingContractAmendment`, `contractAmendmentAccept/Reject`; context bundle; `contract.amendment_*` events and the proposal notification; human-surface and parity registries.
+**Success Criteria**: `human-surface.test.ts`, `mcp-graphql-parity.test.ts` and the server suite exit 0.
+**Status**: Complete
+
+## Stage 3: Web
+**Goal**: the Contract section shows a pending amendment (field before/after, reason, proposer, "holds the claim" flag) with Accept / Reject; In Review marks rows with a pending amendment.
+**Success Criteria**: web tests for render, accept, reject and the marker; web suite exits 0.
+**Status**: Complete
+
+## Stage 4: Protocol and docs
+**Goal**: AGENTS.md, `protocol_get_guide`, skills say "propose an amendment" instead of "ask a person to edit".
+**Success Criteria**: `pnpm lint`, full test suites, CI green.
+**Status**: Complete

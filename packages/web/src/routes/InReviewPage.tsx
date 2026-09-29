@@ -352,6 +352,16 @@ export function InReviewPage() {
                     <span className="observation-card__status">in review</span>
                     <span className="observation-card__meta">{item.team.key}</span>
                     <span className="observation-card__meta">rev {item.revision}</span>
+                    {item.pendingContractAmendment ? (
+                      <button
+                        type="button"
+                        className="observation-card__status"
+                        title="An agent proposed a change to this contract; decide it before reviewing against the old one."
+                        onClick={() => navigate(`/issue/${item.id}#contract`)}
+                      >
+                        contract change proposed
+                      </button>
+                    ) : null}
                     {item.assignee ? (
                       <span className="observation-card__meta">
                         {item.assignee.name ?? item.assignee.email}

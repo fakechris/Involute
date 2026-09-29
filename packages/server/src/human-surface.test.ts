@@ -111,7 +111,14 @@ function producedNotificationTypes(files: Map<string, string>): Set<string> {
 }
 
 /** Dotted literals in notification producers that are outbox events, not inbox notifications. */
-const NOT_INBOX = new Set(['work.review_submitted', 'agent.request_answered', 'agent.request_replied']);
+const NOT_INBOX = new Set([
+  'work.review_submitted',
+  'agent.request_answered',
+  'agent.request_replied',
+  // The agent learns the decision from work_get_context; people decided it themselves.
+  'contract.amendment_accepted',
+  'contract.amendment_rejected',
+]);
 
 describe('human surface registry (INV-795)', () => {
   const mutations = Object.keys(createGraphQLSchema(null as never).getMutationType()!.getFields()).sort();

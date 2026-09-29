@@ -106,6 +106,18 @@ export interface BugSlaSummary {
   budgetHours: number;
 }
 
+export interface ContractAmendmentSummary {
+  id: string;
+  reason: string;
+  /** A field it changes was edited since it was proposed; it cannot be accepted as is. */
+  stale: boolean;
+  /** The proposer holds the claim: it is asking to change the terms its own work is judged by. */
+  proposedByClaimant: boolean;
+  createdAt: string;
+  proposedBy: { id: string; name?: string | null; email?: string | null };
+  changes: Array<{ field: 'acceptance' | 'scope' | 'verification' | 'outcome' | 'constraints'; before: string | null; after: string | null }>;
+}
+
 export interface IssueSummary {
   id: string;
   identifier: string;
@@ -120,6 +132,8 @@ export interface IssueSummary {
   constraints?: string | null;
   acceptance?: string | null;
   verification?: string | null;
+  /** An agent's open proposal to change this committed contract (INV-869). */
+  pendingContractAmendment?: ContractAmendmentSummary | null;
   priority: number;
   /** Committed bugs only (INV-750). */
   bugSla?: BugSlaSummary | null;

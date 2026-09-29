@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 
+import type { ContractAmendmentSummary } from '../board/types';
+import { ContractAmendmentPanel } from './ContractAmendmentPanel';
+
 export type ContractFieldKey = 'outcome' | 'scope' | 'constraints' | 'acceptance' | 'verification';
 
 export type ContractValues = Partial<Record<ContractFieldKey, string | null>>;
@@ -36,18 +39,25 @@ function draftFrom(values: ContractValues): Record<ContractFieldKey, string> {
 
 /**
  * The work contract (INV-786). Committed contracts are human-owned: agents are
- * refused, so this is where a human rewrites them.
+ * refused, so this is where a human rewrites them — or decides a change an
+ * agent proposed (INV-869).
  */
 export function ContractSection({
   values,
   committed,
   saving,
   onSave,
+  amendment,
+  onAcceptAmendment,
+  onRejectAmendment,
 }: {
   values: ContractValues;
   committed: boolean;
   saving: boolean;
   onSave: (changes: ContractValues) => Promise<void>;
+  amendment?: ContractAmendmentSummary | null;
+  onAcceptAmendment?: (id: string) => Promise<string | null>;
+  onRejectAmendment?: (id: string, note: string) => Promise<string | null>;
 }) {
   const [editing, setEditing] = useState(false);
   // A committed item without acceptance cannot be claimed, and only a person can add it (INV-836).
@@ -95,6 +105,9 @@ export function ContractSection({
           </button>
         )}
       </div>
+      {amendment && !editing && onAcceptAmendment && onRejectAmendment ? (
+        <ContractAmendmentPanel amendment={amendment} onAccept={onAcceptAmendment} onReject={onRejectAmendment} />
+      ) : null}
       {missingAcceptance && !editing ? (
         <p role="status" className="contract-section__missing">
           No acceptance criteria yet, so nobody can claim this work. Agents are not allowed to write it on committed

@@ -110,6 +110,9 @@ export const IN_REVIEW_PAGE_QUERY = gql`
         acceptance
         verification
         repository
+        pendingContractAmendment {
+          id
+        }
         createdAt
         team {
           id
@@ -236,6 +239,23 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
         kind
         commitmentStatus
         revision
+        pendingContractAmendment {
+          id
+          reason
+          stale
+          proposedByClaimant
+          createdAt
+          proposedBy {
+            id
+            name
+            email
+          }
+          changes {
+            field
+            before
+            after
+          }
+        }
         outcome
         scope
         constraints

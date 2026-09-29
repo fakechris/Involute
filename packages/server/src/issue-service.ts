@@ -226,12 +226,16 @@ export async function createIssueWithAudit(
 }
 
 export async function updateIssue(
-  prisma: PrismaClient,
+  prisma: DatabaseClient,
   id: string,
   input: UpdateIssueInput,
   actor: WriteActor = INTERNAL_WRITE_ACTOR,
 ): Promise<Issue> {
-  return prisma.$transaction(async (transaction) => {
+  // Inside a caller's transaction (accepting a contract amendment, INV-869) the
+  // update joins it, so the caller's own writes commit or roll back with it.
+  const inTransaction = <T>(run: (transaction: Prisma.TransactionClient) => Promise<T>): Promise<T> =>
+    '$transaction' in prisma ? prisma.$transaction(run) : run(prisma);
+  return inTransaction(async (transaction) => {
     const hint = await transaction.issue.findUnique({ where: { id }, select: { teamId: true } });
     if (!hint) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
     await lockWorkGraph(transaction, hint.teamId);

@@ -19,7 +19,7 @@ Connect: Streamable HTTP MCP at `http://127.0.0.1:4200/mcp` (local) with `Author
 | [propose-work](../propose-work/SKILL.md) | Candidate proposal with optional initial_state ('REVIEW'/'STARTED'/'UNSTARTED') |
 | [file-bug](../file-bug/SKILL.md) | Type: Bug — committed directly, never Candidates; priority required for SLA |
 | [claim-work](../claim-work/SKILL.md) | Lease ready work after the user chooses it |
-| [update-work](../update-work/SKILL.md) | Contract fields with `expected_revision` |
+| [update-work](../update-work/SKILL.md) | Fields with `expected_revision`; committed contracts via `work_propose_amendment` |
 | [report-run](../report-run/SKILL.md) | Phase / block / complete (In Review, never Done) |
 | [attach-evidence](../attach-evidence/SKILL.md) | PR/test/artifact URL |
 | [agent-setup](../agent-setup/SKILL.md) | Wire MCP + Bearer token (secrets stay out of git) |

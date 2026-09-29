@@ -1,4 +1,4 @@
-import type { UserSummary, WorkflowStateSummary, WorkflowStateType } from '../board/types';
+import type { ContractAmendmentSummary, UserSummary, WorkflowStateSummary, WorkflowStateType } from '../board/types';
 
 export type CommitmentStatus = 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
 export type WorkKind = 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
@@ -177,6 +177,8 @@ export interface WorkContextRequest {
 
 export interface WorkContextWork {
   id: string;
+  /** An agent's open proposal to change this committed contract (INV-869). */
+  pendingContractAmendment?: ContractAmendmentSummary | null;
   identifier: string;
   title: string;
   /** Current contract hash; compare with a run's contractRevision (INV-790). */
@@ -279,7 +281,10 @@ export interface CandidatesPageQueryVariables {
 
 
 /** Committed work currently waiting in an In Review workflow state. */
-export type InReviewWork = CandidateWork;
+export type InReviewWork = CandidateWork & {
+  /** An agent proposed a change to this contract that is waiting for a person (INV-869). */
+  pendingContractAmendment?: { id: string } | null;
+};
 
 export interface InReviewPageQueryData {
   issues: {

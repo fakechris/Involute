@@ -1,6 +1,6 @@
 ---
 name: update-work
-description: Use when changing Involute contract fields (scope, acceptance, etc.) with optimistic concurrency via expected_revision.
+description: Use when changing Involute work fields with optimistic concurrency via expected_revision, or proposing a change to a committed contract (work_propose_amendment).
 ---
 
 # Update work
@@ -16,6 +16,17 @@ Scope or acceptance must change mid-flight, or metadata needs a correction.
 - Read current `revision` from `work_get_context`.
 - Call `work_update` with `expected_revision` and only the fields you mean to change.
 - For newly confirmed separate work, prefer `work_propose` + `DISCOVERED_DURING` instead of bloating the parent.
+
+## Committed work: propose, do not ask
+
+Agents cannot change the contract of committed work (acceptance, scope,
+verification, outcome, constraints); `work_update` refuses. When the contract is
+wrong — written against an old rule, impossible as stated, missing acceptance —
+call `work_propose_amendment` with the new values and a reason that says where
+the right rule is written. A person accepts it in one click (it becomes their
+edit) or rejects it with a note. Read the outcome in `work_get_context`
+(`contractAmendments`). Do not put the fix only in a run summary and ask a
+person to retype it.
 
 ## Rules
 

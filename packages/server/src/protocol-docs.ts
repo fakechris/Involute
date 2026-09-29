@@ -84,7 +84,7 @@ Agent credentials carry scopes. Scope enforcement happens on MCP tools:
 | Scope | Unlocks |
 |---|---|
 | \`read\` | \`work_search\`, \`work_get_context\`, \`work_list_ready\`, \`protocol_get_guide\` (always granted) |
-| \`propose\` | \`work_propose\`, \`work_file_bug\` |
+| \`propose\` | \`work_propose\`, \`work_file_bug\`, \`work_propose_amendment\` |
 | \`update\` | \`work_update\` |
 | \`link\` | \`work_link\` |
 | \`claim\` | \`work_claim\` |
@@ -126,7 +126,8 @@ Read-only:
 Write:
 - \`work_propose\` — create candidate work. Pass \`parent_id\` to nest under project/milestone. Pass \`initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED' | 'BACKLOG'\` to direct-route upon human commitment. Type: Bug via \`labels: ['bug']\` is committed directly and never enters Candidates; it requires \`priority\` (SLA), \`steps_to_reproduce\`, and a parent.
 - \`work_file_bug\` — file a Type: Bug. Required: \`priority\` (1–4, sets the SLA) and \`steps_to_reproduce\`. Committed directly; missing parent/priority/steps is refused. Prefer this over \`work_propose\` for bugs.
-- \`work_update\` — update contract fields with \`expected_revision\`.
+- \`work_update\` — update fields with \`expected_revision\`. On committed work agents cannot change the contract (acceptance, scope, verification, outcome, constraints).
+- \`work_propose_amendment\` — propose a change to a committed contract: the fields, their new values and a reason. A person accepts it (applied as their own edit) or rejects it with a note on the issue page; the outcome shows in \`work_get_context\` (\`contractAmendments\`). Use this instead of asking a person to retype a fix.
 - \`work_link\` — create typed work link.
 - \`work_claim\` — atomically claim committed work for the current agent actor.
 - \`run_report\` — report run status (queued / running / blocked / completed). Completed moves to In Review.
@@ -136,6 +137,7 @@ Human-only (delegated CLI or Web UI):
 - \`work_commit\` / \`pnpm candidates:batch-commit\`
 - \`work_reject\`
 - \`work_review\`
+- accepting or rejecting a contract amendment (issue page or work page, Contract section)
 
 Call \`protocol_get_guide\` on the MCP endpoint to fetch this document verbatim.
 

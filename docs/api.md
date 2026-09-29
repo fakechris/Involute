@@ -734,7 +734,9 @@ codex mcp add involute --url https://involute.example.com/mcp
 codex mcp add involute-readonly --url https://involute.example.com/mcp/readonly
 ```
 
-Tools: `protocol_get_guide`, `work_search`, `work_get_context`, `work_list_ready`, `work_propose`, `work_commit`, `work_update`, `work_link`, `work_claim`, `run_report`, `evidence_attach`. The readonly endpoint exposes only the read-only four (including `protocol_get_guide`, which returns the full work protocol as markdown). `tools/list` advertises `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`) per tool. `work_search` and `work_list_ready` accept an IQL `filter` argument. Agent behavior is in `skills/involute/SKILL.md`.
+Tools: `protocol_get_guide`, `work_search`, `work_get_context`, `work_list_ready`, `work_propose`, `work_commit`, `work_update`, `work_propose_amendment`, `work_link`, `work_claim`, `run_report`, `evidence_attach`. The readonly endpoint exposes only the read-only four (including `protocol_get_guide`, which returns the full work protocol as markdown). `tools/list` advertises `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`) per tool. `work_search` and `work_list_ready` accept an IQL `filter` argument. Agent behavior is in `skills/involute/SKILL.md`.
+
+**Contract amendments (INV-869).** Agents cannot rewrite a committed contract. `work_propose_amendment { id, changes: { acceptance?, scope?, verification?, outcome?, constraints? }, reason }` records the fields to change, what they said when proposed, and why; a newer proposal supersedes the open one. A person decides it with GraphQL `contractAmendmentAccept(input: { amendmentId, note? })` — applied through the same `issueUpdate` path as a manual edit, as that person — or `contractAmendmentReject(input: { amendmentId, note })`. Accepting is refused when a field the amendment changes was edited since it was proposed (`Issue.pendingContractAmendment.stale`); unrelated updates such as a run moving the work to Review do not make it stale. Events: `contract.amendment_proposed` (also an inbox notification to the owner), `contract.amendment_accepted`, `contract.amendment_rejected`. `work_get_context` returns `contractAmendments`.
 
 Completed runs and attached evidence move work to In Review, never Done. Outbound webhooks use `INVOLUTE_WEBHOOK_URL` and `INVOLUTE_WEBHOOK_SECRET`.
 
@@ -1161,10 +1163,10 @@ scopes, enforced per MCP tool; `read` is always granted (as in Linear):
 | Scope | Tools |
 |---|---|
 | `read` | `work_search`, `work_get_context`, `work_list_ready` |
-| `propose` | `work_propose` |
+| `propose` | `work_propose`, `work_propose_amendment` |
 | `claim` | `work_claim` |
 | `report` | `run_report`, `evidence_attach` |
-| `update` | `work_update` (contract fields on committed work stay human-only) |
+| `update` | `work_update` (contract fields on committed work stay human-only; agents propose them with `work_propose_amendment`) |
 | `link` | `work_link` |
 
 `work_commit`/`reject`/`accept` have no scope: they are human-only by

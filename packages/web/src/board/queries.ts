@@ -359,6 +359,23 @@ export const ISSUE_PAGE_QUERY = gql`
       constraints
       acceptance
       verification
+      pendingContractAmendment {
+        id
+        reason
+        stale
+        proposedByClaimant
+        createdAt
+        proposedBy {
+          id
+          name
+          email
+        }
+        changes {
+          field
+          before
+          after
+        }
+      }
       bugSla {
         status
         remainingMs
@@ -1633,6 +1650,25 @@ export const SHELL_TEAMS_QUERY = gql`
   query ShellTeams {
     teams {
       nodes { id key name issueCount viewerCanManage viewerCanWrite }
+    }
+  }
+`;
+
+// An agent's proposed change to a committed contract, decided by a person (INV-869).
+export const CONTRACT_AMENDMENT_ACCEPT_MUTATION = gql`
+  mutation ContractAmendmentAccept($input: ContractAmendmentAcceptInput!) {
+    contractAmendmentAccept(input: $input) {
+      success
+      message
+    }
+  }
+`;
+
+export const CONTRACT_AMENDMENT_REJECT_MUTATION = gql`
+  mutation ContractAmendmentReject($input: ContractAmendmentRejectInput!) {
+    contractAmendmentReject(input: $input) {
+      success
+      message
     }
   }
 `;

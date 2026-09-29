@@ -6,6 +6,7 @@ import { IcoChevL } from '../components/Icons';
 import { Btn } from '../components/Primitives';
 import { EvidenceVerificationStatus, RetractEvidence, RunBinding } from '../components/ReviewEvidence';
 import { ClaimControl } from '../components/ClaimControl';
+import { ContractAmendmentPanel, useContractAmendmentDecisions } from '../components/ContractAmendmentPanel';
 import { AgentRequestActions } from '../components/AgentRequestActions';
 import { RespondToAgent } from '../components/RespondToAgent';
 import { EvidenceAttachForm } from '../components/EvidenceAttachForm';
@@ -92,6 +93,7 @@ export function WorkContextPage() {
     },
   );
   const bundle = data?.workContext ?? null;
+  const amendmentDecisions = useContractAmendmentDecisions(() => refetch());
   // The agent that ran it most recently: who a decision it asked for goes back to (INV-794).
   // Runs arrive newest first.
   const latestAgent = (bundle?.runs ?? [])
@@ -204,6 +206,14 @@ export function WorkContextPage() {
               Edit contract
             </Btn>
           </div>
+          {/* Decide a proposed change before reviewing against the old terms (INV-869). */}
+          {work.pendingContractAmendment ? (
+            <ContractAmendmentPanel
+              amendment={work.pendingContractAmendment}
+              onAccept={amendmentDecisions.accept}
+              onReject={amendmentDecisions.reject}
+            />
+          ) : null}
           <dl className="observation-contract observation-contract--stack">
             <ContractField label="Kind" value={work.kind.toLowerCase()} />
             <ContractField label="Outcome" value={work.outcome} />
