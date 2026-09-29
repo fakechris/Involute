@@ -92,9 +92,15 @@ export function writeStoredShellTeams(teams: TeamSummary[]): void {
   }
 
   const normalizedTeams = normalizeTeams(teams);
+  const serialized = JSON.stringify(normalizedTeams);
 
   try {
-    window.localStorage.setItem(APP_SHELL_TEAMS_STORAGE_KEY, JSON.stringify(normalizedTeams));
+    // Unchanged teams must not re-announce: every listener re-renders the
+    // shell, and a writer that re-renders with it would loop forever.
+    if (window.localStorage.getItem(APP_SHELL_TEAMS_STORAGE_KEY) === serialized) {
+      return;
+    }
+    window.localStorage.setItem(APP_SHELL_TEAMS_STORAGE_KEY, serialized);
   } catch {
     // Ignore storage failures in restricted environments.
   }

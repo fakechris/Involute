@@ -420,7 +420,7 @@ describe('CandidatesPage', () => {
       render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
       fireEvent.click(screen.getByLabelText(/Select all visible/));
       fireEvent.click(screen.getByRole('button', { name: /Batch Commit \(2\)/ }));
-      expect(await screen.findByText(/Committed 1, failed 1\. INV-21: Committed work requires a parent/)).toBeInTheDocument();
+      expect(await screen.findByText(/Committed 1, failed 1\. Committed work requires a parent.*\(INV-21\)/)).toBeInTheDocument();
     });
   });
 
