@@ -610,6 +610,15 @@ export function renderApp(
       };
     }
 
+    if (source.includes('query ShellTeams')) {
+      return {
+        data: { teams: { nodes: queryState.data?.teams.nodes ?? [] } },
+        error: undefined,
+        loading: false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
     if (source.includes('query TeamPage')) {
       const key = String(options?.variables?.key ?? '');
       const derived = {

@@ -359,3 +359,54 @@ export function userAccessStatus(user: Pick<User, 'actorKind' | 'deactivatedAt' 
   if (user.actorKind === 'HUMAN' && !user.googleSubject) return 'PENDING';
   return 'ACTIVE';
 }
+
+// --- Invite email ------------------------------------------------------------
+
+export interface InviteDelivery {
+  /** True only when an email actually left the server. */
+  emailSent: boolean;
+  /** Why no email was sent, in words a person can act on. */
+  emailNote: string | null;
+  /** Where the invited person signs in; shown so it can be sent by hand. */
+  signInUrl: string;
+}
+
+/**
+ * Invites work without mail: the row is what lets the person in. When SMTP
+ * is configured (NOTIFICATION_EMAIL_*) an email goes out too; otherwise the
+ * caller is told plainly that nothing was sent and given the link.
+ */
+export async function deliverInvite(
+  input: { email: string; inviterName: string | null },
+  runtime: { appOrigin: string; send: ((mail: { html: string; subject: string; text: string; to: string }) => Promise<void>) | null },
+): Promise<InviteDelivery> {
+  const signInUrl = runtime.appOrigin;
+  if (!runtime.send) {
+    return {
+      emailNote: 'No email was sent: this server has no mail (SMTP) configured. Send them the link yourself.',
+      emailSent: false,
+      signInUrl,
+    };
+  }
+  const who = input.inviterName ?? 'An admin';
+  const text = `${who} invited you to Involute.\n\nSign in with Google using ${input.email}:\n${signInUrl}\n`;
+  try {
+    await runtime.send({
+      html: `<p>${escapeHtml(who)} invited you to Involute.</p><p>Sign in with Google using <strong>${escapeHtml(input.email)}</strong>:<br><a href="${escapeHtml(signInUrl)}">${escapeHtml(signInUrl)}</a></p>`,
+      subject: `${who} invited you to Involute`,
+      text,
+      to: input.email,
+    });
+    return { emailNote: null, emailSent: true, signInUrl };
+  } catch (error) {
+    return {
+      emailNote: `The invite is saved, but the email failed (${error instanceof Error ? error.message : 'unknown error'}). Send them the link yourself.`,
+      emailSent: false,
+      signInUrl,
+    };
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+}

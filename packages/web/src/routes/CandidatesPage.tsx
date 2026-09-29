@@ -972,7 +972,7 @@ export function CandidatesPage() {
     const toCommit = candidates.filter((c) => selectedIds.includes(c.id));
     let successCount = 0;
     let failCount = 0;
-    const failures: string[] = [];
+    const failures: Array<{ identifier: string; reason: string }> = [];
     const committedCandidates: CandidateWork[] = [];
     const undoItems: CommitUndoItem[] = [];
 
@@ -1013,11 +1013,11 @@ export function CandidatesPage() {
           }
         } else {
           failCount++;
-          failures.push(`${candidate.identifier}: ${result.data?.workCommit.message ?? 'refused'}`);
+          failures.push({ identifier: candidate.identifier, reason: result.data?.workCommit.message ?? 'refused' });
         }
       } catch (err) {
         failCount++;
-        failures.push(`${candidate.identifier}: ${err instanceof Error ? err.message : 'failed'}`);
+        failures.push({ identifier: candidate.identifier, reason: err instanceof Error ? err.message : 'failed' });
       }
       setBulkProgress({ done: i + 1, total: toCommit.length });
     }
@@ -1026,7 +1026,7 @@ export function CandidatesPage() {
     setBulkAction(null);
     setSelectedIds([]);
     if (failCount > 0) {
-      setBulkError(`Committed ${successCount}, failed ${failCount}. ${failures.join(' · ')}`);
+      setBulkError(`Committed ${successCount}, failed ${failCount}. ${summarizeFailures(failures)}`);
     }
     if (successCount > 0) {
       recordCommitGesture(undoItems);
@@ -1046,6 +1046,7 @@ export function CandidatesPage() {
     let successCount = 0;
     let failCount = 0;
 
+    const rejectFailures: Array<{ identifier: string; reason: string }> = [];
     for (let i = 0; i < toReject.length; i++) {
       const candidate = toReject[i];
       if (!candidate) continue;
@@ -1062,7 +1063,7 @@ export function CandidatesPage() {
         successCount++;
       } catch (err) {
         failCount++;
-        console.error(`Failed to reject candidate ${candidate.identifier}:`, err);
+        rejectFailures.push({ identifier: candidate.identifier, reason: err instanceof Error ? err.message : 'failed' });
       }
       setBulkProgress({ done: i + 1, total: toReject.length });
     }
@@ -1071,7 +1072,7 @@ export function CandidatesPage() {
     setBulkAction(null);
     setSelectedIds([]);
     if (failCount > 0) {
-      setBulkError(`Rejected ${successCount}, failed ${failCount}.`);
+      setBulkError(`Rejected ${successCount}, failed ${failCount}. ${summarizeFailures(rejectFailures)}`);
     }
     void refetch();
   }
@@ -1369,4 +1370,16 @@ export function CandidatesPage() {
       ) : null}
     </div>
   );
+}
+
+/**
+ * One line per distinct reason, naming the items it applies to: five items
+ * refused for the same reason read as one reason, not five copies of it.
+ */
+export function summarizeFailures(failures: Array<{ identifier: string; reason: string }>): string {
+  const byReason = new Map<string, string[]>();
+  for (const failure of failures) {
+    byReason.set(failure.reason, [...(byReason.get(failure.reason) ?? []), failure.identifier]);
+  }
+  return [...byReason.entries()].map(([reason, ids]) => `${reason} (${ids.join(', ')})`).join(' · ');
 }
