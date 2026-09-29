@@ -222,6 +222,8 @@ model User {
   workEvidence   WorkEvidence[] @relation("WorkEvidenceActor")
   retractedEvidence   WorkEvidence[] @relation("WorkEvidenceRetractedBy")
   reviewDecisions WorkReviewDecision[] @relation("WorkReviewDecisionReviewer")
+  proposedContractAmendments ContractAmendment[] @relation("ContractAmendmentProposer")
+  decidedContractAmendments  ContractAmendment[] @relation("ContractAmendmentDecider")
   autoAcceptEvaluations WorkAutoAcceptEvaluation[] @relation("WorkAutoAcceptEvaluationActor")
   agentCredentials AgentCredential[]
   createdWebhooks WebhookSubscription[] @relation("WebhookSubscriptionCreator")
@@ -336,6 +338,7 @@ model Issue {
   evidence          WorkEvidence[]
   supersedingEvidence WorkEvidence[] @relation("WorkEvidenceSupersededBy")
   reviewDecisions   WorkReviewDecision[]
+  contractAmendments ContractAmendment[]
   autoAcceptEvaluations WorkAutoAcceptEvaluation[]
   notifications     Notification[]
   // Phase 2: GitHub webhook PR provenance tracking
@@ -769,6 +772,37 @@ model WorkReviewDecision {
   @@index([workId, createdAt])
   @@index([runId])
   @@index([reviewerId])
+}
+
+enum ContractAmendmentStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  SUPERSEDED
+}
+
+/// A change to a committed contract that an agent proposed and a person decides (INV-869).
+/// `changes` holds the proposed values of the fields it touches; `before` holds what those
+/// fields said when it was proposed, so acceptance can refuse if someone changed them since.
+model ContractAmendment {
+  id           String                  @id @default(uuid()) @db.Uuid
+  workId       String                  @db.Uuid
+  work         Issue                   @relation(fields: [workId], references: [id], onDelete: Cascade)
+  proposedById String                  @db.Uuid
+  proposedBy   User                    @relation("ContractAmendmentProposer", fields: [proposedById], references: [id], onDelete: Restrict)
+  baseRevision Int
+  changes      Json
+  before       Json
+  reason       String
+  status       ContractAmendmentStatus @default(PENDING)
+  decidedById  String?                 @db.Uuid
+  decidedBy    User?                   @relation("ContractAmendmentDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt    DateTime?
+  decisionNote String?
+  createdAt    DateTime                @default(now())
+
+  @@index([workId, status])
+  @@index([proposedById])
 }
 
 model WorkAutoAcceptEvaluation {

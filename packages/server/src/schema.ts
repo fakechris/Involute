@@ -2,6 +2,7 @@ import type {
   AgentCredential,
   AgentRequest,
   Attachment,
+  ContractAmendment,
   DecisionReceipt,
   Comment,
   Cycle,
@@ -60,6 +61,7 @@ import {
   getExposedError,
   isPrismaInvalidInputError,
   ISSUE_NOT_FOUND_MESSAGE,
+  CONTRACT_AMENDMENT_NOT_FOUND_MESSAGE,
   MEMBERSHIP_NOT_FOUND_MESSAGE,
   NOTIFICATION_NOT_FOUND_MESSAGE,
   ACTOR_MANAGE_FORBIDDEN_MESSAGE,
@@ -129,6 +131,12 @@ import {
   userAccessStatus,
 } from './workspace-access.js';
 import { EVIDENCE_NOT_FOUND_MESSAGE, retractEvidence } from './evidence-retract.js';
+import {
+  acceptContractAmendment,
+  amendmentChanges,
+  isAmendmentStale,
+  rejectContractAmendment,
+} from './contract-amendment.js';
 import { answerAgentRequestAsHuman, replyToAgentRequest } from './agent-request-service.js';
 import { provisionServiceActor } from './service-actors.js';
 import {
@@ -459,6 +467,10 @@ const typeDefs = /* GraphQL */ `
     actorReactivate(id: String!, reason: String): ActorLifecyclePayload!
     """A person retracts wrongly attached evidence: marked, audited, emitted — never deleted (INV-598)."""
     evidenceRetract(input: EvidenceRetractInput!): EvidenceRetractPayload!
+    "Human-only. Apply an agent's proposed contract change as your own edit (INV-869)."
+    contractAmendmentAccept(input: ContractAmendmentAcceptInput!): ContractAmendmentPayload!
+    "Human-only. Decline an agent's proposed contract change, with a note (INV-869)."
+    contractAmendmentReject(input: ContractAmendmentRejectInput!): ContractAmendmentPayload!
     """A person completes a request addressed to them (INV-596): comment, answeredCommentId, COMPLETED, audit and event in one transaction. An ADMIN may answer for someone else with an overrideReason."""
     agentRequestAnswer(input: AgentRequestAnswerInput!): AgentRequestAnswerPayload!
     "The requester answers a request that asked back (input-required); it goes back to its target (INV-794)."
@@ -974,6 +986,8 @@ const typeDefs = /* GraphQL */ `
     bugSla: BugSla
     "Hash of the current execution contract (scope, constraints, repository, acceptance); a run whose contractRevision differs ran against an older contract (INV-790)."
     contractDigest: String!
+    "The open proposal to change this committed contract, if an agent made one (INV-869)."
+    pendingContractAmendment: ContractAmendment
     "Why it was rejected, from the audit that rejected it; null unless REJECTED (INV-792)."
     rejectionReason: String
     claim: WorkClaimRecord
@@ -1198,6 +1212,26 @@ const typeDefs = /* GraphQL */ `
     correctWorkId: String
   }
 
+  input ContractAmendmentAcceptInput {
+    amendmentId: String!
+    "Optional; recorded with the decision."
+    note: String
+  }
+
+  input ContractAmendmentRejectInput {
+    amendmentId: String!
+    "Why: the agent reads it in work_get_context."
+    note: String!
+  }
+
+  type ContractAmendmentPayload {
+    success: Boolean!
+    "Why the decision was refused; null on success."
+    message: String
+    amendment: ContractAmendment
+    issue: Issue
+  }
+
   type EvidenceRetractPayload {
     success: Boolean!
     "Why the retraction was refused; null on success."
@@ -1219,6 +1253,43 @@ const typeDefs = /* GraphQL */ `
     createdAt: DateTime!
     reviewer: User!
     run: WorkRunRecord
+  }
+
+  "One field of a proposed contract change (INV-869)."
+  type ContractFieldChange {
+    field: String!
+    "What the field said when the change was proposed."
+    before: String
+    "What the agent proposes it should say; null clears it."
+    after: String
+  }
+
+  enum ContractAmendmentStatus {
+    PENDING
+    ACCEPTED
+    REJECTED
+    SUPERSEDED
+  }
+
+  """
+  A change to a committed contract that an agent proposed (INV-869). Agents may
+  not rewrite a committed contract; a person accepts the change (applied as
+  their own edit) or rejects it with a note.
+  """
+  type ContractAmendment {
+    id: ID!
+    status: ContractAmendmentStatus!
+    reason: String!
+    changes: [ContractFieldChange!]!
+    proposedBy: User!
+    "The proposer holds the claim on this work: it is asking to change the terms its own work is judged by."
+    proposedByClaimant: Boolean!
+    "A field it changes no longer says what it said when proposed, so it cannot be accepted as is."
+    stale: Boolean!
+    createdAt: DateTime!
+    decidedBy: User
+    decidedAt: DateTime
+    decisionNote: String
   }
 
   type WorkClaimRecord {
@@ -2131,6 +2202,22 @@ const typeDefs = /* GraphQL */ `
 `;
 
 const resolvers = {
+  ContractAmendment: {
+    changes: (parent: ContractAmendment) => amendmentChanges(parent),
+    proposedBy: (parent: ContractAmendment, _args: Record<string, never>, context: GraphQLContext): Promise<User> =>
+      context.prisma.user.findUniqueOrThrow({ where: { id: parent.proposedById } }),
+    decidedBy: (parent: ContractAmendment, _args: Record<string, never>, context: GraphQLContext): Promise<User | null> =>
+      parent.decidedById ? context.prisma.user.findUnique({ where: { id: parent.decidedById } }) : Promise.resolve(null),
+    proposedByClaimant: async (parent: ContractAmendment, _args: Record<string, never>, context: GraphQLContext): Promise<boolean> => {
+      const claim = await context.prisma.workClaim.findUnique({ where: { workId: parent.workId }, select: { actorId: true } });
+      return claim?.actorId === parent.proposedById;
+    },
+    stale: async (parent: ContractAmendment, _args: Record<string, never>, context: GraphQLContext): Promise<boolean> => {
+      if (parent.status !== 'PENDING') return false;
+      const work = await context.prisma.issue.findUniqueOrThrow({ where: { id: parent.workId } });
+      return isAmendmentStale(parent, work);
+    },
+  },
   WorkEvidenceRecord: {
     retractedBy: async (parent: WorkEvidence, _args: Record<string, never>, context: GraphQLContext): Promise<User | null> =>
       parent.retractedById ? context.prisma.user.findUnique({ where: { id: parent.retractedById } }) : null,
@@ -3356,6 +3443,36 @@ const resolvers = {
         }, { actorId: viewer.id, actorKind: viewer.actorKind, surface: 'graphql' });
         return { evidence: updated, success: true as const };
       }, { evidence: null, success: false as const }),
+    contractAmendmentAccept: async (
+      _parent: unknown,
+      args: { input: { amendmentId: string; note?: string | null } },
+      context: GraphQLContext,
+    ): Promise<{ amendment: ContractAmendment | null; issue: IssueParent | null; message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
+        const viewer = requireAuthentication(context);
+        await assertCanWriteIssue(context.prisma, context, await amendmentWorkId(context.prisma, args.input.amendmentId));
+        const result = await acceptContractAmendment(
+          context.prisma,
+          { amendmentId: args.input.amendmentId, note: args.input.note ?? null },
+          writeActorFromViewer(viewer),
+        );
+        return { amendment: result.amendment, issue: await getIssueById(context.prisma, result.work.id), success: true as const };
+      }, { amendment: null, issue: null, success: false as const }),
+    contractAmendmentReject: async (
+      _parent: unknown,
+      args: { input: { amendmentId: string; note: string } },
+      context: GraphQLContext,
+    ): Promise<{ amendment: ContractAmendment | null; issue: IssueParent | null; message?: string | null; success: boolean }> =>
+      runMutationWithReason(async () => {
+        const viewer = requireAuthentication(context);
+        await assertCanWriteIssue(context.prisma, context, await amendmentWorkId(context.prisma, args.input.amendmentId));
+        const result = await rejectContractAmendment(
+          context.prisma,
+          { amendmentId: args.input.amendmentId, note: args.input.note },
+          writeActorFromViewer(viewer),
+        );
+        return { amendment: result.amendment, issue: await getIssueById(context.prisma, result.work.id), success: true as const };
+      }, { amendment: null, issue: null, success: false as const }),
     agentRequestAnswer: async (
       _parent: unknown,
       args: { input: { body: string; overrideReason?: string | null; requestId: string; state?: string | null } },
@@ -4686,6 +4803,15 @@ const resolvers = {
       const links = await context.prisma.workLink.findMany({ ...query, where: { ...query.where, toId: parent.id } });
       return links.map((link) => link.from);
     },
+    pendingContractAmendment: (
+      parent: IssueParent,
+      _args: Record<string, never>,
+      context: GraphQLContext,
+    ): Promise<ContractAmendment | null> =>
+      context.prisma.contractAmendment.findFirst({
+        where: { status: 'PENDING', workId: parent.id },
+        orderBy: { createdAt: 'desc' },
+      }),
     claim: async (
       parent: IssueParent,
       _args: Record<string, never>,
@@ -5243,6 +5369,13 @@ async function runMutation<TResult extends { success: true }, TFallback extends 
  * caller editing the work graph can say why (cycle, unknown work, hierarchy
  * rule) instead of a bare `success: false` (INV-679).
  */
+/** The work item an amendment belongs to, for the write check before deciding it. */
+async function amendmentWorkId(prisma: DatabaseClient, amendmentId: string): Promise<string> {
+  const amendment = await prisma.contractAmendment.findUnique({ where: { id: amendmentId }, select: { workId: true } });
+  if (!amendment) throw createNotFoundError(CONTRACT_AMENDMENT_NOT_FOUND_MESSAGE);
+  return amendment.workId;
+}
+
 async function runMutationWithReason<TResult extends { success: true }, TFallback extends { success: false }>(
   operation: () => Promise<TResult>,
   fallback: TFallback,

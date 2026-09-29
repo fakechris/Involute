@@ -33,6 +33,7 @@ import type {
 } from '../board/types';
 import { ActorBadge } from '../components/ActorBadge';
 import { ContractSection, type ContractValues } from '../components/ContractSection';
+import { useContractAmendmentDecisions } from '../components/ContractAmendmentPanel';
 import { IssueRelations } from '../components/IssueRelations';
 import { AddSubIssueButton } from '../components/AddSubIssueButton';
 import { BugSlaBadge } from '../components/BugSlaBadge';
@@ -91,6 +92,8 @@ export function IssuePage() {
   const [runCommentDelete] = useMutation<CommentDeleteMutationData, CommentDeleteMutationVariables>(
     COMMENT_DELETE_MUTATION,
   );
+
+  const amendmentDecisions = useContractAmendmentDecisions(() => refetch());
 
   const teamId = data?.issue?.team.id ?? '';
   const [runAgentRequestAnswer] = useMutation<{ agentRequestAnswer: { success: boolean } }, { input: { body: string; overrideReason?: string | null; requestId: string } }>(AGENT_REQUEST_ANSWER_MUTATION);
@@ -780,6 +783,9 @@ export function IssuePage() {
               committed={activeIssue.commitmentStatus === 'COMMITTED'}
               saving={isSavingState}
               onSave={(changes) => persistContractChange(activeIssue, changes)}
+              amendment={activeIssue.pendingContractAmendment ?? null}
+              onAcceptAmendment={amendmentDecisions.accept}
+              onRejectAmendment={amendmentDecisions.reject}
             />
             <div className="issue-panel__section">
               <h2>Claim</h2>

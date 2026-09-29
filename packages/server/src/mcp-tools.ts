@@ -38,6 +38,7 @@ import {
 } from './errors.js';
 import { TEAM_WRITE_FORBIDDEN_MESSAGE } from './errors.js';
 import { mentionTexts, updateIssue } from './issue-service.js';
+import { amendmentChanges, proposeContractAmendment } from './contract-amendment.js';
 import { dependencyHints } from './mention-links.js';
 import { researchLacksDownstream } from './work-hygiene.js';
 import { createWorkLink } from './link-service.js';
@@ -56,6 +57,7 @@ export type McpToolName =
   | 'work_commit'
   | 'work_uncommit'
   | 'work_update'
+  | 'work_propose_amendment'
   | 'work_link'
   | 'work_claim'
   | 'run_report'
@@ -80,6 +82,7 @@ export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
   'work_commit',
   'work_uncommit',
   'work_update',
+  'work_propose_amendment',
   'work_link',
   'work_claim',
   'run_report',
@@ -329,6 +332,22 @@ export async function callMcpTool(
         { expectedRevision: requiredNumber(args.expected_revision, 'expected_revision') },
         writeActorFromViewer(context.viewer, 'mcp'),
       );
+    }
+    case 'work_propose_amendment': {
+      const work = await requireWork(context.prisma, requiredString(args.id, 'id'));
+      await assertCanWriteIssue(context.prisma, context, work.id);
+      const amendment = await proposeContractAmendment(
+        context.prisma,
+        { changes: args.changes, reason: requiredString(args.reason, 'reason'), workId: work.id },
+        writeActorFromViewer(context.viewer, 'mcp'),
+      );
+      return {
+        amendment_id: amendment.id,
+        changes: amendmentChanges(amendment),
+        status: amendment.status,
+        work: { id: work.id, identifier: work.identifier },
+        next: `A person accepts or rejects this under Contract on ${work.identifier}'s issue page. Accepting applies it as their own edit; you will see the result in work_get_context (contractAmendments).`,
+      };
     }
     case 'work_update': {
       const work = await requireWork(context.prisma, requiredString(args.id, 'id'));
@@ -765,9 +784,36 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'work_propose_amendment',
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    description:
+      'Propose a change to a COMMITTED contract (acceptance, scope, verification, outcome, constraints). Agents cannot rewrite a committed contract; this records the fields you would change, what they say now and why, and asks the owner. A person accepts (applied as their own edit) or rejects with a note in one click on the issue page. A newer proposal replaces your open one. Candidates: use work_update instead.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Work item identifier (e.g. INV-104) or UUID' },
+        changes: {
+          type: 'object',
+          description: 'New values for the fields to change. A string replaces the field; null clears it (acceptance cannot be cleared).',
+          properties: {
+            acceptance: { type: ['string', 'null'] },
+            scope: { type: ['string', 'null'] },
+            verification: { type: ['string', 'null'] },
+            outcome: { type: ['string', 'null'] },
+            constraints: { type: ['string', 'null'] },
+          },
+          additionalProperties: false,
+          minProperties: 1,
+        },
+        reason: { type: 'string', description: 'What is wrong with the current contract, and where that is written (a rule, a commit, a decision). Shown to the person who decides.' },
+      },
+      required: ['id', 'changes', 'reason'],
+    },
+  },
+  {
     name: 'work_update',
     annotations: { readOnlyHint: false, destructiveHint: false },
-    description: 'Update work contract fields. Requires expected_revision. Does not mark work Done.',
+    description: 'Update work fields. Requires expected_revision. Does not mark work Done. On COMMITTED work agents cannot change the contract fields (acceptance, scope, verification, outcome, constraints) — propose them with work_propose_amendment.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1100,6 +1146,8 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_commit: null,
   work_uncommit: null,
   work_update: 'update',
+  // Proposing writes nothing to the contract until a person accepts it.
+  work_propose_amendment: 'propose',
   work_link: 'link',
   work_claim: 'claim',
   run_report: 'report',

@@ -1,4 +1,5 @@
 import type {
+  ContractAmendment,
   CommitmentStatus,
   Issue,
   Prisma,
@@ -84,6 +85,8 @@ export interface WorkContextBundle {
   evidence: Array<WorkEvidence & { verifications: EvidenceVerification[] }>;
   runs: WorkRun[];
   reviewDecisions: Array<WorkReviewDecision & { reviewer: User }>;
+  /** Proposed changes to the committed contract and what a person decided (INV-869), newest first. */
+  contractAmendments: ContractAmendment[];
   work: Issue;
 }
 
@@ -118,7 +121,7 @@ export async function getWorkContext(
     throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
   }
 
-  const [ancestors, blockedBy, blocks, audits, claim, runs, evidence, reviewDecisions] = await Promise.all([
+  const [ancestors, blockedBy, blocks, audits, claim, runs, evidence, reviewDecisions, contractAmendments] = await Promise.all([
     loadAncestors(prisma, work),
     loadLinkedIssues(prisma, work.id, 'BLOCKS', 'incoming'),
     loadLinkedIssues(prisma, work.id, 'BLOCKS', 'outgoing'),
@@ -149,6 +152,11 @@ export async function getWorkContext(
       orderBy: { createdAt: 'desc' },
       take: MAX_CONTEXT_RUNS,
     }),
+    prisma.contractAmendment.findMany({
+      where: { workId: work.id },
+      orderBy: { createdAt: 'desc' },
+      take: MAX_CONTEXT_RUNS,
+    }),
   ]);
 
   return {
@@ -160,6 +168,7 @@ export async function getWorkContext(
     evidence,
     runs,
     reviewDecisions,
+    contractAmendments,
     work,
   };
 }

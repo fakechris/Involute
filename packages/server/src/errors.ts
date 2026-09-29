@@ -42,7 +42,21 @@ export const WORK_COMMIT_FORBIDDEN_MESSAGE = 'Agents cannot commit work.';
 export const WORK_REJECT_FORBIDDEN_MESSAGE = 'Agents cannot reject work.';
 export const WORK_ACCEPT_FORBIDDEN_MESSAGE = 'Agents cannot accept or cancel work.';
 export const WORK_CONTRACT_UPDATE_FORBIDDEN_MESSAGE =
-  'Agents cannot rewrite committed contract fields; ask a human to update acceptance, scope, verification, outcome, or constraints under "Edit contract" on the issue page (/issue/<id>#contract).';
+  'Agents cannot rewrite committed contract fields. Propose the change with work_propose_amendment (fields plus a reason); a person accepts or rejects it in one click under Contract on the issue page (/issue/<id>#contract).';
+export const CONTRACT_AMENDMENT_AGENTS_ONLY_MESSAGE =
+  'A person edits a committed contract directly under Contract on the issue page; an amendment is how an agent asks for that edit.';
+export const CONTRACT_AMENDMENT_REQUIRES_COMMITTED_MESSAGE =
+  "Only committed work takes a contract amendment; a candidate's contract is edited with work_update.";
+export const CONTRACT_AMENDMENT_FIELDS_MESSAGE =
+  'An amendment changes one or more of acceptance, scope, verification, outcome and constraints, each to a string or null.';
+export const CONTRACT_AMENDMENT_REASON_REQUIRED_MESSAGE = 'An amendment needs a reason: what is wrong with the current contract.';
+export const CONTRACT_AMENDMENT_NO_CHANGE_MESSAGE = 'The proposed values are the same as the current contract.';
+export const CONTRACT_AMENDMENT_NOT_FOUND_MESSAGE = 'Contract amendment not found.';
+export const CONTRACT_AMENDMENT_HUMAN_ONLY_MESSAGE = 'Only a person may accept or reject a contract amendment.';
+export const CONTRACT_AMENDMENT_ALREADY_DECIDED_MESSAGE = 'This amendment was already decided or replaced by a newer one.';
+export const CONTRACT_AMENDMENT_STALE_MESSAGE =
+  'The contract changed since this amendment was proposed. Compare it with the current contract, then edit the contract directly or reject the amendment.';
+export const CONTRACT_AMENDMENT_REJECT_NOTE_REQUIRED_MESSAGE = 'Rejecting an amendment needs a note, so the agent learns why.';
 export const WORK_NOT_CANDIDATE_MESSAGE = 'Only candidate work can be committed or rejected.';
 export const WORK_NOT_COMMITTED_MESSAGE = 'Only committed work can be claimed.';
 export const WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE =
@@ -245,6 +259,16 @@ const exposedErrorCodes = new Map<string, string>([
   [WORK_REJECT_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
   [WORK_ACCEPT_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
   [WORK_CONTRACT_UPDATE_FORBIDDEN_MESSAGE, 'FORBIDDEN'],
+  [CONTRACT_AMENDMENT_AGENTS_ONLY_MESSAGE, 'BAD_USER_INPUT'],
+  [CONTRACT_AMENDMENT_REQUIRES_COMMITTED_MESSAGE, 'BAD_USER_INPUT'],
+  [CONTRACT_AMENDMENT_FIELDS_MESSAGE, 'BAD_USER_INPUT'],
+  [CONTRACT_AMENDMENT_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [CONTRACT_AMENDMENT_NO_CHANGE_MESSAGE, 'BAD_USER_INPUT'],
+  [CONTRACT_AMENDMENT_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [CONTRACT_AMENDMENT_HUMAN_ONLY_MESSAGE, 'BAD_USER_INPUT'],
+  [CONTRACT_AMENDMENT_ALREADY_DECIDED_MESSAGE, 'BAD_USER_INPUT'],
+  [CONTRACT_AMENDMENT_STALE_MESSAGE, 'BAD_USER_INPUT'],
+  [CONTRACT_AMENDMENT_REJECT_NOTE_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_NOT_CANDIDATE_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_NOT_COMMITTED_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE, 'BAD_USER_INPUT'],

@@ -26,6 +26,7 @@ const PAIRS: Record<string, string> = {
 /** MCP write tools with no GraphQL counterpart, and why. */
 const AGENT_ONLY_TOOLS: Record<string, string> = {
   agent_request_claim: 'Agents lease a request before answering it; a person answers directly (agentRequestAnswer).',
+  work_propose_amendment: 'How an agent asks for a contract edit it may not make; a person edits the contract directly (issueUpdate) or decides the proposal (contractAmendmentAccept/Reject).',
 };
 
 /** MCP argument → GraphQL field when the names differ. */

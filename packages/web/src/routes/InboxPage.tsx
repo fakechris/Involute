@@ -59,6 +59,8 @@ function formatNotificationType(type: string): string {
       return 'Webhook disabled';
     case 'bug.reported':
       return 'Bug reported';
+    case 'contract.amendment_proposed':
+      return 'Contract change proposed';
     case 'bug.sla_at_risk':
       return 'Bug SLA at risk';
     case 'bug.sla_breached':
