@@ -84,7 +84,7 @@ Agent credentials carry scopes. Scope enforcement happens on MCP tools:
 | Scope | Unlocks |
 |---|---|
 | \`read\` | \`work_search\`, \`work_get_context\`, \`work_list_ready\`, \`protocol_get_guide\` (always granted) |
-| \`propose\` | \`work_propose\`, \`work_file_bug\` |
+| \`propose\` | \`work_propose\`, \`work_file_bug\`, \`work_propose_amendment\` |
 | \`update\` | \`work_update\` |
 | \`link\` | \`work_link\` |
 | \`claim\` | \`work_claim\` |
