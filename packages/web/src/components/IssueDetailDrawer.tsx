@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@apollo/client/react';
 
 import { ContractSection, type ContractValues } from './ContractSection';
-import type { CommentSummary, IssueSummary, TeamSummary, UserSummary } from '../board/types';
+import type { CommentSummary, ContractAmendmentSummary, IssueSummary, TeamSummary, UserSummary } from '../board/types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ActorBadge } from './ActorBadge';
 import { IssueRelations } from './IssueRelations';
@@ -13,7 +13,8 @@ import { ClaimControl } from './ClaimControl';
 import { WorkStructureEditor, type StructureUpdate } from './WorkStructureEditor';
 import { toggleLabelId } from '../work/labels';
 import { RichTextEditor } from './RichTextEditor';
-import { AGENTS_QUERY } from '../board/queries';
+import { AGENTS_QUERY, ISSUE_CONTRACT_QUERY } from '../board/queries';
+import { useContractAmendmentDecisions } from './ContractAmendmentPanel';
 
 interface IssueDetailDrawerProps {
   issue: IssueSummary | null;
@@ -94,6 +95,17 @@ export function IssueDetailDrawer({
     fetchPolicy: 'cache-first',
   });
   const mentionables = agentsData?.agents ?? [];
+  // The open issue's own contract and any amendment an agent proposed to it (INV-896): the
+  // board list carries neither, and this is where people open work.
+  const { data: contractData, refetch: refetchContract } = useQuery<
+    { issue: (ContractValues & { id: string; commitmentStatus?: IssueSummary['commitmentStatus']; pendingContractAmendment?: ContractAmendmentSummary | null }) | null },
+    { id: string }
+  >(ISSUE_CONTRACT_QUERY, {
+    variables: { id: issue?.id ?? '' },
+    skip: !issue || !onContractSave,
+    fetchPolicy: 'cache-and-network',
+  });
+  const amendmentDecisions = useContractAmendmentDecisions(() => refetchContract());
 
   useEffect(() => {
     setSelectedStateId(issue?.state.id ?? '');
@@ -196,6 +208,8 @@ export function IssueDetailDrawer({
   }
 
   const activeIssue = issue;
+  // Only the contract of the issue on screen: a query still answering for the previous one is ignored.
+  const contract = contractData?.issue?.id === activeIssue.id ? contractData.issue : null;
 
   async function commitTitle() {
     if (isSavingTitleRef.current) {
@@ -421,10 +435,13 @@ export function IssueDetailDrawer({
                 where people actually open work; runs, evidence and audit stay on the full page. */}
             {onContractSave ? (
               <ContractSection
-                values={activeIssue}
-                committed={activeIssue.commitmentStatus === 'COMMITTED'}
+                values={contract ?? activeIssue}
+                committed={(contract?.commitmentStatus ?? activeIssue.commitmentStatus) === 'COMMITTED'}
                 saving={savingState}
                 onSave={(changes) => onContractSave(activeIssue, changes)}
+                amendment={contract?.pendingContractAmendment ?? null}
+                onAcceptAmendment={amendmentDecisions.accept}
+                onRejectAmendment={amendmentDecisions.reject}
               />
             ) : null}
             <div className="issue-panel__section" style={{ display: 'flex', gap: 6 }}>

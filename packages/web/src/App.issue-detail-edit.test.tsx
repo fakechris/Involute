@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { apolloMocks, boardQueryResult, getIssue, renderApp } from './test/app-test-helpers';
+import { apolloMocks, boardQueryResult, getDocumentSource, getIssue, renderApp } from './test/app-test-helpers';
 import { App } from './App';
 import type { IssueUpdateMutationData } from './board/types';
 
@@ -310,5 +310,64 @@ describe('App issue detail editing', () => {
 
     expect(await screen.findByText('Committed work requires acceptance criteria.')).toBeInTheDocument();
     expect(within(contract).getByRole('button', { name: 'Save contract' })).toBeInTheDocument();
+  });
+
+  it('shows an agent\'s proposed contract change in the board drawer, and accepts it there (INV-896)', async () => {
+    const accept = vi.fn().mockResolvedValue({ data: { contractAmendmentAccept: { success: true, message: null } } });
+    const fallback = apolloMocks.useMutation.getMockImplementation() as ((document: unknown) => unknown) | undefined;
+    apolloMocks.useMutation.mockImplementation((document: unknown) =>
+      getDocumentSource(document).includes('mutation ContractAmendmentAccept') ? [accept] : fallback!(document),
+    );
+    const contractRefetch = vi.fn().mockResolvedValue(undefined);
+    renderApp(
+      App,
+      {
+        data: boardQueryResult,
+        loading: false,
+        contractRefetch,
+        contractData: {
+          issue: {
+            id: 'issue-1',
+            revision: 7,
+            commitmentStatus: 'COMMITTED',
+            outcome: 'No new implementation work.',
+            scope: null,
+            constraints: null,
+            acceptance: 'Findings recorded.',
+            verification: null,
+            pendingContractAmendment: {
+              id: 'amendment-1',
+              reason: 'The review found three gaps worth fixing.',
+              stale: false,
+              proposedByClaimant: false,
+              createdAt: '2026-09-30T14:00:00.000Z',
+              proposedBy: { id: 'agent-1', name: 'Claude Code', email: null },
+              changes: [{ field: 'outcome', before: 'No new implementation work.', after: 'Three fixes shipped.' }],
+            },
+          },
+        },
+      },
+      ['/'],
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+    const contract = within(drawer).getByRole('region', { name: 'Contract' });
+    // The drawer shows the issue's own contract, not the board card's empty fields.
+    expect(within(contract).getByText('Findings recorded.')).toBeInTheDocument();
+    const proposal = within(contract).getByRole('region', { name: 'Proposed contract change' });
+    expect(within(proposal).getByText(/three gaps worth fixing/)).toBeInTheDocument();
+
+    fireEvent.click(within(proposal).getByRole('button', { name: 'Accept change' }));
+    await waitFor(() => expect(accept).toHaveBeenCalledWith({ variables: { input: { amendmentId: 'amendment-1' } } }));
+    await waitFor(() => expect(contractRefetch).toHaveBeenCalled());
+  });
+
+  it('shows no proposal panel in the drawer when nothing is pending', async () => {
+    renderTestApp();
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+    const contract = within(drawer).getByRole('region', { name: 'Contract' });
+    expect(within(contract).queryByRole('region', { name: 'Proposed contract change' })).not.toBeInTheDocument();
   });
 });
