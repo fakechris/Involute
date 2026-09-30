@@ -332,6 +332,43 @@ export const COMMENT_DELETE_MUTATION = gql`
   }
 `;
 
+/**
+ * The contract of the one issue open in the board drawer (INV-896). The board list does not
+ * carry contracts — a hundred cards do not need them, and a pending amendment per card would be
+ * a query per card — so the drawer asks for the open issue's own.
+ */
+export const ISSUE_CONTRACT_QUERY = gql`
+  query IssueContract($id: String!) {
+    issue(id: $id) {
+      id
+      revision
+      commitmentStatus
+      outcome
+      scope
+      constraints
+      acceptance
+      verification
+      pendingContractAmendment {
+        id
+        reason
+        stale
+        proposedByClaimant
+        createdAt
+        proposedBy {
+          id
+          name
+          email
+        }
+        changes {
+          field
+          before
+          after
+        }
+      }
+    }
+  }
+`;
+
 export const ISSUE_PAGE_QUERY = gql`
   query IssuePage($id: String!) {
     issue(id: $id) {

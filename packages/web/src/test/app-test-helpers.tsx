@@ -53,7 +53,7 @@ type DndMockSet = {
   useSensors: ReturnType<typeof vi.fn>;
 };
 
-function getDocumentSource(document: unknown): string {
+export function getDocumentSource(document: unknown): string {
   if (typeof document === 'string') {
     return document;
   }
@@ -493,6 +493,9 @@ type QueryState = {
   refetch?: ReturnType<typeof vi.fn>;
   relationsData?: IssueRelationsQueryData;
   workContextData?: WorkContextPageQueryData;
+  /** The board drawer's contract query (INV-896); absent, it answers from the board's own issue. */
+  contractData?: { issue: Record<string, unknown> | null };
+  contractRefetch?: ReturnType<typeof vi.fn>;
 };
 
 export function renderApp(
@@ -598,6 +601,17 @@ export function renderApp(
         error: undefined,
         loading: false,
         refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query IssueContract')) {
+      const issueId = String(options?.variables?.id ?? '');
+      const fromBoard = (queryState.data?.issues.nodes ?? []).find((issue) => issue.id === issueId);
+      return {
+        data: options?.skip ? undefined : (queryState.contractData ?? { issue: fromBoard ?? null }),
+        error: undefined,
+        loading: false,
+        refetch: queryState.contractRefetch ?? vi.fn().mockResolvedValue(undefined),
       };
     }
 
