@@ -260,7 +260,7 @@ Enforced server-side, not just documented:
 - agents can propose candidates, claim ready work, update non-contract fields,
   report runs, and attach evidence
 - agents **cannot** commit or reject candidates, accept work, move anything to
-  Done, or rewrite `acceptance/scope/verification/outcome/constraints` on
+  Done (except a committed Type: Research ISSUE, INV-912), or rewrite `acceptance/scope/verification/outcome/constraints` on
   committed work — those calls fail with `FORBIDDEN`. For a wrong contract the
   agent calls `work_propose_amendment`; a person accepts or rejects it in one
   click on the issue page

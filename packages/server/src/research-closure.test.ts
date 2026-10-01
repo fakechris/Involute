@@ -144,6 +144,19 @@ describe('research closure (Type: Research)', () => {
     await expect(updateIssue(prisma, committed.id, { stateId: done.id }, agentActor)).rejects.toThrow(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
   });
 
+  it('checks the description sent with the close, not the one it replaces', async () => {
+    const committed = await proposeAndCommit(['research']);
+    await prisma.issue.update({ where: { id: committed.id }, data: { description: 'see notes' } });
+    await expect(updateIssue(prisma, committed.id, { description: DESCRIPTION, stateId: done.id }, agentActor)).resolves.toMatchObject({
+      description: DESCRIPTION,
+      stateId: done.id,
+    });
+    const other = await proposeAndCommit(['research']);
+    await expect(updateIssue(prisma, other.id, { description: 'see notes', stateId: done.id }, agentActor)).rejects.toThrow(
+      AGENT_DESCRIPTION_REQUIRED_MESSAGE,
+    );
+  });
+
   it('lets a person reopen research an agent closed', async () => {
     const committed = await proposeAndCommit(['research']);
     await updateIssue(prisma, committed.id, { stateId: done.id }, agentActor);

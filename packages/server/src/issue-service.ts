@@ -326,7 +326,9 @@ export async function updateIssue(
           actor.actorKind === 'AGENT' &&
           (await isResearchWork(transaction, existingIssue.id))
         ) {
-          await assertAgentMayCloseResearch(transaction, existingIssue, actor);
+          // The record that will stand is the one checked: a description sent with the close replaces the stored one.
+          const description = input.description === undefined ? existingIssue.description : input.description;
+          await assertAgentMayCloseResearch(transaction, { ...existingIssue, description }, actor);
           researchClosedByAgent = true;
         } else {
           assertActorCan(actor.actorKind, 'accept');

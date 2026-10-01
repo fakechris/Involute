@@ -161,7 +161,7 @@ When connecting a repository to Involute for the first time:
      - For in-flight tasks, pass \`initial_state: 'STARTED'\` (**In Progress**).
      - For genuinely unstarted work in the immediate active cycle: pass \`initial_state: 'UNSTARTED'\` (**Ready**).
      - For future milestones (M2+), technical debt, or unscheduled tasks: pass \`initial_state: 'BACKLOG'\` (**Backlog**).
-     - Never propose \`COMPLETED\` or \`CANCELED\`; candidate \`initial_state\` stops at In Review.
+     - Never propose \`COMPLETED\` or \`CANCELED\`; candidate \`initial_state\` stops at In Review — except an ISSUE labelled research (Type: Research), which may pass \`initial_state: 'DONE'\` and lands in Done when a person commits it (INV-912).
 4. **Run Reporting Rule (新建 Run 规则)**:
    - When calling \`run_report\` to start a new run, **OMIT \`run_id\`**. The server assigns the run ID.
    - Do NOT pass \`claim.id\` or client-generated UUID as \`run_id\`.
