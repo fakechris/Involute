@@ -37,7 +37,7 @@ Tool dependencies: `work_search`, `work_propose`, `work_link`, `work_get_context
      - `'REVIEW'`: For historical features already implemented and passing tests. When the human commits (via Web UI `/candidates` or batch-commit CLI), the work item directly enters **`In Review`**!
      - `'STARTED'`: For active / ongoing work. Directly enters **`In Progress`**.
      - `'UNSTARTED'`: For truly unstarted work (default). Directly enters **`Ready`**.
-   - **Hard Guardrail**: Candidate `initial_state` CANNOT be `COMPLETED` (`Done`) or `CANCELED`. Agents stop at `In Review`; `Done` is strictly human-gated.
+   - **Hard Guardrail**: Candidate `initial_state` CANNOT be `CANCELED`, nor `COMPLETED` (`Done`) except for a research ISSUE (Type: Research, INV-912). Agents stop at `In Review`; `Done` is human-gated.
 
 4. **Zero Scratchpad Pollution (严禁倾倒临时杂质)**:
    - Do NOT dump local grep logs, shell traces, or one-line refactor scratchpad notes into Involute.
@@ -107,7 +107,7 @@ Tool dependencies: `work_search`, `work_propose`, `work_link`, `work_get_context
 Write `AGENTS.md` in repository root binding:
 - Root Project Identifier and UUID.
 - MCP connection URLs (developer machine vs VPS local).
-- Hard rule: **Agents never unilaterally mark work as Done** (transition to `In Review` with durable evidence; Done is human-reviewed or graded auto-accept).
+- Hard rule: **Agents never unilaterally mark work as Done** (transition to `In Review` with durable evidence; Done is human-reviewed or graded auto-accept). The one exception is a committed research ISSUE (Type: Research, INV-912), which an agent may close.
 - Claim-driven execution (`work_claim` before coding).
 
 ### Step 5: Present Batch Review to Human

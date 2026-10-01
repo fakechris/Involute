@@ -20,8 +20,9 @@ import {
  assertCanReadIssue,
 } from './access-control.js';
 import type { GraphQLContext } from './auth.js';
-import { claimWork, commitWork, normalizeInitialStateType, proposeWork } from './claim-service.js';
+import { claimWork, commitWork, isDoneStateRequest, normalizeInitialStateType, proposeWork } from './claim-service.js';
 import { suggestedBranchName } from './branch-name.js';
+import { isResearchWork } from './labels.js';
 import {
   findWorkByIdOrIdentifier,
   getWorkContext,
@@ -90,6 +91,18 @@ export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
   'agent_request_claim',
   'agent_request_answer',
 ];
+
+const MCP_DONE_CANCEL_FORBIDDEN_TEXT =
+  'Agents cannot transition work directly to COMPLETED or CANCELED. Agents stop at In Review; Done is human-gated — except a committed ISSUE with Type: Research, which an agent may move to Done (INV-912).';
+
+/**
+ * MCP never closes work except Type: Research, for any caller (INV-912). The
+ * rest of the research rules (committed ISSUE, claim, description) are checked
+ * in updateIssue, where every surface meets them.
+ */
+async function assertMcpDoneIsResearch(prisma: PrismaClient, workId: string): Promise<void> {
+  if (!(await isResearchWork(prisma, workId))) throw createValidationError(MCP_DONE_CANCEL_FORBIDDEN_TEXT);
+}
 
 const RECEIPT_SCHEMA = {
   type: 'object',
@@ -383,14 +396,13 @@ export async function callMcpTool(
         if (!stateObj || stateObj.teamId !== work.teamId) {
           throw createValidationError(WORKFLOW_STATE_NOT_FOUND_MESSAGE);
         }
-        if (stateObj.type === 'COMPLETED' || stateObj.type === 'CANCELED') {
-          throw createValidationError(
-            'Agents cannot transition work directly to COMPLETED or CANCELED. Agents stop at In Review; Done is human-gated.',
-          );
+        if (stateObj.type === 'CANCELED') {
+          throw createValidationError(MCP_DONE_CANCEL_FORBIDDEN_TEXT);
         }
         updateInput.stateId = stateObj.id;
+        if (stateObj.type === 'COMPLETED') await assertMcpDoneIsResearch(context.prisma, work.id);
       } else if (rawState) {
-        const targetType = normalizeInitialStateType(rawState);
+        const targetType = isDoneStateRequest(rawState) ? 'COMPLETED' : normalizeInitialStateType(rawState);
         if (targetType) {
           const matchingState = await context.prisma.workflowState.findFirst({
             where: { teamId: work.teamId, type: targetType },
@@ -400,6 +412,7 @@ export async function callMcpTool(
           if (matchingState) {
             updateInput.stateId = matchingState.id;
           }
+          if (targetType === 'COMPLETED') await assertMcpDoneIsResearch(context.prisma, work.id);
         }
       }
       const updated = await updateIssue(
@@ -660,7 +673,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         labels: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Label names, created when missing. Research or competitive analysis is an ISSUE labelled "research"; work it leads to links back with DERIVED_FROM. A bug carries "bug" (Type: Bug; at most one of bug / feature / improvement), is committed directly, and must also pass priority 1–4, a parent, and steps_to_reproduce.',
+          description: 'Label names, created when missing. Research or competitive analysis is an ISSUE labelled "research" (Type: Research; propose it with initial_state DONE, or move it to Done yourself once committed — INV-912); work it leads to links back with DERIVED_FROM. A bug carries "bug" (Type: Bug; at most one of bug / feature / improvement / research), is committed directly, and must also pass priority 1–4, a parent, and steps_to_reproduce.',
         },
         priority: {
           type: 'number',
@@ -685,7 +698,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         source: { type: 'string', description: 'Origin of this candidate; defaults to agent' },
         initial_state: {
           type: 'string',
-          description: 'Optional initial target state upon human commit: BACKLOG (Backlog), UNSTARTED (Ready), STARTED (In Progress), or REVIEW (In Review). Defaults to UNSTARTED. CANNOT be COMPLETED (Done) or CANCELED.',
+          description: 'Optional initial target state upon human commit: BACKLOG (Backlog), UNSTARTED (Ready), STARTED (In Progress), or REVIEW (In Review). Defaults to UNSTARTED. CANNOT be CANCELED, and CANNOT be DONE except for an ISSUE labelled research (Type: Research), which then lands in Done when a person commits it (INV-912).',
         },
       },
       required: ['team', 'title'],
@@ -813,7 +826,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_update',
     annotations: { readOnlyHint: false, destructiveHint: false },
-    description: 'Update work fields. Requires expected_revision. Does not mark work Done. On COMMITTED work agents cannot change the contract fields (acceptance, scope, verification, outcome, constraints) — propose them with work_propose_amendment.',
+    description: 'Update work fields. Requires expected_revision. Does not mark work Done — except a committed ISSUE with Type: Research, which an agent may move to Done (state DONE); never CANCELED (INV-912). On COMMITTED work agents cannot change the contract fields (acceptance, scope, verification, outcome, constraints) — propose them with work_propose_amendment.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -834,11 +847,11 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         priority: { type: 'integer' },
         state: {
           type: 'string',
-          description: 'Optional target workflow state: UNSTARTED (Ready), STARTED (In Progress), or REVIEW (In Review). Cannot be COMPLETED or CANCELED.',
+          description: 'Optional target workflow state: UNSTARTED (Ready), STARTED (In Progress), or REVIEW (In Review). DONE only for a committed ISSUE with Type: Research and no other actor\'s claim (INV-912). Never CANCELED.',
         },
         state_id: {
           type: 'string',
-          description: 'Optional workflow state ID to transition to. Cannot be COMPLETED or CANCELED.',
+          description: 'Optional workflow state ID to transition to. Not CANCELED; COMPLETED only for a committed ISSUE with Type: Research (INV-912).',
         },
         snoozed_until: { type: ['string', 'null'], description: 'ISO timestamp; candidate-only. Pass null to clear.' },
       },

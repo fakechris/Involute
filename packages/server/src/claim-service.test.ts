@@ -19,6 +19,7 @@ import {
   WORK_REVISION_CONFLICT_MESSAGE,
   WORK_IDEMPOTENCY_CONFLICT_MESSAGE,
   AGENT_DESCRIPTION_REQUIRED_MESSAGE,
+  RESEARCH_INITIAL_DONE_ONLY_MESSAGE,
 } from './errors.ts';
 import { claimWork, commitWork, proposeWork, rejectWork } from './claim-service.ts';
 import { uncommitWork } from './work-uncommit.ts';
@@ -765,12 +766,13 @@ describe('claim service', () => {
     });
 
     it('rejects proposing candidate with COMPLETED or CANCELED initial_state', async () => {
+      // Done on commit is reserved for Type: Research (INV-912).
       await expect(
         proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id,
           title: 'Illegal completed proposal',
           initialState: 'COMPLETED',
         }),
-      ).rejects.toThrow('Candidate initial_state cannot be COMPLETED or CANCELED');
+      ).rejects.toThrow(RESEARCH_INITIAL_DONE_ONLY_MESSAGE);
 
       await expect(
         proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id,

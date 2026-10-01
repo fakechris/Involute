@@ -35,6 +35,7 @@ import {
   WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE,
   AGENT_DESCRIPTION_REQUIRED_MESSAGE,
   WORKFLOW_STATE_NOT_FOUND_MESSAGE,
+  RESEARCH_INITIAL_DONE_ONLY_MESSAGE,
 } from './errors.js';
 import { findWorkByIdOrIdentifier, explainWorkNotReady,
   isWorkReadyForClaim } from './context-service.js';
@@ -42,9 +43,10 @@ import { enqueueWorkEvent } from './event-outbox.js';
 import { attachDecisionReceipt, type ReceiptInput } from './decision-receipt.js';
 import { createWorkLink } from './link-service.js';
 import { isLegalContains } from './graph-integrity.js';
-import { createIssueWithAudit, mentionTexts, type CreateIssueInput } from './issue-service.js';
+import { createIssueWithAudit, mentionTexts, recordStateChangeAcceptance, type CreateIssueInput } from './issue-service.js';
 import { linkMentionedWork } from './mention-links.js';
-import { findOrCreateLabelIds, isBugWork } from './labels.js';
+import { findOrCreateLabelIds, isBugWork, isResearchWork, namesResearch } from './labels.js';
+import { hasInitialDoneMarker, INITIAL_DONE_MARKER } from './research-closure.js';
 import { announceBug, composeDescription } from './bug-report.js';
 import {
   completeWorkIdempotency,
@@ -190,12 +192,19 @@ export function validateAgentDescription(
   }
 }
 
+/** Whether an initial_state / state argument asks for Done. */
+export function isDoneStateRequest(raw: string | null | undefined): boolean {
+  if (!raw) return false;
+  const s = raw.trim().toUpperCase().replace(/[\s-]+/g, '_');
+  return s === 'DONE' || s === 'COMPLETED';
+}
+
 export function normalizeInitialStateType(raw: string | null | undefined): 'BACKLOG' | 'UNSTARTED' | 'STARTED' | 'REVIEW' | null {
   if (!raw) return null;
   const s = raw.trim().toUpperCase().replace(/[\s-]+/g, '_');
   if (s === 'COMPLETED' || s === 'DONE' || s === 'CANCELED' || s === 'CANCELLED') {
     throw createValidationError(
-      'Candidate initial_state cannot be COMPLETED or CANCELED. Agents stop at In Review; Done is human-gated.',
+      'Candidate initial_state cannot be COMPLETED or CANCELED. Agents stop at In Review; Done is human-gated, except a research ISSUE (Type: Research), which may ask for DONE (INV-912).',
     );
   }
   if (s === 'BACKLOG') return 'BACKLOG';
@@ -300,7 +309,13 @@ export async function proposeWork(
     // Default per MCP contract is UNSTARTED (Ready): without an explicit
     // initialState we must not fall through to the team's position-0 state
     // (Backlog for INV), or candidates silently park outside the ready lane.
-    const targetType = normalizeInitialStateType(input.initialState) ?? 'UNSTARTED';
+    // Research may ask to land in Done (INV-912): it waits as In Review with a
+    // marker, and the person who commits it is the one who moves it to Done.
+    const wantsDone = isDoneStateRequest(input.initialState);
+    if (wantsDone && ((input.kind ?? 'ISSUE') !== 'ISSUE' || !namesResearch(input.labels))) {
+      throw createValidationError(RESEARCH_INITIAL_DONE_ONLY_MESSAGE);
+    }
+    const targetType = wantsDone ? 'REVIEW' : (normalizeInitialStateType(input.initialState) ?? 'UNSTARTED');
     if (targetType) {
       const matchingState = await transaction.workflowState.findFirst({
         where: {
@@ -318,6 +333,9 @@ export async function proposeWork(
           ? `${input.source};initial_state=BACKLOG`
           : 'initial_state=BACKLOG';
       }
+      if (wantsDone) {
+        createInput.source = input.source ? `${input.source};${INITIAL_DONE_MARKER}` : INITIAL_DONE_MARKER;
+      }
     }
     if (input.acceptance !== undefined) createInput.acceptance = input.acceptance;
     if (input.constraints !== undefined) createInput.constraints = input.constraints;
@@ -326,7 +344,7 @@ export async function proposeWork(
     if (input.outcome !== undefined) createInput.outcome = input.outcome;
     if (input.repository !== undefined) createInput.repository = input.repository;
     if (input.scope !== undefined) createInput.scope = input.scope;
-    if (input.source !== undefined && targetType !== 'BACKLOG') createInput.source = input.source;
+    if (input.source !== undefined && targetType !== 'BACKLOG' && !wantsDone) createInput.source = input.source;
     if (input.verification !== undefined) createInput.verification = input.verification;
 
     const relatedType = input.relatedWorkType ?? 'DISCOVERED_DURING';
@@ -628,9 +646,31 @@ export async function commitWork(
       }
     }
 
-    const cleanSource = existing.source?.includes('initial_state=BACKLOG')
-      ? existing.source.replace(/;?initial_state=BACKLOG;?/, '').trim() || null
-      : existing.source;
+    // A research candidate proposed with initial_state DONE (INV-912) lands in
+    // Done when a person commits it, unless the person chose another state.
+    let committedToDone = false;
+    if (
+      !input.stateId &&
+      hasInitialDoneMarker(existing.source) &&
+      existing.kind === 'ISSUE' &&
+      (await isResearchWork(transaction, existing.id))
+    ) {
+      const doneState = await transaction.workflowState.findFirst({
+        where: { teamId: existing.teamId, type: 'COMPLETED' },
+        orderBy: { position: 'asc' },
+        select: { id: true },
+      });
+      if (doneState) {
+        targetStateId = doneState.id;
+        committedToDone = true;
+      }
+    }
+
+    const cleanSource =
+      existing.source
+        ?.replace(/;?initial_state=BACKLOG;?/, '')
+        .replace(/;?initial_state=DONE;?/, '')
+        .trim() || null;
 
     const updated = await transaction.issue.update({
       where: { id: existing.id },
@@ -666,6 +706,15 @@ export async function commitWork(
       workId: updated.id,
       workIdentifier: updated.identifier,
     });
+
+    if (committedToDone && actor.actorId) {
+      await recordStateChangeAcceptance(transaction, {
+        after: updated,
+        before: existing,
+        reason: 'Accepted at commit: research proposed with initial_state DONE (INV-912).',
+        reviewerId: actor.actorId,
+      });
+    }
 
     if (commitIdempotencyId) {
       await completeWorkIdempotency(transaction, commitIdempotencyId, updated.id);

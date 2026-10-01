@@ -8,6 +8,12 @@ describe('Type label group (INV-749)', () => {
     expect(isTypeLabel('ui')).toBe(false);
   });
 
+  it('counts Research as the fourth Type (INV-912)', () => {
+    expect(['Research', 'research', ' RESEARCH '].every(isTypeLabel)).toBe(true);
+    expect(() => assertSingleType([{ name: 'research' }, { name: 'Bug' }])).toThrow(/at most one Type/);
+    expect(() => assertSingleType([{ name: 'research' }, { name: 'ui' }])).not.toThrow();
+  });
+
   it('allows one Type and any number of other labels', () => {
     expect(() => assertSingleType([{ name: 'bug' }, { name: 'ui' }, { name: 'regression' }])).not.toThrow();
     expect(() => assertSingleType([{ name: 'ui' }])).not.toThrow();
