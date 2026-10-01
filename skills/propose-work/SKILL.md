@@ -33,7 +33,7 @@ New independently acceptable work discovered during a run, or a scoped follow-up
 ## Rules
 
 - Never use propose as a TODO dump.
-- Candidate `initial_state` CANNOT be `COMPLETED` or `CANCELED`. Agents stop at `In Review`; `Done` is strictly human-gated.
+- Candidate `initial_state` CANNOT be `CANCELED`, and CANNOT be `DONE` unless the item is a research ISSUE (`labels: ['research']`, Type: Research, INV-912) — that one lands in Done when a person commits it. Everything else stops at `In Review`; `Done` is human-gated.
 - Agents do not unilaterally `work_commit` or reject candidates via MCP — humans commit.
 - For unplanned hotfixes / bugfixes: run `pnpm hotfix:reflex` to propose and link with `DISCOVERED_DURING`.
 - All production code changes must link to a committed `INV-xxx` (enforced by Layer 1 Git guardrail).

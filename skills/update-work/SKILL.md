@@ -16,6 +16,7 @@ Scope or acceptance must change mid-flight, or metadata needs a correction.
 - Read current `revision` from `work_get_context`.
 - Call `work_update` with `expected_revision` and only the fields you mean to change.
 - For newly confirmed separate work, prefer `work_propose` + `DISCOVERED_DURING` instead of bloating the parent.
+- `work_update` never sets `CANCELED`, and moves work to `DONE` only for a committed research ISSUE (Type: Research, INV-912): its deliverable is the record, so once a person has committed it you may close it. Refused if it is a candidate, not an ISSUE, claimed by another actor, or lacks the three-section description. Everything else stops at In Review.
 
 ## Committed work: propose, do not ask
 

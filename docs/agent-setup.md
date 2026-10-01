@@ -264,7 +264,7 @@ Enforced server-side, not just documented:
   committed work — those calls fail with `FORBIDDEN`. For a wrong contract the
   agent calls `work_propose_amendment`; a person accepts or rejects it in one
   click on the issue page
-- completed runs move work to In Review; Done is human review or CLEAR auto-accept (agents still cannot mark Done)
+- completed runs move work to In Review; Done is human review or CLEAR auto-accept (agents still cannot mark Done, except a committed research ISSUE — Type: Research, INV-912)
 
 ## 5. Rotate or revoke
 

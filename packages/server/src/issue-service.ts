@@ -38,7 +38,8 @@ import { enqueueWorkEvent } from './event-outbox.js';
 import { openAgentRequestsForMentions } from './agent-request-from-mention.js';
 import { assertNodeHierarchy, getContainsDescendantIds, lockWorkGraph } from './graph-integrity.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
-import { assertSingleType, isBugWork } from './labels.js';
+import { assertSingleType, isBugWork, isResearchWork } from './labels.js';
+import { assertAgentMayCloseResearch, RESEARCH_CLOSE_REASON } from './research-closure.js';
 import {
   INTERNAL_WRITE_ACTOR,
   recordWorkAudit,
@@ -294,6 +295,8 @@ export async function updateIssue(
     // A person moving work into Done is an acceptance (INV-790): it is recorded
     // like workReview, whichever control did it (dropdown, drawer, drag, API).
     let acceptedByPerson = false;
+    // An agent closing committed research (INV-912) is the one non-human Done.
+    let researchClosedByAgent = false;
 
     if ('stateId' in input && input.stateId) {
       const state = await transaction.workflowState.findUnique({
@@ -317,7 +320,17 @@ export async function updateIssue(
       }
 
       if (isAcceptStateType(state.type)) {
-        assertActorCan(actor.actorKind, 'accept');
+        if (
+          state.type === 'COMPLETED' &&
+          state.id !== existingIssue.stateId &&
+          actor.actorKind === 'AGENT' &&
+          (await isResearchWork(transaction, existingIssue.id))
+        ) {
+          await assertAgentMayCloseResearch(transaction, existingIssue, actor);
+          researchClosedByAgent = true;
+        } else {
+          assertActorCan(actor.actorKind, 'accept');
+        }
       }
 
       if (state.type === 'COMPLETED' && state.id !== existingIssue.stateId && actor.actorKind === 'HUMAN' && actor.actorId) {
@@ -581,7 +594,7 @@ export async function updateIssue(
     }
 
     await recordWorkAudit(transaction, {
-      actor,
+      actor: researchClosedByAgent ? { ...actor, reason: RESEARCH_CLOSE_REASON } : actor,
       after: selectIssueSnapshot(updated),
       before: selectIssueSnapshot(existingIssue),
       workId: id,
@@ -875,9 +888,9 @@ async function resolveCreateState(
  * (INV-790): an ACCEPTED decision bound to the latest completed run, and the
  * same work.accepted event, so acceptance is audited whatever control was used.
  */
-async function recordStateChangeAcceptance(
+export async function recordStateChangeAcceptance(
   transaction: Prisma.TransactionClient,
-  input: { before: Issue; after: Issue; reviewerId: string },
+  input: { before: Issue; after: Issue; reviewerId: string; reason?: string },
 ): Promise<void> {
   const run = await transaction.workRun.findFirst({
     where: { status: 'COMPLETED', workId: input.after.id },
@@ -888,7 +901,7 @@ async function recordStateChangeAcceptance(
     data: {
       decision: 'ACCEPTED',
       fromRevision: input.before.revision,
-      reason: 'Accepted by moving it to Done.',
+      reason: input.reason ?? 'Accepted by moving it to Done.',
       reviewerId: input.reviewerId,
       runId: run?.id ?? null,
       toRevision: input.after.revision,

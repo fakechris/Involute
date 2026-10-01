@@ -52,7 +52,7 @@ flowchart TD
 3. **No Scratchpad Pollution**: Do not dump local grep output, shell logs, or transient scratchpad thoughts into Involute. Only track discrete, independently acceptable deliverables.
 4. **Claim-Driven Execution**: Call `work_claim` to lease a specific task after confirmation.
 5. **Report Runs with Evidence**: As execution progresses, record phases with `run_report`. On completion, attach durable evidence (PR, commit SHA, test exit code, or artifact URL) with `evidence_attach`.
-6. **In Review, Never Done**: Agents transition tasks to `In Review`. Moving work to `Done` is strictly reserved for human review. Evidence verification is shadow-only, even when its grade is `CLEAR`.
+6. **In Review, Never Done — except research (INV-912)**: Agents transition tasks to `In Review`. Moving work to `Done` is reserved for human review. Evidence verification is shadow-only, even when its grade is `CLEAR`. **One exception — Type: Research**: a research ISSUE's deliverable is the item itself, so once a person has committed it an agent may move it to `Done` (`work_update(state: 'DONE')`), or propose it with `initial_state: 'DONE'` so committing it lands in Done. Refused when the item is not a committed ISSUE, is claimed by another actor, or lacks the three-section description. Agents never set `CANCELED`; every other Type and kind still stops at `In Review`.
 7. **Competitive Research Isolation (竞品分析隔离铁律)**:
    - **绝对禁令**：严禁将任何外部竞品（如 Linear、Plane、Jira 等）的调研文档、逆向代码、架构借用分析提交到 Git 版本库，严禁放在 `docs/` 等公开文档目录中。
    - **专属隔离目录**：所有竞品分析与调研报告必须统一存放在仓库根目录的 `research/` 目录中。
@@ -66,7 +66,7 @@ flowchart TD
    - If the source material says an item depends on / must come after another, record `BLOCKS`: `work_propose(blocked_by: [...], blocks: [...])` or `work_link`. `work_commit` warns about dependency wording without `BLOCKS`. **Never invent dependencies or structure.**
    - Before proposing several related items, lay out the whole tree (parents, blockers) and check it; when the source is ambiguous, propose an outline for review instead of guessing.
 10. **Research is an ISSUE labelled `research` (INV-721)**: see §11.4.
-11. **Bugs carry the Type label Bug (INV-748/749)**: `labels: ['bug']` (any casing). Type is Bug / Feature / Improvement, at most one per item; a second Type is refused. See §12.
+11. **Bugs carry the Type label Bug (INV-748/749)**: `labels: ['bug']` (any casing). Type is Bug / Feature / Improvement / Research (INV-912), at most one per item; a second Type is refused. See §12.
 12. **Permissions are specified in `docs/permissions.md` (INV-846)**: who can sign in (invite-only plus approved domains), workspace roles Admin / Member / Guest, team roles Viewer / Member (EDITOR) / Owner, team lifecycle and where each control lives. Read it before changing any access rule; every rule there has a server test.
 13. **Every person's job has a screen (INV-795)**: when a change makes something a person's job — a rule that refuses agents ("ask a human"), a new mutation, a notification sent to people — the same change ships the web entry point where a person does it and registers it in `packages/server/src/human-surface.ts` (or records it as a gap with the open item tracking it). A field agents can write through MCP must also be writable through the GraphQL input the web app uses. `human-surface.test.ts` and `mcp-graphql-parity.test.ts` enforce both in CI. Every mutation payload carries `message`, so a refused save can say why.
 14. **A wrong contract is amended, not retyped (INV-869)**: agents cannot rewrite the contract of committed work (acceptance / scope / verification / outcome / constraints). When it is wrong, call `work_propose_amendment` with the new values and a reason that says where the right rule is written; the owner is notified and accepts (applied as their own edit) or rejects with a note in the Contract section of the issue or work page. Read the decision in `work_get_context` (`contractAmendments`). Do not leave the fix only in a run summary.
@@ -93,7 +93,7 @@ When an agent onboards a repository for the first time, it MUST get everything r
      - **For in-flight / ongoing work**: Pass `initial_state: 'STARTED'` to land directly in `In Progress`.
      - **For genuinely unstarted work in immediate active cycle**: Pass `initial_state: 'UNSTARTED'` (default) to land in `Ready`.
      - **For future roadmap items, subsequent milestones (M2+), tech debt, or unscheduled tasks**: Pass `initial_state: 'BACKLOG'` to land in `Backlog`. This prevents polluting the active board's Ready column and avoids premature agent auto-claiming.
-     - **Hard Guardrail**: Candidate `initial_state` can NEVER be `COMPLETED` (`Done`) or `CANCELED`. Agents stop at `In Review`; `Done` is strictly human-gated.
+     - **Hard Guardrail**: Candidate `initial_state` can NEVER be `CANCELED`, nor `COMPLETED` (`Done`) except for a research ISSUE (Type: Research, INV-912). Agents stop at `In Review`; `Done` is human-gated.
 4. **Batch Presentation**:
    - Present a formatted Markdown tree of proposed items to the user.
    - Point the human to the Candidate queue with project filter pre-selected: `https://involute.lumenopen.com/candidates?project=<owner/repo>`.
@@ -341,6 +341,7 @@ features:
 ### 11.4 调研在工作图中的表示（工作图规范 v1 C 条，INV-718 / INV-721）
 - 调研正文留在 `research/`（纳入版本管理的仓库可用 `docs/research/`），不进工单。
 - **每次调研是一张带 `research` 标签的 ISSUE**（`work_propose(labels: ['research'], parent_id: <里程碑或 PROJECT>)`），描述写要点与文档路径；产出文件路径作为 evidence。
+- **Type: Research 可由 agent 收尾（INV-912）**：调研的交付物就是条目本身。提案时可带 `initial_state: 'DONE'`，人承诺即进入 Done；已承诺的调研 ISSUE，agent 可用 `work_update(state: 'DONE')` 收尾（未承诺、非 ISSUE、被他人认领或描述不合三段式时拒绝）。CANCELED 仍只有人能设；派生的开发项不随之关闭。
 - 可执行点以 ISSUE、"明确不做"以 DECISION 提案，二者均 `DERIVED_FROM` 指向调研工单。
 - 调研进入 Review 前：下游已提案，或在 summary / verification 写明"无可执行点"；否则 `run_report(completed)` 会给出提醒，并出现在 `/hygiene` 巡检视图。
 - `source` 字段不再承担溯源。
@@ -353,7 +354,7 @@ Involute ships a Linear-style bug pipeline: humans report through the UI, agents
    - **Placed** (`parentId`): committed directly under that parent, like any created work.
    - **Not sure where it belongs**: created as a **CANDIDATE** in triage (`/candidates`); whoever commits it chooses the project and location, and the bug takes that project's repository.
    - Missing priority or steps are refused with the reason in `message`.
-   - **Type labels** Bug / Feature / Improvement form one group: an item has at most one (the server refuses a second; the UI swaps).
+   - **Type labels** Bug / Feature / Improvement / Research form one group: an item has at most one (the server refuses a second; the UI swaps).
    - **Zero-bug triage (INV-750)**: a bug is either committed to be fixed or declined with a reason — never parked. Committing a bug needs a **priority** (`work_commit(priority)`, the card's priority field); declining needs a **reason**; a committed bug cannot be moved to a Backlog state, and placed reports start in Ready. `/candidates?type=bug` (**Bugs only**) is the triage queue.
    - **SLA**: Urgent 24h / High 48h / otherwise 7 days from commitment; the clock stops in Review and when closed and resumes on reopen. `Issue.bugSla` shows it on cards and issue pages; at 20% left and when breached the owner and this week's triager get one `bug.sla_at_risk` / `bug.sla_breached` notification and outbox event each.
    - **Weekly triage rotation**: Settings → Bug triage (`teamTriageRotationUpdate`) sets who is on duty each week; triage reports go to that person (to all team humans when no rotation is set).
