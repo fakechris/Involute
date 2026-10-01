@@ -501,6 +501,13 @@ export function App() {
     return () => window.removeEventListener(OPEN_WORK_SEARCH_EVENT, handleOpenWorkSearch);
   }, []);
 
+  // However the palette closes (Esc, ⌘K, a result), the next open starts empty.
+  useEffect(() => {
+    if (!isPaletteOpen) {
+      setPaletteInitialQuery('');
+    }
+  }, [isPaletteOpen]);
+
   useEffect(() => {
     function handleGlobalKeyDown(event: KeyboardEvent) {
       const isTypingField = isTextEditingTarget(event.target);
@@ -1344,10 +1351,7 @@ export function App() {
         actions={paletteActions}
         initialQuery={paletteInitialQuery}
         open={isPaletteOpen}
-        onClose={() => {
-          setIsPaletteOpen(false);
-          setPaletteInitialQuery('');
-        }}
+        onClose={() => setIsPaletteOpen(false)}
       />
       <TweaksPanel
         density={density}

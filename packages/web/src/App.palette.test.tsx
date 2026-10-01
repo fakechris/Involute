@@ -182,6 +182,13 @@ describe('App command palette', () => {
       const palette = await screen.findByRole('dialog', { name: 'Command palette' });
       expect(within(palette).getByLabelText('Search commands')).toHaveValue('溯源');
       expect(await within(palette).findByRole('button', { name: /INV-777 · Never loaded here/ })).toBeInTheDocument();
+
+      // Closed with ⌘K, the next ⌘K opens empty rather than on the board text.
+      fireEvent.keyDown(window, { key: 'k', metaKey: true });
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Command palette' })).not.toBeInTheDocument());
+      fireEvent.keyDown(window, { key: 'k', metaKey: true });
+      const reopened = await screen.findByRole('dialog', { name: 'Command palette' });
+      await waitFor(() => expect(within(reopened).getByLabelText('Search commands')).toHaveValue(''));
     });
   });
 });

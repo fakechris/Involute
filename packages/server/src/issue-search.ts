@@ -54,6 +54,8 @@ export interface IssueSearchInput {
   first?: number | null;
   /** Extra filters (IQL, team, commitment) ANDed with the text match. */
   where?: Prisma.IssueWhereInput | null;
+  /** Candidates per recall pass; tests lower it. */
+  recallLimit?: number;
 }
 
 export interface IssueSearchHit {
@@ -117,21 +119,39 @@ export async function searchIssues(
   if (readableWhere) clauses.push(readableWhere);
   if (input.where) clauses.push(input.where);
 
-  const candidates = await prisma.issue.findMany({
-    where: { AND: clauses },
-    include: {
-      state: true,
-      // Only comments that contain a word: they decide comment hits and snippets.
-      comments: {
-        where: { OR: patterns.map((term) => ({ body: { contains: term, mode: 'insensitive' as const } })) },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true, body: true },
-        take: 5,
-      },
+  const include = {
+    state: true,
+    // Only comments that contain a word: they decide comment hits and snippets.
+    comments: {
+      where: { OR: patterns.map((term) => ({ body: { contains: term, mode: 'insensitive' as const } })) },
+      orderBy: { createdAt: 'asc' as const },
+      select: { id: true, body: true },
+      take: 5,
     },
-    orderBy: [{ updatedAt: 'desc' }, { identifier: 'asc' }],
-    take: RECALL_LIMIT,
-  });
+  } satisfies Prisma.IssueInclude;
+  const recallLimit = input.recallLimit ?? RECALL_LIMIT;
+  const recall = (where: Prisma.IssueWhereInput) =>
+    prisma.issue.findMany({
+      where,
+      include,
+      orderBy: [{ updatedAt: 'desc' }, { identifier: 'asc' }],
+      take: recallLimit,
+    });
+
+  // Recall is newest-first and capped, so strong matches get their own pass:
+  // an old item found by number or title must not be pushed out by newer
+  // items that only mention the words in a description or comment.
+  const strongMatch: Prisma.IssueWhereInput = {
+    OR: [
+      ...(identifierMatch ? [identifierMatch] : []),
+      ...patterns.map((term) => ({ title: { contains: term, mode: 'insensitive' as const } })),
+    ],
+  };
+  const [strong, broad] = await Promise.all([
+    recall({ AND: [...clauses, strongMatch] }),
+    recall({ AND: clauses }),
+  ]);
+  const candidates = [...new Map([...broad, ...strong].map((issue) => [issue.id, issue])).values()];
 
   const hits = candidates.map(({ comments, ...issue }) => scoreIssue(issue, comments, parsed));
   hits.sort((left, right) =>

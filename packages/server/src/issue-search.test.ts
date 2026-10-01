@@ -122,6 +122,17 @@ describe('Free-text search (INV-925)', () => {
     ]);
   });
 
+  it('keeps an old title match when newer items only mention the word elsewhere', async () => {
+    const old = await work({ title: 'Parser rewrite' });
+    await prisma.issue.update({ where: { id: old.id }, data: { updatedAt: new Date('2020-01-01') } });
+    for (let index = 0; index < 3; index += 1) {
+      await work({ title: `Newer ${index}`, description: 'mentions the parser' });
+    }
+
+    const hits = await searchIssues(prisma, { query: 'parser', recallLimit: 2 });
+    expect(identifiers(hits)[0]).toBe(old.identifier);
+  });
+
   it('matches LIKE wildcards literally', async () => {
     const percent = await work({ title: 'Coverage at 100% now' });
     await work({ title: 'Coverage at 1000 now' });
