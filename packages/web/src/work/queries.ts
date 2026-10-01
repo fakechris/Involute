@@ -617,3 +617,28 @@ export const WORK_RESTORE_MUTATION = gql`
     }
   }
 `;
+
+// Free-text search across every readable item (INV-925); same as MCP work_search.
+export const WORK_SEARCH_QUERY = gql`
+  query WorkSearch($query: String!, $first: Int) {
+    search(query: $query, first: $first) {
+      matchedField
+      snippet
+      commentId
+      issue {
+        id
+        identifier
+        title
+        state {
+          id
+          name
+          type
+        }
+        team {
+          id
+          key
+        }
+      }
+    }
+  }
+`;

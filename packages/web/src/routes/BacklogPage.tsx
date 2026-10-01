@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import type { IssueSummary, TeamSummary, UserSummary } from '../board/types';
+import { openWorkSearch } from '../board/utils';
 import {
   applyBacklogViewState,
   APPLY_BACKLOG_VIEW_EVENT,
@@ -227,6 +228,16 @@ export function BacklogPage({
               }}
             />
           </label>
+          {viewState.query.trim() ? (
+            // The box filters what the list loaded; this searches everything (INV-925).
+            <button
+              type="button"
+              className="search-all-work"
+              onClick={() => openWorkSearch(viewState.query.trim())}
+            >
+              Search all work →
+            </button>
+          ) : null}
 
           <label className="field-stack">
             <span>Sort</span>

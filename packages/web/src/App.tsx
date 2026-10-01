@@ -2,6 +2,7 @@ import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } 
 import { NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon, IcoCheck, IcoGraph, IcoFilter, IcoBug, IcoHistory, IcoKeyboard } from './components/Icons';
+import { CommandPalette, type PaletteAction } from './app/CommandPalette';
 import { KeyboardShortcutsDialog } from './app/KeyboardShortcutsDialog';
 import { LegacyTeamRedirect } from './routes/LegacyTeamRedirect';
 import { NotificationsBell } from './components/NotificationsBell';
@@ -18,6 +19,7 @@ import {
 import {
   ACTIVE_TEAM_STORAGE_KEY,
   OPEN_CREATE_ISSUE_EVENT,
+  OPEN_WORK_SEARCH_EVENT,
   readStoredTeamKey,
   writeStoredTeamKey,
 } from './board/utils';
@@ -87,16 +89,6 @@ const SIDEBAR_WIDTH_STORAGE_KEY = 'involute.sidebar-width';
 
 type ThemeMode = 'dark' | 'light';
 type DensityMode = 'compact' | 'cozy' | 'comfortable';
-
-interface PaletteAction {
-  description?: string;
-  group: string;
-  hint?: string;
-  id: string;
-  label: string;
-  shortcut?: string;
-  run: () => void;
-}
 
 function getNavLinkClassName({ isActive }: { isActive: boolean }) {
   return `app-shell__link${isActive ? ' app-shell__link--active' : ''}`;
@@ -190,177 +182,6 @@ function openCreateIssueSurface(
       openCreateIssue: true,
     },
   });
-}
-
-function CommandPalette({
-  actions,
-  onClose,
-  open,
-}: {
-  actions: PaletteAction[];
-  onClose: () => void;
-  open: boolean;
-}) {
-  const [query, setQuery] = useState('');
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-
-  const filteredActions = useMemo(() => {
-    if (!query.trim()) {
-      return actions;
-    }
-
-    const normalizedQuery = query.trim().toLowerCase();
-
-    return actions.filter((action) => {
-      return (
-        action.label.toLowerCase().includes(normalizedQuery) ||
-        action.description?.toLowerCase().includes(normalizedQuery)
-      );
-    });
-  }, [actions, query]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    setQuery('');
-    setSelectedIndex(0);
-    window.setTimeout(() => {
-      inputRef.current?.focus();
-    }, 10);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-
-      if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        setSelectedIndex((currentIndex) =>
-          filteredActions.length === 0 ? 0 : Math.min(filteredActions.length - 1, currentIndex + 1),
-        );
-        return;
-      }
-
-      if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        setSelectedIndex((currentIndex) => Math.max(0, currentIndex - 1));
-        return;
-      }
-
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        filteredActions[selectedIndex]?.run();
-        onClose();
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [filteredActions, onClose, open, selectedIndex]);
-
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
-
-  const groupedActions = useMemo(() => {
-    const nextGroups = new Map<string, Array<PaletteAction & { index: number }>>();
-
-    filteredActions.forEach((action, index) => {
-      const currentGroup = nextGroups.get(action.group) ?? [];
-      currentGroup.push({ ...action, index });
-      nextGroups.set(action.group, currentGroup);
-    });
-
-    return Array.from(nextGroups.entries());
-  }, [filteredActions]);
-
-  if (!open) {
-    return null;
-  }
-
-  return (
-    <div className="command-palette" role="dialog" aria-modal="true" aria-label="Command palette">
-      <button
-        type="button"
-        className="command-palette__backdrop"
-        aria-label="Close command palette"
-        onClick={onClose}
-      />
-      <section className="command-palette__panel">
-        <div className="command-palette__search-row">
-          <input
-            ref={inputRef}
-            aria-label="Search commands"
-            className="command-palette__input"
-            placeholder="Type a command or search issues…"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          <span className="command-palette__hint">Esc</span>
-        </div>
-        <div className="command-palette__results" role="listbox" aria-label="Command results">
-          {filteredActions.length > 0 ? (
-            groupedActions.map(([group, actionsInGroup]) => (
-              <section key={group} className="command-palette__group">
-                <header className="command-palette__group-label">{group}</header>
-                {actionsInGroup.map((action) => (
-                  <button
-                    key={action.id}
-                    type="button"
-                    className={`command-palette__item${action.index === selectedIndex ? ' command-palette__item--active' : ''}`}
-                    onMouseEnter={() => setSelectedIndex(action.index)}
-                    onClick={() => {
-                      action.run();
-                      onClose();
-                    }}
-                  >
-                    <div className="command-palette__item-copy">
-                      <span className="command-palette__item-label">{action.label}</span>
-                      {action.description ? (
-                        <span className="command-palette__item-description">{action.description}</span>
-                      ) : null}
-                    </div>
-                    <div className="command-palette__item-trailing">
-                      {action.hint ? <span className="command-palette__item-hint">{action.hint}</span> : null}
-                      {action.shortcut ? <kbd>{action.shortcut}</kbd> : null}
-                    </div>
-                  </button>
-                ))}
-              </section>
-            ))
-          ) : (
-            <p className="command-palette__empty">No matching commands.</p>
-          )}
-        </div>
-        <footer className="command-palette__footer">
-          <span>
-            <kbd>↑</kbd>
-            <kbd>↓</kbd>
-            Navigate
-          </span>
-          <span>
-            <kbd>↵</kbd>
-            Open
-          </span>
-          <span className="command-palette__footer-copy">Involute command space</span>
-        </footer>
-      </section>
-    </div>
-  );
 }
 
 function TweaksPanel({
@@ -461,6 +282,7 @@ export function App() {
   const [density, setDensity] = useState<DensityMode>(() => getStoredDensity());
   const [sidebarWidth, setSidebarWidth] = useState(() => getStoredSidebarWidth());
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const [paletteInitialQuery, setPaletteInitialQuery] = useState('');
   const [isTweaksOpen, setIsTweaksOpen] = useState(false);
   // Below the 980px breakpoint the sidebar is hidden; this opens it as a drawer.
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
@@ -667,6 +489,17 @@ export function App() {
       window.removeEventListener('storage', handleStorage);
     };
   }, [activeTeamKey]);
+
+  // A board or backlog search box hands its text to the palette to search all work (INV-925).
+  useEffect(() => {
+    function handleOpenWorkSearch(event: Event) {
+      setPaletteInitialQuery(event instanceof CustomEvent && typeof event.detail === 'string' ? event.detail : '');
+      setIsPaletteOpen(true);
+    }
+
+    window.addEventListener(OPEN_WORK_SEARCH_EVENT, handleOpenWorkSearch);
+    return () => window.removeEventListener(OPEN_WORK_SEARCH_EVENT, handleOpenWorkSearch);
+  }, []);
 
   useEffect(() => {
     function handleGlobalKeyDown(event: KeyboardEvent) {
@@ -1509,8 +1342,12 @@ export function App() {
 
       <CommandPalette
         actions={paletteActions}
+        initialQuery={paletteInitialQuery}
         open={isPaletteOpen}
-        onClose={() => setIsPaletteOpen(false)}
+        onClose={() => {
+          setIsPaletteOpen(false);
+          setPaletteInitialQuery('');
+        }}
       />
       <TweaksPanel
         density={density}

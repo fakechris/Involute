@@ -22,6 +22,12 @@ const WORKFLOW_STATE_TYPE_ORDER = [
 
 export const ACTIVE_TEAM_STORAGE_KEY = 'involute.activeTeamKey';
 export const OPEN_CREATE_ISSUE_EVENT = 'involute:open-create-issue';
+/** Opens the command palette searching all work for `detail` (INV-925). */
+export const OPEN_WORK_SEARCH_EVENT = 'involute:open-work-search';
+
+export function openWorkSearch(query: string) {
+  window.dispatchEvent(new CustomEvent(OPEN_WORK_SEARCH_EVENT, { detail: query }));
+}
 
 export function buildCommittedIssueFilter(
   teamKey: string | null,

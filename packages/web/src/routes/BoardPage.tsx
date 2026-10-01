@@ -68,6 +68,7 @@ import {
   replaceIssueOverride,
   groupIssuesByState,
   OPEN_CREATE_ISSUE_EVENT,
+  openWorkSearch,
   writeStoredTeamKey,
 } from '../board/utils';
 import {
@@ -2390,6 +2391,16 @@ export function BoardPage() {
                 }}
                 style={{ flex: 1, fontSize: 14, color: 'var(--fg)', background: 'transparent', height: 22, border: 'none', outline: 'none' }}
               />
+              {boardViewState.query.trim() ? (
+                // The box filters what the board loaded; this searches everything (INV-925).
+                <button
+                  type="button"
+                  className="search-all-work"
+                  onClick={() => openWorkSearch(boardViewState.query.trim())}
+                >
+                  Search all work →
+                </button>
+              ) : null}
               <kbd>/</kbd>
             </div>
 
