@@ -1,4 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery } from '@apollo/client/react';
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+import { WORK_SEARCH_QUERY } from '../work/queries';
+import type { WorkSearchHit, WorkSearchQueryData } from '../work/types';
 
 export interface PaletteAction {
   description?: string;
@@ -10,18 +15,42 @@ export interface PaletteAction {
   run: () => void;
 }
 
+const SEARCH_DEBOUNCE_MS = 200;
+const SEARCH_RESULT_LIMIT = 20;
+const MATCH_FIELD_LABEL: Record<WorkSearchHit['matchedField'], string> = {
+  identifier: 'identifier',
+  title: 'title',
+  contract: 'contract',
+  description: 'description',
+  comment: 'comment',
+};
+
 export function CommandPalette({
   actions,
+  initialQuery = '',
   onClose,
   open,
 }: {
   actions: PaletteAction[];
+  /** Text to search for when the palette opens (from a board search box). */
+  initialQuery?: string;
   onClose: () => void;
   open: boolean;
 }) {
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const searchText = useDebounced(query.trim(), SEARCH_DEBOUNCE_MS);
+
+  // Issues come from the server, so anything readable is found, not only what
+  // the board happened to load, and descriptions and comments count (INV-925).
+  const { data: searchData, loading: searching } = useQuery<WorkSearchQueryData>(WORK_SEARCH_QUERY, {
+    variables: { query: searchText, first: SEARCH_RESULT_LIMIT },
+    skip: !open || searchText.length === 0,
+    fetchPolicy: 'cache-and-network',
+  });
+  const searchHits = searchText.length > 0 ? searchData?.search : undefined;
 
   const filteredActions = useMemo(() => {
     if (!query.trim()) {
@@ -29,26 +58,45 @@ export function CommandPalette({
     }
 
     const normalizedQuery = query.trim().toLowerCase();
-
-    return actions.filter((action) => {
+    const localMatches = actions.filter((action) => {
       return (
         action.label.toLowerCase().includes(normalizedQuery) ||
         action.description?.toLowerCase().includes(normalizedQuery)
       );
     });
-  }, [actions, query]);
+    if (!searchHits) {
+      return localMatches;
+    }
+
+    const serverIssues: PaletteAction[] = searchHits.map((hit) => ({
+      id: `issue-${hit.issue.id}`,
+      label: `${hit.issue.identifier} · ${hit.issue.title}`,
+      description: hit.snippet ?? `${hit.issue.team.key} · ${hit.issue.state.name}`,
+      group: 'Issues',
+      hint: hit.matchedField === 'title' || hit.matchedField === 'identifier'
+        ? hit.issue.state.name
+        : `in ${MATCH_FIELD_LABEL[hit.matchedField]}`,
+      run: () => navigate(`/issue/${hit.issue.id}`),
+    }));
+    const serverIds = new Set(serverIssues.map((action) => action.id));
+    return [
+      ...localMatches.filter((action) => action.group !== 'Issues'),
+      ...serverIssues,
+      ...localMatches.filter((action) => action.group === 'Issues' && !serverIds.has(action.id)),
+    ];
+  }, [actions, navigate, query, searchHits]);
 
   useEffect(() => {
     if (!open) {
       return;
     }
 
-    setQuery('');
+    setQuery(initialQuery);
     setSelectedIndex(0);
     window.setTimeout(() => {
       inputRef.current?.focus();
     }, 10);
-  }, [open]);
+  }, [initialQuery, open]);
 
   useEffect(() => {
     if (!open) {
@@ -110,6 +158,9 @@ export function CommandPalette({
     return null;
   }
 
+  const terms = query.trim().split(/\s+/).filter(Boolean);
+  const waitingForSearch = query.trim().length > 0 && (searching || searchText !== query.trim()) && !searchHits;
+
   return (
     <div className="command-palette" role="dialog" aria-modal="true" aria-label="Command palette">
       <button
@@ -124,7 +175,7 @@ export function CommandPalette({
             ref={inputRef}
             aria-label="Search commands"
             className="command-palette__input"
-            placeholder="Type a command or search issues..."
+            placeholder="Type a command or search issues…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -147,9 +198,9 @@ export function CommandPalette({
                     }}
                   >
                     <div className="command-palette__item-copy">
-                      <span className="command-palette__item-label">{action.label}</span>
+                      <span className="command-palette__item-label">{highlight(action.label, terms)}</span>
                       {action.description ? (
-                        <span className="command-palette__item-description">{action.description}</span>
+                        <span className="command-palette__item-description">{highlight(action.description, terms)}</span>
                       ) : null}
                     </div>
                     <div className="command-palette__item-trailing">
@@ -160,8 +211,10 @@ export function CommandPalette({
                 ))}
               </section>
             ))
+          ) : waitingForSearch ? (
+            <p className="command-palette__empty">Searching all work…</p>
           ) : (
-            <p className="command-palette__empty">No matching commands.</p>
+            <p className="command-palette__empty">No matching commands or issues.</p>
           )}
         </div>
         <footer className="command-palette__footer">
@@ -174,9 +227,37 @@ export function CommandPalette({
             <kbd>↵</kbd>
             Open
           </span>
-          <span className="command-palette__footer-copy">Involute command space</span>
+          <span className="command-palette__footer-copy">
+            {waitingForSearch && filteredActions.length > 0 ? 'Searching all work…' : 'Searches titles, descriptions, contracts and comments'}
+          </span>
         </footer>
       </section>
     </div>
   );
+}
+
+function useDebounced(value: string, delayMs: number): string {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+/** Wraps every case-insensitive occurrence of a search word in <mark>. */
+function highlight(text: string, terms: string[]): ReactNode {
+  const needles = terms.map((term) => term.replace(/^"|"$/g, '')).filter(Boolean);
+  if (needles.length === 0) {
+    return text;
+  }
+  const pattern = new RegExp(`(${needles.map(escapeRegExp).join('|')})`, 'gi');
+  const parts = text.split(pattern);
+  return parts.map((part, index) =>
+    index % 2 === 1 ? <mark key={index}>{part}</mark> : <Fragment key={index}>{part}</Fragment>,
+  );
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

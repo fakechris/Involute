@@ -27,6 +27,7 @@ import type {
   ProjectWorkTimelineQueryData,
   PlacementOptionsQueryData,
   WorkHygieneQueryData,
+  WorkSearchQueryData,
 } from '../work/types';
 export type {
   AccessPageQueryData,
@@ -496,6 +497,8 @@ type QueryState = {
   /** The board drawer's contract query (INV-896); absent, it answers from the board's own issue. */
   contractData?: { issue: Record<string, unknown> | null };
   contractRefetch?: ReturnType<typeof vi.fn>;
+  /** Server search hits for the command palette (INV-925); absent, nothing matches. */
+  searchData?: WorkSearchQueryData;
 };
 
 export function renderApp(
@@ -519,6 +522,15 @@ export function renderApp(
 
   apolloMocks.useQuery.mockImplementation((_, options) => {
     const source = getDocumentSource(_);
+
+    if (source.includes('query WorkSearch')) {
+      return {
+        data: options?.skip ? undefined : (queryState.searchData ?? { search: [] }),
+        error: undefined,
+        loading: false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
 
     if (source.includes('query AccessPage')) {
       return {

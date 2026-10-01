@@ -3364,6 +3364,32 @@ kbd {
 .command-palette__item-description {
   font-size: 13px;
   color: var(--fg-dim);
+  /* Search snippets can be long: keep one line per result. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-palette__item mark {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: inherit;
+  border-radius: 2px;
+}
+
+/* Board and backlog search boxes: hand the text to the palette (INV-925). */
+.search-all-work {
+  flex: none;
+  border: 0;
+  background: transparent;
+  padding: 0 4px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.search-all-work:hover {
+  color: var(--fg);
 }
 
 .command-palette__item-hint {

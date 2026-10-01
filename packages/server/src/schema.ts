@@ -103,6 +103,7 @@ import type {
   UpdateIssueInput,
 } from './issue-service.js';
 import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
+import { searchIssues, type IssueSearchHit } from './issue-search.js';
 import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
 
 import { requireAuthentication, type GraphQLContext } from './auth.js';
@@ -354,6 +355,17 @@ const DateTimeScalar = new GraphQLScalarType({
 const typeDefs = /* GraphQL */ `
   scalar DateTime
 
+  type IssueSearchHit {
+    issue: Issue!
+    score: Float!
+    "identifier, title, contract, description or comment: the strongest field a word was found in."
+    matchedField: String!
+    "Text around the first match outside the title."
+    snippet: String
+    "The comment the snippet came from, when it came from one."
+    commentId: String
+  }
+
   type Query {
     viewer: User
     viewerCapabilities: ViewerCapabilities!
@@ -389,6 +401,13 @@ const typeDefs = /* GraphQL */ `
     bugSummary(teamFilter: TeamFilter): BugSummaryResult!
     "Open bugs whose titles share words with the given title, best match first (INV-749)."
     similarBugs(teamId: String!, title: String!, first: Int): [Issue!]!
+    """
+    Free-text search over work items (INV-925): identifier, title, description,
+    contract fields and comments, best match first. Every word must be found
+    somewhere; "quoted phrases" stay together; INV-925, inv925 and 925 find the
+    item by number. iql narrows the results. Same search as MCP work_search.
+    """
+    search(query: String!, first: Int, iql: String): [IssueSearchHit!]!
     traceabilityAudit(days: Int): TraceabilityAuditResult!
     """Non-human actors (AGENT and SERVICE), most recently active first. Backs the directory and @ completion."""
     agents(teamKey: String, includeDeactivated: Boolean): [User!]!
@@ -2492,6 +2511,21 @@ const resolvers = {
         noRepositoryCount,
         projects,
       };
+    },
+    search: async (
+      _parent: unknown,
+      args: { query: string; first?: number | null; iql?: string | null },
+      context: GraphQLContext,
+    ): Promise<IssueSearchHit[]> => {
+      requireAuthentication(context);
+      const iqlWhere = args.iql?.trim()
+        ? compileIqlToIssueWhere(parseIqlOrThrow(args.iql), { viewerId: context.viewer?.id ?? null })
+        : undefined;
+      return searchIssues(
+        context.prisma,
+        { query: args.query, first: args.first ?? null, where: iqlWhere ?? null },
+        buildReadableIssueWhere(context),
+      );
     },
     similarBugs: async (
       _parent: unknown,

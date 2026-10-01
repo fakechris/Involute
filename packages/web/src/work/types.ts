@@ -471,3 +471,20 @@ export interface WorkHygieneQueryData {
     researchWithoutDownstream: Array<HygieneRef & { repository: string | null }>;
   };
 }
+
+export interface WorkSearchHit {
+  matchedField: 'identifier' | 'title' | 'contract' | 'description' | 'comment';
+  snippet: string | null;
+  commentId: string | null;
+  issue: {
+    id: string;
+    identifier: string;
+    title: string;
+    state: { id: string; name: string; type: string };
+    team: { id: string; key: string };
+  };
+}
+
+export interface WorkSearchQueryData {
+  search: WorkSearchHit[];
+}

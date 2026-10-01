@@ -27,6 +27,7 @@ import {
 } from './errors.js';
 import { resolveProjectScope } from './project-scope.js';
 import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
+import { searchIssues, type SearchField } from './issue-search.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -173,17 +174,19 @@ export async function getWorkContext(
   };
 }
 
+export interface SearchWorkMatch {
+  field: SearchField;
+  snippet: string | null;
+  commentId: string | null;
+}
+
 export async function searchWork(
   prisma: DatabaseClient,
   input: SearchWorkInput = {},
   readableWhere?: Prisma.IssueWhereInput,
-): Promise<Issue[]> {
+): Promise<Array<Issue & { match?: SearchWorkMatch }>> {
   const first = clampFirst(input.first);
   const clauses: Prisma.IssueWhereInput[] = [];
-
-  if (readableWhere) {
-    clauses.push(readableWhere);
-  }
 
   if (input.iql?.trim()) {
     const parsed = parseIqlOrThrow(input.iql);
@@ -191,17 +194,6 @@ export async function searchWork(
     if (compiled) {
       clauses.push(compiled);
     }
-  }
-
-  const query = input.query?.trim();
-  if (query) {
-    clauses.push({
-      OR: [
-        { identifier: { contains: query, mode: 'insensitive' } },
-        { title: { contains: query, mode: 'insensitive' } },
-        { description: { contains: query, mode: 'insensitive' } },
-      ],
-    });
   }
 
   if (input.teamKey) {
@@ -216,6 +208,24 @@ export async function searchWork(
 
   if (input.commitmentStatus) {
     clauses.push({ commitmentStatus: input.commitmentStatus });
+  }
+
+  // Free text goes through the same ranked search as the web (INV-925).
+  const query = input.query?.trim();
+  if (query) {
+    const hits = await searchIssues(
+      prisma,
+      { query, first, where: clauses.length > 0 ? { AND: clauses } : null },
+      readableWhere,
+    );
+    return hits.map(({ issue: { state: _state, ...issue }, matchedField, snippet, commentId }) => ({
+      ...issue,
+      match: { field: matchedField, snippet, commentId },
+    }));
+  }
+
+  if (readableWhere) {
+    clauses.push(readableWhere);
   }
 
   return prisma.issue.findMany({
