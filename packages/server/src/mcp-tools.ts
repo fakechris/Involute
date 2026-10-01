@@ -598,11 +598,11 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_search',
     annotations: { readOnlyHint: true, destructiveHint: false },
-    description: 'Search Involute work by identifier, title, or description. Includes candidates and committed work.',
+    description: 'Search Involute work by identifier, title, description, contract fields and comments, best match first. Includes candidates and committed work. Each word must be found somewhere; quote a phrase to keep it together. Each result carries match.field and match.snippet.',
     inputSchema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Free-text search across identifier, title, and description' },
+        query: { type: 'string', description: 'Free text: words (all must match), "quoted phrases", or an identifier such as INV-925 / inv925 / 925' },
         filter: { type: 'string', description: 'IQL filter, e.g. team:SON state-type:STARTED -commitment:rejected. See protocol_get_guide.' },
         team_key: { type: 'string' },
         commitment_status: { type: 'string', enum: ['CANDIDATE', 'COMMITTED', 'REJECTED'] },
