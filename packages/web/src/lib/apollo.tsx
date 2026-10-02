@@ -136,7 +136,18 @@ export function createApolloClient() {
   });
 
   return new ApolloClient({
-    cache: new InMemoryCache(),
+    cache: new InMemoryCache({
+      typePolicies: {
+        Query: {
+          fields: {
+            // The board reads noRepositoryCount; the drawer's project picker
+            // does not. Preserve that field when the picker refreshes the same
+            // summary, or Apollo refetches and replaces the accumulated pages.
+            projectSummary: { merge: true },
+          },
+        },
+      },
+    }),
     link: authLink.concat(httpLink),
     defaultOptions: {
       // Work changes behind the reader's back (agents propose, claim and
