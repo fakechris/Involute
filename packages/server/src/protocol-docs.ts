@@ -124,7 +124,7 @@ Read-only:
 - \`protocol_get_guide\` — fetch this document verbatim.
 
 Write:
-- \`work_propose\` — create candidate work. Pass \`parent_id\` to nest under project/milestone. Pass \`initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED' | 'BACKLOG'\` to direct-route upon human commitment. Type: Bug via \`labels: ['bug']\` is committed directly and never enters Candidates; it requires \`priority\` (SLA), \`steps_to_reproduce\`, and a parent.
+- \`work_propose\` — create candidate work. Pass \`parent_id\` to nest under project/milestone. Pass \`initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED' | 'BACKLOG'\` to direct-route upon human commitment. Pass \`priority\` (0–4) to suggest one; the person who commits may change it. Type: Bug via \`labels: ['bug']\` is committed directly and never enters Candidates; it requires \`priority\` (SLA), \`steps_to_reproduce\`, and a parent.
 - \`work_file_bug\` — file a Type: Bug. Required: \`priority\` (1–4, sets the SLA) and \`steps_to_reproduce\`. Committed directly; missing parent/priority/steps is refused. Prefer this over \`work_propose\` for bugs.
 - \`work_update\` — update fields with \`expected_revision\`. On committed work agents cannot change the contract (acceptance, scope, verification, outcome, constraints).
 - \`work_propose_amendment\` — propose a change to a committed contract: the fields, their new values and a reason. A person accepts it (applied as their own edit) or rejects it with a note on the issue page; the outcome shows in \`work_get_context\` (\`contractAmendments\`). Use this instead of asking a person to retype a fix.

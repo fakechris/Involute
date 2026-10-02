@@ -6,6 +6,7 @@ import {
   ISSUE_NOT_FOUND_MESSAGE,
   BUG_COMMIT_PRIORITY_REQUIRED_MESSAGE,
   BUG_PROPOSE_PRIORITY_REQUIRED_MESSAGE,
+  PROPOSE_PRIORITY_RANGE_MESSAGE,
   BUG_PROPOSE_PARENT_REQUIRED_MESSAGE,
   BUG_PROPOSE_STEPS_REQUIRED_MESSAGE,
   BUG_PROPOSE_ACCEPTANCE_REQUIRED_MESSAGE,
@@ -386,12 +387,21 @@ export async function proposeWork(
     const isBug = (input.labels ?? []).some((label) => label.trim().toLowerCase() === 'bug');
     const steps = nonEmpty(input.stepsToReproduce);
     const priority = input.priority ?? null;
+    // Any proposal may suggest a priority; the person who commits it can
+    // change it (INV-936). A bug must have one, 1–4: it sets the SLA.
+    const validPriority = (lowest: number) =>
+      priority !== null && Number.isInteger(priority) && priority >= lowest && priority <= 4;
+    if (isBug && !validPriority(1)) {
+      throw createValidationError(BUG_PROPOSE_PRIORITY_REQUIRED_MESSAGE);
+    }
+    if (priority !== null && !validPriority(0)) {
+      throw createValidationError(PROPOSE_PRIORITY_RANGE_MESSAGE);
+    }
+    if (priority !== null) {
+      createInput.priority = priority;
+    }
     let directBug = false;
     if (isBug) {
-      if (priority === null || priority < 1 || priority > 4) {
-        throw createValidationError(BUG_PROPOSE_PRIORITY_REQUIRED_MESSAGE);
-      }
-      createInput.priority = priority;
       if (steps) createInput.description = composeDescription(input.description, steps);
       if (!parentWork || parentWork.commitmentStatus === 'REJECTED') {
         throw createValidationError(BUG_PROPOSE_PARENT_REQUIRED_MESSAGE);

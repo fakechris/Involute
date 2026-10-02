@@ -599,6 +599,30 @@ describe('work graph GraphQL facade', () => {
     expect(placed.body.data.workCommit).toMatchObject({ success: true, message: null, issue: { parent: { id: parentId } } });
   });
 
+  it('keeps a suggested priority on any proposal through commit, and says why one out of range is refused (INV-936)', async () => {
+    const propose = (priority: number) => postGraphQL({
+      query: `mutation($input: WorkProposeInput!) { workPropose(input: $input) { success message issue { id revision priority } } }`,
+      variables: { input: { teamId: team.id, title: `Suggested priority ${priority}`, repository: 'test/placement', priority } },
+    });
+
+    const low = await propose(4);
+    expectGraphQLSuccess(low);
+    const { id, revision, priority } = low.body.data.workPropose.issue as { id: string; revision: number; priority: number };
+    expect(priority).toBe(4);
+
+    const committed = await postGraphQL({
+      query: `mutation($id: String!, $input: WorkCommitInput!) { workCommit(id: $id, input: $input) { success issue { priority } } }`,
+      variables: { id, input: { expectedRevision: revision, acceptance: 'kept', assigneeId: viewer.id, parentId: await testParentId(prisma, team.id) } },
+    });
+    expectGraphQLSuccess(committed);
+    expect(committed.body.data.workCommit).toMatchObject({ success: true, issue: { priority: 4 } });
+
+    const refused = await propose(7);
+    expectGraphQLSuccess(refused);
+    expect(refused.body.data.workPropose).toMatchObject({ success: false, issue: null });
+    expect(refused.body.data.workPropose.message).toContain('Priority must be 0 (none)');
+  });
+
   it('lets a human rewrite committed contract fields and says why a cleared acceptance is refused', async () => {
     const work = await prisma.issue.create({
       data: {
