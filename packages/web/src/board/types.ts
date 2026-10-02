@@ -376,6 +376,7 @@ export interface TeamMembershipRemoveMutationVariables {
 }
 
 export interface BoardPageQueryVariables {
+  query?: string;
   first: number;
   after?: string;
   teamFilter?: {
@@ -384,6 +385,10 @@ export interface BoardPageQueryVariables {
     };
   } | null;
   filter?: {
+    text?: string;
+    stateIds?: string[];
+    assigneeIds?: string[];
+    labelIds?: string[];
     team?: {
       key?: {
         eq: string;

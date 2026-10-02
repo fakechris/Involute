@@ -17,6 +17,7 @@ import { useMutation, useQuery } from '@apollo/client/react';
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
+import { looksLikeIql } from '../board/iql-eval';
 import {
   BOARD_PAGE_QUERY,
   COMMENT_DELETE_MUTATION,
@@ -222,9 +223,16 @@ export function BoardPage() {
     () => ({
       first: ISSUE_PAGE_SIZE,
       ...(queryTeamKey ? { teamFilter: { key: { eq: queryTeamKey } } } : {}),
-      filter: buildCommittedIssueFilter(queryTeamKey, repositoryFilter),
+      ...(looksLikeIql(boardViewState.query) ? { query: boardViewState.query.trim() } : {}),
+      filter: {
+        ...buildCommittedIssueFilter(queryTeamKey, repositoryFilter),
+        ...(boardViewState.query.trim() && !looksLikeIql(boardViewState.query) ? { text: boardViewState.query.trim() } : {}),
+        ...(boardViewState.stateIds.length ? { stateIds: boardViewState.stateIds } : {}),
+        ...(boardViewState.assigneeIds.length ? { assigneeIds: boardViewState.assigneeIds } : {}),
+        ...(boardViewState.labelIds.length ? { labelIds: boardViewState.labelIds } : {}),
+      },
     }),
-    [queryTeamKey, repositoryFilter],
+    [queryTeamKey, repositoryFilter, boardViewState.query, boardViewState.stateIds, boardViewState.assigneeIds, boardViewState.labelIds],
   );
   const location = useLocation();
   const isBacklogView = location.pathname === '/backlog';
@@ -639,7 +647,7 @@ export function BoardPage() {
   }, [urlIssue, allIssues]);
 
   const boardVisibleIssues = useMemo(
-    () => applyBoardViewState(visibleIssues, boardViewState, users),
+    () => applyBoardViewState(visibleIssues, looksLikeIql(boardViewState.query) ? { ...boardViewState, query: '' } : boardViewState, users),
     [boardViewState, users, visibleIssues],
   );
   const boardViewTokens = useMemo(
@@ -2392,7 +2400,7 @@ export function BoardPage() {
                 style={{ flex: 1, fontSize: 14, color: 'var(--fg)', background: 'transparent', height: 22, border: 'none', outline: 'none' }}
               />
               {boardViewState.query.trim() ? (
-                // The box filters what the board loaded; this searches everything (INV-925).
+                // Search across all work, including candidates outside this board.
                 <button
                   type="button"
                   className="search-all-work"
