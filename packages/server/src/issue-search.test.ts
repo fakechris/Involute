@@ -169,6 +169,15 @@ describe('Free-text search (INV-925)', () => {
       ]);
     });
 
+    it('ranks the query intact in a title above its words apart in a shorter title', async () => {
+      // As in production: the intact one is done, the other still in progress.
+      const started = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'STARTED' } });
+      const intact = await work({ title: '可信证据验证：绑定契约版本、执行对象与验收覆盖', stateId: done.id });
+      const apart = await work({ title: '操作有证据（写操作效果验证）', stateId: started.id });
+
+      expect(identifiers(await searchIssues(prisma, { query: '证据验证' }))).toEqual([intact.identifier, apart.identifier]);
+    });
+
     it('ranks words close together above the same words far apart', async () => {
       const far = await work({ title: 'Far', description: `候选${'，其他内容'.repeat(30)}审批` });
       const near = await work({ title: 'Near', description: '候选审批' });
