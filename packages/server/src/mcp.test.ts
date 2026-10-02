@@ -395,6 +395,8 @@ describe('Involute MCP', () => {
     expect(await callTool('work_unlink', { from_id: parent.identifier, to_id: child.identifier, type: 'BLOCKS' })).toMatchObject({ removed: true, id: link.id });
     expect(await callTool('work_unlink', { from_id: parent.identifier, to_id: child.identifier, type: 'BLOCKS' })).toMatchObject({ removed: false });
     await callTool('work_link', { from_id: child.id, to_id: parent.id, type: 'BLOCKS' });
+    const concurrent = await Promise.all([1, 2].map(() => callTool('work_unlink', { from_id: child.id, to_id: parent.id, type: 'BLOCKS' })));
+    expect(concurrent.map((result) => result.removed).sort()).toEqual([false, true]);
     expect(await prisma.workAudit.findFirst({ where: { workId: parent.id, reason: { contains: link.id } } })).toMatchObject({ surface: 'mcp' });
     const orphan = await mcpRpc('/mcp', { id: 'orphan', method: 'tools/call', params: {
       name: 'work_unlink', arguments: { from_id: parent.id, to_id: child.id, type: 'CONTAINS' },

@@ -33,6 +33,7 @@ import {
   ISSUE_NOT_FOUND_MESSAGE,
   TEAM_NOT_FOUND_MESSAGE,
   WORKFLOW_STATE_NOT_FOUND_MESSAGE,
+  WORK_LINK_NOT_FOUND_MESSAGE,
   createNotFoundError,
   createScopeForbiddenError,
   createValidationError,
@@ -462,7 +463,16 @@ export async function callMcpTool(
         where: { fromId_toId_type: { fromId: from.id, toId: to.id, type } },
       });
       if (!link) return { removed: false, fromId: from.id, toId: to.id, type };
-      await deleteWorkLink(context.prisma, link.id, writeActorFromViewer(context.viewer, 'mcp'));
+      try {
+        await deleteWorkLink(context.prisma, link.id, writeActorFromViewer(context.viewer, 'mcp'));
+      } catch (error) {
+        // Another caller may have removed this exact edge while we waited for
+        // the graph lock. Never delete a newly created replacement by tuple.
+        if (error instanceof Error && error.message === WORK_LINK_NOT_FOUND_MESSAGE) {
+          return { removed: false, fromId: from.id, toId: to.id, type };
+        }
+        throw error;
+      }
       return { removed: true, id: link.id, fromId: from.id, toId: to.id, type };
     }
     case 'work_claim': {
