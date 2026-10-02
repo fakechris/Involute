@@ -48,7 +48,7 @@ pnpm --filter @turnkeyai/involute-server agent:revoke -- <credential-id>
 Start agents on the read-only endpoint until they need to create or claim work:
 
 - full: `https://<host>/mcp`
-- read-only: `https://<host>/mcp/readonly` (`work_search`, `work_get_context`, `work_list_ready` only)
+- read-only: `https://<host>/mcp/readonly` (read-only search, catalogs, context pages, ready work, inbox and protocol guide; discover the current list with `tools/list`)
 
 The server's static `AUTH_TOKEN` is **not** an agent identity. It authenticates
 as a trusted system with no actor; production writes made with it have no

@@ -1849,6 +1849,7 @@ const typeDefs = /* GraphQL */ `
   }
 
   input CommentCreateInput {
+    idempotencyKey: String
     issueId: String!
     body: String!
     """Reply into an existing thread on the same work item. A reply to a reply attaches to the same root."""

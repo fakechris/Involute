@@ -68,6 +68,8 @@ export interface ListReadyWorkInput {
 }
 
 export interface SearchWorkInput {
+  /** Internal continuation state, never accepted directly from MCP arguments. */
+  excludeIds?: string[];
   commitmentStatus?: CommitmentStatus | null;
   first?: number | null;
   /** IQL filter string; the plain `query` stays free-text search. */
@@ -223,7 +225,7 @@ export async function searchWork(
   if (query) {
     const hits = await searchIssues(
       prisma,
-      { query, first, where: clauses.length > 0 ? { AND: clauses } : null },
+      { query, first, where: clauses.length > 0 ? { AND: clauses } : null, ...(input.excludeIds ? { exhaustivePage: true } : {}) },
       readableWhere,
       semantic,
     );

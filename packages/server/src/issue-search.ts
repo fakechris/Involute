@@ -74,6 +74,8 @@ export interface ParsedSearchQuery {
 }
 
 export interface IssueSearchInput {
+  /** Apply readable/filter scope before the full-text frontier for continuation. */
+  exhaustivePage?: boolean;
   query: string;
   first?: number | null;
   /** Extra filters (IQL, team, commitment) ANDed with the text match. */
@@ -176,7 +178,8 @@ export async function searchIssues(
       ...patterns.map((term) => ({ title: { contains: term, mode: 'insensitive' as const } })),
     ],
   };
-  const ranks = await rankByFullText(prisma, parsed);
+  const allowedIds = input.exhaustivePage ? (await prisma.issue.findMany({ where: { AND: scope }, select: { id: true } })).map((issue) => issue.id) : null;
+  const ranks = await rankByFullText(prisma, parsed, allowedIds);
   // Ranked best-first among what this viewer may read and the filters allow,
   // so matches elsewhere cannot use up the limit.
   const rankedIds = ranks.size > 0
@@ -272,6 +275,7 @@ async function fuseWithSemantic(
 async function rankByFullText(
   prisma: DatabaseClient,
   parsed: ParsedSearchQuery,
+  allowedIds: string[] | null = null,
 ): Promise<Map<string, number>> {
   const tsQuery = buildSearchTsQuery(parsed.terms.flatMap((term) => term.pieces));
   if (!tsQuery) {
@@ -282,9 +286,11 @@ async function rankByFullText(
     SELECT id::text AS id, max(rank)::float8 AS rank FROM (
       SELECT issue.id, ts_rank_cd(issue."searchVector", query.q) AS rank
         FROM "Issue" issue, query WHERE issue."searchVector" @@ query.q
+          AND (${allowedIds === null} OR issue.id::text = ANY(${allowedIds ?? []}::text[]))
       UNION ALL
       SELECT comment."issueId", ts_rank_cd(comment."searchVector", query.q)
         FROM "Comment" comment, query WHERE comment."searchVector" @@ query.q
+          AND (${allowedIds === null} OR comment."issueId"::text = ANY(${allowedIds ?? []}::text[]))
     ) matches
     GROUP BY id
     ORDER BY rank DESC

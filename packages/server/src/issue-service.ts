@@ -1,3 +1,4 @@
+import { reserveWorkIdempotency, hashIdempotencyRequest, completeWorkIdempotency } from './idempotency.js';
 import type { Comment, Issue, Prisma, PrismaClient, WorkflowState } from '@prisma/client';
 
 import {
@@ -94,6 +95,7 @@ export interface UpdateIssueInput {
 }
 
 export interface CreateCommentInput {
+  idempotencyKey?: string | null;
   body: string;
   issueId: string;
   /** Reply into an existing thread. Must be a comment on the same work item. */
@@ -718,6 +720,21 @@ export async function createComment(
   // have not been turned into actorIds yet, and an event must never announce a
   // comment that a crash then rolled back.
   return prisma.$transaction(async (tx) => {
+    const author = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { actorKind: true } });
+    let reservationId: string | null = null;
+    if (input.idempotencyKey) {
+      const reservation = await reserveWorkIdempotency(tx, {
+        actor: { actorId: userId, actorKind: author.actorKind, surface: 'comment' },
+        key: input.idempotencyKey, operation: 'comment_create', teamId: issue.teamId,
+        requestHash: hashIdempotencyRequest({ workId: issue.id, body: input.body, parentCommentId }),
+      });
+      if (!reservation.created) {
+        const existing = reservation.record.resultId ? await tx.comment.findUnique({ where: { id: reservation.record.resultId } }) : null;
+        if (!existing || existing.issueId !== issue.id || existing.userId !== userId) throw createValidationError('The original comment is no longer available; do not replay this key.');
+        return existing;
+      }
+      reservationId = reservation.record.id;
+    }
     const comment = await tx.comment.create({
       data: {
         body: input.body,
@@ -728,7 +745,6 @@ export async function createComment(
     });
 
     const mentions = await syncCommentMentions(tx, comment.id, comment.body);
-    const author = await tx.user.findUnique({ where: { id: userId }, select: { actorKind: true } });
     await linkMentionedWork(tx, {
       workId: issue.id,
       teamId: issue.teamId,
@@ -748,6 +764,7 @@ export async function createComment(
       work: issue,
     });
 
+    if (reservationId) await completeWorkIdempotency(tx, reservationId, issue.id, comment.id);
     return comment;
   });
 }

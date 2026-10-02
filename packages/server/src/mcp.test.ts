@@ -466,6 +466,115 @@ describe('Involute MCP', () => {
     });
     expect(illegal.body.error.message).toContain('COMPLETED');
   });
+  it('edits routine metadata and clears fields explicitly through the shared issue service', async () => {
+    const issue = await prisma.issue.create({ data: { identifier: 'INV-9950', title: 'Metadata', teamId: team.id, stateId: ready.id, description: 'Clear this', commitmentStatus: 'CANDIDATE' } });
+    const label = await prisma.issueLabel.findUniqueOrThrow({ where: { name: 'needs-clarification' } });
+    const updated = await callTool('work_update', { id: issue.id, expected_revision: issue.revision, description: null, label_ids: [label.id] });
+    expect(updated.description).toBeNull();
+    const labeled = await prisma.issue.findUniqueOrThrow({ where: { id: issue.id }, include: { labels: true } });
+    expect(labeled.labels.map((entry) => entry.id)).toEqual([label.id]);
+    await callTool('work_update', { id: issue.id, expected_revision: updated.revision, label_ids: [] });
+    expect((await prisma.issue.findUniqueOrThrow({ where: { id: issue.id }, include: { labels: true } })).labels).toHaveLength(0);
+  });
+
+  it('exhausts 50 original comments and 20 runs without omission or duplication', async () => {
+    const issue = await prisma.issue.create({ data: { identifier: 'INV-9951', title: 'Paged history', teamId: team.id, stateId: ready.id } });
+    await prisma.comment.createMany({ data: Array.from({ length: 50 }, (_, i) => ({ issueId: issue.id, userId: viewer.id, body: `Original comment ${i}` })) });
+    await prisma.workRun.createMany({ data: Array.from({ length: 20 }, (_, i) => ({ workId: issue.id, publicId: `RUN-PAGE-${i}` })) });
+    for (const [section, total] of [['comments', 50], ['runs', 20]] as const) {
+      const ids: string[] = [];
+      let after: string | undefined;
+      for (;;) {
+        const page = await callTool('work_read_page', { id: issue.id, section, first: 7, ...(after ? { after } : {}) });
+        ids.push(...page.nodes.map((row: { id: string }) => row.id));
+        if (!page.pageInfo.hasNextPage) break;
+        after = page.pageInfo.endCursor;
+      }
+      expect(ids).toHaveLength(total);
+      expect(new Set(ids).size).toBe(total);
+    }
+    const context = await callTool('work_get_context', { id: issue.id });
+    expect(context.pages.comments.pageInfo.hasNextPage).toBe(true);
+    expect(context.pages.runs.pageInfo.hasNextPage).toBe(true);
+  });
+
+  it('appends comments idempotently with the authenticated author', async () => {
+    const issue = await prisma.issue.create({ data: { identifier: 'INV-9952', title: 'Comments', teamId: team.id, stateId: ready.id } });
+    const input = { work_id: issue.id, body: 'Clarification resolved', idempotency_key: 'same-comment' };
+    const first = await callTool('work_comment', input);
+    const replay = await callTool('work_comment', input);
+    expect(replay.id).toBe(first.id);
+    expect(first.userId).toBe(viewer.id);
+    expect(await prisma.comment.count({ where: { issueId: issue.id } })).toBe(1);
+    const changed = await mcpRpc('/mcp', { id: 'changed-comment', method: 'tools/call', params: { name: 'work_comment', arguments: { ...input, body: 'Different content' } } });
+    expect(changed.body.error).toBeDefined();
+  });
+
+  it('rechecks current team access when continuing an agent search', async () => {
+    const token = 'inv_agent_paging-access';
+    const agent = await prisma.user.create({ data: { name: 'Paging agent', email: 'paging-agent@example.com', actorKind: 'AGENT' } });
+    const credential = await prisma.agentCredential.create({ data: { name: 'paging', userId: agent.id, teamId: team.id, tokenHash: hashAgentToken(token), scopes: ['read'] } });
+    await prisma.issue.createMany({ data: Array.from({ length: 3 }, (_, i) => ({ identifier: `ACCESS-${i}`, title: `Accesspaginationneedle ${i}`, teamId: team.id, stateId: ready.id })) });
+    const args = { query: 'Accesspaginationneedle', paginate: true, first: 1 };
+    const fetchPage = async (arguments_: Record<string, unknown>) => {
+      const response = await mcpRpcWithToken('/mcp', { id: 'page-access', method: 'tools/call', params: { name: 'work_search', arguments: arguments_ } }, token);
+      expect(response.body.error).toBeUndefined();
+      return JSON.parse(response.body.result.content[0].text);
+    };
+    const first = await fetchPage(args);
+    expect(first.nodes).toHaveLength(1);
+    const other = await prisma.team.create({ data: { key: 'CUR', name: 'Cursor other team', visibility: 'PRIVATE' } });
+    await prisma.agentCredential.update({ where: { id: credential.id }, data: { teamId: other.id } });
+    const next = await fetchPage({ ...args, after: first.pageInfo.endCursor });
+    expect(next.nodes).toHaveLength(0);
+    expect(next.pageInfo.hasNextPage).toBe(false);
+  });
+
+  it('binds continuation to query and actor and refuses expired cursors', async () => {
+    await prisma.issue.createMany({ data: Array.from({ length: 3 }, (_, i) => ({ identifier: `CURSOR-${i}`, title: `Cursorboundaryneedle ${i}`, teamId: team.id, stateId: ready.id })) });
+    const args = { query: 'Cursorboundaryneedle', paginate: true, first: 1 };
+    const page = await callTool('work_search', args);
+    const after = page.pageInfo.endCursor;
+    expect(after).toBeTruthy();
+    const rejected = async (arguments_: Record<string, unknown>) => {
+      const response = await mcpRpc('/mcp', { id: 'bad-cursor', method: 'tools/call', params: { name: 'work_search', arguments: arguments_ } });
+      expect(response.body.error.message).toContain('Cursor expired or belongs');
+    };
+    await rejected({ ...args, after, query: 'another query' });
+    await prisma.workSearchCursor.update({ where: { id: after }, data: { actorKey: 'another-principal' } });
+    await rejected({ ...args, after });
+    const fresh = await callTool('work_search', args);
+    await prisma.workSearchCursor.update({ where: { id: fresh.pageInfo.endCursor }, data: { expiresAt: new Date(0) } });
+    await rejected({ ...args, after: fresh.pageInfo.endCursor });
+  });
+
+  it('pages actor catalogs including credential-bound agents and omits secrets', async () => {
+    const agent = await prisma.user.create({ data: { name: 'Bound catalog agent', email: 'bound-catalog@example.com', actorKind: 'AGENT' } });
+    await prisma.agentCredential.create({ data: { name: 'catalog', userId: agent.id, teamId: team.id, tokenHash: hashAgentToken('inv_agent_catalog') } });
+    const page = await callTool('work_catalog', { kind: 'actors', team_id: team.id });
+    expect(page.nodes.map((row: { id: string }) => row.id)).toContain(agent.id);
+    expect(JSON.stringify(page)).not.toContain('tokenHash');
+    expect(JSON.stringify(page)).not.toContain('inv_agent_catalog');
+    const caps = await callTool('work_catalog', { kind: 'capabilities' });
+    expect(caps.tools.find((tool: { name: string }) => tool.name === 'work_comment').scope).toBe('update');
+  });
+
+  it('enumerates 300 search and ready matches beyond the old 200-item limit', async () => {
+    await prisma.issue.createMany({ data: Array.from({ length: 300 }, (_, i) => ({ identifier: `PAGE-${i}`, title: `Exhaustivepaginationneedle ${i}`, teamId: team.id, stateId: ready.id, assigneeId: viewer.id, acceptance: 'Enumerate all records', repository: 'fixture/pagination' })) });
+    for (const name of ['work_search', 'work_list_ready']) {
+      const ids: string[] = [];
+      let after: string | undefined;
+      for (;;) {
+        const page = await callTool(name, { repository: 'fixture/pagination', first: 80, ...(name === 'work_search' ? { query: 'Exhaustivepaginationneedle', paginate: true } : {}), ...(after ? { after } : {}) });
+        ids.push(...page.nodes.map((row: { id: string }) => row.id));
+        if (!page.pageInfo.hasNextPage) break;
+        after = page.pageInfo.endCursor;
+      }
+      expect(ids).toHaveLength(300);
+      expect(new Set(ids).size).toBe(300);
+    }
+  });
+
 });
 
 function readyIdentifiers(result: { nodes?: Array<{ identifier: string }> }): string[] {

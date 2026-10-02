@@ -1,3 +1,6 @@
+import { readyWorkPage, searchWorkPage } from './work-search-page.js';
+import { readWorkCatalog, CATALOG_KINDS } from './work-catalog.js';
+import { readWorkPage, WORK_SECTIONS, type WorkSection } from './work-read-page.js';
 import { releaseClaim } from './claim-release.js';
 import { retractEvidence } from './evidence-retract.js';
 import type { PrismaClient, WorkEvidenceKind, WorkLinkType } from '@prisma/client';
@@ -42,7 +45,7 @@ import {
   createValidationError,
 } from './errors.js';
 import { TEAM_WRITE_FORBIDDEN_MESSAGE } from './errors.js';
-import { mentionTexts, updateIssue } from './issue-service.js';
+import { createComment, mentionTexts, updateIssue } from './issue-service.js';
 import { amendmentChanges, proposeContractAmendment } from './contract-amendment.js';
 import { dependencyHints } from './mention-links.js';
 import { researchLacksDownstream } from './work-hygiene.js';
@@ -54,6 +57,8 @@ import { writeActorFromViewer } from './work-service.js';
 
 export type McpToolName =
   | 'work_search'
+  | 'work_catalog'
+  | 'work_read_page'
   | 'work_get_context'
   | 'work_list_ready'
   | 'protocol_get_guide'
@@ -61,6 +66,7 @@ export type McpToolName =
   | 'work_file_bug'
   | 'work_commit'
   | 'work_uncommit'
+  | 'work_comment'
   | 'work_update'
   | 'work_propose_amendment'
   | 'work_unlink'
@@ -78,6 +84,8 @@ export type McpToolName =
 // returns them in.
 export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
   'work_search',
+  'work_catalog',
+  'work_read_page',
   'work_get_context',
   'work_list_ready',
   'agent_inbox',
@@ -89,6 +97,7 @@ export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
   'work_file_bug',
   'work_commit',
   'work_uncommit',
+  'work_comment',
   'work_update',
   'work_propose_amendment',
   'work_link',
@@ -213,7 +222,29 @@ export async function callMcpTool(
       if (status === 'CANDIDATE' || status === 'COMMITTED' || status === 'REJECTED') {
         searchInput.commitmentStatus = status;
       }
+      if (args.paginate === true || args.after !== undefined) return searchWorkPage(context, searchInput, optionalString(args.after));
       return searchWork(context.prisma, searchInput, buildReadableIssueWhere(context), context.semanticIndex);
+    }
+    case 'work_catalog': {
+      if (args.kind === 'capabilities') return {
+        actor: { id: context.viewer?.id, kind: context.viewer?.actorKind },
+        tools: MCP_TOOL_DEFINITIONS.map((tool) => {
+          const scope = MCP_TOOL_SCOPES[tool.name];
+          const humanOnly = ['work_commit', 'work_uncommit'].includes(tool.name);
+          const allowedByCredential = context.authMode !== 'agent-token' || !scope || Boolean(context.agentScopes?.includes(scope));
+          const allowedByActor = !humanOnly || context.viewer?.actorKind === 'HUMAN';
+          const allowedByEndpoint = !readonly || (READ_ONLY_MCP_TOOLS as readonly string[]).includes(tool.name);
+          return { name: tool.name, scope, humanOnly, allowedByCredential, allowedByActor, allowedByEndpoint,
+            available: allowedByCredential && allowedByActor && allowedByEndpoint };
+        }),
+        constraints: ['Work access, commitment, active claims and revisions are checked per mutation.', 'Agents stop at Review except committed Research issues; Canceled remains human-only.', 'Committed contracts require a proposed amendment.'],
+      };
+      return readWorkCatalog(context, requiredString(args.kind, 'kind'), optionalNumber(args.first) ?? 50, optionalString(args.after), optionalString(args.team_id));
+    }
+    case 'work_read_page': {
+      const work = await requireWork(context.prisma, requiredString(args.id, 'id'));
+      await assertCanReadIssue(context.prisma, context, work.id);
+      return readWorkPage(context.prisma, work.id, requiredString(args.section, 'section') as WorkSection, optionalNumber(args.first) ?? 50, optionalString(args.after), buildReadableIssueWhere(context));
     }
     case 'work_get_context': {
       const id = requiredString(args.id, 'id');
@@ -222,7 +253,14 @@ export async function callMcpTool(
         throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
       }
       await assertCanReadIssue(context.prisma, context, work.id);
-      return getWorkContext(context.prisma, work.id);
+      const bundle = await getWorkContext(context.prisma, work.id);
+      const linkedIds = [...bundle.ancestors, ...bundle.blockedBy, ...bundle.blocks].map((item) => item.id);
+      const visible = new Set((await context.prisma.issue.findMany({ where: { AND: [{ id: { in: linkedIds } }, buildReadableIssueWhere(context) ?? {}] }, select: { id: true } })).map((item) => item.id));
+      bundle.ancestors = bundle.ancestors.filter((item) => visible.has(item.id));
+      bundle.blockedBy = bundle.blockedBy.filter((item) => visible.has(item.id));
+      bundle.blocks = bundle.blocks.filter((item) => visible.has(item.id));
+      const pages = await Promise.all(WORK_SECTIONS.map((section) => readWorkPage(context.prisma, work.id, section, section === 'audits' ? 20 : 10, null, buildReadableIssueWhere(context))));
+      return { ...bundle, pages: Object.fromEntries(pages.map((page) => [page.section, page])), continuation: 'Use work_read_page(id, section, after=pageInfo.endCursor) while hasNextPage is true.' };
     }
     case 'work_list_ready': {
       const readyInput: Parameters<typeof listReadyWork>[1] = {};
@@ -233,7 +271,7 @@ export async function callMcpTool(
       assignOptional(readyInput, 'projectId', optionalString(args.project_id));
       assignOptional(readyInput, 'repository', optionalString(args.repository));
       assignOptional(readyInput, 'teamKey', optionalString(args.team_key));
-      return listReadyWork(context.prisma, readyInput, buildReadableIssueWhere(context));
+      return readyWorkPage(context, readyInput, optionalString(args.after));
     }
     case 'work_propose': {
       const teamId = await resolveTeamId(context.prisma, requiredString(args.team, 'team'));
@@ -382,6 +420,12 @@ export async function callMcpTool(
         next: `A person accepts or rejects this under Contract on ${work.identifier}'s issue page. Accepting applies it as their own edit; you will see the result in work_get_context (contractAmendments).`,
       };
     }
+    case 'work_comment': {
+      const work = await requireWork(context.prisma, requiredString(args.work_id, 'work_id'));
+      await assertCanWriteIssue(context.prisma, context, work.id);
+      if (!context.viewer) throw createValidationError('An authenticated author is required.');
+      return createComment(context.prisma, { issueId: work.id, body: requiredString(args.body, 'body'), parentCommentId: optionalString(args.parent_comment_id) ?? null, idempotencyKey: optionalString(args.idempotency_key) ?? null }, context.viewer.id);
+    }
     case 'work_update': {
       const work = await requireWork(context.prisma, requiredString(args.id, 'id'));
       await assertCanWriteIssue(context.prisma, context, work.id);
@@ -393,21 +437,33 @@ export async function callMcpTool(
         await assertCanWriteIssue(context.prisma, context, parent.id);
         updateInput.parentId = parent.id;
       }
-      assignOptional(updateInput, 'acceptance', optionalString(args.acceptance));
-      assignOptional(updateInput, 'constraints', optionalString(args.constraints));
-      assignOptional(updateInput, 'description', optionalString(args.description));
-      assignOptional(updateInput, 'outcome', optionalString(args.outcome));
+      // Omitted keeps a field; explicit null clears it through the same domain
+      // checks as the issue editor. Labels are replaced as a complete set.
+      for (const [wire, field] of [
+        ['description', 'description'], ['outcome', 'outcome'], ['scope', 'scope'],
+        ['constraints', 'constraints'], ['acceptance', 'acceptance'],
+        ['verification', 'verification'], ['repository', 'repository'],
+        ['cycle_id', 'cycleId'], ['alias', 'alias'],
+      ] as const) {
+        if (args[wire] !== undefined) updateInput[field] = args[wire] === null ? null : requiredString(args[wire], wire);
+      }
+      if (args.label_ids !== undefined) {
+        if (!Array.isArray(args.label_ids) || args.label_ids.some((value) => typeof value !== 'string' || !value.trim())) throw createValidationError('label_ids must be an array of label IDs; use [] to clear.');
+        updateInput.labelIds = args.label_ids as string[];
+      }
+      if (args.kind !== undefined) {
+        const kind = requiredString(args.kind, 'kind');
+        if (!['PROJECT', 'MILESTONE', 'EPIC', 'ISSUE', 'DECISION'].includes(kind)) throw createValidationError('Unknown work kind.');
+        updateInput.kind = kind as NonNullable<typeof updateInput.kind>;
+      }
       assignOptional(updateInput, 'priority', optionalNumber(args.priority));
-      assignOptional(updateInput, 'repository', optionalString(args.repository));
       if (args.cascade_repository !== undefined) {
         updateInput.cascadeRepository = Boolean(args.cascade_repository);
       } else if (args.repository !== undefined) {
         updateInput.cascadeRepository = true;
       }
-      assignOptional(updateInput, 'scope', optionalString(args.scope));
       const rawTitle = optionalString(args.title);
       assignOptional(updateInput, 'title', rawTitle);
-      assignOptional(updateInput, 'verification', optionalString(args.verification));
       if (args.snoozed_until !== undefined) {
         updateInput.snoozedUntil = args.snoozed_until === null ? null : new Date(requiredString(args.snoozed_until, 'snoozed_until'));
       }
@@ -669,6 +725,8 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        paginate: { type: 'boolean', description: 'Set true for an exhaustive continuation response {nodes,pageInfo}; first 1–100. Legacy calls return an array.' },
+        after: { type: 'string', description: 'pageInfo.endCursor from the same query and principal.' },
         query: { type: 'string', description: 'Free text: words (all must match), "quoted phrases", or an identifier such as INV-925 / inv925 / 925' },
         filter: { type: 'string', description: 'IQL filter, e.g. team:SON state-type:STARTED -commitment:rejected. See protocol_get_guide.' },
         team_key: { type: 'string' },
@@ -677,6 +735,18 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         first: { type: 'integer' },
       },
     },
+  },
+  {
+    name: 'work_catalog',
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    description: 'Discover readable teams, states, labels, actors and cycles with pagination, or credential capabilities and policy constraints. Human owners and agent executors are distinct. Catalog visibility uses the web API access rules.',
+    inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: [...CATALOG_KINDS, 'capabilities'] }, team_id: { type: 'string' }, first: { type: 'integer', minimum: 1, maximum: 200 }, after: { type: 'string' } }, required: ['kind'] },
+  },
+  {
+    name: 'work_read_page',
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    description: 'Read complete work sections with keyset pagination. Continue with pageInfo.endCursor while hasNextPage. Includes children, typed links, original comments and history; rechecks read access on every call.',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' }, section: { type: 'string', enum: [...WORK_SECTIONS] }, first: { type: 'integer', minimum: 1, maximum: 200 }, after: { type: 'string' } }, required: ['id', 'section'] },
   },
   {
     name: 'work_get_context',
@@ -697,6 +767,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        after: { type: 'string', description: 'Continue with endCursor from the same ready query.' },
         repository: { type: 'string' },
         team_key: { type: 'string' },
         project_id: { type: 'string', description: 'Work Graph PROJECT UUID/identifier or legacy Project UUID; shares repository scope with readyWork.' },
@@ -892,6 +963,12 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'work_comment',
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    description: 'Append an authored comment or reply using the same rules as the issue page. Supply an idempotency_key for safe retries; the same key with changed content is refused. Without a key, retries create another comment.',
+    inputSchema: { type: 'object', properties: { work_id: { type: 'string' }, body: { type: 'string' }, parent_comment_id: { type: 'string' }, idempotency_key: { type: 'string' } }, required: ['work_id', 'body'] },
+  },
+  {
     name: 'work_update',
     annotations: { readOnlyHint: false, destructiveHint: false },
     description: 'Update work fields. Requires expected_revision. Does not mark work Done — except a committed ISSUE with Type: Research, which an agent may move to Done (state DONE); never CANCELED (INV-912). On COMMITTED work agents cannot change the contract fields (acceptance, scope, verification, outcome, constraints) — propose them with work_propose_amendment.',
@@ -902,13 +979,17 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         expected_revision: { type: 'integer' },
         parent_id: { type: 'string', description: 'Move under this parent (identifier or UUID). Requires access to both items; same-team/repository, hierarchy and cycle rules apply. Cannot detach committed work.' },
         title: { type: 'string' },
-        description: { type: 'string' },
-        outcome: { type: 'string' },
-        scope: { type: 'string' },
-        constraints: { type: 'string' },
-        acceptance: { type: 'string' },
-        verification: { type: 'string' },
-        repository: { type: 'string' },
+        label_ids: { type: 'array', items: { type: 'string' }, description: 'Replace labels with these IDs; [] clears labels. At most one Type label.' },
+        kind: { type: 'string', enum: ['PROJECT', 'MILESTONE', 'EPIC', 'ISSUE', 'DECISION'] },
+        cycle_id: { type: ['string', 'null'] },
+        alias: { type: ['string', 'null'], description: 'PROJECT reference alias; null clears it.' },
+        description: { type: ['string', 'null'] },
+        outcome: { type: ['string', 'null'] },
+        scope: { type: ['string', 'null'] },
+        constraints: { type: ['string', 'null'] },
+        acceptance: { type: ['string', 'null'] },
+        verification: { type: ['string', 'null'] },
+        repository: { type: ['string', 'null'] },
         cascade_repository: {
           type: 'boolean',
           description: 'When updating repository, cascade the repository change to all CONTAINS descendants (default: true).',
@@ -1251,6 +1332,8 @@ function assignOptional<T extends object, K extends keyof T>(
 const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_search: 'read',
   work_get_context: 'read',
+  work_read_page: 'read',
+  work_catalog: 'read',
   work_list_ready: 'read',
   protocol_get_guide: 'read',
   work_propose: 'propose',
@@ -1258,6 +1341,7 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_commit: null,
   work_uncommit: null,
   work_update: 'update',
+  work_comment: 'update',
   // Proposing writes nothing to the contract until a person accepts it.
   work_propose_amendment: 'propose',
   work_link: 'link',
