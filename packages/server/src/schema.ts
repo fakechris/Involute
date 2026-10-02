@@ -1616,6 +1616,10 @@ const typeDefs = /* GraphQL */ `
   }
 
   input IssueFilter {
+    text: String
+    stateIds: [String!]
+    assigneeIds: [String!]
+    labelIds: [String!]
     and: [IssueFilter!]
     team: TeamFilter
     state: WorkflowStateFilterRef

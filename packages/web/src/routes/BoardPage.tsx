@@ -17,6 +17,7 @@ import { useMutation, useQuery } from '@apollo/client/react';
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
+import { looksLikeIql } from '../board/iql-eval';
 import {
   BOARD_PAGE_QUERY,
   COMMENT_DELETE_MUTATION,
@@ -222,9 +223,16 @@ export function BoardPage() {
     () => ({
       first: ISSUE_PAGE_SIZE,
       ...(queryTeamKey ? { teamFilter: { key: { eq: queryTeamKey } } } : {}),
-      filter: buildCommittedIssueFilter(queryTeamKey, repositoryFilter),
+      ...(looksLikeIql(boardViewState.query) ? { query: boardViewState.query.trim() } : {}),
+      filter: {
+        ...buildCommittedIssueFilter(queryTeamKey, repositoryFilter),
+        ...(boardViewState.query.trim() && !looksLikeIql(boardViewState.query) ? { text: boardViewState.query.trim() } : {}),
+        ...(boardViewState.stateIds.length ? { stateIds: boardViewState.stateIds } : {}),
+        ...(boardViewState.assigneeIds.length ? { assigneeIds: boardViewState.assigneeIds } : {}),
+        ...(boardViewState.labelIds.length ? { labelIds: boardViewState.labelIds } : {}),
+      },
     }),
-    [queryTeamKey, repositoryFilter],
+    [queryTeamKey, repositoryFilter, boardViewState.query, boardViewState.stateIds, boardViewState.assigneeIds, boardViewState.labelIds],
   );
   const location = useLocation();
   const isBacklogView = location.pathname === '/backlog';
@@ -242,20 +250,31 @@ export function BoardPage() {
   const queryData = data ?? previousData;
   const inFlightUpdatesRef = useRef<Set<string>>(new Set());
   const lastHandledDropRef = useRef<{ issueId: string; targetStateId: string; timestamp: number } | null>(null);
+  // IQL can depend on graph joins and viewer identity unavailable locally.
+  // Re-check membership on the server after mutations instead of admitting
+  // local overlays into a result set they may no longer match.
+  const iqlMutationOptions = looksLikeIql(boardViewState.query)
+    ? { refetchQueries: ['BoardPage'], awaitRefetchQueries: true }
+    : undefined;
   const [runIssueUpdate] = useMutation<IssueUpdateMutationData, IssueUpdateMutationVariables>(
     ISSUE_UPDATE_MUTATION,
+    iqlMutationOptions,
   );
   const [runIssueCreate] = useMutation<IssueCreateMutationData, IssueCreateMutationVariables>(
     ISSUE_CREATE_MUTATION,
+    iqlMutationOptions,
   );
   const [runCommentCreate] = useMutation<CommentCreateMutationData, CommentCreateMutationVariables>(
     COMMENT_CREATE_MUTATION,
+    iqlMutationOptions,
   );
   const [runIssueDelete] = useMutation<IssueDeleteMutationData, IssueDeleteMutationVariables>(
     ISSUE_DELETE_MUTATION,
+    iqlMutationOptions,
   );
   const [runCommentDelete] = useMutation<CommentDeleteMutationData, CommentDeleteMutationVariables>(
     COMMENT_DELETE_MUTATION,
+    iqlMutationOptions,
   );
   const teams = queryData?.teams.nodes ?? EMPTY_TEAMS;
   const users = queryData?.users.nodes ?? EMPTY_USERS;
@@ -639,8 +658,12 @@ export function BoardPage() {
   }, [urlIssue, allIssues]);
 
   const boardVisibleIssues = useMemo(
-    () => applyBoardViewState(visibleIssues, boardViewState, users),
-    [boardViewState, users, visibleIssues],
+    () => {
+      if (!looksLikeIql(boardViewState.query)) return applyBoardViewState(visibleIssues, boardViewState, users);
+      const matchingIds = new Set(baseIssues.map((issue) => issue.id));
+      return applyBoardViewState(visibleIssues.filter((issue) => matchingIds.has(issue.id)), { ...boardViewState, query: '' }, users);
+    },
+    [baseIssues, boardViewState, users, visibleIssues],
   );
   const boardViewTokens = useMemo(
     () => buildBoardViewSummary(boardViewState, selectedTeam, users, labels),
@@ -2392,7 +2415,7 @@ export function BoardPage() {
                 style={{ flex: 1, fontSize: 14, color: 'var(--fg)', background: 'transparent', height: 22, border: 'none', outline: 'none' }}
               />
               {boardViewState.query.trim() ? (
-                // The box filters what the board loaded; this searches everything (INV-925).
+                // Search across all work, including candidates outside this board.
                 <button
                   type="button"
                   className="search-all-work"

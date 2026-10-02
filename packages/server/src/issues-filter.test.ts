@@ -60,6 +60,31 @@ describe('issues query filtering', () => {
     fixture = await resetDatabase(prisma);
   });
 
+  it('filters before the 200-item page for number, text and combined selectors', async () => {
+    const target = await prisma.issue.findUniqueOrThrow({
+      where: { id: fixture.issues.unassignedTask.id }, include: { labels: true },
+    });
+    await prisma.issue.update({ where: { id: target.id }, data: {
+      identifier: 'INV-671', title: 'Needle beyond the first page', createdAt: new Date('2020-01-01'),
+    } });
+    await prisma.issue.createMany({ data: Array.from({ length: 201 }, (_, index) => ({
+      identifier: `INV-${2000 + index}`, title: 'Recent unrelated work', teamId: target.teamId,
+      stateId: target.stateId, commitmentStatus: 'COMMITTED' as const,
+    })) });
+    const firstPage = await queryIssues({ first: 200 });
+    expect(firstPage.body.data.issues.nodes.some((item: { id: string }) => item.id === target.id)).toBe(false);
+    for (const text of ['671', 'Needle beyond']) {
+      const result = await queryIssues({ first: 200, filter: {
+        text, stateIds: [target.stateId], assigneeIds: ['unassigned'],
+        labelIds: target.labels.map((label) => label.id),
+      } });
+      expect(result.body.errors).toBeUndefined();
+      expect(result.body.data.issues.nodes.map((item: { id: string }) => item.id)).toEqual([target.id]);
+    }
+    const excluded = await queryIssues({ filter: { text: '671', assigneeIds: [fixture.otherUser.id] } });
+    expect(excluded.body.data.issues.nodes).toEqual([]);
+  });
+
   it('limits results with first and always returns children nodes arrays', async () => {
     const response = await queryIssues({
       first: 2,

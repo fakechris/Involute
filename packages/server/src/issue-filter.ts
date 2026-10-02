@@ -43,6 +43,10 @@ export interface IssueLabelRelationFilterInput {
 
 export interface IssueFilterInput {
   and?: IssueFilterInput[] | null;
+  text?: string | null;
+  stateIds?: string[] | null;
+  assigneeIds?: string[] | null;
+  labelIds?: string[] | null;
   assignee?: UserFilterRefInput | null;
   commitmentStatus?: CommitmentStatus | null;
   kind?: WorkKind | null;
@@ -59,6 +63,28 @@ export function buildIssueWhere(
   viewerId: string | null,
 ): Prisma.IssueWhereInput | undefined {
   const clauses: Prisma.IssueWhereInput[] = [];
+  const text = filter?.text?.trim();
+  if (text) {
+    if (/^\d+$/.test(text)) {
+      // The numeric part starts immediately after the team prefix.
+      clauses.push({ identifier: { contains: `-${text}` } });
+    } else {
+      const contains = { contains: text, mode: 'insensitive' as const };
+      clauses.push({ OR: [
+        { identifier: contains }, { title: contains }, { description: contains },
+        { parent: { is: { OR: [{ title: contains }, { identifier: contains }] } } },
+        { project: { is: { name: contains } } },
+      ] });
+    }
+  }
+  if (filter?.stateIds?.length) clauses.push({ stateId: { in: filter.stateIds } });
+  if (filter?.assigneeIds?.length) {
+    clauses.push({ OR: [
+      { assigneeId: { in: filter.assigneeIds.filter((id) => id !== 'unassigned') } },
+      ...(filter.assigneeIds.includes('unassigned') ? [{ assigneeId: null }] : []),
+    ] });
+  }
+  for (const id of filter?.labelIds ?? []) clauses.push({ labels: { some: { id } } });
 
   if (filter?.and) {
     for (const nestedFilter of filter.and) {

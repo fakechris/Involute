@@ -59,11 +59,13 @@ flowchart TD
    - **强制 Git 忽略**：`research/` 目录必须在 `.gitignore` 中被严格忽略，确保零代码污染、零合规与版权风险。
 8. **Placement — every item has one parent (工作图规范 v1, INV-718)**:
    - Legal `CONTAINS`: PROJECT → MILESTONE / DECISION / EPIC / ISSUE; MILESTONE → EPIC / ISSUE; EPIC → ISSUE; ISSUE → ISSUE (sub-issue). An ISSUE directly under a PROJECT is shown as **No milestone**.
+   - Move existing work with `work_update(parent_id, expected_revision)`; the parent accepts an identifier or UUID and must pass existing access, team, repository, hierarchy and cycle checks. Never remove CONTAINS to detach work.
    - Pass `parent_id` on `work_propose`. Committing is **refused** without exactly one parent (every kind but PROJECT); a human may place it at commit.
    - `DISCOVERED_DURING` / `DERIVED_FROM` proposals without `parent_id` inherit the related item's nearest legal same-repository ancestor; the result says where they landed.
 9. **Relations — record what the text says (INV-720)**:
    - Mentioning `INV-123` (or a project alias prefix) in a description, contract field or comment records `RELATED_TO` automatically.
    - If the source material says an item depends on / must come after another, record `BLOCKS`: `work_propose(blocked_by: [...], blocks: [...])` or `work_link`. `work_commit` warns about dependency wording without `BLOCKS`. **Never invent dependencies or structure.**
+   - Correct an erroneous directed relation with `work_unlink(from_id, to_id, type)` before creating its replacement. CONTAINS is refused; use the explicit parent update above. Both endpoints require write access.
    - Before proposing several related items, lay out the whole tree (parents, blockers) and check it; when the source is ambiguous, propose an outline for review instead of guessing.
 10. **Research is an ISSUE labelled `research` (INV-721)**: see §11.4.
 11. **Bugs carry the Type label Bug (INV-748/749)**: `labels: ['bug']` (any casing). Type is Bug / Feature / Improvement / Research (INV-912), at most one per item; a second Type is refused. See §12.
