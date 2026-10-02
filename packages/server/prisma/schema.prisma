@@ -322,6 +322,7 @@ model Issue {
   alias             String?
   labels            IssueLabel[]
   comments          Comment[]
+  embeddings        IssueEmbedding[]
   agentRequests     AgentRequest[]
   projectId         String?           @db.Uuid
   project           Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -365,6 +366,20 @@ model Issue {
   @@index([title(ops: raw("gin_trgm_ops"))], map: "Issue_title_trgm_idx", type: Gin)
   @@index([description(ops: raw("gin_trgm_ops"))], map: "Issue_description_trgm_idx", type: Gin)
   @@index([searchVector], map: "Issue_searchVector_idx", type: Gin)
+}
+
+/// Semantic search vector of a work item (INV-927): one per item and model,
+/// rebuilt in the background when the embedded text (contentHash) changes.
+model IssueEmbedding {
+  issueId     String   @db.Uuid
+  issue       Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  model       String
+  contentHash String
+  vector      Float[]  @db.Real
+  updatedAt   DateTime @updatedAt
+
+  @@id([issueId, model])
+  @@index([model])
 }
 
 model Comment {

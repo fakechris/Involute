@@ -51,6 +51,9 @@ export async function handleMcpRequest(options: McpHandlerOptions): Promise<bool
   if (options.viewerAssertionSecret !== undefined) {
     contextOptions.viewerAssertionSecret = options.viewerAssertionSecret;
   }
+  if (options.semanticIndex) {
+    contextOptions.semanticIndex = options.semanticIndex;
+  }
   const context = await createGraphQLContext(contextOptions);
 
   if (context.authMode === 'none') {

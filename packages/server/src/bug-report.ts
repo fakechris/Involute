@@ -1,4 +1,6 @@
 import type { Issue, IssueLabel, Prisma, PrismaClient } from '@prisma/client';
+import type { SemanticIndex } from './embeddings/semantic-index.js';
+import { findSimilarByMeaning, SIMILAR_BUG_SIMILARITY } from './embeddings/similar-work.js';
 
 import { placeNewWork } from './claim-service.js';
 import {
@@ -115,22 +117,23 @@ export function titleTerms(title: string): string[] {
 export async function findSimilarBugs(
   prisma: DatabaseClient,
   input: { teamId: string; title: string; limit?: number; readableWhere?: Prisma.IssueWhereInput | null },
+  semantic?: SemanticIndex | null,
 ): Promise<Issue[]> {
+  const limit = input.limit ?? 5;
+  const openBugs: Prisma.IssueWhereInput = {
+    AND: [
+      {
+        teamId: input.teamId,
+        commitmentStatus: { in: ['COMMITTED', 'CANDIDATE'] },
+        state: { type: { notIn: ['COMPLETED', 'CANCELED'] } },
+        labels: { some: { name: { equals: BUG_LABEL_NAME, mode: 'insensitive' } } },
+      },
+      ...(input.readableWhere ? [input.readableWhere] : []),
+    ],
+  };
   const terms = titleTerms(input.title);
-  if (terms.length === 0) return [];
-  const candidates = await prisma.issue.findMany({
-    where: {
-      AND: [
-        {
-          teamId: input.teamId,
-          commitmentStatus: { in: ['COMMITTED', 'CANDIDATE'] },
-          state: { type: { notIn: ['COMPLETED', 'CANCELED'] } },
-          labels: { some: { name: { equals: BUG_LABEL_NAME, mode: 'insensitive' } } },
-          OR: terms.map((term) => ({ title: { contains: term, mode: 'insensitive' as const } })),
-        },
-        ...(input.readableWhere ? [input.readableWhere] : []),
-      ],
-    },
+  const candidates = terms.length === 0 ? [] : await prisma.issue.findMany({
+    where: { AND: [openBugs, { OR: terms.map((term) => ({ title: { contains: term, mode: 'insensitive' as const } })) }] },
     orderBy: { createdAt: 'desc' },
     take: 50,
   });
@@ -138,11 +141,26 @@ export async function findSimilarBugs(
     const title = issue.title.toLowerCase();
     return terms.filter((term) => title.includes(term)).length;
   };
-  return candidates
+  const byWords = candidates
     .map((issue) => ({ issue, score: score(issue) }))
     .sort((left, right) => right.score - left.score)
-    .slice(0, input.limit ?? 5)
     .map((entry) => entry.issue);
+  if (!semantic || input.title.trim().length === 0) {
+    return byWords.slice(0, limit);
+  }
+  // Bugs described in other words (INV-927) come first; word matches fill in.
+  const byMeaning = await findSimilarByMeaning(prisma, semantic, input.title, openBugs, SIMILAR_BUG_SIMILARITY, limit);
+  const meaningIds = byMeaning.map((item) => item.id);
+  const meaningIssues = meaningIds.length === 0
+    ? []
+    : await prisma.issue.findMany({ where: { id: { in: meaningIds } } });
+  const ordered = meaningIds
+    .map((id) => meaningIssues.find((issue) => issue.id === id))
+    .filter((issue): issue is Issue => Boolean(issue));
+  for (const issue of byWords) {
+    if (!ordered.some((existing) => existing.id === issue.id)) ordered.push(issue);
+  }
+  return ordered.slice(0, limit);
 }
 
 /**

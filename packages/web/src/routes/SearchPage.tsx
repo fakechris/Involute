@@ -6,6 +6,7 @@ import { readStoredTeamKey } from '../board/utils';
 import { highlight } from '../components/highlight';
 import { ProjectFilterCombobox, type AvailableProject } from '../components/ProjectFilterCombobox';
 import { GRAPH_PROJECTS_QUERY, SEARCH_LABELS_QUERY, WORK_SEARCH_QUERY } from '../work/queries';
+import { matchLabel } from '../work/search-labels';
 import type { GraphProjectsQueryData, SearchLabelsQueryData, WorkSearchQueryData } from '../work/types';
 
 const RESULT_LIMIT = 100;
@@ -17,13 +18,6 @@ const STATE_TYPES = [
   ['COMPLETED', 'Done'],
   ['CANCELED', 'Canceled'],
 ] as const;
-const MATCH_LABEL: Record<string, string> = {
-  identifier: 'identifier',
-  title: 'title',
-  contract: 'contract',
-  description: 'description',
-  comment: 'comment',
-};
 
 /**
  * Every search hit, with filters (INV-926). Kind, state and label become IQL,
@@ -186,7 +180,7 @@ export function SearchPage() {
                     <span className="mono search-result__identifier">{hit.issue.identifier}</span>
                     <span className="search-result__title">{highlight(hit.issue.title, query)}</span>
                     <span className="search-result__meta">
-                      {hit.issue.state.name} · in {MATCH_LABEL[hit.matchedField] ?? hit.matchedField}
+                      {hit.issue.state.name} · {matchLabel(hit.matchedField)}
                     </span>
                   </Link>
                   {hit.snippet ? <p className="search-result__snippet">{highlight(hit.snippet, query)}</p> : null}
