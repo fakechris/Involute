@@ -19,13 +19,25 @@ COPY packages/server/package.json packages/server/package.json
 COPY packages/cli/package.json packages/cli/package.json
 COPY packages/web/package.json packages/web/package.json
 
-RUN pnpm install --frozen-lockfile
+# onnxruntime-node ships every platform's binaries; Linux images need only Linux's.
+# The pnpm store goes in the same layer: node_modules hard-links its files, so
+# keeping the store would carry a second copy of every package (and of the
+# binaries just removed) in the image.
+RUN pnpm install --frozen-lockfile \
+  && rm -rf node_modules/.pnpm/onnxruntime-node@*/node_modules/onnxruntime-node/bin/napi-v*/darwin \
+            node_modules/.pnpm/onnxruntime-node@*/node_modules/onnxruntime-node/bin/napi-v*/win32 \
+  && rm -rf "$(pnpm store path)"
 
 COPY . .
 
 FROM base AS server
 
 RUN pnpm --filter @turnkeyai/involute-server build
+# Semantic search (INV-927): the model ships in the image, so the server never
+# downloads at runtime. INVOLUTE_EMBEDDINGS=off in the environment turns it off.
+RUN cd packages/server && node scripts/fetch-embedding-model.mjs /app/models
+ENV INVOLUTE_EMBEDDINGS=local
+ENV INVOLUTE_MODEL_DIR=/app/models
 COPY packages/server/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
