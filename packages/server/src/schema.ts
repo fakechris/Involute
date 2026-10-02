@@ -1176,6 +1176,7 @@ const typeDefs = /* GraphQL */ `
   }
 
   type WorkRunRecord {
+    executionRevokedAt: DateTime
     executionId: String
     id: ID!
     publicId: String!

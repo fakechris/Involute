@@ -42,10 +42,10 @@ export async function attachEvidence(
     const initial = await requireWork(transaction, input.workId);
     await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR UPDATE`;
     const work = await requireWork(transaction, initial.id);
-    await assertExecutionAuthority(transaction, actor, work.teamId, 'report');
+    await assertExecutionAuthority(transaction, actor, work, 'report');
     const executionRun = input.runId ? await findRun(transaction, input.runId, work.id) : null;
     if (actor.actorKind === 'AGENT') {
-      if (!executionRun || executionRun.actorId !== actorId || executionRun.status === 'FAILED') throw createValidationError(WORK_RUN_ACTOR_MISMATCH_MESSAGE);
+      if (!executionRun || executionRun.actorId !== actorId || executionRun.status === 'FAILED' || executionRun.executionRevokedAt) throw createValidationError(WORK_RUN_ACTOR_MISMATCH_MESSAGE);
       assertWorkToken(executionRun.executionTokenHash, input.claimToken);
       if (executionRun.status !== 'COMPLETED') {
         const lease = executionRun.claimId ? await transaction.workClaim.findUnique({ where: { id: executionRun.claimId } }) : null;

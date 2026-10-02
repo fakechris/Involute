@@ -54,7 +54,7 @@ export async function reportRun(
     const initial = await requireWork(transaction, input.workId);
     await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR UPDATE`;
     const work = await requireWork(transaction, initial.id);
-    await assertExecutionAuthority(transaction, actor, work.teamId, 'report');
+    await assertExecutionAuthority(transaction, actor, work, 'report');
     let idempotencyId: string | null = null;
     if (input.idempotencyKey) {
       const reservation = await reserveWorkIdempotency(transaction, {
@@ -77,7 +77,10 @@ export async function reportRun(
         if (!replayed || replayed.workId !== work.id) {
           throw createValidationError(WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE);
         }
-        if (actor.actorKind === 'AGENT') assertWorkToken(replayed.executionTokenHash, input.claimToken);
+        if (actor.actorKind === 'AGENT') {
+          assertWorkToken(replayed.executionTokenHash, input.claimToken);
+          if (replayed.executionRevokedAt) throw createValidationError('This execution claim has been superseded.');
+        }
         const freshWork = await transaction.issue.findUniqueOrThrow({ where: { id: work.id } });
         return { run: replayed, work: freshWork };
       }
@@ -172,7 +175,10 @@ export async function reportRun(
       }
     }
 
-    if (actor.actorKind === 'AGENT') assertWorkToken(run?.executionTokenHash ?? activeClaim?.executionTokenHash ?? null, input.claimToken);
+    if (actor.actorKind === 'AGENT') {
+      assertWorkToken(run?.executionTokenHash ?? activeClaim?.executionTokenHash ?? null, input.claimToken);
+      if (run?.executionRevokedAt) throw createValidationError('This execution claim has been superseded.');
+    }
     const isNew = !run;
     if (!run) {
       if (!activeClaim) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);

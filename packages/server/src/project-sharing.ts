@@ -55,7 +55,7 @@ export const EMPTY_SHARE_SCOPE: ShareScope = {
   teamIds: [],
 };
 
-export async function resolveShareScope(prisma: PrismaClient, userId: string): Promise<ShareScope> {
+export async function resolveShareScope(prisma: PrismaClient | Prisma.TransactionClient, userId: string): Promise<ShareScope> {
   const shares = await prisma.workShare.findMany({
     where: { userId },
     select: {

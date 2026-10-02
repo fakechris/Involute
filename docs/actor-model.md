@@ -119,6 +119,18 @@ rejected as *superseded*, not accepted because it is the same actor.
 actor renew and answer, so a stalled session could answer after a fresh one had
 re-claimed.)
 
+Work leases use the same separation (INV-943): `WorkClaim.id` identifies a
+fresh generation; the server stores only a digest of its secret token. The
+client execution label is descriptive, never authority. Renewal, run reports,
+self-release and evidence writes prove token possession. A new claim revokes
+all earlier run authorities; expired open runs become failed. Completion
+allows the holder to attach evidence until a later claim supersedes it.
+A person retains force-release through the Claim panel. Agents may retract
+their own unaccepted evidence with a reason; retraction preserves the row.
+Previously accepted evidence cannot be altered by an agent, while new evidence
+after reopening can be corrected. Credential revocation, scopes, project
+shares and archived teams are rechecked under the execution transaction locks.
+
 ### 5. Receipt — what the actor knew when it wrote (to be built)
 
 The session's relevant context, captured **at write time** and attached to the

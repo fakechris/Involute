@@ -700,6 +700,7 @@ model AppSequence {
 }
 
 model WorkRun {
+  executionRevokedAt DateTime?
   executionTokenHash String?
   executionId String?
   id          String        @id @default(uuid()) @db.Uuid

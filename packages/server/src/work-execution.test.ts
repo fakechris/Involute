@@ -97,4 +97,44 @@ describe('work execution ownership (INV-943)', () => {
     expect(await prisma.workRun.count({ where: { workId: work.id } })).toBe(0);
   });
 
+  it('revokes historical evidence authority when another execution takes over', async () => {
+    const { claimToken } = await claimWork(prisma, work.id, {}, asAgent());
+    const { run } = await reportRun(prisma, { workId: work.id, claimToken, status: 'completed' }, asAgent());
+    const { evidence } = await attachEvidence(prisma, { workId: work.id, runId: run.id, claimToken, kind: 'test', url: 'https://example.com/old' }, asAgent());
+    const ready = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'UNSTARTED' } });
+    await prisma.issue.update({ where: { id: work.id }, data: { stateId: ready.id } });
+    await claimWork(prisma, work.id, {}, asAgent());
+    await expect(attachEvidence(prisma, { workId: work.id, runId: run.id, claimToken, kind: 'test', url: 'https://example.com/stale' }, asAgent())).rejects.toThrow();
+    await expect(retractEvidence(prisma, { evidenceId: evidence.id, claimToken, reason: 'stale correction' }, asAgent())).rejects.toThrow(/superseded/i);
+  });
+
+  it('allows correction of new evidence after an earlier accepted delivery is reopened', async () => {
+    await prisma.workReviewDecision.create({ data: { workId: work.id, reviewerId: admin.id, decision: 'ACCEPTED', fromRevision: 1, toRevision: 2, createdAt: new Date(0) } });
+    const { claimToken } = await claimWork(prisma, work.id, {}, asAgent());
+    const { run } = await reportRun(prisma, { workId: work.id, claimToken, status: 'completed' }, asAgent());
+    const { evidence } = await attachEvidence(prisma, { workId: work.id, runId: run.id, claimToken, kind: 'test', url: 'https://example.com/new' }, asAgent());
+    await expect(retractEvidence(prisma, { evidenceId: evidence.id, claimToken, reason: 'Correct the new delivery' }, asAgent())).resolves.toMatchObject({ retractReason: 'Correct the new delivery' });
+  });
+
+  it('honors an editor project share across credential teams and rejects its withdrawal', async () => {
+    const project = await prisma.issue.create({ data: { teamId: team.id, title: 'Shared', kind: 'PROJECT', identifier: 'INV-9000', stateId: work.stateId, repository: 'example/shared' } });
+    await prisma.issue.update({ where: { id: work.id }, data: { repository: project.repository, parentId: project.id } });
+    const share = await prisma.workShare.create({ data: { workId: project.id, userId: agent.id, role: 'EDITOR', createdById: admin.id } });
+    const credential = await prisma.agentCredential.create({ data: { name: 'shared-execution', tokenHash: 'shared-execution-hash', userId: agent.id } });
+    const actor = { ...asAgent(), agentCredentialId: credential.id };
+    const { claimToken } = await claimWork(prisma, work.id, {}, actor);
+    await expect(reportRun(prisma, { workId: work.id, claimToken, status: 'running' }, actor)).resolves.toBeTruthy();
+    await prisma.workShare.delete({ where: { id: share.id } });
+    await expect(reportRun(prisma, { workId: work.id, claimToken, status: 'running' }, actor)).rejects.toThrow(/share/i);
+  });
+
+  it('protects an accepted run even when its decision timestamp precedes the evidence', async () => {
+    const { claimToken } = await claimWork(prisma, work.id, {}, asAgent());
+    const { run } = await reportRun(prisma, { workId: work.id, claimToken, status: 'completed' }, asAgent());
+    const { evidence } = await attachEvidence(prisma, { workId: work.id, runId: run.id, claimToken, kind: 'test', url: 'https://example.com/accepted' }, asAgent());
+    await prisma.workReviewDecision.create({ data: { workId: work.id, runId: run.id, reviewerId: admin.id, decision: 'ACCEPTED', fromRevision: 1, toRevision: 2, createdAt: new Date(0) } });
+    await expect(retractEvidence(prisma, { evidenceId: evidence.id, claimToken, reason: 'Must retain accepted facts' }, asAgent())).rejects.toThrow(/person/i);
+    expect((await prisma.workEvidence.findUniqueOrThrow({ where: { id: evidence.id } })).retractedAt).toBeNull();
+  });
+
 });

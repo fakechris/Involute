@@ -836,7 +836,7 @@ export async function claimWork(
     // Same Issue → Claim lock order as run snapshots and verification.
     await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR UPDATE`;
     const work = await requireWork(transaction, initial.id);
-    await assertExecutionAuthority(transaction, actor, work.teamId, 'claim');
+    await assertExecutionAuthority(transaction, actor, work, 'claim');
 
     if (work.commitmentStatus !== 'COMMITTED') {
       throw createValidationError(WORK_NOT_COMMITTED_MESSAGE);
@@ -884,6 +884,13 @@ export async function claimWork(
       idempotencyId = reservation.record.id;
     }
 
+    if (!renewingOwnClaim) {
+      await transaction.workRun.updateMany({
+        where: { workId: work.id, status: { in: ['QUEUED', 'RUNNING', 'BLOCKED'] } },
+        data: { status: 'FAILED', endedAt: new Date(), summary: 'Execution lease expired; superseded by a new claim.' },
+      });
+      await transaction.workRun.updateMany({ where: { workId: work.id, executionRevokedAt: null }, data: { executionRevokedAt: new Date() } });
+    }
     const leaseUntil = new Date(
       Date.now() + (input.leaseSeconds && input.leaseSeconds > 0
         ? input.leaseSeconds

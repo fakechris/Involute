@@ -41,7 +41,9 @@ export async function reviewWork(
   if (!actorId) throw createValidationError(WORK_CLAIM_REQUIRES_ACTOR_MESSAGE);
 
   return prisma.$transaction(async (transaction) => {
-    const work = await requireWork(transaction, id);
+    const initial = await requireWork(transaction, id);
+    await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR UPDATE`;
+    const work = await requireWork(transaction, initial.id);
     let reviewIdempotencyId: string | null = null;
     if (input.idempotencyKey) {
       const reservation = await reserveWorkIdempotency(transaction, {

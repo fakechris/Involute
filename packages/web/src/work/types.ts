@@ -63,6 +63,8 @@ export interface WorkLinkNode {
 }
 
 export interface WorkRunSummary {
+  executionId?: string | null;
+  executionRevokedAt?: string | null;
   id: string;
   publicId: string;
   actorId?: string | null;

@@ -1,3 +1,4 @@
+import { resolveShareScope, shareScopeIssueWhere } from './project-sharing.js';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { createValidationError } from './errors.js';
 
@@ -16,19 +17,27 @@ export function assertWorkToken(hash: string | null, token?: string | null): voi
 export async function assertExecutionAuthority(
   tx: import('@prisma/client').Prisma.TransactionClient,
   actor: import('./work-service.js').WriteActor,
-  teamId: string,
+  work: { id: string; teamId: string },
   scope: 'claim' | 'report',
 ): Promise<void> {
   if (actor.actorKind !== 'AGENT') return;
+  const { teamId } = work;
   await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${actor.actorId}::uuid FOR SHARE`;
   const user = actor.actorId ? await tx.user.findUnique({ where: { id: actor.actorId } }) : null;
   if (!user || user.deactivatedAt || user.actorKind !== 'AGENT') throw createValidationError('Execution actor is no longer active.');
   if (!actor.agentCredentialId) return; // Internal service callers have no HTTP credential.
   await tx.$queryRaw`SELECT id FROM "AgentCredential" WHERE id = ${actor.agentCredentialId}::uuid FOR SHARE`;
   const credential = await tx.agentCredential.findUnique({ where: { id: actor.agentCredentialId } });
-  if (!credential || credential.userId !== user.id || credential.teamId !== teamId || credential.revokedAt ||
+  if (!credential || credential.userId !== user.id || credential.revokedAt ||
       (credential.expiresAt && credential.expiresAt <= new Date()) || !credential.scopes.includes(scope)) {
     throw createValidationError('Execution credential no longer permits this action.');
+  }
+  if (credential.teamId !== teamId) {
+    await tx.$queryRaw`SELECT id FROM "WorkShare" WHERE "userId" = ${user.id}::uuid FOR SHARE`;
+    const shared = shareScopeIssueWhere(await resolveShareScope(tx, user.id), 'write');
+    if (!shared || !await tx.issue.findFirst({ where: { AND: [{ id: work.id }, shared] }, select: { id: true } })) {
+      throw createValidationError('Execution credential or project share no longer permits this work.');
+    }
   }
   await tx.$queryRaw`SELECT id FROM "Team" WHERE id = ${teamId}::uuid FOR SHARE`;
   const team = await tx.team.findUnique({ where: { id: teamId } });
