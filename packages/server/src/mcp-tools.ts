@@ -1,3 +1,5 @@
+import { releaseClaim } from './claim-release.js';
+import { retractEvidence } from './evidence-retract.js';
 import type { PrismaClient, WorkEvidenceKind, WorkLinkType } from '@prisma/client';
 import { findPossibleDuplicates } from './embeddings/similar-work.js';
 
@@ -63,6 +65,8 @@ export type McpToolName =
   | 'work_propose_amendment'
   | 'work_unlink'
   | 'work_link'
+  | 'work_claim_release'
+  | 'evidence_retract'
   | 'work_claim'
   | 'run_report'
   | 'evidence_attach'
@@ -90,6 +94,8 @@ export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
   'work_link',
   'work_unlink',
   'work_claim',
+  'work_claim_release',
+  'evidence_retract',
   'run_report',
   'evidence_attach',
   'agent_request_claim',
@@ -263,7 +269,7 @@ export async function callMcpTool(
       const proposeReceipt = parseReceipt(args.receipt);
       if (proposeReceipt) proposeInput.receipt = proposeReceipt;
       assignOptional(proposeInput, 'initialState', optionalString(args.initial_state));
-      const created = await proposeWork(context.prisma, proposeInput, writeActorFromViewer(context.viewer, 'mcp'));
+      const created = await proposeWork(context.prisma, proposeInput, { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null });
       const notes: string[] = [];
       if (created.title !== rawTitle) {
         notes.push(`Status prefix was automatically removed from title: "${rawTitle}" -> "${created.title}". Do not encode work status into titles; use work_claim and run_report to transition states.`);
@@ -316,7 +322,7 @@ export async function callMcpTool(
       if (relatedType) proposeInput.relatedWorkType = parseWorkLinkType(relatedType, 'related_work_type');
       else if (proposeInput.relatedWorkId) proposeInput.relatedWorkType = 'DISCOVERED_DURING';
       assignOptional(proposeInput, 'initialState', optionalString(args.initial_state));
-      const created = await proposeWork(context.prisma, proposeInput, writeActorFromViewer(context.viewer, 'mcp'));
+      const created = await proposeWork(context.prisma, proposeInput, { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null });
       return {
         ...created,
         warning:
@@ -343,7 +349,7 @@ export async function callMcpTool(
         context.prisma,
         work.id,
         commitInput,
-        writeActorFromViewer(context.viewer, 'mcp'),
+        { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null },
       );
       const hints = await dependencyHints(context.prisma, { id: committed.id, teamId: committed.teamId, texts: mentionTexts(committed) });
       return hints.length
@@ -357,7 +363,7 @@ export async function callMcpTool(
         context.prisma,
         work.id,
         { expectedRevision: requiredNumber(args.expected_revision, 'expected_revision') },
-        writeActorFromViewer(context.viewer, 'mcp'),
+        { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null },
       );
     }
     case 'work_propose_amendment': {
@@ -366,7 +372,7 @@ export async function callMcpTool(
       const amendment = await proposeContractAmendment(
         context.prisma,
         { changes: args.changes, reason: requiredString(args.reason, 'reason'), workId: work.id },
-        writeActorFromViewer(context.viewer, 'mcp'),
+        { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null },
       );
       return {
         amendment_id: amendment.id,
@@ -438,7 +444,7 @@ export async function callMcpTool(
         context.prisma,
         work.id,
         updateInput,
-        writeActorFromViewer(context.viewer, 'mcp'),
+        { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null },
       );
       if (rawTitle && updated.title !== rawTitle) {
         return {
@@ -454,7 +460,7 @@ export async function callMcpTool(
       await assertCanWriteIssue(context.prisma, context, from.id);
       await assertCanWriteIssue(context.prisma, context, to.id);
       return createWorkLink(context.prisma, {
-        actor: writeActorFromViewer(context.viewer, 'mcp'),
+        actor: { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null },
         fromId: from.id,
         toId: to.id,
         type: parseWorkLinkType(requiredString(args.type, 'type'), 'type'),
@@ -474,7 +480,7 @@ export async function callMcpTool(
       });
       if (!link) return { removed: false, fromId: from.id, toId: to.id, type };
       try {
-        await deleteWorkLink(context.prisma, link.id, writeActorFromViewer(context.viewer, 'mcp'));
+        await deleteWorkLink(context.prisma, link.id, { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null });
       } catch (error) {
         // Another caller may have removed this exact edge while we waited for
         // the graph lock. Never delete a newly created replacement by tuple.
@@ -485,27 +491,43 @@ export async function callMcpTool(
       }
       return { removed: true, id: link.id, fromId: from.id, toId: to.id, type };
     }
+    case 'work_claim_release': {
+      const work = await requireWork(context.prisma, requiredString(args.work_id, 'work_id'));
+      await assertCanWriteIssue(context.prisma, context, work.id);
+      return releaseClaim(context.prisma, { workId: work.id, reason: requiredString(args.reason, 'reason'), claimToken: optionalString(args.claim_token) ?? null }, { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null });
+    }
+    case 'evidence_retract': {
+      const evidence = await context.prisma.workEvidence.findUnique({ where: { id: requiredString(args.evidence_id, 'evidence_id') } });
+      if (!evidence) throw createNotFoundError('Evidence not found.');
+      await assertCanWriteIssue(context.prisma, context, evidence.workId);
+      const correct = optionalString(args.correct_work_id);
+      const target = correct ? await requireWork(context.prisma, correct) : null;
+      if (target) await assertCanWriteIssue(context.prisma, context, target.id);
+      return retractEvidence(context.prisma, { evidenceId: evidence.id, reason: requiredString(args.reason, 'reason'), correctWorkId: target?.id ?? null, claimToken: optionalString(args.claim_token) ?? null }, { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null });
+    }
     case 'work_claim': {
       const work = await requireWork(context.prisma, requiredString(args.id, 'id'));
       await assertCanWriteIssue(context.prisma, context, work.id);
-      const claimInput: Parameters<typeof claimWork>[2] = {};
+      const claimInput: Parameters<typeof claimWork>[2] = { claimToken: optionalString(args.claim_token) ?? null, executionId: optionalString(args.execution_id) ?? null };
       assignOptional(claimInput, 'idempotencyKey', optionalString(args.idempotency_key));
       assignOptional(claimInput, 'leaseSeconds', optionalNumber(args.lease_seconds));
       const result = await claimWork(
         context.prisma,
         work.id,
         claimInput,
-        writeActorFromViewer(context.viewer, 'mcp'),
+        { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null },
       );
       return {
-        ...result,
+        claim: result.claim,
+        work: result.work,
+        claim_token: result.claimToken,
         suggested_branch: suggestedBranchName(result.work.identifier, result.work.title),
       };
     }
     case 'run_report': {
       const work = await requireWork(context.prisma, requiredString(args.work_id, 'work_id'));
       await assertCanWriteIssue(context.prisma, context, work.id);
-      const runInput: Parameters<typeof reportRun>[1] = { workId: work.id };
+      const runInput: Parameters<typeof reportRun>[1] = { workId: work.id, claimToken: optionalString(args.claim_token) ?? null };
       assignOptional(runInput, 'runId', optionalString(args.run_id));
       assignOptional(runInput, 'commitSha', optionalString(args.commit_sha));
       assignOptional(runInput, 'pullRequestNumber', optionalNumber(args.pr_number));
@@ -519,7 +541,7 @@ export async function callMcpTool(
       if (args.decision_requested === true) {
         runInput.decisionRequested = true;
       }
-      const reported = await reportRun(context.prisma, runInput, writeActorFromViewer(context.viewer, 'mcp'));
+      const reported = await reportRun(context.prisma, runInput, { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null });
       // Advisory only: the report is already committed, so a failed check is skipped.
       const lacksDownstream =
         runInput.status === 'completed' && (await researchLacksDownstream(context.prisma, work.id, runInput.summary).catch(() => false));
@@ -535,6 +557,7 @@ export async function callMcpTool(
       const work = await requireWork(context.prisma, requiredString(args.work_id, 'work_id'));
       await assertCanWriteIssue(context.prisma, context, work.id);
       const evidenceInput: Parameters<typeof attachEvidence>[1] = {
+        claimToken: optionalString(args.claim_token) ?? null,
         kind: requiredString(args.kind, 'kind'),
         runId: requiredString(args.run_id, 'run_id'),
         url: requiredString(args.url, 'url'),
@@ -545,7 +568,7 @@ export async function callMcpTool(
       return attachEvidence(
         context.prisma,
         evidenceInput,
-        writeActorFromViewer(context.viewer, 'mcp'),
+        { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null },
       );
     }
     case 'agent_inbox': {
@@ -939,6 +962,8 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        execution_id: { type: 'string', description: 'Optional client execution identifier; token, not this label, proves ownership.' },
+        claim_token: { type: 'string', description: 'Execution secret returned once by work_claim. Required for agents when renewing/reporting/attaching; never include in logs or receipts.' },
         id: { type: 'string' },
         lease_seconds: { type: 'integer' },
         idempotency_key: { type: 'string' },
@@ -953,6 +978,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        claim_token: { type: 'string', description: 'Execution secret returned once by work_claim. Required for agents when renewing/reporting/attaching; never include in logs or receipts.' },
         work_id: { type: 'string', description: 'Work item identifier (e.g. INV-104) or UUID' },
         run_id: {
           type: 'string',
@@ -978,6 +1004,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        claim_token: { type: 'string', description: 'Execution secret returned once by work_claim. Required for agents when renewing/reporting/attaching; never include in logs or receipts.' },
         work_id: { type: 'string' },
         run_id: { type: 'string' },
         kind: { type: 'string', enum: ['pr', 'test', 'log', 'screenshot', 'artifact', 'decision'] },
@@ -987,6 +1014,18 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
       },
       required: ['work_id', 'run_id', 'kind', 'url'],
     },
+  },
+  {
+    name: 'work_claim_release',
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    description: 'Yield your own active execution lease with a reason. Open runs become failed; another worker can claim immediately. Requires your claim_token; people may force release through the UI.',
+    inputSchema: { type: 'object', properties: { work_id: { type: 'string' }, claim_token: { type: 'string' }, reason: { type: 'string' } }, required: ['work_id', 'claim_token', 'reason'] },
+  },
+  {
+    name: 'evidence_retract',
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    description: 'Retract your own evidence before human acceptance, keeping history. Requires its run execution token and a reason. Other authors or accepted work require a person. Attach corrected evidence separately.',
+    inputSchema: { type: 'object', properties: { evidence_id: { type: 'string' }, claim_token: { type: 'string' }, reason: { type: 'string' }, correct_work_id: { type: 'string' } }, required: ['evidence_id', 'claim_token', 'reason'] },
   },
   {
     name: 'agent_inbox',
@@ -1224,6 +1263,8 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_link: 'link',
   work_unlink: 'link',
   work_claim: 'claim',
+  work_claim_release: 'claim',
+  evidence_retract: 'report',
   run_report: 'report',
   evidence_attach: 'report',
   agent_inbox: 'read',

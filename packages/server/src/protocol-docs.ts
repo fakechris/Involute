@@ -22,6 +22,10 @@ primary entrypoint; the web board is an observation and governance surface.
 9. Every production code modification MUST be bound to an Involute work item (INV-xxx). Unlinked PRs are blocked by CI offline lint and synchronized via GitHub Webhooks.
 10. A change that makes something a person's job (a rule refusing agents, a mutation, a notification sent to people) ships with the web screen where a person does it, registered in \`packages/server/src/human-surface.ts\`. A field agents can write through MCP must be writable through GraphQL too. \`human-surface.test.ts\` and \`mcp-graphql-parity.test.ts\` fail otherwise (INV-795).
 
+## Execution leases (INV-943)
+
+A work claim returns a secret \`claim_token\` and an execution label. Keep the token in execution secret state, never in logs, comments, receipts or Git. Pass it to renew a claim, report a run, attach evidence, release your own claim with \`work_claim_release\`, or correct your own unaccepted evidence with \`evidence_retract\`. Both corrections require a reason and preserve history. Actor identity alone cannot authorize a second session. Lease expiry requires a fresh claim; the new claim invalidates old execution writes. Completing a run releases the lease but permits evidence attachment until a subsequent claim supersedes it. A person can force-release from the Claim panel. Existing pre-token leases must expire or be released; their tokens cannot be recovered from context.
+
 ## Work-graph norm v1 (INV-718)
 
 1. **Placement.** Every committed item except a PROJECT has exactly one parent; \`work_commit\` refuses otherwise. Legal CONTAINS: PROJECT → MILESTONE / DECISION / EPIC / ISSUE ("No milestone"), MILESTONE → EPIC / ISSUE, EPIC → ISSUE, ISSUE → ISSUE. Pass \`parent_id\`; DISCOVERED_DURING / DERIVED_FROM proposals without it inherit the related item's nearest legal same-repository ancestor.

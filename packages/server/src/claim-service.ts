@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import { assertExecutionAuthority, assertWorkToken, hashWorkToken, mintWorkToken } from './work-execution.js';
 import type { ActorKind, Issue, Prisma, PrismaClient, User, WorkClaim, WorkLinkType } from '@prisma/client';
 
 import {
@@ -118,6 +120,8 @@ export interface CommitWorkInput {
 }
 
 export interface ClaimWorkInput {
+  claimToken?: string | null;
+  executionId?: string | null;
   idempotencyKey?: string | null;
   leaseSeconds?: number | null;
 }
@@ -820,7 +824,7 @@ export async function claimWork(
   id: string,
   input: ClaimWorkInput = {},
   actor: WriteActor = INTERNAL_WRITE_ACTOR,
-): Promise<{ claim: WorkClaim; work: Issue }> {
+): Promise<{ claim: WorkClaim; work: Issue; claimToken: string | null }> {
   assertActorCan(actor.actorKind, 'claim');
 
   if (!actor.actorId) {
@@ -832,6 +836,7 @@ export async function claimWork(
     // Same Issue → Claim lock order as run snapshots and verification.
     await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR UPDATE`;
     const work = await requireWork(transaction, initial.id);
+    await assertExecutionAuthority(transaction, actor, work, 'claim');
 
     if (work.commitmentStatus !== 'COMMITTED') {
       throw createValidationError(WORK_NOT_COMMITTED_MESSAGE);
@@ -840,6 +845,9 @@ export async function claimWork(
     const currentClaim = await transaction.workClaim.findUnique({ where: { workId: work.id } });
     if (currentClaim && currentClaim.leaseUntil > new Date() && currentClaim.actorId !== actor.actorId) {
       throw createValidationError(WORK_ALREADY_CLAIMED_MESSAGE);
+    }
+    if (actor.actorKind === 'AGENT' && currentClaim && currentClaim.leaseUntil > new Date() && currentClaim.actorId === actor.actorId) {
+      assertWorkToken(currentClaim.executionTokenHash, input.claimToken);
     }
     const renewingOwnClaim = Boolean(
       currentClaim && currentClaim.actorId === actor.actorId && currentClaim.leaseUntil > new Date(),
@@ -868,20 +876,30 @@ export async function claimWork(
           where: { workId: work.id },
           include: { work: true },
         });
-        if (!existing || existing.actorId !== actor.actorId) {
+        if (!existing || existing.actorId !== actor.actorId || existing.leaseUntil <= new Date()) {
           throw createValidationError(WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE);
         }
-        return { claim: existing, work: existing.work };
+        return { claim: existing, work: existing.work, claimToken: input.claimToken ?? null };
       }
       idempotencyId = reservation.record.id;
     }
 
+    if (!renewingOwnClaim) {
+      await transaction.workRun.updateMany({
+        where: { workId: work.id, status: { in: ['QUEUED', 'RUNNING', 'BLOCKED'] } },
+        data: { status: 'FAILED', endedAt: new Date(), summary: 'Execution lease expired; superseded by a new claim.' },
+      });
+      await transaction.workRun.updateMany({ where: { workId: work.id, executionRevokedAt: null }, data: { executionRevokedAt: new Date() } });
+    }
     const leaseUntil = new Date(
       Date.now() + (input.leaseSeconds && input.leaseSeconds > 0
         ? input.leaseSeconds
         : DEFAULT_CLAIM_LEASE_SECONDS) * 1000,
     );
+    const claimToken = actor.actorKind === 'AGENT' ? (renewingOwnClaim ? input.claimToken! : mintWorkToken()) : null;
     const claim = await upsertWorkClaim(transaction, {
+      executionTokenHash: claimToken ? hashWorkToken(claimToken) : null,
+      executionId: renewingOwnClaim ? currentClaim!.executionId : (input.executionId ?? randomUUID()),
       actorId: actor.actorId as string,
       conflict: 'throw',
       leaseUntil,
@@ -919,7 +937,7 @@ export async function claimWork(
       workIdentifier: updatedWork.identifier,
     });
 
-    return { claim, work: updatedWork };
+    return { claim, work: updatedWork, claimToken };
   });
 
   return result;
@@ -930,6 +948,8 @@ async function upsertWorkClaim(
   input: {
     actorId: string;
     conflict: 'throw' | 'skip';
+    executionTokenHash: string | null;
+    executionId: string | null;
     leaseUntil: Date;
     workId: string;
   },
@@ -964,6 +984,8 @@ async function upsertWorkClaim(
     return await prisma.workClaim.create({
       data: {
         actorId: input.actorId,
+        executionTokenHash: input.executionTokenHash,
+        executionId: input.executionId,
         leaseUntil: input.leaseUntil,
         workId: input.workId,
       },

@@ -331,7 +331,7 @@ describe('claim service', () => {
     const refreshed = await claimWork(
       prisma,
       committed.id,
-      {},
+      { claimToken: claimed.claimToken },
       { actorId: agent.id, actorKind: 'AGENT', surface: 'test' },
     );
     expect(refreshed.claim.actorId).toBe(agent.id);

@@ -349,12 +349,13 @@ describe('Involute MCP', () => {
       expect(response.body.error).toBeUndefined();
       return JSON.parse(response.body.result.content[0].text);
     };
-    await invoke('work_claim', { id: work.id });
-    await invoke('run_report', { work_id: work.id, status: 'running', commit_sha: 'a'.repeat(40), pr_number: 4 });
+    const claim = await invoke('work_claim', { id: work.id });
+    expect(JSON.stringify(claim)).not.toContain('executionTokenHash');
+    await invoke('run_report', { work_id: work.id, claim_token: claim.claim_token, status: 'running', commit_sha: 'a'.repeat(40), pr_number: 4 });
     const run = await prisma.workRun.findFirstOrThrow({ where: { workId: work.id } });
     expect(run).toMatchObject({ commitSha: 'a'.repeat(40), pullRequestNumber: 4, repository: 'example/project' });
     expect(run.contractRevision).toHaveLength(64);
-    await invoke('evidence_attach', { work_id: work.id, run_id: run.id, kind: 'test', url: 'https://github.com/example/project/actions/runs/8',
+    await invoke('evidence_attach', { work_id: work.id, claim_token: claim.claim_token, run_id: run.id, kind: 'test', url: 'https://github.com/example/project/actions/runs/8',
       summary: 'status=VERIFIED', status: 'VERIFIED', verifications: [{ status: 'VERIFIED', verifierId: 'github-app' }] });
     expect(await prisma.evidenceVerification.count()).toBe(0);
     expect(await prisma.workEvidence.count({ where: { workId: work.id } })).toBe(1);

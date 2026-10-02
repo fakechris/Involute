@@ -1,3 +1,4 @@
+import { assertExecutionAuthority, assertWorkToken } from './work-execution.js';
 import { snapshotContract, SHA_PATTERN } from './evidence-contract.js';
 import type { Issue, PrismaClient, WorkClaim, WorkRun } from '@prisma/client';
 
@@ -53,6 +54,7 @@ export async function reportRun(
     const initial = await requireWork(transaction, input.workId);
     await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR UPDATE`;
     const work = await requireWork(transaction, initial.id);
+    await assertExecutionAuthority(transaction, actor, work, 'report');
     let idempotencyId: string | null = null;
     if (input.idempotencyKey) {
       const reservation = await reserveWorkIdempotency(transaction, {
@@ -74,6 +76,10 @@ export async function reportRun(
         });
         if (!replayed || replayed.workId !== work.id) {
           throw createValidationError(WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE);
+        }
+        if (actor.actorKind === 'AGENT') {
+          assertWorkToken(replayed.executionTokenHash, input.claimToken);
+          if (replayed.executionRevokedAt) throw createValidationError('This execution claim has been superseded.');
         }
         const freshWork = await transaction.issue.findUniqueOrThrow({ where: { id: work.id } });
         return { run: replayed, work: freshWork };
@@ -118,7 +124,7 @@ export async function reportRun(
             actorId,
             id: input.runId,
             workId: work.id,
-            ...(isTerminalStatus ? {} : { leaseUntil: { gt: new Date() } }),
+            ...(isTerminalStatus && actor.actorKind !== 'AGENT' ? {} : { leaseUntil: { gt: new Date() } }),
           },
         });
         if (claimMatch) {
@@ -131,7 +137,7 @@ export async function reportRun(
           where: {
             actorId,
             workId: work.id,
-            ...(isTerminalStatus ? {} : { leaseUntil: { gt: new Date() } }),
+            ...(isTerminalStatus && actor.actorKind !== 'AGENT' ? {} : { leaseUntil: { gt: new Date() } }),
           },
         });
       }
@@ -169,6 +175,10 @@ export async function reportRun(
       }
     }
 
+    if (actor.actorKind === 'AGENT') {
+      assertWorkToken(run?.executionTokenHash ?? activeClaim?.executionTokenHash ?? null, input.claimToken);
+      if (run?.executionRevokedAt) throw createValidationError('This execution claim has been superseded.');
+    }
     const isNew = !run;
     if (!run) {
       if (!activeClaim) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
@@ -177,6 +187,8 @@ export async function reportRun(
       run = await transaction.workRun.create({
         data: {
           actorId,
+          executionTokenHash: activeClaim.executionTokenHash,
+          executionId: activeClaim.executionId,
           baseRevision: work.revision,
           contractRevision: frozen.contractRevision,
           acceptanceDigest: frozen.acceptanceDigest,
@@ -212,7 +224,8 @@ export async function reportRun(
         throw createValidationError(WORK_RUN_TERMINAL_REPLAY_MESSAGE);
       }
 
-      // Constraint 5: Lease expiration does not block terminal completed/failed updates
+      // Agents must still hold a live lease at every write, including terminal reports.
+      // Human historical reporting retains its previous expiry behavior.
       if (!activeClaim) {
         if (!run.claimId) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
         activeClaim = await transaction.workClaim.findFirst({
@@ -220,7 +233,7 @@ export async function reportRun(
             actorId,
             id: run.claimId,
             workId: work.id,
-            ...(isTerminalStatus ? {} : { leaseUntil: { gt: new Date() } }),
+            ...(isTerminalStatus && actor.actorKind !== 'AGENT' ? {} : { leaseUntil: { gt: new Date() } }),
           },
         });
         if (!activeClaim) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);

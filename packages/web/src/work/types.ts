@@ -63,6 +63,8 @@ export interface WorkLinkNode {
 }
 
 export interface WorkRunSummary {
+  executionId?: string | null;
+  executionRevokedAt?: string | null;
   id: string;
   publicId: string;
   actorId?: string | null;
@@ -156,6 +158,7 @@ export interface WorkAuditSummary {
 export interface WorkClaimSummary {
   actor: WorkUserSummary;
   leaseUntil: string;
+  executionId?: string | null;
   createdAt: string;
 }
 

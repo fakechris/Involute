@@ -663,6 +663,8 @@ model WorkAudit {
 }
 
 model WorkClaim {
+  executionTokenHash String?
+  executionId String?
   id         String   @id @default(uuid()) @db.Uuid
   workId     String   @unique @db.Uuid
   work       Issue    @relation(fields: [workId], references: [id], onDelete: Cascade)
@@ -713,6 +715,9 @@ model AppSequence {
 }
 
 model WorkRun {
+  executionRevokedAt DateTime?
+  executionTokenHash String?
+  executionId String?
   id          String        @id @default(uuid()) @db.Uuid
   publicId    String        @unique
   workId      String        @db.Uuid

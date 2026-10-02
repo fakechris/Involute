@@ -71,6 +71,7 @@ export const BOARD_PAGE_QUERY = gql`
         claim {
           id
           leaseUntil
+          executionId
           actor {
             id
             name
@@ -190,6 +191,7 @@ export const ISSUE_UPDATE_MUTATION = gql`
         claim {
           id
           leaseUntil
+          executionId
           actor {
             id
             name
@@ -383,6 +385,7 @@ export const ISSUE_PAGE_QUERY = gql`
       claim {
         id
         leaseUntil
+          executionId
         actor {
           id
           name

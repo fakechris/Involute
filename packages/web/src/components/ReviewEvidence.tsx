@@ -14,6 +14,8 @@ export function RunBinding({ run, contractDigest }: { run: WorkRunSummary; contr
   const stale = Boolean(run.contractRevision && contractDigest && run.contractRevision !== contractDigest);
   return (
     <span className="review-binding">
+      {run.executionId ? <span className="mono">execution {run.executionId}</span> : null}
+      {run.executionRevokedAt ? <span>execution ended or superseded</span> : null}
       {run.commitSha ? (
         <span className="mono" title={run.commitSha}>
           commit {run.commitSha.slice(0, 7)}

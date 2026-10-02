@@ -116,10 +116,10 @@ describe('work notifications', () => {
   it('notifies the human assignee when an agent run requests a decision', async () => {
     const agent = await createAgentActor('run-agent');
     const committed = await buildCommittedWork();
-    await claimWork(prisma, committed.id, {}, { actorId: agent.id, actorKind: 'AGENT', surface: 'mcp' });
+    const { claimToken } = await claimWork(prisma, committed.id, {}, { actorId: agent.id, actorKind: 'AGENT', surface: 'mcp' });
     await reportRun(
       prisma,
-      { decisionRequested: true, status: 'completed', summary: 'PR is up', workId: committed.id },
+      { claimToken, decisionRequested: true, status: 'completed', summary: 'PR is up', workId: committed.id },
       { actorId: agent.id, actorKind: 'AGENT', surface: 'mcp' },
     );
 
@@ -168,10 +168,10 @@ describe('work notifications', () => {
   it('does not notify anyone for review outcomes when the run actor is an agent', async () => {
     const agent = await createAgentActor('review-run-agent');
     const committed = await buildCommittedWork();
-    await claimWork(prisma, committed.id, {}, { actorId: agent.id, actorKind: 'AGENT', surface: 'mcp' });
+    const { claimToken } = await claimWork(prisma, committed.id, {}, { actorId: agent.id, actorKind: 'AGENT', surface: 'mcp' });
     await reportRun(
       prisma,
-      { decisionRequested: true, status: 'completed', workId: committed.id },
+      { claimToken, decisionRequested: true, status: 'completed', workId: committed.id },
       { actorId: agent.id, actorKind: 'AGENT', surface: 'mcp' },
     );
     await reviewWork(
@@ -195,10 +195,10 @@ describe('work notifications', () => {
       data: { role: 'EDITOR', teamId: team.id, userId: humanRunner.id },
     });
     const committed = await buildCommittedWork();
-    await claimWork(prisma, committed.id, {}, { actorId: humanRunner.id, actorKind: 'HUMAN', surface: 'web' });
+    const { claimToken } = await claimWork(prisma, committed.id, {}, { actorId: humanRunner.id, actorKind: 'HUMAN', surface: 'web' });
     await reportRun(
       prisma,
-      { decisionRequested: true, status: 'completed', workId: committed.id },
+      { claimToken, decisionRequested: true, status: 'completed', workId: committed.id },
       { actorId: humanRunner.id, actorKind: 'HUMAN', surface: 'web' },
     );
     await reviewWork(

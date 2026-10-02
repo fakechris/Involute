@@ -15,12 +15,13 @@ beforeEach(() => {
   mockRelease.mockResolvedValue({ data: { workClaimRelease: { success: true, message: null } } });
 });
 
-const claim = { leaseUntil: '2026-09-27T12:00:00.000Z', actor: { id: 'agent-1', name: 'Bot', email: null } };
+const claim = { executionId: 'worker-session-a', leaseUntil: '2026-09-27T12:00:00.000Z', actor: { id: 'agent-1', name: 'Bot', email: null } };
 
 describe('claim holder and release (INV-789)', () => {
   it('shows who holds the work and releases it with a reason', async () => {
     render(<ClaimControl workId="work-1" claim={claim} />);
     expect(screen.getByText('Bot')).toBeInTheDocument();
+    expect(screen.getByText(/worker-session-a/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Release claim' }));
     const release = screen.getByRole('button', { name: 'Release' });
     expect(release).toBeDisabled();

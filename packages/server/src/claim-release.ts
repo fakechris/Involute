@@ -1,3 +1,4 @@
+import { assertExecutionAuthority, assertWorkToken } from './work-execution.js';
 import type { PrismaClient } from '@prisma/client';
 
 import {
@@ -20,21 +21,31 @@ import { recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-se
  */
 export async function releaseClaim(
   prisma: PrismaClient,
-  input: { workId: string; reason: string },
+  input: { workId: string; reason: string; claimToken?: string | null },
   actor: WriteActor,
 ): Promise<{ workId: string; releasedActorId: string }> {
-  if (actor.actorKind !== 'HUMAN' || !actor.actorId) throw createValidationError(CLAIM_RELEASE_FORBIDDEN_MESSAGE);
+  if (!['HUMAN', 'AGENT'].includes(actor.actorKind) || !actor.actorId) throw createValidationError(CLAIM_RELEASE_FORBIDDEN_MESSAGE);
   const reason = input.reason.trim();
   if (!reason) throw createValidationError(CLAIM_RELEASE_REASON_REQUIRED_MESSAGE);
 
   return prisma.$transaction(async (transaction) => {
     const work = await findWorkByIdOrIdentifier(transaction, input.workId);
     if (!work) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+    await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${work.id}::uuid FOR UPDATE`;
     const claim = await transaction.workClaim.findUnique({ where: { workId: work.id } });
+    await assertExecutionAuthority(transaction, actor, work, 'claim');
     if (!claim) throw createValidationError(CLAIM_RELEASE_NO_CLAIM_MESSAGE);
+    if (actor.actorKind === 'AGENT') {
+      if (claim.actorId !== actor.actorId || claim.leaseUntil <= new Date()) throw createValidationError(CLAIM_RELEASE_FORBIDDEN_MESSAGE);
+      assertWorkToken(claim.executionTokenHash, input.claimToken);
+    }
     const releaser = await transaction.user.findUnique({ where: { id: actor.actorId! }, select: { name: true, email: true } });
     const by = releaser?.name ?? releaser?.email ?? 'a person';
 
+    await transaction.workRun.updateMany({
+      where: { workId: work.id, claimSnapshotId: claim.id, executionRevokedAt: null },
+      data: { executionRevokedAt: new Date() },
+    });
     const closed = await transaction.workRun.updateMany({
       where: { claimId: claim.id, status: { in: ['QUEUED', 'RUNNING', 'BLOCKED'] } },
       data: { status: 'FAILED', endedAt: new Date(), summary: `Claim released by ${by}: ${reason}` },

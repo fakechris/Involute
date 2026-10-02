@@ -30,13 +30,13 @@ async function seedCommittedClaimedWork(team: Team, human: User, executor: User 
     },
     { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
   );
-  await claimWork(
+  const { claimToken } = await claimWork(
     prisma,
     committed.id,
     {},
     { actorId: executor.id, actorKind: executor.actorKind, surface: 'test' },
   );
-  return committed;
+  return { ...committed, claimToken };
 }
 
 describe('graded auto-accept gate', () => {
@@ -88,7 +88,7 @@ describe('graded auto-accept gate', () => {
       const committed = await seedCommittedClaimedWork(team, human, agent);
       const started = await reportRun(
         prisma,
-        { status: 'running', workId: committed.id },
+        { status: 'running', claimToken: committed.claimToken, workId: committed.id },
         actor,
       );
       const attach = () =>
@@ -98,7 +98,7 @@ describe('graded auto-accept gate', () => {
             kind,
             summary,
             runId: started.run.publicId,
-            workId: committed.id,
+            claimToken: committed.claimToken, workId: committed.id,
             url: 'https://github.com/fakechris/Involute/pull/99',
           },
           actor,
@@ -106,7 +106,7 @@ describe('graded auto-accept gate', () => {
       if (attachFirst) await attach();
       await reportRun(
         prisma,
-        { runId: started.run.publicId, status: 'completed', workId: committed.id },
+        { runId: started.run.publicId, status: 'completed', claimToken: committed.claimToken, workId: committed.id },
         actor,
       );
       if (!attachFirst) await attach();
@@ -135,12 +135,12 @@ describe('graded auto-accept gate', () => {
       const committed = await seedCommittedClaimedWork(team, human);
       const started = await reportRun(
         prisma,
-        { status: 'running', workId: committed.id },
+        { status: 'running', claimToken: committed.claimToken, workId: committed.id },
         { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
       );
       await reportRun(
         prisma,
-        { runId: started.run.publicId, status: 'completed', workId: committed.id },
+        { runId: started.run.publicId, status: 'completed', claimToken: committed.claimToken, workId: committed.id },
         { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
       );
       const attached = await attachEvidence(
@@ -150,7 +150,7 @@ describe('graded auto-accept gate', () => {
           runId: started.run.publicId,
           summary: 'exit:0',
           url: 'https://example.test/test-results',
-          workId: committed.id,
+          claimToken: committed.claimToken, workId: committed.id,
         },
         { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
       );
@@ -190,12 +190,12 @@ describe('graded auto-accept gate', () => {
     });
     const started = await reportRun(
       prisma,
-      { status: 'running', workId: committed.id },
+      { status: 'running', claimToken: committed.claimToken, workId: committed.id },
       { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
     );
     const completed = await reportRun(
       prisma,
-      { runId: started.run.publicId, status: 'completed', workId: committed.id },
+      { runId: started.run.publicId, status: 'completed', claimToken: committed.claimToken, workId: committed.id },
       { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
     );
 

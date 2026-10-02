@@ -37,8 +37,8 @@ describe('a person releases an agent claim (INV-789)', () => {
   it('ends the claim, closes its open run, records why and tells the holder and its owner', async () => {
     const other = await prisma.user.create({ data: { email: 'second@example.com', name: 'Second', actorKind: 'HUMAN' } });
     await prisma.user.update({ where: { id: agent.id }, data: { ownerId: other.id } });
-    await claimWork(prisma, work.id, {}, asAgent());
-    const { run } = await reportRun(prisma, { workId: work.id, status: 'running', summary: 'working' }, asAgent());
+    const { claimToken } = await claimWork(prisma, work.id, {}, asAgent());
+    const { run } = await reportRun(prisma, { workId: work.id, status: 'running', summary: 'working', claimToken }, asAgent());
 
     await releaseClaim(prisma, { workId: work.identifier, reason: 'Stuck for a day' }, asHuman());
 
@@ -61,9 +61,9 @@ describe('a person releases an agent claim (INV-789)', () => {
     await expect(claimWork(prisma, work.id, {}, asAgent())).resolves.toBeTruthy();
   });
 
-  it('is for people only, needs a reason and a claim', async () => {
+  it('requires an execution credential for agents and a reason for everyone', async () => {
     await claimWork(prisma, work.id, {}, asAgent());
-    await expect(releaseClaim(prisma, { workId: work.id, reason: 'mine now' }, asAgent())).rejects.toThrow(/Only a person/);
+    await expect(releaseClaim(prisma, { workId: work.id, reason: 'mine now' }, asAgent())).rejects.toThrow(/execution|lease/i);
     await expect(releaseClaim(prisma, { workId: work.id, reason: '  ' }, asHuman())).rejects.toThrow(/needs a reason/);
     await releaseClaim(prisma, { workId: work.id, reason: 'ok' }, asHuman());
     await expect(releaseClaim(prisma, { workId: work.id, reason: 'again' }, asHuman())).rejects.toThrow(/no claim/);
