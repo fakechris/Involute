@@ -177,6 +177,16 @@ describe('Free-text search (INV-925)', () => {
       expect(identifiers(await searchIssues(prisma, { query: '候选审批' }))).toEqual([near.identifier, far.identifier]);
     });
 
+    it('ranks among what the filters allow, so better matches elsewhere do not crowd it out', async () => {
+      for (let index = 0; index < 3; index += 1) {
+        await work({ title: `候选审批 elsewhere ${index}`, repository: 'other/repo' });
+      }
+      const mine = await work({ title: 'Mine', description: '候选队列，之后审批', repository: 'mine/repo' });
+
+      const hits = await searchIssues(prisma, { query: '候选审批', where: { repository: 'mine/repo' }, recallLimit: 2 });
+      expect(identifiers(hits)).toEqual([mine.identifier]);
+    });
+
     it('keeps vectors current on every write, raw SQL included', async () => {
       const issue = await work({ title: 'Trigger' });
       await prisma.$executeRaw`UPDATE "Issue" SET description = '后来补上的溯源说明' WHERE id = ${issue.id}::uuid`;

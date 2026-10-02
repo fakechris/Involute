@@ -19,6 +19,8 @@ export const DEFAULT_SEARCH_FIRST = 20;
 export const MAX_SEARCH_FIRST = 100;
 /** Candidates ranked per query; recall is newest-first beyond this. */
 const RECALL_LIMIT = 500;
+/** Full-text matches considered before scoping; a bound, far above real use. */
+const FULL_TEXT_MATCH_CAP = 5000;
 const MAX_TERMS = 8;
 const SNIPPET_RADIUS = 40;
 
@@ -164,11 +166,19 @@ export async function searchIssues(
       ...patterns.map((term) => ({ title: { contains: term, mode: 'insensitive' as const } })),
     ],
   };
-  const ranks = await rankByFullText(prisma, parsed, recallLimit);
+  const ranks = await rankByFullText(prisma, parsed);
+  // Ranked best-first among what this viewer may read and the filters allow,
+  // so matches elsewhere cannot use up the limit.
+  const rankedIds = ranks.size > 0
+    ? (await prisma.issue.findMany({ where: { AND: [{ id: { in: [...ranks.keys()] } }, ...scope] }, select: { id: true } }))
+        .map(({ id }) => id)
+        .sort((left, right) => (ranks.get(right) ?? 0) - (ranks.get(left) ?? 0))
+        .slice(0, recallLimit)
+    : [];
   const [broad, strong, ranked] = await Promise.all([
     recall(identifierMatch ? { OR: [identifierMatch, textMatch] } : textMatch),
     recall(strongMatch),
-    ranks.size > 0 ? recall({ id: { in: [...ranks.keys()] } }) : Promise.resolve([]),
+    rankedIds.length > 0 ? recall({ id: { in: rankedIds } }) : Promise.resolve([]),
   ]);
   const candidates = [...new Map([...broad, ...strong, ...ranked].map((issue) => [issue.id, issue])).values()];
 
@@ -182,11 +192,13 @@ export async function searchIssues(
   return hits.slice(0, first);
 }
 
-/** Ids of items (or their comments) matching the full-text query, with their best rank. */
+/**
+ * Ids of items (or their comments) matching the full-text query, with their
+ * best rank. Unscoped: the caller narrows to what the viewer may read.
+ */
 async function rankByFullText(
   prisma: DatabaseClient,
   parsed: ParsedSearchQuery,
-  limit: number,
 ): Promise<Map<string, number>> {
   const tsQuery = buildSearchTsQuery(parsed.terms.flatMap((term) => term.pieces));
   if (!tsQuery) {
@@ -203,7 +215,7 @@ async function rankByFullText(
     ) matches
     GROUP BY id
     ORDER BY rank DESC
-    LIMIT ${limit}
+    LIMIT ${FULL_TEXT_MATCH_CAP}
   `;
   return new Map(rows.map((row) => [row.id, row.rank]));
 }
