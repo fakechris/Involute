@@ -178,6 +178,24 @@ describe('Involute MCP', () => {
     expect(denied.body.error.message).toContain('lacks required scope: propose');
   });
 
+  it('keeps a suggested priority on a non-bug proposal and refuses one out of range (INV-936)', async () => {
+    const proposed = await callTool('work_propose', {
+      team: DEFAULT_TEAM_KEY,
+      title: 'Low priority follow-up',
+      repository: 'test/placement',
+      labels: ['improvement'],
+      priority: 4,
+    });
+    expect(proposed).toMatchObject({ commitmentStatus: 'CANDIDATE', priority: 4 });
+
+    const refused = await mcpRpc('/mcp', {
+      id: 'bad-priority',
+      method: 'tools/call',
+      params: { name: 'work_propose', arguments: { team: DEFAULT_TEAM_KEY, title: 'Bad priority', repository: 'test/placement', priority: 9 } },
+    });
+    expect(JSON.stringify(refused.body)).toContain('Priority must be 0 (none)');
+  });
+
   it('runs search → context → propose → commit → claim without marking work done', async () => {
     await prisma.issue.create({
       data: {

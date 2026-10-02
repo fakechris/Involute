@@ -679,7 +679,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         },
         priority: {
           type: 'number',
-          description: 'Required with labels ["bug"]: 1 (Urgent, 24h SLA), 2 (High, 48h), 3 (Medium) or 4 (Low, 7 days). The bug is committed directly (it does not go to Candidates). Without parent, priority or steps_to_reproduce the proposal is refused.',
+          description: 'Suggested priority: 0 (none), 1 (Urgent), 2 (High), 3 (Medium) or 4 (Low); kept on the candidate, and the person who commits it may change it. Required with labels ["bug"] (1–4: Urgent 24h SLA, High 48h, Medium / Low 7 days); the bug is committed directly. Other values are refused.',
         },
         steps_to_reproduce: {
           type: 'string',

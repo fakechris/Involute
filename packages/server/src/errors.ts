@@ -81,6 +81,8 @@ export const RESEARCH_INITIAL_DONE_ONLY_MESSAGE = 'initial_state DONE is only fo
 export const BUG_REPORT_PRIORITY_REQUIRED_MESSAGE = 'A bug report needs a priority (Urgent, High, Medium or Low).';
 export const BUG_REPORT_STEPS_REQUIRED_MESSAGE = 'A bug report needs steps to reproduce.';
 export const BUG_COMMIT_PRIORITY_REQUIRED_MESSAGE = 'Committing a bug needs a priority (Urgent, High, Medium or Low): it sets the SLA.';
+export const PROPOSE_PRIORITY_RANGE_MESSAGE =
+  'Priority must be 0 (none), 1 (Urgent), 2 (High), 3 (Medium) or 4 (Low).';
 export const BUG_PROPOSE_PRIORITY_REQUIRED_MESSAGE = 'Proposing a bug needs a priority (Urgent, High, Medium or Low): it sets the SLA.';
 export const BUG_PROPOSE_PARENT_REQUIRED_MESSAGE =
   'A bug is committed directly (it does not go to Candidates): pass parent_id, or related_work_id so it can inherit a parent.';
@@ -296,6 +298,7 @@ const exposedErrorCodes = new Map<string, string>([
   [CLAIM_RELEASE_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [CLAIM_RELEASE_NO_CLAIM_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_COMMIT_PRIORITY_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [PROPOSE_PRIORITY_RANGE_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_PROPOSE_PRIORITY_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_PROPOSE_PARENT_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_PROPOSE_STEPS_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
