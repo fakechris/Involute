@@ -250,20 +250,31 @@ export function BoardPage() {
   const queryData = data ?? previousData;
   const inFlightUpdatesRef = useRef<Set<string>>(new Set());
   const lastHandledDropRef = useRef<{ issueId: string; targetStateId: string; timestamp: number } | null>(null);
+  // IQL can depend on graph joins and viewer identity unavailable locally.
+  // Re-check membership on the server after mutations instead of admitting
+  // local overlays into a result set they may no longer match.
+  const iqlMutationOptions = looksLikeIql(boardViewState.query)
+    ? { refetchQueries: ['BoardPage'], awaitRefetchQueries: true }
+    : undefined;
   const [runIssueUpdate] = useMutation<IssueUpdateMutationData, IssueUpdateMutationVariables>(
     ISSUE_UPDATE_MUTATION,
+    iqlMutationOptions,
   );
   const [runIssueCreate] = useMutation<IssueCreateMutationData, IssueCreateMutationVariables>(
     ISSUE_CREATE_MUTATION,
+    iqlMutationOptions,
   );
   const [runCommentCreate] = useMutation<CommentCreateMutationData, CommentCreateMutationVariables>(
     COMMENT_CREATE_MUTATION,
+    iqlMutationOptions,
   );
   const [runIssueDelete] = useMutation<IssueDeleteMutationData, IssueDeleteMutationVariables>(
     ISSUE_DELETE_MUTATION,
+    iqlMutationOptions,
   );
   const [runCommentDelete] = useMutation<CommentDeleteMutationData, CommentDeleteMutationVariables>(
     COMMENT_DELETE_MUTATION,
+    iqlMutationOptions,
   );
   const teams = queryData?.teams.nodes ?? EMPTY_TEAMS;
   const users = queryData?.users.nodes ?? EMPTY_USERS;
@@ -647,8 +658,12 @@ export function BoardPage() {
   }, [urlIssue, allIssues]);
 
   const boardVisibleIssues = useMemo(
-    () => applyBoardViewState(visibleIssues, looksLikeIql(boardViewState.query) ? { ...boardViewState, query: '' } : boardViewState, users),
-    [boardViewState, users, visibleIssues],
+    () => {
+      if (!looksLikeIql(boardViewState.query)) return applyBoardViewState(visibleIssues, boardViewState, users);
+      const matchingIds = new Set(baseIssues.map((issue) => issue.id));
+      return applyBoardViewState(visibleIssues.filter((issue) => matchingIds.has(issue.id)), { ...boardViewState, query: '' }, users);
+    },
+    [baseIssues, boardViewState, users, visibleIssues],
   );
   const boardViewTokens = useMemo(
     () => buildBoardViewSummary(boardViewState, selectedTeam, users, labels),

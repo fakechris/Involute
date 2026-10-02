@@ -40,14 +40,14 @@ function placedState() {
   };
 }
 
-function mockCreate() {
+function mockCreate(id = 'issue-3') {
   const createIssue = vi.fn().mockResolvedValue({
     data: {
       issueCreate: {
         success: true,
         message: null,
         issue: {
-          id: 'issue-3',
+          id,
           identifier: 'INV-3',
           revision: 1,
           title: 'Created issue',
@@ -192,6 +192,24 @@ describe('App issue creation', () => {
       repository: 'fakechris/Involute',
       parentId: 'milestone-80',
     });
+  });
+
+  it('does not admit a local creation into a server-filtered IQL result', async () => {
+    window.localStorage.setItem('involute.createPlacement.INV', JSON.stringify({ repository: 'fakechris/Involute', parentId: 'milestone-80' }));
+    mockCreate('local-creation');
+    renderApp(placedState(), ['/']);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create issue' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Create issue drawer' });
+    fireEvent.change(within(dialog).getByLabelText('Issue title'), { target: { value: 'Created issue' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create issue' }));
+    expect(await screen.findByTestId('issue-card-local-creation')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close issue detail drawer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search board issues' }), { target: { value: 'kind:PROJECT' } });
+    await waitFor(() => expect(screen.queryByTestId('issue-card-local-creation')).not.toBeInTheDocument());
+    expect(apolloMocks.useMutation).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      refetchQueries: ['BoardPage'], awaitRefetchQueries: true,
+    }));
   });
 
   it('starts from the last placement, marked "Last used", and submits with Cmd+Enter', async () => {
