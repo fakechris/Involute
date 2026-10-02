@@ -81,6 +81,7 @@ const BugsPage = lazyRoute(async () => (await import('./routes/BugsPage')).BugsP
 const HygienePage = lazyRoute(async () => (await import('./routes/HygienePage')).HygienePage);
 const OpsPage = lazyRoute(async () => (await import('./routes/OpsPage')).OpsPage);
 const GraphPage = lazyRoute(async () => (await import('./routes/GraphPage')).GraphPage);
+const SearchPage = lazyRoute(async () => (await import('./routes/SearchPage')).SearchPage);
 const WorkContextPage = lazyRoute(async () => (await import('./routes/WorkContextPage')).WorkContextPage);
 
 const THEME_STORAGE_KEY = 'involute.theme';
@@ -1318,6 +1319,7 @@ export function App() {
               <Route path="/in-review" element={<InReviewPage />} />
               <Route path="/bugs" element={<BugsPage />} />
               <Route path="/graph" element={<GraphPage />} />
+              <Route path="/search" element={<SearchPage />} />
               <Route path="/hygiene" element={<HygienePage />} />
               <Route path="/ops" element={<OpsPage />} />
               <Route path="/work/:id" element={<WorkContextPage />} />

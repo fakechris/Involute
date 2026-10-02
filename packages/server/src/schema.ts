@@ -405,9 +405,10 @@ const typeDefs = /* GraphQL */ `
     Free-text search over work items (INV-925): identifier, title, description,
     contract fields and comments, best match first. Every word must be found
     somewhere; "quoted phrases" stay together; INV-925, inv925 and 925 find the
-    item by number. iql narrows the results. Same search as MCP work_search.
+    item by number. iql and repository (a project) narrow the results. Same
+    search as MCP work_search.
     """
-    search(query: String!, first: Int, iql: String): [IssueSearchHit!]!
+    search(query: String!, first: Int, iql: String, repository: String): [IssueSearchHit!]!
     traceabilityAudit(days: Int): TraceabilityAuditResult!
     """Non-human actors (AGENT and SERVICE), most recently active first. Backs the directory and @ completion."""
     agents(teamKey: String, includeDeactivated: Boolean): [User!]!
@@ -2514,16 +2515,19 @@ const resolvers = {
     },
     search: async (
       _parent: unknown,
-      args: { query: string; first?: number | null; iql?: string | null },
+      args: { query: string; first?: number | null; iql?: string | null; repository?: string | null },
       context: GraphQLContext,
     ): Promise<IssueSearchHit[]> => {
       requireAuthentication(context);
-      const iqlWhere = args.iql?.trim()
-        ? compileIqlToIssueWhere(parseIqlOrThrow(args.iql), { viewerId: context.viewer?.id ?? null })
-        : undefined;
+      const filters: Prisma.IssueWhereInput[] = [];
+      if (args.iql?.trim()) {
+        const compiled = compileIqlToIssueWhere(parseIqlOrThrow(args.iql), { viewerId: context.viewer?.id ?? null });
+        if (compiled) filters.push(compiled);
+      }
+      if (args.repository) filters.push({ repository: args.repository });
       return searchIssues(
         context.prisma,
-        { query: args.query, first: args.first ?? null, where: iqlWhere ?? null },
+        { query: args.query, first: args.first ?? null, where: filters.length > 0 ? { AND: filters } : null },
         buildReadableIssueWhere(context),
       );
     },

@@ -72,6 +72,8 @@ export interface SearchWorkInput {
   /** IQL filter string; the plain `query` stays free-text search. */
   iql?: string | null;
   query?: string | null;
+  /** Only work in this project (its repository, e.g. fakechris/Involute). */
+  repository?: string | null;
   teamKey?: string | null;
   /** Resolves `assignee:me` in IQL terms; set by the calling surface. */
   viewerId?: string | null;
@@ -208,6 +210,10 @@ export async function searchWork(
 
   if (input.commitmentStatus) {
     clauses.push({ commitmentStatus: input.commitmentStatus });
+  }
+
+  if (input.repository) {
+    clauses.push({ repository: input.repository });
   }
 
   // Free text goes through the same ranked search as the web (INV-925).

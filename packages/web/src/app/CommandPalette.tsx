@@ -1,7 +1,8 @@
 import { useQuery } from '@apollo/client/react';
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { highlight } from '../components/highlight';
 import { WORK_SEARCH_QUERY } from '../work/queries';
 import type { WorkSearchHit, WorkSearchQueryData } from '../work/types';
 
@@ -158,7 +159,6 @@ export function CommandPalette({
     return null;
   }
 
-  const terms = query.trim().split(/\s+/).filter(Boolean);
   const waitingForSearch = query.trim().length > 0 && (searching || searchText !== query.trim()) && !searchHits;
 
   return (
@@ -198,9 +198,9 @@ export function CommandPalette({
                     }}
                   >
                     <div className="command-palette__item-copy">
-                      <span className="command-palette__item-label">{highlight(action.label, terms)}</span>
+                      <span className="command-palette__item-label">{highlight(action.label, query)}</span>
                       {action.description ? (
-                        <span className="command-palette__item-description">{highlight(action.description, terms)}</span>
+                        <span className="command-palette__item-description">{highlight(action.description, query)}</span>
                       ) : null}
                     </div>
                     <div className="command-palette__item-trailing">
@@ -227,6 +227,19 @@ export function CommandPalette({
             <kbd>↵</kbd>
             Open
           </span>
+          {query.trim() ? (
+            // The palette shows the top hits; the page lists all of them, with filters (INV-926).
+            <button
+              type="button"
+              className="command-palette__all-results"
+              onClick={() => {
+                navigate(`/search?q=${encodeURIComponent(query.trim())}`);
+                onClose();
+              }}
+            >
+              View all results →
+            </button>
+          ) : null}
           <span className="command-palette__footer-copy">
             {waitingForSearch && filteredActions.length > 0 ? 'Searching all work…' : 'Searches titles, descriptions, contracts and comments'}
           </span>
@@ -243,21 +256,4 @@ function useDebounced(value: string, delayMs: number): string {
     return () => window.clearTimeout(timer);
   }, [value, delayMs]);
   return debounced;
-}
-
-/** Wraps every case-insensitive occurrence of a search word in <mark>. */
-function highlight(text: string, terms: string[]): ReactNode {
-  const needles = terms.map((term) => term.replace(/^"|"$/g, '')).filter(Boolean);
-  if (needles.length === 0) {
-    return text;
-  }
-  const pattern = new RegExp(`(${needles.map(escapeRegExp).join('|')})`, 'gi');
-  const parts = text.split(pattern);
-  return parts.map((part, index) =>
-    index % 2 === 1 ? <mark key={index}>{part}</mark> : <Fragment key={index}>{part}</Fragment>,
-  );
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

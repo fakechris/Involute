@@ -277,8 +277,8 @@ describe('Free-text search (INV-925)', () => {
     }
 
     const SEARCH = /* GraphQL */ `
-      query Search($query: String!, $iql: String) {
-        search(query: $query, iql: $iql) { issue { identifier state { type } } matchedField snippet commentId }
+      query Search($query: String!, $iql: String, $repository: String) {
+        search(query: $query, iql: $iql, repository: $repository) { issue { identifier state { type } } matchedField snippet commentId }
       }
     `;
 
@@ -297,6 +297,21 @@ describe('Free-text search (INV-925)', () => {
 
       const filtered = await graphql(SEARCH, { query: '拖拽', iql: 'state-type:COMPLETED' });
       expect(filtered.search).toEqual([]);
+
+      // The same filters narrow both surfaces the same way (INV-926).
+      await prisma.issue.update({ where: { id: second.id }, data: { repository: 'fakechris/lumenbox', kind: 'EPIC' } });
+      for (const filters of [
+        { iql: 'kind:EPIC' },
+        { repository: 'fakechris/lumenbox' },
+        { iql: 'kind:ISSUE', repository: 'fakechris/lumenbox' },
+      ]) {
+        const webIds = (await graphql(SEARCH, { query: '拖拽', ...filters })).search.map((hit: any) => hit.issue.identifier);
+        const mcpIds = (await workSearch({ query: '拖拽', ...('iql' in filters ? { filter: filters.iql } : {}), ...('repository' in filters ? { repository: filters.repository } : {}) }))
+          .map((item) => item.identifier);
+        expect(webIds, JSON.stringify(filters)).toEqual(mcpIds);
+      }
+      expect((await graphql(SEARCH, { query: '拖拽', repository: 'fakechris/lumenbox' })).search.map((hit: any) => hit.issue.identifier))
+        .toEqual([second.identifier]);
     });
 
     it('never returns items or comments from a team the viewer cannot read', async () => {
