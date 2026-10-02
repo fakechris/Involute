@@ -1,5 +1,6 @@
 import type { Issue, Prisma, PrismaClient, WorkflowState } from '@prisma/client';
 
+import type { SemanticIndex } from './embeddings/semantic-index.js';
 import { buildSearchTsQuery, segmentQueryWord } from './search-tokens.js';
 
 /**
@@ -24,13 +25,15 @@ const FULL_TEXT_MATCH_CAP = 5000;
 const MAX_TERMS = 8;
 const SNIPPET_RADIUS = 40;
 
-export type SearchField = 'identifier' | 'title' | 'contract' | 'description' | 'comment';
+/** Where the words were found; `semantic` = close in meaning, no words matched (INV-927). */
+export type SearchField = 'identifier' | 'title' | 'contract' | 'description' | 'comment' | 'semantic';
+type TextField = Exclude<SearchField, 'identifier' | 'semantic'>;
 
 const CONTRACT_FIELDS = ['outcome', 'scope', 'constraints', 'acceptance', 'verification'] as const;
 
 // A word found in the title outweighs any number of words found only in
 // comments, so a title hit always ranks above a comment-only hit.
-const FIELD_WEIGHT: Record<Exclude<SearchField, 'identifier'>, number> = {
+const FIELD_WEIGHT: Record<TextField, number> = {
   title: 40,
   contract: 20,
   description: 12,
@@ -41,6 +44,12 @@ const TITLE_PREFIX_BONUS = 20;
 const TITLE_PHRASE_BONUS = 15;
 const TITLE_COVERAGE_BONUS = 10;
 const FULL_TEXT_RANK_WEIGHT = 10;
+/** Items close in meaning considered per query, and kept after scoping. */
+const SEMANTIC_RECALL = 60;
+const SEMANTIC_LIMIT = 20;
+const SEMANTIC_TIMEOUT_MS = 2000;
+/** Reciprocal rank fusion constant (the usual 60). */
+const RRF_K = 60;
 const STATE_WEIGHT: Record<string, number> = {
   STARTED: 5,
   UNSTARTED: 4,
@@ -109,6 +118,7 @@ export async function searchIssues(
   prisma: DatabaseClient,
   input: IssueSearchInput,
   readableWhere?: Prisma.IssueWhereInput,
+  semantic?: SemanticIndex | null,
 ): Promise<IssueSearchHit[]> {
   const parsed = parseSearchQuery(input.query);
   if (parsed.terms.length === 0) {
@@ -189,7 +199,75 @@ export async function searchIssues(
     right.score - left.score
     || right.issue.updatedAt.getTime() - left.issue.updatedAt.getTime()
     || left.issue.identifier.localeCompare(right.issue.identifier));
-  return hits.slice(0, first);
+  if (!semantic) {
+    return hits.slice(0, first);
+  }
+  return fuseWithSemantic(prisma, hits, input.query, scope, semantic, first);
+}
+
+/**
+ * Keyword hits and items close in meaning, merged by reciprocal rank
+ * (INV-927): an item both ways ranks highest; one found only by meaning is
+ * marked `semantic`. A match by number stays first. If the model fails,
+ * search answers by keyword alone.
+ */
+async function fuseWithSemantic(
+  prisma: DatabaseClient,
+  hits: IssueSearchHit[],
+  query: string,
+  scope: Prisma.IssueWhereInput[],
+  semantic: SemanticIndex,
+  first: number,
+): Promise<IssueSearchHit[]> {
+  let matches: Array<{ id: string; similarity: number }>;
+  try {
+    // A model still loading (about 20 s after a restart on a small box) must
+    // not hold up search: past the limit, answer by keyword alone.
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), SEMANTIC_TIMEOUT_MS);
+    });
+    const answered = await Promise.race([semantic.search(query, SEMANTIC_RECALL), timeout]);
+    clearTimeout(timer);
+    if (!answered) {
+      return hits.slice(0, first);
+    }
+    matches = answered;
+  } catch (error) {
+    console.error('[search] semantic search failed; answering by keyword.', error);
+    return hits.slice(0, first);
+  }
+  if (matches.length === 0) {
+    return hits.slice(0, first);
+  }
+  const readable = new Set((await prisma.issue.findMany({
+    where: { AND: [{ id: { in: matches.map((match) => match.id) } }, ...scope] },
+    select: { id: true },
+  })).map(({ id }) => id));
+  const semanticIds = matches.filter((match) => readable.has(match.id)).slice(0, SEMANTIC_LIMIT).map((match) => match.id);
+
+  const keywordIds = hits.map((hit) => hit.issue.id);
+  const fused = new Map<string, number>();
+  keywordIds.forEach((id, rank) => fused.set(id, (fused.get(id) ?? 0) + 1 / (RRF_K + rank + 1)));
+  semanticIds.forEach((id, rank) => fused.set(id, (fused.get(id) ?? 0) + 1 / (RRF_K + rank + 1)));
+
+  const byId = new Map(hits.map((hit) => [hit.issue.id, hit]));
+  const onlySemantic = semanticIds.filter((id) => !byId.has(id));
+  if (onlySemantic.length > 0) {
+    const issues = await prisma.issue.findMany({ where: { id: { in: onlySemantic } }, include: { state: true } });
+    for (const issue of issues) {
+      byId.set(issue.id, { issue, score: 0, matchedField: 'semantic', snippet: null, commentId: null });
+    }
+  }
+  return [...fused.entries()]
+    .filter(([id]) => byId.has(id))
+    .map(([id, value]) => {
+      const hit = byId.get(id)!;
+      const pinned = hit.matchedField === 'identifier' ? IDENTIFIER_WEIGHT : 0;
+      return { ...hit, score: pinned + value };
+    })
+    .sort((left, right) => right.score - left.score)
+    .slice(0, first);
 }
 
 /**
@@ -220,7 +298,6 @@ async function rankByFullText(
   return new Map(rows.map((row) => [row.id, row.rank]));
 }
 
-type TextField = Exclude<SearchField, 'identifier'>;
 
 /**
  * Null when some word is not found (and the item was not asked for by
@@ -306,6 +383,7 @@ function findNeedle(
 }
 
 function fieldWeight(field: SearchField): number {
+  if (field === 'semantic') return 0;
   return field === 'identifier' ? IDENTIFIER_WEIGHT : FIELD_WEIGHT[field];
 }
 

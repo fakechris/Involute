@@ -27,6 +27,7 @@ import {
 } from './errors.js';
 import { resolveProjectScope } from './project-scope.js';
 import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
+import type { SemanticIndex } from './embeddings/semantic-index.js';
 import { searchIssues, type SearchField } from './issue-search.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
@@ -186,6 +187,7 @@ export async function searchWork(
   prisma: DatabaseClient,
   input: SearchWorkInput = {},
   readableWhere?: Prisma.IssueWhereInput,
+  semantic?: SemanticIndex | null,
 ): Promise<Array<Issue & { match?: SearchWorkMatch }>> {
   const first = clampFirst(input.first);
   const clauses: Prisma.IssueWhereInput[] = [];
@@ -223,6 +225,7 @@ export async function searchWork(
       prisma,
       { query, first, where: clauses.length > 0 ? { AND: clauses } : null },
       readableWhere,
+      semantic,
     );
     return hits.map(({ issue: { state: _state, ...issue }, matchedField, snippet, commentId }) => ({
       ...issue,

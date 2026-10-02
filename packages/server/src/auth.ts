@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto';
+import type { SemanticIndex } from './embeddings/semantic-index.js';
 
 import type { PrismaClient, User } from '@prisma/client';
 import { VIEWER_ASSERTION_HEADER } from '@turnkeyai/involute-shared';
@@ -18,6 +19,8 @@ export interface GraphQLContext {
   agentTeamId?: string | null;
   isTrustedSystem: boolean;
   prisma: PrismaClient;
+  /** Semantic search (INV-927); absent when embeddings are off. */
+  semanticIndex?: SemanticIndex | null;
   /** What the viewer may reach through project shares (INV-832); resolved once per request. */
   shareScope?: ShareScope;
   viewer: User | null;
@@ -28,6 +31,7 @@ export interface GraphQLContextOptions {
   request: Request;
   prisma: PrismaClient;
   authToken: string;
+  semanticIndex?: SemanticIndex | null;
   viewerAssertionSecret?: string | null;
 }
 
@@ -80,6 +84,7 @@ export async function createGraphQLContext({
   request,
   prisma,
   authToken,
+  semanticIndex,
   viewerAssertionSecret,
 }: GraphQLContextOptions): Promise<GraphQLContext> {
   const authentication = await resolveRequestAuthentication({
@@ -103,6 +108,7 @@ export async function createGraphQLContext({
     agentTeamId: authentication.authMode === 'agent-token' ? authentication.agentTeamId ?? null : null,
     isTrustedSystem: authentication.isTrustedSystem,
     prisma,
+    semanticIndex: semanticIndex ?? null,
     shareScope,
     viewer: authentication.viewer,
   };

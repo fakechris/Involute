@@ -473,7 +473,8 @@ export interface WorkHygieneQueryData {
 }
 
 export interface WorkSearchHit {
-  matchedField: 'identifier' | 'title' | 'contract' | 'description' | 'comment';
+  /** `semantic`: close in meaning, no words matched (INV-927). */
+  matchedField: 'identifier' | 'title' | 'contract' | 'description' | 'comment' | 'semantic';
   snippet: string | null;
   commentId: string | null;
   issue: {
