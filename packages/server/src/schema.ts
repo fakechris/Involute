@@ -2533,6 +2533,7 @@ const resolvers = {
         context.prisma,
         { query: args.query, first: args.first ?? null, where: filters.length > 0 ? { AND: filters } : null },
         buildReadableIssueWhere(context),
+        context.semanticIndex,
       );
     },
     similarBugs: async (
@@ -2546,7 +2547,7 @@ const resolvers = {
         title: args.title,
         limit: Math.min(Math.max(args.first ?? 5, 1), 20),
         readableWhere: buildReadableIssueWhere(context) ?? null,
-      });
+      }, context.semanticIndex);
       return similar as IssueParent[];
     },
     bugSummary: async (

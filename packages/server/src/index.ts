@@ -1,3 +1,5 @@
+import { createLocalEmbedder, readEmbeddingSettings } from './embeddings/embedder.js';
+import { SemanticIndex, startSemanticIndexer } from './embeddings/semantic-index.js';
 import { startEvidenceVerifier } from './evidence-verification.js';
 import { expireOverdueAgentRequests } from './agent-request-expiry.js';
 import { sweepBugSlas } from './bug-sla.js';
@@ -74,6 +76,11 @@ export interface StartServerOptions {
   githubSyncIntervalMs?: number;
   /** Disable only the consumer; signed inbound receipts are still durably accepted. */
   githubInboundEnabled?: boolean;
+  /**
+   * Semantic search (INV-927). Omitted: built from INVOLUTE_EMBEDDINGS (off
+   * unless `local`); null: off. Tests pass an index over a fake embedder.
+   */
+  semanticIndex?: SemanticIndex | null;
 }
 
 export interface StartedServer {
@@ -95,6 +102,18 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     await prisma.$connect();
   }
 
+  // Semantic search (INV-927): the model loads on first use and a background
+  // indexer embeds new and changed items.
+  let semanticIndex: SemanticIndex | null = options.semanticIndex ?? null;
+  let semanticIndexer: { stop: () => void } | null = null;
+  if (options.semanticIndex === undefined) {
+    const settings = readEmbeddingSettings();
+    if (settings.enabled) {
+      semanticIndex = new SemanticIndex(prisma, createLocalEmbedder(settings));
+      semanticIndexer = startSemanticIndexer(semanticIndex);
+    }
+  }
+
   const yoga = createYoga({
     cors: {
       credentials: true,
@@ -106,6 +125,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
         request,
         prisma,
         authToken: options.authToken ?? environment.authToken,
+        semanticIndex,
         viewerAssertionSecret: options.viewerAssertionSecret ?? environment.viewerAssertionSecret,
       }),
     graphqlEndpoint: '/graphql',
@@ -249,6 +269,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       allowAdminFallback: options.allowAdminFallback ?? environment.allowAdminFallback,
       authToken: options.authToken ?? environment.authToken,
       prisma,
+      semanticIndex,
       viewerAssertionSecret: options.viewerAssertionSecret ?? environment.viewerAssertionSecret,
     };
 
@@ -458,6 +479,10 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     port: address.port,
     prisma,
     stop: async () => {
+      semanticIndexer?.stop();
+      if (options.semanticIndex === undefined) {
+        await semanticIndex?.embedder.dispose?.();
+      }
       if (stopGitHubSync) {
         stopGitHubSync();
       }

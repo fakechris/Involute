@@ -1,4 +1,5 @@
 import type { PrismaClient, WorkEvidenceKind, WorkLinkType } from '@prisma/client';
+import { findPossibleDuplicates } from './embeddings/similar-work.js';
 
 import {
   answerAgentRequest,
@@ -206,7 +207,7 @@ export async function callMcpTool(
       if (status === 'CANDIDATE' || status === 'COMMITTED' || status === 'REJECTED') {
         searchInput.commitmentStatus = status;
       }
-      return searchWork(context.prisma, searchInput, buildReadableIssueWhere(context));
+      return searchWork(context.prisma, searchInput, buildReadableIssueWhere(context), context.semanticIndex);
     }
     case 'work_get_context': {
       const id = requiredString(args.id, 'id');
@@ -278,7 +279,16 @@ export async function callMcpTool(
       if (!created.parentId && created.kind !== 'PROJECT') {
         notes.push('This candidate has no parent. Committing it requires one: pass parent_id now (work_link CONTAINS later), or the human will place it at commit.');
       }
-      return notes.length ? { ...created, warning: notes.join(' ') } : created;
+      // Close in meaning to existing work (INV-927): say so, so a duplicate can
+      // be withdrawn or linked before a person reviews it.
+      const possibleDuplicates = context.semanticIndex
+        ? await findPossibleDuplicates(context.prisma, context.semanticIndex, created, buildReadableIssueWhere(context))
+        : [];
+      if (possibleDuplicates.length > 0) {
+        notes.push(`Possible duplicates: ${possibleDuplicates.map((item) => `${item.identifier} (${item.title})`).join('; ')}. If one is the same work, link it (DUPLICATE_OF) or withdraw this proposal.`);
+      }
+      const result = possibleDuplicates.length > 0 ? { ...created, possible_duplicates: possibleDuplicates } : created;
+      return notes.length ? { ...result, warning: notes.join(' ') } : result;
     }
     case 'work_file_bug': {
       const teamId = await resolveTeamId(context.prisma, requiredString(args.team, 'team'));
@@ -632,7 +642,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_search',
     annotations: { readOnlyHint: true, destructiveHint: false },
-    description: 'Search Involute work by identifier, title, description, contract fields and comments, best match first. Includes candidates and committed work. Each word must be found somewhere; quote a phrase to keep it together. Each result carries match.field and match.snippet.',
+    description: 'Search Involute work by identifier, title, description, contract fields and comments, best match first. Includes candidates and committed work. Each word must be found somewhere; quote a phrase to keep it together. Each result carries match.field and match.snippet; match.field "semantic" means close in meaning with no words matched (when semantic search is on).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -676,7 +686,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_propose',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    description: 'Create candidate work. Does not enter the ready queue. Search for duplicates first. A bug (labels ["bug"]) is committed directly and never enters Candidates; it requires parent_id (or an inheritable related_work_id), priority 1–4, and steps_to_reproduce — omit any and the proposal is refused.',
+    description: 'Create candidate work. Does not enter the ready queue. Search for duplicates first; the result lists possible_duplicates (existing work close in meaning) when semantic search is on. A bug (labels ["bug"]) is committed directly and never enters Candidates; it requires parent_id (or an inheritable related_work_id), priority 1–4, and steps_to_reproduce — omit any and the proposal is refused.',
     inputSchema: {
       type: 'object',
       properties: {

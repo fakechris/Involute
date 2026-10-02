@@ -1,4 +1,5 @@
 node_modules
+**/node_modules
 .git
 .DS_Store
 .env
@@ -16,3 +17,5 @@ packages/server/prisma/*.d.ts.map
 .tmp
 playwright-report
 test-results
+# Local research, competitive notes and data exports never enter an image (AGENTS.md §4.7, INV-927).
+research

@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 
 import { highlight } from '../components/highlight';
 import { WORK_SEARCH_QUERY } from '../work/queries';
-import type { WorkSearchHit, WorkSearchQueryData } from '../work/types';
+import { matchLabel } from '../work/search-labels';
+import type { WorkSearchQueryData } from '../work/types';
 
 export interface PaletteAction {
   description?: string;
@@ -18,13 +19,6 @@ export interface PaletteAction {
 
 const SEARCH_DEBOUNCE_MS = 200;
 const SEARCH_RESULT_LIMIT = 20;
-const MATCH_FIELD_LABEL: Record<WorkSearchHit['matchedField'], string> = {
-  identifier: 'identifier',
-  title: 'title',
-  contract: 'contract',
-  description: 'description',
-  comment: 'comment',
-};
 
 export function CommandPalette({
   actions,
@@ -76,7 +70,7 @@ export function CommandPalette({
       group: 'Issues',
       hint: hit.matchedField === 'title' || hit.matchedField === 'identifier'
         ? hit.issue.state.name
-        : `in ${MATCH_FIELD_LABEL[hit.matchedField]}`,
+        : matchLabel(hit.matchedField),
       run: () => navigate(`/issue/${hit.issue.id}`),
     }));
     const serverIds = new Set(serverIssues.map((action) => action.id));

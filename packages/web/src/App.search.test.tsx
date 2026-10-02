@@ -70,6 +70,16 @@ describe('Search page (INV-926)', () => {
     });
   });
 
+  it('labels a hit found by meaning alone as related (INV-927)', async () => {
+    const related: WorkSearchQueryData = {
+      search: [{ ...searchData.search[0]!, matchedField: 'semantic', snippet: null }],
+    };
+    renderApp({ data: boardQueryResult, loading: false, searchData: related }, ['/search?q=发版后要刷新']);
+
+    const results = await screen.findByRole('list', { name: 'Search results' });
+    expect(within(results).getByRole('link', { name: /INV-1/ })).toHaveTextContent('Backlog · related');
+  });
+
   it('opens from ⌘K with "View all results"', async () => {
     renderApp({ data: boardQueryResult, loading: false, searchData }, ['/']);
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
