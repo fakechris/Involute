@@ -35,9 +35,13 @@ FROM base AS server
 RUN pnpm --filter @turnkeyai/involute-server build
 # Semantic search (INV-927): the model ships in the image, so the server never
 # downloads at runtime. INVOLUTE_EMBEDDINGS=off in the environment turns it off.
-RUN cd packages/server && node scripts/fetch-embedding-model.mjs /app/models
+# Another model is a build argument, so the one baked in and the one the
+# server loads are always the same.
+ARG EMBEDDING_MODEL=Xenova/multilingual-e5-small
+RUN cd packages/server && node scripts/fetch-embedding-model.mjs /app/models "$EMBEDDING_MODEL"
 ENV INVOLUTE_EMBEDDINGS=local
 ENV INVOLUTE_MODEL_DIR=/app/models
+ENV INVOLUTE_EMBEDDING_MODEL=$EMBEDDING_MODEL
 COPY packages/server/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 

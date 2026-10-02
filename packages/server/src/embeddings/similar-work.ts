@@ -16,6 +16,21 @@ export const DUPLICATE_SIMILARITY = 0.96;
  * 0.90–0.96 against its text, the best other bug 0.88–0.91 (INV-927).
  */
 export const SIMILAR_BUG_SIMILARITY = 0.92;
+/** How long an optional similarity lookup may take before the caller goes on without it. */
+export const SIMILARITY_DEADLINE_MS = 2000;
+
+/** The lookup's answer, or `fallback` once `ms` pass (a model still loading, a stuck worker). */
+export async function withDeadline<T>(lookup: Promise<T>, ms: number, fallback: T): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<T>((resolve) => {
+    timer = setTimeout(() => resolve(fallback), ms);
+  });
+  try {
+    return await Promise.race([lookup, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export interface PossibleDuplicate {
   id: string;
@@ -36,7 +51,7 @@ export async function findPossibleDuplicates(
   limit = 3,
 ): Promise<PossibleDuplicate[]> {
   try {
-    const matches = (await index.similarTo(embeddingText(item), 20, new Set([item.id])))
+    const matches = (await withDeadline(index.similarTo(embeddingText(item), 20, new Set([item.id])), SIMILARITY_DEADLINE_MS, []))
       .filter((match) => match.similarity >= DUPLICATE_SIMILARITY);
     return await readableInOrder(prisma, matches, readableWhere, {}, limit);
   } catch (error) {
@@ -55,7 +70,8 @@ export async function findSimilarByMeaning(
   limit: number,
 ): Promise<PossibleDuplicate[]> {
   try {
-    const matches = (await index.similarTo(text, 50)).filter((match) => match.similarity >= threshold);
+    const matches = (await withDeadline(index.similarTo(text, 50), SIMILARITY_DEADLINE_MS, []))
+      .filter((match) => match.similarity >= threshold);
     return await readableInOrder(prisma, matches, undefined, where, limit);
   } catch (error) {
     console.error('[similar-work] similarity search failed; falling back to words.', error);

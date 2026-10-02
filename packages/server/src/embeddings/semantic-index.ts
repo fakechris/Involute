@@ -16,6 +16,8 @@ const MAX_TEXT = 2000;
  * queries sit at 0.005–0.010, real ones mostly above).
  */
 export const MIN_SIGNAL_GAP = 0.007;
+/** How often the indexer drops vectors of deleted items. */
+const PRUNE_INTERVAL_MS = 5 * 60_000;
 
 export interface SemanticMatch {
   id: string;
@@ -118,6 +120,25 @@ export class SemanticIndex {
     return pending.length;
   }
 
+  /**
+   * Drops vectors whose item is gone (deleted items cascade out of the
+   * table but stayed in memory, taking top slots and skewing the signal gate).
+   */
+  async prune(): Promise<number> {
+    const kept = new Set((await this.prisma.issueEmbedding.findMany({
+      where: { model: this.embedder.model },
+      select: { issueId: true },
+    })).map(({ issueId }) => issueId));
+    let removed = 0;
+    for (const id of this.vectors.keys()) {
+      if (!kept.has(id)) {
+        this.vectors.delete(id);
+        removed += 1;
+      }
+    }
+    return removed;
+  }
+
   /** Best matches for a vector, most similar first. */
   nearest(vector: Float32Array, limit: number, exclude?: ReadonlySet<string>): SemanticMatch[] {
     const matches: SemanticMatch[] = [];
@@ -160,6 +181,7 @@ export class SemanticIndex {
 export function startSemanticIndexer(index: SemanticIndex, intervalMs = 20_000): { stop: () => void } {
   let running = false;
   let stopped = false;
+  let lastPrune = 0;
   const tick = async () => {
     if (running || stopped) return;
     running = true;
@@ -168,6 +190,10 @@ export function startSemanticIndexer(index: SemanticIndex, intervalMs = 20_000):
       // whose updatedAt is ahead of this clock being picked up forever.
       for (let round = 0; round < 200 && !stopped; round += 1) {
         if ((await index.refresh()) === 0) break;
+      }
+      if (Date.now() - lastPrune >= PRUNE_INTERVAL_MS) {
+        await index.prune();
+        lastPrune = Date.now();
       }
     } catch (error) {
       console.error('[semantic-index] refresh failed; retrying on the next tick.', error);

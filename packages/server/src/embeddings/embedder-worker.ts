@@ -29,6 +29,10 @@ function load(): Promise<Extract> {
     const pipe = await transformers.pipeline('feature-extraction', options.model, { dtype: 'q8' });
     return (texts, settings) => pipe(texts, settings) as Promise<{ tolist(): number[][] }>;
   })();
+  // A failed load is not kept: the next request tries again.
+  extractor.catch(() => {
+    extractor = null;
+  });
   return extractor;
 }
 

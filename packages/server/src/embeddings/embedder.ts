@@ -35,9 +35,16 @@ export function createLocalEmbedder(options: LocalEmbedderOptions): Embedder {
   const prefixes = prefixesFor(options.model);
   let worker: Worker | null = null;
   let nextId = 0;
-  const pending = new Map<number, { resolve: (vectors: Float32Array[]) => void; reject: (error: Error) => void }>();
+  const pending = new Map<number, {
+    resolve: (vectors: Float32Array[]) => void;
+    reject: (error: Error) => void;
+    settled: Promise<unknown>;
+  }>();
 
-  const failAll = (error: Error) => {
+  // Only the current worker's death fails the pending calls; a worker already
+  // replaced (after dispose) must not reject its successor's.
+  const failAll = (from: Worker, error: Error) => {
+    if (worker !== from) return;
     for (const call of pending.values()) call.reject(error);
     pending.clear();
     worker = null;
@@ -58,8 +65,8 @@ export function createLocalEmbedder(options: LocalEmbedderOptions): Embedder {
       if (message.error !== undefined) call.reject(new Error(`Embedding failed: ${message.error}`));
       else call.resolve(message.vectors!);
     });
-    started.on('error', (error) => failAll(error));
-    started.on('exit', (code) => failAll(new Error(`Embedding worker exited (code ${code}).`)));
+    started.on('error', (error) => failAll(started, error));
+    started.on('exit', (code) => failAll(started, new Error(`Embedding worker exited (code ${code}).`)));
     return started;
   };
 
@@ -67,10 +74,13 @@ export function createLocalEmbedder(options: LocalEmbedderOptions): Embedder {
     worker ??= start();
     const id = nextId++;
     const active = worker;
-    return new Promise((resolve, reject) => {
-      pending.set(id, { resolve, reject });
-      active.postMessage({ id, texts });
+    let call!: { resolve: (vectors: Float32Array[]) => void; reject: (error: Error) => void };
+    const result = new Promise<Float32Array[]>((resolve, reject) => {
+      call = { resolve, reject };
     });
+    pending.set(id, { ...call, settled: result.catch(() => undefined) });
+    active.postMessage({ id, texts });
+    return result;
   };
 
   return {
@@ -84,8 +94,15 @@ export function createLocalEmbedder(options: LocalEmbedderOptions): Embedder {
     },
     async dispose() {
       const active = worker;
+      if (!active) return;
       worker = null;
-      if (active) await active.terminate();
+      // Terminating mid-inference aborts the whole process (onnxruntime), so
+      // calls in flight finish first; a stuck one gets up to 5 s.
+      const inFlight = [...pending.values()].map((call) => call.settled);
+      await Promise.race([Promise.allSettled(inFlight), new Promise((resolve) => setTimeout(resolve, 5000))]);
+      for (const call of pending.values()) call.reject(new Error('Embedding worker stopped.'));
+      pending.clear();
+      await active.terminate();
     },
   };
 }

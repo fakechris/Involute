@@ -9,6 +9,7 @@ import { findSimilarBugs } from './bug-report.ts';
 import type { Embedder } from './embeddings/embedder.ts';
 import { readEmbeddingSettings } from './embeddings/embedder.ts';
 import { SemanticIndex } from './embeddings/semantic-index.ts';
+import { findPossibleDuplicates } from './embeddings/similar-work.ts';
 import { startServer, type StartedServer } from './index.ts';
 import { searchIssues } from './issue-search.ts';
 
@@ -210,6 +211,33 @@ describe('Semantic search (INV-927)', () => {
     const restarted = new SemanticIndex(prisma, embedder);
     expect(await restarted.refresh()).toBe(0);
     expect(restarted.size).toBe(1);
+  });
+
+  it('drops the vector of a deleted item, so it no longer takes a top slot', async () => {
+    const gone = await work({ title: '白屏 A' });
+    const kept = await work({ title: '白屏 B' });
+    const index = await indexed();
+    await prisma.issue.delete({ where: { id: gone.id } });
+
+    expect(index.nearest(fakeVector('白屏'), 5).map((match) => match.id)).toContain(gone.id);
+    expect(await index.prune()).toBe(1);
+    expect(index.nearest(fakeVector('白屏'), 5).map((match) => match.id)).toEqual([kept.id]);
+  });
+
+  it('gives up on a similarity lookup that does not answer, keeping word matches', async () => {
+    const bug = await prisma.issueLabel.upsert({ where: { name: 'Bug' }, create: { name: 'Bug' }, update: {} });
+    const wordMatch = await work({ title: 'merge loses rows', labels: { connect: { id: bug.id } } } as never);
+    await indexed();
+    const stuck = new SemanticIndex(prisma, fakeEmbedder({
+      embedDocuments: () => new Promise(() => {}), // never answers
+    }));
+    await stuck.load();
+
+    const started = Date.now();
+    const similar = await findSimilarBugs(prisma, { teamId: team.id, title: 'merge loses rows' }, stuck);
+    expect(similar.map((issue) => issue.identifier)).toEqual([wordMatch.identifier]);
+    expect(await findPossibleDuplicates(prisma, stuck, wordMatch, undefined)).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(6000);
   });
 
   it('suggests open bugs described in other words', async () => {

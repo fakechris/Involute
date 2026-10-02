@@ -1,6 +1,7 @@
 import type { Issue, Prisma, PrismaClient, WorkflowState } from '@prisma/client';
 
 import type { SemanticIndex } from './embeddings/semantic-index.js';
+import { SIMILARITY_DEADLINE_MS, withDeadline } from './embeddings/similar-work.js';
 import { buildSearchTsQuery, segmentQueryWord } from './search-tokens.js';
 
 /**
@@ -47,7 +48,6 @@ const FULL_TEXT_RANK_WEIGHT = 10;
 /** Items close in meaning considered per query, and kept after scoping. */
 const SEMANTIC_RECALL = 60;
 const SEMANTIC_LIMIT = 20;
-const SEMANTIC_TIMEOUT_MS = 2000;
 /** Reciprocal rank fusion constant (the usual 60). */
 const RRF_K = 60;
 const STATE_WEIGHT: Record<string, number> = {
@@ -223,12 +223,7 @@ async function fuseWithSemantic(
   try {
     // A model still loading (about 20 s after a restart on a small box) must
     // not hold up search: past the limit, answer by keyword alone.
-    let timer: NodeJS.Timeout | undefined;
-    const timeout = new Promise<null>((resolve) => {
-      timer = setTimeout(() => resolve(null), SEMANTIC_TIMEOUT_MS);
-    });
-    const answered = await Promise.race([semantic.search(query, SEMANTIC_RECALL), timeout]);
-    clearTimeout(timer);
+    const answered = await withDeadline(semantic.search(query, SEMANTIC_RECALL), SIMILARITY_DEADLINE_MS, null);
     if (!answered) {
       return hits.slice(0, first);
     }
