@@ -19,6 +19,7 @@ const PAIRS: Record<string, string> = {
   work_uncommit: 'workUncommit',
   work_file_bug: 'bugReport',
   work_link: 'workLink',
+  work_unlink: 'workLinkDelete',
   work_propose: 'workPropose',
   work_update: 'issueUpdate',
 };
@@ -40,6 +41,11 @@ const RENAMED: Record<string, Record<string, string>> = {
 
 /** MCP arguments with no GraphQL field, and why a person does not need them. */
 const AGENT_ONLY_FIELDS: Record<string, Record<string, string>> = {
+  work_unlink: {
+    from_id: 'Selects the existing edge by endpoints; the UI selects that same edge by its id for workLinkDelete.',
+    to_id: 'Selects the existing edge by endpoints; the UI selects that same edge by its id for workLinkDelete.',
+    type: 'Disambiguates the existing edge; the UI selects that same edge by its id for workLinkDelete.',
+  },
   agent_request_answer: {
     claim_token: 'Proves the answering execution holds the request lease; a person does not lease requests.',
     session_id: 'Identifies the agent execution that answers.',
