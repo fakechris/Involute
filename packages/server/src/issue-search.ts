@@ -46,8 +46,8 @@ const TITLE_PHRASE_BONUS = 15;
 const TITLE_COVERAGE_BONUS = 10;
 const FULL_TEXT_RANK_WEIGHT = 10;
 /** Items close in meaning considered per query, and kept after scoping. */
-const SEMANTIC_RECALL = 60;
-const SEMANTIC_LIMIT = 20;
+export const SEMANTIC_RECALL = 60;
+export const SEMANTIC_LIMIT = 20;
 /** Reciprocal rank fusion constant (the usual 60). */
 const RRF_K = 60;
 const STATE_WEIGHT: Record<string, number> = {

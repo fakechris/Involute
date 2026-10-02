@@ -9,6 +9,8 @@ import { startServer, type StartedServer } from './index.ts';
 import { READ_ONLY_MCP_TOOLS, WRITE_MCP_TOOLS } from './mcp-tools.ts';
 import { hashAgentToken } from './agent-credentials.ts';
 import { createGraphQLContext } from './auth.ts';
+import { searchWorkPage } from './work-search-page.ts';
+import type { SemanticIndex } from './embeddings/semantic-index.ts';
 import { testParentId } from './test-placement.ts';
 
 loadProjectEnvironment();
@@ -508,6 +510,30 @@ describe('Involute MCP', () => {
     expect(await prisma.comment.count({ where: { issueId: issue.id } })).toBe(1);
     const changed = await mcpRpc('/mcp', { id: 'changed-comment', method: 'tools/call', params: { name: 'work_comment', arguments: { ...input, body: 'Different content' } } });
     expect(changed.body.error).toBeDefined();
+  });
+
+  it('continues partially filled semantic pages and declares the shared recall boundary', async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 60; i++) {
+      const row = await prisma.issue.create({ data: { identifier: `SEM-${i}`, title: `Unrelated lexical wording ${i}`, teamId: team.id, stateId: ready.id } });
+      ids.push(row.id);
+    }
+    const context = await createGraphQLContext({ prisma, authToken: TEST_AUTH_TOKEN, allowAdminFallback: true,
+      request: new Request(`${server.url}/mcp`, { headers: { authorization: `Bearer ${TEST_AUTH_TOKEN}` } }),
+    });
+    context.semanticIndex = { search: async () => ids.map((id, i) => ({ id, similarity: 1 - i / 100 })) } as unknown as SemanticIndex;
+    const returned: string[] = [];
+    let after: string | null = null;
+    for (;;) {
+      const page = await searchWorkPage(context, { query: 'Meaningonlyneedle', first: 50 }, after);
+      returned.push(...page.nodes.map((node) => node.id));
+      expect(page.recall.semantic.exhaustive).toBe(false);
+      expect(page.recall.semantic.candidateLimit).toBe(60);
+      if (!page.pageInfo.hasNextPage) break;
+      after = page.pageInfo.endCursor;
+    }
+    expect(returned).toHaveLength(60);
+    expect(new Set(returned).size).toBe(60);
   });
 
   it('rechecks current team access when continuing an agent search', async () => {

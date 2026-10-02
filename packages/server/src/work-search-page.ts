@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { GraphQLContext } from './auth.js';
 import { buildReadableIssueWhere } from './access-control.js';
 import { searchWork, listReadyWork, type ListReadyWorkInput, type SearchWorkInput } from './context-service.js';
+import { SEMANTIC_RECALL, SEMANTIC_LIMIT } from './issue-search.js';
 import { createValidationError } from './errors.js';
 
 interface CursorSession { actorKey: string; queryHash: string; seenIds: string[] }
@@ -36,10 +37,10 @@ export async function searchWorkPage(context: GraphQLContext, input: SearchWorkI
   const remaining = (ids: string[]) => ({ AND: [scope, { id: { notIn: ids } }] });
   const nodes = await searchWork(context.prisma, { ...input, first, excludeIds: session.seenIds }, remaining(session.seenIds), context.semanticIndex);
   const nextSeen = [...session.seenIds, ...nodes.map((node) => node.id)];
-  const probe = nodes.length === first ? await searchWork(context.prisma, { ...input, first: 1, excludeIds: nextSeen }, remaining(nextSeen), context.semanticIndex) : [];
+  const probe = await searchWork(context.prisma, { ...input, first: 1, excludeIds: nextSeen }, remaining(nextSeen), context.semanticIndex);
   const hasNextPage = probe.length > 0;
   const endCursor = await saveCursor(context, session, nodes, hasNextPage);
-  return { nodes, pageInfo: { hasNextPage, endCursor }, consistency: 'live; previously returned IDs are excluded, permissions and relevance are rechecked each page; cursor expires after one hour' };
+  return { nodes, pageInfo: { hasNextPage, endCursor }, recall: { semantic: { exhaustive: false, candidateLimit: SEMANTIC_RECALL, perPageLimit: SEMANTIC_LIMIT, note: 'Shared UI semantic recall is bounded; hasNextPage describes this recalled result set, not every vector in the index.' } }, consistency: 'live; previously returned IDs are excluded, permissions and relevance are rechecked each page; cursor expires after one hour' };
 }
 
 /** Ready retains its existing nodes/hasNextPage fields and adds a usable continuation. */
