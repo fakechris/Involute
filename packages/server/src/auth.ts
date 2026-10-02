@@ -13,6 +13,7 @@ import { EMPTY_SHARE_SCOPE, resolveShareScope, type ShareScope } from './project
 
 export interface GraphQLContext {
   authMode: 'agent-token' | 'none' | 'session' | 'token';
+  agentCredentialId?: string | null;
   agentScopes?: string[] | null;
   /** The team the acting credential is bound to (INV-592). An agent's access is this, not a membership. */
   agentTeamId?: string | null;
@@ -32,6 +33,7 @@ export interface GraphQLContextOptions {
 }
 
 interface RequestAuthentication {
+  agentCredentialId?: string | null;
   agentScopes?: string[] | null;
   agentTeamId?: string | null;
   authMode: GraphQLContext['authMode'];
@@ -99,6 +101,7 @@ export async function createGraphQLContext({
 
   return {
     authMode: authentication.authMode,
+    agentCredentialId: authentication.agentCredentialId ?? null,
     agentScopes: authentication.authMode === 'agent-token' ? authentication.agentScopes ?? null : null,
     agentTeamId: authentication.authMode === 'agent-token' ? authentication.agentTeamId ?? null : null,
     isTrustedSystem: authentication.isTrustedSystem,
@@ -207,6 +210,7 @@ async function computeRequestAuthentication({
   if (agent) {
     return {
       authMode: 'agent-token',
+      agentCredentialId: agent.credentialId,
       agentScopes: agent.scopes,
       agentTeamId: agent.teamId,
       authorized: true,

@@ -3,6 +3,7 @@ import type { ActorKind, Issue, Prisma, PrismaClient, User } from '@prisma/clien
 import { createValidationError, WORK_REVISION_CONFLICT_MESSAGE } from './errors.js';
 
 export interface WriteActor {
+  agentCredentialId?: string | null;
   actorId?: string | null;
   actorKind: ActorKind;
   reason?: string | null;

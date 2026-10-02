@@ -156,6 +156,7 @@ export interface WorkAuditSummary {
 export interface WorkClaimSummary {
   actor: WorkUserSummary;
   leaseUntil: string;
+  executionId?: string | null;
   createdAt: string;
 }
 

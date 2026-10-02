@@ -59,6 +59,7 @@ export function hashAgentToken(token: string): string {
 }
 
 export interface AgentPrincipal {
+  credentialId: string;
   scopes: string[];
   /** The team the credential is bound to — the agent\'s access, in place of a membership (INV-592). */
   teamId: string | null;
@@ -294,7 +295,7 @@ export async function resolveAgentPrincipal(
 
   void touchLastSeen(prisma, credential.user, now);
 
-  return { scopes: credential.scopes, teamId: credential.teamId, user: credential.user };
+  return { credentialId: credential.id, scopes: credential.scopes, teamId: credential.teamId, user: credential.user };
 }
 
 /**

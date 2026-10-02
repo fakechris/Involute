@@ -5,6 +5,7 @@ import { WORK_CLAIM_RELEASE_MUTATION } from '../board/queries';
 
 export interface ClaimSummary {
   leaseUntil: string;
+  executionId?: string | null;
   actor: { id: string; name?: string | null; email?: string | null };
 }
 
@@ -45,6 +46,7 @@ export function ClaimControl({ workId, claim }: { workId: string; claim: ClaimSu
       <span>
         Claimed by <strong>{holder}</strong> until {new Date(claim.leaseUntil).toLocaleString()}
       </span>
+      {claim.executionId ? <span> · execution {claim.executionId}</span> : null}
       {open ? (
         <span className="review-retract">
           <input

@@ -297,6 +297,7 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
       }
       claim {
         leaseUntil
+          executionId
         createdAt
         actor {
           id

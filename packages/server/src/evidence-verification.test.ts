@@ -192,15 +192,15 @@ describe('trusted evidence shadow integration', () => {
   async function setup() {
     const proposed = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id, repository), teamId: team.id, title: 'Verify evidence', repository }, reviewer());
     const committed = await commitWork(prisma, proposed.id, { acceptance: JSON.stringify(acceptance), assigneeId: human.id, expectedRevision: proposed.revision }, reviewer());
-    const { claim } = await claimWork(prisma, committed.id, {}, actor());
-    const { run } = await reportRun(prisma, { workId: committed.id, status: 'running', commitSha: sha, pullRequestNumber: 4 }, actor());
-    const { evidence } = await attachEvidence(prisma, { workId: committed.id, runId: run.id, kind: 'test', url: input.url, summary: 'exit:0' }, actor());
-    return { work: committed, run, evidence, claim };
+    const { claim, claimToken } = await claimWork(prisma, committed.id, {}, actor());
+    const { run } = await reportRun(prisma, { claimToken, workId: committed.id, status: 'running', commitSha: sha, pullRequestNumber: 4 }, actor());
+    const { evidence } = await attachEvidence(prisma, { claimToken, workId: committed.id, runId: run.id, kind: 'test', url: input.url, summary: 'exit:0' }, actor());
+    return { work: committed, run, evidence, claim, claimToken };
   }
 
   it('freezes claim/semantic contract, appends observations, and never auto-accepts even CLEAR', async () => {
     const s = await setup();
-    await reportRun(prisma, { workId: s.work.id, runId: s.run.id, status: 'completed' }, actor());
+    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, status: 'completed' }, actor());
     const run = await prisma.workRun.findUniqueOrThrow({ where: { id: s.run.id } });
     expect(run.claimId).toBeNull(); expect(run.claimSnapshotId).toBe(s.claim.id);
     const observation = await verifyEvidence(prisma, s.evidence.id, fixture().options);
@@ -237,23 +237,23 @@ describe('trusted evidence shadow integration', () => {
   it('head updates invalidate prior coverage and completed targets cannot be changed', async () => {
     const s = await setup();
     await verifyEvidence(prisma, s.evidence.id, fixture().options);
-    await reportRun(prisma, { workId: s.work.id, runId: s.run.id, commitSha: 'b'.repeat(40), status: 'completed' }, actor());
+    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, commitSha: 'b'.repeat(40), status: 'completed' }, actor());
     expect((await tryAutoAccept(prisma, s.work.id, { runId: s.run.id }))?.grade.tier).not.toBe('CLEAR');
     // A completed run refuses a new target rather than silently ignoring it (INV-595).
-    await expect(reportRun(prisma, { workId: s.work.id, runId: s.run.id, commitSha: sha }, actor())).rejects.toThrow(WORK_RUN_TERMINAL_REPLAY_MESSAGE);
+    await expect(reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, commitSha: sha }, actor())).rejects.toThrow(WORK_RUN_TERMINAL_REPLAY_MESSAGE);
     expect((await prisma.workRun.findUniqueOrThrow({ where: { id: s.run.id } })).commitSha).toBe('b'.repeat(40));
   });
 
   it('changing only the PR invalidates coverage for the previous PR at the same SHA', async () => {
     const s = await setup();
     await verifyEvidence(prisma, s.evidence.id, fixture().options);
-    await reportRun(prisma, { workId: s.work.id, runId: s.run.id, pullRequestNumber: 5, status: 'completed' }, actor());
+    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, pullRequestNumber: 5, status: 'completed' }, actor());
     expect((await tryAutoAccept(prisma, s.work.id))?.grade.tier).not.toBe('CLEAR');
   });
 
   it('missing required criteria and unavailable refresh retain Review, preserving all observations', async () => {
     const s = await setup();
-    await reportRun(prisma, { workId: s.work.id, runId: s.run.id, status: 'completed' }, actor());
+    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, status: 'completed' }, actor());
     const missing = fixture((path, data) => path.includes('/jobs?') ? { total_count: 0, jobs: [] } : data);
     await verifyEvidence(prisma, s.evidence.id, missing.options);
     expect((await tryAutoAccept(prisma, s.work.id))?.grade.tier).not.toBe('CLEAR');
@@ -266,7 +266,7 @@ describe('trusted evidence shadow integration', () => {
 
   it('human rejection during network verification prevents a new evaluation or acceptance', async () => {
     const s = await setup();
-    await reportRun(prisma, { workId: s.work.id, runId: s.run.id, status: 'completed' }, actor());
+    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, status: 'completed' }, actor());
     let rejected = false;
     const f = fixture(async (_path, data) => {
       if (!rejected) {
@@ -284,11 +284,11 @@ describe('trusted evidence shadow integration', () => {
 
   it('a superseding claim invalidates the completed attempt; cross-run attachment is forbidden', async () => {
     const s = await setup();
-    await reportRun(prisma, { workId: s.work.id, runId: s.run.id, status: 'completed' }, actor());
+    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, status: 'completed' }, actor());
     await verifyEvidence(prisma, s.evidence.id, fixture().options);
     await prisma.workClaim.create({ data: { workId: s.work.id, actorId: human.id, leaseUntil: new Date(Date.now() + 60000) } });
     expect((await tryAutoAccept(prisma, s.work.id))?.grade.tier).not.toBe('CLEAR');
-    await expect(attachEvidence(prisma, { workId: s.work.id, runId: s.run.id, kind: 'test', url: input.url }, reviewer())).rejects.toThrow();
+    await expect(attachEvidence(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, kind: 'test', url: input.url }, reviewer())).rejects.toThrow();
   });
 
   it('does not backfill historical declarations or legacy run snapshots as trusted', async () => {
@@ -316,7 +316,7 @@ describe('trusted evidence shadow integration', () => {
 
   it('rolls back the shadow evaluation and outbox with the caller transaction', async () => {
     const s = await setup();
-    await reportRun(prisma, { workId: s.work.id, runId: s.run.id, status: 'completed' }, actor());
+    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, status: 'completed' }, actor());
     await verifyEvidence(prisma, s.evidence.id, fixture().options);
     const before = await prisma.workAutoAcceptEvaluation.count();
     const events = await prisma.eventOutbox.count();

@@ -30,6 +30,7 @@ export const ALLOWED_RUN_TRANSITIONS: Record<WorkRunStatus, readonly WorkRunStat
 };
 
 export interface ReportRunInput {
+  claimToken?: string | null;
   /** What the reporter knew and why — attached to the audit this report writes (INV-588). */
   receipt?: ReceiptInput | null;
   commitSha?: string | null;
@@ -45,6 +46,7 @@ export interface ReportRunInput {
 }
 
 export interface AttachEvidenceInput {
+  claimToken?: string | null;
   idempotencyKey?: string | null;
   kind: string;
   runId?: string | null;

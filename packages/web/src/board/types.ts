@@ -155,6 +155,7 @@ export interface IssueSummary {
   claim?: {
     id: string;
     leaseUntil: string;
+  executionId?: string | null;
     actor: {
       id: string;
       name?: string | null;

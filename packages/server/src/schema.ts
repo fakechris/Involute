@@ -432,7 +432,7 @@ const typeDefs = /* GraphQL */ `
     teamUpdateAccess(input: TeamUpdateAccessInput!): TeamUpdateAccessPayload!
     teamTriageRotationUpdate(input: TeamTriageRotationInput!): TeamTriageRotationPayload!
     "A person ends an agent's claim now, with a reason (INV-789); open runs under it are closed."
-    workClaimRelease(workId: String!, reason: String!): WorkClaimReleasePayload!
+    workClaimRelease(workId: String!, reason: String!, claimToken: String): WorkClaimReleasePayload!
     "Clear a sync dead letter so the next reconciliation retries that PR; admins only, audited (INV-796)."
     opsSyncDeadLetterClear(id: String!, reason: String!): OpsMutationPayload!
     "Replay a dead inbound GitHub delivery; admins only, audited (INV-796)."
@@ -1176,6 +1176,7 @@ const typeDefs = /* GraphQL */ `
   }
 
   type WorkRunRecord {
+    executionId: String
     id: ID!
     publicId: String!
     actorId: String
@@ -1227,6 +1228,7 @@ const typeDefs = /* GraphQL */ `
   }
 
   input EvidenceRetractInput {
+    claimToken: String
     evidenceId: String!
     reason: String!
     correctWorkId: String
@@ -1313,6 +1315,7 @@ const typeDefs = /* GraphQL */ `
   }
 
   type WorkClaimRecord {
+    executionId: String
     id: ID!
     actor: User!
     leaseUntil: DateTime!
@@ -2027,6 +2030,8 @@ const typeDefs = /* GraphQL */ `
   }
 
   input WorkClaimInput {
+    claimToken: String
+    executionId: String
     leaseSeconds: Int
     idempotencyKey: String
   }
@@ -2161,6 +2166,7 @@ const typeDefs = /* GraphQL */ `
   }
 
   type WorkClaimPayload {
+    claimToken: String
     success: Boolean!
     issue: Issue
     claim: WorkClaimRecord
@@ -2170,6 +2176,7 @@ const typeDefs = /* GraphQL */ `
   }
 
   input RunReportInput {
+    claimToken: String
     commitSha: String
     pullRequestNumber: Int
     workId: String!
@@ -2183,6 +2190,7 @@ const typeDefs = /* GraphQL */ `
   }
 
   input EvidenceAttachInput {
+    claimToken: String
     workId: String!
     "The run the evidence backs. Required for agents; a person recording evidence after the fact may omit it (INV-796)."
     runId: String
@@ -3327,7 +3335,7 @@ const resolvers = {
       _parent: unknown,
       args: { id: string; input?: ClaimWorkInput | null },
       context: GraphQLContext,
-    ): Promise<{ claim: WorkClaimParent | null; issue: IssueParent | null; success: boolean; suggestedBranch: string | null }> =>
+    ): Promise<{ claim: WorkClaimParent | null; issue: IssueParent | null; success: boolean; suggestedBranch: string | null; claimToken: string | null }> =>
       runMutation(async () => {
         const existing = await findWorkByIdOrIdentifier(context.prisma, args.id);
         if (!existing) {
@@ -3349,6 +3357,7 @@ const resolvers = {
           }),
           issue: await getIssueById(context.prisma, result.work.id),
           success: true as const,
+          claimToken: result.claimToken,
           suggestedBranch: suggestedBranchName(result.work.identifier, result.work.title),
         };
       }, {
@@ -3356,6 +3365,7 @@ const resolvers = {
         issue: null,
         success: false as const,
         suggestedBranch: null,
+        claimToken: null,
       }),
     runReport: async (
       _parent: unknown,
@@ -3465,7 +3475,7 @@ const resolvers = {
     }, { decision: null, issue: null, success: false as const }),
     evidenceRetract: async (
       _parent: unknown,
-      args: { input: { correctWorkId?: string | null; evidenceId: string; reason: string } },
+      args: { input: { claimToken?: string | null; correctWorkId?: string | null; evidenceId: string; reason: string } },
       context: GraphQLContext,
     ): Promise<{ evidence: WorkEvidence | null; message?: string | null; success: boolean }> =>
       runMutationWithReason(async () => {
@@ -3479,6 +3489,7 @@ const resolvers = {
           await assertCanWriteIssue(context.prisma, context, args.input.correctWorkId);
         }
         const updated = await retractEvidence(context.prisma, {
+          claimToken: args.input.claimToken ?? null,
           correctWorkId: args.input.correctWorkId ?? null,
           evidenceId: args.input.evidenceId,
           reason: args.input.reason,
@@ -4098,7 +4109,7 @@ const resolvers = {
       }, { success: false as const }),
     workClaimRelease: async (
       _parent: unknown,
-      args: { workId: string; reason: string },
+      args: { workId: string; reason: string; claimToken?: string | null },
       context: GraphQLContext,
     ): Promise<{ issue: IssueParent | null; message?: string | null; success: boolean }> =>
       runMutationWithReason(async () => {
@@ -4106,7 +4117,7 @@ const resolvers = {
         const work = await findWorkByIdOrIdentifier(context.prisma, args.workId);
         if (!work) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
         await assertCanWriteIssue(context.prisma, context, work.id);
-        await releaseClaim(context.prisma, { workId: work.id, reason: args.reason }, writeActorFromViewer(context.viewer));
+        await releaseClaim(context.prisma, { workId: work.id, reason: args.reason, claimToken: args.claimToken ?? null }, writeActorFromViewer(context.viewer));
         return { issue: await getIssueById(context.prisma, work.id), success: true as const };
       }, { issue: null, success: false as const }),
     teamTriageRotationUpdate: async (

@@ -1,3 +1,4 @@
+import { assertExecutionAuthority, assertWorkToken } from './work-execution.js';
 import { createNotFoundError, createValidationError } from './errors.js';
 import { enqueueWorkEvent } from './event-outbox.js';
 import { recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
@@ -19,12 +20,12 @@ export const EVIDENCE_RETRACT_REASON_REQUIRED_MESSAGE = 'Retracting evidence req
  */
 export async function retractEvidence(
   prisma: PrismaClient,
-  input: { correctWorkId?: string | null; evidenceId: string; reason: string },
+  input: { claimToken?: string | null; correctWorkId?: string | null; evidenceId: string; reason: string },
   actor: WriteActor,
   now: Date = new Date(),
 ): Promise<WorkEvidence> {
   const retractedById = actor.actorId;
-  if (actor.actorKind !== 'HUMAN' || !retractedById) {
+  if (!['HUMAN', 'AGENT'].includes(actor.actorKind) || !retractedById) {
     throw createValidationError(EVIDENCE_RETRACT_HUMAN_ONLY_MESSAGE);
   }
   const reason = input.reason.trim();
@@ -39,6 +40,15 @@ export async function retractEvidence(
     });
     if (!evidence) {
       throw createNotFoundError(EVIDENCE_NOT_FOUND_MESSAGE);
+    }
+    await tx.$queryRaw`SELECT id FROM "Issue" WHERE id = ${evidence.workId}::uuid FOR UPDATE`;
+    await assertExecutionAuthority(tx, actor, evidence.work.teamId, 'report');
+    if (actor.actorKind === 'AGENT') {
+      const accepted = await tx.workReviewDecision.count({ where: { workId: evidence.workId, decision: 'ACCEPTED' } });
+      const work = await tx.issue.findUniqueOrThrow({ where: { id: evidence.workId }, include: { state: true } });
+      if (evidence.actorId !== actor.actorId || accepted || ['COMPLETED', 'CANCELED'].includes(work.state.type)) throw createValidationError(EVIDENCE_RETRACT_HUMAN_ONLY_MESSAGE);
+      const run = evidence.runId ? await tx.workRun.findUnique({ where: { id: evidence.runId } }) : null;
+      assertWorkToken(run?.executionTokenHash ?? null, input.claimToken);
     }
     if (evidence.retractedAt) {
       throw createValidationError(EVIDENCE_ALREADY_RETRACTED_MESSAGE);

@@ -218,5 +218,6 @@ function readRequestBody(request: IncomingMessage): Promise<string> {
 }
 
 function jsonReplacer(_key: string, value: unknown): unknown {
+  if (_key === "executionTokenHash") return undefined;
   return value instanceof Date ? value.toISOString() : value;
 }

@@ -205,9 +205,9 @@ describe('receipts on run_report (INV-588)', () => {
     // Commit through the real human gate (moves it to Ready), then claim.
     const admin = await prisma.user.findFirstOrThrow({ where: { actorKind: 'HUMAN' } });
     await commitWork(prisma, created.id, { acceptance: 'Tests pass and the receipt is attached.', assigneeId: admin.id, expectedRevision: created.revision }, { actorId: admin.id, actorKind: 'HUMAN', surface: 'test' });
-    await claimWork(prisma, created.id, {}, { actorId: mia.id, actorKind: 'AGENT', surface: 'test' });
+    const { claimToken } = await claimWork(prisma, created.id, {}, { actorId: mia.id, actorKind: 'AGENT', surface: 'test' });
 
-    const { work } = await reportRun(prisma, {
+    const { work } = await reportRun(prisma, { claimToken,
       receipt: { reasoning: 'Tests green; moving to review.', evidence: [{ kind: 'commit', ref: 'a'.repeat(40), version: 'a'.repeat(40) }] },
       status: 'completed',
       summary: 'done',
@@ -229,14 +229,14 @@ describe('receipts on run_report (INV-588)', () => {
     // Commit through the real human gate (moves it to Ready), then claim.
     const admin = await prisma.user.findFirstOrThrow({ where: { actorKind: 'HUMAN' } });
     await commitWork(prisma, created.id, { acceptance: 'Tests pass and the receipt is attached.', assigneeId: admin.id, expectedRevision: created.revision }, { actorId: admin.id, actorKind: 'HUMAN', surface: 'test' });
-    await claimWork(prisma, created.id, {}, { actorId: mia.id, actorKind: 'AGENT', surface: 'test' });
+    const { claimToken } = await claimWork(prisma, created.id, {}, { actorId: mia.id, actorKind: 'AGENT', surface: 'test' });
 
     // First running report moves Ready → In Progress (audited, no receipt).
-    await reportRun(prisma, { phase: 'starting', status: 'running', workId: created.id },
+    await reportRun(prisma, { claimToken, phase: 'starting', status: 'running', workId: created.id },
       { actorId: mia.id, actorKind: 'AGENT', surface: 'test' });
 
     // Second one changes nothing audited: a receipt has no row to explain.
-    await expect(reportRun(prisma, {
+    await expect(reportRun(prisma, { claimToken,
       phase: 'investigating',
       receipt: { reasoning: 'just thinking' },
       status: 'running',

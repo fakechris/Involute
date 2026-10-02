@@ -15,6 +15,8 @@ const PAIRS: Record<string, string> = {
   evidence_attach: 'evidenceAttach',
   run_report: 'runReport',
   work_claim: 'workClaim',
+  work_claim_release: 'workClaimRelease',
+  evidence_retract: 'evidenceRetract',
   work_commit: 'workCommit',
   work_uncommit: 'workUncommit',
   work_file_bug: 'bugReport',
