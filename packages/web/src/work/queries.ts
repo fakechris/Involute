@@ -620,8 +620,8 @@ export const WORK_RESTORE_MUTATION = gql`
 
 // Free-text search across every readable item (INV-925); same as MCP work_search.
 export const WORK_SEARCH_QUERY = gql`
-  query WorkSearch($query: String!, $first: Int) {
-    search(query: $query, first: $first) {
+  query WorkSearch($query: String!, $first: Int, $iql: String, $repository: String) {
+    search(query: $query, first: $first, iql: $iql, repository: $repository) {
       matchedField
       snippet
       commentId
@@ -638,6 +638,18 @@ export const WORK_SEARCH_QUERY = gql`
           id
           key
         }
+      }
+    }
+  }
+`;
+
+// Label choices for the search page's filter (INV-926).
+export const SEARCH_LABELS_QUERY = gql`
+  query SearchLabels {
+    issueLabels {
+      nodes {
+        id
+        name
       }
     }
   }

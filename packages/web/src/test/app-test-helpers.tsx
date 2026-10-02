@@ -532,6 +532,15 @@ export function renderApp(
       };
     }
 
+    if (source.includes('query SearchLabels')) {
+      return {
+        data: { issueLabels: queryState.data?.issueLabels ?? { nodes: [] } },
+        error: undefined,
+        loading: false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
     if (source.includes('query AccessPage')) {
       return {
         data: queryState.accessData ?? accessQueryResult,

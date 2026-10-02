@@ -357,10 +357,14 @@ model Issue {
   @@index([cycleId])
   @@index([kind])
   @@index([commitmentStatus])
+  /// Ranked search terms (INV-926). Written only by the database trigger; see migration 20261002020000_search_vector.
+  searchVector      Unsupported("tsvector")?
+
   @@index([repository])
   // Trigram indexes behind free-text search (INV-925); pg_trgm is created by the migration.
   @@index([title(ops: raw("gin_trgm_ops"))], map: "Issue_title_trgm_idx", type: Gin)
   @@index([description(ops: raw("gin_trgm_ops"))], map: "Issue_description_trgm_idx", type: Gin)
+  @@index([searchVector], map: "Issue_searchVector_idx", type: Gin)
 }
 
 model Comment {
@@ -382,12 +386,15 @@ model Comment {
   mentions    CommentMention[]
   rootedAgentRequests   AgentRequest[] @relation("AgentRequestRoot")
   answeredAgentRequests AgentRequest[] @relation("AgentRequestAnswer")
+  /// Ranked search terms (INV-926), written only by the database trigger.
+  searchVector Unsupported("tsvector")?
 
   @@index([issueId, createdAt])
   @@index([userId])
   @@index([parentCommentId, createdAt])
   @@index([issueId, parentCommentId, createdAt])
   @@index([body(ops: raw("gin_trgm_ops"))], map: "Comment_body_trgm_idx", type: Gin)
+  @@index([searchVector], map: "Comment_searchVector_idx", type: Gin)
 }
 
 // What the actor knew when it wrote (INV-588). Attached 1:1 to the WorkAudit

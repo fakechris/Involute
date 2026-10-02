@@ -198,6 +198,7 @@ export async function callMcpTool(
       assignOptional(searchInput, 'iql', optionalString(args.filter));
       searchInput.viewerId = context.viewer?.id ?? null;
       assignOptional(searchInput, 'teamKey', optionalString(args.team_key));
+      assignOptional(searchInput, 'repository', optionalString(args.repository));
       const status = optionalString(args.commitment_status);
       if (status === 'CANDIDATE' || status === 'COMMITTED' || status === 'REJECTED') {
         searchInput.commitmentStatus = status;
@@ -605,6 +606,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         query: { type: 'string', description: 'Free text: words (all must match), "quoted phrases", or an identifier such as INV-925 / inv925 / 925' },
         filter: { type: 'string', description: 'IQL filter, e.g. team:SON state-type:STARTED -commitment:rejected. See protocol_get_guide.' },
         team_key: { type: 'string' },
+        repository: { type: 'string', description: 'Only work in this project, by repository (e.g. fakechris/Involute)' },
         commitment_status: { type: 'string', enum: ['CANDIDATE', 'COMMITTED', 'REJECTED'] },
         first: { type: 'integer' },
       },

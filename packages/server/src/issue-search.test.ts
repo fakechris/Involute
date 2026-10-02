@@ -7,6 +7,8 @@ import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/s
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
 import { parseSearchQuery, searchIssues } from './issue-search.ts';
+import { reindexSearchVectors } from './search-reindex.ts';
+import { buildSearchTsQuery } from './search-tokens.ts';
 import { createSession } from './session.js';
 
 loadProjectEnvironment();
@@ -61,8 +63,13 @@ describe('Free-text search (INV-925)', () => {
   });
 
   it('parses words, quoted phrases and identifiers', () => {
-    expect(parseSearchQuery('候选  审批 候选')).toEqual({ terms: ['候选', '审批'], identifier: null });
-    expect(parseSearchQuery('"board drag" 卡片').terms).toEqual(['board drag', '卡片']);
+    const texts = (query: string) => parseSearchQuery(query).terms.map((term) => term.text);
+    expect(texts('候选  审批 候选')).toEqual(['候选', '审批']);
+    expect(parseSearchQuery('候选  审批').identifier).toBeNull();
+    expect(texts('"board drag" 卡片')).toEqual(['board drag', '卡片']);
+    // Unquoted words are cut into segments; a quoted phrase must match as typed.
+    expect(parseSearchQuery('候选审批').terms[0]).toMatchObject({ quoted: false, needles: ['候选', '审批'] });
+    expect(parseSearchQuery('"候选审批"').terms[0]).toMatchObject({ quoted: true, needles: ['候选审批'] });
     expect(parseSearchQuery('inv925').identifier).toEqual({ prefix: 'INV', number: '925' });
     expect(parseSearchQuery('INV-925').identifier).toEqual({ prefix: 'INV', number: '925' });
     expect(parseSearchQuery('925').identifier).toEqual({ prefix: null, number: '925' });
@@ -133,6 +140,99 @@ describe('Free-text search (INV-925)', () => {
     expect(identifiers(hits)[0]).toBe(old.identifier);
   });
 
+  describe('ranked full text (INV-926)', () => {
+    it('finds the words of 候选审批 apart, as in 「候选队列的审批」', async () => {
+      const apart = await work({ title: 'Queue', description: '进入候选队列的审批流程' });
+      await work({ title: 'Only one', description: '候选队列' });
+
+      expect(identifiers(await searchIssues(prisma, { query: '候选审批' }))).toEqual([apart.identifier]);
+    });
+
+    it('keeps characters a dictionary does not know together: 工单 is not 工 … 单', async () => {
+      const together = await work({ title: '提交工单' });
+      await work({ title: '人工审核的单据' });
+
+      expect(identifiers(await searchIssues(prisma, { query: '工单' }))).toEqual([together.identifier]);
+      expect(identifiers(await searchIssues(prisma, { query: '选队' }))).toEqual([]);
+      const inside = await work({ title: '候选队列' });
+      // A substring inside a word still matches.
+      expect(identifiers(await searchIssues(prisma, { query: '选队' }))).toEqual([inside.identifier]);
+    });
+
+    it('ranks a title with every word above a description with every word', async () => {
+      const inDescription = await work({ title: 'Other', description: '看板拖拽后卡片消失' });
+      const inTitle = await work({ title: '看板拖拽', stateId: done.id });
+
+      expect(identifiers(await searchIssues(prisma, { query: '看板 拖拽' }))).toEqual([
+        inTitle.identifier,
+        inDescription.identifier,
+      ]);
+    });
+
+    it('ranks words close together above the same words far apart', async () => {
+      const far = await work({ title: 'Far', description: `候选${'，其他内容'.repeat(30)}审批` });
+      const near = await work({ title: 'Near', description: '候选审批' });
+      await prisma.issue.update({ where: { id: near.id }, data: { updatedAt: new Date('2020-01-01') } });
+
+      expect(identifiers(await searchIssues(prisma, { query: '候选审批' }))).toEqual([near.identifier, far.identifier]);
+    });
+
+    it('ranks among what the filters allow, so better matches elsewhere do not crowd it out', async () => {
+      for (let index = 0; index < 3; index += 1) {
+        await work({ title: `候选审批 elsewhere ${index}`, repository: 'other/repo' });
+      }
+      const mine = await work({ title: 'Mine', description: '候选队列，之后审批', repository: 'mine/repo' });
+
+      const hits = await searchIssues(prisma, { query: '候选审批', where: { repository: 'mine/repo' }, recallLimit: 2 });
+      expect(identifiers(hits)).toEqual([mine.identifier]);
+    });
+
+    it('keeps vectors current on every write, raw SQL included', async () => {
+      const issue = await work({ title: 'Trigger' });
+      await prisma.$executeRaw`UPDATE "Issue" SET description = '后来补上的溯源说明' WHERE id = ${issue.id}::uuid`;
+      const comment = await prisma.comment.create({ data: { issueId: issue.id, userId: admin.id, body: '评论提到看板' } });
+
+      const [row] = await prisma.$queryRaw<Array<{ issue: boolean; comment: boolean }>>`
+        SELECT
+          (SELECT "searchVector" @@ to_tsquery('simple', '溯源') FROM "Issue" WHERE id = ${issue.id}::uuid) AS issue,
+          (SELECT "searchVector" @@ to_tsquery('simple', '看板') FROM "Comment" WHERE id = ${comment.id}::uuid) AS comment
+      `;
+      expect(row).toEqual({ issue: true, comment: true });
+    });
+
+    it('rebuilds vectors with a reindex that can run again and again', async () => {
+      await work({ title: '重建索引', description: 'reindex me' });
+      await comment(await work({ title: 'Has a comment' }), '评论正文');
+      await prisma.$executeRaw`UPDATE "Issue" SET "searchVector" = NULL`;
+      await prisma.$executeRaw`UPDATE "Comment" SET "searchVector" = NULL`;
+      expect(await searchIssues(prisma, { query: '重建索引' })).toHaveLength(1); // still found by substring
+
+      const vectors = () => prisma.$queryRaw<Array<{ vector: string }>>`
+        SELECT "searchVector"::text AS vector FROM "Issue" UNION ALL SELECT "searchVector"::text FROM "Comment" ORDER BY 1
+      `;
+      const firstRun = await reindexSearchVectors(prisma);
+      const afterFirst = await vectors();
+      const secondRun = await reindexSearchVectors(prisma);
+
+      expect(firstRun).toEqual({ issues: 2, comments: 1 });
+      expect(secondRun).toEqual(firstRun);
+      expect(await vectors()).toEqual(afterFirst);
+      expect(afterFirst.every((row) => row.vector !== null)).toBe(true);
+    });
+
+    it('matches what the database tokenizer indexed, for every query the compiler builds', async () => {
+      const samples = ['候选队列的审批', '提交工单', 'work_propose 提交', 'INV-859 修复', '看板 v2版本', 'かな検索'];
+      for (const text of samples) {
+        const pieces = parseSearchQuery(text).terms.flatMap((term) => term.pieces);
+        const tsQuery = buildSearchTsQuery(pieces)!;
+        const [row] = await prisma.$queryRaw<Array<{ matches: boolean }>>`
+          SELECT to_tsvector('simple', involute_search_tokens(${text})) @@ (${tsQuery}) AS matches
+        `;
+        expect(row?.matches, text).toBe(true);
+      }
+    });
+  });
+
   it('matches LIKE wildcards literally', async () => {
     const percent = await work({ title: 'Coverage at 100% now' });
     await work({ title: 'Coverage at 1000 now' });
@@ -187,8 +287,8 @@ describe('Free-text search (INV-925)', () => {
     }
 
     const SEARCH = /* GraphQL */ `
-      query Search($query: String!, $iql: String) {
-        search(query: $query, iql: $iql) { issue { identifier state { type } } matchedField snippet commentId }
+      query Search($query: String!, $iql: String, $repository: String) {
+        search(query: $query, iql: $iql, repository: $repository) { issue { identifier state { type } } matchedField snippet commentId }
       }
     `;
 
@@ -207,6 +307,21 @@ describe('Free-text search (INV-925)', () => {
 
       const filtered = await graphql(SEARCH, { query: '拖拽', iql: 'state-type:COMPLETED' });
       expect(filtered.search).toEqual([]);
+
+      // The same filters narrow both surfaces the same way (INV-926).
+      await prisma.issue.update({ where: { id: second.id }, data: { repository: 'fakechris/lumenbox', kind: 'EPIC' } });
+      for (const filters of [
+        { iql: 'kind:EPIC' },
+        { repository: 'fakechris/lumenbox' },
+        { iql: 'kind:ISSUE', repository: 'fakechris/lumenbox' },
+      ]) {
+        const webIds = (await graphql(SEARCH, { query: '拖拽', ...filters })).search.map((hit: any) => hit.issue.identifier);
+        const mcpIds = (await workSearch({ query: '拖拽', ...('iql' in filters ? { filter: filters.iql } : {}), ...('repository' in filters ? { repository: filters.repository } : {}) }))
+          .map((item) => item.identifier);
+        expect(webIds, JSON.stringify(filters)).toEqual(mcpIds);
+      }
+      expect((await graphql(SEARCH, { query: '拖拽', repository: 'fakechris/lumenbox' })).search.map((hit: any) => hit.issue.identifier))
+        .toEqual([second.identifier]);
     });
 
     it('never returns items or comments from a team the viewer cannot read', async () => {

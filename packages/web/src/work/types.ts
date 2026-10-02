@@ -488,3 +488,7 @@ export interface WorkSearchHit {
 export interface WorkSearchQueryData {
   search: WorkSearchHit[];
 }
+
+export interface SearchLabelsQueryData {
+  issueLabels: { nodes: Array<{ id: string; name: string }> };
+}
