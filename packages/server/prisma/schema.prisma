@@ -1115,3 +1115,15 @@ model BugSlaAlert {
 
   @@unique([workId, kind])
 }
+
+// Short-lived, principal-bound continuation state for exhaustive MCP search.
+model WorkSearchCursor {
+  id        String   @id @default(uuid()) @db.Uuid
+  actorKey  String
+  queryHash String
+  seenIds   String[]
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}

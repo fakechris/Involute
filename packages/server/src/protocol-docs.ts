@@ -87,9 +87,9 @@ Agent credentials carry scopes. Scope enforcement happens on MCP tools:
 
 | Scope | Unlocks |
 |---|---|
-| \`read\` | \`work_search\`, \`work_get_context\`, \`work_list_ready\`, \`protocol_get_guide\` (always granted) |
+| \`read\` | \`work_catalog\`, \`work_read_page\`, \`work_search\`, \`work_get_context\`, \`work_list_ready\`, \`protocol_get_guide\` (always granted) |
 | \`propose\` | \`work_propose\`, \`work_file_bug\`, \`work_propose_amendment\` |
-| \`update\` | \`work_update\` |
+| \`update\` | \`work_update\`, \`work_comment\` |
 | \`link\` | \`work_link\`, \`work_unlink\` |
 | \`claim\` | \`work_claim\` |
 | \`report\` | \`run_report\`, \`evidence_attach\` |
@@ -122,15 +122,17 @@ Work nodes carry a delivery contract (\`outcome\`, \`scope\`, \`constraints\`,
 ## MCP tools
 
 Read-only:
-- \`work_search\` — search by identifier, title, description, or IQL filter.
-- \`work_get_context\` — load full contract bundle, ancestors, blockers, active claim, and audits.
-- \`work_list_ready\` — list committed, unblocked, unclaimed work in urgency order.
+- \`work_search\` — search through the same keyword, segmentation, full-text and semantic ranking as the UI. Pass \`paginate: true\` for \`{nodes, pageInfo}\`; repeat the same query/filter with \`after: pageInfo.endCursor\` while \`hasNextPage\`. Without pagination the legacy array is preserved. Pages are live, exclude previously returned IDs, recheck access, and expire after one hour. Semantic recall remains bounded by the shared search policy.
+- \`work_get_context\` — load the contract bundle, ancestors, blockers and active claim. The \`pages\` object provides continuation for children, typed links, comments, audits, runs, evidence, verifications, reviews and amendments; use \`work_read_page(id, section, after)\` until exhausted.
+- \`work_list_ready\` — list committed, unblocked, unclaimed work in urgency order; continue with \`after: pageInfo.endCursor\`.
+- \`work_catalog\` — page visible teams, states, labels, actors and cycles. Use kind \`capabilities\` for credential scopes and actor restrictions; each mutation still checks current work access and lifecycle.
 - \`protocol_get_guide\` — fetch this document verbatim.
 
 Write:
 - \`work_propose\` — create candidate work. Pass \`parent_id\` to nest under project/milestone. Pass \`initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED' | 'BACKLOG'\` to direct-route upon human commitment. Pass \`priority\` (0–4) to suggest one; the person who commits may change it. Type: Bug via \`labels: ['bug']\` is committed directly and never enters Candidates; it requires \`priority\` (SLA), \`steps_to_reproduce\`, and a parent.
 - \`work_file_bug\` — file a Type: Bug. Required: \`priority\` (1–4, sets the SLA) and \`steps_to_reproduce\`. Committed directly; missing parent/priority/steps is refused. Prefer this over \`work_propose\` for bugs.
-- \`work_update\` — update fields with \`expected_revision\`. On committed work agents cannot change the contract (acceptance, scope, verification, outcome, constraints).
+- \`work_update\` — update fields with \`expected_revision\`. Omitted fields remain unchanged; nullable fields accept null to clear. \`label_ids\` replaces the set (empty clears); kind, cycle_id and alias use the same validation as the editor. On committed work agents cannot change the contract (acceptance, scope, verification, outcome, constraints).
+- \`work_comment\` — append as the authenticated actor; optional parent_comment_id replies to a comment. Supply idempotency_key for safe retries (same key with different content is refused).
 - \`work_propose_amendment\` — propose a change to a committed contract: the fields, their new values and a reason. A person accepts it (applied as their own edit) or rejects it with a note on the issue page; the outcome shows in \`work_get_context\` (\`contractAmendments\`). Use this instead of asking a person to retype a fix.
 - \`work_link\` — create typed work link.
 - \`work_unlink\` — remove a directed non-CONTAINS relation by from_id, to_id and type; requires write access to both endpoints. Use before replacing a reversed BLOCKS edge.

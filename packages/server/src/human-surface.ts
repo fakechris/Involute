@@ -154,6 +154,7 @@ export const HUMAN_GATES: Array<{ text: string; mutation: string } | { text: str
   { text: 'Committed work requires a human owner', mutation: 'workCommit' },
   { text: 'Agents cannot reject work', mutation: 'workReject' },
   { text: 'Agents cannot accept or cancel work', mutation: 'workReview' },
+  { text: 'Agents stop at Review except committed Research issues; Canceled remains human-only.', mutation: 'workReview' },
   { text: 'Agents cannot transition work directly to COMPLETED or CANCELED', mutation: 'workReview' },
   { text: 'Agents cannot rewrite committed contract fields', mutation: 'issueUpdate' },
   { text: 'Work owner must be a human assignee', mutation: 'issueUpdate' },

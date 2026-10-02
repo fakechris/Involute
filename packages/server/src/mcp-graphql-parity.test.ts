@@ -24,6 +24,7 @@ const PAIRS: Record<string, string> = {
   work_unlink: 'workLinkDelete',
   work_propose: 'workPropose',
   work_update: 'issueUpdate',
+  work_comment: 'commentCreate',
 };
 
 /** MCP write tools with no GraphQL counterpart, and why. */
@@ -39,6 +40,7 @@ const RENAMED: Record<string, Record<string, string>> = {
   work_file_bug: { team: 'teamId' },
   work_propose: { team: 'teamId' },
   work_update: { state: 'stateId' },
+  work_comment: { work_id: 'issueId' },
 };
 
 /** MCP arguments with no GraphQL field, and why a person does not need them. */
