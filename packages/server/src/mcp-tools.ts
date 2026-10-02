@@ -42,7 +42,7 @@ import { mentionTexts, updateIssue } from './issue-service.js';
 import { amendmentChanges, proposeContractAmendment } from './contract-amendment.js';
 import { dependencyHints } from './mention-links.js';
 import { researchLacksDownstream } from './work-hygiene.js';
-import { createWorkLink } from './link-service.js';
+import { createWorkLink, deleteWorkLink } from './link-service.js';
 import { buildProtocolGuide } from './protocol-docs.js';
 import { attachEvidence, reportRun } from './run-service.js';
 import { uncommitWork } from './work-uncommit.js';
@@ -59,6 +59,7 @@ export type McpToolName =
   | 'work_uncommit'
   | 'work_update'
   | 'work_propose_amendment'
+  | 'work_unlink'
   | 'work_link'
   | 'work_claim'
   | 'run_report'
@@ -85,6 +86,7 @@ export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
   'work_update',
   'work_propose_amendment',
   'work_link',
+  'work_unlink',
   'work_claim',
   'run_report',
   'evidence_attach',
@@ -369,6 +371,11 @@ export async function callMcpTool(
       const updateInput: Parameters<typeof updateIssue>[2] = {
         expectedRevision: requiredNumber(args.expected_revision, 'expected_revision'),
       };
+      if (args.parent_id !== undefined) {
+        const parent = await requireWork(context.prisma, requiredString(args.parent_id, 'parent_id'));
+        await assertCanWriteIssue(context.prisma, context, parent.id);
+        updateInput.parentId = parent.id;
+      }
       assignOptional(updateInput, 'acceptance', optionalString(args.acceptance));
       assignOptional(updateInput, 'constraints', optionalString(args.constraints));
       assignOptional(updateInput, 'description', optionalString(args.description));
@@ -441,6 +448,22 @@ export async function callMcpTool(
         toId: to.id,
         type: parseWorkLinkType(requiredString(args.type, 'type'), 'type'),
       });
+    }
+    case 'work_unlink': {
+      const from = await requireWork(context.prisma, requiredString(args.from_id, 'from_id'));
+      const to = await requireWork(context.prisma, requiredString(args.to_id, 'to_id'));
+      await assertCanWriteIssue(context.prisma, context, from.id);
+      await assertCanWriteIssue(context.prisma, context, to.id);
+      const type = parseWorkLinkType(requiredString(args.type, 'type'), 'type');
+      if (type === 'CONTAINS') {
+        throw createValidationError('Move work with work_update(parent_id, expected_revision); removing CONTAINS would orphan it.');
+      }
+      const link = await context.prisma.workLink.findUnique({
+        where: { fromId_toId_type: { fromId: from.id, toId: to.id, type } },
+      });
+      if (!link) return { removed: false, fromId: from.id, toId: to.id, type };
+      await deleteWorkLink(context.prisma, link.id, writeActorFromViewer(context.viewer, 'mcp'));
+      return { removed: true, id: link.id, fromId: from.id, toId: to.id, type };
     }
     case 'work_claim': {
       const work = await requireWork(context.prisma, requiredString(args.id, 'id'));
@@ -834,6 +857,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
       properties: {
         id: { type: 'string' },
         expected_revision: { type: 'integer' },
+        parent_id: { type: 'string', description: 'Move under this parent (identifier or UUID). Requires access to both items; same-team/repository, hierarchy and cycle rules apply. Cannot detach committed work.' },
         title: { type: 'string' },
         description: { type: 'string' },
         outcome: { type: 'string' },
@@ -870,6 +894,20 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         from_id: { type: 'string' },
         to_id: { type: 'string' },
         type: { type: 'string' },
+      },
+      required: ['from_id', 'to_id', 'type'],
+    },
+  },
+  {
+    name: 'work_unlink',
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    description: 'Remove the specified directed relation. Use this before correcting a reversed BLOCKS edge. Both endpoints require write access. CONTAINS is refused: move work with work_update(parent_id, expected_revision). Returns removed=false if absent.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        from_id: { type: 'string' },
+        to_id: { type: 'string' },
+        type: { type: 'string', enum: ['BLOCKS', 'DERIVED_FROM', 'DISCOVERED_DURING', 'RELATED_TO', 'DUPLICATE_OF'] },
       },
       required: ['from_id', 'to_id', 'type'],
     },
@@ -1164,6 +1202,7 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   // Proposing writes nothing to the contract until a person accepts it.
   work_propose_amendment: 'propose',
   work_link: 'link',
+  work_unlink: 'link',
   work_claim: 'claim',
   run_report: 'report',
   evidence_attach: 'report',

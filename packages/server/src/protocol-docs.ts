@@ -86,7 +86,7 @@ Agent credentials carry scopes. Scope enforcement happens on MCP tools:
 | \`read\` | \`work_search\`, \`work_get_context\`, \`work_list_ready\`, \`protocol_get_guide\` (always granted) |
 | \`propose\` | \`work_propose\`, \`work_file_bug\`, \`work_propose_amendment\` |
 | \`update\` | \`work_update\` |
-| \`link\` | \`work_link\` |
+| \`link\` | \`work_link\`, \`work_unlink\` |
 | \`claim\` | \`work_claim\` |
 | \`report\` | \`run_report\`, \`evidence_attach\` |
 
@@ -129,6 +129,8 @@ Write:
 - \`work_update\` — update fields with \`expected_revision\`. On committed work agents cannot change the contract (acceptance, scope, verification, outcome, constraints).
 - \`work_propose_amendment\` — propose a change to a committed contract: the fields, their new values and a reason. A person accepts it (applied as their own edit) or rejects it with a note on the issue page; the outcome shows in \`work_get_context\` (\`contractAmendments\`). Use this instead of asking a person to retype a fix.
 - \`work_link\` — create typed work link.
+- \`work_unlink\` — remove a directed non-CONTAINS relation by from_id, to_id and type; requires write access to both endpoints. Use before replacing a reversed BLOCKS edge.
+- Move existing work with \`work_update(parent_id, expected_revision)\`; identifiers and UUIDs are accepted. Graph hierarchy, repository, team and cycle constraints still apply.
 - \`work_claim\` — atomically claim committed work for the current agent actor.
 - \`run_report\` — report run status (queued / running / blocked / completed). Completed moves to In Review.
 - \`evidence_attach\` — attach PR, test, log, or artifact URL to a run.

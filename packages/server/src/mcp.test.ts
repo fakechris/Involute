@@ -368,6 +368,65 @@ describe('Involute MCP', () => {
     expect(await prisma.evidenceVerification.count()).toBe(0);
   });
 
+  it('moves existing work with revision checks and repairs a reversed BLOCKS edge', async () => {
+    const oldParent = await testParentId(prisma, team.id);
+    const parent = await prisma.issue.create({ data: {
+      identifier: 'INV-950', title: 'Destination', kind: 'MILESTONE',
+      teamId: team.id, stateId: ready.id, repository: (await prisma.issue.findUniqueOrThrow({ where: { id: oldParent } })).repository,
+    } });
+    const child = await prisma.issue.create({ data: {
+      identifier: 'INV-951', title: 'Implementation', kind: 'ISSUE', parentId: oldParent,
+      teamId: team.id, stateId: ready.id, repository: parent.repository,
+    } });
+    await prisma.workLink.create({ data: { fromId: oldParent, toId: child.id, type: 'CONTAINS' } });
+    const moved = await callTool('work_update', { id: child.identifier, parent_id: parent.identifier, expected_revision: child.revision });
+    expect(moved.parentId).toBe(parent.id);
+    expect(await prisma.workLink.findMany({ where: { toId: child.id, type: 'CONTAINS' } })).toMatchObject([{ fromId: parent.id }]);
+    const stale = await mcpRpc('/mcp', { id: 'stale-parent', method: 'tools/call', params: {
+      name: 'work_update', arguments: { id: child.id, parent_id: oldParent, expected_revision: child.revision },
+    } });
+    expect(stale.body.error).toBeDefined();
+    expect((await prisma.issue.findUniqueOrThrow({ where: { id: child.id } })).parentId).toBe(parent.id);
+    const link = await callTool('work_link', { from_id: parent.id, to_id: child.id, type: 'BLOCKS' });
+    const cycle = await mcpRpc('/mcp', { id: 'cycle', method: 'tools/call', params: {
+      name: 'work_link', arguments: { from_id: child.id, to_id: parent.id, type: 'BLOCKS' },
+    } });
+    expect(cycle.body.error).toBeDefined();
+    expect(await callTool('work_unlink', { from_id: parent.identifier, to_id: child.identifier, type: 'BLOCKS' })).toMatchObject({ removed: true, id: link.id });
+    expect(await callTool('work_unlink', { from_id: parent.identifier, to_id: child.identifier, type: 'BLOCKS' })).toMatchObject({ removed: false });
+    await callTool('work_link', { from_id: child.id, to_id: parent.id, type: 'BLOCKS' });
+    expect(await prisma.workAudit.findFirst({ where: { workId: parent.id, reason: { contains: link.id } } })).toMatchObject({ surface: 'mcp' });
+    const orphan = await mcpRpc('/mcp', { id: 'orphan', method: 'tools/call', params: {
+      name: 'work_unlink', arguments: { from_id: parent.id, to_id: child.id, type: 'CONTAINS' },
+    } });
+    expect(orphan.body.error).toBeDefined();
+    expect(await prisma.workLink.count({ where: { toId: child.id, type: 'CONTAINS' } })).toBe(1);
+  });
+
+  it('enforces agent scopes, endpoint access and repository constraints for graph edits', async () => {
+    const agent = await prisma.user.create({ data: { name: 'Graph agent', email: 'graph-agent@test.local', actorKind: 'AGENT', ownerId: viewer.id, globalRole: 'USER' } });
+    const token = 'inv_agent_graph_edit_test';
+    const credential = await prisma.agentCredential.create({ data: { name: 'graph', tokenHash: hashAgentToken(token), teamId: team.id, userId: agent.id, scopes: ['read', 'update', 'link'] } });
+    const parentId = await testParentId(prisma, team.id);
+    const child = await prisma.issue.create({ data: { identifier: 'INV-952', title: 'Child', kind: 'ISSUE', teamId: team.id, stateId: ready.id, repository: 'test/placement' } });
+    const invoke = (name: string, args: Record<string, unknown>) => mcpRpcWithToken('/mcp', { id: name, method: 'tools/call', params: { name, arguments: args } }, token);
+    const moved = await invoke('work_update', { id: child.id, parent_id: parentId, expected_revision: child.revision });
+    expect(moved.body.error).toBeUndefined();
+    const revision = JSON.parse(moved.body.result.content[0].text).revision;
+    const foreignRepo = await prisma.issue.create({ data: { identifier: 'INV-953', title: 'Other repo', kind: 'MILESTONE', teamId: team.id, stateId: ready.id, repository: 'other/repo' } });
+    expect((await invoke('work_update', { id: child.id, parent_id: foreignRepo.id, expected_revision: revision })).body.error).toBeDefined();
+    const otherTeam = await prisma.team.create({ data: { key: 'FOREIGN', name: 'Private', visibility: 'PRIVATE' } });
+    const otherState = await prisma.workflowState.create({ data: { name: 'Ready', type: 'UNSTARTED', position: 0, teamId: otherTeam.id } });
+    const foreign = await prisma.issue.create({ data: { identifier: 'FOREIGN-1', title: 'Private parent', kind: 'PROJECT', teamId: otherTeam.id, stateId: otherState.id, repository: 'test/placement' } });
+    expect((await invoke('work_update', { id: child.id, parent_id: foreign.id, expected_revision: revision })).body.error).toBeDefined();
+    await prisma.workLink.create({ data: { fromId: child.id, toId: foreign.id, type: 'RELATED_TO' } });
+    expect((await invoke('work_unlink', { from_id: child.id, to_id: foreign.id, type: 'RELATED_TO' })).body.error).toBeDefined();
+    expect(await prisma.workLink.count({ where: { fromId: child.id, toId: foreign.id } })).toBe(1);
+    await prisma.agentCredential.update({ where: { id: credential.id }, data: { scopes: ['read'] } });
+    const denied = await invoke('work_unlink', { from_id: parentId, to_id: child.id, type: 'BLOCKS' });
+    expect(denied.body.error.message).toContain('scope');
+  });
+
   it('supports updating work state via work_update and rejects COMPLETED/CANCELED', async () => {
     const candidate = await prisma.issue.create({
       data: {

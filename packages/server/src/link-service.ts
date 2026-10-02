@@ -150,6 +150,15 @@ export async function deleteWorkLink(
     if (child) await projectParent(prisma, child, child.parentId === existing.fromId ? null : child.parentId, actor);
   }
 
+  if (existing.type !== 'CONTAINS') {
+    const before = await prisma.issue.findUniqueOrThrow({ where: { id: existing.fromId } });
+    const after = await prisma.issue.update({ where: { id: before.id }, data: { revision: { increment: 1 } } });
+    await recordWorkAudit(prisma, {
+      actor: { ...(actor ?? INTERNAL_WRITE_ACTOR), reason: `Removed ${existing.type} link ${existing.id}: ${existing.fromId} -> ${existing.toId}` },
+      before: selectIssueSnapshot(before), after: selectIssueSnapshot(after), workId: before.id,
+    });
+  }
+
   return { id: existing.id };
 }
 
