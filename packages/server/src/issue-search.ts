@@ -269,8 +269,11 @@ function scoreIssue(
   }
 
   const phrase = parsed.terms.map((term) => term.text).join(' ').toLowerCase();
+  // The query as typed, intact in the title, beats its words found apart:
+  // 证据验证 ranks 「可信证据验证」 above 「操作有证据（写操作效果验证）」.
+  const foundApart = parsed.terms.length > 1 || parsed.terms[0]!.needles.length > 1;
   if (title.startsWith(parsed.terms[0]!.needles[0]!)) score += TITLE_PREFIX_BONUS;
-  if (parsed.terms.length > 1 && title.includes(phrase)) score += TITLE_PHRASE_BONUS;
+  if (foundApart && title.includes(phrase)) score += TITLE_PHRASE_BONUS;
   // Of two titles with the same words, the shorter one is closer to the query.
   if (title.length > 0) score += TITLE_COVERAGE_BONUS * Math.min(1, matchedTitleChars / title.length);
   // How often and how close together the words occur, weighted by field.
