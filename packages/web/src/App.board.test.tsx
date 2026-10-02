@@ -196,6 +196,17 @@ describe('App board UI', () => {
     expect(screen.getByTestId('issue-card-issue-1')).toHaveAttribute('draggable', 'true');
   });
 
+  it('sends number search to the server before pagination', async () => {
+    renderTestApp();
+    fireEvent.click(await screen.findByRole('button', { name: 'Filter' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search board issues' }), { target: { value: '671' } });
+    await waitFor(() => expect(apolloMocks.useQuery).toHaveBeenCalledWith(
+      expect.anything(), expect.objectContaining({
+        variables: expect.objectContaining({ first: 200, filter: expect.objectContaining({ text: '671' }) }),
+      }),
+    ));
+  });
+
   it('loads the next page only when the user explicitly asks for more issues', async () => {
     const fetchMore = vi.fn().mockResolvedValue(undefined);
 
