@@ -12,6 +12,7 @@ import {
   VIEWER_ASSERTION_HEADER,
 } from '@turnkeyai/involute-shared';
 import { createViewerAssertion } from '@turnkeyai/involute-shared/viewer-assertion';
+import { registerDoctorCommand } from './commands/doctor.js';
 import { registerExportCommand } from './commands/export.js';
 import { registerExecutorCommand, createExecutorMcpClient } from './commands/executor.js';
 import { registerImportCommand } from './commands/import.js';
@@ -1516,6 +1517,7 @@ export function createProgram(): Command {
   registerConfigCommands(program);
   registerAuthCommands(program);
 
+  registerDoctorCommand(program, () => readConfig(getConfigPath()));
   registerExecutorCommand(program, async () => {
     const config = await readConfig(getConfigPath());
     if (!config['server-url'] || !config.token) throw new CliError('Configure server-url and an agent token before running an executor.');

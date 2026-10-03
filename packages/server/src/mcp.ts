@@ -6,7 +6,9 @@ import { createGraphQLContext, type GraphQLContextOptions } from './auth.js';
 import { getExposedError, NOT_AUTHENTICATED_MESSAGE } from './errors.js';
 import { callMcpTool, listMcpTools } from './mcp-tools.js';
 
-const PROTOCOL_VERSION = '2025-03-26';
+import { MCP_PROTOCOL_VERSION, serverBuild } from './protocol-info.js';
+import { WORK_REVISION_CONFLICT_MESSAGE } from './errors.js';
+import { buildReadableIssueWhere } from './access-control.js';
 
 export interface McpHandlerOptions extends Omit<GraphQLContextOptions, 'request'> {
   request: IncomingMessage;
@@ -90,6 +92,15 @@ export async function handleMcpRequest(options: McpHandlerOptions): Promise<bool
       -32000,
       exposed?.message ?? (error instanceof Error ? error.message : 'Internal error'),
     );
+    if (exposed?.message === WORK_REVISION_CONFLICT_MESSAGE) {
+      const params = message.params as { arguments?: { id?: unknown; work_id?: unknown } } | undefined;
+      const id = params?.arguments?.id ?? params?.arguments?.work_id;
+      if (typeof id === 'string') {
+        const key = /^[a-f0-9-]{36}$/i.test(id) ? { id } : { identifier: id };
+        const work = await context.prisma.issue.findFirst({ where: { AND: [key, buildReadableIssueWhere(context) ?? {}] }, select: { revision: true } });
+        if (work) Object.assign(rpcError.error, { message: `${rpcError.error.message} currentRevision: ${work.revision}. Re-read context and reconcile; never blindly overwrite.`, data: { code: 'REVISION_CONFLICT', currentRevision: work.revision, remediation: 'Re-read context and reconcile; never blindly overwrite.' } });
+      }
+    }
     const status = exposed?.extensions.code === 'UNAUTHENTICATED' ? 401 : 200;
     writeJson(options.response, status, rpcError);
   }
@@ -106,13 +117,14 @@ async function dispatchMcpMethod(
   switch (message.method) {
     case 'initialize':
       return {
-        protocolVersion: PROTOCOL_VERSION,
+        protocolVersion: MCP_PROTOCOL_VERSION,
         capabilities: {
           tools: { listChanged: false },
         },
         serverInfo: {
           name: 'involute',
-          version: '0.0.0',
+          version: serverBuild().serverVersion,
+          buildSha: serverBuild().buildSha,
         },
         instructions:
           'Involute is a project-state kernel. Search before creating work. Propose candidates instead of committed issues. Do not file local TODOs. Run complete is not work accepted. Call protocol_get_guide for the full protocol. Machine-readable docs: GET /llms.txt.',

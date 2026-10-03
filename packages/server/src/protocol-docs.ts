@@ -35,6 +35,17 @@ and personal controls have stated exemptions rather than an implied agent tool.
 Use the existing MCP initialization and \`tools/list\` discovery after reconnecting;
 the action catalog version is not a replacement for transport protocol negotiation.
 
+## Binding and version diagnostics
+
+Call \`protocol_get_guide(project_id, repository)\` for its machine-readable
+\`protocol\` object: schema/work/MCP versions, build SHA, endpoint origin,
+canonical project binding and credential scopes. Missing/unknown versions or build
+identity are unknown, not success. Run \`involute doctor --project INV-79 --json\`
+for versioned checks and remediation (exit 0 passed, 2 config/compatibility, 3 unavailable).
+\`work_commit.state_id\` is a workflow state UUID from \`work_catalog(kind: states)\`,
+not a state enum. Revision conflicts return a readable \`currentRevision\`; re-read
+and reconcile, never blindly retry with the new revision.
+
 ## Execution leases (INV-943)
 
 A work claim returns a secret \`claim_token\` and an execution label. Keep the token in execution secret state, never in logs, comments, receipts or Git. Pass it to renew a claim, report a run, attach evidence, release your own claim with \`work_claim_release\`, or correct your own unaccepted evidence with \`evidence_retract\`. Both corrections require a reason and preserve history. Actor identity alone cannot authorize a second session. Lease expiry requires a fresh claim; the new claim invalidates old execution writes. Completing a run releases the lease but permits evidence attachment until a subsequent claim supersedes it. A person can force-release from the Claim panel. Existing pre-token leases must expire or be released; their tokens cannot be recovered from context.
