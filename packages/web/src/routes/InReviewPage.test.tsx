@@ -91,7 +91,7 @@ describe('InReviewPage', () => {
     render(<MemoryRouter><InReviewPage /></MemoryRouter>);
     const child = screen.getByRole('listitem', { name: 'INV-101 in review' });
     expect(within(child).getByRole('button', { name: 'Review delivery package' })).toBeInTheDocument();
-    expect(within(child).queryByRole('button', { name: 'Accept', exact: true })).toBeNull();
+    expect(within(child).queryByRole('button', { name: /^Accept$/ })).toBeNull();
     expect(within(child).queryByRole('checkbox')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Select all visible' }));
     expect(screen.getByText('1 selected')).toBeInTheDocument();
