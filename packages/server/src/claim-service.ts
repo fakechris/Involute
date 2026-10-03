@@ -849,7 +849,8 @@ export async function claimWork(
     const work = await requireWork(transaction, initial.id);
     await assertExecutionAuthority(transaction, actor, work, 'claim');
     if (work.supersededById) throw createValidationError('Claim the replacement work instead of this superseded item.');
-    await assertDeliveryExecution(transaction, work);
+    const deliveryBinding = await assertDeliveryExecution(transaction, work);
+    if (deliveryBinding?.unit.executorActorId && deliveryBinding.unit.executorActorId !== actor.actorId) throw createValidationError('Only the approved executor may claim this implementation unit.');
 
     if (work.commitmentStatus !== 'COMMITTED') {
       throw createValidationError(WORK_NOT_COMMITTED_MESSAGE);

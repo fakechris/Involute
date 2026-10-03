@@ -1,3 +1,4 @@
+import { executorContext, executorUpdate, type ExecutorInput } from './executor-service.js';
 import { visibleDeliveryChange } from './delivery-visibility.js';
 import { deliveryContext, pendingDeliveryChanges } from './delivery-context.js';
 import { proposeDeliveryChange, decideDeliveryChange } from './delivery-change-set.js';
@@ -377,8 +378,10 @@ const typeDefs = /* GraphQL */ `
   type DeliveryChangeSet { viewerCanDecide: Boolean! id: ID! work: Issue! status: String! reason: String! changesJson: String! beforeJson: String! createdAt: DateTime! }
   type DeliveryPageInfo { hasNextPage: Boolean! endCursor: String }
   type DeliveryChangeConnection { nodes: [DeliveryChangeSet!]! pageInfo: DeliveryPageInfo! }
+  type ExecutorMutationPayload { success: Boolean! message: String resultJson: String }
   type DeliveryMutationPayload { success: Boolean! message: String changeSet: DeliveryChangeSet issue: Issue }
   type Query {
+    executorContextJson(id: String!): String!
     deliveryContext(id: String!): DeliveryContext!
     deliveryChanges(first: Int, after: String, repository: String, noRepository: Boolean, teamKey: String, bugsOnly: Boolean): DeliveryChangeConnection!
     viewer: User
@@ -437,6 +440,7 @@ const typeDefs = /* GraphQL */ `
   }
 
   type Mutation {
+    executorUpdate(workId: String!, operation: String!, detailsJson: String): ExecutorMutationPayload!
     deliveryChangePropose(workId: String!, expectedRevision: Int!, reason: String!, changesJson: String!): DeliveryMutationPayload!
     deliveryChangeDecide(id: String!, approve: Boolean!, note: String, ownerId: String): DeliveryMutationPayload!
     deliveryExecutionCreate(workId: String!, unitKey: String!, expectedGrantRevision: Int!): DeliveryMutationPayload!
@@ -2315,6 +2319,7 @@ const resolvers = {
     beforeJson: (parent: import('@prisma/client').DeliveryChangeSet) => JSON.stringify(parent.before),
   },
   Query: {
+    executorContextJson: async (_parent: unknown, args: { id: string }, context: GraphQLContext) => JSON.stringify(await executorContext(context, args.id)),
     deliveryContext: (_parent: unknown, args: { id: string }, context: GraphQLContext) => deliveryContext(context, args.id),
     deliveryChanges: (_parent: unknown, args: { first?: number; after?: string; repository?: string; noRepository?: boolean; teamKey?: string; bugsOnly?: boolean }, context: GraphQLContext) => pendingDeliveryChanges(context, args),
     serverFeatures: (_parent: unknown, _args: unknown, context: GraphQLContext): ServerFeature[] => {
@@ -3026,6 +3031,12 @@ const resolvers = {
     },
   },
   Mutation: {
+    executorUpdate: (_parent: unknown, args: { workId: string; operation: ExecutorInput['operation']; detailsJson?: string }, context: GraphQLContext) => runMutationWithReason(async () => {
+      requireAuthentication(context);
+      let details: Omit<ExecutorInput, 'workId' | 'operation'> = {};
+      try { details = JSON.parse(args.detailsJson ?? '{}'); } catch { throw createValidationError('Executor details must be valid JSON.'); }
+      return { success: true, resultJson: JSON.stringify(await executorUpdate(context, { ...details, workId: args.workId, operation: args.operation })) };
+    }, { success: false, resultJson: null }),
     deliveryChangePropose: (_parent: unknown, args: { workId: string; expectedRevision: number; reason: string; changesJson: string }, context: GraphQLContext) => runMutationWithReason(async () => {
       requireAuthentication(context);
       let changes: unknown;

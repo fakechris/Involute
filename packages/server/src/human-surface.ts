@@ -33,6 +33,7 @@ export type HumanSurface =
   | { kind: 'gap'; tracking: string; note: string };
 
 export const MUTATION_SURFACES: Record<string, HumanSurface> = {
+  executorUpdate: { kind: 'web', components: ['components/ExecutorPanel.tsx'], label: 'Stop executor' },
   deliveryChangePropose: { kind: 'web', components: ['components/DeliveryPanel.tsx'], label: 'Propose delivery change' },
   deliveryChangeDecide: { kind: 'web', components: ['components/DeliveryPanel.tsx'], label: 'Approve delivery change' },
   deliveryExecutionCreate: { kind: 'web', components: ['components/DeliveryPanel.tsx'], label: 'Create implementation' },
@@ -161,6 +162,7 @@ export const HUMAN_GATES: Array<{ text: string; mutation: string } | { text: str
   { text: 'Agents cannot transition work directly to COMPLETED or CANCELED', mutation: 'workReview' },
   { text: 'Agents cannot rewrite committed contract fields', mutation: 'issueUpdate' },
   { text: 'Work owner must be a human assignee', mutation: 'issueUpdate' },
+  { text: 'Only a person may reconcile external effects.', mutation: 'executorUpdate' },
   { text: 'Instantiate an approved delivery unit and any predecessors', mutation: 'deliveryExecutionCreate' },
   { text: 'Only a person may approve or reject a delivery change set', mutation: 'deliveryChangeDecide' },
   { text: 'Only a person can release a claim', mutation: 'workClaimRelease' },

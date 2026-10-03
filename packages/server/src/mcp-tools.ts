@@ -1,3 +1,4 @@
+import { executorContext, executorUpdate, EXECUTOR_OPERATIONS, type ExecutorInput } from './executor-service.js';
 import { deliveryContext } from './delivery-context.js';
 import { proposeDeliveryChange } from './delivery-change-set.js';
 import { createDeliveryExecution } from './delivery-execution.js';
@@ -62,6 +63,8 @@ export type McpToolName =
   | 'work_search'
   | 'work_catalog'
   | 'work_read_page'
+  | 'work_executor_context'
+  | 'work_executor_update'
   | 'work_delivery_context'
   | 'work_delivery_propose'
   | 'work_execution_create'
@@ -92,6 +95,7 @@ export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
   'work_search',
   'work_catalog',
   'work_read_page',
+  'work_executor_context',
   'work_delivery_context',
   'work_get_context',
   'work_list_ready',
@@ -100,6 +104,7 @@ export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
 ];
 
 export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
+  'work_executor_update',
   'work_delivery_propose',
   'work_execution_create',
   'work_propose',
@@ -255,6 +260,8 @@ export async function callMcpTool(
       await assertCanReadIssue(context.prisma, context, work.id);
       return readWorkPage(context.prisma, work.id, requiredString(args.section, 'section') as WorkSection, optionalNumber(args.first) ?? 50, optionalString(args.after), buildReadableIssueWhere(context));
     }
+    case 'work_executor_context': return executorContext(context, requiredString(args.id, 'id'));
+    case 'work_executor_update': return executorUpdate(context, { ...(args.details as Omit<ExecutorInput, 'workId' | 'operation'> ?? {}), workId: requiredString(args.work_id, 'work_id'), operation: requiredString(args.operation, 'operation') as ExecutorInput['operation'] });
     case 'work_delivery_context': return deliveryContext(context, requiredString(args.id, 'id'));
     case 'work_delivery_propose': return proposeDeliveryChange(context, { workId: requiredString(args.work_id, 'work_id'), expectedRevision: requiredNumber(args.expected_revision, 'expected_revision'), reason: requiredString(args.reason, 'reason'), changes: args.changes });
     case 'work_execution_create': return createDeliveryExecution(context, { workId: requiredString(args.work_id, 'work_id'), unitKey: requiredString(args.unit_key, 'unit_key'), expectedGrantRevision: requiredNumber(args.expected_grant_revision, 'expected_grant_revision') });
@@ -761,6 +768,12 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     inputSchema: { type: 'object', properties: { id: { type: 'string' }, section: { type: 'string', enum: [...WORK_SECTIONS] }, first: { type: 'integer', minimum: 1, maximum: 200 }, after: { type: 'string' } }, required: ['id', 'section'] },
   },
   {
+    name: 'work_executor_context',
+    description: 'Read version 1 external executor dispatches, stop acknowledgement, checkpoints, effect intents and executor-reported delivery receipts. These observations are not independent verification or human acceptance.',
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  },
+  {
     name: 'work_delivery_context',
     description: 'Read a delivery package, its approved implementation units, grant revision and technical proof status. Business acceptance remains human-owned.',
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
@@ -794,6 +807,12 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         first: { type: 'integer' },
       },
     },
+  },
+  {
+    name: 'work_executor_update',
+    description: 'Version 1 external executor protocol. Dispatch requires an explicit executorActorId and maxAttempts approved in the delivery policy. Subsequent calls supply details.expectedRevision and generation. ack supplies runId and claimToken; checkpoint supplies checkpoint; prepare_effect supplies effect {key, action: merge|deploy, environment?, commitSha, paths}; start_effect supplies effectId immediately before the actual effect; receipt supplies idempotencyKey and receipt. A started effect with an unknown result MUST NOT be retried. Humans may dispatch, stop, recover or reconcile an unknown effect with details.resolution {outcome, reason, evidenceUrl, observedSha?}, but cannot forge an executor acknowledgement or receipt.',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    inputSchema: { type: 'object', properties: { work_id: { type: 'string' }, operation: { type: 'string', enum: [...EXECUTOR_OPERATIONS] }, details: { type: 'object', properties: { expectedRevision: { type: 'integer' }, generation: { type: 'integer' }, runId: { type: 'string' }, claimToken: { type: 'string' }, checkpoint: { type: 'string' }, effectId: { type: 'string' }, effect: { type: 'object', properties: { key: { type: 'string' }, action: { type: 'string', enum: ['merge', 'deploy'] }, environment: { type: 'string' }, commitSha: { type: 'string' }, paths: { type: 'array', items: { type: 'string' } } }, required: ['key', 'action', 'commitSha', 'paths'], additionalProperties: false }, receipt: { type: 'object' }, final: { type: 'boolean', description: 'False records an intermediate effect observation and keeps the dispatch running; default true submits final delivery.' }, resolution: { type: 'object', properties: { outcome: { type: 'string', enum: ['COMPLETED', 'FAILED'] }, reason: { type: 'string' }, evidenceUrl: { type: 'string' }, observedSha: { type: 'string' } } }, idempotencyKey: { type: 'string' } }, additionalProperties: false } }, required: ['work_id', 'operation'] },
   },
   {
     name: 'work_delivery_propose',
@@ -1361,6 +1380,8 @@ function assignOptional<T extends object, K extends keyof T>(
 // to no scope.
 const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_search: 'read',
+  work_executor_context: 'read',
+  work_executor_update: 'report',
   work_delivery_context: 'read',
   work_delivery_propose: 'propose',
   work_execution_create: 'claim',

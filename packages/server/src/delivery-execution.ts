@@ -1,3 +1,4 @@
+import { enqueueWorkEvent } from './event-outbox.js';
 import type { GraphQLContext } from './auth.js';
 import { assertCanWriteIssue } from './access-control.js';
 import { findWorkByIdOrIdentifier } from './context-service.js';
@@ -36,6 +37,10 @@ export async function createDeliveryExecution(context: GraphQLContext, input: { 
       const bound = await tx.issue.update({ where: { id: created.id }, data: { deliveryRootId: work.id, deliveryUnitKey: key, deliveryGrantRevision: grant.revision } });
       await recordWorkAudit(tx, { workId: bound.id, before: selectIssueSnapshot(created), after: selectIssueSnapshot(bound), actor: { ...actor, reason: `Bound to approved delivery ${work.identifier} generation ${grant.revision}, unit ${key}.` } });
       for (const predecessor of predecessors) await createWorkLink(tx, { fromId: predecessor.id, toId: bound.id, type: 'BLOCKS', actor });
+      if (unit.executorActorId) {
+        const dispatch = await tx.executorDispatch.create({ data: { workId: bound.id, rootId: work.id, grantRevision: grant.revision, executorActorId: unit.executorActorId } });
+        await enqueueWorkEvent(tx, { type: 'executor.dispatched', workId: bound.id, workIdentifier: bound.identifier, payload: { dispatchId: dispatch.id, generation: 1, actorId: actor.actorId, protocolVersion: 1 } });
+      }
       return bound;
     };
     return instantiate(input.unitKey);

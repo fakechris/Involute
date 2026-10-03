@@ -119,6 +119,9 @@ export async function resetAndSeed(prisma: PrismaClient): Promise<void> {
   }
 
   // ActorAudit references users with Restrict (INV-586), so it goes first.
+  await prisma.executorDeliveryReceipt.deleteMany();
+  await prisma.executorEffect.deleteMany();
+  await prisma.executorDispatch.deleteMany();
   await prisma.actorAudit.deleteMany();
   await prisma.decisionReceipt.deleteMany();
   await prisma.commentMention.deleteMany();

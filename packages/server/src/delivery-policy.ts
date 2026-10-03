@@ -9,6 +9,8 @@ export interface DeliveryUnit {
   paths: string[];
   actions: DeliveryAction[];
   dependsOn: string[];
+  executorActorId?: string;
+  maxAttempts?: number;
   checks: Array<{ workflowId: number; job: string }>;
 }
 export interface DeliveryPolicy { units: DeliveryUnit[]; environments: string[] }
@@ -46,10 +48,12 @@ export function parseDeliveryPolicy(raw: unknown, contract: DeliveryContract): D
   if (!Array.isArray(value.units) || !value.units.length || value.units.length > 100) throw createValidationError('A delivery policy needs 1–100 implementation units.');
   const criteria = deliveryCriteria(contract);
   const units = value.units.map((rawUnit): DeliveryUnit => {
-    const unit = object(rawUnit, ['key', 'title', 'criteria', 'paths', 'actions', 'dependsOn', 'checks']);
+    const unit = object(rawUnit, ['key', 'title', 'criteria', 'paths', 'actions', 'dependsOn', 'checks', 'executorActorId', 'maxAttempts']);
     if (typeof unit.key !== 'string' || !/^[a-z][a-z0-9_-]{0,63}$/.test(unit.key)) throw createValidationError('Invalid delivery unit key.');
     if (typeof unit.title !== 'string' || !unit.title.trim() || unit.title.length > 250) throw createValidationError('An implementation unit needs a title.');
     if (!Array.isArray(unit.criteria) || !unit.criteria.length || unit.criteria.some((index) => !Number.isInteger(index) || index < 0 || index >= criteria.length)) throw createValidationError('Unit criteria must reference existing acceptance lines.');
+    if (unit.executorActorId !== undefined && (typeof unit.executorActorId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(unit.executorActorId))) throw createValidationError('An executor must be an explicit agent ID.');
+    if (unit.maxAttempts !== undefined && (!Number.isSafeInteger(unit.maxAttempts) || Number(unit.maxAttempts) < 1 || Number(unit.maxAttempts) > 10 || !unit.executorActorId)) throw createValidationError('Executor attempts must be between 1 and 10 with an explicit agent.');
     const paths = strings(unit.paths, 'paths', true);
     if (paths.some((path) => path.startsWith('/') || path.includes('\\') || /[*?\[\]\0]/.test(path) || path.replace(/\/$/, '').split('/').some((part) => !part || part === '.' || part === '..'))) throw createValidationError('A delivery path must be a literal repository-relative path or directory prefix.');
     const actions = strings(unit.actions, 'actions', true);
@@ -62,7 +66,7 @@ export function parseDeliveryPolicy(raw: unknown, contract: DeliveryContract): D
       if (!Number.isSafeInteger(check.workflowId) || Number(check.workflowId) < 1 || typeof check.job !== 'string' || !check.job.trim() || check.job.length > 200) throw createValidationError('Technical checks need a workflow ID and exact job name.');
       return { workflowId: Number(check.workflowId), job: check.job.trim() };
     });
-    return { key: unit.key, title: unit.title.trim(), criteria: [...new Set(unit.criteria)] as number[], paths, actions: actions as DeliveryAction[], checks, dependsOn: strings(unit.dependsOn ?? [], 'predecessors') };
+    return { ...(unit.executorActorId ? { executorActorId: unit.executorActorId as string, maxAttempts: Number(unit.maxAttempts ?? 1) } : {}), key: unit.key, title: unit.title.trim(), criteria: [...new Set(unit.criteria)] as number[], paths, actions: actions as DeliveryAction[], checks, dependsOn: strings(unit.dependsOn ?? [], 'predecessors') };
   });
   const byKey = new Map(units.map((unit) => [unit.key, unit]));
   if (byKey.size !== units.length) throw createValidationError('Delivery unit keys must be unique.');
