@@ -3,7 +3,7 @@ import { hashIdempotencyRequest } from './idempotency.js';
 import type { Issue, Prisma, PrismaClient } from '@prisma/client';
 import type { GraphQLContext } from './auth.js';
 import { assertCanWriteIssue } from './access-control.js';
-import { createValidationError } from './errors.js';
+import { createValidationError, WORK_REVISION_CONFLICT_MESSAGE } from './errors.js';
 import { findWorkByIdOrIdentifier } from './context-service.js';
 import { parseDeliveryPolicy } from './delivery-policy.js';
 import { deliveryContractDigest } from './delivery-grant.js';
@@ -64,7 +64,7 @@ export async function proposeDeliveryChange(context: GraphQLContext, input: { wo
     await lockWorkGraph(tx, root.teamId);
     await tx.$queryRaw`SELECT id FROM "Issue" WHERE id = ${root.id}::uuid FOR NO KEY UPDATE`;
     const current = await tx.issue.findUniqueOrThrow({ where: { id: root.id } });
-    if (current.revision !== input.expectedRevision) throw createValidationError('Revision conflict; refresh before proposing.');
+    if (current.revision !== input.expectedRevision) throw createValidationError(WORK_REVISION_CONFLICT_MESSAGE);
     const sourceIds = requested.mergeSourceIds.slice().sort();
     await tx.$queryRaw`SELECT id FROM "Issue" WHERE id = ANY(${sourceIds}::uuid[]) ORDER BY id FOR NO KEY UPDATE`;
     const sourceRows = await tx.issue.findMany({ where: { id: { in: sourceIds } } });

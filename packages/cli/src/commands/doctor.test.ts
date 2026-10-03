@@ -19,6 +19,12 @@ describe('doctor diagnostics', () => {
     server({ ...protocol, protocolVersion: 27 }); const report = await runDoctor(config);
     expect(report.exitCode).toBe(2); expect(report.checks.at(-1)?.status).toBe('unknown');
   });
+  it('does not pass an unknown server version with otherwise valid metadata', async () => {
+    server({ ...protocol, serverVersion: 'unrecognized' });
+    const report = await runDoctor(config, { project: 'INV-79' });
+    expect(report.exitCode).toBe(2);
+    expect(report.checks.find(c => c.id === 'serverVersion')?.status).toBe('unknown');
+  });
   it('does not pass a wrong root even when the repository matches', async () => {
     server(); const report = await runDoctor(config, { project: 'INV-2', repository: 'owner/repo' });
     expect(report.exitCode).toBe(2); expect(report.checks.find(c => c.id === 'project')?.status).toBe('fail');

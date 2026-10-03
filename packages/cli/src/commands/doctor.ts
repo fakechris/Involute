@@ -61,6 +61,7 @@ export async function runDoctor(config: Config, binding: { project?: string; rep
       supportedCapabilities: raw.supportedCapabilities.filter((value: unknown) => typeof value === 'string' && ['cursor-pagination', 'execution-claims-v1', 'action-catalog-v1', 'external-executor-v1', 'revision-conflict-v1'].includes(value)),
     };
     add('protocol', 'pass', 'PROTOCOL_COMPATIBLE');
+    add('serverVersion', protocol.serverVersion === 'unknown' ? 'unknown' : 'pass', protocol.serverVersion === 'unknown' ? 'SERVER_VERSION_UNKNOWN' : 'SERVER_VERSION_IDENTIFIED', protocol.serverVersion === 'unknown' ? 'Use a server reporting a valid release version.' : '');
     add('build', protocol.buildSha ? 'pass' : 'unknown', protocol.buildSha ? 'BUILD_IDENTIFIED' : 'BUILD_UNKNOWN', protocol.buildSha ? '' : 'Build the server with INVOLUTE_BUILD_SHA set to its full source SHA.');
     const originMatches = protocol.endpointOrigin === url.origin;
     add('origin', originMatches ? 'pass' : protocol.endpointOrigin ? 'fail' : 'unknown', originMatches ? 'ORIGIN_MATCH' : 'ORIGIN_UNCONFIRMED', originMatches ? '' : 'Check APP_ORIGIN and the selected public endpoint; direct endpoints may intentionally differ.');

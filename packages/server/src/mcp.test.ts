@@ -135,6 +135,10 @@ describe('Involute MCP', () => {
     expect(conflict.body.error.message).toContain(`currentRevision: ${work.revision}`);
     expect(conflict.body.error.data).toMatchObject({ code: 'REVISION_CONFLICT', currentRevision: work.revision });
     expect((await prisma.issue.findUniqueOrThrow({ where: { id: work.id } })).title).toBe(work.title);
+    const deliveryConflict = await mcpRpc('/mcp', { id: 'delivery-conflict', method: 'tools/call', params: {
+      name: 'work_delivery_propose', arguments: { work_id: work.id, expected_revision: 99999, reason: 'Test stale proposal', changes: { contract: { scope: 'Revised scope' } } },
+    } });
+    expect(deliveryConflict.body.error.data).toMatchObject({ code: 'REVISION_CONFLICT', currentRevision: work.revision });
     const invalidState = await mcpRpc('/mcp', { id: 'state-enum', method: 'tools/call', params: {
       name: 'work_commit', arguments: { id: work.id, expected_revision: work.revision, state_id: 'UNSTARTED' },
     } });
