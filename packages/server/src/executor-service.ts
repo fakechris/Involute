@@ -185,6 +185,7 @@ export async function executorUpdate(context: GraphQLContext, input: ExecutorInp
       if (receipt.environment !== null && !binding!.policy.environments.includes(receipt.environment)) return refuse('The receipt environment was not approved.');
       const effect = input.effectId ? await tx.executorEffect.findFirst({ where: { id: input.effectId, dispatchId: row.id, generation: row.generation, environment: receipt.environment, state: 'STARTED' } }) : null;
       if (receipt.environment && !effect || input.effectId && !effect || effect?.action === 'merge' && !receipt.mergedSha) return refuse('No deployment intent was started for this receipt.');
+      if (effect?.action === 'merge' && (effect.commitSha !== receipt.commitSha || effect.pullRequestNumber !== receipt.pullRequestNumber)) return refuse('Receipt provenance does not match the bound run.');
       if (receipt.mergedSha && effect?.action !== 'merge') {
         const observedMerges = await tx.executorEffect.findMany({ where: { dispatchId: row.id, generation: row.generation, action: 'merge', state: 'OBSERVED', commitSha: run.commitSha!, pullRequestNumber: run.pullRequestNumber }, select: { id: true } });
         const observation = await tx.executorDeliveryReceipt.findFirst({ where: { dispatchId: row.id, generation: row.generation, runId: run.id, effectId: { in: observedMerges.map((item) => item.id) }, payload: { path: ['mergedSha'], equals: receipt.mergedSha } } });

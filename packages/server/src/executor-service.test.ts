@@ -141,6 +141,18 @@ describe('external executor authority and receipts', () => {
     await reportRun(prisma, { workId: f.work.id, runId: f.run.id, claimToken: f.claim.claimToken!, status: 'running', commitSha: 'b'.repeat(40) }, f.actor);
     await expect(f.update('start_effect', { effectId: effect.id })).rejects.toThrow(/bound PR head/);
   });
+  it('refuses rebinding a started merge observation to a different PR or head', async () => {
+    const f = await fixture();
+    const grant = await prisma.deliveryPackage.findUniqueOrThrow({ where: { workId: f.root.id } });
+    const policy = grant.policy as { units: Array<{ actions: string[] }> };
+    policy.units[0]!.actions.push('merge');
+    await prisma.deliveryPackage.update({ where: { workId: f.root.id }, data: { policy } });
+    const merge = await f.update('prepare_effect', { effect: { ...intent, action: 'merge', environment: undefined } });
+    await f.update('start_effect', { effectId: merge.id });
+    await reportRun(prisma, { workId: f.work.id, runId: f.run.id, claimToken: f.claim.claimToken!, status: 'running', commitSha: 'c'.repeat(40), pullRequestNumber: 13 }, f.actor);
+    await expect(f.update('receipt', { effectId: merge.id, idempotencyKey: 'rebound', receipt: { version: 1, repository: 'test/executor', commitSha: 'c'.repeat(40), pullRequestNumber: 13, mergedSha: 'b'.repeat(40), environment: null, deployedSha: null, health: 'unknown', behavior: 'unknown', evidenceUrls: [], observedAt: new Date().toISOString() } })).rejects.toThrow(/provenance/);
+    expect((await prisma.executorEffect.findUniqueOrThrow({ where: { id: merge.id } })).state).toBe('STARTED');
+  });
   it('observes a merge then deploys without an intermediate human decision', async () => {
     const f = await fixture();
     const grant = await prisma.deliveryPackage.findUniqueOrThrow({ where: { workId: f.root.id } });
