@@ -1,3 +1,4 @@
+import { actionCapabilities } from './action-capabilities.js';
 import { executorContext, executorUpdate, EXECUTOR_OPERATIONS, type ExecutorInput } from './executor-service.js';
 import { deliveryContext } from './delivery-context.js';
 import { proposeDeliveryChange } from './delivery-change-set.js';
@@ -241,6 +242,8 @@ export async function callMcpTool(
     }
     case 'work_catalog': {
       if (args.kind === 'capabilities') return {
+        actionCatalogVersion: 1,
+        actions: actionCapabilities().map((action) => ({ ...action, inputSchema: MCP_TOOL_DEFINITIONS.find((tool) => tool.name === action.mcpTool)?.inputSchema ?? null })),
         actor: { id: context.viewer?.id, kind: context.viewer?.actorKind },
         tools: MCP_TOOL_DEFINITIONS.map((tool) => {
           const scope = MCP_TOOL_SCOPES[tool.name];
