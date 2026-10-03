@@ -826,7 +826,8 @@ carrying a root request id, a budget and a hop limit, not a relaxed check here.
 
 | Tool | Does |
 |---|---|
-| `agent_inbox(since?, cursor?, first?)` | Requests addressed to you that are still open. Reading reserves nothing. |
+| `agent_inbox(since?, cursor?, first?)` | Requests addressed to you that are still open, and `notifications`: your unread decisions (INV-968). Reading reserves nothing. |
+| `notification_mark_read(id)` | Mark one of your notifications read (scope `read`). Same rule as `notificationMarkRead`: your own only, idempotent. |
 | `agent_request_claim(id, claim_token?)` | Take the claim, moving the request to `working`. Returns a `claim_token`. |
 | `agent_request_answer(id, claim_token, body, state?, evidence[]?)` | Post the answer and move the request. |
 
@@ -1236,6 +1237,18 @@ assignee, falling back to human team owners.
   left waiting.
 
 `agent.request_expired` notifications carry `advice`: who to ask instead.
+
+**The proposer hears the decision (INV-968).** Whoever proposed a work item (the
+actor on its first audit row) is subscribed to it, the way Linear subscribes an
+issue's creator, whatever its actor kind. When a person commits, declines
+(`work.rejected`, with the reason), or uncommits it, or accepts or returns it in
+review, the proposer gets a notification; on a review the run's actor does too.
+The person who decided is never notified of their own decision, and a replayed
+event adds nothing. A session agent with no webhook reads these in
+`agent_inbox` (`notifications`: type, work identifier and title, current
+`commitment_status`, `decided_by_actor_id`, `reason`), marks them read with
+`notification_mark_read`, and should check there, not ask, before telling anyone
+a candidate is still waiting. `work_propose` says so in `decision_notice`.
 
 ```graphql
 query {

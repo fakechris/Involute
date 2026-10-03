@@ -50,7 +50,8 @@ import {
   createScopeForbiddenError,
   createValidationError,
 } from './errors.js';
-import { TEAM_WRITE_FORBIDDEN_MESSAGE } from './errors.js';
+import { NOTIFICATION_NOT_FOUND_MESSAGE, TEAM_WRITE_FORBIDDEN_MESSAGE } from './errors.js';
+import { markNotificationRead, readUnreadNotifications } from './notification-service.js';
 import { createComment, mentionTexts, updateIssue } from './issue-service.js';
 import { amendmentChanges, proposeContractAmendment } from './contract-amendment.js';
 import { dependencyHints } from './mention-links.js';
@@ -88,6 +89,7 @@ export type McpToolName =
   | 'run_report'
   | 'evidence_attach'
   | 'agent_inbox'
+  | 'notification_mark_read'
   | 'agent_request_claim'
   | 'agent_request_answer';
 
@@ -123,9 +125,13 @@ export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
   'evidence_retract',
   'run_report',
   'evidence_attach',
+  'notification_mark_read',
   'agent_request_claim',
   'agent_request_answer',
 ];
+
+export const CANDIDATE_DECISION_NOTICE =
+  'A person commits or declines this candidate. Their decision arrives in your agent_inbox `notifications` (work.committed / work.rejected); check there, or read commitmentStatus with work_get_context, before telling anyone it is still waiting.';
 
 const MCP_DONE_CANCEL_FORBIDDEN_TEXT =
   'Agents cannot transition work directly to COMPLETED or CANCELED. Agents stop at In Review; Done is human-gated — except a committed ISSUE with Type: Research, which an agent may move to Done (INV-912).';
@@ -355,7 +361,12 @@ export async function callMcpTool(
       if (possibleDuplicates.length > 0) {
         notes.push(`Possible duplicates: ${possibleDuplicates.map((item) => `${item.identifier} (${item.title})`).join('; ')}. If one is the same work, link it (DUPLICATE_OF) or withdraw this proposal.`);
       }
-      const result = possibleDuplicates.length > 0 ? { ...created, possible_duplicates: possibleDuplicates } : created;
+      const withDuplicates = possibleDuplicates.length > 0 ? { ...created, possible_duplicates: possibleDuplicates } : created;
+      // Where the person's decision will reach the proposer (INV-968), so it
+      // is read there instead of asked about.
+      const result = created.commitmentStatus === 'CANDIDATE'
+        ? { ...withDuplicates, decision_notice: CANDIDATE_DECISION_NOTICE }
+        : withDuplicates;
       return notes.length ? { ...result, warning: notes.join(' ') } : result;
     }
     case 'work_file_bug': {
@@ -683,7 +694,41 @@ export async function callMcpTool(
           work_identifier: item.workIdentifier,
           ...handOffFields(item.handOff),
         })),
+        // Decisions on work you proposed or delivered (INV-968): committed,
+        // declined, moved back to candidates, accepted or returned in review.
+        notifications: (
+          await readUnreadNotifications(context.prisma, {
+            first: Math.min(Math.max(optionalNumber(args.first) ?? 20, 1), 50),
+            since: optionalDate(args.since),
+            teamId: context.authMode === 'agent-token' ? context.agentTeamId ?? null : null,
+            userId: actorId,
+          })
+        ).map((notification) => {
+          const payload = (notification.payload ?? {}) as Record<string, unknown>;
+          const text = (key: string) => (typeof payload[key] === 'string' ? (payload[key] as string) : null);
+          return {
+            commitment_status: notification.work?.commitmentStatus ?? null,
+            created_at: notification.createdAt.toISOString(),
+            decided_by_actor_id: text('actorId') ?? text('reviewerId'),
+            decision: text('decision'),
+            id: notification.id,
+            reason: text('reason'),
+            type: notification.type,
+            work_id: notification.workId,
+            work_identifier: notification.work?.identifier ?? null,
+            work_title: notification.work?.title ?? null,
+          };
+        }),
       };
+    }
+    case 'notification_mark_read': {
+      const actorId = requireActorId(context);
+      const notification = await markNotificationRead(context.prisma, {
+        id: requiredString(args.id, 'id'),
+        userId: actorId,
+      });
+      if (!notification) throw createNotFoundError(NOTIFICATION_NOT_FOUND_MESSAGE);
+      return { id: notification.id, read_at: notification.readAt?.toISOString() ?? null };
     }
     case 'agent_request_claim': {
       const actorId = requireActorId(context);
@@ -1171,7 +1216,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     name: 'agent_inbox',
     annotations: { readOnlyHint: true, destructiveHint: false },
     description:
-      'Open requests addressed to you: questions put to this actor that are still submitted, working, or awaiting your input. Poll with `since` or page with `cursor`. Reading does not reserve anything — call agent_request_claim before you start work. A row with `handed_off_from_id` was handed to you after its previous target did not answer: answer in your own name, standing in for @`handed_off_from_handle`.',
+      'Open requests addressed to you: questions put to this actor that are still submitted, working, or awaiting your input. Also `notifications`: unread decisions on work you proposed or delivered — committed, declined, moved back to candidates, accepted or returned in review — so the decision is read here instead of asked for; mark each read with notification_mark_read. Poll with `since` or page with `cursor`. Reading does not reserve anything — call agent_request_claim before you start work. A row with `handed_off_from_id` was handed to you after its previous target did not answer: answer in your own name, standing in for @`handed_off_from_handle`.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1179,6 +1224,19 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         cursor: { type: 'string', description: 'Opaque cursor from a previous page' },
         first: { type: 'integer', description: 'Page size, 1-50 (default 20)' },
       },
+    },
+  },
+  {
+    name: 'notification_mark_read',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    description:
+      'Mark one of your notifications from agent_inbox read once you have acted on it, so the next agent_inbox shows only what is new. Your own notifications only; marking one twice is harmless.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Notification id from agent_inbox' },
+      },
+      required: ['id'],
     },
   },
   {
@@ -1419,6 +1477,8 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   run_report: 'report',
   evidence_attach: 'report',
   agent_inbox: 'read',
+  // Clearing your own inbox is part of reading it.
+  notification_mark_read: 'read',
   agent_request_claim: 'answer',
   agent_request_answer: 'answer',
 };

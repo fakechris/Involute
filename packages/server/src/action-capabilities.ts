@@ -3,6 +3,7 @@ import { MUTATION_SURFACES } from './human-surface.js';
 /** MCP write tool → the GraphQL mutation a person (the web app) uses for the same change. */
 export const PAIRS: Record<string, string> = {
   agent_request_answer: 'agentRequestAnswer',
+  notification_mark_read: 'notificationMarkRead',
   evidence_attach: 'evidenceAttach',
   run_report: 'runReport',
   work_claim: 'workClaim',
@@ -77,7 +78,6 @@ export const MCP_EXEMPTIONS: Record<string, { reason: string; gate: 'administrat
   commentDelete: { gate: 'personal', reason: 'People delete their comments; agents append an attributable correction with work_comment.' },
   agentRequestReply: { gate: 'personal', reason: 'Human follow-up questions; agents answer leased requests through agent_request_answer.' },
   fileUpload: { gate: 'personal', reason: 'Browser multipart attachment upload; agents attach durable evidence URLs.' },
-  notificationMarkRead: { gate: 'personal', reason: 'Human inbox read state; agent request consumption uses agent_inbox.' },
   notificationsMarkAllRead: { gate: 'personal', reason: 'Human inbox read state.' },
   notificationPreferencesUpdate: { gate: 'personal', reason: 'Human notification preferences.' },
   userUpdate: { gate: 'personal', reason: 'Human profile settings.' },
@@ -122,6 +122,7 @@ const DETAILS: Record<string, ActionDetails> = {
   work_executor_update: detail(['work_executor_context', 'work_delivery_context'], 'Approved executor and execution token; human reconciliation is exceptional.', 'expectedRevision, generation, effect key and receipt idempotencyKey.', 'Versioned dispatch, effect or delivery receipt.', 'Never replay unknown effects. Stop and reconcile with evidence; recover within approved budget.'),
   work_propose_amendment: detail(['work_get_context'], 'Propose an amendment; no direct rewrite of committed contract.', 'Records a contract snapshot; a newer proposal replaces the open proposal from the same actor.', 'Proposed amendment with source reason.', 'Read contractAmendments for the human decision before continuing.', 'candidate'),
   agent_request_claim: detail(['agent_inbox'], 'Only the addressed active agent may lease a request.', 'Request lease and claim_token on renewal.', 'Private claim token and leased request.', 'Renew before expiry or answer with input-required to hand control back.'),
+  notification_mark_read: detail(['agent_inbox'], 'Only your own notifications.', 'Idempotent: already read stays read.', 'Notification id and read time.', 'Read agent_inbox again; an unknown id is not yours or does not exist.'),
   agent_request_answer: detail(['agent_inbox'], 'Claim token for agent answers; human answer through UI.', 'Request lease and claim_token.', 'Authored answer and request state.', 'Read request state after uncertain response; renew or hand back the lease.'),
 };
 

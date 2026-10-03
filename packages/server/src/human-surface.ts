@@ -211,6 +211,10 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationLanding> = {
   'run.completed': { kind: 'work', action: 'Human review' },
   'work.accepted': { kind: 'info' },
   'work.review_rejected': { kind: 'info' },
+  // The proposer hears the decision on its proposal (INV-968).
+  'work.committed': { kind: 'info' },
+  'work.rejected': { kind: 'info' },
+  'work.uncommitted': { kind: 'info' },
   'work.claim_released': { kind: 'info' },
   'bug.sla_at_risk': { kind: 'info' },
   'bug.sla_breached': { kind: 'info' },
