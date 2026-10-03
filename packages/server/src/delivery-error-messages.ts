@@ -1,5 +1,6 @@
 /** Public validation messages for delivery operations; unexpected errors stay masked. */
 export const DELIVERY_VALIDATION_MESSAGES = [
+  "Reconcile unresolved external effects before returning the delivery for changes.",
   "An implementation unit has an unresolved external effect.",
   "Only a person may reconcile external effects.",
   "Reconciliation needs an outcome, reason and durable evidence URL.",

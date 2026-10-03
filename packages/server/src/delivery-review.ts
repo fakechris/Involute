@@ -60,7 +60,8 @@ export async function returnDeliveryChildren(tx: Prisma.TransactionClient, root:
     const binding = await assertDeliveryExecution(tx, task);
     const dispatch = await tx.executorDispatch.findUnique({ where: { workId_grantRevision: { workId: task.id, grantRevision: grant.revision } } });
     if (dispatch) {
-      const retry = dispatch.state === 'DELIVERED' && dispatch.generation < (binding?.unit.maxAttempts ?? 1);
+      if (await tx.executorEffect.count({ where: { dispatchId: dispatch.id, state: 'STARTED' } })) throw createValidationError('Reconcile unresolved external effects before returning the delivery for changes.');
+      const retry = !['QUEUED', 'RUNNING', 'STOP_REQUESTED'].includes(dispatch.state) && dispatch.generation < (binding?.unit.maxAttempts ?? 1);
       await tx.executorDispatch.update({ where: { id: dispatch.id }, data: { state: retry ? 'QUEUED' : 'EXHAUSTED', generation: { increment: 1 }, revision: { increment: 1 }, runId: null, leaseUntil: null, feedback: reason ?? 'Returned for changes' } });
       await enqueueWorkEvent(tx, { type: retry ? 'executor.dispatched' : 'executor.exhausted', workId: task.id, workIdentifier: task.identifier, payload: { dispatchId: dispatch.id, generation: dispatch.generation + 1, feedback: reason, actorId: actor.actorId, protocolVersion: 1 } });
     }

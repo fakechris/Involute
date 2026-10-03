@@ -156,6 +156,29 @@ describe('external executor authority and receipts', () => {
     const deploy = await f.update('prepare_effect', { effect: { ...intent, key: 'release', commitSha: 'b'.repeat(40) } });
     await f.update('start_effect', { effectId: deploy.id });
   });
+  it('refuses injected dispatch bindings, states and human resolutions', async () => {
+    const f = await fixture();
+    for (const injection of [{ dispatchId: f.root.id }, { generation: 50 }, { state: 'STARTED' }, { resolution: { outcome: 'COMPLETED', actorId: f.humanContext.viewer!.id } }]) {
+      await expect(f.update('prepare_effect', { effect: { ...intent, ...injection } })).rejects.toThrow(/Invalid executor effect intent/);
+    }
+    expect(await prisma.executorEffect.count()).toBe(0);
+  });
+  it('keeps an unresolved effect in its generation until reconciliation before Return', async () => {
+    const f = await fixture();
+    const effect = await f.update('prepare_effect', { effect: intent });
+    await f.update('start_effect', { effectId: effect.id });
+    const receipt = { version: 1, repository: 'test/executor', commitSha: sha, pullRequestNumber: 12, environment: 'staging', deployedSha: 'b'.repeat(40), health: 'fail', behavior: 'unknown', evidenceUrls: ['https://example.test/failure'], observedAt: new Date().toISOString() };
+    await f.update('receipt', { effectId: effect.id, idempotencyKey: 'mismatch', receipt });
+    await reportRun(prisma, { workId: f.work.id, runId: f.run.id, claimToken: f.claim.claimToken!, status: 'completed' }, f.actor);
+    const review = await prisma.workflowState.findFirstOrThrow({ where: { teamId: f.work.teamId, type: 'REVIEW' } });
+    const root = await prisma.issue.update({ where: { id: f.root.id }, data: { stateId: review.id } });
+    const decision = { expectedRevision: root.revision, decision: 'REJECTED' as const, reason: 'Redo failed deployment' };
+    await expect(reviewWork(prisma, root.id, decision, writeActorFromViewer(f.humanContext.viewer))).rejects.toThrow(/Reconcile unresolved/);
+    expect((await f.current()).generation).toBe(1);
+    await f.update('reconcile', { effectId: effect.id, resolution: { outcome: 'FAILED', reason: 'External release inspection completed', evidenceUrl: 'https://example.test/reconciliation' } }, f.humanContext);
+    await reviewWork(prisma, root.id, decision, writeActorFromViewer(f.humanContext.viewer));
+    expect(await f.current()).toMatchObject({ state: 'QUEUED', generation: 2 });
+  });
   it('requires the approved executor for the underlying work claim too', async () => {
     const f = await fixture();
     await prisma.workClaim.update({ where: { id: f.claim.claim.id }, data: { leaseUntil: new Date(0) } });

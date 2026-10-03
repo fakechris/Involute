@@ -88,7 +88,7 @@ export async function executorUpdate(context: GraphQLContext, input: ExecutorInp
     if (input.operation === 'reconcile') {
       if (fresh.viewer.actorKind !== 'HUMAN') return refuse('Only a person may reconcile external effects.');
       const resolution = input.resolution;
-      if (!resolution || !['COMPLETED', 'FAILED'].includes(resolution.outcome) || !bounded(resolution.reason, 8000) || !resolution.reason.trim() || !bounded(resolution.evidenceUrl, 2048) || resolution.observedSha !== undefined && !/^[a-f0-9]{40}$/.test(resolution.observedSha)) return refuse('Reconciliation needs an outcome, reason and durable evidence URL.');
+      if (!resolution || typeof resolution !== 'object' || Array.isArray(resolution) || Object.keys(resolution).some((key) => !['outcome', 'reason', 'evidenceUrl', 'observedSha'].includes(key)) || !['COMPLETED', 'FAILED'].includes(resolution.outcome) || !bounded(resolution.reason, 8000) || !resolution.reason.trim() || !bounded(resolution.evidenceUrl, 2048) || resolution.observedSha !== undefined && !/^[a-f0-9]{40}$/.test(resolution.observedSha)) return refuse('Reconciliation needs an outcome, reason and durable evidence URL.');
       try { const url = new URL(resolution.evidenceUrl); if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw Error(); } catch { return refuse('Reconciliation needs an outcome, reason and durable evidence URL.'); }
       if (await tx.workClaim.count({ where: { workId: work.id, leaseUntil: { gt: new Date() } } })) return refuse('Release the active implementation claim before reconciling an external effect.');
       const effect = input.effectId ? await tx.executorEffect.findFirst({ where: { id: input.effectId, dispatchId: row.id, generation: row.generation, state: 'STARTED' } }) : null;
@@ -154,7 +154,7 @@ export async function executorUpdate(context: GraphQLContext, input: ExecutorInp
     if (['prepare_effect', 'start_effect'].includes(input.operation) && await tx.executorEffect.count({ where: { dispatchId: row.id, state: 'STARTED' } })) return refuse('An external effect has an unknown result; reconcile it before starting another execution.');
     if (input.operation === 'prepare_effect') {
       const effect = input.effect;
-      if (!effect || !bounded(effect.key, 100) || !['merge', 'deploy'].includes(effect.action) || !/^[a-f0-9]{40}$/.test(effect.commitSha) || !Array.isArray(effect.paths) || !effect.paths.length || effect.paths.length > 1000) return refuse('Invalid executor effect intent.');
+      if (!effect || typeof effect !== 'object' || Array.isArray(effect) || Object.keys(effect).some((key) => !['key', 'action', 'environment', 'commitSha', 'paths'].includes(key)) || !bounded(effect.key, 100) || !['merge', 'deploy'].includes(effect.action) || !/^[a-f0-9]{40}$/.test(effect.commitSha) || !Array.isArray(effect.paths) || !effect.paths.length || effect.paths.length > 1000) return refuse('Invalid executor effect intent.');
       if (effect.action === 'merge' && (!run.pullRequestNumber || effect.commitSha !== run.commitSha)) return refuse('The merge intent must match the bound PR head.');
       if (!binding!.unit.actions.includes(effect.action) || (effect.action === 'deploy' && (!effect.environment || !binding!.policy.environments.includes(effect.environment))) || (effect.action === 'merge' && effect.environment)) return refuse('The effect action or environment was not approved.');
       if (!effect.paths.every((path) => typeof path === 'string' && !path.startsWith('/') && !path.includes('\\') && !path.includes('\0') && path.split('/').every((part) => part && part !== '.' && part !== '..') && binding!.unit.paths.some((allowed) => path === allowed || allowed.endsWith('/') && path.startsWith(allowed)))) return refuse('The effect changes paths outside the approved scope.');
@@ -163,7 +163,7 @@ export async function executorUpdate(context: GraphQLContext, input: ExecutorInp
         if (existing.pullRequestNumber !== run.pullRequestNumber || existing.action !== effect.action || existing.commitSha !== effect.commitSha || existing.environment !== (effect.environment ?? null) || JSON.stringify(existing.paths) !== JSON.stringify(effect.paths)) return refuse('The effect idempotency key was reused with different arguments.');
         return existing;
       }
-      return tx.executorEffect.create({ data: { dispatchId: row.id, generation: row.generation, ...effect, pullRequestNumber: run.pullRequestNumber } });
+      return tx.executorEffect.create({ data: { dispatchId: row.id, generation: row.generation, key: effect.key, action: effect.action, environment: effect.environment ?? null, commitSha: effect.commitSha, paths: effect.paths, pullRequestNumber: run.pullRequestNumber } });
     }
     if (input.operation === 'start_effect') {
       const effect = input.effectId ? await tx.executorEffect.findUnique({ where: { id: input.effectId } }) : null;
