@@ -1,7 +1,8 @@
+import { visibleDeliveryChange } from './delivery-visibility.js';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { createValidationError } from './errors.js';
 
-export const WORK_SECTIONS = ['children', 'links', 'comments', 'audits', 'runs', 'evidence', 'reviews', 'amendments', 'verifications'] as const;
+export const WORK_SECTIONS = ['children', 'links', 'comments', 'audits', 'runs', 'evidence', 'reviews', 'amendments', 'verifications', 'delivery_changes'] as const;
 export type WorkSection = typeof WORK_SECTIONS[number];
 interface Row { id: string; createdAt: Date }
 
@@ -25,7 +26,8 @@ export async function readWorkPage(prisma: PrismaClient, workId: string, section
     case 'comments': rows = await prisma.comment.findMany({ ...options, where: { issueId: workId, ...window }, include: { user: { select: { id: true, name: true, actorKind: true } } } }); break;
     case 'audits': rows = await prisma.workAudit.findMany({ ...options, where: { workId, ...window } }); break;
     case 'runs': rows = await prisma.workRun.findMany({ ...options, where: { workId, ...window } }); break;
-    case 'evidence': rows = await prisma.workEvidence.findMany({ ...options, where: { workId, ...window } }); break;
+    case 'evidence': rows = await prisma.workEvidence.findMany({ ...options, where: { AND: [window, { OR: [{ workId }, { supersededByWorkId: workId }] }, { work: readable }] } }); break;
+    case 'delivery_changes': rows = await Promise.all((await prisma.deliveryChangeSet.findMany({ ...options, where: { workId, ...window } })).map((row) => visibleDeliveryChange(prisma, row, readable))); break;
     case 'verifications': rows = await prisma.evidenceVerification.findMany({ ...options, where: { evidence: { workId }, ...window } }); break;
     case 'reviews': rows = await prisma.workReviewDecision.findMany({ ...options, where: { workId, ...window } }); break;
     case 'amendments': rows = await prisma.contractAmendment.findMany({ ...options, where: { workId, ...window } }); break;

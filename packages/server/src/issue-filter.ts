@@ -42,6 +42,7 @@ export interface IssueLabelRelationFilterInput {
 }
 
 export interface IssueFilterInput {
+  includeSuperseded?: boolean | null;
   and?: IssueFilterInput[] | null;
   text?: string | null;
   stateIds?: string[] | null;
@@ -63,6 +64,7 @@ export function buildIssueWhere(
   viewerId: string | null,
 ): Prisma.IssueWhereInput | undefined {
   const clauses: Prisma.IssueWhereInput[] = [];
+  if (filter?.commitmentStatus && !filter.includeSuperseded) clauses.push({ supersededById: null });
   const text = filter?.text?.trim();
   if (text) {
     if (/^\d+$/.test(text)) {

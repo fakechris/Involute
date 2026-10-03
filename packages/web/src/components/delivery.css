@@ -1,0 +1,14 @@
+.delivery-panel { display: grid; gap: 12px; }
+.delivery-panel label { display: grid; gap: 6px; margin-block: 10px; }
+.delivery-panel label:has(input[type="checkbox"]) { display: flex; align-items: center; }
+.delivery-panel input:not([type="checkbox"]), .delivery-panel textarea { width: 100%; max-width: 680px; padding: 8px; color: inherit; background: transparent; border: 1px solid currentColor; border-radius: 5px; }
+.delivery-panel textarea { min-height: 80px; }
+.delivery-panel fieldset { min-width: 0; margin-block: 12px; padding: 12px; border: 1px solid currentColor; border-radius: 6px; }
+.delivery-panel button { margin: 4px 8px 4px 0; padding: 6px 10px; cursor: pointer; }
+.delivery-panel button:disabled { cursor: default; opacity: .5; }
+.delivery-panel p { overflow-wrap: anywhere; }
+.delivery-panel { max-width: 880px; margin-bottom: 20px; font-size: 13px; align-content: start; }
+.delivery-panel p, .delivery-panel h3 { margin: 0; }
+.delivery-panel .observation-card { gap: 10px; }
+.delivery-panel .observation-card .observation-card { background: var(--bg); gap: 8px; }
+.delivery-panel select { max-width: 400px; padding: 6px; }

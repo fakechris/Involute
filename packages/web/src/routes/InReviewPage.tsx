@@ -80,7 +80,7 @@ export function InReviewPage() {
   const pageInfo = data?.issues?.pageInfo;
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedItems = useMemo(
-    () => items.filter((item) => selectedIdSet.has(item.id)),
+    () => items.filter((item) => !item.deliveryRootId && selectedIdSet.has(item.id)),
     [items, selectedIdSet],
   );
 
@@ -102,13 +102,14 @@ export function InReviewPage() {
   }
 
   function toggleSelection(item: InReviewWork) {
+    if (item.deliveryRootId) return;
     setSelectedIds((current) =>
       current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id],
     );
   }
 
   function selectAllVisible() {
-    setSelectedIds(items.map((item) => item.id));
+    setSelectedIds(items.filter((item) => !item.deliveryRootId).map((item) => item.id));
   }
 
   function clearSelection() {
@@ -256,7 +257,7 @@ export function InReviewPage() {
               <span>Bulk actions call workReview (human-audited)</span>
             </div>
             <div className="issue-bulkbar__actions">
-              <Btn variant="ghost" size="sm" onClick={selectAllVisible}>
+              <Btn variant="ghost" size="sm" onClick={selectAllVisible} disabled={!items.some((item) => !item.deliveryRootId)}>
                 Select all
               </Btn>
               <Btn variant="ghost" size="sm" onClick={clearSelection}>
@@ -315,7 +316,7 @@ export function InReviewPage() {
         ) : (
           <div className="observation-list" role="list" aria-label="In Review items">
             <div className="in-review-list-toolbar">
-              <Btn variant="ghost" size="sm" onClick={selectAllVisible}>
+              <Btn variant="ghost" size="sm" onClick={selectAllVisible} disabled={!items.some((item) => !item.deliveryRootId)}>
                 Select all visible
               </Btn>
               {selectedIds.length > 0 ? (
@@ -334,14 +335,14 @@ export function InReviewPage() {
                   role="listitem"
                 >
                   <header className="observation-card__header">
-                    <label className="in-review-select">
+                    {!item.deliveryRootId ? <label className="in-review-select">
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={() => toggleSelection(item)}
                         aria-label={`Select ${item.identifier}`}
                       />
-                    </label>
+                    </label> : null}
                     <button
                       type="button"
                       className="observation-card__id"
@@ -394,6 +395,7 @@ export function InReviewPage() {
                     </p>
                   ) : null}
                   <div className="observation-card__actions">
+                    {item.deliveryRootId ? <Btn variant="accent" onClick={() => navigate(`/work/${item.deliveryRootId}`)}>Review delivery package</Btn> : <>
                     <Btn
                       variant="accent"
                       icon={<IcoCheck size={12} />}
@@ -410,6 +412,7 @@ export function InReviewPage() {
                     >
                       {itemPending[item.id] === 'REJECTED' ? 'Returning...' : 'Return'}
                     </Btn>
+                    </>}
                     <Btn variant="ghost" onClick={() => navigate(`/work/${item.id}`)}>
                       Open context
                     </Btn>

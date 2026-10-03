@@ -1,3 +1,4 @@
+import { DeliveryPanel } from '../components/DeliveryPanel';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -186,6 +187,7 @@ export function WorkContextPage() {
         </Btn>
       </div>
       <div className="page-content observation-content work-context">
+        <DeliveryPanel workId={work.id} />
         {work.commitmentStatus === 'CANDIDATE' ? (
           <section className="work-context__section">
             <h2>Candidate</h2>
@@ -232,7 +234,8 @@ export function WorkContextPage() {
           <h2>Claim</h2>
           <ClaimControl workId={bundle.work.id} claim={bundle.claim} />
         </section>
-        {work.state.type === 'REVIEW' ? (
+        {work.deliveryRootId ? <Link to={`/work/${work.deliveryRootId}`}>Review the delivery package</Link> : null}
+        {work.state.type === 'REVIEW' && !work.deliveryRootId ? (
           <section className="work-context__section" aria-label="Human review">
             <h2>Human review</h2>
             <p>Only an explicit human decision can move this work out of review.</p>

@@ -33,6 +33,9 @@ export type HumanSurface =
   | { kind: 'gap'; tracking: string; note: string };
 
 export const MUTATION_SURFACES: Record<string, HumanSurface> = {
+  deliveryChangePropose: { kind: 'web', components: ['components/DeliveryPanel.tsx'], label: 'Propose delivery change' },
+  deliveryChangeDecide: { kind: 'web', components: ['components/DeliveryPanel.tsx'], label: 'Approve delivery change' },
+  deliveryExecutionCreate: { kind: 'web', components: ['components/DeliveryPanel.tsx'], label: 'Create implementation' },
   actorDeactivate: { kind: 'web', doc: 'ACTOR_DEACTIVATE_MUTATION', components: ['components/AgentLifecycleActions.tsx'], label: 'Deactivate' },
   actorReactivate: { kind: 'web', doc: 'ACTOR_REACTIVATE_MUTATION', components: ['components/AgentLifecycleActions.tsx'], label: 'Reactivate' },
   actorTransferOwner: { kind: 'web', doc: 'ACTOR_TRANSFER_OWNER_MUTATION', components: ['components/AgentLifecycleActions.tsx'], label: 'Transfer owner' },
@@ -158,6 +161,8 @@ export const HUMAN_GATES: Array<{ text: string; mutation: string } | { text: str
   { text: 'Agents cannot transition work directly to COMPLETED or CANCELED', mutation: 'workReview' },
   { text: 'Agents cannot rewrite committed contract fields', mutation: 'issueUpdate' },
   { text: 'Work owner must be a human assignee', mutation: 'issueUpdate' },
+  { text: 'Instantiate an approved delivery unit and any predecessors', mutation: 'deliveryExecutionCreate' },
+  { text: 'Only a person may approve or reject a delivery change set', mutation: 'deliveryChangeDecide' },
   { text: 'Only a person can release a claim', mutation: 'workClaimRelease' },
   { text: 'Only a person can restore a rejected candidate', mutation: 'workRestore' },
   { text: 'Only a person can return committed work to the candidate queue', mutation: 'workUncommit' },

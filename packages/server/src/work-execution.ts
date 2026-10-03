@@ -18,7 +18,7 @@ export async function assertExecutionAuthority(
   tx: import('@prisma/client').Prisma.TransactionClient,
   actor: import('./work-service.js').WriteActor,
   work: { id: string; teamId: string },
-  scope: 'claim' | 'report',
+  scope: 'claim' | 'report' | 'propose',
 ): Promise<void> {
   if (actor.actorKind !== 'AGENT') return;
   const { teamId } = work;

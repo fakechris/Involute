@@ -1,3 +1,4 @@
+import { isDeliveryExecutionReady, deliveryLinkBlocks } from './delivery-readiness.js';
 import type {
   ContractAmendment,
   CommitmentStatus,
@@ -41,6 +42,7 @@ export const OPEN_BLOCKER_LINK_WHERE = {
   type: 'BLOCKS',
   from: {
     commitmentStatus: 'COMMITTED',
+    supersededById: null,
     state: { type: { notIn: ['COMPLETED', 'CANCELED'] } },
   },
 } satisfies Prisma.WorkLinkWhereInput;
@@ -120,6 +122,7 @@ export async function findWorkByIdOrIdentifier(
 export async function getWorkContext(
   prisma: DatabaseClient,
   id: string,
+  readable: Prisma.IssueWhereInput = {},
 ): Promise<WorkContextBundle> {
   const work = await findWorkByIdOrIdentifier(prisma, id);
 
@@ -147,7 +150,7 @@ export async function getWorkContext(
       take: MAX_CONTEXT_RUNS,
     }),
     prisma.workEvidence.findMany({
-      where: { workId: work.id },
+      where: { AND: [{ OR: [{ workId: work.id }, { supersededByWorkId: work.id }] }, { work: readable }] },
       include: { verifications: { orderBy: { createdAt: 'desc' }, take: 10 } },
       orderBy: [{ createdAt: 'desc' }],
       take: MAX_CONTEXT_RUNS,
@@ -270,12 +273,20 @@ export async function listReadyWork(
     const priorityWhere: Prisma.IssueWhereInput = priority === 'other'
       ? { priority: { notIn: [...READY_PRIORITY_ORDER] } }
       : { priority };
-    const batch = await prisma.issue.findMany({
-      where: combineWhere(baseWhere, priorityWhere),
-      orderBy: [{ updatedAt: 'desc' }, { identifier: 'asc' }],
-      take: remaining,
-    });
-    ordered.push(...batch);
+    let cursor: string | undefined;
+    for (;;) {
+      const batch = await prisma.issue.findMany({
+        where: combineWhere(baseWhere, priorityWhere),
+        orderBy: [{ updatedAt: 'desc' }, { identifier: 'asc' }],
+        take: Math.max(50, remaining), ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      });
+      for (const work of batch) {
+        if (!work.deliveryRootId || await isDeliveryExecutionReady(prisma, work)) ordered.push(work);
+        if (ordered.length >= first + 1) break;
+      }
+      if (ordered.length >= first + 1 || batch.length < Math.max(50, remaining)) break;
+      cursor = batch.at(-1)!.id;
+    }
   }
   const nodes = ordered.slice(0, first);
 
@@ -289,10 +300,8 @@ export async function isWorkReadyForClaim(
   prisma: DatabaseClient,
   workId: string,
 ): Promise<boolean> {
-  return Boolean(await prisma.issue.findFirst({
-    where: combineWhere({ id: workId }, buildReadyWorkWhere({}, { allowStarted: true })),
-    select: { id: true },
-  }));
+  const work = await prisma.issue.findFirst({ where: combineWhere({ id: workId }, buildReadyWorkWhere({}, { allowStarted: true })) });
+  return Boolean(work && (!work.deliveryRootId || await isDeliveryExecutionReady(prisma, work)));
 }
 
 /**
@@ -314,7 +323,7 @@ export async function explainWorkNotReady(prisma: DatabaseClient, workId: string
   if (work.state.type !== 'UNSTARTED' && work.state.type !== 'STARTED') return WORK_NOT_READY_STATE_MESSAGE;
   if (work.acceptance === null) return WORK_NOT_READY_ACCEPTANCE_MESSAGE;
   if (work.assignee?.actorKind !== 'HUMAN') return WORK_NOT_READY_OWNER_MESSAGE;
-  if (await prisma.workLink.count({ where: { toId: workId, ...OPEN_BLOCKER_LINK_WHERE } })) return WORK_NOT_READY_BLOCKED_MESSAGE;
+  for (const link of await prisma.workLink.findMany({ where: { toId: workId, ...OPEN_BLOCKER_LINK_WHERE } })) if (await deliveryLinkBlocks(prisma, link)) return WORK_NOT_READY_BLOCKED_MESSAGE;
   if (work.labels.some((label) => (READY_EXCLUDED_LABELS as readonly string[]).includes(label.name))) return WORK_NOT_READY_LABEL_MESSAGE;
   return WORK_NOT_READY_MESSAGE;
 }
@@ -342,6 +351,7 @@ export function compareReadyWork(
 function buildReadyWorkWhere(input: ListReadyWorkInput, options?: { allowStarted?: boolean }): Prisma.IssueWhereInput {
   const clauses: Prisma.IssueWhereInput[] = [
     { commitmentStatus: 'COMMITTED' },
+    { supersededById: null },
     { acceptance: { not: null } },
     { assignee: { is: { actorKind: 'HUMAN' } } },
     {
@@ -352,9 +362,7 @@ function buildReadyWorkWhere(input: ListReadyWorkInput, options?: { allowStarted
       },
     },
     {
-      incomingLinks: {
-        none: OPEN_BLOCKER_LINK_WHERE,
-      },
+      OR: [{ deliveryRootId: { not: null } }, { incomingLinks: { none: OPEN_BLOCKER_LINK_WHERE } }],
     },
     {
       labels: {

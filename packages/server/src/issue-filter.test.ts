@@ -20,8 +20,9 @@ describe('buildIssueWhere', () => {
 
   it('filters by commitment status so the board can project committed work only', () => {
     expect(buildIssueWhere({ commitmentStatus: 'COMMITTED' }, null)).toEqual({
-      commitmentStatus: 'COMMITTED',
+      AND: [{ supersededById: null }, { commitmentStatus: 'COMMITTED' }],
     });
+    expect(buildIssueWhere({ commitmentStatus: 'COMMITTED', includeSuperseded: true }, null)).toEqual({ commitmentStatus: 'COMMITTED' });
   });
 
   it('combines commitment status with a team key', () => {
@@ -35,6 +36,7 @@ describe('buildIssueWhere', () => {
       ),
     ).toEqual({
       AND: [
+        { supersededById: null },
         {
           team: {
             is: {

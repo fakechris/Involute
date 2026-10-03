@@ -1,3 +1,6 @@
+import { deliveryContext } from './delivery-context.js';
+import { proposeDeliveryChange } from './delivery-change-set.js';
+import { createDeliveryExecution } from './delivery-execution.js';
 import { readyWorkPage, searchWorkPage } from './work-search-page.js';
 import { readWorkCatalog, CATALOG_KINDS } from './work-catalog.js';
 import { readWorkPage, WORK_SECTIONS, type WorkSection } from './work-read-page.js';
@@ -59,6 +62,9 @@ export type McpToolName =
   | 'work_search'
   | 'work_catalog'
   | 'work_read_page'
+  | 'work_delivery_context'
+  | 'work_delivery_propose'
+  | 'work_execution_create'
   | 'work_get_context'
   | 'work_list_ready'
   | 'protocol_get_guide'
@@ -86,6 +92,7 @@ export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
   'work_search',
   'work_catalog',
   'work_read_page',
+  'work_delivery_context',
   'work_get_context',
   'work_list_ready',
   'agent_inbox',
@@ -93,6 +100,8 @@ export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
 ];
 
 export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
+  'work_delivery_propose',
+  'work_execution_create',
   'work_propose',
   'work_file_bug',
   'work_commit',
@@ -246,6 +255,9 @@ export async function callMcpTool(
       await assertCanReadIssue(context.prisma, context, work.id);
       return readWorkPage(context.prisma, work.id, requiredString(args.section, 'section') as WorkSection, optionalNumber(args.first) ?? 50, optionalString(args.after), buildReadableIssueWhere(context));
     }
+    case 'work_delivery_context': return deliveryContext(context, requiredString(args.id, 'id'));
+    case 'work_delivery_propose': return proposeDeliveryChange(context, { workId: requiredString(args.work_id, 'work_id'), expectedRevision: requiredNumber(args.expected_revision, 'expected_revision'), reason: requiredString(args.reason, 'reason'), changes: args.changes });
+    case 'work_execution_create': return createDeliveryExecution(context, { workId: requiredString(args.work_id, 'work_id'), unitKey: requiredString(args.unit_key, 'unit_key'), expectedGrantRevision: requiredNumber(args.expected_grant_revision, 'expected_grant_revision') });
     case 'work_get_context': {
       const id = requiredString(args.id, 'id');
       const work = await findWorkByIdOrIdentifier(context.prisma, id);
@@ -253,7 +265,7 @@ export async function callMcpTool(
         throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
       }
       await assertCanReadIssue(context.prisma, context, work.id);
-      const bundle = await getWorkContext(context.prisma, work.id);
+      const bundle = await getWorkContext(context.prisma, work.id, buildReadableIssueWhere(context));
       const linkedIds = [...bundle.ancestors, ...bundle.blockedBy, ...bundle.blocks].map((item) => item.id);
       const visible = new Set((await context.prisma.issue.findMany({ where: { AND: [{ id: { in: linkedIds } }, buildReadableIssueWhere(context) ?? {}] }, select: { id: true } })).map((item) => item.id));
       bundle.ancestors = bundle.ancestors.filter((item) => visible.has(item.id));
@@ -749,6 +761,12 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     inputSchema: { type: 'object', properties: { id: { type: 'string' }, section: { type: 'string', enum: [...WORK_SECTIONS] }, first: { type: 'integer', minimum: 1, maximum: 200 }, after: { type: 'string' } }, required: ['id', 'section'] },
   },
   {
+    name: 'work_delivery_context',
+    description: 'Read a delivery package, its approved implementation units, grant revision and technical proof status. Business acceptance remains human-owned.',
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  },
+  {
     name: 'work_get_context',
     annotations: { readOnlyHint: true, destructiveHint: false },
     description: 'Return the full context bundle for a work id or identifier: contract, ancestors, blockers, claim, audits.',
@@ -776,6 +794,18 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         first: { type: 'integer' },
       },
     },
+  },
+  {
+    name: 'work_delivery_propose',
+    description: 'Propose a candidate delivery change: contract edits, an explicit implementation policy and/or mergeSourceIds. A person approves the entire change atomically in Candidates. Repeated calls create separate proposals. Unit criteria are zero-based references to existing nonblank acceptance lines; paths are literal repository-relative bounds; actions are edit/test/pull_request/merge/deploy; technical dependencies require approved workflowId/job checks.',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    inputSchema: { type: 'object', properties: { work_id: { type: 'string' }, expected_revision: { type: 'integer' }, reason: { type: 'string' }, changes: { type: 'object', properties: { contract: { type: 'object' }, policy: { type: 'object' }, mergeSourceIds: { type: 'array', items: { type: 'string' } } }, additionalProperties: false } }, required: ['work_id', 'expected_revision', 'reason', 'changes'] },
+  },
+  {
+    name: 'work_execution_create',
+    description: 'Instantiate an approved delivery unit and any predecessors, inheriting its contract and human owner. This cannot introduce a new goal or authority. Repeated calls return the same unit for the same grant revision.',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    inputSchema: { type: 'object', properties: { work_id: { type: 'string' }, unit_key: { type: 'string' }, expected_grant_revision: { type: 'integer' } }, required: ['work_id', 'unit_key', 'expected_grant_revision'] },
   },
   {
     name: 'work_propose',
@@ -1331,6 +1361,9 @@ function assignOptional<T extends object, K extends keyof T>(
 // to no scope.
 const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_search: 'read',
+  work_delivery_context: 'read',
+  work_delivery_propose: 'propose',
+  work_execution_create: 'claim',
   work_get_context: 'read',
   work_read_page: 'read',
   work_catalog: 'read',

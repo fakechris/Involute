@@ -43,6 +43,7 @@ export const CANDIDATES_PAGE_QUERY = gql`
         title
         description
         commitmentStatus
+        hasPendingDeliveryChange
         kind
         revision
         outcome
@@ -98,6 +99,7 @@ export const IN_REVIEW_PAGE_QUERY = gql`
     issues(first: $first, after: $after, filter: $filter, query: $query) {
       nodes {
         id
+        deliveryRootId
         identifier
         title
         description
@@ -212,6 +214,7 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
   query WorkContextPage($id: String!) {
     workContext(id: $id) {
       work {
+        deliveryRootId
         agentRequests(first: 200) {
           id
           state
