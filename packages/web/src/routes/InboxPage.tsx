@@ -51,6 +51,14 @@ function formatNotificationType(type: string): string {
       return 'Run completed';
     case 'work.accepted':
       return 'Work accepted';
+    case 'work.committed':
+      return 'Proposal committed';
+    case 'work.rejected':
+      return 'Proposal declined';
+    case 'work.uncommitted':
+      return 'Moved back to candidates';
+    case 'work.review_rejected':
+      return 'Returned with feedback';
     case 'contract.breached':
       return 'Contract breached';
     case 'evidence.submitted':

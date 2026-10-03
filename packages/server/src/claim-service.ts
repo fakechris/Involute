@@ -44,6 +44,7 @@ import {
 import { findWorkByIdOrIdentifier, explainWorkNotReady,
   isWorkReadyForClaim } from './context-service.js';
 import { enqueueWorkEvent } from './event-outbox.js';
+import { projectDecisionNotifications } from './notification-service.js';
 import { attachDecisionReceipt, type ReceiptInput } from './decision-receipt.js';
 import { createWorkLink } from './link-service.js';
 import { isLegalContains, lockWorkGraph } from './graph-integrity.js';
@@ -712,7 +713,7 @@ export async function commitWork(
       workId: existing.id,
     });
 
-    await enqueueWorkEvent(transaction, {
+    const committedEvent = await enqueueWorkEvent(transaction, {
       payload: {
         acceptance: updated.acceptance,
         assigneeId: updated.assigneeId,
@@ -722,6 +723,14 @@ export async function commitWork(
       updatedFrom: { commitmentStatus: existing.commitmentStatus, revision: existing.revision },
       workId: updated.id,
       workIdentifier: updated.identifier,
+    });
+    // The proposer learns it was committed without having to ask (INV-968).
+    await projectDecisionNotifications(transaction, {
+      deciderId: actor.actorId,
+      eventId: committedEvent.id,
+      payload: { actorId: actor.actorId ?? null, stateId: updated.stateId },
+      type: 'work.committed',
+      work: updated,
     });
 
     if (committedToDone && actor.actorId) {
@@ -804,7 +813,7 @@ export async function rejectWork(
       workId: existing.id,
     });
 
-    await enqueueWorkEvent(transaction, {
+    const rejectedEvent = await enqueueWorkEvent(transaction, {
       payload: {
         actorId: actor.actorId ?? null,
         reason,
@@ -813,6 +822,13 @@ export async function rejectWork(
       updatedFrom: { commitmentStatus: existing.commitmentStatus, revision: existing.revision },
       workId: updated.id,
       workIdentifier: updated.identifier,
+    });
+    await projectDecisionNotifications(transaction, {
+      deciderId: actor.actorId,
+      eventId: rejectedEvent.id,
+      payload: { actorId: actor.actorId ?? null, reason },
+      type: 'work.rejected',
+      work: updated,
     });
 
     if (rejectIdempotencyId) {

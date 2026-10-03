@@ -13,7 +13,7 @@ primary entrypoint; the web board is an observation and governance surface.
 
 1. Search before creating work. Duplicates are noise.
 2. Fuzzy discoveries enter as candidates (\`work_propose\`), never as committed work.
-3. Committed work is created by a human (\`work_commit\`) or authorized batch delegation (\`pnpm candidates:batch-commit\`). Agents never unilaterally commit.
+3. Committed work is created by a human (\`work_commit\`) or authorized batch delegation (\`pnpm candidates:batch-commit\`). Agents never unilaterally commit. The decision reaches the proposer: it appears in \`agent_inbox\` \`notifications\` (\`work.committed\`, \`work.rejected\` with the reason, \`work.uncommitted\`, review outcomes) — read it there, or read \`commitmentStatus\`, before telling anyone a candidate is still waiting (INV-968).
 4. Claim before executing (\`work_claim\`); report attempts with \`run_report\`. The claim response issues \`suggested_branch\` — use it verbatim as your git branch name. Never invent branch names containing issue identifiers: a harness-issued name is the only reference the traceability guard trusts unconditionally.
 5. Run complete is not work accepted. Self-reported PR/test summaries and URLs are unverified and require human review; they cannot trigger auto-accept. GitHub merge also stops at Review. Server verification is shadow-only, including CLEAR observations; only human review accepts work.
 6. Do not file local TODOs as work. If it is not worth a contract, keep it local.
@@ -142,7 +142,7 @@ Read-only:
 - \`protocol_get_guide\` — fetch this document verbatim.
 
 Write:
-- \`work_propose\` — create candidate work. Pass \`parent_id\` to nest under project/milestone. Pass \`initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED' | 'BACKLOG'\` to direct-route upon human commitment. Pass \`priority\` (0–4) to suggest one; the person who commits may change it. Type: Bug via \`labels: ['bug']\` is committed directly and never enters Candidates; it requires \`priority\` (SLA), \`steps_to_reproduce\`, and a parent.
+- \`work_propose\` — create candidate work; \`decision_notice\` says where the person's decision will arrive. Pass \`parent_id\` to nest under project/milestone. Pass \`initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED' | 'BACKLOG'\` to direct-route upon human commitment. Pass \`priority\` (0–4) to suggest one; the person who commits may change it. Type: Bug via \`labels: ['bug']\` is committed directly and never enters Candidates; it requires \`priority\` (SLA), \`steps_to_reproduce\`, and a parent.
 - \`work_file_bug\` — file a Type: Bug. Required: \`priority\` (1–4, sets the SLA) and \`steps_to_reproduce\`. Committed directly; missing parent/priority/steps is refused. Prefer this over \`work_propose\` for bugs.
 - \`work_update\` — update fields with \`expected_revision\`. Omitted fields remain unchanged; nullable fields accept null to clear. \`label_ids\` replaces the set (empty clears); kind, cycle_id and alias use the same validation as the editor. On committed work agents cannot change the contract (acceptance, scope, verification, outcome, constraints).
 - \`work_comment\` — append as the authenticated actor; optional parent_comment_id replies to a comment. Supply idempotency_key for safe retries (same key with different content is refused).

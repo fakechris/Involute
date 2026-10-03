@@ -154,7 +154,7 @@ import {
   type WorkProvenance as WorkProvenanceResult,
 } from './agent-directory.js';
 import { createComment, createIssue, createIssueInTransaction, deleteComment, deleteIssue, mentionTexts, updateIssue } from './issue-service.js';
-import { projectWorkNotifications } from './notification-service.js';
+import { markNotificationRead, projectWorkNotifications } from './notification-service.js';
 import { auditMergedPrTraceability } from './traceability-audit.js';
 import { suggestedBranchName } from './branch-name.js';
 import { createWorkLink, deleteWorkLink, listIncidentLinks } from './link-service.js';
@@ -3939,23 +3939,9 @@ const resolvers = {
       runMutation(async () => {
         const viewer = requireAuthentication(context);
         // Scoped to the viewer: marking someone else's notification is a 404,
-        // not a silent success.
-        const updated = await context.prisma.notification.updateMany({
-          where: { id: args.id, readAt: null, userId: viewer.id },
-          data: { readAt: new Date() },
-        });
-        if (updated.count !== 1) {
-          const existing = await context.prisma.notification.findFirst({
-            include: { work: true },
-            where: { id: args.id, userId: viewer.id },
-          });
-          if (!existing) throw createNotFoundError(NOTIFICATION_NOT_FOUND_MESSAGE);
-          return { notification: existing, success: true as const };
-        }
-        const notification = await context.prisma.notification.findUniqueOrThrow({
-          include: { work: true },
-          where: { id: args.id },
-        });
+        // not a silent success. Shared with MCP notification_mark_read.
+        const notification = await markNotificationRead(context.prisma, { id: args.id, userId: viewer.id });
+        if (!notification) throw createNotFoundError(NOTIFICATION_NOT_FOUND_MESSAGE);
         return { notification, success: true as const };
       }, { notification: null, success: false as const }),
     notificationsMarkAllRead: async (

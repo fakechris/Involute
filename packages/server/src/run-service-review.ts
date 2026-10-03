@@ -8,7 +8,7 @@ import {
   hashIdempotencyRequest,
   reserveWorkIdempotency,
 } from './idempotency.js';
-import { projectWorkNotifications } from './notification-service.js';
+import { projectDecisionNotifications } from './notification-service.js';
 import {
   createNotFoundError,
   createValidationError,
@@ -123,7 +123,6 @@ export async function reviewWork(
       before: selectIssueSnapshot(work),
       workId: work.id,
     });
-    let reviewEventId: string | null = null;
     const reviewEventType = input.decision === 'ACCEPTED' ? 'work.accepted' : 'work.review_rejected';
     const enqueued = await enqueueWorkEvent(transaction, {
       payload: {
@@ -138,36 +137,23 @@ export async function reviewWork(
       workId: work.id,
       workIdentifier: work.identifier,
     });
-    reviewEventId = enqueued.id;
 
-    // Close the loop with the acting agent's owner: a human actor learns the
-    // review outcome here; agent actors have no notification inbox (their
-    // surface is webhooks), so they are skipped.
-    if (run?.actorId) {
-      const runActor = await transaction.user.findUnique({
-        where: { id: run.actorId },
-        select: { actorKind: true, id: true },
-      });
-      if (runActor?.actorKind === 'HUMAN') {
-        await transaction.notification.createMany({
-          data: [
-            {
-              payload: {
-                decision: input.decision,
-                decisionId: decision.id,
-                reason: decision.reason,
-              },
-              sourceEventId: reviewEventId,
-              teamId: work.teamId,
-              type: reviewEventType,
-              userId: runActor.id,
-              workId: work.id,
-            },
-          ],
-          skipDuplicates: true,
-        });
-      }
-    }
+    // Close the loop with whoever did the work and whoever proposed it, agents
+    // included: the run's actor learns the outcome of its delivery, the
+    // proposer the outcome of its proposal. Neither is the reviewer (INV-968).
+    await projectDecisionNotifications(transaction, {
+      alsoNotify: [run?.actorId],
+      deciderId: actorId,
+      eventId: enqueued.id,
+      payload: {
+        decision: input.decision,
+        decisionId: decision.id,
+        reason: decision.reason,
+        reviewerId: actorId,
+      },
+      type: reviewEventType,
+      work,
+    });
     if (reviewIdempotencyId) {
       await completeWorkIdempotency(transaction, reviewIdempotencyId, work.id, decision.id);
     }

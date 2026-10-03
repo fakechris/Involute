@@ -126,3 +126,118 @@ export async function projectWebhookDisabledNotifications(
     skipDuplicates: true,
   });
 }
+
+/**
+ * Who proposed a work item: the actor on its first audit row. Every surface
+ * that creates work (work_propose, workPropose, issueCreate, bug reports)
+ * writes that row in the same transaction, so it is the record of authorship.
+ * Null when the work was written by the internal actor.
+ */
+export async function resolveProposerId(prisma: DatabaseClient, workId: string): Promise<string | null> {
+  const first = await prisma.workAudit.findFirst({
+    where: { workId },
+    orderBy: [{ revision: 'asc' }, { createdAt: 'asc' }],
+    select: { actorId: true },
+  });
+  return first?.actorId ?? null;
+}
+
+/** The decisions a proposer (and, on review, the run's actor) is told about (INV-968). */
+export const DECISION_NOTIFICATION_TYPES = [
+  'work.committed',
+  'work.rejected',
+  'work.uncommitted',
+  'work.accepted',
+  'work.review_rejected',
+] as const;
+export type DecisionNotificationType = (typeof DECISION_NOTIFICATION_TYPES)[number];
+
+export interface DecisionNotificationInput {
+  eventId: string;
+  type: DecisionNotificationType;
+  work: Pick<Issue, 'id' | 'teamId'>;
+  payload: Prisma.InputJsonValue;
+  /** Whoever made the decision; never told about their own decision. */
+  deciderId: string | null | undefined;
+  /** Others the decision is about besides the proposer, e.g. the run's actor on a review. */
+  alsoNotify?: ReadonlyArray<string | null | undefined>;
+}
+
+/**
+ * Tell the actors a decision is about that it was made (INV-968).
+ *
+ * The proposer is subscribed to their own proposal, the way Linear subscribes
+ * an issue's creator. Agents included: a session agent has no webhook, and
+ * without this row it can only find out by asking the person who already
+ * decided. Delivery is the same Notification table people read in the Inbox;
+ * agents read it through agent_inbox. The (sourceEventId, userId) constraint
+ * makes a replayed event a no-op.
+ */
+export async function projectDecisionNotifications(
+  prisma: DatabaseClient,
+  input: DecisionNotificationInput,
+): Promise<void> {
+  const proposerId = await resolveProposerId(prisma, input.work.id);
+  const ids = new Set(
+    [proposerId, ...(input.alsoNotify ?? [])].filter((id): id is string => typeof id === 'string' && id.length > 0),
+  );
+  if (input.deciderId) ids.delete(input.deciderId);
+  if (ids.size === 0) return;
+  const recipients = await prisma.user.findMany({
+    where: { deactivatedAt: null, id: { in: [...ids] } },
+    select: { id: true },
+  });
+  if (recipients.length === 0) return;
+  await prisma.notification.createMany({
+    data: recipients.map((recipient) => ({
+      payload: input.payload,
+      sourceEventId: input.eventId,
+      teamId: input.work.teamId,
+      type: input.type,
+      userId: recipient.id,
+      workId: input.work.id,
+    })),
+    skipDuplicates: true,
+  });
+}
+
+/**
+ * Mark one of the caller's notifications read. Scoped to the caller: someone
+ * else's notification is reported as not found, never silently marked.
+ * Already-read is a success, so a retry is harmless.
+ */
+export async function markNotificationRead(
+  prisma: DatabaseClient,
+  input: { id: string; userId: string },
+): Promise<Prisma.NotificationGetPayload<{ include: { work: true } }> | null> {
+  await prisma.notification.updateMany({
+    where: { id: input.id, readAt: null, userId: input.userId },
+    data: { readAt: new Date() },
+  });
+  return prisma.notification.findFirst({
+    include: { work: true },
+    where: { id: input.id, userId: input.userId },
+  });
+}
+
+/**
+ * The caller's unread notifications, newest first: what agent_inbox shows an
+ * agent next to its open requests. A team-bound agent credential sees the
+ * notifications of its team (and the unscoped ones), like its requests.
+ */
+export async function readUnreadNotifications(
+  prisma: DatabaseClient,
+  input: { first: number; since: Date | null; teamId: string | null; userId: string },
+) {
+  return prisma.notification.findMany({
+    include: { work: { select: { commitmentStatus: true, identifier: true, title: true } } },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: input.first,
+    where: {
+      readAt: null,
+      userId: input.userId,
+      ...(input.since ? { createdAt: { gt: input.since } } : {}),
+      ...(input.teamId ? { OR: [{ teamId: input.teamId }, { teamId: null }] } : {}),
+    },
+  });
+}

@@ -13,6 +13,7 @@ import {
   WORK_UNCOMMIT_RUN_MESSAGE,
 } from './errors.js';
 import { enqueueWorkEvent } from './event-outbox.js';
+import { projectDecisionNotifications } from './notification-service.js';
 import { syncContainsFromParentId } from './link-service.js';
 import { claimIssueRevision, recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
 
@@ -93,11 +94,18 @@ export async function uncommitWork(
       before: selectIssueSnapshot(work),
       workId: work.id,
     });
-    await enqueueWorkEvent(transaction, {
+    const uncommittedEvent = await enqueueWorkEvent(transaction, {
       payload: { actorId: actor.actorId, restoredFromRevision: input.expectedRevision },
       type: 'work.uncommitted',
       workId: restored.id,
       workIdentifier: restored.identifier,
+    });
+    await projectDecisionNotifications(transaction, {
+      deciderId: actor.actorId,
+      eventId: uncommittedEvent.id,
+      payload: { actorId: actor.actorId ?? null },
+      type: 'work.uncommitted',
+      work: restored,
     });
     return restored;
   });

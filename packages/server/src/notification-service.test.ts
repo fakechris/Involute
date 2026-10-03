@@ -165,7 +165,7 @@ describe('work notifications', () => {
     expect(recipients.map((row) => row.userId).sort()).toEqual([humanOwner.id, human.id].sort());
   });
 
-  it('does not notify anyone for review outcomes when the run actor is an agent', async () => {
+  it('tells an agent run actor how its review landed, and not the reviewer (INV-968)', async () => {
     const agent = await createAgentActor('review-run-agent');
     const committed = await buildCommittedWork();
     const { claimToken } = await claimWork(prisma, committed.id, {}, { actorId: agent.id, actorKind: 'AGENT', surface: 'mcp' });
@@ -181,10 +181,13 @@ describe('work notifications', () => {
       { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
     );
 
+    // Agents read their notifications through agent_inbox; the reviewer is not
+    // told about their own decision.
     const reviewRows = await prisma.notification.findMany({
       where: { type: { in: ['work.accepted', 'work.review_rejected'] } },
     });
-    expect(reviewRows).toEqual([]);
+    expect(reviewRows.map((row) => [row.type, row.userId])).toEqual([['work.accepted', agent.id]]);
+    expect((reviewRows[0]?.payload as { reviewerId?: string }).reviewerId).toBe(human.id);
   });
 
   it('notifies a human run actor when the review lands', async () => {
