@@ -6,6 +6,12 @@ import { emitOpsAlert } from './ops-alerts.js';
 import type { Issue, Prisma, PrismaClient, WorkflowStateType } from '@prisma/client';
 
 export const WORK_EVENT_TYPES = [
+  'executor.dispatched',
+  'executor.acknowledged',
+  'executor.stop_requested',
+  'executor.stopped',
+  'executor.delivered',
+  'executor.exhausted',
   'work.proposed',
   'work.committed',
   'work.uncommitted',

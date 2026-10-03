@@ -1171,3 +1171,57 @@ model WorkSearchCursor {
 
   @@index([expiresAt])
 }
+
+/// Versioned external runtime dispatch. Never contains an executable shell command or credential.
+model ExecutorDispatch {
+  id String @id @default(uuid()) @db.Uuid
+  workId String @db.Uuid
+  rootId String @db.Uuid
+  grantRevision Int
+  executorActorId String @db.Uuid
+  generation Int @default(1)
+  revision Int @default(1)
+  state String @default("QUEUED")
+  runId String? @db.Uuid
+  leaseUntil DateTime?
+  checkpoint String?
+  feedback String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  effects ExecutorEffect[]
+  receipts ExecutorDeliveryReceipt[]
+  @@unique([workId, grantRevision])
+  @@index([executorActorId, state])
+  @@index([rootId])
+}
+
+/// An effect intent becomes STARTED once, never automatically retried after an unknown result.
+model ExecutorEffect {
+  id String @id @default(uuid()) @db.Uuid
+  dispatchId String @db.Uuid
+  dispatch ExecutorDispatch @relation(fields: [dispatchId], references: [id], onDelete: Restrict)
+  generation Int
+  key String
+  action String
+  environment String?
+  commitSha String
+  paths String[]
+  state String @default("PREPARED")
+  createdAt DateTime @default(now())
+  startedAt DateTime?
+  @@unique([dispatchId, generation, key])
+}
+
+model ExecutorDeliveryReceipt {
+  id String @id @default(uuid()) @db.Uuid
+  dispatchId String @db.Uuid
+  dispatch ExecutorDispatch @relation(fields: [dispatchId], references: [id], onDelete: Restrict)
+  generation Int
+  runId String @db.Uuid
+  actorId String @db.Uuid
+  idempotencyKey String
+  effectId String? @db.Uuid
+  payload Json
+  createdAt DateTime @default(now())
+  @@unique([dispatchId, generation, idempotencyKey])
+}

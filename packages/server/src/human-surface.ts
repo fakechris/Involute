@@ -33,6 +33,7 @@ export type HumanSurface =
   | { kind: 'gap'; tracking: string; note: string };
 
 export const MUTATION_SURFACES: Record<string, HumanSurface> = {
+  executorUpdate: { kind: 'web', components: ['components/ExecutorPanel.tsx'], label: 'Stop executor' },
   deliveryChangePropose: { kind: 'web', components: ['components/DeliveryPanel.tsx'], label: 'Propose delivery change' },
   deliveryChangeDecide: { kind: 'web', components: ['components/DeliveryPanel.tsx'], label: 'Approve delivery change' },
   deliveryExecutionCreate: { kind: 'web', components: ['components/DeliveryPanel.tsx'], label: 'Create implementation' },

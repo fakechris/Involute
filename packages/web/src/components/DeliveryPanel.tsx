@@ -1,3 +1,4 @@
+import { ExecutorPanel } from './ExecutorPanel';
 import './delivery.css';
 import { gql } from '@apollo/client';
 import { useMutation, useQuery } from '@apollo/client/react';
@@ -5,9 +6,10 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 type Work = { id: string; identifier: string; title: string; revision: number; acceptance: string | null; repository: string | null; assignee?: { id: string } | null; team?: { memberships: { nodes: Array<{ user: { id: string; name: string; actorKind: string } }> } }; supersededBy?: { id: string; identifier: string } | null };
-type Policy = { environments: string[]; units: Array<{ key: string; title: string; criteria: number[]; paths: string[]; actions: string[]; dependsOn: string[]; checks: Array<{ workflowId: number; job: string }> }> };
+type Policy = { environments: string[]; units: Array<{ key: string; title: string; executorActorId?: string; maxAttempts?: number; criteria: number[]; paths: string[]; actions: string[]; dependsOn: string[]; checks: Array<{ workflowId: number; job: string }> }> };
 type Result = { success: boolean; message?: string | null };
-const CONTEXT = gql`query DeliveryPanel($id: String!) { deliveryContext(id: $id) { viewerCanWrite work { id identifier title revision acceptance repository supersededBy { id identifier } } grant { revision policyJson } authorizationValid authorizationMessage units { issue { id identifier title state { name } } technicalReady } } }`;
+const CONTEXT = gql`query DeliveryPanel($id: String!) { deliveryContext(id: $id) { viewerCanWrite work { id identifier title revision acceptance repository supersededBy { id identifier } } grant { revision policyJson } authorizationValid authorizationMessage units { issue { id identifier title deliveryUnitKey state { name } } technicalReady } } }`;
+const AGENTS = gql`query DeliveryExecutors { agents { id name } }`;
 const PROPOSE = gql`mutation DeliveryProposal($workId: String!, $expectedRevision: Int!, $reason: String!, $changesJson: String!) { deliveryChangePropose(workId: $workId, expectedRevision: $expectedRevision, reason: $reason, changesJson: $changesJson) { success message } }`;
 const CREATE = gql`mutation DeliveryExecution($workId: String!, $unitKey: String!, $expectedGrantRevision: Int!) { deliveryExecutionCreate(workId: $workId, unitKey: $unitKey, expectedGrantRevision: $expectedGrantRevision) { success message issue { id } } }`;
 const QUEUE = gql`query DeliveryQueue($after: String, $repository: String, $noRepository: Boolean, $teamKey: String, $bugsOnly: Boolean) { deliveryChanges(first: 30, after: $after, repository: $repository, noRepository: $noRepository, teamKey: $teamKey, bugsOnly: $bugsOnly) { nodes { id viewerCanDecide reason changesJson beforeJson work { id identifier title revision acceptance repository assignee { id } team { memberships { nodes { user { id name actorKind } } } } } } pageInfo { hasNextPage endCursor } } }`;
@@ -27,6 +29,7 @@ function Plan({ policy, acceptance }: { policy: Policy; acceptance: string | nul
     <strong>{unit.title} ({unit.key})</strong>
     <p>Acceptance: {unit.criteria.map((index) => criteria[index] ?? `Missing criterion ${index + 1}`).join('; ')}</p>
     <p>Paths: {unit.paths.join(', ')} · Actions: {unit.actions.join(', ')}</p>
+    <p>Executor: {unit.executorActorId ?? 'Not delegated'} · Attempt budget: {unit.maxAttempts ?? 1}</p>
     <p>Predecessors: {unit.dependsOn.join(', ') || 'None'}</p>
     <p>Required CI: {unit.checks.map((check) => `workflow ${check.workflowId} / ${check.job}`).join('; ') || 'Final delivery evidence'}</p>
   </article>)}</div>;
@@ -34,6 +37,7 @@ function Plan({ policy, acceptance }: { policy: Policy; acceptance: string | nul
 
 const list = (value: string) => value.split(',').map((part) => part.trim()).filter(Boolean);
 function PolicyEditor({ value, onChange, acceptance }: { value: Policy; onChange: (policy: Policy) => void; acceptance: string | null }) {
+  const { data: agentData } = useQuery<{ agents: Array<{ id: string; name: string }> }>(AGENTS);
   const criteria = (acceptance ?? '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   function update(index: number, patch: Partial<Policy['units'][number]>) { onChange({ ...value, units: value.units.map((unit, position) => position === index ? { ...unit, ...patch } : unit) }); }
   return <fieldset><legend>Implementation authority</legend>
@@ -44,6 +48,8 @@ function PolicyEditor({ value, onChange, acceptance }: { value: Policy; onChange
       <label>Repository paths (comma separated)<input defaultValue={unit.paths.join(', ')} onBlur={(event) => update(index, { paths: list(event.target.value) })} /></label>
       <div>Existing acceptance criteria{criteria.map((criterion, criterionIndex) => <label key={criterionIndex}><input type="checkbox" checked={unit.criteria.includes(criterionIndex)} onChange={(event) => update(index, { criteria: event.target.checked ? [...unit.criteria, criterionIndex] : unit.criteria.filter((item) => item !== criterionIndex) })} />{criterion}</label>)}</div>
       <div>Allowed actions{['edit', 'test', 'pull_request', 'merge', 'deploy'].map((action) => <label key={action}><input type="checkbox" checked={unit.actions.includes(action)} onChange={(event) => update(index, { actions: event.target.checked ? [...unit.actions, action] : unit.actions.filter((item) => item !== action) })} />{action}</label>)}</div>
+      <label>Executor (explicit delegation)<select value={unit.executorActorId ?? ''} onChange={(event) => { const { executorActorId: _id, maxAttempts: _max, ...rest } = unit; onChange({ ...value, units: value.units.map((item, position) => position === index ? event.target.value ? { ...unit, executorActorId: event.target.value, maxAttempts: unit.maxAttempts ?? 1 } : rest : item) }); }}><option value="">Not delegated</option>{agentData?.agents?.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></label>
+      {unit.executorActorId ? <label>Maximum execution attempts<input type="number" min="1" max="10" step="1" value={unit.maxAttempts ?? 1} onChange={(event) => update(index, { maxAttempts: Number(event.target.value) })} /></label> : null}
       <label>Predecessor keys (comma separated)<input defaultValue={unit.dependsOn.join(', ')} onBlur={(event) => update(index, { dependsOn: list(event.target.value) })} /></label>
       {unit.checks.map((check, checkIndex) => <div key={checkIndex}><label>GitHub workflow ID<input type="number" min="1" step="1" value={check.workflowId || ''} onChange={(event) => update(index, { checks: unit.checks.map((item, position) => position === checkIndex ? { ...item, workflowId: Number(event.target.value) } : item) })} /></label><label>Exact CI job name<input value={check.job} onChange={(event) => update(index, { checks: unit.checks.map((item, position) => position === checkIndex ? { ...item, job: event.target.value } : item) })} /></label><button type="button" onClick={() => update(index, { checks: unit.checks.filter((_, position) => position !== checkIndex) })}>Remove check</button></div>)}
       <button type="button" onClick={() => update(index, { checks: [...unit.checks, { workflowId: 0, job: '' }] })}>Add CI check</button>
@@ -54,7 +60,7 @@ function PolicyEditor({ value, onChange, acceptance }: { value: Policy; onChange
 }
 
 export function DeliveryPanel({ workId }: { workId: string }) {
-  const { data, error, refetch } = useQuery<{ deliveryContext: { viewerCanWrite: boolean; work: Work; grant: { revision: number; policyJson: string } | null; authorizationValid: boolean; authorizationMessage: string; units: Array<{ issue: { id: string; identifier: string; title: string; state: { name: string } }; technicalReady: boolean }> } }>(CONTEXT, { variables: { id: workId } });
+  const { data, error, refetch } = useQuery<{ deliveryContext: { viewerCanWrite: boolean; work: Work; grant: { revision: number; policyJson: string } | null; authorizationValid: boolean; authorizationMessage: string; units: Array<{ issue: { id: string; identifier: string; title: string; deliveryUnitKey?: string; state: { name: string } }; technicalReady: boolean }> } }>(CONTEXT, { variables: { id: workId } });
   const [propose, proposing] = useMutation<{ deliveryChangePropose: Result }>(PROPOSE);
   const [create, creating] = useMutation<{ deliveryExecutionCreate: Result }>(CREATE);
   const [reason, setReason] = useState('');
@@ -75,7 +81,8 @@ export function DeliveryPanel({ workId }: { workId: string }) {
     {policy ? <><Plan policy={policy} acceptance={context.work.acceptance} />{context.viewerCanWrite ? policy.units.map((unit) => <button key={unit.key} type="button" disabled={!context.authorizationValid || creating.loading} onClick={async () => {
       try { const result = (await create({ variables: { workId: context.work.id, unitKey: unit.key, expectedGrantRevision: context.grant!.revision } })).data?.deliveryExecutionCreate; setMessage(result?.success ? 'Implementation task is available.' : result?.message ?? 'Could not create task.'); await refetch(); } catch (failure) { setMessage(String(failure)); }
     }}>Create implementation: {unit.title}</button>) : null}</> : null}
-    {context.units.map(({ issue, technicalReady }) => <p key={issue.id}><Link to={`/work/${issue.id}`}>{issue.identifier} {issue.title}</Link> · {issue.state.name} · {technicalReady ? 'CI verified' : 'CI proof pending'}</p>)}
+    <ExecutorPanel workId={context.work.id} />
+    {context.units.map(({ issue, technicalReady }) => <div key={issue.id}><p><Link to={`/work/${issue.id}`}>{issue.identifier} {issue.title}</Link> · {issue.state.name} · {technicalReady ? 'CI verified' : 'CI proof pending'}</p></div>)}
     {context.viewerCanWrite ? <details><summary>Propose delivery change</summary><p>Changes return to Candidates for approval. Existing authorization is not expanded by this proposal.</p>
       <label>Reason<textarea value={reason} onChange={(event) => setReason(event.target.value)} /></label>
       <label>Replacement scope (leave blank to keep)<textarea value={scope} onChange={(event) => setScope(event.target.value)} /></label>

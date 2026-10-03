@@ -6,7 +6,7 @@ import { writeActorFromViewer } from './work-service.js';
 import { createValidationError } from './errors.js';
 type Tx = Prisma.TransactionClient;
 
-export async function deliveryPermissionContext(tx: Tx, context: GraphQLContext, work: Issue, scope: 'propose' | 'claim') {
+export async function deliveryPermissionContext(tx: Tx, context: GraphQLContext, work: Issue, scope: 'propose' | 'claim' | 'report') {
   if (!context.viewer) throw createValidationError('An authenticated actor is required.');
   await tx.$queryRaw`SELECT id FROM "User" WHERE id = ${context.viewer.id}::uuid FOR SHARE`;
   const viewer = await tx.user.findUnique({ where: { id: context.viewer.id } });
