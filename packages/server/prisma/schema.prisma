@@ -1203,12 +1203,14 @@ model ExecutorEffect {
   generation Int
   key String
   action String
+  pullRequestNumber Int?
   environment String?
   commitSha String
   paths String[]
   state String @default("PREPARED")
   createdAt DateTime @default(now())
   startedAt DateTime?
+  resolution Json?
   @@unique([dispatchId, generation, key])
 }
 
@@ -1220,6 +1222,7 @@ model ExecutorDeliveryReceipt {
   runId String @db.Uuid
   actorId String @db.Uuid
   idempotencyKey String
+  final Boolean @default(true)
   effectId String? @db.Uuid
   payload Json
   createdAt DateTime @default(now())

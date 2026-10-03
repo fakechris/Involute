@@ -20,7 +20,8 @@ export async function prepareDeliveryAcceptance(tx: Prisma.TransactionClient, wo
     const binding = await assertDeliveryExecution(tx, task);
     if (binding?.unit.executorActorId) {
       const dispatch = await tx.executorDispatch.findUnique({ where: { workId_grantRevision: { workId: task.id, grantRevision: grant.revision } } });
-      if (!dispatch || dispatch.state !== 'DELIVERED' || !await tx.executorDeliveryReceipt.count({ where: { dispatchId: dispatch.id, generation: dispatch.generation, runId: dispatch.runId ?? '' } })) throw createValidationError('An implementation unit has no current executor delivery receipt.');
+      if (dispatch && await tx.executorEffect.count({ where: { dispatchId: dispatch.id, state: 'STARTED' } })) throw createValidationError('An implementation unit has an unresolved external effect.');
+      if (!dispatch || dispatch.state !== 'DELIVERED' || !await tx.executorDeliveryReceipt.count({ where: { dispatchId: dispatch.id, generation: dispatch.generation, runId: dispatch.runId ?? '', final: true } })) throw createValidationError('An implementation unit has no current executor delivery receipt.');
     }
     const run = await tx.workRun.findFirst({ where: { workId: task.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
     if (binding?.unit.executorActorId && (await tx.executorDispatch.findUnique({ where: { workId_grantRevision: { workId: task.id, grantRevision: grant.revision } } }))?.runId !== run?.id) throw createValidationError('An implementation unit has no current executor delivery receipt.');

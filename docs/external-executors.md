@@ -50,6 +50,7 @@ Only the approved executor may claim the implementation.
      "repository": "owner/repository",
      "commitSha": "<40-character PR head SHA bound to the run>",
      "pullRequestNumber": 123,
+     "mergedSha": "<observed merge SHA, or null>",
      "environment": "staging",
      "deployedSha": "<40-character observed deployed SHA>",
      "health": "pass",
@@ -58,6 +59,11 @@ Only the approved executor may claim the implementation.
      "observedAt": "2026-10-03T01:00:00.000Z"
    }
    ```
+
+   An intermediate observation uses `details.final: false` and keeps the dispatch
+   running. For example, report the observed merge SHA against the merge effect
+   before preparing deployment; the final receipt omits this flag or sets it true.
+   Observed successful effects stop blocking the next effect.
 
    Without deployment, use null environment/deployedSha. Health and behavior are
    `pass`, `fail` or `unknown`. The server binds repository, PR and head SHA to the
@@ -72,7 +78,10 @@ Return revokes the old runs and requeues the original approved executor with the
 human feedback, within `maxAttempts`. Exhaustion is visible as `EXHAUSTED`; a new
 budget is a candidate change. A stopped/expired execution with no started effect
 can use `recover` after its old claim expires. Its old run is revoked. An unknown
-external effect blocks automatic recovery.
+external effect blocks automatic recovery. On the work page, a person can
+release the implementation claim and use **Reconcile external effect** to record
+the observed outcome, reason and durable evidence. The effect is then closed with
+an immutable actor-stamped resolution; recovery still respects the attempt budget.
 
 ## Stop and failure semantics
 
@@ -107,7 +116,8 @@ involute executor-effect --work <implementation-uuid> \
 The execution file has `work_id`, `run_id`, `claim_token` and mode 0600. Configure
 CLI authentication in its private configuration. A recipe has `version: 1`,
 `repository`, absolute `cwd`, pinned `baseSha`, `action`, optional `environment`,
-absolute `command`, and `args`; at least one argument must contain `{sha}`. The
+absolute `command`, and `args`; at least one argument must contain `{sha}`; a merge recipe also needs `{pr}`,
+which is replaced with the PR number bound to the run. The
 operator must map each recipe to the stated environment and restrict the runtime's
 credentials accordingly. Recipes and credentials must not be writable by untrusted
 workload code. This adapter is not an OS sandbox and cannot constrain arbitrary

@@ -12,6 +12,8 @@ export const WORK_EVENT_TYPES = [
   'executor.stopped',
   'executor.delivered',
   'executor.exhausted',
+  'executor.reconciled',
+  'executor.observed',
   'work.proposed',
   'work.committed',
   'work.uncommitted',

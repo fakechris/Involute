@@ -62,7 +62,7 @@ describe('external executor authority and receipts', () => {
     const f = await fixture();
     const effect = await f.update('prepare_effect', { effect: intent });
     await f.update('start_effect', { effectId: effect.id });
-    await expect(f.update('start_effect', { effectId: effect.id })).rejects.toThrow(/already started/);
+    await expect(f.update('start_effect', { effectId: effect.id })).rejects.toThrow(/unknown result/);
     await prisma.workClaim.update({ where: { id: f.claim.claim.id }, data: { leaseUntil: new Date(0) } });
     await prisma.executorDispatch.update({ where: { id: (await f.current()).id }, data: { leaseUntil: new Date(0) } });
     await expect(f.update('recover', {}, f.humanContext)).rejects.toThrow(/unknown result/);
@@ -93,6 +93,7 @@ describe('external executor authority and receipts', () => {
     await reportRun(prisma, { workId: f.work.id, runId: f.run.id, claimToken: f.claim.claimToken!, status: 'completed' }, f.actor);
     await f.update('receipt', { idempotencyKey: 'stable', receipt });
     expect(await prisma.executorDeliveryReceipt.count()).toBe(1);
+    await expect(f.update('receipt', { idempotencyKey: 'stable', receipt: { ...receipt, health: 'fail' } })).rejects.toThrow(/different facts/);
     const review = await prisma.workflowState.findFirstOrThrow({ where: { teamId: f.work.teamId, type: 'REVIEW' } });
     const root = await prisma.issue.update({ where: { id: f.root.id }, data: { stateId: review.id } });
     await reviewWork(prisma, root.id, { expectedRevision: root.revision, decision: 'REJECTED', reason: 'Improve the release marker' }, writeActorFromViewer(f.humanContext.viewer));
@@ -108,6 +109,52 @@ describe('external executor authority and receipts', () => {
     await f.update('stop', {}, f.humanContext);
     await f.update('stop_ack');
     expect((await f.current()).visibleState).toBe('UNKNOWN');
+  });
+  it('refuses a new key while any external effect remains unresolved', async () => {
+    const f = await fixture();
+    const effect = await f.update('prepare_effect', { effect: intent });
+    await f.update('start_effect', { effectId: effect.id });
+    await expect(f.update('prepare_effect', { effect: { ...intent, key: 'try-again' } })).rejects.toThrow(/unknown result/);
+  });
+  it('records evidence-backed human reconciliation before allowing recovery', async () => {
+    const f = await fixture();
+    const effect = await f.update('prepare_effect', { effect: intent });
+    await f.update('start_effect', { effectId: effect.id });
+    await f.update('stop', {}, f.humanContext);
+    await f.update('stop_ack');
+    const resolution = { outcome: 'FAILED' as const, reason: 'External audit confirms operation did not complete', evidenceUrl: 'https://example.test/external-audit' };
+    await expect(f.update('reconcile', { effectId: effect.id, resolution })).rejects.toThrow(/Only a person/);
+    await expect(f.update('reconcile', { effectId: effect.id, resolution }, f.humanContext)).rejects.toThrow(/Release the active/);
+    await prisma.workClaim.update({ where: { id: f.claim.claim.id }, data: { leaseUntil: new Date(0) } });
+    await f.update('reconcile', { effectId: effect.id, resolution }, f.humanContext);
+    expect((await prisma.executorEffect.findUniqueOrThrow({ where: { id: effect.id } })).state).toBe('RECONCILED_FAILED');
+    await f.update('recover', {}, f.humanContext);
+    expect((await f.current()).generation).toBe(2);
+  });
+  it('rechecks a merge head after intent preparation', async () => {
+    const f = await fixture();
+    const grant = await prisma.deliveryPackage.findUniqueOrThrow({ where: { workId: f.root.id } });
+    const policy = grant.policy as { units: Array<{ actions: string[] }> };
+    policy.units[0]!.actions.push('merge');
+    await prisma.deliveryPackage.update({ where: { workId: f.root.id }, data: { policy } });
+    const effect = await f.update('prepare_effect', { effect: { ...intent, action: 'merge', environment: undefined } });
+    await reportRun(prisma, { workId: f.work.id, runId: f.run.id, claimToken: f.claim.claimToken!, status: 'running', commitSha: 'b'.repeat(40) }, f.actor);
+    await expect(f.update('start_effect', { effectId: effect.id })).rejects.toThrow(/bound PR head/);
+  });
+  it('observes a merge then deploys without an intermediate human decision', async () => {
+    const f = await fixture();
+    const grant = await prisma.deliveryPackage.findUniqueOrThrow({ where: { workId: f.root.id } });
+    const policy = grant.policy as { units: Array<{ actions: string[] }> };
+    policy.units[0]!.actions.push('merge');
+    await prisma.deliveryPackage.update({ where: { workId: f.root.id }, data: { policy } });
+    const merge = await f.update('prepare_effect', { effect: { ...intent, action: 'merge', environment: undefined } });
+    await f.update('start_effect', { effectId: merge.id });
+    const receipt = { version: 1, repository: 'test/executor', commitSha: sha, pullRequestNumber: 12, mergedSha: 'b'.repeat(40), environment: null, deployedSha: null, health: 'unknown', behavior: 'unknown', evidenceUrls: ['https://example.test/merge'], observedAt: new Date().toISOString() };
+    await f.update('receipt', { effectId: merge.id, idempotencyKey: 'merge-observed', final: false, receipt });
+    expect((await f.current()).visibleState).toBe('RUNNING');
+    expect((await prisma.executorEffect.findUniqueOrThrow({ where: { id: merge.id } })).state).toBe('OBSERVED');
+    const deploy = await f.update('prepare_effect', { effect: { ...intent, key: 'release', commitSha: 'b'.repeat(40) } });
+    await f.update('start_effect', { effectId: deploy.id });
   });
   it('requires the approved executor for the underlying work claim too', async () => {
     const f = await fixture();

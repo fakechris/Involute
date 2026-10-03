@@ -23,7 +23,7 @@ export function createExecutorMcpClient(serverUrl: string, token: string): Execu
     return JSON.parse(text) as unknown;
   } };
 }
-interface Row { repository: string; id: string; workId: string; generation: number; revision: number; visibleState: string; runId: string | null }
+interface Row { repository: string; id: string; workId: string; generation: number; revision: number; visibleState: string; runId: string | null; run?: { commitSha: string | null; pullRequestNumber: number | null } | null }
 interface Recipe {
   version: 1; repository: string; cwd: string; baseSha: string; action: 'merge' | 'deploy'; environment?: string;
   command: string; args: string[];
@@ -63,8 +63,9 @@ export async function performExecutorEffect(client: ExecutorTransport, options: 
   const details = () => ({ expectedRevision: row.revision, generation: row.generation, claimToken: execution.claim_token });
   if (row.visibleState === 'QUEUED') { await update(client, options.work, 'ack', { ...details(), runId: execution.run_id }); row = await getRow(client, options.work); }
   if (row.runId !== execution.run_id || row.visibleState !== 'RUNNING') throw message('This execution is not the acknowledged running dispatch.');
+  if (recipe.action === 'merge' && (!row.run?.pullRequestNumber || row.run.commitSha !== options.sha || !recipe.args.some((arg) => arg.includes('{pr}')))) throw message('Merge recipes require a {pr} argument and the bound PR head.');
   const effect = await update(client, options.work, 'prepare_effect', { ...details(), effect: { key: options.key, action: recipe.action, environment: recipe.environment, commitSha: options.sha, paths } });
-  const args = recipe.args.map((arg) => arg.replaceAll('{sha}', options.sha));
+  const args = recipe.args.map((arg) => arg.replaceAll('{sha}', options.sha).replaceAll('{pr}', String(row.run?.pullRequestNumber ?? '')));
   let stopped = false;
   await executeAuthorizedEffect({
     prepare: async () => {

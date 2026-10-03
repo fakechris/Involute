@@ -1,5 +1,13 @@
 /** Public validation messages for delivery operations; unexpected errors stay masked. */
 export const DELIVERY_VALIDATION_MESSAGES = [
+  "An implementation unit has an unresolved external effect.",
+  "Only a person may reconcile external effects.",
+  "Reconciliation needs an outcome, reason and durable evidence URL.",
+  "Release the active implementation claim before reconciling an external effect.",
+  "Only an unresolved effect from this execution can be reconciled.",
+  "Receipt final must be a boolean.",
+
+  "The merge intent must match the bound PR head.",
   "Executor work not found.",
   "Invalid executor operation.",
   "An executor requires an approved delivery implementation unit.",
