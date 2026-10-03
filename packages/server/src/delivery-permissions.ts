@@ -1,3 +1,4 @@
+import { resolveShareScope } from './project-sharing.js';
 import type { Issue, Prisma } from '@prisma/client';
 import type { GraphQLContext } from './auth.js';
 import { assertExecutionAuthority } from './work-execution.js';
@@ -16,6 +17,5 @@ export async function deliveryPermissionContext(tx: Tx, context: GraphQLContext,
   await tx.$queryRaw`SELECT id FROM "Team" WHERE id = ${work.teamId}::uuid FOR SHARE`;
 
   const { shareScope: _cachedShareScope, ...freshContext } = context;
-  return { ...freshContext, viewer };
+  return { ...freshContext, viewer, shareScope: await resolveShareScope(tx, viewer.id) };
 }
-

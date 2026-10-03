@@ -1,3 +1,4 @@
+import { visibleDeliveryChange } from './delivery-visibility.js';
 import { deliveryContext, pendingDeliveryChanges } from './delivery-context.js';
 import { proposeDeliveryChange, decideDeliveryChange } from './delivery-change-set.js';
 import { createDeliveryExecution } from './delivery-execution.js';
@@ -379,7 +380,7 @@ const typeDefs = /* GraphQL */ `
   type DeliveryMutationPayload { success: Boolean! message: String changeSet: DeliveryChangeSet issue: Issue }
   type Query {
     deliveryContext(id: String!): DeliveryContext!
-    deliveryChanges(first: Int, after: String, repository: String): DeliveryChangeConnection!
+    deliveryChanges(first: Int, after: String, repository: String, noRepository: Boolean, teamKey: String, bugsOnly: Boolean): DeliveryChangeConnection!
     viewer: User
     viewerCapabilities: ViewerCapabilities!
     workspaceSettings: WorkspaceSettings!
@@ -2301,9 +2302,13 @@ const resolvers = {
   }),
   DeliveryGrant: { policyJson: (parent: import('@prisma/client').DeliveryPackage) => JSON.stringify(parent.policy) },
   DeliveryChangeSet: {
-    viewerCanDecide: async (parent: { workId: string }, _args: unknown, context: GraphQLContext) => {
-      if (context.viewer?.actorKind !== 'HUMAN') return false;
-      try { await assertCanWriteIssue(context.prisma, context, parent.workId); return true; } catch { return false; }
+    viewerCanDecide: async (parent: import('@prisma/client').DeliveryChangeSet & { restricted?: boolean }, _args: unknown, context: GraphQLContext) => {
+      if (context.viewer?.actorKind !== 'HUMAN' || parent.restricted) return false;
+      try {
+        const ids = Object.keys((parent.before as { revisions?: Record<string, number> }).revisions ?? {});
+        for (const id of [parent.workId, ...ids]) await assertCanWriteIssue(context.prisma, context, id);
+        return true;
+      } catch { return false; }
     },
     work: (parent: import('@prisma/client').DeliveryChangeSet, _args: unknown, context: GraphQLContext) => context.prisma.issue.findUniqueOrThrow({ where: { id: parent.workId } }),
     changesJson: (parent: import('@prisma/client').DeliveryChangeSet) => JSON.stringify(parent.changes),
@@ -2311,7 +2316,7 @@ const resolvers = {
   },
   Query: {
     deliveryContext: (_parent: unknown, args: { id: string }, context: GraphQLContext) => deliveryContext(context, args.id),
-    deliveryChanges: (_parent: unknown, args: { first?: number; after?: string; repository?: string }, context: GraphQLContext) => pendingDeliveryChanges(context, args),
+    deliveryChanges: (_parent: unknown, args: { first?: number; after?: string; repository?: string; noRepository?: boolean; teamKey?: string; bugsOnly?: boolean }, context: GraphQLContext) => pendingDeliveryChanges(context, args),
     serverFeatures: (_parent: unknown, _args: unknown, context: GraphQLContext): ServerFeature[] => {
       assertSettingsAdmin(context);
       return listServerFeatures();
@@ -2773,7 +2778,7 @@ const resolvers = {
       }
 
       await assertCanReadIssue(context.prisma, context, work.id);
-      return getWorkContext(context.prisma, work.id);
+      return getWorkContext(context.prisma, work.id, buildReadableIssueWhere(context));
     },
     workHygiene: async (
       _parent: unknown,
@@ -3024,11 +3029,11 @@ const resolvers = {
     deliveryChangePropose: (_parent: unknown, args: { workId: string; expectedRevision: number; reason: string; changesJson: string }, context: GraphQLContext) => runMutationWithReason(async () => {
       requireAuthentication(context);
       const changeSet = await proposeDeliveryChange(context, { ...args, changes: JSON.parse(args.changesJson) });
-      return { success: true, changeSet };
+      return { success: true, changeSet: await visibleDeliveryChange(context.prisma, changeSet, buildReadableIssueWhere(context)) };
     }, { success: false, changeSet: null }),
     deliveryChangeDecide: (_parent: unknown, args: { id: string; approve: boolean; note?: string; ownerId?: string }, context: GraphQLContext) => runMutationWithReason(async () => {
       requireAuthentication(context);
-      return { success: true, changeSet: await decideDeliveryChange(context, args) };
+      return { success: true, changeSet: await visibleDeliveryChange(context.prisma, await decideDeliveryChange(context, args), buildReadableIssueWhere(context)) };
     }, { success: false, changeSet: null }),
     deliveryExecutionCreate: (_parent: unknown, args: { workId: string; unitKey: string; expectedGrantRevision: number }, context: GraphQLContext) => runMutationWithReason(async () => {
       requireAuthentication(context);

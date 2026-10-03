@@ -25,6 +25,7 @@ export interface WorkRef {
 }
 
 export interface CandidateWork {
+  deliveryRootId?: string | null;
   hasPendingDeliveryChange?: boolean;
   id: string;
   identifier: string;
@@ -187,6 +188,7 @@ export interface WorkContextWork {
   title: string;
   /** Current contract hash; compare with a run's contractRevision (INV-790). */
   contractDigest?: string | null;
+  deliveryRootId?: string | null;
   /** Requests to agents on this work, with their hand-off chain (INV-597). */
   agentRequests?: WorkContextRequest[];
   /** A bug candidate is triaged from the bug filter (INV-794). */

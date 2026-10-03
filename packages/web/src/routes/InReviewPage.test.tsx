@@ -11,6 +11,7 @@ const mockFetchMore = vi.fn().mockResolvedValue(undefined);
 const reviewItems = [
   {
     id: 'issue-r1',
+    deliveryRootId: null as string | null,
     identifier: 'INV-101',
     title: 'Ship batch review UI',
     description: 'Multi-select accept/return',
@@ -56,6 +57,7 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  reviewItems[0]!.deliveryRootId = null;
   mockRunReview.mockResolvedValue({
     data: {
       workReview: {
@@ -84,6 +86,20 @@ vi.mock('@apollo/client/react', () => ({
 }));
 
 describe('InReviewPage', () => {
+  it('routes inherited work to its package and excludes it from bulk acceptance', async () => {
+    reviewItems[0]!.deliveryRootId = 'delivery-root';
+    render(<MemoryRouter><InReviewPage /></MemoryRouter>);
+    const child = screen.getByRole('listitem', { name: 'INV-101 in review' });
+    expect(within(child).getByRole('button', { name: 'Review delivery package' })).toBeInTheDocument();
+    expect(within(child).queryByRole('button', { name: 'Accept', exact: true })).toBeNull();
+    expect(within(child).queryByRole('checkbox')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Select all visible' }));
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Bulk accept' }));
+    await waitFor(() => expect(mockRunReview).toHaveBeenCalledTimes(1));
+    expect(JSON.stringify(mockRunReview.mock.calls)).not.toContain('issue-r1');
+  });
+
   it('marks work whose contract has a proposed change waiting (INV-869)', () => {
     render(
       <MemoryRouter>

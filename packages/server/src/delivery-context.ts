@@ -1,3 +1,4 @@
+import { visibleDeliveryChange } from './delivery-visibility.js';
 import type { GraphQLContext } from './auth.js';
 import { assertCanReadIssue, assertCanWriteIssue, buildReadableIssueWhere } from './access-control.js';
 import { findWorkByIdOrIdentifier } from './context-service.js';
@@ -24,11 +25,11 @@ export async function deliveryContext(context: GraphQLContext, id: string) {
   return { work, grant, units, authorizationValid, authorizationMessage, viewerCanWrite };
 }
 
-export async function pendingDeliveryChanges(context: GraphQLContext, input: { first?: number | null; after?: string | null; repository?: string | null } = {}) {
+export async function pendingDeliveryChanges(context: GraphQLContext, input: { first?: number | null; after?: string | null; repository?: string | null; noRepository?: boolean | null; teamKey?: string | null; bugsOnly?: boolean | null } = {}) {
   const first = input.first ?? 50;
   if (!Number.isInteger(first) || first < 1 || first > 100) throw createValidationError('Choose first between 1 and 100.');
   if (input.after && !/^[0-9a-f-]{36}$/i.test(input.after)) throw createValidationError('Invalid delivery queue cursor.');
-  const nodes = await context.prisma.deliveryChangeSet.findMany({ where: { status: 'PENDING', ...(input.after ? { id: { gt: input.after } } : {}), work: { AND: [buildReadableIssueWhere(context) ?? {}, ...(input.repository ? [{ repository: input.repository }] : [])] } }, orderBy: { id: 'asc' }, take: first + 1 });
-  const page = nodes.slice(0, first);
+  const nodes = await context.prisma.deliveryChangeSet.findMany({ where: { status: 'PENDING', ...(input.after ? { id: { gt: input.after } } : {}), work: { AND: [buildReadableIssueWhere(context) ?? {}, ...(input.repository ? [{ repository: input.repository }] : []), ...(input.noRepository ? [{ repository: null }] : []), ...(input.teamKey ? [{ team: { key: input.teamKey } }] : []), ...(input.bugsOnly ? [{ labels: { some: { name: { equals: 'bug', mode: 'insensitive' as const } } } }] : [])] } }, orderBy: { id: 'asc' }, take: first + 1 });
+  const page = await Promise.all(nodes.slice(0, first).map((node) => visibleDeliveryChange(context.prisma, node, buildReadableIssueWhere(context))));
   return { nodes: page, pageInfo: { hasNextPage: nodes.length > first, endCursor: page.at(-1)?.id ?? null } };
 }

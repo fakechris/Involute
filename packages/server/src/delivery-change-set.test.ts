@@ -10,6 +10,9 @@ import { createIssue, updateIssue } from './issue-service.ts';
 import { testParentId } from './test-placement.ts';
 import { isWorkReadyForClaim, listReadyWork } from './context-service.ts';
 import { snapshotContract } from './evidence-contract.ts';
+import { visibleDeliveryChange } from './delivery-visibility.ts';
+import { readWorkPage } from './work-read-page.ts';
+import { resolveShareScope, upsertWorkShare } from './project-sharing.ts';
 import { reviewWork } from './run-service-review.ts';
 import { commitWork } from './claim-service.ts';
 import { createWorkLink } from './link-service.ts';
@@ -124,6 +127,49 @@ describe('delivery packages and candidate change sets', () => {
     expect(await isWorkReadyForClaim(prisma, tasks[1]!.id)).toBe(false);
     expect(await prisma.workReviewDecision.count({ where: { workId: { in: tasks.map((task) => task.id) }, decision: 'REJECTED' } })).toBe(3);
     expect(await prisma.workRun.count({ where: { workId: { in: tasks.map((task) => task.id) }, executionRevokedAt: null } })).toBe(0);
+  });
+
+  it('refreshes inherited authorization atomically when a contract-only proposal is approved', async () => {
+    const f = await fixture();
+    const plan = await proposeDeliveryChange(f.agentContext, { workId: f.work.id, expectedRevision: f.work.revision, reason: 'Approve package', changes: { policy } });
+    await decideDeliveryChange(f.humanContext, { id: plan.id, approve: true });
+    const old = await createDeliveryExecution(f.agentContext, { workId: f.work.id, unitKey: 'a', expectedGrantRevision: 1 });
+    const root = await prisma.issue.findUniqueOrThrow({ where: { id: f.work.id } });
+    const change = await proposeDeliveryChange(f.agentContext, { workId: root.id, expectedRevision: root.revision, reason: 'Clarify scope', changes: { contract: { scope: 'Explicit corrected scope' } } });
+    expect((change.changes as { policy?: unknown }).policy).toBeTruthy();
+    await decideDeliveryChange(f.humanContext, { id: change.id, approve: true });
+    const current = await createDeliveryExecution(f.agentContext, { workId: root.id, unitKey: 'a', expectedGrantRevision: 2 });
+    expect(current.id).not.toBe(old.id);
+    expect(current.scope).toBe('Explicit corrected scope');
+    expect(await isWorkReadyForClaim(prisma, old.id)).toBe(false);
+    expect(await isWorkReadyForClaim(prisma, current.id)).toBe(true);
+  });
+
+  it('preserves a cross-team editor share after refreshing permissions inside the transaction', async () => {
+    const f = await fixture();
+    const outsider = await prisma.user.create({ data: { name: 'Shared editor', email: 'shared-delivery@fixture.local', actorKind: 'HUMAN' } });
+    const project = await prisma.issue.findFirstOrThrow({ where: { kind: 'PROJECT', repository: f.work.repository, teamId: f.team.id } });
+    await upsertWorkShare(prisma, { workId: project.id, userId: outsider.id, role: 'EDITOR', actor: { actorId: f.human.id, actorKind: 'HUMAN' } });
+    const shared: GraphQLContext = { prisma, viewer: outsider, authMode: 'session', isTrustedSystem: false, shareScope: await resolveShareScope(prisma, outsider.id) };
+    const change = await proposeDeliveryChange(shared, { workId: f.work.id, expectedRevision: f.work.revision, reason: 'Approve shared package', changes: { policy } });
+    await decideDeliveryChange(shared, { id: change.id, approve: true, ownerId: f.human.id });
+    expect((await createDeliveryExecution(shared, { workId: f.work.id, unitKey: 'a', expectedGrantRevision: 1 })).deliveryRootId).toBe(f.work.id);
+  });
+
+  it('redacts a private merge snapshot and filters inherited evidence on every read page', async () => {
+    const f = await fixture(false);
+    const source = await createIssue(prisma, { teamId: f.team.id, parentId: f.work.parentId, title: 'Private source', repository: f.work.repository, acceptance: 'Secret contract' });
+    const change = await proposeDeliveryChange(f.humanContext, { workId: f.work.id, expectedRevision: f.work.revision, reason: 'Private consolidation detail', changes: { mergeSourceIds: [source.id] } });
+    const visible = await visibleDeliveryChange(prisma, change, { id: f.work.id });
+    expect(visible.restricted).toBe(true);
+    expect(JSON.stringify(visible)).not.toContain('Secret contract');
+    expect(JSON.stringify(visible)).not.toContain(source.id);
+    const page = await readWorkPage(prisma, f.work.id, 'delivery_changes', 10, null, { id: f.work.id });
+    expect(JSON.stringify(page)).not.toContain(source.id);
+    await decideDeliveryChange(f.humanContext, { id: change.id, approve: true });
+    await prisma.workEvidence.create({ data: { workId: source.id, supersededByWorkId: f.work.id, kind: 'ARTIFACT', url: 'https://example.com/private-evidence' } });
+    expect((await readWorkPage(prisma, f.work.id, 'evidence', 10, null, { id: f.work.id })).nodes).toHaveLength(0);
+    expect((await readWorkPage(prisma, f.work.id, 'evidence', 10)).nodes).toHaveLength(1);
   });
 
   it('rolls back all merge and contract changes on any revision conflict', async () => {

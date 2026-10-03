@@ -10,7 +10,7 @@ type Result = { success: boolean; message?: string | null };
 const CONTEXT = gql`query DeliveryPanel($id: String!) { deliveryContext(id: $id) { viewerCanWrite work { id identifier title revision acceptance repository supersededBy { id identifier } } grant { revision policyJson } authorizationValid authorizationMessage units { issue { id identifier title state { name } } technicalReady } } }`;
 const PROPOSE = gql`mutation DeliveryProposal($workId: String!, $expectedRevision: Int!, $reason: String!, $changesJson: String!) { deliveryChangePropose(workId: $workId, expectedRevision: $expectedRevision, reason: $reason, changesJson: $changesJson) { success message } }`;
 const CREATE = gql`mutation DeliveryExecution($workId: String!, $unitKey: String!, $expectedGrantRevision: Int!) { deliveryExecutionCreate(workId: $workId, unitKey: $unitKey, expectedGrantRevision: $expectedGrantRevision) { success message issue { id } } }`;
-const QUEUE = gql`query DeliveryQueue($after: String, $repository: String) { deliveryChanges(first: 30, after: $after, repository: $repository) { nodes { id viewerCanDecide reason changesJson beforeJson work { id identifier title revision acceptance repository assignee { id } team { memberships { nodes { user { id name actorKind } } } } } } pageInfo { hasNextPage endCursor } } }`;
+const QUEUE = gql`query DeliveryQueue($after: String, $repository: String, $noRepository: Boolean, $teamKey: String, $bugsOnly: Boolean) { deliveryChanges(first: 30, after: $after, repository: $repository, noRepository: $noRepository, teamKey: $teamKey, bugsOnly: $bugsOnly) { nodes { id viewerCanDecide reason changesJson beforeJson work { id identifier title revision acceptance repository assignee { id } team { memberships { nodes { user { id name actorKind } } } } } } pageInfo { hasNextPage endCursor } } }`;
 const DECIDE = gql`mutation DeliveryDecision($id: String!, $approve: Boolean!, $note: String, $ownerId: String) { deliveryChangeDecide(id: $id, approve: $approve, note: $note, ownerId: $ownerId) { success message } }`;
 
 function Plan({ policy, acceptance }: { policy: Policy; acceptance: string | null }) {
@@ -105,8 +105,8 @@ function ChangeCard({ change, refresh }: { change: Change; refresh: () => Promis
   </article>;
 }
 
-export function DeliveryChangeQueue({ repository }: { repository?: string | undefined }) {
-  const { data, error, refetch, fetchMore, loading } = useQuery<{ deliveryChanges: { nodes: Change[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } }>(QUEUE, { variables: { repository: repository || null }, notifyOnNetworkStatusChange: true });
+export function DeliveryChangeQueue({ repository, noRepository, teamKey, bugsOnly }: { repository?: string | undefined; noRepository?: boolean | undefined; teamKey?: string | null | undefined; bugsOnly?: boolean | undefined }) {
+  const { data, error, refetch, fetchMore, loading } = useQuery<{ deliveryChanges: { nodes: Change[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } }>(QUEUE, { variables: { repository: repository || null, noRepository: noRepository ?? false, teamKey: teamKey ?? null, bugsOnly: bugsOnly ?? false }, notifyOnNetworkStatusChange: true });
   if (error) return <p role="alert">Delivery changes could not be loaded: {error.message}</p>;
   const queue = data?.deliveryChanges;
   if (!queue?.nodes.length) return null;

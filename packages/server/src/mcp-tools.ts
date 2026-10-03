@@ -265,7 +265,7 @@ export async function callMcpTool(
         throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
       }
       await assertCanReadIssue(context.prisma, context, work.id);
-      const bundle = await getWorkContext(context.prisma, work.id);
+      const bundle = await getWorkContext(context.prisma, work.id, buildReadableIssueWhere(context));
       const linkedIds = [...bundle.ancestors, ...bundle.blockedBy, ...bundle.blocks].map((item) => item.id);
       const visible = new Set((await context.prisma.issue.findMany({ where: { AND: [{ id: { in: linkedIds } }, buildReadableIssueWhere(context) ?? {}] }, select: { id: true } })).map((item) => item.id));
       bundle.ancestors = bundle.ancestors.filter((item) => visible.has(item.id));

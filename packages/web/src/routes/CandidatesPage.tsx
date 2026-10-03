@@ -1192,7 +1192,7 @@ export function CandidatesPage() {
       ) : null}
 
       <div className="page-content observation-content">
-        {!showRejected ? <DeliveryChangeQueue repository={repositoryFilter?.eq} /> : null}
+        {!showRejected ? <DeliveryChangeQueue repository={repositoryFilter?.eq} noRepository={repositoryFilter?.isNull} teamKey={teamKey} bugsOnly={bugsOnly} /> : null}
         {showRejected ? (
           <RejectedWorkList teamKey={teamKey} />
         ) : error ? (

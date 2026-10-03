@@ -122,6 +122,7 @@ export async function findWorkByIdOrIdentifier(
 export async function getWorkContext(
   prisma: DatabaseClient,
   id: string,
+  readable: Prisma.IssueWhereInput = {},
 ): Promise<WorkContextBundle> {
   const work = await findWorkByIdOrIdentifier(prisma, id);
 
@@ -149,7 +150,7 @@ export async function getWorkContext(
       take: MAX_CONTEXT_RUNS,
     }),
     prisma.workEvidence.findMany({
-      where: { OR: [{ workId: work.id }, { supersededByWorkId: work.id }] },
+      where: { AND: [{ OR: [{ workId: work.id }, { supersededByWorkId: work.id }] }, { work: readable }] },
       include: { verifications: { orderBy: { createdAt: 'desc' }, take: 10 } },
       orderBy: [{ createdAt: 'desc' }],
       take: MAX_CONTEXT_RUNS,

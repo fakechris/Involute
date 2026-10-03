@@ -79,6 +79,10 @@ export async function proposeDeliveryChange(context: GraphQLContext, input: { wo
         else if (!current[field] && values.length) requested.contract[field] = values[0]!;
       }
     }
+    if (requested.policy === undefined && Object.keys(requested.contract).length) {
+      const grant = await tx.deliveryPackage.findUnique({ where: { workId: current.id } });
+      if (grant) requested.policy = grant.policy;
+    }
     const updatedContract = { ...current, ...requested.contract };
     if (!updatedContract.acceptance?.trim()) throw createValidationError('Acceptance cannot be cleared.');
     if (requested.policy !== undefined) requested.policy = parseDeliveryPolicy(requested.policy, updatedContract);

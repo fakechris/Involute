@@ -57,4 +57,3 @@ ALTER TABLE "DeliveryChangeSet" ADD CONSTRAINT "DeliveryChangeSet_proposedById_f
 
 -- AddForeignKey
 ALTER TABLE "DeliveryChangeSet" ADD CONSTRAINT "DeliveryChangeSet_decidedById_fkey" FOREIGN KEY ("decidedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
