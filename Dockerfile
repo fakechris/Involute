@@ -30,6 +30,10 @@ RUN pnpm install --frozen-lockfile \
 
 COPY . .
 
+# Local release builders pass the source SHA; unknown remains explicit otherwise.
+ARG INVOLUTE_BUILD_SHA
+ENV INVOLUTE_BUILD_SHA=$INVOLUTE_BUILD_SHA
+
 FROM base AS server
 
 RUN pnpm --filter @turnkeyai/involute-server build

@@ -108,6 +108,39 @@ describe('Involute MCP', () => {
     expect(guideText).toContain('involute-signature');
   });
 
+  it('describes canonical project binding and distinguishes unknown build metadata', async () => {
+    await testParentId(prisma, team.id);
+    const root = await prisma.issue.findFirstOrThrow({ where: { teamId: team.id, kind: 'PROJECT', repository: 'test/placement' } });
+    const reply = await mcpRpc('/mcp/readonly', { id: 'protocol', method: 'tools/call', params: {
+      name: 'protocol_get_guide', arguments: { project_id: root.id },
+    } });
+    const protocol = JSON.parse(reply.body.result.content[0].text).protocol;
+    expect(protocol).toMatchObject({ schemaVersion: 1, protocolVersion: 1,
+      mcpProtocolVersion: '2025-03-26', projectBinding: { rootId: root.id },
+      authScopeSummary: { readonly: true } });
+    expect(protocol).not.toHaveProperty('token');
+    const unknown = await mcpRpc('/mcp', { id: 'bad-root', method: 'tools/call', params: {
+      name: 'protocol_get_guide', arguments: { project_id: 'INV-999999999' },
+    } });
+    expect(unknown.body.error).toBeDefined();
+  });
+
+  it('returns a readable current revision on conflict and rejects state enums before UUID queries', async () => {
+    const work = await prisma.issue.create({ data: { identifier: 'INV-909090',
+      title: 'Protocol conflict fixture', teamId: team.id, stateId: ready.id,
+      commitmentStatus: 'CANDIDATE', kind: 'ISSUE', parentId: await testParentId(prisma, team.id) } });
+    const conflict = await mcpRpc('/mcp', { id: 'conflict', method: 'tools/call', params: {
+      name: 'work_update', arguments: { id: work.id, expected_revision: work.revision + 99, title: 'must not apply' },
+    } });
+    expect(conflict.body.error.message).toContain(`currentRevision: ${work.revision}`);
+    expect(conflict.body.error.data).toMatchObject({ code: 'REVISION_CONFLICT', currentRevision: work.revision });
+    expect((await prisma.issue.findUniqueOrThrow({ where: { id: work.id } })).title).toBe(work.title);
+    const invalidState = await mcpRpc('/mcp', { id: 'state-enum', method: 'tools/call', params: {
+      name: 'work_commit', arguments: { id: work.id, expected_revision: work.revision, state_id: 'UNSTARTED' },
+    } });
+    expect(invalidState.body.error.message).toContain('state_id must be a workflow state UUID');
+  });
+
   it('accepts revocable team-scoped agent tokens only on MCP', async () => {
     const token = 'inv_agent_test-credential';
     const agent = await prisma.user.create({
