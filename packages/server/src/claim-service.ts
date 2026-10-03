@@ -1,3 +1,4 @@
+import { assertDeliveryExecution } from './delivery-grant.js';
 import { randomUUID } from 'node:crypto';
 import { assertExecutionAuthority, assertWorkToken, hashWorkToken, mintWorkToken } from './work-execution.js';
 import type { ActorKind, Issue, Prisma, PrismaClient, User, WorkClaim, WorkLinkType } from '@prisma/client';
@@ -45,7 +46,7 @@ import { findWorkByIdOrIdentifier, explainWorkNotReady,
 import { enqueueWorkEvent } from './event-outbox.js';
 import { attachDecisionReceipt, type ReceiptInput } from './decision-receipt.js';
 import { createWorkLink } from './link-service.js';
-import { isLegalContains } from './graph-integrity.js';
+import { isLegalContains, lockWorkGraph } from './graph-integrity.js';
 import { createIssueWithAudit, mentionTexts, recordStateChangeAcceptance, type CreateIssueInput } from './issue-service.js';
 import { linkMentionedWork } from './mention-links.js';
 import { findOrCreateLabelIds, isBugWork, isResearchWork, namesResearch } from './labels.js';
@@ -537,14 +538,14 @@ async function placeForCommit(
 }
 
 export async function commitWork(
-  prisma: PrismaClient,
+  prisma: DatabaseClient,
   id: string,
   input: CommitWorkInput,
   actor: WriteActor = INTERNAL_WRITE_ACTOR,
 ): Promise<Issue> {
   assertActorCan(actor.actorKind, 'commit');
 
-  return prisma.$transaction(async (transaction) => {
+  const run = async (transaction: Prisma.TransactionClient) => {
     const existing = await requireWork(transaction, id);
 
     let commitIdempotencyId: string | null = null;
@@ -565,6 +566,8 @@ export async function commitWork(
       commitIdempotencyId = reservation.record.id;
     }
 
+    if (existing.supersededById) throw createValidationError('Commit the replacement work instead of this superseded item.');
+    if (await transaction.deliveryChangeSet.count({ where: { workId: id, status: 'PENDING' } })) throw createValidationError('Review the pending delivery change in Candidates before committing this work.');
     if (existing.commitmentStatus !== 'CANDIDATE') {
       throw createValidationError(WORK_NOT_CANDIDATE_MESSAGE);
     }
@@ -735,7 +738,8 @@ export async function commitWork(
     }
 
     return updated;
-  });
+  };
+  return '$transaction' in prisma ? prisma.$transaction(run) : run(prisma);
 }
 
 export async function rejectWork(
@@ -833,10 +837,19 @@ export async function claimWork(
 
   const result = await prisma.$transaction(async (transaction) => {
     const initial = await requireWork(transaction, id);
+    await lockWorkGraph(transaction, initial.teamId);
+    if (initial.deliveryRootId) {
+      const blockers = await transaction.workLink.findMany({ where: { toId: initial.id, type: 'BLOCKS' }, select: { fromId: true } });
+      const inherited = await transaction.issue.findMany({ where: { deliveryRootId: initial.deliveryRootId, deliveryGrantRevision: initial.deliveryGrantRevision }, select: { id: true } });
+      const ids = [...new Set([initial.deliveryRootId, ...blockers.map((link) => link.fromId), ...inherited.filter((item) => item.id !== initial.id).map((item) => item.id)])].sort();
+      await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ANY(${ids}::uuid[]) ORDER BY id FOR SHARE`;
+    }
     // Same Issue → Claim lock order as run snapshots and verification.
-    await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR UPDATE`;
+    await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR NO KEY UPDATE`;
     const work = await requireWork(transaction, initial.id);
     await assertExecutionAuthority(transaction, actor, work, 'claim');
+    if (work.supersededById) throw createValidationError('Claim the replacement work instead of this superseded item.');
+    await assertDeliveryExecution(transaction, work);
 
     if (work.commitmentStatus !== 'COMMITTED') {
       throw createValidationError(WORK_NOT_COMMITTED_MESSAGE);

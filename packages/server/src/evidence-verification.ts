@@ -1,3 +1,5 @@
+import { deliveryTechnicalContract } from './delivery-grant.js';
+import type { AcceptanceContract } from './evidence-contract.js';
 import { randomUUID } from 'node:crypto';
 import type { Issue, Prisma, PrismaClient, WorkRun } from '@prisma/client';
 import { digest, snapshotContract, VERIFICATION_MAX_AGE_MS } from './evidence-contract.js';
@@ -10,12 +12,14 @@ const RETRY_MS = 5 * 60_000;
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 
 /** Called while holding the issue row lock, after network IO has finished. */
-export async function assessVerifiedEvidence(tx: DatabaseClient, work: Issue, run: WorkRun | null) {
+export async function assessVerifiedEvidence(tx: DatabaseClient, work: Issue, run: WorkRun | null, technical?: AcceptanceContract) {
   const reasons: string[] = [];
   const current = snapshotContract(work);
-  if (!current.acceptance) reasons.push('acceptance has no structured required criteria');
+  const criteria = technical ?? current.acceptance;
+  if (!criteria) reasons.push('acceptance has no structured required criteria');
   if (!run || run.status !== 'COMPLETED' || !run.claimSnapshotId || !run.commitSha || !run.pullRequestNumber) reasons.push('completed execution binding is missing');
   if (run && (run.contractRevision !== current.contractRevision || run.acceptanceDigest !== current.acceptanceDigest || run.repository !== work.repository)) reasons.push('execution contract is stale');
+  if (run?.executionRevokedAt) reasons.push('execution authority was revoked');
   if (!run) return { eligible: false, reasons, covered: [] as string[] };
   const latest = await tx.workRun.findFirst({ where: { workId: work.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
   if (latest?.id !== run.id) reasons.push('a newer execution attempt exists');
@@ -42,7 +46,7 @@ export async function assessVerifiedEvidence(tx: DatabaseClient, work: Issue, ru
     }
     if (Array.isArray(observation?.covered)) for (const id of observation.covered) if (typeof id === 'string') covered.add(id);
   }
-  for (const item of current.acceptance?.criteria ?? []) if (item.required && !covered.has(item.id)) reasons.push(`missing required acceptance ${item.id}`);
+  for (const item of criteria?.criteria ?? []) if (item.required && !covered.has(item.id)) reasons.push(`missing required acceptance ${item.id}`);
   return { eligible: reasons.length === 0, reasons, covered: [...covered].sort() };
 }
 
@@ -60,6 +64,8 @@ export async function verifyEvidence(prisma: PrismaClient, evidenceId: string, o
   try {
     const run = evidence.run;
     const contract = snapshotContract(evidence.work);
+    const technical = evidence.work.deliveryRootId ? await deliveryTechnicalContract(prisma, evidence.work).catch(() => null) : null;
+    const verificationContract = technical ?? contract.acceptance;
     const binding = {
       evidenceId: evidence.id, verifierId: VERIFIER_ID, verifierVersion: VERIFIER_VERSION,
       repository: run?.repository ?? null, commitSha: run?.commitSha ?? null, runId: run?.id ?? null,
@@ -68,9 +74,9 @@ export async function verifyEvidence(prisma: PrismaClient, evidenceId: string, o
     const unavailable: VerificationObservation = { status: 'UNAVAILABLE', failureCode: 'EXECUTION_NOT_BOUND',
       externalRunId: null, checks: [], covered: [], source: {} };
     await prisma.evidenceVerification.create({ data: { ...binding, status: 'PENDING', resultDigest: digest({ status: 'PENDING' }), result: { status: 'PENDING' } } });
-    const observed = run?.repository && run.commitSha && run.pullRequestNumber && contract.acceptance && run.contractRevision === contract.contractRevision
+    const observed = run?.repository && run.commitSha && run.pullRequestNumber && verificationContract && run.contractRevision === contract.contractRevision
       ? await verifyGitHubEvidence({ url: evidence.url, repository: run.repository, commitSha: run.commitSha,
-          pullRequestNumber: run.pullRequestNumber, acceptance: contract.acceptance }, options)
+          pullRequestNumber: run.pullRequestNumber, acceptance: verificationContract }, options)
       : unavailable;
 
     return await prisma.$transaction(async tx => {

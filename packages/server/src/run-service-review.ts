@@ -1,3 +1,5 @@
+import { prepareDeliveryAcceptance, acceptDeliveryChildren, returnDeliveryChildren } from './delivery-review.js';
+import { lockWorkGraph } from './graph-integrity.js';
 import type { Issue, PrismaClient, WorkReviewDecision } from '@prisma/client';
 
 import { enqueueWorkEvent } from './inv11-hooks.js';
@@ -42,8 +44,11 @@ export async function reviewWork(
 
   return prisma.$transaction(async (transaction) => {
     const initial = await requireWork(transaction, id);
-    await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR UPDATE`;
+    await lockWorkGraph(transaction, initial.teamId);
+    await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR NO KEY UPDATE`;
     const work = await requireWork(transaction, initial.id);
+    if (work.deliveryRootId) throw createValidationError('Review the delivery package to accept or return its implementation units together.');
+    if (work.supersededById) throw createValidationError('Review the replacement work instead of this superseded item.');
     let reviewIdempotencyId: string | null = null;
     if (input.idempotencyKey) {
       const reservation = await reserveWorkIdempotency(transaction, {
@@ -76,6 +81,7 @@ export async function reviewWork(
       select: { type: true },
     });
     if (state?.type !== 'REVIEW') throw createValidationError(WORK_REVIEW_REQUIRED_MESSAGE);
+    const deliveryTasks = input.decision === 'ACCEPTED' ? await prepareDeliveryAcceptance(transaction, work) : [];
     await claimIssueRevision(transaction, work.id, input.expectedRevision);
 
     const targetType = input.decision === 'ACCEPTED' ? 'COMPLETED' : 'UNSTARTED';
@@ -109,6 +115,8 @@ export async function reviewWork(
         workId: work.id,
       },
     });
+    await acceptDeliveryChildren(transaction, deliveryTasks, work, targetState.id, actor);
+    if (input.decision === 'REJECTED') await returnDeliveryChildren(transaction, work, targetState.id, actor, input.reason ?? null);
     await recordWorkAudit(transaction, {
       actor,
       after: selectIssueSnapshot(updated),

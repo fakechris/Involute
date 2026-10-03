@@ -206,6 +206,9 @@ model User {
   // and left no earlier trace; never backfilled with a guess.
   createdAt      DateTime? @default(now())
   issuedCredentials AgentCredential[] @relation("CredentialIssuer")
+  deliveryApprovals DeliveryPackage[] @relation("DeliveryApprover")
+  deliveryProposals DeliveryChangeSet[] @relation("DeliveryProposer")
+  deliveryDecisions DeliveryChangeSet[] @relation("DeliveryDecider")
   workShares     WorkShare[] @relation("WorkShareUser")
   workSharesMade WorkShare[] @relation("WorkShareCreator")
   notificationPrefs Json    @default("{}")
@@ -342,6 +345,15 @@ model Issue {
   contractAmendments ContractAmendment[]
   autoAcceptEvaluations WorkAutoAcceptEvaluation[]
   notifications     Notification[]
+  // Execution provenance survives removal of a package: missing authorization fails closed.
+  deliveryRootId String? @db.Uuid
+  deliveryUnitKey String?
+  deliveryGrantRevision Int?
+  deliveryPackage DeliveryPackage?
+  deliveryChanges DeliveryChangeSet[]
+  supersededById String? @db.Uuid
+  supersededBy Issue? @relation("SupersededWork", fields: [supersededById], references: [id], onDelete: Restrict)
+  supersededWorks Issue[] @relation("SupersededWork")
   // Phase 2: GitHub webhook PR provenance tracking
   stateSourcePrId      String?
   lastAppliedEventTime DateTime?
@@ -366,10 +378,42 @@ model Issue {
   @@index([title(ops: raw("gin_trgm_ops"))], map: "Issue_title_trgm_idx", type: Gin)
   @@index([description(ops: raw("gin_trgm_ops"))], map: "Issue_description_trgm_idx", type: Gin)
   @@index([searchVector], map: "Issue_searchVector_idx", type: Gin)
+  @@unique([deliveryRootId, deliveryUnitKey, deliveryGrantRevision])
+
 }
 
 /// Semantic search vector of a work item (INV-927): one per item and model,
 /// rebuilt in the background when the embedded text (contentHash) changes.
+model DeliveryPackage {
+  workId String @id @db.Uuid
+  work Issue @relation(fields: [workId], references: [id], onDelete: Cascade)
+  revision Int @default(1)
+  policy Json
+  contractDigest String
+  approvedById String @db.Uuid
+  approvedBy User @relation("DeliveryApprover", fields: [approvedById], references: [id], onDelete: Restrict)
+  approvedAt DateTime @default(now())
+  revokedAt DateTime?
+}
+
+model DeliveryChangeSet {
+  id String @id @default(uuid()) @db.Uuid
+  workId String @db.Uuid
+  work Issue @relation(fields: [workId], references: [id], onDelete: Cascade)
+  status String @default("PENDING")
+  reason String
+  changes Json
+  before Json
+  proposedById String @db.Uuid
+  proposedBy User @relation("DeliveryProposer", fields: [proposedById], references: [id], onDelete: Restrict)
+  decidedById String? @db.Uuid
+  decidedBy User? @relation("DeliveryDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+  decisionNote String?
+  createdAt DateTime @default(now())
+  decidedAt DateTime?
+  @@index([status, createdAt])
+}
+
 model IssueEmbedding {
   issueId     String   @db.Uuid
   issue       Issue    @relation(fields: [issueId], references: [id], onDelete: Cascade)

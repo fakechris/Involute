@@ -1,3 +1,7 @@
+import { deliveryContext, pendingDeliveryChanges } from './delivery-context.js';
+import { proposeDeliveryChange, decideDeliveryChange } from './delivery-change-set.js';
+import { createDeliveryExecution } from './delivery-execution.js';
+import { deliveryLinkBlocks } from './delivery-readiness.js';
 import type {
   AgentCredential,
   AgentRequest,
@@ -366,7 +370,16 @@ const typeDefs = /* GraphQL */ `
     commentId: String
   }
 
+  type DeliveryGrant { revision: Int! policyJson: String! approvedAt: DateTime! approvedById: String! revokedAt: DateTime }
+  type DeliveryExecution { issue: Issue! technicalReady: Boolean! }
+  type DeliveryContext { viewerCanWrite: Boolean! work: Issue! grant: DeliveryGrant units: [DeliveryExecution!]! authorizationValid: Boolean! authorizationMessage: String! }
+  type DeliveryChangeSet { viewerCanDecide: Boolean! id: ID! work: Issue! status: String! reason: String! changesJson: String! beforeJson: String! createdAt: DateTime! }
+  type DeliveryPageInfo { hasNextPage: Boolean! endCursor: String }
+  type DeliveryChangeConnection { nodes: [DeliveryChangeSet!]! pageInfo: DeliveryPageInfo! }
+  type DeliveryMutationPayload { success: Boolean! message: String changeSet: DeliveryChangeSet issue: Issue }
   type Query {
+    deliveryContext(id: String!): DeliveryContext!
+    deliveryChanges(first: Int, after: String, repository: String): DeliveryChangeConnection!
     viewer: User
     viewerCapabilities: ViewerCapabilities!
     workspaceSettings: WorkspaceSettings!
@@ -423,6 +436,9 @@ const typeDefs = /* GraphQL */ `
   }
 
   type Mutation {
+    deliveryChangePropose(workId: String!, expectedRevision: Int!, reason: String!, changesJson: String!): DeliveryMutationPayload!
+    deliveryChangeDecide(id: String!, approve: Boolean!, note: String, ownerId: String): DeliveryMutationPayload!
+    deliveryExecutionCreate(workId: String!, unitKey: String!, expectedGrantRevision: Int!): DeliveryMutationPayload!
     issueCreate(input: IssueCreateInput!): IssueCreatePayload!
     bugReport(input: BugReportInput!): BugReportPayload!
     issueUpdate(id: String!, input: IssueUpdateInput!): IssueUpdatePayload!
@@ -996,6 +1012,11 @@ const typeDefs = /* GraphQL */ `
     ready queue. Batched when read through the issues connection (INV-679).
     """
     openBlockers: [Issue!]!
+    supersededBy: Issue
+    hasPendingDeliveryChange: Boolean!
+    deliveryRootId: String
+    deliveryUnitKey: String
+    deliveryGrantRevision: Int
     """
     Identifiers this item's text mentions next to dependency wording ("依赖",
     "blocked by", …) that have no BLOCKS edge either way — a prompt to record
@@ -1620,6 +1641,7 @@ const typeDefs = /* GraphQL */ `
   }
 
   input IssueFilter {
+    includeSuperseded: Boolean
     text: String
     stateIds: [String!]
     assigneeIds: [String!]
@@ -2277,7 +2299,19 @@ const resolvers = {
     parseValue: (value) => value,
     parseLiteral: (ast) => valueFromASTUntyped(ast),
   }),
+  DeliveryGrant: { policyJson: (parent: import('@prisma/client').DeliveryPackage) => JSON.stringify(parent.policy) },
+  DeliveryChangeSet: {
+    viewerCanDecide: async (parent: { workId: string }, _args: unknown, context: GraphQLContext) => {
+      if (context.viewer?.actorKind !== 'HUMAN') return false;
+      try { await assertCanWriteIssue(context.prisma, context, parent.workId); return true; } catch { return false; }
+    },
+    work: (parent: import('@prisma/client').DeliveryChangeSet, _args: unknown, context: GraphQLContext) => context.prisma.issue.findUniqueOrThrow({ where: { id: parent.workId } }),
+    changesJson: (parent: import('@prisma/client').DeliveryChangeSet) => JSON.stringify(parent.changes),
+    beforeJson: (parent: import('@prisma/client').DeliveryChangeSet) => JSON.stringify(parent.before),
+  },
   Query: {
+    deliveryContext: (_parent: unknown, args: { id: string }, context: GraphQLContext) => deliveryContext(context, args.id),
+    deliveryChanges: (_parent: unknown, args: { first?: number; after?: string; repository?: string }, context: GraphQLContext) => pendingDeliveryChanges(context, args),
     serverFeatures: (_parent: unknown, _args: unknown, context: GraphQLContext): ServerFeature[] => {
       assertSettingsAdmin(context);
       return listServerFeatures();
@@ -2402,6 +2436,7 @@ const resolvers = {
       const teamKey = args.teamFilter?.key?.eq;
       const where: Prisma.IssueWhereInput = {
         commitmentStatus: 'CANDIDATE',
+        supersededById: null,
         ...(teamKey ? { team: { is: { key: teamKey } } } : {}),
         ...(readableWhere ? readableWhere : {}),
       };
@@ -2986,6 +3021,19 @@ const resolvers = {
     },
   },
   Mutation: {
+    deliveryChangePropose: (_parent: unknown, args: { workId: string; expectedRevision: number; reason: string; changesJson: string }, context: GraphQLContext) => runMutationWithReason(async () => {
+      requireAuthentication(context);
+      const changeSet = await proposeDeliveryChange(context, { ...args, changes: JSON.parse(args.changesJson) });
+      return { success: true, changeSet };
+    }, { success: false, changeSet: null }),
+    deliveryChangeDecide: (_parent: unknown, args: { id: string; approve: boolean; note?: string; ownerId?: string }, context: GraphQLContext) => runMutationWithReason(async () => {
+      requireAuthentication(context);
+      return { success: true, changeSet: await decideDeliveryChange(context, args) };
+    }, { success: false, changeSet: null }),
+    deliveryExecutionCreate: (_parent: unknown, args: { workId: string; unitKey: string; expectedGrantRevision: number }, context: GraphQLContext) => runMutationWithReason(async () => {
+      requireAuthentication(context);
+      return { success: true, issue: await createDeliveryExecution(context, args) };
+    }, { success: false, issue: null }),
     issueCreate: async (
       _parent: unknown,
       args: { input: CreateIssueInput },
@@ -4709,6 +4757,8 @@ const resolvers = {
     },
   },
   Issue: {
+    hasPendingDeliveryChange: async (parent: IssueParent, _args: unknown, context: GraphQLContext) => (await context.prisma.deliveryChangeSet.count({ where: { workId: parent.id, status: 'PENDING' } })) > 0,
+    supersededBy: async (parent: IssueParent, _args: unknown, context: GraphQLContext) => parent.supersededById ? context.prisma.issue.findFirst({ where: { AND: [{ id: parent.supersededById }, buildReadableIssueWhere(context) ?? {}] } }) : null,
     priority: (parent: IssueParent): number => parent.priority,
     state: async (
       parent: IssueParent,
@@ -4854,10 +4904,14 @@ const resolvers = {
       _args: Record<string, never>,
       context: GraphQLContext,
     ): Promise<Issue[]> => {
-      if (parent.incomingLinks) return parent.incomingLinks.flatMap((link) => (link.from ? [link.from] : []));
       const query = buildOpenBlockerLinkQuery(buildReadableIssueWhere(context));
-      const links = await context.prisma.workLink.findMany({ ...query, where: { ...query.where, toId: parent.id } });
-      return links.map((link) => link.from);
+      const links = parent.deliveryRootId
+        ? await context.prisma.workLink.findMany({ where: { toId: parent.id, type: 'BLOCKS', from: buildReadableIssueWhere(context) ?? {} }, include: { from: true } })
+        : parent.incomingLinks ?? await context.prisma.workLink.findMany({ ...query, where: { ...query.where, toId: parent.id } });
+      if (!parent.deliveryRootId) return links.flatMap((link) => link.from ? [link.from] : []);
+      const blocked = [];
+      for (const link of links) if (link.from && await deliveryLinkBlocks(context.prisma, { fromId: link.from.id, toId: parent.id })) blocked.push(link.from);
+      return blocked;
     },
     pendingContractAmendment: (
       parent: IssueParent,

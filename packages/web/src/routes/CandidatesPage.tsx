@@ -1,3 +1,4 @@
+import { DeliveryChangeQueue } from '../components/DeliveryPanel';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -910,7 +911,7 @@ export function CandidatesPage() {
   }
 
   const snoozedCandidates = useMemo(() => candidates.filter(isSnoozed), [candidates]);
-  const activeCandidates = useMemo(() => candidates.filter((c) => !isSnoozed(c)), [candidates]);
+  const activeCandidates = useMemo(() => candidates.filter((c) => !isSnoozed(c) && !c.hasPendingDeliveryChange), [candidates]);
 
   const filteredActiveCandidates = useMemo(() => {
     if (!selectedProject) return activeCandidates;
@@ -1191,6 +1192,7 @@ export function CandidatesPage() {
       ) : null}
 
       <div className="page-content observation-content">
+        {!showRejected ? <DeliveryChangeQueue repository={repositoryFilter?.eq} /> : null}
         {showRejected ? (
           <RejectedWorkList teamKey={teamKey} />
         ) : error ? (

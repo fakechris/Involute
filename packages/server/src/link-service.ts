@@ -51,6 +51,8 @@ export async function createWorkLink(
     throw createNotFoundError(WORK_LINK_ENDPOINT_NOT_FOUND_MESSAGE);
   }
 
+  if (input.type === 'BLOCKS' && (fromIssue.supersededById || toIssue.supersededById)) throw createValidationError('Use the replacement work for new blocking dependencies.');
+
   if (fromIssue.teamId !== toIssue.teamId) {
     throw createValidationError(WORK_LINK_TEAM_MISMATCH_MESSAGE);
   }

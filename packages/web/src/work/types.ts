@@ -25,6 +25,7 @@ export interface WorkRef {
 }
 
 export interface CandidateWork {
+  hasPendingDeliveryChange?: boolean;
   id: string;
   identifier: string;
   title: string;

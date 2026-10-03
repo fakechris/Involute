@@ -252,6 +252,11 @@ export async function updateIssue(
       throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
     }
 
+    if (existingIssue.deliveryRootId && ['acceptance', 'scope', 'constraints', 'outcome', 'verification', 'repository', 'parentId', 'kind'].some((field) => Object.prototype.hasOwnProperty.call(input, field))) {
+      throw createValidationError('Inherited execution contracts are changed through their delivery package in Candidates.');
+    }
+    if (existingIssue.supersededById && input.stateId !== undefined) throw createValidationError('Change the replacement work instead of reopening a superseded item.');
+
     // Agents shape candidate work via propose, but the committed contract is
     // human-owned: once COMMITTED, acceptance/scope/verification/outcome/
     // constraints can only be rewritten by a human (via commit or human update).
@@ -319,6 +324,10 @@ export async function updateIssue(
 
       if (state.teamId !== existingIssue.teamId) {
         throw createValidationError(WORKFLOW_STATE_TEAM_UPDATE_MISMATCH_MESSAGE);
+      }
+
+      if (state.type === 'COMPLETED' && state.id !== existingIssue.stateId && (existingIssue.deliveryRootId || await transaction.deliveryPackage.count({ where: { workId: existingIssue.id } }))) {
+        throw createValidationError('Accept the delivery package from In Review so every implementation unit is checked together.');
       }
 
       if (isAcceptStateType(state.type)) {

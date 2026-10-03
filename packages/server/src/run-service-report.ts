@@ -1,3 +1,4 @@
+import { assertDeliveryExecution } from './delivery-grant.js';
 import { assertExecutionAuthority, assertWorkToken } from './work-execution.js';
 import { snapshotContract, SHA_PATTERN } from './evidence-contract.js';
 import type { Issue, PrismaClient, WorkClaim, WorkRun } from '@prisma/client';
@@ -55,6 +56,7 @@ export async function reportRun(
     await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR UPDATE`;
     const work = await requireWork(transaction, initial.id);
     await assertExecutionAuthority(transaction, actor, work, 'report');
+    if (!['FAILED', 'BLOCKED'].includes(String(input.status ?? 'RUNNING').toUpperCase())) await assertDeliveryExecution(transaction, work);
     let idempotencyId: string | null = null;
     if (input.idempotencyKey) {
       const reservation = await reserveWorkIdempotency(transaction, {

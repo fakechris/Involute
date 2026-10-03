@@ -43,6 +43,7 @@ export const CANDIDATES_PAGE_QUERY = gql`
         title
         description
         commitmentStatus
+        hasPendingDeliveryChange
         kind
         revision
         outcome
