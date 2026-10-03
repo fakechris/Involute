@@ -3028,7 +3028,9 @@ const resolvers = {
   Mutation: {
     deliveryChangePropose: (_parent: unknown, args: { workId: string; expectedRevision: number; reason: string; changesJson: string }, context: GraphQLContext) => runMutationWithReason(async () => {
       requireAuthentication(context);
-      const changeSet = await proposeDeliveryChange(context, { ...args, changes: JSON.parse(args.changesJson) });
+      let changes: unknown;
+      try { changes = JSON.parse(args.changesJson); } catch { throw createValidationError('changesJson must be valid JSON.'); }
+      const changeSet = await proposeDeliveryChange(context, { ...args, changes });
       return { success: true, changeSet: await visibleDeliveryChange(context.prisma, changeSet, buildReadableIssueWhere(context)) };
     }, { success: false, changeSet: null }),
     deliveryChangeDecide: (_parent: unknown, args: { id: string; approve: boolean; note?: string; ownerId?: string }, context: GraphQLContext) => runMutationWithReason(async () => {

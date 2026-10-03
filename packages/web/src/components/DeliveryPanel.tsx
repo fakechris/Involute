@@ -13,6 +13,14 @@ const CREATE = gql`mutation DeliveryExecution($workId: String!, $unitKey: String
 const QUEUE = gql`query DeliveryQueue($after: String, $repository: String, $noRepository: Boolean, $teamKey: String, $bugsOnly: Boolean) { deliveryChanges(first: 30, after: $after, repository: $repository, noRepository: $noRepository, teamKey: $teamKey, bugsOnly: $bugsOnly) { nodes { id viewerCanDecide reason changesJson beforeJson work { id identifier title revision acceptance repository assignee { id } team { memberships { nodes { user { id name actorKind } } } } } } pageInfo { hasNextPage endCursor } } }`;
 const DECIDE = gql`mutation DeliveryDecision($id: String!, $approve: Boolean!, $note: String, $ownerId: String) { deliveryChangeDecide(id: $id, approve: $approve, note: $note, ownerId: $ownerId) { success message } }`;
 
+function parseObject<T>(raw: string): T | null {
+  try { const value: unknown = JSON.parse(raw); return value && typeof value === 'object' && !Array.isArray(value) ? value as T : null; } catch { return null; }
+}
+function parsePolicy(raw: string): Policy | null {
+  const value = parseObject<Policy>(raw);
+  return value && Array.isArray(value.environments) && Array.isArray(value.units) && value.units.every((unit) => unit && Array.isArray(unit.criteria) && Array.isArray(unit.paths) && Array.isArray(unit.actions) && Array.isArray(unit.dependsOn) && Array.isArray(unit.checks)) ? value : null;
+}
+
 function Plan({ policy, acceptance }: { policy: Policy; acceptance: string | null }) {
   const criteria = (acceptance ?? '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   return <div><p>Deployment environments: {policy.environments.join(', ') || 'None approved'}</p>{policy.units.map((unit) => <article key={unit.key} className="observation-card">
@@ -37,7 +45,7 @@ function PolicyEditor({ value, onChange, acceptance }: { value: Policy; onChange
       <div>Existing acceptance criteria{criteria.map((criterion, criterionIndex) => <label key={criterionIndex}><input type="checkbox" checked={unit.criteria.includes(criterionIndex)} onChange={(event) => update(index, { criteria: event.target.checked ? [...unit.criteria, criterionIndex] : unit.criteria.filter((item) => item !== criterionIndex) })} />{criterion}</label>)}</div>
       <div>Allowed actions{['edit', 'test', 'pull_request', 'merge', 'deploy'].map((action) => <label key={action}><input type="checkbox" checked={unit.actions.includes(action)} onChange={(event) => update(index, { actions: event.target.checked ? [...unit.actions, action] : unit.actions.filter((item) => item !== action) })} />{action}</label>)}</div>
       <label>Predecessor keys (comma separated)<input defaultValue={unit.dependsOn.join(', ')} onBlur={(event) => update(index, { dependsOn: list(event.target.value) })} /></label>
-      {unit.checks.map((check, checkIndex) => <div key={checkIndex}><label>GitHub workflow ID<input type="number" min="1" value={check.workflowId || ''} onChange={(event) => update(index, { checks: unit.checks.map((item, position) => position === checkIndex ? { ...item, workflowId: Number(event.target.value) } : item) })} /></label><label>Exact CI job name<input value={check.job} onChange={(event) => update(index, { checks: unit.checks.map((item, position) => position === checkIndex ? { ...item, job: event.target.value } : item) })} /></label><button type="button" onClick={() => update(index, { checks: unit.checks.filter((_, position) => position !== checkIndex) })}>Remove check</button></div>)}
+      {unit.checks.map((check, checkIndex) => <div key={checkIndex}><label>GitHub workflow ID<input type="number" min="1" step="1" value={check.workflowId || ''} onChange={(event) => update(index, { checks: unit.checks.map((item, position) => position === checkIndex ? { ...item, workflowId: Number(event.target.value) } : item) })} /></label><label>Exact CI job name<input value={check.job} onChange={(event) => update(index, { checks: unit.checks.map((item, position) => position === checkIndex ? { ...item, job: event.target.value } : item) })} /></label><button type="button" onClick={() => update(index, { checks: unit.checks.filter((_, position) => position !== checkIndex) })}>Remove check</button></div>)}
       <button type="button" onClick={() => update(index, { checks: [...unit.checks, { workflowId: 0, job: '' }] })}>Add CI check</button>
       <button type="button" onClick={() => onChange({ ...value, units: value.units.filter((_, position) => position !== index) })}>Remove implementation</button>
     </fieldset>)}
@@ -59,7 +67,9 @@ export function DeliveryPanel({ workId }: { workId: string }) {
   const context = data?.deliveryContext;
   if (error) return <p role="alert">Delivery authorization could not be loaded: {error.message}</p>;
   if (!context) return null;
-  const policy = context.grant ? JSON.parse(context.grant.policyJson) as Policy : null;
+  const policy = context.grant ? parsePolicy(context.grant.policyJson) : null;
+  if (context.grant && !policy) return <p role="alert">The delivery policy could not be read. Refresh or ask an administrator to inspect the record.</p>;
+  const invalidChecks = draftPolicy?.units.some((unit) => unit.checks.some((check) => !Number.isSafeInteger(check.workflowId) || check.workflowId < 1 || !check.job.trim())) ?? false;
   return <section className="work-context__section delivery-panel"><h2>Delivery authorization</h2>
     <p>{context.authorizationMessage}</p>{context.work.supersededBy ? <p>Consolidated into <Link to={`/work/${context.work.supersededBy.id}`}>{context.work.supersededBy.identifier}</Link>. History and evidence are retained.</p> : null}<p>Repository: {context.work.repository ?? 'Not set'}</p>
     {policy ? <><Plan policy={policy} acceptance={context.work.acceptance} />{context.viewerCanWrite ? policy.units.map((unit) => <button key={unit.key} type="button" disabled={!context.authorizationValid || creating.loading} onClick={async () => {
@@ -73,8 +83,9 @@ export function DeliveryPanel({ workId }: { workId: string }) {
       {['outcome', 'constraints', 'verification'].map((field) => <label key={field}>Replacement {field} (leave blank to keep)<textarea value={otherContract[field] ?? ''} onChange={(event) => setOtherContract({ ...otherContract, [field]: event.target.value })} /></label>)}
       <label><input type="checkbox" checked={draftPolicy !== null} onChange={(event) => setDraftPolicy(event.target.checked ? policy ?? { units: [], environments: [] } : null)} />Propose implementation authority</label>
       {draftPolicy ? <PolicyEditor value={draftPolicy} onChange={setDraftPolicy} acceptance={acceptance.trim() || context.work.acceptance} /> : null}
+      {invalidChecks ? <p role="alert">Each CI check needs a positive whole workflow ID and an exact job name.</p> : null}
       <label>Issues to consolidate (identifiers separated by commas)<input value={sources} onChange={(event) => setSources(event.target.value)} /></label>
-      <button type="button" disabled={proposing.loading || !reason.trim() || (!scope.trim() && !acceptance.trim() && !sources.trim() && !draftPolicy && !Object.values(otherContract).some((value) => value.trim()))} onClick={async () => {
+      <button type="button" disabled={proposing.loading || invalidChecks || !reason.trim() || (!scope.trim() && !acceptance.trim() && !sources.trim() && !draftPolicy && !Object.values(otherContract).some((value) => value.trim()))} onClick={async () => {
         try { const result = (await propose({ variables: { workId: context.work.id, expectedRevision: context.work.revision, reason, changesJson: JSON.stringify({ ...(draftPolicy ? { policy: draftPolicy } : {}), contract: { ...Object.fromEntries(Object.entries(otherContract).filter(([, value]) => value.trim())), ...(scope.trim() ? { scope } : {}), ...(acceptance.trim() ? { acceptance } : {}) }, mergeSourceIds: sources.split(',').map((id) => id.trim()).filter(Boolean) }) } })).data?.deliveryChangePropose; setMessage(result?.success ? 'Proposed. Review this change in Candidates.' : result?.message ?? 'Could not propose change.'); await refetch(); } catch (failure) { setMessage(String(failure)); }
       }}>Propose delivery change</button>
     </details> : null}{message ? <p role="status">{message}</p> : null}
@@ -87,8 +98,9 @@ function ChangeCard({ change, refresh }: { change: Change; refresh: () => Promis
   const [note, setNote] = useState('');
   const [ownerId, setOwnerId] = useState(change.work.assignee?.id ?? '');
   const [message, setMessage] = useState('');
-  const proposal = JSON.parse(change.changesJson) as { contract: Record<string, string | null>; policy?: Policy; mergeSourceIds: string[] };
-  const before = JSON.parse(change.beforeJson) as { policy?: Policy | null; contracts: Record<string, Record<string, string | null>> };
+  const proposal = parseObject<{ contract: Record<string, string | null>; policy?: Policy; mergeSourceIds: string[] }>(change.changesJson);
+  const before = parseObject<{ policy?: Policy | null; contracts: Record<string, Record<string, string | null>> }>(change.beforeJson);
+  if (!proposal || !before || !proposal.contract || !before.contracts || !Array.isArray(proposal.mergeSourceIds) || (proposal.policy && !parsePolicy(JSON.stringify(proposal.policy))) || (before.policy && !parsePolicy(JSON.stringify(before.policy)))) return <p role="alert">This delivery change could not be read. Refresh or ask an administrator to inspect the record.</p>;
   async function submit(approve: boolean) {
     try { const result = (await decide({ variables: { id: change.id, approve, note, ownerId: ownerId || null } })).data?.deliveryChangeDecide; if (result?.success) await refresh(); else setMessage(result?.message ?? 'Could not save decision.'); } catch (failure) { setMessage(String(failure)); }
   }

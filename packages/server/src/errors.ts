@@ -1,3 +1,4 @@
+import { DELIVERY_VALIDATION_MESSAGES } from './delivery-error-messages.js';
 import { GraphQLError } from 'graphql';
 
 export const NOT_AUTHENTICATED_MESSAGE = 'Not authenticated';
@@ -231,6 +232,7 @@ export function createScopeForbiddenError(scope: string): GraphQLError {
 }
 
 const exposedErrorCodes = new Map<string, string>([
+  ...DELIVERY_VALIDATION_MESSAGES.map((message): [string, string] => [message, 'BAD_USER_INPUT']),
   [NOT_AUTHENTICATED_MESSAGE, 'UNAUTHENTICATED'],
   [TEAM_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ISSUE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],

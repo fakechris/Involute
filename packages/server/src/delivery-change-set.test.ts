@@ -1,3 +1,4 @@
+import { startServer } from './index.ts';
 import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
@@ -48,6 +49,17 @@ async function proof(workId: string, key: string, actorId: string) {
 }
 
 describe('delivery packages and candidate change sets', () => {
+  it('returns an actionable mutation message for malformed JSON', async () => {
+    const f = await fixture();
+    const server = await startServer({ prisma, port: 0, allowAdminFallback: true, authToken: 'delivery-fixture-token' });
+    try {
+      const response = await fetch(`${server.url}/graphql`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer delivery-fixture-token' }, body: JSON.stringify({ query: 'mutation($id:String!){ deliveryChangePropose(workId:$id, expectedRevision:1, reason:"test", changesJson:"{") { success message } }', variables: { id: f.work.id } }) });
+      const result = await response.json() as { errors?: unknown; data?: { deliveryChangePropose: unknown } };
+      expect(result.errors).toBeUndefined();
+      expect(result.data?.deliveryChangePropose).toMatchObject({ success: false, message: 'changesJson must be valid JSON.' });
+    } finally { await server.stop(); }
+  });
+
   it('approves one candidate, instantiates A→B→C idempotently, and releases technical dependencies without business Done', async () => {
     const f = await fixture();
     const set = await proposeDeliveryChange(f.agentContext, { workId: f.work.id, expectedRevision: f.work.revision, reason: 'Approved implementation plan', changes: { policy } });

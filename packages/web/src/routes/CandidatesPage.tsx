@@ -871,7 +871,7 @@ export function CandidatesPage() {
   }, [allHumans, bulkAssigneeId]);
 
   const candidates = useMemo(
-    () => (data?.issues.nodes ?? []).filter((candidate) => !bugsOnly || isBugCandidate(candidate)),
+    () => (data?.issues.nodes ?? []).filter((candidate) => !candidate.hasPendingDeliveryChange && (!bugsOnly || isBugCandidate(candidate))),
     [data?.issues.nodes, bugsOnly],
   );
   const candidateSummary = data?.candidateSummary;
@@ -911,7 +911,7 @@ export function CandidatesPage() {
   }
 
   const snoozedCandidates = useMemo(() => candidates.filter(isSnoozed), [candidates]);
-  const activeCandidates = useMemo(() => candidates.filter((c) => !isSnoozed(c) && !c.hasPendingDeliveryChange), [candidates]);
+  const activeCandidates = useMemo(() => candidates.filter((c) => !isSnoozed(c)), [candidates]);
 
   const filteredActiveCandidates = useMemo(() => {
     if (!selectedProject) return activeCandidates;

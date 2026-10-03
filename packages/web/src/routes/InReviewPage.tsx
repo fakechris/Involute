@@ -257,7 +257,7 @@ export function InReviewPage() {
               <span>Bulk actions call workReview (human-audited)</span>
             </div>
             <div className="issue-bulkbar__actions">
-              <Btn variant="ghost" size="sm" onClick={selectAllVisible}>
+              <Btn variant="ghost" size="sm" onClick={selectAllVisible} disabled={!items.some((item) => !item.deliveryRootId)}>
                 Select all
               </Btn>
               <Btn variant="ghost" size="sm" onClick={clearSelection}>
@@ -316,7 +316,7 @@ export function InReviewPage() {
         ) : (
           <div className="observation-list" role="list" aria-label="In Review items">
             <div className="in-review-list-toolbar">
-              <Btn variant="ghost" size="sm" onClick={selectAllVisible}>
+              <Btn variant="ghost" size="sm" onClick={selectAllVisible} disabled={!items.some((item) => !item.deliveryRootId)}>
                 Select all visible
               </Btn>
               {selectedIds.length > 0 ? (

@@ -20,9 +20,9 @@ export async function prepareDeliveryAcceptance(tx: Prisma.TransactionClient, wo
     const binding = await assertDeliveryExecution(tx, task);
     const run = await tx.workRun.findFirst({ where: { workId: task.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
     const claim = await tx.workClaim.findUnique({ where: { workId: task.id } });
-    if (!binding || !run || run.status !== 'COMPLETED' || run.executionRevokedAt || !run.claimSnapshotId || run.contractRevision !== snapshotContract(task).contractRevision || (claim && claim.leaseUntil > new Date())) throw createValidationError(`Implementation unit ${task.deliveryUnitKey} is not ready for final acceptance.`);
-    if (binding.unit.checks.length && !(await hasTechnicalDeliveryProof(tx, task))) throw createValidationError(`Implementation unit ${task.deliveryUnitKey} lacks current verified CI evidence.`);
-    if (!binding.unit.checks.length && !(await tx.workEvidence.count({ where: { workId: task.id, runId: run.id, retractedAt: null } }))) throw createValidationError(`Implementation unit ${task.deliveryUnitKey} has no delivery evidence for review.`);
+    if (!binding || !run || run.status !== 'COMPLETED' || run.executionRevokedAt || !run.claimSnapshotId || run.contractRevision !== snapshotContract(task).contractRevision || (claim && claim.leaseUntil > new Date())) throw createValidationError('An implementation unit is not ready for final acceptance.');
+    if (binding.unit.checks.length && !(await hasTechnicalDeliveryProof(tx, task))) throw createValidationError('An implementation unit lacks current verified CI evidence.');
+    if (!binding.unit.checks.length && !(await tx.workEvidence.count({ where: { workId: task.id, runId: run.id, retractedAt: null } }))) throw createValidationError('An implementation unit has no delivery evidence for review.');
     prepared.push({ task, runId: run.id });
   }
   return prepared;
