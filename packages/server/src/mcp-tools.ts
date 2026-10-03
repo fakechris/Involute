@@ -1,3 +1,4 @@
+import { protocolInfo } from './protocol-info.js';
 import { actionCapabilities } from './action-capabilities.js';
 import { executorContext, executorUpdate, EXECUTOR_OPERATIONS, type ExecutorInput } from './executor-service.js';
 import { deliveryContext } from './delivery-context.js';
@@ -228,6 +229,7 @@ export async function callMcpTool(
     case 'protocol_get_guide': {
       return {
         guide: buildProtocolGuide(),
+        protocol: await protocolInfo(context, { projectId: optionalString(args.project_id) ?? null, repository: optionalString(args.repository) ?? null }, readonly),
         contentType: 'text/markdown',
       };
     }
@@ -413,6 +415,9 @@ export async function callMcpTool(
       assignOptional(commitInput, 'constraints', optionalString(args.constraints));
       assignOptional(commitInput, 'outcome', optionalString(args.outcome));
       assignOptional(commitInput, 'scope', optionalString(args.scope));
+      if (args.state_id !== undefined && (typeof args.state_id !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(args.state_id))) {
+        throw createValidationError('state_id must be a workflow state UUID; discover it with work_catalog(kind: states).');
+      }
       assignOptional(commitInput, 'stateId', optionalString(args.state_id));
       assignOptional(commitInput, 'verification', optionalString(args.verification));
       assignOptional(commitInput, 'idempotencyKey', optionalString(args.idempotency_key));
@@ -1011,7 +1016,8 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         constraints: { type: 'string' },
         state_id: {
           type: 'string',
-          description: 'Optional target workflow state ID or type to transition to upon commit. Cannot be COMPLETED or CANCELED.',
+          format: 'uuid',
+          description: 'Optional workflow state UUID. State type strings are not accepted; discover UUIDs through work_catalog(kind: states). Human commit preserves Research initial Done rules.',
         },
         verification: { type: 'string' },
         idempotency_key: { type: 'string' },
@@ -1098,6 +1104,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         },
         state_id: {
           type: 'string',
+          format: 'uuid',
           description: 'Optional workflow state ID to transition to. Not CANCELED; COMPLETED only for a committed ISSUE with Type: Research (INV-912).',
         },
         snoozed_until: { type: ['string', 'null'], description: 'ISO timestamp; candidate-only. Pass null to clear.' },
@@ -1284,7 +1291,10 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     description: 'Return the full Involute work protocol: kernel rules, state machines, scopes, tools, webhook events, and the IQL query language. Call this before writing work.',
     inputSchema: {
       type: 'object',
-      properties: {},
+      properties: {
+        project_id: { type: 'string', description: 'PROJECT UUID or identifier for binding diagnosis.' },
+        repository: { type: 'string', description: 'Repository to resolve using the canonical project resolver.' },
+      },
     },
   },
 ];

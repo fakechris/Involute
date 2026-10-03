@@ -24,3 +24,12 @@ See full guide: [`docs/agent-setup.md`](../../docs/agent-setup.md).
 
 - Commit `inv_agent_…` values, token files, or `.env` auth.
 - Point agents at `/graphql` with agent tokens.
+
+## Verify the connection
+
+Run `involute doctor --project <PROJECT identifier> --repository <owner/repo> --json`
+after configuring the private CLI config. Exit 0 means every check passed; 2 means
+configuration/authentication/compatibility is unresolved; 3 means service access
+failed. The native MCP equivalent is `protocol_get_guide(project_id, repository)`:
+inspect its `protocol` object, then refresh `tools/list`. Missing versions are
+unknown, never assumed compatible. See [client diagnostics](../../docs/mcp-conformance.md).

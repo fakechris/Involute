@@ -284,3 +284,12 @@ Enforced server-side, not just documented:
   credential also shows who issued it. Actors and credentials older than
   INV-604 (2026-09-18) have no issuer and may have no creation time; those
   blanks are real gaps, not defaults.
+
+## Verify the connection
+
+Run `involute doctor --project <PROJECT identifier> --repository <owner/repo> --json`
+after configuring the private CLI config. Exit 0 means every check passed; 2 means
+configuration/authentication/compatibility is unresolved; 3 means service access
+failed. The native MCP equivalent is `protocol_get_guide(project_id, repository)`:
+inspect its `protocol` object, then refresh `tools/list`. Missing versions are
+unknown, never assumed compatible. See [client diagnostics](mcp-conformance.md).
