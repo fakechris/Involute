@@ -69,4 +69,3 @@ ALTER TABLE "ExecutorEffect" ADD CONSTRAINT "ExecutorEffect_dispatchId_fkey" FOR
 
 -- AddForeignKey
 ALTER TABLE "ExecutorDeliveryReceipt" ADD CONSTRAINT "ExecutorDeliveryReceipt_dispatchId_fkey" FOREIGN KEY ("dispatchId") REFERENCES "ExecutorDispatch"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
