@@ -1,4 +1,5 @@
-import { createExecutorMcpClient } from './commands/executor.js';
+import { Command } from 'commander';
+import { createExecutorMcpClient, registerExecutorCommand } from './commands/executor.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { executeAuthorizedEffect } from './executor-runtime.js';
 describe('external effect authority boundary', () => {
@@ -28,4 +29,14 @@ it('uses the agent MCP endpoint and never retries an ambiguous mutation', async 
   fetch.mockReset().mockRejectedValue(new Error('Lost response'));
   await expect(client.call('work_executor_update', { operation: 'start_effect' })).rejects.toThrow('Lost response');
   expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it('shows safe validation errors while redacting unexpected transport failures', async () => {
+  const args = ['executor-effect', '--work', 'work', '--execution-file', '/private/file', '--recipe', '/private/recipe', '--sha', 'invalid', '--key', 'k', '--journal', '/private/journal'];
+  const program = new Command();
+  registerExecutorCommand(program, async () => ({ call: async () => ({}) }));
+  await expect(program.parseAsync(args, { from: 'user' })).rejects.toThrow('Use a full lowercase commit SHA.');
+  const failed = new Command();
+  registerExecutorCommand(failed, async () => { throw new Error('secret-bearing transport failure'); });
+  await expect(failed.parseAsync(args, { from: 'user' })).rejects.not.toThrow('secret-bearing');
 });

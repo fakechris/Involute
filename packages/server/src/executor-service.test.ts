@@ -155,6 +155,8 @@ describe('external executor authority and receipts', () => {
     expect((await prisma.executorEffect.findUniqueOrThrow({ where: { id: merge.id } })).state).toBe('OBSERVED');
     const deploy = await f.update('prepare_effect', { effect: { ...intent, key: 'release', commitSha: 'b'.repeat(40) } });
     await f.update('start_effect', { effectId: deploy.id });
+    await f.update('receipt', { effectId: deploy.id, idempotencyKey: 'final-deployment', receipt: { ...receipt, environment: 'staging', deployedSha: 'b'.repeat(40) } });
+    expect((await f.current()).visibleState).toBe('DELIVERED');
   });
   it('refuses injected dispatch bindings, states and human resolutions', async () => {
     const f = await fixture();
@@ -178,6 +180,25 @@ describe('external executor authority and receipts', () => {
     await f.update('reconcile', { effectId: effect.id, resolution: { outcome: 'FAILED', reason: 'External release inspection completed', evidenceUrl: 'https://example.test/reconciliation' } }, f.humanContext);
     await reviewWork(prisma, root.id, decision, writeActorFromViewer(f.humanContext.viewer));
     expect(await f.current()).toMatchObject({ state: 'QUEUED', generation: 2 });
+  });
+  it('refuses a merge claim without an authorized merge effect', async () => {
+    const f = await fixture();
+    await expect(f.update('receipt', { idempotencyKey: 'unauthorized-merge', receipt: { version: 1, repository: 'test/executor', commitSha: sha, pullRequestNumber: 12, mergedSha: 'b'.repeat(40), environment: null, deployedSha: null, health: 'unknown', behavior: 'unknown', evidenceUrls: [], observedAt: new Date().toISOString() } })).rejects.toThrow(/intent/);
+    expect(await prisma.executorDeliveryReceipt.count()).toBe(0);
+  });
+  it('keeps a never-started queued dispatch and its remaining budget on Return', async () => {
+    const f = await fixture();
+    await prisma.workClaim.update({ where: { id: f.claim.claim.id }, data: { leaseUntil: new Date(0) } });
+    await prisma.executorDispatch.update({ where: { id: (await f.current()).id }, data: { state: 'QUEUED', runId: null, leaseUntil: null } });
+    const review = await prisma.workflowState.findFirstOrThrow({ where: { teamId: f.work.teamId, type: 'REVIEW' } });
+    const root = await prisma.issue.update({ where: { id: f.root.id }, data: { stateId: review.id } });
+    await reviewWork(prisma, root.id, { expectedRevision: root.revision, decision: 'REJECTED', reason: 'Clarify before starting' }, writeActorFromViewer(f.humanContext.viewer));
+    expect(await f.current()).toMatchObject({ state: 'QUEUED', generation: 1, feedback: 'Clarify before starting' });
+  });
+  it('isolates an unreadable receipt without losing dispatch context', async () => {
+    const f = await fixture();
+    await prisma.executorDeliveryReceipt.create({ data: { dispatchId: (await f.current()).id, generation: 1, runId: f.run.id, actorId: f.agent.id, idempotencyKey: 'corrupt-fixture', payload: { version: 999 } } });
+    expect((await f.current()).receipts[0]).toMatchObject({ payload: null, assessment: null });
   });
   it('requires the approved executor for the underlying work claim too', async () => {
     const f = await fixture();

@@ -61,9 +61,13 @@ export async function returnDeliveryChildren(tx: Prisma.TransactionClient, root:
     const dispatch = await tx.executorDispatch.findUnique({ where: { workId_grantRevision: { workId: task.id, grantRevision: grant.revision } } });
     if (dispatch) {
       if (await tx.executorEffect.count({ where: { dispatchId: dispatch.id, state: 'STARTED' } })) throw createValidationError('Reconcile unresolved external effects before returning the delivery for changes.');
-      const retry = !['QUEUED', 'RUNNING', 'STOP_REQUESTED'].includes(dispatch.state) && dispatch.generation < (binding?.unit.maxAttempts ?? 1);
-      await tx.executorDispatch.update({ where: { id: dispatch.id }, data: { state: retry ? 'QUEUED' : 'EXHAUSTED', generation: { increment: 1 }, revision: { increment: 1 }, runId: null, leaseUntil: null, feedback: reason ?? 'Returned for changes' } });
-      await enqueueWorkEvent(tx, { type: retry ? 'executor.dispatched' : 'executor.exhausted', workId: task.id, workIdentifier: task.identifier, payload: { dispatchId: dispatch.id, generation: dispatch.generation + 1, feedback: reason, actorId: actor.actorId, protocolVersion: 1 } });
+      if (dispatch.state === 'QUEUED') {
+        await tx.executorDispatch.update({ where: { id: dispatch.id }, data: { revision: { increment: 1 }, feedback: reason ?? 'Returned for changes' } });
+      } else {
+        const retry = !['RUNNING', 'STOP_REQUESTED'].includes(dispatch.state) && dispatch.generation < (binding?.unit.maxAttempts ?? 1);
+        await tx.executorDispatch.update({ where: { id: dispatch.id }, data: { state: retry ? 'QUEUED' : 'EXHAUSTED', generation: { increment: 1 }, revision: { increment: 1 }, runId: null, leaseUntil: null, feedback: reason ?? 'Returned for changes' } });
+        await enqueueWorkEvent(tx, { type: retry ? 'executor.dispatched' : 'executor.exhausted', workId: task.id, workIdentifier: task.identifier, payload: { dispatchId: dispatch.id, generation: dispatch.generation + 1, feedback: reason, actorId: actor.actorId, protocolVersion: 1 } });
+      }
     }
     const decision = await tx.workReviewDecision.create({ data: { workId: task.id, runId: run?.id ?? null, reviewerId: actor.actorId!, decision: 'REJECTED', fromRevision: task.revision, toRevision: after.revision, reason: reason ?? `Returned with delivery package ${root.identifier}.` } });
     await recordWorkAudit(tx, { workId: task.id, before: selectIssueSnapshot(task), after: selectIssueSnapshot(after), actor: { ...actor, reason: decision.reason } });

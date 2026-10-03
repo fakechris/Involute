@@ -29,7 +29,8 @@ interface Recipe {
   command: string; args: string[];
 }
 interface Options { work: string; executionFile: string; recipe: string; sha: string; key: string; journal: string }
-function message(value: string): Error { return new Error(value); }
+class SafeExecutorError extends Error {}
+function message(value: string): Error { return new SafeExecutorError(value); }
 async function getRow(client: ExecutorTransport, work: string): Promise<Row> {
   const context = await client.call('work_executor_context', { id: work }) as { protocolVersion: number; dispatches: Row[]; work: { repository: string } };
   if (context.protocolVersion !== 1) throw message('Unsupported executor protocol.');
@@ -111,5 +112,5 @@ export function registerExecutorCommand(program: Command, client: () => Promise<
     .requiredOption('--sha <sha>', 'Exact release or PR head SHA')
     .requiredOption('--key <key>', 'Stable effect idempotency key')
     .requiredOption('--journal <path>', 'New private durable journal file; must not already exist')
-    .action(async (options: Options) => { try { await performExecutorEffect(await client(), options); } catch { throw message('Executor did not finish safely. Inspect its private journal and server dispatch; do not automatically repeat an unknown effect.'); } });
+    .action(async (options: Options) => { try { await performExecutorEffect(await client(), options); } catch (error) { throw message(`${error instanceof SafeExecutorError ? error.message + ' ' : ''}Executor did not finish safely. Inspect its private journal and server dispatch; do not automatically repeat an unknown effect.`); } });
 }

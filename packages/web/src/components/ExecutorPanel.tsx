@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 const CONTEXT = gql`query ExecutorPanel($id: String!) { executorContextJson(id: $id) }`;
 const UPDATE = gql`mutation ExecutorAction($workId: String!, $operation: String!, $detailsJson: String) { executorUpdate(workId: $workId, operation: $operation, detailsJson: $detailsJson) { success message resultJson } }`;
-type Receipt = { id: string; final?: boolean; generation: number; payload: { commitSha: string; pullRequestNumber: number | null; mergedSha?: string | null; environment: string | null; deployedSha: string | null; health: string; behavior: string; evidenceUrls: string[] }; assessment: { versionMatches: boolean | null } };
+type Receipt = { id: string; final?: boolean; generation: number; payload: { commitSha: string; pullRequestNumber: number | null; mergedSha?: string | null; environment: string | null; deployedSha: string | null; health: string; behavior: string; evidenceUrls: string[] }; assessment: { versionMatches: boolean | null } | null };
 type Effect = { id: string; generation: number; action: string; environment: string | null; commitSha: string; state: string; resolution?: { outcome: string; reason: string; evidenceUrl: string; observedSha?: string } | null };
 type Dispatch = { id: string; workId: string; revision: number; generation: number; visibleState: string; executorActorId: string; checkpoint: string | null; feedback: string | null; receipts: Receipt[]; effects?: Effect[] };
 type Context = { protocolVersion: number; viewerCanWrite: boolean; viewerCanReconcile?: boolean; dispatches: Dispatch[] };
@@ -50,7 +50,7 @@ export function ExecutorPanel({ workId, canDispatch = false }: { workId: string;
           </details> : null}
         </div>;
       })}
-      {dispatch.receipts.map((receipt) => <div key={receipt.id}><h4>{receipt.final === false ? 'Effect observation' : 'Delivery receipt'} · attempt {receipt.generation}</h4>
+      {dispatch.receipts.map((receipt) => !receipt.assessment ? <p key={receipt.id} role="alert">Receipt {receipt.id} could not be read. Inspect the stored record.</p> : <div key={receipt.id}><h4>{receipt.final === false ? 'Effect observation' : 'Delivery receipt'} · attempt {receipt.generation}</h4>
         <p>PR: {receipt.payload.pullRequestNumber ?? 'Not reported'} · PR commit: <code>{receipt.payload.commitSha}</code></p>
         {receipt.payload.mergedSha ? <p>Merge commit: <code>{receipt.payload.mergedSha}</code></p> : null}
         <p>Environment: {receipt.payload.environment ?? 'No deployment reported'} · Deployed version: <code>{receipt.payload.deployedSha ?? 'Unknown'}</code></p>
