@@ -583,6 +583,8 @@ describe('Involute MCP', () => {
     expect(JSON.stringify(page)).not.toContain('inv_agent_catalog');
     const caps = await callTool('work_catalog', { kind: 'capabilities' });
     expect(caps.tools.find((tool: { name: string }) => tool.name === 'work_comment').scope).toBe('update');
+    expect(caps.actionCatalogVersion).toBe(1);
+    expect(caps.actions).toEqual(expect.arrayContaining([expect.objectContaining({ mutation: 'issueUpdate', mcpTool: 'work_update', prerequisites: expect.any(Array), recovery: expect.any(String) }), expect.objectContaining({ mutation: 'workReview', humanGate: 'final-acceptance', mcpExemption: expect.any(String) })]));
   });
 
   it('enumerates 300 search and ready matches beyond the old 200-item limit', async () => {

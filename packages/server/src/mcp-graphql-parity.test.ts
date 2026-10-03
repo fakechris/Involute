@@ -9,69 +9,7 @@ import { createGraphQLSchema } from './schema.ts';
 // ask a person for. Every field an agent can write must be writable through
 // GraphQL, or be listed below with the reason it is agent-only.
 
-/** MCP write tool → the GraphQL mutation a person (the web app) uses for the same change. */
-const PAIRS: Record<string, string> = {
-  agent_request_answer: 'agentRequestAnswer',
-  evidence_attach: 'evidenceAttach',
-  run_report: 'runReport',
-  work_claim: 'workClaim',
-  work_claim_release: 'workClaimRelease',
-  evidence_retract: 'evidenceRetract',
-  work_commit: 'workCommit',
-  work_uncommit: 'workUncommit',
-  work_file_bug: 'bugReport',
-  work_link: 'workLink',
-  work_unlink: 'workLinkDelete',
-  work_propose: 'workPropose',
-  work_update: 'issueUpdate',
-  work_comment: 'commentCreate',
-  work_delivery_propose: 'deliveryChangePropose',
-  work_execution_create: 'deliveryExecutionCreate',
-  work_executor_update: 'executorUpdate',
-};
-
-/** MCP write tools with no GraphQL counterpart, and why. */
-const AGENT_ONLY_TOOLS: Record<string, string> = {
-  agent_request_claim: 'Agents lease a request before answering it; a person answers directly (agentRequestAnswer).',
-  work_propose_amendment: 'How an agent asks for a contract edit it may not make; a person edits the contract directly (issueUpdate) or decides the proposal (contractAmendmentAccept/Reject).',
-};
-
-/** MCP argument → GraphQL field when the names differ. */
-const RENAMED: Record<string, Record<string, string>> = {
-  agent_request_answer: { id: 'requestId' },
-  run_report: { pr_number: 'pullRequestNumber' },
-  work_file_bug: { team: 'teamId' },
-  work_propose: { team: 'teamId' },
-  work_update: { state: 'stateId' },
-  work_comment: { work_id: 'issueId' },
-  work_delivery_propose: { changes: 'changesJson' },
-  work_executor_update: { details: 'detailsJson' },
-};
-
-/** MCP arguments with no GraphQL field, and why a person does not need them. */
-const AGENT_ONLY_FIELDS: Record<string, Record<string, string>> = {
-  work_unlink: {
-    from_id: 'Selects the existing edge by endpoints; the UI selects that same edge by its id for workLinkDelete.',
-    to_id: 'Selects the existing edge by endpoints; the UI selects that same edge by its id for workLinkDelete.',
-    type: 'Disambiguates the existing edge; the UI selects that same edge by its id for workLinkDelete.',
-  },
-  agent_request_answer: {
-    claim_token: 'Proves the answering execution holds the request lease; a person does not lease requests.',
-    session_id: 'Identifies the agent execution that answers.',
-    receipt: 'Agent decision receipt (INV-588); a person\'s answer is the comment itself.',
-    evidence: 'Agent-attached references backing its answer.',
-  },
-  run_report: { receipt: 'Agent decision receipt (INV-588); people do not report runs.' },
-  work_file_bug: {
-    related_work_id: 'Agents file a bug they found while working on another item (DISCOVERED_DURING).',
-    related_work_type: 'Agents file a bug they found while working on another item (DISCOVERED_DURING).',
-    initial_state: 'An agent that fixed the bug on the spot files it straight into Review.',
-    acceptance: 'A bug is committed on filing and agents cannot edit acceptance on committed work; a person sets it on the issue page instead.',
-    verification: 'Same as acceptance: a person edits it on the issue page after reporting.',
-    idempotency_key: 'Lets an agent retry a filing without duplicating it; the web app submits once.',
-    source: 'Tags where an agent found the bug; a person\'s report is tagged bug-report by the server.',
-  },
-};
+import { PAIRS, AGENT_ONLY_TOOLS, RENAMED, AGENT_ONLY_FIELDS, MCP_EXEMPTIONS, GRAPHQL_ONLY_FIELDS, actionCapabilities } from './action-capabilities.ts';
 
 const camel = (name: string) => name.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
 
@@ -99,6 +37,13 @@ function missingInGraphQL(tool: McpToolDefinition, mutations: Fields): string[] 
   });
 }
 
+function missingInMcp(tool: McpToolDefinition, mutations: Fields): string[] {
+  const mutation = PAIRS[tool.name]!;
+  const properties = Object.keys((tool.inputSchema as { properties: Record<string, unknown> }).properties);
+  const mapped = new Set(properties.map((field) => RENAMED[tool.name]?.[field] ?? camel(field)));
+  return [...graphqlFieldNames(mutations, mutation)].filter((field) => field !== 'input' && !mapped.has(field) && !GRAPHQL_ONLY_FIELDS[mutation]?.[field]);
+}
+
 describe('MCP and GraphQL write inputs (INV-795)', () => {
   const mutations = createGraphQLSchema(null as never).getMutationType()!.getFields() as unknown as Fields;
   const tools = listMcpTools(false);
@@ -124,6 +69,33 @@ describe('MCP and GraphQL write inputs (INV-795)', () => {
       for (const field of Object.keys(fields)) if (!properties.includes(field)) stale.push(`${toolName}.${field}`);
     }
     expect(stale).toEqual([]);
+  });
+
+  it('covers every GraphQL mutation in the reverse direction with a tool or explicit exemption', () => {
+    const paired = new Set(Object.values(PAIRS));
+    expect(Object.keys(mutations).filter((name) => !paired.has(name) && !MCP_EXEMPTIONS[name])).toEqual([]);
+    expect(Object.keys(MCP_EXEMPTIONS).filter((name) => !mutations[name] || paired.has(name))).toEqual([]);
+    for (const action of actionCapabilities().filter((item) => item.mcpTool)) {
+      expect(action.prerequisites?.length, action.mutation ?? action.mcpTool!).toBeGreaterThan(0);
+      for (const field of ['permission', 'concurrency', 'receipt', 'recovery', 'humanGate'] as const) expect(action[field], `${action.mutation}.${field}`).toBeTruthy();
+    }
+  });
+
+  it('covers every GraphQL input field through MCP or an explicit field exemption', () => {
+    const missing: string[] = [];
+    for (const [toolName, mutation] of Object.entries(PAIRS)) {
+      const tool = tools.find((item) => item.name === toolName)!;
+      missing.push(...missingInMcp(tool, mutations).map((field) => `${mutation}.${field}`));
+      for (const field of Object.keys(GRAPHQL_ONLY_FIELDS[mutation] ?? {})) expect(graphqlFieldNames(mutations, mutation).has(field), `${mutation}.${field} stale exemption`).toBe(true);
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it('detects removal of the agent parent editor while the UI field still exists', () => {
+    const tool = tools.find((item) => item.name === 'work_update')!;
+    const properties = { ...(tool.inputSchema as { properties: Record<string, unknown> }).properties };
+    delete properties.parent_id;
+    expect(missingInMcp({ ...tool, inputSchema: { ...tool.inputSchema, properties } }, mutations)).toEqual(['parentId']);
   });
 
   it('reports a field added to an MCP tool but not to GraphQL', () => {
