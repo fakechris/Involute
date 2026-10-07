@@ -219,6 +219,8 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationLanding> = {
   'delivery.approved': { kind: 'info' },
   'delivery.declined': { kind: 'info' },
   'work.claim_released': { kind: 'info' },
+  // Written to the approved executor's (an agent's) inbox: start on it (INV-993).
+  'executor.dispatched': { kind: 'info' },
   'work.claim_expired': { kind: 'info' },
   'bug.sla_at_risk': { kind: 'info' },
   'bug.sla_breached': { kind: 'info' },

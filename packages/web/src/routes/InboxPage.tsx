@@ -63,6 +63,8 @@ function formatNotificationType(type: string): string {
       return 'Agent lease expired';
     case 'delivery.approved':
       return 'Delivery authorized';
+    case 'executor.dispatched':
+      return 'Execution dispatched';
     case 'delivery.declined':
       return 'Delivery change declined';
     case 'contract.breached':

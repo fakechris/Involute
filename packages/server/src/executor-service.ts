@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import type { GraphQLContext } from './auth.js';
+import { announceExecutorDispatch } from './delivery-execution.js';
 import { assertCanReadIssue, assertCanWriteIssue, buildReadableIssueWhere } from './access-control.js';
 import { findWorkByIdOrIdentifier } from './context-service.js';
 import { assertDeliveryExecution } from './delivery-grant.js';
@@ -83,7 +84,7 @@ export async function executorUpdate(context: GraphQLContext, input: ExecutorInp
     if (input.operation === 'dispatch') {
       if (row) return row;
       const created = await tx.executorDispatch.create({ data: { workId: work.id, rootId: work.deliveryRootId!, grantRevision: work.deliveryGrantRevision!, executorActorId: executorId } });
-      await event(tx, work, created.id, created.generation, fresh.viewer.id, 'executor.dispatched');
+      await announceExecutorDispatch(tx, { work, dispatchId: created.id, generation: created.generation, actorId: fresh.viewer.id, executorActorId: executorId });
       return created;
     }
     if (!row || row.revision !== input.expectedRevision || row.generation !== input.generation) return refuse('Executor revision or generation changed; refresh before retrying.');
@@ -109,7 +110,7 @@ export async function executorUpdate(context: GraphQLContext, input: ExecutorInp
       if (row.generation >= (binding!.unit.maxAttempts ?? 1)) return refuse('The approved execution attempt budget is exhausted; propose a candidate change.');
       if (row.runId) await tx.workRun.update({ where: { id: row.runId }, data: { executionRevokedAt: new Date() } });
       const updated = await tx.executorDispatch.update({ where: { id: row.id }, data: { state: 'QUEUED', generation: { increment: 1 }, revision: { increment: 1 }, runId: null, leaseUntil: null } });
-      await event(tx, work, row.id, updated.generation, fresh.viewer.id, 'executor.dispatched');
+      await announceExecutorDispatch(tx, { work, dispatchId: row.id, generation: updated.generation, actorId: fresh.viewer.id, executorActorId: executorId });
       return updated;
     }
     if (input.operation === 'stop') {
@@ -205,6 +206,6 @@ export async function executorUpdate(context: GraphQLContext, input: ExecutorInp
     return refuse('Invalid executor operation.');
   });
 }
-async function event(tx: Prisma.TransactionClient, work: { id: string; identifier: string }, dispatchId: string, generation: number, actorId: string, type: 'executor.dispatched' | 'executor.acknowledged' | 'executor.stop_requested' | 'executor.stopped' | 'executor.delivered' | 'executor.observed') {
+async function event(tx: Prisma.TransactionClient, work: { id: string; identifier: string }, dispatchId: string, generation: number, actorId: string, type: 'executor.acknowledged' | 'executor.stop_requested' | 'executor.stopped' | 'executor.delivered' | 'executor.observed') {
   await enqueueWorkEvent(tx, { type, workId: work.id, workIdentifier: work.identifier, payload: { dispatchId, generation, actorId, protocolVersion: 1 } });
 }
