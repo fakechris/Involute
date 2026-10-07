@@ -1,7 +1,7 @@
 import type { ComponentType, ReactNode } from 'react';
 import { cleanup, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, vi } from 'vitest';
 
 import { App } from '../App';
 import { resetStatusUndo } from '../undo/status-undo';
@@ -150,6 +150,16 @@ const hoistedApolloMocks = vi.hoisted<ApolloMockSet>(() => ({
   }),
 }));
 export const apolloMocks: ApolloMockSet = hoistedApolloMocks;
+
+// Pages load lazily (lazyRoute): the first test that renders one pays for the
+// cold import inside its findBy wait, which is 1 s. BoardPage alone takes
+// ~250 ms locally; on a CI runner, import plus first render ran past 1 s and
+// failed whichever test came first (INV-950). Load every page once before the
+// file's tests, with its own time limit, so tests measure rendering only.
+const routeModules = import.meta.glob(['../routes/*.tsx', '!../routes/*.test.tsx']);
+beforeAll(async () => {
+  await Promise.all(Object.values(routeModules).map((load) => load()));
+}, 60_000);
 
 vi.mock('@apollo/client/react', async () => {
   const actual = await vi.importActual<typeof import('@apollo/client/react')>('@apollo/client/react');
