@@ -22,6 +22,48 @@ export const PAIRS: Record<string, string> = {
   work_executor_update: 'executorUpdate',
 };
 
+/**
+ * MCP read tool → the GraphQL queries the web app uses for the same reads
+ * (INV-1004). A query with no tool here and no entry in QUERY_EXEMPTIONS fails
+ * the parity test, as a mutation would.
+ */
+export const READ_PAIRS: Record<string, string[]> = {
+  work_search: ['search', 'issues'],
+  work_catalog: ['teams', 'issueLabels', 'cycles', 'users', 'agents', 'viewerCapabilities'],
+  work_read_page: ['deliveryChanges'],
+  work_get_context: ['workContext', 'issue'],
+  work_list_ready: ['readyWork'],
+  work_delivery_context: ['deliveryContext'],
+  work_executor_context: ['executorContextJson'],
+  agent_inbox: ['notifications', 'unreadNotificationCount'],
+};
+
+/** MCP read tools with no GraphQL counterpart, and why. */
+export const AGENT_ONLY_READ_TOOLS: Record<string, string> = {
+  protocol_get_guide: 'The agent protocol as markdown; people read docs/ and the web app itself.',
+};
+
+/** GraphQL queries that intentionally have no MCP tool; each names the decision it rests on. */
+export const QUERY_EXEMPTIONS: Record<string, { reason: string; decision: string }> = {
+  viewer: { reason: 'The signed-in person; an agent is its credential (work_catalog actors).', decision: 'INV-846' },
+  workspaceSettings: { reason: 'Sign-in and access policy are administration.', decision: 'INV-846' },
+  serverFeatures: { reason: 'Feature flags for the web shell.', decision: 'INV-795' },
+  projects: { reason: 'Legacy Project model; a project is PROJECT work (work_search kind = PROJECT).', decision: 'INV-718' },
+  project: { reason: 'Legacy Project model; a project is PROJECT work (work_get_context).', decision: 'INV-718' },
+  cycle: { reason: 'One cycle by id for the cycles page; agents list them with work_catalog(cycles).', decision: 'INV-795' },
+  workGraph: { reason: 'The graph observation view for people; agents read relations per item (work_get_context, work_read_page).', decision: 'INV-718' },
+  workHygiene: { reason: 'The /hygiene inspection view for people; agents get the per-item reminders (run_report, research closure).', decision: 'INV-721' },
+  candidateSummary: { reason: 'Board-level counts for people deciding candidates.', decision: 'INV-79' },
+  projectSummary: { reason: 'Portfolio summary for people.', decision: 'INV-79' },
+  bugSummary: { reason: 'The /bugs statistics page for triage.', decision: 'INV-750' },
+  similarBugs: { reason: 'Live suggestions while a person types a bug title; work_file_bug returns possible_duplicates on filing.', decision: 'INV-1000' },
+  traceabilityAudit: { reason: 'Post-merge audit for operators.', decision: 'INV-449' },
+  agentProfile: { reason: 'The agent directory page; agents identify each other through work_catalog(actors).', decision: 'INV-795' },
+  agentCredentials: { reason: 'Credential issuance and lifecycle belong to human administrators.', decision: 'INV-846' },
+  webhooks: { reason: 'Integration credentials are administrative controls.', decision: 'INV-796' },
+  opsOverview: { reason: 'Operations runbook view for administrators.', decision: 'INV-796' },
+};
+
 /** MCP write tools with no GraphQL counterpart, and why. */
 export const AGENT_ONLY_TOOLS: Record<string, string> = {
   agent_request_claim: 'Agents lease a request before answering it; a person answers directly (agentRequestAnswer).',
@@ -70,33 +112,43 @@ export const AGENT_ONLY_FIELDS: Record<string, Record<string, string>> = {
   },
 };
 
-/** These actions intentionally stay with people. New mutations need an explicit decision here. */
-export const MCP_EXEMPTIONS: Record<string, { reason: string; gate: 'administration' | 'candidate' | 'final-acceptance' | 'personal' | 'deprecated' }> = {
-  deliveryChangeDecide: { gate: 'candidate', reason: 'A person approves or declines changes to delivery authority.' },
-  contractAmendmentAccept: { gate: 'candidate', reason: 'A person approves a proposed committed-contract amendment.' },
-  contractAmendmentReject: { gate: 'candidate', reason: 'A person declines a committed-contract amendment.' },
-  workReject: { gate: 'candidate', reason: 'A person declines candidate work with a reason.' },
-  workRestore: { gate: 'candidate', reason: 'A person restores rejected work to the candidate queue.' },
-  workReview: { gate: 'final-acceptance', reason: 'A person accepts delivery or returns it with feedback.' },
-  issueCreate: { gate: 'candidate', reason: 'People create committed work; agents use work_propose or work_file_bug.' },
-  issueDelete: { gate: 'administration', reason: 'Permanent deletion is a human administrative action; agent delivery preserves history.' },
-  commentDelete: { gate: 'personal', reason: 'People delete their comments; agents append an attributable correction with work_comment.' },
-  agentRequestReply: { gate: 'personal', reason: 'Human follow-up questions; agents answer leased requests through agent_request_answer.' },
-  fileUpload: { gate: 'personal', reason: 'Browser multipart attachment upload; agents attach durable evidence URLs.' },
-  notificationsMarkAllRead: { gate: 'personal', reason: 'Human inbox read state.' },
-  notificationPreferencesUpdate: { gate: 'personal', reason: 'Human notification preferences.' },
-  userUpdate: { gate: 'personal', reason: 'Human profile settings.' },
-  projectCreate: { gate: 'deprecated', reason: 'Legacy Project model; use PROJECT work via work_propose.' },
-  projectUpdate: { gate: 'deprecated', reason: 'Legacy Project model; use PROJECT work via work_update.' },
-  projectDelete: { gate: 'deprecated', reason: 'Legacy Project model; human issueDelete handles PROJECT work.' },
+/**
+ * These actions intentionally stay with people. New mutations need an explicit
+ * decision here, and each entry names the work item or DECISION that made the
+ * rule (INV-1004) — a reason alone is not an exemption.
+ */
+export const MCP_EXEMPTIONS: Record<string, { reason: string; gate: 'administration' | 'candidate' | 'final-acceptance' | 'personal' | 'deprecated'; decision: string }> = {
+  deliveryChangeDecide: { gate: 'candidate', reason: 'A person approves or declines changes to delivery authority.', decision: 'INV-941' },
+  contractAmendmentAccept: { gate: 'candidate', reason: 'A person approves a proposed committed-contract amendment.', decision: 'INV-869' },
+  contractAmendmentReject: { gate: 'candidate', reason: 'A person declines a committed-contract amendment.', decision: 'INV-869' },
+  workReject: { gate: 'candidate', reason: 'A person declines candidate work with a reason.', decision: 'INV-79' },
+  workRestore: { gate: 'candidate', reason: 'A person restores rejected work to the candidate queue.', decision: 'INV-79' },
+  workReview: { gate: 'final-acceptance', reason: 'A person accepts delivery or returns it with feedback.', decision: 'INV-474' },
+  issueCreate: { gate: 'candidate', reason: 'People create committed work; agents use work_propose or work_file_bug.', decision: 'INV-79' },
+  issueDelete: { gate: 'administration', reason: 'Permanent deletion is a human administrative action; agent delivery preserves history.', decision: 'INV-846' },
+  commentDelete: { gate: 'personal', reason: 'People delete their comments; agents append an attributable correction with work_comment.', decision: 'INV-795' },
+  agentRequestReply: { gate: 'personal', reason: 'Human follow-up questions; agents answer leased requests through agent_request_answer.', decision: 'INV-795' },
+  fileUpload: { gate: 'personal', reason: 'Browser multipart attachment upload; agents attach durable evidence URLs.', decision: 'INV-795' },
+  notificationsMarkAllRead: { gate: 'personal', reason: 'Human inbox read state.', decision: 'INV-968' },
+  notificationPreferencesUpdate: { gate: 'personal', reason: 'Human notification preferences.', decision: 'INV-795' },
+  userUpdate: { gate: 'personal', reason: 'Human profile settings.', decision: 'INV-795' },
+  projectCreate: { gate: 'deprecated', reason: 'Legacy Project model; use PROJECT work via work_propose.', decision: 'INV-718' },
+  projectUpdate: { gate: 'deprecated', reason: 'Legacy Project model; use PROJECT work via work_update.', decision: 'INV-718' },
+  projectDelete: { gate: 'deprecated', reason: 'Legacy Project model; human issueDelete handles PROJECT work.', decision: 'INV-718' },
 };
-const administration: Record<string, string[]> = {
-  'Identity, credential issuance and lifecycle belong to human administrators.': ['actorDeactivate', 'actorReactivate', 'actorTransferOwner', 'actorSetSuccessor', 'agentCredentialCreate', 'agentCredentialRevoke', 'serviceActorCreate', 'userSetGlobalRole', 'userInvite', 'userInviteRevoke', 'userReactivate', 'userSuspend'],
-  'Workspace and team access or membership configuration belongs to human administrators.': ['teamMembershipRemove', 'teamMembershipUpsert', 'teamTriageRotationUpdate', 'teamUpdateAccess', 'teamArchive', 'teamCreate', 'teamJoin', 'teamLeave', 'teamUnarchive', 'teamUpdate', 'workspaceSettingsUpdate', 'workShareRemove', 'workShareUpsert'],
-  'Dedicated taxonomy configuration lives in Settings; agents select catalog values, and work_propose can also create named labels.': ['cycleCreate', 'cycleDelete', 'cycleUpdate', 'labelCreate', 'labelUpdate', 'labelDelete', 'workflowStateCreate', 'workflowStateUpdate', 'workflowStateDelete'],
-  'Integration credentials and operational replay are administrative controls.': ['webhookCreate', 'webhookDelete', 'webhookRotateSecret', 'webhookUpdate', 'opsSyncDeadLetterClear', 'opsInboundReplay'],
-};
-for (const [reason, names] of Object.entries(administration)) for (const name of names) MCP_EXEMPTIONS[name] = { gate: 'administration', reason };
+const administration: Array<[string, string, string[]]> = [
+  ['Identity, credential issuance and lifecycle belong to human administrators.', 'INV-846', ['actorDeactivate', 'actorReactivate', 'actorTransferOwner', 'actorSetSuccessor', 'agentCredentialCreate', 'agentCredentialRevoke', 'serviceActorCreate', 'userSetGlobalRole', 'userInvite', 'userInviteRevoke', 'userReactivate', 'userSuspend']],
+  ['Workspace and team access or membership configuration belongs to human administrators.', 'INV-846', ['teamMembershipRemove', 'teamMembershipUpsert', 'teamTriageRotationUpdate', 'teamUpdateAccess', 'teamArchive', 'teamCreate', 'teamJoin', 'teamLeave', 'teamUnarchive', 'teamUpdate', 'workspaceSettingsUpdate', 'workShareRemove', 'workShareUpsert']],
+  ['Dedicated taxonomy configuration lives in Settings; agents select catalog values, and work_propose can also create named labels.', 'INV-795', ['cycleCreate', 'cycleDelete', 'cycleUpdate', 'labelCreate', 'labelUpdate', 'labelDelete', 'workflowStateCreate', 'workflowStateUpdate', 'workflowStateDelete']],
+  ['Integration credentials and operational replay are administrative controls.', 'INV-796', ['webhookCreate', 'webhookDelete', 'webhookRotateSecret', 'webhookUpdate', 'opsSyncDeadLetterClear', 'opsInboundReplay']],
+];
+for (const [reason, decision, names] of administration) for (const name of names) MCP_EXEMPTIONS[name] = { gate: 'administration', reason, decision };
+
+/**
+ * Where the same field is deliberately typed differently on the two surfaces
+ * (INV-1004); anything else that differs fails the parity test.
+ */
+export const FIELD_TYPE_EXCEPTIONS: Record<string, Record<string, string>> = {};
 
 /** Explicit GraphQL-only inputs. No wildcard exemption: a newly added field fails coverage. */
 export const GRAPHQL_ONLY_FIELDS: Record<string, Record<string, string>> = {

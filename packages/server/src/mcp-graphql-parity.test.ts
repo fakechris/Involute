@@ -9,7 +9,10 @@ import { createGraphQLSchema } from './schema.ts';
 // ask a person for. Every field an agent can write must be writable through
 // GraphQL, or be listed below with the reason it is agent-only.
 
-import { PAIRS, AGENT_ONLY_TOOLS, RENAMED, AGENT_ONLY_FIELDS, MCP_EXEMPTIONS, GRAPHQL_ONLY_FIELDS, actionCapabilities } from './action-capabilities.ts';
+import {
+  PAIRS, AGENT_ONLY_TOOLS, RENAMED, AGENT_ONLY_FIELDS, MCP_EXEMPTIONS, GRAPHQL_ONLY_FIELDS, actionCapabilities,
+  READ_PAIRS, AGENT_ONLY_READ_TOOLS, QUERY_EXEMPTIONS, FIELD_TYPE_EXCEPTIONS,
+} from './action-capabilities.ts';
 
 const camel = (name: string) => name.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
 
@@ -36,6 +39,87 @@ function missingInGraphQL(tool: McpToolDefinition, mutations: Fields): string[] 
     return !graphql.has(RENAMED[tool.name]?.[property] ?? camel(property));
   });
 }
+
+type JsonSchemaProperty = { type?: string | string[]; enum?: string[]; items?: { type?: string } };
+
+// The schema's graphql module may be another instance than this file's, so
+// types are read structurally (ofType, name, getValues) rather than with
+// graphql's type guards.
+type GqlType = { ofType?: GqlType; name?: string; getValues?: () => Array<{ name: string }>; getFields?: () => Record<string, { type: GqlType }>; toString(): string };
+const unwrap = (type: GqlType): GqlType => (type.ofType ? unwrap(type.ofType) : type);
+const isNonNull = (type: GqlType) => String(type).endsWith('!');
+const isList = (type: GqlType) => String(type).startsWith('[');
+
+/** The GraphQL type (argument or input-object field) a MCP property maps to, or null. */
+function graphqlFieldType(mutations: Fields, mutation: string, field: string): GqlType | null {
+  for (const arg of (mutations[mutation]?.args ?? []) as ReadonlyArray<{ name: string; type: GqlType }>) {
+    if (arg.name === field) return arg.type;
+    const inner = unwrap(arg.type).getFields?.()[field];
+    if (inner) return inner.type;
+  }
+  return null;
+}
+
+/**
+ * Why a MCP property's JSON schema type does not fit its GraphQL type (INV-1004):
+ * strings go with String / ID / enums / custom scalars, numbers with Int / Float,
+ * booleans with Boolean, arrays with lists, objects with String-encoded JSON;
+ * an enum on both sides must list the same values.
+ */
+function typeMismatch(property: JsonSchemaProperty, graphqlType: GqlType): string | null {
+  const jsonTypes = (Array.isArray(property.type) ? property.type : [property.type ?? 'string']).filter((type) => type !== 'null');
+  const json = jsonTypes[0] ?? 'string';
+  const type = isNonNull(graphqlType) ? graphqlType.ofType! : graphqlType;
+  if ((json === 'array') !== isList(type)) return `${json} vs ${String(graphqlType)}`;
+  const named = unwrap(type);
+  if (typeof named.getValues === 'function') {
+    if (property.enum) {
+      const values = named.getValues().map((value) => value.name).sort();
+      const ours = [...property.enum].sort();
+      if (values.join() !== ours.join()) return `enum {${ours.join('|')}} vs ${named.name} {${values.join('|')}}`;
+    } else if (json !== 'string') return `${json} vs enum ${named.name}`;
+    return null;
+  }
+  const family: Record<string, string[]> = {
+    string: ['String', 'ID', 'DateTime', 'JSON'],
+    integer: ['Int', 'Float'],
+    number: ['Int', 'Float'],
+    boolean: ['Boolean'],
+    object: ['String', 'JSON'],
+    array: ['String', 'ID', 'Int', 'Float', 'Boolean', 'JSON'],
+  };
+  return (family[json] ?? []).includes(named.name ?? '') ? null : `${json} vs ${String(graphqlType)}`;
+}
+
+/** Paired MCP properties whose type does not fit the GraphQL field's, with no stated exception. */
+function fieldTypeMismatches(tool: McpToolDefinition, mutations: Fields): string[] {
+  const mutation = PAIRS[tool.name]!;
+  const properties = (tool.inputSchema as { properties?: Record<string, JsonSchemaProperty> }).properties ?? {};
+  const mismatches: string[] = [];
+  for (const [name, property] of Object.entries(properties)) {
+    if (AGENT_ONLY_FIELDS[tool.name]?.[name] || FIELD_TYPE_EXCEPTIONS[tool.name]?.[name]) continue;
+    const graphqlType = graphqlFieldType(mutations, mutation, RENAMED[tool.name]?.[name] ?? camel(name));
+    if (!graphqlType) continue;
+    const why = typeMismatch(property, graphqlType);
+    if (why) mismatches.push(`${tool.name}.${name} → ${mutation}: ${why}`);
+  }
+  return mismatches;
+}
+
+/** GraphQL queries with neither a MCP read tool nor an exemption, and stale entries. */
+function queryCoverageProblems(queries: Record<string, unknown>, readTools: Set<string>): string[] {
+  const paired = new Set(Object.values(READ_PAIRS).flat());
+  const problems = Object.keys(queries).filter((name) => !paired.has(name) && !QUERY_EXEMPTIONS[name]).map((name) => `query ${name} has no MCP read tool and no exemption`);
+  for (const [tool, names] of Object.entries(READ_PAIRS)) {
+    if (!readTools.has(tool)) problems.push(`READ_PAIRS names ${tool}, which is not a read-only MCP tool`);
+    for (const name of names) if (!queries[name]) problems.push(`READ_PAIRS ${tool} → ${name}: no such query`);
+  }
+  for (const name of Object.keys(QUERY_EXEMPTIONS)) if (!queries[name] || paired.has(name)) problems.push(`QUERY_EXEMPTIONS ${name} is stale`);
+  for (const tool of readTools) if (!READ_PAIRS[tool] && !AGENT_ONLY_READ_TOOLS[tool]) problems.push(`read tool ${tool} has no GraphQL query and no agent-only reason`);
+  return problems;
+}
+
+const DECISION_ID = /^INV-\d+$/;
 
 function missingInMcp(tool: McpToolDefinition, mutations: Fields): string[] {
   const mutation = PAIRS[tool.name]!;
@@ -89,6 +173,48 @@ describe('MCP and GraphQL write inputs (INV-795)', () => {
       for (const field of Object.keys(GRAPHQL_ONLY_FIELDS[mutation] ?? {})) expect(graphqlFieldNames(mutations, mutation).has(field), `${mutation}.${field} stale exemption`).toBe(true);
     }
     expect(missing).toEqual([]);
+  });
+
+  // INV-1004: the read side, field semantics and the decisions behind exemptions.
+  const queries = createGraphQLSchema(null as never).getQueryType()!.getFields() as unknown as Record<string, unknown>;
+  const readTools = new Set(listMcpTools(false).filter((tool) => tool.annotations?.readOnlyHint).map((tool) => tool.name));
+
+  it('pairs every GraphQL query with a MCP read tool or an exemption, and every read tool with a query', () => {
+    expect(queryCoverageProblems(queries, readTools)).toEqual([]);
+  });
+
+  it('reports a query added without a MCP read tool', () => {
+    expect(queryCoverageProblems({ ...queries, widgetReport: {} }, readTools)).toEqual(['query widgetReport has no MCP read tool and no exemption']);
+  });
+
+  it('types every paired field the same way on both surfaces', () => {
+    const drift = tools.filter((tool) => PAIRS[tool.name]).flatMap((tool) => fieldTypeMismatches(tool, mutations));
+    expect(drift).toEqual([]);
+    for (const [toolName, fields] of Object.entries(FIELD_TYPE_EXCEPTIONS)) {
+      const tool = tools.find((candidate) => candidate.name === toolName)!;
+      for (const field of Object.keys(fields)) expect((tool.inputSchema as { properties: Record<string, unknown> }).properties[field], `${toolName}.${field} stale type exception`).toBeTruthy();
+    }
+  });
+
+  it('reports a field typed differently on the two surfaces', () => {
+    const workUpdate = tools.find((tool) => tool.name === 'work_update')!;
+    const retyped = {
+      ...workUpdate,
+      inputSchema: { ...workUpdate.inputSchema, properties: { ...(workUpdate.inputSchema as { properties: object }).properties, priority: { type: 'string' } } },
+    } as McpToolDefinition;
+    expect(fieldTypeMismatches(retyped, mutations)).toEqual(['work_update.priority → issueUpdate: string vs Int']);
+    const mistypedEnum = { ...retyped, inputSchema: { ...retyped.inputSchema, properties: { kind: { type: 'string', enum: ['ISSUE', 'WIDGET'] } } } } as McpToolDefinition;
+    expect(fieldTypeMismatches(mistypedEnum, mutations)).toHaveLength(1);
+  });
+
+  it('names the decision behind every exemption', () => {
+    const undecided = [
+      ...Object.entries(MCP_EXEMPTIONS).filter(([, entry]) => !DECISION_ID.test(entry.decision)).map(([name]) => `mutation ${name}`),
+      ...Object.entries(QUERY_EXEMPTIONS).filter(([, entry]) => !DECISION_ID.test(entry.decision)).map(([name]) => `query ${name}`),
+    ];
+    expect(undecided).toEqual([]);
+    expect(DECISION_ID.test('')).toBe(false);
+    expect(DECISION_ID.test('because')).toBe(false);
   });
 
   it('detects removal of the agent parent editor while the UI field still exists', () => {
