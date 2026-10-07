@@ -2327,8 +2327,8 @@ const resolvers = {
   WebhookSubscriptionRecord: {
     actorHandle: async (parent: { actorId: string | null }, _args: unknown, context: GraphQLContext): Promise<string | null> => {
       if (!parent.actorId) return null;
-      const actor = await context.prisma.user.findUnique({ where: { id: parent.actorId }, select: { handle: true, name: true } });
-      return actor?.handle ?? actor?.name ?? null;
+      const actor = await context.prisma.user.findUnique({ where: { id: parent.actorId }, select: { handle: true } });
+      return actor?.handle ?? null;
     },
   },
   Query: {
