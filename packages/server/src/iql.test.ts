@@ -121,6 +121,21 @@ describe('IQL filtering across surfaces', () => {
     expect(result.body.data.issues.nodes.map((node: { identifier: string }) => node.identifier)).toEqual(['IQL-2']);
   });
 
+  it('matches labels in any casing, alone and in lists (INV-999)', async () => {
+    const bug = await prisma.issueLabel.upsert({ where: { name: 'Bug' }, create: { name: 'Bug' }, update: {} });
+    await prisma.issue.update({ where: { identifier: 'IQL-1' }, data: { labels: { connect: { id: bug.id } } } });
+    for (const q of ['label:bug', 'label:Bug', 'label:BUG', 'label:bug,other', 'label:OTHER,bUg']) {
+      const result = await postGraphQL(
+        'query($q: String) { issues(first: 10, query: $q) { nodes { identifier } } }',
+        { q },
+      );
+      expect(result.body.errors, q).toBeUndefined();
+      expect(result.body.data.issues.nodes.map((node: { identifier: string }) => node.identifier), q).toEqual(['IQL-1']);
+    }
+    const none = await postGraphQL('query($q: String) { issues(first: 10, query: $q) { nodes { identifier } } }', { q: 'label:other' });
+    expect(none.body.data.issues.nodes).toEqual([]);
+  });
+
   it('rejects invalid queries with an exposed IQL_PARSE error', async () => {
     const result = await postGraphQL(
       'query($q: String) { issues(first: 10, query: $q) { nodes { identifier } } }',

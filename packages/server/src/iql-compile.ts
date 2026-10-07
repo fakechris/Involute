@@ -179,9 +179,11 @@ function compileTerm(term: IqlTerm, context: IqlCompileContext): Prisma.IssueWhe
       return clauseFor({ assigneeId: value });
     }
     case 'label':
-      return clauseFor(values.length > 1
-        ? { labels: { some: { name: { in: values } } } }
-        : { labels: { some: { name: { equals: values[0] ?? '' } } } });
+      // Any casing, as the docs promise (label:bug finds Bug); the in-memory
+      // matcher below already compared case-insensitively (INV-999).
+      return clauseFor({
+        labels: { some: { OR: values.map((value) => ({ name: { equals: value, mode: 'insensitive' as const } })) } },
+      });
     case 'priority': {
       const numeric = Number(values[0]);
       if (!Number.isFinite(numeric)) {
