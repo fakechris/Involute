@@ -1,4 +1,4 @@
-import type { Issue, IssueLabel, Prisma, PrismaClient } from '@prisma/client';
+import type { Issue, IssueLabel, Prisma, PrismaClient, WorkEvidence, WorkRun } from '@prisma/client';
 import type { SemanticIndex } from './embeddings/semantic-index.js';
 import { findSimilarByMeaning, SIMILAR_BUG_SIMILARITY } from './embeddings/similar-work.js';
 
@@ -9,6 +9,8 @@ import {
   createValidationError,
 } from './errors.js';
 import { enqueueWorkEvent } from './event-outbox.js';
+import { snapshotContract } from './evidence-contract.js';
+import { nextRunPublicId } from './run-service-shared.js';
 import { createIssueInTransaction } from './issue-service.js';
 import { projectWorkNotifications } from './notification-service.js';
 import { currentTriager } from './bug-triage.js';
@@ -192,4 +194,90 @@ export async function announceBug(transaction: Prisma.TransactionClient, issue: 
   } else {
     await projectWorkNotifications(transaction, { eventId: event.id, payload, type: 'bug.reported', work: issue });
   }
+}
+
+const FULL_SHA = /^[a-f0-9]{40}$/;
+
+export interface FixedBugEvidenceInput {
+  commitSha?: string | null;
+  pullRequestNumber?: number | null;
+  evidenceUrl?: string | null;
+  summary?: string | null;
+}
+
+export function hasFixedBugEvidence(input: FixedBugEvidenceInput): boolean {
+  return Boolean(input.commitSha || input.pullRequestNumber || input.evidenceUrl);
+}
+
+/** Checked before the bug is filed: a refused run must not leave a committed bug without one. */
+export function validateFixedBugEvidence(input: FixedBugEvidenceInput): void {
+  if (input.commitSha && !FULL_SHA.test(input.commitSha)) throw createValidationError('commit_sha must be a lowercase full 40-character Git SHA');
+  if (input.pullRequestNumber != null && (!Number.isSafeInteger(input.pullRequestNumber) || input.pullRequestNumber < 1)) throw createValidationError('pr_number must be a positive integer');
+}
+
+/**
+ * A bug the agent fixed before filing it (AGENTS.md §7, INV-997): the filing
+ * goes straight to Review, so there is no lease to report a run under and
+ * nothing to attach evidence to. Record the completed run and its evidence
+ * here, in the same shape reportRun + attachEvidence would have left, so the
+ * reviewer sees the fix and verification can run on it.
+ */
+export async function recordFixedBugRun(
+  prisma: DatabaseClient,
+  input: { workId: string } & FixedBugEvidenceInput,
+  actor: WriteActor,
+): Promise<{ run: WorkRun; evidence: WorkEvidence[] }> {
+  if (!actor.actorId) throw createValidationError('Recording a fixed bug needs an acting user.');
+  validateFixedBugEvidence(input);
+  const work = await prisma.issue.findUniqueOrThrow({ where: { id: input.workId } });
+  const frozen = snapshotContract(work);
+  const run = await prisma.workRun.create({
+    data: {
+      actorId: actor.actorId,
+      baseRevision: work.revision,
+      contractRevision: frozen.contractRevision,
+      acceptanceDigest: frozen.acceptanceDigest,
+      contractSnapshot: JSON.parse(JSON.stringify(frozen.contractSnapshot)),
+      repository: work.repository,
+      commitSha: input.commitSha ?? null,
+      pullRequestNumber: input.pullRequestNumber ?? null,
+      externalUrl: input.evidenceUrl ?? null,
+      phase: 'fixed-on-filing',
+      publicId: await nextRunPublicId(prisma),
+      status: 'COMPLETED',
+      summary: input.summary ?? 'Fixed before filing; see the attached evidence.',
+      workId: work.id,
+      endedAt: new Date(),
+    },
+  });
+  const urls: Array<{ kind: 'PR' | 'ARTIFACT'; url: string }> = [];
+  if (input.pullRequestNumber && work.repository) urls.push({ kind: 'PR', url: `https://github.com/${work.repository}/pull/${input.pullRequestNumber}` });
+  if (input.evidenceUrl) urls.push({ kind: /\/pull\/\d+/.test(input.evidenceUrl) && !urls.length ? 'PR' : 'ARTIFACT', url: input.evidenceUrl });
+  const evidence: WorkEvidence[] = [];
+  for (const item of urls) {
+    const row = await prisma.workEvidence.create({
+      data: { kind: item.kind, url: item.url, runId: run.id, workId: work.id, actorId: actor.actorId, summary: input.summary ?? null, verificationNextAt: item.kind === 'PR' ? new Date() : null },
+    });
+    evidence.push(row);
+    await enqueueWorkEvent(prisma, {
+      payload: { evidenceId: row.id, kind: row.kind, url: row.url, summary: row.summary, runId: run.id, actorId: actor.actorId },
+      type: 'artifact.attached',
+      workId: work.id,
+      workIdentifier: work.identifier,
+    });
+  }
+  const completed = await enqueueWorkEvent(prisma, {
+    payload: { runId: run.id, publicId: run.publicId, status: run.status, phase: run.phase, summary: run.summary, externalUrl: run.externalUrl },
+    type: 'run.completed',
+    workId: work.id,
+    workIdentifier: work.identifier,
+  });
+  // The reviewer learns a fix is waiting, as after any completed run.
+  await projectWorkNotifications(prisma, {
+    eventId: completed.id,
+    payload: { externalUrl: run.externalUrl, phase: run.phase, publicId: run.publicId, summary: run.summary },
+    type: 'run.completed',
+    work,
+  });
+  return { run, evidence };
 }

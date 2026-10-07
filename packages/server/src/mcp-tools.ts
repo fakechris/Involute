@@ -49,6 +49,8 @@ import {
   createNotFoundError,
   createScopeForbiddenError,
   createValidationError,
+  FIXED_BUG_EVIDENCE_REQUIRED_MESSAGE,
+  FIXED_BUG_EVIDENCE_WITHOUT_REVIEW_MESSAGE,
 } from './errors.js';
 import { NOTIFICATION_NOT_FOUND_MESSAGE, TEAM_WRITE_FORBIDDEN_MESSAGE } from './errors.js';
 import { markNotificationRead, readUnreadNotifications } from './notification-service.js';
@@ -59,6 +61,7 @@ import { researchLacksDownstream } from './work-hygiene.js';
 import { createWorkLink, deleteWorkLink } from './link-service.js';
 import { buildProtocolGuide } from './protocol-docs.js';
 import { attachEvidence, reportRun } from './run-service.js';
+import { hasFixedBugEvidence, recordFixedBugRun, validateFixedBugEvidence } from './bug-report.js';
 import { uncommitWork } from './work-uncommit.js';
 import { writeActorFromViewer } from './work-service.js';
 
@@ -395,11 +398,29 @@ export async function callMcpTool(
       if (relatedType) proposeInput.relatedWorkType = parseWorkLinkType(relatedType, 'related_work_type');
       else if (proposeInput.relatedWorkId) proposeInput.relatedWorkType = 'DISCOVERED_DURING';
       assignOptional(proposeInput, 'initialState', optionalString(args.initial_state));
-      const created = await proposeWork(context.prisma, proposeInput, { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null });
+      // Fixed before filing (INV-997): the filing lands in Review and carries
+      // the fix's evidence; the server records the completed run for it.
+      const fixed = {
+        commitSha: optionalString(args.commit_sha) ?? null,
+        pullRequestNumber: optionalNumber(args.pr_number) ?? null,
+        evidenceUrl: optionalString(args.evidence_url) ?? null,
+        summary: optionalString(args.summary) ?? null,
+      };
+      const intoReview = /^(REVIEW|IN_REVIEW)$/i.test(optionalString(args.initial_state) ?? '');
+      if (intoReview && !hasFixedBugEvidence(fixed)) throw createValidationError(FIXED_BUG_EVIDENCE_REQUIRED_MESSAGE);
+      if (!intoReview && hasFixedBugEvidence(fixed)) throw createValidationError(FIXED_BUG_EVIDENCE_WITHOUT_REVIEW_MESSAGE);
+      validateFixedBugEvidence(fixed);
+      const bugActor = { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null };
+      const created = await proposeWork(context.prisma, proposeInput, bugActor);
+      const recorded = intoReview && created.commitmentStatus === 'COMMITTED'
+        ? await context.prisma.$transaction((tx) => recordFixedBugRun(tx, { workId: created.id, ...fixed }, bugActor))
+        : null;
       return {
         ...created,
-        warning:
-          'Bug committed directly (INV-787): it does not go to Candidates. Priority set the SLA. Fix it or have it declined with a reason.',
+        ...(recorded ? { run: { id: recorded.run.id, public_id: recorded.run.publicId }, evidence: recorded.evidence.map((item) => ({ id: item.id, kind: item.kind, url: item.url })) } : {}),
+        warning: recorded
+          ? 'Bug committed directly into Review with its fix recorded (INV-997): the run and evidence are attached; a person accepts or returns it.'
+          : 'Bug committed directly (INV-787): it does not go to Candidates. Priority set the SLA. Fix it or have it declined with a reason.',
       };
     }
     case 'work_commit': {
@@ -949,7 +970,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     name: 'work_file_bug',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     description:
-      'File a Type: Bug. It is committed directly and never enters Candidates. Priority is required because it sets the SLA (1 Urgent 24h, 2 High 48h, 3 Medium / 4 Low = 7 days). Missing parent, priority, steps_to_reproduce or acceptance refuses the call. Prefer this over work_propose for bugs.',
+      'File a Type: Bug. It is committed directly and never enters Candidates. Priority is required because it sets the SLA (1 Urgent 24h, 2 High 48h, 3 Medium / 4 Low = 7 days). Missing parent, priority, steps_to_reproduce or acceptance refuses the call. Already fixed it? Pass initial_state REVIEW with commit_sha / pr_number / evidence_url: the server records the completed run and evidence (INV-997). Prefer this over work_propose for bugs.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -990,8 +1011,12 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         repository: { type: 'string' },
         initial_state: {
           type: 'string',
-          description: 'UNSTARTED (Ready, default), STARTED, or REVIEW if already fixed. BACKLOG is ignored for bugs.',
+          description: 'UNSTARTED (Ready, default), STARTED, or REVIEW if already fixed — then pass commit_sha, pr_number or evidence_url and the server records the completed run with that evidence (INV-997). BACKLOG is ignored for bugs.',
         },
+        commit_sha: { type: 'string', description: 'With initial_state REVIEW: the fix commit (full 40-char SHA).' },
+        pr_number: { type: 'integer', minimum: 1, description: 'With initial_state REVIEW: the fix PR number in the work\'s repository; attached as PR evidence.' },
+        evidence_url: { type: 'string', description: 'With initial_state REVIEW: a test run, log or artifact URL proving the fix.' },
+        summary: { type: 'string', description: 'With initial_state REVIEW: what was fixed and how it was checked; becomes the run summary.' },
         idempotency_key: { type: 'string' },
         source: { type: 'string' },
       },
