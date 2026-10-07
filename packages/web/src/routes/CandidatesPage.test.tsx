@@ -221,6 +221,25 @@ describe('CandidatesPage', () => {
     });
   });
 
+  it('refuses to batch-commit a candidate without acceptance instead of inventing one (INV-998)', async () => {
+    const blank = { ...candidateItems[0], id: 'cand-blank', identifier: 'INV-77', title: 'No criteria yet', acceptance: null };
+    queryDataHolder.current = {
+      issues: { nodes: [...candidateItems, blank], pageInfo: { endCursor: null, hasNextPage: false } },
+      teams: { nodes: mockTeams },
+    };
+    render(
+      <MemoryRouter>
+        <CandidatesPage />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByLabelText(/Select all visible/));
+    fireEvent.click(screen.getByRole('button', { name: /Batch Commit \(3\)/ }));
+
+    expect(await screen.findByText(/INV-77: needs acceptance criteria/)).toBeInTheDocument();
+    expect(mockRunCommit).not.toHaveBeenCalled();
+    queryDataHolder.current = null;
+  });
+
   it('undoes one batch commit as a single gesture and redoes it', async () => {
     const third = {
       ...candidateItems[0],
