@@ -31,7 +31,7 @@ vi.mock('@apollo/client/react', () => ({
               dead: [{ id: 'in-1', deliveryId: 'd-1', eventType: 'push', repository: 'acme/app', attempts: 4, lastErrorCode: 'E_X', receivedAt: '2026-09-27T00:00:00.000Z', replayable: true }],
             },
             outboxFailures: [{ id: 'o-1', type: 'work.committed', attempts: 5, lastError: 'HTTP 500', createdAt: '2026-09-27T00:00:00.000Z', deadLetteredAt: null }],
-            webhooks: [{ id: 'w-1', label: 'CI', url: 'https://hooks.example.com/ci', teamId: null, eventTypes: [], filterQuery: null, enabled: false, consecutiveFailures: 10, createdAt: '2026-09-01T00:00:00.000Z' }],
+            webhooks: [{ id: 'w-1', label: 'CI', url: 'https://hooks.example.com/ci', teamId: null, eventTypes: [], filterQuery: null, actorId: null, actorHandle: null, enabled: false, consecutiveFailures: 10, createdAt: '2026-09-01T00:00:00.000Z' }],
             audits: [{ id: 'a-1', action: 'inbound-replayed', subject: 'acme/app push d-0', reason: 'upstream fixed', createdAt: '2026-09-27T00:00:00.000Z', byActor: { id: 'u', name: 'Chris' } }],
           },
         },
@@ -98,7 +98,7 @@ describe('the ops page (INV-796)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add webhook' }));
     await waitFor(() =>
       expect(mutationFor(WEBHOOK_CREATE_MUTATION)).toHaveBeenCalledWith({
-        variables: { input: { url: 'https://hooks.example.com/new', label: null, team: null, eventTypes: ['work.committed', 'bug.reported'] } },
+        variables: { input: { url: 'https://hooks.example.com/new', label: null, team: null, eventTypes: ['work.committed', 'bug.reported'], agent: null } },
       }),
     );
     expect(await screen.findByRole('status')).toHaveTextContent('s3cret');

@@ -1157,6 +1157,15 @@ mutation {
 }
 ```
 
+**An agent's push channel (INV-992).** `webhookCreate(input: { agent: "<handle or id>", url })`
+binds the subscription to one agent. It then delivers only the events that
+reached that agent's `agent_inbox` (its proposals' `work.committed` /
+`work.rejected`, review outcomes, delivery decisions, claim expiry) and the
+`executor.*` dispatches addressed to it — never the team's whole stream. Each
+delivery carries `actor_id` and a `wake` hint; on receipt the agent reads
+`agent_inbox`, then `work_get_context`, and continues. `WebhookSubscriptionRecord`
+exposes `actorId` / `actorHandle`; the Ops page's **Agent handle** field sets it.
+
 Rotation is immediate: `webhookRotateSecret(id)` returns a fresh secret and
 resets the failure counter. For zero-downtime rotation, create a temporary
 second subscription with the new secret, update the receiver, then delete the
