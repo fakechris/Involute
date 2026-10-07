@@ -347,6 +347,7 @@ features:
 - **Type: Research 可由 agent 收尾（INV-912）**：调研的交付物就是条目本身。提案时可带 `initial_state: 'DONE'`，人承诺即进入 Done；已承诺的调研 ISSUE，agent 可用 `work_update(state: 'DONE')` 收尾（未承诺、非 ISSUE、被他人认领或描述不合三段式时拒绝）。CANCELED 仍只有人能设；派生的开发项不随之关闭。
 - 可执行点以 ISSUE、"明确不做"以 DECISION 提案，二者均 `DERIVED_FROM` 指向调研工单。
 - 调研进入 Review 前：下游已提案，或在 summary / verification 写明"无可执行点"；否则 `run_report(completed)` 会给出提醒，并出现在 `/hygiene` 巡检视图。
+- **收尾需有下游（INV-1001）**：既无 `DERIVED_FROM` 派生项、描述里也没写"无可执行点"的调研，agent 收尾（`work_update(state: 'DONE')`）被拒并说明；带 `initial_state: 'DONE'` 的此类提案在人承诺时落在 Review 而非 Done。派生项全部承诺后，提案者的 `agent_inbox` 收到一条 `research.closable`——这时收尾；`/hygiene` 的"Research ready to close"列出同样的条目。
 - `source` 字段不再承担溯源。
 
 ## 12. Bug Management Flow (缺陷上报与处理闭环)

@@ -771,6 +771,10 @@ See the **payload v2** section above for the full envelope. Summary:
   `reason`), and the unit's approved executor and last run actor get the same
   notification in their `agent_inbox` (INV-995) — the feedback is no longer
   only in the dispatch row's `feedback`.
+- `research.closable` (INV-1001): every item derived (`DERIVED_FROM`) from a
+  research item is now committed and the research still sits in Review; its
+  proposer gets the same notification and closes it. Sent once per research
+  item; `workHygiene.researchClosable` lists the same items.
 - Delivery authorization decisions (`delivery.approved`, `delivery.declined`,
   INV-990) carry `changeSetId`, `decision`, `note`, `grantRevision` and the
   authorized `unitKeys`; the delivery proposer also gets an Inbox notification

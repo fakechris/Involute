@@ -37,6 +37,8 @@ export const WORK_EVENT_TYPES = [
   'work.claim_released',
   // A lease ran out without renewal and the server released it (INV-991).
   'work.claim_expired',
+  // A research item's derived work is all committed; it can be closed (INV-1001).
+  'research.closable',
   'work.restored',
   'comment.created',
   'agent.mentioned',
