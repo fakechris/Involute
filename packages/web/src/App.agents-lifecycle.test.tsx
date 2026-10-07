@@ -63,6 +63,23 @@ describe('Agent lifecycle controls (INV-605)', () => {
     });
   });
 
+  // INV-1015: the Transfer owner entry point has a click test.
+  it('lets a manager transfer the actor to another person with a reason', async () => {
+    mockSessionState({ authMode: 'session', authenticated: true, googleOAuthConfigured: true, viewer: { id: 'user-1', email: 'admin@example.com', name: 'Admin', globalRole: 'ADMIN' } });
+    const data = { ...boardQueryResult, users: { nodes: [...boardQueryResult.users.nodes, { id: 'user-2', name: 'Bea', email: 'bea@example.com', actorKind: 'HUMAN', deactivatedAt: null }] } };
+    renderApp({ data: data as typeof boardQueryResult, agentProfileData: profile(), loading: false }, ['/agents/mia']);
+
+    const manage = await screen.findByRole('region', { name: 'Lifecycle' });
+    fireEvent.click(within(manage).getByRole('button', { name: 'Transfer owner' }));
+    fireEvent.change(await within(manage).findByLabelText('New owner'), { target: { value: 'user-2' } });
+    fireEvent.change(within(manage).getByLabelText('Reason for transferring'), { target: { value: 'Admin is leaving' } });
+    fireEvent.click(within(manage).getByRole('button', { name: 'Confirm transfer' }));
+
+    await waitFor(() => {
+      expect(lifecycleMutationMocks.actorTransferOwner).toHaveBeenCalledWith({ variables: { id: 'agent-mia', ownerId: 'user-2', reason: 'Admin is leaving' } });
+    });
+  });
+
   it('hides the controls and the per-credential Revoke from viewers who may not manage the actor', async () => {
     mockSessionState({ authMode: 'session', authenticated: true, googleOAuthConfigured: true, viewer: { id: 'user-9', email: 'sam@example.com', name: 'Sam', globalRole: 'USER' } });
     renderApp({ data: boardQueryResult, agentProfileData: profile({ viewerCanManage: false }), loading: false }, ['/agents/mia']);

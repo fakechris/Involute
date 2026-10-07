@@ -44,7 +44,7 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   deliveryExecutionCreate: { kind: 'web', components: ['components/DeliveryPanel.tsx'], label: 'Create implementation', test: 'components/DeliveryPanel.test.tsx' },
   actorDeactivate: { kind: 'web', doc: 'ACTOR_DEACTIVATE_MUTATION', components: ['components/AgentLifecycleActions.tsx'], label: 'Deactivate', test: 'App.agents-lifecycle.test.tsx' },
   actorReactivate: { kind: 'web', doc: 'ACTOR_REACTIVATE_MUTATION', components: ['components/AgentLifecycleActions.tsx'], label: 'Reactivate', test: 'App.agents-lifecycle.test.tsx' },
-  actorTransferOwner: { kind: 'web', doc: 'ACTOR_TRANSFER_OWNER_MUTATION', components: ['components/AgentLifecycleActions.tsx'], label: 'Transfer owner', test: { tracking: 'INV-1015' } },
+  actorTransferOwner: { kind: 'web', doc: 'ACTOR_TRANSFER_OWNER_MUTATION', components: ['components/AgentLifecycleActions.tsx'], label: 'Transfer owner', test: 'App.agents-lifecycle.test.tsx' },
   agentCredentialCreate: { kind: 'web', components: ['routes/AgentsTab.tsx'], test: 'App.agents-issue.test.tsx' },
   agentCredentialRevoke: { kind: 'web', doc: 'AGENT_CREDENTIAL_REVOKE_MUTATION', components: ['routes/AgentsPage.tsx'], label: 'Revoke', test: 'App.agents-lifecycle.test.tsx' },
   agentRequestAnswer: {
@@ -78,7 +78,7 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   cycleUpdate: { kind: 'web', doc: 'CYCLE_UPDATE_MUTATION', components: ['routes/CyclesPage.tsx'], test: 'routes/CyclesPage.test.tsx' },
   evidenceAttach: { kind: 'web', doc: 'EVIDENCE_ATTACH_MUTATION', components: ['components/EvidenceAttachForm.tsx'], label: 'Attach evidence', test: 'components/EvidenceAttachForm.test.tsx' },
   evidenceRetract: { kind: 'web', doc: 'EVIDENCE_RETRACT_MUTATION', components: ['components/ReviewEvidence.tsx'], label: 'Retract evidence', test: 'App.work-observation.test.tsx' },
-  fileUpload: { kind: 'web', doc: 'FILE_UPLOAD_MUTATION', components: ['components/RichTextEditor.tsx'], test: { tracking: 'INV-1015' } },
+  fileUpload: { kind: 'web', doc: 'FILE_UPLOAD_MUTATION', components: ['components/RichTextEditor.tsx'], test: 'components/RichTextEditor.test.tsx' },
   issueCreate: { kind: 'web', doc: 'ISSUE_CREATE_MUTATION', components: ['routes/BoardPage.tsx'], test: 'App.issue-create.test.tsx' },
   issueDelete: { kind: 'web', doc: 'ISSUE_DELETE_MUTATION', components: ['routes/IssuePage.tsx'], label: 'Delete issue', test: 'App.issue-meta.test.tsx' },
   issueUpdate: {
@@ -114,7 +114,7 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   teamMembershipUpsert: { kind: 'web', doc: 'TEAM_MEMBERSHIP_UPSERT_MUTATION', components: ['routes/TeamPages.tsx'], label: 'Add to team', test: 'App.team-pages.test.tsx' },
   teamTriageRotationUpdate: { kind: 'web', doc: 'TEAM_TRIAGE_ROTATION_MUTATION', components: ['routes/BugTriageTab.tsx'], label: 'Bug triage rotation', test: 'routes/BugTriageTab.test.tsx' },
   teamUpdateAccess: { kind: 'api-only', reason: 'Superseded by teamUpdate (name and visibility together), which the team settings page uses; kept for existing API clients.' },
-  userUpdate: { kind: 'web', doc: 'USER_UPDATE_MUTATION', components: ['routes/SettingsPage.tsx'], test: { tracking: 'INV-1015' } },
+  userUpdate: { kind: 'web', doc: 'USER_UPDATE_MUTATION', components: ['routes/SettingsPage.tsx'], test: 'routes/SettingsPage.test.tsx' },
   webhookCreate: { kind: 'web', doc: 'WEBHOOK_CREATE_MUTATION', components: ['routes/OpsPage.tsx'], label: 'Add webhook', test: 'routes/OpsPage.test.tsx' },
   webhookDelete: { kind: 'web', doc: 'WEBHOOK_DELETE_MUTATION', components: ['routes/OpsPage.tsx'], label: 'Delete webhook', test: 'routes/OpsPage.test.tsx' },
   webhookRotateSecret: { kind: 'web', doc: 'WEBHOOK_ROTATE_SECRET_MUTATION', components: ['routes/OpsPage.tsx'], label: 'Rotate secret', test: 'routes/OpsPage.test.tsx' },
