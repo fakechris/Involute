@@ -265,6 +265,7 @@ function WebhookCreateForm() {
   const [label, setLabel] = useState('');
   const [team, setTeam] = useState('');
   const [eventTypes, setEventTypes] = useState('');
+  const [agent, setAgent] = useState('');
   const [secret, setSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [run, state] = useMutation<{ webhookCreate: MutationResult & { secret: string | null } }>(WEBHOOK_CREATE_MUTATION, { refetchQueries: REFETCH });
@@ -281,6 +282,7 @@ function WebhookCreateForm() {
               label: label.trim() || null,
               team: team.trim() || null,
               eventTypes: parseEventTypes(eventTypes),
+              agent: agent.trim() || null,
             },
           },
         })
@@ -293,6 +295,7 @@ function WebhookCreateForm() {
       setUrl('');
       setLabel('');
       setEventTypes('');
+      setAgent('');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not add the webhook.');
     }
@@ -303,6 +306,7 @@ function WebhookCreateForm() {
       <input aria-label="Webhook URL" placeholder="https://…" value={url} onChange={(event) => setUrl(event.target.value)} />
       <input aria-label="Webhook label" placeholder="Label" value={label} onChange={(event) => setLabel(event.target.value)} />
       <input aria-label="Webhook team" placeholder="Team key (blank: all teams)" value={team} onChange={(event) => setTeam(event.target.value)} />
+      <input aria-label="Webhook agent" placeholder="Agent handle (blank: not an agent's push channel)" value={agent} onChange={(event) => setAgent(event.target.value)} />
       <input
         aria-label="Webhook events"
         placeholder="Events, comma separated (blank: all)"
@@ -356,6 +360,7 @@ function WebhookRow({ webhook }: { webhook: OpsWebhook }) {
       <span>{webhook.label ?? 'Unlabelled'}</span>
       <span className="mono">{webhook.url}</span>
       <span>{webhook.teamId ? 'one team' : 'all teams'}</span>
+      {webhook.actorId ? <span>push channel for @{webhook.actorHandle ?? webhook.actorId}</span> : null}
       <span className={webhook.enabled ? '' : 'issue-relations__error'}>
         {webhook.enabled ? 'enabled' : `disabled${webhook.consecutiveFailures ? ` after ${webhook.consecutiveFailures} failures` : ''}`}
       </span>

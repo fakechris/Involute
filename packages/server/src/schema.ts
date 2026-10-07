@@ -77,6 +77,7 @@ import {
   TEAM_OWNER_REQUIRED_MESSAGE,
   UPLOAD_TOO_LARGE_MESSAGE,
   WEBHOOK_EVENT_TYPE_INVALID_MESSAGE,
+  WEBHOOK_AGENT_NOT_FOUND_MESSAGE,
   WEBHOOK_NOT_FOUND_MESSAGE,
   WEBHOOK_URL_INVALID_MESSAGE,
   WORK_LINK_NOT_FOUND_MESSAGE,
@@ -1428,6 +1429,9 @@ const typeDefs = /* GraphQL */ `
     label: String
     url: String!
     teamId: String
+    "Set when the webhook is an agent's push channel (INV-992): only events about that agent are delivered."
+    actorId: String
+    actorHandle: String
     eventTypes: [String!]!
     filterQuery: String
     enabled: Boolean!
@@ -1442,6 +1446,8 @@ const typeDefs = /* GraphQL */ `
     label: String
     eventTypes: [String!]
     filterQuery: String
+    "Agent handle or id: makes this the agent's push channel (INV-992), delivering only what reaches its inbox and its executor dispatches."
+    agent: String
   }
 
   input WebhookUpdateInput {
@@ -2317,6 +2323,13 @@ const resolvers = {
     work: (parent: import('@prisma/client').DeliveryChangeSet, _args: unknown, context: GraphQLContext) => context.prisma.issue.findUniqueOrThrow({ where: { id: parent.workId } }),
     changesJson: (parent: import('@prisma/client').DeliveryChangeSet) => JSON.stringify(parent.changes),
     beforeJson: (parent: import('@prisma/client').DeliveryChangeSet) => JSON.stringify(parent.before),
+  },
+  WebhookSubscriptionRecord: {
+    actorHandle: async (parent: { actorId: string | null }, _args: unknown, context: GraphQLContext): Promise<string | null> => {
+      if (!parent.actorId) return null;
+      const actor = await context.prisma.user.findUnique({ where: { id: parent.actorId }, select: { handle: true } });
+      return actor?.handle ?? null;
+    },
   },
   Query: {
     executorContextJson: async (_parent: unknown, args: { id: string }, context: GraphQLContext) => JSON.stringify(await executorContext(context, args.id)),
@@ -3834,6 +3847,7 @@ const resolvers = {
       _parent: unknown,
       args: {
         input: {
+          agent?: string | null;
           eventTypes?: string[] | null;
           filterQuery?: string | null;
           label?: string | null;
@@ -3848,6 +3862,7 @@ const resolvers = {
         const teamId = await resolveWebhookTeamId(context, args.input.team ?? null);
         const eventTypes = normalizeWebhookEventTypes(args.input.eventTypes ?? null);
         const filterQuery = normalizeWebhookFilterQuery(args.input.filterQuery ?? null);
+        const actorId = args.input.agent?.trim() ? await resolveWebhookAgentId(context.prisma, args.input.agent.trim()) : null;
         const secret = randomBytes(32).toString('hex');
         const subscription = await context.prisma.webhookSubscription.create({
           data: {
@@ -3858,6 +3873,7 @@ const resolvers = {
             secret,
             teamId,
             url: normalizeWebhookUrl(args.input.url),
+            actorId,
           },
         });
         await auditWebhook(context, 'webhook-created', subscription);
@@ -5189,6 +5205,18 @@ async function resolveTeamByIdOrKey(prisma: PrismaClient, idOrKey: string): Prom
 // Webhook scope gate (Linear parity: only workspace admins manage webhooks).
 // Team-scoped subscriptions need team OWNER; global (all-teams) ones need a
 // global ADMIN or trusted system caller.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The agent a push channel is for, by handle or id; only agents can be pushed to (INV-992). */
+async function resolveWebhookAgentId(prisma: PrismaClient, agent: string): Promise<string> {
+  const user = await prisma.user.findFirst({
+    where: { actorKind: 'AGENT', deactivatedAt: null, OR: [{ handle: agent.replace(/^@/, '') }, ...(UUID_PATTERN.test(agent) ? [{ id: agent }] : [])] },
+    select: { id: true },
+  });
+  if (!user) throw createValidationError(WEBHOOK_AGENT_NOT_FOUND_MESSAGE);
+  return user.id;
+}
+
 async function resolveWebhookTeamId(context: GraphQLContext, team: string | null): Promise<string | null> {
   if (!team) {
     if (context.isTrustedSystem || context.viewer?.globalRole === 'ADMIN') {
