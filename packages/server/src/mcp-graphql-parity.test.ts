@@ -71,6 +71,11 @@ function typeMismatch(property: JsonSchemaProperty, graphqlType: GqlType): strin
   const json = jsonTypes[0] ?? 'string';
   const type = isNonNull(graphqlType) ? graphqlType.ofType! : graphqlType;
   if ((json === 'array') !== isList(type)) return `${json} vs ${String(graphqlType)}`;
+  // A list: its items must fit the list's element type.
+  if (json === 'array') {
+    const why = typeMismatch(property.items ?? {}, type.ofType!);
+    return why ? `array of ${why}` : null;
+  }
   const named = unwrap(type);
   if (typeof named.getValues === 'function') {
     if (property.enum) {
@@ -86,18 +91,17 @@ function typeMismatch(property: JsonSchemaProperty, graphqlType: GqlType): strin
     number: ['Int', 'Float'],
     boolean: ['Boolean'],
     object: ['String', 'JSON'],
-    array: ['String', 'ID', 'Int', 'Float', 'Boolean', 'JSON'],
   };
   return (family[json] ?? []).includes(named.name ?? '') ? null : `${json} vs ${String(graphqlType)}`;
 }
 
-/** Paired MCP properties whose type does not fit the GraphQL field's, with no stated exception. */
-function fieldTypeMismatches(tool: McpToolDefinition, mutations: Fields): string[] {
+/** Paired MCP properties whose type does not fit the GraphQL field's, with no stated exception (or all of them, with `includeExcepted`). */
+function fieldTypeMismatches(tool: McpToolDefinition, mutations: Fields, includeExcepted = false): string[] {
   const mutation = PAIRS[tool.name]!;
   const properties = (tool.inputSchema as { properties?: Record<string, JsonSchemaProperty> }).properties ?? {};
   const mismatches: string[] = [];
   for (const [name, property] of Object.entries(properties)) {
-    if (AGENT_ONLY_FIELDS[tool.name]?.[name] || FIELD_TYPE_EXCEPTIONS[tool.name]?.[name]) continue;
+    if (AGENT_ONLY_FIELDS[tool.name]?.[name] || (!includeExcepted && FIELD_TYPE_EXCEPTIONS[tool.name]?.[name])) continue;
     const graphqlType = graphqlFieldType(mutations, mutation, RENAMED[tool.name]?.[name] ?? camel(name));
     if (!graphqlType) continue;
     const why = typeMismatch(property, graphqlType);
@@ -190,9 +194,11 @@ describe('MCP and GraphQL write inputs (INV-795)', () => {
   it('types every paired field the same way on both surfaces', () => {
     const drift = tools.filter((tool) => PAIRS[tool.name]).flatMap((tool) => fieldTypeMismatches(tool, mutations));
     expect(drift).toEqual([]);
+    // An exception stays only while the types really differ; once they match it would hide later drift.
     for (const [toolName, fields] of Object.entries(FIELD_TYPE_EXCEPTIONS)) {
       const tool = tools.find((candidate) => candidate.name === toolName)!;
-      for (const field of Object.keys(fields)) expect((tool.inputSchema as { properties: Record<string, unknown> }).properties[field], `${toolName}.${field} stale type exception`).toBeTruthy();
+      const stillDiffer = fieldTypeMismatches(tool, mutations, true);
+      for (const field of Object.keys(fields)) expect(stillDiffer.some((entry) => entry.startsWith(`${toolName}.${field} `)), `${toolName}.${field} stale type exception`).toBe(true);
     }
   });
 
@@ -203,6 +209,8 @@ describe('MCP and GraphQL write inputs (INV-795)', () => {
       inputSchema: { ...workUpdate.inputSchema, properties: { ...(workUpdate.inputSchema as { properties: object }).properties, priority: { type: 'string' } } },
     } as McpToolDefinition;
     expect(fieldTypeMismatches(retyped, mutations)).toEqual(['work_update.priority → issueUpdate: string vs Int']);
+    const retypedItems = { ...retyped, inputSchema: { ...retyped.inputSchema, properties: { label_ids: { type: 'array', items: { type: 'integer' } } } } } as McpToolDefinition;
+    expect(fieldTypeMismatches(retypedItems, mutations)).toEqual(['work_update.label_ids → issueUpdate: array of integer vs String!']);
     const mistypedEnum = { ...retyped, inputSchema: { ...retyped.inputSchema, properties: { kind: { type: 'string', enum: ['ISSUE', 'WIDGET'] } } } } as McpToolDefinition;
     expect(fieldTypeMismatches(mistypedEnum, mutations)).toHaveLength(1);
   });
