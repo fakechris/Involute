@@ -32,7 +32,8 @@ export const AGENT_ONLY_TOOLS: Record<string, string> = {
 export const RENAMED: Record<string, Record<string, string>> = {
   agent_request_answer: { id: 'requestId' },
   run_report: { pr_number: 'pullRequestNumber' },
-  work_file_bug: { team: 'teamId' },
+  // Names on MCP, ids in the Report bug dialog (INV-1000).
+  work_file_bug: { team: 'teamId', labels: 'labelIds' },
   work_propose: { team: 'teamId' },
   work_update: { state: 'stateId' },
   work_comment: { work_id: 'issueId' },
