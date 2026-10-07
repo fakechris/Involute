@@ -1,0 +1,5 @@
+# The MCP ↔ GraphQL ↔ UI parity tables (INV-1004): a change here is a product decision.
+/packages/server/src/action-capabilities.ts @fakechris
+/packages/server/src/human-surface.ts @fakechris
+/packages/server/src/mcp-graphql-parity.test.ts @fakechris
+/packages/server/src/human-surface.test.ts @fakechris

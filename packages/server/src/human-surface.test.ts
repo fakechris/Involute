@@ -37,6 +37,22 @@ function sourceFiles(root: string): Map<string, string> {
 const web = sourceFiles(webSrc);
 const server = sourceFiles(serverSrc);
 
+/** The web test files, by path under packages/web/src (INV-1004). */
+function testFiles(root: string): Map<string, string> {
+  const files = new Map<string, string>();
+  const walk = (dir: string) => {
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) {
+        if (name !== 'node_modules') walk(path);
+      } else if (/\.test\.tsx?$/.test(name)) files.set(relative(root, path), readFileSync(path, 'utf8'));
+    }
+  };
+  walk(root);
+  return files;
+}
+const webTests = testFiles(webSrc);
+
 function gqlDocuments(files: Map<string, string>): Array<{ name: string; file: string; body: string }> {
   const docs: Array<{ name: string; file: string; body: string }> = [];
   for (const [file, source] of files) {
@@ -50,7 +66,7 @@ function gqlDocuments(files: Map<string, string>): Array<{ name: string; file: s
 const callsMutation = (text: string, mutation: string) => new RegExp(`\\b${mutation}\\s*[({]`).test(text);
 
 /** Why a `web` entry no longer holds; empty when it does. */
-function checkWebEntry(mutation: string, entry: Extract<HumanSurface, { kind: 'web' }>, files: Map<string, string>): string[] {
+function checkWebEntry(mutation: string, entry: Extract<HumanSurface, { kind: 'web' }>, files: Map<string, string>, tests: Map<string, string> = webTests): string[] {
   const problems: string[] = [];
   if (entry.doc) {
     const doc = gqlDocuments(files).find((candidate) => candidate.name === entry.doc);
@@ -70,6 +86,19 @@ function checkWebEntry(mutation: string, entry: Extract<HumanSurface, { kind: 'w
     const where = entry.labelFile ? [entry.labelFile] : entry.components;
     if (!where.some((file) => files.get(file)?.includes(entry.label!))) {
       problems.push(`${mutation}: label "${entry.label}" is not in ${where.join(', ')}`);
+    }
+  }
+  // A web entry is exercised by a test, or an open item will write one (INV-1004).
+  const test = (entry as { test?: string | { tracking: string } }).test;
+  if (!test) problems.push(`${mutation}: no web test named (test: 'path.test.tsx' or { tracking: 'INV-…' })`);
+  else if (typeof test === 'object') {
+    if (!/^INV-\d+$/.test(test.tracking)) problems.push(`${mutation}: test gap must track an INV item`);
+  } else {
+    const source = tests.get(test);
+    if (source === undefined) problems.push(`${mutation}: test ${test} does not exist`);
+    else {
+      const names = [entry.label, entry.doc, ...entry.components.map((component) => component.replace(/^.*\//, '').replace(/\.tsx?$/, ''))].filter((name): name is string => Boolean(name));
+      if (!names.some((name) => source.includes(name))) problems.push(`${mutation}: test ${test} mentions neither the label, the document nor a component`);
     }
   }
   return problems;
@@ -188,7 +217,24 @@ describe('human surface registry (INV-795)', () => {
   });
 
   describe('fails when an entry point disappears', () => {
-    it('reports a removed component, a component that stopped using the document, and a missing label', () => {
+    it('reports a web entry with no test, a test that does not exist, and one that never touches the entry point', () => {
+    const entry = MUTATION_SURFACES.workClaimRelease as Extract<HumanSurface, { kind: 'web' }>;
+    const { test: _test, ...bare } = entry;
+    expect(checkWebEntry('workClaimRelease', bare as typeof entry, web)).toEqual([
+      "workClaimRelease: no web test named (test: 'path.test.tsx' or { tracking: 'INV-…' })",
+    ]);
+    expect(checkWebEntry('workClaimRelease', { ...entry, test: 'components/Nope.test.tsx' }, web)).toEqual([
+      'workClaimRelease: test components/Nope.test.tsx does not exist',
+    ]);
+    const unrelated = new Map(webTests);
+    unrelated.set('components/Unrelated.test.tsx', "it('renders', () => {});");
+    expect(checkWebEntry('workClaimRelease', { ...entry, test: 'components/Unrelated.test.tsx' }, web, unrelated)).toEqual([
+      'workClaimRelease: test components/Unrelated.test.tsx mentions neither the label, the document nor a component',
+    ]);
+    expect(checkWebEntry('workClaimRelease', { ...entry, test: { tracking: 'later' } }, web)).toEqual(['workClaimRelease: test gap must track an INV item']);
+  });
+
+  it('reports a removed component, a component that stopped using the document, and a missing label', () => {
       const entry = MUTATION_SURFACES.workClaimRelease as Extract<HumanSurface, { kind: 'web' }>;
       const without = new Map(web);
       without.delete(entry.components[0]!);
