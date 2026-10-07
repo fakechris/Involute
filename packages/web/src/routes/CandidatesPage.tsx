@@ -965,6 +965,18 @@ export function CandidatesPage() {
       );
       return;
     }
+    // Acceptance is what the agent will be held to; a batch used to fill a
+    // blank one with "Accepted and committed for execution: <title>", which
+    // let dozens of items through with no criteria at all (INV-998).
+    const selectedNeedingAcceptance = candidates.filter((c) => selectedIds.includes(c.id) && !(c.acceptance ?? '').trim());
+    if (selectedNeedingAcceptance.length > 0) {
+      setBulkError(
+        `Committed 0, failed ${selectedNeedingAcceptance.length}. ${selectedNeedingAcceptance
+          .map((c) => `${c.identifier}: needs acceptance criteria — open the card and commit it with the acceptance filled in.`)
+          .join(' · ')}`,
+      );
+      return;
+    }
     setIsBulkProcessing(true);
     setBulkAction('commit');
     setBulkError(null);
@@ -982,10 +994,7 @@ export function CandidatesPage() {
       if (!candidate) continue;
       const teamHumans = humansByTeam.get(candidate.team.id) ?? [];
       const assigneeId = bulkAssigneeId || candidate.assignee?.id || teamHumans[0]?.id || allHumans[0]?.id;
-      const acceptance =
-        candidate.acceptance && candidate.acceptance.trim() !== ''
-          ? candidate.acceptance.trim()
-          : `Accepted and committed for execution: ${candidate.title}`;
+      const acceptance = (candidate.acceptance ?? '').trim();
 
       try {
         const result = await runCommit({
