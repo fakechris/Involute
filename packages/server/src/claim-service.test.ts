@@ -291,6 +291,15 @@ describe('claim service', () => {
         { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
       ),
     ).rejects.toThrow(WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE);
+    // The old batch placeholder is not acceptance either (INV-998).
+    await expect(
+      commitWork(
+        prisma,
+        candidate.id,
+        { expectedRevision: candidate.revision, acceptance: 'Accepted and committed for execution: Add ready queue' },
+        { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
+      ),
+    ).rejects.toThrow(WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE);
 
     const committed = await commitWork(
       prisma,

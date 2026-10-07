@@ -538,6 +538,8 @@ async function placeForCommit(
   if (!parent || parent.commitmentStatus === 'REJECTED') throw createValidationError(WORK_COMMIT_PARENT_REJECTED_MESSAGE);
 }
 
+const ACCEPTANCE_PLACEHOLDER = /^\s*Accepted and committed for execution\b/i;
+
 export async function commitWork(
   prisma: DatabaseClient,
   id: string,
@@ -580,7 +582,9 @@ export async function commitWork(
     await claimIssueRevision(transaction, existing.id, input.expectedRevision);
 
     const acceptance = nonEmpty(input.acceptance) ?? nonEmpty(existing.acceptance);
-    if (!acceptance) {
+    // The batch page once filled a blank acceptance with this sentence (INV-998);
+    // it says nothing an agent could be held to, so it is no acceptance.
+    if (!acceptance || ACCEPTANCE_PLACEHOLDER.test(acceptance)) {
       throw createValidationError(WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE);
     }
 
