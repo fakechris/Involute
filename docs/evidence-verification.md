@@ -73,9 +73,15 @@ whose `fetch` answers for the PR, the run and its jobs. `success` → `VERIFIED`
 is ready; `failure` → `FAILED` and B stays blocked. Each case prints the
 work / run / evidence / verification ids it created (`[INV-994 relay] …`).
 
-To do the same by hand against a local server, call `verifyEvidence(prisma, evidenceId,
-options)` from a `tsx` script with your own `options.fetch`; the queued worker
-(`EVIDENCE_VERIFIER_ENABLED=true`) only knows the GitHub App path above.
+To run it by hand against a local database and keep the records (never production):
+
+```bash
+DATABASE_URL=postgresql://…/involute_dev pnpm --filter @turnkeyai/involute-server exec tsx scripts/local-delivery-relay.ts
+```
+
+It prints one `[INV-994 relay] …` line per case with the work, run, evidence and
+verification ids. The queued worker (`EVIDENCE_VERIFIER_ENABLED=true`) only knows
+the GitHub App path above.
 
 ## Read results and recover
 
