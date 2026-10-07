@@ -35,6 +35,8 @@ export const WORK_EVENT_TYPES = [
   'bug.sla_at_risk',
   'bug.sla_breached',
   'work.claim_released',
+  // A lease ran out without renewal and the server released it (INV-991).
+  'work.claim_expired',
   'work.restored',
   'comment.created',
   'agent.mentioned',

@@ -446,6 +446,8 @@ A person moving work into a Done (COMPLETED) state through `issueUpdate` — sta
 
 `workClaimRelease(workId, reason)` (INV-789): a person ends an agent's claim now instead of waiting for the lease. Open runs under the claim are closed as `FAILED` ("Claim released by …: reason"), so the agent's next `run_report` is refused; the holder and its owner get a `work.claim_released` Inbox notification and outbox event; the work can be claimed again. Agents cannot release claims (`FORBIDDEN`); a reason is required.
 
+A lease that runs out without renewal is released by the server within five minutes (INV-991): open runs under it fail ("Lease expired … without renewal"), work the agent had moved to In Progress returns to Ready (Review or Done reached through a PR stays), the change is audited, and the work's owner, the holder and the holder's owner get a `work.claim_expired` Inbox notification and outbox event.
+
 Updates any combination of:
 
 - `stateId`

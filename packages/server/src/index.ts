@@ -3,6 +3,7 @@ import { SemanticIndex, startSemanticIndexer } from './embeddings/semantic-index
 import { startEvidenceVerifier } from './evidence-verification.js';
 import { expireOverdueAgentRequests } from './agent-request-expiry.js';
 import { sweepBugSlas } from './bug-sla.js';
+import { sweepExpiredClaims } from './claim-expiry.js';
 import type { PrismaClient } from '@prisma/client';
 
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
@@ -418,6 +419,15 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   }, 10 * 60_000);
   bugSlaTimer?.unref();
 
+  // Expired claims (INV-991): released by the server, runs failed, people told.
+  const claimExpiryTimer = setInterval(() => {
+    void sweepExpiredClaims(prisma).catch((error: unknown) => {
+      console.error('Failed to sweep expired claims.');
+      console.error(error);
+    });
+  }, 5 * 60_000);
+  claimExpiryTimer.unref();
+
   // Daily retention sweep: read notifications older than 90 days and unread
   // notifications older than 180 days are removed.
   let retentionTimer: NodeJS.Timeout | undefined;
@@ -499,6 +509,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
         clearInterval(requestExpiryTimer);
         clearInterval(bugSlaTimer);
       }
+      clearInterval(claimExpiryTimer);
 
       await new Promise<void>((resolve, reject) => {
         httpServer.close((error) => {

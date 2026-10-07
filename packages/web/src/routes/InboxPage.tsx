@@ -59,6 +59,8 @@ function formatNotificationType(type: string): string {
       return 'Moved back to candidates';
     case 'work.review_rejected':
       return 'Returned with feedback';
+    case 'work.claim_expired':
+      return 'Agent lease expired';
     case 'delivery.approved':
       return 'Delivery authorized';
     case 'delivery.declined':

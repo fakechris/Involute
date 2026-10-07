@@ -219,6 +219,7 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationLanding> = {
   'delivery.approved': { kind: 'info' },
   'delivery.declined': { kind: 'info' },
   'work.claim_released': { kind: 'info' },
+  'work.claim_expired': { kind: 'info' },
   'bug.sla_at_risk': { kind: 'info' },
   'bug.sla_breached': { kind: 'info' },
   'contract.amendment_proposed': { kind: 'work', action: 'Accept change', component: 'components/ContractAmendmentPanel.tsx' },
