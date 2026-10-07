@@ -18,6 +18,9 @@ export const WORK_EVENT_TYPES = [
   'work.committed',
   'work.uncommitted',
   'work.rejected',
+  // A delivery change set (INV-941) was approved or declined (INV-990).
+  'delivery.approved',
+  'delivery.declined',
   'work.claimed',
   'work.state_changed',
   'run.started',

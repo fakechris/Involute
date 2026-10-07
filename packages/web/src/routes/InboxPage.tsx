@@ -59,6 +59,10 @@ function formatNotificationType(type: string): string {
       return 'Moved back to candidates';
     case 'work.review_rejected':
       return 'Returned with feedback';
+    case 'delivery.approved':
+      return 'Delivery authorized';
+    case 'delivery.declined':
+      return 'Delivery change declined';
     case 'contract.breached':
       return 'Contract breached';
     case 'evidence.submitted':

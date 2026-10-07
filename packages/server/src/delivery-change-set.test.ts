@@ -85,6 +85,33 @@ describe('delivery packages and candidate change sets', () => {
     expect((await prisma.issue.findUniqueOrThrow({ where: { id: a!.id }, include: { state: true } })).state.type).toBe('REVIEW');
   });
 
+  it('tells the delivery proposer the decision, on committed and on candidate roots (INV-990)', async () => {
+    const committed = await fixture(false);
+    const approvedSet = await proposeDeliveryChange(committed.agentContext, { workId: committed.work.id, expectedRevision: committed.work.revision, reason: 'Ready to deliver', changes: { policy } });
+    await decideDeliveryChange(committed.humanContext, { id: approvedSet.id, approve: true, note: 'go' });
+    const approved = await prisma.notification.findMany({ where: { userId: committed.agent.id, type: 'delivery.approved' } });
+    expect(approved).toHaveLength(1);
+    expect(approved[0]!.payload).toMatchObject({ changeSetId: approvedSet.id, decision: 'approved', note: 'go', grantRevision: 1, unitKeys: ['a', 'b', 'c'] });
+    expect(approved[0]!.workId).toBe(committed.work.id);
+    expect(await prisma.eventOutbox.count({ where: { type: 'delivery.approved' } })).toBe(1);
+    // The decider is not told about their own decision.
+    expect(await prisma.notification.count({ where: { userId: committed.human.id, type: 'delivery.approved' } })).toBe(0);
+
+    const declinedSet = await proposeDeliveryChange(committed.agentContext, { workId: committed.work.id, expectedRevision: (await prisma.issue.findUniqueOrThrow({ where: { id: committed.work.id } })).revision, reason: 'Second try', changes: { contract: { scope: 'Narrower scope' } } });
+    await decideDeliveryChange(committed.humanContext, { id: declinedSet.id, approve: false, note: 'Not now' });
+    const declined = await prisma.notification.findFirst({ where: { userId: committed.agent.id, type: 'delivery.declined' } });
+    expect(declined?.payload).toMatchObject({ changeSetId: declinedSet.id, decision: 'declined', note: 'Not now' });
+
+    await resetAndSeed(prisma);
+    const candidate = await fixture(true);
+    const set = await proposeDeliveryChange(candidate.agentContext, { workId: candidate.work.id, expectedRevision: candidate.work.revision, reason: 'Plan', changes: { policy } });
+    await decideDeliveryChange(candidate.humanContext, { id: set.id, approve: true });
+    // The fixture's work has no proposer audit, so only the delivery decision reaches the agent here;
+    // the commit itself is announced by commitWork (INV-968), covered elsewhere.
+    expect((await prisma.issue.findUniqueOrThrow({ where: { id: candidate.work.id } })).commitmentStatus).toBe('COMMITTED');
+    expect(await prisma.notification.count({ where: { userId: candidate.agent.id, type: 'delivery.approved' } })).toBe(1);
+  });
+
   it('refuses independent child contracts, unknown units, stale grants and a changed root contract', async () => {
     const f = await fixture(false);
     const set = await proposeDeliveryChange(f.agentContext, { workId: f.work.id, expectedRevision: f.work.revision, reason: 'Delegate units', changes: { policy } });

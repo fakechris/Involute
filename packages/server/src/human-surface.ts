@@ -215,6 +215,9 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationLanding> = {
   'work.committed': { kind: 'info' },
   'work.rejected': { kind: 'info' },
   'work.uncommitted': { kind: 'info' },
+  // A delivery authorization was decided; the agent reads it and starts, or stops (INV-990).
+  'delivery.approved': { kind: 'info' },
+  'delivery.declined': { kind: 'info' },
   'work.claim_released': { kind: 'info' },
   'bug.sla_at_risk': { kind: 'info' },
   'bug.sla_breached': { kind: 'info' },
