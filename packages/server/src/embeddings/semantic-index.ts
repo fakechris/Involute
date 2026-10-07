@@ -68,7 +68,9 @@ export class SemanticIndex {
 
   /**
    * Embeds up to `limit` items that have no vector yet or changed since theirs
-   * was made; returns how many it looked at (0 = up to date).
+   * was made; returns how many it looked at (0 = up to date). An item touched
+   * in the same millisecond as its vector was marked is looked at again (the
+   * hash decides), so an edit is never skipped on timestamp ties.
    */
   async refresh(limit = 32): Promise<number> {
     if (!this.loaded) await this.load();
@@ -86,7 +88,7 @@ export class SemanticIndex {
              embedding."contentHash"
         FROM "Issue" issue
         LEFT JOIN "IssueEmbedding" embedding ON embedding."issueId" = issue.id AND embedding.model = ${model}
-       WHERE embedding."issueId" IS NULL OR embedding."updatedAt" < issue."updatedAt"
+       WHERE embedding."issueId" IS NULL OR embedding."updatedAt" <= issue."updatedAt"
        ORDER BY issue."updatedAt" DESC
        LIMIT ${limit}
     `;
