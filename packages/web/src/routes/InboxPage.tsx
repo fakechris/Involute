@@ -61,6 +61,8 @@ function formatNotificationType(type: string): string {
       return 'Returned with feedback';
     case 'work.claim_expired':
       return 'Agent lease expired';
+    case 'research.closable':
+      return 'Research can be closed';
     case 'delivery.approved':
       return 'Delivery authorized';
     case 'executor.dispatched':

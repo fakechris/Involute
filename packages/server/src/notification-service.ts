@@ -152,6 +152,8 @@ export const DECISION_NOTIFICATION_TYPES = [
   // Delivery authorization decided (INV-990): the delivery proposer may not be the work's proposer.
   'delivery.approved',
   'delivery.declined',
+  // Every item derived from a research item is committed; its proposer can close it (INV-1001).
+  'research.closable',
 ] as const;
 export type DecisionNotificationType = (typeof DECISION_NOTIFICATION_TYPES)[number];
 

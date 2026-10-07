@@ -78,6 +78,7 @@ export const ISSUE_TYPE_EXCLUSIVE_MESSAGE = 'An item has at most one Type: Bug, 
 export const RESEARCH_CLOSE_NOT_ISSUE_MESSAGE = 'Only an ISSUE with Type: Research can be closed by an agent; a person accepts everything else.';
 export const RESEARCH_CLOSE_NOT_COMMITTED_MESSAGE = 'A research item an agent closes must be committed first: a person commits it, then the agent may move it to Done.';
 export const RESEARCH_CLOSE_CLAIMED_MESSAGE = 'Another actor holds the claim on this research item; it closes when that claim ends or by its holder.';
+export const RESEARCH_CLOSE_NO_DOWNSTREAM_MESSAGE = 'Research closes once it led somewhere: propose its actionable points (ISSUE) or "won\'t do" decisions (DECISION) DERIVED_FROM it, or state "无可执行点" / "no actionable points" in its description, then close it (INV-1001).';
 export const RESEARCH_INITIAL_DONE_ONLY_MESSAGE = 'initial_state DONE is only for an ISSUE labelled research (Type: Research); it lands in Done when a person commits it. Other work stops at In Review.';
 export const BUG_REPORT_PRIORITY_REQUIRED_MESSAGE = 'A bug report needs a priority (Urgent, High, Medium or Low).';
 export const BUG_REPORT_STEPS_REQUIRED_MESSAGE = 'A bug report needs steps to reproduce.';
@@ -318,6 +319,7 @@ const exposedErrorCodes = new Map<string, string>([
   [RESEARCH_CLOSE_NOT_ISSUE_MESSAGE, 'FORBIDDEN'],
   [RESEARCH_CLOSE_NOT_COMMITTED_MESSAGE, 'FORBIDDEN'],
   [RESEARCH_CLOSE_CLAIMED_MESSAGE, 'FORBIDDEN'],
+  [RESEARCH_CLOSE_NO_DOWNSTREAM_MESSAGE, 'FORBIDDEN'],
   [RESEARCH_INITIAL_DONE_ONLY_MESSAGE, 'BAD_USER_INPUT'],
   [TRIAGE_ROTATION_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_REPORT_PRIORITY_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],

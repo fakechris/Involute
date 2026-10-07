@@ -475,6 +475,8 @@ export interface WorkHygieneQueryData {
     dependencyWithoutBlocks: Array<{ from: HygieneRef; to: HygieneRef }>;
     researchWithoutDownstreamCount: number;
     researchWithoutDownstream: Array<HygieneRef & { repository: string | null }>;
+    researchClosableCount: number;
+    researchClosable: Array<HygieneRef & { repository: string | null }>;
   };
 }
 

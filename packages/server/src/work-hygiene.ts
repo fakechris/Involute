@@ -22,6 +22,13 @@ export interface WorkHygiene {
   dependencyWithoutBlocksCount: number;
   researchWithoutDownstream: Issue[];
   researchWithoutDownstreamCount: number;
+  /** Research in Review whose derived items are all committed: nothing left to wait for (INV-1001). */
+  researchClosable: Issue[];
+  researchClosableCount: number;
+}
+
+function isResearch(issue: { labels: Array<{ name: string }> }): boolean {
+  return issue.labels.some((label) => label.name.toLowerCase() === RESEARCH_LABEL);
 }
 
 function contractTexts(issue: Issue): Array<string | null> {
@@ -62,6 +69,11 @@ export async function loadWorkHygiene(
   for (const [child, parent] of parentOf) anyLink.add(pairKey(child, parent));
   const blocksLink = new Set(links.filter((link) => link.type === 'BLOCKS').map((link) => pairKey(link.fromId, link.toId)));
   const derivedTargets = new Set(links.filter((link) => link.type === 'DERIVED_FROM').map((link) => link.toId));
+  const derivedFrom = new Map<string, string[]>();
+  for (const link of links) {
+    if (link.type !== 'DERIVED_FROM') continue;
+    derivedFrom.set(link.toId, [...(derivedFrom.get(link.toId) ?? []), link.fromId]);
+  }
 
   const unplaced: Issue[] = [];
   for (const issue of issues) {
@@ -96,9 +108,19 @@ export async function loadWorkHygiene(
     }
   }
 
+  // Only committed items are loaded, so a derived id missing from byId is a
+  // candidate (or declined) item: the research still waits for it.
+  const researchClosable = issues.filter(
+    (issue) =>
+      isResearch(issue) &&
+      issue.state.type === 'REVIEW' &&
+      (derivedFrom.get(issue.id) ?? []).length > 0 &&
+      derivedFrom.get(issue.id)!.every((id) => byId.has(id)),
+  );
+
   const researchWithoutDownstream = issues.filter(
     (issue) =>
-      issue.labels.some((label) => label.name.toLowerCase() === RESEARCH_LABEL) &&
+      isResearch(issue) &&
       (issue.state.type === 'REVIEW' || issue.state.type === 'COMPLETED') &&
       !derivedTargets.has(issue.id) &&
       !contractTexts(issue).some((text) => text && NO_ACTIONABLE.test(text)),
@@ -113,7 +135,25 @@ export async function loadWorkHygiene(
     dependencyWithoutBlocksCount: dependencyWithoutBlocks.length,
     researchWithoutDownstream: researchWithoutDownstream.slice(0, LIST_LIMIT),
     researchWithoutDownstreamCount: researchWithoutDownstream.length,
+    researchClosable: researchClosable.slice(0, LIST_LIMIT),
+    researchClosableCount: researchClosable.length,
   };
+}
+
+/**
+ * Research items `workId` was derived from that now have every derived item
+ * committed and still sit in Review — the ones whose proposer can close them (INV-1001).
+ */
+export async function closableResearchSources(prisma: DatabaseClient, workId: string): Promise<Issue[]> {
+  const links = await prisma.workLink.findMany({ where: { type: 'DERIVED_FROM', fromId: workId }, select: { toId: true } });
+  const closable: Issue[] = [];
+  for (const { toId } of links) {
+    const research = await prisma.issue.findUnique({ where: { id: toId }, include: { labels: { select: { name: true } }, state: { select: { type: true } } } });
+    if (!research || !isResearch(research) || research.state.type !== 'REVIEW' || research.commitmentStatus !== 'COMMITTED') continue;
+    const derived = await prisma.workLink.findMany({ where: { type: 'DERIVED_FROM', toId }, select: { from: { select: { commitmentStatus: true } } } });
+    if (derived.length > 0 && derived.every((link) => link.from.commitmentStatus === 'COMMITTED')) closable.push(research);
+  }
+  return closable;
 }
 
 /**

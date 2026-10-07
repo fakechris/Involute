@@ -52,6 +52,7 @@ export function HygienePage() {
                 ['Mentions without a link', hygiene.unlinkedMentionCount],
                 ['Dependencies without BLOCKS', hygiene.dependencyWithoutBlocksCount],
                 ['Research with nothing derived', hygiene.researchWithoutDownstreamCount],
+                ['Research ready to close', hygiene.researchClosableCount],
               ].map(([label, count]) => (
                 <div key={label as string} className={`hygiene-stat${count ? ' hygiene-stat--open' : ''}`}>
                   <span className="hygiene-stat__count">{count}</span>
@@ -113,6 +114,16 @@ export function HygienePage() {
               <p className="observation-hint">Finished research should lead somewhere: propose its actionable points and "won't do" decisions DERIVED_FROM it, or state "no actionable points".</p>
               <ul className="hygiene-list">
                 {hygiene.researchWithoutDownstream.map((item) => (
+                  <li key={item.id}>{itemButton(item)}</li>
+                ))}
+              </ul>
+            </section>
+
+            <section aria-label="Research ready to close">
+              <h2>Research ready to close · {hygiene.researchClosableCount}</h2>
+              <p className="observation-hint">Everything derived from this research is committed; nothing is left to wait for. Its proposer closes it (an agent may, for Type: Research), or accept it here.</p>
+              <ul className="hygiene-list">
+                {hygiene.researchClosable.map((item) => (
                   <li key={item.id}>{itemButton(item)}</li>
                 ))}
               </ul>
