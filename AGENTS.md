@@ -136,7 +136,7 @@ Any bugfix or unplanned modification touching product source code MUST adhere to
      - `related_work_id: <当前处理任务ID 或 所属父里程碑ID>`
      - `related_work_type: 'DISCOVERED_DURING'`
      - `parent_id`：可省略——省略时自动继承被关联项所在的里程碑（同仓库）；跨仓库发现的问题必须显式给出目标仓库的父级（§4.8）
-     - 若是 bug，调用 `work_file_bug`（或 `work_propose` 带 `labels: ['bug']`），必带 `priority`（1–4，设 SLA）、`steps_to_reproduce` 与 `acceptance`（直接承诺后 agent 不能再补验收标准，缺了就无法 claim）：有父级（显式或继承）时直接承诺，不进 Candidates；缺任一项则拒绝（见 §12.5）。当场已修好的再加 `initial_state: 'REVIEW'`
+     - 若是 bug，调用 `work_file_bug`（或 `work_propose` 带 `labels: ['bug']`），必带 `priority`（1–4，设 SLA）、`steps_to_reproduce` 与 `acceptance`（直接承诺后 agent 不能再补验收标准，缺了就无法 claim）：有父级（显式或继承）时直接承诺，不进 Candidates；缺任一项则拒绝（见 §12.5）。当场已修好的再加 `initial_state: 'REVIEW'`，并带 `commit_sha` / `pr_number` / `evidence_url`（可加 `summary`）：服务端自动生成已完成的 run 并挂上证据，审阅者能直接看到修复（INV-997）；只带 REVIEW 不带证据会被拒绝
    - 必须自动生成标准的结构化中文描述：
      - `### 1. 目标与架构定位`
      - `### 2. 核心功能与交付范围`
