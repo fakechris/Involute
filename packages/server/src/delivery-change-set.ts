@@ -9,6 +9,8 @@ import { parseDeliveryPolicy } from './delivery-policy.js';
 import { deliveryContractDigest } from './delivery-grant.js';
 import { lockWorkGraph } from './graph-integrity.js';
 import { commitWork } from './claim-service.js';
+import { enqueueWorkEvent } from './event-outbox.js';
+import { projectDecisionNotifications } from './notification-service.js';
 import { updateIssue } from './issue-service.js';
 import { createWorkLink } from './link-service.js';
 import { claimIssueRevision, recordWorkAudit, selectIssueSnapshot, writeActorFromViewer } from './work-service.js';
@@ -112,7 +114,9 @@ export async function decideDeliveryChange(context: GraphQLContext, input: { id:
     if (set.status !== 'PENDING') throw createValidationError('This delivery change has already been decided.');
     if (!input.approve) {
       if (!input.note?.trim()) throw createValidationError('Declining a delivery change needs a reason.');
-      return tx.deliveryChangeSet.update({ where: { id: set.id }, data: { status: 'REJECTED', decidedById: context.viewer!.id, decidedAt: new Date(), decisionNote: input.note.trim() } });
+      const declined = await tx.deliveryChangeSet.update({ where: { id: set.id }, data: { status: 'REJECTED', decidedById: context.viewer!.id, decidedAt: new Date(), decisionNote: input.note.trim() } });
+      await announceDeliveryDecision(tx, { set, work: hint.work, deciderId: context.viewer!.id, decision: 'declined', note: input.note.trim() });
+      return declined;
     }
     const requested = changes(set.changes);
     let root = await tx.issue.findUniqueOrThrow({ where: { id: set.workId } });
@@ -161,6 +165,52 @@ export async function decideDeliveryChange(context: GraphQLContext, input: { id:
       target = await tx.issue.findUniqueOrThrow({ where: { id: target.id } });
       await recordWorkAudit(tx, { workId: target.id, before: selectIssueSnapshot(root), after: selectIssueSnapshot(target), actor });
     }
-    return tx.deliveryChangeSet.update({ where: { id: set.id }, data: { status: 'APPLIED', decidedById: context.viewer!.id, decidedAt: new Date(), decisionNote: input.note?.trim() ?? null } });
+    const applied = await tx.deliveryChangeSet.update({ where: { id: set.id }, data: { status: 'APPLIED', decidedById: context.viewer!.id, decidedAt: new Date(), decisionNote: input.note?.trim() ?? null } });
+    const grant = requested.policy !== undefined ? await tx.deliveryPackage.findUnique({ where: { workId: target.id }, select: { revision: true } }) : null;
+    await announceDeliveryDecision(tx, {
+      set, work: target, deciderId: context.viewer!.id, decision: 'approved', note: input.note?.trim() ?? null,
+      grantRevision: grant?.revision ?? null,
+      unitKeys: requested.policy !== undefined ? parseDeliveryPolicy(requested.policy, target).units.map((unit) => unit.key) : [],
+    });
+    return applied;
+  });
+}
+
+/**
+ * The delivery proposer learns the decision without asking (INV-990): the
+ * event goes to the outbox and a notification to the proposer's inbox. Until
+ * this, approving authorization on already-committed work told no one, and
+ * the agent that asked for it never started (INV-972).
+ */
+async function announceDeliveryDecision(
+  tx: Prisma.TransactionClient,
+  input: {
+    set: { id: string; proposedById: string; reason: string };
+    work: Pick<Issue, 'id' | 'identifier' | 'teamId'>;
+    deciderId: string;
+    decision: 'approved' | 'declined';
+    note: string | null;
+    grantRevision?: number | null;
+    unitKeys?: string[];
+  },
+) {
+  const type = input.decision === 'approved' ? 'delivery.approved' : 'delivery.declined';
+  const payload = {
+    changeSetId: input.set.id,
+    decision: input.decision,
+    deciderId: input.deciderId,
+    reason: input.set.reason,
+    note: input.note,
+    grantRevision: input.grantRevision ?? null,
+    unitKeys: input.unitKeys ?? [],
+  };
+  const event = await enqueueWorkEvent(tx, { type, payload, workId: input.work.id, workIdentifier: input.work.identifier });
+  await projectDecisionNotifications(tx, {
+    deciderId: input.deciderId,
+    eventId: event.id,
+    payload,
+    type,
+    work: input.work,
+    alsoNotify: [input.set.proposedById],
   });
 }

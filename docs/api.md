@@ -764,6 +764,10 @@ See the **payload v2** section above for the full envelope. Summary:
   target has either been delivered or exhausted its retries.
 - Review events (`work.accepted`, `work.review_rejected`) include
   `selfReviewed: true` when the reviewer is also the work owner or run actor.
+- Delivery authorization decisions (`delivery.approved`, `delivery.declined`,
+  INV-990) carry `changeSetId`, `decision`, `note`, `grantRevision` and the
+  authorized `unitKeys`; the delivery proposer also gets an Inbox notification
+  of the same type, whether or not the root work was still a candidate.
 
 ### Comment events (INV-559)
 

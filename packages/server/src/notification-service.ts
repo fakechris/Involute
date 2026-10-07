@@ -149,6 +149,9 @@ export const DECISION_NOTIFICATION_TYPES = [
   'work.uncommitted',
   'work.accepted',
   'work.review_rejected',
+  // Delivery authorization decided (INV-990): the delivery proposer may not be the work's proposer.
+  'delivery.approved',
+  'delivery.declined',
 ] as const;
 export type DecisionNotificationType = (typeof DECISION_NOTIFICATION_TYPES)[number];
 
