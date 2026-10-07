@@ -766,6 +766,11 @@ See the **payload v2** section above for the full envelope. Summary:
   target has either been delivered or exhausted its retries.
 - Review events (`work.accepted`, `work.review_rejected`) include
   `selfReviewed: true` when the reviewer is also the work owner or run actor.
+- Returning a delivery package returns each implementation unit with its own
+  `work.review_rejected` (`packageWorkId`, `packageIdentifier`, `unitKey`,
+  `reason`), and the unit's approved executor and last run actor get the same
+  notification in their `agent_inbox` (INV-995) — the feedback is no longer
+  only in the dispatch row's `feedback`.
 - Delivery authorization decisions (`delivery.approved`, `delivery.declined`,
   INV-990) carry `changeSetId`, `decision`, `note`, `grantRevision` and the
   authorized `unitKeys`; the delivery proposer also gets an Inbox notification

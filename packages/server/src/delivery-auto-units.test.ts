@@ -8,6 +8,7 @@ import { testParentId } from './test-placement.js';
 import { proposeDeliveryChange, decideDeliveryChange } from './delivery-change-set.js';
 import { createDeliveryExecution } from './delivery-execution.js';
 import { readUnreadNotifications } from './notification-service.js';
+import { reviewWork } from './run-service-review.js';
 loadProjectEnvironment();
 const prisma = new PrismaClient();
 beforeEach(async () => { await resetAndSeed(prisma); });
@@ -61,5 +62,25 @@ describe('units exist and executors are told once a package is approved', () => 
     expect(await prisma.issue.count({ where: { deliveryRootId: f.root.id } })).toBe(3);
     expect(await prisma.executorDispatch.count({ where: { rootId: f.root.id } })).toBe(2);
     expect(await prisma.notification.count({ where: { type: 'executor.dispatched' } })).toBe(2);
+  });
+
+  // INV-995: returning the package puts the feedback in each unit executor's inbox.
+  it('sends a package return to each unit executor with the feedback and unit', async () => {
+    const f = await fixture();
+    await decideDeliveryChange(f.humanContext, { id: f.proposal.id, approve: true });
+    const review = await prisma.workflowState.findFirstOrThrow({ where: { teamId: f.root.teamId, type: 'REVIEW' } });
+    const root = await prisma.issue.update({ where: { id: f.root.id }, data: { stateId: review.id } });
+    const human = (await prisma.user.findUniqueOrThrow({ where: { email: DEFAULT_ADMIN_EMAIL } })).id;
+    await reviewWork(prisma, root.id, { expectedRevision: root.revision, decision: 'REJECTED', reason: 'Unit a misses the edge case.' }, { actorKind: 'HUMAN', actorId: human });
+
+    const units = await prisma.issue.findMany({ where: { deliveryRootId: f.root.id }, orderBy: { deliveryUnitKey: 'asc' } });
+    const returned = async (userId: string) => (await readUnreadNotifications(prisma, { first: 20, since: null, teamId: null, userId })).filter((row) => row.type === 'work.review_rejected');
+    const toAgent = await returned(f.agent.id);
+    expect(toAgent.map((row) => row.work?.identifier)).toEqual([units[0]!.identifier]);
+    expect(toAgent[0]!.payload).toMatchObject({ reason: 'Unit a misses the edge case.', unitKey: 'a', packageIdentifier: f.root.identifier });
+    expect((await returned(f.other.id)).map((row) => row.work?.identifier)).toEqual([units[1]!.identifier]);
+    // The reviewer is not told their own decision; the unit without an executor tells no agent.
+    expect(await prisma.notification.count({ where: { type: 'work.review_rejected', userId: human } })).toBe(0);
+    expect(await prisma.notification.count({ where: { type: 'work.review_rejected', workId: units[2]!.id } })).toBe(0);
   });
 });
