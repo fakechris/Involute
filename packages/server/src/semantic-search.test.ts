@@ -209,7 +209,8 @@ describe('Semantic search (INV-927)', () => {
 
     // A restart reads the stored vectors instead of embedding again.
     const restarted = new SemanticIndex(prisma, embedder);
-    expect(await restarted.refresh()).toBe(0);
+    await restarted.refresh();
+    expect(embedder.documentsEmbedded).toBe(2);
     expect(restarted.size).toBe(1);
   });
 
