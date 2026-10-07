@@ -7,6 +7,7 @@ import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/s
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import {
   AGENT_DESCRIPTION_REQUIRED_MESSAGE,
+  RESEARCH_CLOSE_NO_DOWNSTREAM_MESSAGE,
   RESEARCH_CLOSE_CLAIMED_MESSAGE,
   RESEARCH_CLOSE_NOT_COMMITTED_MESSAGE,
   RESEARCH_CLOSE_NOT_ISSUE_MESSAGE,
@@ -16,6 +17,7 @@ import {
 import { claimWork, commitWork, proposeWork } from './claim-service.ts';
 import { updateIssue } from './issue-service.ts';
 import { RESEARCH_CLOSE_REASON } from './research-closure.ts';
+import { readUnreadNotifications } from './notification-service.ts';
 import { testParentId } from './test-placement.ts';
 import type { WriteActor } from './work-service.ts';
 
@@ -23,7 +25,9 @@ loadProjectEnvironment();
 
 const prisma = new PrismaClientConstructor();
 
-const DESCRIPTION = '### 1. 目标与架构定位\n调研。\n### 2. 核心功能与交付范围\n结论。\n### 3. 验收标准与验证方案\n来源固定。';
+const BARE_DESCRIPTION = '### 1. 目标与架构定位\n调研。\n### 2. 核心功能与交付范围\n结论。\n### 3. 验收标准与验证方案\n来源固定。';
+// Says the research led nowhere, so it closes without derived items (INV-1001).
+const DESCRIPTION = `${BARE_DESCRIPTION}\n无可执行点。`;
 
 // INV-912: Type: Research is the one kind of work an agent may move to Done.
 describe('research closure (Type: Research)', () => {
@@ -215,6 +219,56 @@ describe('research closure (Type: Research)', () => {
       proposeWork(prisma, { description: DESCRIPTION, initialState: 'CANCELED', labels: ['research'], parentId, teamId: team.id, title: 'Canceled' }, agentActor),
     ).rejects.toThrow(/cannot be COMPLETED or CANCELED/);
   });
+  // INV-1001: research closes once it led somewhere, and its proposer hears when it can.
+  describe('closure needs downstream (INV-1001)', () => {
+    async function bareResearch() {
+      const candidate = await proposeWork(
+        prisma,
+        { description: BARE_DESCRIPTION, labels: ['research'], parentId: await parentFor('ISSUE'), teamId: team.id, title: 'Study with no note' },
+        agentActor,
+      );
+      return commit(candidate, review.id);
+    }
+    const derive = (researchId: string, title: string) =>
+      proposeWork(prisma, { description: DESCRIPTION, relatedWorkId: researchId, relatedWorkType: 'DERIVED_FROM', teamId: team.id, title }, agentActor);
+
+    it('refuses to close research nothing derives from, until something does', async () => {
+      const research = await bareResearch();
+      await expect(updateIssue(prisma, research.id, { stateId: done.id }, agentActor)).rejects.toThrow(RESEARCH_CLOSE_NO_DOWNSTREAM_MESSAGE);
+      await derive(research.id, 'Do the thing');
+      const closed = await updateIssue(prisma, research.id, { stateId: done.id }, agentActor);
+      expect(closed.stateId).toBe(done.id);
+    });
+
+    it('tells the proposer once when every derived item is committed', async () => {
+      const research = await bareResearch();
+      const first = await derive(research.id, 'First action');
+      const second = await derive(research.id, 'Second action');
+      await commit(first);
+      const unread = () => readUnreadNotifications(prisma, { first: 10, since: null, teamId: null, userId: agent.id });
+      expect((await unread()).filter((row) => row.type === 'research.closable')).toHaveLength(0);
+      await commit(second);
+      const closable = (await unread()).filter((row) => row.type === 'research.closable');
+      expect(closable).toHaveLength(1);
+      expect(closable[0]!.workId).toBe(research.id);
+      expect(closable[0]!.payload).toMatchObject({ lastDerivedIdentifier: expect.stringMatching(/^INV-/) });
+      // A later derived item does not repeat the notice.
+      await commit(await derive(research.id, 'Third action'));
+      expect((await unread()).filter((row) => row.type === 'research.closable')).toHaveLength(1);
+    });
+
+    it('lands an initial_state DONE research in Review instead when nothing derives from it', async () => {
+      const candidate = await proposeWork(
+        prisma,
+        { description: BARE_DESCRIPTION, initialState: 'DONE', labels: ['research'], parentId: await parentFor('ISSUE'), teamId: team.id, title: 'Claims done' },
+        agentActor,
+      );
+      const committed = await commit(candidate);
+      expect(committed.stateId).toBe(review.id);
+      expect(await prisma.workReviewDecision.count({ where: { workId: committed.id } })).toBe(0);
+    });
+  });
+
 });
 
 async function resetDatabase(prismaClient: PrismaClient): Promise<void> {

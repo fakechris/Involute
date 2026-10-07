@@ -51,7 +51,8 @@ import { isLegalContains, lockWorkGraph } from './graph-integrity.js';
 import { createIssueWithAudit, mentionTexts, recordStateChangeAcceptance, type CreateIssueInput } from './issue-service.js';
 import { linkMentionedWork } from './mention-links.js';
 import { findOrCreateLabelIds, isBugWork, isResearchWork, namesResearch } from './labels.js';
-import { hasInitialDoneMarker, INITIAL_DONE_MARKER } from './research-closure.js';
+import { hasInitialDoneMarker, INITIAL_DONE_MARKER, notifyClosableResearch } from './research-closure.js';
+import { researchLacksDownstream } from './work-hygiene.js';
 import { announceBug, composeDescription } from './bug-report.js';
 import {
   completeWorkIdempotency,
@@ -669,7 +670,9 @@ export async function commitWork(
     }
 
     // A research candidate proposed with initial_state DONE (INV-912) lands in
-    // Done when a person commits it, unless the person chose another state.
+    // Done when a person commits it, unless the person chose another state —
+    // or it led nowhere and does not say so (INV-1001): then it lands in
+    // Review, where /hygiene lists it until its downstream is proposed.
     let committedToDone = false;
     if (
       !input.stateId &&
@@ -677,14 +680,15 @@ export async function commitWork(
       existing.kind === 'ISSUE' &&
       (await isResearchWork(transaction, existing.id))
     ) {
-      const doneState = await transaction.workflowState.findFirst({
-        where: { teamId: existing.teamId, type: 'COMPLETED' },
+      const lacksDownstream = await researchLacksDownstream(transaction, existing.id);
+      const landing = await transaction.workflowState.findFirst({
+        where: { teamId: existing.teamId, type: lacksDownstream ? 'REVIEW' : 'COMPLETED' },
         orderBy: { position: 'asc' },
         select: { id: true },
       });
-      if (doneState) {
-        targetStateId = doneState.id;
-        committedToDone = true;
+      if (landing) {
+        targetStateId = landing.id;
+        committedToDone = !lacksDownstream;
       }
     }
 
@@ -736,6 +740,8 @@ export async function commitWork(
       type: 'work.committed',
       work: updated,
     });
+
+    await notifyClosableResearch(transaction, updated);
 
     if (committedToDone && actor.actorId) {
       await recordStateChangeAcceptance(transaction, {

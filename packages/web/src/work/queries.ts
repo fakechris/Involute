@@ -584,6 +584,13 @@ export const WORK_HYGIENE_QUERY = gql`
         title
         repository
       }
+      researchClosableCount
+      researchClosable {
+        id
+        identifier
+        title
+        repository
+      }
     }
   }
 `;

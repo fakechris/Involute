@@ -1159,6 +1159,9 @@ const typeDefs = /* GraphQL */ `
     dependencyWithoutBlocks: [WorkReferencePair!]!
     researchWithoutDownstreamCount: Int!
     researchWithoutDownstream: [Issue!]!
+    "Research in Review whose derived items are all committed; its proposer can close it (INV-1001)."
+    researchClosableCount: Int!
+    researchClosable: [Issue!]!
   }
 
   type WorkReferencePair {

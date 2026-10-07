@@ -6,7 +6,11 @@ import {
   RESEARCH_CLOSE_CLAIMED_MESSAGE,
   RESEARCH_CLOSE_NOT_COMMITTED_MESSAGE,
   RESEARCH_CLOSE_NOT_ISSUE_MESSAGE,
+  RESEARCH_CLOSE_NO_DOWNSTREAM_MESSAGE,
 } from './errors.js';
+import { enqueueWorkEvent } from './event-outbox.js';
+import { projectDecisionNotifications } from './notification-service.js';
+import { closableResearchSources, researchLacksDownstream } from './work-hygiene.js';
 import type { WriteActor } from './work-service.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
@@ -46,4 +50,20 @@ export async function assertAgentMayCloseResearch(
   }
   // The record is the deliverable, so it has to be one: the three-section description.
   validateAgentDescription(work.description, actor);
+  // And it has to have led somewhere, or say that it could not (INV-1001).
+  if (await researchLacksDownstream(prisma, work.id, work.description)) throw createValidationError(RESEARCH_CLOSE_NO_DOWNSTREAM_MESSAGE);
+}
+
+/**
+ * Committing `work` may be the last thing a research item was waiting for:
+ * when every item derived from it is now committed, its proposer is told it
+ * can be closed (INV-1001) — once per research item, in its inbox.
+ */
+export async function notifyClosableResearch(prisma: DatabaseClient, work: Pick<Issue, 'id' | 'identifier'>): Promise<void> {
+  for (const research of await closableResearchSources(prisma, work.id)) {
+    if (await prisma.notification.count({ where: { type: 'research.closable', workId: research.id } })) continue;
+    const payload = { lastDerivedWorkId: work.id, lastDerivedIdentifier: work.identifier };
+    const event = await enqueueWorkEvent(prisma, { type: 'research.closable', workId: research.id, workIdentifier: research.identifier, payload });
+    await projectDecisionNotifications(prisma, { deciderId: null, eventId: event.id, payload, type: 'research.closable', work: research });
+  }
 }

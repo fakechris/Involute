@@ -222,6 +222,8 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationLanding> = {
   // Written to the approved executor's (an agent's) inbox: start on it (INV-993).
   'executor.dispatched': { kind: 'info' },
   'work.claim_expired': { kind: 'info' },
+  // The research proposer (usually an agent) closes it with work_update(state: DONE) (INV-1001).
+  'research.closable': { kind: 'info' },
   'bug.sla_at_risk': { kind: 'info' },
   'bug.sla_breached': { kind: 'info' },
   'contract.amendment_proposed': { kind: 'work', action: 'Accept change', component: 'components/ContractAmendmentPanel.tsx' },
