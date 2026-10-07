@@ -113,6 +113,8 @@ function producedNotificationTypes(files: Map<string, string>): Set<string> {
 /** Dotted literals in notification producers that are outbox events, not inbox notifications. */
 const NOT_INBOX = new Set([
   'work.review_submitted',
+  // Outbox event written next to a run.completed notification (INV-997).
+  'artifact.attached',
   'agent.request_answered',
   'agent.request_replied',
   // The agent learns the decision from work_get_context; people decided it themselves.

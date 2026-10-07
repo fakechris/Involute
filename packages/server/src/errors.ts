@@ -82,6 +82,10 @@ export const RESEARCH_INITIAL_DONE_ONLY_MESSAGE = 'initial_state DONE is only fo
 export const BUG_REPORT_PRIORITY_REQUIRED_MESSAGE = 'A bug report needs a priority (Urgent, High, Medium or Low).';
 export const BUG_REPORT_STEPS_REQUIRED_MESSAGE = 'A bug report needs steps to reproduce.';
 export const BUG_COMMIT_PRIORITY_REQUIRED_MESSAGE = 'Committing a bug needs a priority (Urgent, High, Medium or Low): it sets the SLA.';
+export const FIXED_BUG_EVIDENCE_REQUIRED_MESSAGE =
+  'Filing a fixed bug into Review needs its evidence: pass commit_sha, pr_number or evidence_url (INV-997).';
+export const FIXED_BUG_EVIDENCE_WITHOUT_REVIEW_MESSAGE =
+  'commit_sha, pr_number and evidence_url describe a fix already made: pass initial_state REVIEW with them, or leave them out.';
 export const PROPOSE_PRIORITY_RANGE_MESSAGE =
   'Priority must be 0 (none), 1 (Urgent), 2 (High), 3 (Medium) or 4 (Low).';
 export const BUG_PROPOSE_PRIORITY_REQUIRED_MESSAGE = 'Proposing a bug needs a priority (Urgent, High, Medium or Low): it sets the SLA.';
@@ -301,6 +305,8 @@ const exposedErrorCodes = new Map<string, string>([
   [CLAIM_RELEASE_NO_CLAIM_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_COMMIT_PRIORITY_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [PROPOSE_PRIORITY_RANGE_MESSAGE, 'BAD_USER_INPUT'],
+  [FIXED_BUG_EVIDENCE_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [FIXED_BUG_EVIDENCE_WITHOUT_REVIEW_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_PROPOSE_PRIORITY_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_PROPOSE_PARENT_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_PROPOSE_STEPS_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],

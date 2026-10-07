@@ -62,6 +62,10 @@ export const AGENT_ONLY_FIELDS: Record<string, Record<string, string>> = {
     verification: 'Same as acceptance: a person edits it on the issue page after reporting.',
     idempotency_key: 'Lets an agent retry a filing without duplicating it; the web app submits once.',
     source: 'Tags where an agent found the bug; a person\'s report is tagged bug-report by the server.',
+    commit_sha: 'An agent files the bug it fixed on the spot with the fix (INV-997); a person attaches evidence to the issue afterwards.',
+    pr_number: 'Same as commit_sha: the fix PR of a bug fixed before filing.',
+    evidence_url: 'Same as commit_sha: proof of a fix made before filing.',
+    summary: 'Same as commit_sha: the run summary of a fix made before filing.',
   },
 };
 
