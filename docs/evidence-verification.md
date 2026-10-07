@@ -55,6 +55,34 @@ pnpm --filter @turnkeyai/involute-server evidence:verify <evidence-uuid>
 
 This operator command is not an MCP/GraphQL mutation. It appends observations and cannot accept work. Exit 0 means the source observation is VERIFIED, **not** that the whole work contract is satisfied. Exit 2 means another observation status; exit 1 means invocation or execution failed.
 
+## Run the A→B relay locally (INV-994)
+
+Production has no verifier configured (decision 2026-10-07: the GitHub App is not
+tied to oracle_5). The relay rule — unit B of a delivery package is claimable only
+once unit A's CI evidence is `VERIFIED` — is exercised locally with a fixture
+GitHub instead:
+
+```bash
+pnpm --filter @turnkeyai/involute-server exec vitest run src/delivery-relay-local.test.ts
+```
+
+The test approves a two-unit package (A with `checks: [{ workflowId: 7, job: 'verify' }]`,
+B `dependsOn: ['a']`), runs A to completion bound to PR #4 / SHA, attaches
+`actions/runs/8` evidence and calls `verifyEvidence` with a `GitHubVerifierOptions`
+whose `fetch` answers for the PR, the run and its jobs. `success` → `VERIFIED` and B
+is ready; `failure` → `FAILED` and B stays blocked. Each case prints the
+work / run / evidence / verification ids it created (`[INV-994 relay] …`).
+
+To run it by hand against a local database and keep the records (never production):
+
+```bash
+DATABASE_URL=postgresql://…/involute_dev pnpm --filter @turnkeyai/involute-server exec tsx scripts/local-delivery-relay.ts
+```
+
+It prints one `[INV-994 relay] …` line per case with the work, run, evidence and
+verification ids. The queued worker (`EVIDENCE_VERIFIER_ENABLED=true`) only knows
+the GitHub App path above.
+
 ## Read results and recover
 
 MCP `work_get_context` and GraphQL `WorkEvidenceRecord.verifications` expose the observation history. PENDING is followed by a separate VERIFIED, FAILED, UNAVAILABLE or STALE record. Records preserve the execution/contract binding, external run ID, verifier version, observed time and result digest. Read stored status as an observation of that binding, not a permanent assertion about the current work.
