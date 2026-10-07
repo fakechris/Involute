@@ -54,7 +54,24 @@ docker compose --env-file .env.production -f docker-compose.prod.images.yml logs
 
 ## Deploy
 
-Images publish from `main` via `.github/workflows/docker-publish.yml`. Production deploy is Ansible:
+Images publish from `main` via `.github/workflows/docker-publish.yml`. Wait for the
+**Docker Publish** run of the merge commit to finish, then deploy that tag with the
+host script (INV-1008):
+
+```bash
+# from a workstation (the script runs on the host; nothing is copied there)
+ssh oracle_5 'sudo bash -s' < scripts/deploy-prod.sh sha-<12 hex of the merge commit>
+```
+
+The script refuses to pull when `/` has less than `MIN_FREE_GB` (8) free, backs up
+`.env.production` and the database into `.backups/`, switches `INVOLUTE_IMAGE_TAG`,
+pulls, restarts, waits for `/ready` to answer `200` JSON, and then removes every
+application image except the new and the previous tag. A failed pull, restart or
+health check puts `INVOLUTE_IMAGE_TAG` back and restarts the previous images.
+Rollback is the same command with the previous tag (printed at the end). Env knobs:
+`INVOLUTE_DIR`, `MIN_FREE_GB`, `HEALTH_URL`, `HEALTH_TIMEOUT`, `KEEP_DB_BACKUPS`.
+
+The Ansible path is the alternative:
 
 ```bash
 # from a workstation with vault access
