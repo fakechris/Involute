@@ -376,10 +376,12 @@ export async function callMcpTool(
       const teamId = await resolveTeamId(context.prisma, requiredString(args.team, 'team'));
       await assertCanWriteTeam(context.prisma, context, teamId);
       const rawTitle = requiredString(args.title, 'title');
+      // Domain labels ride along; a second Type label is refused by the server as usual (INV-1000).
+      const extraLabels = (Array.isArray(args.labels) ? args.labels : []).filter((label): label is string => typeof label === 'string' && label.trim() !== '' && label.trim().toLowerCase() !== 'bug');
       const proposeInput: Parameters<typeof proposeWork>[1] = {
         teamId,
         title: rawTitle,
-        labels: ['bug'],
+        labels: ['bug', ...extraLabels],
         priority: requiredNumber(args.priority, 'priority'),
         stepsToReproduce: requiredString(args.steps_to_reproduce, 'steps_to_reproduce'),
         // A bug is committed on filing, and an agent may not add acceptance to
@@ -415,12 +417,29 @@ export async function callMcpTool(
       const recorded = intoReview && created.commitmentStatus === 'COMMITTED'
         ? await context.prisma.$transaction((tx) => recordFixedBugRun(tx, { workId: created.id, ...fixed }, bugActor))
         : null;
+      // Where it landed and what it may duplicate, as work_propose says (INV-1000):
+      // a bug is committed on filing, so the filer is the one who can still act.
+      const notes = [recorded
+        ? 'Bug committed directly into Review with its fix recorded (INV-997): the run and evidence are attached; a person accepts or returns it.'
+        : 'Bug committed directly (INV-787): it does not go to Candidates. Priority set the SLA. Fix it or have it declined with a reason.'];
+      const parent = created.parentId
+        ? await context.prisma.issue.findUnique({ where: { id: created.parentId }, select: { identifier: true, kind: true, title: true } })
+        : null;
+      if (parent && !proposeInput.parentId) {
+        notes.push(`No parent_id given: placed under ${parent.kind} ${parent.identifier} (${parent.title}), inherited from the related work (norm v1, INV-718). If that is the wrong place, move it with work_update(parent_id).`);
+      }
+      const possibleDuplicates = context.semanticIndex
+        ? await findPossibleDuplicates(context.prisma, context.semanticIndex, created, buildReadableIssueWhere(context))
+        : [];
+      if (possibleDuplicates.length > 0) {
+        notes.push(`Possible duplicates: ${possibleDuplicates.map((item) => `${item.identifier} (${item.title})`).join('; ')}. If one is the same bug, link this one to it (work_link DUPLICATE_OF) and tell the owner so it is declined.`);
+      }
       return {
         ...created,
         ...(recorded ? { run: { id: recorded.run.id, public_id: recorded.run.publicId }, evidence: recorded.evidence.map((item) => ({ id: item.id, kind: item.kind, url: item.url })) } : {}),
-        warning: recorded
-          ? 'Bug committed directly into Review with its fix recorded (INV-997): the run and evidence are attached; a person accepts or returns it.'
-          : 'Bug committed directly (INV-787): it does not go to Candidates. Priority set the SLA. Fix it or have it declined with a reason.',
+        placed_under: parent ? { identifier: parent.identifier, kind: parent.kind, title: parent.title } : null,
+        ...(possibleDuplicates.length > 0 ? { possible_duplicates: possibleDuplicates } : {}),
+        warning: notes.join(' '),
       };
     }
     case 'work_commit': {
@@ -970,7 +989,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     name: 'work_file_bug',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     description:
-      'File a Type: Bug. It is committed directly and never enters Candidates. Priority is required because it sets the SLA (1 Urgent 24h, 2 High 48h, 3 Medium / 4 Low = 7 days). Missing parent, priority, steps_to_reproduce or acceptance refuses the call. Already fixed it? Pass initial_state REVIEW with commit_sha / pr_number / evidence_url: the server records the completed run and evidence (INV-997). Prefer this over work_propose for bugs.',
+      'File a Type: Bug. It is committed directly and never enters Candidates. Priority is required because it sets the SLA (1 Urgent 24h, 2 High 48h, 3 Medium / 4 Low = 7 days). Missing parent, priority, steps_to_reproduce or acceptance refuses the call. Already fixed it? Pass initial_state REVIEW with commit_sha / pr_number / evidence_url: the server records the completed run and evidence (INV-997). The result says where it was placed (placed_under) and lists possible_duplicates — existing work close in meaning — when semantic search is on (INV-1000). Prefer this over work_propose for bugs.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -995,6 +1014,11 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
           description: 'Required. What must be true when it is fixed. The bug is committed on filing and agents cannot add acceptance later, so without it the bug cannot be claimed.',
         },
         verification: { type: 'string', description: 'How the fix will be checked (tests, manual steps).' },
+        labels: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Extra domain labels (e.g. search, ops). Bug is added automatically; a second Type label (Feature / Improvement / Research) is refused.',
+        },
         parent_id: {
           type: 'string',
           description: 'Parent PROJECT/MILESTONE/EPIC/ISSUE. Required unless related_work_id can inherit one.',
