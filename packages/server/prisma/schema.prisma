@@ -241,6 +241,7 @@ model User {
   agentRequestsTargeted AgentRequest[] @relation("AgentRequestTarget")
   agentRequestsMade     AgentRequest[] @relation("AgentRequestRequester")
   agentRequestsClaimed  AgentRequest[] @relation("AgentRequestClaimant")
+  pushSubscriptions    WebhookSubscription[] @relation("WebhookSubscriptionActor")
 }
 
 model AgentCredential {
@@ -952,11 +953,16 @@ model WebhookSubscription {
   filterQuery         String?
   enabled             Boolean  @default(true)
   consecutiveFailures Int      @default(0)
+  /// Bound to one agent (INV-992): receives only the events written to that
+  /// agent's inbox (and its executor dispatches), so a decision wakes it.
+  actorId             String?  @db.Uuid
+  actor               User?    @relation("WebhookSubscriptionActor", fields: [actorId], references: [id], onDelete: Cascade)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   @@index([teamId])
   @@index([enabled])
+  @@index([actorId])
 }
 
 // Kernel notifications: human-gate signals (decision requests, review

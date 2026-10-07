@@ -9,6 +9,8 @@ const WEBHOOK_FIELDS = `
   teamId
   eventTypes
   filterQuery
+  actorId
+  actorHandle
   enabled
   consecutiveFailures
   createdAt
@@ -92,6 +94,8 @@ export interface OpsWebhook {
   teamId: string | null;
   eventTypes: string[];
   filterQuery: string | null;
+  actorId: string | null;
+  actorHandle: string | null;
   enabled: boolean;
   consecutiveFailures: number;
   createdAt: string;

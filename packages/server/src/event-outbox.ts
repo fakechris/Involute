@@ -84,6 +84,11 @@ export interface WebhookTarget {
   eventTypes?: string[];
   /** IQL filter evaluated against the work snapshot at delivery time. */
   filterQuery?: string | null;
+  /**
+   * Bound to one agent (INV-992): delivers only events that reached that
+   * agent's inbox, or dispatches addressed to it — the push that wakes it.
+   */
+  actorId?: string | null;
 }
 
 export const WEBHOOK_AUTO_DISABLE_THRESHOLD = 10;
@@ -191,6 +196,7 @@ export async function flushEventOutbox(
 
   const eventTeams = await loadEventTeams(prisma, pending);
   const workSnapshots = await loadWorkSnapshots(prisma, pending);
+  const audiences = distinctTargets.some((target) => target.actorId) ? await loadEventAudiences(prisma, pending) : new Map<string, Set<string>>();
 
   let delivered = 0;
   let failed = 0;
@@ -227,7 +233,7 @@ export async function flushEventOutbox(
     const eventWorkId = (event.payload as { work?: { id?: unknown } } | null)?.work?.id;
     const eventWork = typeof eventWorkId === 'string' ? workSnapshots.get(eventWorkId) ?? null : null;
     const eventTargets = distinctTargets.filter((target) =>
-      targetMatchesEvent(target, event.type, eventTeams.get(event.id) ?? null, eventWork),
+      targetMatchesEvent(target, event.type, eventTeams.get(event.id) ?? null, eventWork, audiences.get(event.id)),
     );
     if (eventTargets.length === 0) {
       await prisma.eventOutbox.updateMany({
@@ -363,9 +369,14 @@ function targetMatchesEvent(
   eventType: string,
   eventTeamId: string | null,
   work: WorkSnapshot | null,
+  audience?: Set<string>,
 ): boolean {
   if (!target.subscriptionId) {
     return true;
+  }
+  // An agent's push hears only what is about it.
+  if (target.actorId && !audience?.has(target.actorId)) {
+    return false;
   }
   if (target.teamId && target.teamId !== eventTeamId) {
     return false;
@@ -391,6 +402,45 @@ function targetMatchesEvent(
     }
   }
   return true;
+}
+
+/**
+ * Who each event is about, for agent-bound targets (INV-992): everyone whose
+ * inbox got a notification from it, plus the executor a dispatch names.
+ */
+async function loadEventAudiences(
+  prisma: PrismaClient,
+  events: Array<{ id: string; type: string; payload: unknown }>,
+): Promise<Map<string, Set<string>>> {
+  const audiences = new Map<string, Set<string>>();
+  if (events.length === 0) return audiences;
+  const notifications = await prisma.notification.findMany({
+    where: { sourceEventId: { in: events.map((event) => event.id) } },
+    select: { sourceEventId: true, userId: true },
+  });
+  for (const row of notifications) {
+    if (!row.sourceEventId) continue;
+    const set = audiences.get(row.sourceEventId) ?? new Set<string>();
+    set.add(row.userId);
+    audiences.set(row.sourceEventId, set);
+  }
+  const dispatchIds = events
+    .filter((event) => event.type.startsWith('executor.'))
+    .map((event) => (event.payload as { data?: { dispatchId?: unknown } } | null)?.data?.dispatchId)
+    .filter((id): id is string => typeof id === 'string');
+  if (dispatchIds.length > 0) {
+    const dispatches = await prisma.executorDispatch.findMany({ where: { id: { in: dispatchIds } }, select: { id: true, executorActorId: true } });
+    const executorByDispatch = new Map(dispatches.map((dispatch) => [dispatch.id, dispatch.executorActorId]));
+    for (const event of events) {
+      const dispatchId = (event.payload as { data?: { dispatchId?: unknown } } | null)?.data?.dispatchId;
+      const executor = typeof dispatchId === 'string' ? executorByDispatch.get(dispatchId) : undefined;
+      if (!executor) continue;
+      const set = audiences.get(event.id) ?? new Set<string>();
+      set.add(executor);
+      audiences.set(event.id, set);
+    }
+  }
+  return audiences;
 }
 
 async function loadEventTeams(
@@ -532,6 +582,7 @@ function targetIdentity(target: WebhookTarget): string {
     target.subscriptionId ?? '',
     target.teamId ?? '',
     (target.eventTypes ?? []).join(','),
+    target.actorId ?? '',
   ].join('\0');
 }
 
@@ -583,6 +634,8 @@ async function deliverToTarget(
     delivery_id: deliveryId,
     occurred_at: event.createdAt.toISOString(),
     createdAt: event.createdAt.toISOString(),
+    // The agent this push is for, and what to do on waking (INV-992).
+    ...(target.actorId ? { actor_id: target.actorId, wake: 'Read agent_inbox for the decision, then work_get_context on the work and continue.' } : {}),
   });
 
   try {
@@ -676,5 +729,6 @@ export async function collectOutboundWebhookTargets(
     subscriptionId: subscription.id,
     teamId: subscription.teamId,
     url: subscription.url,
+    actorId: subscription.actorId,
   }));
 }
