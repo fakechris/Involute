@@ -766,10 +766,22 @@ See the **payload v2** section above for the full envelope. Summary:
   target has either been delivered or exhausted its retries.
 - Review events (`work.accepted`, `work.review_rejected`) include
   `selfReviewed: true` when the reviewer is also the work owner or run actor.
+- Returning a delivery package returns each implementation unit with its own
+  `work.review_rejected` (`packageWorkId`, `packageIdentifier`, `unitKey`,
+  `reason`), and the unit's approved executor and last run actor get the same
+  notification in their `agent_inbox` (INV-995) — the feedback is no longer
+  only in the dispatch row's `feedback`.
 - Delivery authorization decisions (`delivery.approved`, `delivery.declined`,
   INV-990) carry `changeSetId`, `decision`, `note`, `grantRevision` and the
   authorized `unitKeys`; the delivery proposer also gets an Inbox notification
   of the same type, whether or not the root work was still a candidate.
+- Approving a policy also creates every implementation unit of the package
+  (INV-993): N approved units → N committed sub-issues in Ready, in BLOCKS
+  order, each with a queued `ExecutorDispatch` when the unit names an
+  executor. `executor.dispatched` goes to the outbox **and** to the executor
+  agent's `agent_inbox` (same `dispatchId`, `generation`), so a push channel
+  (INV-992) or a poll finds it. `work_execution_create` stays as an
+  idempotent fallback and returns the existing unit.
 
 ### Comment events (INV-559)
 

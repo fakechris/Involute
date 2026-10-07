@@ -1,5 +1,6 @@
 import type { Issue, Prisma } from '@prisma/client';
 import { approvedDelivery, assertDeliveryExecution } from './delivery-grant.js';
+import { projectDecisionNotifications } from './notification-service.js';
 import { hasTechnicalDeliveryProof } from './delivery-readiness.js';
 import { snapshotContract } from './evidence-contract.js';
 import { createValidationError } from './errors.js';
@@ -71,6 +72,18 @@ export async function returnDeliveryChildren(tx: Prisma.TransactionClient, root:
     }
     const decision = await tx.workReviewDecision.create({ data: { workId: task.id, runId: run?.id ?? null, reviewerId: actor.actorId!, decision: 'REJECTED', fromRevision: task.revision, toRevision: after.revision, reason: reason ?? `Returned with delivery package ${root.identifier}.` } });
     await recordWorkAudit(tx, { workId: task.id, before: selectIssueSnapshot(task), after: selectIssueSnapshot(after), actor: { ...actor, reason: decision.reason } });
-    await enqueueWorkEvent(tx, { type: 'work.review_rejected', workId: task.id, workIdentifier: task.identifier, payload: { decisionId: decision.id, packageWorkId: root.id, reviewerId: actor.actorId, reason: decision.reason } });
+    const payload = { decisionId: decision.id, packageWorkId: root.id, packageIdentifier: root.identifier, unitKey: task.deliveryUnitKey, reviewerId: actor.actorId, reason: decision.reason };
+    const event = await enqueueWorkEvent(tx, { type: 'work.review_rejected', workId: task.id, workIdentifier: task.identifier, payload });
+    // The feedback reaches whoever executes this unit — its approved executor
+    // and the actor of its last run — in their inbox, not only the dispatch
+    // row (INV-995). The reviewer is never told their own decision.
+    await projectDecisionNotifications(tx, {
+      alsoNotify: [dispatch?.executorActorId ?? binding?.unit.executorActorId, run?.actorId],
+      deciderId: actor.actorId ?? null,
+      eventId: event.id,
+      payload,
+      type: 'work.review_rejected',
+      work: task,
+    });
   }
 }

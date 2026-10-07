@@ -6,10 +6,11 @@ import { assertCanWriteIssue } from './access-control.js';
 import { createValidationError, WORK_REVISION_CONFLICT_MESSAGE } from './errors.js';
 import { findWorkByIdOrIdentifier } from './context-service.js';
 import { parseDeliveryPolicy } from './delivery-policy.js';
-import { deliveryContractDigest } from './delivery-grant.js';
+import { approvedDelivery, deliveryContractDigest } from './delivery-grant.js';
 import { lockWorkGraph } from './graph-integrity.js';
 import { commitWork } from './claim-service.js';
 import { enqueueWorkEvent } from './event-outbox.js';
+import { instantiateApprovedUnits } from './delivery-execution.js';
 import { projectDecisionNotifications } from './notification-service.js';
 import { updateIssue } from './issue-service.js';
 import { createWorkLink } from './link-service.js';
@@ -167,6 +168,11 @@ export async function decideDeliveryChange(context: GraphQLContext, input: { id:
     }
     const applied = await tx.deliveryChangeSet.update({ where: { id: set.id }, data: { status: 'APPLIED', decidedById: context.viewer!.id, decidedAt: new Date(), decisionNote: input.note?.trim() ?? null } });
     const grant = requested.policy !== undefined ? await tx.deliveryPackage.findUnique({ where: { workId: target.id }, select: { revision: true } }) : null;
+    // Approval creates every unit at once (INV-993): nobody has to ask for them one by one.
+    if (requested.policy !== undefined) {
+      const approved = await approvedDelivery(tx, target.id);
+      await instantiateApprovedUnits(tx, approved, approved.policy.units.map((unit) => unit.key), actor);
+    }
     await announceDeliveryDecision(tx, {
       set, work: target, deciderId: context.viewer!.id, decision: 'approved', note: input.note?.trim() ?? null,
       grantRevision: grant?.revision ?? null,

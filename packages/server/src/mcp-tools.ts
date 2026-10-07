@@ -915,7 +915,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   },
   {
     name: 'work_execution_create',
-    description: 'Instantiate an approved delivery unit and any predecessors, inheriting its contract and human owner. This cannot introduce a new goal or authority. Repeated calls return the same unit for the same grant revision.',
+    description: 'Instantiate an approved delivery unit and any predecessors, inheriting its contract and human owner. This cannot introduce a new goal or authority. Repeated calls return the same unit for the same grant revision. Since INV-993 approval already creates every unit and puts executor.dispatched in each executor agent_inbox; this is the fallback.',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     inputSchema: { type: 'object', properties: { work_id: { type: 'string' }, unit_key: { type: 'string' }, expected_grant_revision: { type: 'integer' } }, required: ['work_id', 'unit_key', 'expected_grant_revision'] },
   },
