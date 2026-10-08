@@ -1,4 +1,5 @@
 import { protocolInfo } from './protocol-info.js';
+import { storeUpload } from './uploads.js';
 import { actionCapabilities } from './action-capabilities.js';
 import { executorContext, executorUpdate, EXECUTOR_OPERATIONS, type ExecutorInput } from './executor-service.js';
 import { deliveryContext } from './delivery-context.js';
@@ -74,6 +75,7 @@ export type McpToolName =
   | 'work_delivery_context'
   | 'work_delivery_propose'
   | 'work_execution_create'
+  | 'work_attach_file'
   | 'work_get_context'
   | 'work_list_ready'
   | 'protocol_get_guide'
@@ -111,6 +113,7 @@ export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
 ];
 
 export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
+  'work_attach_file',
   'work_executor_update',
   'work_delivery_propose',
   'work_execution_create',
@@ -687,6 +690,24 @@ export async function callMcpTool(
       }
       return reported;
     }
+    case 'work_attach_file': {
+      // A private file on the work (INV-1003): research reports and the like
+      // that must never enter git or an image. Readers of the work may open it.
+      const work = await requireWork(context.prisma, requiredString(args.work_id, 'work_id'));
+      await assertCanWriteIssue(context.prisma, context, work.id);
+      if (!context.viewer) throw createValidationError('An authenticated actor is required to attach a file.');
+      const attachment = await storeUpload(context.prisma, {
+        filename: requiredString(args.filename, 'filename'),
+        mimeType: requiredString(args.mime_type, 'mime_type'),
+        content: requiredString(args.content, 'content'),
+        issueId: work.id,
+        uploaderId: context.viewer.id,
+      });
+      return {
+        id: attachment.id, filename: attachment.filename, mime_type: attachment.mimeType, size: attachment.size, url: attachment.url, work_id: work.id, identifier: work.identifier,
+        warning: 'Stored under the work; people with read access open it from the issue page (Files). Pass its url to evidence_attach(kind: artifact) when it belongs to a run.',
+      };
+    }
     case 'evidence_attach': {
       const work = await requireWork(context.prisma, requiredString(args.work_id, 'work_id'));
       await assertCanWriteIssue(context.prisma, context, work.id);
@@ -1232,6 +1253,22 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'work_attach_file',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    description:
+      'Attach a private file to work (INV-1003): a research report, export or screenshot that must stay out of git and images. Stored server-side; readers of the work open it from the issue page. Base64 content, up to 50 MB. Returns the url to cite in evidence_attach(kind: artifact).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        work_id: { type: 'string', description: 'Work id or identifier the file belongs to.' },
+        filename: { type: 'string' },
+        mime_type: { type: 'string', description: 'e.g. text/markdown, application/pdf.' },
+        content: { type: 'string', description: 'Base64-encoded file content.' },
+      },
+      required: ['work_id', 'filename', 'mime_type', 'content'],
+    },
+  },
+  {
     name: 'evidence_attach',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     description: 'Attach a PR, test report, log, screenshot, or artifact to an existing run.',
@@ -1505,6 +1542,7 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_delivery_context: 'read',
   work_delivery_propose: 'propose',
   work_execution_create: 'claim',
+  work_attach_file: 'report',
   work_get_context: 'read',
   work_read_page: 'read',
   work_catalog: 'read',

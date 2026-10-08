@@ -837,6 +837,21 @@ export function IssuePage() {
               <AddSubIssueButton issue={activeIssue} />
             </div>
 
+            {/* Private files on the work (INV-1003): research reports and other material that never enters git. */}
+            {activeIssue.attachments && activeIssue.attachments.length > 0 ? (
+              <div className="issue-panel__section">
+                <h2>Files · {activeIssue.attachments.length}</h2>
+                <ul className="issue-children" role="list" aria-label="Files">
+                  {activeIssue.attachments.map((file) => (
+                    <li key={file.id} role="listitem" className="issue-children__row">
+                      <a href={file.url} target="_blank" rel="noreferrer">{file.filename}</a>
+                      <span className="observation-card__meta">{file.mimeType} · {Math.max(1, Math.round(file.size / 1024))} KB</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
             {/* Typed links: blockers, related, duplicates (INV-679). Same section as the board drawer. */}
             <IssueRelations key={activeIssue.id} issueId={activeIssue.id} onOpen={(issueId) => navigate(`/issue/${issueId}`)} />
 
