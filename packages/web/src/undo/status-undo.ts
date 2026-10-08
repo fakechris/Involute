@@ -100,7 +100,36 @@ export interface DeleteUndoApplyResult {
 
 export type DeleteUndoApply = (items: DeleteUndoItem[]) => Promise<DeleteUndoApplyResult>;
 
-export type SessionUndoEntry = StatusUndoEntry | CommitUndoEntry | FieldUndoEntry | DeleteUndoEntry;
+/** One work relation a gesture added or removed (INV-842). */
+export interface LinkUndoItem {
+  /** Known once the link exists; null for a removed link until redo recreates it. */
+  linkId: string | null;
+  fromId: string;
+  toId: string;
+  type: string;
+  /** "INV-2 blocked by INV-42" — how the relation reads from the issue it was changed on. */
+  summary: string;
+  /** Issues whose Relations sections show this link, for refresh. */
+  issueIds: string[];
+  /** 'linked': undo removes it; 'unlinked': undo adds it back. */
+  phase: 'linked' | 'unlinked';
+}
+
+export interface LinkUndoEntry {
+  id: string;
+  links: LinkUndoItem[];
+}
+
+export interface LinkUndoApplyResult {
+  /** Index into the items given, with the link id after the write (a re-added link has a new id). */
+  applied: Array<{ index: number; linkId: string | null }>;
+  conflicts: string[];
+  retryable?: number[];
+}
+
+export type LinkUndoApply = (items: LinkUndoItem[]) => Promise<LinkUndoApplyResult>;
+
+export type SessionUndoEntry = StatusUndoEntry | CommitUndoEntry | FieldUndoEntry | DeleteUndoEntry | LinkUndoEntry;
 
 export interface CommitUndoApplyResult {
   applied: Array<{ issueId: string; revision: number }>;
@@ -129,6 +158,7 @@ let applyStatus: StatusUndoApply | null = null;
 let applyCommit: CommitUndoApply | null = null;
 let applyField: FieldUndoApply | null = null;
 let applyDelete: DeleteUndoApply | null = null;
+let applyLink: LinkUndoApply | null = null;
 const listeners = new Set<() => void>();
 let toastTimer: number | null = null;
 let chain: Promise<void> = Promise.resolve();
@@ -172,6 +202,7 @@ export function resetStatusUndo() {
   applyCommit = null;
   applyField = null;
   applyDelete = null;
+  applyLink = null;
   chain = Promise.resolve();
   emit(EMPTY);
 }
@@ -190,6 +221,15 @@ export function registerFieldUndoApply(apply: FieldUndoApply) {
   return () => {
     if (applyField === apply) {
       applyField = null;
+    }
+  };
+}
+
+export function registerLinkUndoApply(apply: LinkUndoApply) {
+  applyLink = apply;
+  return () => {
+    if (applyLink === apply) {
+      applyLink = null;
     }
   };
 }
@@ -253,7 +293,15 @@ export function formatDeleteGesture(entry: DeleteUndoEntry): string {
   return first.origin === 'created' ? `${who} created` : `${who} restored`;
 }
 
+export function formatLinkGesture(entry: LinkUndoEntry): string {
+  const shown = entry.links.slice(0, 3).map((item) => item.summary);
+  const extra = entry.links.length - shown.length;
+  const what = extra > 0 ? `${shown.join(', ')} and ${extra} more` : shown.join(', ');
+  return entry.links[0]?.phase === 'unlinked' ? `${what} removed` : `${what} added`;
+}
+
 function entrySize(entry: SessionUndoEntry): number {
+  if ('links' in entry) return entry.links.length;
   if ('deletions' in entry) return entry.deletions.length;
   if ('items' in entry) return entry.items.length;
   if ('fields' in entry) return entry.fields.length;
@@ -261,6 +309,7 @@ function entrySize(entry: SessionUndoEntry): number {
 }
 
 export function formatUndoEntry(entry: SessionUndoEntry): string {
+  if ('links' in entry) return formatLinkGesture(entry);
   if ('deletions' in entry) return formatDeleteGesture(entry);
   if ('items' in entry) return formatCommitGesture(entry);
   if ('fields' in entry) return formatFieldChanges(entry.fields);
@@ -298,6 +347,20 @@ export function recordCommitGesture(items: CommitUndoItem[]) {
     return;
   }
   const entry: CommitUndoEntry = { id: entryId(), items };
+  emit({
+    undo: [...snapshot.undo, entry].slice(-STATUS_UNDO_LIMIT),
+    redo: [],
+    toast: { entry, action: 'undo', conflicts: [] },
+  });
+  scheduleToastDismiss();
+}
+
+/** Relations added or removed in one gesture become one undo entry (INV-842). */
+export function recordLinkGesture(links: LinkUndoItem[]) {
+  if (links.length === 0) {
+    return;
+  }
+  const entry: LinkUndoEntry = { id: entryId(), links };
   emit({
     undo: [...snapshot.undo, entry].slice(-STATUS_UNDO_LIMIT),
     redo: [],
@@ -428,6 +491,10 @@ async function perform(direction: 'undo' | 'redo') {
     await performDeletions(entry, direction, poppedUndo, poppedRedo);
     return;
   }
+  if ('links' in entry) {
+    await performLinks(entry, direction, poppedUndo, poppedRedo);
+    return;
+  }
 
   const apply = await waitForApply();
   if (!apply) {
@@ -512,6 +579,55 @@ async function performFields(
       entry: reversed.fields.length > 0 ? reversed : { id: entry.id, fields: [] },
       action: reversed.fields.length > 0 ? (direction === 'undo' ? 'redo' : 'undo') : 'none',
       conflicts: result.conflicts,
+    },
+    { undo, redo },
+  );
+}
+
+async function performLinks(
+  entry: LinkUndoEntry,
+  direction: 'undo' | 'redo',
+  poppedUndo: SessionUndoEntry[],
+  poppedRedo: SessionUndoEntry[],
+) {
+  const apply = applyLink;
+  if (!apply) {
+    emit({
+      undo: direction === 'undo' ? [...snapshot.undo, entry].slice(-STATUS_UNDO_LIMIT) : snapshot.undo,
+      redo: direction === 'redo' ? [...snapshot.redo, entry].slice(-STATUS_UNDO_LIMIT) : snapshot.redo,
+      toast: { entry: { id: 'unavailable', changes: [] }, action: 'none', conflicts: [], message: 'Undo is not ready' },
+    });
+    scheduleToastDismiss();
+    return;
+  }
+  const result = await apply(entry.links);
+  const applied = new Map(result.applied.map((item) => [item.index, item.linkId]));
+  const retryable = new Set(result.retryable ?? []);
+  const reversed: LinkUndoEntry = {
+    id: entryId(),
+    links: entry.links.flatMap((item, index) => {
+      if (!applied.has(index)) return [];
+      return [{ ...item, linkId: applied.get(index) ?? null, phase: item.phase === 'linked' ? 'unlinked' as const : 'linked' as const }];
+    }),
+  };
+  const retry: LinkUndoEntry = { id: entryId(), links: entry.links.filter((_, index) => retryable.has(index)) };
+  const gestureArrived = snapshot.undo.length > poppedUndo.length || snapshot.redo.length !== poppedRedo.length;
+  let undo = snapshot.undo;
+  let redo = snapshot.redo;
+  if (!gestureArrived) {
+    if (direction === 'redo' && reversed.links.length > 0) undo = [...undo, reversed].slice(-STATUS_UNDO_LIMIT);
+    if (direction === 'undo' && reversed.links.length > 0) redo = [...redo, reversed].slice(-STATUS_UNDO_LIMIT);
+    if (retry.links.length > 0) {
+      if (direction === 'undo') undo = [...undo, retry].slice(-STATUS_UNDO_LIMIT);
+      else redo = [...redo, retry].slice(-STATUS_UNDO_LIMIT);
+    }
+  }
+  showToast(
+    {
+      entry: reversed.links.length > 0 ? reversed : { id: entry.id, links: [] },
+      action: reversed.links.length > 0 ? (direction === 'undo' ? 'redo' : 'undo') : 'none',
+      conflicts: result.conflicts,
+      ...(retry.links.length > 0 ? { message: 'Could not reach the server; try again.' } : {}),
     },
     { undo, redo },
   );

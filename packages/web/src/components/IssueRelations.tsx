@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@apollo/client/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   ISSUE_RELATIONS_QUERY,
@@ -18,6 +18,8 @@ import type {
 } from '../board/types';
 import { Btn } from './Primitives';
 import { StatusIcon } from './StatusIcon';
+import { LINKS_CHANGED_EVENT, type LinksChangedDetail } from '../undo/LinkUndoHost';
+import { recordLinkGesture } from '../undo/status-undo';
 
 /**
  * How a typed link reads from the open issue's side. A link is stored once,
@@ -121,6 +123,19 @@ export function IssueRelations({ issueId, disabled = false, onOpen }: IssueRelat
 
   const links = data?.issue?.id === issueId ? data.issue.links?.nodes ?? [] : [];
   const groups = groupRelations(issueId, links);
+  const selfIdentifier = links.find((link) => link.from.id === issueId)?.from.identifier
+    ?? links.find((link) => link.to.id === issueId)?.to.identifier
+    ?? issueId;
+
+  // An undo/redo changed links on this issue: show the server's version.
+  useEffect(() => {
+    const onChanged = (event: Event) => {
+      const detail = (event as CustomEvent<LinksChangedDetail>).detail;
+      if (detail?.issueIds.includes(issueId)) void refetch();
+    };
+    window.addEventListener(LINKS_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(LINKS_CHANGED_EVENT, onChanged);
+  }, [issueId, refetch]);
 
   /** `action` resolves to null on success, or the reason the server gave for refusing. */
   async function run(action: () => Promise<string | null>) {
@@ -154,6 +169,17 @@ export function IssueRelations({ issueId, disabled = false, onOpen }: IssueRelat
       });
       const payload = result?.data?.workLink;
       if (!payload?.success) return refusalMessage(payload?.message);
+      if (payload.link) {
+        recordLinkGesture([{
+          linkId: payload.link.id,
+          fromId: relation.reverse ? other : issueId,
+          toId: relation.reverse ? issueId : other,
+          type: relation.type,
+          summary: `${selfIdentifier} ${relation.label.toLowerCase()} ${other}`,
+          issueIds: [issueId, other],
+          phase: 'linked',
+        }]);
+      }
       setTarget('');
       setAdding(false);
       return null;
@@ -216,7 +242,20 @@ export function IssueRelations({ issueId, disabled = false, onOpen }: IssueRelat
                       void run(async () => {
                         const result = await deleteLink({ variables: { id: row.linkId } });
                         const payload = result?.data?.workLinkDelete;
-                        return payload?.success ? null : refusalMessage(payload?.message);
+                        if (!payload?.success) return refusalMessage(payload?.message);
+                        const link = links.find((candidate) => candidate.id === row.linkId);
+                        if (link) {
+                          recordLinkGesture([{
+                            linkId: null,
+                            fromId: link.from.id,
+                            toId: link.to.id,
+                            type: link.type,
+                            summary: `${selfIdentifier} ${group.label.toLowerCase()} ${row.other.identifier}`,
+                            issueIds: [link.from.id, link.to.id],
+                            phase: 'unlinked',
+                          }]);
+                        }
+                        return null;
                       })
                     }
                   >
