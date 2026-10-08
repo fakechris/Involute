@@ -235,6 +235,10 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationLanding> = {
   'work.claim_expired': { kind: 'info' },
   // The run went quiet; the owner looks at the work page and decides (INV-996).
   'run.stale': { kind: 'info' },
+  // A fixed bug waits past the review clock: the owner reviews it (INV-1002).
+  'review.overdue': { kind: 'work', action: 'Human review' },
+  // Daily: how much waits in Review and for how long; the owner opens /in-review (INV-1002).
+  'review.digest': { kind: 'inbox' },
   // The research proposer (usually an agent) closes it with work_update(state: DONE) (INV-1001).
   'research.closable': { kind: 'info' },
   'bug.sla_at_risk': { kind: 'info' },

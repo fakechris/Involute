@@ -169,6 +169,7 @@ import { dependencyHints } from './mention-links.js';
 import { loadWorkHygiene } from './work-hygiene.js';
 import { BUG_LABEL_NAME, findSimilarBugs, reportBug, type BugReportInput } from './bug-report.js';
 import { loadBugSlas } from './bug-sla.js';
+import { loadReviewWaits } from './review-wait.js';
 import { snapshotContract } from './evidence-contract.js';
 import { loadBugMetrics, type BugMetrics } from './bug-metrics.js';
 import { currentTriager, parseRotation, setTriageRotation } from './bug-triage.js';
@@ -573,6 +574,13 @@ const typeDefs = /* GraphQL */ `
   }
 
   "A committed bug's SLA (INV-750): Urgent 24h, High 48h, otherwise 7 days; the clock stops in Review and when closed."
+  type ReviewWait {
+    since: String!
+    waitMs: Float!
+    overdue: Boolean!
+    thresholdMs: Float!
+  }
+
   type BugSla {
     status: BugSlaStatus!
     budgetHours: Int!
@@ -1033,6 +1041,8 @@ const typeDefs = /* GraphQL */ `
     dependencyHints: [String!]!
     "SLA for committed Type: Bug work; null otherwise (INV-750)."
     bugSla: BugSla
+    "How long committed work has waited in Review; null outside Review (INV-1002). overdue is true for a bug past REVIEW_OVERDUE_MS (default 3 days)."
+    reviewWait: ReviewWait
     "Hash of the current execution contract (scope, constraints, repository, acceptance); a run whose contractRevision differs ran against an older contract (INV-790)."
     contractDigest: String!
     "The open proposal to change this committed contract, if an agent made one (INV-869)."
@@ -4915,6 +4925,11 @@ const resolvers = {
         select: { reason: true },
       });
       return audit?.reason ?? null;
+    },
+    reviewWait: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
+      if (parent.commitmentStatus !== 'COMMITTED') return null;
+      const wait = (await loadReviewWaits(context.prisma, [parent.id])).get(parent.id);
+      return wait ? { ...wait, since: wait.since.toISOString() } : null;
     },
     bugSla: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
       if (parent.commitmentStatus !== 'COMMITTED') return null;

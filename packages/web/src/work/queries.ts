@@ -115,6 +115,11 @@ export const IN_REVIEW_PAGE_QUERY = gql`
         pendingContractAmendment {
           id
         }
+        reviewWait {
+          since
+          waitMs
+          overdue
+        }
         createdAt
         team {
           id

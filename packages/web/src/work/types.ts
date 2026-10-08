@@ -294,6 +294,8 @@ export interface CandidatesPageQueryVariables {
 export type InReviewWork = CandidateWork & {
   /** An agent proposed a change to this contract that is waiting for a person (INV-869). */
   pendingContractAmendment?: { id: string } | null;
+  /** How long it has waited in Review; overdue for a bug past the review clock (INV-1002). */
+  reviewWait?: { since: string; waitMs: number; overdue: boolean } | null;
 };
 
 export interface InReviewPageQueryData {

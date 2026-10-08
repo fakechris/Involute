@@ -28,6 +28,7 @@ const reviewItems = [
     team: { id: 'team-1', key: 'INV' },
     assignee: { id: 'user-1', name: 'Admin', email: 'admin@involute.local', actorKind: 'HUMAN' },
     state: { id: 'state-review', name: 'In Review', type: 'REVIEW', position: 3 },
+    reviewWait: { since: '2026-09-03T10:00:00.000Z', waitMs: 4 * 86_400_000, overdue: true },
   },
   {
     id: 'issue-r2',
@@ -98,6 +99,18 @@ describe('InReviewPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Bulk accept' }));
     await waitFor(() => expect(mockRunReview).toHaveBeenCalledTimes(1));
     expect(JSON.stringify(mockRunReview.mock.calls)).not.toContain('issue-r1');
+  });
+
+  // INV-1002
+  it('shows how long each item has waited in Review and marks an overdue bug', () => {
+    render(
+      <MemoryRouter>
+        <InReviewPage />
+      </MemoryRouter>,
+    );
+    const first = screen.getByRole('listitem', { name: 'INV-101 in review' });
+    expect(within(first).getByText('waiting 4d · overdue')).toBeInTheDocument();
+    expect(within(first).getByText('waiting 4d · overdue')).toHaveClass('issue-relations__error');
   });
 
   it('marks work whose contract has a proposed change waiting (INV-869)', () => {
