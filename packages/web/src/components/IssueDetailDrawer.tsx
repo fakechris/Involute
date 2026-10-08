@@ -257,7 +257,7 @@ export function IssueDetailDrawer({
   }
 
   function confirmCommentDelete(): boolean {
-    return window.confirm('Delete this comment? This cannot be undone.');
+    return window.confirm('Delete this comment? You can undo this with ⌘Z until you reload the page; it comes back as a new comment.');
   }
 
   return (

@@ -51,6 +51,7 @@ import {
 } from './lib/app-shell-state';
 import { fetchSessionState, getGoogleLoginUrl, logoutSession, type SessionState } from './lib/session';
 import { lazyRoute, RouteErrorBoundary } from './lib/lazy-route';
+import { CommentUndoHost } from './undo/CommentUndoHost';
 import { CommitUndoHost } from './undo/CommitUndoHost';
 import { DeleteUndoHost } from './undo/DeleteUndoHost';
 import { FieldUndoHost } from './undo/FieldUndoHost';
@@ -1383,6 +1384,7 @@ export function App() {
       <FieldUndoHost />
       <DeleteUndoHost />
       <LinkUndoHost />
+      <CommentUndoHost />
     </div>
   );
 }

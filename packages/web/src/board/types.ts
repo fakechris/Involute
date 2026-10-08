@@ -518,6 +518,7 @@ export interface CommentCreateMutationVariables {
   input: {
     issueId: string;
     body: string;
+    parentCommentId?: string;
   };
 }
 
