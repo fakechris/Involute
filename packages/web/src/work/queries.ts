@@ -473,6 +473,7 @@ export const ISSUE_SNOOZE_MUTATION = gql`
       success
       issue {
         id
+        revision
         snoozedUntil
       }
     }

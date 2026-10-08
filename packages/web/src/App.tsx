@@ -52,6 +52,7 @@ import {
 import { fetchSessionState, getGoogleLoginUrl, logoutSession, type SessionState } from './lib/session';
 import { lazyRoute, RouteErrorBoundary } from './lib/lazy-route';
 import { CommitUndoHost } from './undo/CommitUndoHost';
+import { FieldUndoHost } from './undo/FieldUndoHost';
 import { StatusUndoToast } from './undo/StatusUndoToast';
 import {
   formatUndoEntry,
@@ -753,7 +754,7 @@ export function App() {
       {
         id: 'undo-status',
         label: statusUndo.undo.length > 0 ? `Undo · ${formatUndoEntry(statusUndo.undo[statusUndo.undo.length - 1]!)}` : 'Undo',
-        description: statusUndo.undo.length > 0 ? 'Revert the latest status change' : 'Nothing to undo',
+        description: statusUndo.undo.length > 0 ? 'Revert the latest change' : 'Nothing to undo',
         group: 'Actions',
         shortcut: '⌘ Z',
         run: () => {
@@ -766,7 +767,7 @@ export function App() {
       {
         id: 'redo-status',
         label: statusUndo.redo.length > 0 ? `Redo · ${formatUndoEntry(statusUndo.redo[statusUndo.redo.length - 1]!)}` : 'Redo',
-        description: statusUndo.redo.length > 0 ? 'Repeat the latest undone status change' : 'Nothing to redo',
+        description: statusUndo.redo.length > 0 ? 'Repeat the latest undone change' : 'Nothing to redo',
         group: 'Actions',
         shortcut: '⇧ ⌘ Z',
         run: () => {
@@ -1377,6 +1378,7 @@ export function App() {
       />
       <StatusUndoToast />
       <CommitUndoHost />
+      <FieldUndoHost />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 /** Session undo for status changes. One gesture is one entry. Refresh clears it. */
+import { formatFieldChanges, type FieldUndoChange } from './field-gesture';
 
 export const STATUS_UNDO_LIMIT = 50;
 const TOAST_MS = 8000;
@@ -59,7 +60,20 @@ export interface CommitUndoEntry {
   items: CommitUndoItem[];
 }
 
-export type SessionUndoEntry = StatusUndoEntry | CommitUndoEntry;
+/** Any field edits of one gesture (INV-839): state, priority, assignee, labels, title, … */
+export interface FieldUndoEntry {
+  id: string;
+  fields: FieldUndoChange[];
+}
+
+export interface FieldUndoApplyResult {
+  applied: Array<{ issueId: string; revision: number }>;
+  conflicts: string[];
+}
+
+export type FieldUndoApply = (changes: Array<FieldUndoChange & { expectedRevision: number; patch: FieldUndoChange['before'] }>) => Promise<FieldUndoApplyResult>;
+
+export type SessionUndoEntry = StatusUndoEntry | CommitUndoEntry | FieldUndoEntry;
 
 export interface CommitUndoApplyResult {
   applied: Array<{ issueId: string; revision: number }>;
@@ -86,6 +100,7 @@ const EMPTY: StatusUndoSnapshot = { undo: [], redo: [], toast: null };
 let snapshot: StatusUndoSnapshot = EMPTY;
 let applyStatus: StatusUndoApply | null = null;
 let applyCommit: CommitUndoApply | null = null;
+let applyField: FieldUndoApply | null = null;
 const listeners = new Set<() => void>();
 let toastTimer: number | null = null;
 let chain: Promise<void> = Promise.resolve();
@@ -127,6 +142,7 @@ export function resetStatusUndo() {
   }
   applyStatus = null;
   applyCommit = null;
+  applyField = null;
   chain = Promise.resolve();
   emit(EMPTY);
 }
@@ -136,6 +152,15 @@ export function registerStatusUndoApply(apply: StatusUndoApply) {
   return () => {
     if (applyStatus === apply) {
       applyStatus = null;
+    }
+  };
+}
+
+export function registerFieldUndoApply(apply: FieldUndoApply) {
+  applyField = apply;
+  return () => {
+    if (applyField === apply) {
+      applyField = null;
     }
   };
 }
@@ -180,18 +205,24 @@ export function formatCommitGesture(entry: CommitUndoEntry): string {
   return entry.items[0]?.phase === 'candidate' ? `${who} returned to candidates` : `${who} committed`;
 }
 
+function entrySize(entry: SessionUndoEntry): number {
+  if ('items' in entry) return entry.items.length;
+  if ('fields' in entry) return entry.fields.length;
+  return entry.changes.length;
+}
+
 export function formatUndoEntry(entry: SessionUndoEntry): string {
-  return 'items' in entry ? formatCommitGesture(entry) : formatStatusMove(entry);
+  if ('items' in entry) return formatCommitGesture(entry);
+  if ('fields' in entry) return formatFieldChanges(entry.fields);
+  return formatStatusMove(entry);
 }
 
 export function formatStatusToast(toast: StatusUndoToast): string {
-  const described = 'items' in toast.entry ? toast.entry.items.length > 0 : toast.entry.changes.length > 0;
+  const described = entrySize(toast.entry) > 0;
   if (toast.message && !described && toast.conflicts.length === 0) {
     return toast.message;
   }
-  const move = 'items' in toast.entry
-    ? (toast.entry.items.length > 0 ? formatCommitGesture(toast.entry) : '')
-    : (toast.entry.changes.length > 0 ? formatStatusMove(toast.entry) : '');
+  const move = described ? formatUndoEntry(toast.entry) : '';
   const conflict = toast.conflicts.length > 0 ? `Could not change ${toast.conflicts.join(', ')}.` : '';
   return [toast.message, move, conflict].filter(Boolean).join(' ');
 }
@@ -217,6 +248,20 @@ export function recordCommitGesture(items: CommitUndoItem[]) {
     return;
   }
   const entry: CommitUndoEntry = { id: entryId(), items };
+  emit({
+    undo: [...snapshot.undo, entry].slice(-STATUS_UNDO_LIMIT),
+    redo: [],
+    toast: { entry, action: 'undo', conflicts: [] },
+  });
+  scheduleToastDismiss();
+}
+
+/** One gesture's field edits become one undo entry (INV-839). */
+export function recordFieldGesture(fields: FieldUndoChange[]) {
+  if (fields.length === 0) {
+    return;
+  }
+  const entry: FieldUndoEntry = { id: entryId(), fields };
   emit({
     undo: [...snapshot.undo, entry].slice(-STATUS_UNDO_LIMIT),
     redo: [],
@@ -311,6 +356,10 @@ async function perform(direction: 'undo' | 'redo') {
     await performCommit(entry, direction, poppedUndo, poppedRedo);
     return;
   }
+  if ('fields' in entry) {
+    await performFields(entry, direction, poppedUndo, poppedRedo);
+    return;
+  }
 
   const apply = await waitForApply();
   if (!apply) {
@@ -350,6 +399,50 @@ async function perform(direction: 'undo' | 'redo') {
     {
       entry: reversed.changes.length > 0 ? reversed : { id: entry.id, changes: [] },
       action: reversed.changes.length > 0 ? (direction === 'undo' ? 'redo' : 'undo') : 'none',
+      conflicts: result.conflicts,
+    },
+    { undo, redo },
+  );
+}
+
+async function performFields(
+  entry: FieldUndoEntry,
+  direction: 'undo' | 'redo',
+  poppedUndo: SessionUndoEntry[],
+  poppedRedo: SessionUndoEntry[],
+) {
+  const apply = applyField;
+  if (!apply) {
+    emit({
+      undo: direction === 'undo' ? [...snapshot.undo, entry].slice(-STATUS_UNDO_LIMIT) : snapshot.undo,
+      redo: direction === 'redo' ? [...snapshot.redo, entry].slice(-STATUS_UNDO_LIMIT) : snapshot.redo,
+      toast: { entry: { id: 'unavailable', changes: [] }, action: 'none', conflicts: [], message: 'Undo is not ready' },
+    });
+    scheduleToastDismiss();
+    return;
+  }
+  // Undo writes `before`; the reversed entry (for redo) writes `after` again.
+  const result = await apply(entry.fields.map((change) => ({ ...change, expectedRevision: change.revision, patch: change.before })));
+  const appliedById = new Map(result.applied.map((item) => [item.issueId, item]));
+  const reversed: FieldUndoEntry = {
+    id: entryId(),
+    fields: entry.fields.flatMap((change) => {
+      const next = appliedById.get(change.issueId);
+      if (!next) return [];
+      return [{ ...change, before: change.after, after: change.before, summary: change.reverseSummary, reverseSummary: change.summary, revision: next.revision }];
+    }),
+  };
+  const gestureArrived = snapshot.undo.length > poppedUndo.length || snapshot.redo.length !== poppedRedo.length;
+  const undo = direction === 'redo' && reversed.fields.length > 0 && !gestureArrived
+    ? [...snapshot.undo, reversed].slice(-STATUS_UNDO_LIMIT)
+    : snapshot.undo;
+  const redo = direction === 'undo' && reversed.fields.length > 0 && !gestureArrived
+    ? [...snapshot.redo, reversed].slice(-STATUS_UNDO_LIMIT)
+    : snapshot.redo;
+  showToast(
+    {
+      entry: reversed.fields.length > 0 ? reversed : { id: entry.id, fields: [] },
+      action: reversed.fields.length > 0 ? (direction === 'undo' ? 'redo' : 'undo') : 'none',
       conflicts: result.conflicts,
     },
     { undo, redo },
