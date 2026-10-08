@@ -678,6 +678,8 @@ export function BoardPage() {
   visibleIssuesRef.current = visibleIssues;
   const refetchRef = useRef<typeof refetch | undefined>(refetch);
   refetchRef.current = refetch;
+  const baseIssuesRef = useRef<IssueSummary[]>(baseIssues);
+  baseIssuesRef.current = baseIssues;
   const statusUndoApplyRef = useRef<StatusUndoApply>(async () => ({ applied: [], conflicts: [] }));
   statusUndoApplyRef.current = async (changes) => {
     const applied: StatusUndoApplied[] = [];
@@ -791,6 +793,13 @@ export function BoardPage() {
       // board only admits ids the query returned, so ask again.
       setDeletedIssueIds((current) => current.filter((id) => !detail.issues.some((issue) => issue.id === id)));
       void refetchRef.current?.();
+      // A restored issue is no longer deleted on this board; one the query never
+      // returned (created this session, undone, redone) shows as created.
+      setDeletedIssueIds((current) => current.filter((id) => !detail.issues.some((issue) => issue.id === id)));
+      setCreatedIssues((current) => {
+        const missing = detail.issues.filter((issue) => !baseIssuesRef.current.some((base) => base.id === issue.id) && !current.some((item) => item.id === issue.id));
+        return missing.length ? [...missing, ...current] : current;
+      });
       setIssueOverrides((currentOverrides) => {
         let nextOverrides = currentOverrides;
         for (const issue of detail.issues) {
@@ -1967,6 +1976,7 @@ export function BoardPage() {
         ...currentIssues.filter((issue) => issue.id !== result.data!.issueCreate.issue!.id),
       ]);
       setFocusedIssueId(result.data.issueCreate.issue.id);
+      recordDeleteGesture([{ issueId: result.data.issueCreate.issue.id, identifier: result.data.issueCreate.issue.identifier, phase: 'restored', origin: 'created' }]);
       setCreateTitle('');
       setCreateDescription(createKind === 'DECISION' ? DECISION_TEMPLATE : '');
       if (createMore) {
@@ -2033,6 +2043,7 @@ export function BoardPage() {
         ...currentIssues.filter((issue) => issue.id !== newIssue.id),
       ]);
       setFocusedIssueId(newIssue.id);
+      recordDeleteGesture([{ issueId: newIssue.id, identifier: newIssue.identifier, phase: 'restored', origin: 'created' }]);
     } catch {
       setMutationError('We could not create the issue. Please try again.');
     } finally {

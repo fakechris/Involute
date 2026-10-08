@@ -81,6 +81,8 @@ export interface DeleteUndoItem {
   phase: 'deleted' | 'restored';
   /** Revision of the restored item; deleting it again is refused if someone edited it since. */
   revision?: number;
+  /** The gesture that put it on the stack was creating it (INV-841), so the toast says so. */
+  origin?: 'created';
 }
 
 export interface DeleteUndoEntry {
@@ -246,7 +248,9 @@ export function formatDeleteGesture(entry: DeleteUndoEntry): string {
   const shown = ids.slice(0, 3);
   const extra = ids.length - shown.length;
   const who = extra > 0 ? `${shown.join(', ')} and ${extra} more` : shown.join(', ');
-  return entry.deletions[0]?.phase === 'restored' ? `${who} restored` : `${who} deleted`;
+  const first = entry.deletions[0];
+  if (first?.phase !== 'restored') return `${who} deleted`;
+  return first.origin === 'created' ? `${who} created` : `${who} restored`;
 }
 
 function entrySize(entry: SessionUndoEntry): number {
