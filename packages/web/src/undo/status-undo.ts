@@ -79,6 +79,8 @@ export interface DeleteUndoItem {
   identifier: string;
   /** 'deleted': undo restores it; 'restored': undo deletes it again. */
   phase: 'deleted' | 'restored';
+  /** Revision of the restored item; deleting it again is refused if someone edited it since. */
+  revision?: number;
 }
 
 export interface DeleteUndoEntry {
@@ -87,8 +89,11 @@ export interface DeleteUndoEntry {
 }
 
 export interface DeleteUndoApplyResult {
-  applied: string[];
+  /** Issue ids the server applied; for restores, with the restored revision. */
+  applied: Array<{ issueId: string; revision?: number }>;
   conflicts: string[];
+  /** Issue ids the request never reached the server for (network); they stay on the stack. */
+  retryable?: string[];
 }
 
 export type DeleteUndoApply = (items: DeleteUndoItem[]) => Promise<DeleteUndoApplyResult>;
@@ -525,25 +530,39 @@ async function performDeletions(
     return;
   }
   const result = await apply(entry.deletions);
-  const applied = new Set(result.applied);
+  const applied = new Map(result.applied.map((item) => [item.issueId, item]));
+  const retryable = new Set(result.retryable ?? []);
   const reversed: DeleteUndoEntry = {
     id: entryId(),
-    deletions: entry.deletions
-      .filter((item) => applied.has(item.issueId))
-      .map((item) => ({ ...item, phase: item.phase === 'deleted' ? 'restored' as const : 'deleted' as const })),
+    deletions: entry.deletions.flatMap((item) => {
+      const next = applied.get(item.issueId);
+      if (!next) return [];
+      return [{
+        ...item,
+        phase: item.phase === 'deleted' ? 'restored' as const : 'deleted' as const,
+        ...(next.revision !== undefined ? { revision: next.revision } : {}),
+      }];
+    }),
   };
+  // A request that never reached the server leaves its item where it was, to try again.
+  const retry: DeleteUndoEntry = { id: entryId(), deletions: entry.deletions.filter((item) => retryable.has(item.issueId)) };
   const gestureArrived = snapshot.undo.length > poppedUndo.length || snapshot.redo.length !== poppedRedo.length;
-  const undo = direction === 'redo' && reversed.deletions.length > 0 && !gestureArrived
-    ? [...snapshot.undo, reversed].slice(-STATUS_UNDO_LIMIT)
-    : snapshot.undo;
-  const redo = direction === 'undo' && reversed.deletions.length > 0 && !gestureArrived
-    ? [...snapshot.redo, reversed].slice(-STATUS_UNDO_LIMIT)
-    : snapshot.redo;
+  let undo = snapshot.undo;
+  let redo = snapshot.redo;
+  if (!gestureArrived) {
+    if (direction === 'redo' && reversed.deletions.length > 0) undo = [...undo, reversed].slice(-STATUS_UNDO_LIMIT);
+    if (direction === 'undo' && reversed.deletions.length > 0) redo = [...redo, reversed].slice(-STATUS_UNDO_LIMIT);
+    if (retry.deletions.length > 0) {
+      if (direction === 'undo') undo = [...undo, retry].slice(-STATUS_UNDO_LIMIT);
+      else redo = [...redo, retry].slice(-STATUS_UNDO_LIMIT);
+    }
+  }
   showToast(
     {
       entry: reversed.deletions.length > 0 ? reversed : { id: entry.id, deletions: [] },
       action: reversed.deletions.length > 0 ? (direction === 'undo' ? 'redo' : 'undo') : 'none',
       conflicts: result.conflicts,
+      ...(retry.deletions.length > 0 ? { message: 'Could not reach the server; try again.' } : {}),
     },
     { undo, redo },
   );

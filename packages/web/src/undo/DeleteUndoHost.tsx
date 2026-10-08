@@ -22,8 +22,9 @@ export function DeleteUndoHost() {
   const [runDelete] = useMutation<IssueDeleteMutationData, IssueDeleteMutationVariables>(ISSUE_DELETE_MUTATION);
   const applyRef = useRef<DeleteUndoApply>(async () => ({ applied: [], conflicts: [] }));
   applyRef.current = async (items) => {
-    const applied: string[] = [];
+    const applied: Array<{ issueId: string; revision?: number }> = [];
     const conflicts: string[] = [];
+    const retryable: string[] = [];
     const issues: IssueSummary[] = [];
     const deletedIds: string[] = [];
     for (const item of items) {
@@ -36,23 +37,28 @@ export function DeleteUndoHost() {
             continue;
           }
           issues.push(issue);
+          applied.push({ issueId: item.issueId, revision: issue.revision });
         } else {
-          const result = await runDelete({ variables: { id: item.issueId } });
+          // Deleting again is guarded by the revision the restore returned.
+          const result = await runDelete({
+            variables: { id: item.issueId, ...(item.revision !== undefined ? { expectedRevision: item.revision } : {}) },
+          });
           if (!result.data?.issueDelete.success) {
             conflicts.push(item.identifier);
             continue;
           }
           deletedIds.push(item.issueId);
+          applied.push({ issueId: item.issueId });
         }
-        applied.push(item.issueId);
       } catch {
-        conflicts.push(item.identifier);
+        // The request did not get an answer: keep the entry so it can be tried again.
+        retryable.push(item.issueId);
       }
     }
     window.dispatchEvent(new CustomEvent<IssueUndoAppliedDetail>(ISSUE_UNDO_APPLIED_EVENT, {
       detail: { issues, issueIds: items.map((item) => item.issueId), deletedIds },
     }));
-    return { applied, conflicts };
+    return { applied, conflicts, retryable };
   };
   useEffect(() => registerDeleteUndoApply((items) => applyRef.current(items)), []);
   return null;

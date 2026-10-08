@@ -542,6 +542,8 @@ export interface IssueDeleteMutationData {
 
 export interface IssueDeleteMutationVariables {
   id: string;
+  /** Only delete if still at this revision (a redo after undo, INV-840). */
+  expectedRevision?: number;
 }
 
 export interface CommentDeleteMutationData {

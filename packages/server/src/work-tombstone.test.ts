@@ -4,7 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
 import { createComment, createIssue, deleteIssue } from './issue-service.ts';
 import { createWorkLink } from './link-service.ts';
-import { restoreDeletedIssue, TOMBSTONE_ID_TAKEN_MESSAGE, TOMBSTONE_NOT_FOUND_MESSAGE } from './work-tombstone.ts';
+import { restoreDeletedIssue, sweepExpiredTombstones, TOMBSTONE_EXPIRED_MESSAGE, TOMBSTONE_ID_TAKEN_MESSAGE, TOMBSTONE_NOT_FOUND_MESSAGE, TOMBSTONE_RETENTION_MS } from './work-tombstone.ts';
 
 // INV-840: deleting work leaves a tombstone; restoring puts the same id back
 // with its fields, labels, comments, links, children and audit trail.
@@ -15,6 +15,7 @@ const repo = 'fakechris/Involute';
 
 beforeEach(async () => {
   await prisma.workTombstone.deleteMany();
+  await prisma.decisionReceipt.deleteMany();
   await prisma.issue.deleteMany();
   await prisma.workflowState.deleteMany();
   await prisma.team.deleteMany();
@@ -82,6 +83,47 @@ describe('restoreDeletedIssue', () => {
       data: { identifier: issue.identifier, title: 'Squatter', teamId, stateId: issue.stateId },
     });
     await expect(restoreDeletedIssue(prisma, issue.id)).rejects.toThrow(TOMBSTONE_ID_TAKEN_MESSAGE);
+  });
+
+  it('refuses a delete whose expected revision is stale', async () => {
+    const issue = await createIssue(prisma, { teamId, kind: 'ISSUE', title: 'Guarded', repository: repo });
+    await expect(deleteIssue(prisma, issue.id, undefined, issue.revision + 1)).rejects.toThrow('revision');
+    expect(await prisma.issue.findUnique({ where: { id: issue.id } })).not.toBeNull();
+    await deleteIssue(prisma, issue.id, undefined, issue.revision);
+    expect(await prisma.issue.findUnique({ where: { id: issue.id } })).toBeNull();
+  });
+
+  it('brings a decision receipt back with its audit row', async () => {
+    const issue = await createIssue(prisma, { teamId, kind: 'ISSUE', title: 'Receipted', repository: repo });
+    const audit = await prisma.workAudit.findFirstOrThrow({ where: { workId: issue.id } });
+    await prisma.decisionReceipt.create({
+      data: { auditId: audit.id, actorId: userId, contractRevision: 1, reasoning: 'because', evidence: [], inputs: [] },
+    });
+    await deleteIssue(prisma, issue.id);
+    await restoreDeletedIssue(prisma, issue.id);
+    const receipt = await prisma.decisionReceipt.findUnique({ where: { auditId: audit.id } });
+    expect(receipt?.reasoning).toBe('because');
+  });
+
+  it('keeps a child that was re-parented after the deletion with its new parent', async () => {
+    const issue = await createIssue(prisma, { teamId, kind: 'ISSUE', title: 'Old parent', repository: repo });
+    const child = await createIssue(prisma, { teamId, kind: 'ISSUE', title: 'Child', repository: repo, parentId: issue.id });
+    const other = await createIssue(prisma, { teamId, kind: 'ISSUE', title: 'New parent', repository: repo });
+    await deleteIssue(prisma, issue.id);
+    await prisma.issue.update({ where: { id: child.id }, data: { parentId: other.id } });
+    await createWorkLink(prisma, { fromId: other.id, toId: child.id, type: 'CONTAINS' });
+    await restoreDeletedIssue(prisma, issue.id);
+    expect((await prisma.issue.findUniqueOrThrow({ where: { id: child.id } })).parentId).toBe(other.id);
+    expect(await prisma.workLink.count({ where: { toId: child.id, type: 'CONTAINS' } })).toBe(1);
+  });
+
+  it('expires after retention and the sweep drops it', async () => {
+    const issue = await createIssue(prisma, { teamId, kind: 'ISSUE', title: 'Old', repository: repo });
+    await deleteIssue(prisma, issue.id);
+    await prisma.workTombstone.update({ where: { id: issue.id }, data: { deletedAt: new Date(Date.now() - TOMBSTONE_RETENTION_MS - 60_000) } });
+    await expect(restoreDeletedIssue(prisma, issue.id)).rejects.toThrow(TOMBSTONE_EXPIRED_MESSAGE);
+    expect(await sweepExpiredTombstones(prisma)).toBe(1);
+    expect(await prisma.workTombstone.findUnique({ where: { id: issue.id } })).toBeNull();
   });
 
   it('drops a parent that no longer exists instead of failing', async () => {

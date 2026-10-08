@@ -676,6 +676,8 @@ export function BoardPage() {
 
   const visibleIssuesRef = useRef<IssueSummary[]>(visibleIssues);
   visibleIssuesRef.current = visibleIssues;
+  const refetchRef = useRef<typeof refetch | undefined>(refetch);
+  refetchRef.current = refetch;
   const statusUndoApplyRef = useRef<StatusUndoApply>(async () => ({ applied: [], conflicts: [] }));
   statusUndoApplyRef.current = async (changes) => {
     const applied: StatusUndoApplied[] = [];
@@ -785,8 +787,10 @@ export function BoardPage() {
         setSelectedIssueIds((current) => current.filter((id) => !deletedIds.includes(id)));
       }
       if (!detail.issues.length) return;
-      // A restored issue is no longer deleted on this board.
+      // A restored issue is no longer deleted on this board; a server-filtered
+      // board only admits ids the query returned, so ask again.
       setDeletedIssueIds((current) => current.filter((id) => !detail.issues.some((issue) => issue.id === id)));
+      void refetchRef.current?.();
       setIssueOverrides((currentOverrides) => {
         let nextOverrides = currentOverrides;
         for (const issue of detail.issues) {

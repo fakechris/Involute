@@ -46,11 +46,27 @@ export interface WorkTombstoneSnapshot {
     before: Prisma.JsonValue | null;
     after: Prisma.JsonValue;
     createdAt: string;
+    /** The decision receipt attached to this audit row, if any (cascades with it). */
+    receipt: {
+      id: string;
+      actorId: string;
+      sessionId: string | null;
+      runtime: string | null;
+      contractRevision: number;
+      reasoning: string;
+      evidence: Prisma.JsonValue;
+      inputs: Prisma.JsonValue;
+      createdAt: string;
+    } | null;
   }>;
 }
 
+/** How long a deletion stays undoable. The session undo stack is gone on reload; this bounds the server copy. */
+export const TOMBSTONE_RETENTION_MS = 7 * 24 * 60 * 60_000;
+
 export const TOMBSTONE_NOT_FOUND_MESSAGE = 'Nothing to restore: this work was not deleted in a way that can be undone, or it was already restored.';
 export const TOMBSTONE_ID_TAKEN_MESSAGE = 'This work cannot be restored: its id or identifier is in use again.';
+export const TOMBSTONE_EXPIRED_MESSAGE = 'This work was deleted more than 7 days ago and can no longer be restored.';
 
 /** Capture everything `restoreDeletedIssue` needs, before the row is deleted. */
 export async function writeWorkTombstone(tx: Tx, issueId: string, deletedById: string | null): Promise<void> {
@@ -63,7 +79,7 @@ export async function writeWorkTombstone(tx: Tx, issueId: string, deletedById: s
       outgoingLinks: true,
       incomingLinks: true,
       shares: true,
-      audits: { orderBy: { createdAt: 'asc' } },
+      audits: { orderBy: { createdAt: 'asc' }, include: { receipt: true } },
     },
   });
   const { labels, children, comments, outgoingLinks, incomingLinks, shares, audits, ...row } = issue;
@@ -98,6 +114,19 @@ export async function writeWorkTombstone(tx: Tx, issueId: string, deletedById: s
       before: audit.before,
       after: audit.after,
       createdAt: audit.createdAt.toISOString(),
+      receipt: audit.receipt
+        ? {
+            id: audit.receipt.id,
+            actorId: audit.receipt.actorId,
+            sessionId: audit.receipt.sessionId,
+            runtime: audit.receipt.runtime,
+            contractRevision: audit.receipt.contractRevision,
+            reasoning: audit.receipt.reasoning,
+            evidence: audit.receipt.evidence,
+            inputs: audit.receipt.inputs,
+            createdAt: audit.receipt.createdAt.toISOString(),
+          }
+        : null,
     })),
   };
   await tx.workTombstone.upsert({
@@ -108,7 +137,17 @@ export async function writeWorkTombstone(tx: Tx, issueId: string, deletedById: s
 }
 
 export async function findWorkTombstone(prisma: PrismaClient, id: string) {
-  return prisma.workTombstone.findUnique({ where: { id }, select: { id: true, teamId: true, identifier: true } });
+  return prisma.workTombstone.findUnique({ where: { id }, select: { id: true, teamId: true, identifier: true, deletedAt: true } });
+}
+
+export function isTombstoneExpired(deletedAt: Date, now = new Date()): boolean {
+  return now.getTime() - deletedAt.getTime() > TOMBSTONE_RETENTION_MS;
+}
+
+/** Drop snapshots past retention. Returns how many were removed. */
+export async function sweepExpiredTombstones(prisma: PrismaClient, now = new Date()): Promise<number> {
+  const result = await prisma.workTombstone.deleteMany({ where: { deletedAt: { lt: new Date(now.getTime() - TOMBSTONE_RETENTION_MS) } } });
+  return result.count;
 }
 
 /** Put a deleted item back under its original id. Returns the restored row. */
@@ -120,6 +159,7 @@ export async function restoreDeletedIssue(
   return prisma.$transaction(async (tx) => {
     const tombstone = await tx.workTombstone.findUnique({ where: { id } });
     if (!tombstone) throw createNotFoundError(TOMBSTONE_NOT_FOUND_MESSAGE);
+    if (isTombstoneExpired(tombstone.deletedAt)) throw createValidationError(TOMBSTONE_EXPIRED_MESSAGE);
     await lockWorkGraph(tx, tombstone.teamId);
     const snapshot = tombstone.snapshot as unknown as WorkTombstoneSnapshot;
     const { issue } = snapshot;
@@ -182,11 +222,15 @@ export async function restoreDeletedIssue(
     });
 
     // Children were detached by the deletion; those still detached come back.
+    // One that was given a new parent since keeps it, and its old CONTAINS
+    // link is not replayed below.
+    const reattached = new Set<string>();
     for (const childId of snapshot.childIds) {
       const child = await tx.issue.findUnique({ where: { id: childId } });
       if (!child || child.parentId !== null) continue;
       const after = await tx.issue.update({ where: { id: childId }, data: { parentId: id, revision: { increment: 1 } } });
       await recordWorkAudit(tx, { actor, before: selectIssueSnapshot(child), after: selectIssueSnapshot(after), workId: childId });
+      reattached.add(childId);
     }
     if (parentId) {
       await tx.workLink.upsert({
@@ -198,7 +242,9 @@ export async function restoreDeletedIssue(
 
     const userIds = new Set((await tx.user.findMany({ where: { id: { in: [...new Set(snapshot.comments.flatMap((comment) => [comment.userId, ...comment.mentionActorIds]))] } }, select: { id: true } })).map((user) => user.id));
     const restoredCommentIds = new Set<string>();
-    for (const comment of snapshot.comments) {
+    // Roots first: a reply only comes back once its thread root has.
+    const orderedComments = [...snapshot.comments].sort((a, b) => Number(a.parentCommentId !== null) - Number(b.parentCommentId !== null));
+    for (const comment of orderedComments) {
       if (!userIds.has(comment.userId)) continue;
       if (comment.parentCommentId && !restoredCommentIds.has(comment.parentCommentId)) continue;
       await tx.comment.create({
@@ -218,6 +264,7 @@ export async function restoreDeletedIssue(
 
     for (const link of snapshot.links) {
       if (link.type === 'CONTAINS' && link.toId === id) continue; // handled with parentId above
+      if (link.type === 'CONTAINS' && link.fromId === id && !reattached.has(link.toId)) continue; // child moved on
       const other = link.fromId === id ? link.toId : link.fromId;
       if (!(await exists('issue', other))) continue;
       await tx.workLink.upsert({
@@ -253,6 +300,23 @@ export async function restoreDeletedIssue(
           createdAt: new Date(audit.createdAt),
         },
       });
+      const receipt = audit.receipt;
+      if (receipt && (await exists('user', receipt.actorId))) {
+        await tx.decisionReceipt.create({
+          data: {
+            id: receipt.id,
+            auditId: audit.id,
+            actorId: receipt.actorId,
+            sessionId: receipt.sessionId,
+            runtime: receipt.runtime,
+            contractRevision: receipt.contractRevision,
+            reasoning: receipt.reasoning,
+            evidence: receipt.evidence as Prisma.InputJsonValue,
+            inputs: receipt.inputs as Prisma.InputJsonValue,
+            createdAt: new Date(receipt.createdAt),
+          },
+        });
+      }
     }
     await recordWorkAudit(tx, { actor: { ...actor, reason: actor.reason ?? 'Restored after deletion (INV-840)' }, before: null, after: selectIssueSnapshot(restored), workId: id });
 

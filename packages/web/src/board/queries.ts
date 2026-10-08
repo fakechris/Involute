@@ -437,8 +437,8 @@ export const COMMENT_CREATE_MUTATION = gql`
 `;
 
 export const ISSUE_DELETE_MUTATION = gql`
-  mutation IssueDelete($id: String!) {
-    issueDelete(id: $id) {
+  mutation IssueDelete($id: String!, $expectedRevision: Int) {
+    issueDelete(id: $id, expectedRevision: $expectedRevision) {
       success
       issueId
     }
