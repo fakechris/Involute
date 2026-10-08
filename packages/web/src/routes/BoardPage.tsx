@@ -45,12 +45,15 @@ import type {
   IssueUpdateMutationVariables,
 } from '../board/types';
 import {
+  recordFieldGesture,
   recordStatusGesture,
   registerStatusUndoApply,
   type StatusUndoApplied,
   type StatusUndoApply,
   type StatusUndoChange,
 } from '../undo/status-undo';
+import { ISSUE_UNDO_APPLIED_EVENT, type IssueUndoAppliedDetail } from '../undo/FieldUndoHost';
+import { fieldChange, type FieldUndoChange } from '../undo/field-gesture';
 import {
   ACTIVE_TEAM_STORAGE_KEY,
   buildCommittedIssueFilter,
@@ -670,6 +673,8 @@ export function BoardPage() {
     [boardViewState, labels, selectedTeam, users],
   );
 
+  const visibleIssuesRef = useRef<IssueSummary[]>(visibleIssues);
+  visibleIssuesRef.current = visibleIssues;
   const statusUndoApplyRef = useRef<StatusUndoApply>(async () => ({ applied: [], conflicts: [] }));
   statusUndoApplyRef.current = async (changes) => {
     const applied: StatusUndoApplied[] = [];
@@ -739,6 +744,52 @@ export function BoardPage() {
   };
 
   useEffect(() => registerStatusUndoApply((changes) => statusUndoApplyRef.current(changes)), []);
+
+  // Names for undo toasts, resolved when the gesture is recorded.
+  const fieldNames = {
+    stateName: (id: string) => selectedTeam?.states.nodes.find((state) => state.id === id)?.name,
+    userName: (id: string | null) => (id ? users.find((user) => user.id === id)?.name ?? undefined : undefined),
+    labelNames: (ids: string[]) => labels.filter((label) => ids.includes(label.id)).map((label) => label.name),
+  };
+
+  /** One bulk gesture is one undo entry: a change per issue the server accepted (INV-839). */
+  function bulkFieldChanges(
+    issuesToUpdate: IssueSummary[],
+    results: PromiseSettledResult<{ data?: IssueUpdateMutationData | null | undefined }>[],
+    previousIssuesById: Map<string, IssueSummary>,
+    patch?: Omit<IssueUpdateMutationVariables['input'], 'expectedRevision'>,
+  ): FieldUndoChange[] {
+    return results.flatMap((result, index) => {
+      const issue = issuesToUpdate[index];
+      if (!issue || result.status !== 'fulfilled') return [];
+      const returned = result.value.data?.issueUpdate.success ? result.value.data.issueUpdate.issue : null;
+      if (!returned) return [];
+      const previous = previousIssuesById.get(issue.id) ?? issue;
+      const after = patch ?? { labelIds: returned.labels.nodes.map((label) => label.id) };
+      const change = fieldChange(previous, after, returned.revision, fieldNames);
+      return change ? [change] : [];
+    });
+  }
+
+  // An undo/redo rewrote issues on the server: show those versions and select them.
+  useEffect(() => {
+    const onApplied = (event: Event) => {
+      const detail = (event as CustomEvent<IssueUndoAppliedDetail>).detail;
+      if (!detail?.issues.length) return;
+      setIssueOverrides((currentOverrides) => {
+        let nextOverrides = currentOverrides;
+        for (const issue of detail.issues) {
+          const previous = nextOverrides[issue.id] ?? visibleIssuesRef.current.find((item) => item.id === issue.id);
+          nextOverrides = replaceIssueOverride(nextOverrides, issue.id, previous ? mergeIssueWithPreservedComments(previous, issue) : issue);
+        }
+        return nextOverrides;
+      });
+      setSelectedIssueIds(detail.issues.map((issue) => issue.id));
+      setFocusedIssueId(detail.issues[0]?.id ?? null);
+    };
+    window.addEventListener(ISSUE_UNDO_APPLIED_EVENT, onApplied);
+    return () => window.removeEventListener(ISSUE_UNDO_APPLIED_EVENT, onApplied);
+  }, []);
 
   useEffect(() => {
     const state = location.state as { selectIssueIds?: unknown } | null;
@@ -1249,6 +1300,7 @@ export function BoardPage() {
 
     setIsSavingState(false);
     setBulkAssigneeId('');
+    recordFieldGesture(bulkFieldChanges(issuesToUpdate, results, previousIssuesById, { assigneeId: nextAssigneeId }));
 
     if (hadFailure) {
       setMutationError('We could not update some assignees. Please try again.');
@@ -1358,6 +1410,7 @@ export function BoardPage() {
 
     setIsSavingState(false);
     setBulkLabelId('');
+    recordFieldGesture(bulkFieldChanges(issuesToUpdate, results, previousIssuesById));
 
     if (hadFailure) {
       setMutationError('We could not add the label to some selected issues. Please try again.');
@@ -1464,6 +1517,7 @@ export function BoardPage() {
 
     setIsSavingState(false);
     setBulkRemoveLabelId('');
+    recordFieldGesture(bulkFieldChanges(issuesToUpdate, results, previousIssuesById));
 
     if (hadFailure) {
       setMutationError('We could not remove the label from some selected issues. Please try again.');
@@ -1602,6 +1656,8 @@ export function BoardPage() {
     issue: IssueSummary,
     input: IssueUpdateMutationVariables['input'],
     applyOptimisticIssue: (current: IssueSummary) => IssueSummary,
+    // Drags record their own status entry; everything else is one field entry (INV-839).
+    record = true,
   ): Promise<IssueSummary | null> {
     if (inFlightUpdatesRef.current.has(issue.id)) {
       return null;
@@ -1646,6 +1702,10 @@ export function BoardPage() {
 
         return replaceIssueOverride(currentOverrides, issue.id, merged);
       });
+      if (record) {
+        const change = fieldChange(issue, input, returnedIssue.revision, fieldNames);
+        if (change) recordFieldGesture([change]);
+      }
       return merged;
     } catch (mutationIssue) {
       setIssueOverrides((currentOverrides) =>
@@ -2042,7 +2102,7 @@ export function BoardPage() {
       const updated = await persistIssueUpdate(issue, { stateId: targetStateId }, (current) => ({
         ...current,
         state: targetState,
-      }));
+      }), false);
       if (updated && originState && originStateId !== targetStateId) {
         recordStatusGesture([
           {
@@ -2178,7 +2238,7 @@ export function BoardPage() {
       const updated = await persistIssueUpdate(issue, { stateId: targetStateId }, (current) => ({
         ...current,
         state: targetState,
-      }));
+      }), false);
       if (updated && originState) {
         recordStatusGesture([
           {

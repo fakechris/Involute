@@ -1,5 +1,8 @@
 import { useMutation, useQuery } from '@apollo/client/react';
 import { DeliverySection } from '../components/DeliveryPanel';
+import { ISSUE_UNDO_APPLIED_EVENT, type IssueUndoAppliedDetail } from '../undo/FieldUndoHost';
+import { fieldChange } from '../undo/field-gesture';
+import { recordFieldGesture } from '../undo/status-undo';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -105,6 +108,18 @@ export function IssuePage() {
   const [answerBody, setAnswerBody] = useState('');
   const [answerOverride, setAnswerOverride] = useState('');
   const [answerError, setAnswerError] = useState<string | null>(null);
+  // An undo/redo from anywhere rewrites this issue on the server: show that version.
+  useEffect(() => {
+    const onApplied = (event: Event) => {
+      const detail = (event as CustomEvent<IssueUndoAppliedDetail>).detail;
+      const mine = detail?.issues.find((issue) => issue.id === id);
+      if (mine) setLocalIssue((current) => (current ? mergeIssueWithPreservedComments(current, mine) : mine));
+      else if (detail?.issueIds.includes(id ?? '')) void refetch();
+    };
+    window.addEventListener(ISSUE_UNDO_APPLIED_EVENT, onApplied);
+    return () => window.removeEventListener(ISSUE_UNDO_APPLIED_EVENT, onApplied);
+  }, [id, refetch]);
+
   const { data: cyclesData } = useQuery<CyclesQueryData, CyclesQueryVariables>(CYCLES_QUERY, {
     skip: !teamId,
     variables: { teamId },
@@ -289,6 +304,13 @@ export function IssuePage() {
           ? mergeIssueWithPreservedComments(currentIssue, result.data!.issueUpdate.issue!)
           : result.data!.issueUpdate.issue!,
       );
+      // One save is one undo entry, whatever fields it touched (INV-839).
+      const change = fieldChange(issue, input, result.data.issueUpdate.issue.revision, {
+        stateName: (id) => selectedTeam?.states.nodes.find((state) => state.id === id)?.name,
+        userName: (id) => (id ? data?.users.nodes.find((user) => user.id === id)?.name ?? undefined : undefined),
+        labelNames: (ids) => (data?.issueLabels.nodes ?? []).filter((label) => ids.includes(label.id)).map((label) => label.name),
+      });
+      if (change) recordFieldGesture([change]);
       return true;
     } catch (mutationIssue) {
       // Say why the server refused, when it said; otherwise assume a conflict.

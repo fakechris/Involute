@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
-import { recordCommitGesture, type CommitUndoItem } from '../undo/status-undo';
+import { recordCommitGesture, recordFieldGesture, type CommitUndoItem } from '../undo/status-undo';
 import { selectCandidatesEventName } from '../undo/CommitUndoHost';
 import { IcoCheck, IcoClose } from '../components/Icons';
 import { Btn } from '../components/Primitives';
@@ -59,7 +59,7 @@ function humanUsers(users: WorkUserSummary[]): WorkUserSummary[] {
 }
 
 interface SnoozeMutationData {
-  issueUpdate: { issue: { id: string } | null; success: boolean };
+  issueUpdate: { issue: { id: string; revision: number; snoozedUntil: string | null } | null; success: boolean };
 }
 
 interface SnoozeMutationVariables {
@@ -439,6 +439,19 @@ function CandidateCard({
       if (!result.data?.issueUpdate.success) {
         setError('We could not snooze this candidate. Please try again.');
         return;
+      }
+      // Snoozing is one undo entry like any other field edit (INV-839).
+      const written = result.data.issueUpdate.issue;
+      if (written) {
+        recordFieldGesture([{
+          issueId: candidate.id,
+          identifier: candidate.identifier,
+          after: { snoozedUntil: written.snoozedUntil ?? null },
+          before: { snoozedUntil: candidate.snoozedUntil ?? null },
+          revision: written.revision,
+          summary: days === null ? 'unsnoozed' : 'snoozed',
+          reverseSummary: days === null ? 'snoozed' : 'unsnoozed',
+        }]);
       }
       onRefresh();
     } catch {
