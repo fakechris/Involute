@@ -108,6 +108,12 @@ export function IssuePage() {
   const [answerBody, setAnswerBody] = useState('');
   const [answerOverride, setAnswerOverride] = useState('');
   const [answerError, setAnswerError] = useState<string | null>(null);
+  const { data: cyclesData } = useQuery<CyclesQueryData, CyclesQueryVariables>(CYCLES_QUERY, {
+    skip: !teamId,
+    variables: { teamId },
+  });
+
+  const [localIssue, setLocalIssue] = useState<IssueSummary | null>(null);
   // An undo/redo from anywhere rewrites this issue on the server: show that version.
   useEffect(() => {
     const onApplied = (event: Event) => {
@@ -120,12 +126,6 @@ export function IssuePage() {
     return () => window.removeEventListener(ISSUE_UNDO_APPLIED_EVENT, onApplied);
   }, [id, refetch]);
 
-  const { data: cyclesData } = useQuery<CyclesQueryData, CyclesQueryVariables>(CYCLES_QUERY, {
-    skip: !teamId,
-    variables: { teamId },
-  });
-
-  const [localIssue, setLocalIssue] = useState<IssueSummary | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [isSavingState, setIsSavingState] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
