@@ -203,6 +203,7 @@ export async function reportRun(
           externalUrl: input.externalUrl ?? null,
           phase: input.phase ?? null,
           publicId,
+          lastActivityAt: new Date(),
           status: status ?? 'RUNNING',
           summary: input.summary ?? null,
           workId: work.id,
@@ -254,6 +255,9 @@ export async function reportRun(
           ...(input.phase !== undefined ? { phase: input.phase } : {}),
           ...(input.summary !== undefined ? { summary: input.summary } : {}),
           ...(input.externalUrl !== undefined ? { externalUrl: input.externalUrl } : {}),
+          // Any report is the executor doing something (INV-996).
+          lastActivityAt: new Date(),
+          staleNotifiedAt: null,
           ...(status && TERMINAL_RUN_STATUSES.includes(status) ? { endedAt: new Date() } : {}),
           ...(status === 'COMPLETED' ? { claimId: null } : {}),
         },

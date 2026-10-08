@@ -771,6 +771,12 @@ See the **payload v2** section above for the full envelope. Summary:
   `reason`), and the unit's approved executor and last run actor get the same
   notification in their `agent_inbox` (INV-995) — the feedback is no longer
   only in the dispatch row's `feedback`.
+- `run.stale` (INV-996): a RUNNING run wrote nothing (no `run_report`, no
+  evidence on the run, no comment by its actor) for `RUN_STALE_AFTER_MS`
+  (default 30 min); payload `runId`, `publicId`, `actorId`, `lastActivityAt`,
+  `silentMinutes`, `phase`. Sent once per quiet spell to the work owner and the
+  executor's owner; `WorkRunRecord.presence` is `live` / `stale` / `settled` and
+  `lastActivityAt` says when it last wrote.
 - `research.closable` (INV-1001): every item derived (`DERIVED_FROM`) from a
   research item is now committed and the research still sits in Review; its
   proposer gets the same notification and closes it. Sent once per research

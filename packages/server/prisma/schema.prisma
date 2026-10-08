@@ -786,6 +786,11 @@ model WorkRun {
   externalUrl String?
   startedAt   DateTime      @default(now())
   endedAt     DateTime?
+  // Last write that counted as the executor doing something (INV-996): a
+  // run_report, evidence on this run or a comment by its actor.
+  lastActivityAt DateTime   @default(now())
+  // When the owner was told this run went quiet; cleared when activity resumes.
+  staleNotifiedAt DateTime?
   evidence    WorkEvidence[]
   reviewDecisions WorkReviewDecision[]
   autoAcceptEvaluations WorkAutoAcceptEvaluation[]

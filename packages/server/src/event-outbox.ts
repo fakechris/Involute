@@ -39,6 +39,8 @@ export const WORK_EVENT_TYPES = [
   'work.claim_expired',
   // A research item's derived work is all committed; it can be closed (INV-1001).
   'research.closable',
+  // A running execution has written nothing for RUN_STALE_AFTER_MS (INV-996).
+  'run.stale',
   'work.restored',
   'comment.created',
   'agent.mentioned',

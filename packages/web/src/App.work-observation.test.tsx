@@ -104,6 +104,25 @@ const workContextQuery: WorkContextPageQueryData = {
         externalUrl: 'https://example.test/pr/1',
         startedAt: '2026-08-31T16:00:00.000Z',
         endedAt: '2026-08-31T16:20:00.000Z',
+        lastActivityAt: '2026-08-31T16:20:00.000Z',
+        staleNotifiedAt: null,
+        presence: 'settled',
+      },
+      {
+        id: 'run-2',
+        publicId: 'RUN-2',
+        actorId: 'agent-1',
+        claimId: 'claim-1',
+        baseRevision: 2,
+        status: 'RUNNING',
+        phase: 'implement',
+        summary: null,
+        externalUrl: null,
+        startedAt: '2026-08-31T17:00:00.000Z',
+        endedAt: null,
+        lastActivityAt: '2026-08-31T17:05:00.000Z',
+        staleNotifiedAt: '2026-08-31T17:40:00.000Z',
+        presence: 'stale',
       },
     ],
     evidence: [
@@ -244,6 +263,10 @@ describe('K6 observation UI', () => {
     expect(screen.getByText('Child task')).toBeInTheDocument();
     expect(screen.getByText('Ready queue excludes blocked work')).toBeInTheDocument();
     expect(screen.getByText('RUN-1')).toBeInTheDocument();
+    // INV-996: a quiet running run is marked stale with its last activity.
+    expect(screen.getByText('RUN-2')).toBeInTheDocument();
+    expect(screen.getByText('stale')).toBeInTheDocument();
+    expect(screen.getByText(/last activity/)).toBeInTheDocument();
     expect(screen.getByText('Patch landed, waiting for review')).toBeInTheDocument();
     expect(screen.getByText('Implementation PR')).toBeInTheDocument();
     expect(screen.getByText('run completed')).toBeInTheDocument();

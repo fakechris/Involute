@@ -4,6 +4,7 @@ import { startEvidenceVerifier } from './evidence-verification.js';
 import { expireOverdueAgentRequests } from './agent-request-expiry.js';
 import { sweepBugSlas } from './bug-sla.js';
 import { sweepExpiredClaims } from './claim-expiry.js';
+import { sweepStaleRuns } from './run-staleness.js';
 import type { PrismaClient } from '@prisma/client';
 
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
@@ -419,6 +420,15 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   }, 10 * 60_000);
   bugSlaTimer?.unref();
 
+  // Quiet runs (INV-996): the owner hears once that an execution went silent.
+  const staleRunTimer = setInterval(() => {
+    void sweepStaleRuns(prisma).catch((error: unknown) => {
+      console.error('Failed to sweep stale runs.');
+      console.error(error);
+    });
+  }, 5 * 60_000);
+  staleRunTimer?.unref();
+
   // Expired claims (INV-991): released by the server, runs failed, people told.
   const claimExpiryTimer = setInterval(() => {
     void sweepExpiredClaims(prisma).catch((error: unknown) => {
@@ -510,6 +520,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
         clearInterval(bugSlaTimer);
       }
       clearInterval(claimExpiryTimer);
+      clearInterval(staleRunTimer);
 
       await new Promise<void>((resolve, reject) => {
         httpServer.close((error) => {

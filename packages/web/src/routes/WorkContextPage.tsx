@@ -278,6 +278,12 @@ export function WorkContextPage() {
                 <li key={run.id}>
                   <strong className="mono">{run.publicId}</strong>
                   <span>{run.status.toLowerCase()}</span>
+                  {run.presence === 'stale' ? (
+                    <span className="issue-relations__error" title="No run_report, evidence or comment from the executor for over the stale threshold">stale</span>
+                  ) : null}
+                  {run.status === 'RUNNING' && run.lastActivityAt ? (
+                    <span className="observation-card__meta">last activity {formatWhen(run.lastActivityAt)}</span>
+                  ) : null}
                   {run.phase ? <span>{run.phase}</span> : null}
                   {run.summary ? <span>{run.summary}</span> : null}
                   <span className="observation-card__meta">base rev {run.baseRevision ?? '—'}</span>

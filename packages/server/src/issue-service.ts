@@ -744,6 +744,8 @@ export async function createComment(
       }
       reservationId = reservation.record.id;
     }
+    // An executor commenting on the work it runs is activity on that run (INV-996).
+    await tx.workRun.updateMany({ where: { workId: issue.id, actorId: userId, status: 'RUNNING' }, data: { lastActivityAt: new Date(), staleNotifiedAt: null } });
     const comment = await tx.comment.create({
       data: {
         body: input.body,

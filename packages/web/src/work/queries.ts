@@ -323,6 +323,9 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
         externalUrl
         startedAt
         endedAt
+        lastActivityAt
+        staleNotifiedAt
+        presence
         repository
         commitSha
         pullRequestNumber
