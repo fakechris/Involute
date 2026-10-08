@@ -771,6 +771,13 @@ See the **payload v2** section above for the full envelope. Summary:
   `reason`), and the unit's approved executor and last run actor get the same
   notification in their `agent_inbox` (INV-995) — the feedback is no longer
   only in the dispatch row's `feedback`.
+- `review.overdue` (INV-1002): a committed bug has waited in Review longer
+  than `REVIEW_OVERDUE_MS` (default 3 days; a separate clock from the bug SLA,
+  which pauses in Review). Once per Review spell, to the owner's inbox too.
+  `Issue.reviewWait { since, waitMs, overdue, thresholdMs }` shows the wait on
+  any committed work in Review; `/in-review` prints it. Owners with work in
+  Review also get one `review.digest` inbox note per day (count, overdue count,
+  longest wait) — no outbox event, the email digest carries it.
 - `run.stale` (INV-996): a RUNNING run wrote nothing (no `run_report`, no
   evidence on the run, no comment by its actor) for `RUN_STALE_AFTER_MS`
   (default 30 min); payload `runId`, `publicId`, `actorId`, `lastActivityAt`,

@@ -36,6 +36,14 @@ function writeStoredIql(query: string) {
   }
 }
 
+/** Days waiting in Review, as people say it (INV-1002). */
+function formatWaitDays(waitMs: number): string {
+  const days = Math.floor(waitMs / 86_400_000);
+  if (days >= 1) return `${days}d`;
+  const hours = Math.floor(waitMs / 3_600_000);
+  return hours >= 1 ? `${hours}h` : '<1h';
+}
+
 function buildFilter(teamKey: string | null): InReviewPageQueryVariables['filter'] {
   return {
     commitmentStatus: 'COMMITTED',
@@ -351,6 +359,11 @@ export function InReviewPage() {
                       {item.identifier}
                     </button>
                     <span className="observation-card__status">in review</span>
+                    {item.reviewWait ? (
+                      <span className={`observation-card__meta${item.reviewWait.overdue ? ' issue-relations__error' : ''}`} title={`In Review since ${item.reviewWait.since}`}>
+                        waiting {formatWaitDays(item.reviewWait.waitMs)}{item.reviewWait.overdue ? ' · overdue' : ''}
+                      </span>
+                    ) : null}
                     <span className="observation-card__meta">{item.team.key}</span>
                     <span className="observation-card__meta">rev {item.revision}</span>
                     {item.pendingContractAmendment ? (

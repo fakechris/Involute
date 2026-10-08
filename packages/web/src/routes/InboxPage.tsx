@@ -63,6 +63,10 @@ function formatNotificationType(type: string): string {
       return 'Agent lease expired';
     case 'run.stale':
       return 'Agent run went quiet';
+    case 'review.overdue':
+      return 'Fixed bug waiting too long for review';
+    case 'review.digest':
+      return 'Waiting for your review';
     case 'research.closable':
       return 'Research can be closed';
     case 'delivery.approved':

@@ -41,6 +41,8 @@ export const WORK_EVENT_TYPES = [
   'research.closable',
   // A running execution has written nothing for RUN_STALE_AFTER_MS (INV-996).
   'run.stale',
+  // A fixed bug has waited in Review past the review clock (INV-1002).
+  'review.overdue',
   'work.restored',
   'comment.created',
   'agent.mentioned',
