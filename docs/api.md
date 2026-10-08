@@ -792,6 +792,10 @@ See the **payload v2** section above for the full envelope. Summary:
   INV-990) carry `changeSetId`, `decision`, `note`, `grantRevision` and the
   authorized `unitKeys`; the delivery proposer also gets an Inbox notification
   of the same type, whether or not the root work was still a candidate.
+- `deliveryChanges(workId)` narrows the pending queue to one work item (id or
+  identifier). The web app renders one delivery section — authorization plus
+  this item's changes with Approve / Decline — on the work page, the issue page
+  and the board drawer (INV-1023); /candidates keeps the cross-item queue.
 - Approving a policy also creates every implementation unit of the package
   (INV-993): N approved units → N committed sub-issues in Ready, in BLOCKS
   order, each with a queued `ExecutorDispatch` when the unit names an

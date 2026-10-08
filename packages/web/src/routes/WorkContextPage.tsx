@@ -1,4 +1,4 @@
-import { DeliveryPanel } from '../components/DeliveryPanel';
+import { DeliverySection } from '../components/DeliveryPanel';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -187,7 +187,7 @@ export function WorkContextPage() {
         </Btn>
       </div>
       <div className="page-content observation-content work-context">
-        <DeliveryPanel workId={work.id} />
+        <DeliverySection workId={work.id} />
         {work.commitmentStatus === 'CANDIDATE' ? (
           <section className="work-context__section">
             <h2>Candidate</h2>

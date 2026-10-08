@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from '@apollo/client/react';
+import { DeliverySection } from '../components/DeliveryPanel';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -851,6 +852,9 @@ export function IssuePage() {
                 </ul>
               </div>
             ) : null}
+
+            {/* Delivery authorization and changes awaiting approval (INV-1023): the same section as the work page. */}
+            <DeliverySection key={`delivery-${activeIssue.id}`} workId={activeIssue.id} compact />
 
             {/* Typed links: blockers, related, duplicates (INV-679). Same section as the board drawer. */}
             <IssueRelations key={activeIssue.id} issueId={activeIssue.id} onOpen={(issueId) => navigate(`/issue/${issueId}`)} />
