@@ -1,4 +1,6 @@
 import { executorContext, executorUpdate, type ExecutorInput } from './executor-service.js';
+import type { WorkRun } from '@prisma/client';
+import { runPresence } from './run-staleness.js';
 import { visibleDeliveryChange } from './delivery-visibility.js';
 import { deliveryContext, pendingDeliveryChanges } from './delivery-context.js';
 import { proposeDeliveryChange, decideDeliveryChange } from './delivery-change-set.js';
@@ -1226,6 +1228,12 @@ const typeDefs = /* GraphQL */ `
     externalUrl: String
     startedAt: DateTime!
     endedAt: DateTime
+    "Last run_report, evidence on this run or comment by its actor (INV-996)."
+    lastActivityAt: DateTime!
+    "When the owner was told the run went quiet; null while it is live or after activity resumed."
+    staleNotifiedAt: DateTime
+    "live while the executor keeps writing, stale after RUN_STALE_AFTER_MS (default 30 min) of silence, settled once ended. Derived."
+    presence: String!
   }
 
   type EvidenceVerificationRecord {
@@ -4498,6 +4506,7 @@ const resolvers = {
   WorkRunRecord: {
     actor: (parent: { actorId?: string | null }, _args: Record<string, never>, context: GraphQLContext) =>
       parent.actorId ? context.prisma.user.findUnique({ where: { id: parent.actorId } }) : null,
+    presence: (parent: { status: WorkRun['status']; lastActivityAt: Date }) => runPresence(parent),
   },
   Team: {
     viewerCanWrite: (parent: TeamParent, _args: Record<string, never>, context: GraphQLContext): Promise<boolean> =>

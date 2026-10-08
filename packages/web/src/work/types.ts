@@ -76,6 +76,10 @@ export interface WorkRunSummary {
   phase?: string | null;
   summary?: string | null;
   externalUrl?: string | null;
+  lastActivityAt?: string | null;
+  staleNotifiedAt?: string | null;
+  /** live / stale / settled (INV-996). */
+  presence?: string | null;
   startedAt: string;
   endedAt?: string | null;
   /** Who ran it (INV-794). */

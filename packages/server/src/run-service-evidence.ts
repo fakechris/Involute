@@ -82,6 +82,8 @@ export async function attachEvidence(
     const run = input.runId ? await findRun(transaction, input.runId, work.id) : null;
     if (input.runId && !run) throw createNotFoundError(WORK_RUN_NOT_FOUND_MESSAGE);
     if (run && run.actorId !== actorId) throw createValidationError(WORK_RUN_ACTOR_MISMATCH_MESSAGE);
+    // Evidence on a running execution is activity (INV-996).
+    if (run?.status === 'RUNNING') await transaction.workRun.update({ where: { id: run.id }, data: { lastActivityAt: new Date(), staleNotifiedAt: null } });
 
     const evidence = await transaction.workEvidence.create({
       data: {
