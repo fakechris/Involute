@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 
 try {
   const counts = await reindexSearchVectors(prisma);
-  console.log(`Reindexed search vectors: ${counts.issues} issues, ${counts.comments} comments.`);
+  console.log(`Reindexed search vectors: ${counts.issues} issues, ${counts.comments} comments, ${counts.runs} runs.`);
 } finally {
   await prisma.$disconnect();
 }
