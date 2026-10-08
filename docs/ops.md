@@ -84,6 +84,22 @@ Or GitHub Actions `Deploy` with `profile=production`. Keep `INVOLUTE_DEPLOY_ON_M
 
 `server-init` runs `prisma migrate deploy` before the API starts. Do not run ad-hoc SQL against production unless recovering.
 
+## Export and import the work graph (INV-1007)
+
+Take the data with you, or move it to another instance:
+
+```bash
+pnpm --filter @turnkeyai/involute-server workgraph:export ./workgraph-2026-10-08
+pnpm --filter @turnkeyai/involute-server workgraph:import ./workgraph-2026-10-08   # on the target
+```
+
+One JSON file per table plus `manifest.json`: work items, relations, comments,
+runs, evidence and verifications, review decisions, audits (original actor and
+time kept), delivery packages, executor records, saved views. Import skips rows
+that already exist, so it can be run again. Not included: agent credentials and
+sessions (mint new ones), claims, notifications, the outbox, inbound GitHub
+deliveries, search vectors and embeddings (rebuilt by triggers and the indexer).
+
 ## Rollback
 
 1. Note the running image tags:
