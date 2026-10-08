@@ -24,24 +24,54 @@ if [ -z "$BASE_URL" ]; then
   exit 2
 fi
 
-if [ -z "$MCP_TOKEN" ]; then
+if [ -z "$MCP_TOKEN" ] && [ "${INVOLUTE_SMOKE_ONLY_READY:-}" != "1" ]; then
   echo "Set INVOLUTE_SMOKE_AUTH_TOKEN to run the authenticated MCP smoke." >&2
   exit 2
 fi
 
 BASE_URL="${BASE_URL%/}"
 
-curl --connect-timeout 5 --max-time 15 -fsS "$BASE_URL/health" >/dev/null
-
-# Readiness (database ping) — new deploys must go green; older images that
-# predate /ready are tolerated with a warning so the smoke stays backward
-# compatible during rolling upgrades.
-READY_STATUS="$(curl --connect-timeout 5 --max-time 15 -sS -o /dev/null -w '%{http_code}' "$BASE_URL/ready")"
-case "$READY_STATUS" in
-  200) ;;
-  404) echo "Warning: /ready not found (pre-W7 image?); skipping readiness check." >&2 ;;
-  *) echo "/ready returned unexpected status: $READY_STATUS" >&2; exit 1 ;;
+# Readiness (INV-972): the API's JSON, not the SPA. A 200 that is text/html is
+# the web proxy's index.html fallback and means the backend was never asked;
+# anything but 200 + application/json + status=ready + database=ok fails.
+# scripts/test-readiness.py exercises this check against a fake server with
+# INVOLUTE_SMOKE_ONLY_READY=1.
+READY_BODY="$(mktemp)"
+READY_META="$(
+  curl --connect-timeout 5 --max-time 15 -sS -o "$READY_BODY" -w '%{http_code} %{content_type}' \
+    -H 'Accept: application/json' "$BASE_URL/ready" || true
+)"
+READY_STATUS="${READY_META%% *}"
+READY_TYPE="${READY_META#* }"
+if [ "$READY_STATUS" != "200" ]; then
+  echo "/ready returned status ${READY_STATUS:-none} (backend not ready, or the proxy did not forward it)" >&2
+  head -c 200 "$READY_BODY" >&2; echo >&2
+  rm -f "$READY_BODY"; exit 1
+fi
+case "$READY_TYPE" in
+  application/json*) ;;
+  *) echo "/ready returned 200 with content-type '${READY_TYPE}': the SPA fallback answered instead of the API" >&2; rm -f "$READY_BODY"; exit 1 ;;
 esac
+if ! python3 - "$READY_BODY" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as handle:
+        payload = json.load(handle)
+except Exception as error:  # noqa: BLE001
+    raise SystemExit(f"/ready body is not JSON: {error}")
+if not isinstance(payload, dict) or payload.get("status") != "ready" or payload.get("database") != "ok":
+    raise SystemExit(f"/ready did not report status=ready and database=ok: {payload}")
+PY
+then
+  rm -f "$READY_BODY"; exit 1
+fi
+rm -f "$READY_BODY"
+if [ "${INVOLUTE_SMOKE_ONLY_READY:-}" = "1" ]; then
+  printf 'Readiness check passed for %s\n' "$BASE_URL"
+  exit 0
+fi
+
+curl --connect-timeout 5 --max-time 15 -fsS "$BASE_URL/health" >/dev/null
 
 SESSION_RESPONSE="$(mktemp)"
 SESSION_STATUS="$(
