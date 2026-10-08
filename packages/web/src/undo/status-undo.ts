@@ -300,6 +300,13 @@ export function formatLinkGesture(entry: LinkUndoEntry): string {
   return entry.links[0]?.phase === 'unlinked' ? `${what} removed` : `${what} added`;
 }
 
+export function formatLinkGesture(entry: LinkUndoEntry): string {
+  const shown = entry.links.slice(0, 3).map((item) => item.summary);
+  const extra = entry.links.length - shown.length;
+  const what = extra > 0 ? `${shown.join(', ')} and ${extra} more` : shown.join(', ');
+  return entry.links[0]?.phase === 'unlinked' ? `${what} removed` : `${what} added`;
+}
+
 function entrySize(entry: SessionUndoEntry): number {
   if ('links' in entry) return entry.links.length;
   if ('deletions' in entry) return entry.deletions.length;
