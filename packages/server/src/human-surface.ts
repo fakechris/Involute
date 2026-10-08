@@ -115,6 +115,8 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   teamTriageRotationUpdate: { kind: 'web', doc: 'TEAM_TRIAGE_ROTATION_MUTATION', components: ['routes/BugTriageTab.tsx'], label: 'Bug triage rotation', test: 'routes/BugTriageTab.test.tsx' },
   teamUpdateAccess: { kind: 'api-only', reason: 'Superseded by teamUpdate (name and visibility together), which the team settings page uses; kept for existing API clients.' },
   userUpdate: { kind: 'web', doc: 'USER_UPDATE_MUTATION', components: ['routes/SettingsPage.tsx'], test: 'routes/SettingsPage.test.tsx' },
+  savedViewUpsert: { kind: 'web', doc: 'SAVED_VIEW_UPSERT_MUTATION', components: ['routes/ViewsPage.tsx'], label: 'Share with team', test: 'routes/ViewsPage.test.tsx' },
+  savedViewDelete: { kind: 'web', doc: 'SAVED_VIEW_DELETE_MUTATION', components: ['routes/ViewsPage.tsx'], label: 'Delete view', test: 'routes/ViewsPage.test.tsx' },
   webhookCreate: { kind: 'web', doc: 'WEBHOOK_CREATE_MUTATION', components: ['routes/OpsPage.tsx'], label: 'Add webhook', test: 'routes/OpsPage.test.tsx' },
   webhookDelete: { kind: 'web', doc: 'WEBHOOK_DELETE_MUTATION', components: ['routes/OpsPage.tsx'], label: 'Delete webhook', test: 'routes/OpsPage.test.tsx' },
   webhookRotateSecret: { kind: 'web', doc: 'WEBHOOK_ROTATE_SECRET_MUTATION', components: ['routes/OpsPage.tsx'], label: 'Rotate secret', test: 'routes/OpsPage.test.tsx' },

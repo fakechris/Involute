@@ -1,4 +1,5 @@
 import { protocolInfo } from './protocol-info.js';
+import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
 import { storeUpload } from './uploads.js';
 import { actionCapabilities } from './action-capabilities.js';
 import { executorContext, executorUpdate, EXECUTOR_OPERATIONS, type ExecutorInput } from './executor-service.js';
@@ -76,6 +77,9 @@ export type McpToolName =
   | 'work_delivery_propose'
   | 'work_execution_create'
   | 'work_attach_file'
+  | 'work_views'
+  | 'work_view_save'
+  | 'work_view_delete'
   | 'work_get_context'
   | 'work_list_ready'
   | 'protocol_get_guide'
@@ -108,11 +112,14 @@ export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
   'work_delivery_context',
   'work_get_context',
   'work_list_ready',
+  'work_views',
   'agent_inbox',
   'protocol_get_guide',
 ];
 
 export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
+  'work_view_save',
+  'work_view_delete',
   'work_attach_file',
   'work_executor_update',
   'work_delivery_propose',
@@ -690,6 +697,24 @@ export async function callMcpTool(
       }
       return reported;
     }
+    case 'work_views': {
+      const views = await listSavedViews(context, requiredString(args.team_key, 'team_key'));
+      return views.map((view) => ({ id: view.id, name: view.name, kind: view.kind, visibility: view.visibility, owner_id: view.ownerId, state: view.state, updated_at: view.updatedAt.toISOString() }));
+    }
+    case 'work_view_save': {
+      const view = await upsertSavedView(context, {
+        id: optionalString(args.id) ?? null,
+        teamKey: requiredString(args.team_key, 'team_key'),
+        name: requiredString(args.name, 'name'),
+        kind: requiredString(args.kind, 'kind'),
+        visibility: optionalString(args.visibility) ?? null,
+        state: args.state,
+      });
+      return { id: view.id, name: view.name, kind: view.kind, visibility: view.visibility, owner_id: view.ownerId, state: view.state };
+    }
+    case 'work_view_delete': {
+      return { id: requiredString(args.id, 'id'), removed: await deleteSavedView(context, requiredString(args.id, 'id')) };
+    }
     case 'work_attach_file': {
       // A private file on the work (INV-1003): research reports and the like
       // that must never enter git or an image. Readers of the work may open it.
@@ -1253,6 +1278,36 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'work_views',
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    description: 'Saved board/backlog views you may use in a team: your own and the team\'s shared ones (INV-1005). The state is the board/backlog filter and sort the web app saves.',
+    inputSchema: { type: 'object', properties: { team_key: { type: 'string' } }, required: ['team_key'] },
+  },
+  {
+    name: 'work_view_save',
+    // Without an id each call creates a view, so a retry can duplicate.
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+    description: 'Create or update a saved view (INV-1005). visibility PRIVATE (default, yours) or TEAM (every member; needs write access to the team). Pass id to update one of yours.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        team_key: { type: 'string' },
+        name: { type: 'string' },
+        kind: { type: 'string', enum: ['board', 'backlog'] },
+        visibility: { type: 'string', enum: ['PRIVATE', 'TEAM'] },
+        state: { type: 'object', description: 'The filter/sort state as the web app saves it (query, stateIds, assigneeIds, labelIds, sortField, sortDirection, …).' },
+      },
+      required: ['team_key', 'name', 'kind', 'state'],
+    },
+  },
+  {
+    name: 'work_view_delete',
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
+    description: 'Delete one of your saved views; a team owner may also delete a shared one (INV-1005).',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  },
+  {
     name: 'work_attach_file',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     description:
@@ -1543,6 +1598,9 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_delivery_propose: 'propose',
   work_execution_create: 'claim',
   work_attach_file: 'report',
+  work_views: 'read',
+  work_view_save: 'propose',
+  work_view_delete: 'propose',
   work_get_context: 'read',
   work_read_page: 'read',
   work_catalog: 'read',

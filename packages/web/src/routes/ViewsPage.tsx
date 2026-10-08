@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation } from '@apollo/client/react';
 import { useNavigate } from 'react-router-dom';
+
+import { SAVED_VIEW_DELETE_MUTATION, SAVED_VIEW_UPSERT_MUTATION } from '../work/queries';
 
 import { readSavedBoardViews, writeSavedBoardViews, BOARD_SAVED_VIEWS_EVENT, dispatchApplyBoardView, type SavedBoardView } from '../board/views';
 import { readSavedBacklogViews, writeSavedBacklogViews, BACKLOG_SAVED_VIEWS_EVENT, dispatchApplyBacklogView, type SavedBacklogView } from '../backlog/views';
@@ -21,6 +24,37 @@ export function ViewsPage() {
   const [boardViews, setBoardViews] = useState<SavedBoardView[]>(() => readSavedBoardViews(teamKey));
   const [backlogViews, setBacklogViews] = useState<SavedBacklogView[]>(() => readSavedBacklogViews(teamKey));
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [runUpsert] = useMutation<{ savedViewUpsert: { success: boolean; message?: string | null } }>(SAVED_VIEW_UPSERT_MUTATION);
+  const [runDelete] = useMutation<{ savedViewDelete: { success: boolean; message?: string | null } }>(SAVED_VIEW_DELETE_MUTATION);
+  const [error, setError] = useState<string | null>(null);
+
+  // Sharing and deleting go to the server (INV-1005); the local list follows.
+  async function setVisibility(entry: ViewEntry, visibility: 'PRIVATE' | 'TEAM') {
+    if (!teamKey) return;
+    setError(null);
+    const result = await runUpsert({ variables: { input: { id: entry.id, teamKey, name: entry.name, kind: entry.kind.toLowerCase(), visibility, stateJson: JSON.stringify(entry.view.state) } } }).catch((caught: unknown) => ({ data: { savedViewUpsert: { success: false, message: caught instanceof Error ? caught.message : 'Could not update the view.' } } }));
+    if (!result.data?.savedViewUpsert.success) { setError(result.data?.savedViewUpsert.message ?? 'Could not update the view.'); return; }
+    if (entry.kind === 'Board') {
+      const next = boardViews.map((view) => (view.id === entry.id ? { ...view, visibility } : view));
+      writeSavedBoardViews(teamKey, next); setBoardViews(next);
+    } else {
+      const next = backlogViews.map((view) => (view.id === entry.id ? { ...view, visibility } : view));
+      writeSavedBacklogViews(teamKey, next); setBacklogViews(next);
+    }
+  }
+  async function remove(entry: ViewEntry) {
+    if (!teamKey) return;
+    setError(null);
+    const result = await runDelete({ variables: { id: entry.id } }).catch((caught: unknown) => ({ data: { savedViewDelete: { success: false, message: caught instanceof Error ? caught.message : 'Could not delete the view.' } } }));
+    if (!result.data?.savedViewDelete.success) { setError(result.data?.savedViewDelete.message ?? 'Could not delete the view.'); return; }
+    if (entry.kind === 'Board') {
+      const next = boardViews.filter((view) => view.id !== entry.id);
+      writeSavedBoardViews(teamKey, next); setBoardViews(next);
+    } else {
+      const next = backlogViews.filter((view) => view.id !== entry.id);
+      writeSavedBacklogViews(teamKey, next); setBacklogViews(next);
+    }
+  }
   const [newViewName, setNewViewName] = useState('');
   const [newViewKind, setNewViewKind] = useState<'Board' | 'Backlog'>('Board');
 
@@ -71,6 +105,7 @@ export function ViewsPage() {
       </div>
 
       <div className="page-content">
+        {error ? <p className="issue-relations__error" role="alert">{error}</p> : null}
         {views.length === 0 ? (
           <div className="empty-state">
             <div style={{
@@ -95,8 +130,8 @@ export function ViewsPage() {
               gap: 12,
             }}>
               {views.map((v) => (
+                <div key={v.id} className="saved-view-card" aria-label={`View ${v.name}`} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <button
-                  key={v.id}
                   type="button"
                   onClick={() => {
                     if (v.kind === 'Board') {
@@ -136,7 +171,17 @@ export function ViewsPage() {
                   }}>
                     {v.kind}
                   </span>
+                  {v.view.visibility === 'TEAM' ? <span className="observation-card__meta" style={{ marginLeft: 8 }}>shared with team</span> : null}
                 </button>
+                <div className="request-actions" style={{ display: 'flex', gap: 6 }}>
+                  {v.view.visibility === 'TEAM' ? (
+                    <button type="button" className="ui-action" onClick={() => void setVisibility(v, 'PRIVATE')}>Make private</button>
+                  ) : (
+                    <button type="button" className="ui-action" onClick={() => void setVisibility(v, 'TEAM')}>Share with team</button>
+                  )}
+                  <button type="button" className="ui-action" onClick={() => void remove(v)}>Delete view</button>
+                </div>
+                </div>
               ))}
             </div>
           </div>

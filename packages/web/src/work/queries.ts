@@ -603,6 +603,49 @@ export const WORK_HYGIENE_QUERY = gql`
   }
 `;
 
+// Saved views on the server (INV-1005): the state travels as JSON text.
+export const SAVED_VIEWS_QUERY = gql`
+  query SavedViews($teamKey: String!) {
+    savedViews(teamKey: $teamKey) {
+      id
+      teamId
+      ownerId
+      name
+      kind
+      visibility
+      stateJson
+      updatedAt
+    }
+  }
+`;
+
+export const SAVED_VIEW_UPSERT_MUTATION = gql`
+  mutation SavedViewUpsert($input: SavedViewInput!) {
+    savedViewUpsert(input: $input) {
+      success
+      message
+      view {
+        id
+        name
+        kind
+        visibility
+        ownerId
+        stateJson
+      }
+    }
+  }
+`;
+
+export const SAVED_VIEW_DELETE_MUTATION = gql`
+  mutation SavedViewDelete($id: ID!) {
+    savedViewDelete(id: $id) {
+      success
+      message
+      id
+    }
+  }
+`;
+
 // A person marks evidence as wrongly attached (INV-598); exposed in the UI by INV-790.
 export const EVIDENCE_RETRACT_MUTATION = gql`
   mutation EvidenceRetract($input: EvidenceRetractInput!) {

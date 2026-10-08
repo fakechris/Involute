@@ -116,6 +116,27 @@ enum AutoAcceptOutcome {
   SKIPPED
 }
 
+// A saved board/backlog view kept on the server (INV-1005): private to its
+// owner or shared with the team, visible on every device.
+model SavedView {
+  id         String   @id @default(uuid()) @db.Uuid
+  teamId     String   @db.Uuid
+  team       Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  ownerId    String   @db.Uuid
+  owner      User     @relation("SavedViewOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  name       String
+  // board | backlog
+  kind       String
+  // PRIVATE | TEAM
+  visibility String   @default("PRIVATE")
+  state      Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([teamId, visibility])
+  @@index([ownerId])
+}
+
 model Team {
   id              String          @id @default(uuid()) @db.Uuid
   key             String          @unique
@@ -136,6 +157,7 @@ model Team {
   triageRotation  Json?
 
   @@index([key])
+  savedViews      SavedView[]
 }
 
 model WorkflowState {
@@ -242,6 +264,7 @@ model User {
   agentRequestsMade     AgentRequest[] @relation("AgentRequestRequester")
   agentRequestsClaimed  AgentRequest[] @relation("AgentRequestClaimant")
   pushSubscriptions    WebhookSubscription[] @relation("WebhookSubscriptionActor")
+  savedViews           SavedView[]          @relation("SavedViewOwner")
 }
 
 model AgentCredential {
