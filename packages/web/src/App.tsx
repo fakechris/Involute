@@ -54,6 +54,7 @@ import { lazyRoute, RouteErrorBoundary } from './lib/lazy-route';
 import { CommitUndoHost } from './undo/CommitUndoHost';
 import { DeleteUndoHost } from './undo/DeleteUndoHost';
 import { FieldUndoHost } from './undo/FieldUndoHost';
+import { LinkUndoHost } from './undo/LinkUndoHost';
 import { StatusUndoToast } from './undo/StatusUndoToast';
 import {
   formatUndoEntry,
@@ -1381,6 +1382,7 @@ export function App() {
       <CommitUndoHost />
       <FieldUndoHost />
       <DeleteUndoHost />
+      <LinkUndoHost />
     </div>
   );
 }
