@@ -34,6 +34,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Research stays out of git and images (AGENTS.md §4.7)
+        run: bash scripts/ci-research-guard.sh
+
       - name: Verify PR Work Graph Reference
         if: github.event_name == 'pull_request'
         run: bash scripts/ci-pr-lint.sh

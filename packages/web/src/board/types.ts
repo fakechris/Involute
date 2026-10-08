@@ -163,6 +163,8 @@ export interface IssueSummary {
       actorKind: 'HUMAN' | 'AGENT' | 'SERVICE';
     };
   } | null;
+  /** Private files on the work (INV-1003). */
+  attachments?: Array<{ id: string; filename: string; mimeType: string; size: number; url: string; createdAt: string }>;
   children: {
     nodes: Array<{
       id: string;

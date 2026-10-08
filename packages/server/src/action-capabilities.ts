@@ -19,6 +19,7 @@ export const PAIRS: Record<string, string> = {
   work_comment: 'commentCreate',
   work_delivery_propose: 'deliveryChangePropose',
   work_execution_create: 'deliveryExecutionCreate',
+  work_attach_file: 'fileUpload',
   work_executor_update: 'executorUpdate',
 };
 
@@ -81,6 +82,7 @@ export const RENAMED: Record<string, Record<string, string>> = {
   work_comment: { work_id: 'issueId' },
   work_delivery_propose: { changes: 'changesJson' },
   work_executor_update: { details: 'detailsJson' },
+  work_attach_file: { work_id: 'issueId', mime_type: 'mimeType' },
 };
 
 /** MCP arguments with no GraphQL field, and why a person does not need them. */
@@ -128,7 +130,6 @@ export const MCP_EXEMPTIONS: Record<string, { reason: string; gate: 'administrat
   issueDelete: { gate: 'administration', reason: 'Permanent deletion is a human administrative action; agent delivery preserves history.', decision: 'INV-846' },
   commentDelete: { gate: 'personal', reason: 'People delete their comments; agents append an attributable correction with work_comment.', decision: 'INV-795' },
   agentRequestReply: { gate: 'personal', reason: 'Human follow-up questions; agents answer leased requests through agent_request_answer.', decision: 'INV-795' },
-  fileUpload: { gate: 'personal', reason: 'Browser multipart attachment upload; agents attach durable evidence URLs.', decision: 'INV-795' },
   notificationsMarkAllRead: { gate: 'personal', reason: 'Human inbox read state.', decision: 'INV-968' },
   notificationPreferencesUpdate: { gate: 'personal', reason: 'Human notification preferences.', decision: 'INV-795' },
   userUpdate: { gate: 'personal', reason: 'Human profile settings.', decision: 'INV-795' },
@@ -175,6 +176,7 @@ const DETAILS: Record<string, ActionDetails> = {
   work_commit: detail(['work_get_context'], 'Human commitment authority.', 'expected_revision.', 'Committed work.', 'Refresh candidate before retry; human undo uses work_uncommit.', 'candidate'),
   work_uncommit: detail(['work_get_context'], 'Human commitment authority and eligible undo state.', 'expected_revision.', 'Restored candidate.', 'Read context; progressed work cannot be silently uncommitted.', 'candidate'),
   work_delivery_propose: detail(['work_delivery_context'], 'Write access; proposals cannot expand authority themselves.', 'expected_revision.', 'Candidate delivery change.', 'Read delivery changes; a person approves or declines.', 'candidate'),
+  work_attach_file: detail(['work_get_context'], 'Write access to the work; the file is readable by whoever can read the work.', 'Each call stores a new file; attach once.', 'Attachment id and url.', 'Read Issue.attachments before retrying an uncertain upload; cite the url as artifact evidence.'),
   work_execution_create: detail(['work_delivery_context'], 'Valid candidate-approved grant and unit prerequisites.', 'expected_grant_revision; one implementation per unit/grant.', 'Implementation work.', 'Read existing unit after an uncertain result.'),
   work_executor_update: detail(['work_executor_context', 'work_delivery_context'], 'Approved executor and execution token; human reconciliation is exceptional.', 'expectedRevision, generation, effect key and receipt idempotencyKey.', 'Versioned dispatch, effect or delivery receipt.', 'Never replay unknown effects. Stop and reconcile with evidence; recover within approved budget.'),
   work_propose_amendment: detail(['work_get_context'], 'Propose an amendment; no direct rewrite of committed contract.', 'Records a contract snapshot; a newer proposal replaces the open proposal from the same actor.', 'Proposed amendment with source reason.', 'Read contractAmendments for the human decision before continuing.', 'candidate'),

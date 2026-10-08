@@ -1,4 +1,5 @@
 import { executorContext, executorUpdate, type ExecutorInput } from './executor-service.js';
+import { storeUpload } from './uploads.js';
 import type { WorkRun } from '@prisma/client';
 import { runPresence } from './run-staleness.js';
 import { visibleDeliveryChange } from './delivery-visibility.js';
@@ -273,7 +274,6 @@ const MAX_AGENT_REQUESTS_CONNECTION_FIRST = 200;
 
 const MAX_ISSUES_CONNECTION_FIRST = 200;
 
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 const BUG_TREND_WEEKS = 8;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -1043,6 +1043,8 @@ const typeDefs = /* GraphQL */ `
     bugSla: BugSla
     "How long committed work has waited in Review; null outside Review (INV-1002). overdue is true for a bug past REVIEW_OVERDUE_MS (default 3 days)."
     reviewWait: ReviewWait
+    "Files attached to this work, newest first (INV-1003): research reports and other private material that never enters git or an image."
+    attachments: [Attachment!]!
     "Hash of the current execution contract (scope, constraints, repository, acceptance); a run whose contractRevision differs ran against an older contract (INV-790)."
     contractDigest: String!
     "The open proposal to change this committed contract, if an agent made one (INV-869)."
@@ -1557,6 +1559,7 @@ const typeDefs = /* GraphQL */ `
     size: Int!
     url: String!
     createdAt: DateTime!
+    uploader: User
   }
 
   type TeamConnection {
@@ -1900,6 +1903,8 @@ const typeDefs = /* GraphQL */ `
     filename: String!
     mimeType: String!
     content: String!
+    "Attach the file to this work (id or identifier): readers of the work may open it (INV-1003)."
+    issueId: String
   }
 
   input CommentCreateInput {
@@ -4468,46 +4473,26 @@ const resolvers = {
     },
     fileUpload: async (
       _parent: unknown,
-      args: { input: { filename: string; mimeType: string; content: string } },
+      args: { input: { filename: string; mimeType: string; content: string; issueId?: string | null } },
       context: GraphQLContext,
     ): Promise<{ attachment: Attachment | null; success: boolean }> => {
       const viewer = requireAuthentication(context);
       return runMutation(async () => {
-        const buffer = Buffer.from(args.input.content, 'base64');
-        if (buffer.length > MAX_UPLOAD_BYTES) {
-          throw createValidationError(UPLOAD_TOO_LARGE_MESSAGE);
+        let issueId: string | null = null;
+        if (args.input.issueId) {
+          const work = await findWorkByIdOrIdentifier(context.prisma, args.input.issueId);
+          if (!work) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+          await assertCanWriteIssue(context.prisma, context, work.id);
+          issueId = work.id;
         }
-        const uploadsDir = getUploadsDirectory();
-        if (!existsSync(uploadsDir)) {
-          mkdirSync(uploadsDir, { recursive: true });
-        }
-        const requestedExt = extname(args.input.filename).toLowerCase();
-        const ext = /^\.[a-z0-9]{1,10}$/.test(requestedExt) ? requestedExt : '';
-        const storedName = `${randomUUID()}${ext}`;
-        const filePath = join(uploadsDir, storedName);
-        writeFileSync(filePath, buffer);
-        const url = `/uploads/${storedName}`;
-        try {
-          const attachment = await context.prisma.attachment.create({
-            data: {
-              filename: args.input.filename,
-              mimeType: args.input.mimeType,
-              size: buffer.length,
-              url,
-              uploaderId: viewer.id,
-            },
-          });
-          return { attachment, success: true as const };
-        } catch (error) {
-          try {
-            unlinkSync(filePath);
-          } catch {
-            // Best effort: the DB write already failed, don't mask it.
-          }
-          throw error;
-        }
+        const attachment = await storeUpload(context.prisma, { ...args.input, issueId, uploaderId: viewer.id });
+        return { attachment, success: true as const };
       }, { attachment: null, success: false as const });
     },
+  },
+  Attachment: {
+    uploader: (parent: { uploaderId: string }, _args: Record<string, never>, context: GraphQLContext) =>
+      context.prisma.user.findUnique({ where: { id: parent.uploaderId } }),
   },
   OpsAuditRecord: {
     byActor: (parent: { byActorId: string | null }, _args: unknown, context: GraphQLContext) =>
@@ -4931,6 +4916,8 @@ const resolvers = {
       const wait = (await loadReviewWaits(context.prisma, [parent.id])).get(parent.id);
       return wait ? { ...wait, since: wait.since.toISOString() } : null;
     },
+    attachments: (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) =>
+      context.prisma.attachment.findMany({ where: { issueId: parent.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] }),
     bugSla: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
       if (parent.commitmentStatus !== 'COMMITTED') return null;
       // Labels are usually loaded with the issue: skip non-bugs without a query.

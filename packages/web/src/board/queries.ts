@@ -471,6 +471,14 @@ export const ISSUE_PAGE_QUERY = gql`
           }
         }
       }
+      attachments {
+        id
+        filename
+        mimeType
+        size
+        url
+        createdAt
+      }
       parent {
         id
         identifier
