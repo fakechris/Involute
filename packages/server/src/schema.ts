@@ -389,7 +389,8 @@ const typeDefs = /* GraphQL */ `
   type Query {
     executorContextJson(id: String!): String!
     deliveryContext(id: String!): DeliveryContext!
-    deliveryChanges(first: Int, after: String, repository: String, noRepository: Boolean, teamKey: String, bugsOnly: Boolean): DeliveryChangeConnection!
+    "Pending delivery change sets the viewer may read; workId (id or identifier) narrows to one work item (INV-1023)."
+    deliveryChanges(first: Int, after: String, repository: String, noRepository: Boolean, teamKey: String, bugsOnly: Boolean, workId: String): DeliveryChangeConnection!
     viewer: User
     viewerCapabilities: ViewerCapabilities!
     workspaceSettings: WorkspaceSettings!
@@ -2405,7 +2406,7 @@ const resolvers = {
   Query: {
     executorContextJson: async (_parent: unknown, args: { id: string }, context: GraphQLContext) => JSON.stringify(await executorContext(context, args.id)),
     deliveryContext: (_parent: unknown, args: { id: string }, context: GraphQLContext) => deliveryContext(context, args.id),
-    deliveryChanges: (_parent: unknown, args: { first?: number; after?: string; repository?: string; noRepository?: boolean; teamKey?: string; bugsOnly?: boolean }, context: GraphQLContext) => pendingDeliveryChanges(context, args),
+    deliveryChanges: (_parent: unknown, args: { first?: number; after?: string; repository?: string; noRepository?: boolean; teamKey?: string; bugsOnly?: boolean; workId?: string }, context: GraphQLContext) => pendingDeliveryChanges(context, args),
     serverFeatures: (_parent: unknown, _args: unknown, context: GraphQLContext): ServerFeature[] => {
       assertSettingsAdmin(context);
       return listServerFeatures();

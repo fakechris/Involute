@@ -12,6 +12,7 @@ import { testParentId } from './test-placement.ts';
 import { isWorkReadyForClaim, listReadyWork } from './context-service.ts';
 import { snapshotContract } from './evidence-contract.ts';
 import { visibleDeliveryChange } from './delivery-visibility.ts';
+import { pendingDeliveryChanges } from './delivery-context.ts';
 import { readWorkPage } from './work-read-page.ts';
 import { resolveShareScope, upsertWorkShare } from './project-sharing.ts';
 import { reviewWork } from './run-service-review.ts';
@@ -122,6 +123,18 @@ describe('delivery packages and candidate change sets', () => {
     await expect(updateIssue(prisma, a.id, { expectedRevision: a.revision, scope: 'New goal' }, { actorKind: 'HUMAN', actorId: f.human.id })).rejects.toThrow(/Inherited execution/);
     await prisma.issue.update({ where: { id: f.work.id }, data: { acceptance: 'Expanded goal' } });
     expect(await isWorkReadyForClaim(prisma, a.id)).toBe(false);
+  });
+
+  // INV-1023: the queue can be narrowed to one work item for its own page.
+  it('lists pending changes for one work item by id or identifier', async () => {
+    const f = await fixture();
+    const other = await createIssue(prisma, { teamId: f.team.id, parentId: await testParentId(prisma, f.team.id, 'test/delivery'), title: 'Other package', repository: 'test/delivery', scope: 's', acceptance: 'a', assigneeId: f.human.id, stateId: f.ready.id, commitmentStatus: 'COMMITTED' });
+    const mine = await proposeDeliveryChange(f.agentContext, { workId: f.work.id, expectedRevision: f.work.revision, reason: 'Mine', changes: { policy } });
+    await proposeDeliveryChange(f.agentContext, { workId: other.id, expectedRevision: other.revision, reason: 'Theirs', changes: { contract: { scope: 'changed' } } });
+    expect((await pendingDeliveryChanges(f.humanContext, {})).nodes).toHaveLength(2);
+    expect((await pendingDeliveryChanges(f.humanContext, { workId: f.work.id })).nodes.map((node) => node.id)).toEqual([mine.id]);
+    expect((await pendingDeliveryChanges(f.humanContext, { workId: f.work.identifier })).nodes.map((node) => node.id)).toEqual([mine.id]);
+    expect((await pendingDeliveryChanges(f.humanContext, { workId: other.identifier })).nodes).toHaveLength(1);
   });
 
   it('blocks ordinary commitment while authorization is pending and invalidates grants when the business goal changes', async () => {

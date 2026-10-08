@@ -12,7 +12,7 @@ const CONTEXT = gql`query DeliveryPanel($id: String!) { deliveryContext(id: $id)
 const AGENTS = gql`query DeliveryExecutors { agents { id name } }`;
 const PROPOSE = gql`mutation DeliveryProposal($workId: String!, $expectedRevision: Int!, $reason: String!, $changesJson: String!) { deliveryChangePropose(workId: $workId, expectedRevision: $expectedRevision, reason: $reason, changesJson: $changesJson) { success message } }`;
 const CREATE = gql`mutation DeliveryExecution($workId: String!, $unitKey: String!, $expectedGrantRevision: Int!) { deliveryExecutionCreate(workId: $workId, unitKey: $unitKey, expectedGrantRevision: $expectedGrantRevision) { success message issue { id } } }`;
-const QUEUE = gql`query DeliveryQueue($after: String, $repository: String, $noRepository: Boolean, $teamKey: String, $bugsOnly: Boolean) { deliveryChanges(first: 30, after: $after, repository: $repository, noRepository: $noRepository, teamKey: $teamKey, bugsOnly: $bugsOnly) { nodes { id viewerCanDecide reason changesJson beforeJson work { id identifier title revision acceptance repository assignee { id } team { memberships { nodes { user { id name actorKind } } } } } } pageInfo { hasNextPage endCursor } } }`;
+const QUEUE = gql`query DeliveryQueue($after: String, $repository: String, $noRepository: Boolean, $teamKey: String, $bugsOnly: Boolean, $workId: String) { deliveryChanges(first: 30, after: $after, repository: $repository, noRepository: $noRepository, teamKey: $teamKey, bugsOnly: $bugsOnly, workId: $workId) { nodes { id viewerCanDecide reason changesJson beforeJson work { id identifier title revision acceptance repository assignee { id } team { memberships { nodes { user { id name actorKind } } } } } } pageInfo { hasNextPage endCursor } } }`;
 const DECIDE = gql`mutation DeliveryDecision($id: String!, $approve: Boolean!, $note: String, $ownerId: String) { deliveryChangeDecide(id: $id, approve: $approve, note: $note, ownerId: $ownerId) { success message } }`;
 
 function parseObject<T>(raw: string): T | null {
@@ -59,7 +59,20 @@ function PolicyEditor({ value, onChange, acceptance }: { value: Policy; onChange
   </fieldset>;
 }
 
-export function DeliveryPanel({ workId }: { workId: string }) {
+/**
+ * The one delivery surface (INV-1023): authorization + its pending changes
+ * with Approve / Decline, rendered the same on the work page, the issue page
+ * and the board drawer. `compact` hides it where nothing delivery-related
+ * exists yet, so ordinary issues do not grow an empty section.
+ */
+export function DeliverySection({ workId, compact = false }: { workId: string; compact?: boolean }) {
+  return <>
+    <DeliveryChangeQueue workId={workId} heading="Delivery changes awaiting approval" />
+    <DeliveryPanel workId={workId} compact={compact} />
+  </>;
+}
+
+export function DeliveryPanel({ workId, compact = false }: { workId: string; compact?: boolean }) {
   const { data, error, refetch } = useQuery<{ deliveryContext: { viewerCanWrite: boolean; work: Work; grant: { revision: number; policyJson: string } | null; authorizationValid: boolean; authorizationMessage: string; units: Array<{ issue: { id: string; identifier: string; title: string; deliveryUnitKey?: string; state: { name: string } }; technicalReady: boolean }> } }>(CONTEXT, { variables: { id: workId } });
   const [propose, proposing] = useMutation<{ deliveryChangePropose: Result }>(PROPOSE);
   const [create, creating] = useMutation<{ deliveryExecutionCreate: Result }>(CREATE);
@@ -75,6 +88,8 @@ export function DeliveryPanel({ workId }: { workId: string }) {
   if (!context) return null;
   const policy = context.grant ? parsePolicy(context.grant.policyJson) : null;
   if (context.grant && !policy) return <p role="alert">The delivery policy could not be read. Refresh or ask an administrator to inspect the record.</p>;
+  // Nothing delegated yet: on the drawer and issue page say nothing rather than show an empty authorization block.
+  if (compact && !context.grant && !context.units.length) return null;
   const invalidAttempts = draftPolicy?.units.some((unit) => unit.executorActorId && (!Number.isInteger(unit.maxAttempts ?? 1) || (unit.maxAttempts ?? 1) < 1 || (unit.maxAttempts ?? 1) > 10)) ?? false;
   const invalidChecks = draftPolicy?.units.some((unit) => unit.checks.some((check) => !Number.isSafeInteger(check.workflowId) || check.workflowId < 1 || !check.job.trim())) ?? false;
   return <section className="work-context__section delivery-panel"><h2>Delivery authorization</h2>
@@ -126,12 +141,12 @@ function ChangeCard({ change, refresh }: { change: Change; refresh: () => Promis
   </article>;
 }
 
-export function DeliveryChangeQueue({ repository, noRepository, teamKey, bugsOnly }: { repository?: string | undefined; noRepository?: boolean | undefined; teamKey?: string | null | undefined; bugsOnly?: boolean | undefined }) {
-  const { data, error, refetch, fetchMore, loading } = useQuery<{ deliveryChanges: { nodes: Change[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } }>(QUEUE, { variables: { repository: repository || null, noRepository: noRepository ?? false, teamKey: teamKey ?? null, bugsOnly: bugsOnly ?? false }, notifyOnNetworkStatusChange: true });
+export function DeliveryChangeQueue({ repository, noRepository, teamKey, bugsOnly, workId, heading = 'Delivery changes' }: { repository?: string | undefined; noRepository?: boolean | undefined; teamKey?: string | null | undefined; bugsOnly?: boolean | undefined; workId?: string | undefined; heading?: string }) {
+  const { data, error, refetch, fetchMore, loading } = useQuery<{ deliveryChanges: { nodes: Change[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } }>(QUEUE, { variables: { repository: repository || null, noRepository: noRepository ?? false, teamKey: teamKey ?? null, bugsOnly: bugsOnly ?? false, workId: workId ?? null }, notifyOnNetworkStatusChange: true });
   if (error) return <p role="alert">Delivery changes could not be loaded: {error.message}</p>;
   const queue = data?.deliveryChanges;
   if (!queue?.nodes.length) return null;
-  return <section className="work-context__section delivery-panel"><h2>Delivery changes</h2><p>Approve the business contract and implementation authority together. Final acceptance remains a separate human decision.</p>
+  return <section className="work-context__section delivery-panel" aria-label={heading}><h2>{heading} · {queue.nodes.length}</h2><p>Approve the business contract and implementation authority together. Final acceptance remains a separate human decision.</p>
     {queue.nodes.map((change) => <ChangeCard key={change.id} change={change} refresh={() => refetch()} />)}
     {queue.pageInfo.hasNextPage ? <button type="button" disabled={loading} onClick={() => void fetchMore({ variables: { after: queue.pageInfo.endCursor }, updateQuery: (previous, { fetchMoreResult }) => ({ deliveryChanges: { ...fetchMoreResult.deliveryChanges, nodes: [...previous.deliveryChanges.nodes, ...fetchMoreResult.deliveryChanges.nodes] } }) })}>Load more delivery changes</button> : null}
   </section>;

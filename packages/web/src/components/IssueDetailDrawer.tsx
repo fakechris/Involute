@@ -6,6 +6,7 @@ import { ContractSection, type ContractValues } from './ContractSection';
 import type { CommentSummary, ContractAmendmentSummary, IssueSummary, TeamSummary, UserSummary } from '../board/types';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ActorBadge } from './ActorBadge';
+import { DeliverySection } from './DeliveryPanel';
 import { IssueRelations } from './IssueRelations';
 import { AddSubIssueButton } from './AddSubIssueButton';
 import { BugSlaBadge } from './BugSlaBadge';
@@ -444,6 +445,8 @@ export function IssueDetailDrawer({
                 onRejectAmendment={amendmentDecisions.reject}
               />
             ) : null}
+            {/* Delivery authorization and changes awaiting approval (INV-1023), same as the issue and work pages. */}
+            <DeliverySection key={`delivery-${activeIssue.id}`} workId={activeIssue.id} compact />
             <div className="issue-panel__section" style={{ display: 'flex', gap: 6 }}>
               {onContractSave ? null : (
                 <button
