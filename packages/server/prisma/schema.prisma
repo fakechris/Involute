@@ -814,6 +814,8 @@ model WorkRun {
   lastActivityAt DateTime   @default(now())
   // When the owner was told this run went quiet; cleared when activity resumes.
   staleNotifiedAt DateTime?
+  // Full-text vector over summary, kept by a trigger (INV-935).
+  searchVector Unsupported("tsvector")?
   evidence    WorkEvidence[]
   reviewDecisions WorkReviewDecision[]
   autoAcceptEvaluations WorkAutoAcceptEvaluation[]
@@ -824,6 +826,7 @@ model WorkRun {
   @@index([actorId])
   @@index([claimId])
   @@index([status])
+  @@index([searchVector], map: "WorkRun_searchVector_idx", type: Gin)
 }
 
 model WorkEvidence {
