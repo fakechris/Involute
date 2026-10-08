@@ -342,7 +342,7 @@ features:
 | 刷新调研、转化行动项、bug、交付 | Involute 工单 |
 
 ### 11.4 调研在工作图中的表示（工作图规范 v1 C 条，INV-718 / INV-721）
-- 调研正文留在 `research/`（纳入版本管理的仓库可用 `docs/research/`），不进工单。
+- 调研正文留在 `research/`（纳入版本管理的仓库可用 `docs/research/`），不进工单；**要让人或其他 agent 核对时，用 `work_attach_file(work_id, filename, mime_type, content)` 把报告作为私有附件挂到调研工单（INV-1003）**——存在服务端 uploads，只有能读该工单的人能从 issue 页 Files 打开，不进 git、不进镜像；CI 的 `scripts/ci-research-guard.sh` 对被 track 的 `research/` 文件报错。
 - **每次调研是一张带 `research` 标签的 ISSUE**（`work_propose(labels: ['research'], parent_id: <里程碑或 PROJECT>)`），描述写要点与文档路径；产出文件路径作为 evidence。
 - **Type: Research 可由 agent 收尾（INV-912）**：调研的交付物就是条目本身。提案时可带 `initial_state: 'DONE'`，人承诺即进入 Done；已承诺的调研 ISSUE，agent 可用 `work_update(state: 'DONE')` 收尾（未承诺、非 ISSUE、被他人认领或描述不合三段式时拒绝）。CANCELED 仍只有人能设；派生的开发项不随之关闭。
 - 可执行点以 ISSUE、"明确不做"以 DECISION 提案，二者均 `DERIVED_FROM` 指向调研工单。

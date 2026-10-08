@@ -1159,6 +1159,17 @@ an answer is posted **into the thread its question was asked in**. So two people
 can ask two different questions of the same agent on the same work item, and
 neither the requests nor the answers cross.
 
+### Private files on work (INV-1003)
+
+`fileUpload(input: { filename, mimeType, content, issueId })` stores a file
+server-side and, with `issueId` (id or identifier), attaches it to that work;
+MCP `work_attach_file(work_id, filename, mime_type, content)` is the agent's
+side of the same thing. `Issue.attachments` lists them newest first and the
+issue page shows them under **Files**. `GET /uploads/<name>` serves a file only
+to its uploader, admins, trusted token bearers, or readers of the linked work.
+Research reports go this way, never into git or an image —
+`scripts/ci-research-guard.sh` fails CI when a `research/` path is tracked.
+
 ### Webhook subscriptions (Linear-style, per-endpoint secrets)
 
 Preferred over the legacy shared `INVOLUTE_WEBHOOK_URL`/`INVOLUTE_WEBHOOK_SECRET`
