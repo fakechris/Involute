@@ -1232,7 +1232,7 @@ const typeDefs = /* GraphQL */ `
     lastActivityAt: DateTime!
     "When the owner was told the run went quiet; null while it is live or after activity resumed."
     staleNotifiedAt: DateTime
-    "live while the executor keeps writing, stale after RUN_STALE_AFTER_MS (default 30 min) of silence, settled once ended. Derived."
+    "live while the executor keeps writing, stale after RUN_STALE_AFTER_MS (default 30 min) of silence, waiting while queued or blocked, settled once ended. Derived."
     presence: String!
   }
 

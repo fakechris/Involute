@@ -520,6 +520,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
         clearInterval(bugSlaTimer);
       }
       clearInterval(claimExpiryTimer);
+      clearInterval(staleRunTimer);
 
       await new Promise<void>((resolve, reject) => {
         httpServer.close((error) => {

@@ -7,10 +7,13 @@ import { enqueueWorkEvent } from './event-outbox.js';
  * answers for a request — 'will it reply' — asked of a run: a run is `live`
  * while its executor keeps writing (run_report phases, evidence on the run,
  * comments by its actor), `stale` once nothing has been written for
- * RUN_STALE_AFTER_MS (default 30 minutes, like Linear's agent sessions), and
- * `settled` once it ended. Derived from lastActivityAt, never stored.
+ * RUN_STALE_AFTER_MS (default 30 minutes, like Linear's agent sessions),
+ * `waiting` while queued or blocked, and `settled` once it ended. Derived from
+ * lastActivityAt, never stored.
  */
-export type RunPresence = 'live' | 'stale' | 'settled';
+export type RunPresence = 'waiting' | 'live' | 'stale' | 'settled';
+
+const OPEN_NOT_RUNNING = new Set(['QUEUED', 'BLOCKED']);
 
 export const DEFAULT_RUN_STALE_AFTER_MS = 30 * 60_000;
 
@@ -20,6 +23,8 @@ export function runStaleAfterMs(env: NodeJS.ProcessEnv = process.env): number {
 }
 
 export function runPresence(run: Pick<WorkRun, 'status' | 'lastActivityAt'>, now = new Date(), staleAfterMs = runStaleAfterMs()): RunPresence {
+  // Queued or blocked runs are open but not expected to write: waiting, not settled.
+  if (OPEN_NOT_RUNNING.has(run.status)) return 'waiting';
   if (run.status !== 'RUNNING') return 'settled';
   return now.getTime() - run.lastActivityAt.getTime() >= staleAfterMs ? 'stale' : 'live';
 }
