@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import type { GraphQLContext } from './auth.js';
 import { announceExecutorDispatch } from './delivery-execution.js';
+import { settleDeliveryRootAfterReceipt } from './delivery-root-review.js';
 import { assertCanReadIssue, assertCanWriteIssue, buildReadableIssueWhere } from './access-control.js';
 import { findWorkByIdOrIdentifier } from './context-service.js';
 import { assertDeliveryExecution } from './delivery-grant.js';
@@ -201,6 +202,10 @@ export async function executorUpdate(context: GraphQLContext, input: ExecutorInp
       if (effect && (effect.action === 'deploy' && receipt.deployedSha === effect.commitSha || effect.action === 'merge' && receipt.mergedSha)) await tx.executorEffect.update({ where: { id: effect.id }, data: { state: 'OBSERVED' } });
       await tx.executorDispatch.update({ where: { id: row.id }, data: { state: input.final === false ? 'RUNNING' : 'DELIVERED', revision: { increment: 1 } } });
       await event(tx, work, row.id, row.generation, fresh.viewer.id, input.final === false ? 'executor.observed' : 'executor.delivered');
+      // The last unit's final receipt sends the whole package to review (INV-1025).
+      if (input.final !== false) {
+        await settleDeliveryRootAfterReceipt(tx, { rootId: row.rootId, grantRevision: row.grantRevision, unitKeys: binding!.policy.units.map((unit) => unit.key), viewer: fresh.viewer });
+      }
       return created;
     }
     return refuse('Invalid executor operation.');
