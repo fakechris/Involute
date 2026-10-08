@@ -165,6 +165,7 @@ import { auditMergedPrTraceability } from './traceability-audit.js';
 import { suggestedBranchName } from './branch-name.js';
 import { createWorkLink, deleteWorkLink, listIncidentLinks } from './link-service.js';
 import { writeActorFromViewer } from './work-service.js';
+import { findWorkTombstone, isTombstoneExpired, restoreDeletedIssue, TOMBSTONE_EXPIRED_MESSAGE, TOMBSTONE_NOT_FOUND_MESSAGE } from './work-tombstone.js';
 import { getUploadsDirectory } from './uploads.js';
 import { loadProjectWorkGraph, type ProjectWorkGraph } from './work-graph-view.js';
 import { loadWorkTimelines } from './work-timeline.js';
@@ -456,7 +457,10 @@ const typeDefs = /* GraphQL */ `
     issueCreate(input: IssueCreateInput!): IssueCreatePayload!
     bugReport(input: BugReportInput!): BugReportPayload!
     issueUpdate(id: String!, input: IssueUpdateInput!): IssueUpdatePayload!
-    issueDelete(id: String!): IssueDeletePayload!
+    "Delete work. With expectedRevision, only if it is still at that revision (a redo after undo, INV-840)."
+    issueDelete(id: String!, expectedRevision: Int): IssueDeletePayload!
+    "Undo a deletion: put the work back under its original id (INV-840)."
+    issueUndelete(id: String!): IssueUndeletePayload!
     commentCreate(input: CommentCreateInput!): CommentCreatePayload!
     commentDelete(id: String!): CommentDeletePayload!
     teamUpdateAccess(input: TeamUpdateAccessInput!): TeamUpdateAccessPayload!
@@ -1999,6 +2003,13 @@ const typeDefs = /* GraphQL */ `
     message: String
   }
 
+  type IssueUndeletePayload {
+    success: Boolean!
+    issue: Issue
+    "Why the restore was refused (nothing to restore, id in use again, ...); null on success."
+    message: String
+  }
+
   type CommentCreatePayload {
     success: Boolean!
     comment: Comment
@@ -3209,12 +3220,12 @@ const resolvers = {
       }),
     issueDelete: async (
       _parent: unknown,
-      args: { id: string },
+      args: { id: string; expectedRevision?: number | null },
       context: GraphQLContext,
     ): Promise<{ issueId: string | null; success: boolean }> =>
       runMutation(async () => {
         await assertCanWriteIssue(context.prisma, context, args.id);
-        const issue = await deleteIssue(context.prisma, args.id, writeActorFromViewer(context.viewer));
+        const issue = await deleteIssue(context.prisma, args.id, writeActorFromViewer(context.viewer), args.expectedRevision ?? null);
 
         return {
           issueId: issue.id,
@@ -3222,6 +3233,26 @@ const resolvers = {
         };
       }, {
         issueId: null,
+        success: false as const,
+      }),
+    issueUndelete: async (
+      _parent: unknown,
+      args: { id: string },
+      context: GraphQLContext,
+    ): Promise<{ issue: IssueParent | null; success: boolean }> =>
+      runMutation(async () => {
+        const tombstone = await findWorkTombstone(context.prisma, args.id);
+        if (!tombstone) throw createNotFoundError(TOMBSTONE_NOT_FOUND_MESSAGE);
+        if (isTombstoneExpired(tombstone.deletedAt)) throw createValidationError(TOMBSTONE_EXPIRED_MESSAGE);
+        await assertCanWriteTeam(context.prisma, context, tombstone.teamId);
+        const issue = await restoreDeletedIssue(context.prisma, args.id, writeActorFromViewer(context.viewer));
+
+        return {
+          issue: await getIssueById(context.prisma, issue.id),
+          success: true as const,
+        };
+      }, {
+        issue: null,
         success: false as const,
       }),
     workPropose: async (

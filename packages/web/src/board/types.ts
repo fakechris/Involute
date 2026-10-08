@@ -521,6 +521,18 @@ export interface CommentCreateMutationVariables {
   };
 }
 
+export interface IssueUndeleteMutationData {
+  issueUndelete: {
+    success: boolean;
+    issue: IssueSummary | null;
+    message?: string | null;
+  };
+}
+
+export interface IssueUndeleteMutationVariables {
+  id: string;
+}
+
 export interface IssueDeleteMutationData {
   issueDelete: {
     success: boolean;
@@ -530,6 +542,8 @@ export interface IssueDeleteMutationData {
 
 export interface IssueDeleteMutationVariables {
   id: string;
+  /** Only delete if still at this revision (a redo after undo, INV-840). */
+  expectedRevision?: number;
 }
 
 export interface CommentDeleteMutationData {

@@ -286,6 +286,126 @@ export const ISSUE_UPDATE_MUTATION = gql`
   }
 `;
 
+// INV-840: undo a deletion — the same item comes back under its original id.
+export const ISSUE_UNDELETE_MUTATION = gql`
+  mutation IssueUndelete($id: String!) {
+    issueUndelete(id: $id) {
+      success
+      message
+      issue {
+        id
+        identifier
+        revision
+        title
+        description
+        priority
+        kind
+        repository
+        commitmentStatus
+        outcome
+        scope
+        constraints
+        acceptance
+        verification
+        claim {
+          id
+          leaseUntil
+          executionId
+          actor {
+            id
+            name
+            email
+            actorKind
+          }
+        }
+        createdAt
+        updatedAt
+        state {
+          id
+          name
+          type
+          position
+        }
+        team {
+          id
+          key
+        }
+        labels {
+          nodes {
+            id
+            name
+          }
+        }
+        assignee {
+          id
+          name
+          email
+        }
+        children {
+          nodes {
+            id
+            identifier
+            title
+            kind
+            state {
+              id
+              name
+              type
+            }
+            assignee {
+              id
+              name
+            }
+          }
+        }
+        parent {
+          id
+          identifier
+          title
+          kind
+        }
+        projectId
+        cycleId
+        provenance {
+          actorKind
+          surface
+          source
+          actor {
+            id
+            name
+            email
+            handle
+            actorKind
+            runtime
+            presence
+            presenceDetail
+            lastSeenAt
+          }
+        }
+        comments(first: 100, orderBy: createdAt) {
+          nodes {
+            id
+            body
+            createdAt
+            user {
+              id
+              name
+              email
+              handle
+              actorKind
+              runtime
+              presence
+              presenceDetail
+              lastSeenAt
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+
 /** A person completes a request addressed to them (INV-596). */
 export const AGENT_REQUEST_ANSWER_MUTATION = gql`
   mutation AgentRequestAnswer($input: AgentRequestAnswerInput!) {
@@ -317,8 +437,8 @@ export const COMMENT_CREATE_MUTATION = gql`
 `;
 
 export const ISSUE_DELETE_MUTATION = gql`
-  mutation IssueDelete($id: String!) {
-    issueDelete(id: $id) {
+  mutation IssueDelete($id: String!, $expectedRevision: Int) {
+    issueDelete(id: $id, expectedRevision: $expectedRevision) {
       success
       issueId
     }

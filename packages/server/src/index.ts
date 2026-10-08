@@ -6,6 +6,7 @@ import { sweepBugSlas } from './bug-sla.js';
 import { sendReviewDigests, sweepOverdueReviews } from './review-wait.js';
 import { sweepExpiredClaims } from './claim-expiry.js';
 import { sweepStaleRuns } from './run-staleness.js';
+import { sweepExpiredTombstones } from './work-tombstone.js';
 import type { PrismaClient } from '@prisma/client';
 
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
@@ -434,6 +435,15 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     });
   }, 5 * 60_000);
   staleRunTimer?.unref();
+
+  // Deleted work past retention (INV-840) can no longer be restored; drop the snapshot.
+  const tombstoneTimer = setInterval(() => {
+    void sweepExpiredTombstones(prisma).catch((error: unknown) => {
+      console.error('Failed to sweep expired tombstones.');
+      console.error(error);
+    });
+  }, 60 * 60_000);
+  tombstoneTimer?.unref();
 
   // Expired claims (INV-991): released by the server, runs failed, people told.
   const claimExpiryTimer = setInterval(() => {

@@ -2,7 +2,7 @@ import { useMutation, useQuery } from '@apollo/client/react';
 import { DeliverySection } from '../components/DeliveryPanel';
 import { ISSUE_UNDO_APPLIED_EVENT, type IssueUndoAppliedDetail } from '../undo/FieldUndoHost';
 import { fieldChange } from '../undo/field-gesture';
-import { recordFieldGesture } from '../undo/status-undo';
+import { recordDeleteGesture, recordFieldGesture } from '../undo/status-undo';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -460,6 +460,7 @@ export function IssuePage() {
       }
 
       setLocalIssue(null);
+      recordDeleteGesture([{ issueId: issue.id, identifier: issue.identifier, phase: 'deleted' }]);
       navigate('/');
     } catch {
       setMutationError(ISSUE_DELETE_ERROR_MESSAGE);
@@ -538,7 +539,7 @@ export function IssuePage() {
   }
 
   function confirmIssueDelete(): boolean {
-    return window.confirm(`Delete ${issueSnapshot?.identifier}? This cannot be undone.`);
+    return window.confirm(`Delete ${issueSnapshot?.identifier}? You can undo this with ⌘Z until you reload the page.`);
   }
 
   function confirmCommentDelete(): boolean {

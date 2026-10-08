@@ -476,13 +476,27 @@ mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
 
 ### `issueDelete`
 
-Deletes an issue.
+Deletes an issue. The item's fields, labels, comments, links, shares, audit trail with decision receipts and the children's parent are kept in a `WorkTombstone` keyed by the original id so the deletion can be undone (INV-840); the snapshot is dropped after 7 days. Leases, runs, evidence and notifications are not kept. With `expectedRevision`, the delete is refused when the item has been edited since (used when a restore is redone).
 
 ```graphql
-mutation IssueDelete($id: String!) {
-  issueDelete(id: $id) {
+mutation IssueDelete($id: String!, $expectedRevision: Int) {
+  issueDelete(id: $id, expectedRevision: $expectedRevision) {
     success
     issueId
+  }
+}
+```
+
+### `issueUndelete`
+
+Undoes a deletion: the same item comes back under its original id and identifier (INV-840). Refused when nothing was deleted under that id, when the deletion is older than 7 days, when the id or identifier is in use again, or when the workflow state is gone; a parent, assignee, project or cycle that no longer exists is dropped rather than invented. The web app's session undo (⌘Z after a delete) calls this; agents do not delete work.
+
+```graphql
+mutation IssueUndelete($id: String!) {
+  issueUndelete(id: $id) {
+    success
+    message
+    issue { id identifier parent { id } }
   }
 }
 ```

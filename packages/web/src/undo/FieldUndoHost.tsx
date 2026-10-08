@@ -8,8 +8,11 @@ import { registerFieldUndoApply, type FieldUndoApply } from './status-undo';
 /** Pages listen for this to refresh the issues an undo/redo just rewrote. */
 export const ISSUE_UNDO_APPLIED_EVENT = 'involute:issue-undo-applied';
 export interface IssueUndoAppliedDetail {
+  /** Issues now at the version the server returned (edited back, or restored). */
   issues: IssueSummary[];
   issueIds: string[];
+  /** Issues an undo/redo deleted again (INV-840). */
+  deletedIds?: string[];
 }
 
 /**

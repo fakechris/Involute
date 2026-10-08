@@ -39,6 +39,7 @@ import { enqueueWorkEvent } from './event-outbox.js';
 import { openAgentRequestsForMentions } from './agent-request-from-mention.js';
 import { assertNodeHierarchy, getContainsDescendantIds, lockWorkGraph } from './graph-integrity.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
+import { writeWorkTombstone } from './work-tombstone.js';
 import { assertSingleType, isBugWork, isResearchWork } from './labels.js';
 import { assertAgentMayCloseResearch, RESEARCH_CLOSE_REASON } from './research-closure.js';
 import {
@@ -820,20 +821,27 @@ export async function deleteIssue(
   prisma: PrismaClient,
   id: string,
   actor: WriteActor = INTERNAL_WRITE_ACTOR,
+  /** When given, the delete only happens if the item is still at this revision (a redo after an undo, INV-840). */
+  expectedRevision?: number | null,
 ): Promise<Pick<Issue, 'id'>> {
   return prisma.$transaction(async tx => {
     const hint = await tx.issue.findUnique({ where: { id }, select: { teamId: true } });
     if (!hint) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
     await lockWorkGraph(tx, hint.teamId);
-    const issue = await tx.issue.findUnique({ where: { id }, select: { id: true } });
+    const issue = await tx.issue.findUnique({ where: { id }, select: { id: true, revision: true } });
     if (!issue) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+    if (expectedRevision !== undefined && expectedRevision !== null && issue.revision !== expectedRevision) {
+      throw createValidationError(WORK_REVISION_CONFLICT_MESSAGE);
+    }
+    // Snapshot first, while the children still point here (INV-840).
+    await writeWorkTombstone(tx, id, actor.actorId ?? null);
     const children = await tx.issue.findMany({ where: { parentId: id } });
     for (const child of children) {
       const after = await tx.issue.update({ where: { id: child.id }, data: { parentId: null, revision: { increment: 1 } } });
       await recordWorkAudit(tx, { actor, before: selectIssueSnapshot(child), after: selectIssueSnapshot(after), workId: child.id });
     }
     await tx.issue.delete({ where: { id } });
-    return issue;
+    return { id: issue.id };
   });
 }
 

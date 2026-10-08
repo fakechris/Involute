@@ -253,7 +253,7 @@ export function IssueDetailDrawer({
   }
 
   function confirmIssueDelete(): boolean {
-    return window.confirm(`Delete ${activeIssue.identifier}? This cannot be undone.`);
+    return window.confirm(`Delete ${activeIssue.identifier}? You can undo this with ⌘Z until you reload the page.`);
   }
 
   function confirmCommentDelete(): boolean {
