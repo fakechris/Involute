@@ -24,7 +24,9 @@ CASES = [
     ("json saying database down", 200, "application/json", json.dumps({"status": "ready", "database": "error"}), 1),
     ("404", 404, "text/plain", "Not found", 1),
     ("503 not ready", 503, "application/json", json.dumps({"status": "not-ready", "database": "error"}), 1),
+    ("jsonp media type is not json", 200, "application/jsonp", json.dumps({"database": "ok", "status": "ready"}), 1),
     ("ready json", 200, "application/json; charset=utf-8", json.dumps({"database": "ok", "status": "ready"}), 0),
+    ("ready json, upper-case media type", 200, "Application/JSON", json.dumps({"database": "ok", "status": "ready"}), 0),
 ]
 
 

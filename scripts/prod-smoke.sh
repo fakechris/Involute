@@ -48,10 +48,11 @@ if [ "$READY_STATUS" != "200" ]; then
   head -c 200 "$READY_BODY" >&2; echo >&2
   rm -f "$READY_BODY"; exit 1
 fi
-case "$READY_TYPE" in
-  application/json*) ;;
-  *) echo "/ready returned 200 with content-type '${READY_TYPE}': the SPA fallback answered instead of the API" >&2; rm -f "$READY_BODY"; exit 1 ;;
-esac
+# Media type exactly application/json (parameters such as charset allowed), any case.
+READY_MEDIA="$(printf '%s' "$READY_TYPE" | cut -d';' -f1 | tr '[:upper:]' '[:lower:]' | tr -d ' ')"
+if [ "$READY_MEDIA" != "application/json" ]; then
+  echo "/ready returned 200 with content-type '${READY_TYPE}': the SPA fallback answered instead of the API" >&2; rm -f "$READY_BODY"; exit 1
+fi
 if ! python3 - "$READY_BODY" <<'PY'
 import json, sys
 try:
