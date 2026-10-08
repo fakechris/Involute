@@ -1,5 +1,9 @@
 import type { PrismaClient, Team, User } from '@prisma/client';
 
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -21,8 +25,18 @@ describe('work_attach_file (INV-1003)', () => {
   let human: User;
   let agent: User;
 
-  beforeAll(async () => { await prisma.$connect(); });
-  afterAll(async () => { await prisma.$disconnect(); });
+  let uploadsDir: string;
+  beforeAll(async () => {
+    await prisma.$connect();
+    // Files land in a scratch directory, not the repository's uploads/.
+    uploadsDir = await mkdtemp(join(tmpdir(), 'involute-attach-test-'));
+    process.env.INVOLUTE_UPLOADS_DIR = uploadsDir;
+  });
+  afterAll(async () => {
+    delete process.env.INVOLUTE_UPLOADS_DIR;
+    await rm(uploadsDir, { force: true, recursive: true });
+    await prisma.$disconnect();
+  });
   beforeEach(async () => {
     await prisma.attachment.deleteMany();
     await prisma.comment.deleteMany();
@@ -37,7 +51,7 @@ describe('work_attach_file (INV-1003)', () => {
     agent = await prisma.user.create({ data: { name: 'Researcher', email: 'researcher@agents.local', actorKind: 'AGENT', ownerId: human.id } });
     await prisma.teamMembership.create({ data: { role: 'EDITOR', teamId: team.id, userId: agent.id } });
     await prisma.agentCredential.create({ data: { name: 'researcher', scopes: ['read', 'propose', 'claim', 'report'], tokenHash: hashAgentToken(AGENT_TOKEN), teamId: team.id, userId: agent.id } });
-    server = await startServer({ allowAdminFallback: true, prisma, authToken: 'unused-static-token', port: 0 });
+    server = await startServer({ allowAdminFallback: true, prisma, authToken: 'unused-static-token', port: 0, uploadsDir });
   });
   afterEach(async () => { await server.stop(); });
 

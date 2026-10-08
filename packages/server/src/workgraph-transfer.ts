@@ -22,6 +22,7 @@ export const WORKGRAPH_FORMAT = 'involute.workgraph/1';
 /** Tables in insert order; `self` names columns pointing back at the same table. */
 export const WORKGRAPH_TABLES: ReadonlyArray<{ table: string; self?: string[] }> = [
   { table: 'User', self: ['ownerId', 'successorActorId', 'invitedById'] },
+  { table: 'ActorAudit' },
   { table: 'Team' },
   { table: 'TeamMembership' },
   { table: 'WorkflowState' },
@@ -155,6 +156,9 @@ export async function importWorkGraph(prisma: PrismaClient, directory: string): 
 export async function workGraphCounts(prisma: PrismaClient): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
   for (const { table } of WORKGRAPH_TABLES) {
+    // An older database may not have every table yet (a backup from before a migration).
+    const [exists] = await prisma.$queryRaw<Array<{ present: boolean }>>`SELECT to_regclass(${quote(table)}) IS NOT NULL AS present`;
+    if (!exists?.present) continue;
     const [row] = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(`SELECT count(*)::bigint AS count FROM ${quote(table)}`);
     counts[table] = Number(row?.count ?? 0);
   }
