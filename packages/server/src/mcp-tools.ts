@@ -105,7 +105,6 @@ export type McpToolName =
 // Order matches MCP_TOOL_DEFINITIONS, which is the order `listMcpTools`
 // returns them in.
 export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
-  'work_views',
   'work_search',
   'work_catalog',
   'work_read_page',
@@ -113,6 +112,7 @@ export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
   'work_delivery_context',
   'work_get_context',
   'work_list_ready',
+  'work_views',
   'agent_inbox',
   'protocol_get_guide',
 ];
