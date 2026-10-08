@@ -39,6 +39,8 @@
     "hotfix:reflex": "pnpm exec tsx prisma/hotfix-reflex.ts",
     "repo:migrate": "pnpm exec tsx prisma/repo-migrate.ts",
     "search:reindex": "pnpm exec tsx prisma/search-reindex.ts",
+    "workgraph:export": "pnpm exec tsx prisma/workgraph.ts export",
+    "workgraph:import": "pnpm exec tsx prisma/workgraph.ts import",
     "build": "pnpm --filter @turnkeyai/involute-shared build && pnpm run prisma:generate && pnpm exec tsc -p tsconfig.json",
     "prisma:db:push": "pnpm exec prisma db push --skip-generate",
     "prisma:generate": "pnpm exec prisma generate",
