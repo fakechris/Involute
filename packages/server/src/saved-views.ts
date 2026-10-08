@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient, SavedView } from '@prisma/client';
 
-import { assertCanReadTeam, assertCanWriteTeam } from './access-control.js';
+import { assertCanReadTeam, assertCanWriteTeam, assertTeamNotArchived } from './access-control.js';
 import { requireAuthentication, type GraphQLContext } from './auth.js';
 import { createNotFoundError, createValidationError, TEAM_NOT_FOUND_MESSAGE } from './errors.js';
 
@@ -54,6 +54,8 @@ export async function upsertSavedView(context: GraphQLContext, input: SavedViewI
     throw createValidationError(SAVED_VIEW_INVALID_MESSAGE);
   }
   const team = await teamByKey(context.prisma, input.teamKey);
+  // An archived team is read-only for everything, private views included.
+  await assertTeamNotArchived(context.prisma, team.id);
   if (visibility === 'TEAM') await assertCanWriteTeam(context.prisma, context, team.id);
   else await assertCanReadTeam(context.prisma, context, team.id);
   const state = JSON.parse(JSON.stringify(input.state)) as Prisma.InputJsonValue;
@@ -73,6 +75,7 @@ export async function deleteSavedView(context: GraphQLContext, id: string): Prom
   const viewer = requireAuthentication(context);
   const existing = await context.prisma.savedView.findUnique({ where: { id } });
   if (!existing) return false;
+  await assertTeamNotArchived(context.prisma, existing.teamId);
   if (existing.ownerId !== viewer.id && context.viewer?.globalRole !== 'ADMIN') {
     // A team owner may remove a shared view from the team.
     if (existing.visibility !== 'TEAM') throw createNotFoundError(SAVED_VIEW_NOT_FOUND_MESSAGE);

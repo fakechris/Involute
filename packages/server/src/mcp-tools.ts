@@ -105,6 +105,7 @@ export type McpToolName =
 // Order matches MCP_TOOL_DEFINITIONS, which is the order `listMcpTools`
 // returns them in.
 export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
+  'work_views',
   'work_search',
   'work_catalog',
   'work_read_page',
@@ -1284,7 +1285,8 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   },
   {
     name: 'work_view_save',
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    // Without an id each call creates a view, so a retry can duplicate.
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     description: 'Create or update a saved view (INV-1005). visibility PRIVATE (default, yours) or TEAM (every member; needs write access to the team). Pass id to update one of yours.',
     inputSchema: {
       type: 'object',

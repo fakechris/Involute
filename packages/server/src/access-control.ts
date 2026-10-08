@@ -145,7 +145,7 @@ export async function assertCanReadTeam(
 }
 
 /** Archived teams are read-only for everyone, admins included (docs/permissions.md §5). */
-async function assertTeamNotArchived(prisma: PrismaClient, teamId: string): Promise<void> {
+export async function assertTeamNotArchived(prisma: PrismaClient, teamId: string): Promise<void> {
   const team = await prisma.team.findUnique({ where: { id: teamId }, select: { archivedAt: true } });
   if (team?.archivedAt) throw createValidationError(TEAM_ARCHIVED_MESSAGE);
 }
