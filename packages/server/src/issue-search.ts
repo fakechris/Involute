@@ -27,7 +27,7 @@ const MAX_TERMS = 8;
 const SNIPPET_RADIUS = 40;
 
 /** Where the words were found; `semantic` = close in meaning, no words matched (INV-927). */
-export type SearchField = 'identifier' | 'title' | 'contract' | 'description' | 'comment' | 'semantic';
+export type SearchField = 'identifier' | 'title' | 'contract' | 'description' | 'comment' | 'run' | 'semantic';
 type TextField = Exclude<SearchField, 'identifier' | 'semantic'>;
 
 const CONTRACT_FIELDS = ['outcome', 'scope', 'constraints', 'acceptance', 'verification'] as const;
@@ -39,6 +39,8 @@ const FIELD_WEIGHT: Record<TextField, number> = {
   contract: 20,
   description: 12,
   comment: 6,
+  // Run summaries (INV-935): process text, weakest of all.
+  run: 4,
 };
 const IDENTIFIER_WEIGHT = 1000;
 const TITLE_PREFIX_BONUS = 20;
@@ -138,6 +140,7 @@ export async function searchIssues(
         { description: { contains: term, mode: 'insensitive' } },
         ...CONTRACT_FIELDS.map((field) => ({ [field]: { contains: term, mode: 'insensitive' } })),
         { comments: { some: { body: { contains: term, mode: 'insensitive' } } } },
+        { runs: { some: { summary: { contains: term, mode: 'insensitive' } } } },
       ] as Prisma.IssueWhereInput[],
     })),
   };
@@ -154,6 +157,13 @@ export async function searchIssues(
       where: { OR: commentNeedles.map((needle) => ({ body: { contains: needle, mode: 'insensitive' as const } })) },
       orderBy: { createdAt: 'asc' as const },
       select: { id: true, body: true },
+      take: 5,
+    },
+    // Likewise runs whose summary contains a word (INV-935).
+    runs: {
+      where: { OR: commentNeedles.map((needle) => ({ summary: { contains: needle, mode: 'insensitive' as const } })) },
+      orderBy: { createdAt: 'desc' as const },
+      select: { id: true, summary: true },
       take: 5,
     },
   } satisfies Prisma.IssueInclude;
@@ -196,7 +206,7 @@ export async function searchIssues(
   const candidates = [...new Map([...broad, ...strong, ...ranked].map((issue) => [issue.id, issue])).values()];
 
   const hits = candidates
-    .map(({ comments, ...issue }) => scoreIssue(issue, comments, parsed, ranks.get(issue.id) ?? 0))
+    .map(({ comments, runs, ...issue }) => scoreIssue(issue, comments, runs, parsed, ranks.get(issue.id) ?? 0))
     .filter((hit): hit is IssueSearchHit => hit !== null);
   hits.sort((left, right) =>
     right.score - left.score
@@ -291,6 +301,10 @@ async function rankByFullText(
       SELECT comment."issueId", ts_rank_cd(comment."searchVector", query.q)
         FROM "Comment" comment, query WHERE comment."searchVector" @@ query.q
           AND (${allowedIds === null} OR comment."issueId"::text = ANY(${allowedIds ?? []}::text[]))
+      UNION ALL
+      SELECT run."workId", ts_rank_cd(run."searchVector", query.q)
+        FROM "WorkRun" run, query WHERE run."searchVector" @@ query.q
+          AND (${allowedIds === null} OR run."workId"::text = ANY(${allowedIds ?? []}::text[]))
     ) matches
     GROUP BY id
     ORDER BY rank DESC
@@ -308,6 +322,7 @@ async function rankByFullText(
 function scoreIssue(
   issue: Issue & { state: WorkflowState },
   comments: Array<{ id: string; body: string }>,
+  runs: Array<{ id: string; summary: string | null }>,
   parsed: ParsedSearchQuery,
   fullTextRank: number,
 ): IssueSearchHit | null {
@@ -322,7 +337,7 @@ function scoreIssue(
   for (const term of parsed.terms) {
     let weakest: TextField | null = null;
     for (const needle of term.needles) {
-      const found = findNeedle(needle, title, contract, issue.description, comments);
+      const found = findNeedle(needle, title, contract, issue.description, comments, runs);
       if (!found) {
         weakest = null;
         break;
@@ -373,6 +388,7 @@ function findNeedle(
   contract: string[],
   description: string | null,
   comments: Array<{ id: string; body: string }>,
+  runs: Array<{ id: string; summary: string | null }> = [],
 ): { field: TextField; text: string; commentId: string | null } | null {
   if (title.includes(needle)) return { field: 'title', text: title, commentId: null };
   const contractText = contract.find((text) => text.toLowerCase().includes(needle));
@@ -380,6 +396,8 @@ function findNeedle(
   if (description?.toLowerCase().includes(needle)) return { field: 'description', text: description, commentId: null };
   const comment = comments.find((candidate) => candidate.body.toLowerCase().includes(needle));
   if (comment) return { field: 'comment', text: comment.body, commentId: comment.id };
+  const run = runs.find((candidate) => candidate.summary?.toLowerCase().includes(needle));
+  if (run?.summary) return { field: 'run', text: run.summary, commentId: null };
   return null;
 }
 

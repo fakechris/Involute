@@ -8,7 +8,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
  */
 export async function reindexSearchVectors(
   prisma: PrismaClient | Prisma.TransactionClient,
-): Promise<{ issues: number; comments: number }> {
+): Promise<{ issues: number; comments: number; runs: number }> {
   const issues = await prisma.$executeRaw`
     UPDATE "Issue" SET "searchVector" = involute_issue_search_vector(
       title, outcome, scope, constraints, acceptance, verification, description
@@ -17,5 +17,8 @@ export async function reindexSearchVectors(
   const comments = await prisma.$executeRaw`
     UPDATE "Comment" SET "searchVector" = involute_comment_search_vector(body)
   `;
-  return { issues, comments };
+  const runs = await prisma.$executeRaw`
+    UPDATE "WorkRun" SET "searchVector" = involute_run_search_vector(summary)
+  `;
+  return { issues, comments, runs };
 }

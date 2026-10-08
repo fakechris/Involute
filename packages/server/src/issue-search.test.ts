@@ -36,6 +36,10 @@ describe('Free-text search (INV-925)', () => {
 
   const identifiers = (hits: Awaited<ReturnType<typeof searchIssues>>) => hits.map((hit) => hit.issue.identifier);
 
+  async function run(issue: Issue, summary: string) {
+    return prisma.workRun.create({ data: { workId: issue.id, publicId: `RUN-${issue.identifier}-${Date.now()}`, actorId: admin.id, status: 'COMPLETED', summary } });
+  }
+
   beforeAll(async () => {
     await prisma.$connect();
   });
@@ -45,6 +49,7 @@ describe('Free-text search (INV-925)', () => {
   });
 
   beforeEach(async () => {
+    await prisma.workRun.deleteMany();
     await prisma.comment.deleteMany();
     await prisma.issue.deleteMany();
     await prisma.workflowState.deleteMany();
@@ -93,6 +98,42 @@ describe('Free-text search (INV-925)', () => {
     expect(hit?.matchedField).toBe('comment');
     expect(hit?.snippet).toContain('溯源');
     expect(hit?.commentId).not.toBeNull();
+  });
+
+  // INV-935: text that only exists in a run summary finds its work.
+  it('finds a two-character word that only a run summary contains, marked as a run hit with a snippet', async () => {
+    const reported = await work({ title: 'Deploy' });
+    await run(reported, '部署后磁盘告警，已清理旧镜像。');
+    await work({ title: 'unrelated' });
+
+    const [hit, ...rest] = await searchIssues(prisma, { query: '磁盘' });
+    expect(rest).toEqual([]);
+    expect(hit?.issue.identifier).toBe(reported.identifier);
+    expect(hit?.matchedField).toBe('run');
+    expect(hit?.snippet).toContain('磁盘');
+    expect(hit?.commentId).toBeNull();
+  });
+
+  it('ranks a title hit above a run-only hit and hides runs of work the viewer may not read', async () => {
+    const inTitle = await work({ title: '磁盘清理脚本' });
+    const inRun = await work({ title: 'Deploy' });
+    await run(inRun, '磁盘满了');
+    const other = await prisma.team.create({ data: { key: 'OTH', name: 'Other' } });
+    const otherState = await prisma.workflowState.create({ data: { teamId: other.id, name: 'Ready', type: 'UNSTARTED', position: 0 } });
+    const hidden = await prisma.issue.create({ data: { identifier: 'OTH-1', teamId: other.id, stateId: otherState.id, title: 'Secret' } });
+    await run(hidden, '磁盘里有秘密');
+
+    expect(identifiers(await searchIssues(prisma, { query: '磁盘' }, { teamId: team.id }))).toEqual([inTitle.identifier, inRun.identifier]);
+  });
+
+  it('search:reindex rebuilds run vectors and can run again', async () => {
+    const reported = await work({ title: 'Deploy' });
+    await run(reported, '回填测试');
+    await prisma.$executeRaw`UPDATE "WorkRun" SET "searchVector" = NULL`;
+    const first = await reindexSearchVectors(prisma);
+    expect(first.runs).toBe(1);
+    expect(identifiers(await searchIssues(prisma, { query: '回填' }))).toEqual([reported.identifier]);
+    expect((await reindexSearchVectors(prisma)).runs).toBe(1);
   });
 
   it('requires every word but not that they are adjacent', async () => {
@@ -223,7 +264,7 @@ describe('Free-text search (INV-925)', () => {
       const afterFirst = await vectors();
       const secondRun = await reindexSearchVectors(prisma);
 
-      expect(firstRun).toEqual({ issues: 2, comments: 1 });
+      expect(firstRun).toEqual({ issues: 2, comments: 1, runs: 0 });
       expect(secondRun).toEqual(firstRun);
       expect(await vectors()).toEqual(afterFirst);
       expect(afterFirst.every((row) => row.vector !== null)).toBe(true);
