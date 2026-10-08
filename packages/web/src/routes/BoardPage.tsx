@@ -45,6 +45,7 @@ import type {
   IssueUpdateMutationVariables,
 } from '../board/types';
 import {
+  recordDeleteGesture,
   recordFieldGesture,
   recordStatusGesture,
   registerStatusUndoApply,
@@ -775,7 +776,17 @@ export function BoardPage() {
   useEffect(() => {
     const onApplied = (event: Event) => {
       const detail = (event as CustomEvent<IssueUndoAppliedDetail>).detail;
-      if (!detail?.issues.length) return;
+      if (!detail) return;
+      const deletedIds = detail.deletedIds ?? [];
+      if (deletedIds.length > 0) {
+        setDeletedIssueIds((current) => [...new Set([...current, ...deletedIds])]);
+        setIssueOverrides((current) => deletedIds.reduce((next, id) => replaceIssueOverride(next, id, null), current));
+        setCreatedIssues((current) => current.filter((issue) => !deletedIds.includes(issue.id)));
+        setSelectedIssueIds((current) => current.filter((id) => !deletedIds.includes(id)));
+      }
+      if (!detail.issues.length) return;
+      // A restored issue is no longer deleted on this board.
+      setDeletedIssueIds((current) => current.filter((id) => !detail.issues.some((issue) => issue.id === id)));
       setIssueOverrides((currentOverrides) => {
         let nextOverrides = currentOverrides;
         for (const issue of detail.issues) {
@@ -1869,6 +1880,7 @@ export function BoardPage() {
       setActiveIssueId((currentIssueId) => (currentIssueId === issue.id ? null : currentIssueId));
       setDragPreviewStateId(null);
       setDragOriginStateId(null);
+      recordDeleteGesture([{ issueId: issue.id, identifier: issue.identifier, phase: 'deleted' }]);
     } catch {
       setMutationError(ISSUE_DELETE_ERROR_MESSAGE);
       throw new Error(ISSUE_DELETE_ERROR_MESSAGE);

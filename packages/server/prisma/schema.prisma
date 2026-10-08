@@ -703,6 +703,20 @@ model WorkLink {
   @@index([actorId])
 }
 
+/// What a deleted work item looked like, so a person can undo the deletion
+/// by its original id within the session (INV-840). One row per deleted id;
+/// restoring removes it.
+model WorkTombstone {
+  id          String   @id @db.Uuid
+  teamId      String   @db.Uuid
+  identifier  String
+  snapshot    Json
+  deletedById String?  @db.Uuid
+  deletedAt   DateTime @default(now())
+
+  @@index([teamId, deletedAt])
+}
+
 model WorkAudit {
   id              String     @id @default(uuid()) @db.Uuid
   workId          String     @db.Uuid

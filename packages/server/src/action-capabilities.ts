@@ -133,6 +133,7 @@ export const MCP_EXEMPTIONS: Record<string, { reason: string; gate: 'administrat
   workReview: { gate: 'final-acceptance', reason: 'A person accepts delivery or returns it with feedback.', decision: 'INV-474' },
   issueCreate: { gate: 'candidate', reason: 'People create committed work; agents use work_propose or work_file_bug.', decision: 'INV-79' },
   issueDelete: { gate: 'administration', reason: 'Permanent deletion is a human administrative action; agent delivery preserves history.', decision: 'INV-846' },
+  issueUndelete: { gate: 'administration', reason: 'Undoing a deletion is the same administrative act in reverse; agents never deleted it.', decision: 'INV-840' },
   commentDelete: { gate: 'personal', reason: 'People delete their comments; agents append an attributable correction with work_comment.', decision: 'INV-795' },
   agentRequestReply: { gate: 'personal', reason: 'Human follow-up questions; agents answer leased requests through agent_request_answer.', decision: 'INV-795' },
   notificationsMarkAllRead: { gate: 'personal', reason: 'Human inbox read state.', decision: 'INV-968' },

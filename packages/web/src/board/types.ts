@@ -521,6 +521,18 @@ export interface CommentCreateMutationVariables {
   };
 }
 
+export interface IssueUndeleteMutationData {
+  issueUndelete: {
+    success: boolean;
+    issue: IssueSummary | null;
+    message?: string | null;
+  };
+}
+
+export interface IssueUndeleteMutationVariables {
+  id: string;
+}
+
 export interface IssueDeleteMutationData {
   issueDelete: {
     success: boolean;

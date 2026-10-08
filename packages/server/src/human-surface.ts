@@ -81,6 +81,7 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   fileUpload: { kind: 'web', doc: 'FILE_UPLOAD_MUTATION', components: ['components/RichTextEditor.tsx'], test: 'components/RichTextEditor.test.tsx' },
   issueCreate: { kind: 'web', doc: 'ISSUE_CREATE_MUTATION', components: ['routes/BoardPage.tsx'], test: 'App.issue-create.test.tsx' },
   issueDelete: { kind: 'web', doc: 'ISSUE_DELETE_MUTATION', components: ['routes/IssuePage.tsx'], label: 'Delete issue', test: 'App.issue-meta.test.tsx' },
+  issueUndelete: { kind: 'web', doc: 'ISSUE_UNDELETE_MUTATION', components: ['undo/DeleteUndoHost.tsx'], label: 'Undo', test: 'App.delete-undo.test.tsx' },
   issueUpdate: {
     kind: 'web',
     doc: 'ISSUE_UPDATE_MUTATION',

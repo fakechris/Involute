@@ -73,7 +73,27 @@ export interface FieldUndoApplyResult {
 
 export type FieldUndoApply = (changes: Array<FieldUndoChange & { expectedRevision: number; patch: FieldUndoChange['before'] }>) => Promise<FieldUndoApplyResult>;
 
-export type SessionUndoEntry = StatusUndoEntry | CommitUndoEntry | FieldUndoEntry;
+/** One deleted (or, after undo, restored) work item (INV-840). */
+export interface DeleteUndoItem {
+  issueId: string;
+  identifier: string;
+  /** 'deleted': undo restores it; 'restored': undo deletes it again. */
+  phase: 'deleted' | 'restored';
+}
+
+export interface DeleteUndoEntry {
+  id: string;
+  deletions: DeleteUndoItem[];
+}
+
+export interface DeleteUndoApplyResult {
+  applied: string[];
+  conflicts: string[];
+}
+
+export type DeleteUndoApply = (items: DeleteUndoItem[]) => Promise<DeleteUndoApplyResult>;
+
+export type SessionUndoEntry = StatusUndoEntry | CommitUndoEntry | FieldUndoEntry | DeleteUndoEntry;
 
 export interface CommitUndoApplyResult {
   applied: Array<{ issueId: string; revision: number }>;
@@ -101,6 +121,7 @@ let snapshot: StatusUndoSnapshot = EMPTY;
 let applyStatus: StatusUndoApply | null = null;
 let applyCommit: CommitUndoApply | null = null;
 let applyField: FieldUndoApply | null = null;
+let applyDelete: DeleteUndoApply | null = null;
 const listeners = new Set<() => void>();
 let toastTimer: number | null = null;
 let chain: Promise<void> = Promise.resolve();
@@ -143,6 +164,7 @@ export function resetStatusUndo() {
   applyStatus = null;
   applyCommit = null;
   applyField = null;
+  applyDelete = null;
   chain = Promise.resolve();
   emit(EMPTY);
 }
@@ -161,6 +183,15 @@ export function registerFieldUndoApply(apply: FieldUndoApply) {
   return () => {
     if (applyField === apply) {
       applyField = null;
+    }
+  };
+}
+
+export function registerDeleteUndoApply(apply: DeleteUndoApply) {
+  applyDelete = apply;
+  return () => {
+    if (applyDelete === apply) {
+      applyDelete = null;
     }
   };
 }
@@ -205,13 +236,23 @@ export function formatCommitGesture(entry: CommitUndoEntry): string {
   return entry.items[0]?.phase === 'candidate' ? `${who} returned to candidates` : `${who} committed`;
 }
 
+export function formatDeleteGesture(entry: DeleteUndoEntry): string {
+  const ids = entry.deletions.map((item) => item.identifier);
+  const shown = ids.slice(0, 3);
+  const extra = ids.length - shown.length;
+  const who = extra > 0 ? `${shown.join(', ')} and ${extra} more` : shown.join(', ');
+  return entry.deletions[0]?.phase === 'restored' ? `${who} restored` : `${who} deleted`;
+}
+
 function entrySize(entry: SessionUndoEntry): number {
+  if ('deletions' in entry) return entry.deletions.length;
   if ('items' in entry) return entry.items.length;
   if ('fields' in entry) return entry.fields.length;
   return entry.changes.length;
 }
 
 export function formatUndoEntry(entry: SessionUndoEntry): string {
+  if ('deletions' in entry) return formatDeleteGesture(entry);
   if ('items' in entry) return formatCommitGesture(entry);
   if ('fields' in entry) return formatFieldChanges(entry.fields);
   return formatStatusMove(entry);
@@ -248,6 +289,20 @@ export function recordCommitGesture(items: CommitUndoItem[]) {
     return;
   }
   const entry: CommitUndoEntry = { id: entryId(), items };
+  emit({
+    undo: [...snapshot.undo, entry].slice(-STATUS_UNDO_LIMIT),
+    redo: [],
+    toast: { entry, action: 'undo', conflicts: [] },
+  });
+  scheduleToastDismiss();
+}
+
+/** A deletion that the server can take back by id becomes one undo entry (INV-840). */
+export function recordDeleteGesture(deletions: DeleteUndoItem[]) {
+  if (deletions.length === 0) {
+    return;
+  }
+  const entry: DeleteUndoEntry = { id: entryId(), deletions };
   emit({
     undo: [...snapshot.undo, entry].slice(-STATUS_UNDO_LIMIT),
     redo: [],
@@ -360,6 +415,10 @@ async function perform(direction: 'undo' | 'redo') {
     await performFields(entry, direction, poppedUndo, poppedRedo);
     return;
   }
+  if ('deletions' in entry) {
+    await performDeletions(entry, direction, poppedUndo, poppedRedo);
+    return;
+  }
 
   const apply = await waitForApply();
   if (!apply) {
@@ -443,6 +502,47 @@ async function performFields(
     {
       entry: reversed.fields.length > 0 ? reversed : { id: entry.id, fields: [] },
       action: reversed.fields.length > 0 ? (direction === 'undo' ? 'redo' : 'undo') : 'none',
+      conflicts: result.conflicts,
+    },
+    { undo, redo },
+  );
+}
+
+async function performDeletions(
+  entry: DeleteUndoEntry,
+  direction: 'undo' | 'redo',
+  poppedUndo: SessionUndoEntry[],
+  poppedRedo: SessionUndoEntry[],
+) {
+  const apply = applyDelete;
+  if (!apply) {
+    emit({
+      undo: direction === 'undo' ? [...snapshot.undo, entry].slice(-STATUS_UNDO_LIMIT) : snapshot.undo,
+      redo: direction === 'redo' ? [...snapshot.redo, entry].slice(-STATUS_UNDO_LIMIT) : snapshot.redo,
+      toast: { entry: { id: 'unavailable', changes: [] }, action: 'none', conflicts: [], message: 'Undo is not ready' },
+    });
+    scheduleToastDismiss();
+    return;
+  }
+  const result = await apply(entry.deletions);
+  const applied = new Set(result.applied);
+  const reversed: DeleteUndoEntry = {
+    id: entryId(),
+    deletions: entry.deletions
+      .filter((item) => applied.has(item.issueId))
+      .map((item) => ({ ...item, phase: item.phase === 'deleted' ? 'restored' as const : 'deleted' as const })),
+  };
+  const gestureArrived = snapshot.undo.length > poppedUndo.length || snapshot.redo.length !== poppedRedo.length;
+  const undo = direction === 'redo' && reversed.deletions.length > 0 && !gestureArrived
+    ? [...snapshot.undo, reversed].slice(-STATUS_UNDO_LIMIT)
+    : snapshot.undo;
+  const redo = direction === 'undo' && reversed.deletions.length > 0 && !gestureArrived
+    ? [...snapshot.redo, reversed].slice(-STATUS_UNDO_LIMIT)
+    : snapshot.redo;
+  showToast(
+    {
+      entry: reversed.deletions.length > 0 ? reversed : { id: entry.id, deletions: [] },
+      action: reversed.deletions.length > 0 ? (direction === 'undo' ? 'redo' : 'undo') : 'none',
       conflicts: result.conflicts,
     },
     { undo, redo },

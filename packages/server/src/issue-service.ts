@@ -39,6 +39,7 @@ import { enqueueWorkEvent } from './event-outbox.js';
 import { openAgentRequestsForMentions } from './agent-request-from-mention.js';
 import { assertNodeHierarchy, getContainsDescendantIds, lockWorkGraph } from './graph-integrity.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
+import { writeWorkTombstone } from './work-tombstone.js';
 import { assertSingleType, isBugWork, isResearchWork } from './labels.js';
 import { assertAgentMayCloseResearch, RESEARCH_CLOSE_REASON } from './research-closure.js';
 import {
@@ -827,6 +828,8 @@ export async function deleteIssue(
     await lockWorkGraph(tx, hint.teamId);
     const issue = await tx.issue.findUnique({ where: { id }, select: { id: true } });
     if (!issue) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+    // Snapshot first, while the children still point here (INV-840).
+    await writeWorkTombstone(tx, id, actor.actorId ?? null);
     const children = await tx.issue.findMany({ where: { parentId: id } });
     for (const child of children) {
       const after = await tx.issue.update({ where: { id: child.id }, data: { parentId: null, revision: { increment: 1 } } });
