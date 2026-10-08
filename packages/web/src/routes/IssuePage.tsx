@@ -2,7 +2,8 @@ import { useMutation, useQuery } from '@apollo/client/react';
 import { DeliverySection } from '../components/DeliveryPanel';
 import { ISSUE_UNDO_APPLIED_EVENT, type IssueUndoAppliedDetail } from '../undo/FieldUndoHost';
 import { fieldChange } from '../undo/field-gesture';
-import { recordDeleteGesture, recordFieldGesture } from '../undo/status-undo';
+import { recordCommentGesture, recordDeleteGesture, recordFieldGesture } from '../undo/status-undo';
+import { COMMENTS_CHANGED_EVENT, type CommentsChangedDetail } from '../undo/CommentUndoHost';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -114,6 +115,23 @@ export function IssuePage() {
   });
 
   const [localIssue, setLocalIssue] = useState<IssueSummary | null>(null);
+  // An undo/redo posted a comment again or deleted one on this issue.
+  useEffect(() => {
+    const onComments = (event: Event) => {
+      const detail = (event as CustomEvent<CommentsChangedDetail>).detail;
+      if (detail?.issueId !== id) return;
+      setLocalIssue((current) => {
+        if (!current) return current;
+        const nodes = detail.posted
+          ? [...current.comments.nodes.filter((comment) => comment.id !== detail.posted?.id), detail.posted]
+          : current.comments.nodes.filter((comment) => comment.id !== detail.deletedCommentId);
+        return { ...current, comments: { nodes } };
+      });
+    };
+    window.addEventListener(COMMENTS_CHANGED_EVENT, onComments);
+    return () => window.removeEventListener(COMMENTS_CHANGED_EVENT, onComments);
+  }, [id]);
+
   // An undo/redo from anywhere rewrites this issue on the server: show that version.
   useEffect(() => {
     const onApplied = (event: Event) => {
@@ -485,6 +503,7 @@ export function IssuePage() {
         throw new Error('Delete comment mutation failed');
       }
 
+      const deleted = issue.comments.nodes.find((comment) => comment.id === commentId);
       setLocalIssue((currentIssue) =>
         currentIssue
           ? {
@@ -495,6 +514,9 @@ export function IssuePage() {
             }
           : currentIssue,
       );
+      if (deleted) {
+        recordCommentGesture([{ commentId, issueId: issue.id, issueIdentifier: issue.identifier, body: deleted.body, parentCommentId: null, phase: 'deleted' }]);
+      }
     } catch {
       setMutationError(COMMENT_DELETE_ERROR_MESSAGE);
       throw new Error(COMMENT_DELETE_ERROR_MESSAGE);
@@ -543,7 +565,7 @@ export function IssuePage() {
   }
 
   function confirmCommentDelete(): boolean {
-    return window.confirm('Delete this comment? This cannot be undone.');
+    return window.confirm('Delete this comment? You can undo this with ⌘Z until you reload the page; it comes back as a new comment.');
   }
 
   // --- Error / loading / not found ---
