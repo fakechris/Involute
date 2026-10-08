@@ -1159,6 +1159,18 @@ an answer is posted **into the thread its question was asked in**. So two people
 can ask two different questions of the same agent on the same work item, and
 neither the requests nor the answers cross.
 
+### Saved views (INV-1005)
+
+Board/backlog views live on the server: `savedViews(teamKey)` returns the
+viewer's own (`PRIVATE`) and the team's shared (`TEAM`) views;
+`savedViewUpsert(input: { id?, teamKey, name, kind, visibility, stateJson })`
+creates or updates (only the owner edits; `TEAM` needs team write access);
+`savedViewDelete(id)` by the owner, or by a team editor for a shared view.
+MCP: `work_views`, `work_view_save`, `work_view_delete`. The web app mirrors
+the server list into localStorage and migrates views it finds there once
+(`involute.views.migrated.<team>`); /views has **Share with team** / **Make
+private** / **Delete view**.
+
 ### Private files on work (INV-1003)
 
 `fileUpload(input: { filename, mimeType, content, issueId })` stores a file

@@ -22,6 +22,9 @@ export interface SavedBoardView {
   id: string;
   name: string;
   state: BoardViewState;
+  /** PRIVATE (yours) or TEAM (shared); absent for a view the server has not seen yet (INV-1005). */
+  visibility?: 'PRIVATE' | 'TEAM';
+  ownerId?: string | null;
 }
 
 export interface ApplyBoardViewDetail {
@@ -130,6 +133,8 @@ function normalizeSavedBoardViews(value: unknown): SavedBoardView[] {
         id: candidate.id,
         name: candidate.name,
         state: normalizeBoardViewState(candidate.state),
+        ...(candidate.visibility === 'PRIVATE' || candidate.visibility === 'TEAM' ? { visibility: candidate.visibility } : {}),
+        ...(typeof candidate.ownerId === 'string' ? { ownerId: candidate.ownerId } : {}),
       },
     ];
   });

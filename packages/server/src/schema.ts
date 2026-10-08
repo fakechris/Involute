@@ -1,4 +1,6 @@
 import { executorContext, executorUpdate, type ExecutorInput } from './executor-service.js';
+import type { SavedView } from '@prisma/client';
+import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
 import { storeUpload } from './uploads.js';
 import type { WorkRun } from '@prisma/client';
 import { runPresence } from './run-staleness.js';
@@ -417,6 +419,8 @@ const typeDefs = /* GraphQL */ `
     finished research nothing derives from. Lists are capped at 200; counts are exact.
     """
     workHygiene(teamKey: String!): WorkHygiene!
+    "Saved board/backlog views the viewer may use in this team: their own and the team's shared ones (INV-1005)."
+    savedViews(teamKey: String!): [SavedView!]!
     candidateSummary(teamFilter: TeamFilter): CandidateSummary!
     projectSummary(teamFilter: TeamFilter): ProjectSummaryResult!
     bugSummary(teamFilter: TeamFilter): BugSummaryResult!
@@ -528,6 +532,10 @@ const typeDefs = /* GraphQL */ `
     serviceActorCreate(input: ServiceActorCreateInput!): ActorLifecyclePayload!
     agentCredentialRevoke(id: String!): AgentCredentialRevokePayload!
     webhookCreate(input: WebhookCreateInput!): WebhookMutationPayload!
+    "Create or update a saved view (INV-1005)."
+    savedViewUpsert(input: SavedViewInput!): SavedViewPayload!
+    "Delete one of your saved views, or a shared one as a team owner (INV-1005)."
+    savedViewDelete(id: ID!): SavedViewDeletePayload!
     webhookUpdate(id: String!, input: WebhookUpdateInput!): WebhookMutationPayload!
     webhookDelete(id: String!): WebhookMutationPayload!
     webhookRotateSecret(id: String!): WebhookMutationPayload!
@@ -1162,6 +1170,43 @@ const typeDefs = /* GraphQL */ `
     transitions: [WorkStateTransition!]!
     """FULL when auditing covers the whole life; PARTIAL when it began later; NONE when there is no trail."""
     history: WorkHistoryCompleteness!
+  }
+
+  type SavedView {
+    id: ID!
+    teamId: String!
+    ownerId: String!
+    name: String!
+    "board or backlog"
+    kind: String!
+    "PRIVATE (owner only) or TEAM (every member)"
+    visibility: String!
+    "The filter/sort state the client saved, as JSON text."
+    stateJson: String!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  input SavedViewInput {
+    "Omit to create; pass to update (or to keep a browser-made UUID when migrating)."
+    id: String
+    teamKey: String!
+    name: String!
+    kind: String!
+    visibility: String
+    stateJson: String!
+  }
+
+  type SavedViewPayload {
+    success: Boolean!
+    message: String
+    view: SavedView
+  }
+
+  type SavedViewDeletePayload {
+    success: Boolean!
+    message: String
+    id: ID
   }
 
   type WorkHygiene {
@@ -2824,6 +2869,8 @@ const resolvers = {
       await assertCanReadIssue(context.prisma, context, work.id);
       return getWorkContext(context.prisma, work.id, buildReadableIssueWhere(context));
     },
+    savedViews: async (_parent: unknown, args: { teamKey: string }, context: GraphQLContext) =>
+      (await listSavedViews(context, args.teamKey)).map(savedViewRecord),
     workHygiene: async (
       _parent: unknown,
       args: { teamKey: string },
@@ -4471,6 +4518,15 @@ const resolvers = {
         return { user, success: true as const };
       }, { user: null, success: false as const });
     },
+    savedViewUpsert: async (_parent: unknown, args: { input: { id?: string | null; teamKey: string; name: string; kind: string; visibility?: string | null; stateJson: string } }, context: GraphQLContext) =>
+      runMutation(async () => {
+        let state: unknown;
+        try { state = JSON.parse(args.input.stateJson); } catch { throw createValidationError('stateJson must be valid JSON.'); }
+        const view = await upsertSavedView(context, { ...args.input, state });
+        return { success: true as const, view: savedViewRecord(view) };
+      }, { success: false as const, view: null }),
+    savedViewDelete: async (_parent: unknown, args: { id: string }, context: GraphQLContext) =>
+      runMutation(async () => ({ success: true as const, id: (await deleteSavedView(context, args.id)) ? args.id : null }), { success: false as const, id: null }),
     fileUpload: async (
       _parent: unknown,
       args: { input: { filename: string; mimeType: string; content: string; issueId?: string | null } },
@@ -5172,6 +5228,11 @@ const resolvers = {
     },
   },
 };
+
+/** GraphQL shape of a saved view: the state travels as JSON text. */
+function savedViewRecord(view: SavedView) {
+  return { ...view, stateJson: JSON.stringify(view.state) };
+}
 
 export function createGraphQLSchema(_prisma: PrismaClient) {
   return makeExecutableSchema({

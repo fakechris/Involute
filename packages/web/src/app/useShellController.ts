@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useApolloClient } from '@apollo/client/react';
 import { useLocation, useNavigate } from 'react-router-dom';
+
+import { startSavedViewsSync } from '../lib/saved-views-sync';
 
 import { type PaletteAction } from './CommandPalette';
 import { type DensityMode, type ThemeMode } from './TweaksPanel';
@@ -106,6 +109,15 @@ export function useShellController() {
     setSavedBoardViews(readSavedBoardViews(activeTeamKey));
     setSavedBacklogViews(readSavedBacklogViews(activeTeamKey));
   }, [activeTeamKey]);
+
+  // Saved views live on the server (INV-1005); the browser copy is a mirror.
+  // Tests render without a provider: then there is nothing to sync with.
+  let apolloClient: ReturnType<typeof useApolloClient> | null = null;
+  try { apolloClient = useApolloClient(); } catch { apolloClient = null; }
+  useEffect(() => {
+    if (!apolloClient || !activeTeamKey || !session?.authenticated) return;
+    return startSavedViewsSync(apolloClient, activeTeamKey);
+  }, [apolloClient, activeTeamKey, session?.authenticated]);
 
   useEffect(() => {
     function handleTeamsUpdate(event: Event) {

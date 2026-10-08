@@ -23,6 +23,9 @@ export interface SavedBacklogView {
   id: string;
   name: string;
   state: BacklogViewState;
+  /** PRIVATE (yours) or TEAM (shared); absent for a view the server has not seen yet (INV-1005). */
+  visibility?: 'PRIVATE' | 'TEAM';
+  ownerId?: string | null;
 }
 
 export interface ApplyBacklogViewDetail {
@@ -118,6 +121,8 @@ function normalizeSavedBacklogViews(value: unknown): SavedBacklogView[] {
         id: candidate.id,
         name: candidate.name,
         state: normalizeBacklogViewState(candidate.state),
+        ...(candidate.visibility === 'PRIVATE' || candidate.visibility === 'TEAM' ? { visibility: candidate.visibility } : {}),
+        ...(typeof candidate.ownerId === 'string' ? { ownerId: candidate.ownerId } : {}),
       },
     ];
   });
