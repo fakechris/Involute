@@ -45,6 +45,7 @@ import type {
   IssueUpdateMutationVariables,
 } from '../board/types';
 import {
+  recordCommentGesture,
   recordDeleteGesture,
   recordFieldGesture,
   recordStatusGesture,
@@ -53,6 +54,7 @@ import {
   type StatusUndoApply,
   type StatusUndoChange,
 } from '../undo/status-undo';
+import { COMMENTS_CHANGED_EVENT, type CommentsChangedDetail } from '../undo/CommentUndoHost';
 import { ISSUE_UNDO_APPLIED_EVENT, type IssueUndoAppliedDetail } from '../undo/FieldUndoHost';
 import { fieldChange, type FieldUndoChange } from '../undo/field-gesture';
 import {
@@ -775,6 +777,24 @@ export function BoardPage() {
       return change ? [change] : [];
     });
   }
+
+  // An undo/redo posted a comment again or deleted one: reflect it on the card.
+  useEffect(() => {
+    const onComments = (event: Event) => {
+      const detail = (event as CustomEvent<CommentsChangedDetail>).detail;
+      if (!detail) return;
+      setIssueOverrides((currentOverrides) => {
+        const currentIssue = currentOverrides[detail.issueId] ?? visibleIssuesRef.current.find((item) => item.id === detail.issueId);
+        if (!currentIssue) return currentOverrides;
+        const nodes = detail.posted
+          ? [...currentIssue.comments.nodes.filter((comment) => comment.id !== detail.posted?.id), detail.posted]
+          : currentIssue.comments.nodes.filter((comment) => comment.id !== detail.deletedCommentId);
+        return replaceIssueOverride(currentOverrides, detail.issueId, { ...currentIssue, comments: { nodes } });
+      });
+    };
+    window.addEventListener(COMMENTS_CHANGED_EVENT, onComments);
+    return () => window.removeEventListener(COMMENTS_CHANGED_EVENT, onComments);
+  }, []);
 
   // An undo/redo rewrote issues on the server: show those versions and select them.
   useEffect(() => {
@@ -1927,6 +1947,10 @@ export function BoardPage() {
           },
         });
       });
+      const deleted = (issueOverrides[issue.id] ?? issue).comments.nodes.find((comment) => comment.id === commentId);
+      if (deleted) {
+        recordCommentGesture([{ commentId, issueId: issue.id, issueIdentifier: issue.identifier, body: deleted.body, parentCommentId: null, phase: 'deleted' }]);
+      }
     } catch {
       setMutationError(COMMENT_DELETE_ERROR_MESSAGE);
       throw new Error(COMMENT_DELETE_ERROR_MESSAGE);

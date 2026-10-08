@@ -129,7 +129,32 @@ export interface LinkUndoApplyResult {
 
 export type LinkUndoApply = (items: LinkUndoItem[]) => Promise<LinkUndoApplyResult>;
 
-export type SessionUndoEntry = StatusUndoEntry | CommitUndoEntry | FieldUndoEntry | DeleteUndoEntry | LinkUndoEntry;
+/** One comment a gesture deleted; undo posts the same text again as a new comment (INV-843). */
+export interface CommentUndoItem {
+  /** The comment that exists now: the original before undo, the re-posted one after. Null once deleted. */
+  commentId: string | null;
+  issueId: string;
+  issueIdentifier: string;
+  body: string;
+  parentCommentId: string | null;
+  /** 'deleted': undo re-posts it; 'restored': undo deletes the re-posted one. */
+  phase: 'deleted' | 'restored';
+}
+
+export interface CommentUndoEntry {
+  id: string;
+  comments: CommentUndoItem[];
+}
+
+export interface CommentUndoApplyResult {
+  applied: Array<{ index: number; commentId: string | null }>;
+  conflicts: string[];
+  retryable?: number[];
+}
+
+export type CommentUndoApply = (items: CommentUndoItem[]) => Promise<CommentUndoApplyResult>;
+
+export type SessionUndoEntry = StatusUndoEntry | CommitUndoEntry | FieldUndoEntry | DeleteUndoEntry | LinkUndoEntry | CommentUndoEntry;
 
 export interface CommitUndoApplyResult {
   applied: Array<{ issueId: string; revision: number }>;
@@ -159,6 +184,7 @@ let applyCommit: CommitUndoApply | null = null;
 let applyField: FieldUndoApply | null = null;
 let applyDelete: DeleteUndoApply | null = null;
 let applyLink: LinkUndoApply | null = null;
+let applyComment: CommentUndoApply | null = null;
 const listeners = new Set<() => void>();
 let toastTimer: number | null = null;
 let chain: Promise<void> = Promise.resolve();
@@ -203,6 +229,7 @@ export function resetStatusUndo() {
   applyField = null;
   applyDelete = null;
   applyLink = null;
+  applyComment = null;
   chain = Promise.resolve();
   emit(EMPTY);
 }
@@ -221,6 +248,15 @@ export function registerFieldUndoApply(apply: FieldUndoApply) {
   return () => {
     if (applyField === apply) {
       applyField = null;
+    }
+  };
+}
+
+export function registerCommentUndoApply(apply: CommentUndoApply) {
+  applyComment = apply;
+  return () => {
+    if (applyComment === apply) {
+      applyComment = null;
     }
   };
 }
@@ -293,6 +329,13 @@ export function formatDeleteGesture(entry: DeleteUndoEntry): string {
   return first.origin === 'created' ? `${who} created` : `${who} restored`;
 }
 
+export function formatCommentGesture(entry: CommentUndoEntry): string {
+  const ids = [...new Set(entry.comments.map((item) => item.issueIdentifier))];
+  const where = ids.length === 1 ? `on ${ids[0]}` : `on ${ids.length} items`;
+  const count = entry.comments.length === 1 ? 'Comment' : `${entry.comments.length} comments`;
+  return entry.comments[0]?.phase === 'restored' ? `${count} ${where} posted again as new` : `${count} ${where} deleted`;
+}
+
 export function formatLinkGesture(entry: LinkUndoEntry): string {
   const shown = entry.links.slice(0, 3).map((item) => item.summary);
   const extra = entry.links.length - shown.length;
@@ -301,6 +344,7 @@ export function formatLinkGesture(entry: LinkUndoEntry): string {
 }
 
 function entrySize(entry: SessionUndoEntry): number {
+  if ('comments' in entry) return entry.comments.length;
   if ('links' in entry) return entry.links.length;
   if ('deletions' in entry) return entry.deletions.length;
   if ('items' in entry) return entry.items.length;
@@ -309,6 +353,7 @@ function entrySize(entry: SessionUndoEntry): number {
 }
 
 export function formatUndoEntry(entry: SessionUndoEntry): string {
+  if ('comments' in entry) return formatCommentGesture(entry);
   if ('links' in entry) return formatLinkGesture(entry);
   if ('deletions' in entry) return formatDeleteGesture(entry);
   if ('items' in entry) return formatCommitGesture(entry);
@@ -347,6 +392,20 @@ export function recordCommitGesture(items: CommitUndoItem[]) {
     return;
   }
   const entry: CommitUndoEntry = { id: entryId(), items };
+  emit({
+    undo: [...snapshot.undo, entry].slice(-STATUS_UNDO_LIMIT),
+    redo: [],
+    toast: { entry, action: 'undo', conflicts: [] },
+  });
+  scheduleToastDismiss();
+}
+
+/** A deleted comment becomes one undo entry; undo posts its text again (INV-843). */
+export function recordCommentGesture(comments: CommentUndoItem[]) {
+  if (comments.length === 0) {
+    return;
+  }
+  const entry: CommentUndoEntry = { id: entryId(), comments };
   emit({
     undo: [...snapshot.undo, entry].slice(-STATUS_UNDO_LIMIT),
     redo: [],
@@ -495,6 +554,10 @@ async function perform(direction: 'undo' | 'redo') {
     await performLinks(entry, direction, poppedUndo, poppedRedo);
     return;
   }
+  if ('comments' in entry) {
+    await performComments(entry, direction, poppedUndo, poppedRedo);
+    return;
+  }
 
   const apply = await waitForApply();
   if (!apply) {
@@ -579,6 +642,55 @@ async function performFields(
       entry: reversed.fields.length > 0 ? reversed : { id: entry.id, fields: [] },
       action: reversed.fields.length > 0 ? (direction === 'undo' ? 'redo' : 'undo') : 'none',
       conflicts: result.conflicts,
+    },
+    { undo, redo },
+  );
+}
+
+async function performComments(
+  entry: CommentUndoEntry,
+  direction: 'undo' | 'redo',
+  poppedUndo: SessionUndoEntry[],
+  poppedRedo: SessionUndoEntry[],
+) {
+  const apply = applyComment;
+  if (!apply) {
+    emit({
+      undo: direction === 'undo' ? [...snapshot.undo, entry].slice(-STATUS_UNDO_LIMIT) : snapshot.undo,
+      redo: direction === 'redo' ? [...snapshot.redo, entry].slice(-STATUS_UNDO_LIMIT) : snapshot.redo,
+      toast: { entry: { id: 'unavailable', changes: [] }, action: 'none', conflicts: [], message: 'Undo is not ready' },
+    });
+    scheduleToastDismiss();
+    return;
+  }
+  const result = await apply(entry.comments);
+  const applied = new Map(result.applied.map((item) => [item.index, item.commentId]));
+  const retryable = new Set(result.retryable ?? []);
+  const reversed: CommentUndoEntry = {
+    id: entryId(),
+    comments: entry.comments.flatMap((item, index) => {
+      if (!applied.has(index)) return [];
+      return [{ ...item, commentId: applied.get(index) ?? null, phase: item.phase === 'deleted' ? 'restored' as const : 'deleted' as const }];
+    }),
+  };
+  const retry: CommentUndoEntry = { id: entryId(), comments: entry.comments.filter((_, index) => retryable.has(index)) };
+  const gestureArrived = snapshot.undo.length > poppedUndo.length || snapshot.redo.length !== poppedRedo.length;
+  let undo = snapshot.undo;
+  let redo = snapshot.redo;
+  if (!gestureArrived) {
+    if (direction === 'redo' && reversed.comments.length > 0) undo = [...undo, reversed].slice(-STATUS_UNDO_LIMIT);
+    if (direction === 'undo' && reversed.comments.length > 0) redo = [...redo, reversed].slice(-STATUS_UNDO_LIMIT);
+    if (retry.comments.length > 0) {
+      if (direction === 'undo') undo = [...undo, retry].slice(-STATUS_UNDO_LIMIT);
+      else redo = [...redo, retry].slice(-STATUS_UNDO_LIMIT);
+    }
+  }
+  showToast(
+    {
+      entry: reversed.comments.length > 0 ? reversed : { id: entry.id, comments: [] },
+      action: reversed.comments.length > 0 ? (direction === 'undo' ? 'redo' : 'undo') : 'none',
+      conflicts: result.conflicts,
+      ...(retry.comments.length > 0 ? { message: 'Could not reach the server; try again.' } : {}),
     },
     { undo, redo },
   );
