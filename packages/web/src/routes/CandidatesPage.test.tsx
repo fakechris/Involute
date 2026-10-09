@@ -527,15 +527,27 @@ describe('CandidatesPage', () => {
       }
     });
 
-    it('filters to bugs when "Bugs only" is on', async () => {
+    it('filters by type, kind, priority, owner and text from the shared bar; ?type=bug still works (INV-1077)', async () => {
       const { useQuery } = await import('@apollo/client/react');
       render(<MemoryRouter initialEntries={['/candidates?type=bug']}><CandidatesPage /></MemoryRouter>);
-      expect(screen.getByRole('button', { name: 'Bugs only' })).toHaveAttribute('aria-pressed', 'true');
-      const calls = vi.mocked(useQuery).mock.calls.filter(([document]) => (document as { loc?: { source?: { body?: string } } }).loc?.source?.body?.includes('query CandidatesPage'));
-      const variables = (calls.at(-1)?.[1] as { variables?: { filter?: Record<string, unknown> } })?.variables;
-      expect(variables?.filter).toMatchObject({ labels: { some: { name: { in: ['bug', 'Bug', 'BUG'] } } } });
+      const lastQuery = () => {
+        const calls = vi.mocked(useQuery).mock.calls.filter(([document]) => (document as { loc?: { source?: { body?: string } } }).loc?.source?.body?.includes('query CandidatesPage'));
+        return (calls.at(-1)?.[1] as { variables?: { query?: string | null } })?.variables?.query;
+      };
+      expect(screen.getByLabelText('Filter by type')).toHaveValue('bug');
+      expect(lastQuery()).toBe('label:bug');
       // The fixture has no bug candidates, so nothing is listed.
       expect(screen.queryByRole('article', { name: 'INV-40 candidate' })).not.toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText('Filter by type'), { target: { value: 'untyped' } });
+      fireEvent.change(screen.getByLabelText('Filter by kind'), { target: { value: 'EPIC' } });
+      fireEvent.change(screen.getByLabelText('Filter by priority'), { target: { value: '2' } });
+      fireEvent.change(screen.getByLabelText('Filter by owner'), { target: { value: 'me' } });
+      const text = screen.getByLabelText('Filter by text');
+      fireEvent.change(text, { target: { value: 'checkout' } });
+      fireEvent.keyDown(text, { key: 'Enter' });
+      expect(lastQuery()).toBe('-label:bug,feature,improvement,research kind:EPIC priority:2 assignee:me "checkout"');
+      fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+      expect(lastQuery()).toBeNull();
     });
   });
 

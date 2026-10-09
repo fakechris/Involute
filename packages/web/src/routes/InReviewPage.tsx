@@ -1,10 +1,11 @@
 import { useMutation, useQuery } from '@apollo/client/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
 import { IcoCheck, IcoClose, IcoFilter } from '../components/Icons';
 import { Btn } from '../components/Primitives';
+import { filtersToIql, joinIql, useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { IN_REVIEW_PAGE_QUERY, IN_REVIEW_PROJECTS_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
 import type {
   InReviewPageQueryData,
@@ -60,9 +61,19 @@ export function InReviewPage() {
   const teamKey = readStoredTeamKey();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedProject = searchParams.get('project');
+  const workFilters = useWorkFilters(() => {
+    setSelectedIds([]);
+    setBulkError(null);
+  });
+  const filterIql = filtersToIql(workFilters.filters);
   const [iqlDraft, setIqlDraft] = useState(readStoredIql);
   const [activeIql, setActiveIql] = useState(readStoredIql);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Any change of what is listed — a filter, the project, or Back/Forward — drops
+  // the selection, so a bulk decision never applies to rows no longer shown.
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [filterIql, selectedProject]);
   const [bulkReason, setBulkReason] = useState('');
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<'accept' | 'reject' | null>(null);
@@ -75,10 +86,10 @@ export function InReviewPage() {
   const queryVariables: InReviewPageQueryVariables = {
     first: 50,
     filter: buildFilter(teamKey, selectedProject),
-    query: activeIql.trim() || null,
+    query: joinIql(activeIql, filterIql) || null,
   };
   const { data: projectData } = useQuery<{ issues?: { nodes: Array<{ id: string; repository: string | null }>; pageInfo?: { hasNextPage: boolean } } }>(IN_REVIEW_PROJECTS_QUERY, {
-    variables: { filter: buildFilter(teamKey), query: activeIql.trim() || null },
+    variables: { filter: buildFilter(teamKey), query: joinIql(activeIql, filterIql) || null },
     fetchPolicy: 'cache-and-network',
   });
   const projectCounts = useMemo(() => {
@@ -289,6 +300,7 @@ export function InReviewPage() {
             ))}
           </div>
         ) : null}
+        <WorkFilterBar {...workFilters} />
         <section className="in-review-filter" aria-label="In Review filter">
           <label className="observation-field observation-field--inline">
             <span>

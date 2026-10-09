@@ -1,7 +1,7 @@
 import { gql } from '@apollo/client';
 
 export const CANDIDATES_PAGE_QUERY = gql`
-  query CandidatesPage($first: Int!, $after: String, $filter: IssueFilter, $teamFilter: TeamFilter) {
+  query CandidatesPage($first: Int!, $after: String, $filter: IssueFilter, $teamFilter: TeamFilter, $query: String) {
     candidateSummary(teamFilter: $teamFilter) {
       totalCount
       noRepositoryCount
@@ -36,7 +36,7 @@ export const CANDIDATES_PAGE_QUERY = gql`
         }
       }
     }
-    issues(first: $first, after: $after, filter: $filter) {
+    issues(first: $first, after: $after, filter: $filter, query: $query) {
       nodes {
         id
         identifier
