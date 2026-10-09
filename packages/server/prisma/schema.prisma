@@ -347,6 +347,9 @@ model Issue {
   // INV-459: per-project reference alias (e.g. LUM on the lumenbox PROJECT
   // node) — alias-prefixed PR references canonicalize to the team key.
   alias             String?
+  // INV-1075: on a PROJECT, bugs whose fix GitHub confirms (merged, checks green)
+  // are accepted by the Auto-Accept Gate. Off by default; only people turn it on.
+  autoAcceptBugs    Boolean           @default(false)
   labels            IssueLabel[]
   comments          Comment[]
   embeddings        IssueEmbedding[]

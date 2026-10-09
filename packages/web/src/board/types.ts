@@ -121,6 +121,8 @@ export interface ContractAmendmentSummary {
 export interface IssueSummary {
   id: string;
   identifier: string;
+  /** Latest Auto-Accept Gate evaluation (INV-1075); only the issue page asks for it. */
+  autoAccept?: { outcome: string; reasons: string[]; accepted: boolean; createdAt: string } | null;
   revision: number;
   title: string;
   kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
@@ -493,6 +495,8 @@ export interface IssueUpdateMutationVariables {
     /** Move the CONTAINS subtree to the new repository too. */
     cascadeRepository?: boolean;
     alias?: string | null;
+    /** PROJECT only, people only: verified bug fixes close themselves (INV-1075). */
+    autoAcceptBugs?: boolean;
     kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
     outcome?: string | null;
     scope?: string | null;
@@ -697,6 +701,8 @@ export interface ProjectIssueSummary {
   repository?: string | null;
   /** Reference prefix PRs may use instead of the team key, e.g. LUM (INV-459). */
   alias?: string | null;
+  /** Verified bug fixes are accepted by the Auto-Accept Gate (INV-1075). */
+  autoAcceptBugs?: boolean;
   priority: number;
   kind: 'PROJECT';
   createdAt: string;

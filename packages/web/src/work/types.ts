@@ -298,6 +298,8 @@ export type InReviewWork = CandidateWork & {
   pendingContractAmendment?: { id: string } | null;
   /** How long it has waited in Review; overdue for a bug past the review clock (INV-1002). */
   reviewWait?: { since: string; waitMs: number; overdue: boolean } | null;
+  /** Why the Auto-Accept Gate left a bug for a person, or that it accepted it (INV-1075). */
+  autoAccept?: AutoAcceptInfo | null;
 };
 
 export interface InReviewPageQueryData {
@@ -508,4 +510,11 @@ export interface WorkSearchQueryData {
 
 export interface SearchLabelsQueryData {
   issueLabels: { nodes: Array<{ id: string; name: string }> };
+}
+
+export interface AutoAcceptInfo {
+  outcome: string;
+  reasons: string[];
+  accepted: boolean;
+  createdAt: string;
 }

@@ -434,6 +434,11 @@ export function InReviewPage() {
                         waiting {formatWaitDays(item.reviewWait.waitMs)}{item.reviewWait.overdue ? ' · overdue' : ''}
                       </span>
                     ) : null}
+                    {item.autoAccept && !item.autoAccept.accepted ? (
+                      <span className="observation-card__meta" title={`Auto-Accept Gate, ${item.autoAccept.createdAt}`}>
+                        not auto-accepted: {item.autoAccept.reasons.join('; ')}
+                      </span>
+                    ) : null}
                     <span className="observation-card__meta">{item.team.key}</span>
                     <span className="observation-card__meta">rev {item.revision}</span>
                     {item.pendingContractAmendment ? (

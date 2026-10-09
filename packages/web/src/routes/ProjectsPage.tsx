@@ -136,7 +136,8 @@ export function ProjectsPage() {
   const [formRepository, setFormRepository] = useState('');
   const [formAlias, setFormAlias] = useState('');
   const [formCascade, setFormCascade] = useState(true);
-  const [editingOriginal, setEditingOriginal] = useState<{ repository: string; alias: string } | null>(null);
+  const [formAutoAccept, setFormAutoAccept] = useState(false);
+  const [editingOriginal, setEditingOriginal] = useState<{ repository: string; alias: string; autoAcceptBugs: boolean } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -174,6 +175,7 @@ export function ProjectsPage() {
     setFormRepository('');
     setFormAlias('');
     setFormCascade(true);
+    setFormAutoAccept(false);
     setEditingOriginal(null);
     setFormError(null);
     dialogRef.current?.showModal();
@@ -189,7 +191,8 @@ export function ProjectsPage() {
     setFormRepository(project.repository ?? '');
     setFormAlias(project.alias ?? '');
     setFormCascade(true);
-    setEditingOriginal({ repository: project.repository ?? '', alias: project.alias ?? '' });
+    setFormAutoAccept(project.autoAcceptBugs ?? false);
+    setEditingOriginal({ repository: project.repository ?? '', alias: project.alias ?? '', autoAcceptBugs: project.autoAcceptBugs ?? false });
     setFormError(null);
     dialogRef.current?.showModal();
   }
@@ -240,7 +243,7 @@ export function ProjectsPage() {
             setFormError(`The project was created, but its alias was not saved: ${aliased.data?.issueUpdate.message ?? 'refused.'}`);
             setDialogMode('edit');
             setSelectedProjectId(projectId);
-            setEditingOriginal({ repository, alias: '' });
+            setEditingOriginal({ repository, alias: '', autoAcceptBugs: false });
             return;
           }
         }
@@ -259,6 +262,9 @@ export function ProjectsPage() {
         }
         if (alias !== (editingOriginal?.alias ?? '')) {
           input.alias = alias || null;
+        }
+        if (formAutoAccept !== (editingOriginal?.autoAcceptBugs ?? false)) {
+          input.autoAcceptBugs = formAutoAccept;
         }
         const updated = await runUpdate({ variables: { id: projectId, input }, refetchQueries });
         if (!updated.data?.issueUpdate.success) {
@@ -335,6 +341,24 @@ export function ProjectsPage() {
           PRs and branches in this repository are routed to this project. With an alias, they may reference work as{' '}
           <span className="mono">{(formAlias.trim() || 'ALIAS').toUpperCase()}-123</span> as well as by the team key.
         </p>
+        {dialogMode === 'edit' ? (
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12, fontSize: 14 }}>
+            <input
+              type="checkbox"
+              aria-label="Auto-accept verified bug fixes"
+              checked={formAutoAccept}
+              // Turning it on needs a repository; turning it off never does.
+              disabled={!formRepository.trim() && !formAutoAccept}
+              onChange={(e) => setFormAutoAccept(e.target.checked)}
+            />
+            <span>
+              Auto-accept verified bug fixes
+              <span style={{ display: 'block', fontSize: 13, color: 'var(--fg-dim)', lineHeight: 1.4 }}>
+                A bug in Review moves to Done when GitHub shows its fix merged (or on the default branch) with CI checks green. Anything else waits for you, with the reason on /in-review. You can move an auto-accepted bug back to Review.
+              </span>
+            </span>
+          </label>
+        ) : null}
         {dialogMode === 'edit' && editingOriginal?.repository && formRepository.trim() !== editingOriginal.repository ? (
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 14 }}>
             <input type="checkbox" checked={formCascade} onChange={(e) => setFormCascade(e.target.checked)} />

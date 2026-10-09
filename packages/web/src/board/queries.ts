@@ -496,6 +496,12 @@ export const ISSUE_PAGE_QUERY = gql`
     issue(id: $id) {
       id
       identifier
+      autoAccept {
+        outcome
+        reasons
+        accepted
+        createdAt
+      }
       revision
       title
       description
@@ -1001,6 +1007,7 @@ export const PROJECT_ISSUES_QUERY = gql`
         kind
         repository
         alias
+        autoAcceptBugs
         createdAt
         updatedAt
         state {

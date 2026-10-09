@@ -1,6 +1,6 @@
 import { prepareDeliveryAcceptance, acceptDeliveryChildren, returnDeliveryChildren } from './delivery-review.js';
 import { lockWorkGraph } from './graph-integrity.js';
-import type { Issue, PrismaClient, WorkReviewDecision } from '@prisma/client';
+import type { Issue, Prisma, PrismaClient, WorkReviewDecision } from '@prisma/client';
 
 import { enqueueWorkEvent } from './inv11-hooks.js';
 import {
@@ -39,10 +39,25 @@ export async function reviewWork(
   actor: WriteActor,
 ): Promise<{ decision: WorkReviewDecision; work: Issue }> {
   if (actor.actorKind !== 'HUMAN') throw createValidationError(WORK_ACCEPT_FORBIDDEN_MESSAGE);
+  if (!actor.actorId) throw createValidationError(WORK_CLAIM_REQUIRES_ACTOR_MESSAGE);
+  return prisma.$transaction((transaction) => reviewWorkInTransaction(transaction, id, input, actor));
+}
+
+/**
+ * The review itself, inside a caller's transaction. People reach it through
+ * reviewWork; the only other caller is the Auto-Accept Gate (a SERVICE actor)
+ * for a bug GitHub confirmed fixed (INV-1075). Never exposed to agents.
+ */
+export async function reviewWorkInTransaction(
+  transaction: Prisma.TransactionClient,
+  id: string,
+  input: ReviewWorkInput,
+  actor: WriteActor,
+): Promise<{ decision: WorkReviewDecision; work: Issue }> {
+  if (actor.actorKind !== 'HUMAN' && actor.actorKind !== 'SERVICE') throw createValidationError(WORK_ACCEPT_FORBIDDEN_MESSAGE);
   const actorId = actor.actorId;
   if (!actorId) throw createValidationError(WORK_CLAIM_REQUIRES_ACTOR_MESSAGE);
-
-  return prisma.$transaction(async (transaction) => {
+  {
     const initial = await requireWork(transaction, id);
     await lockWorkGraph(transaction, initial.teamId);
     await transaction.$queryRaw`SELECT id FROM "Issue" WHERE id = ${initial.id}::uuid FOR NO KEY UPDATE`;
@@ -158,5 +173,5 @@ export async function reviewWork(
       await completeWorkIdempotency(transaction, reviewIdempotencyId, work.id, decision.id);
     }
     return { decision, work: updated };
-  });
+  }
 }

@@ -6683,3 +6683,17 @@ a.bugs-stat {
 .board-filter-indicator__clear {
   color: var(--fg-dim, #888);
 }
+
+/* A bug the Auto-Accept Gate closed, with the way back (INV-1075). */
+.issue-panel__auto-accept {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2, 6px);
+  font-size: 13px;
+  color: var(--fg-dim);
+}

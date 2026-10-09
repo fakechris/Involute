@@ -221,6 +221,7 @@ export function IssuePage() {
   }, [issueSnapshot]);
 
   const states = useMemo(() => selectedTeam?.states.nodes ?? [], [selectedTeam]);
+  const reviewStateId = states.find((state) => state.type === 'REVIEW')?.id ?? null;
   const comments = useMemo(
     () =>
       issueSnapshot
@@ -743,6 +744,17 @@ export function IssuePage() {
         {/* Left column — main content */}
         <div className="issue-panel__main">
           <div className="issue-panel__content-wrap">
+            {activeIssue.autoAccept?.accepted && activeIssue.state.type === 'COMPLETED' ? (
+              // The Auto-Accept Gate closed this bug; a person can take it back (INV-1075).
+              <div className="issue-panel__auto-accept" role="note" aria-label="Auto-accepted">
+                <span>{activeIssue.autoAccept.reasons[0] ?? 'Accepted automatically after GitHub verified the fix.'}</span>
+                {reviewStateId ? (
+                  <Btn variant="subtle" size="sm" disabled={isSavingState} onClick={() => void persistStateChange(activeIssue, reviewStateId).catch(() => undefined)}>
+                    Return to Review
+                  </Btn>
+                ) : null}
+              </div>
+            ) : null}
             {/* Title */}
             <textarea
               ref={titleTextareaRef}
