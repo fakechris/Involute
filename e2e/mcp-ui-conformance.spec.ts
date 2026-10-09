@@ -168,7 +168,7 @@ test('pagination never limits MCP search, board filtering or an opened issue', a
   await page.goto(`/?project=${encodeURIComponent(f.repository)}`);
   await expect(page.getByRole('heading', { name: f.repository, exact: true })).toBeVisible();
   await expect(page.getByTestId(`issue-card-${target.id}`)).toHaveCount(0);
-  await page.getByRole('button', { name: 'Filter', exact: true }).click();
+  // A project in the URL is a filter in effect, so the bar is already open (INV-1086).
   await page.getByLabel('Search board issues').fill(target.identifier);
   const targetCard = page.getByTestId(`issue-card-${target.id}`);
   await expect(targetCard).toBeVisible();

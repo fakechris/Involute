@@ -6660,3 +6660,26 @@ a.bugs-stat {
   color: var(--accent, #5b8def);
   cursor: pointer;
 }
+
+/* Filters in effect while the bar is closed stay visible and clearable (INV-1086). */
+.board-filter-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+}
+.board-filter-indicator button {
+  font: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--r-1, 4px);
+}
+.board-filter-indicator__open {
+  color: var(--accent, #5b8def);
+  background: var(--accent-subtle, rgba(91, 141, 239, 0.12)) !important;
+}
+.board-filter-indicator__clear {
+  color: var(--fg-dim, #888);
+}
