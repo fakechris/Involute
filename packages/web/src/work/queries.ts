@@ -94,6 +94,21 @@ export const CANDIDATES_PAGE_QUERY = gql`
   }
 `;
 
+// Which projects have work waiting in Review, for the project switcher (INV-1076).
+export const IN_REVIEW_PROJECTS_QUERY = gql`
+  query InReviewProjects($filter: IssueFilter, $query: String) {
+    issues(first: 200, filter: $filter, query: $query) {
+      nodes {
+        id
+        repository
+      }
+      pageInfo {
+        hasNextPage
+      }
+    }
+  }
+`;
+
 export const IN_REVIEW_PAGE_QUERY = gql`
   query InReviewPage($first: Int!, $after: String, $filter: IssueFilter, $query: String) {
     issues(first: $first, after: $after, filter: $filter, query: $query) {

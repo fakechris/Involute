@@ -212,4 +212,19 @@ describe('InReviewPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Apply filter' }));
     expect(screen.getByText('Active: state:"In Review" team:INV')).toBeInTheDocument();
   });
+
+  it('switches project with the pills and sends the repository filter (INV-1076)', async () => {
+    const { useQuery } = await import('@apollo/client/react');
+    render(
+      <MemoryRouter initialEntries={['/in-review']}>
+        <InReviewPage />
+      </MemoryRouter>,
+    );
+    const switcher = screen.getByRole('tablist', { name: 'Project switcher' });
+    expect(within(switcher).getByRole('tab', { name: /All Projects/ })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(within(switcher).getByRole('tab', { name: /fakechris\/Involute/ }));
+    expect(within(switcher).getByRole('tab', { name: /fakechris\/Involute/ })).toHaveAttribute('aria-selected', 'true');
+    const calls = (useQuery as unknown as { mock: { calls: Array<[unknown, { variables: { filter: Record<string, unknown> } }]> } }).mock.calls;
+    expect(calls.some(([, options]) => (options.variables.filter as { repository?: { eq: string } }).repository?.eq === 'fakechris/Involute')).toBe(true);
+  });
 });

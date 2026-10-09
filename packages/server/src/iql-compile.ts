@@ -132,6 +132,22 @@ function compileTerm(term: IqlTerm, context: IqlCompileContext): Prisma.IssueWhe
   const listContains = (candidate: string): boolean => values.includes(candidate.toLowerCase());
 
   switch (term.field) {
+    case 'project': {
+      // project:<repo name | owner/repo | PROJECT identifier> (INV-1076).
+      const IDENT = /^[A-Za-z]+-\d+$/;
+      const parentChain = (identifier: string): Prisma.IssueWhereInput[] => {
+        const id = { identifier: { equals: identifier.toUpperCase() } };
+        return [{ parent: { is: id } }, { parent: { is: { parent: { is: id } } } }, { parent: { is: { parent: { is: { parent: { is: id } } } } } }];
+      };
+      if (values.length === 0) throw iqlParseGraphQLError('project needs a repository name, owner/repo or PROJECT identifier.');
+      const clauses = values.flatMap((value): Prisma.IssueWhereInput[] => {
+        if (IDENT.test(value)) return parentChain(value);
+        return value.includes('/')
+          ? [{ repository: { equals: value, mode: 'insensitive' } }]
+          : [{ repository: { endsWith: `/${value}`, mode: 'insensitive' } }];
+      });
+      return clauseFor({ OR: clauses });
+    }
     case 'team':
       return clauseFor(values.length > 1 ? { team: { key: { in: values } } } : { team: { is: { key: values[0] ?? '' } } });
     case 'state':
@@ -297,6 +313,14 @@ function matchPositive(term: IqlTerm, work: DatabaseWork, context: IqlCompileCon
   const listContains = (candidate: string): boolean => values.some((value) => value.toLowerCase() === candidate.toLowerCase());
 
   switch (term.field) {
+    case 'project': {
+      // In memory only the repository is known; PROJECT identifiers match through the query path.
+      const repo = (work.repository ?? '').toLowerCase();
+      return values.some((value) => {
+        const wanted = value.toLowerCase();
+        return wanted.includes('/') ? repo === wanted : repo.endsWith(`/${wanted}`);
+      });
+    }
     case 'team':
       return listContains(work.identifier.split('-')[0] ?? '');
     case 'state':
