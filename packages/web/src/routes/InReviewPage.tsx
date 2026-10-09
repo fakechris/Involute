@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@apollo/client/react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
@@ -69,6 +69,11 @@ export function InReviewPage() {
   const [iqlDraft, setIqlDraft] = useState(readStoredIql);
   const [activeIql, setActiveIql] = useState(readStoredIql);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Any change of what is listed — a filter, the project, or Back/Forward — drops
+  // the selection, so a bulk decision never applies to rows no longer shown.
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [filterIql, selectedProject]);
   const [bulkReason, setBulkReason] = useState('');
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<'accept' | 'reject' | null>(null);

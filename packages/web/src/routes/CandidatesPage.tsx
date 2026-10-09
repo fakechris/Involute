@@ -816,6 +816,10 @@ export function CandidatesPage() {
   // Rejected work, to review and restore (INV-792).
   const showRejected = searchParams.get('view') === 'rejected';
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  // Back/Forward can change the filters or project too: drop a selection made for another list.
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [filterIql, selectedProject]);
 
   useEffect(() => {
     function onSelect(event: Event) {
