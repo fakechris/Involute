@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 
 import { ensureAutoAcceptActor } from './auto-accept-gate.js';
+import { lockWorkGraph } from './graph-integrity.js';
 import { configuredGitHubVerifier, verifyBugFix, type BugFixObservation, type GitHubVerifierOptions } from './github-evidence-verifier.js';
 import { reviewWorkInTransaction } from './run-service-review.js';
 
@@ -16,6 +17,8 @@ import { reviewWorkInTransaction } from './run-service-review.js';
 export const BUG_GATE_SOURCE = 'bug-gate';
 /** A work whose last check failed is looked at again after this long. */
 export const BUG_GATE_RETRY_MS = 10 * 60_000;
+/** GitHub is asked about at most this many bugs per sweep; the longest-unchecked go first. */
+export const BUG_GATE_BATCH = 50;
 
 const BUG_LABEL = { some: { name: { equals: 'bug', mode: 'insensitive' as const } } };
 
@@ -43,26 +46,37 @@ export async function sweepBugAutoAccept(
   options: GitHubVerifierOptions = configuredGitHubVerifier(),
   now = new Date(),
 ): Promise<{ accepted: number; skipped: number }> {
+  // A repository name is only unique within a team: the switch covers that team's bugs.
   const projects = await prisma.issue.findMany({
     where: { kind: 'PROJECT', autoAcceptBugs: true, commitmentStatus: 'COMMITTED', repository: { not: null } },
-    select: { repository: true },
+    select: { repository: true, teamId: true },
   });
-  const repositories = [...new Set(projects.map((project) => project.repository!))];
-  if (repositories.length === 0) return { accepted: 0, skipped: 0 };
+  if (projects.length === 0) return { accepted: 0, skipped: 0 };
 
-  const candidates = await prisma.issue.findMany({
+  const inReview = await prisma.issue.findMany({
     where: {
+      OR: projects.map((project) => ({ teamId: project.teamId, repository: project.repository! })),
       commitmentStatus: 'COMMITTED',
       kind: 'ISSUE',
-      repository: { in: repositories },
       deliveryRootId: null,
       supersededById: null,
       state: { type: 'REVIEW' },
       labels: BUG_LABEL,
     },
     select: { id: true },
-    take: 50,
   });
+  // Longest-unchecked first, recently checked left out, so bugs that wait for a
+  // person can never crowd out the rest (never checked sorts first).
+  const lastChecked = new Map<string, number>();
+  for (const row of await prisma.workAutoAcceptEvaluation.groupBy({
+    by: ['workId'],
+    where: { workId: { in: inReview.map((item) => item.id) }, signals: { path: ['source'], equals: BUG_GATE_SOURCE } },
+    _max: { createdAt: true },
+  })) lastChecked.set(row.workId, row._max.createdAt?.getTime() ?? 0);
+  const candidates = inReview
+    .filter((item) => now.getTime() - (lastChecked.get(item.id) ?? 0) >= BUG_GATE_RETRY_MS)
+    .sort((a, b) => (lastChecked.get(a.id) ?? 0) - (lastChecked.get(b.id) ?? 0))
+    .slice(0, BUG_GATE_BATCH);
 
   let accepted = 0;
   let skipped = 0;
@@ -73,11 +87,12 @@ export async function sweepBugAutoAccept(
       skipped += await record(prisma, id, run?.id ?? null, gate.id, now, ['the latest run is not a completed run with a commit sha'], null);
       continue;
     }
-    const recent = await prisma.workAutoAcceptEvaluation.findFirst({
-      where: { workId: id, runId: run.id, signals: { path: ['source'], equals: BUG_GATE_SOURCE }, createdAt: { gt: new Date(now.getTime() - BUG_GATE_RETRY_MS) } },
+    // The gate decides a run once. Accepted before and back in Review means a
+    // person moved it back: from then on it is theirs, as is a returned run.
+    const acceptedBefore = await prisma.workAutoAcceptEvaluation.findFirst({
+      where: { workId: id, runId: run.id, outcome: 'ACCEPTED', signals: { path: ['source'], equals: BUG_GATE_SOURCE } },
     });
-    if (recent) continue;
-    const returned = await prisma.workReviewDecision.findFirst({ where: { workId: id, decision: 'REJECTED', createdAt: { gte: run.startedAt } } });
+    const returned = acceptedBefore ?? await prisma.workReviewDecision.findFirst({ where: { workId: id, decision: 'REJECTED', createdAt: { gte: run.startedAt } } });
     if (returned) {
       skipped += await record(prisma, id, run.id, gate.id, now, ['a person returned this run; it waits for a person'], null);
       continue;
@@ -94,6 +109,9 @@ export async function sweepBugAutoAccept(
       : `commit ${run.commitSha.slice(0, 12)} on ${String(observation.source.defaultBranch)}`;
     const reason = `Auto-accepted: GitHub confirms ${where}; ${observation.checks.length} CI check(s) green.`;
     const done = await prisma.$transaction(async (tx) => {
+      // Same lock order as every other writer: the team graph, then the row.
+      const { teamId } = await tx.issue.findUniqueOrThrow({ where: { id }, select: { teamId: true } });
+      await lockWorkGraph(tx, teamId);
       await tx.$queryRaw`SELECT id FROM "Issue" WHERE id = ${id}::uuid FOR UPDATE`;
       const fresh = await tx.issue.findUniqueOrThrow({ where: { id }, include: { state: true } });
       const latest = await tx.workRun.findFirst({ where: { workId: id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });

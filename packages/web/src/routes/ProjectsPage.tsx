@@ -347,7 +347,8 @@ export function ProjectsPage() {
               type="checkbox"
               aria-label="Auto-accept verified bug fixes"
               checked={formAutoAccept}
-              disabled={!formRepository.trim()}
+              // Turning it on needs a repository; turning it off never does.
+              disabled={!formRepository.trim() && !formAutoAccept}
               onChange={(e) => setFormAutoAccept(e.target.checked)}
             />
             <span>

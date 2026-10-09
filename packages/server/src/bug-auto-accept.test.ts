@@ -139,6 +139,25 @@ describe('bug auto-accept gate (INV-1075)', () => {
     const review = await prisma.workflowState.findFirstOrThrow({ where: { teamId: f.team.id, type: 'REVIEW' } });
     await updateIssue(prisma, f.bug.id, { stateId: review.id }, writeActorFromViewer(f.human));
     expect(await f.stateOf()).toBe('REVIEW');
+    // ...and the gate does not take it back: the person owns it now.
+    const later = github({});
+    await sweepBugAutoAccept(prisma, later, new Date(Date.now() + 30 * 60_000));
+    expect(await f.stateOf()).toBe('REVIEW');
+    expect(later.calls).toEqual([]);
+    expect((await f.evaluations()).at(-1)?.reasons.join(' ')).toContain('waits for a person');
+  });
+
+  it('covers only the opted-in team, even when another team uses the same repository name', async () => {
+    const f = await fixture();
+    const other = await prisma.team.create({ data: { key: 'OTH', name: 'Other' } });
+    const otherReview = await prisma.workflowState.create({ data: { teamId: other.id, name: 'In Review', type: 'REVIEW', position: 3 } });
+    await prisma.workflowState.create({ data: { teamId: other.id, name: 'Done', type: 'COMPLETED', position: 4 } });
+    const label = await prisma.issueLabel.findUniqueOrThrow({ where: { name: 'Bug' } });
+    const foreign = await prisma.issue.create({ data: { teamId: other.id, identifier: 'OTH-1', title: 'Not yours', repository: repo, stateId: otherReview.id, labels: { connect: { id: label.id } } } });
+    await prisma.workRun.create({ data: { workId: foreign.id, publicId: `RUN-${randomUUID()}`, status: 'COMPLETED', repository: repo, commitSha: sha, pullRequestNumber: 12 } });
+    await sweepBugAutoAccept(prisma, github({}));
+    expect(await f.stateOf()).toBe('COMPLETED');
+    expect((await prisma.issue.findUniqueOrThrow({ where: { id: foreign.id }, include: { state: true } })).state.type).toBe('REVIEW');
   });
 
   it('only people turn the switch on, only on a PROJECT, and agents still cannot accept', async () => {

@@ -438,7 +438,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   staleRunTimer?.unref();
 
   // Verified bug fixes in opted-in projects close themselves (INV-1075).
-  startBugAutoAccept(prisma);
+  const stopBugAutoAccept = startBugAutoAccept(prisma);
 
   // Deleted work past retention (INV-840) can no longer be restored; drop the snapshot.
   const tombstoneTimer = setInterval(() => {
@@ -541,6 +541,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       }
       clearInterval(claimExpiryTimer);
       clearInterval(staleRunTimer);
+      stopBugAutoAccept();
 
       await new Promise<void>((resolve, reject) => {
         httpServer.close((error) => {
