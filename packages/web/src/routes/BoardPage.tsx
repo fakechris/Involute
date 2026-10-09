@@ -25,6 +25,7 @@ import {
   ISSUE_DELETE_MUTATION,
   ISSUE_CREATE_MUTATION,
   ISSUE_UPDATE_MUTATION,
+  VIEWER_ID_QUERY,
 } from '../board/queries';
 import type {
   BoardGroupBy,
@@ -56,6 +57,9 @@ import {
 } from '../undo/status-undo';
 import { COMMENTS_CHANGED_EVENT, type CommentsChangedDetail } from '../undo/CommentUndoHost';
 import { ISSUE_UNDO_APPLIED_EVENT, type IssueUndoAppliedDetail } from '../undo/FieldUndoHost';
+import { QuickPicker, type QuickPickerOption } from '../components/QuickPicker';
+import { isGotoChordPending } from '../app/goto-chord';
+import { BOARD_PICKER_EVENT } from './board-picker-event';
 import { fieldChange, type FieldUndoChange } from '../undo/field-gesture';
 import {
   ACTIVE_TEAM_STORAGE_KEY,
@@ -284,6 +288,12 @@ export function BoardPage() {
   );
   const teams = queryData?.teams.nodes ?? EMPTY_TEAMS;
   const users = queryData?.users.nodes ?? EMPTY_USERS;
+  const { data: viewerData } = useQuery<{ viewer?: { id: string } | null }>(VIEWER_ID_QUERY);
+  const viewerId = viewerData?.viewer?.id ?? null;
+  // S / P / A / L open a picker over the selected issues, or the focused one (INV-1087).
+  const [picker, setPicker] = useState<null | { kind: 'state' | 'priority' | 'assignee' | 'label'; targetIds: string[] }>(null);
+  const [peekIssueId, setPeekIssueId] = useState<string | null>(null);
+
   const labels = useMemo(() => {
     const seen = new Map<string, (typeof EMPTY_LABELS)[number]>();
     for (const l of queryData?.issueLabels.nodes ?? EMPTY_LABELS) {
@@ -299,6 +309,16 @@ export function BoardPage() {
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [focusedIssueId, setFocusedIssueId] = useState<string | null>(null);
   const [selectedIssueIds, setSelectedIssueIds] = useState<string[]>([]);
+  const pickerTargetsRef = useRef<string[]>([]);
+  pickerTargetsRef.current = selectedIssueIds.length > 0 ? selectedIssueIds : focusedIssueId ? [focusedIssueId] : [];
+  useEffect(() => {
+    const onPicker = (event: Event) => {
+      const kind = (event as CustomEvent<{ kind: 'state' | 'priority' | 'assignee' | 'label' }>).detail?.kind;
+      if (kind && pickerTargetsRef.current.length > 0) setPicker({ kind, targetIds: pickerTargetsRef.current });
+    };
+    window.addEventListener(BOARD_PICKER_EVENT, onPicker);
+    return () => window.removeEventListener(BOARD_PICKER_EVENT, onPicker);
+  }, []);
   const [bulkTargetStateId, setBulkTargetStateId] = useState('');
   const [bulkAssigneeId, setBulkAssigneeId] = useState('');
   const [bulkLabelId, setBulkLabelId] = useState('');
@@ -964,7 +984,7 @@ export function BoardPage() {
         return;
       }
 
-      if (!isBacklogView && event.key.toLowerCase() === 'f') {
+      if (!isBacklogView && event.key.toLowerCase() === 'f' && !isGotoChordPending() && !event.defaultPrevented) {
         event.preventDefault();
         if (event.shiftKey) clearAllFiltersRef.current();
         else setFilterBarVisible((visible) => !visible);
@@ -1158,6 +1178,71 @@ export function BoardPage() {
 
   function selectAllVisibleIssues() {
     setSelectedIssueIds(boardVisibleIssues.map((issue) => issue.id));
+  }
+
+  /**
+   * One keyboard gesture over several issues (INV-1087): each write is the
+   * same guarded issueUpdate the drawer uses, and the whole gesture is one
+   * entry on the undo stack.
+   */
+  async function applyFieldToIssues(
+    ids: string[],
+    patchFor: (issue: IssueSummary) => Omit<IssueUpdateMutationVariables['input'], 'expectedRevision'> | null,
+    optimistic: (issue: IssueSummary) => IssueSummary,
+  ) {
+    const targets = ids
+      .map((id) => issueOverrides[id] ?? boardVisibleIssues.find((issue) => issue.id === id))
+      .filter((issue): issue is IssueSummary => Boolean(issue));
+    const results = await Promise.all(targets.map(async (issue) => {
+      const patch = patchFor(issue);
+      if (!patch) return null;
+      const updated = await persistIssueUpdate(issue, patch, optimistic, false).catch(() => null);
+      return updated ? fieldChange(issue, patch, updated.revision, fieldNames) : null;
+    }));
+    recordFieldGesture(results.filter((change): change is FieldUndoChange => Boolean(change)));
+  }
+
+  function pickerOptions(kind: 'state' | 'priority' | 'assignee' | 'label', ids: string[]): QuickPickerOption[] {
+    const targets = ids.map((id) => boardVisibleIssues.find((issue) => issue.id === id)).filter((issue): issue is IssueSummary => Boolean(issue));
+    const all = <T,>(predicate: (issue: IssueSummary) => T) => targets.length > 0 && targets.every((issue) => predicate(issue));
+    if (kind === 'state') return (selectedTeam?.states.nodes ?? []).map((state) => ({ id: state.id, label: state.name, checked: all((issue) => issue.state.id === state.id) }));
+    if (kind === 'priority') return [1, 2, 3, 4, 0].map((value) => ({ id: String(value), label: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][value]!, hotkey: String(value), checked: all((issue) => issue.priority === value) }));
+    if (kind === 'assignee') return [{ id: 'unassigned', label: 'Unassigned', checked: all((issue) => !issue.assignee) }, ...users.map((user) => ({ id: user.id, label: user.name ?? user.email ?? user.id, checked: all((issue) => issue.assignee?.id === user.id) }))];
+    return labels.map((label) => ({ id: label.id, label: label.name, checked: all((issue) => issue.labels.nodes.some((item) => item.id === label.id)) }));
+  }
+
+  function applyPick(kind: 'state' | 'priority' | 'assignee' | 'label', ids: string[], option: QuickPickerOption) {
+    if (kind === 'state') {
+      const state = selectedTeam?.states.nodes.find((item) => item.id === option.id);
+      if (!state) return;
+      void applyFieldToIssues(ids, (issue) => (issue.state.id === state.id ? null : { stateId: state.id }), (issue) => ({ ...issue, state }));
+      return;
+    }
+    if (kind === 'priority') {
+      const priority = Number(option.id);
+      void applyFieldToIssues(ids, (issue) => (issue.priority === priority ? null : { priority }), (issue) => ({ ...issue, priority }));
+      return;
+    }
+    if (kind === 'assignee') {
+      const assigneeId = option.id === 'unassigned' ? null : option.id;
+      const assignee = assigneeId ? users.find((user) => user.id === assigneeId) ?? null : null;
+      void applyFieldToIssues(ids, (issue) => ((issue.assignee?.id ?? null) === assigneeId ? null : { assigneeId }), (issue) => ({ ...issue, assignee }));
+      return;
+    }
+    // A label toggles: off when every target has it, otherwise on for all.
+    const label = labels.find((item) => item.id === option.id);
+    if (!label) return;
+    const remove = Boolean(option.checked);
+    void applyFieldToIssues(
+      ids,
+      (issue) => {
+        const has = issue.labels.nodes.some((item) => item.id === label.id);
+        if (remove ? !has : has) return null;
+        const next = remove ? issue.labels.nodes.filter((item) => item.id !== label.id) : [...issue.labels.nodes, label];
+        return { labelIds: next.map((item) => item.id) };
+      },
+      (issue) => ({ ...issue, labels: { nodes: remove ? issue.labels.nodes.filter((item) => item.id !== label.id) : [...issue.labels.nodes, label] } }),
+    );
   }
 
   async function applyBulkStateChange() {
@@ -2220,7 +2305,50 @@ export function BoardPage() {
         tagName === 'SELECT' ||
         (isElementTarget && target.getAttribute('contenteditable') === 'true');
 
-      if (isTypingField || selectedIssueId || isCreateOpen) {
+      if (isTypingField || selectedIssueId || isCreateOpen || picker) {
+        return;
+      }
+
+      // Copy the focused issue's identifier (⌘.) or link (⌘⇧, or ⌘⇧C) (INV-1087).
+      if ((event.metaKey || event.ctrlKey) && focusedIssueId) {
+        const focused = boardVisibleIssues.find((issue) => issue.id === focusedIssueId);
+        if (focused && event.key === '.' && !event.shiftKey) {
+          event.preventDefault();
+          void navigator.clipboard?.writeText(focused.identifier);
+          return;
+        }
+        if (focused && event.shiftKey && (event.key === ',' || event.key === '<' || event.key.toLowerCase() === 'c')) {
+          event.preventDefault();
+          void navigator.clipboard?.writeText(`${window.location.origin}/issue/${focused.id}`);
+          return;
+        }
+      }
+      // Whoever ran first, the `g` chord owns the key after it (App marks it handled).
+      if (event.metaKey || event.ctrlKey || event.altKey || isGotoChordPending() || event.defaultPrevented) {
+        return;
+      }
+
+      const fieldKeys: Record<string, 'state' | 'priority' | 'assignee' | 'label'> = { s: 'state', p: 'priority', a: 'assignee', l: 'label' };
+      const targetIds = selectedIssueIds.length > 0 ? selectedIssueIds : focusedIssueId ? [focusedIssueId] : [];
+      if (!event.shiftKey && fieldKeys[event.key] && targetIds.length > 0) {
+        event.preventDefault();
+        setPeekIssueId(null);
+        setPicker({ kind: fieldKeys[event.key]!, targetIds });
+        return;
+      }
+      if (!event.shiftKey && event.key === 'i' && targetIds.length > 0 && viewerId) {
+        event.preventDefault();
+        void applyFieldToIssues(targetIds, (issue) => (issue.assignee?.id === viewerId ? null : { assigneeId: viewerId }), (issue) => ({ ...issue, assignee: users.find((user) => user.id === viewerId) ?? issue.assignee }));
+        return;
+      }
+      if (event.key === ' ' && focusedIssueId) {
+        event.preventDefault();
+        setPeekIssueId((current) => (current ? null : focusedIssueId));
+        return;
+      }
+      if (event.key === 'Escape' && peekIssueId) {
+        event.preventDefault();
+        setPeekIssueId(null);
         return;
       }
 
@@ -2278,7 +2406,7 @@ export function BoardPage() {
     return () => {
       window.removeEventListener('keydown', handleBoardKeyboardShortcuts);
     };
-  }, [boardVisibleIssues, focusedIssueId, isBacklogView, isCreateOpen, selectedIssueId]);
+  }, [boardVisibleIssues, focusedIssueId, isBacklogView, isCreateOpen, selectedIssueId, picker, selectedIssueIds, viewerId, peekIssueId, users]);
 
   async function handleNativeDropIssue(payload: Html5BoardDragPayload, targetStateId: string) {
     const issue = visibleIssues.find((item) => item.id === payload.issueId);
@@ -2380,8 +2508,30 @@ export function BoardPage() {
     );
   }
 
+  const peekIssue = peekIssueId ? boardVisibleIssues.find((issue) => issue.id === peekIssueId) ?? null : null;
+  const pickerTitles = { state: 'Change status', priority: 'Set priority', assignee: 'Assign to', label: 'Toggle label' } as const;
+
   return (
     <main className="board-page">
+      {picker ? (
+        <QuickPicker
+          title={`${pickerTitles[picker.kind]}${picker.targetIds.length > 1 ? ` · ${picker.targetIds.length} issues` : ''}`}
+          options={pickerOptions(picker.kind, picker.targetIds)}
+          onPick={(option) => applyPick(picker.kind, picker.targetIds, option)}
+          onClose={() => setPicker(null)}
+        />
+      ) : null}
+      {peekIssue ? (
+        <aside className="issue-peek" role="dialog" aria-label={`Peek ${peekIssue.identifier}`}>
+          <div className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>{peekIssue.identifier}</div>
+          <strong>{peekIssue.title}</strong>
+          <div className="issue-peek__meta">
+            {[peekIssue.state.name, peekIssue.assignee?.name ?? 'Unassigned', ['No priority', 'Urgent', 'High', 'Medium', 'Low'][peekIssue.priority] ?? '', ...peekIssue.labels.nodes.map((label) => label.name)].filter(Boolean).join(' · ')}
+          </div>
+          {peekIssue.description ? <div className="issue-peek__body">{peekIssue.description.slice(0, 1200)}</div> : null}
+          <div className="issue-peek__meta">Space or Esc to close · Enter to open</div>
+        </aside>
+      ) : null}
       <header className="board-page__header" style={{
         display: 'flex', alignItems: 'center', gap: 10,
         height: 44, padding: '0 var(--pad-x, var(--content-gutter))',

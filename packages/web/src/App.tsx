@@ -55,6 +55,8 @@ import { CommentUndoHost } from './undo/CommentUndoHost';
 import { CommitUndoHost } from './undo/CommitUndoHost';
 import { DeleteUndoHost } from './undo/DeleteUndoHost';
 import { FieldUndoHost } from './undo/FieldUndoHost';
+import { setGotoChordPending } from './app/goto-chord';
+import { BOARD_PICKER_EVENT } from './routes/board-picker-event';
 import { LinkUndoHost } from './undo/LinkUndoHost';
 import { StatusUndoToast } from './undo/StatusUndoToast';
 import {
@@ -560,6 +562,7 @@ export function App() {
         window.clearTimeout(gotoPrefixTimeoutRef.current);
         gotoPrefixTimeoutRef.current = null;
         setIsGotoActive(false);
+        setGotoChordPending(false);
 
         if (event.key === 'Escape') {
           event.preventDefault();
@@ -603,9 +606,11 @@ export function App() {
       if (event.key.toLowerCase() === 'g' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
         event.preventDefault();
         setIsGotoActive(true);
+        setGotoChordPending(true);
         gotoPrefixTimeoutRef.current = window.setTimeout(() => {
           gotoPrefixTimeoutRef.current = null;
           setIsGotoActive(false);
+          setGotoChordPending(false);
         }, 1500);
         return;
       }
@@ -780,6 +785,23 @@ export function App() {
           void redoStatusGesture();
         },
       },
+      // Board field shortcuts, reachable from the palette too (INV-1087).
+      ...([
+        ['state', 'Change status…', 'S'],
+        ['priority', 'Set priority…', 'P'],
+        ['assignee', 'Assign to…', 'A'],
+        ['label', 'Toggle label…', 'L'],
+      ] as const).map(([kind, label, shortcut]) => ({
+        id: `board-${kind}`,
+        label,
+        description: 'On the board: the selected issues, or the focused one',
+        group: 'Actions',
+        shortcut,
+        run: () => {
+          if (location.pathname !== '/') navigate('/');
+          window.setTimeout(() => window.dispatchEvent(new CustomEvent(BOARD_PICKER_EVENT, { detail: { kind } })), 0);
+        },
+      })),
       {
         id: 'toggle-theme',
         label: `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`,

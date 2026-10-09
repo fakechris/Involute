@@ -1,6 +1,6 @@
 import { DeliveryChangeQueue } from '../components/DeliveryPanel';
 import { useMutation, useQuery } from '@apollo/client/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
@@ -9,6 +9,9 @@ import { selectCandidatesEventName } from '../undo/CommitUndoHost';
 import { IcoCheck, IcoClose } from '../components/Icons';
 import { Btn } from '../components/Primitives';
 import { filtersToIql, useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
+import { useListKeys } from '../components/useListKeys';
+
+const COMMIT_CANDIDATE_EVENT = 'involute:commit-candidate';
 import { PlacementPicker } from '../components/PlacementPicker';
 import type { CreatePlacement } from '../work/placement';
 import {
@@ -375,6 +378,7 @@ function CandidateCard({
   otherCandidates,
   isSelected,
   needsAttention = false,
+  focused = false,
   onToggleSelect,
   onCommitted,
   onRejected,
@@ -389,6 +393,8 @@ function CandidateCard({
   isSelected?: boolean;
   /** Briefly outlined after a batch refusal pointed at this card (INV-1047). */
   needsAttention?: boolean;
+  /** The row J/K points at (INV-1087). */
+  focused?: boolean;
   onToggleSelect?: (id: string) => void;
   onCommitted: () => void;
   onRejected: () => void;
@@ -502,6 +508,16 @@ function CandidateCard({
     }
   }
 
+  // ⌘↵ on the focused card commits it with what the card holds (INV-1087).
+  const commitRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    const onCommit = (event: Event) => {
+      if ((event as CustomEvent<{ id: string }>).detail?.id === candidate.id) commitRef.current();
+    };
+    window.addEventListener(COMMIT_CANDIDATE_EVENT, onCommit);
+    return () => window.removeEventListener(COMMIT_CANDIDATE_EVENT, onCommit);
+  }, [candidate.id]);
+
   async function handleCommit() {
     setError(null);
     setPendingAction('commit');
@@ -577,7 +593,9 @@ function CandidateCard({
 
   return (
     <article
-      className={`observation-card${isSelected ? ' observation-card--selected' : ''}${needsAttention ? ' observation-card--attention' : ''}`}
+      className={`observation-card${isSelected ? ' observation-card--selected' : ''}${needsAttention ? ' observation-card--attention' : ''}${focused ? ' observation-card--focused' : ''}`}
+      data-list-key-id={candidate.id}
+      aria-current={focused ? 'true' : undefined}
       aria-label={`${candidate.identifier} candidate`}
       id={`candidate-${candidate.id}`}
     >
@@ -737,6 +755,14 @@ function CandidateCard({
         </p>
       ) : null}
       <div className="observation-card__actions">
+        {(() => {
+          const blocked = pendingAction !== null || snoozed || (missingParent && !parentChoice) || needsPriority;
+          commitRef.current = () => {
+            if (!blocked) void handleCommit();
+            else document.getElementById(`acceptance-${candidate.id}`)?.focus();
+          };
+          return null;
+        })()}
         <Btn
           variant="accent"
           icon={<IcoCheck size={12} />}
@@ -806,6 +832,7 @@ function CandidateCard({
 }
 
 export function CandidatesPage() {
+  const navigate = useNavigate();
   const teamKey = readStoredTeamKey();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedProject = searchParams.get('project');
@@ -986,6 +1013,15 @@ export function CandidatesPage() {
   function clearSelection() {
     setSelectedIds([]);
   }
+
+  // J/K, X, ⇧A, ⇧X, Enter like the board; ⌘↵ commits the focused card (INV-1087).
+  const listKeys = useListKeys(filteredActiveCandidates, {
+    onToggle: (candidate) => toggleSelect(candidate.id),
+    onSelectAll: selectAllVisible,
+    onClear: clearSelection,
+    onOpen: (candidate) => navigate(`/work/${candidate.id}`),
+    onPrimary: (candidate) => window.dispatchEvent(new CustomEvent(COMMIT_CANDIDATE_EVENT, { detail: { id: candidate.id } })),
+  });
 
   const effectivePriority = (candidate: CandidateWork) => priorityById[candidate.id] ?? candidate.priority ?? 0;
   const selectedBugsNeedingPriority = useMemo(
@@ -1294,6 +1330,7 @@ export function CandidatesPage() {
                 otherCandidates={candidates.filter((other) => other.id !== candidate.id)}
                 isSelected={selectedIds.includes(candidate.id)}
                 needsAttention={attentionId === candidate.id}
+                focused={listKeys.focusedId === candidate.id}
                 onToggleSelect={toggleSelect}
                 onCommitted={() => void refetch()}
                 onRejected={() => void refetch()}

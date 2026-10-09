@@ -6697,3 +6697,92 @@ a.bugs-stat {
   font-size: 13px;
   color: var(--fg-dim);
 }
+
+/* Keyboard pickers and peek on the board (INV-1087). */
+.quick-picker__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 15vh;
+  background: rgba(0, 0, 0, 0.18);
+}
+.quick-picker {
+  width: min(420px, 92vw);
+  background: var(--bg-raised, #fff);
+  border: 1px solid var(--border, #d0d4da);
+  border-radius: var(--r-3, 10px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+.quick-picker__input {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--border, #d0d4da);
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 14px;
+  background: transparent;
+  color: var(--fg);
+  outline: none;
+}
+.quick-picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 320px;
+  overflow: auto;
+}
+.quick-picker__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--r-2, 6px);
+  cursor: pointer;
+  font-size: 13px;
+}
+.quick-picker__option--active {
+  background: var(--accent-subtle, rgba(91, 141, 239, 0.12));
+}
+.quick-picker__check {
+  width: 12px;
+  color: var(--accent, #5b8def);
+}
+.quick-picker__key {
+  margin-left: auto;
+}
+.quick-picker__empty {
+  padding: 8px 10px;
+  color: var(--fg-dim);
+  font-size: 13px;
+}
+.issue-peek {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 55;
+  width: min(440px, 92vw);
+  max-height: 60vh;
+  overflow: auto;
+  padding: 14px 16px;
+  background: var(--bg-raised, #fff);
+  border: 1px solid var(--border, #d0d4da);
+  border-radius: var(--r-3, 10px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  font-size: 13px;
+}
+.issue-peek__meta {
+  color: var(--fg-dim);
+  margin: 4px 0 8px;
+}
+.issue-peek__body {
+  white-space: pre-wrap;
+  color: var(--fg-muted, inherit);
+}
+/* The row J/K points at on /in-review and /candidates (INV-1087). */
+.observation-card--focused {
+  box-shadow: inset 3px 0 0 var(--accent, #5b8def);
+}

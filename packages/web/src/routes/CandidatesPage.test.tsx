@@ -179,6 +179,24 @@ describe('CandidatesPage', () => {
     expect(screen.queryByText('INV-21')).not.toBeInTheDocument();
   });
 
+  it('moves with J/K, selects with X and ⇧A, and commits the focused card with ⌘↵ (INV-1087)', async () => {
+    render(
+      <MemoryRouter>
+        <CandidatesPage />
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(window, { key: 'j' });
+    const first = screen.getAllByRole('article')[0]!;
+    expect(first).toHaveAttribute('aria-current', 'true');
+    fireEvent.keyDown(window, { key: 'x' });
+    expect(screen.getByText(/1 selected|selected \(1\)|Clear selection \(1\)/)).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'X', shiftKey: true });
+    fireEvent.keyDown(window, { key: 'A', shiftKey: true });
+    expect(screen.getByRole('button', { name: /Batch Commit \(2\)/ })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Enter', metaKey: true });
+    await waitFor(() => expect(mockRunCommit).toHaveBeenCalledTimes(1));
+  });
+
   it('supports multi-select checkboxes and batch commit', async () => {
     render(
       <MemoryRouter>
