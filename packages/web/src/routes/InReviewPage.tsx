@@ -77,7 +77,7 @@ export function InReviewPage() {
     filter: buildFilter(teamKey, selectedProject),
     query: activeIql.trim() || null,
   };
-  const { data: projectData } = useQuery<{ issues?: { nodes: Array<{ id: string; repository: string | null }> } }>(IN_REVIEW_PROJECTS_QUERY, {
+  const { data: projectData } = useQuery<{ issues?: { nodes: Array<{ id: string; repository: string | null }>; pageInfo?: { hasNextPage: boolean } } }>(IN_REVIEW_PROJECTS_QUERY, {
     variables: { filter: buildFilter(teamKey), query: activeIql.trim() || null },
     fetchPolicy: 'cache-and-network',
   });
@@ -88,7 +88,9 @@ export function InReviewPage() {
     }
     return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [projectData]);
-  const allCount = projectData?.issues?.nodes?.length ?? 0;
+  // Counts come from the first 200 items; past that they read as a floor ("200+").
+  const countsTruncated = projectData?.issues?.pageInfo?.hasNextPage === true;
+  const allCount = `${projectData?.issues?.nodes?.length ?? 0}${countsTruncated ? '+' : ''}`;
   function selectProject(repo: string | null) {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -257,7 +259,7 @@ export function InReviewPage() {
       </div>
 
       <div className="page-content observation-content">
-        {projectCounts.length > 0 ? (
+        {projectCounts.length > 0 || selectedProject ? (
           <div className="board-project-pills" role="tablist" aria-label="Project switcher">
             <button
               type="button"
@@ -269,7 +271,10 @@ export function InReviewPage() {
               <span className="board-project-pill__name">All Projects</span>
               <span className="board-project-pill__count">{allCount}</span>
             </button>
-            {projectCounts.map(([repo, count]) => (
+            {(selectedProject && !projectCounts.some(([repo]) => repo === selectedProject)
+              ? [...projectCounts, [selectedProject, 0] as [string, number]]
+              : projectCounts
+            ).map(([repo, count]) => (
               <button
                 key={repo}
                 type="button"
@@ -279,7 +284,7 @@ export function InReviewPage() {
                 onClick={() => selectProject(repo)}
               >
                 <span className="board-project-pill__name">{repo}</span>
-                <span className="board-project-pill__count">{count}</span>
+                <span className="board-project-pill__count">{count}{countsTruncated ? '+' : ''}</span>
               </button>
             ))}
           </div>

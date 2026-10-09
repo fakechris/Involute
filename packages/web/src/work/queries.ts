@@ -102,6 +102,9 @@ export const IN_REVIEW_PROJECTS_QUERY = gql`
         id
         repository
       }
+      pageInfo {
+        hasNextPage
+      }
     }
   }
 `;

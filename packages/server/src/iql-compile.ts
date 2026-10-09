@@ -139,6 +139,7 @@ function compileTerm(term: IqlTerm, context: IqlCompileContext): Prisma.IssueWhe
         const id = { identifier: { equals: identifier.toUpperCase() } };
         return [{ parent: { is: id } }, { parent: { is: { parent: { is: id } } } }, { parent: { is: { parent: { is: { parent: { is: id } } } } } }];
       };
+      if (values.length === 0) throw iqlParseGraphQLError('project needs a repository name, owner/repo or PROJECT identifier.');
       const clauses = values.flatMap((value): Prisma.IssueWhereInput[] => {
         if (IDENT.test(value)) return parentChain(value);
         return value.includes('/')
