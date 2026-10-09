@@ -1847,3 +1847,12 @@ export const CONTRACT_AMENDMENT_REJECT_MUTATION = gql`
     }
   }
 `;
+
+// Who "I" is for the assign-to-me shortcut on the board (INV-1087).
+export const VIEWER_ID_QUERY = gql`
+  query ViewerId {
+    viewer {
+      id
+    }
+  }
+`;

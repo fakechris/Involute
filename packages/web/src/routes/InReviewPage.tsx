@@ -6,6 +6,7 @@ import { readStoredTeamKey } from '../board/utils';
 import { IcoCheck, IcoClose, IcoFilter } from '../components/Icons';
 import { Btn } from '../components/Primitives';
 import { filtersToIql, joinIql, useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
+import { useListKeys } from '../components/useListKeys';
 import { IN_REVIEW_PAGE_QUERY, IN_REVIEW_PROJECTS_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
 import type {
   InReviewPageQueryData,
@@ -162,6 +163,14 @@ export function InReviewPage() {
   function clearSelection() {
     setSelectedIds([]);
   }
+
+  // J/K, X, ⇧A, ⇧X, Enter like the board (INV-1087).
+  const listKeys = useListKeys(items, {
+    onToggle: toggleSelection,
+    onSelectAll: selectAllVisible,
+    onClear: clearSelection,
+    onOpen: (item) => navigate(`/issue/${item.id}`),
+  });
 
   async function handleLoadMore() {
     if (!pageInfo?.hasNextPage || !pageInfo.endCursor) return;
@@ -408,7 +417,9 @@ export function InReviewPage() {
               return (
                 <article
                   key={item.id}
-                  className={`observation-card${checked ? ' observation-card--selected' : ''}`}
+                  className={`observation-card${checked ? ' observation-card--selected' : ''}${listKeys.focusedId === item.id ? ' observation-card--focused' : ''}`}
+                  data-list-key-id={item.id}
+                  aria-current={listKeys.focusedId === item.id ? 'true' : undefined}
                   aria-label={`${item.identifier} in review`}
                   role="listitem"
                 >

@@ -252,5 +252,21 @@ describe('InReviewPage', () => {
     expect(screen.getByText(/not auto-accepted: the fix commit has no CI checks/)).toBeInTheDocument();
     delete (reviewItems[0] as Record<string, unknown>).autoAccept;
   });
+
+  it('moves with J/K and selects with X and ⇧A like the board (INV-1087)', () => {
+    render(
+      <MemoryRouter>
+        <InReviewPage />
+      </MemoryRouter>,
+    );
+    fireEvent.keyDown(window, { key: 'j' });
+    expect(screen.getByRole('listitem', { name: 'INV-101 in review' })).toHaveAttribute('aria-current', 'true');
+    fireEvent.keyDown(window, { key: 'j' });
+    expect(screen.getByRole('listitem', { name: 'INV-102 in review' })).toHaveAttribute('aria-current', 'true');
+    fireEvent.keyDown(window, { key: 'x' });
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'A', shiftKey: true });
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+  });
 });
 
