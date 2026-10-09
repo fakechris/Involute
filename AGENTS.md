@@ -35,7 +35,7 @@ flowchart TD
     A["Agent calls work_propose"] --> B["CANDIDATE Queue (/candidates)"]
     B -->|"Human reviews & commits (work_commit)"| C["COMMITTED Queue (Board & Backlog)"]
     C -->|"Agent leases task (work_claim)"| D["In Progress (Leased)"]
-    D -->|"run_report & evidence_attach"| E["In Review (/in-review)"]
+    D -->|"run_report & evidence(attach)"| E["In Review (/in-review)"]
     E -->|"Human Review"| F["Done"]
 ```
 
@@ -51,7 +51,7 @@ flowchart TD
 2. **Propose, Never Unilaterally Commit**: Agents propose candidates (`kind: 'MILESTONE'` or `'ISSUE'`); only humans commit them. Specify `initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED'` on `work_propose` so committed items route directly to the proper phase upon human approval. **One exception — bugs (decision INV-787, §12.5)**: a bug filed with a parent, a priority and steps to reproduce is committed at once.
 3. **No Scratchpad Pollution**: Do not dump local grep output, shell logs, or transient scratchpad thoughts into Involute. Only track discrete, independently acceptable deliverables.
 4. **Claim-Driven Execution**: Call `work_claim` to lease a specific task after confirmation.
-5. **Report Runs with Evidence**: As execution progresses, record phases with `run_report`. On completion, attach durable evidence (PR, commit SHA, test exit code, or artifact URL) with `evidence_attach`.
+5. **Report Runs with Evidence**: As execution progresses, record phases with `run_report`. On completion, attach durable evidence (PR, commit SHA, test exit code, or artifact URL) with `evidence(action: 'attach')` (the old name `evidence_attach` still works for one version, INV-1046).
 6. **In Review, Never Done — except research (INV-912)**: Agents transition tasks to `In Review`. Moving work to `Done` is reserved for human review. Evidence verification is shadow-only, even when its grade is `CLEAR`. **One exception — Type: Research**: a research ISSUE's deliverable is the item itself, so once a person has committed it an agent may move it to `Done` (`work_update(state: 'DONE')`), or propose it with `initial_state: 'DONE'` so committing it lands in Done. Refused when the item is not a committed ISSUE, is claimed by another actor, or lacks the three-section description. Agents never set `CANCELED`; every other Type and kind still stops at `In Review`.
 7. **Competitive Research Isolation (竞品分析隔离铁律)**:
    - **绝对禁令**：严禁将任何外部竞品（如 Linear、Plane、Jira 等）的调研文档、逆向代码、架构借用分析提交到 Git 版本库，严禁放在 `docs/` 等公开文档目录中。
@@ -64,8 +64,8 @@ flowchart TD
    - `DISCOVERED_DURING` / `DERIVED_FROM` proposals without `parent_id` inherit the related item's nearest legal same-repository ancestor; the result says where they landed.
 9. **Relations — record what the text says (INV-720)**:
    - Mentioning `INV-123` (or a project alias prefix) in a description, contract field or comment records `RELATED_TO` automatically.
-   - If the source material says an item depends on / must come after another, record `BLOCKS`: `work_propose(blocked_by: [...], blocks: [...])` or `work_link`. `work_commit` warns about dependency wording without `BLOCKS`. **Never invent dependencies or structure.**
-   - Correct an erroneous directed relation with `work_unlink(from_id, to_id, type)` before creating its replacement. CONTAINS is refused; use the explicit parent update above. Both endpoints require write access.
+   - If the source material says an item depends on / must come after another, record `BLOCKS`: `work_propose(blocked_by: [...], blocks: [...])` or `work_relate(action: 'link')`. `work_commit` warns about dependency wording without `BLOCKS`. **Never invent dependencies or structure.**
+   - Correct an erroneous directed relation with `work_relate(action: 'unlink', from_id, to_id, type)` before creating its replacement. CONTAINS is refused; use the explicit parent update above. Both endpoints require write access.
    - Before proposing several related items, lay out the whole tree (parents, blockers) and check it; when the source is ambiguous, propose an outline for review instead of guessing.
 10. **Research is an ISSUE labelled `research` (INV-721)**: see §11.4.
 11. **Bugs carry the Type label Bug (INV-748/749)**: `labels: ['bug']` (any casing). Type is Bug / Feature / Improvement / Research (INV-912), at most one per item; a second Type is refused. See §12.
@@ -172,7 +172,7 @@ flowchart LR
 
 ### 8.3 双轨原子 CAS 状态机 (Dual-Track Atomic CAS State Machine)
 系统支持两条并行的工作项流转轨道，状态迁移具备原子互斥与可重入保证：
-- **Track A（人工/Agent 显式协同轨）**：通过 MCP 工具或 Web UI 执行 `work_claim` -> `run_report` -> `evidence_attach`。
+- **Track A（人工/Agent 显式协同轨）**：通过 MCP 工具或 Web UI 执行 `work_claim` -> `run_report` -> `evidence(action: 'attach')`。
 - **Track B（Git / GitHub Webhook 自动化生命周期轨）**：
   - **分支创建 (`create` 事件)**：将处于 `UNSTARTED` / `READY` 的工作项 CAS 推进至 `IN_PROGRESS`。
   - **PR 开启 (`pull_request.opened` / `reopened`)**：将处于 `UNSTARTED` / `READY` / `IN_PROGRESS` 的工作项推进至 `REVIEW`，并原子关联 PR 链接至 `workEvidence`。
@@ -271,10 +271,10 @@ query {
 ```
 
 异常类处置：
-- `no-identifier`：合并的 PR 完全没有工单引用（直接推送绕过了 lint）→ 补齐工单或在工单上手动 `evidence_attach` 记录该 PR。
+- `no-identifier`：合并的 PR 完全没有工单引用（直接推送绕过了 lint）→ 补齐工单或在工单上手动 `evidence(action: 'attach')` 记录该 PR。
 - `unknown-identifier`：引用不存在 → 同上，确认真实工单并修正记录。
 - `team-mismatch`：跨团队引用 → 检查路由表配置或确认是否引错仓库的工单。
-- `no-evidence`：工单存在但从未挂载该 PR 的 evidence（合并未被回溯）→ 在该工单上手动 `evidence_attach` PR 链接补账。
+- `no-evidence`：工单存在但从未挂载该 PR 的 evidence（合并未被回溯）→ 在该工单上手动 `evidence(action: 'attach')` PR 链接补账。
 
 `repoErrors` 非空表示对应仓库的 GitHub API 调用失败（如限流），该仓库本轮未被扫描，其余仓库结果不受影响。
 
@@ -363,7 +363,7 @@ Involute ships a Linear-style bug pipeline: humans report through the UI, agents
    - **SLA**: Urgent 24h / High 48h / otherwise 7 days from commitment; the clock stops in Review and when closed and resumes on reopen. `Issue.bugSla` shows it on cards and issue pages; at 20% left and when breached the owner and this week's triager get one `bug.sla_at_risk` / `bug.sla_breached` notification and outbox event each.
    - **Weekly triage rotation**: Settings → Bug triage (`teamTriageRotationUpdate`) sets who is on duty each week; triage reports go to that person (to all team humans when no rotation is set).
 2. **Discovery by agents**: Every report emits a `bug.reported` inbox notification to team humans **and** a `bug.reported` outbox webhook event (subscribable via `WORK_EVENT_TYPES`), so external agents can discover new bugs and `work_claim` them like any other committed work.
-3. **Fixing agents follow the standard protocol**: claim → `run_report` → `evidence_attach` → In Review. Bugs are ordinary committed issues; `Done` remains strictly human-gated.
+3. **Fixing agents follow the standard protocol**: claim → `run_report` → `evidence(action: 'attach')` → In Review. Bugs are ordinary committed issues; `Done` remains strictly human-gated.
 4. **Statistics**: The `/bugs` page (backed by the `bugSummary` query) shows open/closed counts, per-project and per-type-label breakdowns, unclaimed open count, open-age stats, and an 8-week creation trend for triage.
 5. **Bugs filed by agents (INV-751, decision INV-787)** — whether the agent found it or a person told it: prefer MCP `work_file_bug` (required `priority` 1–4, `steps_to_reproduce` and `acceptance`; JSON schema rejects omit — the bug is committed on filing and agents cannot add acceptance to committed work, so without it nobody could claim it). Equivalent: `work_propose` with `labels: ['bug']`, **`priority` (1–4 — it sets the SLA: Urgent 24h / High 48h / otherwise 7 days)**, and `steps_to_reproduce`, placed like any work (`parent_id`, or `related_work_id` + `DISCOVERED_DURING` to inherit the parent). **It is committed directly and does not go to Candidates** — owner is the agent's human owner, it starts in Ready (or Review with `initial_state: 'REVIEW'` when already fixed), its SLA runs and `bug.reported` + `work.committed` are emitted. Missing parent, priority, steps or acceptance, **the proposal is refused**. The result says where it landed (`placed_under`, with a note when the parent was inherited) and lists `possible_duplicates` close in meaning (INV-1000) — a duplicate is linked `DUPLICATE_OF` and declined, not left open; extra domain `labels` may ride along, a second Type label is refused. Committed bugs are fixed or declined with a reason, never parked (zero-bug). Humans who are unsure where a bug belongs still use Report bug, which may send that report to triage.
 6. **Metrics**: `/bugs` (the `bugSummary.metrics` block) adds triage time p50/p90, bugs waiting in triage, SLA met rate, open bugs past their SLA and at risk, source (people / agents / other) and open bugs with no parent (goal 0).

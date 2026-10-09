@@ -1,4 +1,5 @@
 import { protocolInfo } from './protocol-info.js';
+import { groupForAction, hidesFromCaller, MCP_TOOL_GROUPS, resolveMcpCall, type McpToolGroup } from './mcp-tool-groups.js';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
 import { storeUpload } from './uploads.js';
 import { actionCapabilities } from './action-capabilities.js';
@@ -222,9 +223,83 @@ export interface McpToolDefinition {
   name: McpToolName;
 }
 
-export function listMcpTools(readonly: boolean): McpToolDefinition[] {
+/** One listed tool: a single action, or a group of actions behind an `action` argument (INV-1046). */
+export interface McpListedTool {
+  annotations: McpToolAnnotations;
+  description: string;
+  inputSchema: JsonSchema;
+  name: string;
+  /** The underlying actions, in the order their `action` values are offered. */
+  actions: McpToolName[];
+}
+
+/** Every action with its own schema — what the parity guards and docs tables describe. */
+export function listMcpActions(readonly: boolean): McpToolDefinition[] {
   const tools = [...MCP_TOOL_DEFINITIONS];
   return readonly ? tools.filter((tool) => (READ_ONLY_MCP_TOOLS as readonly string[]).includes(tool.name)) : tools;
+}
+
+function groupedTool(group: McpToolGroup, members: McpToolDefinition[]): McpListedTool {
+  const actions = Object.entries(group.actions).filter(([, member]) => members.some((tool) => tool.name === member));
+  const properties: Record<string, unknown> = {
+    action: {
+      type: 'string',
+      enum: actions.map(([action]) => action),
+      description: `Which operation to run${group.defaultAction && actions.some(([a]) => a === group.defaultAction) ? ` (default "${group.defaultAction}")` : ''}. Each action's own arguments are listed below with the action it belongs to.`,
+    },
+  };
+  for (const [action, member] of actions) {
+    const tool = members.find((item) => item.name === member)!;
+    for (const [key, schema] of Object.entries(tool.inputSchema.properties)) {
+      const existing = properties[key] as { description?: string; 'x-actions'?: string[] } | undefined;
+      if (existing) {
+        existing['x-actions'] = [...(existing['x-actions'] ?? []), action];
+        continue;
+      }
+      const base: Record<string, unknown> = typeof schema === 'object' && schema !== null ? { ...(schema as Record<string, unknown>) } : { description: String(schema) };
+      const required = tool.inputSchema.required?.includes(key);
+      base.description = `[${action}${required ? ', required' : ''}] ${String(base.description ?? '')}`.trim();
+      base['x-actions'] = [action];
+      properties[key] = base;
+    }
+  }
+  const memberTools = actions.map(([, member]) => members.find((item) => item.name === member)!);
+  return {
+    name: group.name,
+    description: group.description,
+    inputSchema: { type: 'object', properties, ...(group.defaultAction && actions.some(([a]) => a === group.defaultAction) ? {} : { required: ['action'] }) },
+    annotations: {
+      readOnlyHint: memberTools.every((tool) => tool.annotations.readOnlyHint),
+      destructiveHint: memberTools.some((tool) => tool.annotations.destructiveHint),
+      ...(memberTools.every((tool) => tool.annotations.idempotentHint === true) ? { idempotentHint: true } : {}),
+    },
+    actions: memberTools.map((tool) => tool.name),
+  };
+}
+
+/**
+ * What tools/list shows: grouped tools plus the actions that stand alone,
+ * minus what this caller may never run (INV-1046). The read-only endpoint
+ * shows a group only with its read-only actions. Folded legacy actions
+ * (notification_mark_read, work_read_page) are not listed; their arguments
+ * live on agent_inbox and work_get_context.
+ */
+export function listMcpTools(readonly: boolean, context?: Pick<GraphQLContext, 'viewer' | 'authMode' | 'isTrustedSystem'>): McpListedTool[] {
+  const actions = listMcpActions(readonly).filter((tool) => !hidesFromCaller(tool.name, context));
+  const listed: McpListedTool[] = [];
+  const seen = new Set<string>();
+  for (const tool of actions) {
+    const grouped = groupForAction(tool.name);
+    if (grouped) {
+      if (seen.has(grouped.group.name)) continue;
+      seen.add(grouped.group.name);
+      listed.push(groupedTool(grouped.group, actions));
+      continue;
+    }
+    if (tool.name === 'notification_mark_read' || tool.name === 'work_read_page') continue;
+    listed.push({ ...tool, actions: [tool.name] });
+  }
+  return listed;
 }
 
 export async function callMcpTool(
@@ -233,8 +308,25 @@ export async function callMcpTool(
   args: Record<string, unknown>,
   readonly: boolean,
 ): Promise<unknown> {
+  const resolved = resolveMcpCall(name, args);
+  const result = await callMcpAction(context, resolved.action, resolved.args, readonly);
+  if (resolved.deprecated && result && typeof result === 'object' && !Array.isArray(result)) {
+    return { ...(result as Record<string, unknown>), deprecated: resolved.deprecated };
+  }
+  return result;
+}
+
+async function callMcpAction(
+  context: GraphQLContext,
+  name: string,
+  args: Record<string, unknown>,
+  readonly: boolean,
+): Promise<unknown> {
   if (readonly && !(READ_ONLY_MCP_TOOLS as readonly string[]).includes(name)) {
     throw new Error(`Tool "${name}" is not available on the read-only MCP endpoint.`);
+  }
+  if (hidesFromCaller(name, context)) {
+    throw new Error(`Tool "${name}" is for people: a person commits or uncommits candidate work.`);
   }
   assertToolScope(context, name as McpToolName);
 
@@ -296,6 +388,10 @@ export async function callMcpTool(
         throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
       }
       await assertCanReadIssue(context.prisma, context, work.id);
+      // One section at a time, paginated (what work_read_page did, INV-1046).
+      if (typeof args.section === 'string') {
+        return readWorkPage(context.prisma, work.id, args.section as WorkSection, optionalNumber(args.first) ?? 50, optionalString(args.after), buildReadableIssueWhere(context));
+      }
       const bundle = await getWorkContext(context.prisma, work.id, buildReadableIssueWhere(context));
       const linkedIds = [...bundle.ancestors, ...bundle.blockedBy, ...bundle.blocks].map((item) => item.id);
       const visible = new Set((await context.prisma.issue.findMany({ where: { AND: [{ id: { in: linkedIds } }, buildReadableIssueWhere(context) ?? {}] }, select: { id: true } })).map((item) => item.id));
@@ -303,7 +399,7 @@ export async function callMcpTool(
       bundle.blockedBy = bundle.blockedBy.filter((item) => visible.has(item.id));
       bundle.blocks = bundle.blocks.filter((item) => visible.has(item.id));
       const pages = await Promise.all(WORK_SECTIONS.map((section) => readWorkPage(context.prisma, work.id, section, section === 'audits' ? 20 : 10, null, buildReadableIssueWhere(context))));
-      return { ...bundle, pages: Object.fromEntries(pages.map((page) => [page.section, page])), continuation: 'Use work_read_page(id, section, after=pageInfo.endCursor) while hasNextPage is true.' };
+      return { ...bundle, pages: Object.fromEntries(pages.map((page) => [page.section, page])), continuation: 'Call work_get_context(id, section, after=pageInfo.endCursor) while hasNextPage is true.' };
     }
     case 'work_list_ready': {
       const readyInput: Parameters<typeof listReadyWork>[1] = {};
@@ -758,6 +854,12 @@ export async function callMcpTool(
       if (context.authMode === 'agent-token' && !context.agentTeamId) {
         throw createValidationError(TEAM_WRITE_FORBIDDEN_MESSAGE);
       }
+      // Clearing what you have acted on is part of reading the inbox (INV-1046).
+      const ack = Array.isArray(args.ack) ? args.ack.filter((item): item is string => typeof item === 'string') : [];
+      if (readonly && ack.length > 0) throw new Error('agent_inbox(ack) is not available on the read-only MCP endpoint.');
+      for (const id of ack) {
+        if (!(await markNotificationRead(context.prisma, { id, userId: actorId }))) throw createNotFoundError(NOTIFICATION_NOT_FOUND_MESSAGE);
+      }
       const page = await readAgentInbox(context.prisma, {
         actorId,
         cursor: optionalString(args.cursor) ?? null,
@@ -925,6 +1027,9 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        section: { type: 'string', enum: [...WORK_SECTIONS], description: 'Read one section only, paginated with first/after — children, links, comments, audits, runs, evidence, reviews, amendments, verifications or delivery_changes. Without it the full bundle is returned with the first page of each.' },
+        first: { type: 'number', description: 'Page size for a section read (default 50).' },
+        after: { type: 'string', description: 'pageInfo.endCursor from the previous section page.' },
         id: { type: 'string', description: 'Issue identifier or UUID' },
       },
       required: ['id'],
@@ -1361,6 +1466,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        ack: { type: 'array', items: { type: 'string' }, description: 'Notification ids from a previous agent_inbox you have acted on; they are marked read before this page is built (not on the read-only endpoint).' },
         since: { type: 'string', description: 'ISO-8601; only requests created after this instant' },
         cursor: { type: 'string', description: 'Opaque cursor from a previous page' },
         first: { type: 'integer', description: 'Page size, 1-50 (default 20)' },

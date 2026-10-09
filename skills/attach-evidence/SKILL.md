@@ -5,7 +5,7 @@ description: Use when attaching a durable PR, test, or artifact URL to an Involu
 
 # Attach evidence
 
-Tool: `evidence_attach`
+Tool: `evidence` with `action: 'attach'` (default; the old name `evidence_attach` still works for one version, INV-1046)
 
 ## When
 

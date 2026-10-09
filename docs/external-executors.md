@@ -22,11 +22,11 @@ Only the approved executor may claim the implementation.
 
 ## Runtime sequence
 
-1. Read `work_executor_context(id)` and the approved delivery context. Unsupported
+1. Read `executor(action: 'context', id)` and the approved delivery context. Unsupported
    protocol versions must fail closed. Use the implementation UUID for writes.
 2. `work_claim`, then `run_report(running)`. Keep the returned claim token in a
    private execution file, never in a command line, report, log or repository.
-3. `work_executor_update(operation: "ack")` with `details.runId`, `claimToken`,
+3. `executor(action: 'update', operation: "ack")` with `details.runId`, `claimToken`,
    `expectedRevision` and `generation` binds the dispatch to that execution.
 4. Perform implementation and tests. Renew the work lease before it expires and
    send a `checkpoint` with a durable, secret-free recovery summary. Refresh the

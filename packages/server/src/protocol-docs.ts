@@ -48,7 +48,7 @@ and reconcile, never blindly retry with the new revision.
 
 ## Execution leases (INV-943)
 
-A work claim returns a secret \`claim_token\` and an execution label. Keep the token in execution secret state, never in logs, comments, receipts or Git. Pass it to renew a claim, report a run, attach evidence, release your own claim with \`work_claim_release\`, or correct your own unaccepted evidence with \`evidence_retract\`. Both corrections require a reason and preserve history. Actor identity alone cannot authorize a second session. Lease expiry requires a fresh claim; the new claim invalidates old execution writes. Completing a run releases the lease but permits evidence attachment until a subsequent claim supersedes it. A person can force-release from the Claim panel. Existing pre-token leases must expire or be released; their tokens cannot be recovered from context.
+A work claim returns a secret \`claim_token\` and an execution label. Keep the token in execution secret state, never in logs, comments, receipts or Git. Pass it to renew a claim, report a run, attach evidence, release your own claim with \`work_claim(action: 'release')\`, or correct your own unaccepted evidence with \`evidence(action: 'retract')\`. Both corrections require a reason and preserve history. Actor identity alone cannot authorize a second session. Lease expiry requires a fresh claim; the new claim invalidates old execution writes. Completing a run releases the lease but permits evidence attachment until a subsequent claim supersedes it. A person can force-release from the Claim panel. Existing pre-token leases must expire or be released; their tokens cannot be recovered from context.
 
 ## Work-graph norm v1 (INV-718)
 
@@ -111,14 +111,14 @@ Agent credentials carry scopes. Scope enforcement happens on MCP tools:
 
 | Scope | Unlocks |
 |---|---|
-| \`read\` | \`work_catalog\`, \`work_read_page\`, \`work_search\`, \`work_get_context\`, \`work_list_ready\`, \`protocol_get_guide\` (always granted) |
+| \`read\` | \`work_catalog\`, \`work_search\`, \`work_get_context\` (with \`section\` for one paginated section), \`work_list_ready\`, \`agent_inbox\`, \`protocol_get_guide\` (always granted) |
 | \`propose\` | \`work_propose\`, \`work_file_bug\`, \`work_propose_amendment\` |
 | \`update\` | \`work_update\`, \`work_comment\` |
-| \`link\` | \`work_link\`, \`work_unlink\` |
-| \`claim\` | \`work_claim\` |
-| \`report\` | \`run_report\`, \`evidence_attach\` |
+| \`link\` | \`work_relate\` (action \`link\` / \`unlink\`) |
+| \`claim\` | \`work_claim\` (action \`claim\` / \`release\`) |
+| \`report\` | \`run_report\`, \`evidence\` (action \`attach\` / \`retract\`) |
 
-\`work_commit\` has no scope: it is gated on actor kind (humans only), not tokens.
+Tools are grouped (INV-1046): a pair or family is one tool with an \`action\` argument — \`work_relate\`, \`work_view\`, \`work_claim\`, \`evidence\`, \`agent_request\`, \`delivery\`, \`executor\`. Where a default is named, the old call shape still works (\`work_claim(id)\` claims). The old names (\`work_link\`, \`evidence_attach\`, \`work_claim_release\`, \`agent_request_claim\`, \`work_executor_update\`, …) stay callable for one version and answer with a \`deprecated\` note; \`notification_mark_read\` became \`agent_inbox(ack: [...])\` and \`work_read_page\` became \`work_get_context(id, section, after)\`. \`tools/list\` is cut to what the credential can run: an agent never sees \`work_commit\` / \`work_uncommit\`, which are gated on actor kind (humans only), not tokens.
 
 ## Four state machines (do not collapse them)
 
@@ -147,7 +147,7 @@ Work nodes carry a delivery contract (\`outcome\`, \`scope\`, \`constraints\`,
 
 Read-only:
 - \`work_search\` — search through the same keyword, segmentation, full-text and semantic ranking as the UI. Pass \`paginate: true\` for \`{nodes, pageInfo}\`; repeat the same query/filter with \`after: pageInfo.endCursor\` while \`hasNextPage\`. Without pagination the legacy array is preserved. Pages are live, exclude previously returned IDs, recheck access, and expire after one hour. Semantic recall remains bounded by the shared search policy.
-- \`work_get_context\` — load the contract bundle, ancestors, blockers and active claim. The \`pages\` object provides continuation for children, typed links, comments, audits, runs, evidence, verifications, reviews and amendments; use \`work_read_page(id, section, after)\` until exhausted.
+- \`work_get_context\` — load the contract bundle, ancestors, blockers and active claim. The \`pages\` object provides continuation for children, typed links, comments, audits, runs, evidence, verifications, reviews and amendments; use \`work_get_context(id, section, after)\` until exhausted.
 - \`work_list_ready\` — list committed, unblocked, unclaimed work in urgency order; continue with \`after: pageInfo.endCursor\`.
 - \`work_catalog\` — page visible teams, states, labels, actors and cycles. Use kind \`capabilities\` for credential scopes and actor restrictions; each mutation still checks current work access and lifecycle.
 - \`protocol_get_guide\` — fetch this document verbatim.
@@ -158,12 +158,13 @@ Write:
 - \`work_update\` — update fields with \`expected_revision\`. Omitted fields remain unchanged; nullable fields accept null to clear. \`label_ids\` replaces the set (empty clears); kind, cycle_id and alias use the same validation as the editor. On committed work agents cannot change the contract (acceptance, scope, verification, outcome, constraints).
 - \`work_comment\` — append as the authenticated actor; optional parent_comment_id replies to a comment. Supply idempotency_key for safe retries (same key with different content is refused).
 - \`work_propose_amendment\` — propose a change to a committed contract: the fields, their new values and a reason. A person accepts it (applied as their own edit) or rejects it with a note on the issue page; the outcome shows in \`work_get_context\` (\`contractAmendments\`). Use this instead of asking a person to retype a fix.
-- \`work_link\` — create typed work link.
-- \`work_unlink\` — remove a directed non-CONTAINS relation by from_id, to_id and type; requires write access to both endpoints. Use before replacing a reversed BLOCKS edge.
+- \`work_relate\` — \`action: 'link'\` creates a typed work link; \`action: 'unlink'\` removes a directed non-CONTAINS relation by from_id, to_id and type (write access to both endpoints). Unlink before replacing a reversed BLOCKS edge.
 - Move existing work with \`work_update(parent_id, expected_revision)\`; identifiers and UUIDs are accepted. Graph hierarchy, repository, team and cycle constraints still apply.
-- \`work_claim\` — atomically claim committed work for the current agent actor.
+- \`work_claim\` — atomically claim committed work for the current agent actor; \`action: 'release'\` yields your own lease with a reason.
 - \`run_report\` — report run status (queued / running / blocked / completed). Completed moves to In Review.
-- \`evidence_attach\` — attach PR, test, log, or artifact URL to a run.
+- \`evidence\` — \`action: 'attach'\` (default) adds a PR, test, log, or artifact URL to a run; \`action: 'retract'\` withdraws your own unaccepted evidence with a reason.
+- \`agent_request\` — \`action: 'claim'\` leases a request from \`agent_inbox\`, \`action: 'answer'\` replies.
+- \`delivery\` / \`executor\` — delivery packages and the external executor protocol, each with \`action: 'context'\` (default, read) and the write actions (\`propose\`, \`execution_create\`; \`update\`).
 
 Human-only (delegated CLI or Web UI):
 - \`work_commit\` / \`pnpm candidates:batch-commit\`

@@ -133,7 +133,7 @@ async function dispatchMcpMethod(
       return {};
     case 'tools/list':
       return {
-        tools: listMcpTools(readonly).map((tool) => ({
+        tools: listMcpTools(readonly, context).map((tool) => ({
           name: tool.name,
           description: tool.description,
           inputSchema: tool.inputSchema,

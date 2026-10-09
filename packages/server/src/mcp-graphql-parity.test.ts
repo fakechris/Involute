@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { listMcpTools, WRITE_MCP_TOOLS, type McpToolDefinition } from './mcp-tools.ts';
+import { listMcpActions, WRITE_MCP_TOOLS, type McpToolDefinition } from './mcp-tools.ts';
 import { createGraphQLSchema } from './schema.ts';
 
 // INV-795: the MCP tools and the GraphQL mutations the web app uses are kept by
@@ -134,7 +134,7 @@ function missingInMcp(tool: McpToolDefinition, mutations: Fields): string[] {
 
 describe('MCP and GraphQL write inputs (INV-795)', () => {
   const mutations = createGraphQLSchema(null as never).getMutationType()!.getFields() as unknown as Fields;
-  const tools = listMcpTools(false);
+  const tools = listMcpActions(false);
 
   it('pairs every MCP write tool with a GraphQL mutation or says why it is agent-only', () => {
     const unpaired = WRITE_MCP_TOOLS.filter((name) => !PAIRS[name] && !AGENT_ONLY_TOOLS[name]);
@@ -181,7 +181,7 @@ describe('MCP and GraphQL write inputs (INV-795)', () => {
 
   // INV-1004: the read side, field semantics and the decisions behind exemptions.
   const queries = createGraphQLSchema(null as never).getQueryType()!.getFields() as unknown as Record<string, unknown>;
-  const readTools = new Set(listMcpTools(false).filter((tool) => tool.annotations?.readOnlyHint).map((tool) => tool.name));
+  const readTools = new Set(listMcpActions(false).filter((tool) => tool.annotations?.readOnlyHint).map((tool) => tool.name));
 
   it('pairs every GraphQL query with a MCP read tool or an exemption, and every read tool with a query', () => {
     expect(queryCoverageProblems(queries, readTools)).toEqual([]);

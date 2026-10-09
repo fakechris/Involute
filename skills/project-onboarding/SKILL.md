@@ -5,7 +5,7 @@ description: Use when onboarding a repository to Involute. Discovers existing TO
 
 # Project Onboarding (Involute Work-Graph Blueprint)
 
-Tool dependencies: `work_search`, `work_propose`, `work_link`, `work_get_context`, `work_list_ready`, `work_claim`, `run_report`, `evidence_attach`.
+Tool dependencies: `work_search`, `work_propose`, `work_relate`, `work_get_context`, `work_list_ready`, `work_claim`, `run_report`, `evidence_attach`.
 
 ## When to use
 
@@ -122,6 +122,6 @@ Print a structured summary for the human operator:
 - **Direct 1-Pass State (Zero-friction path)**:
   Items proposed with `initial_state: 'REVIEW'` land **directly in `In Review`** the moment they are committed. No secondary manual promotion is needed!
 - **Evidence Attachment**:
-  For items in `In Review`, agents should attach test suites or verification evidence via `evidence_attach` with `kind: "test"` or `"pr"` (passing test suite path or PR URL).
+  For items in `In Review`, agents should attach test suites or verification evidence via `evidence` (action `attach`) with `kind: "test"` or `"pr"` (passing test suite path or PR URL).
 - **Fallback for unaligned items**:
   If any completed item was mistakenly committed into `Ready`, immediately advance it via `work_claim` -> `run_report(completed)` -> `evidence_attach` to move it to **`In Review`**. Only truly unstarted items remain in **`Ready`**.
