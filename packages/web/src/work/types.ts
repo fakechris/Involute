@@ -268,6 +268,8 @@ export interface CandidatesPageQueryData {
 export interface CandidatesPageQueryVariables {
   first: number;
   after?: string;
+  /** IQL from the shared filter bar (INV-1077). */
+  query?: string | null;
   teamFilter?: {
     key?: {
       eq: string;

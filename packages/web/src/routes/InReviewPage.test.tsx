@@ -227,4 +227,19 @@ describe('InReviewPage', () => {
     const calls = (useQuery as unknown as { mock: { calls: Array<[unknown, { variables: { filter: Record<string, unknown> } }]> } }).mock.calls;
     expect(calls.some(([, options]) => (options.variables.filter as { repository?: { eq: string } }).repository?.eq === 'fakechris/Involute')).toBe(true);
   });
+
+  it('narrows the queue with the shared filter bar on top of the IQL view (INV-1077)', async () => {
+    const { useQuery } = await import('@apollo/client/react');
+    render(
+      <MemoryRouter initialEntries={['/in-review?project=fakechris/Involute']}>
+        <InReviewPage />
+      </MemoryRouter>,
+    );
+    fireEvent.change(screen.getByLabelText('Filter by type'), { target: { value: 'bug' } });
+    fireEvent.change(screen.getByLabelText('Filter by priority'), { target: { value: '1' } });
+    const calls = (useQuery as unknown as { mock: { calls: Array<[unknown, { variables: { query?: string | null; filter: { repository?: { eq: string } } } }]> } }).mock.calls;
+    const last = calls.filter(([, options]) => options.variables.filter.repository?.eq === 'fakechris/Involute').at(-1)!;
+    expect(last[1].variables.query).toMatch(/^state:"In Review".* label:bug priority:1$/);
+  });
 });
+

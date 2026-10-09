@@ -8,6 +8,7 @@ import { recordCommitGesture, recordFieldGesture, type CommitUndoItem } from '..
 import { selectCandidatesEventName } from '../undo/CommitUndoHost';
 import { IcoCheck, IcoClose } from '../components/Icons';
 import { Btn } from '../components/Primitives';
+import { filtersToIql, useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { PlacementPicker } from '../components/PlacementPicker';
 import type { CreatePlacement } from '../work/placement';
 import {
@@ -808,8 +809,10 @@ export function CandidatesPage() {
   const teamKey = readStoredTeamKey();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedProject = searchParams.get('project');
-  // Bug triage (INV-750): only candidates carrying Type: Bug.
-  const bugsOnly = searchParams.get('type') === 'bug';
+  // Shared batch filters (INV-1077); ?type=bug keeps working for bug triage (INV-750).
+  const workFilters = useWorkFilters(() => setSelectedIds([]));
+  const bugsOnly = workFilters.filters.type === 'bug';
+  const filterIql = filtersToIql(workFilters.filters);
   // Rejected work, to review and restore (INV-792).
   const showRejected = searchParams.get('view') === 'rejected';
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -863,11 +866,11 @@ export function CandidatesPage() {
       variables: {
         first: 100,
         teamFilter: teamKey ? { key: { eq: teamKey } } : null,
+        query: filterIql || null,
         filter: {
           commitmentStatus: 'CANDIDATE',
           ...(teamKey ? { team: { key: { eq: teamKey } } } : {}),
           ...(repositoryFilter ? { repository: repositoryFilter } : {}),
-          ...(bugsOnly ? { labels: { some: { name: { in: ['bug', 'Bug', 'BUG'] } } } } : {}),
         },
       },
     },
@@ -1160,21 +1163,6 @@ export function CandidatesPage() {
         <span className="mono observation-count">{currentProjectTotal}</span>
         <button
           type="button"
-          className={`board-project-pill${bugsOnly ? ' board-project-pill--active' : ''}`}
-          aria-pressed={bugsOnly}
-          onClick={() =>
-            setSearchParams((previous) => {
-              const next = new URLSearchParams(previous);
-              if (bugsOnly) next.delete('type');
-              else next.set('type', 'bug');
-              return next;
-            })
-          }
-        >
-          Bugs only
-        </button>
-        <button
-          type="button"
           className={`board-project-pill${showRejected ? ' board-project-pill--active' : ''}`}
           aria-pressed={showRejected}
           onClick={() =>
@@ -1192,6 +1180,7 @@ export function CandidatesPage() {
         <span className="observation-hint">Proposed work waits here until a human commits it.</span>
       </div>
 
+      {!showRejected ? <WorkFilterBar {...workFilters} /> : null}
       {repositories.length > 0 || noRepoCount > 0 ? (
         <div className="board-project-pills" role="tablist" aria-label="Project switcher" style={{ padding: '0 24px 8px' }}>
           <button

@@ -6630,3 +6630,33 @@ a.bugs-stat {
 .admin-invite__result p {
   margin: 0 0 6px;
 }
+
+/* Shared batch-decision filters on /in-review and /candidates (INV-1077). */
+.work-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 0 24px 8px;
+}
+.work-filter-bar select,
+.work-filter-bar input {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--border, #d0d4da);
+  border-radius: 6px;
+  background: var(--surface, transparent);
+  color: inherit;
+}
+.work-filter-bar input {
+  min-width: 200px;
+}
+.work-filter-bar__clear {
+  font: inherit;
+  font-size: 12px;
+  background: none;
+  border: none;
+  color: var(--accent, #5b8def);
+  cursor: pointer;
+}
