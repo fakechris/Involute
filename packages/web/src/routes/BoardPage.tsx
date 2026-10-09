@@ -957,7 +957,7 @@ export function BoardPage() {
         if (boardSearchInputRef.current) {
           boardSearchInputRef.current.focus();
           boardSearchInputRef.current.select();
-        } else {
+        } else if (!isBacklogView) {
           pendingSearchFocusRef.current = true;
           setFilterBarVisible(true);
         }
@@ -2451,7 +2451,7 @@ export function BoardPage() {
           </select>
         ) : null}
         <Btn variant="ghost" icon={<IcoFilter size={14} />} size="sm" onClick={() => setFilterBarVisible((v) => !v)}>{filterBarVisible ? 'Hide filters' : 'Filter'}</Btn>
-        {!filterBarVisible && activeFilterCount > 0 ? (
+        {!isBacklogView && !filterBarVisible && activeFilterCount > 0 ? (
           <span className="board-filter-indicator" role="status">
             <button type="button" className="board-filter-indicator__open" onClick={() => setFilterBarVisible(true)}>
               {activeFilterCount} {activeFilterCount === 1 ? 'filter' : 'filters'}

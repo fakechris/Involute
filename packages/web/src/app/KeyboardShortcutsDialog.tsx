@@ -43,7 +43,7 @@ export const SHORTCUT_SECTIONS: ShortcutSection[] = [
       { id: 'act-undo', label: 'Undo', description: 'Revert the latest status change', keys: ['⌘', 'Z'] },
       { id: 'act-redo', label: 'Redo', description: 'Repeat the latest undone status change', keys: ['⇧', '⌘', 'Z'] },
       { id: 'act-palette', label: 'Command palette', description: 'Open search and action launcher', keys: ['⌘', 'K'] },
-      { id: 'act-search', label: 'Search in view', description: 'Open the filter bar and focus its search on the board or backlog', keys: ['/'] },
+      { id: 'act-search', label: 'Search in view', description: 'Open the board filter bar and focus its search', keys: ['/'] },
       { id: 'act-filter', label: 'Show / hide filters', description: 'Toggle the board filter bar', keys: ['F'] },
       { id: 'act-clear-filters', label: 'Clear all filters', description: 'Remove every board filter, search text and project', keys: ['⇧', 'F'] },
       { id: 'act-number', label: 'Find by issue number', description: 'Type a digit on the board to filter by identifier number', keys: ['0–9'] },
