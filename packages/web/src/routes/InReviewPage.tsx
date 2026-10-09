@@ -1,11 +1,11 @@
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
 import { IcoCheck, IcoClose, IcoFilter } from '../components/Icons';
 import { Btn } from '../components/Primitives';
-import { IN_REVIEW_PAGE_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
+import { IN_REVIEW_PAGE_QUERY, IN_REVIEW_PROJECTS_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
 import type {
   InReviewPageQueryData,
   InReviewPageQueryVariables,
@@ -44,18 +44,22 @@ function formatWaitDays(waitMs: number): string {
   return hours >= 1 ? `${hours}h` : '<1h';
 }
 
-function buildFilter(teamKey: string | null): InReviewPageQueryVariables['filter'] {
+function buildFilter(teamKey: string | null, repository: string | null = null): InReviewPageQueryVariables['filter'] {
   return {
     commitmentStatus: 'COMMITTED',
     // By type: an admin may rename the state (INV-797).
     state: { type: { eq: 'REVIEW' } },
     ...(teamKey ? { team: { key: { eq: teamKey } } } : {}),
-  };
+    // One project at a time, so "Select all" never reaches into another (INV-1076).
+    ...(repository ? { repository: { eq: repository } } : {}),
+  } as InReviewPageQueryVariables['filter'];
 }
 
 export function InReviewPage() {
   const navigate = useNavigate();
   const teamKey = readStoredTeamKey();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedProject = searchParams.get('project');
   const [iqlDraft, setIqlDraft] = useState(readStoredIql);
   const [activeIql, setActiveIql] = useState(readStoredIql);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -70,9 +74,31 @@ export function InReviewPage() {
 
   const queryVariables: InReviewPageQueryVariables = {
     first: 50,
-    filter: buildFilter(teamKey),
+    filter: buildFilter(teamKey, selectedProject),
     query: activeIql.trim() || null,
   };
+  const { data: projectData } = useQuery<{ issues?: { nodes: Array<{ id: string; repository: string | null }> } }>(IN_REVIEW_PROJECTS_QUERY, {
+    variables: { filter: buildFilter(teamKey), query: activeIql.trim() || null },
+    fetchPolicy: 'cache-and-network',
+  });
+  const projectCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const node of projectData?.issues?.nodes ?? []) {
+      if (node.repository) counts.set(node.repository, (counts.get(node.repository) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [projectData]);
+  const allCount = projectData?.issues?.nodes?.length ?? 0;
+  function selectProject(repo: string | null) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (repo) next.set('project', repo);
+      else next.delete('project');
+      return next;
+    });
+    setSelectedIds([]);
+    setBulkError(null);
+  }
 
   const { data, error, fetchMore, loading, refetch } = useQuery<
     InReviewPageQueryData,
@@ -231,6 +257,33 @@ export function InReviewPage() {
       </div>
 
       <div className="page-content observation-content">
+        {projectCounts.length > 0 ? (
+          <div className="board-project-pills" role="tablist" aria-label="Project switcher">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={!selectedProject}
+              className={`board-project-pill${!selectedProject ? ' board-project-pill--active' : ''}`}
+              onClick={() => selectProject(null)}
+            >
+              <span className="board-project-pill__name">All Projects</span>
+              <span className="board-project-pill__count">{allCount}</span>
+            </button>
+            {projectCounts.map(([repo, count]) => (
+              <button
+                key={repo}
+                type="button"
+                role="tab"
+                aria-selected={selectedProject === repo}
+                className={`board-project-pill${selectedProject === repo ? ' board-project-pill--active' : ''}`}
+                onClick={() => selectProject(repo)}
+              >
+                <span className="board-project-pill__name">{repo}</span>
+                <span className="board-project-pill__count">{count}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
         <section className="in-review-filter" aria-label="In Review filter">
           <label className="observation-field observation-field--inline">
             <span>

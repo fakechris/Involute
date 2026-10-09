@@ -58,6 +58,7 @@ export const IQL_FIELDS = [
   'updated',
   'link',
   'has',
+  'project',
 ] as const;
 
 export type IqlField = (typeof IQL_FIELDS)[number];

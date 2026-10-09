@@ -1301,6 +1301,9 @@ link:blocked-by:none has:contract -state:done "free text"
   within the last 30 days".
 - `link:<type>:<identifier|none>` matches incoming links of that type, where
   `none` means "no incoming link of this type from unresolved work".
+- `project:<name|owner/repo|PROJECT identifier>` (INV-1076) matches work whose
+  repository is that project (`project:cangkuyi`, `project:fakechris/cangkuyi`), or that
+  sits up to three levels under that PROJECT (`project:INV-1026`).
 - Parse failures return GraphQL errors with `extensions.code = 'IQL_PARSE'`;
   they are never silently swallowed.
 

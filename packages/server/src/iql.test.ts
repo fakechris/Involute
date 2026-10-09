@@ -113,6 +113,20 @@ describe('IQL filtering across surfaces', () => {
     expect(result.body.data.issues.nodes.map((node: { identifier: string }) => node.identifier)).toEqual(['IQL-1']);
   });
 
+  it('filters by project: repository name, owner/repo, or PROJECT identifier (INV-1076)', async () => {
+    const project = await prisma.issue.create({ data: { teamId: team.id, identifier: 'IQL-9', title: 'fakechris/cangkuyi', kind: 'PROJECT', stateId: startedState.id, repository: 'fakechris/cangkuyi' } });
+    await prisma.issue.update({ where: { identifier: 'IQL-1' }, data: { repository: 'fakechris/cangkuyi', parentId: project.id } });
+    const ids = async (q: string) => {
+      const result = await postGraphQL('query($q: String) { issues(first: 10, query: $q) { nodes { identifier } } }', { q });
+      expect(result.body.errors, q).toBeUndefined();
+      return result.body.data.issues.nodes.map((node: { identifier: string }) => node.identifier).sort();
+    };
+    expect(await ids('project:cangkuyi kind:ISSUE')).toEqual(['IQL-1']);
+    expect(await ids('project:FakeChris/Cangkuyi kind:ISSUE')).toEqual(['IQL-1']);
+    expect(await ids('project:iql-9')).toEqual(['IQL-1']);
+    expect(await ids('project:elsewhere')).toEqual([]);
+  });
+
   it('matches free-text terms against titles', async () => {
     const result = await postGraphQL(
       'query($q: String) { issues(first: 10, query: $q) { nodes { identifier } } }',
