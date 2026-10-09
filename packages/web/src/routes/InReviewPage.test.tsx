@@ -241,5 +241,16 @@ describe('InReviewPage', () => {
     const last = calls.filter(([, options]) => options.variables.filter.repository?.eq === 'fakechris/Involute').at(-1)!;
     expect(last[1].variables.query).toMatch(/^state:"In Review".* label:bug priority:1$/);
   });
+
+  it('says why the Auto-Accept Gate left a bug for a person (INV-1075)', () => {
+    (reviewItems[0] as Record<string, unknown>).autoAccept = { outcome: 'SKIPPED', accepted: false, createdAt: '2026-10-09T10:00:00.000Z', reasons: ['the fix commit has no CI checks (NO_CHECKS)'] };
+    render(
+      <MemoryRouter>
+        <InReviewPage />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/not auto-accepted: the fix commit has no CI checks/)).toBeInTheDocument();
+    delete (reviewItems[0] as Record<string, unknown>).autoAccept;
+  });
 });
 

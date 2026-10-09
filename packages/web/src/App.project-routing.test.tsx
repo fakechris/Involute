@@ -50,7 +50,7 @@ describe('project routing settings', () => {
     fireEvent.change(within(dialog).getByLabelText('Reference alias'), { target: { value: 'lum' } });
     expect(within(dialog).getByText('LUM-123')).toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText('GitHub repository'), { target: { value: 'fakechris/lumenbox-next' } });
-    fireEvent.click(within(dialog).getByRole('checkbox', { hidden: true }));
+    fireEvent.click(within(dialog).getByLabelText(/Move the project/));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save', hidden: true }));
 
     await waitFor(() => expect(issueUpdate).toHaveBeenCalled());
@@ -104,5 +104,17 @@ describe('project routing settings', () => {
     await waitFor(() => expect(issueUpdate).toHaveBeenCalled());
     expect(issueCreate.mock.calls[0]![0].variables.input).toMatchObject({ kind: 'PROJECT', repository: 'fakechris/widgets' });
     expect(issueUpdate.mock.calls[0]![0].variables).toEqual({ id: 'proj-new', input: { alias: 'WID' } });
+  });
+
+  it('turns on auto-accept of verified bug fixes for the project (INV-1075)', async () => {
+    const issueUpdate = vi.fn().mockResolvedValue({ data: { issueUpdate: { success: true, message: null, issue: null } } });
+    mockMutations({ issueUpdate });
+    const dialog = await openEdit();
+    const toggle = within(dialog).getByLabelText('Auto-accept verified bug fixes');
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save', hidden: true }));
+    await waitFor(() => expect(issueUpdate).toHaveBeenCalled());
+    expect(issueUpdate.mock.calls[0]![0].variables.input).toMatchObject({ autoAcceptBugs: true });
   });
 });

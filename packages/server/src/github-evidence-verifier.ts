@@ -71,6 +71,9 @@ export function configuredGitHubVerifier(): GitHubVerifierOptions {
   return {
     repositories,
     async installationToken(repository) {
+      // A read-only fine-grained token is the simple setup; the GitHub App is the scoped one (INV-1075).
+      const staticToken = process.env.GITHUB_VERIFICATION_TOKEN;
+      if (staticToken && repositories.has(repository)) return staticToken;
       const appId = process.env.GITHUB_VERIFICATION_APP_ID;
       const installationId = process.env.GITHUB_VERIFICATION_INSTALLATION_ID;
       const keyPath = process.env.GITHUB_VERIFICATION_PRIVATE_KEY_PATH;
@@ -177,6 +180,65 @@ export async function verifyGitHubEvidence(input: VerificationRequest, options: 
     return { ...result, status: 'VERIFIED' };
   } catch (error) {
     return { ...result, covered: [], status: error instanceof VerificationError ? error.status : 'UNAVAILABLE',
+      failureCode: error instanceof VerificationError ? error.code : 'GITHUB_UNAVAILABLE' };
+  }
+}
+
+export interface BugFixRequest {
+  repository: string;
+  commitSha: string;
+  /** When the run named a PR, it must be merged with this head; otherwise the commit must be on the default branch. */
+  pullRequestNumber: number | null;
+}
+
+export interface BugFixObservation {
+  status: EvidenceVerificationStatus;
+  failureCode: string | null;
+  source: JsonObject;
+  checks: Array<{ name: string; conclusion: string | null }>;
+}
+
+/**
+ * Did GitHub land this fix (INV-1075)? Positive facts only from the API: the
+ * PR is merged with the run's head, or the commit is an ancestor of the
+ * default branch; and the commit has at least one check run, all completed
+ * and none failed. Anything else is a reason to leave the work for a person.
+ */
+export async function verifyBugFix(input: BugFixRequest, options: GitHubVerifierOptions): Promise<BugFixObservation> {
+  const result: BugFixObservation = { status: 'UNAVAILABLE', failureCode: null, source: {}, checks: [] };
+  try {
+    if (!REPOSITORY_PATTERN.test(input.repository) || !options.repositories.has(input.repository)) throw new VerificationError('SOURCE_NOT_ALLOWED');
+    if (!SHA_PATTERN.test(input.commitSha)) throw new VerificationError('EXECUTION_NOT_BOUND');
+    const token = await options.installationToken(input.repository);
+    if (!token) throw new VerificationError('VERIFIER_NOT_CONFIGURED');
+    const get = async (path: string) => object(await githubJson(options.fetch ?? fetch, `/repos/${input.repository}${path}`, token));
+    if (input.pullRequestNumber) {
+      const pr = await get(`/pulls/${input.pullRequestNumber}`);
+      if (pr.number !== input.pullRequestNumber || object(object(pr.base).repo).full_name !== input.repository) throw new VerificationError('PR_MISMATCH', 'FAILED');
+      if (object(pr.head).sha !== input.commitSha) throw new VerificationError('HEAD_CHANGED', 'STALE');
+      if (pr.merged !== true) throw new VerificationError('PR_NOT_MERGED', 'PENDING');
+      result.source = { mode: 'pr', prNumber: input.pullRequestNumber, mergeSha: typeof pr.merge_commit_sha === 'string' ? pr.merge_commit_sha : null };
+    } else {
+      const repo = await get('');
+      const branch = typeof repo.default_branch === 'string' ? repo.default_branch : null;
+      if (!branch) throw new VerificationError('INVALID_RESPONSE');
+      const compare = await get(`/compare/${encodeURIComponent(branch)}...${input.commitSha}`);
+      // "behind"/"identical": the commit is already contained in the default branch.
+      if (compare.status !== 'behind' && compare.status !== 'identical') throw new VerificationError('COMMIT_NOT_ON_DEFAULT_BRANCH', 'PENDING');
+      result.source = { mode: 'branch', defaultBranch: branch };
+    }
+    const runs = await get(`/commits/${input.commitSha}/check-runs?per_page=100`);
+    if (!Array.isArray(runs.check_runs) || !Number.isSafeInteger(runs.total_count)) throw new VerificationError('INVALID_RESPONSE');
+    const checkRuns = runs.check_runs.map(object);
+    result.checks = checkRuns.map((run) => ({ name: String(run.name ?? ''), conclusion: typeof run.conclusion === 'string' ? run.conclusion : null }));
+    if (Number(runs.total_count) === 0) throw new VerificationError('NO_CHECKS', 'FAILED');
+    if (Number(runs.total_count) > checkRuns.length) throw new VerificationError('INCOMPLETE_CHECK_PAGE');
+    if (checkRuns.some((run) => run.conclusion && !['success', 'skipped', 'neutral'].includes(String(run.conclusion)))) throw new VerificationError('CHECK_FAILED', 'FAILED');
+    if (checkRuns.some((run) => run.status !== 'completed' || !run.conclusion)) throw new VerificationError('CHECK_PENDING', 'PENDING');
+    if (!checkRuns.some((run) => run.conclusion === 'success')) throw new VerificationError('NO_PASSING_CHECK', 'FAILED');
+    return { ...result, status: 'VERIFIED' };
+  } catch (error) {
+    return { ...result, status: error instanceof VerificationError ? error.status : 'UNAVAILABLE',
       failureCode: error instanceof VerificationError ? error.code : 'GITHUB_UNAVAILABLE' };
   }
 }

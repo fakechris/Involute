@@ -39,6 +39,9 @@ import { enqueueWorkEvent } from './event-outbox.js';
 import { openAgentRequestsForMentions } from './agent-request-from-mention.js';
 import { assertNodeHierarchy, getContainsDescendantIds, lockWorkGraph } from './graph-integrity.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
+
+export const AUTO_ACCEPT_BUGS_HUMAN_ONLY_MESSAGE = 'Only a person can turn automatic acceptance of verified bug fixes on or off.';
+export const AUTO_ACCEPT_BUGS_PROJECT_ONLY_MESSAGE = 'Automatic acceptance of verified bug fixes is set on a PROJECT.';
 import { writeWorkTombstone } from './work-tombstone.js';
 import { assertSingleType, isBugWork, isResearchWork } from './labels.js';
 import { assertAgentMayCloseResearch, RESEARCH_CLOSE_REASON } from './research-closure.js';
@@ -75,6 +78,7 @@ export interface CreateIssueInput {
 export interface UpdateIssueInput {
   acceptance?: string | null;
   alias?: string | null;
+  autoAcceptBugs?: boolean | null;
   assigneeId?: string | null;
   cascadeRepository?: boolean | null;
   constraints?: string | null;
@@ -532,6 +536,13 @@ export async function updateIssue(
 
     if ('alias' in input) {
       data.alias = await validProjectAlias(transaction, existingIssue, input);
+    }
+
+    if ('autoAcceptBugs' in input && input.autoAcceptBugs !== undefined && input.autoAcceptBugs !== null) {
+      // A person decides whether verified fixes may close themselves (INV-1075).
+      if (actor.actorKind !== 'HUMAN') throw createValidationError(AUTO_ACCEPT_BUGS_HUMAN_ONLY_MESSAGE);
+      if ((('kind' in input && input.kind) || existingIssue.kind) !== 'PROJECT') throw createValidationError(AUTO_ACCEPT_BUGS_PROJECT_ONLY_MESSAGE);
+      data.autoAcceptBugs = input.autoAcceptBugs;
     }
 
     if ('kind' in input && input.kind) {

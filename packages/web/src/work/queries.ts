@@ -130,6 +130,12 @@ export const IN_REVIEW_PAGE_QUERY = gql`
         pendingContractAmendment {
           id
         }
+        autoAccept {
+          outcome
+          reasons
+          accepted
+          createdAt
+        }
         reviewWait {
           since
           waitMs

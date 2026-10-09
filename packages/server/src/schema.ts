@@ -166,6 +166,7 @@ import { suggestedBranchName } from './branch-name.js';
 import { createWorkLink, deleteWorkLink, listIncidentLinks } from './link-service.js';
 import { writeActorFromViewer } from './work-service.js';
 import { findWorkTombstone, isTombstoneExpired, restoreDeletedIssue, TOMBSTONE_EXPIRED_MESSAGE, TOMBSTONE_NOT_FOUND_MESSAGE } from './work-tombstone.js';
+import { BUG_GATE_SOURCE } from './bug-auto-accept.js';
 import { getUploadsDirectory } from './uploads.js';
 import { loadProjectWorkGraph, type ProjectWorkGraph } from './work-graph-view.js';
 import { loadWorkTimelines } from './work-timeline.js';
@@ -1034,6 +1035,9 @@ const typeDefs = /* GraphQL */ `
     verification: String
     repository: String
     alias: String
+    autoAcceptBugs: Boolean!
+    "Latest automatic-acceptance evaluation of this work, if any (INV-1075)."
+    autoAccept: AutoAcceptEvaluation
     links(type: WorkLinkType): WorkLinkConnection!
     """
     Committed work that still blocks this item: incoming BLOCKS links whose
@@ -1901,6 +1905,8 @@ const typeDefs = /* GraphQL */ `
     snoozedUntil: DateTime
     kind: WorkKind
     alias: String
+    "On a PROJECT: accept bugs whose fix GitHub confirms (merged, checks green). People only (INV-1075)."
+    autoAcceptBugs: Boolean
     repository: String
     cascadeRepository: Boolean
     # Contract fields. Humans may rewrite them on committed work; agents are
@@ -2001,6 +2007,15 @@ const typeDefs = /* GraphQL */ `
     issueId: ID
     "Why the mutation was refused; null on success."
     message: String
+  }
+
+  type AutoAcceptEvaluation {
+    outcome: String!
+    tier: String!
+    reasons: [String!]!
+    createdAt: DateTime!
+    "True when the gate accepted the work (moved it to Done)."
+    accepted: Boolean!
   }
 
   type IssueUndeletePayload {
@@ -4998,6 +5013,13 @@ const resolvers = {
         select: { reason: true },
       });
       return audit?.reason ?? null;
+    },
+    autoAccept: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
+      const evaluation = await context.prisma.workAutoAcceptEvaluation.findFirst({
+        where: { workId: parent.id, signals: { path: ['source'], equals: BUG_GATE_SOURCE } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+      return evaluation ? { outcome: evaluation.outcome, tier: evaluation.tier, reasons: evaluation.reasons, createdAt: evaluation.createdAt, accepted: evaluation.outcome === 'ACCEPTED' } : null;
     },
     reviewWait: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
       if (parent.commitmentStatus !== 'COMMITTED') return null;

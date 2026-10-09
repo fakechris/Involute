@@ -43,6 +43,7 @@ Configure these server environment variables using the deployment's secret stora
 - `GITHUB_VERIFICATION_REPOSITORIES`: exact, comma-separated `owner/repo` allowlist.
 - `GITHUB_VERIFICATION_APP_ID` and `GITHUB_VERIFICATION_INSTALLATION_ID`.
 - `GITHUB_VERIFICATION_PRIVATE_KEY_PATH`: mounted private-key file, never a repository file.
+- Or, instead of the App: `GITHUB_VERIFICATION_TOKEN`, a fine-grained read-only token (Contents, Pull requests, Checks: read) for the allow-listed repositories. Server environment only (INV-1075).
 - `EVIDENCE_VERIFIER_ENABLED=true`: opt in to background observation. Default is disabled.
 
 The App installation needs read access to Actions, pull requests and contents. The service mints short-lived installation tokens restricted to the requested repository; it does not reuse a client token or the general sync token. Credentials, raw HTTP errors and response bodies are excluded from observation/error logs.
@@ -54,6 +55,16 @@ pnpm --filter @turnkeyai/involute-server evidence:verify <evidence-uuid>
 ```
 
 This operator command is not an MCP/GraphQL mutation. It appends observations and cannot accept work. Exit 0 means the source observation is VERIFIED, **not** that the whole work contract is satisfied. Exit 2 means another observation status; exit 1 means invocation or execution failed.
+
+## Bugs that close themselves (INV-1075)
+
+A PROJECT can turn on **Auto-accept verified bug fixes** (Projects page → Edit; GraphQL `issueUpdate(input: { autoAcceptBugs })`, people only — agents are refused and MCP has no such field). Every five minutes the Auto-Accept Gate looks at committed Type: Bug issues of that repository sitting in Review and asks GitHub, never the agent:
+
+- the latest run is COMPLETED with a commit sha;
+- with a PR number: the PR is merged and its head is that sha; without one: the commit is already on the default branch (`compare` says `behind` or `identical`);
+- the commit has at least one check run, all completed, none failed, at least one success.
+
+All true: the bug moves to Done as the SERVICE actor **Auto-Accept Gate** (`work.accepted`, audit, the run's agent is notified; the decision reason names the PR or commit). Anything else leaves it in Review, and `Issue.autoAccept` / `/in-review` say why (`NO_CHECKS`, `PR_NOT_MERGED`, `COMMIT_NOT_ON_DEFAULT_BRANCH`, `RATE_OR_PERMISSION_LIMIT`, …); the same run is asked again after 10 minutes. A person returned the run? It waits for a person. A person can move an auto-accepted bug back to Review from its issue page (**Return to Review**). The repository must be in `GITHUB_VERIFICATION_REPOSITORIES` with credentials configured, or every bug reports `VERIFIER_NOT_CONFIGURED`.
 
 ## Run the A→B relay locally (INV-994)
 
