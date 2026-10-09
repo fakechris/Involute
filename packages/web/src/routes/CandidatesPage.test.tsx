@@ -235,8 +235,17 @@ describe('CandidatesPage', () => {
     fireEvent.click(screen.getByLabelText(/Select all visible/));
     fireEvent.click(screen.getByRole('button', { name: /Batch Commit \(3\)/ }));
 
-    expect(await screen.findByText(/INV-77: needs acceptance criteria/)).toBeInTheDocument();
+    expect(await screen.findByText(/INV-77 needs acceptance criteria/)).toBeInTheDocument();
     expect(mockRunCommit).not.toHaveBeenCalled();
+    // The refusal points at the box to fill, and the card said so before (INV-1047).
+    const card = screen.getByRole('article', { name: 'INV-77 candidate' });
+    expect(within(card).getByText('Needs acceptance')).toBeInTheDocument();
+    const box = screen.getByLabelText('Acceptance for INV-77');
+    expect(box).toHaveFocus();
+    (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.click(screen.getByRole('button', { name: 'Fill acceptance for INV-77' }));
+    expect(box).toHaveFocus();
+    expect(card.className).toContain('observation-card--attention');
     queryDataHolder.current = null;
   });
 

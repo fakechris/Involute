@@ -4652,6 +4652,28 @@ kbd {
   margin-right: 8px;
 }
 
+/* A batch refusal names the card to fix; the button takes the person there (INV-1047). */
+.candidates-bulkbar__fix {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.observation-card--attention {
+  outline: 2px solid var(--accent, #5b8def);
+  outline-offset: 2px;
+  transition: outline-color 0.3s ease;
+}
+.observation-card__status--missing {
+  color: var(--danger, #c0392b);
+  border-color: currentColor;
+}
+
 .observation-card__repo {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   color: var(--accent);

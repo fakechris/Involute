@@ -373,6 +373,7 @@ function CandidateCard({
   states = [],
   otherCandidates,
   isSelected,
+  needsAttention = false,
   onToggleSelect,
   onCommitted,
   onRejected,
@@ -385,6 +386,8 @@ function CandidateCard({
   states?: Array<{ id: string; name: string; type: string }>;
   otherCandidates: CandidateWork[];
   isSelected?: boolean;
+  /** Briefly outlined after a batch refusal pointed at this card (INV-1047). */
+  needsAttention?: boolean;
   onToggleSelect?: (id: string) => void;
   onCommitted: () => void;
   onRejected: () => void;
@@ -573,8 +576,9 @@ function CandidateCard({
 
   return (
     <article
-      className={`observation-card${isSelected ? ' observation-card--selected' : ''}`}
+      className={`observation-card${isSelected ? ' observation-card--selected' : ''}${needsAttention ? ' observation-card--attention' : ''}`}
       aria-label={`${candidate.identifier} candidate`}
+      id={`candidate-${candidate.id}`}
     >
       <header className="observation-card__header">
         {onToggleSelect ? (
@@ -594,6 +598,11 @@ function CandidateCard({
           {candidate.identifier}
         </button>
         <span className="observation-card__status">{snoozed ? 'snoozed candidate' : 'candidate'}</span>
+        {!acceptance.trim() ? (
+          <span className="observation-card__status observation-card__status--missing" title="Committing needs acceptance criteria; fill the Acceptance box on this card.">
+            Needs acceptance
+          </span>
+        ) : null}
         {(() => {
           const badge = targetStateBadge(candidate);
           return badge ? (
@@ -633,6 +642,7 @@ function CandidateCard({
       <label className="observation-field">
         <span>Acceptance</span>
         <textarea
+          id={`acceptance-${candidate.id}`}
           aria-label={`Acceptance for ${candidate.identifier}`}
           value={acceptance}
           onChange={(event) => setAcceptance(event.target.value)}
@@ -818,6 +828,17 @@ export function CandidatesPage() {
   const [bulkAction, setBulkAction] = useState<'commit' | 'reject' | null>(null);
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
   const [bulkError, setBulkError] = useState<string | null>(null);
+  // Candidates a batch refused for a blank acceptance: each gets a button that
+  // takes the person to the box to fill (INV-1047).
+  const [acceptanceMissing, setAcceptanceMissing] = useState<CandidateWork[]>([]);
+  const [attentionId, setAttentionId] = useState<string | null>(null);
+  function focusAcceptance(candidate: CandidateWork) {
+    const box = document.getElementById(`acceptance-${candidate.id}`);
+    box?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    box?.focus();
+    setAttentionId(candidate.id);
+    window.setTimeout(() => setAttentionId((current) => (current === candidate.id ? null : current)), 2500);
+  }
   const [commitGlance, setCommitGlance] = useState<CommitGlanceState | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [paginationError, setPaginationError] = useState(false);
@@ -983,13 +1004,16 @@ export function CandidatesPage() {
     // let dozens of items through with no criteria at all (INV-998).
     const selectedNeedingAcceptance = candidates.filter((c) => selectedIds.includes(c.id) && !(c.acceptance ?? '').trim());
     if (selectedNeedingAcceptance.length > 0) {
+      setAcceptanceMissing(selectedNeedingAcceptance);
       setBulkError(
-        `Committed 0, failed ${selectedNeedingAcceptance.length}. ${selectedNeedingAcceptance
-          .map((c) => `${c.identifier}: needs acceptance criteria — open the card and commit it with the acceptance filled in.`)
-          .join(' · ')}`,
+        `Committed 0, failed ${selectedNeedingAcceptance.length}: ${selectedNeedingAcceptance
+          .map((c) => `${c.identifier} needs acceptance criteria`)
+          .join(' · ')}. Fill the Acceptance box on the card below, then Commit there or batch again.`,
       );
+      focusAcceptance(selectedNeedingAcceptance[0]!);
       return;
     }
+    setAcceptanceMissing([]);
     setIsBulkProcessing(true);
     setBulkAction('commit');
     setBulkError(null);
@@ -1276,6 +1300,7 @@ export function CandidatesPage() {
                 states={statesByTeam.get(candidate.team.id) ?? []}
                 otherCandidates={candidates.filter((other) => other.id !== candidate.id)}
                 isSelected={selectedIds.includes(candidate.id)}
+                needsAttention={attentionId === candidate.id}
                 onToggleSelect={toggleSelect}
                 onCommitted={() => void refetch()}
                 onRejected={() => void refetch()}
@@ -1308,7 +1333,21 @@ export function CandidatesPage() {
                   </label>
                 </div>
                 <div className="candidates-bulkbar__right">
-                  {bulkError ? <span className="candidates-bulkbar__error">{bulkError}</span> : null}
+                  {bulkError ? (
+                    <span className="candidates-bulkbar__error" role="alert">
+                      {bulkError}
+                      {acceptanceMissing.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="candidates-bulkbar__fix"
+                          onClick={() => focusAcceptance(c)}
+                        >
+                          Fill acceptance for {c.identifier}
+                        </button>
+                      ))}
+                    </span>
+                  ) : null}
                   <Btn
                     variant="accent"
                     icon={<IcoCheck size={14} />}
@@ -1352,6 +1391,7 @@ export function CandidatesPage() {
                     states={statesByTeam.get(candidate.team.id) ?? []}
                     otherCandidates={candidates.filter((other) => other.id !== candidate.id)}
                     isSelected={selectedIds.includes(candidate.id)}
+                    needsAttention={attentionId === candidate.id}
                     onToggleSelect={toggleSelect}
                     onCommitted={() => void refetch()}
                     onRejected={() => void refetch()}
