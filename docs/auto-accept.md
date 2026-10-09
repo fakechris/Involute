@@ -2,7 +2,7 @@
 
 ## Goal
 
-After `run_report` / `evidence_attach` move work to **In Review**, some work can
+After `run_report` / `evidence` (attach) move work to **In Review**, some work can
 move to **Done** without a full manual review when the evidence is *objectively*
 verifiable (checks green, PR merged, test exit 0, etc.).
 
@@ -64,7 +64,7 @@ Triggers (same DB transaction as the primary mutation when possible):
 - after a run reaches `COMPLETED` and work moves to In Review
 - after evidence is attached while work is already In Review
 
-Failures in the gate must not hide primary `run_report` / `evidence_attach`
+Failures in the gate must not hide primary `run_report` / `evidence` (attach)
 errors; evaluation errors are recorded as SKIPPED with reasons when feasible.
 
 ## Audit trail

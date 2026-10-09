@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
-import { READ_ONLY_MCP_TOOLS, WRITE_MCP_TOOLS } from './mcp-tools.ts';
+import { listMcpTools, READ_ONLY_MCP_TOOLS, WRITE_MCP_TOOLS } from './mcp-tools.ts';
 import { hashAgentToken } from './agent-credentials.ts';
 import { createGraphQLContext } from './auth.ts';
 import { searchWorkPage } from './work-search-page.ts';
@@ -69,13 +69,22 @@ describe('Involute MCP', () => {
     const allTools = await mcpRpc('/mcp', { method: 'tools/list', id: 2 });
     expect(allTools.status).toBe(200);
     const names = (allTools.body.result.tools as Array<{ name: string }>).map((tool) => tool.name);
-    expect(names).toEqual(expect.arrayContaining([...READ_ONLY_MCP_TOOLS, ...WRITE_MCP_TOOLS]));
+    // Every action is reachable: standing alone, or as an action of a grouped tool (INV-1046).
+    const listed = listMcpTools(false);
+    const reachable = new Set(listed.flatMap((tool) => tool.actions));
+    for (const action of [...READ_ONLY_MCP_TOOLS, ...WRITE_MCP_TOOLS]) {
+      if (action === 'notification_mark_read' || action === 'work_read_page') continue; // folded into agent_inbox / work_get_context
+      expect(reachable.has(action), action).toBe(true);
+    }
+    expect(names).toEqual(listed.map((tool) => tool.name));
+    expect(names).toContain('work_commit'); // a trusted system token may commit
 
     const readonlyTools = await mcpRpc('/mcp/readonly', { method: 'tools/list', id: 3 });
     const readonlyNames = (readonlyTools.body.result.tools as Array<{ name: string }>).map(
       (tool) => tool.name,
     );
-    expect(readonlyNames).toEqual([...READ_ONLY_MCP_TOOLS]);
+    expect(readonlyNames).toEqual(listMcpTools(true).map((tool) => tool.name));
+    expect(readonlyNames).not.toContain('work_relate');
 
     const blocked = await mcpRpc('/mcp/readonly', {
       id: 4,
@@ -162,7 +171,7 @@ describe('Involute MCP', () => {
       method: 'tools/list',
     }, token);
     expect(mcpResponse.status).toBe(200);
-    expect(mcpResponse.body.result.tools).toHaveLength(READ_ONLY_MCP_TOOLS.length);
+    expect(mcpResponse.body.result.tools).toHaveLength(listMcpTools(true).length);
 
     const graphqlResponse = await fetch(`${server.url}/graphql`, {
       method: 'POST',
@@ -428,6 +437,11 @@ describe('Involute MCP', () => {
     expect(stale.body.error).toBeDefined();
     expect((await prisma.issue.findUniqueOrThrow({ where: { id: child.id } })).parentId).toBe(parent.id);
     const link = await callTool('work_link', { from_id: parent.id, to_id: child.id, type: 'BLOCKS' });
+    // The old name still works for one version and says what to call instead (INV-1046).
+    expect(link.deprecated).toContain('work_relate');
+    const relisted = await callTool('work_relate', { action: 'link', from_id: parent.id, to_id: child.id, type: 'BLOCKS' });
+    expect(relisted.deprecated).toBeUndefined();
+    expect(relisted.id).toBe(link.id);
     const cycle = await mcpRpc('/mcp', { id: 'cycle', method: 'tools/call', params: {
       name: 'work_link', arguments: { from_id: child.id, to_id: parent.id, type: 'BLOCKS' },
     } });

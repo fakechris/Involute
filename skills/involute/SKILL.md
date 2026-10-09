@@ -63,5 +63,5 @@ Any bugfix or unplanned modification touching product source code MUST adhere to
 work_list_ready / work_search → work_get_context → work_claim
 (local plan — do not upload)
 work_update or work_propose for newly confirmed work
-run_report + evidence_attach → In Review (human accepts → Done)
+run_report + evidence(attach) → In Review (human accepts → Done)
 ```
