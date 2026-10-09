@@ -367,7 +367,15 @@ export function BoardPage() {
   // may not be mounted yet, so the focus happens once the filter bar renders.
   const pendingSearchFocusRef = useRef(false);
   const [inlineCreateGroupId, setInlineCreateGroupId] = useState<string | null>(null);
-  const [filterBarVisible, setFilterBarVisible] = useState(false);
+  // Saved filters must never act unseen (INV-1086): the bar opens when any is set.
+  const activeFilterCount =
+    (boardViewState.query.trim() ? 1 : 0) +
+    (boardViewState.projectKey ? 1 : 0) +
+    boardViewState.assigneeIds.length +
+    boardViewState.stateIds.length +
+    boardViewState.labelIds.length;
+  const [filterBarVisible, setFilterBarVisible] = useState(() => activeFilterCount > 0);
+  const clearAllFiltersRef = useRef<() => void>(() => undefined);
   const [collapsedColumns, setCollapsedColumns] = useState<Record<string, boolean>>(() => {
     try {
       const stored = localStorage.getItem('involute:collapsed-columns');
@@ -945,8 +953,21 @@ export function BoardPage() {
 
       if (event.key === '/') {
         event.preventDefault();
-        boardSearchInputRef.current?.focus();
-        boardSearchInputRef.current?.select();
+        // The search box only exists while the bar is open: open it first (INV-1086).
+        if (boardSearchInputRef.current) {
+          boardSearchInputRef.current.focus();
+          boardSearchInputRef.current.select();
+        } else {
+          pendingSearchFocusRef.current = true;
+          setFilterBarVisible(true);
+        }
+        return;
+      }
+
+      if (!isBacklogView && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        if (event.shiftKey) clearAllFiltersRef.current();
+        else setFilterBarVisible((visible) => !visible);
         return;
       }
 
@@ -1581,6 +1602,11 @@ export function BoardPage() {
     });
     setActiveSavedBoardViewId('');
   }
+
+  clearAllFiltersRef.current = () => {
+    resetBoardViewState();
+    handleSelectProject(null);
+  };
 
   function resetBoardViewState() {
     setBoardViewState(getDefaultBoardViewState());
@@ -2425,6 +2451,16 @@ export function BoardPage() {
           </select>
         ) : null}
         <Btn variant="ghost" icon={<IcoFilter size={14} />} size="sm" onClick={() => setFilterBarVisible((v) => !v)}>{filterBarVisible ? 'Hide filters' : 'Filter'}</Btn>
+        {!filterBarVisible && activeFilterCount > 0 ? (
+          <span className="board-filter-indicator" role="status">
+            <button type="button" className="board-filter-indicator__open" onClick={() => setFilterBarVisible(true)}>
+              {activeFilterCount} {activeFilterCount === 1 ? 'filter' : 'filters'}
+            </button>
+            <button type="button" className="board-filter-indicator__clear" aria-label="Clear all filters" title="Clear all filters (⇧F)" onClick={() => clearAllFiltersRef.current()}>
+              Clear
+            </button>
+          </span>
+        ) : null}
         <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
         {canWriteTeam ? (
           <>
@@ -2517,10 +2553,14 @@ export function BoardPage() {
                   setActiveSavedBoardViewId('');
                 }}
                 onKeyDown={(event) => {
-                  if (event.key === 'Escape' && boardViewState.query) {
-                    event.preventDefault();
+                  if (event.key !== 'Escape') return;
+                  event.preventDefault();
+                  // First Esc clears the text, the next one leaves the box.
+                  if (boardViewState.query) {
                     setBoardViewState((currentState) => ({ ...currentState, query: '' }));
                     setActiveSavedBoardViewId('');
+                  } else {
+                    event.currentTarget.blur();
                   }
                 }}
                 style={{ flex: 1, fontSize: 14, color: 'var(--fg)', background: 'transparent', height: 22, border: 'none', outline: 'none' }}
@@ -2636,7 +2676,7 @@ export function BoardPage() {
             })}
 
             {(boardViewState.query || boardViewState.projectKey || boardViewState.assigneeIds.length > 0 || boardViewState.stateIds.length > 0 || boardViewState.labelIds.length > 0) ? (
-              <button type="button" onClick={() => { resetBoardViewState(); handleSelectProject(null); }} style={{
+              <button type="button" title="Clear all filters (⇧F)" onClick={() => clearAllFiltersRef.current()} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4, height: 22, padding: '0 8px',
                 fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', cursor: 'pointer',
                 background: 'transparent', border: 'none',
