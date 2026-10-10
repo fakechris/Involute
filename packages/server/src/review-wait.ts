@@ -76,36 +76,3 @@ export async function sweepOverdueReviews(prisma: PrismaClient, now = new Date()
   }
   return sent;
 }
-
-/**
- * One `review.digest` inbox note per owner per day while they have committed
- * work waiting in Review: how many, and the longest wait. The existing email
- * digest mails it with everything else unread.
- */
-export async function sendReviewDigests(prisma: PrismaClient, now = new Date()): Promise<number> {
-  const waiting = await prisma.issue.findMany({
-    where: { commitmentStatus: 'COMMITTED', state: { type: 'REVIEW' }, assignee: { actorKind: 'HUMAN', deactivatedAt: null } },
-    select: { id: true, identifier: true, title: true, assigneeId: true, teamId: true },
-  });
-  const waits = await loadReviewWaits(prisma, waiting.map((item) => item.id), now);
-  const byOwner = new Map<string, typeof waiting>();
-  for (const item of waiting) byOwner.set(item.assigneeId!, [...(byOwner.get(item.assigneeId!) ?? []), item]);
-  let sent = 0;
-  for (const [userId, items] of byOwner) {
-    const recent = await prisma.notification.findFirst({ where: { userId, type: 'review.digest', createdAt: { gt: new Date(now.getTime() - DAY) } }, select: { id: true } });
-    if (recent) continue;
-    const longest = items.map((item) => ({ item, wait: waits.get(item.id) })).filter((entry) => entry.wait).sort((a, b) => b.wait!.waitMs - a.wait!.waitMs)[0];
-    if (!longest) continue;
-    const payload = {
-      count: items.length,
-      overdue: items.filter((item) => waits.get(item.id)?.overdue).length,
-      longestIdentifier: longest.item.identifier,
-      longestTitle: longest.item.title,
-      longestWaitDays: Math.floor(longest.wait!.waitMs / DAY),
-      identifiers: items.map((item) => item.identifier).slice(0, 20),
-    };
-    await prisma.notification.create({ data: { payload, teamId: longest.item.teamId, type: 'review.digest', userId, workId: longest.item.id, createdAt: now } });
-    sent += 1;
-  }
-  return sent;
-}

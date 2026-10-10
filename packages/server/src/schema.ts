@@ -1254,6 +1254,12 @@ const typeDefs = /* GraphQL */ `
     "Nearest EPIC or MILESTONE above the work, else its PROJECT; items sharing it belong together."
     groupKey: ID
     group: Issue
+    "Waited longer than its kind allows (INV-1094)."
+    overdue: Boolean!
+    "Unfinished work that BLOCKS this one: decide it after them."
+    waitingOn: [Issue!]!
+    "Everything that blocked this work is finished, so its decision is ready now."
+    unblocked: Boolean!
   }
 
   type AttentionConnection {
@@ -2438,6 +2444,8 @@ const resolvers = {
       parent.groupId ? context.prisma.issue.findUnique({ where: { id: parent.groupId } }) : null,
     work: (parent: AttentionItem, _args: unknown, context: GraphQLContext) =>
       parent.workId ? context.prisma.issue.findUnique({ where: { id: parent.workId } }) : null,
+    waitingOn: (parent: AttentionItem, _args: unknown, context: GraphQLContext) =>
+      parent.waitingOnIds.length ? context.prisma.issue.findMany({ where: { id: { in: parent.waitingOnIds } }, orderBy: { identifier: 'asc' } }) : [],
   },
   ContractAmendment: {
     changes: (parent: ContractAmendment) => amendmentChanges(parent),

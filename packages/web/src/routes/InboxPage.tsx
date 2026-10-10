@@ -67,6 +67,8 @@ function formatNotificationType(type: string): string {
       return 'Fixed bug waiting too long for review';
     case 'review.digest':
       return 'Waiting for your review';
+    case 'attention.digest':
+      return 'What needs you today';
     case 'research.closable':
       return 'Research can be closed';
     case 'delivery.approved':

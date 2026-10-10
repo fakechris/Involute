@@ -44,7 +44,7 @@ export type HumanSurface =
 export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   executorUpdate: { kind: 'web', components: ['components/ExecutorPanel.tsx'], label: 'Stop executor', test: 'components/ExecutorPanel.test.tsx' },
   deliveryChangePropose: { kind: 'web', components: ['components/DeliveryPanel.tsx'], label: 'Propose delivery change', test: 'components/DeliveryPanel.test.tsx' },
-  deliveryChangeDecide: { kind: 'web', components: ['components/DeliveryPanel.tsx'], label: 'Approve delivery change', test: 'components/DeliveryPanel.test.tsx' },
+  deliveryChangeDecide: { kind: 'web', doc: 'DELIVERY_DECIDE_MUTATION', components: ['components/DeliveryPanel.tsx', 'routes/AttentionPage.tsx'], label: 'Approve delivery change', test: 'components/DeliveryPanel.test.tsx' },
   deliveryExecutionCreate: { kind: 'web', components: ['components/DeliveryPanel.tsx'], label: 'Create implementation', test: 'components/DeliveryPanel.test.tsx' },
   actorDeactivate: { kind: 'web', doc: 'ACTOR_DEACTIVATE_MUTATION', components: ['components/AgentLifecycleActions.tsx'], label: 'Deactivate', test: 'App.agents-lifecycle.test.tsx' },
   actorReactivate: { kind: 'web', doc: 'ACTOR_REACTIVATE_MUTATION', components: ['components/AgentLifecycleActions.tsx'], label: 'Reactivate', test: 'App.agents-lifecycle.test.tsx' },
@@ -263,8 +263,8 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationSurface> = {
   'run.stale': { kind: 'info', actionable: 'info' },
   // A fixed bug waits past the review clock: the owner reviews it (INV-1002).
   'review.overdue': { kind: 'work', action: 'Human review', component: 'components/HumanReviewSection.tsx', actionable: 'WORK_REVIEW' },
-  // Daily: how much waits in Review and for how long; the owner opens /in-review (INV-1002).
-  'review.digest': { kind: 'inbox', actionable: 'info' },
+  // Daily: everything still waiting on the person, the same list as Needs you (INV-1094).
+  'attention.digest': { kind: 'inbox', actionable: 'info' },
   // The research proposer (usually an agent) closes it with work_update(state: DONE) (INV-1001).
   'research.closable': { kind: 'info', actionable: 'info' },
   'bug.sla_at_risk': { kind: 'info', actionable: 'info' },

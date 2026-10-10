@@ -52,7 +52,25 @@ export interface AttentionItem {
   actions: AttentionAction[];
   /** Nearest EPIC or MILESTONE above the work, else its PROJECT; null when unplaced or not work. */
   groupId: string | null;
+  /** Waited longer than its kind allows (INV-1094). */
+  overdue: boolean;
+  /** Work that BLOCKS this one and is not finished: decide it after them. */
+  waitingOnIds: string[];
+  /** Everything that blocked this work is finished: the decision is ready now (INV-1053 → INV-1054). */
+  unblocked: boolean;
 }
+
+const HOUR = 60 * 60_000;
+/** How long each kind may wait before it is marked overdue and leads the digest (INV-1094). */
+export const ATTENTION_OVERDUE_MS: Record<AttentionKind, number> = {
+  AGENT_REQUEST: 4 * HOUR,
+  CANDIDATE_COMMIT: 72 * HOUR,
+  CONTRACT_AMENDMENT: 24 * HOUR,
+  DECISION_REQUESTED: 4 * HOUR,
+  DELIVERY_CHANGE: 24 * HOUR,
+  OPS: 24 * HOUR,
+  WORK_REVIEW: 72 * HOUR,
+};
 
 export interface AttentionSummary {
   total: number;
@@ -116,6 +134,8 @@ export async function loadAttention(
   const lists = await Promise.all(ATTENTION_KINDS.filter((kind) => wanted.has(kind)).map((kind) => ATTENTION_LOADERS[kind](prisma, scope)));
   const items = lists.flat();
   await assignGroups(prisma, items);
+  await assignBlockers(prisma, items);
+  for (const entry of items) entry.overdue = now.getTime() - entry.since.getTime() >= ATTENTION_OVERDUE_MS[entry.kind];
   // Longest wait first: the oldest decision is the one most likely forgotten.
   return items.sort((a, b) => a.since.getTime() - b.since.getTime() || a.id.localeCompare(b.id));
 }
@@ -397,7 +417,27 @@ function item(
   reason: string,
   actions: AttentionAction[],
 ): AttentionItem {
-  return { actions, groupId: null, id: `${kind}:${subjectId}`, kind, reason, since, subjectId, workId };
+  return { actions, groupId: null, id: `${kind}:${subjectId}`, kind, overdue: false, reason, since, subjectId, unblocked: false, waitingOnIds: [], workId };
+}
+
+/** Fill waitingOnIds / unblocked from BLOCKS links into each item's work, in one read. */
+async function assignBlockers(prisma: DatabaseClient, items: AttentionItem[]): Promise<void> {
+  const workIds = [...new Set(items.flatMap((entry) => (entry.workId ? [entry.workId] : [])))];
+  if (workIds.length === 0) return;
+  const links = await prisma.workLink.findMany({
+    where: { toId: { in: workIds }, type: 'BLOCKS' },
+    select: { from: { select: { id: true, state: { select: { type: true } } } }, toId: true },
+  });
+  const blockers = new Map<string, Array<{ id: string; done: boolean }>>();
+  for (const link of links) {
+    const done = link.from.state.type === 'COMPLETED' || link.from.state.type === 'CANCELED';
+    blockers.set(link.toId, [...(blockers.get(link.toId) ?? []), { done, id: link.from.id }]);
+  }
+  for (const entry of items) {
+    const of = entry.workId ? blockers.get(entry.workId) ?? [] : [];
+    entry.waitingOnIds = of.filter((blocker) => !blocker.done).map((blocker) => blocker.id);
+    entry.unblocked = of.length > 0 && entry.waitingOnIds.length === 0;
+  }
 }
 
 /** Fill groupId by walking parents, one query per level for the whole page. */
