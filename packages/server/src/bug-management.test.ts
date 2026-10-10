@@ -47,6 +47,11 @@ const BUG_REPORT_MUTATION = /* GraphQL */ `
 const BUG_SUMMARY_QUERY = /* GraphQL */ `
   query BugSummary($teamFilter: TeamFilter) {
     bugSummary(teamFilter: $teamFilter) {
+      mostDuplicated {
+        identifier
+        priority
+        duplicateCount
+      }
       openCount
       closedCount
       byPriority {
@@ -424,6 +429,32 @@ describe('bug management', () => {
         { repository: null, openCount: 1, closedCount: 1 },
       ]);
       expect(summary.byTypeLabel).toEqual([{ label: 'ui', count: 2 }]);
+    });
+
+    it('lists open bugs by how many DUPLICATE_OF links point at them (INV-1124)', async () => {
+      const cookie = await login(human);
+      const often = await createBug({ title: 'Reported three times', priority: 3 });
+      const once = await createBug({ title: 'Reported twice', priority: 2 });
+      const closed = await createBug({ title: 'Closed original', stateName: 'Done' });
+      const plain = await createIssue(prisma, { teamId: team.id, title: 'Not a bug' });
+      const duplicates = await Promise.all(
+        ['d1', 'd2', 'd3', 'd4', 'd5', 'd6'].map((title) => createBug({ title, stateName: 'Canceled' })),
+      );
+      const link = (fromId: string, toId: string) => prisma.workLink.create({ data: { fromId, toId, type: 'DUPLICATE_OF' } });
+      await link(duplicates[0]!.id, often.id);
+      await link(duplicates[1]!.id, often.id);
+      await link(duplicates[2]!.id, often.id);
+      await link(duplicates[3]!.id, once.id);
+      await link(duplicates[4]!.id, closed.id);
+      await link(duplicates[5]!.id, plain.id);
+      await prisma.workLink.create({ data: { fromId: duplicates[4]!.id, toId: once.id, type: 'RELATED_TO' } });
+
+      const { body } = await queryBugSummary(cookie);
+      expect(body.errors).toBeUndefined();
+      expect(body.data.bugSummary.mostDuplicated).toEqual([
+        { identifier: often.identifier, priority: 3, duplicateCount: 3 },
+        { identifier: once.identifier, priority: 2, duplicateCount: 1 },
+      ]);
     });
 
     it('excludes candidates and non-bug issues from the counts', async () => {

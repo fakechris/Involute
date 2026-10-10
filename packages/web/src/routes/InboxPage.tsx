@@ -87,6 +87,10 @@ function formatNotificationType(type: string): string {
       return 'Bug reported';
     case 'contract.amendment_proposed':
       return 'Contract change proposed';
+    case 'duplicate.marked':
+      return 'Marked as duplicate';
+    case 'duplicate.original_changed':
+      return 'Original of your duplicate changed';
     case 'bug.sla_at_risk':
       return 'Bug SLA at risk';
     case 'bug.sla_breached':

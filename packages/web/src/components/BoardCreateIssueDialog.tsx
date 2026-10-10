@@ -3,6 +3,7 @@ import { useEffect, useRef, type FormEvent } from 'react';
 import type { TeamSummary } from '../board/types';
 import type { CreatePlacement, PlaceableProject, PlacementSource } from '../work/placement';
 import { PlacementPicker } from './PlacementPicker';
+import { RichTextEditor } from './RichTextEditor';
 
 export type CreatableKind = 'ISSUE' | 'EPIC' | 'DECISION';
 
@@ -31,6 +32,8 @@ interface BoardCreateIssueDialogProps {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onTeamChange: (teamKey: string) => void;
   onTitleChange: (value: string) => void;
+  /** Bug is a type here too, but a bug is filed with priority and steps: hand over to Report bug (INV-1132). */
+  onReportBug?: () => void;
 }
 
 export function BoardCreateIssueDialog({
@@ -54,6 +57,7 @@ export function BoardCreateIssueDialog({
   onSubmit,
   onTeamChange,
   onTitleChange,
+  onReportBug,
 }: BoardCreateIssueDialogProps) {
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -99,10 +103,19 @@ export function BoardCreateIssueDialog({
           <div className="issue-panel__section">
             <label className="field-stack">
               <span>Type</span>
-              <select aria-label="Work type" value={createKind} disabled={isSaving} onChange={(event) => onCreateKindChange(event.target.value as CreatableKind)}>
+              <select
+                aria-label="Work type"
+                value={createKind}
+                disabled={isSaving}
+                onChange={(event) => {
+                  if (event.target.value === 'BUG') onReportBug?.();
+                  else onCreateKindChange(event.target.value as CreatableKind);
+                }}
+              >
                 <option value="ISSUE">Issue</option>
                 <option value="EPIC">Epic</option>
                 <option value="DECISION">Decision</option>
+                {onReportBug ? <option value="BUG">Bug — report with steps and priority</option> : null}
               </select>
             </label>
           </div>
@@ -126,13 +139,15 @@ export function BoardCreateIssueDialog({
             <label className="issue-panel__label" htmlFor="create-issue-description">
               Description
             </label>
-            <textarea
+            {/* Paste, drop or attach screenshots like in a comment (INV-1132). */}
+            <RichTextEditor
               id="create-issue-description"
-              aria-label="Issue description"
-              className="issue-panel__textarea"
+              ariaLabel="Issue description"
+              placeholder="Describe it; paste or drop screenshots"
               value={createDescription}
               disabled={isSaving}
-              onChange={(event) => onDescriptionChange(event.target.value)}
+              onChange={onDescriptionChange}
+              hideSubmit
             />
           </div>
 

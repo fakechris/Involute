@@ -5,13 +5,15 @@ import { listMcpActions, listMcpTools } from './mcp-tools.ts';
 
 // INV-1046: agents see at most twenty tools, none they can never run; every
 // action stays reachable, old names stay callable with a deprecation note.
+// INV-1116 added one grouped tool (work_timeline: list / star / unstar), so the
+// cap is twenty-one; grow it only for a new family, never for a lone action.
 const agent = { viewer: { actorKind: 'AGENT' } as never, authMode: 'agent-token' as const, isTrustedSystem: false };
 const human = { viewer: { actorKind: 'HUMAN' } as never, authMode: 'token' as const, isTrustedSystem: false };
 
 describe('MCP tool groups', () => {
-  it('lists at most twenty tools for an agent credential, without the human-only ones', () => {
+  it('lists at most twenty-one tools for an agent credential, without the human-only ones', () => {
     const tools = listMcpTools(false, agent);
-    expect(tools.length).toBeLessThanOrEqual(20);
+    expect(tools.length).toBeLessThanOrEqual(21);
     const names = tools.map((tool) => tool.name);
     for (const name of HUMAN_ONLY_MCP_TOOLS) expect(names).not.toContain(name);
     expect(listMcpTools(false, human).map((tool) => tool.name)).toEqual(expect.arrayContaining([...HUMAN_ONLY_MCP_TOOLS]));

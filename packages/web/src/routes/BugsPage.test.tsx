@@ -1,5 +1,5 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BugsPage } from './BugsPage';
@@ -30,6 +30,10 @@ const bugsPageData = {
       { weekStart: '2026-08-24', count: 0 },
       { weekStart: '2026-08-31', count: 1 },
       { weekStart: '2026-09-07', count: 2 },
+    ],
+    mostDuplicated: [
+      { id: 'issue-high', identifier: 'INV-32', title: 'High wrong totals', priority: 2, duplicateCount: 3 },
+      { id: 'issue-urgent', identifier: 'INV-30', title: 'Urgent crash on save', priority: 1, duplicateCount: 1 },
     ],
     metrics: {
       triageHoursP50: 3.5,
@@ -70,6 +74,7 @@ const bugsPageData = {
         id: 'issue-urgent',
         identifier: 'INV-30',
         title: 'Urgent crash on save',
+        revision: 4,
         priority: 1,
         repository: 'fakechris/Involute',
         createdAt: '2026-08-02T10:00:00.000Z',
@@ -105,7 +110,21 @@ const bugsPageData = {
     ],
     pageInfo: { endCursor: null, hasNextPage: false },
   },
+  teams: {
+    nodes: [{
+      id: 'team-1',
+      states: {
+        nodes: [
+          { id: 'state-backlog', name: 'Backlog', type: 'BACKLOG', position: 0 },
+          { id: 'state-ready', name: 'Ready', type: 'UNSTARTED', position: 1 },
+          { id: 'state-progress', name: 'In Progress', type: 'STARTED', position: 2 },
+        ],
+      },
+    }],
+  },
 };
+
+const mockUpdate = vi.fn();
 
 afterEach(() => {
   cleanup();
@@ -122,8 +141,16 @@ vi.mock('@apollo/client/react', () => ({
     error: undefined,
     refetch: vi.fn(),
   })),
-  useMutation: vi.fn(() => [vi.fn(), { loading: false }]),
+  useMutation: vi.fn(() => [mockUpdate, { loading: false }]),
 }));
+
+vi.mock('../lib/session', () => ({
+  fetchSessionState: vi.fn().mockResolvedValue({ authenticated: true, authMode: 'session', googleOAuthConfigured: false, viewer: { email: 'me@test', globalRole: 'USER', id: 'user-me', name: 'Me' } }),
+}));
+
+function LocationState() {
+  return <pre data-testid="location-state">{JSON.stringify(useLocation().state)}</pre>;
+}
 
 describe('BugsPage', () => {
   it('shows triage time, SLA outcomes, breaches, sources and unplaced bugs (INV-751)', () => {
@@ -161,6 +188,17 @@ describe('BugsPage', () => {
     ]);
   });
 
+  it('lists the open bugs reported again most, most duplicates first (INV-1124)', () => {
+    render(
+      <MemoryRouter>
+        <BugsPage />
+      </MemoryRouter>,
+    );
+    const panel = screen.getByLabelText('Most duplicated open bugs');
+    const rows = within(panel).getAllByRole('row').map((row) => row.textContent);
+    expect(rows).toEqual(['BugDuplicates', 'INV-32High wrong totals3', 'INV-30Urgent crash on save1']);
+    expect(within(panel).getByRole('button', { name: /INV-32/ })).toHaveAttribute('title', expect.stringMatching(/raising its priority/));
+  });
 
   it('renders the header stat cards', () => {
     render(
@@ -223,5 +261,44 @@ describe('BugsPage', () => {
     expect(items[1]).toHaveTextContent('INV-32');
     expect(items[2]).toHaveTextContent('INV-31');
     expect(screen.queryByText('Fixed last week')).not.toBeInTheDocument();
+  });
+
+  // INV-1133
+  it('opens each bug on its own page and changes it in place with its revision', async () => {
+    mockUpdate.mockResolvedValue({ data: { issueUpdate: { issue: null, success: true } } });
+    render(<MemoryRouter><BugsPage /></MemoryRouter>);
+    const list = screen.getByRole('list', { name: 'Open bugs list' });
+    expect(within(list).getByRole('link', { name: 'INV-30' })).toHaveAttribute('href', '/issue/INV-30');
+
+    fireEvent.change(within(list).getByLabelText('Priority of INV-30'), { target: { value: '2' } });
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith({ variables: { id: 'issue-urgent', input: { expectedRevision: 4, priority: 2 } } }));
+
+    fireEvent.change(within(list).getByLabelText('Status of INV-30'), { target: { value: 'state-progress' } });
+    await waitFor(() => expect(mockUpdate).toHaveBeenLastCalledWith({ variables: { id: 'issue-urgent', input: { expectedRevision: 4, stateId: 'state-progress' } } }));
+
+    const assign = await within(list).findAllByRole('button', { name: 'Assign to me' });
+    await waitFor(() => expect(assign[0]).not.toBeDisabled());
+    fireEvent.click(assign[0]!);
+    await waitFor(() => expect(mockUpdate).toHaveBeenLastCalledWith(expect.objectContaining({ variables: expect.objectContaining({ input: expect.objectContaining({ assigneeId: 'user-me' }) }) })));
+  });
+
+  it('shows why the server refused a change, e.g. a bug moved to Backlog', async () => {
+    mockUpdate.mockResolvedValue({ data: { issueUpdate: { issue: null, message: 'A committed bug cannot go to Backlog.', success: false } } });
+    render(<MemoryRouter><BugsPage /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText('Status of INV-30'), { target: { value: 'state-backlog' } });
+    expect(await screen.findByRole('alert')).toHaveTextContent('A committed bug cannot go to Backlog.');
+  });
+
+  it('reports a bug from the page', () => {
+    render(
+      <MemoryRouter initialEntries={['/bugs']}>
+        <Routes>
+          <Route path="/bugs" element={<BugsPage />} />
+          <Route path="/" element={<LocationState />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Report bug' }));
+    expect(screen.getByTestId('location-state')).toHaveTextContent('{"openReportBug":true}');
   });
 });

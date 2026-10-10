@@ -32,6 +32,12 @@ export const MCP_TOOL_GROUPS: readonly McpToolGroup[] = [
     defaultAction: 'list',
   },
   {
+    name: 'work_timeline',
+    description: 'The issue timeline (INV-1116): action "list" (default) returns audit changes, runs, evidence and comments in time order with actors and entry keys (starred_only for key events); "star" marks an entry as a key event, "unstar" removes the star.',
+    actions: { list: 'work_timeline', star: 'work_timeline_star', unstar: 'work_timeline_unstar' },
+    defaultAction: 'list',
+  },
+  {
     name: 'work_claim',
     description: 'Lease committed work for this actor (action "claim", default) or yield your own lease with a reason (action "release"). A claim returns a secret claim_token and a harness-issued suggested_branch you must use verbatim. Does not change the human assignee.',
     actions: { claim: 'work_claim', release: 'work_claim_release' },

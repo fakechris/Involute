@@ -1,6 +1,7 @@
 import { executorContext, executorUpdate, type ExecutorInput } from './executor-service.js';
 import type { SavedView } from '@prisma/client';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
+import { starTimelineEntry, unstarTimelineEntry, workTimelineFor, type TimelineEntry } from './work-activity-timeline.js';
 import { storeUpload } from './uploads.js';
 import type { IssueSeverity, WorkRun } from '@prisma/client';
 import { SEVERITIES } from './severity.js';
@@ -165,7 +166,8 @@ import { createComment, createIssue, createIssueInTransaction, deleteComment, de
 import { isActionableNotification, markNotificationRead, projectWorkNotifications, resolveAttentionNotifications } from './notification-service.js';
 import { auditMergedPrTraceability } from './traceability-audit.js';
 import { suggestedBranchName } from './branch-name.js';
-import { createWorkLink, deleteWorkLink, listIncidentLinks } from './link-service.js';
+import { linkWork } from './duplicate-linkage.js';
+import { deleteWorkLink, listIncidentLinks } from './link-service.js';
 import { writeActorFromViewer } from './work-service.js';
 import { findWorkTombstone, isTombstoneExpired, restoreDeletedIssue, TOMBSTONE_EXPIRED_MESSAGE, TOMBSTONE_NOT_FOUND_MESSAGE } from './work-tombstone.js';
 import { BUG_GATE_SOURCE } from './bug-auto-accept.js';
@@ -264,6 +266,7 @@ interface BugSummaryResultShape {
   oldestOpenAgeDays: number | null;
   avgOpenAgeDays: number | null;
   createdPerWeek: Array<{ weekStart: string; count: number }>;
+  mostDuplicated: Array<{ id: string; identifier: string; title: string; priority: number; duplicateCount: number }>;
   metrics: BugMetrics;
 }
 
@@ -284,6 +287,7 @@ const MAX_ISSUES_CONNECTION_FIRST = 200;
 
 
 const BUG_TREND_WEEKS = 8;
+const MOST_DUPLICATED_LIMIT = 10;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function buildIssueListInclude(
@@ -441,6 +445,11 @@ const typeDefs = /* GraphQL */ `
     attentionSummary(teamKey: String): AttentionSummary!
     "Saved board/backlog views the viewer may use in this team: their own and the team's shared ones (INV-1005)."
     savedViews(teamKey: String!): [SavedView!]!
+    """
+    The issue timeline (INV-1116): audit changes, runs, evidence and comments in time
+    order with their actors, and which entries are starred as key events.
+    """
+    issueTimeline(issueId: String!, starredOnly: Boolean): IssueTimeline!
     candidateSummary(teamFilter: TeamFilter): CandidateSummary!
     projectSummary(teamFilter: TeamFilter): ProjectSummaryResult!
     bugSummary(teamFilter: TeamFilter): BugSummaryResult!
@@ -563,6 +572,10 @@ const typeDefs = /* GraphQL */ `
     savedViewUpsert(input: SavedViewInput!): SavedViewPayload!
     "Delete one of your saved views, or a shared one as a team owner (INV-1005)."
     savedViewDelete(id: ID!): SavedViewDeletePayload!
+    "Star a timeline entry as a key event (INV-1116). Needs write access to the work."
+    issueTimelineStar(input: IssueTimelineStarInput!): IssueTimelineStarPayload!
+    "Remove a timeline star; the record of who starred and unstarred it stays (INV-1116)."
+    issueTimelineUnstar(input: IssueTimelineStarInput!): IssueTimelineStarPayload!
     webhookUpdate(id: String!, input: WebhookUpdateInput!): WebhookMutationPayload!
     webhookDelete(id: String!): WebhookMutationPayload!
     webhookRotateSecret(id: String!): WebhookMutationPayload!
@@ -1223,6 +1236,55 @@ const typeDefs = /* GraphQL */ `
     transitions: [WorkStateTransition!]!
     """FULL when auditing covers the whole life; PARTIAL when it began later; NONE when there is no trail."""
     history: WorkHistoryCompleteness!
+  }
+
+  type IssueTimeline {
+    workId: ID!
+    identifier: String!
+    entries: [IssueTimelineEntry!]!
+    "True when a source had more rows than the timeline reads."
+    truncated: Boolean!
+  }
+
+  type IssueTimelineEntry {
+    "Stable reference used to star it: audit:<id>, run:<id>:started, run:<id>:ended, evidence:<id>, evidence:<id>:retracted, needinfo:<id>, needinfo:<id>:closed, comment:<id>."
+    key: String!
+    "CREATED, STATE, COMMITMENT, ASSIGNEE, PRIORITY, PARENT, FIELDS, RUN_STARTED, RUN_ENDED, EVIDENCE, EVIDENCE_RETRACTED, NEEDINFO or COMMENT."
+    kind: String!
+    at: DateTime!
+    actor: User
+    actorKind: ActorKind
+    summary: String!
+    detail: String
+    url: String
+    changes: [IssueTimelineChange!]!
+    revision: Int
+    sourceId: String!
+    starred: Boolean!
+    starredAt: DateTime
+    starredBy: User
+  }
+
+  type IssueTimelineChange {
+    field: String!
+    from: String
+    to: String
+  }
+
+  input IssueTimelineStarInput {
+    "Work id or identifier."
+    issueId: String!
+    entryKey: String!
+  }
+
+  type IssueTimelineStarPayload {
+    success: Boolean!
+    message: String
+    issueId: String
+    entryKey: String
+    starred: Boolean
+    starredAt: DateTime
+    starredBy: User
   }
 
   type SavedView {
@@ -1949,8 +2011,18 @@ const typeDefs = /* GraphQL */ `
     oldestOpenAgeDays: Float
     avgOpenAgeDays: Float
     createdPerWeek: [BugWeekCount!]!
+    "Open bugs most often reported again: the most DUPLICATE_OF links point at them, most first, top 10 (INV-1124)."
+    mostDuplicated: [BugDuplicateCount!]!
     "Triage, SLA, source and placement (INV-751)."
     metrics: BugMetrics!
+  }
+
+  type BugDuplicateCount {
+    id: ID!
+    identifier: String!
+    title: String!
+    priority: Int!
+    duplicateCount: Int!
   }
 
   type BugMetrics {
@@ -2270,7 +2342,7 @@ const typeDefs = /* GraphQL */ `
     priority: Int
     """Steps to reproduce a bug; appended to the description."""
     stepsToReproduce: String
-    """Optional impact, SEV1–SEV3, apart from priority (INV-1115)."""
+    """Impact, SEV1–SEV3, apart from priority (INV-1115). Required when labels include incident (INV-1123)."""
     severity: IssueSeverity
     """Existing work this proposal is blocked by (each X BLOCKS the new item)."""
     blockedBy: [String!]
@@ -2901,6 +2973,7 @@ const resolvers = {
           oldestOpenAgeDays: null,
           avgOpenAgeDays: null,
           createdPerWeek: emptyWeeks,
+          mostDuplicated: [],
           metrics,
         };
       }
@@ -2922,7 +2995,7 @@ const resolvers = {
       const trendCutoff = startOfUtcWeek(now);
       trendCutoff.setUTCDate(trendCutoff.getUTCDate() - (BUG_TREND_WEEKS - 1) * 7);
 
-      const [openBugs, closedRepoGroups, recentCreations] = await Promise.all([
+      const [openBugs, closedRepoGroups, recentCreations, duplicateGroups] = await Promise.all([
         context.prisma.issue.findMany({
           where: openWhere,
           select: {
@@ -2942,6 +3015,11 @@ const resolvers = {
         context.prisma.issue.findMany({
           where: { ...baseWhere, createdAt: { gte: trendCutoff } },
           select: { createdAt: true },
+        }),
+        context.prisma.workLink.groupBy({
+          by: ['toId'],
+          where: { type: 'DUPLICATE_OF', to: openWhere, ...(readableWhere ? { from: readableWhere } : {}) },
+          _count: { _all: true },
         }),
       ]);
 
@@ -3013,6 +3091,20 @@ const resolvers = {
       }
       const createdPerWeek = [...weekBuckets.entries()].map(([weekStart, count]) => ({ weekStart, count }));
 
+      const topDuplicated = duplicateGroups
+        .map((group) => ({ id: group.toId, duplicateCount: group._count._all }))
+        .sort((a, b) => b.duplicateCount - a.duplicateCount || a.id.localeCompare(b.id))
+        .slice(0, MOST_DUPLICATED_LIMIT);
+      const duplicatedIssues = await context.prisma.issue.findMany({
+        where: { id: { in: topDuplicated.map((entry) => entry.id) } },
+        select: { id: true, identifier: true, title: true, priority: true },
+      });
+      const duplicatedById = new Map(duplicatedIssues.map((issue) => [issue.id, issue]));
+      const mostDuplicated = topDuplicated.flatMap((entry) => {
+        const issue = duplicatedById.get(entry.id);
+        return issue ? [{ ...issue, duplicateCount: entry.duplicateCount }] : [];
+      });
+
       const openCount = openBugs.length;
       const closedCount = closedRepoGroups.reduce((sum, group) => sum + group._count._all, 0);
 
@@ -3029,6 +3121,7 @@ const resolvers = {
           : null,
         avgOpenAgeDays: openCount > 0 ? Math.round((ageSumDays / openCount) * 10) / 10 : null,
         createdPerWeek,
+        mostDuplicated,
         metrics,
       };
     },
@@ -3059,6 +3152,10 @@ const resolvers = {
     },
     savedViews: async (_parent: unknown, args: { teamKey: string }, context: GraphQLContext) =>
       (await listSavedViews(context, args.teamKey)).map(savedViewRecord),
+    issueTimeline: async (_parent: unknown, args: { issueId: string; starredOnly?: boolean | null }, context: GraphQLContext) => {
+      const timeline = await workTimelineFor(context, args.issueId, { starredOnly: args.starredOnly === true });
+      return { ...timeline, entries: timeline.entries.map(timelineEntryRecord) };
+    },
     attention: async (
       _parent: unknown,
       args: { first?: number | null; after?: string | null; kinds?: AttentionKind[] | null; teamKey?: string | null },
@@ -3476,7 +3573,7 @@ const resolvers = {
         if (!to) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
         await assertCanWriteIssue(context.prisma, context, from.id);
         await assertCanWriteIssue(context.prisma, context, to.id);
-        const link = await createWorkLink(context.prisma, {
+        const { link } = await linkWork(context.prisma, {
           actor: writeActorFromViewer(context.viewer),
           fromId: from.id,
           toId: to.id,
@@ -4789,6 +4886,16 @@ const resolvers = {
         const view = await upsertSavedView(context, { ...args.input, state });
         return { success: true as const, view: savedViewRecord(view) };
       }, { success: false as const, view: null }),
+    issueTimelineStar: async (_parent: unknown, args: { input: { issueId: string; entryKey: string } }, context: GraphQLContext) =>
+      runMutation(async () => {
+        const result = await starTimelineEntry(context, args.input.issueId, args.input.entryKey);
+        return { success: true as const, issueId: result.workId, entryKey: result.entryKey, starred: true, starredAt: result.star.starredAt, starredBy: result.star.starredBy };
+      }, { success: false as const }),
+    issueTimelineUnstar: async (_parent: unknown, args: { input: { issueId: string; entryKey: string } }, context: GraphQLContext) =>
+      runMutation(async () => {
+        const result = await unstarTimelineEntry(context, args.input.issueId, args.input.entryKey);
+        return { success: true as const, issueId: result.workId, entryKey: result.entryKey, starred: false, starredAt: null, starredBy: null };
+      }, { success: false as const }),
     savedViewDelete: async (_parent: unknown, args: { id: string }, context: GraphQLContext) =>
       runMutation(async () => ({ success: true as const, id: (await deleteSavedView(context, args.id)) ? args.id : null }), { success: false as const, id: null }),
     fileUpload: async (
@@ -5499,6 +5606,12 @@ const resolvers = {
     },
   },
 };
+
+/** GraphQL shape of a timeline entry: the star is flattened onto the entry. */
+function timelineEntryRecord(entry: TimelineEntry) {
+  const { star, ...rest } = entry;
+  return { ...rest, starred: star !== null, starredAt: star?.starredAt ?? null, starredBy: star?.starredBy ?? null };
+}
 
 /** GraphQL shape of a saved view: the state travels as JSON text. */
 function savedViewRecord(view: SavedView) {

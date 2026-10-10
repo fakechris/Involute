@@ -1,5 +1,6 @@
 import type { ActorKind, Issue, Prisma, PrismaClient, User } from '@prisma/client';
 
+import { notifyDuplicateReporters } from './duplicate-notes.js';
 import { createValidationError, WORK_REVISION_CONFLICT_MESSAGE } from './errors.js';
 
 export interface WriteActor {
@@ -138,6 +139,11 @@ export async function recordWorkAudit(
   // execution's row can commit in between and the receipt would inherit its
   // identity (INV-591).
   const created = await prisma.workAudit.create({ data, select: { id: true } });
+  // Every state change is audited here, whatever surface made it, so this is
+  // where the reporters of its duplicates hear about it (INV-1124).
+  if (input.before && input.before.stateId !== input.after.stateId) {
+    await notifyDuplicateReporters(prisma, { workId: input.workId, auditId: created.id, toStateId: input.after.stateId, actorId: actor.actorId });
+  }
   return created.id;
 }
 

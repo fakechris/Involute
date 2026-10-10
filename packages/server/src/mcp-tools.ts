@@ -2,6 +2,7 @@ import { requestNeedInfo, withdrawNeedInfo } from './need-info-service.js';
 import { protocolInfo } from './protocol-info.js';
 import { groupForAction, hidesFromCaller, MCP_TOOL_GROUPS, resolveMcpCall, type McpToolGroup } from './mcp-tool-groups.js';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
+import { starTimelineEntry, unstarTimelineEntry, workTimelineFor, type TimelineEntry } from './work-activity-timeline.js';
 import { storeUpload } from './uploads.js';
 import { actionCapabilities } from './action-capabilities.js';
 import { executorContext, executorUpdate, EXECUTOR_OPERATIONS, type ExecutorInput } from './executor-service.js';
@@ -38,7 +39,7 @@ import {
 import type { GraphQLContext } from './auth.js';
 import { claimWork, commitWork, isDoneStateRequest, normalizeInitialStateType, proposeWork } from './claim-service.js';
 import { suggestedBranchName } from './branch-name.js';
-import { isResearchWork } from './labels.js';
+import { isResearchWork, namesIncident } from './labels.js';
 import {
   findWorkByIdOrIdentifier,
   getWorkContext,
@@ -62,7 +63,8 @@ import { createComment, mentionTexts, updateIssue } from './issue-service.js';
 import { amendmentChanges, proposeContractAmendment } from './contract-amendment.js';
 import { dependencyHints } from './mention-links.js';
 import { researchLacksDownstream } from './work-hygiene.js';
-import { createWorkLink, deleteWorkLink } from './link-service.js';
+import { linkWork } from './duplicate-linkage.js';
+import { deleteWorkLink } from './link-service.js';
 import { buildProtocolGuide } from './protocol-docs.js';
 import { attachEvidence, reportRun } from './run-service.js';
 import { hasFixedBugEvidence, recordFixedBugRun, validateFixedBugEvidence } from './bug-report.js';
@@ -83,6 +85,9 @@ export type McpToolName =
   | 'work_views'
   | 'work_view_save'
   | 'work_view_delete'
+  | 'work_timeline'
+  | 'work_timeline_star'
+  | 'work_timeline_unstar'
   | 'work_get_context'
   | 'work_list_ready'
   | 'protocol_get_guide'
@@ -118,6 +123,7 @@ export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
   'work_get_context',
   'work_list_ready',
   'work_views',
+  'work_timeline',
   'agent_inbox',
   'protocol_get_guide',
 ];
@@ -125,6 +131,8 @@ export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
 export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
   'work_view_save',
   'work_view_delete',
+  'work_timeline_star',
+  'work_timeline_unstar',
   'work_attach_file',
   'work_executor_update',
   'work_delivery_propose',
@@ -473,6 +481,9 @@ async function callMcpAction(
       if (isBug) {
         notes.push('Bug committed directly (INV-787): it does not go to Candidates. Its SLA is running. Fix it or have it declined with a reason; it never goes to the backlog.');
       }
+      if (namesIncident(proposeInput.labels)) {
+        notes.push('Incident declared (INV-1123): committed directly, In Progress (investigating); the person who owns you is the Incident Lead and the team was notified.');
+      }
       if (!created.parentId && created.kind !== 'PROJECT') {
         notes.push('This candidate has no parent. Committing it requires one: pass parent_id now (work_link CONTAINS later), or the human will place it at commit.');
       }
@@ -553,7 +564,7 @@ async function callMcpAction(
         ? await findPossibleDuplicates(context.prisma, context.semanticIndex, created, buildReadableIssueWhere(context))
         : [];
       if (possibleDuplicates.length > 0) {
-        notes.push(`Possible duplicates: ${possibleDuplicates.map((item) => `${item.identifier} (${item.title})`).join('; ')}. If one is the same bug, link this one to it (work_link DUPLICATE_OF) and tell the owner so it is declined.`);
+        notes.push(`Possible duplicates: ${possibleDuplicates.map((item) => `${item.identifier} (${item.title})`).join('; ')}. If one is the same bug, link this one to it (work_link DUPLICATE_OF): its owner is notified to decline it as a duplicate.`);
       }
       return {
         ...created,
@@ -716,12 +727,14 @@ async function callMcpAction(
       const to = await requireWork(context.prisma, requiredString(args.to_id, 'to_id'));
       await assertCanWriteIssue(context.prisma, context, from.id);
       await assertCanWriteIssue(context.prisma, context, to.id);
-      return createWorkLink(context.prisma, {
+      const { duplicate, link } = await linkWork(context.prisma, {
         actor: { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null },
         fromId: from.id,
         toId: to.id,
         type: parseWorkLinkType(requiredString(args.type, 'type'), 'type'),
       });
+      // DUPLICATE_OF (INV-1124): say whether the duplicate was closed or waits for a person.
+      return duplicate ? { ...link, duplicate } : link;
     }
     case 'work_unlink': {
       const from = await requireWork(context.prisma, requiredString(args.from_id, 'from_id'));
@@ -736,8 +749,9 @@ async function callMcpAction(
         where: { fromId_toId_type: { fromId: from.id, toId: to.id, type } },
       });
       if (!link) return { removed: false, fromId: from.id, toId: to.id, type };
+      let note: string | undefined;
       try {
-        await deleteWorkLink(context.prisma, link.id, { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null });
+        ({ note } = await deleteWorkLink(context.prisma, link.id, { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null }));
       } catch (error) {
         // Another caller may have removed this exact edge while we waited for
         // the graph lock. Never delete a newly created replacement by tuple.
@@ -746,7 +760,7 @@ async function callMcpAction(
         }
         throw error;
       }
-      return { removed: true, id: link.id, fromId: from.id, toId: to.id, type };
+      return { removed: true, id: link.id, fromId: from.id, toId: to.id, type, ...(note ? { note } : {}) };
     }
     case 'work_claim_release': {
       const work = await requireWork(context.prisma, requiredString(args.work_id, 'work_id'));
@@ -827,6 +841,18 @@ async function callMcpAction(
     }
     case 'work_view_delete': {
       return { id: requiredString(args.id, 'id'), removed: await deleteSavedView(context, requiredString(args.id, 'id')) };
+    }
+    case 'work_timeline': {
+      const timeline = await workTimelineFor(context, requiredString(args.work_id, 'work_id'), { starredOnly: args.starred_only === true });
+      return { work_id: timeline.workId, identifier: timeline.identifier, truncated: timeline.truncated, entries: timeline.entries.map(timelineEntryForMcp) };
+    }
+    case 'work_timeline_star': {
+      const result = await starTimelineEntry(context, requiredString(args.work_id, 'work_id'), requiredString(args.entry_key, 'entry_key'));
+      return { work_id: result.workId, entry_key: result.entryKey, starred: true, starred_at: result.star.starredAt.toISOString(), starred_by: result.star.starredBy.name ?? result.star.starredBy.email ?? result.star.starredById };
+    }
+    case 'work_timeline_unstar': {
+      const result = await unstarTimelineEntry(context, requiredString(args.work_id, 'work_id'), requiredString(args.entry_key, 'entry_key'));
+      return { work_id: result.workId, entry_key: result.entryKey, starred: false, removed: result.removed };
     }
     case 'work_attach_file': {
       // A private file on the work (INV-1003): research reports and the like
@@ -1156,7 +1182,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         labels: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Label names, created when missing. Research or competitive analysis is an ISSUE labelled "research" (Type: Research; propose it with initial_state DONE, or move it to Done yourself once committed — INV-912); work it leads to links back with DERIVED_FROM. A bug carries "bug" (Type: Bug; at most one of bug / feature / improvement / research), is committed directly, and must also pass priority 1–4, a parent, and steps_to_reproduce.',
+          description: 'Label names, created when missing. Research or competitive analysis is an ISSUE labelled "research" (Type: Research; propose it with initial_state DONE, or move it to Done yourself once committed — INV-912); work it leads to links back with DERIVED_FROM. A bug carries "bug" (Type: Bug; at most one of bug / feature / improvement / research / incident), is committed directly, and must also pass priority 1–4, a parent, and steps_to_reproduce. An incident carries "incident" (Type: Incident, INV-1123): committed directly In Progress (investigating) with your owner as Incident Lead, and must pass severity, an impact statement in description, and a parent.',
         },
         priority: {
           type: 'number',
@@ -1221,7 +1247,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         labels: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Extra domain labels (e.g. search, ops). Bug is added automatically; a second Type label (Feature / Improvement / Research) is refused.',
+          description: 'Extra domain labels (e.g. search, ops). Bug is added automatically; a second Type label (Feature / Improvement / Research / Incident) is refused.',
         },
         parent_id: {
           type: 'string',
@@ -1465,6 +1491,24 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     description: 'Delete one of your saved views; a team owner may also delete a shared one (INV-1005).',
     inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  },
+  {
+    name: 'work_timeline',
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    description: 'The issue timeline (INV-1116): state, assignee, priority, placement and field changes from the audit trail, runs, evidence and comments, oldest first, each with its actor and a key you can star. starred_only returns just the key events.',
+    inputSchema: { type: 'object', properties: { work_id: { type: 'string', description: 'Work identifier (e.g. INV-104) or UUID' }, starred_only: { type: 'boolean' } }, required: ['work_id'] },
+  },
+  {
+    name: 'work_timeline_star',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    description: 'Star a timeline entry as a key event (INV-1116), e.g. for a postmortem. Pass an entry key from work_timeline. Needs write access; starring a starred entry keeps the first star.',
+    inputSchema: { type: 'object', properties: { work_id: { type: 'string' }, entry_key: { type: 'string' } }, required: ['work_id', 'entry_key'] },
+  },
+  {
+    name: 'work_timeline_unstar',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    description: 'Remove the star from a timeline entry (INV-1116). Who starred and unstarred it stays on record.',
+    inputSchema: { type: 'object', properties: { work_id: { type: 'string' }, entry_key: { type: 'string' } }, required: ['work_id', 'entry_key'] },
   },
   {
     name: 'work_attach_file',
@@ -1790,6 +1834,9 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_views: 'read',
   work_view_save: 'propose',
   work_view_delete: 'propose',
+  work_timeline: 'read',
+  work_timeline_star: 'propose',
+  work_timeline_unstar: 'propose',
   work_get_context: 'read',
   work_read_page: 'read',
   work_catalog: 'read',
@@ -1844,5 +1891,25 @@ function handOffFields(origin: HandOffOrigin | null) {
     handed_off_from_id: origin?.handedOffFromId ?? null,
     hop_count: origin?.hopCount ?? null,
     root_request_id: origin?.rootRequestId ?? null,
+  };
+}
+
+/** MCP shape of a timeline entry: snake_case, the actor and starrer by name. */
+function timelineEntryForMcp(entry: TimelineEntry) {
+  const name = (user: { name: string | null; email: string | null; id: string } | null) => (user ? user.name ?? user.email ?? user.id : null);
+  return {
+    key: entry.key,
+    kind: entry.kind,
+    at: entry.at.toISOString(),
+    actor: name(entry.actor),
+    actor_kind: entry.actorKind,
+    summary: entry.summary,
+    detail: entry.detail,
+    url: entry.url,
+    changes: entry.changes,
+    revision: entry.revision,
+    starred: entry.star !== null,
+    starred_at: entry.star?.starredAt.toISOString() ?? null,
+    starred_by: name(entry.star?.starredBy ?? null),
   };
 }

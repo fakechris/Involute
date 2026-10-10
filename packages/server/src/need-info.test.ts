@@ -11,6 +11,7 @@ import { reportBug } from './bug-report.ts';
 import { computeBugSla, loadBugSlas } from './bug-sla.ts';
 import { startServer, type StartedServer } from './index.ts';
 import { createComment, createIssue } from './issue-service.ts';
+import { loadWorkTimeline } from './work-activity-timeline.ts';
 import { NEEDINFO_DEADLINE_MS, requestNeedInfo, withdrawNeedInfo } from './need-info-service.ts';
 
 loadProjectEnvironment();
@@ -66,6 +67,15 @@ describe('needinfo (INV-1119)', () => {
     expect(await prisma.notification.findFirstOrThrow({ where: { type: 'needinfo.requested', userId: reporter.id } })).toMatchObject({ resolution: 'answered' });
     expect(await prisma.notification.count({ where: { type: 'needinfo.answered', userId: agent.id, workId: bug.id } })).toBe(1);
     expect(await prisma.eventOutbox.count({ where: { type: 'needinfo.answered' } })).toBe(1);
+
+    // The issue timeline (INV-1116) shows it asked and answered.
+    const timeline = await loadWorkTimeline(prisma, bug.id);
+    const needInfoEntries = timeline.entries.filter((entry) => entry.kind === 'NEEDINFO');
+    expect(needInfoEntries.map((entry) => [entry.key, entry.summary, entry.actor?.id])).toEqual([
+      [`needinfo:${request.id}`, 'Asked Rita for information', agent.id],
+      [`needinfo:${request.id}:closed`, 'Rita answered the needinfo', reporter.id],
+    ]);
+    expect(needInfoEntries[0]!.detail).toBe('Which browser?');
   });
 
   it('lets a person ask an agent, which sees it in agent_inbox and answers through agent_request', async () => {

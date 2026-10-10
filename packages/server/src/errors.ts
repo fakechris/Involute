@@ -4,6 +4,9 @@ import { GraphQLError } from 'graphql';
 export const NOT_AUTHENTICATED_MESSAGE = 'Not authenticated';
 export const TEAM_NOT_FOUND_MESSAGE = 'Team not found.';
 export const ISSUE_NOT_FOUND_MESSAGE = 'Issue not found.';
+// INV-1116: starring refers to an entry of the projected issue timeline.
+export const TIMELINE_ENTRY_NOT_FOUND_MESSAGE = 'That timeline entry does not exist on this work item. Read the timeline and pass an entry key it lists.';
+export const TIMELINE_ENTRY_KEY_REQUIRED_MESSAGE = 'entryKey is required.';
 export const COMMENT_NOT_FOUND_MESSAGE = 'Comment not found.';
 export const COMMENT_PARENT_ISSUE_MISMATCH_MESSAGE =
   'Parent comment belongs to a different work item.';
@@ -74,7 +77,7 @@ export const CONTAINS_REPOSITORY_WHITESPACE_MESSAGE = 'CONTAINS repository value
 export const CONTAINS_CROSS_REPOSITORY_MESSAGE = 'CONTAINS cannot cross repository boundaries.';
 export const CONTAINS_MULTIPLE_PARENTS_MESSAGE = 'CONTAINS cannot have multiple parents; use an explicit parent update.';
 export const HIERARCHY_PARENT_MISSING_MESSAGE = 'Hierarchy parent does not exist.';
-export const ISSUE_TYPE_EXCLUSIVE_MESSAGE = 'An item has at most one Type: Bug, Feature, Improvement or Research.';
+export const ISSUE_TYPE_EXCLUSIVE_MESSAGE = 'An item has at most one Type: Bug, Feature, Improvement, Research or Incident.';
 export const RESEARCH_CLOSE_NOT_ISSUE_MESSAGE = 'Only an ISSUE with Type: Research can be closed by an agent; a person accepts everything else.';
 export const RESEARCH_CLOSE_NOT_COMMITTED_MESSAGE = 'A research item an agent closes must be committed first: a person commits it, then the agent may move it to Done.';
 export const RESEARCH_CLOSE_CLAIMED_MESSAGE = 'Another actor holds the claim on this research item; it closes when that claim ends or by its holder.';
@@ -98,6 +101,16 @@ export const BUG_PROPOSE_STEPS_REQUIRED_MESSAGE =
   'A bug is committed directly (it does not go to Candidates): pass steps_to_reproduce.';
 export const BUG_PROPOSE_OWNER_REQUIRED_MESSAGE =
   'A bug is committed directly (it does not go to Candidates): the filing agent needs a human owner on this team.';
+export const INCIDENT_PARENT_REQUIRED_MESSAGE =
+  'An incident is committed directly (it does not go to Candidates): say where it belongs — parent_id, or related_work_id so it can inherit a parent.';
+export const INCIDENT_SEVERITY_REQUIRED_MESSAGE =
+  'An incident needs a severity: SEV1 (Critical), SEV2 (Major) or SEV3 (Minor). Unsure? Pick the higher one (docs/severity.md).';
+export const INCIDENT_IMPACT_REQUIRED_MESSAGE =
+  'An incident needs an impact statement in its description: who or what is affected, and how.';
+export const INCIDENT_OWNER_REQUIRED_MESSAGE =
+  'An incident is committed directly (it does not go to Candidates): the declaring agent needs a human owner on this team, who becomes the Incident Lead.';
+export const INCIDENT_STARTED_STATE_MISSING_MESSAGE =
+  'An incident starts In Progress (investigating), but this team has no started workflow state.';
 export const BUG_REJECT_REASON_REQUIRED_MESSAGE = 'Declining a bug needs a reason (zero-bug: fix it or say why not).';
 export const WORK_REJECT_RESOLUTION_REQUIRED_MESSAGE =
   'Rejecting a candidate needs a resolution: completed, wont_do, invalid, duplicate, cannot_reproduce or obsolete.';
@@ -270,6 +283,8 @@ const exposedErrorCodes = new Map<string, string>([
   [TEAM_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ISSUE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [REQUEST_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [TIMELINE_ENTRY_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [TIMELINE_ENTRY_KEY_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [COMMENT_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [COMMENT_PARENT_ISSUE_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
   [MEMBERSHIP_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
@@ -342,6 +357,11 @@ const exposedErrorCodes = new Map<string, string>([
   [BUG_PROPOSE_STEPS_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_PROPOSE_ACCEPTANCE_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_PROPOSE_OWNER_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_PARENT_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_SEVERITY_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_IMPACT_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_OWNER_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_STARTED_STATE_MISSING_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_REJECT_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_NO_BACKLOG_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_REJECT_RESOLUTION_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],

@@ -45,6 +45,7 @@ import { NeedInfoControl, NeedInfoWithdrawButton } from '../components/NeedInfoC
 import { AddSubIssueButton } from '../components/AddSubIssueButton';
 import { BugSlaBadge } from '../components/BugSlaBadge';
 import { ClaimControl } from '../components/ClaimControl';
+import { IssueTimeline } from '../components/IssueTimeline';
 import { WorkStructureEditor } from '../components/WorkStructureEditor';
 import { toggleLabelId } from '../work/labels';
 import { mergeIssueWithPreservedComments } from '../board/utils';
@@ -52,7 +53,7 @@ import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { writeStoredShellIssue } from '../lib/app-shell-state';
-import { IcoChevL, IcoChevR, IcoCopy, IcoMore, IcoLink, IcoClose, IcoLabel } from '../components/Icons';
+import { IcoChevL, IcoChevR, IcoCopy, IcoMore, IcoLink, IcoClose } from '../components/Icons';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { Avatar, Btn, Kbd } from '../components/Primitives';
 import { RichTextEditor } from '../components/RichTextEditor';
@@ -234,66 +235,6 @@ export function IssuePage() {
         : [],
     [issueSnapshot],
   );
-
-  const activityEntries = useMemo(() => {
-    if (!issueSnapshot) {
-      return [];
-    }
-
-    const entries: Array<{
-      kind: 'event' | 'comment';
-      id: string;
-      timestamp: string;
-      title: string;
-      body?: string;
-      comment?: CommentSummary;
-    }> = [
-      {
-        kind: 'event',
-        id: `${issueSnapshot.id}-created`,
-        timestamp: issueSnapshot.createdAt,
-        title: `${issueSnapshot.identifier} was created`,
-      },
-      {
-        kind: 'event',
-        id: `${issueSnapshot.id}-state`,
-        timestamp: issueSnapshot.updatedAt,
-        title: `Current state is ${issueSnapshot.state.name}`,
-      },
-    ];
-
-    if (issueSnapshot.assignee) {
-      entries.push({
-        kind: 'event',
-        id: `${issueSnapshot.id}-assignee`,
-        timestamp: issueSnapshot.updatedAt,
-        title: `Assigned to ${issueSnapshot.assignee.name ?? issueSnapshot.assignee.email ?? 'Unknown'}`,
-      });
-    }
-
-    if (issueSnapshot.labels.nodes.length > 0) {
-      entries.push({
-        kind: 'event',
-        id: `${issueSnapshot.id}-labels`,
-        timestamp: issueSnapshot.updatedAt,
-        title: 'Labels updated',
-        body: [...new Set(issueSnapshot.labels.nodes.map((l) => l.name))].join(', '),
-      });
-    }
-
-    comments.forEach((comment) => {
-      entries.push({
-        kind: 'comment',
-        id: comment.id,
-        timestamp: comment.createdAt,
-        title: renderCommentAuthor(comment),
-        body: comment.body,
-        comment,
-      });
-    });
-
-    return entries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-  }, [comments, issueSnapshot]);
 
   // --- Mutation handlers ---
 
@@ -1027,60 +968,42 @@ export function IssuePage() {
               </div>
             ) : null}
 
-            {/* Activity */}
-            <div className="issue-panel__activity-section">
-              <div className="issue-panel__activity-header">Activity</div>
-              <div className="issue-activity" aria-label="Issue activity">
-                {activityEntries.map((entry) =>
-                  entry.kind === 'comment' && entry.comment ? (
-                    <div key={entry.id} id={`comment-${entry.id}`} className="issue-activity__comment">
-                      <Avatar user={{ name: renderCommentAuthor(entry.comment) }} size={22} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="issue-activity__comment-meta">
-                          <ActorBadge
-                            actor={entry.comment.user}
-                            onSelect={(picked) => navigate(`/agents/${picked}`)}
-                          />
-                          <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
-                            {formatTimestamp(entry.timestamp)}
-                          </span>
-                          <button
-                            type="button"
-                            className="discussion-entry__delete"
-                            aria-label="Delete comment"
-                            disabled={isSavingState}
-                            onClick={() => {
-                              if (!confirmCommentDelete()) return;
-                              void persistCommentDelete(activeIssue, entry.comment!.id).catch(() => undefined);
-                            }}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                        <MarkdownRenderer content={entry.comment.body} />
-                      </div>
-                    </div>
-                  ) : (
-                    <div key={entry.id} className="issue-activity__event">
-                      <div className="issue-activity__event-icon">
-                        {entry.id.endsWith('-labels') ? (
-                          <IcoLabel size={12} />
-                        ) : (
-                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--fg-dim)', display: 'block' }} />
-                        )}
-                      </div>
-                      <span style={{ flex: 1 }}>{entry.title}</span>
-                      {entry.body ? (
-                        <span style={{ color: 'var(--fg-muted)' }}>{entry.body}</span>
-                      ) : null}
-                      <span style={{ marginLeft: 'auto', fontSize: 13 }}>
-                        {formatTimestamp(entry.timestamp)}
+            {/* Activity: the server timeline with the page's comments (INV-1116) */}
+            <IssueTimeline
+              issueId={activeIssue.id}
+              comments={comments}
+              refreshKey={`${activeIssue.revision}:${activeIssue.updatedAt}:${comments.length}`}
+              renderComment={(comment, star) => (
+                <div id={`comment-${comment.id}`} className="issue-activity__comment">
+                  <Avatar user={{ name: renderCommentAuthor(comment) }} size={22} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="issue-activity__comment-meta">
+                      <ActorBadge
+                        actor={comment.user}
+                        onSelect={(picked) => navigate(`/agents/${picked}`)}
+                      />
+                      <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
+                        {formatTimestamp(comment.createdAt)}
                       </span>
+                      <button
+                        type="button"
+                        className="discussion-entry__delete"
+                        aria-label="Delete comment"
+                        disabled={isSavingState}
+                        onClick={() => {
+                          if (!confirmCommentDelete()) return;
+                          void persistCommentDelete(activeIssue, comment.id).catch(() => undefined);
+                        }}
+                      >
+                        Delete
+                      </button>
+                      {star}
                     </div>
-                  ),
-                )}
-              </div>
-            </div>
+                    <MarkdownRenderer content={comment.body} />
+                  </div>
+                </div>
+              )}
+            />
 
             {/* Comment box */}
             <RichTextEditor

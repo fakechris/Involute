@@ -274,6 +274,35 @@ export interface BugReportMutationVariables {
   };
 }
 
+export interface IncidentDeclareMutationData {
+  workPropose: {
+    success: boolean;
+    message?: string | null;
+    issue: {
+      id: string;
+      identifier: string;
+      title: string;
+      severity: IssueSeverity | null;
+      repository: string | null;
+      commitmentStatus?: 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
+    } | null;
+  };
+}
+
+export interface IncidentDeclareMutationVariables {
+  input: {
+    teamId: string;
+    title: string;
+    /** The impact statement (INV-1123). */
+    description: string;
+    severity: IssueSeverity;
+    parentId: string;
+    /** Label names: incident plus any extra labels. */
+    labels: string[];
+    source: string;
+  };
+}
+
 export interface SimilarBugsQueryData {
   similarBugs: Array<{ id: string; identifier: string; title: string; state: { id: string; name: string } }>;
 }
@@ -290,6 +319,8 @@ export interface BugSummaryData {
   oldestOpenAgeDays: number | null;
   avgOpenAgeDays: number | null;
   createdPerWeek: Array<{ weekStart: string; count: number }>;
+  /** Open bugs most DUPLICATE_OF links point at (INV-1124); absent from older servers. */
+  mostDuplicated?: Array<{ id: string; identifier: string; title: string; priority: number; duplicateCount: number }>;
   /** Triage, SLA, source and placement (INV-751); absent from older servers. */
   metrics?: BugMetricsData;
 }
@@ -312,6 +343,7 @@ export interface BugMetricsData {
 
 export interface BugsPageQueryData {
   bugSummary: BugSummaryData;
+  teams?: { nodes: Array<{ id: string; states?: { nodes: WorkflowStateSummary[] } }> };
   issues: {
     nodes: IssueSummary[];
     pageInfo: {
