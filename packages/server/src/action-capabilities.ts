@@ -66,6 +66,8 @@ export const QUERY_EXEMPTIONS: Record<string, { reason: string; decision: string
   agentCredentials: { reason: 'Credential issuance and lifecycle belong to human administrators.', decision: 'INV-846' },
   webhooks: { reason: 'Integration credentials are administrative controls.', decision: 'INV-796' },
   opsOverview: { reason: 'Operations runbook view for administrators.', decision: 'INV-796' },
+  attention: { reason: 'The Needs you queue of decisions only people make; an agent learns of decisions through agent_inbox.', decision: 'INV-1090' },
+  attentionSummary: { reason: 'The Needs you count for people; agents read agent_inbox.', decision: 'INV-1090' },
 };
 
 /** MCP write tools with no GraphQL counterpart, and why. */
