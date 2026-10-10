@@ -17,6 +17,8 @@ Rules of thumb:
   every change is audited with the old value.
 - **A SEV3 incident is essentially a bug.** File it as a Bug with a severity
   rather than declaring an incident.
+- Severity is required on incidents (Type: Incident, INV-1123): declaring one
+  without it is refused.
 - Severity is optional on bugs and on any other work. Leave it empty
   ("not judged") when nobody has looked at the impact yet.
 
