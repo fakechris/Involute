@@ -179,7 +179,8 @@ describe('Free-text search (INV-925)', () => {
     expect(rest).toEqual([]);
     expect(hit?.issue.identifier).toBe(studied.identifier);
     expect(hit?.matchedField).toBe('attachment');
-    expect(hit?.attachmentFilename).toBe('part-1.md');
+    // The three alphaword files can share a createdAt millisecond; any of them is a right snippet.
+    expect(hit?.attachmentFilename).toMatch(/^part-[123]\.md$/);
   });
 
   it('finds a word deep inside a long attachment and snippets around it', async () => {
