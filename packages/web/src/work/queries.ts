@@ -629,6 +629,13 @@ export const WORK_HYGIENE_QUERY = gql`
         title
         repository
       }
+      researchWithoutAttachmentCount
+      researchWithoutAttachment {
+        id
+        identifier
+        title
+        repository
+      }
       incidentsWithoutDownstreamCount
       incidentsWithoutDownstream {
         id

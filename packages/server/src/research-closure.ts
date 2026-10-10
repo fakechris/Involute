@@ -24,6 +24,10 @@ type DatabaseClient = PrismaClient | Prisma.TransactionClient;
  */
 export const RESEARCH_CLOSE_REASON = 'research closed by agent (Type: Research)';
 
+/** Returned (not thrown) when research is completed or closed with no file attached (INV-1128). */
+export const RESEARCH_NO_ATTACHMENT_WARNING =
+  'This research has no attachment. Attach its report with work_attach_file(work_id, filename, mime_type, content) so people and other agents can check it; /hygiene lists research without an attachment until one is attached (INV-1003, INV-1128).';
+
 /** Source marker for a research candidate proposed with initial_state DONE; committing it lands in Done. */
 export const INITIAL_DONE_MARKER = 'initial_state=DONE';
 

@@ -22,6 +22,8 @@ const hygieneData: WorkHygieneQueryData = {
     researchWithoutDownstream: [{ ...ref(694, 'External projects study'), repository: 'fakechris/lumenbox' }],
     researchClosableCount: 1,
     researchClosable: [{ ...ref(940, 'Delivery package study'), repository: 'fakechris/Involute' }],
+    researchWithoutAttachmentCount: 1,
+    researchWithoutAttachment: [{ ...ref(1140, 'Vendor pricing study'), repository: 'fakechris/Involute' }],
     incidentsWithoutDownstreamCount: 1,
     incidentsWithoutDownstream: [{ ...ref(1130, 'Board blank for everyone'), severity: 'SEV3' }],
     incidentsWithoutPostmortemCount: 1,
@@ -52,6 +54,13 @@ describe('work graph health page (INV-721)', () => {
     const postmortem = screen.getByRole('region', { name: 'Incidents without a postmortem' });
     expect(within(postmortem).getByText('INV-1131')).toBeInTheDocument();
     expect(within(postmortem).getByText('SEV1')).toBeInTheDocument();
+  });
+
+  it('lists research without an attachment (INV-1128)', async () => {
+    renderApp(App, { data: boardQueryResult, loading: false, hygieneData }, ['/hygiene']);
+    const summary = await screen.findByLabelText('Summary');
+    expect(summary).toHaveTextContent('1Research without an attachment');
+    expect(within(screen.getByRole('region', { name: 'Research without an attachment' })).getByText('INV-1140')).toBeInTheDocument();
   });
 
   it('records a worded dependency in the right direction', async () => {

@@ -1403,6 +1403,9 @@ const typeDefs = /* GraphQL */ `
     "Research in Review whose derived items are all committed; its proposer can close it (INV-1001)."
     researchClosableCount: Int!
     researchClosable: [Issue!]!
+    "Research in Review or Done with no file attached: its report was never uploaded (INV-1128)."
+    researchWithoutAttachmentCount: Int!
+    researchWithoutAttachment: [Issue!]!
     "Incidents in Review or Done nothing derives from and not stating 无可执行点 (INV-1126)."
     incidentsWithoutDownstreamCount: Int!
     incidentsWithoutDownstream: [Issue!]!
