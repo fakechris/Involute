@@ -191,6 +191,7 @@ export const HUMAN_GATES: HumanGate[] = [
   { text: 'Agents cannot rewrite committed contract fields', mutation: 'issueUpdate', attention: 'CONTRACT_AMENDMENT' },
   { text: 'Work owner must be a human assignee', mutation: 'issueUpdate', attention: { none: 'Refuses an agent owner on the edit itself; nothing is left waiting (INV-1090).' } },
   { text: 'Only a person can turn automatic acceptance of verified bug fixes on or off.', mutation: 'issueUpdate', attention: { none: 'A project setting a person changes when they choose to, not a pending decision (INV-1075).' } },
+  { text: 'Only a person cancels work', mutation: 'issueUpdate', attention: { none: 'Canceling is done on the issue itself with a resolution when a person decides to; nothing is left waiting (INV-1118).' } },
   { text: 'Only a person may reconcile external effects.', mutation: 'executorUpdate', attention: { none: 'Reconciling is done from the executor panel when a receipt is disputed; not a queued decision (INV-944).' } },
   { text: 'Instantiate an approved delivery unit and any predecessors', mutation: 'deliveryExecutionCreate', attention: { none: 'Follows an approval already decided under DELIVERY_CHANGE; starting it is the owner\'s choice of timing (INV-993).' } },
   { text: 'Only a person may approve or reject a delivery change set', mutation: 'deliveryChangeDecide', attention: 'DELIVERY_CHANGE' },

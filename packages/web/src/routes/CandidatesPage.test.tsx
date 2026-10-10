@@ -153,6 +153,7 @@ vi.mock('@apollo/client/react', () => ({
   useMutation: vi.fn((mutation: { loc?: { source?: { body?: string } } }) => {
     const body = mutation.loc?.source?.body ?? '';
     if (body.includes('workUncommit')) return [mockRunUncommit, { loading: false }];
+    if (body.includes('workReject(')) return [mockRunReject, { loading: false }];
     return [mockRunCommit, { loading: false }];
   }),
 }));
@@ -195,6 +196,24 @@ describe('CandidatesPage', () => {
     expect(screen.getByRole('button', { name: /Batch Commit \(2\)/ })).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'Enter', metaKey: true });
     await waitFor(() => expect(mockRunCommit).toHaveBeenCalledTimes(1));
+  });
+
+  it('batch-rejects only once a resolution is chosen, and sends it with each item (INV-1118)', async () => {
+    render(
+      <MemoryRouter>
+        <CandidatesPage />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByLabelText(/Select all visible/));
+    const batchReject = screen.getByRole('button', { name: /Batch Reject \(2\)/ });
+    expect(batchReject).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Resolution for batch reject'), { target: { value: 'OBSOLETE' } });
+    expect(batchReject).toBeEnabled();
+    fireEvent.click(batchReject);
+    await waitFor(() => expect(mockRunReject).toHaveBeenCalledTimes(2));
+    expect(mockRunReject).toHaveBeenCalledWith({
+      variables: { id: 'cand-1', input: expect.objectContaining({ resolution: 'OBSOLETE', expectedRevision: 1 }) },
+    });
   });
 
   it('supports multi-select checkboxes and batch commit', async () => {
@@ -531,7 +550,17 @@ describe('CandidatesPage', () => {
         expect(commit).toBeDisabled();
         expect(reject).toBeDisabled();
         fireEvent.change(within(card).getByLabelText('Reject reason for INV-60'), { target: { value: 'Works as designed' } });
+        // A reason alone is not enough: the resolution comes first (INV-1118).
+        expect(reject).toBeDisabled();
+        expect(reject).toHaveAttribute('title', 'Choose a resolution first: why is it closed?');
+        fireEvent.change(within(card).getByLabelText('Resolution for INV-60'), { target: { value: 'INVALID' } });
         expect(reject).toBeEnabled();
+        fireEvent.click(reject);
+        await waitFor(() =>
+          expect(mockRunReject).toHaveBeenCalledWith({
+            variables: { id: 'cand-bug', input: expect.objectContaining({ resolution: 'INVALID', reason: 'Works as designed' }) },
+          }),
+        );
         fireEvent.change(within(card).getByLabelText('Priority for INV-60'), { target: { value: '2' } });
         fireEvent.change(within(card).getByLabelText('Owner for INV-60'), { target: { value: 'user-admin' } });
         fireEvent.click(commit);

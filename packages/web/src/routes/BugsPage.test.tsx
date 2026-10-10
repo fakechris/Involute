@@ -45,6 +45,10 @@ const bugsPageData = {
         { source: 'HUMAN_REPORT', count: 3 },
         { source: 'AGENT', count: 2 },
       ],
+      byResolution: [
+        { resolution: 'INVALID', source: 'AGENT', count: 1 },
+        { resolution: 'WONT_DO', source: 'HUMAN_REPORT', count: 1 },
+      ],
       unplacedOpenCount: 1,
     },
   },
@@ -139,6 +143,22 @@ describe('BugsPage', () => {
     expect(breaches).toHaveTextContent('INV-30');
     expect(breaches).toHaveTextContent('5.5h over');
     expect(screen.getByLabelText('Bugs by source')).toHaveTextContent('Reported by people3Filed by agents2');
+  });
+
+  it('shows why bugs were closed without a fix, by reporter, with the false-report rate (INV-1118)', () => {
+    render(
+      <MemoryRouter>
+        <BugsPage />
+      </MemoryRouter>,
+    );
+    const panel = screen.getByLabelText('Bugs closed without a fix');
+    const rows = within(panel).getAllByRole('row').map((row) => row.textContent);
+    expect(rows).toEqual([
+      'ResolutionReported by peopleFiled by agentsOther',
+      "Won't do100",
+      'Invalid (not a real problem)010',
+      'False-report rate0%50%—',
+    ]);
   });
 
 

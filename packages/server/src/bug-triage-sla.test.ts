@@ -105,9 +105,9 @@ describe('zero-bug triage (INV-750)', () => {
 
   it('declines a bug only with a reason', async () => {
     const bug = await bugCandidate();
-    await expect(rejectWork(prisma, bug.id, { expectedRevision: 1 }, human())).rejects.toThrow(/needs a reason/);
+    await expect(rejectWork(prisma, bug.id, { expectedRevision: 1, resolution: 'INVALID' }, human())).rejects.toThrow(/needs a reason/);
     const fresh = await prisma.issue.findUniqueOrThrow({ where: { id: bug.id } });
-    await expect(rejectWork(prisma, bug.id, { expectedRevision: fresh.revision, reason: 'Works as designed' }, human())).resolves.toMatchObject({ commitmentStatus: 'REJECTED' });
+    await expect(rejectWork(prisma, bug.id, { expectedRevision: fresh.revision, resolution: 'WONT_DO', reason: 'Works as designed' }, human())).resolves.toMatchObject({ commitmentStatus: 'REJECTED' });
   });
 
   it('reminds the owner and triager once when a bug is at risk and once when breached', async () => {

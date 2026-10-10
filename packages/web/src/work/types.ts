@@ -1,3 +1,4 @@
+import type { WorkResolution } from '../components/CloseReasonDialog';
 import type { ContractAmendmentSummary, UserSummary, WorkflowStateSummary, WorkflowStateType } from '../board/types';
 
 export type CommitmentStatus = 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
@@ -415,6 +416,8 @@ export interface WorkRejectMutationVariables {
   id: string;
   input: {
     expectedRevision: number;
+    /** Required (INV-1118). */
+    resolution: WorkResolution;
     reason?: string;
   };
 }
