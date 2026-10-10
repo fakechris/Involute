@@ -101,6 +101,14 @@ describe('issue timeline (INV-1116)', () => {
     expect(new Set(timeline.entries.map((entry) => entry.key)).size).toBe(timeline.entries.length);
   });
 
+  it('labels severity changes (INV-1115) by name', async () => {
+    await updateIssue(prisma, work.id, { severity: 'SEV2' }, writeActorFromViewer(admin));
+    await updateIssue(prisma, work.id, { severity: 'SEV1' }, writeActorFromViewer(admin));
+    await updateIssue(prisma, work.id, { severity: null }, writeActorFromViewer(admin));
+    const entries = (await loadWorkTimeline(prisma, work.id)).entries.filter((entry) => entry.changes.some((change) => change.field === 'severity'));
+    expect(entries.map((entry) => entry.summary)).toEqual(['Severity set to SEV2 Major', 'Severity SEV2 Major → SEV1 Critical', 'Severity cleared']);
+  });
+
   it('shows nothing to a person who cannot read the work, and never names work they cannot read', async () => {
     await expect(workTimelineFor(human(outsider), work.identifier)).rejects.toThrow();
     await expect(callMcpTool(human(outsider), 'work_timeline', { work_id: work.identifier }, true)).rejects.toThrow();

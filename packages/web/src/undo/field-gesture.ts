@@ -38,6 +38,7 @@ export function beforePatch(issue: IssueSummary, after: IssueFieldPatch): IssueF
     switch (key) {
       case 'stateId': before.stateId = issue.state.id; break;
       case 'priority': before.priority = issue.priority; break;
+      case 'severity': before.severity = issue.severity ?? null; break;
       case 'assigneeId': before.assigneeId = issue.assignee?.id ?? null; break;
       case 'labelIds': before.labelIds = issue.labels.nodes.map((label) => label.id); break;
       case 'title': before.title = issue.title; break;
@@ -59,6 +60,7 @@ function describe(patch: IssueFieldPatch, names: FieldNames): string {
     switch (key) {
       case 'stateId': parts.push(`moved to ${names.stateName?.(String(value)) ?? 'another state'}`); break;
       case 'priority': parts.push(`priority set to ${PRIORITY_NAMES[Number(value)] ?? String(value)}`); break;
+      case 'severity': parts.push(value ? `severity set to ${String(value)}` : 'severity cleared'); break;
       case 'assigneeId': parts.push(value ? `assigned to ${names.userName?.(String(value)) ?? 'someone'}` : 'unassigned'); break;
       case 'labelIds': {
         const labels = names.labelNames?.(value as string[]) ?? [];

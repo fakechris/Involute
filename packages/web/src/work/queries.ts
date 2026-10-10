@@ -719,6 +719,7 @@ export const WORK_SEARCH_QUERY = gql`
       matchedField
       snippet
       commentId
+      attachmentFilename
       issue {
         id
         identifier
@@ -776,6 +777,13 @@ export const ATTENTION_PAGE_QUERY = gql`
           identifier
           title
           kind
+        }
+        overdue
+        unblocked
+        waitingOn {
+          id
+          identifier
+          title
         }
         work {
           ...CandidateWorkFields

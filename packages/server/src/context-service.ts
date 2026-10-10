@@ -186,6 +186,9 @@ export interface SearchWorkMatch {
   field: SearchField;
   snippet: string | null;
   commentId: string | null;
+  /** The attachment the snippet came from, and its file name (INV-1117). */
+  attachmentId: string | null;
+  filename: string | null;
 }
 
 export async function searchWork(
@@ -232,9 +235,9 @@ export async function searchWork(
       readableWhere,
       semantic,
     );
-    return hits.map(({ issue: { state: _state, ...issue }, matchedField, snippet, commentId }) => ({
+    return hits.map(({ issue: { state: _state, ...issue }, matchedField, snippet, commentId, attachmentId, attachmentFilename }) => ({
       ...issue,
-      match: { field: matchedField, snippet, commentId },
+      match: { field: matchedField, snippet, commentId, attachmentId, filename: attachmentFilename },
     }));
   }
 

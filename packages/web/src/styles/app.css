@@ -2349,6 +2349,29 @@ kbd {
   border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent);
 }
 
+/* Severity (INV-1115): impact, shown apart from the priority icon. */
+.issue-card__severity {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 1.5px 5px;
+  border-radius: var(--r-1);
+  --severity-tone: var(--fg-dim);
+  color: var(--severity-tone);
+  background: color-mix(in srgb, var(--severity-tone) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--severity-tone) 32%, transparent);
+}
+
+.issue-card__severity--sev1 {
+  --severity-tone: var(--danger);
+}
+
+.issue-card__severity--sev2 {
+  --severity-tone: var(--warn);
+}
+
 .issue-card__assignee-group {
   display: inline-flex;
   align-items: center;
@@ -6974,4 +6997,37 @@ a.bugs-stat {
   color: var(--danger, #c33);
   font-size: 13px;
   margin-bottom: 6px;
+}
+
+/* Work-tree packs and waits in Needs you (INV-1094). */
+.attention-section__summary {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  color: var(--fg-muted);
+}
+
+.attention-row__flag {
+  font-size: 11.5px;
+  color: var(--fg-dim);
+}
+
+.attention-row__flag--ready {
+  color: var(--accent);
+}
+
+.attention-row__flag--overdue,
+.attention-row--overdue .attention-row__text > .mono {
+  color: var(--danger, #e5484d);
+}
+
+.attention-pack-confirm {
+  margin: 6px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-2);
+}
+
+.attention-pack-confirm ul {
+  margin: 4px 0 8px;
+  padding-left: 18px;
 }

@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { AgentRequestActions } from '../components/AgentRequestActions';
 import { ContractAmendmentPanel, useContractAmendmentDecisions } from '../components/ContractAmendmentPanel';
-import { DeliveryChangeQueue } from '../components/DeliveryPanel';
+import { DELIVERY_DECIDE_MUTATION, DeliveryChangeQueue } from '../components/DeliveryPanel';
 import { HumanReviewSection } from '../components/HumanReviewSection';
 import { Btn } from '../components/Primitives';
 import { RespondToAgent } from '../components/RespondToAgent';
@@ -55,11 +55,89 @@ export function formatWait(since: string, now = Date.now()): string {
 }
 
 interface Section {
-  kind: AttentionKind;
+  key: string;
   title: string;
   count: number;
   oldestSince: string | null;
   groups: Array<{ key: string; label: string | null; items: AttentionItemNode[] }>;
+  /** Work-tree view: one sentence on what the pack holds (INV-1094). */
+  summary?: string;
+}
+
+export type AttentionView = 'kind' | 'tree';
+const VIEW_STORAGE_KEY = 'involute.todo.view';
+
+const NOUNS: Record<AttentionKind, [string, string]> = {
+  AGENT_REQUEST: ['agent question', 'agent questions'],
+  CANDIDATE_COMMIT: ['candidate to commit', 'candidates to commit'],
+  CONTRACT_AMENDMENT: ['contract change', 'contract changes'],
+  DECISION_REQUESTED: ['decision requested', 'decisions requested'],
+  DELIVERY_CHANGE: ['delivery approval', 'delivery approvals'],
+  OPS: ['operations item', 'operations items'],
+  WORK_REVIEW: ['finished item to accept', 'finished items to accept'],
+};
+
+/** "3 candidates to commit, 1 contract change" in section order. */
+export function packSummary(items: AttentionItemNode[]): string {
+  return SECTIONS.flatMap(({ kind }) => {
+    const count = items.filter((item) => item.kind === kind).length;
+    return count ? [`${count} ${NOUNS[kind][count === 1 ? 0 : 1]}`] : [];
+  }).join(', ');
+}
+
+/**
+ * Inside a pack: what just became ready first (everything before it is done),
+ * then in BLOCKS order — an item waiting on another item of the pack comes
+ * after it — then the longest wait (INV-1094).
+ */
+export function orderPack(items: AttentionItemNode[]): AttentionItemNode[] {
+  const byWait = [...items].sort((a, b) => Number(Boolean(b.unblocked)) - Number(Boolean(a.unblocked)) || a.since.localeCompare(b.since));
+  const ordered: AttentionItemNode[] = [];
+  const remaining = new Set(byWait);
+  while (remaining.size > 0) {
+    const pending = new Set([...remaining].flatMap((item) => (item.work ? [item.work.id] : [])));
+    const next = [...remaining].find((item) => !(item.waitingOn ?? []).some((blocker) => pending.has(blocker.id))) ?? [...remaining][0]!;
+    ordered.push(next);
+    remaining.delete(next);
+  }
+  return ordered;
+}
+
+/** One pack per work tree (nearest EPIC/MILESTONE, else PROJECT); packs with anything overdue first, then the oldest. */
+function buildPacks(items: AttentionItemNode[]): Section[] {
+  const packs = new Map<string, AttentionItemNode[]>();
+  for (const item of items) {
+    const key = item.groupKey ?? '';
+    packs.set(key, [...(packs.get(key) ?? []), item]);
+  }
+  return [...packs.entries()]
+    .map(([key, entries]) => {
+      const ordered = orderPack(entries);
+      const group = entries.find((entry) => entry.group)?.group ?? null;
+      const oldest = [...entries].sort((a, b) => a.since.localeCompare(b.since))[0]!.since;
+      return {
+        count: entries.length,
+        groups: [{ items: ordered, key, label: null }],
+        key: `pack:${key}`,
+        oldestSince: oldest,
+        summary: packSummary(entries),
+        title: group ? `${group.identifier} ${group.title}` : 'Not placed',
+        overdue: entries.some((entry) => entry.overdue),
+      };
+    })
+    .sort((a, b) => Number(b.overdue) - Number(a.overdue) || (a.oldestSince ?? '').localeCompare(b.oldestSince ?? ''))
+    .map(({ overdue: _overdue, ...section }) => section);
+}
+
+/** What a pack's one button may decide: no reason needed, nothing it waits on, nothing stale. Review stays a person's look. */
+export function suggestedDecisions(items: AttentionItemNode[]): AttentionItemNode[] {
+  return items.filter((item) => {
+    if ((item.waitingOn ?? []).length > 0) return false;
+    if (item.kind === 'CANDIDATE_COMMIT') return item.actions.includes('COMMIT');
+    if (item.kind === 'CONTRACT_AMENDMENT') return item.actions.includes('ACCEPT');
+    if (item.kind === 'DELIVERY_CHANGE') return item.actions.includes('APPROVE');
+    return false;
+  });
 }
 
 /** Sections in fixed order; inside one, items under the same EPIC/MILESTONE sit together, longest wait first. */
@@ -76,7 +154,7 @@ function buildSections(items: AttentionItemNode[]): Section[] {
       groups.get(key)!.items.push(item);
     }
     // Groups follow their oldest item; Map keeps first-seen order, which is that.
-    return [{ count: ofKind.length, groups: [...groups.values()], kind, oldestSince: ofKind[0]!.since, title }];
+    return [{ count: ofKind.length, groups: [...groups.values()], key: kind, oldestSince: ofKind[0]!.since, title }];
   });
 }
 
@@ -103,7 +181,12 @@ export function AttentionPage() {
   });
   const refresh = () => refetch();
   const items = data?.attention.nodes ?? NO_ITEMS;
-  const sections = useMemo(() => buildSections(items), [items]);
+  // By kind (decide one sort of thing in a row) or by work tree (decide one piece of work at once), remembered (INV-1094).
+  const [view, setView] = useState<AttentionView>(() => (window.localStorage.getItem(VIEW_STORAGE_KEY) === 'tree' ? 'tree' : 'kind'));
+  useEffect(() => {
+    window.localStorage.setItem(VIEW_STORAGE_KEY, view);
+  }, [view]);
+  const sections = useMemo(() => (view === 'tree' ? buildPacks(items) : buildSections(items)), [items, view]);
   const ordered = useMemo(() => sections.flatMap((section) => section.groups.flatMap((group) => group.items)), [sections]);
 
   const humansByTeam = useMemo(() => {
@@ -127,6 +210,8 @@ export function AttentionPage() {
   const amendmentDecisions = useContractAmendmentDecisions(refresh);
   const [runReview] = useMutation<WorkReviewMutationData, WorkReviewMutationVariables>(WORK_REVIEW_MUTATION);
   const [runCommit] = useMutation<WorkCommitMutationData, WorkCommitMutationVariables>(WORK_COMMIT_MUTATION);
+  const [runDeliveryDecide] = useMutation<{ deliveryChangeDecide: { success: boolean; message?: string | null } }>(DELIVERY_DECIDE_MUTATION);
+  const [packConfirm, setPackConfirm] = useState<{ key: string; title: string; items: AttentionItemNode[] } | null>(null);
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -171,7 +256,37 @@ export function AttentionPage() {
         return 'The commit request failed.';
       }
     }
+    if (item.kind === 'DELIVERY_CHANGE') {
+      try {
+        // No owner chosen: the server keeps the current owner, as the card's default does.
+        const result = await runDeliveryDecide({ variables: { approve: true, id: item.subjectId, note: null, ownerId: null } });
+        return result.data?.deliveryChangeDecide.success ? null : result.data?.deliveryChangeDecide.message ?? 'The delivery change was not approved.';
+      } catch {
+        return 'The delivery request failed.';
+      }
+    }
     return 'Decide this one on the right.';
+  }
+
+  // A pack's suggested decisions, after the person saw the list: stops at the first refusal (INV-1094).
+  async function runPack(entries: AttentionItemNode[]) {
+    setBatchPending(true);
+    const results: Array<{ id: string; label: string; message: string | null }> = [];
+    let stopped = false;
+    for (const item of entries) {
+      const label = item.work?.identifier ?? item.reason;
+      if (stopped) {
+        results.push({ id: item.id, label, message: 'Not done: stopped at the refusal above.' });
+        continue;
+      }
+      const message = await accept(item);
+      results.push({ id: item.id, label, message });
+      if (message) stopped = true;
+    }
+    setBatchResults(results);
+    setPackConfirm(null);
+    setBatchPending(false);
+    await refresh();
   }
 
   async function acceptFocused(item: AttentionItemNode) {
@@ -274,6 +389,13 @@ export function AttentionPage() {
       <div className="page-header">
         <h1 className="page-header__title">Needs you</h1>
         <span className="observation-card__meta">{data ? `${data.attentionSummary.total} waiting on your decision` : ''}</span>
+        <div className="inbox-page__toggle" role="tablist" aria-label="Group by">
+          {(['kind', 'tree'] as const).map((key) => (
+            <button key={key} type="button" role="tab" aria-selected={view === key} className={view === key ? 'is-active' : ''} onClick={() => setView(key)}>
+              {key === 'kind' ? 'By kind' : 'By work tree'}
+            </button>
+          ))}
+        </div>
         <div style={{ flex: 1 }} />
         <span className="observation-card__meta">J/K move · A accept or commit · R reason · H snooze · Z undo · X select</span>
       </div>
@@ -290,11 +412,36 @@ export function AttentionPage() {
         <div className="page-content attention-layout">
           <div className="attention-list" aria-label="Waiting on your decision">
             {sections.map((section) => (
-              <section key={section.kind} className="attention-section" aria-label={section.title}>
+              <section key={section.key} className="attention-section" aria-label={section.title}>
                 <h2 className="attention-section__title">
                   {section.title} <span className="attention-section__count">{section.count}</span>
                   {section.oldestSince ? <span className="observation-card__meta">oldest {formatWait(section.oldestSince)}</span> : null}
                 </h2>
+                {section.summary ? <p className="attention-section__summary">{section.summary}</p> : null}
+                {view === 'tree' && suggestedDecisions(section.groups[0]?.items ?? []).length > 0 ? (
+                  <Btn
+                    variant="subtle"
+                    onClick={() => setPackConfirm({ items: suggestedDecisions(section.groups[0]!.items), key: section.key, title: section.title })}
+                  >
+                    {`Do the suggested decisions (${suggestedDecisions(section.groups[0]!.items).length})`}
+                  </Btn>
+                ) : null}
+                {packConfirm?.key === section.key ? (
+                  <div className="attention-pack-confirm" role="dialog" aria-label={`Confirm decisions for ${section.title}`}>
+                    <p>These will be decided as proposed. Nothing that needs a reason is in the list.</p>
+                    <ul>
+                      {packConfirm.items.map((entry) => (
+                        <li key={entry.id}>
+                          <span className="mono">{entry.work?.identifier}</span> {entry.kind === 'CANDIDATE_COMMIT' ? 'commit' : entry.kind === 'CONTRACT_AMENDMENT' ? 'accept the contract change' : 'approve the delivery change'}
+                        </li>
+                      ))}
+                    </ul>
+                    <Btn variant="accent" disabled={batchPending} onClick={() => void runPack(packConfirm.items)}>
+                      {batchPending ? 'Deciding…' : `Confirm ${packConfirm.items.length} decisions`}
+                    </Btn>
+                    <Btn variant="ghost" onClick={() => setPackConfirm(null)}>Cancel</Btn>
+                  </div>
+                ) : null}
                 {section.groups.map((group) => (
                   <div key={group.key} className="attention-group">
                     {group.label ? <div className="attention-group__label">{group.label}</div> : null}
@@ -304,7 +451,7 @@ export function AttentionPage() {
                           key={item.id}
                           data-list-key-id={item.id}
                           aria-current={focused?.id === item.id ? 'true' : undefined}
-                          className={`attention-row${focused?.id === item.id ? ' attention-row--focused' : ''}`}
+                          className={`attention-row${focused?.id === item.id ? ' attention-row--focused' : ''}${item.overdue ? ' attention-row--overdue' : ''}`}
                           onClick={() => listKeys.setFocusedId(item.id)}
                         >
                           <input
@@ -317,6 +464,11 @@ export function AttentionPage() {
                           <span className="attention-row__text">
                             {item.work ? <span className="mono">{item.work.identifier}</span> : null} {item.work?.title ?? item.reason}
                             <span className="attention-row__reason">{item.reason}</span>
+                            {item.unblocked ? <span className="attention-row__flag attention-row__flag--ready">What blocked it is done</span> : null}
+                            {(item.waitingOn ?? []).length > 0 ? (
+                              <span className="attention-row__flag">Waiting on {(item.waitingOn ?? []).map((blocker) => blocker.identifier).join(', ')}</span>
+                            ) : null}
+                            {item.overdue ? <span className="attention-row__flag attention-row__flag--overdue">Overdue</span> : null}
                           </span>
                           <span className="observation-card__meta" title={new Date(item.since).toLocaleString()}>{formatWait(item.since)}</span>
                         </li>

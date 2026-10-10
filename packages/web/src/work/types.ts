@@ -492,9 +492,11 @@ export interface WorkHygieneQueryData {
 
 export interface WorkSearchHit {
   /** `semantic`: close in meaning, no words matched (INV-927). */
-  matchedField: 'identifier' | 'title' | 'contract' | 'description' | 'comment' | 'run' | 'semantic';
+  matchedField: 'identifier' | 'title' | 'contract' | 'description' | 'comment' | 'attachment' | 'run' | 'semantic';
   snippet: string | null;
   commentId: string | null;
+  /** The attached file the snippet came from (INV-1117). */
+  attachmentFilename?: string | null;
   issue: {
     id: string;
     identifier: string;
@@ -541,6 +543,12 @@ export interface AttentionItemNode {
   groupKey: string | null;
   group: { id: string; identifier: string; title: string; kind: WorkKind } | null;
   work: CandidateWork | null;
+  /** Waited past its kind's limit (INV-1094). */
+  overdue?: boolean;
+  /** Everything that BLOCKS it is finished: ready now. */
+  unblocked?: boolean;
+  /** Unfinished work that BLOCKS it. */
+  waitingOn?: Array<{ id: string; identifier: string; title: string }>;
 }
 
 export interface AttentionPageQueryData {

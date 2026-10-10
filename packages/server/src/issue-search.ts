@@ -6,7 +6,8 @@ import { buildSearchTsQuery, segmentQueryWord } from './search-tokens.js';
 
 /**
  * Free-text search over work items (INV-925): identifier, title, description,
- * contract fields and comments, ranked by where the words were found.
+ * contract fields, comments, run summaries (INV-935) and the text of text
+ * attachments (INV-1117), ranked by where the words were found.
  *
  * Recall is plain `ILIKE` through Prisma (`contains`, insensitive), so Chinese
  * works without segmentation and a two-character word is never dropped (a
@@ -25,9 +26,11 @@ const RECALL_LIMIT = 500;
 const FULL_TEXT_MATCH_CAP = 5000;
 const MAX_TERMS = 8;
 const SNIPPET_RADIUS = 40;
+/** Characters kept each side of a needle found in an attachment (INV-1117); wider than a snippet. */
+const ATTACHMENT_WINDOW = 120;
 
 /** Where the words were found; `semantic` = close in meaning, no words matched (INV-927). */
-export type SearchField = 'identifier' | 'title' | 'contract' | 'description' | 'comment' | 'run' | 'semantic';
+export type SearchField = 'identifier' | 'title' | 'contract' | 'description' | 'comment' | 'attachment' | 'run' | 'semantic';
 type TextField = Exclude<SearchField, 'identifier' | 'semantic'>;
 
 const CONTRACT_FIELDS = ['outcome', 'scope', 'constraints', 'acceptance', 'verification'] as const;
@@ -39,6 +42,8 @@ const FIELD_WEIGHT: Record<TextField, number> = {
   contract: 20,
   description: 12,
   comment: 6,
+  // Attached reports and logs (INV-1117): below what people wrote on the work.
+  attachment: 5,
   // Run summaries (INV-935): process text, weakest of all.
   run: 4,
 };
@@ -95,6 +100,9 @@ export interface IssueSearchHit {
   snippet: string | null;
   /** The comment the snippet came from, when it came from one. */
   commentId: string | null;
+  /** The attachment the snippet came from, when it came from one (INV-1117). */
+  attachmentId: string | null;
+  attachmentFilename: string | null;
 }
 
 export function parseSearchQuery(raw: string): ParsedSearchQuery {
@@ -141,6 +149,7 @@ export async function searchIssues(
         ...CONTRACT_FIELDS.map((field) => ({ [field]: { contains: term, mode: 'insensitive' } })),
         { comments: { some: { body: { contains: term, mode: 'insensitive' } } } },
         { runs: { some: { summary: { contains: term, mode: 'insensitive' } } } },
+        { attachments: { some: { textContent: { contains: term, mode: 'insensitive' } } } },
       ] as Prisma.IssueWhereInput[],
     })),
   };
@@ -204,9 +213,11 @@ export async function searchIssues(
     rankedIds.length > 0 ? recall({ id: { in: rankedIds } }) : Promise.resolve([]),
   ]);
   const candidates = [...new Map([...broad, ...strong, ...ranked].map((issue) => [issue.id, issue])).values()];
+  const attachmentsByIssue = await loadAttachmentMatches(prisma, candidates.map((issue) => issue.id), parsed);
 
   const hits = candidates
-    .map(({ comments, runs, ...issue }) => scoreIssue(issue, comments, runs, parsed, ranks.get(issue.id) ?? 0))
+    .map(({ comments, runs, ...issue }) =>
+      scoreIssue(issue, comments, runs, attachmentsByIssue.get(issue.id) ?? [], parsed, ranks.get(issue.id) ?? 0))
     .filter((hit): hit is IssueSearchHit => hit !== null);
   hits.sort((left, right) =>
     right.score - left.score
@@ -264,7 +275,7 @@ async function fuseWithSemantic(
   if (onlySemantic.length > 0) {
     const issues = await prisma.issue.findMany({ where: { id: { in: onlySemantic } }, include: { state: true } });
     for (const issue of issues) {
-      byId.set(issue.id, { issue, score: 0, matchedField: 'semantic', snippet: null, commentId: null });
+      byId.set(issue.id, { issue, score: 0, matchedField: 'semantic', snippet: null, commentId: null, attachmentId: null, attachmentFilename: null });
     }
   }
   return [...fused.entries()]
@@ -305,6 +316,11 @@ async function rankByFullText(
       SELECT run."workId", ts_rank_cd(run."searchVector", query.q)
         FROM "WorkRun" run, query WHERE run."searchVector" @@ query.q
           AND (${allowedIds === null} OR run."workId"::text = ANY(${allowedIds ?? []}::text[]))
+      UNION ALL
+      SELECT attachment."issueId", ts_rank_cd(attachment."searchVector", query.q)
+        FROM "Attachment" attachment, query WHERE attachment."searchVector" @@ query.q
+          AND attachment."issueId" IS NOT NULL
+          AND (${allowedIds === null} OR attachment."issueId"::text = ANY(${allowedIds ?? []}::text[]))
     ) matches
     GROUP BY id
     ORDER BY rank DESC
@@ -315,6 +331,44 @@ async function rankByFullText(
 
 
 /**
+ * Every text attachment of the candidates that contains some needle
+ * (INV-1117), however many there are, so a query whose words are spread over
+ * several files still scores. Attachments hold up to 100k characters each, so
+ * the database returns only a window around the first occurrence of each
+ * needle found; scoring and snippets need nothing more.
+ */
+async function loadAttachmentMatches(
+  prisma: DatabaseClient,
+  issueIds: string[],
+  parsed: ParsedSearchQuery,
+): Promise<Map<string, SearchableAttachment[]>> {
+  const needles = [...new Set(parsed.terms.flatMap((term) => term.needles))];
+  if (issueIds.length === 0 || needles.length === 0) return new Map();
+  const rows = await prisma.$queryRaw<Array<{ id: string; issueId: string; filename: string; textContent: string }>>`
+    SELECT attachment.id::text AS id, attachment."issueId"::text AS "issueId", attachment.filename,
+           string_agg(
+             substr(attachment."textContent", greatest(1, found.position - ${ATTACHMENT_WINDOW}::int), char_length(needle) + 2 * ${ATTACHMENT_WINDOW}::int),
+             ' … ' ORDER BY found.position
+           ) AS "textContent"
+      FROM "Attachment" attachment
+      CROSS JOIN unnest(${needles}::text[]) AS needle
+      CROSS JOIN LATERAL (SELECT strpos(lower(attachment."textContent"), needle) AS position) found
+     WHERE attachment."issueId"::text = ANY(${issueIds}::text[])
+       AND attachment."textContent" IS NOT NULL
+       AND found.position > 0
+     GROUP BY attachment.id
+     ORDER BY attachment."createdAt" ASC, attachment.id ASC
+  `;
+  const byIssue = new Map<string, SearchableAttachment[]>();
+  for (const row of rows) {
+    const list = byIssue.get(row.issueId) ?? [];
+    list.push({ id: row.id, filename: row.filename, textContent: row.textContent });
+    byIssue.set(row.issueId, list);
+  }
+  return byIssue;
+}
+
+/**
  * Null when some word is not found (and the item was not asked for by
  * number). A word is found when each of its needles is in some field; it
  * counts as strong as the weakest field one of them needed.
@@ -323,6 +377,7 @@ function scoreIssue(
   issue: Issue & { state: WorkflowState },
   comments: Array<{ id: string; body: string }>,
   runs: Array<{ id: string; summary: string | null }>,
+  attachments: SearchableAttachment[],
   parsed: ParsedSearchQuery,
   fullTextRank: number,
 ): IssueSearchHit | null {
@@ -331,13 +386,13 @@ function scoreIssue(
   const byIdentifier = identifierMatches(issue.identifier, parsed.identifier);
   let score = byIdentifier ? IDENTIFIER_WEIGHT : 0;
   let matchedField: SearchField | null = byIdentifier ? 'identifier' : null;
-  let snippet: { text: string; commentId: string | null } | null = null;
+  let snippet: { text: string; commentId: string | null; attachment: SearchableAttachment | null } | null = null;
   let matchedTitleChars = 0;
 
   for (const term of parsed.terms) {
     let weakest: TextField | null = null;
     for (const needle of term.needles) {
-      const found = findNeedle(needle, title, contract, issue.description, comments, runs);
+      const found = findNeedle(needle, title, contract, issue.description, comments, runs, attachments);
       if (!found) {
         weakest = null;
         break;
@@ -345,7 +400,7 @@ function scoreIssue(
       if (found.field === 'title') {
         matchedTitleChars += needle.length;
       } else {
-        snippet ??= { text: excerpt(found.text, needle), commentId: found.commentId };
+        snippet ??= { text: excerpt(found.text, needle), commentId: found.commentId, attachment: found.attachment };
       }
       if (!weakest || FIELD_WEIGHT[found.field] < FIELD_WEIGHT[weakest]) {
         weakest = found.field;
@@ -379,8 +434,12 @@ function scoreIssue(
     matchedField: matchedField ?? 'identifier',
     snippet: snippet?.text ?? null,
     commentId: snippet?.commentId ?? null,
+    attachmentId: snippet?.attachment?.id ?? null,
+    attachmentFilename: snippet?.attachment?.filename ?? null,
   };
 }
+
+type SearchableAttachment = { id: string; filename: string; textContent: string | null };
 
 function findNeedle(
   needle: string,
@@ -389,15 +448,20 @@ function findNeedle(
   description: string | null,
   comments: Array<{ id: string; body: string }>,
   runs: Array<{ id: string; summary: string | null }> = [],
-): { field: TextField; text: string; commentId: string | null } | null {
-  if (title.includes(needle)) return { field: 'title', text: title, commentId: null };
+  attachments: SearchableAttachment[] = [],
+): { field: TextField; text: string; commentId: string | null; attachment: SearchableAttachment | null } | null {
+  const found = (field: TextField, text: string, commentId: string | null = null, attachment: SearchableAttachment | null = null) =>
+    ({ field, text, commentId, attachment });
+  if (title.includes(needle)) return found('title', title);
   const contractText = contract.find((text) => text.toLowerCase().includes(needle));
-  if (contractText) return { field: 'contract', text: contractText, commentId: null };
-  if (description?.toLowerCase().includes(needle)) return { field: 'description', text: description, commentId: null };
+  if (contractText) return found('contract', contractText);
+  if (description?.toLowerCase().includes(needle)) return found('description', description);
   const comment = comments.find((candidate) => candidate.body.toLowerCase().includes(needle));
-  if (comment) return { field: 'comment', text: comment.body, commentId: comment.id };
+  if (comment) return found('comment', comment.body, comment.id);
+  const attachment = attachments.find((candidate) => candidate.textContent?.toLowerCase().includes(needle));
+  if (attachment?.textContent) return found('attachment', attachment.textContent, null, attachment);
   const run = runs.find((candidate) => candidate.summary?.toLowerCase().includes(needle));
-  if (run?.summary) return { field: 'run', text: run.summary, commentId: null };
+  if (run?.summary) return found('run', run.summary);
   return null;
 }
 
