@@ -495,9 +495,11 @@ export interface WorkHygieneQueryData {
 
 export interface WorkSearchHit {
   /** `semantic`: close in meaning, no words matched (INV-927). */
-  matchedField: 'identifier' | 'title' | 'contract' | 'description' | 'comment' | 'run' | 'semantic';
+  matchedField: 'identifier' | 'title' | 'contract' | 'description' | 'comment' | 'attachment' | 'run' | 'semantic';
   snippet: string | null;
   commentId: string | null;
+  /** The attached file the snippet came from (INV-1117). */
+  attachmentFilename?: string | null;
   issue: {
     id: string;
     identifier: string;

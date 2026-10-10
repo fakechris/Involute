@@ -672,10 +672,15 @@ model Attachment {
   uploaderId String   @db.Uuid
   uploader   User     @relation("Uploads", fields: [uploaderId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
+  // Text of a text upload, length-capped, for search; null for binaries (INV-1117).
+  textContent  String?
+  // Full-text vector over textContent, kept by a trigger (INV-1117).
+  searchVector Unsupported("tsvector")?
 
   @@index([issueId])
   @@index([commentId])
   @@index([uploaderId])
+  @@index([searchVector], map: "Attachment_searchVector_idx", type: Gin)
 }
 
 model LegacyLinearMapping {

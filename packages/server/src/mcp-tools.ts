@@ -993,7 +993,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_search',
     annotations: { readOnlyHint: true, destructiveHint: false },
-    description: 'Search Involute work by identifier, title, description, contract fields and comments, best match first. Includes candidates and committed work. Each word must be found somewhere; quote a phrase to keep it together. Each result carries match.field and match.snippet; match.field "semantic" means close in meaning with no words matched (when semantic search is on).',
+    description: 'Search Involute work by identifier, title, description, contract fields, comments, run summaries and text attachments, best match first. Includes candidates and committed work. Each word must be found somewhere; quote a phrase to keep it together. Each result carries match.field and match.snippet; match.field "attachment" adds match.filename, "semantic" means close in meaning with no words matched (when semantic search is on).',
     inputSchema: {
       type: 'object',
       properties: {
