@@ -19,6 +19,7 @@ import {
   INCIDENT_PARENT_REQUIRED_MESSAGE,
   INCIDENT_SEVERITY_REQUIRED_MESSAGE,
   INCIDENT_STARTED_STATE_MISSING_MESSAGE,
+  INCIDENT_TIMES_NOT_INCIDENT_MESSAGE,
   ISSUE_TYPE_EXCLUSIVE_MESSAGE,
   BUG_NO_BACKLOG_MESSAGE,
   BUG_REJECT_REASON_REQUIRED_MESSAGE,
@@ -69,6 +70,7 @@ import { hasInitialDoneMarker, INITIAL_DONE_MARKER, notifyClosableResearch } fro
 import { researchLacksDownstream } from './work-hygiene.js';
 import { announceBug, composeDescription } from './bug-report.js';
 import { announceIncident, INCIDENT_DEFAULT_ACCEPTANCE } from './incident.js';
+import { mergeIncidentTimes, readIncidentTimes } from './incident-timestamps.js';
 import {
   completeWorkIdempotency,
   hashIdempotencyRequest,
@@ -111,6 +113,15 @@ export interface ProposeWorkInput {
   stepsToReproduce?: string | null;
   /** SEV1 (Critical) / SEV2 (Major) / SEV3 (Minor): impact, apart from priority (INV-1115). */
   severity?: string | null;
+  /**
+   * Type: Incident only (INV-1125): impact timestamps at declaration, Date or
+   * ISO string. detectedAt defaults to the declaration time and impactStartedAt
+   * to detectedAt.
+   */
+  impactStartedAt?: Date | string | null;
+  detectedAt?: Date | string | null;
+  mitigatedAt?: Date | string | null;
+  resolvedAt?: Date | string | null;
   /** Existing work (ids or identifiers) this proposal is blocked by — each becomes X BLOCKS new (INV-720). */
   blockedBy?: string[] | null;
   /** Existing work this proposal blocks — each becomes new BLOCKS X. */
@@ -416,6 +427,8 @@ export async function proposeWork(
     const isBug = (input.labels ?? []).some((label) => label.trim().toLowerCase() === 'bug');
     const isIncident = namesIncident(input.labels);
     if (isBug && isIncident) throw createValidationError(ISSUE_TYPE_EXCLUSIVE_MESSAGE);
+    const incidentTimes = readIncidentTimes(input);
+    if (!isIncident && Object.keys(incidentTimes).length > 0) throw createValidationError(INCIDENT_TIMES_NOT_INCIDENT_MESSAGE);
     const steps = nonEmpty(input.stepsToReproduce);
     const priority = input.priority ?? null;
     // Any proposal may suggest a priority; the person who commits it can
@@ -487,6 +500,13 @@ export async function proposeWork(
       createInput.assigneeId = owner;
       createInput.stateId = started.id;
       if (!nonEmpty(input.acceptance)) createInput.acceptance = INCIDENT_DEFAULT_ACCEPTANCE;
+      // Impact timestamps (INV-1125): detected defaults to now, impact started to detected.
+      const detectedAt = incidentTimes.detectedAt ?? new Date();
+      const { next } = mergeIncidentTimes(
+        { impactStartedAt: incidentTimes.impactStartedAt ?? detectedAt, detectedAt, mitigatedAt: null, resolvedAt: null },
+        { mitigatedAt: incidentTimes.mitigatedAt ?? null, resolvedAt: incidentTimes.resolvedAt ?? null },
+      );
+      Object.assign(createInput, next);
       if (createInput.source?.includes('initial_state=BACKLOG')) {
         createInput.source = createInput.source.replace(/;?initial_state=BACKLOG;?/, '').trim() || null;
       }

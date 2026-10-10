@@ -182,6 +182,10 @@ export const ISSUE_UPDATE_MUTATION = gql`
         description
         priority
         severity
+        impactStartedAt
+        detectedAt
+        mitigatedAt
+        resolvedAt
         kind
         repository
         commitmentStatus
@@ -512,6 +516,10 @@ export const ISSUE_PAGE_QUERY = gql`
       description
       priority
       severity
+      impactStartedAt
+      detectedAt
+      mitigatedAt
+      resolvedAt
       kind
       repository
       claim {

@@ -71,6 +71,7 @@ import { hasFixedBugEvidence, recordFixedBugRun, validateFixedBugEvidence } from
 import { uncommitWork } from './work-uncommit.js';
 import { writeActorFromViewer } from './work-service.js';
 import { parseSeverity, SEVERITIES } from './severity.js';
+import { INCIDENT_TIME_ARGS, INCIDENT_TIME_FIELDS, readIncidentTimes, type IncidentTimeField } from './incident-timestamps.js';
 
 export type McpToolName =
   | 'work_search'
@@ -179,6 +180,24 @@ const SEVERITY_PROPERTY = {
   enum: [...SEVERITIES],
   description: "Impact, separate from priority (which orders work and sets a bug's SLA): SEV1 Critical — outage, data loss or security exposure, no workaround; SEV2 Major — a core flow broken or degraded for many, painful workaround; SEV3 Minor — limited impact, a workaround exists. Unsure: pick the higher one. Optional (INV-1115).",
 };
+
+/** Incident impact timestamps on work_propose / work_update; same names as the GraphQL inputs (INV-1125). */
+function readIncidentTimeArgs(args: Record<string, unknown>): Partial<Record<IncidentTimeField, Date | null>> {
+  return readIncidentTimes(Object.fromEntries(INCIDENT_TIME_FIELDS.map((field) => [field, args[INCIDENT_TIME_ARGS[field]]])));
+}
+
+const INCIDENT_TIME_HELP =
+  'Type: Incident only (INV-1125), ISO 8601. Order: impact started ≤ detected / mitigated ≤ resolved; out-of-order values are refused.';
+
+function incidentTimeProperties(nullable: boolean) {
+  const type = nullable ? ['string', 'null'] : 'string';
+  return {
+    impact_started_at: { type, description: `${INCIDENT_TIME_HELP} When the impact began${nullable ? '; can be moved earlier, not cleared' : '; defaults to detected_at'}.` },
+    detected_at: { type, description: `${INCIDENT_TIME_HELP} When it was noticed${nullable ? '; can be moved, not cleared' : '; defaults to now'}.` },
+    mitigated_at: { type, description: `${INCIDENT_TIME_HELP} When the impact stopped; when absent, metrics use resolved_at.${nullable ? ' null clears it.' : ''}` },
+    resolved_at: { type, description: `${INCIDENT_TIME_HELP} When it was fixed; required before the incident moves to In Review (REVIEW or a completed run).${nullable ? ' null clears it.' : ''}` },
+  };
+}
 
 const RECEIPT_SCHEMA = {
   type: 'object',
@@ -456,6 +475,7 @@ async function callMcpAction(
       assignOptional(proposeInput, 'priority', optionalNumber(args.priority));
       assignOptional(proposeInput, 'stepsToReproduce', optionalString(args.steps_to_reproduce));
       assignOptional(proposeInput, 'severity', parseSeverity(args.severity));
+      Object.assign(proposeInput, readIncidentTimeArgs(args));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
       assignOptional(proposeInput, 'verification', optionalString(args.verification));
       const kind = optionalString(args.kind);
@@ -669,6 +689,7 @@ async function callMcpAction(
       assignOptional(updateInput, 'priority', optionalNumber(args.priority));
       const severity = parseSeverity(args.severity);
       if (severity !== undefined) updateInput.severity = severity;
+      Object.assign(updateInput, readIncidentTimeArgs(args));
       if (args.cascade_repository !== undefined) {
         updateInput.cascadeRepository = Boolean(args.cascade_repository);
       } else if (args.repository !== undefined) {
@@ -1193,6 +1214,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
           description: 'Bugs: how to reproduce it; appended to the description under "Steps to reproduce". Fixed on the spot? Also pass initial_state REVIEW.',
         },
         severity: SEVERITY_PROPERTY,
+        ...incidentTimeProperties(false),
         blocked_by: {
           type: 'array',
           items: { type: 'string' },
@@ -1378,6 +1400,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         },
         priority: { type: 'integer' },
         severity: { ...SEVERITY_PROPERTY, type: ['string', 'null'], enum: [...SEVERITIES, null], description: `${SEVERITY_PROPERTY.description} null clears it; a change is audited with the old value.` },
+        ...incidentTimeProperties(true),
         state: {
           type: 'string',
           description: 'Optional target workflow state: UNSTARTED (Ready), STARTED (In Progress), or REVIEW (In Review). DONE only for a committed ISSUE with Type: Research and no other actor\'s claim (INV-912). Never CANCELED.',

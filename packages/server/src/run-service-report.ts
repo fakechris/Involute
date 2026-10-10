@@ -24,7 +24,9 @@ import {
   WORK_RUN_TRANSITION_INVALID_MESSAGE,
   WORK_RUN_CONFLICT_MESSAGE,
   WORK_REVIEW_STATE_MISSING_MESSAGE,
+  INCIDENT_REVIEW_NEEDS_RESOLVED_MESSAGE,
 } from './errors.js';
+import { isIncidentWork } from './labels.js';
 import { recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
 import { attachDecisionReceipt } from './decision-receipt.js';
 import {
@@ -410,6 +412,10 @@ export async function moveToInReview(
   });
 
   if (!reviewState) throw createValidationError(WORK_REVIEW_STATE_MISSING_MESSAGE);
+  // An incident reaches Review once resolved (INV-1125): its run completes after resolvedAt is set.
+  if (!work.resolvedAt && (await isIncidentWork(prisma, work.id))) {
+    throw createValidationError(INCIDENT_REVIEW_NEEDS_RESOLVED_MESSAGE);
+  }
 
   // Optimistic guard: only the first concurrent COMPLETED reporter wins the
   // REVIEW transition. Losers re-read; if the work already moved to a terminal

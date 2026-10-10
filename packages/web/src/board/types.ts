@@ -145,6 +145,11 @@ export interface IssueSummary {
   priority: number;
   /** Impact, apart from priority; null when not judged (INV-1115). */
   severity?: IssueSeverity | null;
+  /** Type: Incident impact timestamps, ISO strings (INV-1125). */
+  impactStartedAt?: string | null;
+  detectedAt?: string | null;
+  mitigatedAt?: string | null;
+  resolvedAt?: string | null;
   /** Committed bugs only (INV-750). */
   bugSla?: BugSlaSummary | null;
   createdAt: string;
@@ -537,6 +542,11 @@ export interface IssueUpdateMutationVariables {
     priority?: number;
     /** SEV1–SEV3; null clears it (INV-1115). */
     severity?: IssueSeverity | null;
+    /** Type: Incident only (INV-1125); ISO strings, null clears mitigated / resolved. */
+    impactStartedAt?: string | null;
+    detectedAt?: string | null;
+    mitigatedAt?: string | null;
+    resolvedAt?: string | null;
     stateId?: string;
     title?: string;
     projectId?: string | null;
