@@ -1,5 +1,6 @@
 import { prepareDeliveryAcceptance, acceptDeliveryChildren, returnDeliveryChildren } from './delivery-review.js';
 import { lockWorkGraph } from './graph-integrity.js';
+import { assertIncidentMayClose } from './incident-closure.js';
 import type { Issue, Prisma, PrismaClient, WorkReviewDecision } from '@prisma/client';
 
 import { enqueueWorkEvent } from './inv11-hooks.js';
@@ -96,6 +97,8 @@ export async function reviewWorkInTransaction(
       select: { type: true },
     });
     if (state?.type !== 'REVIEW') throw createValidationError(WORK_REVIEW_REQUIRED_MESSAGE);
+    // Accepting an incident closes it: its follow-ups and postmortem must be there (INV-1126).
+    if (input.decision === 'ACCEPTED') await assertIncidentMayClose(transaction, work);
     const deliveryTasks = input.decision === 'ACCEPTED' ? await prepareDeliveryAcceptance(transaction, work) : [];
     await claimIssueRevision(transaction, work.id, input.expectedRevision);
 

@@ -18,6 +18,7 @@ import { useListKeys } from '../components/useListKeys';
 import { fetchSessionState } from '../lib/session';
 import { readStoredTeamKey } from '../board/utils';
 import { IcoBug } from '../components/Icons';
+import { FixedBetweenDeploys } from '../components/FixedBetweenDeploys';
 import { Btn, PriorityIcon } from '../components/Primitives';
 
 const CLOSED_STATE_TYPES = new Set(['COMPLETED', 'CANCELED']);
@@ -138,6 +139,8 @@ export function BugsPage() {
             </section>
 
             {summary.metrics ? <BugTriageMetrics metrics={summary.metrics} onOpen={(id) => navigate(`/issue/${id}`)} /> : null}
+
+            <FixedBetweenDeploys repositories={summary.byRepository.flatMap((row) => (row.repository ? [row.repository] : []))} />
 
             <div className="bugs-grid">
               <section className="bugs-panel" aria-label="Bugs by project">

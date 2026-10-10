@@ -33,8 +33,8 @@ export const MCP_TOOL_GROUPS: readonly McpToolGroup[] = [
   },
   {
     name: 'work_timeline',
-    description: 'The issue timeline (INV-1116): action "list" (default) returns audit changes, runs, evidence and comments in time order with actors and entry keys (starred_only for key events); "star" marks an entry as a key event, "unstar" removes the star.',
-    actions: { list: 'work_timeline', star: 'work_timeline_star', unstar: 'work_timeline_unstar' },
+    description: 'The issue timeline (INV-1116): action "list" (default) returns audit changes, runs, evidence and comments in time order with actors and entry keys (starred_only for key events); "star" marks an entry as a key event, "unstar" removes the star; "postmortem_draft" returns a six-section postmortem markdown built from the starred entries, impact timestamps and follow-ups, to complete and attach with work_attach_file (INV-1126).',
+    actions: { list: 'work_timeline', star: 'work_timeline_star', unstar: 'work_timeline_unstar', postmortem_draft: 'work_postmortem_draft' },
     defaultAction: 'list',
   },
   {
