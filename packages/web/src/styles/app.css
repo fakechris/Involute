@@ -2944,6 +2944,33 @@ kbd {
   color: var(--fg);
 }
 
+/* Incident impact timestamps (INV-1125) */
+.incident-times {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.incident-times__summary {
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+
+.incident-times__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.incident-times__label {
+  width: 92px;
+  flex-shrink: 0;
+  color: var(--fg-dim);
+}
+
 .issue-panel__prop-select {
   flex: 1;
   min-width: 0;

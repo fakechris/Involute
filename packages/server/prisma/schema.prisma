@@ -390,6 +390,12 @@ model Issue {
   // INV-1120: how many times it left Done / Canceled for an open state.
   reopenCount       Int               @default(0)
   reopens           WorkReopen[]
+  // INV-1125: Type: Incident only. Impact started ≤ detected / mitigated ≤
+  // resolved; a missing mitigatedAt counts as resolvedAt in metrics.
+  impactStartedAt   DateTime?
+  detectedAt        DateTime?
+  mitigatedAt       DateTime?
+  resolvedAt        DateTime?
   labels            IssueLabel[]
   comments          Comment[]
   embeddings        IssueEmbedding[]
