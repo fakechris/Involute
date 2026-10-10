@@ -74,6 +74,7 @@ import { writeActorFromViewer } from './work-service.js';
 import { parseSeverity, SEVERITIES } from './severity.js';
 import { INCIDENT_TIME_ARGS, INCIDENT_TIME_FIELDS, readIncidentTimes, type IncidentTimeField } from './incident-timestamps.js';
 import { parseReproducibility, REPRODUCIBILITIES } from './reproducibility.js';
+import { parseFoundInSha } from './found-in.js';
 
 export type McpToolName =
   | 'work_search'
@@ -207,6 +208,13 @@ const REPRODUCIBILITY_PROPERTY = {
   type: 'string',
   enum: [...REPRODUCIBILITIES],
   description: 'How often the bug shows up when someone tries: ALWAYS (every try), SOMETIMES (some tries), ONCE (seen once, not reproduced since). SOMETIMES and ONCE bugs are never auto-accepted — a merged PR with green CI cannot prove an intermittent bug gone — so a person accepts them. Optional (INV-1122).',
+};
+
+/** Found-in on the write tools: a deploy SHA, as GraphQL foundInSha (INV-1121). */
+const FOUND_IN_SHA_PROPERTY = {
+  type: 'string',
+  pattern: '^(sha-)?[0-9a-fA-F]{7,40}$',
+  description: 'The deploy the bug was found in: its build commit SHA, 7–40 hex (the sha-… image tag; protocol_get_guide returns the running build as protocol.buildSha). Involute has no version numbers (decision INV-1130). The fix SHA is never passed: it comes from the merged PR. Optional (INV-1121).',
 };
 
 const RECEIPT_SCHEMA = {
@@ -487,6 +495,7 @@ async function callMcpAction(
       assignOptional(proposeInput, 'severity', parseSeverity(args.severity));
       Object.assign(proposeInput, readIncidentTimeArgs(args));
       assignOptional(proposeInput, 'reproducibility', parseReproducibility(args.reproducibility));
+      assignOptional(proposeInput, 'foundInSha', parseFoundInSha(args.found_in_sha));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
       assignOptional(proposeInput, 'verification', optionalString(args.verification));
       const kind = optionalString(args.kind);
@@ -556,6 +565,7 @@ async function callMcpAction(
       assignOptional(proposeInput, 'description', optionalString(args.description));
       assignOptional(proposeInput, 'severity', parseSeverity(args.severity));
       assignOptional(proposeInput, 'reproducibility', parseReproducibility(args.reproducibility));
+      assignOptional(proposeInput, 'foundInSha', parseFoundInSha(args.found_in_sha));
       assignOptional(proposeInput, 'parentId', optionalString(args.parent_id));
       assignOptional(proposeInput, 'relatedWorkId', optionalString(args.related_work_id));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
@@ -704,6 +714,8 @@ async function callMcpAction(
       Object.assign(updateInput, readIncidentTimeArgs(args));
       const reproducibility = parseReproducibility(args.reproducibility);
       if (reproducibility !== undefined) updateInput.reproducibility = reproducibility;
+      const foundInSha = parseFoundInSha(args.found_in_sha);
+      if (foundInSha !== undefined) updateInput.foundInSha = foundInSha;
       if (args.cascade_repository !== undefined) {
         updateInput.cascadeRepository = Boolean(args.cascade_repository);
       } else if (args.repository !== undefined) {
@@ -1247,6 +1259,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         severity: SEVERITY_PROPERTY,
         ...incidentTimeProperties(false),
         reproducibility: REPRODUCIBILITY_PROPERTY,
+        found_in_sha: FOUND_IN_SHA_PROPERTY,
         blocked_by: {
           type: 'array',
           items: { type: 'string' },
@@ -1290,6 +1303,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         },
         severity: SEVERITY_PROPERTY,
         reproducibility: REPRODUCIBILITY_PROPERTY,
+        found_in_sha: FOUND_IN_SHA_PROPERTY,
         steps_to_reproduce: {
           type: 'string',
           description: 'Required. How to reproduce it.',
@@ -1435,6 +1449,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         severity: { ...SEVERITY_PROPERTY, type: ['string', 'null'], enum: [...SEVERITIES, null], description: `${SEVERITY_PROPERTY.description} null clears it; a change is audited with the old value.` },
         ...incidentTimeProperties(true),
         reproducibility: { ...REPRODUCIBILITY_PROPERTY, type: ['string', 'null'], enum: [...REPRODUCIBILITIES, null], description: `${REPRODUCIBILITY_PROPERTY.description} null clears it; a change is audited with the old value.` },
+        found_in_sha: { ...FOUND_IN_SHA_PROPERTY, type: ['string', 'null'], description: `${FOUND_IN_SHA_PROPERTY.description} null clears it; a change is audited with the old value.` },
         state: {
           type: 'string',
           description: 'Optional target workflow state: UNSTARTED (Ready), STARTED (In Progress), or REVIEW (In Review). DONE only for a committed ISSUE with Type: Research and no other actor\'s claim (INV-912). Never CANCELED.',

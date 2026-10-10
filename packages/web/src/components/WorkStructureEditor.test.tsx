@@ -120,6 +120,26 @@ describe('structure editing of committed work (INV-791)', () => {
     expect(onUpdate).toHaveBeenLastCalledWith({ reproducibility: null });
   });
 
+  it('edits the found-in deploy SHA of a bug on leaving the field (INV-1121)', () => {
+    renderEditor(issue);
+    expect(screen.queryByLabelText('Found in deploy SHA')).toBeNull();
+    cleanup();
+
+    const onUpdate = renderEditor({ ...issue, foundInSha: '1234567', labels: { nodes: [{ name: 'Bug' }] } });
+    const input = screen.getByLabelText('Found in deploy SHA') as HTMLInputElement;
+    expect(input.value).toBe('1234567');
+    fireEvent.change(input, { target: { value: 'nope' } });
+    fireEvent.blur(input);
+    expect(screen.getByRole('alert')).toHaveTextContent('7 to 40 hex');
+    expect(onUpdate).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: 'abcdef0123' } });
+    fireEvent.blur(input);
+    expect(onUpdate).toHaveBeenLastCalledWith({ foundInSha: 'abcdef0123' });
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onUpdate).toHaveBeenLastCalledWith({ foundInSha: null });
+  });
+
   it('offers only legal parents for the kind', () => {
     renderEditor({ ...issue, kind: 'EPIC' });
     expect(within(screen.getByLabelText('Location')).getAllByRole('option').map((option) => option.textContent)).toEqual([

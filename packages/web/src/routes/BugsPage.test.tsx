@@ -142,6 +142,7 @@ vi.mock('@apollo/client/react', () => ({
     refetch: vi.fn(),
   })),
   useMutation: vi.fn(() => [mockUpdate, { loading: false }]),
+  useLazyQuery: vi.fn(() => [vi.fn(), { data: undefined, loading: false, error: undefined }]),
 }));
 
 vi.mock('../lib/session', () => ({

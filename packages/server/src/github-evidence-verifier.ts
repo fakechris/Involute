@@ -38,7 +38,7 @@ const number = (value: unknown): number => {
 };
 
 /** Fixed host/path, bounded body and deadline; redirects and raw errors never escape. */
-async function githubJson(fetcher: typeof fetch, path: string, token: string, body?: JsonObject): Promise<unknown> {
+async function githubJson(fetcher: typeof fetch, path: string, token: string, body?: JsonObject, maxBytes = 2_000_000): Promise<unknown> {
   const response = await fetcher(`https://api.github.com${path}`, {
     method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(10_000),
     headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`,
@@ -58,7 +58,7 @@ async function githubJson(fetcher: typeof fetch, path: string, token: string, bo
       const { value, done } = await reader.read();
       if (done) break;
       size += value.length;
-      if (size > 2_000_000) throw new VerificationError('RESPONSE_TOO_LARGE');
+      if (size > maxBytes) throw new VerificationError('RESPONSE_TOO_LARGE');
       chunks.push(value);
     }
   } finally { await reader.cancel().catch(() => {}); }
@@ -239,6 +239,73 @@ export async function verifyBugFix(input: BugFixRequest, options: GitHubVerifier
     return { ...result, status: 'VERIFIED' };
   } catch (error) {
     return { ...result, status: error instanceof VerificationError ? error.status : 'UNAVAILABLE',
+      failureCode: error instanceof VerificationError ? error.code : 'GITHUB_UNAVAILABLE' };
+  }
+}
+
+export interface CommitRangeRequest {
+  repository: string;
+  /** The older deploy SHA (7–40 hex); commits reachable from it are excluded. */
+  base: string;
+  /** The newer deploy SHA (7–40 hex); commits reachable from it, and it, are included. */
+  head: string;
+}
+
+export interface CommitRangeObservation {
+  /** VERIFIED when GitHub listed the whole range; anything else means the range is unknown. */
+  status: EvidenceVerificationStatus;
+  failureCode: string | null;
+  /** GitHub's compare status: ahead, identical, diverged (behind is refused as RANGE_REVERSED). */
+  compareStatus: string | null;
+  /** Full SHAs in head but not in base, oldest first. */
+  commits: string[];
+}
+
+/** GitHub lists at most this many commits of one range here; longer ranges are refused, never cut. */
+export const COMMIT_RANGE_LIMIT = 1000;
+
+/**
+ * The commits deployed between two SHAs (INV-1121): GitHub's compare of
+ * base...head, every page. An unknown SHA, a reversed range, a range longer
+ * than COMMIT_RANGE_LIMIT or any GitHub failure is returned as such — never
+ * as an empty range.
+ */
+export async function compareCommitRange(input: CommitRangeRequest, options: GitHubVerifierOptions): Promise<CommitRangeObservation> {
+  const result: CommitRangeObservation = { status: 'UNAVAILABLE', failureCode: null, compareStatus: null, commits: [] };
+  try {
+    if (!REPOSITORY_PATTERN.test(input.repository) || !options.repositories.has(input.repository)) throw new VerificationError('SOURCE_NOT_ALLOWED');
+    const range = /^[a-f0-9]{7,40}$/;
+    if (!range.test(input.base) || !range.test(input.head)) throw new VerificationError('INVALID_SHA', 'FAILED');
+    const token = await options.installationToken(input.repository);
+    if (!token) throw new VerificationError('VERIFIER_NOT_CONFIGURED');
+    const commits: string[] = [];
+    let total: number | null = null;
+    for (let page = 1; page <= COMMIT_RANGE_LIMIT / 100; page++) {
+      let data: JsonObject;
+      try {
+        // The first page also carries the changed files, so it may be large.
+        data = object(await githubJson(options.fetch ?? fetch, `/repos/${input.repository}/compare/${input.base}...${input.head}?per_page=100&page=${page}`, token, undefined, 20_000_000));
+      } catch (error) {
+        // 404: GitHub does not know one of the SHAs (or they share no history).
+        if (error instanceof VerificationError && error.code === 'HTTP_404') throw new VerificationError('UNKNOWN_SHA', 'FAILED');
+        throw error;
+      }
+      if (typeof data.status !== 'string' || !Number.isSafeInteger(data.total_commits) || !Array.isArray(data.commits)) throw new VerificationError('INVALID_RESPONSE');
+      if (data.status === 'behind') throw new VerificationError('RANGE_REVERSED', 'FAILED');
+      if (total !== null && total !== data.total_commits) throw new VerificationError('RANGE_CHANGED');
+      total = Number(data.total_commits);
+      if (total > COMMIT_RANGE_LIMIT) throw new VerificationError('RANGE_TOO_LARGE', 'FAILED');
+      result.compareStatus = data.status;
+      for (const commit of data.commits.map(object)) {
+        if (typeof commit.sha !== 'string' || !SHA_PATTERN.test(commit.sha)) throw new VerificationError('INVALID_RESPONSE');
+        commits.push(commit.sha);
+      }
+      if (commits.length >= total || data.commits.length === 0) break;
+    }
+    if (total === null || commits.length !== total) throw new VerificationError('INCOMPLETE_RANGE');
+    return { ...result, status: 'VERIFIED', commits };
+  } catch (error) {
+    return { ...result, commits: [], status: error instanceof VerificationError ? error.status : 'UNAVAILABLE',
       failureCode: error instanceof VerificationError ? error.code : 'GITHUB_UNAVAILABLE' };
   }
 }

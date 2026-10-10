@@ -87,6 +87,7 @@ import {
 } from './work-service.js';
 import { parseSeverity } from './severity.js';
 import { parseReproducibility } from './reproducibility.js';
+import { parseFoundInSha } from './found-in.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -126,6 +127,8 @@ export interface ProposeWorkInput {
   resolvedAt?: Date | string | null;
   /** ALWAYS / SOMETIMES / ONCE: how often a bug reproduces (INV-1122). */
   reproducibility?: string | null;
+  /** Deploy SHA (7–40 hex) a bug was found in (INV-1121). */
+  foundInSha?: string | null;
   /** Existing work (ids or identifiers) this proposal is blocked by — each becomes X BLOCKS new (INV-720). */
   blockedBy?: string[] | null;
   /** Existing work this proposal blocks — each becomes new BLOCKS X. */
@@ -452,6 +455,8 @@ export async function proposeWork(
     if (severity) createInput.severity = severity;
     const reproducibility = parseReproducibility(input.reproducibility);
     if (reproducibility) createInput.reproducibility = reproducibility;
+    const foundInSha = parseFoundInSha(input.foundInSha);
+    if (foundInSha) createInput.foundInSha = foundInSha;
     let directBug = false;
     if (isBug) {
       if (steps) createInput.description = composeDescription(input.description, steps);
