@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Involute Capture</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <header class="panel__header">
+        <h1>Report a bug</h1>
+        <span id="connection" class="muted"></span>
+      </header>
+      <p id="notice" class="notice" role="status" hidden></p>
+
+      <section class="editor" aria-label="Screenshot">
+        <div class="toolbar" role="toolbar" aria-label="Annotation tools">
+          <button type="button" data-tool="rect" aria-pressed="true" title="Draw a box">Box</button>
+          <button type="button" data-tool="arrow" aria-pressed="false" title="Draw an arrow">Arrow</button>
+          <button type="button" data-tool="text" aria-pressed="false" title="Place text">Text</button>
+          <button type="button" data-tool="blur" aria-pressed="false" title="Blur out a region">Blur</button>
+          <span class="toolbar__gap"></span>
+          <button type="button" id="undo" disabled>Undo</button>
+          <button type="button" id="redo" disabled>Redo</button>
+        </div>
+        <label id="text-tool" class="inline" hidden>Text to place <input id="annotation-text" type="text" maxlength="120" value="" /></label>
+        <div class="canvas-wrap">
+          <canvas id="canvas" aria-label="Screenshot with annotations" hidden></canvas>
+          <p id="shot-status" class="muted">Taking the screenshot…</p>
+        </div>
+        <div class="toolbar" role="toolbar" aria-label="Page">
+          <button type="button" id="pick">Pick element</button>
+          <button type="button" id="retake">Retake screenshot</button>
+          <button type="button" id="larger">Open larger</button>
+        </div>
+        <p id="picked" class="muted" hidden></p>
+      </section>
+
+      <form id="form" class="form" novalidate>
+        <label>Title <input id="title" name="title" type="text" required autocomplete="off" /></label>
+        <ul id="similar" class="similar" aria-label="Similar open bugs" hidden></ul>
+        <label>Steps to reproduce <textarea id="steps" name="steps" rows="4" required></textarea></label>
+        <label>Description <textarea id="description" name="description" rows="3"></textarea></label>
+        <div class="row">
+          <label>Priority
+            <select id="priority" name="priority" required>
+              <option value="">Choose…</option>
+              <option value="1">Urgent</option>
+              <option value="2">High</option>
+              <option value="3">Medium</option>
+              <option value="4">Low</option>
+            </select>
+          </label>
+          <label>Severity
+            <select id="severity" name="severity">
+              <option value="">Not judged</option>
+              <option value="SEV1">SEV1</option>
+              <option value="SEV2">SEV2</option>
+              <option value="SEV3">SEV3</option>
+            </select>
+          </label>
+        </div>
+        <label>Team <select id="team" name="team"></select></label>
+        <label>Project <select id="project" name="project"></select></label>
+        <label>Location <select id="location" name="location"></select></label>
+        <p id="form-error" class="error" role="alert" hidden></p>
+        <button type="submit" id="submit" class="primary">Report bug</button>
+      </form>
+      <p id="result" class="result" role="status" hidden></p>
+    </main>
+    <script src="panel.js"></script>
+  </body>
+</html>

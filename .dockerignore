@@ -6,6 +6,7 @@ node_modules
 .factory
 dist
 packages/*/dist
+packages/*/dist-e2e
 packages/server/src/*.js
 packages/server/src/*.js.map
 packages/server/src/*.d.ts

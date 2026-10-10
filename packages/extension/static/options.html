@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Involute Capture — Options</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <main class="panel" style="max-width: 640px">
+      <h1>Involute Capture</h1>
+
+      <section class="form" aria-labelledby="server-heading">
+        <h2 id="server-heading">Involute</h2>
+        <label>Server URL <input id="server" type="url" placeholder="https://involute.lumenopen.com" /></label>
+        <div class="toolbar">
+          <button type="button" id="connect" class="primary">Connect</button>
+          <button type="button" id="disconnect" hidden>Disconnect</button>
+        </div>
+        <p id="status" role="status"></p>
+        <p id="server-error" class="error" role="alert" hidden></p>
+      </section>
+
+      <section class="form" aria-labelledby="origins-heading">
+        <h2 id="origins-heading">Managed origins</h2>
+        <p class="muted">
+          On these origins the extension records console errors and failed requests (method, address, status, time —
+          never bodies, headers, cookies or form values) so they go with a report. Nothing is recorded anywhere else.
+        </p>
+        <ul id="origins"></ul>
+        <form id="add-origin" class="toolbar">
+          <label class="inline">Origin <input id="origin" type="url" placeholder="https://app.example.com" required /></label>
+          <button type="submit">Add</button>
+        </form>
+        <p id="origin-error" class="error" role="alert" hidden></p>
+      </section>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>
