@@ -325,15 +325,21 @@ async function agentRequests(prisma: DatabaseClient, scope: Scope): Promise<Atte
         { targetActorId: scope.viewer.id, state: { in: ['SUBMITTED', 'WORKING'] } },
       ],
     },
-    select: { createdAt: true, id: true, state: true, updatedAt: true, workId: true },
+    select: { body: true, createdAt: true, id: true, needInfo: true, requestedByActor: { select: { name: true } }, state: true, updatedAt: true, workId: true },
     orderBy: { createdAt: 'asc' },
     take: KIND_LIMIT,
   });
-  return rows.map((row) =>
-    row.state === 'INPUT_REQUIRED'
-      ? item('AGENT_REQUEST', row.id, row.workId, row.updatedAt, 'An agent needs more from you before it can answer', ['REPLY'])
-      : item('AGENT_REQUEST', row.id, row.workId, row.createdAt, 'A question was handed to you to answer', ['ANSWER']),
-  );
+  return rows.map((row) => {
+    if (row.state === 'INPUT_REQUIRED') {
+      return item('AGENT_REQUEST', row.id, row.workId, row.updatedAt, row.needInfo ? 'Your needinfo was asked back: reply before it can be answered' : 'An agent needs more from you before it can answer', ['REPLY']);
+    }
+    // A needinfo (INV-1119): any comment of yours on the work answers it too.
+    if (row.needInfo) {
+      const question = row.body.length > 140 ? `${row.body.slice(0, 139)}…` : row.body;
+      return item('AGENT_REQUEST', row.id, row.workId, row.createdAt, `${row.requestedByActor.name} needs information from you: ${question}`, ['ANSWER']);
+    }
+    return item('AGENT_REQUEST', row.id, row.workId, row.createdAt, 'A question was handed to you to answer', ['ANSWER']);
+  });
 }
 
 /**

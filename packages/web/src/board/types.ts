@@ -226,6 +226,10 @@ export interface AgentRequestSummary {
   failureReason: string | null;
   answeredCommentId: string | null;
   targetActor: UserSummary;
+  /** A needinfo (INV-1119): raised to a named person; any comment of theirs answers it. */
+  needInfo?: boolean;
+  body?: string;
+  requestedByActor?: { id: string; name: string | null } | null;
 }
 
 export interface ProjectSummaryItem {

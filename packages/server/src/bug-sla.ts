@@ -3,6 +3,7 @@ import type { Issue, Prisma, PrismaClient, WorkflowStateType } from '@prisma/cli
 import { BUG_LABEL_NAME } from './bug-report.js';
 import { enqueueWorkEvent } from './event-outbox.js';
 import { currentTriager } from './bug-triage.js';
+import { loadReporterWaits } from './need-info-service.js';
 import { loadWorkTimelines, type WorkTimelineEntry } from './work-timeline.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
@@ -31,15 +32,40 @@ export interface BugSla {
 const STOPPED: ReadonlySet<WorkflowStateType> = new Set(['REVIEW', 'COMPLETED', 'CANCELED']);
 const CLOSED: ReadonlySet<WorkflowStateType> = new Set(['COMPLETED', 'CANCELED']);
 
+/** A span during which the bug waited on its reporter (INV-1119); `to` null = still waiting. */
+export interface SlaPause {
+  from: Date;
+  to: Date | null;
+}
+
+/** Milliseconds of [start, end) covered by the pauses, overlapping pauses counted once. */
+function pausedWithin(start: number, end: number, pauses: SlaPause[], now: number): number {
+  const spans = pauses
+    .map((pause) => [Math.max(start, pause.from.getTime()), Math.min(end, pause.to?.getTime() ?? now)] as const)
+    .filter(([from, to]) => to > from)
+    .sort((a, b) => a[0] - b[0]);
+  let covered = 0;
+  let reach = start;
+  for (const [from, to] of spans) {
+    const lo = Math.max(from, reach);
+    if (to > lo) covered += to - lo;
+    reach = Math.max(reach, to);
+  }
+  return covered;
+}
+
 /**
  * A committed bug's SLA (INV-750). The clock starts at commitment, runs while
  * the bug is open and not in Review, stops in Review and when closed, and
- * resumes if it is reopened. Pure: computed from the audit timeline.
+ * resumes if it is reopened. It also stops while a needinfo to the bug's
+ * reporter is open (INV-1119) and resumes when it is answered or withdrawn.
+ * Pure: computed from the audit timeline and the reporter waits.
  */
 export function computeBugSla(
   timeline: Pick<WorkTimelineEntry, 'committedAt' | 'transitions'>,
   input: { priority: number; stateType: WorkflowStateType; createdAt: Date },
   now: Date,
+  pauses: SlaPause[] = [],
 ): BugSla {
   const startedAt = timeline.committedAt ?? input.createdAt;
   const budgetMs = slaBudgetMs(input.priority);
@@ -54,16 +80,17 @@ export function computeBugSla(
   for (let index = 0; index < points.length; index += 1) {
     const point = points[index]!;
     const end = points[index + 1]?.at ?? now.getTime();
-    if (!STOPPED.has(point.type)) elapsedMs += Math.max(0, end - point.at);
+    if (!STOPPED.has(point.type)) elapsedMs += Math.max(0, end - point.at) - pausedWithin(point.at, end, pauses, now.getTime());
   }
+  const waitingOnReporter = pauses.some((pause) => pause.to === null && pause.from.getTime() <= now.getTime());
   const remainingMs = budgetMs - elapsedMs;
   let status: BugSlaStatus;
   if (remainingMs < 0) status = 'BREACHED';
   else if (CLOSED.has(input.stateType)) status = 'MET';
-  else if (input.stateType === 'REVIEW') status = 'PAUSED';
+  else if (input.stateType === 'REVIEW' || waitingOnReporter) status = 'PAUSED';
   else if (remainingMs <= budgetMs * AT_RISK_SHARE) status = 'AT_RISK';
   else status = 'ON_TRACK';
-  const running = !STOPPED.has(input.stateType);
+  const running = !STOPPED.has(input.stateType) && !waitingOnReporter;
   return {
     status,
     budgetMs,
@@ -87,13 +114,16 @@ export async function loadBugSlas(
     where: { id: { in: issueIds }, commitmentStatus: 'COMMITTED', ...BUG_WHERE },
     select: { id: true, stateId: true, commitmentStatus: true, updatedAt: true, createdAt: true, priority: true, state: { select: { type: true } } },
   });
-  const timelines = await loadWorkTimelines(prisma, bugs);
+  const [timelines, waits] = await Promise.all([
+    loadWorkTimelines(prisma, bugs),
+    loadReporterWaits(prisma, bugs.map((bug) => bug.id)),
+  ]);
   const byId = new Map(timelines.map((entry) => [entry.workId, entry]));
   const result = new Map<string, BugSla>();
   for (const bug of bugs) {
     const timeline = byId.get(bug.id);
     if (!timeline) continue;
-    result.set(bug.id, computeBugSla(timeline, { priority: bug.priority, stateType: bug.state.type, createdAt: bug.createdAt }, now));
+    result.set(bug.id, computeBugSla(timeline, { priority: bug.priority, stateType: bug.state.type, createdAt: bug.createdAt }, now, waits.get(bug.id) ?? []));
   }
   return result;
 }

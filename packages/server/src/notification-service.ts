@@ -262,6 +262,7 @@ export async function readUnreadNotifications(
 export const ACTIONABLE_NOTIFICATION_KINDS = {
   'agent.request_handed_off': 'AGENT_REQUEST',
   'agent.request_input_required': 'AGENT_REQUEST',
+  'needinfo.requested': 'AGENT_REQUEST',
   'bug.reported': 'CANDIDATE_COMMIT',
   'contract.amendment_proposed': 'CONTRACT_AMENDMENT',
   'decision.requested': 'DECISION_REQUESTED',

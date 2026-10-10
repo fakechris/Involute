@@ -58,6 +58,8 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
     label: 'Answer',
     test: 'components/AgentRequestActions.test.tsx',
   },
+  needInfoRequest: { kind: 'web', doc: 'NEED_INFO_REQUEST_MUTATION', components: ['components/NeedInfoControl.tsx'], label: 'Ask for info', test: 'components/NeedInfoControl.test.tsx' },
+  needInfoWithdraw: { kind: 'web', doc: 'NEED_INFO_WITHDRAW_MUTATION', components: ['components/NeedInfoControl.tsx'], label: 'Withdraw needinfo', test: 'components/NeedInfoControl.test.tsx' },
   agentRequestReply: { kind: 'web', doc: 'AGENT_REQUEST_REPLY_MUTATION', components: ['components/AgentRequestActions.tsx'], label: 'Reply to agent', test: 'components/AgentRequestActions.test.tsx' },
   actorSetSuccessor: { kind: 'web', doc: 'ACTOR_SET_SUCCESSOR_MUTATION', components: ['components/ActorSuccessorControl.tsx'], label: 'Successor', test: 'components/AgentRequestActions.test.tsx' },
   bugReport: { kind: 'web', doc: 'BUG_REPORT_MUTATION', components: ['components/ReportBugDialog.tsx'], label: 'Report bug', test: 'components/ReportBugDialog.test.tsx' },
@@ -286,6 +288,12 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationSurface> = {
   'bug.reported': { kind: 'work', action: 'Triage this candidate', actionable: 'CANDIDATE_COMMIT' },
   'agent.request_expired': { kind: 'work', action: 'Answer', component: 'components/AgentRequestActions.tsx', actionable: 'info' },
   'agent.request_handed_off': { kind: 'work', action: 'Answer', component: 'components/AgentRequestActions.tsx', actionable: 'AGENT_REQUEST' },
+  // Someone needs information from you (INV-1119): answer it, or comment on the work.
+  'needinfo.requested': { kind: 'work', action: 'Answer', component: 'components/AgentRequestActions.tsx', actionable: 'AGENT_REQUEST' },
+  // Your needinfo was answered; the answer is on the work page.
+  'needinfo.answered': { kind: 'info', actionable: 'info' },
+  // You were @mentioned in a comment (INV-1119).
+  'comment.mentioned': { kind: 'info', actionable: 'info' },
   'webhook.disabled': { kind: 'inbox', actionable: 'OPS' },
   // INV-1093: decisions nobody was told about. Each is decided in Needs you (/todo).
   'work.proposed_batch': { kind: 'inbox', actionable: 'CANDIDATE_COMMIT' },

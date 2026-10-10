@@ -25,7 +25,8 @@ type DatabaseClient = PrismaClient | Prisma.TransactionClient;
  *
  * Entries are addressed by a stable key derived from their source row, so a
  * star survives re-projection: `audit:<id>`, `run:<id>:started`,
- * `run:<id>:ended`, `evidence:<id>`, `evidence:<id>:retracted`, `comment:<id>`.
+ * `run:<id>:ended`, `evidence:<id>`, `evidence:<id>:retracted`, `comment:<id>`,
+ * `needinfo:<id>`, `needinfo:<id>:closed`.
  */
 export const TIMELINE_ENTRY_KINDS = [
   'CREATED',
@@ -39,6 +40,8 @@ export const TIMELINE_ENTRY_KINDS = [
   'RUN_ENDED',
   'EVIDENCE',
   'EVIDENCE_RETRACTED',
+  // A needinfo (INV-1119) raised, and how it closed.
+  'NEEDINFO',
   'COMMENT',
 ] as const;
 export type TimelineEntryKind = (typeof TIMELINE_ENTRY_KINDS)[number];
@@ -237,6 +240,12 @@ export function auditEntry(
   return { ...base, kind: kind ?? 'FIELDS', summary: phrases.join('; '), changes };
 }
 
+const NEEDINFO_CLOSED: Record<string, string> = {
+  COMPLETED: '{target} answered the needinfo',
+  CANCELED: 'Needinfo for {target} withdrawn',
+  FAILED: 'Needinfo for {target} lapsed without an answer',
+};
+
 const RUN_ENDED_WORDS: Record<string, string> = { COMPLETED: 'completed', FAILED: 'failed', BLOCKED: 'blocked', RUNNING: 'stopped', QUEUED: 'stopped' };
 
 /**
@@ -252,15 +261,21 @@ export async function loadWorkTimeline(
   const work = await prisma.issue.findUnique({ where: { id: workId }, select: { id: true, identifier: true, teamId: true } });
   if (!work) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
   const take = TIMELINE_SOURCE_LIMIT + 1;
-  const [audits, runs, evidence, comments, stars] = await Promise.all([
+  const [audits, runs, evidence, comments, stars, needInfos] = await Promise.all([
     prisma.workAudit.findMany({ where: { workId }, include: { actor: true }, orderBy: [{ createdAt: 'asc' }, { revision: 'asc' }, { id: 'asc' }], take }),
     prisma.workRun.findMany({ where: { workId }, include: { actor: true }, orderBy: [{ startedAt: 'asc' }, { id: 'asc' }], take }),
     prisma.workEvidence.findMany({ where: { workId }, include: { actor: true, retractedBy: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take }),
     prisma.comment.findMany({ where: { issueId: workId }, include: { user: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take }),
     activeStars(prisma, workId),
+    prisma.agentRequest.findMany({
+      where: { needInfo: true, workId },
+      include: { requestedByActor: true, targetActor: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take,
+    }),
   ]);
-  const truncated = [audits, runs, evidence, comments].some((rows) => rows.length > TIMELINE_SOURCE_LIMIT);
-  for (const rows of [audits, runs, evidence, comments]) rows.splice(TIMELINE_SOURCE_LIMIT);
+  const truncated = [audits, runs, evidence, comments, needInfos].some((rows) => rows.length > TIMELINE_SOURCE_LIMIT);
+  for (const rows of [audits, runs, evidence, comments, needInfos]) rows.splice(TIMELINE_SOURCE_LIMIT);
 
   const lookups = await buildLookups(prisma, audits.map((audit) => [asSnapshot(audit.before), asSnapshot(audit.after)]).flat(), options.readable);
   const entries: Array<Omit<TimelineEntry, 'star'>> = [];
@@ -325,6 +340,41 @@ export async function loadWorkTimeline(
         changes: [],
         revision: null,
         sourceId: item.id,
+      });
+    }
+  }
+  for (const request of needInfos) {
+    const target = request.targetActor.name ?? request.targetActor.email ?? 'someone';
+    entries.push({
+      key: `needinfo:${request.id}`,
+      kind: 'NEEDINFO',
+      at: request.createdAt,
+      actor: request.requestedByActor,
+      actorKind: request.requestedByActor.actorKind,
+      summary: `Asked ${target} for information`,
+      detail: request.body,
+      url: null,
+      changes: [],
+      revision: null,
+      sourceId: request.id,
+    });
+    const closed = NEEDINFO_CLOSED[request.state];
+    if (closed) {
+      // A closed request is not written again, so updatedAt is when it closed.
+      const byTarget = request.state === 'COMPLETED' || request.state === 'FAILED';
+      const actor = byTarget ? request.targetActor : request.state === 'CANCELED' ? request.requestedByActor : null;
+      entries.push({
+        key: `needinfo:${request.id}:closed`,
+        kind: 'NEEDINFO',
+        at: request.canceledAt ?? request.updatedAt,
+        actor,
+        actorKind: actor?.actorKind ?? null,
+        summary: closed.replace('{target}', target),
+        detail: request.state === 'FAILED' ? request.failureReason : null,
+        url: null,
+        changes: [],
+        revision: null,
+        sourceId: request.id,
       });
     }
   }

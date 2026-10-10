@@ -39,7 +39,7 @@ export interface HandoffResult {
  * bound to the team carrying the `answer` scope — the only scope
  * `agent_request_claim` and `agent_request_answer` require.
  */
-async function canAnswerOnTeam(tx: Tx, actor: { actorKind: string; globalRole: string; id: string }, teamId: string, now: Date): Promise<boolean> {
+export async function canAnswerOnTeam(tx: Tx, actor: { actorKind: string; globalRole: string; id: string }, teamId: string, now: Date): Promise<boolean> {
   if (actor.actorKind === 'HUMAN') {
     if (actor.globalRole === 'ADMIN') return true;
     const membership = await tx.teamMembership.findUnique({

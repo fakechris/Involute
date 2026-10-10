@@ -153,6 +153,8 @@ const NOT_INBOX = new Set([
   // The agent learns the decision from work_get_context; people decided it themselves.
   'contract.amendment_accepted',
   'contract.amendment_rejected',
+  // A needinfo was withdrawn (INV-1119): its notification is resolved, nobody new is told.
+  'needinfo.withdrawn',
 ]);
 
 /** Gates that do not say whether they wait in Needs you (INV-1095). */
