@@ -123,6 +123,12 @@ export const BOARD_PAGE_QUERY = gql`
           dueAt
           budgetHours
         }
+        followUpDeadline {
+          status
+          remainingMs
+          dueAt
+          budgetHours
+        }
         openBlockers {
           id
           identifier
@@ -570,6 +576,17 @@ export const ISSUE_PAGE_QUERY = gql`
         remainingMs
         dueAt
         budgetHours
+      }
+      followUpDeadline {
+        status
+        remainingMs
+        dueAt
+        budgetHours
+        incidents {
+          id
+          identifier
+          title
+        }
       }
       createdAt
       updatedAt

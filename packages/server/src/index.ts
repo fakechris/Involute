@@ -3,6 +3,7 @@ import { SemanticIndex, startSemanticIndexer } from './embeddings/semantic-index
 import { startEvidenceVerifier } from './evidence-verification.js';
 import { expireOverdueAgentRequests } from './agent-request-expiry.js';
 import { sweepBugSlas } from './bug-sla.js';
+import { sweepFollowUpDeadlines } from './follow-up-deadline.js';
 import { sendAttentionDigests } from './attention-digest.js';
 import { sweepOverdueReviews } from './review-wait.js';
 import { sweepExpiredClaims } from './claim-expiry.js';
@@ -419,6 +420,11 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   const bugSlaTimer = setInterval(() => {
     void sweepBugSlas(prisma).catch((error: unknown) => {
       console.error('Failed to sweep bug SLAs.');
+      console.error(error);
+    });
+    // Incident follow-up deadlines (INV-1127): the same clock, at risk and overdue once each.
+    void sweepFollowUpDeadlines(prisma).catch((error: unknown) => {
+      console.error('Failed to sweep incident follow-up deadlines.');
       console.error(error);
     });
     // Review waits (INV-1002): overdue fixed bugs once per spell. One digest per
