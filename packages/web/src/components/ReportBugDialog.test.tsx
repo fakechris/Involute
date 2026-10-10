@@ -7,6 +7,7 @@ import { ReportBugDialog } from './ReportBugDialog';
 const mockRunBugReport = vi.fn();
 const mockRunFileUpload = vi.fn();
 const similarBugs = vi.fn();
+const serverBuildSha = vi.fn();
 
 afterEach(() => {
   cleanup();
@@ -16,6 +17,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
   similarBugs.mockReturnValue([]);
+  serverBuildSha.mockReturnValue(null);
   mockRunBugReport.mockResolvedValue({
     data: {
       bugReport: {
@@ -40,6 +42,9 @@ vi.mock('@apollo/client/react', () => ({
     if (options?.skip) return { data: undefined, loading: false };
     if (docStr.includes('SimilarBugs')) {
       return { data: { similarBugs: similarBugs(options?.variables?.title) }, loading: false };
+    }
+    if (docStr.includes('ServerBuild')) {
+      return { data: { serverBuild: { buildSha: serverBuildSha(), serverVersion: '0.0.0' } }, loading: false };
     }
     if (docStr.includes('PlacementOptions')) {
       return {
@@ -161,6 +166,41 @@ describe('ReportBugDialog (INV-749)', () => {
 
     await waitFor(() => expect(mockRunBugReport).toHaveBeenCalledTimes(1));
     expect(mockRunBugReport.mock.calls[0]![0].variables.input).toMatchObject({ priority: 1, reproducibility: 'SOMETIMES' });
+  });
+
+  it('sends the running build as found-in by default, an edited SHA instead, and none when cleared (INV-1121)', async () => {
+    const build = '8b2d065aa1b2c3d4e5f60718293a4b5c6d7e8f90';
+    serverBuildSha.mockReturnValue(build);
+    renderDialog();
+    expect(screen.getByLabelText('Found in deploy SHA')).toHaveValue(build);
+    fillRequired();
+    fireEvent.click(screen.getByLabelText('Not sure where it belongs — send to triage'));
+    fireEvent.click(screen.getByRole('button', { name: 'Report bug' }));
+    await waitFor(() => expect(mockRunBugReport).toHaveBeenCalledTimes(1));
+    expect(mockRunBugReport.mock.calls[0]![0].variables.input).toMatchObject({ foundInSha: build });
+
+    cleanup();
+    mockRunBugReport.mockClear();
+    renderDialog();
+    fillRequired();
+    fireEvent.click(screen.getByLabelText('Not sure where it belongs — send to triage'));
+    fireEvent.change(screen.getByLabelText('Found in deploy SHA'), { target: { value: 'v1.2' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('7 to 40 hex');
+    expect(screen.getByRole('button', { name: 'Report bug' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Found in deploy SHA'), { target: { value: 'sha-1234567abcde' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Report bug' }));
+    await waitFor(() => expect(mockRunBugReport).toHaveBeenCalledTimes(1));
+    expect(mockRunBugReport.mock.calls[0]![0].variables.input).toMatchObject({ foundInSha: 'sha-1234567abcde' });
+
+    cleanup();
+    mockRunBugReport.mockClear();
+    renderDialog();
+    fillRequired();
+    fireEvent.click(screen.getByLabelText('Not sure where it belongs — send to triage'));
+    fireEvent.change(screen.getByLabelText('Found in deploy SHA'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Report bug' }));
+    await waitFor(() => expect(mockRunBugReport).toHaveBeenCalledTimes(1));
+    expect(mockRunBugReport.mock.calls[0]![0].variables.input).not.toHaveProperty('foundInSha');
   });
 
   it('starts in the project the board is filtered to', () => {

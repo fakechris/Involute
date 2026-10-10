@@ -18,6 +18,7 @@ import type { WriteActor } from './work-service.js';
 import { parseSeverity } from './severity.js';
 import { parseReproducibility } from './reproducibility.js';
 import { CAPTURE_MESSAGES, environmentSection, parseBugCapture, type BugCapture } from './bug-capture.js';
+import { parseFoundInSha } from './found-in.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -34,6 +35,8 @@ export interface BugReportInput {
   severity?: string | null;
   /** Optional ALWAYS / SOMETIMES / ONCE (INV-1122); SOMETIMES and ONCE are never auto-accepted. */
   reproducibility?: string | null;
+  /** Optional deploy SHA the bug was found in (INV-1121); the web app defaults it to the running build. */
+  foundInSha?: string | null;
   /** Where the bug belongs (id or identifier). Without it the report goes to triage as a candidate. */
   parentId?: string | null;
   repository?: string | null;
@@ -73,6 +76,7 @@ export async function reportBug(prisma: PrismaClient, input: BugReportInput, act
   const severity = parseSeverity(input.severity) ?? null;
   const reproducibility = parseReproducibility(input.reproducibility) ?? null;
   const capture = parseBugCapture(input.capture);
+  const foundInSha = parseFoundInSha(input.foundInSha) ?? null;
   // Outside the transaction: a failed INSERT would poison it.
   const bugLabel = await findOrCreateBugLabel(prisma);
   const labelIds = [...new Set([bugLabel.id, ...(input.labelIds ?? [])])];
@@ -90,6 +94,7 @@ export async function reportBug(prisma: PrismaClient, input: BugReportInput, act
       severity,
       reproducibility,
       capture: capture ? (JSON.parse(JSON.stringify(capture)) as Prisma.InputJsonValue) : null,
+      foundInSha,
       repository: input.repository ?? null,
       source: BUG_REPORT_SOURCE,
       teamId: input.teamId,

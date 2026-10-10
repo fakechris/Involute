@@ -171,6 +171,8 @@ import { deleteWorkLink, listIncidentLinks } from './link-service.js';
 import { writeActorFromViewer } from './work-service.js';
 import { findWorkTombstone, isTombstoneExpired, restoreDeletedIssue, TOMBSTONE_EXPIRED_MESSAGE, TOMBSTONE_NOT_FOUND_MESSAGE } from './work-tombstone.js';
 import { BUG_GATE_SOURCE } from './bug-auto-accept.js';
+import { bugsFixedBetween } from './bugs-fixed-between.js';
+import { serverBuild } from './protocol-info.js';
 import { getUploadsDirectory } from './uploads.js';
 import { loadProjectWorkGraph, type ProjectWorkGraph } from './work-graph-view.js';
 import { loadWorkTimelines } from './work-timeline.js';
@@ -458,6 +460,15 @@ const typeDefs = /* GraphQL */ `
     similarBugs(teamId: String!, title: String!, first: Int): [Issue!]!
     "The readable PROJECT whose webOrigins include this page origin (normalized to scheme://host[:port]); null when none (INV-1146)."
     projectForOrigin(origin: String!): Issue
+    """
+    Bugs fixed between two deploys (INV-1121): GitHub's compare of fromSha...toSha
+    (7–40 hex) in the repository, and the readable bugs whose fix — a merge GitHub
+    reported, never an agent's claim — lies in that range, in deploy order.
+    known is false, with the reason, when the range cannot be listed.
+    """
+    bugsFixedBetween(repository: String!, fromSha: String!, toSha: String!): BugsFixedBetween!
+    "The build this server runs (INV-1121): the web app defaults a bug's found-in SHA to it. Null fields are unknown."
+    serverBuild: ServerBuild!
     """
     Free-text search over work items (INV-925): identifier, title, description,
     contract fields and comments, best match first. Every word must be found
@@ -809,6 +820,44 @@ const typeDefs = /* GraphQL */ `
     issueCount: Int!
   }
 
+  type ServerBuild {
+    "Full source SHA of the build (INVOLUTE_BUILD_SHA); null when the image was built without it."
+    buildSha: String
+    serverVersion: String!
+  }
+
+  "Where a bug's fix SHA came from (INV-1121): always something GitHub reported."
+  enum BugFixSource {
+    "A signed pull_request.merged webhook or the sync engine: the merge commit."
+    MERGE_EVENT
+    "Evidence the verifier saw merged: the PR head."
+    VERIFIED_EVIDENCE
+    "The bug gate's GitHub check (INV-1075)."
+    BUG_GATE
+  }
+
+  type FixedBug {
+    issue: Issue!
+    "The fix commit inside the range (full SHA)."
+    fixSha: String!
+    prNumber: Int
+    source: BugFixSource!
+  }
+
+  type BugsFixedBetween {
+    "False when GitHub could not list the range (unknown SHA, reversed, too long, not configured, unavailable); bugs is then empty and means nothing."
+    known: Boolean!
+    failureCode: String
+    message: String
+    repository: String!
+    fromSha: String!
+    toSha: String!
+    "GitHub's compare status: ahead, identical or diverged."
+    compareStatus: String
+    commitCount: Int
+    bugs: [FixedBug!]!
+  }
+
   type ServerFeature {
     key: String!
     label: String!
@@ -952,6 +1001,8 @@ const typeDefs = /* GraphQL */ `
     DISCOVERED_DURING
     RELATED_TO
     DUPLICATE_OF
+    "A REGRESSED_BY B: B introduced the regression A reports or fixes (INV-1120)."
+    REGRESSED_BY
   }
 
   type Comment {
@@ -1078,6 +1129,8 @@ const typeDefs = /* GraphQL */ `
     severity: IssueSeverity
     "How often the bug reproduces; null when unknown (INV-1122)."
     reproducibility: BugReproducibility
+    "The deploy (build SHA, 7–40 hex) the bug was found in; null when not recorded (INV-1121). The fix SHA is derived from merge evidence, see bugsFixedBetween."
+    foundInSha: String
     createdAt: DateTime!
     updatedAt: DateTime!
     state: WorkflowState!
@@ -1109,6 +1162,8 @@ const typeDefs = /* GraphQL */ `
     capture: Json
     "Why a rejected candidate or canceled work was closed; null while open (INV-1118)."
     resolution: WorkResolution
+    "Times it moved from Done or Canceled back to an open state (INV-1120)."
+    reopenCount: Int!
     "Type: Incident (INV-1125): when the impact began; never after the other timestamps."
     impactStartedAt: DateTime
     "Type: Incident: when it was noticed; defaults to the declaration time."
@@ -1991,6 +2046,8 @@ const typeDefs = /* GraphQL */ `
     severity: IssueSeverity
     "Optional: how often it reproduces (INV-1122). SOMETIMES / ONCE keep the fix out of auto-accept."
     reproducibility: BugReproducibility
+    "Optional deploy SHA (7–40 hex) it was found in (INV-1121); the web app defaults it to the running build (serverBuild.buildSha)."
+    foundInSha: String
     "Where it belongs (id or identifier: its PROJECT for No milestone, a MILESTONE, EPIC or ISSUE). Omit when unsure: the report goes to triage as a candidate."
     parentId: String
     repository: String
@@ -2084,6 +2141,18 @@ const typeDefs = /* GraphQL */ `
     byResolution: [BugResolutionCount!]!
     "Committed open bugs no parent contains; the goal is zero."
     unplacedOpenCount: Int!
+    "Bugs ever closed (closed now or reopened since) (INV-1120)."
+    closedEverCount: Int!
+    "Of those, bugs moved from Done or Canceled back to an open state at least once."
+    reopenedCount: Int!
+    "reopenedCount / closedEverCount; null before any bug was closed."
+    reopenRate: Float
+    "Bugs the Auto-Accept Gate accepted at least once (INV-1075)."
+    autoAcceptedCount: Int!
+    "Of those, bugs reopened after the gate accepted them."
+    reopenedAfterAutoAcceptCount: Int!
+    "reopenedAfterAutoAcceptCount / autoAcceptedCount; null before any auto-acceptance."
+    reopenedAfterAutoAcceptRate: Float
   }
 
   type BugBreach {
@@ -2151,6 +2220,8 @@ const typeDefs = /* GraphQL */ `
     resolvedAt: DateTime
     "ALWAYS / SOMETIMES / ONCE; null clears it. SOMETIMES / ONCE keep a bug out of auto-accept (INV-1122)."
     reproducibility: BugReproducibility
+    "Deploy SHA (7–40 hex) a bug was found in; null clears it (INV-1121)."
+    foundInSha: String
     projectId: String
     cycleId: String
     snoozedUntil: DateTime
@@ -2406,6 +2477,8 @@ const typeDefs = /* GraphQL */ `
     resolvedAt: DateTime
     """How often a bug reproduces: ALWAYS / SOMETIMES / ONCE (INV-1122)."""
     reproducibility: BugReproducibility
+    """Deploy SHA (7–40 hex) a bug was found in (INV-1121)."""
+    foundInSha: String
     """Existing work this proposal is blocked by (each X BLOCKS the new item)."""
     blockedBy: [String!]
     """Existing work this proposal blocks."""
@@ -2719,6 +2792,14 @@ const resolvers = {
     executorContextJson: async (_parent: unknown, args: { id: string }, context: GraphQLContext) => JSON.stringify(await executorContext(context, args.id)),
     deliveryContext: (_parent: unknown, args: { id: string }, context: GraphQLContext) => deliveryContext(context, args.id),
     deliveryChanges: (_parent: unknown, args: { first?: number; after?: string; repository?: string; noRepository?: boolean; teamKey?: string; bugsOnly?: boolean; workId?: string }, context: GraphQLContext) => pendingDeliveryChanges(context, args),
+    serverBuild: (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      requireAuthentication(context);
+      return serverBuild();
+    },
+    bugsFixedBetween: async (_parent: unknown, args: { repository: string; fromSha: string; toSha: string }, context: GraphQLContext) => {
+      requireAuthentication(context);
+      return bugsFixedBetween(context.prisma, args, buildReadableIssueWhere(context));
+    },
     serverFeatures: (_parent: unknown, _args: unknown, context: GraphQLContext): ServerFeature[] => {
       assertSettingsAdmin(context);
       return listServerFeatures();

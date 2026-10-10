@@ -393,6 +393,68 @@ describe('GitHub Webhook & Dual-Track CAS State Machine (Phase 2)', () => {
       expect(await prisma.workAutoAcceptEvaluation.count({ where: { workId: issue.id, outcome: 'SKIPPED' } })).toBeGreaterThan(0);
     });
 
+    // INV-1148: an incident goes to In Review once resolved (INV-1125); the
+    // webhook track must not bypass that rule.
+    async function markIncident(issueId: string, resolvedAt: Date | null): Promise<void> {
+      const label = await prisma.issueLabel.upsert({ where: { name: 'Incident' }, create: { name: 'Incident' }, update: {} });
+      const started = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'STARTED' } });
+      await prisma.issue.update({
+        where: { id: issueId },
+        data: { labels: { connect: { id: label.id } }, stateId: started.id, detectedAt: new Date('2026-10-09T10:00:00.000Z'), resolvedAt },
+      });
+    }
+
+    function prEvent(issue: Issue, action: string, id: number, updatedAt: string, merged = false) {
+      return {
+        action,
+        pull_request: {
+          id,
+          number: id - 7000,
+          title: 'Fix the outage',
+          html_url: `https://github.com/fakechris/Involute/pull/${id - 7000}`,
+          merged,
+          ...(merged ? { merge_commit_sha: 'fedcba9876543210' } : {}),
+          head: { ref: `feat/${issue.identifier}-fix` },
+          updated_at: updatedAt,
+        },
+        repository: { full_name: 'fakechris/Involute' },
+      };
+    }
+
+    it('keeps an unresolved incident out of In Review on PR opened/reopened/merged, still attaching evidence (INV-1148)', async () => {
+      const issue = await createTestIssue('Unresolved incident PR');
+      await markIncident(issue.id, null);
+
+      await processGitHubPrEvent(prisma, prEvent(issue, 'opened', 7101, '2026-10-10T08:00:00.000Z'));
+      let row = await prisma.issue.findUniqueOrThrow({ where: { id: issue.id }, include: { state: true, evidence: true } });
+      expect(row.state.type).toBe('STARTED');
+      expect(row.stateSourcePrId).toBeNull();
+      expect(row.evidence.map(item => item.url)).toEqual(['https://github.com/fakechris/Involute/pull/101']);
+      expect(await prisma.webhookEventLog.count({ where: { issueId: issue.id } })).toBe(1);
+
+      await processGitHubPrEvent(prisma, prEvent(issue, 'reopened', 7101, '2026-10-10T08:10:00.000Z'));
+      await processGitHubPrEvent(prisma, prEvent(issue, 'closed', 7101, '2026-10-10T08:20:00.000Z', true));
+      row = await prisma.issue.findUniqueOrThrow({ where: { id: issue.id }, include: { state: true, evidence: true } });
+      expect(row.state.type).toBe('STARTED');
+      expect(row.evidence.some(item => item.summary?.includes('Merged in fedcba9'))).toBe(true);
+      expect(await prisma.webhookEventLog.count({ where: { issueId: issue.id } })).toBe(3);
+
+      // A redelivery is still a duplicate, not a second evaluation.
+      await processGitHubPrEvent(prisma, prEvent(issue, 'opened', 7101, '2026-10-10T08:00:00.000Z'));
+      expect(await prisma.webhookEventLog.count({ where: { issueId: issue.id } })).toBe(3);
+    });
+
+    it('moves a resolved incident to In Review on PR opened (INV-1148)', async () => {
+      const issue = await createTestIssue('Resolved incident PR');
+      await markIncident(issue.id, new Date('2026-10-09T12:00:00.000Z'));
+
+      await processGitHubPrEvent(prisma, prEvent(issue, 'opened', 7102, '2026-10-10T09:00:00.000Z'));
+      const row = await prisma.issue.findUniqueOrThrow({ where: { id: issue.id }, include: { state: true, evidence: true } });
+      expect(row.state.type).toBe('REVIEW');
+      expect(row.stateSourcePrId).toBe('7102');
+      expect(row.evidence).toHaveLength(1);
+    });
+
     it('Branch creation event advances UNSTARTED to STARTED', async () => {
       const issue = await createTestIssue('Branch create test');
 

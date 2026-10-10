@@ -1128,6 +1128,7 @@ export function IssuePage() {
                     ...(update.priority !== undefined ? { priority: update.priority } : {}),
                     ...(update.severity !== undefined ? { severity: update.severity } : {}),
                     ...(update.reproducibility !== undefined ? { reproducibility: update.reproducibility } : {}),
+                    ...(update.foundInSha !== undefined ? { foundInSha: update.foundInSha } : {}),
                     ...(update.kind ? { kind: update.kind } : {}),
                   })).catch(() => undefined);
                 }}
