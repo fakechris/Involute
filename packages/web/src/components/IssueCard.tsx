@@ -4,7 +4,7 @@ import { CSS } from '@dnd-kit/utilities';
 
 import type { Html5BoardDragPayload, IssueSummary } from '../board/types';
 import { createHtml5BoardDragPayload } from '../board/utils';
-import { BugSlaBadge } from './BugSlaBadge';
+import { BugSlaBadge, FollowUpDeadlineBadge } from './BugSlaBadge';
 import { PriorityIcon } from './Primitives';
 import { StatusIcon } from './StatusIcon';
 import { severityLabel } from '../board/severity';
@@ -200,6 +200,7 @@ export function IssueCard({
               </span>
             ) : null}
             <BugSlaBadge sla={issue.bugSla} />
+            <FollowUpDeadlineBadge deadline={issue.followUpDeadline} />
             {issue.repository ? (
               <span
                 role={onFilterProject ? 'button' : undefined}

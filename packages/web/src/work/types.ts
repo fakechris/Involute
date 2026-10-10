@@ -495,6 +495,8 @@ export interface WorkHygieneQueryData {
     incidentsWithoutDownstream: Array<HygieneRef & { severity: string | null }>;
     incidentsWithoutPostmortemCount: number;
     incidentsWithoutPostmortem: Array<HygieneRef & { severity: string | null }>;
+    overdueFollowUpCount: number;
+    overdueFollowUps: Array<HygieneRef & { repository: string | null }>;
   };
 }
 

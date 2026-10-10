@@ -38,6 +38,9 @@ export const WORK_EVENT_TYPES = [
   'bug.sla_breached',
   // A Type: Incident was declared, committed and under investigation (INV-1123).
   'incident.declared',
+  // An incident follow-up's deadline is at risk (20% left) / has passed (INV-1127).
+  'incident.follow_up_at_risk',
+  'incident.follow_up_overdue',
   'work.claim_released',
   // A lease ran out without renewal and the server released it (INV-991).
   'work.claim_expired',

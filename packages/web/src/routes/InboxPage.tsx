@@ -97,6 +97,10 @@ function formatNotificationType(type: string): string {
       return 'Bug SLA at risk';
     case 'bug.sla_breached':
       return 'Bug SLA breached';
+    case 'incident.follow_up_at_risk':
+      return 'Incident follow-up due soon';
+    case 'incident.follow_up_overdue':
+      return 'Incident follow-up overdue';
     case 'work.proposed_batch':
       return 'New candidates';
     case 'delivery.proposed':

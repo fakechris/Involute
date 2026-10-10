@@ -9,7 +9,7 @@ import { ActorBadge } from './ActorBadge';
 import { DeliverySection } from './DeliveryPanel';
 import { IssueRelations } from './IssueRelations';
 import { AddSubIssueButton } from './AddSubIssueButton';
-import { BugSlaBadge } from './BugSlaBadge';
+import { BugSlaBadge, FollowUpDeadlineBadge } from './BugSlaBadge';
 import { ClaimControl } from './ClaimControl';
 import { WorkStructureEditor, type StructureUpdate } from './WorkStructureEditor';
 import { toggleLabelId } from '../work/labels';
@@ -668,6 +668,15 @@ export function IssueDetailDrawer({
                   <span className="issue-panel__label">Bug SLA</span>
                   <p>
                     <BugSlaBadge sla={activeIssue.bugSla} showMet />
+                  </p>
+                </div>
+              ) : null}
+
+              {activeIssue.followUpDeadline ? (
+                <div className="issue-panel__property-group">
+                  <span className="issue-panel__label">Follow-up deadline</span>
+                  <p>
+                    <FollowUpDeadlineBadge deadline={activeIssue.followUpDeadline} showMet />
                   </p>
                 </div>
               ) : null}
