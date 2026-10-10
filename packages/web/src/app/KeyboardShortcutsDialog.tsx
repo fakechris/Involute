@@ -19,13 +19,14 @@ export const SHORTCUT_SECTIONS: ShortcutSection[] = [
     id: 'navigation',
     title: 'Navigation (G Chords)',
     items: [
+      { id: 'nav-todo', label: 'Go to Needs you', description: 'Every decision waiting on you', keys: ['G', 'T'] },
       { id: 'nav-board', label: 'Go to Board', description: 'Active committed board', keys: ['G', 'B'] },
       { id: 'nav-backlog', label: 'Go to Backlog', description: 'Issue backlog table', keys: ['G', 'L'] },
       { id: 'nav-candidates', label: 'Go to Candidates', description: 'Proposed work review queue', keys: ['G', 'C'] },
       { id: 'nav-in-review', label: 'Go to In Review', description: 'Completed agent runs review', keys: ['G', 'N'] },
       { id: 'nav-bugs', label: 'Go to Bugs', description: 'Reported bugs queue', keys: ['G', 'U'] },
       { id: 'nav-graph', label: 'Go to Graph', description: 'Work-graph relationships view', keys: ['G', 'R'] },
-      { id: 'nav-inbox', label: 'Go to Inbox', description: 'Notifications and activity', keys: ['G', 'I'] },
+      { id: 'nav-inbox', label: 'Go to Activity', description: 'What happened on your work', keys: ['G', 'I'] },
       { id: 'nav-my-issues', label: 'Go to My Issues', description: 'Issues assigned to you', keys: ['G', 'M'] },
       { id: 'nav-projects', label: 'Go to Projects', description: 'Projects overview', keys: ['G', 'P'] },
       { id: 'nav-cycles', label: 'Go to Milestones', description: 'Milestones and delivery cycles', keys: ['G', 'V'] },
@@ -73,6 +74,16 @@ export const SHORTCUT_SECTIONS: ShortcutSection[] = [
       { id: 'bb-peek', label: 'Peek', description: 'Preview the focused issue without opening it', keys: ['Space'] },
       { id: 'bb-copy-id', label: 'Copy identifier', description: 'Copy the focused issue identifier', keys: ['⌘', '.'] },
       { id: 'bb-copy-link', label: 'Copy link', description: 'Copy a link to the focused issue', keys: ['⌘', '⇧', ','] },
+    ],
+  },
+  {
+    id: 'needs-you',
+    title: 'Needs you',
+    items: [
+      { id: 'ny-accept', label: 'Accept or commit', description: 'Commit the focused candidate; accept a contract change or finished work by pressing twice, it cannot be undone', keys: ['A'] },
+      { id: 'ny-reason', label: 'Write a reason', description: 'Put the cursor in the decision note to decline or return', keys: ['R'] },
+      { id: 'ny-snooze', label: 'Snooze candidate', description: 'Snooze the focused candidate for a week', keys: ['H'] },
+      { id: 'ny-undo', label: 'Undo', description: 'Undo the last commit or snooze', keys: ['Z'] },
     ],
   },
 ];

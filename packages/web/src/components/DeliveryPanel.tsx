@@ -118,7 +118,7 @@ export function DeliveryPanel({ workId, compact = false }: { workId: string; com
 
 type Change = { viewerCanDecide: boolean; id: string; reason: string; changesJson: string; beforeJson: string; work: Work };
 function ChangeCard({ change, refresh }: { change: Change; refresh: () => Promise<unknown> }) {
-  const [decide, { loading }] = useMutation<{ deliveryChangeDecide: Result }>(DECIDE);
+  const [decide, { loading }] = useMutation<{ deliveryChangeDecide: Result }>(DECIDE, { refetchQueries: ['AttentionPage'] });
   const [note, setNote] = useState('');
   const [ownerId, setOwnerId] = useState(change.work.assignee?.id ?? '');
   const [message, setMessage] = useState('');

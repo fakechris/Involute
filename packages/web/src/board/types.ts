@@ -816,6 +816,11 @@ export interface NotificationRecordItem {
   payload: Record<string, unknown> | null;
   readAt: string | null;
   createdAt: string;
+  /** It asked for a decision (INV-1093); open ones are in Needs you. */
+  actionable?: boolean;
+  resolvedAt?: string | null;
+  resolution?: string | null;
+  resolvedBy?: { id: string; name: string | null; email: string | null } | null;
   work: {
     id: string;
     identifier: string;

@@ -89,6 +89,16 @@ function formatNotificationType(type: string): string {
       return 'Bug SLA at risk';
     case 'bug.sla_breached':
       return 'Bug SLA breached';
+    case 'work.proposed_batch':
+      return 'New candidates';
+    case 'delivery.proposed':
+      return 'Delivery change proposed';
+    case 'executor.exhausted':
+      return 'Implementation ran out of attempts';
+    case 'contract.amendment_accepted':
+      return 'Contract change accepted';
+    case 'contract.amendment_rejected':
+      return 'Contract change rejected';
     default:
       return type
         .split('.')
@@ -99,11 +109,51 @@ function formatNotificationType(type: string): string {
 
 function getPayloadSummary(payload: Record<string, unknown> | null): string | null {
   if (!payload) return null;
+  if (Array.isArray(payload.items)) {
+    const identifiers = (payload.items as Array<{ identifier?: unknown }>).map((entry) => entry.identifier).filter((value): value is string => typeof value === 'string');
+    return `${identifiers.length} proposed: ${identifiers.slice(0, 5).join(', ')}${identifiers.length > 5 ? '…' : ''}`;
+  }
   if (typeof payload.summary === 'string' && payload.summary) return payload.summary;
   if (typeof payload.message === 'string' && payload.message) return payload.message;
   if (typeof payload.reason === 'string' && payload.reason) return payload.reason;
   if (typeof payload.decision === 'string' && payload.decision) return `Decision: ${payload.decision}`;
   return null;
+}
+
+export interface ActivityRow {
+  item: NotificationRecordItem;
+  /** Older notifications about the same work, folded under the newest. */
+  more: NotificationRecordItem[];
+}
+
+/**
+ * One row per work item (INV-1093), like GitHub's activity: the newest
+ * notification stands for the rest. Notifications with no work stay alone.
+ * The list arrives newest first, so each row sits where its newest one was.
+ */
+export function groupActivity(items: NotificationRecordItem[]): ActivityRow[] {
+  const rows: ActivityRow[] = [];
+  const byWork = new Map<string, ActivityRow>();
+  for (const item of items) {
+    const key = item.work?.id;
+    const row = key ? byWork.get(key) : undefined;
+    if (row) {
+      row.more.push(item);
+      continue;
+    }
+    const created = { item, more: [] };
+    rows.push(created);
+    if (key) byWork.set(key, created);
+  }
+  return rows;
+}
+
+/** What became of a notification that asked for a decision. */
+export function resolutionText(item: NotificationRecordItem): string | null {
+  if (!item.actionable || !item.resolvedAt) return null;
+  const how = item.resolution ? item.resolution.charAt(0).toUpperCase() + item.resolution.slice(1) : 'Decided';
+  const who = item.resolvedBy?.name ?? item.resolvedBy?.email;
+  return who ? `${how} by ${who}` : how;
 }
 
 export function InboxPage() {
@@ -146,20 +196,23 @@ export function InboxPage() {
   const notifications = useMemo(() => data?.notifications.nodes ?? [], [data?.notifications.nodes]);
   const unreadCount = data?.unreadNotificationCount ?? 0;
 
-  const handleOpenItem = (item: NotificationRecordItem) => {
-    if (!item.readAt) {
-      void runMarkRead({ variables: { id: item.id } });
-    }
-    if (item.work) {
-      navigate(`/work/${item.work.id}`);
+  const markGroupRead = (group: NotificationRecordItem[]) => {
+    for (const entry of group) {
+      if (!entry.readAt) void runMarkRead({ variables: { id: entry.id } });
     }
   };
 
-  const handleMarkItemRead = (e: React.MouseEvent, item: NotificationRecordItem) => {
-    e.stopPropagation();
-    if (!item.readAt) {
-      void runMarkRead({ variables: { id: item.id } });
+  const handleOpenGroup = (group: NotificationRecordItem[]) => {
+    markGroupRead(group);
+    const work = group[0]?.work;
+    if (work) {
+      navigate(`/work/${work.id}`);
     }
+  };
+
+  const handleMarkGroupRead = (e: React.MouseEvent, group: NotificationRecordItem[]) => {
+    e.stopPropagation();
+    markGroupRead(group);
   };
 
   const handleMarkAllRead = async () => {
@@ -167,13 +220,12 @@ export function InboxPage() {
   };
 
   return (
-    <main className="inbox-page" aria-label="Inbox">
+    <main className="inbox-page" aria-label="Activity">
       <header className="inbox-page__header">
         <IcoInbox size={14} style={{ color: 'var(--fg-dim)' }} />
-        <span className="inbox-page__title">Inbox</span>
-        <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
-          {unreadCount}
-        </span>
+        <span className="inbox-page__title">Activity</span>
+        {/* No number here: what waits on you is counted once, in Needs you (INV-1093). */}
+        <Link className="inbox-page__todo-link" to="/todo">What needs you</Link>
         <div style={{ flex: 1 }} />
         {unreadCount > 0 && (
           <Btn
@@ -186,7 +238,7 @@ export function InboxPage() {
             Mark all read
           </Btn>
         )}
-        <div className="inbox-page__toggle" role="tablist" aria-label="Inbox filter">
+        <div className="inbox-page__toggle" role="tablist" aria-label="Activity filter">
           {(['all', 'unread'] as const).map((key) => (
             <button
               key={key}
@@ -205,18 +257,20 @@ export function InboxPage() {
       <div className="inbox-page__list">
         {error && notifications.length === 0 ? (
           <p className="inbox-page__empty" role="alert">
-            Could not load inbox notifications. Confirm the API server is running and try again.
+            Could not load activity. Confirm the API server is running and try again.
           </p>
         ) : loading && notifications.length === 0 ? (
           <p className="inbox-page__empty">Loading…</p>
         ) : notifications.length === 0 ? (
           <p className="inbox-page__empty">
-            {filter === 'unread' ? 'No unread notifications.' : 'Inbox is empty.'}
+            {filter === 'unread' ? 'Nothing unread.' : 'No activity yet.'}
           </p>
         ) : (
-          notifications.map((item) => {
-            const isUnread = !item.readAt;
+          groupActivity(notifications).map(({ item, more }) => {
+            const group = [item, ...more];
+            const isUnread = group.some((entry) => !entry.readAt);
             const summary = getPayloadSummary(item.payload);
+            const resolved = resolutionText(item);
 
             return (
               <div
@@ -224,11 +278,11 @@ export function InboxPage() {
                 tabIndex={0}
                 key={item.id}
                 className={`inbox-item${isUnread ? ' inbox-item--unread' : ''}`}
-                onClick={() => handleOpenItem(item)}
+                onClick={() => handleOpenGroup(group)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
-                    handleOpenItem(item);
+                    handleOpenGroup(group);
                   }
                 }}
               >
@@ -270,6 +324,18 @@ export function InboxPage() {
                       {item.work.title}
                     </div>
                   )}
+                  {item.actionable ? (
+                    resolved ? (
+                      <div className="inbox-item__resolution">{resolved}</div>
+                    ) : (
+                      <Link className="inbox-item__ops-link" to="/todo" onClick={(event) => event.stopPropagation()}>
+                        Waiting on you · Needs you
+                      </Link>
+                    )
+                  ) : null}
+                  {more.length > 0 ? (
+                    <div className="inbox-item__more">+{more.length} more on this item</div>
+                  ) : null}
                   {!item.work ? <NotificationDetails payload={item.payload} /> : null}
                   {!item.work && OPS_SECTION[item.type] ? (
                     <Link className="inbox-item__ops-link" to={`/ops#${OPS_SECTION[item.type]}`} onClick={(event) => event.stopPropagation()}>
@@ -299,7 +365,7 @@ export function InboxPage() {
                       type="button"
                       title="Mark as read"
                       aria-label="Mark as read"
-                      onClick={(e) => handleMarkItemRead(e, item)}
+                      onClick={(e) => handleMarkGroupRead(e, group)}
                       style={{
                         background: 'none',
                         border: 'none',

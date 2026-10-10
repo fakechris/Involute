@@ -518,3 +518,37 @@ export interface AutoAcceptInfo {
   accepted: boolean;
   createdAt: string;
 }
+
+export type AttentionKind =
+  | 'CONTRACT_AMENDMENT'
+  | 'WORK_REVIEW'
+  | 'CANDIDATE_COMMIT'
+  | 'DELIVERY_CHANGE'
+  | 'AGENT_REQUEST'
+  | 'DECISION_REQUESTED'
+  | 'OPS';
+
+export type AttentionAction = 'ACCEPT' | 'ANSWER' | 'APPROVE' | 'COMMIT' | 'DECLINE' | 'OPEN' | 'REJECT' | 'REPLY' | 'RESPOND' | 'RETURN';
+
+/** A decision the viewer is waiting to make (INV-1091). */
+export interface AttentionItemNode {
+  id: string;
+  kind: AttentionKind;
+  subjectId: string;
+  actions: AttentionAction[];
+  reason: string;
+  since: string;
+  groupKey: string | null;
+  group: { id: string; identifier: string; title: string; kind: WorkKind } | null;
+  work: CandidateWork | null;
+}
+
+export interface AttentionPageQueryData {
+  attentionSummary: { total: number; byKind: Array<{ kind: AttentionKind; count: number; oldestSince: string | null }> };
+  attention: { nodes: AttentionItemNode[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } };
+  teams: { nodes: Array<Omit<CandidatesPageQueryData['teams']['nodes'][number], 'name'>> };
+}
+
+export interface AttentionSummaryQueryData {
+  attentionSummary: { total: number };
+}

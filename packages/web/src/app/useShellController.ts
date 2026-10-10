@@ -47,6 +47,7 @@ import {
   type AppShellTeamSummary,
 } from '../lib/app-shell-state';
 import { fetchSessionState, type SessionState } from '../lib/session';
+import { isQuestionKey, isSlashKey } from '../lib/keys';
 
 export function useShellController() {
   const navigate = useNavigate();
@@ -214,7 +215,7 @@ export function useShellController() {
         return;
       }
 
-      if ((event.metaKey || event.ctrlKey) && event.key === '/') {
+      if ((event.metaKey || event.ctrlKey) && isSlashKey(event)) {
         event.preventDefault();
         setShortcutsOpen((currentValue) => !currentValue);
         return;
@@ -255,6 +256,7 @@ export function useShellController() {
             u: '/bugs',
             r: '/graph',
             i: '/inbox',
+            t: '/todo',
             m: '/my-issues',
             p: '/projects',
             v: '/cycles',
@@ -292,7 +294,7 @@ export function useShellController() {
         return;
       }
 
-      if (event.key === '?' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (isQuestionKey(event) && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
         setShortcutsOpen(true);
         return;

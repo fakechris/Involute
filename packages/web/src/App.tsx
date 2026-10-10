@@ -6,6 +6,7 @@ import { CommandPalette, type PaletteAction } from './app/CommandPalette';
 import { KeyboardShortcutsDialog } from './app/KeyboardShortcutsDialog';
 import { LegacyTeamRedirect } from './routes/LegacyTeamRedirect';
 import { NotificationsBell } from './components/NotificationsBell';
+import { NeedsYouNavLink } from './components/NeedsYouNavLink';
 import { ShellTeamsSync } from './app/ShellTeamsSync';
 import { Avatar } from './components/Primitives';
 import {
@@ -68,8 +69,10 @@ import {
   subscribeStatusUndo,
   undoStatusGesture,
 } from './undo/status-undo';
+import { isQuestionKey, isSlashKey } from './lib/keys';
 
 const BoardPage = lazyRoute(async () => (await import('./routes/BoardPage')).BoardPage);
+const AttentionPage = lazyRoute(async () => (await import('./routes/AttentionPage')).AttentionPage);
 const InboxPage = lazyRoute(async () => (await import('./routes/InboxPage')).InboxPage);
 const IssuePage = lazyRoute(async () => (await import('./routes/IssuePage')).IssuePage);
 const MyIssuesPage = lazyRoute(async () => (await import('./routes/MyIssuesPage')).MyIssuesPage);
@@ -536,7 +539,7 @@ export function App() {
         return;
       }
 
-      if ((event.metaKey || event.ctrlKey) && event.key === '/') {
+      if ((event.metaKey || event.ctrlKey) && isSlashKey(event)) {
         event.preventDefault();
         setIsShortcutsOpen((currentValue) => !currentValue);
         return;
@@ -580,6 +583,7 @@ export function App() {
             r: '/graph',
             h: '/hygiene',
             i: '/inbox',
+            t: '/todo',
             m: '/my-issues',
             p: '/projects',
             v: '/cycles',
@@ -621,7 +625,7 @@ export function App() {
         return;
       }
 
-      if (event.key === '?' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (isQuestionKey(event) && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
         setIsShortcutsOpen(true);
         return;
@@ -680,9 +684,17 @@ export function App() {
         run: () => navigate('/hygiene'),
       },
       {
+        id: 'go-todo',
+        label: 'Go to Needs you',
+        description: 'Every decision waiting on you, in one queue',
+        group: 'Navigation',
+        shortcut: 'G T',
+        run: () => navigate('/todo'),
+      },
+      {
         id: 'go-inbox',
-        label: 'Go to inbox',
-        description: 'Open notifications and activity',
+        label: 'Go to Activity',
+        description: 'What happened on your work; decisions are in Needs you',
         group: 'Navigation',
         shortcut: 'G I',
         run: () => navigate('/inbox'),
@@ -947,6 +959,7 @@ export function App() {
           </button>
 
           <nav className="app-shell__nav-section" aria-label="Primary">
+            <NeedsYouNavLink authenticated={Boolean(session?.authenticated)} className={getNavLinkClassName} />
             <NavLink to="/" className={getNavLinkClassName} end title="Go to Board · G B">
               <span className="app-shell__nav-icon"><IcoIssues size={14} /></span>
               <span className="app-shell__link-label">Board</span>
@@ -977,9 +990,9 @@ export function App() {
               <span className="app-shell__link-label">Health</span>
               <kbd className="app-shell__link-kbd" aria-hidden="true">G H</kbd>
             </NavLink>
-            <NavLink to="/inbox" className={getNavLinkClassName} title="Go to Inbox · G I">
+            <NavLink to="/inbox" className={getNavLinkClassName} title="Go to Activity · G I">
               <span className="app-shell__nav-icon"><IcoInbox size={14} /></span>
-              <span className="app-shell__link-label">Inbox</span>
+              <span className="app-shell__link-label">Activity</span>
               <kbd className="app-shell__link-kbd" aria-hidden="true">G I</kbd>
             </NavLink>
             <NavLink to="/my-issues" className={getNavLinkClassName} title="Go to My Issues · G M">
@@ -1349,6 +1362,7 @@ export function App() {
               <Route path="/hygiene" element={<HygienePage />} />
               <Route path="/ops" element={<OpsPage />} />
               <Route path="/work/:id" element={<WorkContextPage />} />
+              <Route path="/todo" element={<AttentionPage />} />
               <Route path="/inbox" element={<InboxPage />} />
               <Route path="/my-issues" element={<MyIssuesPage />} />
               <Route path="/views" element={<ViewsPage />} />

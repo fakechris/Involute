@@ -160,7 +160,7 @@ import {
   type WorkProvenance as WorkProvenanceResult,
 } from './agent-directory.js';
 import { createComment, createIssue, createIssueInTransaction, deleteComment, deleteIssue, mentionTexts, updateIssue } from './issue-service.js';
-import { markNotificationRead, projectWorkNotifications } from './notification-service.js';
+import { isActionableNotification, markNotificationRead, projectWorkNotifications, resolveAttentionNotifications } from './notification-service.js';
 import { auditMergedPrTraceability } from './traceability-audit.js';
 import { suggestedBranchName } from './branch-name.js';
 import { createWorkLink, deleteWorkLink, listIncidentLinks } from './link-service.js';
@@ -1606,6 +1606,12 @@ const typeDefs = /* GraphQL */ `
     payload: Json!
     readAt: DateTime
     createdAt: DateTime!
+    "It asked the recipient to decide something (INV-1093); the open ones are in attention."
+    actionable: Boolean!
+    "When the decision it asked for was made, by whom, and how (accepted, rejected, committed, declined, replied, answered…)."
+    resolvedAt: DateTime
+    resolvedBy: User
+    resolution: String
   }
 
   type NotificationConnection {
@@ -2421,6 +2427,11 @@ const typeDefs = /* GraphQL */ `
 `;
 
 const resolvers = {
+  NotificationRecord: {
+    actionable: (parent: { type: string }) => isActionableNotification(parent.type),
+    resolvedBy: (parent: { resolvedById?: string | null }, _args: unknown, context: GraphQLContext) =>
+      parent.resolvedById ? context.prisma.user.findUnique({ where: { id: parent.resolvedById } }) : null,
+  },
   AttentionItem: {
     groupKey: (parent: AttentionItem) => parent.groupId,
     group: (parent: AttentionItem, _args: unknown, context: GraphQLContext) =>
@@ -4112,6 +4123,16 @@ const resolvers = {
           data,
         });
         await auditWebhook(context, 'webhook-updated', subscription, { changed: Object.keys(data) });
+        // Switched back on: the alert asking an administrator to do it is answered (INV-1093).
+        if (args.input.enabled && !existing.enabled) {
+          await resolveAttentionNotifications(context.prisma, {
+            kind: 'OPS',
+            payload: { key: 'subscriptionId', value: existing.id },
+            resolution: 're-enabled',
+            resolvedById: context.viewer?.id,
+            types: ['webhook.disabled'],
+          });
+        }
         return { secret: null, subscription, success: true as const };
       }, { secret: null, subscription: null, success: false as const }),
     webhookDelete: async (

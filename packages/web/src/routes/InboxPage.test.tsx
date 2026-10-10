@@ -2,7 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { InboxPage } from './InboxPage';
+import { InboxPage, groupActivity, resolutionText } from './InboxPage';
+import type { NotificationRecordItem } from '../board/types';
 
 const mockRunMarkRead = vi.fn();
 const mockRunMarkAllRead = vi.fn();
@@ -23,6 +24,8 @@ vi.mock('@apollo/client/react', () => ({
           {
             id: 'notif-1',
             type: 'decision.requested',
+            actionable: true,
+            resolvedAt: null,
             payload: { summary: 'Approval required for schema change' },
             readAt: null,
             createdAt: '2026-04-02T10:00:00.000Z',
@@ -95,15 +98,16 @@ describe('InboxPage', () => {
     expect(screen.getByRole('link', { name: 'Open in Ops' })).toHaveAttribute('href', '/ops#traceability');
   });
 
-  it('renders real notifications and shows unread badge', () => {
+  it('renders activity without an unread number: the only count is Needs you (INV-1093)', () => {
     render(
       <MemoryRouter>
         <InboxPage />
       </MemoryRouter>,
     );
 
-    expect(screen.getByText('Inbox')).toBeInTheDocument();
-    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(screen.getByText('Activity')).toBeInTheDocument();
+    expect(screen.queryByText('1')).toBeNull();
+    expect(screen.getByRole('link', { name: 'What needs you' })).toHaveAttribute('href', '/todo');
     expect(screen.getByText('Decision requested')).toBeInTheDocument();
     expect(screen.getByText('INV-1')).toBeInTheDocument();
     expect(screen.getByText('Database connection pool')).toBeInTheDocument();
@@ -137,5 +141,43 @@ describe('InboxPage', () => {
     fireEvent.click(markAllBtn);
 
     expect(mockRunMarkAllRead).toHaveBeenCalled();
+  });
+
+  // INV-1093
+  it('folds a work item\'s notifications into one row and links an open decision to Needs you', () => {
+    render(
+      <MemoryRouter>
+        <InboxPage />
+      </MemoryRouter>,
+    );
+    // decision.requested on INV-1 is actionable and still open.
+    expect(screen.getByRole('link', { name: 'Waiting on you · Needs you' })).toHaveAttribute('href', '/todo');
+  });
+});
+
+describe('Activity rows (INV-1093)', () => {
+  const base = (id: string, workId: string | null, extra: Partial<NotificationRecordItem> = {}): NotificationRecordItem => ({
+    createdAt: '2026-10-10T00:00:00.000Z',
+    id,
+    payload: null,
+    readAt: null,
+    type: 'work.committed',
+    work: workId ? { id: workId, identifier: workId.toUpperCase(), title: workId } : null,
+    ...extra,
+  });
+
+  it('keeps one row per work item at the newest notification, and lone rows for no work', () => {
+    const rows = groupActivity([base('n3', 'inv-1'), base('n2', null), base('n1', 'inv-1'), base('n0', 'inv-2')]);
+    expect(rows.map((row) => [row.item.id, row.more.map((entry) => entry.id)])).toEqual([
+      ['n3', ['n1']],
+      ['n2', []],
+      ['n0', []],
+    ]);
+  });
+
+  it('says who decided a resolved notification and how', () => {
+    expect(resolutionText(base('a', 'inv-1', { actionable: true, resolution: 'accepted', resolvedAt: '2026-10-10T01:00:00.000Z', resolvedBy: { email: null, id: 'u', name: 'Chris' } }))).toBe('Accepted by Chris');
+    expect(resolutionText(base('b', 'inv-1', { actionable: true }))).toBeNull();
+    expect(resolutionText(base('c', 'inv-1'))).toBeNull();
   });
 });

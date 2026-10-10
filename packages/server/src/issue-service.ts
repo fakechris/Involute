@@ -52,6 +52,7 @@ import {
   selectIssueSnapshot,
   type WriteActor,
 } from './work-service.js';
+import { resolveAttentionNotifications } from './notification-service.js';
 
 export interface CreateIssueInput {
   acceptance?: string | null;
@@ -786,6 +787,11 @@ export async function createComment(
       requestIdByActorId,
       work: issue,
     });
+    // A person's word on the work answers a decision its run asked for (INV-1093),
+    // the same rule the Needs you queue uses.
+    if (author.actorKind === 'HUMAN') {
+      await resolveAttentionNotifications(tx, { kind: 'DECISION_REQUESTED', resolution: 'answered', resolvedById: userId, workId: issue.id });
+    }
 
     if (reservationId) await completeWorkIdempotency(tx, reservationId, issue.id, comment.id);
     return comment;

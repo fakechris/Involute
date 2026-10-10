@@ -32,7 +32,7 @@ describe('deriveViewLabel', () => {
     expect(deriveViewLabel('/in-review', '')).toBe('In Review');
     expect(deriveViewLabel('/bugs', '')).toBe('Bugs');
     expect(deriveViewLabel('/graph', '')).toBe('Graph');
-    expect(deriveViewLabel('/inbox', '')).toBe('Inbox');
+    expect(deriveViewLabel('/inbox', '')).toBe('Activity');
     expect(deriveViewLabel('/my-issues', '')).toBe('My Issues');
     expect(deriveViewLabel('/views', '')).toBe('Views');
     expect(deriveViewLabel('/projects', '')).toBe('Projects');

@@ -83,6 +83,9 @@ export async function processNotificationEmails(
       createdAt: { lt: cutoff },
       emailAttempts: { lt: MAX_EMAIL_ATTEMPTS },
       emailedAt: null,
+      // Only what is still news: read in the app, or a decision already made, is not mailed (INV-1093).
+      readAt: null,
+      resolvedAt: null,
     },
   });
   if (pending.length === 0) {
@@ -140,7 +143,7 @@ function buildDigestMail(
     work: { identifier: string; id: string; title: string } | null;
   }>,
 ): OutgoingNotificationEmail {
-  const subject = `Involute: ${notifications.length} work item${notifications.length === 1 ? '' : 's'} need your attention`;
+  const subject = notifications.length === 1 ? 'Involute: 1 work item needs your attention' : `Involute: ${notifications.length} work items need your attention`;
   const lines = notifications.map((notification) => {
     if (notification.work) {
       return `- [${notification.work.identifier}] ${notification.work.title} — ${notification.type}`;

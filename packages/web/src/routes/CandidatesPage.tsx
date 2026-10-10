@@ -11,7 +11,9 @@ import { Btn } from '../components/Primitives';
 import { filtersToIql, useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { useListKeys } from '../components/useListKeys';
 
-const COMMIT_CANDIDATE_EVENT = 'involute:commit-candidate';
+export const COMMIT_CANDIDATE_EVENT = 'involute:commit-candidate';
+/** H on a focused candidate in Needs you snoozes it for a week, the card's shortest Snooze (INV-1092). */
+export const SNOOZE_CANDIDATE_EVENT = 'involute:snooze-candidate';
 import { PlacementPicker } from '../components/PlacementPicker';
 import type { CreatePlacement } from '../work/placement';
 import {
@@ -41,7 +43,7 @@ import type {
 
 const COMMIT_ERROR_MESSAGE = 'We could not commit this candidate. Check acceptance, owner, and revision.';
 
-function commitUndoItem(
+export function commitUndoItem(
   candidate: CandidateWork,
   revision: number,
   input: { acceptance: string; assigneeId: string | null; priority: number | null },
@@ -58,7 +60,7 @@ function commitUndoItem(
 }
 const REJECT_ERROR_MESSAGE = 'We could not reject this candidate. Please try again.';
 
-function humanUsers(users: WorkUserSummary[]): WorkUserSummary[] {
+export function humanUsers(users: WorkUserSummary[]): WorkUserSummary[] {
   return users.filter((user) => user.actorKind !== 'AGENT' && user.actorKind !== 'SERVICE');
 }
 
@@ -371,7 +373,7 @@ function UnscopedParentField({ candidate, onChange }: { candidate: CandidateWork
   );
 }
 
-function CandidateCard({
+export function CandidateCard({
   candidate,
   humans,
   states = [],
@@ -510,12 +512,20 @@ function CandidateCard({
 
   // ⌘↵ on the focused card commits it with what the card holds (INV-1087).
   const commitRef = useRef<() => void>(() => undefined);
+  const snoozeRef = useRef<() => void>(() => undefined);
   useEffect(() => {
     const onCommit = (event: Event) => {
       if ((event as CustomEvent<{ id: string }>).detail?.id === candidate.id) commitRef.current();
     };
+    const onSnooze = (event: Event) => {
+      if ((event as CustomEvent<{ id: string }>).detail?.id === candidate.id) snoozeRef.current();
+    };
     window.addEventListener(COMMIT_CANDIDATE_EVENT, onCommit);
-    return () => window.removeEventListener(COMMIT_CANDIDATE_EVENT, onCommit);
+    window.addEventListener(SNOOZE_CANDIDATE_EVENT, onSnooze);
+    return () => {
+      window.removeEventListener(COMMIT_CANDIDATE_EVENT, onCommit);
+      window.removeEventListener(SNOOZE_CANDIDATE_EVENT, onSnooze);
+    };
   }, [candidate.id]);
 
   async function handleCommit() {
@@ -760,6 +770,9 @@ function CandidateCard({
           commitRef.current = () => {
             if (!blocked) void handleCommit();
             else document.getElementById(`acceptance-${candidate.id}`)?.focus();
+          };
+          snoozeRef.current = () => {
+            if (pendingAction === null && !snoozed) void handleSnooze(7);
           };
           return null;
         })()}

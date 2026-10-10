@@ -1,5 +1,7 @@
 import type { Issue, Prisma, PrismaClient } from '@prisma/client';
 
+import type { AttentionKind } from './attention-service.js';
+
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
 // Recipient cap: an ownerless work must not fan out to an unbounded set of
@@ -86,6 +88,7 @@ export async function projectWebhookDisabledNotifications(
     subscription: {
       consecutiveFailures: number;
       createdById?: string | null;
+      id: string;
       label: string | null;
       url: string;
     };
@@ -117,6 +120,8 @@ export async function projectWebhookDisabledNotifications(
       payload: {
         consecutiveFailures: input.subscription.consecutiveFailures,
         label: input.subscription.label,
+        // Re-enabling it resolves this notification (INV-1093).
+        subscriptionId: input.subscription.id,
         url: input.subscription.url,
       },
       sourceEventId: input.eventId,
@@ -245,4 +250,134 @@ export async function readUnreadNotifications(
       ...(input.teamId ? { OR: [{ teamId: input.teamId }, { teamId: null }] } : {}),
     },
   });
+}
+
+/**
+ * Notifications that ask a person to decide something (INV-1093), with the
+ * decision that answers them. Everything else is information. The Needs you
+ * queue is the list of open decisions; these rows are how a person was told,
+ * and they are resolved — read for everyone, with who decided and how — in
+ * the transaction that makes the decision.
+ */
+export const ACTIONABLE_NOTIFICATION_KINDS = {
+  'agent.request_handed_off': 'AGENT_REQUEST',
+  'agent.request_input_required': 'AGENT_REQUEST',
+  'bug.reported': 'CANDIDATE_COMMIT',
+  'contract.amendment_proposed': 'CONTRACT_AMENDMENT',
+  'decision.requested': 'DECISION_REQUESTED',
+  'delivery.proposed': 'DELIVERY_CHANGE',
+  'review.overdue': 'WORK_REVIEW',
+  'run.completed': 'WORK_REVIEW',
+  'webhook.disabled': 'OPS',
+  'work.proposed_batch': 'CANDIDATE_COMMIT',
+} as const satisfies Record<string, AttentionKind>;
+
+export function isActionableNotification(type: string): boolean {
+  return Object.hasOwn(ACTIONABLE_NOTIFICATION_KINDS, type);
+}
+
+function typesOfKind(kind: AttentionKind): string[] {
+  return Object.entries(ACTIONABLE_NOTIFICATION_KINDS)
+    .filter(([, of]) => of === kind)
+    .map(([type]) => type);
+}
+
+/**
+ * A decision was made: every recipient's notification asking for it is
+ * resolved and read, whoever decided (INV-1093). Matched by the work it is
+ * about, or, for decisions that are not a work item's (a request, a
+ * webhook), by an id in the payload. Rows already resolved keep their first
+ * resolution. Returns how many rows were resolved.
+ */
+export async function resolveAttentionNotifications(
+  prisma: DatabaseClient,
+  input: {
+    kind: AttentionKind;
+    resolution: string;
+    resolvedById: string | null | undefined;
+    workId?: string | null;
+    payload?: { key: string; value: string };
+    /** Narrow to some of the kind's types, e.g. only the request a reply answers. */
+    types?: string[];
+  },
+): Promise<number> {
+  const types = input.types ?? typesOfKind(input.kind);
+  if (!input.workId && !input.payload) return 0;
+  const where: Prisma.NotificationWhereInput = {
+    resolvedAt: null,
+    type: { in: types },
+    ...(input.workId ? { workId: input.workId } : {}),
+    ...(input.payload ? { payload: { equals: input.payload.value, path: [input.payload.key] } } : {}),
+  };
+  const now = new Date();
+  // Read first, only where unread, so a time a person already read it is kept.
+  await prisma.notification.updateMany({ data: { readAt: now }, where: { ...where, readAt: null } });
+  const resolved = await prisma.notification.updateMany({
+    data: { resolution: input.resolution, resolvedAt: now, resolvedById: input.resolvedById ?? null },
+    where,
+  });
+  return resolved.count;
+}
+
+/**
+ * New candidates, told to the people who decide them at most once an hour per
+ * team (INV-1093): one open row per person collects every proposal until it
+ * is read or an hour passes, so an agent proposing twenty items is one line.
+ * Decided candidates leave its list; when none is left it is resolved.
+ */
+export async function projectProposedBatch(
+  prisma: DatabaseClient,
+  input: { eventId: string; proposerId: string | null | undefined; work: Pick<Issue, 'assigneeId' | 'id' | 'identifier' | 'teamId' | 'title'> },
+): Promise<void> {
+  // A person proposing work is not told about it.
+  const recipients = (await resolveHumanRecipients(prisma, input.work)).filter((id) => id !== input.proposerId);
+  const since = new Date(Date.now() - PROPOSED_BATCH_WINDOW_MS);
+  const entry = { id: input.work.id, identifier: input.work.identifier, title: input.work.title };
+  for (const userId of recipients) {
+    const open = await prisma.notification.findFirst({
+      where: { createdAt: { gte: since }, readAt: null, teamId: input.work.teamId, type: 'work.proposed_batch', userId },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (open) {
+      const items = batchItems(open.payload);
+      if (!items.some((item) => item.id === entry.id) && items.length < PROPOSED_BATCH_LIMIT) items.push(entry);
+      await prisma.notification.update({ where: { id: open.id }, data: { payload: { count: items.length, items } } });
+    } else {
+      await prisma.notification.createMany({
+        data: [{ payload: { count: 1, items: [entry] }, sourceEventId: input.eventId, teamId: input.work.teamId, type: 'work.proposed_batch', userId }],
+        skipDuplicates: true,
+      });
+    }
+  }
+}
+
+/** A candidate was committed or declined: batches listing only decided candidates are resolved. */
+export async function settleProposedBatches(
+  prisma: DatabaseClient,
+  input: { resolvedById: string | null | undefined; work: Pick<Issue, 'id' | 'teamId'> },
+): Promise<void> {
+  const open = await prisma.notification.findMany({
+    where: { resolvedAt: null, teamId: input.work.teamId, type: 'work.proposed_batch' },
+    select: { id: true, payload: true },
+  });
+  const containing = open.filter((row) => batchItems(row.payload).some((item) => item.id === input.work.id));
+  for (const row of containing) {
+    const ids = batchItems(row.payload).map((item) => item.id);
+    const waiting = await prisma.issue.count({ where: { commitmentStatus: 'CANDIDATE', id: { in: ids } } });
+    if (waiting > 0) continue;
+    const now = new Date();
+    await prisma.notification.updateMany({ data: { readAt: now }, where: { id: row.id, readAt: null } });
+    await prisma.notification.updateMany({
+      data: { resolution: 'decided', resolvedAt: now, resolvedById: input.resolvedById ?? null },
+      where: { id: row.id, resolvedAt: null },
+    });
+  }
+}
+
+const PROPOSED_BATCH_WINDOW_MS = 60 * 60_000;
+const PROPOSED_BATCH_LIMIT = 50;
+
+function batchItems(payload: Prisma.JsonValue): Array<{ id: string; identifier: string; title: string }> {
+  const items = (payload as { items?: unknown } | null)?.items;
+  return Array.isArray(items) ? (items as Array<{ id: string; identifier: string; title: string }>) : [];
 }

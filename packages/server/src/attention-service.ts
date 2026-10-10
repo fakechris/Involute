@@ -327,21 +327,35 @@ async function decisionRequests(prisma: DatabaseClient, scope: Scope): Promise<A
   for (const notification of notifications) {
     if (notification.workId && !latestByWork.has(notification.workId)) latestByWork.set(notification.workId, notification);
   }
-  const items: AttentionItem[] = [];
-  for (const [workId, notification] of latestByWork) {
+  const open = [...latestByWork.entries()].flatMap(([workId, notification]) => {
     const payload = (notification.payload ?? {}) as { publicId?: unknown; summary?: unknown };
-    if (typeof payload.publicId !== 'string') continue;
-    const run = await prisma.workRun.findFirst({
-      where: { publicId: payload.publicId, status: { in: [...ACTIVE_RUN_STATUSES] }, workId },
-      select: { id: true },
-    });
-    if (!run) continue;
-    const answered = await prisma.comment.count({
-      where: { createdAt: { gt: notification.createdAt }, issueId: workId, user: { actorKind: 'HUMAN' } },
-    });
-    if (answered > 0) continue;
-    const summary = typeof payload.summary === 'string' && payload.summary.trim() ? `: ${payload.summary.trim()}` : '';
-    items.push(item('DECISION_REQUESTED', run.id, workId, notification.createdAt, `An agent asked for a decision${summary}`, ['RESPOND']));
+    return typeof payload.publicId === 'string' ? [{ notification, publicId: payload.publicId, summary: payload.summary, workId }] : [];
+  });
+  if (open.length === 0) return [];
+  // Two reads for all of them: the runs still going, and people's comments since the oldest request.
+  const [runs, comments] = await Promise.all([
+    prisma.workRun.findMany({
+      where: { publicId: { in: open.map((entry) => entry.publicId) }, status: { in: [...ACTIVE_RUN_STATUSES] } },
+      select: { id: true, publicId: true, workId: true },
+    }),
+    prisma.comment.findMany({
+      where: {
+        createdAt: { gt: new Date(Math.min(...open.map((entry) => entry.notification.createdAt.getTime()))) },
+        issueId: { in: open.map((entry) => entry.workId) },
+        user: { actorKind: 'HUMAN' },
+      },
+      select: { createdAt: true, issueId: true },
+    }),
+  ]);
+  const runByPublicId = new Map(runs.map((run) => [run.publicId, run]));
+  const items: AttentionItem[] = [];
+  for (const entry of open) {
+    const run = runByPublicId.get(entry.publicId);
+    if (!run || run.workId !== entry.workId) continue;
+    const answered = comments.some((comment) => comment.issueId === entry.workId && comment.createdAt > entry.notification.createdAt);
+    if (answered) continue;
+    const summary = typeof entry.summary === 'string' && entry.summary.trim() ? `: ${entry.summary.trim()}` : '';
+    items.push(item('DECISION_REQUESTED', run.id, entry.workId, entry.notification.createdAt, `An agent asked for a decision${summary}`, ['RESPOND']));
   }
   return items;
 }

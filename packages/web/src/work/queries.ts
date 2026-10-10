@@ -1,5 +1,58 @@
 import { gql } from '@apollo/client';
 
+// Everything a candidate card shows and commits with; shared by Candidates and Needs you (INV-1092).
+export const CANDIDATE_WORK_FIELDS = gql`
+  fragment CandidateWorkFields on Issue {
+    id
+    identifier
+    title
+    description
+    commitmentStatus
+    hasPendingDeliveryChange
+    kind
+    revision
+    outcome
+    scope
+    constraints
+    acceptance
+    verification
+    repository
+    snoozedUntil
+    source
+    priority
+    labels {
+      nodes {
+        id
+        name
+      }
+    }
+    createdAt
+    parent {
+      id
+      identifier
+      title
+      kind
+    }
+    dependencyHints
+    team {
+      id
+      key
+    }
+    assignee {
+      id
+      name
+      email
+      actorKind
+    }
+    state {
+      id
+      name
+      type
+      position
+    }
+  }
+`;
+
 export const CANDIDATES_PAGE_QUERY = gql`
   query CandidatesPage($first: Int!, $after: String, $filter: IssueFilter, $teamFilter: TeamFilter, $query: String) {
     candidateSummary(teamFilter: $teamFilter) {
@@ -38,53 +91,7 @@ export const CANDIDATES_PAGE_QUERY = gql`
     }
     issues(first: $first, after: $after, filter: $filter, query: $query) {
       nodes {
-        id
-        identifier
-        title
-        description
-        commitmentStatus
-        hasPendingDeliveryChange
-        kind
-        revision
-        outcome
-        scope
-        constraints
-        acceptance
-        verification
-        repository
-        snoozedUntil
-        source
-        priority
-        labels {
-          nodes {
-            id
-            name
-          }
-        }
-        createdAt
-        parent {
-          id
-          identifier
-          title
-          kind
-        }
-        dependencyHints
-        team {
-          id
-          key
-        }
-        assignee {
-          id
-          name
-          email
-          actorKind
-        }
-        state {
-          id
-          name
-          type
-          position
-        }
+        ...CandidateWorkFields
       }
       pageInfo {
         hasNextPage
@@ -92,6 +99,7 @@ export const CANDIDATES_PAGE_QUERY = gql`
       }
     }
   }
+  ${CANDIDATE_WORK_FIELDS}
 `;
 
 // Which projects have work waiting in Review, for the project switcher (INV-1076).
@@ -737,6 +745,80 @@ export const SEARCH_LABELS_QUERY = gql`
         id
         name
       }
+    }
+  }
+`;
+
+// What the signed-in person is waiting to decide (INV-1091/1092). The work
+// carries the candidate fields so a candidate is committed from the queue
+// with the same card as on Candidates; teams give the card its owners and states.
+export const ATTENTION_PAGE_QUERY = gql`
+  query AttentionPage($first: Int) {
+    attentionSummary {
+      total
+      byKind {
+        kind
+        count
+        oldestSince
+      }
+    }
+    attention(first: $first) {
+      nodes {
+        id
+        kind
+        subjectId
+        actions
+        reason
+        since
+        groupKey
+        group {
+          id
+          identifier
+          title
+          kind
+        }
+        work {
+          ...CandidateWorkFields
+        }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+    teams {
+      nodes {
+        id
+        key
+        states {
+          nodes {
+            id
+            name
+            type
+          }
+        }
+        memberships {
+          nodes {
+            id
+            user {
+              id
+              name
+              email
+              actorKind
+            }
+          }
+        }
+      }
+    }
+  }
+  ${CANDIDATE_WORK_FIELDS}
+`;
+
+// The Needs you count in the sidebar: the only number in the app (INV-1093).
+export const ATTENTION_SUMMARY_QUERY = gql`
+  query AttentionSummary {
+    attentionSummary {
+      total
     }
   }
 `;

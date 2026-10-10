@@ -34,9 +34,13 @@ describe('App keyboard shortcuts and help dialog', () => {
     expect(graphLink).toBeInTheDocument();
     expect(within(graphLink).getByText('G R')).toBeInTheDocument();
 
-    const inboxLink = screen.getByRole('link', { name: /^Inbox/i });
-    expect(inboxLink).toBeInTheDocument();
-    expect(within(inboxLink).getByText('G I')).toBeInTheDocument();
+    // Inbox is Activity since INV-1093; G I still goes there.
+    const activityLink = screen.getByRole('link', { name: /^Activity/i });
+    expect(activityLink).toHaveAttribute('href', '/inbox');
+    expect(within(activityLink).getByText('G I')).toBeInTheDocument();
+
+    const needsYouLink = screen.getByRole('link', { name: /^Needs you/i });
+    expect(within(needsYouLink).getByText('G T')).toBeInTheDocument();
 
     const myIssuesLink = screen.getByRole('link', { name: /^My Issues/i });
     expect(myIssuesLink).toBeInTheDocument();
@@ -81,6 +85,13 @@ describe('App keyboard shortcuts and help dialog', () => {
     expect(await screen.findByRole('dialog', { name: /Create issue/i })).toBeInTheDocument();
     // Should stay on the board and not navigate to candidates
     expect(screen.queryByRole('heading', { name: 'Candidates' })).not.toBeInTheDocument();
+  });
+
+  it('opens keyboard shortcuts with ？ from a Chinese input method', async () => {
+    renderTestApp();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { code: 'Slash', key: '？', shiftKey: true });
+    expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
   });
 
   it('opens keyboard shortcuts dialog via ? key and closes with Escape', async () => {

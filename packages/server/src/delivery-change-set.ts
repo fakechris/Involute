@@ -11,7 +11,7 @@ import { lockWorkGraph } from './graph-integrity.js';
 import { commitWork } from './claim-service.js';
 import { enqueueWorkEvent } from './event-outbox.js';
 import { instantiateApprovedUnits } from './delivery-execution.js';
-import { projectDecisionNotifications } from './notification-service.js';
+import { projectDecisionNotifications, projectWorkNotifications, resolveAttentionNotifications } from './notification-service.js';
 import { updateIssue } from './issue-service.js';
 import { createWorkLink } from './link-service.js';
 import { claimIssueRevision, recordWorkAudit, selectIssueSnapshot, writeActorFromViewer } from './work-service.js';
@@ -93,7 +93,12 @@ export async function proposeDeliveryChange(context: GraphQLContext, input: { wo
     const freshContext = await deliveryPermissionContext(tx, context, current, 'propose');
     const before = await snapshot(tx, current, requested);
     await writable(freshContext, Object.keys(before.revisions));
-    return tx.deliveryChangeSet.create({ data: { workId: current.id, proposedById: context.viewer!.id, reason: input.reason.trim(), changes: json(requested), before: json(before) } });
+    const set = await tx.deliveryChangeSet.create({ data: { workId: current.id, proposedById: context.viewer!.id, reason: input.reason.trim(), changes: json(requested), before: json(before) } });
+    // The people who decide it hear that it waits (INV-1093); before, nobody did.
+    const payload = { changeSetId: set.id, proposedById: set.proposedById, reason: set.reason };
+    const event = await enqueueWorkEvent(tx, { type: 'delivery.proposed', payload, workId: current.id, workIdentifier: current.identifier });
+    await projectWorkNotifications(tx, { eventId: event.id, payload, type: 'delivery.proposed', work: current });
+    return set;
   });
 }
 
@@ -211,6 +216,7 @@ async function announceDeliveryDecision(
     unitKeys: input.unitKeys ?? [],
   };
   const event = await enqueueWorkEvent(tx, { type, payload, workId: input.work.id, workIdentifier: input.work.identifier });
+  await resolveAttentionNotifications(tx, { kind: 'DELIVERY_CHANGE', resolution: input.decision, resolvedById: input.deciderId, workId: input.work.id });
   await projectDecisionNotifications(tx, {
     deciderId: input.deciderId,
     eventId: event.id,
