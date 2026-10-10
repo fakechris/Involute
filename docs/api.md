@@ -791,9 +791,14 @@ See the **payload v2** section above for the full envelope. Summary:
   than `REVIEW_OVERDUE_MS` (default 3 days; a separate clock from the bug SLA,
   which pauses in Review). Once per Review spell, to the owner's inbox too.
   `Issue.reviewWait { since, waitMs, overdue, thresholdMs }` shows the wait on
-  any committed work in Review; `/in-review` prints it. Owners with work in
-  Review also get one `review.digest` inbox note per day (count, overdue count,
-  longest wait) — no outbox event, the email digest carries it.
+  any committed work in Review; `/in-review` prints it.
+- `attention.digest` (INV-1094, replaces `review.digest`): once a day, every
+  person with something in Needs you (`attention`) gets one inbox note —
+  `total`, `overdue`, `byKind`, the three longest waits (`oldest`, overdue
+  first) and the work trees with most waiting (`packs`). Nothing waiting,
+  nothing sent; no outbox event, the email digest carries it. An item is
+  `overdue` after 24h (contract change, delivery change, operations), 4h
+  (agent request, decision requested) or 3 days (candidate, finished work).
 - `run.stale` (INV-996): a RUNNING run wrote nothing (no `run_report`, no
   evidence on the run, no comment by its actor) for `RUN_STALE_AFTER_MS`
   (default 30 min); payload `runId`, `publicId`, `actorId`, `lastActivityAt`,

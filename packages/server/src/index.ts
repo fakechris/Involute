@@ -3,7 +3,8 @@ import { SemanticIndex, startSemanticIndexer } from './embeddings/semantic-index
 import { startEvidenceVerifier } from './evidence-verification.js';
 import { expireOverdueAgentRequests } from './agent-request-expiry.js';
 import { sweepBugSlas } from './bug-sla.js';
-import { sendReviewDigests, sweepOverdueReviews } from './review-wait.js';
+import { sendAttentionDigests } from './attention-digest.js';
+import { sweepOverdueReviews } from './review-wait.js';
 import { sweepExpiredClaims } from './claim-expiry.js';
 import { sweepStaleRuns } from './run-staleness.js';
 import { sweepExpiredTombstones } from './work-tombstone.js';
@@ -420,8 +421,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       console.error('Failed to sweep bug SLAs.');
       console.error(error);
     });
-    // Review waits (INV-1002): overdue fixed bugs once per spell, one digest per owner per day.
-    void sweepOverdueReviews(prisma).then(() => sendReviewDigests(prisma)).catch((error: unknown) => {
+    // Review waits (INV-1002): overdue fixed bugs once per spell. One digest per
+    // person per day of everything still waiting on them (INV-1094, replaces review.digest).
+    void sweepOverdueReviews(prisma).then(() => sendAttentionDigests(prisma)).catch((error: unknown) => {
       console.error('Failed to sweep review waits.');
       console.error(error);
     });
