@@ -62,6 +62,7 @@ const EXCLUDED_COLUMNS: Record<string, string[]> = {
   WorkRun: ['executionTokenHash', 'claimId', 'searchVector'],
   Issue: ['searchVector'],
   Comment: ['searchVector'],
+  Attachment: ['searchVector'],
   WorkEvidence: ['verificationLeaseId', 'verificationLeaseUntil'],
 };
 
