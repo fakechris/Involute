@@ -255,6 +255,7 @@ export function useShellController() {
             u: '/bugs',
             r: '/graph',
             i: '/inbox',
+            t: '/todo',
             m: '/my-issues',
             p: '/projects',
             v: '/cycles',

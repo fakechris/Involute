@@ -129,7 +129,7 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
     reason: 'Agents lease work to execute it; a person owns work through the assignee and can release a claim (workClaimRelease).',
   },
   workClaimRelease: { kind: 'web', doc: 'WORK_CLAIM_RELEASE_MUTATION', components: ['components/ClaimControl.tsx'], label: 'Why release this claim', test: 'components/ClaimControl.test.tsx' },
-  workCommit: { kind: 'web', doc: 'WORK_COMMIT_MUTATION', components: ['routes/CandidatesPage.tsx'], label: 'Commit', test: 'routes/CandidatesPage.test.tsx' },
+  workCommit: { kind: 'web', doc: 'WORK_COMMIT_MUTATION', components: ['routes/CandidatesPage.tsx', 'routes/AttentionPage.tsx'], label: 'Commit', test: 'routes/CandidatesPage.test.tsx' },
   workLink: { kind: 'web', doc: 'WORK_LINK_MUTATION', components: ['components/IssueRelations.tsx'], label: 'Relation type', test: 'App.issue-relations.test.tsx' },
   workLinkDelete: { kind: 'web', doc: 'WORK_LINK_DELETE_MUTATION', components: ['components/IssueRelations.tsx'], label: 'Remove ', test: 'App.issue-relations.test.tsx' },
   workShareRemove: { kind: 'web', doc: 'WORK_SHARE_REMOVE_MUTATION', components: ['components/ProjectSharing.tsx'], label: 'Remove', test: 'App.project-sharing.test.tsx' },
@@ -155,7 +155,8 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   workReview: {
     kind: 'web',
     doc: 'WORK_REVIEW_MUTATION',
-    components: ['routes/WorkContextPage.tsx', 'routes/InReviewPage.tsx'],
+    // Needs you accepts by key and in batches (INV-1092).
+    components: ['components/HumanReviewSection.tsx', 'routes/InReviewPage.tsx', 'routes/AttentionPage.tsx'],
     label: 'Human review',
     test: 'routes/InReviewPage.test.tsx',
   },
@@ -223,7 +224,7 @@ export type NotificationLanding =
 
 /** Every notification type written to a person's inbox. */
 export const NOTIFICATION_SURFACES: Record<string, NotificationLanding> = {
-  'run.completed': { kind: 'work', action: 'Human review' },
+  'run.completed': { kind: 'work', action: 'Human review', component: 'components/HumanReviewSection.tsx' },
   'work.accepted': { kind: 'info' },
   'work.review_rejected': { kind: 'info' },
   // The proposer hears the decision on its proposal (INV-968).
@@ -240,7 +241,7 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationLanding> = {
   // The run went quiet; the owner looks at the work page and decides (INV-996).
   'run.stale': { kind: 'info' },
   // A fixed bug waits past the review clock: the owner reviews it (INV-1002).
-  'review.overdue': { kind: 'work', action: 'Human review' },
+  'review.overdue': { kind: 'work', action: 'Human review', component: 'components/HumanReviewSection.tsx' },
   // Daily: how much waits in Review and for how long; the owner opens /in-review (INV-1002).
   'review.digest': { kind: 'inbox' },
   // The research proposer (usually an agent) closes it with work_update(state: DONE) (INV-1001).

@@ -1,5 +1,5 @@
 import { DeliverySection } from '../components/DeliveryPanel';
-import { useMutation, useQuery } from '@apollo/client/react';
+import { useQuery } from '@apollo/client/react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
@@ -12,14 +12,13 @@ import { AgentRequestActions } from '../components/AgentRequestActions';
 import { RespondToAgent } from '../components/RespondToAgent';
 import { EvidenceAttachForm } from '../components/EvidenceAttachForm';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
-import { WORK_CONTEXT_PAGE_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
+import { WORK_CONTEXT_PAGE_QUERY } from '../work/queries';
+import { HumanReviewSection } from '../components/HumanReviewSection';
 import type {
   ReceiptReferenceSummary,
   WorkContextPageQueryData,
   WorkContextPageQueryVariables,
   WorkRef,
-  WorkReviewMutationData,
-  WorkReviewMutationVariables,
 } from '../work/types';
 
 function formatWhen(value: string | null | undefined): string {
@@ -75,7 +74,6 @@ function RelatedList({
 export function WorkContextPage() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const [reviewReason, setReviewReason] = useState('');
   // Who is looking decides which request actions apply (INV-794).
   const [viewer, setViewer] = useState<SessionViewer | null>(null);
   useEffect(() => {
@@ -83,9 +81,6 @@ export function WorkContextPage() {
       .then((session) => setViewer(session.viewer))
       .catch(() => setViewer(null));
   }, []);
-  const [reviewError, setReviewError] = useState<string | null>(null);
-  const [reviewPending, setReviewPending] = useState<'ACCEPTED' | 'REJECTED' | null>(null);
-  const [runReview] = useMutation<WorkReviewMutationData, WorkReviewMutationVariables>(WORK_REVIEW_MUTATION);
   const { data, error, loading, refetch } = useQuery<WorkContextPageQueryData, WorkContextPageQueryVariables>(
     WORK_CONTEXT_PAGE_QUERY,
     {
@@ -142,33 +137,6 @@ export function WorkContextPage() {
   }
 
   const work = bundle.work;
-
-  async function handleReview(decision: 'ACCEPTED' | 'REJECTED') {
-    setReviewError(null);
-    setReviewPending(decision);
-    try {
-      const result = await runReview({
-        variables: {
-          id: work.id,
-          input: {
-            decision,
-            expectedRevision: work.revision,
-            ...(reviewReason.trim() ? { reason: reviewReason.trim() } : {}),
-          },
-        },
-      });
-      if (!result.data?.workReview.success || !result.data.workReview.issue) {
-        setReviewError(result.data?.workReview.message ?? 'The review decision was not accepted. Refresh and check the current revision.');
-        return;
-      }
-      setReviewReason('');
-      await refetch();
-    } catch {
-      setReviewError('The review request failed. The work state was not assumed to have changed.');
-    } finally {
-      setReviewPending(null);
-    }
-  }
 
   return (
     <div className="observation-page">
@@ -236,36 +204,7 @@ export function WorkContextPage() {
         </section>
         {work.deliveryRootId ? <Link to={`/work/${work.deliveryRootId}`}>Review the delivery package</Link> : null}
         {work.state.type === 'REVIEW' && !work.deliveryRootId ? (
-          <section className="work-context__section" aria-label="Human review">
-            <h2>Human review</h2>
-            <p>Only an explicit human decision can move this work out of review.</p>
-            <label className="observation-field">
-              <span>Reason</span>
-              <input
-                aria-label="Review reason"
-                value={reviewReason}
-                onChange={(event) => setReviewReason(event.target.value)}
-                placeholder="Optional decision note"
-              />
-            </label>
-            {reviewError ? <p className="observation-error" role="alert">{reviewError}</p> : null}
-            <div className="observation-card__actions">
-              <Btn
-                variant="accent"
-                disabled={reviewPending !== null}
-                onClick={() => void handleReview('ACCEPTED')}
-              >
-                {reviewPending === 'ACCEPTED' ? 'Accepting…' : 'Accept'}
-              </Btn>
-              <Btn
-                variant="danger"
-                disabled={reviewPending !== null}
-                onClick={() => void handleReview('REJECTED')}
-              >
-                {reviewPending === 'REJECTED' ? 'Rejecting…' : 'Reject'}
-              </Btn>
-            </div>
-          </section>
+          <HumanReviewSection work={work} onReviewed={() => refetch()} />
         ) : null}
         <section className="work-context__section">
           <h2>Runs</h2>

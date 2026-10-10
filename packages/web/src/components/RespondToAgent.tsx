@@ -14,7 +14,8 @@ export function RespondToAgent({ workId, agent }: { workId: string; agent: { id:
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [runComment, state] = useMutation<{ commentCreate: { success: boolean } }, CommentCreateMutationVariables>(COMMENT_CREATE_MUTATION, {
-    refetchQueries: ['WorkContextPage'],
+    // A person's word on the work closes the decision request in Needs you (INV-1092).
+    refetchQueries: ['WorkContextPage', 'AttentionPage'],
   });
   if (!agent.handle) return null;
 

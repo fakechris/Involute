@@ -6786,3 +6786,116 @@ a.bugs-stat {
 .observation-card--focused {
   box-shadow: inset 3px 0 0 var(--accent, #5b8def);
 }
+
+/* Needs you (INV-1092): the queue on the left, the decision on the right. */
+.attention-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.attention-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.attention-section__title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
+.attention-section__count {
+  font-family: var(--font-mono);
+  color: var(--fg-muted);
+}
+
+.attention-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.attention-group__label {
+  font-size: 12px;
+  color: var(--fg-muted);
+  padding: 4px 8px 2px;
+}
+
+.attention-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  padding: 6px 8px;
+  border-radius: var(--r-2, 6px);
+  cursor: pointer;
+}
+
+.attention-row:hover {
+  background: var(--bg-hover, rgba(127, 127, 127, 0.08));
+}
+
+.attention-row--focused {
+  background: var(--bg-hover, rgba(127, 127, 127, 0.08));
+  box-shadow: inset 3px 0 0 var(--accent, #5b8def);
+}
+
+.attention-row__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.attention-row__reason {
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.attention-decision {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.attention-decision__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.attention-batch-results {
+  margin-top: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+}
+
+@media (max-width: 900px) {
+  .attention-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .attention-decision {
+    position: static;
+  }
+}
+
+.attention-notice {
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-2);
+  font-size: 13px;
+}

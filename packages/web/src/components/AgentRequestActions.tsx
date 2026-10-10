@@ -7,7 +7,8 @@ import type { WorkContextRequest } from '../work/types';
 
 const OPEN = new Set(['SUBMITTED', 'WORKING', 'submitted', 'working']);
 const ASKED_BACK = new Set(['INPUT_REQUIRED', 'input-required']);
-const REFETCH = ['WorkContextPage', 'IssuePage'];
+// The Needs you queue drops a request once it is replied to or answered (INV-1092).
+const REFETCH = ['WorkContextPage', 'IssuePage', 'AttentionPage'];
 
 type AnswerState = 'completed' | 'failed' | 'input-required';
 
