@@ -3002,7 +3002,7 @@ const resolvers = {
         }),
         context.prisma.workLink.groupBy({
           by: ['toId'],
-          where: { type: 'DUPLICATE_OF', to: openWhere },
+          where: { type: 'DUPLICATE_OF', to: openWhere, ...(readableWhere ? { from: readableWhere } : {}) },
           _count: { _all: true },
         }),
       ]);
