@@ -60,6 +60,17 @@ enum CommitmentStatus {
   REJECTED
 }
 
+// INV-1118: why work was closed without being done — set when a candidate is
+// rejected or committed work moves to a CANCELED state; cleared on reopen.
+enum WorkResolution {
+  COMPLETED
+  WONT_DO
+  INVALID
+  DUPLICATE
+  CANNOT_REPRODUCE
+  OBSOLETE
+}
+
 enum WorkLinkType {
   CONTAINS
   BLOCKS
@@ -362,6 +373,8 @@ model Issue {
   // INV-1075: on a PROJECT, bugs whose fix GitHub confirms (merged, checks green)
   // are accepted by the Auto-Accept Gate. Off by default; only people turn it on.
   autoAcceptBugs    Boolean           @default(false)
+  // INV-1118: structured close reason; the free-text reason stays on WorkAudit.
+  resolution        WorkResolution?
   labels            IssueLabel[]
   comments          Comment[]
   embeddings        IssueEmbedding[]

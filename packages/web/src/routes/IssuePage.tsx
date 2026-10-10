@@ -1,3 +1,4 @@
+import { isBugIssue, resolutionLabel, useCloseReason, type WorkResolution } from '../components/CloseReasonDialog';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { DeliverySection } from '../components/DeliveryPanel';
 import { ISSUE_UNDO_APPLIED_EVENT, type IssueUndoAppliedDetail } from '../undo/FieldUndoHost';
@@ -152,6 +153,7 @@ export function IssuePage() {
 
   // Local UI state (previously in IssueDetailDrawer)
   const [selectedStateId, setSelectedStateId] = useState('');
+  const { askCloseReason, closeReasonDialog } = useCloseReason();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
@@ -295,8 +297,18 @@ export function IssuePage() {
     if (!state || issue.state.id === stateId) {
       return;
     }
+    // Canceling asks why first (INV-1118): a resolution, and a reason for a bug.
+    let close: { resolution?: WorkResolution; reason?: string } = {};
+    if (state.type === 'CANCELED' && issue.state.type !== 'CANCELED') {
+      const answer = await askCloseReason({ title: `Cancel ${issue.identifier}`, needsReason: isBugIssue(issue) });
+      if (!answer) {
+        setSelectedStateId(issue.state.id);
+        return;
+      }
+      close = { resolution: answer.resolution, ...(answer.reason ? { reason: answer.reason } : {}) };
+    }
 
-    await persistIssueUpdate(issue, { stateId }, (current) => ({
+    await persistIssueUpdate(issue, { stateId, ...close }, (current) => ({
       ...current,
       state,
     }));
@@ -577,6 +589,7 @@ export function IssuePage() {
   return (
     <main className="issue-panel issue-panel--page" aria-label="Issue detail page">
       <h1 className="sr-only" style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0 }}>Issue detail</h1>
+      {closeReasonDialog}
       {/* ── Header ── */}
       <div className="issue-panel__header">
         <div className="issue-panel__title-row">
@@ -1020,6 +1033,12 @@ export function IssuePage() {
               </select>
             </div>
           </div>
+          {activeIssue.resolution ? (
+            <div className="issue-panel__prop-row">
+              <div className="issue-panel__prop-label">Resolution</div>
+              <div className="issue-panel__prop-value" aria-label="Resolution">{resolutionLabel(activeIssue.resolution)}</div>
+            </div>
+          ) : null}
 
           {/* Assignee */}
           <div className="issue-panel__prop-row">

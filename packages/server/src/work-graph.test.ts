@@ -765,6 +765,7 @@ describe('work graph GraphQL facade', () => {
         id: identifier,
         input: {
           expectedRevision: revision,
+          resolution: 'WONT_DO',
           reason: 'out of scope for this milestone',
         },
       },

@@ -102,6 +102,15 @@ export const BUG_PROPOSE_STEPS_REQUIRED_MESSAGE =
 export const BUG_PROPOSE_OWNER_REQUIRED_MESSAGE =
   'A bug is committed directly (it does not go to Candidates): the filing agent needs a human owner on this team.';
 export const BUG_REJECT_REASON_REQUIRED_MESSAGE = 'Declining a bug needs a reason (zero-bug: fix it or say why not).';
+export const WORK_REJECT_RESOLUTION_REQUIRED_MESSAGE =
+  'Rejecting a candidate needs a resolution: completed, wont_do, invalid, duplicate, cannot_reproduce or obsolete.';
+export const WORK_CANCEL_RESOLUTION_REQUIRED_MESSAGE =
+  'Canceling work needs a resolution: completed, wont_do, invalid, duplicate, cannot_reproduce or obsolete.';
+export const BUG_CANCEL_REASON_REQUIRED_MESSAGE = 'Canceling a bug needs a reason (zero-bug: fix it or say why not).';
+export const WORK_RESOLUTION_INVALID_MESSAGE =
+  'Unknown resolution. Use completed, wont_do, invalid, duplicate, cannot_reproduce or obsolete.';
+export const WORK_RESOLUTION_NOT_CLOSING_MESSAGE =
+  'A resolution says why work was closed: set it when moving the work to a Canceled state (or when rejecting a candidate).';
 export const BUG_NO_BACKLOG_MESSAGE = 'Bugs do not go to the backlog (zero-bug): commit to fixing it, or decline it with a reason.';
 export const TRIAGE_ROTATION_INVALID_MESSAGE = 'A triage rotation lists human members of the team and a valid start date.';
 export const CLAIM_RELEASE_FORBIDDEN_MESSAGE = 'Only a person can release a claim.';
@@ -321,6 +330,11 @@ const exposedErrorCodes = new Map<string, string>([
   [BUG_PROPOSE_OWNER_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_REJECT_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_NO_BACKLOG_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_REJECT_RESOLUTION_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_CANCEL_RESOLUTION_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [BUG_CANCEL_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_RESOLUTION_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [WORK_RESOLUTION_NOT_CLOSING_MESSAGE, 'BAD_USER_INPUT'],
   [RESEARCH_CLOSE_NOT_ISSUE_MESSAGE, 'FORBIDDEN'],
   [RESEARCH_CLOSE_NOT_COMMITTED_MESSAGE, 'FORBIDDEN'],
   [RESEARCH_CLOSE_CLAIMED_MESSAGE, 'FORBIDDEN'],

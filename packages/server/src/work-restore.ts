@@ -32,7 +32,7 @@ export async function restoreWork(
     if (work.commitmentStatus !== 'REJECTED') throw createValidationError(WORK_RESTORE_NOT_REJECTED_MESSAGE);
     const restored = await transaction.issue.update({
       where: { id: work.id },
-      data: { commitmentStatus: 'CANDIDATE', revision: { increment: 1 } },
+      data: { commitmentStatus: 'CANDIDATE', resolution: null, revision: { increment: 1 } },
     });
     await recordWorkAudit(transaction, {
       actor: { ...actor, reason: `Restored to candidate: ${reason}` },
