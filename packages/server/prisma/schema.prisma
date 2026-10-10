@@ -116,6 +116,15 @@ enum AutoAcceptOutcome {
   SKIPPED
 }
 
+// Impact, separate from priority (INV-1115): priority orders the work and sets
+// a bug's SLA; severity says how bad the effect is. Definitions in
+// docs/severity.md.
+enum IssueSeverity {
+  SEV1
+  SEV2
+  SEV3
+}
+
 // A saved board/backlog view kept on the server (INV-1005): private to its
 // owner or shared with the team, visible on every device.
 model SavedView {
@@ -331,6 +340,7 @@ model Issue {
   teamId            String            @db.Uuid
   team              Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
   priority          Int               @default(0)
+  severity          IssueSeverity?
   kind              WorkKind          @default(ISSUE)
   commitmentStatus  CommitmentStatus  @default(COMMITTED)
   revision          Int               @default(1)

@@ -6,10 +6,12 @@ import { BUG_REPORT_MUTATION, SIMILAR_BUGS_QUERY } from '../board/queries';
 import type {
   BugReportMutationData,
   BugReportMutationVariables,
+  IssueSeverity,
   LabelSummary,
   ProjectSummaryItem,
   SimilarBugsQueryData,
 } from '../board/types';
+import { SEVERITY_OPTIONS } from '../board/severity';
 import { isTypeLabel } from '../work/labels';
 import { readLastPlacement, rememberPlacement, resolveInitialPlacement, type CreatePlacement, type PlacementSource } from '../work/placement';
 import { PlacementPicker } from './PlacementPicker';
@@ -55,6 +57,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
   const [description, setDescription] = useState('');
   const [steps, setSteps] = useState('');
   const [priority, setPriority] = useState(0);
+  const [severity, setSeverity] = useState<IssueSeverity | ''>('');
   const [placement, setPlacement] = useState<CreatePlacement | null>(null);
   const [placementSource, setPlacementSource] = useState<PlacementSource | null>(null);
   const [triage, setTriage] = useState(false);
@@ -88,6 +91,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
     setDescription('');
     setSteps('');
     setPriority(0);
+    setSeverity('');
     setPlacement(initial?.placement ?? null);
     setPlacementSource(initial?.source ?? null);
     setTriage(false);
@@ -130,6 +134,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
             description: description.trim() || null,
             stepsToReproduce: steps.trim(),
             priority,
+            ...(severity ? { severity } : {}),
             ...(triage || !placement ? {} : { parentId: placement.parentId }),
             labelIds: selectedLabelIds,
           },
@@ -268,6 +273,23 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
                   </option>
                   {PRIORITY_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field-stack">
+                <span>Severity (optional)</span>
+                <select
+                  aria-label="Bug severity"
+                  title="How bad the effect is, apart from priority. Unsure? Pick the higher one."
+                  value={severity}
+                  disabled={isSaving}
+                  onChange={(event) => setSeverity(event.target.value as IssueSeverity | '')}
+                >
+                  <option value="">Not judged</option>
+                  {SEVERITY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value} title={option.description}>
                       {option.label}
                     </option>
                   ))}

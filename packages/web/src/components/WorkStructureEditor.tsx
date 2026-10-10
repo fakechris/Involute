@@ -5,12 +5,15 @@ import { readStoredTeamKey } from '../board/utils';
 import { GRAPH_PROJECTS_QUERY } from '../work/queries';
 import type { GraphProjectsQueryData, WorkKind } from '../work/types';
 import type { CreatePlacement } from '../work/placement';
+import type { IssueSeverity } from '../board/types';
+import { SEVERITY_OPTIONS } from '../board/severity';
 import { PlacementPicker } from './PlacementPicker';
 
 export interface StructureUpdate {
   parentId?: string | null;
   repository?: string | null;
   priority?: number;
+  severity?: IssueSeverity | null;
   kind?: WorkKind;
 }
 
@@ -18,6 +21,7 @@ interface StructuredWork {
   id: string;
   kind?: WorkKind | null;
   priority: number;
+  severity?: IssueSeverity | null;
   repository?: string | null;
   parent?: { id: string; identifier: string; title: string; kind?: WorkKind | null } | null;
 }
@@ -48,7 +52,8 @@ export function currentPlacement(work: StructuredWork): CreatePlacement | null {
 
 /**
  * Structure of committed work a person can change (INV-791): where it sits
- * (project, then No milestone / milestone / epic), its priority and its kind.
+ * (project, then No milestone / milestone / epic), its priority, its severity
+ * (impact, apart from priority — INV-1115) and its kind.
  * Refusals — an illegal parent, a kind the hierarchy does not allow — come back
  * from the server with the reason, shown by the caller.
  */
@@ -101,6 +106,25 @@ export function WorkStructureEditor({
           ))}
         </select>
       </label>
+      {kind !== 'PROJECT' ? (
+        <label className="field-stack">
+          <span>Severity</span>
+          <select
+            aria-label="Issue severity"
+            title="Impact, apart from priority. Unsure? Pick the higher one."
+            value={work.severity ?? ''}
+            disabled={disabled}
+            onChange={(event) => onUpdate({ severity: (event.target.value || null) as IssueSeverity | null })}
+          >
+            <option value="">No severity</option>
+            {SEVERITY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value} title={option.description}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       {kind !== 'PROJECT' ? (
         <label className="field-stack">
           <span>Kind</span>

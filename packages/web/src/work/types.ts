@@ -543,6 +543,12 @@ export interface AttentionItemNode {
   groupKey: string | null;
   group: { id: string; identifier: string; title: string; kind: WorkKind } | null;
   work: CandidateWork | null;
+  /** Waited past its kind's limit (INV-1094). */
+  overdue?: boolean;
+  /** Everything that BLOCKS it is finished: ready now. */
+  unblocked?: boolean;
+  /** Unfinished work that BLOCKS it. */
+  waitingOn?: Array<{ id: string; identifier: string; title: string }>;
 }
 
 export interface AttentionPageQueryData {

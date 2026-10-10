@@ -14,7 +14,8 @@
  *   value   := bareword | "quoted string"   (','-separated values become IN)
  *
  * Fields: team, state, state-type, kind, commitment, assignee, label,
- * priority, updated, link, has. Bare words match title/description text.
+ * priority, severity, updated, link, has, project. Bare words match
+ * title/description text. `severity:sev1,sev2` / `severity:none` (INV-1115).
  */
 
 export class IqlParseError extends Error {
@@ -55,6 +56,7 @@ export const IQL_FIELDS = [
   'assignee',
   'label',
   'priority',
+  'severity',
   'updated',
   'link',
   'has',

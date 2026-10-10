@@ -1,4 +1,4 @@
-import type { Issue, Prisma, WorkLinkType, WorkflowStateType } from '@prisma/client';
+import type { Issue, IssueSeverity, Prisma, WorkLinkType, WorkflowStateType } from '@prisma/client';
 
 import { GraphQLError } from 'graphql';
 
@@ -12,6 +12,7 @@ import {
 } from '@turnkeyai/involute-shared';
 
 import { IQL_PARSE_ERROR_PREFIX } from './errors.js';
+import { SEVERITIES } from './severity.js';
 
 type DatabaseWork = Issue & {
   assignee: { actorKind: string; id: string } | null;
@@ -211,6 +212,22 @@ function compileTerm(term: IqlTerm, context: IqlCompileContext): Prisma.IssueWhe
       const clause = buildNumberClause(term.op, numeric);
       return clause ? clauseFor({ priority: clause }) : {};
     }
+    case 'severity': {
+      // severity:sev1,sev2 or severity:none (INV-1115); != negates like '-'.
+      const wanted = values.map((value) => value.toUpperCase());
+      if (!wanted.every((value) => value === 'NONE' || (SEVERITIES as readonly string[]).includes(value))) {
+        throw iqlParseGraphQLError(`severity must be one of ${SEVERITIES.join(', ')} or none.`);
+      }
+      const named = wanted.filter((value): value is IssueSeverity => value !== 'NONE');
+      const none = wanted.includes('NONE');
+      if (include !== (term.op === 'neq')) {
+        if (!named.length) return { severity: null };
+        return none ? { OR: [{ severity: { in: named } }, { severity: null }] } : { severity: { in: named } };
+      }
+      // Written out rather than NOT: SQL's NOT IN never matches a null severity.
+      if (none) return named.length ? { severity: { notIn: named } } : { severity: { not: null } };
+      return { OR: [{ severity: { notIn: named } }, { severity: null }] };
+    }
     case 'updated': {
       // `updated:>30d` = updated within the last 30 days (cutoff = now-30d).
       const ms = durationToMs(values[0] ?? '', term);
@@ -355,6 +372,10 @@ function matchPositive(term: IqlTerm, work: DatabaseWork, context: IqlCompileCon
         case 'lte': return work.priority <= numeric;
       }
       return false;
+    }
+    case 'severity': {
+      const matched = listContains(work.severity ?? 'none');
+      return term.op === 'neq' ? !matched : matched;
     }
     case 'updated': {
       const ms = durationToMs(values[0] ?? '', term);

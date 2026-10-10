@@ -13,7 +13,8 @@ const AGENTS = gql`query DeliveryExecutors { agents { id name } }`;
 const PROPOSE = gql`mutation DeliveryProposal($workId: String!, $expectedRevision: Int!, $reason: String!, $changesJson: String!) { deliveryChangePropose(workId: $workId, expectedRevision: $expectedRevision, reason: $reason, changesJson: $changesJson) { success message } }`;
 const CREATE = gql`mutation DeliveryExecution($workId: String!, $unitKey: String!, $expectedGrantRevision: Int!) { deliveryExecutionCreate(workId: $workId, unitKey: $unitKey, expectedGrantRevision: $expectedGrantRevision) { success message issue { id } } }`;
 const QUEUE = gql`query DeliveryQueue($after: String, $repository: String, $noRepository: Boolean, $teamKey: String, $bugsOnly: Boolean, $workId: String) { deliveryChanges(first: 30, after: $after, repository: $repository, noRepository: $noRepository, teamKey: $teamKey, bugsOnly: $bugsOnly, workId: $workId) { nodes { id viewerCanDecide reason changesJson beforeJson work { id identifier title revision acceptance repository assignee { id } team { memberships { nodes { user { id name actorKind } } } } } } pageInfo { hasNextPage endCursor } } }`;
-const DECIDE = gql`mutation DeliveryDecision($id: String!, $approve: Boolean!, $note: String, $ownerId: String) { deliveryChangeDecide(id: $id, approve: $approve, note: $note, ownerId: $ownerId) { success message } }`;
+/** Also run from a work-tree pack in Needs you (INV-1094). */
+export const DELIVERY_DECIDE_MUTATION = gql`mutation DeliveryDecision($id: String!, $approve: Boolean!, $note: String, $ownerId: String) { deliveryChangeDecide(id: $id, approve: $approve, note: $note, ownerId: $ownerId) { success message } }`;
 
 function parseObject<T>(raw: string): T | null {
   try { const value: unknown = JSON.parse(raw); return value && typeof value === 'object' && !Array.isArray(value) ? value as T : null; } catch { return null; }
@@ -118,7 +119,7 @@ export function DeliveryPanel({ workId, compact = false }: { workId: string; com
 
 type Change = { viewerCanDecide: boolean; id: string; reason: string; changesJson: string; beforeJson: string; work: Work };
 function ChangeCard({ change, refresh }: { change: Change; refresh: () => Promise<unknown> }) {
-  const [decide, { loading }] = useMutation<{ deliveryChangeDecide: Result }>(DECIDE, { refetchQueries: ['AttentionPage'] });
+  const [decide, { loading }] = useMutation<{ deliveryChangeDecide: Result }>(DELIVERY_DECIDE_MUTATION, { refetchQueries: ['AttentionPage'] });
   const [note, setNote] = useState('');
   const [ownerId, setOwnerId] = useState(change.work.assignee?.id ?? '');
   const [message, setMessage] = useState('');
