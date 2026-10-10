@@ -406,6 +406,12 @@ model Issue {
   // INV-1075: on a PROJECT, bugs whose fix GitHub confirms (merged, checks green)
   // are accepted by the Auto-Accept Gate. Off by default; only people turn it on.
   autoAcceptBugs    Boolean           @default(false)
+  // INV-1146: on a PROJECT, the web origins (scheme://host[:port]) its app is
+  // served from, so the bug-capture extension can route a report to it.
+  webOrigins        String[]          @default([])
+  // INV-1146: browser environment captured with a bug report (page, viewport,
+  // console errors, failed requests, element); validated and size-capped.
+  capture           Json?
   // INV-1118: structured close reason; the free-text reason stays on WorkAudit.
   resolution        WorkResolution?
   // INV-1120: how many times it left Done / Canceled for an open state.

@@ -28,8 +28,9 @@ Direct Tailscale/loopback access can intentionally differ from the public
 `APP_ORIGIN`; doctor reports that difference instead of silently trusting it.
 
 Local release builders must pass `--build-arg INVOLUTE_BUILD_SHA=<full source SHA>`
-to `docker build`. The protocol reports a null build SHA when it is unknown. This
-does not change the local publication process or require GitHub Workflow changes.
+to `docker build`; the Docker publish workflow passes the commit SHA. The protocol
+reports a null build SHA when it is unknown. The web image reports the same SHA in
+`<meta name="involute-version">` (`dev` when unknown, INV-1146).
 
 ## State and revision compatibility
 

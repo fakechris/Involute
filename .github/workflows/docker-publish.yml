@@ -82,7 +82,8 @@ jobs:
           target: ${{ matrix.target }}
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.tags.outputs.tags }}
-          # The running build names itself (serverBuild / protocol buildSha); Report bug
-          # defaults a bug's found-in to it (INV-1121).
+          # The running build names itself (serverBuild / protocol buildSha, and the
+          # web app's involute-version meta, INV-1146); Report bug defaults a bug's
+          # found-in to it (INV-1121).
           build-args: |
             INVOLUTE_BUILD_SHA=${{ github.sha }}

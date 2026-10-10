@@ -181,6 +181,7 @@ import { loadWorkHygiene } from './work-hygiene.js';
 import { EXTENSION_TOKEN_HUMAN_ONLY_MESSAGE, createExtensionToken, listExtensionTokens, revokeExtensionToken } from './extension-tokens.js';
 import { type AttentionItem, type AttentionKind, loadAttention, pageAttention, summarizeAttention } from './attention-service.js';
 import { BUG_LABEL_NAME, findSimilarBugs, reportBug, type BugReportInput } from './bug-report.js';
+import { normalizeWebOrigin } from './web-origins.js';
 import { loadBugSlas } from './bug-sla.js';
 import { FOLLOW_UP_LINK_WHERE, loadFollowUpDeadlines } from './follow-up-deadline.js';
 import { loadReviewWaits } from './review-wait.js';
@@ -467,6 +468,8 @@ const typeDefs = /* GraphQL */ `
     bugSummary(teamFilter: TeamFilter): BugSummaryResult!
     "Open bugs whose titles share words with the given title, best match first (INV-749)."
     similarBugs(teamId: String!, title: String!, first: Int): [Issue!]!
+    "The readable PROJECT whose webOrigins include this page origin (normalized to scheme://host[:port]); null when none (INV-1146)."
+    projectForOrigin(origin: String!): Issue
     """
     Bugs fixed between two deploys (INV-1121): GitHub's compare of fromSha...toSha
     (7–40 hex) in the repository, and the readable bugs whose fix — a merge GitHub
@@ -1192,6 +1195,10 @@ const typeDefs = /* GraphQL */ `
     repository: String
     alias: String
     autoAcceptBugs: Boolean!
+    "PROJECT only (INV-1146): the http(s) origins its app is served from, as scheme://host[:port]."
+    webOrigins: [String!]!
+    "Browser environment captured with a bug report (INV-1146): url, title, viewport, userAgent, colorScheme, appVersion, consoleErrors, failedRequests, element, screenshotAttachmentId, screenshotUrl. Null when none was sent."
+    capture: Json
     "Why a rejected candidate or canceled work was closed; null while open (INV-1118)."
     resolution: WorkResolution
     "Times it moved from Done or Canceled back to an open state (INV-1120)."
@@ -2115,6 +2122,15 @@ const typeDefs = /* GraphQL */ `
     parentId: String
     repository: String
     labelIds: [String!]
+    """
+    Optional browser environment (INV-1146): { url, title, viewport { width, height, dpr },
+    userAgent, colorScheme ('light' | 'dark'), appVersion, consoleErrors [{ level, message, time }],
+    failedRequests [{ method, url, status, durationMs }], element { selector, text, box { x, y, width, height },
+    styles }, screenshotAttachmentId }. Lists over 20 entries and long text are cut; unknown style
+    names are dropped; wrong types or a non-http(s) url refuse the report with the reason in message.
+    Stored as Issue.capture and appended to the description as an Environment section.
+    """
+    capture: Json
   }
 
   type BugReportPayload {
@@ -2281,6 +2297,8 @@ const typeDefs = /* GraphQL */ `
     snoozedUntil: DateTime
     kind: WorkKind
     alias: String
+    "PROJECT only (INV-1146): http(s) origins its app is served from; normalized to scheme://host[:port], deduplicated; an origin another project has is refused. [] or null clears."
+    webOrigins: [String!]
     "On a PROJECT: accept bugs whose fix GitHub confirms (merged, checks green). People only (INV-1075)."
     autoAcceptBugs: Boolean
     "Required when moving work to a Canceled state (INV-1118)."
@@ -3135,6 +3153,25 @@ const resolvers = {
         readableWhere: buildReadableIssueWhere(context) ?? null,
       }, context.semanticIndex);
       return similar as IssueParent[];
+    },
+    projectForOrigin: async (
+      _parent: unknown,
+      args: { origin: string },
+      context: GraphQLContext,
+    ): Promise<IssueParent | null> => {
+      requireAuthentication(context);
+      const origin = normalizeWebOrigin(args.origin);
+      if (!origin) return null;
+      const readableWhere = buildReadableIssueWhere(context);
+      return context.prisma.issue.findFirst({
+        where: {
+          AND: [
+            { kind: 'PROJECT', commitmentStatus: { not: 'REJECTED' }, webOrigins: { has: origin } },
+            ...(readableWhere ? [readableWhere] : []),
+          ],
+        },
+        include: buildIssueDetailInclude(),
+      });
     },
     bugSummary: async (
       _parent: unknown,
