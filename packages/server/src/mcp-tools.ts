@@ -71,6 +71,7 @@ import { hasFixedBugEvidence, recordFixedBugRun, validateFixedBugEvidence } from
 import { uncommitWork } from './work-uncommit.js';
 import { writeActorFromViewer } from './work-service.js';
 import { parseSeverity, SEVERITIES } from './severity.js';
+import { INCIDENT_TIME_ARGS, INCIDENT_TIME_FIELDS, readIncidentTimes, type IncidentTimeField } from './incident-timestamps.js';
 import { parseReproducibility, REPRODUCIBILITIES } from './reproducibility.js';
 
 export type McpToolName =
@@ -181,6 +182,23 @@ const SEVERITY_PROPERTY = {
   description: "Impact, separate from priority (which orders work and sets a bug's SLA): SEV1 Critical — outage, data loss or security exposure, no workaround; SEV2 Major — a core flow broken or degraded for many, painful workaround; SEV3 Minor — limited impact, a workaround exists. Unsure: pick the higher one. Optional (INV-1115).",
 };
 
+/** Incident impact timestamps on work_propose / work_update; same names as the GraphQL inputs (INV-1125). */
+function readIncidentTimeArgs(args: Record<string, unknown>): Partial<Record<IncidentTimeField, Date | null>> {
+  return readIncidentTimes(Object.fromEntries(INCIDENT_TIME_FIELDS.map((field) => [field, args[INCIDENT_TIME_ARGS[field]]])));
+}
+
+const INCIDENT_TIME_HELP =
+  'Type: Incident only (INV-1125), ISO 8601. Order: impact started ≤ detected / mitigated ≤ resolved; out-of-order values are refused.';
+
+function incidentTimeProperties(nullable: boolean) {
+  const type = nullable ? ['string', 'null'] : 'string';
+  return {
+    impact_started_at: { type, description: `${INCIDENT_TIME_HELP} When the impact began${nullable ? '; can be moved earlier, not cleared' : '; defaults to detected_at'}.` },
+    detected_at: { type, description: `${INCIDENT_TIME_HELP} When it was noticed${nullable ? '; can be moved, not cleared' : '; defaults to now'}.` },
+    mitigated_at: { type, description: `${INCIDENT_TIME_HELP} When the impact stopped; when absent, metrics use resolved_at.${nullable ? ' null clears it.' : ''}` },
+    resolved_at: { type, description: `${INCIDENT_TIME_HELP} When it was fixed; required before the incident moves to In Review (REVIEW or a completed run).${nullable ? ' null clears it.' : ''}` },
+  };
+}
 /** Reproducibility on the write tools; the same three values as GraphQL BugReproducibility (INV-1122). */
 const REPRODUCIBILITY_PROPERTY = {
   type: 'string',
@@ -464,6 +482,7 @@ async function callMcpAction(
       assignOptional(proposeInput, 'priority', optionalNumber(args.priority));
       assignOptional(proposeInput, 'stepsToReproduce', optionalString(args.steps_to_reproduce));
       assignOptional(proposeInput, 'severity', parseSeverity(args.severity));
+      Object.assign(proposeInput, readIncidentTimeArgs(args));
       assignOptional(proposeInput, 'reproducibility', parseReproducibility(args.reproducibility));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
       assignOptional(proposeInput, 'verification', optionalString(args.verification));
@@ -679,6 +698,7 @@ async function callMcpAction(
       assignOptional(updateInput, 'priority', optionalNumber(args.priority));
       const severity = parseSeverity(args.severity);
       if (severity !== undefined) updateInput.severity = severity;
+      Object.assign(updateInput, readIncidentTimeArgs(args));
       const reproducibility = parseReproducibility(args.reproducibility);
       if (reproducibility !== undefined) updateInput.reproducibility = reproducibility;
       if (args.cascade_repository !== undefined) {
@@ -1205,6 +1225,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
           description: 'Bugs: how to reproduce it; appended to the description under "Steps to reproduce". Fixed on the spot? Also pass initial_state REVIEW.',
         },
         severity: SEVERITY_PROPERTY,
+        ...incidentTimeProperties(false),
         reproducibility: REPRODUCIBILITY_PROPERTY,
         blocked_by: {
           type: 'array',
@@ -1392,6 +1413,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         },
         priority: { type: 'integer' },
         severity: { ...SEVERITY_PROPERTY, type: ['string', 'null'], enum: [...SEVERITIES, null], description: `${SEVERITY_PROPERTY.description} null clears it; a change is audited with the old value.` },
+        ...incidentTimeProperties(true),
         reproducibility: { ...REPRODUCIBILITY_PROPERTY, type: ['string', 'null'], enum: [...REPRODUCIBILITIES, null], description: `${REPRODUCIBILITY_PROPERTY.description} null clears it; a change is audited with the old value.` },
         state: {
           type: 'string',
