@@ -39,6 +39,8 @@ import { linkMentionedWork } from './mention-links.js';
 import { enqueueCommentEvents } from './comment-events.js';
 import { enqueueWorkEvent } from './event-outbox.js';
 import { openAgentRequestsForMentions } from './agent-request-from-mention.js';
+import { answerNeedInfoByComment } from './need-info-service.js';
+import { notifyMentionedHumans } from './mention-notifications.js';
 import { assertNodeHierarchy, getContainsDescendantIds, lockWorkGraph } from './graph-integrity.js';
 import { orderWorkflowStates } from './workflow-state-order.js';
 
@@ -840,6 +842,9 @@ export async function createComment(
       requestIdByActorId,
       work: issue,
     });
+    // The target's comment answers their open needinfo here (INV-1119).
+    await answerNeedInfoByComment(tx, comment);
+    await notifyMentionedHumans(tx, { comment, work: issue });
     // A person's word on the work answers a decision its run asked for (INV-1093),
     // the same rule the Needs you queue uses.
     if (author.actorKind === 'HUMAN') {

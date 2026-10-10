@@ -240,6 +240,24 @@ export const OPS_DEAD_LETTER_NOT_FOUND_MESSAGE = 'That sync dead letter no longe
 export const OPS_INBOUND_NOT_REPLAYABLE_MESSAGE =
   'Only a dead inbound delivery that still has its payload can be replayed, and it changed since the page loaded; refresh and try again.';
 
+// needinfo (INV-1119)
+export const NEEDINFO_QUESTION_REQUIRED_MESSAGE = 'A needinfo needs a question: say what you need to know.';
+export const NEEDINFO_TARGET_NOT_FOUND_MESSAGE = 'No active person or agent matches that target (id, @handle or email).';
+export const NEEDINFO_TARGET_SELF_MESSAGE = 'You cannot raise a needinfo to yourself.';
+export const NEEDINFO_TARGET_SERVICE_MESSAGE = 'A service actor cannot answer questions; choose a person or an agent.';
+export const NEEDINFO_AGENT_TO_AGENT_MESSAGE =
+  'One agent cannot raise a needinfo to another (docs/54 §C keeps a person at the head of every chain of questions); address the agent\'s owner instead.';
+export const NEEDINFO_TARGET_CANNOT_ANSWER_MESSAGE =
+  'That target cannot write on this team, so they could not answer here. Choose someone who is an editor or owner of the team (or an agent with the answer scope).';
+export const NEEDINFO_ALREADY_OPEN_MESSAGE = 'There is already an open needinfo to that target on this work; wait for it or withdraw it first.';
+export const NEEDINFO_NOT_A_NEEDINFO_MESSAGE = 'This request is not a needinfo; only a needinfo can be withdrawn.';
+export const NEEDINFO_WITHDRAW_NOT_REQUESTER_MESSAGE =
+  'Only whoever raised this needinfo can withdraw it; an admin can withdraw it with a reason.';
+export const NEEDINFO_WITHDRAW_REASON_REQUIRED_MESSAGE = 'Withdrawing someone else\'s needinfo requires a reason.';
+
+export const NEEDINFO_CLOSED_MESSAGE = 'This needinfo is already answered, withdrawn or expired.';
+export const NEEDINFO_IDEMPOTENCY_MISMATCH_MESSAGE = 'That idempotency key was used for a different request; do not replay it.';
+
 export function createScopeForbiddenError(scope: string): GraphQLError {
   return new GraphQLError(`Agent credential lacks required scope: ${scope}.`, {
     extensions: { code: 'FORBIDDEN' },
@@ -251,6 +269,7 @@ const exposedErrorCodes = new Map<string, string>([
   [NOT_AUTHENTICATED_MESSAGE, 'UNAUTHENTICATED'],
   [TEAM_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ISSUE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [REQUEST_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [COMMENT_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [COMMENT_PARENT_ISSUE_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
   [MEMBERSHIP_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
@@ -427,7 +446,28 @@ const exposedErrorCodes = new Map<string, string>([
   [OPS_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [OPS_DEAD_LETTER_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [OPS_INBOUND_NOT_REPLAYABLE_MESSAGE, 'BAD_USER_INPUT'],
+  [NEEDINFO_QUESTION_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [NEEDINFO_TARGET_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [NEEDINFO_TARGET_SELF_MESSAGE, 'BAD_USER_INPUT'],
+  [NEEDINFO_TARGET_SERVICE_MESSAGE, 'BAD_USER_INPUT'],
+  [NEEDINFO_AGENT_TO_AGENT_MESSAGE, 'BAD_USER_INPUT'],
+  [NEEDINFO_TARGET_CANNOT_ANSWER_MESSAGE, 'BAD_USER_INPUT'],
+  [NEEDINFO_ALREADY_OPEN_MESSAGE, 'BAD_USER_INPUT'],
+  [NEEDINFO_NOT_A_NEEDINFO_MESSAGE, 'BAD_USER_INPUT'],
+  [NEEDINFO_WITHDRAW_NOT_REQUESTER_MESSAGE, 'BAD_USER_INPUT'],
+  [NEEDINFO_WITHDRAW_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [NEEDINFO_CLOSED_MESSAGE, 'BAD_USER_INPUT'],
+  [NEEDINFO_IDEMPOTENCY_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
 ]);
+
+/**
+ * Let a module that keeps its own refusal texts have them reach GraphQL
+ * callers as `message` instead of "Unexpected error." (INV-1119: the agent
+ * request refusals had been masked on the web).
+ */
+export function exposeErrorMessages(messages: readonly string[], code = 'BAD_USER_INPUT'): void {
+  for (const message of messages) if (!exposedErrorCodes.has(message)) exposedErrorCodes.set(message, code);
+}
 
 export function createNotAuthenticatedError(): GraphQLError {
   return createExposedError(NOT_AUTHENTICATED_MESSAGE);

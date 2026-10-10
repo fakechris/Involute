@@ -6,7 +6,7 @@ import {
   toWireState,
   type A2aRequestState,
 } from './agent-request-state.js';
-import { createNotFoundError, createValidationError } from './errors.js';
+import { createNotFoundError, createValidationError, exposeErrorMessages } from './errors.js';
 import { enqueueWorkEvent } from './event-outbox.js';
 import { syncCommentMentions } from './mention-service.js';
 import { recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
@@ -60,6 +60,8 @@ export interface CreateAgentRequestInput {
   rootCommentId: string;
   targetActorId: string;
   workId: string;
+  /** A needinfo raised explicitly to a named person (INV-1119). */
+  needInfo?: boolean;
 }
 
 export async function createAgentRequest(
@@ -91,6 +93,7 @@ export async function createAgentRequest(
       state: 'SUBMITTED',
       targetActorId: input.targetActorId,
       workId: input.workId,
+      needInfo: input.needInfo ?? false,
     },
   });
 }
@@ -108,6 +111,8 @@ export interface AgentInboxItem {
   workIdentifier: string;
   /** Set only on a request handed off from another (INV-609); null otherwise. */
   handOff: HandOffOrigin | null;
+  /** A needinfo (INV-1119): any comment you write on the work answers it. */
+  needInfo: boolean;
 }
 
 /**
@@ -205,11 +210,12 @@ export async function readAgentInbox(
       workId: request.workId,
       workIdentifier: request.work.identifier,
       handOff: origins.get(request.id) ?? null,
+      needInfo: request.needInfo,
     })),
   };
 }
 
-export type AgentRequestEvent = 'claimed' | 'renewed' | 'answered' | 'canceled' | 'expired' | 'handed-off' | 'replied';
+export type AgentRequestEvent = 'claimed' | 'renewed' | 'answered' | 'canceled' | 'expired' | 'handed-off' | 'replied' | 'needinfo';
 
 /**
  * Audit a request event on its work item (INV-587). The issue itself is not
@@ -490,6 +496,9 @@ export async function answerAgentRequest(
     if (input.receipt) {
       await attachDecisionReceipt(tx, { auditId: answeredAuditId, receipt: input.receipt });
     }
+    if (request.needInfo && nextState !== 'INPUT_REQUIRED') {
+      await settleNeedInfoAnswered(tx, request, { answeredById: input.actorId, commentId: comment.id });
+    }
     if (nextState === 'INPUT_REQUIRED') {
       await notifyRequesterAskedBack(tx, request, { commentId: comment.id, askedById: input.actorId });
     }
@@ -620,6 +629,9 @@ export async function answerAgentRequestAsHuman(
       resolvedById: input.by.actorId,
       types: ['agent.request_handed_off'],
     });
+    if (request.needInfo && humanState !== 'INPUT_REQUIRED') {
+      await settleNeedInfoAnswered(tx, request, { answeredById: input.by.actorId, commentId: comment.id });
+    }
     if (humanState === 'INPUT_REQUIRED') {
       await notifyRequesterAskedBack(tx, request, { commentId: comment.id, askedById: input.by.actorId });
     }
@@ -653,6 +665,49 @@ export async function cancelAgentRequest(
     const request = await tx.agentRequest.findUniqueOrThrow({ where: { id: input.id } });
     await recordRequestAudit(tx, { actor: input.by, event: 'canceled', request });
     return request;
+  });
+}
+
+/**
+ * A needinfo was answered (INV-1119): the notification that asked for it is
+ * resolved for its target, and whoever asked — person or agent — is told, so
+ * an agent waiting on a person reads the answer in agent_inbox (and is woken
+ * on its push channel) instead of polling the thread.
+ */
+export async function settleNeedInfoAnswered(
+  tx: Prisma.TransactionClient,
+  request: Pick<AgentRequest, 'id' | 'workId' | 'requestedByActorId' | 'targetActorId' | 'rootCommentId'>,
+  input: { answeredById: string; commentId: string },
+): Promise<void> {
+  await resolveAttentionNotifications(tx, {
+    kind: 'AGENT_REQUEST',
+    payload: { key: 'requestId', value: request.id },
+    resolution: 'answered',
+    resolvedById: input.answeredById,
+    types: ['needinfo.requested'],
+  });
+  const work = await tx.issue.findUniqueOrThrow({ where: { id: request.workId }, select: { id: true, identifier: true, teamId: true, title: true } });
+  const payload = {
+    answeredById: input.answeredById,
+    commentId: input.commentId,
+    requestId: request.id,
+    rootCommentId: request.rootCommentId,
+    targetActorId: request.targetActorId,
+  };
+  const event = await enqueueWorkEvent(tx, { payload, type: 'needinfo.answered', workId: work.id, workIdentifier: work.identifier });
+  if (request.requestedByActorId === input.answeredById) return;
+  const requester = await tx.user.findUnique({ where: { id: request.requestedByActorId }, select: { deactivatedAt: true, id: true } });
+  if (!requester || requester.deactivatedAt) return;
+  await tx.notification.createMany({
+    data: [{
+      payload: { ...payload, identifier: work.identifier, title: work.title },
+      sourceEventId: event.id,
+      teamId: work.teamId,
+      type: 'needinfo.answered',
+      userId: requester.id,
+      workId: work.id,
+    }],
+    skipDuplicates: true,
   });
 }
 
@@ -747,3 +802,19 @@ export async function replyToAgentRequest(
     return tx.agentRequest.findUniqueOrThrow({ where: { id: request.id } });
   });
 }
+
+// Refusals reach the web as `message` (they were masked as "Unexpected error.").
+exposeErrorMessages([REQUEST_NOT_FOUND_MESSAGE], 'NOT_FOUND');
+exposeErrorMessages([
+  REQUEST_NOT_CLAIMABLE_MESSAGE,
+  REQUEST_NOT_HELD_MESSAGE,
+  CLAIM_SUPERSEDED_MESSAGE,
+  CLAIM_TOKEN_REQUIRED_MESSAGE,
+  REQUEST_ALREADY_TERMINAL_MESSAGE,
+  ANSWER_REQUIRES_BODY_MESSAGE,
+  HUMAN_ANSWER_NOT_TARGET_MESSAGE,
+  HUMAN_ANSWER_OVERRIDE_REASON_REQUIRED_MESSAGE,
+  REPLY_NOT_REQUESTER_MESSAGE,
+  REQUEST_AWAITING_REPLY_MESSAGE,
+  REPLY_REQUIRES_INPUT_REQUIRED_MESSAGE,
+]);

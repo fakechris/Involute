@@ -57,6 +57,12 @@ export const WORK_EVENT_TYPES = [
   'agent.request_answered',
   'agent.request_input_required',
   'agent.request_replied',
+  // A needinfo (INV-1119) was raised to a named person, answered, or withdrawn.
+  'needinfo.requested',
+  'needinfo.answered',
+  'needinfo.withdrawn',
+  // A person was @mentioned in a comment (INV-1119).
+  'comment.mentioned',
   'webhook.disabled',
 ] as const;
 

@@ -41,6 +41,7 @@ import { ActorBadge } from '../components/ActorBadge';
 import { ContractSection, type ContractValues } from '../components/ContractSection';
 import { useContractAmendmentDecisions } from '../components/ContractAmendmentPanel';
 import { IssueRelations } from '../components/IssueRelations';
+import { NeedInfoControl, NeedInfoWithdrawButton } from '../components/NeedInfoControl';
 import { AddSubIssueButton } from '../components/AddSubIssueButton';
 import { BugSlaBadge } from '../components/BugSlaBadge';
 import { ClaimControl } from '../components/ClaimControl';
@@ -929,6 +930,11 @@ export function IssuePage() {
             {/* Typed links: blockers, related, duplicates (INV-679). Same section as the board drawer. */}
             <IssueRelations key={activeIssue.id} issueId={activeIssue.id} onOpen={(issueId) => navigate(`/issue/${issueId}`)} />
 
+            {/* Ask a named person for information (needinfo, INV-1119) */}
+            <div className="issue-panel__section">
+              <NeedInfoControl issueId={activeIssue.id} people={allUsers} viewer={sessionViewer} onChanged={() => void refetch()} />
+            </div>
+
             {/* Requests to agents, grouped by hand-off chain (INV-589/593/597) */}
             {(activeIssue.agentRequests ?? []).length > 0 ? (
               <div className="issue-panel__section">
@@ -937,7 +943,7 @@ export function IssuePage() {
                   <div key={chain[0]!.id} className="issue-children" role="list" style={{ marginBottom: 10 }}>
                     {chain.map((request, index) => (
                       <div key={request.id} id={`request-${request.id}`} role="listitem" className="issue-children__row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-faint)', minWidth: 44 }}>{request.hopCount === 0 ? 'asked' : `hop ${request.hopCount}`}</span>
+                        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-faint)', minWidth: 44 }}>{request.needInfo ? 'needinfo' : request.hopCount === 0 ? 'asked' : `hop ${request.hopCount}`}</span>
                         {index === 0 && request.hopCount > 0 ? (
                           <span style={{ fontSize: 12, color: 'var(--warning, #b80)' }} title="The chain's earlier requests are not in this page's result">chain incomplete</span>
                         ) : null}
@@ -957,6 +963,12 @@ export function IssuePage() {
                         {request.failureReason ? (
                           <span style={{ fontSize: 12, color: 'var(--fg-faint)' }}>{request.failureReason}</span>
                         ) : null}
+                        {request.needInfo && request.body ? (
+                          <span style={{ fontSize: 12, color: 'var(--fg-dim)', flexBasis: '100%' }}>
+                            {request.requestedByActor?.name ?? 'Someone'} asked: {request.body}
+                          </span>
+                        ) : null}
+                        <NeedInfoWithdrawButton request={request} viewer={sessionViewer} onChanged={() => void refetch()} />
                         {sessionViewer
                           && !['completed', 'failed', 'canceled'].includes(request.state)
                           && (request.targetActor.id === sessionViewer.id || sessionViewer.globalRole === 'ADMIN')

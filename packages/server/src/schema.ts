@@ -151,6 +151,7 @@ import {
   isAmendmentStale,
   rejectContractAmendment,
 } from './contract-amendment.js';
+import { requestNeedInfo, withdrawNeedInfo } from './need-info-service.js';
 import { answerAgentRequestAsHuman, replyToAgentRequest } from './agent-request-service.js';
 import { provisionServiceActor } from './service-actors.js';
 import {
@@ -546,6 +547,10 @@ const typeDefs = /* GraphQL */ `
     agentRequestAnswer(input: AgentRequestAnswerInput!): AgentRequestAnswerPayload!
     "The requester answers a request that asked back (input-required); it goes back to its target (INV-794)."
     agentRequestReply(requestId: String!, body: String!, overrideReason: String): AgentRequestAnswerPayload!
+    "Ask a named person or agent for information on a work item (needinfo, INV-1119). It waits in their Needs you / agent_inbox until they answer or comment on the work."
+    needInfoRequest(input: NeedInfoRequestInput!): AgentRequestAnswerPayload!
+    "Withdraw a needinfo you raised (an admin may, with a reason) (INV-1119)."
+    needInfoWithdraw(requestId: String!, reason: String): AgentRequestAnswerPayload!
     "Declare who takes over when this actor stops answering; null clears it. Set by people, recorded in ActorAudit (INV-794)."
     actorSetSuccessor(id: String!, successorId: String, reason: String): ActorLifecyclePayload!
     """Transfer accountability for a non-human actor to another human. Human-only, recorded in ActorAudit."""
@@ -1032,6 +1037,8 @@ const typeDefs = /* GraphQL */ `
     handedOffFromId: String
     """When the whole chain must have reached a person."""
     chainDeadlineAt: DateTime
+    "A needinfo (INV-1119): raised to a named person; any comment of theirs on the work answers it."
+    needInfo: Boolean!
   }
 
   enum CommentOrderBy {
@@ -1524,6 +1531,15 @@ const typeDefs = /* GraphQL */ `
     revokedAt: DateTime
     user: User!
     issuedBy: User
+  }
+
+  input NeedInfoRequestInput {
+    "Work item id or identifier."
+    workId: String!
+    "Who should answer: actor id, @handle or email."
+    targetId: String!
+    question: String!
+    idempotencyKey: String
   }
 
   input AgentRequestAnswerInput {
@@ -3920,6 +3936,40 @@ const resolvers = {
           by: { actorId: viewer.id, actorKind: viewer.actorKind, globalRole: viewer.globalRole },
           id: args.requestId,
           overrideReason: args.overrideReason ?? null,
+        });
+        return { comment: null, request, success: true as const };
+      }, { comment: null, request: null, success: false as const }),
+    needInfoRequest: async (
+      _parent: unknown,
+      args: { input: { workId: string; targetId: string; question: string; idempotencyKey?: string | null } },
+      context: GraphQLContext,
+    ): Promise<{ comment: Comment | null; message?: string | null; request: AgentRequestParent | null; success: boolean }> =>
+      runMutationWithReason(async () => {
+        const viewer = requireAuthentication(context);
+        const work = await findWorkByIdOrIdentifier(context.prisma, args.input.workId);
+        if (!work) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+        await assertCanWriteIssue(context.prisma, context, work.id);
+        const raised = await requestNeedInfo(context.prisma, {
+          by: { actorId: viewer.id, actorKind: viewer.actorKind, globalRole: viewer.globalRole },
+          idempotencyKey: args.input.idempotencyKey ?? null,
+          question: args.input.question,
+          target: args.input.targetId,
+          workId: work.id,
+        });
+        return { comment: raised.comment, request: raised.request, success: true as const };
+      }, { comment: null, request: null, success: false as const }),
+    needInfoWithdraw: async (
+      _parent: unknown,
+      args: { requestId: string; reason?: string | null },
+      context: GraphQLContext,
+    ): Promise<{ comment: Comment | null; message?: string | null; request: AgentRequestParent | null; success: boolean }> =>
+      runMutationWithReason(async () => {
+        const viewer = requireAuthentication(context);
+        await assertCanActOnRequest(context.prisma, context, args.requestId);
+        const request = await withdrawNeedInfo(context.prisma, {
+          by: { actorId: viewer.id, actorKind: viewer.actorKind, globalRole: viewer.globalRole },
+          id: args.requestId,
+          reason: args.reason ?? null,
         });
         return { comment: null, request, success: true as const };
       }, { comment: null, request: null, success: false as const }),

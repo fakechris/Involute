@@ -2,6 +2,7 @@ import { describePick, handOffRequest } from './agent-request-handoff.js';
 import { recordRequestAudit } from './agent-request-service.js';
 import { CLAIMABLE_REQUEST_STATES } from './agent-request-state.js';
 import { enqueueWorkEvent } from './event-outbox.js';
+import { resolveAttentionNotifications } from './notification-service.js';
 import { EXPIRY_SWEEPER_ACTOR, ensureServiceActor } from './service-actors.js';
 
 import type { Prisma, PrismaClient } from '@prisma/client';
@@ -165,14 +166,27 @@ async function expireOneRequest(
     // Hand off, not just fail (INV-589). Same transaction as the CAS above,
     // so a second sweep — which never sees the request as claimable — cannot
     // hand it off twice.
-    const handoff = await handOffRequest(tx, {
-      request,
-      target: {
-        id: request.targetActor.id,
-        ownerId: request.targetActor.ownerId,
-        successorActorId: request.targetActor.successorActorId,
-      },
-    }, now);
+    // A needinfo names the one person who has the answer (INV-1119): it is not
+    // handed to someone else, it lapses and the asker is told.
+    const handoff = request.needInfo
+      ? { next: null, pick: null, skipped: [] }
+      : await handOffRequest(tx, {
+        request,
+        target: {
+          id: request.targetActor.id,
+          ownerId: request.targetActor.ownerId,
+          successorActorId: request.targetActor.successorActorId,
+        },
+      }, now);
+    if (request.needInfo) {
+      await resolveAttentionNotifications(tx, {
+        kind: 'AGENT_REQUEST',
+        payload: { key: 'requestId', value: request.id },
+        resolution: 'expired',
+        resolvedById: null,
+        types: ['needinfo.requested'],
+      });
+    }
 
     const notice = handoff.pick
       ? buildHandoffNotice({
