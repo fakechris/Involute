@@ -1,3 +1,4 @@
+import { requestNeedInfo, withdrawNeedInfo } from './need-info-service.js';
 import { protocolInfo } from './protocol-info.js';
 import { groupForAction, hidesFromCaller, MCP_TOOL_GROUPS, resolveMcpCall, type McpToolGroup } from './mcp-tool-groups.js';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
@@ -107,7 +108,9 @@ export type McpToolName =
   | 'agent_inbox'
   | 'notification_mark_read'
   | 'agent_request_claim'
-  | 'agent_request_answer';
+  | 'agent_request_answer'
+  | 'agent_request_needinfo'
+  | 'agent_request_withdraw';
 
 // Order matches MCP_TOOL_DEFINITIONS, which is the order `listMcpTools`
 // returns them in.
@@ -151,6 +154,8 @@ export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
   'notification_mark_read',
   'agent_request_claim',
   'agent_request_answer',
+  'agent_request_needinfo',
+  'agent_request_withdraw',
 ];
 
 export const CANDIDATE_DECISION_NOTICE =
@@ -918,6 +923,8 @@ async function callMcpAction(
           state: item.state,
           work_id: item.workId,
           work_identifier: item.workIdentifier,
+          // A needinfo (INV-1119): a comment of yours on the work answers it too.
+          need_info: item.needInfo,
           ...handOffFields(item.handOff),
         })),
         // Decisions on work you proposed or delivered (INV-968): committed,
@@ -1009,6 +1016,38 @@ async function callMcpAction(
         id: answered.request.id,
         state: toWireState(answered.request.state),
       };
+    }
+    case 'agent_request_needinfo': {
+      requireActorId(context);
+      const work = await requireWork(context.prisma, requiredString(args.work_id, 'work_id'));
+      await assertCanWriteIssue(context.prisma, context, work.id);
+      const viewer = context.viewer!;
+      const raised = await requestNeedInfo(context.prisma, {
+        by: { actorId: viewer.id, actorKind: viewer.actorKind, globalRole: viewer.globalRole },
+        idempotencyKey: optionalString(args.idempotency_key) ?? null,
+        question: requiredString(args.question, 'question'),
+        target: requiredString(args.target_id, 'target_id'),
+        workId: work.id,
+      });
+      return {
+        deadline_at: raised.request.deadlineAt.toISOString(),
+        id: raised.request.id,
+        root_comment_id: raised.comment.id,
+        state: toWireState(raised.request.state),
+        target_actor_id: raised.request.targetActorId,
+        work_id: raised.request.workId,
+      };
+    }
+    case 'agent_request_withdraw': {
+      requireActorId(context);
+      await assertCanActOnRequest(context.prisma, context, requiredString(args.id, 'id'));
+      const viewer = context.viewer!;
+      const withdrawn = await withdrawNeedInfo(context.prisma, {
+        by: { actorId: viewer.id, actorKind: viewer.actorKind, globalRole: viewer.globalRole },
+        id: requiredString(args.id, 'id'),
+        reason: optionalString(args.reason) ?? null,
+      });
+      return { id: withdrawn.id, state: toWireState(withdrawn.state) };
     }
     default:
       throw new Error(`Unknown tool "${name}".`);
@@ -1561,6 +1600,35 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'agent_request_needinfo',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    description:
+      'Ask a named person for information on a work item (needinfo, INV-1119) — e.g. the bug reporter for steps you cannot reproduce. Posts the question as your comment and opens a request addressed to them: a person sees it in Needs you, an agent in agent_inbox. It clears when they answer it or write any comment on the work; you are told in agent_inbox (needinfo.answered). While it waits on a bug\'s reporter the bug SLA is paused. An agent may raise it to a person, not to another agent. Withdraw with action "withdraw".',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        work_id: { type: 'string', description: 'Work item identifier (e.g. INV-104) or UUID' },
+        target_id: { type: 'string', description: 'Who should answer: actor id, @handle or email (work_catalog lists actors)' },
+        question: { type: 'string', description: 'What you need to know' },
+        idempotency_key: { type: 'string' },
+      },
+      required: ['work_id', 'target_id', 'question'],
+    },
+  },
+  {
+    name: 'agent_request_withdraw',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    description: 'Withdraw a needinfo you raised that is no longer needed (INV-1119). It leaves the target\'s queue and any SLA pause ends.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Needinfo request id' },
+        reason: { type: 'string', description: 'Why it is no longer needed' },
+      },
+      required: ['id'],
+    },
+  },
+  {
     name: 'agent_request_answer',
     annotations: { readOnlyHint: false, destructiveHint: false },
     description:
@@ -1794,6 +1862,9 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   notification_mark_read: 'read',
   agent_request_claim: 'answer',
   agent_request_answer: 'answer',
+  // A needinfo posts the question as a comment: the same scope as work_comment.
+  agent_request_needinfo: 'update',
+  agent_request_withdraw: 'update',
 };
 
 export function assertToolScope(context: GraphQLContext, name: McpToolName): void {

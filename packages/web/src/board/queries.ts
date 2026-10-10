@@ -650,11 +650,17 @@ export const ISSUE_PAGE_QUERY = gql`
         handedOffFromId
         failureReason
         answeredCommentId
+        needInfo
+        body
         targetActor {
           id
           name
           handle
           actorKind
+        }
+        requestedByActor {
+          id
+          name
         }
       }
       comments(first: 100, orderBy: createdAt) {
@@ -1698,6 +1704,27 @@ export const WORK_CLAIM_RELEASE_MUTATION = gql`
 export const AGENT_REQUEST_REPLY_MUTATION = gql`
   mutation AgentRequestReply($requestId: String!, $body: String!, $overrideReason: String) {
     agentRequestReply(requestId: $requestId, body: $body, overrideReason: $overrideReason) {
+      success
+      message
+      request { id state }
+    }
+  }
+`;
+
+// Ask a named person or agent for information (needinfo, INV-1119).
+export const NEED_INFO_REQUEST_MUTATION = gql`
+  mutation NeedInfoRequest($input: NeedInfoRequestInput!) {
+    needInfoRequest(input: $input) {
+      success
+      message
+      request { id state needInfo }
+    }
+  }
+`;
+
+export const NEED_INFO_WITHDRAW_MUTATION = gql`
+  mutation NeedInfoWithdraw($requestId: String!, $reason: String) {
+    needInfoWithdraw(requestId: $requestId, reason: $reason) {
       success
       message
       request { id state }

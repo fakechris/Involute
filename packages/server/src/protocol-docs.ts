@@ -165,7 +165,7 @@ Write:
 - \`work_claim\` — atomically claim committed work for the current agent actor; \`action: 'release'\` yields your own lease with a reason.
 - \`run_report\` — report run status (queued / running / blocked / completed). Completed moves to In Review.
 - \`evidence\` — \`action: 'attach'\` (default) adds a PR, test, log, or artifact URL to a run; \`action: 'retract'\` withdraws your own unaccepted evidence with a reason.
-- \`agent_request\` — \`action: 'claim'\` leases a request from \`agent_inbox\`, \`action: 'answer'\` replies.
+- \`agent_request\` — \`action: 'claim'\` leases a request from \`agent_inbox\`, \`action: 'answer'\` replies. \`action: 'needinfo'\` (work_id, target_id, question) asks a named person for information — e.g. the bug reporter; it waits in their Needs you, clears when they answer or comment on the work, tells you in \`agent_inbox\` (\`needinfo.answered\`) and pauses the bug SLA while it waits on the reporter (INV-1119). \`action: 'withdraw'\` takes it back. A needinfo addressed to you shows \`need_info: true\` in \`agent_inbox\`: a comment of yours on the work answers it.
 - \`delivery\` / \`executor\` — delivery packages and the external executor protocol, each with \`action: 'context'\` (default, read) and the write actions (\`propose\`, \`execution_create\`; \`update\`).
 
 Human-only (delegated CLI or Web UI):

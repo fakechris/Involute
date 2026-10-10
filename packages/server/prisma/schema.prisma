@@ -602,10 +602,15 @@ model AgentRequest {
   handedOffFromId    String?           @db.Uuid
   hopCount           Int               @default(0)
   chainDeadlineAt    DateTime?
+  // A needinfo (INV-1119): raised explicitly to a named person, human or agent.
+  // Any comment its target writes on the work answers it, and while it waits
+  // on a bug's reporter that bug's SLA clock is paused.
+  needInfo           Boolean           @default(false)
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
   @@index([targetActorId, state, createdAt])
+  @@index([workId, needInfo, state])
   @@index([workId, createdAt])
   @@index([state, deadlineAt])
   @@index([rootCommentId])

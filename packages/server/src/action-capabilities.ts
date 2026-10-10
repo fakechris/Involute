@@ -3,6 +3,8 @@ import { MUTATION_SURFACES } from './human-surface.js';
 /** MCP write tool → the GraphQL mutation a person (the web app) uses for the same change. */
 export const PAIRS: Record<string, string> = {
   agent_request_answer: 'agentRequestAnswer',
+  agent_request_needinfo: 'needInfoRequest',
+  agent_request_withdraw: 'needInfoWithdraw',
   notification_mark_read: 'notificationMarkRead',
   evidence_attach: 'evidenceAttach',
   run_report: 'runReport',
@@ -82,6 +84,7 @@ export const AGENT_ONLY_TOOLS: Record<string, string> = {
 /** MCP argument → GraphQL field when the names differ. */
 export const RENAMED: Record<string, Record<string, string>> = {
   agent_request_answer: { id: 'requestId' },
+  agent_request_withdraw: { id: 'requestId' },
   run_report: { pr_number: 'pullRequestNumber' },
   // Names on MCP, ids in the Report bug dialog (INV-1000).
   work_file_bug: { team: 'teamId', labels: 'labelIds' },
@@ -199,6 +202,8 @@ const DETAILS: Record<string, ActionDetails> = {
   work_propose_amendment: detail(['work_get_context'], 'Propose an amendment; no direct rewrite of committed contract.', 'Records a contract snapshot; a newer proposal replaces the open proposal from the same actor.', 'Proposed amendment with source reason.', 'Read contractAmendments for the human decision before continuing.', 'candidate'),
   agent_request_claim: detail(['agent_inbox'], 'Only the addressed active agent may lease a request.', 'Request lease and claim_token on renewal.', 'Private claim token and leased request.', 'Renew before expiry or answer with input-required to hand control back.'),
   notification_mark_read: detail(['agent_inbox'], 'Only your own notifications.', 'Idempotent: already read stays read.', 'Notification id and read time.', 'Read agent_inbox again; an unknown id is not yours or does not exist.'),
+  agent_request_needinfo: detail(['work_get_context', 'work_catalog'], 'Write access to the work; the target must be able to write on its team; an agent may raise one to a person, not to another agent.', 'One open needinfo per target and work; optional idempotency_key.', 'Request id, root comment and deadline.', 'Read work_get_context / agent_inbox before retrying; withdraw a needinfo raised by mistake.'),
+  agent_request_withdraw: detail(['agent_inbox', 'work_get_context'], 'Whoever raised it; an admin with a reason.', 'CAS on an open state; a closed needinfo is refused.', 'Withdrawn request state.', 'Raise a new needinfo if it was withdrawn by mistake.'),
   agent_request_answer: detail(['agent_inbox'], 'Claim token for agent answers; human answer through UI.', 'Request lease and claim_token.', 'Authored answer and request state.', 'Read request state after uncertain response; renew or hand back the lease.'),
 };
 
