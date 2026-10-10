@@ -999,6 +999,12 @@ export const BUGS_PAGE_QUERY = gql`
           count
         }
         unplacedOpenCount
+        closedEverCount
+        reopenedCount
+        reopenRate
+        autoAcceptedCount
+        reopenedAfterAutoAcceptCount
+        reopenedAfterAutoAcceptRate
       }
     }
     # Each bug's team states, for changing status in place (INV-1133).

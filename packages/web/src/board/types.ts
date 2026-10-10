@@ -335,6 +335,14 @@ export interface BugMetricsData {
   /** Rejected or canceled bugs by resolution and reporter (INV-1118). */
   byResolution?: Array<{ resolution: WorkResolution; source: 'HUMAN_REPORT' | 'AGENT' | 'OTHER'; count: number }>;
   unplacedOpenCount: number;
+  /** Reopens (INV-1120); absent from older servers. */
+  closedEverCount?: number;
+  reopenedCount?: number;
+  reopenRate?: number | null;
+  /** Bugs the Auto-Accept Gate accepted, and those reopened afterwards (INV-1120). */
+  autoAcceptedCount?: number;
+  reopenedAfterAutoAcceptCount?: number;
+  reopenedAfterAutoAcceptRate?: number | null;
 }
 
 export interface BugsPageQueryData {

@@ -937,6 +937,8 @@ const typeDefs = /* GraphQL */ `
     DISCOVERED_DURING
     RELATED_TO
     DUPLICATE_OF
+    "A REGRESSED_BY B: B introduced the regression A reports or fixes (INV-1120)."
+    REGRESSED_BY
   }
 
   type Comment {
@@ -1086,6 +1088,8 @@ const typeDefs = /* GraphQL */ `
     autoAcceptBugs: Boolean!
     "Why a rejected candidate or canceled work was closed; null while open (INV-1118)."
     resolution: WorkResolution
+    "Times it moved from Done or Canceled back to an open state (INV-1120)."
+    reopenCount: Int!
     "Latest automatic-acceptance evaluation of this work, if any (INV-1075)."
     autoAccept: AutoAcceptEvaluation
     links(type: WorkLinkType): WorkLinkConnection!
@@ -2027,6 +2031,18 @@ const typeDefs = /* GraphQL */ `
     byResolution: [BugResolutionCount!]!
     "Committed open bugs no parent contains; the goal is zero."
     unplacedOpenCount: Int!
+    "Bugs ever closed (closed now or reopened since) (INV-1120)."
+    closedEverCount: Int!
+    "Of those, bugs moved from Done or Canceled back to an open state at least once."
+    reopenedCount: Int!
+    "reopenedCount / closedEverCount; null before any bug was closed."
+    reopenRate: Float
+    "Bugs the Auto-Accept Gate accepted at least once (INV-1075)."
+    autoAcceptedCount: Int!
+    "Of those, bugs reopened after the gate accepted them."
+    reopenedAfterAutoAcceptCount: Int!
+    "reopenedAfterAutoAcceptCount / autoAcceptedCount; null before any auto-acceptance."
+    reopenedAfterAutoAcceptRate: Float
   }
 
   type BugBreach {

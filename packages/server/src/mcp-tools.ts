@@ -218,6 +218,7 @@ const WORK_LINK_TYPES: readonly WorkLinkType[] = [
   'DISCOVERED_DURING',
   'RELATED_TO',
   'DUPLICATE_OF',
+  'REGRESSED_BY',
 ];
 
 interface JsonSchema {
@@ -1137,7 +1138,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         related_work_id: { type: 'string', description: 'Existing work item identifier (e.g. INV-2) or UUID to relate this new item to.' },
         related_work_type: {
           type: 'string',
-          enum: ['CONTAINS', 'BLOCKS', 'DERIVED_FROM', 'DISCOVERED_DURING', 'RELATED_TO', 'DUPLICATE_OF'],
+          enum: ['CONTAINS', 'BLOCKS', 'DERIVED_FROM', 'DISCOVERED_DURING', 'RELATED_TO', 'DUPLICATE_OF', 'REGRESSED_BY'],
           description: 'Relationship type from the new item to related_work_id. If CONTAINS, the related item becomes the parent. Otherwise the typed link is recorded in addition to any parent_id. Defaults to DISCOVERED_DURING.',
         },
         labels: {
@@ -1356,7 +1357,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_link',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    description: 'Create a typed work link: CONTAINS, BLOCKS, DERIVED_FROM, DISCOVERED_DURING, RELATED_TO, DUPLICATE_OF.',
+    description: 'Create a typed work link: CONTAINS, BLOCKS, DERIVED_FROM, DISCOVERED_DURING, RELATED_TO, DUPLICATE_OF, REGRESSED_BY (from = the regression, to = the work that introduced it).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1376,7 +1377,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
       properties: {
         from_id: { type: 'string' },
         to_id: { type: 'string' },
-        type: { type: 'string', enum: ['BLOCKS', 'DERIVED_FROM', 'DISCOVERED_DURING', 'RELATED_TO', 'DUPLICATE_OF'] },
+        type: { type: 'string', enum: ['BLOCKS', 'DERIVED_FROM', 'DISCOVERED_DURING', 'RELATED_TO', 'DUPLICATE_OF', 'REGRESSED_BY'] },
       },
       required: ['from_id', 'to_id', 'type'],
     },

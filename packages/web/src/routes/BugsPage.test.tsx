@@ -54,6 +54,12 @@ const bugsPageData = {
         { resolution: 'WONT_DO', source: 'HUMAN_REPORT', count: 1 },
       ],
       unplacedOpenCount: 1,
+      closedEverCount: 8,
+      reopenedCount: 2,
+      reopenRate: 0.25,
+      autoAcceptedCount: 4,
+      reopenedAfterAutoAcceptCount: 1,
+      reopenedAfterAutoAcceptRate: 0.25,
     },
   },
   issues: {
@@ -170,6 +176,17 @@ describe('BugsPage', () => {
     expect(breaches).toHaveTextContent('INV-30');
     expect(breaches).toHaveTextContent('5.5h over');
     expect(screen.getByLabelText('Bugs by source')).toHaveTextContent('Reported by people3Filed by agents2');
+  });
+
+  it('shows the reopen rate and reopens after the Auto-Accept Gate accepted (INV-1120)', () => {
+    render(
+      <MemoryRouter>
+        <BugsPage />
+      </MemoryRouter>,
+    );
+    const triage = screen.getByLabelText('Triage and SLA');
+    expect(triage).toHaveTextContent('25%Reopened (2 of 8 closed)');
+    expect(triage).toHaveTextContent('25%Reopened after auto-accept (1 of 4)');
   });
 
   it('shows why bugs were closed without a fix, by reporter, with the false-report rate (INV-1118)', () => {

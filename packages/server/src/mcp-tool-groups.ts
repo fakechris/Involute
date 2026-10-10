@@ -22,7 +22,7 @@ export interface McpToolGroup {
 export const MCP_TOOL_GROUPS: readonly McpToolGroup[] = [
   {
     name: 'work_relate',
-    description: 'Add or remove a typed relation between two work items (BLOCKS, DERIVED_FROM, DISCOVERED_DURING, RELATED_TO, DUPLICATE_OF; CONTAINS is added through parent_id on work_propose/work_update). action "link" creates it, "unlink" removes the exact directed edge — use unlink before correcting a reversed BLOCKS.',
+    description: 'Add or remove a typed relation between two work items (BLOCKS, DERIVED_FROM, DISCOVERED_DURING, RELATED_TO, DUPLICATE_OF, REGRESSED_BY; CONTAINS is added through parent_id on work_propose/work_update). action "link" creates it, "unlink" removes the exact directed edge — use unlink before correcting a reversed BLOCKS.',
     actions: { link: 'work_link', unlink: 'work_unlink' },
   },
   {
