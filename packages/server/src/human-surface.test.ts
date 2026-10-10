@@ -4,13 +4,17 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
+import { ATTENTION_KINDS, ATTENTION_LOADERS } from './attention-service.ts';
 import {
   HUMAN_GATE_PATTERN,
   HUMAN_GATES,
   MUTATION_SURFACES,
   NOTIFICATION_SURFACES,
+  type HumanGate,
   type HumanSurface,
+  type NotificationSurface,
 } from './human-surface.ts';
+import { ACTIONABLE_NOTIFICATION_KINDS } from './notification-service.ts';
 import { createGraphQLSchema } from './schema.ts';
 
 // INV-795: every thing a person may or must do has a place in the web app.
@@ -151,6 +155,52 @@ const NOT_INBOX = new Set([
   'contract.amendment_rejected',
 ]);
 
+/** Gates that do not say whether they wait in Needs you (INV-1095). */
+function gateAttentionProblems(gates: readonly HumanGate[]): string[] {
+  return gates.flatMap((gate) => {
+    const attention = (gate as { attention?: unknown }).attention;
+    if (typeof attention === 'string') {
+      return (ATTENTION_KINDS as readonly string[]).includes(attention) ? [] : [`${gate.text}: unknown attention kind ${attention}`];
+    }
+    if (attention && typeof attention === 'object' && typeof (attention as { none?: unknown }).none === 'string') {
+      return /INV-\d+/.test((attention as { none: string }).none) ? [] : [`${gate.text}: attention exemption must cite an INV item`];
+    }
+    return [`${gate.text}: no attention declared (an AttentionKind or { none: 'reason (INV-…)' })`];
+  });
+}
+
+/**
+ * Notifications whose `actionable` is missing or disagrees with
+ * ACTIONABLE_NOTIFICATION_KINDS, the list notification-service resolves from (INV-1095).
+ */
+function notificationActionableProblems(
+  surfaces: Record<string, NotificationSurface>,
+  actionable: Record<string, string> = ACTIONABLE_NOTIFICATION_KINDS,
+): string[] {
+  const problems: string[] = [];
+  for (const [type, surface] of Object.entries(surfaces)) {
+    const declared = (surface as { actionable?: unknown }).actionable;
+    const expected = Object.hasOwn(actionable, type) ? actionable[type] : 'info';
+    if (declared === undefined) problems.push(`${type}: no actionable declared (an AttentionKind or 'info')`);
+    else if (declared !== expected) problems.push(`${type}: actionable ${String(declared)} here, ${expected} in ACTIONABLE_NOTIFICATION_KINDS`);
+  }
+  for (const type of Object.keys(actionable)) {
+    if (!(type in surfaces)) problems.push(`${type}: in ACTIONABLE_NOTIFICATION_KINDS but not in NOTIFICATION_SURFACES`);
+  }
+  return problems;
+}
+
+/** Attention kinds that a non-test server source resolves with resolveAttentionNotifications({ kind }). */
+function resolvedAttentionKinds(files: Map<string, string>): Set<string> {
+  const kinds = new Set<string>();
+  for (const source of files.values()) {
+    for (const match of source.matchAll(/resolveAttentionNotifications\(\s*[\w.]+\s*,\s*\{[^}]*?\bkind:\s*'(\w+)'/g)) kinds.add(match[1]!);
+  }
+  return kinds;
+}
+
+const attentionTest = readFileSync(join(serverSrc, 'attention-service.test.ts'), 'utf8');
+
 describe('human surface registry (INV-795)', () => {
   const mutations = Object.keys(createGraphQLSchema(null as never).getMutationType()!.getFields()).sort();
 
@@ -216,6 +266,26 @@ describe('human surface registry (INV-795)', () => {
     }
   });
 
+  it('says for every human gate whether it waits in Needs you (INV-1095)', () => {
+    expect(gateAttentionProblems(HUMAN_GATES)).toEqual([]);
+  });
+
+  it('says for every notification whether it asks for a decision, agreeing with notification-service (INV-1095)', () => {
+    expect(notificationActionableProblems(NOTIFICATION_SURFACES)).toEqual([]);
+  });
+
+  it('gives every attention kind a loader and a test that sees it appear and go (INV-1095)', () => {
+    expect(ATTENTION_KINDS.filter((kind) => typeof (ATTENTION_LOADERS as Record<string, unknown>)[kind] !== 'function')).toEqual([]);
+    // attention-service.test.ts holds one "appears → decided → gone" case per kind.
+    expect(ATTENTION_KINDS.filter((kind) => !attentionTest.includes(`'${kind}'`))).toEqual([]);
+  });
+
+  it('resolves every actionable notification kind from some decision (INV-1095)', () => {
+    const resolved = resolvedAttentionKinds(server);
+    const used = [...new Set(Object.values(ACTIONABLE_NOTIFICATION_KINDS))].sort();
+    expect(used.filter((kind) => !resolved.has(kind))).toEqual([]);
+  });
+
   describe('fails when an entry point disappears', () => {
     it('reports a web entry with no test, a test that does not exist, and one that never touches the entry point', () => {
     const entry = MUTATION_SURFACES.workClaimRelease as Extract<HumanSurface, { kind: 'web' }>;
@@ -254,6 +324,29 @@ describe('human surface registry (INV-795)', () => {
       const withNewRule = new Map(server);
       withNewRule.set('frobnicate.ts', "export const M = 'Only a person may frobnicate the widget.';");
       expect(uncoveredGateTexts(withNewRule, HUMAN_GATES)).toEqual(['frobnicate.ts: Only a person may frobnicate the widget.']);
+    });
+
+    it('reports a gate or a notification that does not say whether it waits in Needs you (INV-1095)', () => {
+      const bare = { text: 'Only a person may frobnicate', mutation: 'workCommit' } as unknown as HumanGate;
+      expect(gateAttentionProblems([bare])).toEqual([
+        "Only a person may frobnicate: no attention declared (an AttentionKind or { none: 'reason (INV-…)' })",
+      ]);
+      expect(gateAttentionProblems([{ ...bare, attention: { none: 'later' } }])).toEqual(['Only a person may frobnicate: attention exemption must cite an INV item']);
+
+      const withNew = { ...NOTIFICATION_SURFACES, 'widget.frobnicated': { kind: 'info' } as NotificationSurface };
+      expect(notificationActionableProblems(withNew)).toEqual(["widget.frobnicated: no actionable declared (an AttentionKind or 'info')"]);
+      expect(notificationActionableProblems({ ...NOTIFICATION_SURFACES, 'run.completed': { ...NOTIFICATION_SURFACES['run.completed']!, actionable: 'info' } })).toEqual([
+        'run.completed: actionable info here, WORK_REVIEW in ACTIONABLE_NOTIFICATION_KINDS',
+      ]);
+      expect(notificationActionableProblems(NOTIFICATION_SURFACES, { ...ACTIONABLE_NOTIFICATION_KINDS, 'widget.frobnicated': 'OPS' })).toEqual([
+        'widget.frobnicated: in ACTIONABLE_NOTIFICATION_KINDS but not in NOTIFICATION_SURFACES',
+      ]);
+    });
+
+    it('reports an attention kind nobody resolves (INV-1095)', () => {
+      const without = new Map([...server].map(([file, source]) => [file, source.replace(/kind: 'OPS'/g, "kind: 'NOPE'")]));
+      expect(resolvedAttentionKinds(without).has('OPS')).toBe(false);
+      expect(resolvedAttentionKinds(server).has('OPS')).toBe(true);
     });
 
     it('reports a new inbox notification type', () => {

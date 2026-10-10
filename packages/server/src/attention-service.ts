@@ -75,7 +75,7 @@ const ACTIVE_RUN_STATUSES = ['QUEUED', 'RUNNING', 'BLOCKED'] as const;
 
 type Viewer = Pick<User, 'actorKind' | 'globalRole' | 'id'>;
 
-interface Scope {
+export interface Scope {
   now: Date;
   viewer: Viewer;
   /** Readability (team membership and project shares); undefined = no restriction. */
@@ -86,6 +86,21 @@ interface Scope {
   triagerTeamIds: string[];
   rotationTeamIds: string[];
 }
+
+/**
+ * The loader that reads each kind from live state (INV-1095).
+ * human-surface.test.ts checks every kind has one and a test that sees it
+ * appear and go once decided.
+ */
+export const ATTENTION_LOADERS: Record<AttentionKind, (prisma: DatabaseClient, scope: Scope) => Promise<AttentionItem[]>> = {
+  AGENT_REQUEST: agentRequests,
+  CANDIDATE_COMMIT: candidates,
+  CONTRACT_AMENDMENT: amendments,
+  DECISION_REQUESTED: decisionRequests,
+  DELIVERY_CHANGE: deliveryChanges,
+  OPS: opsItems,
+  WORK_REVIEW: reviews,
+};
 
 export async function loadAttention(
   prisma: DatabaseClient,
@@ -98,16 +113,7 @@ export async function loadAttention(
   if (!viewer || viewer.actorKind !== 'HUMAN') return [];
   const scope = await buildScope(prisma, viewer, readable, filter.teamKey ?? null, now);
   const wanted = new Set<AttentionKind>(filter.kinds?.length ? filter.kinds : ATTENTION_KINDS);
-  const loaders: Record<AttentionKind, () => Promise<AttentionItem[]>> = {
-    AGENT_REQUEST: () => agentRequests(prisma, scope),
-    CANDIDATE_COMMIT: () => candidates(prisma, scope),
-    CONTRACT_AMENDMENT: () => amendments(prisma, scope),
-    DECISION_REQUESTED: () => decisionRequests(prisma, scope),
-    DELIVERY_CHANGE: () => deliveryChanges(prisma, scope),
-    OPS: () => opsItems(prisma, scope),
-    WORK_REVIEW: () => reviews(prisma, scope),
-  };
-  const lists = await Promise.all(ATTENTION_KINDS.filter((kind) => wanted.has(kind)).map((kind) => loaders[kind]()));
+  const lists = await Promise.all(ATTENTION_KINDS.filter((kind) => wanted.has(kind)).map((kind) => ATTENTION_LOADERS[kind](prisma, scope)));
   const items = lists.flat();
   await assignGroups(prisma, items);
   // Longest wait first: the oldest decision is the one most likely forgotten.
