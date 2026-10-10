@@ -112,6 +112,15 @@ export interface BugSlaSummary {
   budgetHours: number;
 }
 
+/** Deadline of an incident follow-up (INV-1127): the bug SLA clock plus DECLINED. */
+export interface FollowUpDeadlineSummary {
+  status: BugSlaSummary['status'] | 'DECLINED';
+  remainingMs: number;
+  dueAt: string | null;
+  budgetHours: number;
+  incidents?: Array<{ id: string; identifier: string; title: string }>;
+}
+
 export interface ContractAmendmentSummary {
   id: string;
   reason: string;
@@ -156,6 +165,7 @@ export interface IssueSummary {
   reproducibility?: BugReproducibility | null;
   /** Committed bugs only (INV-750). */
   bugSla?: BugSlaSummary | null;
+  followUpDeadline?: FollowUpDeadlineSummary | null;
   createdAt: string;
   updatedAt: string;
   state: WorkflowStateSummary;

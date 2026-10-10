@@ -22,6 +22,8 @@ const hygieneData: WorkHygieneQueryData = {
     researchWithoutDownstream: [{ ...ref(694, 'External projects study'), repository: 'fakechris/lumenbox' }],
     researchClosableCount: 1,
     researchClosable: [{ ...ref(940, 'Delivery package study'), repository: 'fakechris/Involute' }],
+    overdueFollowUpCount: 1,
+    overdueFollowUps: [{ ...ref(1131, 'Guard docker prune'), repository: 'fakechris/Involute' }],
   },
 };
 
@@ -37,6 +39,8 @@ describe('work graph health page (INV-721)', () => {
     expect(within(screen.getByRole('region', { name: 'Research with nothing derived' })).getByText('INV-694')).toBeInTheDocument();
     expect(summary).toHaveTextContent('1Research ready to close');
     expect(within(screen.getByRole('region', { name: 'Research ready to close' })).getByText('INV-940')).toBeInTheDocument();
+    expect(summary).toHaveTextContent('1Overdue incident follow-ups');
+    expect(within(screen.getByRole('region', { name: 'Overdue incident follow-ups' })).getByText('INV-1131')).toBeInTheDocument();
   });
 
   it('records a worded dependency in the right direction', async () => {

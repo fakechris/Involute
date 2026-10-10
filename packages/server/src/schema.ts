@@ -179,6 +179,7 @@ import { loadWorkHygiene } from './work-hygiene.js';
 import { type AttentionItem, type AttentionKind, loadAttention, pageAttention, summarizeAttention } from './attention-service.js';
 import { BUG_LABEL_NAME, findSimilarBugs, reportBug, type BugReportInput } from './bug-report.js';
 import { loadBugSlas } from './bug-sla.js';
+import { FOLLOW_UP_LINK_WHERE, loadFollowUpDeadlines } from './follow-up-deadline.js';
 import { loadReviewWaits } from './review-wait.js';
 import { snapshotContract } from './evidence-contract.js';
 import { loadBugMetrics, type BugMetrics } from './bug-metrics.js';
@@ -235,6 +236,8 @@ type IssueParent = Issue & {
   cycle?: Cycle | null;
   /** Present only when the list read batched `openBlockers`; each link carries its blocker. */
   incomingLinks?: Array<WorkLink & { from?: Issue | null }> | null;
+  /** Present only when the list read batched `followUpDeadline`: its DERIVED_FROM links to incidents. */
+  outgoingLinks?: Array<Pick<WorkLink, 'toId'>> | null;
 };
 type WorkLinkParent = WorkLink & { from?: Issue | null; to?: Issue | null };
 type WorkClaimParent = WorkClaim & { actor?: User | null };
@@ -296,6 +299,8 @@ function buildIssueListInclude(
     includeComments?: boolean;
     /** Readable-team filter for the blockers; set to batch `openBlockers` into the list read. */
     openBlockers?: { readableWhere: Prisma.IssueWhereInput | undefined };
+    /** Batch the follow-up links so non-follow-ups resolve `followUpDeadline` without a query. */
+    followUpLinks?: boolean;
   } = {},
 ): Prisma.IssueInclude {
   const include: Prisma.IssueInclude = {
@@ -322,6 +327,10 @@ function buildIssueListInclude(
 
   if (options.openBlockers) {
     include.incomingLinks = buildOpenBlockerLinkQuery(options.openBlockers.readableWhere);
+  }
+
+  if (options.followUpLinks) {
+    include.outgoingLinks = { where: FOLLOW_UP_LINK_WHERE, select: { toId: true } };
   }
 
   if (options.includeComments) {
@@ -659,6 +668,29 @@ const typeDefs = /* GraphQL */ `
     BREACHED
     PAUSED
     MET
+  }
+
+  "The bug SLA clock's statuses plus DECLINED: canceled (e.g. resolution WONT_DO), never overdue (INV-1127)."
+  enum FollowUpDeadlineStatus {
+    ON_TRACK
+    AT_RISK
+    BREACHED
+    PAUSED
+    MET
+    DECLINED
+  }
+
+  "Deadline of an incident follow-up (INV-1127): the bug SLA clock with budget by priority (default Urgent 7d, High 14d, else 30d; FOLLOW_UP_DEADLINE_DAYS)."
+  type FollowUpDeadline {
+    status: FollowUpDeadlineStatus!
+    budgetHours: Int!
+    elapsedMs: Float!
+    remainingMs: Float!
+    "When it runs out if nothing changes; null while paused, closed or declined."
+    dueAt: String
+    startedAt: String!
+    "The incidents it was derived from, oldest first."
+    incidents: [Issue!]!
   }
 
   type WorkRestorePayload {
@@ -1132,6 +1164,8 @@ const typeDefs = /* GraphQL */ `
     dependencyHints: [String!]!
     "SLA for committed Type: Bug work; null otherwise (INV-750)."
     bugSla: BugSla
+    "Deadline for a committed ISSUE derived (DERIVED_FROM) from a Type: Incident; null otherwise (INV-1127)."
+    followUpDeadline: FollowUpDeadline
     "How long committed work has waited in Review; null outside Review (INV-1002). overdue is true for a bug past REVIEW_OVERDUE_MS (default 3 days)."
     reviewWait: ReviewWait
     "Files attached to this work, newest first (INV-1003): research reports and other private material that never enters git or an image."
@@ -1403,6 +1437,9 @@ const typeDefs = /* GraphQL */ `
     "Research in Review whose derived items are all committed; its proposer can close it (INV-1001)."
     researchClosableCount: Int!
     researchClosable: [Issue!]!
+    "Open incident follow-ups past their deadline, most overdue first (INV-1127). Declined ones never count."
+    overdueFollowUpCount: Int!
+    overdueFollowUps: [Issue!]!
   }
 
   type WorkReferencePair {
@@ -2780,6 +2817,7 @@ const resolvers = {
           ...(requestedIssueFields.has('openBlockers')
             ? { openBlockers: { readableWhere: buildReadableIssueWhere(context) } }
             : {}),
+          followUpLinks: requestedIssueFields.has('followUpDeadline'),
         }),
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: first + 1,
@@ -5390,6 +5428,24 @@ const resolvers = {
     },
     attachments: (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) =>
       context.prisma.attachment.findMany({ where: { issueId: parent.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] }),
+    followUpDeadline: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
+      if (parent.commitmentStatus !== 'COMMITTED' || parent.kind !== 'ISSUE') return null;
+      // Batched by list reads: no link to an incident, no query.
+      if (parent.outgoingLinks && parent.outgoingLinks.length === 0) return null;
+      const deadline = (await loadFollowUpDeadlines(context.prisma, [parent.id])).get(parent.id);
+      if (!deadline) return null;
+      const incidents = await context.prisma.issue.findMany({ where: { id: { in: deadline.incidentIds }, ...buildReadableIssueWhere(context) } });
+      const order = new Map(deadline.incidentIds.map((id, index) => [id, index]));
+      return {
+        status: deadline.status,
+        budgetHours: Math.round(deadline.budgetMs / 3_600_000),
+        elapsedMs: deadline.elapsedMs,
+        remainingMs: deadline.remainingMs,
+        dueAt: deadline.dueAt?.toISOString() ?? null,
+        startedAt: deadline.startedAt.toISOString(),
+        incidents: incidents.sort((a, b) => order.get(a.id)! - order.get(b.id)!),
+      };
+    },
     bugSla: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
       if (parent.commitmentStatus !== 'COMMITTED') return null;
       // Labels are usually loaded with the issue: skip non-bugs without a query.

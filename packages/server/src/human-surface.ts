@@ -281,6 +281,9 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationSurface> = {
   'bug.sla_at_risk': { kind: 'info', actionable: 'info' },
   // The team hears an incident was declared; it is already committed and under investigation (INV-1123).
   'incident.declared': { kind: 'info', actionable: 'info' },
+  // An incident follow-up nears or passes its deadline (INV-1127): its owner and the Incident Lead hear once each.
+  'incident.follow_up_at_risk': { kind: 'info', actionable: 'info' },
+  'incident.follow_up_overdue': { kind: 'info', actionable: 'info' },
   'bug.sla_breached': { kind: 'info', actionable: 'info' },
   'contract.amendment_proposed': { kind: 'work', action: 'Accept change', component: 'components/ContractAmendmentPanel.tsx', actionable: 'CONTRACT_AMENDMENT' },
   'decision.requested': { kind: 'work', action: 'Respond to the agent', component: 'components/RespondToAgent.tsx', actionable: 'DECISION_REQUESTED' },

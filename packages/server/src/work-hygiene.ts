@@ -1,5 +1,6 @@
 import type { Issue, Prisma, PrismaClient } from '@prisma/client';
 
+import { loadFollowUpDeadlines } from './follow-up-deadline.js';
 import { dependencyWordedReferences, extractTeamReferences } from './mention-links.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
@@ -25,6 +26,9 @@ export interface WorkHygiene {
   /** Research in Review whose derived items are all committed: nothing left to wait for (INV-1001). */
   researchClosable: Issue[];
   researchClosableCount: number;
+  /** Open incident follow-ups past their deadline, most overdue first (INV-1127); declined ones never count. */
+  overdueFollowUps: Issue[];
+  overdueFollowUpCount: number;
 }
 
 function isResearch(issue: { labels: Array<{ name: string }> }): boolean {
@@ -44,6 +48,7 @@ function contractTexts(issue: Issue): Array<string | null> {
 export async function loadWorkHygiene(
   prisma: DatabaseClient,
   input: { teamId: string; teamKey: string },
+  now = new Date(),
 ): Promise<WorkHygiene> {
   const issues = await prisma.issue.findMany({
     where: { teamId: input.teamId, commitmentStatus: 'COMMITTED' },
@@ -126,6 +131,18 @@ export async function loadWorkHygiene(
       !contractTexts(issue).some((text) => text && NO_ACTIONABLE.test(text)),
   );
 
+  const openDerived = issues.filter(
+    (issue) =>
+      issue.kind === 'ISSUE' &&
+      issue.state.type !== 'COMPLETED' &&
+      issue.state.type !== 'CANCELED' &&
+      links.some((link) => link.type === 'DERIVED_FROM' && link.fromId === issue.id),
+  );
+  const deadlines = await loadFollowUpDeadlines(prisma, openDerived.map((issue) => issue.id), now);
+  const overdueFollowUps = openDerived
+    .filter((issue) => deadlines.get(issue.id)?.status === 'BREACHED')
+    .sort((a, b) => deadlines.get(a.id)!.remainingMs - deadlines.get(b.id)!.remainingMs);
+
   return {
     unplaced: unplaced.slice(0, LIST_LIMIT),
     unplacedCount: unplaced.length,
@@ -137,6 +154,8 @@ export async function loadWorkHygiene(
     researchWithoutDownstreamCount: researchWithoutDownstream.length,
     researchClosable: researchClosable.slice(0, LIST_LIMIT),
     researchClosableCount: researchClosable.length,
+    overdueFollowUps: overdueFollowUps.slice(0, LIST_LIMIT),
+    overdueFollowUpCount: overdueFollowUps.length,
   };
 }
 

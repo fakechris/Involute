@@ -53,6 +53,7 @@ export function HygienePage() {
                 ['Dependencies without BLOCKS', hygiene.dependencyWithoutBlocksCount],
                 ['Research with nothing derived', hygiene.researchWithoutDownstreamCount],
                 ['Research ready to close', hygiene.researchClosableCount],
+                ['Overdue incident follow-ups', hygiene.overdueFollowUpCount],
               ].map(([label, count]) => (
                 <div key={label as string} className={`hygiene-stat${count ? ' hygiene-stat--open' : ''}`}>
                   <span className="hygiene-stat__count">{count}</span>
@@ -124,6 +125,16 @@ export function HygienePage() {
               <p className="observation-hint">Everything derived from this research is committed; nothing is left to wait for. Its proposer closes it (an agent may, for Type: Research), or accept it here.</p>
               <ul className="hygiene-list">
                 {hygiene.researchClosable.map((item) => (
+                  <li key={item.id}>{itemButton(item)}</li>
+                ))}
+              </ul>
+            </section>
+
+            <section aria-label="Overdue incident follow-ups">
+              <h2>Overdue incident follow-ups · {hygiene.overdueFollowUpCount}</h2>
+              <p className="observation-hint">Committed work derived from an incident, past its deadline (Urgent 7 days, High 14, otherwise 30 from commitment; paused in Review). Finish it, or decline it with a reason.</p>
+              <ul className="hygiene-list">
+                {hygiene.overdueFollowUps.map((item) => (
                   <li key={item.id}>{itemButton(item)}</li>
                 ))}
               </ul>
