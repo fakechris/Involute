@@ -440,6 +440,8 @@ Zero-bug triage (INV-750): `workCommit` of a bug needs `priority` (1–4) and ne
 
 Agent-filed bugs (INV-751 / decision INV-787): `workPropose` / `work_propose` accept `priority` and `stepsToReproduce` (`steps_to_reproduce`). A proposal labelled `bug` with a parent (explicit or inherited), a priority and steps is created **COMMITTED** (owner: the agent's human owner; Ready, or `initial_state` STARTED / REVIEW; never Backlog) and emits `work.committed` + `bug.reported`; otherwise it is a triage candidate. `bugSummary.metrics { triageHoursP50 triageHoursP90 triagedCount untriagedCount slaMetCount slaBreachedClosedCount slaMetRate atRiskOpenCount breachedOpen { identifier overdueHours } bySource { source count } unplacedOpenCount }`.
 
+Severity (INV-1115): `Issue.severity: IssueSeverity` (`SEV1` Critical / `SEV2` Major / `SEV3` Minor, nullable) is impact, kept apart from `priority`, which alone orders work and sets a bug's SLA. Written through `issueUpdate`, `bugReport`, `workPropose` and MCP `work_update` / `work_propose` / `work_file_bug` (`severity`; `null` clears it on update); other values are refused (MCP answers with the definitions). Every change is a `WorkAudit` row whose `before` / `after` snapshots carry the old and new severity. `bugSummary.bySeverity { severity count }` counts open bugs, SEV1 first and unjudged (`null`) last. Definitions: `docs/severity.md`.
+
 ### `issueUpdate`
 
 A person moving work into a Done (COMPLETED) state through `issueUpdate` — status dropdown, drawer, board drag or API — is an acceptance (INV-790): it records an `ACCEPTED` review decision bound to the latest completed run and emits `work.accepted` (payload `viaStateChange: true`), exactly like `workReview`. `Issue.contractDigest` is the current contract hash; a run whose `contractRevision` differs ran against an older contract. `workReview`, `workReject` and `evidenceRetract` return the refusal reason in `message`.
@@ -1309,6 +1311,8 @@ link:blocked-by:none has:contract -state:done "free text"
 - `project:<name|owner/repo|PROJECT identifier>` (INV-1076) matches work whose
   repository is that project (`project:cangkuyi`, `project:fakechris/cangkuyi`), or that
   sits up to three levels under that PROJECT (`project:INV-1026`).
+- `severity:sev1,sev2` (INV-1115) matches those severities; `severity:none`
+  matches work nobody has judged; `-severity:sev1` includes unjudged work.
 - Parse failures return GraphQL errors with `extensions.code = 'IQL_PARSE'`;
   they are never silently swallowed.
 

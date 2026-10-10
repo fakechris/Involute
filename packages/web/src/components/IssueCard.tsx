@@ -7,6 +7,7 @@ import { createHtml5BoardDragPayload } from '../board/utils';
 import { BugSlaBadge } from './BugSlaBadge';
 import { PriorityIcon } from './Primitives';
 import { StatusIcon } from './StatusIcon';
+import { severityLabel } from '../board/severity';
 
 const PRIORITY_NAMES: Record<number, string> = { 1: 'Urgent', 2: 'High', 3: 'Medium', 4: 'Low' };
 
@@ -180,6 +181,15 @@ export function IssueCard({
             {issue.identifier}
           </span>
           <div className="issue-card__header-tags">
+            {issue.severity ? (
+              <span
+                className={`issue-card__severity issue-card__severity--${issue.severity.toLowerCase()}`}
+                title={`Severity: ${severityLabel(issue.severity)}`}
+                data-testid={`issue-severity-${issue.id}`}
+              >
+                {issue.severity}
+              </span>
+            ) : null}
             {openBlockers.length > 0 ? (
               <span
                 className="issue-card__blocked-badge"

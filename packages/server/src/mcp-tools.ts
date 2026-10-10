@@ -67,6 +67,7 @@ import { attachEvidence, reportRun } from './run-service.js';
 import { hasFixedBugEvidence, recordFixedBugRun, validateFixedBugEvidence } from './bug-report.js';
 import { uncommitWork } from './work-uncommit.js';
 import { writeActorFromViewer } from './work-service.js';
+import { parseSeverity, SEVERITIES } from './severity.js';
 
 export type McpToolName =
   | 'work_search'
@@ -158,6 +159,13 @@ const MCP_DONE_CANCEL_FORBIDDEN_TEXT =
 async function assertMcpDoneIsResearch(prisma: PrismaClient, workId: string): Promise<void> {
   if (!(await isResearchWork(prisma, workId))) throw createValidationError(MCP_DONE_CANCEL_FORBIDDEN_TEXT);
 }
+
+/** Severity on the write tools; the same three values as GraphQL IssueSeverity (INV-1115). */
+const SEVERITY_PROPERTY = {
+  type: 'string',
+  enum: [...SEVERITIES],
+  description: "Impact, separate from priority (which orders work and sets a bug's SLA): SEV1 Critical — outage, data loss or security exposure, no workaround; SEV2 Major — a core flow broken or degraded for many, painful workaround; SEV3 Minor — limited impact, a workaround exists. Unsure: pick the higher one. Optional (INV-1115).",
+};
 
 const RECEIPT_SCHEMA = {
   type: 'object',
@@ -434,6 +442,7 @@ async function callMcpAction(
       assignOptional(proposeInput, 'labels', stringList(args.labels));
       assignOptional(proposeInput, 'priority', optionalNumber(args.priority));
       assignOptional(proposeInput, 'stepsToReproduce', optionalString(args.steps_to_reproduce));
+      assignOptional(proposeInput, 'severity', parseSeverity(args.severity));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
       assignOptional(proposeInput, 'verification', optionalString(args.verification));
       const kind = optionalString(args.kind);
@@ -498,6 +507,7 @@ async function callMcpAction(
       };
       assignOptional(proposeInput, 'verification', optionalString(args.verification));
       assignOptional(proposeInput, 'description', optionalString(args.description));
+      assignOptional(proposeInput, 'severity', parseSeverity(args.severity));
       assignOptional(proposeInput, 'parentId', optionalString(args.parent_id));
       assignOptional(proposeInput, 'relatedWorkId', optionalString(args.related_work_id));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
@@ -641,6 +651,8 @@ async function callMcpAction(
         updateInput.kind = kind as NonNullable<typeof updateInput.kind>;
       }
       assignOptional(updateInput, 'priority', optionalNumber(args.priority));
+      const severity = parseSeverity(args.severity);
+      if (severity !== undefined) updateInput.severity = severity;
       if (args.cascade_repository !== undefined) {
         updateInput.cascadeRepository = Boolean(args.cascade_repository);
       } else if (args.repository !== undefined) {
@@ -1115,6 +1127,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
           type: 'string',
           description: 'Bugs: how to reproduce it; appended to the description under "Steps to reproduce". Fixed on the spot? Also pass initial_state REVIEW.',
         },
+        severity: SEVERITY_PROPERTY,
         blocked_by: {
           type: 'array',
           items: { type: 'string' },
@@ -1156,6 +1169,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
           maximum: 4,
           description: 'Required. Sets the SLA: 1 Urgent 24h, 2 High 48h, 3 Medium 7 days, 4 Low 7 days.',
         },
+        severity: SEVERITY_PROPERTY,
         steps_to_reproduce: {
           type: 'string',
           description: 'Required. How to reproduce it.',
@@ -1298,6 +1312,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
           description: 'When updating repository, cascade the repository change to all CONTAINS descendants (default: true).',
         },
         priority: { type: 'integer' },
+        severity: { ...SEVERITY_PROPERTY, type: ['string', 'null'], enum: [...SEVERITIES, null], description: `${SEVERITY_PROPERTY.description} null clears it; a change is audited with the old value.` },
         state: {
           type: 'string',
           description: 'Optional target workflow state: UNSTARTED (Ready), STARTED (In Progress), or REVIEW (In Review). DONE only for a committed ISSUE with Type: Research and no other actor\'s claim (INV-912). Never CANCELED.',

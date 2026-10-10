@@ -20,7 +20,7 @@ export function looksLikeIql(query: string): boolean {
 /**
  * Client-side IQL evaluation for saved board/backlog views. Supports the
  * fields the web already has in hand (state, kind, commitment, assignee,
- * label, priority, updated, team, free text). `link:` and `has:` terms need
+ * label, priority, severity, updated, team, free text). `link:` and `has:` terms need
  * graph joins the client does not load, so they match nothing here; use the
  * API (`issues(query:)`) for full-fidelity filtering.
  */
@@ -99,6 +99,12 @@ function matchPositive(term: IqlTerm, issue: IssueSummary, viewerId: string | nu
         case 'lte': return issue.priority <= numeric;
       }
       return false;
+    }
+    case 'severity': {
+      // severity:sev1,sev2 / severity:none (INV-1115), as the server reads it.
+      const current = (issue.severity ?? 'none').toLowerCase();
+      const matched = values.some((value) => value.toLowerCase() === current);
+      return term.op === 'neq' ? !matched : matched;
     }
     case 'updated': {
       const ms = parseDurationMs(values[0] ?? '');
