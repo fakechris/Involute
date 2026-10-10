@@ -2095,3 +2095,54 @@ export const BUGS_FIXED_BETWEEN_QUERY = gql`
     }
   }
 `;
+
+/** The /incidents page (INV-1129). */
+export const INCIDENTS_PAGE_QUERY = gql`
+  query IncidentsPage($teamFilter: TeamFilter) {
+    incidentSummary(teamFilter: $teamFilter) {
+      openCount
+      resolvedCount
+      excludedCount
+      mttrHours
+      mttrSampleCount
+      mttmHours
+      mttmSampleCount
+      bySeverity {
+        severity
+        openCount
+        resolvedCount
+      }
+      byRepository {
+        repository
+        openCount
+        resolvedCount
+      }
+      followUps {
+        total
+        completed
+        declined
+        overdue
+        overdueOpen
+        completionRate
+      }
+      incidents {
+        id
+        identifier
+        title
+        severity
+        repository
+        stateName
+        impactStartedAt
+        resolvedAt
+        impactHours
+        ongoing
+        postmortemRequired
+        postmortemAttached
+        followUpTotal
+        followUpCompleted
+        followUpDeclined
+        followUpOverdueOpen
+      }
+    }
+  }
+`;

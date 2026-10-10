@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon, IcoCheck, IcoGraph, IcoFilter, IcoBug, IcoHistory, IcoKeyboard } from './components/Icons';
+import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon, IcoCheck, IcoGraph, IcoFilter, IcoBug, IcoBell, IcoHistory, IcoKeyboard } from './components/Icons';
 import { CommandPalette, type PaletteAction } from './app/CommandPalette';
 import { KeyboardShortcutsDialog } from './app/KeyboardShortcutsDialog';
 import { LegacyTeamRedirect } from './routes/LegacyTeamRedirect';
@@ -87,6 +87,7 @@ const CyclesPage = lazyRoute(async () => (await import('./routes/CyclesPage')).C
 const CandidatesPage = lazyRoute(async () => (await import('./routes/CandidatesPage')).CandidatesPage);
 const InReviewPage = lazyRoute(async () => (await import('./routes/InReviewPage')).InReviewPage);
 const BugsPage = lazyRoute(async () => (await import('./routes/BugsPage')).BugsPage);
+const IncidentsPage = lazyRoute(async () => (await import('./routes/IncidentsPage')).IncidentsPage);
 const HygienePage = lazyRoute(async () => (await import('./routes/HygienePage')).HygienePage);
 const OpsPage = lazyRoute(async () => (await import('./routes/OpsPage')).OpsPage);
 const GraphPage = lazyRoute(async () => (await import('./routes/GraphPage')).GraphPage);
@@ -980,6 +981,10 @@ export function App() {
               <span className="app-shell__link-label">Bugs</span>
               <kbd className="app-shell__link-kbd" aria-hidden="true">G U</kbd>
             </NavLink>
+            <NavLink to="/incidents" className={getNavLinkClassName} title="Go to Incidents">
+              <span className="app-shell__nav-icon"><IcoBell size={14} /></span>
+              <span className="app-shell__link-label">Incidents</span>
+            </NavLink>
             <NavLink to="/graph" className={getNavLinkClassName} title="Go to Graph · G R">
               <span className="app-shell__nav-icon"><IcoGraph size={14} /></span>
               <span className="app-shell__link-label">Graph</span>
@@ -1357,6 +1362,7 @@ export function App() {
               <Route path="/candidates" element={<CandidatesPage />} />
               <Route path="/in-review" element={<InReviewPage />} />
               <Route path="/bugs" element={<BugsPage />} />
+              <Route path="/incidents" element={<IncidentsPage />} />
               <Route path="/graph" element={<GraphPage />} />
               <Route path="/search" element={<SearchPage />} />
               <Route path="/hygiene" element={<HygienePage />} />
