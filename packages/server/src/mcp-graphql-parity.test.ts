@@ -40,7 +40,7 @@ function missingInGraphQL(tool: McpToolDefinition, mutations: Fields): string[] 
   });
 }
 
-type JsonSchemaProperty = { type?: string | string[]; enum?: string[]; items?: { type?: string } };
+type JsonSchemaProperty = { type?: string | string[]; enum?: Array<string | null>; items?: { type?: string } };
 
 // The schema's graphql module may be another instance than this file's, so
 // types are read structurally (ofType, name, getValues) rather than with
@@ -80,7 +80,8 @@ function typeMismatch(property: JsonSchemaProperty, graphqlType: GqlType): strin
   if (typeof named.getValues === 'function') {
     if (property.enum) {
       const values = named.getValues().map((value) => value.name).sort();
-      const ours = [...property.enum].sort();
+      // A nullable enum lists null too (so strict clients accept clearing it); GraphQL says that with a nullable type.
+      const ours = property.enum.filter((value): value is string => value !== null).sort();
       if (values.join() !== ours.join()) return `enum {${ours.join('|')}} vs ${named.name} {${values.join('|')}}`;
     } else if (json !== 'string') return `${json} vs enum ${named.name}`;
     return null;

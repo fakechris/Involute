@@ -2,7 +2,8 @@ import { executorContext, executorUpdate, type ExecutorInput } from './executor-
 import type { SavedView } from '@prisma/client';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
 import { storeUpload } from './uploads.js';
-import type { WorkRun } from '@prisma/client';
+import type { IssueSeverity, WorkRun } from '@prisma/client';
+import { SEVERITIES } from './severity.js';
 import { runPresence } from './run-staleness.js';
 import { visibleDeliveryChange } from './delivery-visibility.js';
 import { deliveryContext, pendingDeliveryChanges } from './delivery-context.js';
@@ -255,6 +256,7 @@ interface BugSummaryResultShape {
   openCount: number;
   closedCount: number;
   byPriority: Array<{ priority: number; count: number }>;
+  bySeverity: Array<{ severity: IssueSeverity | null; count: number }>;
   byRepository: Array<{ repository: string | null; openCount: number; closedCount: number }>;
   byTypeLabel: Array<{ label: string; count: number }>;
   unclaimedOpenCount: number;
@@ -613,6 +615,13 @@ const typeDefs = /* GraphQL */ `
     "When it runs out if nothing changes; null while paused or closed."
     dueAt: String
     startedAt: String!
+  }
+
+  "Impact, apart from priority (INV-1115): SEV1 Critical, SEV2 Major, SEV3 Minor. Definitions in docs/severity.md."
+  enum IssueSeverity {
+    SEV1
+    SEV2
+    SEV3
   }
 
   enum BugSlaStatus {
@@ -1021,6 +1030,8 @@ const typeDefs = /* GraphQL */ `
     title: String!
     description: String
     priority: Int!
+    "How bad the effect is; null when not judged. Independent of priority and the SLA (INV-1115)."
+    severity: IssueSeverity
     createdAt: DateTime!
     updatedAt: DateTime!
     state: WorkflowState!
@@ -1846,6 +1857,8 @@ const typeDefs = /* GraphQL */ `
     stepsToReproduce: String
     "Required, 1 (Urgent) to 4 (Low)."
     priority: Int
+    "Optional impact (INV-1115); the SLA still follows priority."
+    severity: IssueSeverity
     "Where it belongs (id or identifier: its PROJECT for No milestone, a MILESTONE, EPIC or ISSUE). Omit when unsure: the report goes to triage as a candidate."
     parentId: String
     repository: String
@@ -1861,6 +1874,12 @@ const typeDefs = /* GraphQL */ `
 
   type BugPriorityCount {
     priority: Int!
+    count: Int!
+  }
+
+  type BugSeverityCount {
+    "null counts open bugs nobody has judged yet."
+    severity: IssueSeverity
     count: Int!
   }
 
@@ -1884,6 +1903,8 @@ const typeDefs = /* GraphQL */ `
     openCount: Int!
     closedCount: Int!
     byPriority: [BugPriorityCount!]!
+    "Open bugs by severity, SEV1 first, unjudged last (INV-1115)."
+    bySeverity: [BugSeverityCount!]!
     byRepository: [BugRepositoryCount!]!
     byTypeLabel: [BugTypeLabelCount!]!
     unclaimedOpenCount: Int!
@@ -1960,6 +1981,8 @@ const typeDefs = /* GraphQL */ `
     description: String
     assigneeId: String
     priority: Int
+    "SEV1–SEV3; null clears it. Audited like any field; never changes the SLA (INV-1115)."
+    severity: IssueSeverity
     projectId: String
     cycleId: String
     snoozedUntil: DateTime
@@ -2197,6 +2220,8 @@ const typeDefs = /* GraphQL */ `
     priority: Int
     """Steps to reproduce a bug; appended to the description."""
     stepsToReproduce: String
+    """Optional impact, SEV1–SEV3, apart from priority (INV-1115)."""
+    severity: IssueSeverity
     """Existing work this proposal is blocked by (each X BLOCKS the new item)."""
     blockedBy: [String!]
     """Existing work this proposal blocks."""
@@ -2814,6 +2839,7 @@ const resolvers = {
           openCount: 0,
           closedCount: 0,
           byPriority: [],
+          bySeverity: [],
           byRepository: [],
           byTypeLabel: [],
           unclaimedOpenCount: 0,
@@ -2847,6 +2873,7 @@ const resolvers = {
           select: {
             createdAt: true,
             priority: true,
+            severity: true,
             repository: true,
             labels: { select: { id: true, name: true } },
             claim: { select: { leaseUntil: true } },
@@ -2864,6 +2891,7 @@ const resolvers = {
       ]);
 
       const priorityCounts = new Map<number, number>();
+      const severityCounts = new Map<IssueSeverity | null, number>();
       const repoOpenCounts = new Map<string | null, number>();
       const typeLabelCounts = new Map<string, number>();
       let unclaimedOpenCount = 0;
@@ -2872,6 +2900,7 @@ const resolvers = {
 
       for (const bug of openBugs) {
         priorityCounts.set(bug.priority, (priorityCounts.get(bug.priority) ?? 0) + 1);
+        severityCounts.set(bug.severity, (severityCounts.get(bug.severity) ?? 0) + 1);
         repoOpenCounts.set(bug.repository, (repoOpenCounts.get(bug.repository) ?? 0) + 1);
         for (const label of bug.labels) {
           if (label.id === bugLabel.id) {
@@ -2895,6 +2924,10 @@ const resolvers = {
             (a.priority === 0 ? Number.MAX_SAFE_INTEGER : a.priority) -
             (b.priority === 0 ? Number.MAX_SAFE_INTEGER : b.priority),
         );
+
+      const bySeverity = [...SEVERITIES, null]
+        .filter((severity) => severityCounts.has(severity))
+        .map((severity) => ({ severity, count: severityCounts.get(severity)! }));
 
       const repoClosedCounts = new Map<string | null, number>(
         closedRepoGroups.map((group) => [group.repository, group._count._all]),
@@ -2932,6 +2965,7 @@ const resolvers = {
         openCount,
         closedCount,
         byPriority,
+        bySeverity,
         byRepository,
         byTypeLabel,
         unclaimedOpenCount,

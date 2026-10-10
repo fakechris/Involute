@@ -3,6 +3,7 @@ import { useQuery } from '@apollo/client/react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { BUGS_PAGE_QUERY } from '../board/queries';
+import { severityLabel } from '../board/severity';
 import type { BugMetricsData, BugsPageQueryData, BugsPageQueryVariables } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 import { IcoBug } from '../components/Icons';
@@ -162,6 +163,30 @@ export function BugsPage() {
                   </table>
                 )}
               </section>
+
+              <section className="bugs-panel" aria-label="Open bugs by severity">
+                <h2 className="bugs-panel__title">Open by severity</h2>
+                {(summary.bySeverity ?? []).length === 0 ? (
+                  <p className="bugs-panel__empty">No open bugs.</p>
+                ) : (
+                  <table className="bugs-table">
+                    <thead>
+                      <tr>
+                        <th>Severity</th>
+                        <th>Open</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(summary.bySeverity ?? []).map((row) => (
+                        <tr key={row.severity ?? '__none__'}>
+                          <td>{row.severity ? severityLabel(row.severity) : 'Not judged'}</td>
+                          <td>{row.count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </section>
             </div>
 
             <section className="bugs-panel" aria-label="Bug creation trend">
@@ -199,6 +224,7 @@ export function BugsPage() {
                       <PriorityIcon level={issue.priority} size={12} />
                       <span className="mono bugs-list__identifier">{issue.identifier}</span>
                       <span className="bugs-list__title">{issue.title}</span>
+                      {issue.severity ? <span className="bugs-list__meta mono" title={severityLabel(issue.severity)}>{issue.severity}</span> : null}
                       <span className="bugs-list__meta">{issue.state.name}</span>
                       <span className="bugs-list__meta mono">{issue.repository ?? 'No project'}</span>
                     </button>
