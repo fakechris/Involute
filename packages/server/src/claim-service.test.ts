@@ -510,7 +510,7 @@ describe('claim service', () => {
       rejectWork(
         prisma,
         candidate.id,
-        { expectedRevision: candidate.revision, reason: 'duplicate of existing work' },
+        { expectedRevision: candidate.revision, resolution: 'DUPLICATE', reason: 'duplicate of existing work' },
         { actorId: agent.id, actorKind: 'AGENT', surface: 'codex' },
       ),
     ).rejects.toThrow(WORK_REJECT_FORBIDDEN_MESSAGE);
@@ -518,7 +518,7 @@ describe('claim service', () => {
     const rejected = await rejectWork(
       prisma,
       candidate.id,
-      { expectedRevision: candidate.revision, reason: 'duplicate of existing work' },
+      { expectedRevision: candidate.revision, resolution: 'DUPLICATE', reason: 'duplicate of existing work' },
       { actorId: human.id, actorKind: 'HUMAN', surface: 'web' },
     );
 

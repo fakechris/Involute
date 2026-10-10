@@ -1,3 +1,4 @@
+import { RESOLUTION_OPTIONS } from '../components/CloseReasonDialog';
 import { useMemo } from 'react';
 import { useQuery } from '@apollo/client/react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -320,7 +321,57 @@ function BugTriageMetrics({ metrics, onOpen }: { metrics: BugMetricsData; onOpen
             </table>
           )}
         </section>
+        <BugResolutions metrics={metrics} />
       </div>
     </>
+  );
+}
+
+const SOURCES: Array<BugMetricsData['bySource'][number]['source']> = ['HUMAN_REPORT', 'AGENT', 'OTHER'];
+const FALSE_REPORT: ReadonlySet<string> = new Set(['INVALID', 'CANNOT_REPRODUCE']);
+
+/**
+ * Why bugs were closed without a fix, by who reported them (INV-1118). The
+ * false-report rate — invalid or cannot reproduce, over all bugs from that
+ * source — shows which reporter files noise.
+ */
+function BugResolutions({ metrics }: { metrics: BugMetricsData }) {
+  const rows = metrics.byResolution ?? [];
+  const resolutions = RESOLUTION_OPTIONS.filter((option) => rows.some((row) => row.resolution === option.value));
+  const count = (resolution: string, source: string) => rows.find((row) => row.resolution === resolution && row.source === source)?.count ?? 0;
+  const falseRate = (source: string) => {
+    const total = metrics.bySource.find((entry) => entry.source === source)?.count ?? 0;
+    if (!total) return '—';
+    const noise = rows.filter((row) => row.source === source && FALSE_REPORT.has(row.resolution)).reduce((sum, row) => sum + row.count, 0);
+    return `${Math.round((noise / total) * 100)}%`;
+  };
+  return (
+    <section className="bugs-panel" aria-label="Bugs closed without a fix">
+      <h2 className="bugs-panel__title">Closed without a fix</h2>
+      {resolutions.length === 0 ? (
+        <p className="bugs-panel__empty">No bug has been declined or canceled yet.</p>
+      ) : (
+        <table className="bugs-table">
+          <thead>
+            <tr>
+              <th>Resolution</th>
+              {SOURCES.map((source) => <th key={source}>{SOURCE_LABEL[source]}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {resolutions.map((option) => (
+              <tr key={option.value}>
+                <td>{option.label}</td>
+                {SOURCES.map((source) => <td key={source} className="mono">{count(option.value, source)}</td>)}
+              </tr>
+            ))}
+            <tr>
+              <td>False-report rate</td>
+              {SOURCES.map((source) => <td key={source} className="mono">{falseRate(source)}</td>)}
+            </tr>
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }

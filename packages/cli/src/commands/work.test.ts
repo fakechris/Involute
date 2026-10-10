@@ -243,6 +243,8 @@ describe('work CLI commands', () => {
         'work',
         'reject',
         proposed.identifier,
+        '--resolution',
+        'wont_do',
         '--reason',
         'not a delivery contract',
         '--json',

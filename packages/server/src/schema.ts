@@ -1,6 +1,7 @@
 import { executorContext, executorUpdate, type ExecutorInput } from './executor-service.js';
 import type { SavedView } from '@prisma/client';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
+import { starTimelineEntry, unstarTimelineEntry, workTimelineFor, type TimelineEntry } from './work-activity-timeline.js';
 import { storeUpload } from './uploads.js';
 import type { IssueSeverity, WorkRun } from '@prisma/client';
 import { SEVERITIES } from './severity.js';
@@ -375,12 +376,16 @@ const typeDefs = /* GraphQL */ `
   type IssueSearchHit {
     issue: Issue!
     score: Float!
-    "identifier, title, contract, description or comment: the strongest field a word was found in."
+    "identifier, title, contract, description, comment, attachment, run or semantic: the strongest field a word was found in."
     matchedField: String!
     "Text around the first match outside the title."
     snippet: String
     "The comment the snippet came from, when it came from one."
     commentId: String
+    "The attachment the snippet came from, when it came from one (INV-1117)."
+    attachmentId: String
+    "That attachment's file name."
+    attachmentFilename: String
   }
 
   type DeliveryGrant { revision: Int! policyJson: String! approvedAt: DateTime! approvedById: String! revokedAt: DateTime }
@@ -436,6 +441,11 @@ const typeDefs = /* GraphQL */ `
     attentionSummary(teamKey: String): AttentionSummary!
     "Saved board/backlog views the viewer may use in this team: their own and the team's shared ones (INV-1005)."
     savedViews(teamKey: String!): [SavedView!]!
+    """
+    The issue timeline (INV-1116): audit changes, runs, evidence and comments in time
+    order with their actors, and which entries are starred as key events.
+    """
+    issueTimeline(issueId: String!, starredOnly: Boolean): IssueTimeline!
     candidateSummary(teamFilter: TeamFilter): CandidateSummary!
     projectSummary(teamFilter: TeamFilter): ProjectSummaryResult!
     bugSummary(teamFilter: TeamFilter): BugSummaryResult!
@@ -554,6 +564,10 @@ const typeDefs = /* GraphQL */ `
     savedViewUpsert(input: SavedViewInput!): SavedViewPayload!
     "Delete one of your saved views, or a shared one as a team owner (INV-1005)."
     savedViewDelete(id: ID!): SavedViewDeletePayload!
+    "Star a timeline entry as a key event (INV-1116). Needs write access to the work."
+    issueTimelineStar(input: IssueTimelineStarInput!): IssueTimelineStarPayload!
+    "Remove a timeline star; the record of who starred and unstarred it stays (INV-1116)."
+    issueTimelineUnstar(input: IssueTimelineStarInput!): IssueTimelineStarPayload!
     webhookUpdate(id: String!, input: WebhookUpdateInput!): WebhookMutationPayload!
     webhookDelete(id: String!): WebhookMutationPayload!
     webhookRotateSecret(id: String!): WebhookMutationPayload!
@@ -903,6 +917,16 @@ const typeDefs = /* GraphQL */ `
     REJECTED
   }
 
+  "Why work was closed without being done (INV-1118)."
+  enum WorkResolution {
+    COMPLETED
+    WONT_DO
+    INVALID
+    DUPLICATE
+    CANNOT_REPRODUCE
+    OBSOLETE
+  }
+
   enum WorkLinkType {
     CONTAINS
     BLOCKS
@@ -1057,6 +1081,8 @@ const typeDefs = /* GraphQL */ `
     repository: String
     alias: String
     autoAcceptBugs: Boolean!
+    "Why a rejected candidate or canceled work was closed; null while open (INV-1118)."
+    resolution: WorkResolution
     "Latest automatic-acceptance evaluation of this work, if any (INV-1075)."
     autoAccept: AutoAcceptEvaluation
     links(type: WorkLinkType): WorkLinkConnection!
@@ -1200,6 +1226,55 @@ const typeDefs = /* GraphQL */ `
     transitions: [WorkStateTransition!]!
     """FULL when auditing covers the whole life; PARTIAL when it began later; NONE when there is no trail."""
     history: WorkHistoryCompleteness!
+  }
+
+  type IssueTimeline {
+    workId: ID!
+    identifier: String!
+    entries: [IssueTimelineEntry!]!
+    "True when a source had more rows than the timeline reads."
+    truncated: Boolean!
+  }
+
+  type IssueTimelineEntry {
+    "Stable reference used to star it: audit:<id>, run:<id>:started, run:<id>:ended, evidence:<id>, evidence:<id>:retracted, comment:<id>."
+    key: String!
+    "CREATED, STATE, COMMITMENT, ASSIGNEE, PRIORITY, PARENT, FIELDS, RUN_STARTED, RUN_ENDED, EVIDENCE, EVIDENCE_RETRACTED or COMMENT."
+    kind: String!
+    at: DateTime!
+    actor: User
+    actorKind: ActorKind
+    summary: String!
+    detail: String
+    url: String
+    changes: [IssueTimelineChange!]!
+    revision: Int
+    sourceId: String!
+    starred: Boolean!
+    starredAt: DateTime
+    starredBy: User
+  }
+
+  type IssueTimelineChange {
+    field: String!
+    from: String
+    to: String
+  }
+
+  input IssueTimelineStarInput {
+    "Work id or identifier."
+    issueId: String!
+    entryKey: String!
+  }
+
+  type IssueTimelineStarPayload {
+    success: Boolean!
+    message: String
+    issueId: String
+    entryKey: String
+    starred: Boolean
+    starredAt: DateTime
+    starredBy: User
   }
 
   type SavedView {
@@ -1935,6 +2010,8 @@ const typeDefs = /* GraphQL */ `
     atRiskOpenCount: Int!
     breachedOpen: [BugBreach!]!
     bySource: [BugSourceCount!]!
+    "Rejected or canceled bugs by resolution and reporter (INV-1118)."
+    byResolution: [BugResolutionCount!]!
     "Committed open bugs no parent contains; the goal is zero."
     unplacedOpenCount: Int!
   }
@@ -1953,6 +2030,12 @@ const typeDefs = /* GraphQL */ `
   }
 
   type BugSourceCount {
+    source: BugSource!
+    count: Int!
+  }
+
+  type BugResolutionCount {
+    resolution: WorkResolution!
     source: BugSource!
     count: Int!
   }
@@ -1996,6 +2079,10 @@ const typeDefs = /* GraphQL */ `
     alias: String
     "On a PROJECT: accept bugs whose fix GitHub confirms (merged, checks green). People only (INV-1075)."
     autoAcceptBugs: Boolean
+    "Required when moving work to a Canceled state (INV-1118)."
+    resolution: WorkResolution
+    "Why, recorded on the audit; required to cancel a bug."
+    reason: String
     repository: String
     cascadeRepository: Boolean
     # Contract fields. Humans may rewrite them on committed work; agents are
@@ -2262,6 +2349,9 @@ const typeDefs = /* GraphQL */ `
 
   input WorkRejectInput {
     expectedRevision: Int!
+    "Required; refused with a message when missing (INV-1118)."
+    resolution: WorkResolution
+    "Free text; required to decline a bug."
     reason: String
     idempotencyKey: String
   }
@@ -3012,6 +3102,10 @@ const resolvers = {
     },
     savedViews: async (_parent: unknown, args: { teamKey: string }, context: GraphQLContext) =>
       (await listSavedViews(context, args.teamKey)).map(savedViewRecord),
+    issueTimeline: async (_parent: unknown, args: { issueId: string; starredOnly?: boolean | null }, context: GraphQLContext) => {
+      const timeline = await workTimelineFor(context, args.issueId, { starredOnly: args.starredOnly === true });
+      return { ...timeline, entries: timeline.entries.map(timelineEntryRecord) };
+    },
     attention: async (
       _parent: unknown,
       args: { first?: number | null; after?: string | null; kinds?: AttentionKind[] | null; teamKey?: string | null },
@@ -4708,6 +4802,16 @@ const resolvers = {
         const view = await upsertSavedView(context, { ...args.input, state });
         return { success: true as const, view: savedViewRecord(view) };
       }, { success: false as const, view: null }),
+    issueTimelineStar: async (_parent: unknown, args: { input: { issueId: string; entryKey: string } }, context: GraphQLContext) =>
+      runMutation(async () => {
+        const result = await starTimelineEntry(context, args.input.issueId, args.input.entryKey);
+        return { success: true as const, issueId: result.workId, entryKey: result.entryKey, starred: true, starredAt: result.star.starredAt, starredBy: result.star.starredBy };
+      }, { success: false as const }),
+    issueTimelineUnstar: async (_parent: unknown, args: { input: { issueId: string; entryKey: string } }, context: GraphQLContext) =>
+      runMutation(async () => {
+        const result = await unstarTimelineEntry(context, args.input.issueId, args.input.entryKey);
+        return { success: true as const, issueId: result.workId, entryKey: result.entryKey, starred: false, starredAt: null, starredBy: null };
+      }, { success: false as const }),
     savedViewDelete: async (_parent: unknown, args: { id: string }, context: GraphQLContext) =>
       runMutation(async () => ({ success: true as const, id: (await deleteSavedView(context, args.id)) ? args.id : null }), { success: false as const, id: null }),
     fileUpload: async (
@@ -5418,6 +5522,12 @@ const resolvers = {
     },
   },
 };
+
+/** GraphQL shape of a timeline entry: the star is flattened onto the entry. */
+function timelineEntryRecord(entry: TimelineEntry) {
+  const { star, ...rest } = entry;
+  return { ...rest, starred: star !== null, starredAt: star?.starredAt ?? null, starredBy: star?.starredBy ?? null };
+}
 
 /** GraphQL shape of a saved view: the state travels as JSON text. */
 function savedViewRecord(view: SavedView) {

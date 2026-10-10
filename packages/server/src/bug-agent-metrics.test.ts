@@ -86,7 +86,7 @@ describe('agent-filed bugs and bug metrics (INV-751 / INV-787)', () => {
     const declined = await reportBug(prisma, { teamId: team.id, title: 'Human declined', priority: 3, stepsToReproduce: 'x' }, asHuman());
     await prisma.workAudit.updateMany({ where: { workId: { in: [triaged.id, declined.id] } }, data: { createdAt: new Date(Date.now() - 10 * HOUR) } });
     await commitWork(prisma, triaged.id, { expectedRevision: 1, assigneeId: admin.id, acceptance: 'fixed', parentId: projectId }, asHuman());
-    await rejectWork(prisma, declined.id, { expectedRevision: 1, reason: 'Not a bug' }, asHuman());
+    await rejectWork(prisma, declined.id, { expectedRevision: 1, resolution: 'WONT_DO', reason: 'Not a bug' }, asHuman());
 
     // Close the agent bug in time; leave an unplaced committed bug open.
     const done = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'COMPLETED' } });

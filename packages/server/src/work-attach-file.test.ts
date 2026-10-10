@@ -86,6 +86,39 @@ describe('work_attach_file (INV-1003)', () => {
     expect((await fetch(`${server.url}${result.url}`)).status).toBe(401);
   });
 
+  // INV-1117: the report's text is searchable through work_search, for readers of the work only.
+  it('makes an attached markdown report findable by work_search with its file name and a snippet, until it is deleted', async () => {
+    const parentId = await testParentId(prisma, team.id);
+    const work = await prisma.issue.findUniqueOrThrow({ where: { id: parentId } });
+    const report = '# Postmortem\n\nThe zephyrquartz volume was pruned by mistake.';
+    const attached = await mcp('work_attach_file', { work_id: work.identifier, filename: 'postmortem.md', mime_type: 'text/markdown', content: Buffer.from(report).toString('base64') });
+    await mcp('work_attach_file', { work_id: work.identifier, filename: 'zephyrquartz.png', mime_type: 'image/png', content: Buffer.from('zephyrquartz').toString('base64') });
+
+    const found = await mcp('work_search', { query: 'zephyrquartz' });
+    const hits = (Array.isArray(found) ? found : found.nodes) as Array<{ identifier: string; match?: { field: string; snippet: string; attachmentId: string; filename: string } }>;
+    expect(hits.map((hit) => hit.identifier)).toEqual([work.identifier]);
+    expect(hits[0]!.match).toMatchObject({ field: 'attachment', filename: 'postmortem.md', attachmentId: attached.id });
+    expect(hits[0]!.match!.snippet).toContain('zephyrquartz');
+
+    // An agent that cannot read the work does not find it.
+    const other = await prisma.team.create({ data: { key: 'OTH', name: 'Other' } });
+    const stranger = await prisma.user.create({ data: { name: 'Stranger', email: 'stranger@agents.local', actorKind: 'AGENT', ownerId: human.id } });
+    await prisma.teamMembership.create({ data: { role: 'EDITOR', teamId: other.id, userId: stranger.id } });
+    await prisma.agentCredential.create({ data: { name: 'stranger', scopes: ['read'], tokenHash: hashAgentToken('inv_agent_stranger_test'), teamId: other.id, userId: stranger.id } });
+    const strangerSearch = await fetch(`${server.url}/mcp`, {
+      method: 'POST',
+      headers: { accept: 'application/json', 'content-type': 'application/json', authorization: 'Bearer inv_agent_stranger_test' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'work_search', arguments: { query: 'zephyrquartz' } } }),
+    });
+    const strangerBody = await strangerSearch.json() as { result: { content: Array<{ text: string }> } };
+    const strangerResult = JSON.parse(strangerBody.result.content[0]!.text);
+    expect(Array.isArray(strangerResult) ? strangerResult : strangerResult.nodes).toEqual([]);
+
+    await prisma.attachment.delete({ where: { id: attached.id } });
+    const afterDelete = await mcp('work_search', { query: 'zephyrquartz' });
+    expect(Array.isArray(afterDelete) ? afterDelete : afterDelete.nodes).toEqual([]);
+  });
+
   it('refuses a file on work the actor cannot write and a file over the size cap', async () => {
     const outsider = await mcp('work_attach_file', { work_id: 'INV-999999', filename: 'x.md', mime_type: 'text/markdown', content: 'eA==' });
     expect(outsider.error).toBeTruthy();

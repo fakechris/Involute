@@ -1,9 +1,11 @@
 import { reserveWorkIdempotency, hashIdempotencyRequest, completeWorkIdempotency } from './idempotency.js';
-import type { Comment, Issue, IssueSeverity, Prisma, PrismaClient, WorkflowState } from '@prisma/client';
+import type { Comment, Issue, IssueSeverity, Prisma, PrismaClient, WorkflowState, WorkflowStateType, WorkResolution } from '@prisma/client';
 
 import {
   ASSIGNEE_NOT_FOUND_MESSAGE,
   BUG_NO_BACKLOG_MESSAGE,
+  WORK_CANCEL_RESOLUTION_REQUIRED_MESSAGE,
+  WORK_RESOLUTION_NOT_CLOSING_MESSAGE,
   COMMENT_NOT_FOUND_MESSAGE,
   COMMENT_PARENT_ISSUE_MISMATCH_MESSAGE,
   createNotFoundError,
@@ -44,6 +46,7 @@ export const AUTO_ACCEPT_BUGS_HUMAN_ONLY_MESSAGE = 'Only a person can turn autom
 export const AUTO_ACCEPT_BUGS_PROJECT_ONLY_MESSAGE = 'Automatic acceptance of verified bug fixes is set on a PROJECT.';
 import { writeWorkTombstone } from './work-tombstone.js';
 import { assertSingleType, isBugWork, isResearchWork } from './labels.js';
+import { assertBugCloseReason, enqueueWorkCanceledEvent, parseWorkResolution } from './work-resolution.js';
 import { assertAgentMayCloseResearch, RESEARCH_CLOSE_REASON } from './research-closure.js';
 import {
   INTERNAL_WRITE_ACTOR,
@@ -95,7 +98,11 @@ export interface UpdateIssueInput {
   parentId?: string | null;
   priority?: number | null;
   projectId?: string | null;
+  /** Why the change was made; recorded on the audit row. Required to cancel a bug (INV-1118). */
+  reason?: string | null;
   repository?: string | null;
+  /** Why work is closed, when moving it to a CANCELED state (INV-1118). */
+  resolution?: string | null;
   scope?: string | null;
   /** SEV1–SEV3; null clears it. Never changes the SLA, which follows priority (INV-1115). */
   severity?: IssueSeverity | string | null;
@@ -317,6 +324,12 @@ export async function updateIssue(
     // An agent closing committed research (INV-912) is the one non-human Done.
     let researchClosedByAgent = false;
 
+    const closeResolution = parseWorkResolution(input.resolution);
+    const closeReason = input.reason?.trim() || null;
+    // Set when this update moves the work into a CANCELED state.
+    let canceledWith: WorkResolution | null = null;
+    let nextStateType: WorkflowStateType | null = null;
+
     if ('stateId' in input && input.stateId) {
       const state = await transaction.workflowState.findUnique({
         where: {
@@ -363,6 +376,17 @@ export async function updateIssue(
         acceptedByPerson = current?.type !== 'COMPLETED';
       }
 
+      // Closing without doing it says why (INV-1118): a resolution, and a reason for a bug.
+      if (state.type === 'CANCELED' && state.id !== existingIssue.stateId) {
+        const current = await transaction.workflowState.findUnique({ where: { id: existingIssue.stateId }, select: { type: true } });
+        if (current?.type !== 'CANCELED') {
+          if (!closeResolution) throw createValidationError(WORK_CANCEL_RESOLUTION_REQUIRED_MESSAGE);
+          assertBugCloseReason(await isBugWork(transaction, existingIssue.id), closeReason);
+          canceledWith = closeResolution;
+        }
+      }
+      nextStateType = state.type;
+
       // Zero-bug (INV-750): a committed bug is fixed or declined, never parked.
       if (
         state.type === 'BACKLOG' &&
@@ -378,6 +402,20 @@ export async function updateIssue(
           id: state.id,
         },
       };
+    }
+
+    // The resolution belongs to a canceled item: set on the way in, kept while
+    // it stays canceled (it may be corrected), cleared when it is reopened.
+    if (closeResolution || nextStateType) {
+      const finalStateType = nextStateType ?? (await transaction.workflowState.findUnique({ where: { id: existingIssue.stateId }, select: { type: true } }))?.type;
+      if (finalStateType === 'CANCELED') {
+        if (closeResolution && closeResolution !== existingIssue.resolution) data.resolution = closeResolution;
+      } else if (closeResolution) {
+        // A rejected candidate keeps its resolution; anything else is not closing.
+        throw createValidationError(WORK_RESOLUTION_NOT_CLOSING_MESSAGE);
+      } else if (existingIssue.resolution && existingIssue.commitmentStatus !== 'REJECTED') {
+        data.resolution = null;
+      }
     }
 
     if ('title' in input && input.title !== undefined && input.title !== null) {
@@ -632,7 +670,7 @@ export async function updateIssue(
     }
 
     await recordWorkAudit(transaction, {
-      actor: researchClosedByAgent ? { ...actor, reason: RESEARCH_CLOSE_REASON } : actor,
+      actor: researchClosedByAgent ? { ...actor, reason: RESEARCH_CLOSE_REASON } : closeReason ? { ...actor, reason: closeReason } : actor,
       after: selectIssueSnapshot(updated),
       before: selectIssueSnapshot(existingIssue),
       workId: id,
@@ -642,6 +680,9 @@ export async function updateIssue(
     }
     if (acceptedByPerson) {
       await recordStateChangeAcceptance(transaction, { before: existingIssue, after: updated, reviewerId: actor.actorId! });
+    }
+    if (canceledWith) {
+      await enqueueWorkCanceledEvent(transaction, { work: updated, before: existingIssue, actorId: actor.actorId, resolution: canceledWith, reason: closeReason });
     }
 
     return updated;

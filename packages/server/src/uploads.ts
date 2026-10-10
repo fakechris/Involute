@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import type { Attachment, Prisma, PrismaClient } from '@prisma/client';
 
+import { extractSearchableText } from './attachment-text.js';
 import { createValidationError, UPLOAD_TOO_LARGE_MESSAGE } from './errors.js';
 
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -21,7 +22,8 @@ export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
  * Stores one upload on disk and records it (INV-1003): used by the web
  * editor's fileUpload and by the agent's work_attach_file. Files never live in
  * git or an image — only here and in the Attachment row that governs who may
- * read them (uploader, admins, readers of the linked work).
+ * read them (uploader, admins, readers of the linked work). Text files also
+ * keep their text for search (INV-1117).
  */
 export async function storeUpload(
   prisma: PrismaClient | Prisma.TransactionClient,
@@ -38,7 +40,7 @@ export async function storeUpload(
   writeFileSync(filePath, buffer);
   try {
     return await prisma.attachment.create({
-      data: { filename: input.filename, mimeType: input.mimeType, size: buffer.length, url: `/uploads/${storedName}`, uploaderId: input.uploaderId, issueId: input.issueId ?? null, commentId: input.commentId ?? null },
+      data: { filename: input.filename, mimeType: input.mimeType, size: buffer.length, url: `/uploads/${storedName}`, uploaderId: input.uploaderId, issueId: input.issueId ?? null, commentId: input.commentId ?? null, textContent: extractSearchableText(input.filename, input.mimeType, buffer) },
     });
   } catch (error) {
     try { unlinkSync(filePath); } catch { /* the DB write already failed; do not mask it */ }

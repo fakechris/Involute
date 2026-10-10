@@ -29,7 +29,7 @@ describe('restoring rejected work to a candidate (INV-792)', () => {
   it('turns rejected work back into a candidate, audited with the reason', async () => {
     const project = await createIssue(prisma, { teamId: team.id, kind: 'PROJECT', title: 'acme/app', repository: 'acme/app' });
     const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Idea', parentId: project.id });
-    const rejected = await rejectWork(prisma, candidate.id, { expectedRevision: candidate.revision, reason: 'Not now' }, asHuman());
+    const rejected = await rejectWork(prisma, candidate.id, { expectedRevision: candidate.revision, resolution: 'WONT_DO', reason: 'Not now' }, asHuman());
     expect(rejected.commitmentStatus).toBe('REJECTED');
 
     const audit0 = await prisma.workAudit.findFirstOrThrow({
@@ -47,7 +47,7 @@ describe('restoring rejected work to a candidate (INV-792)', () => {
   it('is for people only, needs a reason, and only applies to rejected work', async () => {
     const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Idea' });
     await expect(restoreWork(prisma, { id: candidate.id, reason: 'x' }, asHuman())).rejects.toThrow(/Only rejected work/);
-    await rejectWork(prisma, candidate.id, { expectedRevision: candidate.revision, reason: 'no' }, asHuman());
+    await rejectWork(prisma, candidate.id, { expectedRevision: candidate.revision, resolution: 'WONT_DO', reason: 'no' }, asHuman());
     await expect(restoreWork(prisma, { id: candidate.id, reason: '  ' }, asHuman())).rejects.toThrow(/needs a reason/);
     await expect(
       restoreWork(prisma, { id: candidate.id, reason: 'x' }, { actorId: admin.id, actorKind: 'AGENT', surface: 'mcp' }),

@@ -60,6 +60,17 @@ enum CommitmentStatus {
   REJECTED
 }
 
+// INV-1118: why work was closed without being done — set when a candidate is
+// rejected or committed work moves to a CANCELED state; cleared on reopen.
+enum WorkResolution {
+  COMPLETED
+  WONT_DO
+  INVALID
+  DUPLICATE
+  CANNOT_REPRODUCE
+  OBSOLETE
+}
+
 enum WorkLinkType {
   CONTAINS
   BLOCKS
@@ -274,6 +285,8 @@ model User {
   agentRequestsClaimed  AgentRequest[] @relation("AgentRequestClaimant")
   pushSubscriptions    WebhookSubscription[] @relation("WebhookSubscriptionActor")
   savedViews           SavedView[]          @relation("SavedViewOwner")
+  timelineStars        WorkTimelineStar[]   @relation("WorkTimelineStarredBy")
+  timelineUnstars      WorkTimelineStar[]   @relation("WorkTimelineUnstarredBy")
 }
 
 model AgentCredential {
@@ -360,6 +373,8 @@ model Issue {
   // INV-1075: on a PROJECT, bugs whose fix GitHub confirms (merged, checks green)
   // are accepted by the Auto-Accept Gate. Off by default; only people turn it on.
   autoAcceptBugs    Boolean           @default(false)
+  // INV-1118: structured close reason; the free-text reason stays on WorkAudit.
+  resolution        WorkResolution?
   labels            IssueLabel[]
   comments          Comment[]
   embeddings        IssueEmbedding[]
@@ -372,6 +387,7 @@ model Issue {
   outgoingLinks     WorkLink[]        @relation("WorkLinkFrom")
   incomingLinks     WorkLink[]        @relation("WorkLinkTo")
   audits            WorkAudit[]
+  timelineStars     WorkTimelineStar[]
   bugSlaAlerts      BugSlaAlert[]
   claim             WorkClaim?
   idempotencyKeys   WorkIdempotency[]
@@ -659,10 +675,15 @@ model Attachment {
   uploaderId String   @db.Uuid
   uploader   User     @relation("Uploads", fields: [uploaderId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
+  // Text of a text upload, length-capped, for search; null for binaries (INV-1117).
+  textContent  String?
+  // Full-text vector over textContent, kept by a trigger (INV-1117).
+  searchVector Unsupported("tsvector")?
 
   @@index([issueId])
   @@index([commentId])
   @@index([uploaderId])
+  @@index([searchVector], map: "Attachment_searchVector_idx", type: Gin)
 }
 
 model LegacyLinearMapping {
@@ -728,6 +749,26 @@ model WorkTombstone {
   deletedAt   DateTime @default(now())
 
   @@index([teamId, deletedAt])
+}
+
+// A timeline entry marked as a key event (INV-1116). The entry itself is
+// projected from audits, runs, evidence and comments; this row only records
+// which one, who starred it and when. Unstarring keeps the row (who and when),
+// so starring is on record both ways; at most one active star per entry.
+model WorkTimelineStar {
+  id            String    @id @default(uuid()) @db.Uuid
+  workId        String    @db.Uuid
+  work          Issue     @relation(fields: [workId], references: [id], onDelete: Cascade)
+  // audit:<id> | run:<id>:started | run:<id>:ended | evidence:<id> | evidence:<id>:retracted | comment:<id>
+  entryKey      String
+  starredById   String    @db.Uuid
+  starredBy     User      @relation("WorkTimelineStarredBy", fields: [starredById], references: [id], onDelete: Restrict)
+  starredAt     DateTime  @default(now())
+  unstarredAt   DateTime?
+  unstarredById String?   @db.Uuid
+  unstarredBy   User?     @relation("WorkTimelineUnstarredBy", fields: [unstarredById], references: [id], onDelete: Restrict)
+
+  @@index([workId, entryKey])
 }
 
 model WorkAudit {

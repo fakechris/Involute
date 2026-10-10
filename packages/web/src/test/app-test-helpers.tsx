@@ -1,3 +1,4 @@
+import type { IssueTimelineQueryData } from '../components/IssueTimeline';
 import type { ComponentType, ReactNode } from 'react';
 import { cleanup, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -498,6 +499,8 @@ type QueryState = {
   graphData?: ProjectWorkGraphQueryData;
   graphProjectsData?: GraphProjectsQueryData;
   timelineData?: ProjectWorkTimelineQueryData;
+  /** The issue page's server timeline (INV-1116); empty when omitted. */
+  issueTimelineData?: IssueTimelineQueryData;
   hygieneData?: WorkHygieneQueryData;
   placementData?: PlacementOptionsQueryData;
   loading?: boolean;
@@ -604,6 +607,16 @@ export function renderApp(
         error: undefined,
         loading: false,
         refetch: queryState.refetch ?? vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    if (source.includes('query IssueTimeline')) {
+      const issueId = String(options?.variables?.issueId ?? '');
+      return {
+        data: queryState.issueTimelineData ?? { issueTimeline: { workId: issueId, truncated: false, entries: [] } },
+        error: undefined,
+        loading: false,
+        refetch: vi.fn().mockResolvedValue(undefined),
       };
     }
 
