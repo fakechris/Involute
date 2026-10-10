@@ -28,6 +28,9 @@ export interface WorkHygiene {
   /** Research in Review whose derived items are all committed: nothing left to wait for (INV-1001). */
   researchClosable: Issue[];
   researchClosableCount: number;
+  /** Research in Review or Done with no file attached: the report was never uploaded (INV-1128). */
+  researchWithoutAttachment: Issue[];
+  researchWithoutAttachmentCount: number;
   /** Incidents in Review or Done nothing derives from and that do not say "无可执行点" (INV-1126). */
   incidentsWithoutDownstream: Issue[];
   incidentsWithoutDownstreamCount: number;
@@ -45,6 +48,13 @@ function isResearch(issue: { labels: Array<{ name: string }> }): boolean {
 
 function isIncident(issue: { labels: Array<{ name: string }> }): boolean {
   return issue.labels.some((label) => label.name.toLowerCase() === INCIDENT_LABEL_NAME.toLowerCase());
+}
+
+/** The ids among `issues` that have at least one attachment. */
+async function attachedIds(prisma: DatabaseClient, issues: Issue[]): Promise<Set<string | null>> {
+  if (!issues.length) return new Set();
+  const rows = await prisma.attachment.findMany({ where: { issueId: { in: issues.map((issue) => issue.id) } }, select: { issueId: true }, distinct: ['issueId'] });
+  return new Set(rows.map((row) => row.issueId));
 }
 
 /**
@@ -139,17 +149,17 @@ export async function loadWorkHygiene(
       !saysNoActionable(contractTexts(issue)),
   );
 
+  // Finished research should carry its report as a private file (INV-1003, INV-1128).
+  const finishedResearch = issues.filter((issue) => isResearch(issue) && (issue.state.type === 'REVIEW' || issue.state.type === 'COMPLETED'));
+  const researchAttached = await attachedIds(prisma, finishedResearch);
+  const researchWithoutAttachment = finishedResearch.filter((issue) => !researchAttached.has(issue.id));
+
   // Incidents being closed or closed (INV-1126): the follow-ups and, for
   // SEV1/SEV2, the postmortem attachment the closing rule asks for.
   const closingIncidents = issues.filter((issue) => isIncident(issue) && (issue.state.type === 'REVIEW' || issue.state.type === 'COMPLETED'));
   const incidentsWithoutDownstream = closingIncidents.filter((issue) => !derivedTargets.has(issue.id) && !saysNoActionable(contractTexts(issue)));
   const needingPostmortem = closingIncidents.filter((issue) => incidentNeedsPostmortem(issue.severity));
-  const attached = needingPostmortem.length
-    ? new Set(
-        (await prisma.attachment.findMany({ where: { issueId: { in: needingPostmortem.map((issue) => issue.id) } }, select: { issueId: true }, distinct: ['issueId'] }))
-          .map((row) => row.issueId),
-      )
-    : new Set<string | null>();
+  const attached = await attachedIds(prisma, needingPostmortem);
   const incidentsWithoutPostmortem = needingPostmortem.filter((issue) => !attached.has(issue.id));
 
   const openDerived = issues.filter(
@@ -179,6 +189,8 @@ export async function loadWorkHygiene(
     researchWithoutDownstreamCount: researchWithoutDownstream.length,
     researchClosable: researchClosable.slice(0, LIST_LIMIT),
     researchClosableCount: researchClosable.length,
+    researchWithoutAttachment: researchWithoutAttachment.slice(0, LIST_LIMIT),
+    researchWithoutAttachmentCount: researchWithoutAttachment.length,
     overdueFollowUps: overdueFollowUps.slice(0, LIST_LIMIT),
     overdueFollowUpCount: overdueFollowUps.length,
   };
@@ -208,4 +220,15 @@ export async function researchLacksDownstream(prisma: DatabaseClient, workId: st
   const work = await prisma.issue.findUnique({ where: { id: workId }, include: { labels: { select: { name: true } } } });
   if (!work || !work.labels.some((label) => label.name.toLowerCase() === RESEARCH_LABEL)) return false;
   return (await missingCloseRequirements(prisma, work, ['downstream'], extraText)).length > 0;
+}
+
+/**
+ * For a research item being completed or closed: true when no file is attached
+ * to it — its report was not uploaded with work_attach_file (INV-1003, INV-1128).
+ * A reminder, never a refusal.
+ */
+export async function researchLacksAttachment(prisma: DatabaseClient, workId: string): Promise<boolean> {
+  const work = await prisma.issue.findUnique({ where: { id: workId }, include: { labels: { select: { name: true } } } });
+  if (!work || !isResearch(work)) return false;
+  return (await missingCloseRequirements(prisma, work, ['attachment'])).length > 0;
 }

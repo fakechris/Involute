@@ -19,6 +19,7 @@ const NORM_RULES: Array<[string, RegExp]> = [
   ['preview the tree', /lay out the whole tree/],
   ['research label', /labels: \['research'\]/],
   ['research downstream via DERIVED_FROM', /DERIVED_FROM/],
+  ['research closing checks the attachment', /Research without an attachment/],
   ['bugs carry the Type label', /labels: \['bug'\]/],
   ['one Type per item', /at most one per item/],
   ['zero-bug: priority or reason, never backlog', /[Zz]ero-bug/],

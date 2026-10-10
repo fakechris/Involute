@@ -187,6 +187,7 @@ import { FOLLOW_UP_LINK_WHERE, loadFollowUpDeadlines } from './follow-up-deadlin
 import { loadReviewWaits } from './review-wait.js';
 import { snapshotContract } from './evidence-contract.js';
 import { loadBugMetrics, type BugMetrics } from './bug-metrics.js';
+import { loadIncidentSummary } from './incident-metrics.js';
 import { currentTriager, parseRotation, setTriageRotation } from './bug-triage.js';
 import { releaseClaim } from './claim-release.js';
 import { restoreWork } from './work-restore.js';
@@ -466,6 +467,8 @@ const typeDefs = /* GraphQL */ `
     candidateSummary(teamFilter: TeamFilter): CandidateSummary!
     projectSummary(teamFilter: TeamFilter): ProjectSummaryResult!
     bugSummary(teamFilter: TeamFilter): BugSummaryResult!
+    "Incident counts, MTTR / MTTM averages and follow-up progress for the /incidents page (INV-1129). Readable, committed Type: Incident work only; declined and duplicate incidents are not counted."
+    incidentSummary(teamFilter: TeamFilter): IncidentSummaryResult!
     "Open bugs whose titles share words with the given title, best match first (INV-749)."
     similarBugs(teamId: String!, title: String!, first: Int): [Issue!]!
     "The readable PROJECT whose webOrigins include this page origin (normalized to scheme://host[:port]); null when none (INV-1146)."
@@ -1506,6 +1509,9 @@ const typeDefs = /* GraphQL */ `
     "Research in Review whose derived items are all committed; its proposer can close it (INV-1001)."
     researchClosableCount: Int!
     researchClosable: [Issue!]!
+    "Research in Review or Done with no file attached: its report was never uploaded (INV-1128)."
+    researchWithoutAttachmentCount: Int!
+    researchWithoutAttachment: [Issue!]!
     "Incidents in Review or Done nothing derives from and not stating 无可执行点 (INV-1126)."
     incidentsWithoutDownstreamCount: Int!
     incidentsWithoutDownstream: [Issue!]!
@@ -2165,6 +2171,73 @@ const typeDefs = /* GraphQL */ `
   type BugWeekCount {
     weekStart: String!
     count: Int!
+  }
+
+  type IncidentSummaryResult {
+    "Counted incidents still under way (no resolvedAt and not closed)."
+    openCount: Int!
+    resolvedCount: Int!
+    "Incidents left out of every number: declined, closed as duplicate or invalid, or marked DUPLICATE_OF another."
+    excludedCount: Int!
+    "SEV1 first, unjudged last."
+    bySeverity: [IncidentSeverityCount!]!
+    byRepository: [IncidentRepositoryCount!]!
+    "Mean hours from impact started to resolved; a plain average, no percentiles (INV-1130). Null before any resolved incident."
+    mttrHours: Float
+    "How many incidents the MTTR average is over."
+    mttrSampleCount: Int!
+    "Mean hours from impact started to mitigated (resolved when mitigation was not recorded)."
+    mttmHours: Float
+    mttmSampleCount: Int!
+    followUps: IncidentFollowUpTotals!
+    "Counted incidents, ongoing first, then the most recent impact."
+    incidents: [IncidentSummaryItem!]!
+  }
+
+  type IncidentSeverityCount {
+    severity: IssueSeverity
+    openCount: Int!
+    resolvedCount: Int!
+  }
+
+  type IncidentRepositoryCount {
+    repository: String
+    openCount: Int!
+    resolvedCount: Int!
+  }
+
+  type IncidentFollowUpTotals {
+    "Committed follow-ups DERIVED_FROM a counted incident (INV-1127)."
+    total: Int!
+    completed: Int!
+    declined: Int!
+    "Follow-ups past their deadline, open or closed late."
+    overdue: Int!
+    "Of those, still open."
+    overdueOpen: Int!
+    "completed / (total - declined); a declined follow-up is no longer owed. Null when none are owed."
+    completionRate: Float
+  }
+
+  type IncidentSummaryItem {
+    id: ID!
+    identifier: String!
+    title: String!
+    severity: IssueSeverity
+    repository: String
+    stateName: String!
+    impactStartedAt: DateTime!
+    resolvedAt: DateTime
+    "Impact so far in hours: to resolvedAt, or to now while ongoing."
+    impactHours: Float!
+    ongoing: Boolean!
+    "SEV1/SEV2 must carry a postmortem attachment before Done (INV-1126)."
+    postmortemRequired: Boolean!
+    postmortemAttached: Boolean!
+    followUpTotal: Int!
+    followUpCompleted: Int!
+    followUpDeclined: Int!
+    followUpOverdueOpen: Int!
   }
 
   type BugSummaryResult {
@@ -3153,6 +3226,22 @@ const resolvers = {
         readableWhere: buildReadableIssueWhere(context) ?? null,
       }, context.semanticIndex);
       return similar as IssueParent[];
+    },
+    incidentSummary: async (
+      _parent: unknown,
+      args: { teamFilter?: TeamFilterInput | null },
+      context: GraphQLContext,
+    ) => {
+      requireAuthentication(context);
+      const readableWhere = buildReadableIssueWhere(context);
+      const teamKey = args.teamFilter?.key?.eq;
+      const teamKeyIn = args.teamFilter?.key?.in;
+      const teamClause = teamKey
+        ? { team: { is: { key: teamKey } } }
+        : teamKeyIn && teamKeyIn.length > 0
+          ? { team: { is: { key: { in: teamKeyIn } } } }
+          : {};
+      return loadIncidentSummary(context.prisma, { ...teamClause, ...(readableWhere ?? {}) });
     },
     projectForOrigin: async (
       _parent: unknown,

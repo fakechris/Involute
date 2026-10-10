@@ -491,6 +491,8 @@ export interface WorkHygieneQueryData {
     researchWithoutDownstream: Array<HygieneRef & { repository: string | null }>;
     researchClosableCount: number;
     researchClosable: Array<HygieneRef & { repository: string | null }>;
+    researchWithoutAttachmentCount: number;
+    researchWithoutAttachment: Array<HygieneRef & { repository: string | null }>;
     incidentsWithoutDownstreamCount: number;
     incidentsWithoutDownstream: Array<HygieneRef & { severity: string | null }>;
     incidentsWithoutPostmortemCount: number;

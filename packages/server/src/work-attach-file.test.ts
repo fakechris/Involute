@@ -12,6 +12,8 @@ import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
 import { hashAgentToken } from './agent-credentials.ts';
 import { testParentId } from './test-placement.ts';
+import { commitWork, proposeWork } from './claim-service.ts';
+import { RESEARCH_NO_ATTACHMENT_WARNING } from './research-closure.ts';
 
 loadProjectEnvironment();
 
@@ -50,7 +52,7 @@ describe('work_attach_file (INV-1003)', () => {
     human = await prisma.user.findUniqueOrThrow({ where: { email: DEFAULT_ADMIN_EMAIL } });
     agent = await prisma.user.create({ data: { name: 'Researcher', email: 'researcher@agents.local', actorKind: 'AGENT', ownerId: human.id } });
     await prisma.teamMembership.create({ data: { role: 'EDITOR', teamId: team.id, userId: agent.id } });
-    await prisma.agentCredential.create({ data: { name: 'researcher', scopes: ['read', 'propose', 'claim', 'report'], tokenHash: hashAgentToken(AGENT_TOKEN), teamId: team.id, userId: agent.id } });
+    await prisma.agentCredential.create({ data: { name: 'researcher', scopes: ['read', 'propose', 'claim', 'report', 'update'], tokenHash: hashAgentToken(AGENT_TOKEN), teamId: team.id, userId: agent.id } });
     server = await startServer({ allowAdminFallback: true, prisma, authToken: 'unused-static-token', port: 0, uploadsDir });
   });
   afterEach(async () => { await server.stop(); });
@@ -117,6 +119,36 @@ describe('work_attach_file (INV-1003)', () => {
     await prisma.attachment.delete({ where: { id: attached.id } });
     const afterDelete = await mcp('work_search', { query: 'zephyrquartz' });
     expect(Array.isArray(afterDelete) ? afterDelete : afterDelete.nodes).toEqual([]);
+  });
+
+  // INV-1128: closing research reminds the agent to attach its report; it never refuses.
+  it('reminds an agent closing research with no attachment, and stops once a file is attached', async () => {
+    const description = '### 1. 目标与架构定位\n调研。\n### 2. 核心功能与交付范围\n结论。\n### 3. 验收标准与验证方案\n来源固定。\n无可执行点。';
+    const research = async (title: string) => {
+      const candidate = await proposeWork(prisma, { description, labels: ['research'], parentId: await testParentId(prisma, team.id), teamId: team.id, title }, { actorId: agent.id, actorKind: 'AGENT', surface: 'mcp' });
+      return commitWork(prisma, candidate.id, { acceptance: 'Findings recorded.', assigneeId: human.id, expectedRevision: candidate.revision }, { actorId: human.id, actorKind: 'HUMAN', surface: 'graphql' });
+    };
+    const finish = async (identifier: string) => {
+      const claim = await mcp('work_claim', { id: identifier });
+      const reported = await mcp('run_report', { work_id: identifier, claim_token: claim.claim_token, status: 'completed', summary: 'Read three vendors.' });
+      const current = await prisma.issue.findUniqueOrThrow({ where: { identifier } });
+      const closed = await mcp('work_update', { id: identifier, expected_revision: current.revision, state: 'DONE' });
+      return { reported, closed };
+    };
+
+    const bare = await research('Study without a report');
+    const withoutFile = await finish(bare.identifier);
+    expect(withoutFile.reported.run.status).toBe('COMPLETED');
+    expect(withoutFile.reported.warning).toBe(RESEARCH_NO_ATTACHMENT_WARNING);
+    const done = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'COMPLETED' } });
+    expect(withoutFile.closed).toMatchObject({ stateId: done.id, warning: RESEARCH_NO_ATTACHMENT_WARNING });
+
+    const reported = await research('Study with a report');
+    await mcp('work_attach_file', { work_id: reported.identifier, filename: 'study.md', mime_type: 'text/markdown', content: Buffer.from('# Study').toString('base64') });
+    const withFile = await finish(reported.identifier);
+    expect(withFile.reported.warning).toBeUndefined();
+    expect(withFile.closed.stateId).toBe(done.id);
+    expect(withFile.closed.warning).toBeUndefined();
   });
 
   it('refuses a file on work the actor cannot write and a file over the size cap', async () => {

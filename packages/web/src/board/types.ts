@@ -1068,3 +1068,50 @@ export interface BugsFixedBetweenQueryData {
     bugs: FixedBugSummary[];
   };
 }
+
+/** incidentSummary (INV-1129): plain averages with sample counts, no percentiles (INV-1130). */
+export interface IncidentSummaryData {
+  openCount: number;
+  resolvedCount: number;
+  excludedCount: number;
+  mttrHours: number | null;
+  mttrSampleCount: number;
+  mttmHours: number | null;
+  mttmSampleCount: number;
+  bySeverity: Array<{ severity: IssueSeverity | null; openCount: number; resolvedCount: number }>;
+  byRepository: Array<{ repository: string | null; openCount: number; resolvedCount: number }>;
+  followUps: {
+    total: number;
+    completed: number;
+    declined: number;
+    overdue: number;
+    overdueOpen: number;
+    completionRate: number | null;
+  };
+  incidents: Array<{
+    id: string;
+    identifier: string;
+    title: string;
+    severity: IssueSeverity | null;
+    repository: string | null;
+    stateName: string;
+    impactStartedAt: string;
+    resolvedAt: string | null;
+    impactHours: number;
+    ongoing: boolean;
+    postmortemRequired: boolean;
+    postmortemAttached: boolean;
+    followUpTotal: number;
+    followUpCompleted: number;
+    followUpDeclined: number;
+    followUpOverdueOpen: number;
+  }>;
+}
+
+export interface IncidentsPageQueryData {
+  incidentSummary: IncidentSummaryData;
+}
+
+export interface IncidentsPageQueryVariables {
+  teamFilter?: { key: { eq: string } };
+}

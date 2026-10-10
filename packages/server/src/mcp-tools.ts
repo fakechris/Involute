@@ -12,6 +12,7 @@ import { proposeDeliveryChange } from './delivery-change-set.js';
 import { createDeliveryExecution } from './delivery-execution.js';
 import { readyWorkPage, searchWorkPage } from './work-search-page.js';
 import { readWorkCatalog, CATALOG_KINDS } from './work-catalog.js';
+import { loadIncidentSummary } from './incident-metrics.js';
 import { readWorkPage, WORK_SECTIONS, type WorkSection } from './work-read-page.js';
 import { releaseClaim } from './claim-release.js';
 import { retractEvidence } from './evidence-retract.js';
@@ -63,7 +64,8 @@ import { markNotificationRead, readUnreadNotifications } from './notification-se
 import { createComment, mentionTexts, updateIssue } from './issue-service.js';
 import { amendmentChanges, proposeContractAmendment } from './contract-amendment.js';
 import { dependencyHints } from './mention-links.js';
-import { researchLacksDownstream } from './work-hygiene.js';
+import { RESEARCH_NO_ATTACHMENT_WARNING } from './research-closure.js';
+import { researchLacksAttachment, researchLacksDownstream } from './work-hygiene.js';
 import { linkWork } from './duplicate-linkage.js';
 import { deleteWorkLink } from './link-service.js';
 import { buildProtocolGuide } from './protocol-docs.js';
@@ -428,6 +430,12 @@ async function callMcpAction(
         }),
         constraints: ['Work access, commitment, active claims and revisions are checked per mutation.', 'Agents stop at Review except committed Research issues; Canceled remains human-only.', 'Committed contracts require a proposed amendment.'],
       };
+      if (args.kind === 'incident_summary') {
+        // The /incidents numbers (INV-1129), scoped like the web page: readable work, optionally one team.
+        const teamId = optionalString(args.team_id);
+        const readable = buildReadableIssueWhere(context);
+        return loadIncidentSummary(context.prisma, { ...(teamId ? { teamId } : {}), ...(readable ?? {}) });
+      }
       return readWorkCatalog(context, requiredString(args.kind, 'kind'), optionalNumber(args.first) ?? 50, optionalString(args.after), optionalString(args.team_id));
     }
     case 'work_read_page': {
@@ -766,13 +774,18 @@ async function callMcpAction(
         updateInput,
         { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null },
       );
+      const updateWarnings: string[] = [];
       if (rawTitle && updated.title !== rawTitle) {
-        return {
-          ...updated,
-          warning: `Status prefix was automatically removed from title: "${rawTitle}" -> "${updated.title}". Do not encode work status into titles; use work_claim and run_report to transition states.`,
-        };
+        updateWarnings.push(`Status prefix was automatically removed from title: "${rawTitle}" -> "${updated.title}". Do not encode work status into titles; use work_claim and run_report to transition states.`);
       }
-      return updated;
+      // Advisory only: research closed without its report attached (INV-1128).
+      if (updateInput.stateId && updateInput.stateId !== work.stateId) {
+        const target = await context.prisma.workflowState.findUnique({ where: { id: updateInput.stateId }, select: { type: true } });
+        if (target?.type === 'COMPLETED' && (await researchLacksAttachment(context.prisma, work.id).catch(() => false))) {
+          updateWarnings.push(RESEARCH_NO_ATTACHMENT_WARNING);
+        }
+      }
+      return updateWarnings.length ? { ...updated, warning: updateWarnings.join(' ') } : updated;
     }
     case 'work_link': {
       const from = await requireWork(context.prisma, requiredString(args.from_id, 'from_id'));
@@ -866,15 +879,16 @@ async function callMcpAction(
       }
       const reported = await reportRun(context.prisma, runInput, { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null });
       // Advisory only: the report is already committed, so a failed check is skipped.
-      const lacksDownstream =
-        runInput.status === 'completed' && (await researchLacksDownstream(context.prisma, work.id, runInput.summary).catch(() => false));
-      if (lacksDownstream) {
-        return {
-          ...reported,
-          warning: 'This is research with nothing derived from it yet. Propose its actionable points (DERIVED_FROM this item) and "won\'t do" conclusions as DECISIONs, or state "no actionable points" in the summary or verification.',
-        };
-      }
-      return reported;
+      const completed = runInput.status === 'completed';
+      const lacksDownstream = completed && (await researchLacksDownstream(context.prisma, work.id, runInput.summary).catch(() => false));
+      const lacksAttachment = completed && (await researchLacksAttachment(context.prisma, work.id).catch(() => false));
+      const warnings = [
+        ...(lacksDownstream
+          ? ['This is research with nothing derived from it yet. Propose its actionable points (DERIVED_FROM this item) and "won\'t do" conclusions as DECISIONs, or state "no actionable points" in the summary or verification.']
+          : []),
+        ...(lacksAttachment ? [RESEARCH_NO_ATTACHMENT_WARNING] : []),
+      ];
+      return warnings.length ? { ...reported, warning: warnings.join(' ') } : reported;
     }
     case 'work_views': {
       const views = await listSavedViews(context, requiredString(args.team_key, 'team_key'));
@@ -1145,8 +1159,8 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_catalog',
     annotations: { readOnlyHint: true, destructiveHint: false },
-    description: 'Discover readable teams, states, labels, actors and cycles with pagination, or credential capabilities and policy constraints. Human owners and agent executors are distinct. Catalog visibility uses the web API access rules.',
-    inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: [...CATALOG_KINDS, 'capabilities'] }, team_id: { type: 'string' }, first: { type: 'integer', minimum: 1, maximum: 200 }, after: { type: 'string' } }, required: ['kind'] },
+    description: 'Discover readable teams, states, labels, actors and cycles with pagination, or credential capabilities and policy constraints. kind "incident_summary" returns the /incidents numbers (INV-1129): open/resolved counts by severity and project, MTTR and MTTM as plain averages with sample counts, follow-up completion and overdue counts, and the incident list (team_id narrows to one team). Human owners and agent executors are distinct. Catalog visibility uses the web API access rules.',
+    inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: [...CATALOG_KINDS, 'capabilities', 'incident_summary'] }, team_id: { type: 'string' }, first: { type: 'integer', minimum: 1, maximum: 200 }, after: { type: 'string' } }, required: ['kind'] },
   },
   {
     name: 'work_read_page',
