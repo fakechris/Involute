@@ -40,6 +40,11 @@ describe('Free-text search (INV-925)', () => {
     return prisma.workRun.create({ data: { workId: issue.id, publicId: `RUN-${issue.identifier}-${Date.now()}`, actorId: admin.id, status: 'COMPLETED', summary } });
   }
 
+  // INV-1117: a text attachment with its extracted text, as storeUpload records it.
+  async function attach(issue: Issue, filename: string, textContent: string | null) {
+    return prisma.attachment.create({ data: { issueId: issue.id, uploaderId: admin.id, filename, mimeType: 'text/markdown', size: 1, url: `/uploads/${filename}`, textContent } });
+  }
+
   beforeAll(async () => {
     await prisma.$connect();
   });
@@ -49,6 +54,7 @@ describe('Free-text search (INV-925)', () => {
   });
 
   beforeEach(async () => {
+    await prisma.attachment.deleteMany();
     await prisma.workRun.deleteMany();
     await prisma.comment.deleteMany();
     await prisma.issue.deleteMany();
@@ -134,6 +140,50 @@ describe('Free-text search (INV-925)', () => {
     expect(first.runs).toBe(1);
     expect(identifiers(await searchIssues(prisma, { query: '回填' }))).toEqual([reported.identifier]);
     expect((await reindexSearchVectors(prisma)).runs).toBe(1);
+  });
+
+  it('search:reindex rebuilds attachment vectors', async () => {
+    const studied = await work({ title: 'Study' });
+    await attach(studied, 'study.md', '回填附件正文');
+    await prisma.$executeRaw`UPDATE "Attachment" SET "searchVector" = NULL`;
+    expect((await reindexSearchVectors(prisma)).attachments).toBe(1);
+    expect(identifiers(await searchIssues(prisma, { query: '附件正文' }))).toEqual([studied.identifier]);
+  });
+
+  // INV-1117: text that only exists in an attached report finds its work.
+  it('finds a word that only a text attachment contains, with the file name and a snippet', async () => {
+    const studied = await work({ title: 'Incident study' });
+    const file = await attach(studied, 'orbstack-postmortem.md', '# 复盘\n\n误删容器后用快照恢复，耗时两小时。');
+    await attach(await work({ title: 'Binary only' }), 'logo.png', null);
+    await work({ title: 'unrelated' });
+
+    const [hit, ...rest] = await searchIssues(prisma, { query: '快照' });
+    expect(rest).toEqual([]);
+    expect(hit?.issue.identifier).toBe(studied.identifier);
+    expect(hit?.matchedField).toBe('attachment');
+    expect(hit?.snippet).toContain('快照');
+    expect(hit?.attachmentId).toBe(file.id);
+    expect(hit?.attachmentFilename).toBe('orbstack-postmortem.md');
+    expect(hit?.commentId).toBeNull();
+    // Words found apart through the full-text index count too.
+    expect(identifiers(await searchIssues(prisma, { query: '误删恢复' }))).toEqual([studied.identifier]);
+  });
+
+  it('ranks a comment hit above an attachment-only hit, hides attachments of unreadable work, and forgets a deleted attachment', async () => {
+    const inComment = await work({ title: 'A' });
+    await comment(inComment, '快照策略');
+    const inFile = await work({ title: 'B' });
+    const file = await attach(inFile, 'notes.txt', '快照保留七天');
+    const other = await prisma.team.create({ data: { key: 'OTH', name: 'Other' } });
+    const otherState = await prisma.workflowState.create({ data: { teamId: other.id, name: 'Ready', type: 'UNSTARTED', position: 0 } });
+    const hidden = await prisma.issue.create({ data: { identifier: 'OTH-1', teamId: other.id, stateId: otherState.id, title: 'Secret' } });
+    await attach(hidden, 'secret.md', '快照里的秘密');
+
+    expect(identifiers(await searchIssues(prisma, { query: '快照' }, { teamId: team.id }))).toEqual([inComment.identifier, inFile.identifier]);
+
+    await prisma.attachment.delete({ where: { id: file.id } });
+    expect(identifiers(await searchIssues(prisma, { query: '快照' }, { teamId: team.id }))).toEqual([inComment.identifier]);
+    expect(identifiers(await searchIssues(prisma, { query: '七天' }))).toEqual([]);
   });
 
   it('requires every word but not that they are adjacent', async () => {
@@ -264,7 +314,7 @@ describe('Free-text search (INV-925)', () => {
       const afterFirst = await vectors();
       const secondRun = await reindexSearchVectors(prisma);
 
-      expect(firstRun).toEqual({ issues: 2, comments: 1, runs: 0 });
+      expect(firstRun).toEqual({ issues: 2, comments: 1, runs: 0, attachments: 0 });
       expect(secondRun).toEqual(firstRun);
       expect(await vectors()).toEqual(afterFirst);
       expect(afterFirst.every((row) => row.vector !== null)).toBe(true);

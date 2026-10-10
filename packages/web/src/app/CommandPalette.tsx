@@ -70,7 +70,7 @@ export function CommandPalette({
       group: 'Issues',
       hint: hit.matchedField === 'title' || hit.matchedField === 'identifier'
         ? hit.issue.state.name
-        : matchLabel(hit.matchedField),
+        : matchLabel(hit),
       run: () => navigate(`/issue/${hit.issue.id}`),
     }));
     const serverIds = new Set(serverIssues.map((action) => action.id));

@@ -180,7 +180,7 @@ export function SearchPage() {
                     <span className="mono search-result__identifier">{hit.issue.identifier}</span>
                     <span className="search-result__title">{highlight(hit.issue.title, query)}</span>
                     <span className="search-result__meta">
-                      {hit.issue.state.name} · {matchLabel(hit.matchedField)}
+                      {hit.issue.state.name} · {matchLabel(hit)}
                     </span>
                   </Link>
                   {hit.snippet ? <p className="search-result__snippet">{highlight(hit.snippet, query)}</p> : null}

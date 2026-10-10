@@ -373,12 +373,16 @@ const typeDefs = /* GraphQL */ `
   type IssueSearchHit {
     issue: Issue!
     score: Float!
-    "identifier, title, contract, description or comment: the strongest field a word was found in."
+    "identifier, title, contract, description, comment, attachment, run or semantic: the strongest field a word was found in."
     matchedField: String!
     "Text around the first match outside the title."
     snippet: String
     "The comment the snippet came from, when it came from one."
     commentId: String
+    "The attachment the snippet came from, when it came from one (INV-1117)."
+    attachmentId: String
+    "That attachment's file name."
+    attachmentFilename: String
   }
 
   type DeliveryGrant { revision: Int! policyJson: String! approvedAt: DateTime! approvedById: String! revokedAt: DateTime }
