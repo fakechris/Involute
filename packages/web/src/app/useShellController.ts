@@ -324,6 +324,7 @@ export function useShellController() {
       { id: 'go-in-review', label: 'Go to In Review', description: 'Batch accept or return committed work waiting in review', group: 'Navigation', shortcut: 'G N', run: () => navigate('/in-review') },
       { id: 'go-candidates', label: 'Go to candidates', description: 'Review proposed work before it is committed', group: 'Navigation', shortcut: 'G C', run: () => navigate('/candidates') },
       { id: 'go-bugs', label: 'Go to bugs', description: 'Open bug queue', group: 'Navigation', shortcut: 'G U', run: () => navigate('/bugs') },
+      { id: 'go-incidents', label: 'Go to incidents', description: 'Incident counts, MTTR, MTTM and follow-up progress', group: 'Navigation', run: () => navigate('/incidents') },
       { id: 'go-graph', label: 'Go to graph', description: 'Inspect contains and blocks relationships', group: 'Navigation', shortcut: 'G R', run: () => navigate('/graph') },
       { id: 'go-inbox', label: 'Go to inbox', description: 'Open notifications and activity', group: 'Navigation', shortcut: 'G I', run: () => navigate('/inbox') },
       { id: 'go-my-issues', label: 'Go to my issues', description: 'Open your assigned issues', group: 'Navigation', shortcut: 'G M', run: () => navigate('/my-issues') },

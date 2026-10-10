@@ -36,7 +36,7 @@ export const PAIRS: Record<string, string> = {
  */
 export const READ_PAIRS: Record<string, string[]> = {
   work_search: ['search', 'issues'],
-  work_catalog: ['teams', 'issueLabels', 'cycles', 'users', 'agents', 'viewerCapabilities'],
+  work_catalog: ['teams', 'issueLabels', 'cycles', 'users', 'agents', 'viewerCapabilities', 'incidentSummary'],
   work_read_page: ['deliveryChanges'],
   work_get_context: ['workContext', 'issue'],
   work_list_ready: ['readyWork'],

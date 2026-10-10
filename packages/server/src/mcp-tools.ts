@@ -12,6 +12,7 @@ import { proposeDeliveryChange } from './delivery-change-set.js';
 import { createDeliveryExecution } from './delivery-execution.js';
 import { readyWorkPage, searchWorkPage } from './work-search-page.js';
 import { readWorkCatalog, CATALOG_KINDS } from './work-catalog.js';
+import { loadIncidentSummary } from './incident-metrics.js';
 import { readWorkPage, WORK_SECTIONS, type WorkSection } from './work-read-page.js';
 import { releaseClaim } from './claim-release.js';
 import { retractEvidence } from './evidence-retract.js';
@@ -429,6 +430,12 @@ async function callMcpAction(
         }),
         constraints: ['Work access, commitment, active claims and revisions are checked per mutation.', 'Agents stop at Review except committed Research issues; Canceled remains human-only.', 'Committed contracts require a proposed amendment.'],
       };
+      if (args.kind === 'incident_summary') {
+        // The /incidents numbers (INV-1129), scoped like the web page: readable work, optionally one team.
+        const teamId = optionalString(args.team_id);
+        const readable = buildReadableIssueWhere(context);
+        return loadIncidentSummary(context.prisma, { ...(teamId ? { teamId } : {}), ...(readable ?? {}) });
+      }
       return readWorkCatalog(context, requiredString(args.kind, 'kind'), optionalNumber(args.first) ?? 50, optionalString(args.after), optionalString(args.team_id));
     }
     case 'work_read_page': {
@@ -1152,8 +1159,8 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_catalog',
     annotations: { readOnlyHint: true, destructiveHint: false },
-    description: 'Discover readable teams, states, labels, actors and cycles with pagination, or credential capabilities and policy constraints. Human owners and agent executors are distinct. Catalog visibility uses the web API access rules.',
-    inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: [...CATALOG_KINDS, 'capabilities'] }, team_id: { type: 'string' }, first: { type: 'integer', minimum: 1, maximum: 200 }, after: { type: 'string' } }, required: ['kind'] },
+    description: 'Discover readable teams, states, labels, actors and cycles with pagination, or credential capabilities and policy constraints. kind "incident_summary" returns the /incidents numbers (INV-1129): open/resolved counts by severity and project, MTTR and MTTM as plain averages with sample counts, follow-up completion and overdue counts, and the incident list (team_id narrows to one team). Human owners and agent executors are distinct. Catalog visibility uses the web API access rules.',
+    inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: [...CATALOG_KINDS, 'capabilities', 'incident_summary'] }, team_id: { type: 'string' }, first: { type: 'integer', minimum: 1, maximum: 200 }, after: { type: 'string' } }, required: ['kind'] },
   },
   {
     name: 'work_read_page',
