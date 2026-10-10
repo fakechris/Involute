@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { Link } from 'react-router-dom';
 
-import { BUG_REPORT_MUTATION, SIMILAR_BUGS_QUERY } from '../board/queries';
+import { BUG_REPORT_MUTATION, SERVER_BUILD_QUERY, SIMILAR_BUGS_QUERY } from '../board/queries';
 import type {
   BugReportMutationData,
   BugReportMutationVariables,
@@ -10,6 +10,7 @@ import type {
   IssueSeverity,
   LabelSummary,
   ProjectSummaryItem,
+  ServerBuildQueryData,
   SimilarBugsQueryData,
 } from '../board/types';
 import { SEVERITY_OPTIONS } from '../board/severity';
@@ -27,6 +28,8 @@ const PRIORITY_OPTIONS = [
 ];
 
 const REPORT_ERROR_MESSAGE = 'Could not report the bug. Please try again.';
+// A deploy SHA (INV-1121): 7–40 hex, optionally as the sha-… image tag.
+const FOUND_IN_SHA = /^(sha-)?[0-9a-f]{7,40}$/i;
 
 interface ReportBugDialogProps {
   isOpen: boolean;
@@ -64,6 +67,8 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
   const [priority, setPriority] = useState(0);
   const [severity, setSeverity] = useState<IssueSeverity | ''>('');
   const [reproducibility, setReproducibility] = useState<BugReproducibility | ''>('');
+  // null: not edited, so it follows the running build (INV-1121).
+  const [foundInSha, setFoundInSha] = useState<string | null>(null);
   const [placement, setPlacement] = useState<CreatePlacement | null>(null);
   const [placementSource, setPlacementSource] = useState<PlacementSource | null>(null);
   const [triage, setTriage] = useState(false);
@@ -88,6 +93,10 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
     skip: !isOpen || searchTitle.length < 3,
   });
   const similarBugs = searchTitle.length >= 3 ? (similar.data?.similarBugs ?? []) : [];
+  const build = useQuery<ServerBuildQueryData>(SERVER_BUILD_QUERY, { skip: !isOpen });
+  const runningBuildSha = build.data?.serverBuild?.buildSha ?? null;
+  const foundIn = (foundInSha ?? runningBuildSha ?? '').trim();
+  const foundInValid = !foundIn || FOUND_IN_SHA.test(foundIn);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -102,6 +111,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
     setPriority(0);
     setSeverity('');
     setReproducibility('');
+    setFoundInSha(null);
     setPlacement(initial?.placement ?? null);
     setPlacementSource(initial?.source ?? null);
     setTriage(false);
@@ -121,7 +131,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
   // Type is Bug by definition; the other Type labels do not apply.
   const extraLabels = labels.filter((label) => !isTypeLabel(label.name));
   const placed = triage || Boolean(placement);
-  const canSubmit = Boolean(title.trim() && steps.trim() && priority > 0 && placed) && !isSaving;
+  const canSubmit = Boolean(title.trim() && steps.trim() && priority > 0 && placed && foundInValid) && !isSaving;
 
   function toggleLabel(labelId: string) {
     setSelectedLabelIds((current) =>
@@ -146,6 +156,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
             priority,
             ...(severity ? { severity } : {}),
             ...(reproducibility ? { reproducibility } : {}),
+            ...(foundIn ? { foundInSha: foundIn } : {}),
             ...(triage || !placement ? {} : { parentId: placement.parentId }),
             labelIds: selectedLabelIds,
           },
@@ -323,6 +334,20 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
                     </option>
                   ))}
                 </select>
+              </label>
+              <label className="field-stack">
+                <span>Found in (deploy SHA)</span>
+                <input
+                  aria-label="Found in deploy SHA"
+                  title="The deploy you saw it on: its commit SHA. Starts as the build this server runs; clear it if you saw it elsewhere."
+                  value={foundInSha ?? runningBuildSha ?? ''}
+                  placeholder="Build unknown"
+                  spellCheck={false}
+                  disabled={isSaving}
+                  aria-invalid={!foundInValid}
+                  onChange={(event) => setFoundInSha(event.target.value)}
+                />
+                {!foundInValid ? <span className="observation-error" role="alert">A commit SHA: 7 to 40 hex characters.</span> : null}
               </label>
             </div>
 
