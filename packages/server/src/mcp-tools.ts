@@ -37,7 +37,7 @@ import {
 import type { GraphQLContext } from './auth.js';
 import { claimWork, commitWork, isDoneStateRequest, normalizeInitialStateType, proposeWork } from './claim-service.js';
 import { suggestedBranchName } from './branch-name.js';
-import { isResearchWork } from './labels.js';
+import { isResearchWork, namesIncident } from './labels.js';
 import {
   findWorkByIdOrIdentifier,
   getWorkContext,
@@ -467,6 +467,9 @@ async function callMcpAction(
       const isBug = (proposeInput.labels ?? []).some((label) => label.trim().toLowerCase() === 'bug');
       if (isBug) {
         notes.push('Bug committed directly (INV-787): it does not go to Candidates. Its SLA is running. Fix it or have it declined with a reason; it never goes to the backlog.');
+      }
+      if (namesIncident(proposeInput.labels)) {
+        notes.push('Incident declared (INV-1123): committed directly, In Progress (investigating); the person who owns you is the Incident Lead and the team was notified.');
       }
       if (!created.parentId && created.kind !== 'PROJECT') {
         notes.push('This candidate has no parent. Committing it requires one: pass parent_id now (work_link CONTAINS later), or the human will place it at commit.');
@@ -1117,7 +1120,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         labels: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Label names, created when missing. Research or competitive analysis is an ISSUE labelled "research" (Type: Research; propose it with initial_state DONE, or move it to Done yourself once committed — INV-912); work it leads to links back with DERIVED_FROM. A bug carries "bug" (Type: Bug; at most one of bug / feature / improvement / research), is committed directly, and must also pass priority 1–4, a parent, and steps_to_reproduce.',
+          description: 'Label names, created when missing. Research or competitive analysis is an ISSUE labelled "research" (Type: Research; propose it with initial_state DONE, or move it to Done yourself once committed — INV-912); work it leads to links back with DERIVED_FROM. A bug carries "bug" (Type: Bug; at most one of bug / feature / improvement / research / incident), is committed directly, and must also pass priority 1–4, a parent, and steps_to_reproduce. An incident carries "incident" (Type: Incident, INV-1123): committed directly In Progress (investigating) with your owner as Incident Lead, and must pass severity, an impact statement in description, and a parent.',
         },
         priority: {
           type: 'number',
@@ -1182,7 +1185,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         labels: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Extra domain labels (e.g. search, ops). Bug is added automatically; a second Type label (Feature / Improvement / Research) is refused.',
+          description: 'Extra domain labels (e.g. search, ops). Bug is added automatically; a second Type label (Feature / Improvement / Research / Incident) is refused.',
         },
         parent_id: {
           type: 'string',

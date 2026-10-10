@@ -901,6 +901,25 @@ export const BUG_REPORT_MUTATION = gql`
   }
 `;
 
+// Declare a Type: Incident (INV-1123): a proposal labelled incident is
+// committed In Progress at once and the team is notified.
+export const INCIDENT_DECLARE_MUTATION = gql`
+  mutation IncidentDeclare($input: WorkProposeInput!) {
+    workPropose(input: $input) {
+      success
+      message
+      issue {
+        id
+        identifier
+        title
+        severity
+        repository
+        commitmentStatus
+      }
+    }
+  }
+`;
+
 // Open bugs with similar titles, shown while reporting one (INV-749).
 export const SIMILAR_BUGS_QUERY = gql`
   query SimilarBugs($teamId: String!, $title: String!) {

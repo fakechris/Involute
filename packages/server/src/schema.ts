@@ -2226,7 +2226,7 @@ const typeDefs = /* GraphQL */ `
     priority: Int
     """Steps to reproduce a bug; appended to the description."""
     stepsToReproduce: String
-    """Optional impact, SEV1–SEV3, apart from priority (INV-1115)."""
+    """Impact, SEV1–SEV3, apart from priority (INV-1115). Required when labels include incident (INV-1123)."""
     severity: IssueSeverity
     """Existing work this proposal is blocked by (each X BLOCKS the new item)."""
     blockedBy: [String!]

@@ -149,10 +149,10 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   userReactivate: { kind: 'web', doc: 'USER_REACTIVATE_MUTATION', components: ['routes/AdministrationTabs.tsx'], label: 'Reactivate', test: 'routes/AdministrationTabs.test.tsx' },
   userSuspend: { kind: 'web', doc: 'USER_SUSPEND_MUTATION', components: ['routes/AdministrationTabs.tsx'], label: 'Suspend', test: 'routes/AdministrationTabs.test.tsx' },
   workspaceSettingsUpdate: { kind: 'web', doc: 'WORKSPACE_SETTINGS_UPDATE_MUTATION', components: ['routes/AdministrationTabs.tsx'], label: 'Save security settings', test: 'routes/AdministrationTabs.test.tsx' },
-  workPropose: {
-    kind: 'api-only',
-    reason: 'Agents propose candidates; people create committed work directly (issueCreate) or report bugs (bugReport).',
-  },
+  // Agents propose candidates; people create committed work directly (issueCreate)
+  // or report bugs (bugReport). A person declares an incident through it
+  // (labels: ['incident']), which commits it at once (INV-1123).
+  workPropose: { kind: 'web', doc: 'INCIDENT_DECLARE_MUTATION', components: ['components/ReportIncidentDialog.tsx'], label: 'Report incident', test: 'components/ReportIncidentDialog.test.tsx' },
   workReject: { kind: 'web', doc: 'WORK_REJECT_MUTATION', components: ['routes/CandidatesPage.tsx'], label: 'Reject reason', test: 'routes/CandidatesPage.test.tsx' },
   workRestore: { kind: 'web', doc: 'WORK_RESTORE_MUTATION', components: ['routes/CandidatesPage.tsx'], label: 'Restore to candidate', test: 'routes/CandidatesPage.test.tsx' },
   workUncommit: { kind: 'web', doc: 'WORK_UNCOMMIT_MUTATION', components: ['undo/CommitUndoHost.tsx'], label: 'Undo commit', test: 'routes/CandidatesPage.test.tsx' },
@@ -212,6 +212,7 @@ export const HUMAN_GATES: HumanGate[] = [
   { text: 'Only the person this request is addressed to may answer it', mutation: 'agentRequestAnswer', attention: 'AGENT_REQUEST' },
   { text: 'Team membership is a human roster', mutation: 'teamMembershipUpsert', attention: { none: 'Team and access administration, done when a person decides to (INV-846).' } },
   { text: 'the filing agent needs a human owner on this team', mutation: 'teamMembershipUpsert', attention: { none: 'The bug is refused, not parked; the fix is adding the owner to the team, which is administration (INV-804, INV-846).' } },
+  { text: 'the declaring agent needs a human owner on this team', mutation: 'teamMembershipUpsert', attention: { none: 'The incident is refused, not parked; the fix is adding the owner to the team, which is administration (INV-1123, INV-846).' } },
   { text: 'A triage rotation lists human members', mutation: 'teamTriageRotationUpdate', attention: { none: 'Team and access administration, done when a person decides to (INV-846).' } },
   { text: 'Only a human may provision a service actor', mutation: 'serviceActorCreate', attention: { none: 'Actor administration, done when a person decides to (INV-586, INV-846).' } },
   { text: 'Provision a SERVICE actor for an external program (CI, cron, a bridge). Human-only.', mutation: 'serviceActorCreate', attention: { none: 'Actor administration, done when a person decides to (INV-586, INV-846).' } },
@@ -268,6 +269,8 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationSurface> = {
   // The research proposer (usually an agent) closes it with work_update(state: DONE) (INV-1001).
   'research.closable': { kind: 'info', actionable: 'info' },
   'bug.sla_at_risk': { kind: 'info', actionable: 'info' },
+  // The team hears an incident was declared; it is already committed and under investigation (INV-1123).
+  'incident.declared': { kind: 'info', actionable: 'info' },
   'bug.sla_breached': { kind: 'info', actionable: 'info' },
   'contract.amendment_proposed': { kind: 'work', action: 'Accept change', component: 'components/ContractAmendmentPanel.tsx', actionable: 'CONTRACT_AMENDMENT' },
   'decision.requested': { kind: 'work', action: 'Respond to the agent', component: 'components/RespondToAgent.tsx', actionable: 'DECISION_REQUESTED' },
