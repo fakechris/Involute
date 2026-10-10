@@ -459,6 +459,16 @@ describe('Involute MCP', () => {
     expect(await prisma.workLink.count({ where: { toId: child.id, type: 'CONTAINS' } })).toBe(1);
   });
 
+  it('records REGRESSED_BY from the regression to the work that introduced it (INV-1120)', async () => {
+    const parentId = await testParentId(prisma, team.id);
+    const repository = (await prisma.issue.findUniqueOrThrow({ where: { id: parentId } })).repository;
+    const culprit = await prisma.issue.create({ data: { identifier: 'INV-960', title: 'Refactor save', kind: 'ISSUE', parentId, teamId: team.id, stateId: ready.id, repository } });
+    const regression = await prisma.issue.create({ data: { identifier: 'INV-961', title: 'Save broke', kind: 'ISSUE', parentId, teamId: team.id, stateId: ready.id, repository } });
+    const link = await callTool('work_relate', { action: 'link', from_id: regression.identifier, to_id: culprit.identifier, type: 'REGRESSED_BY' });
+    expect(link).toMatchObject({ fromId: regression.id, toId: culprit.id, type: 'REGRESSED_BY' });
+    expect(await callTool('work_unlink', { from_id: regression.id, to_id: culprit.id, type: 'REGRESSED_BY' })).toMatchObject({ removed: true });
+  });
+
   it('enforces agent scopes, endpoint access and repository constraints for graph edits', async () => {
     const agent = await prisma.user.create({ data: { name: 'Graph agent', email: 'graph-agent@test.local', actorKind: 'AGENT', ownerId: viewer.id, globalRole: 'USER' } });
     const token = 'inv_agent_graph_edit_test';

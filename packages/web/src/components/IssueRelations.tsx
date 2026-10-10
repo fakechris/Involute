@@ -39,6 +39,8 @@ const RELATION_GROUPS: Array<{
   { key: 'related', label: 'Related', type: 'RELATED_TO', direction: 'either' },
   { key: 'duplicate-of', label: 'Duplicate of', type: 'DUPLICATE_OF', direction: 'outgoing' },
   { key: 'duplicated-by', label: 'Duplicated by', type: 'DUPLICATE_OF', direction: 'incoming' },
+  { key: 'regressed-by', label: 'Regressed by', type: 'REGRESSED_BY', direction: 'outgoing' },
+  { key: 'regressions', label: 'Regressions', type: 'REGRESSED_BY', direction: 'incoming' },
   { key: 'derived-from', label: 'Derived from', type: 'DERIVED_FROM', direction: 'outgoing' },
   { key: 'derivations', label: 'Derived into', type: 'DERIVED_FROM', direction: 'incoming' },
   { key: 'discovered-during', label: 'Discovered during', type: 'DISCOVERED_DURING', direction: 'outgoing' },
@@ -51,6 +53,7 @@ const ADDABLE_RELATIONS: Array<{ key: string; label: string; type: WorkLinkType;
   { key: 'blocking', label: 'Blocking', type: 'BLOCKS', reverse: false },
   { key: 'related', label: 'Related to', type: 'RELATED_TO', reverse: false },
   { key: 'duplicate-of', label: 'Duplicate of', type: 'DUPLICATE_OF', reverse: false },
+  { key: 'regressed-by', label: 'Regressed by', type: 'REGRESSED_BY', reverse: false },
   { key: 'derived-from', label: 'Derived from', type: 'DERIVED_FROM', reverse: false },
   { key: 'discovered-during', label: 'Discovered during', type: 'DISCOVERED_DURING', reverse: false },
 ];

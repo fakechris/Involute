@@ -10,6 +10,7 @@
 
 import type { Prisma, WorkflowStateType } from '@prisma/client';
 
+import { isIncidentWork } from './labels.js';
 import { GITHUB_WEBHOOK_ACTOR, ensureServiceActor } from './service-actors.js';
 import { recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
 
@@ -36,6 +37,8 @@ type TransactionClient = Prisma.TransactionClient;
 export interface StateTransitionResult {
   applied: boolean;
   duplicate?: boolean;
+  /** The move to REVIEW was held back because the incident has no resolvedAt (INV-1148). */
+  incidentUnresolved?: boolean;
   reason: string;
   issueId: string;
   previousStateType?: string;
@@ -190,12 +193,17 @@ export async function applyMonotonicForward(
     where: { teamId: input.teamId, type: { in: lowerTypes } }, select: { id: true },
   });
   const before = await tx.issue.findUnique({ where: { id: input.issueId } });
+  // An incident goes to In Review once resolved (INV-1125). The webhook track
+  // obeys the same rule (INV-1148): the resolvedAt predicate rides in the same
+  // single-statement CAS, so a concurrent resolvedAt write is respected.
+  const incidentGate = input.targetStateType === 'REVIEW' && (await isIncidentWork(tx, input.issueId));
 
   // Atomic CAS update: executes at the DB engine level, safe under concurrent executions
   const updateResult = await tx.issue.updateMany({
     where: {
       id: input.issueId,
       teamId: input.teamId,
+      ...(incidentGate ? { resolvedAt: { not: null } } : {}),
       // Keep the CAS predicate on the updated row: a relation-filter subquery can
       // retain a stale join snapshot after waiting for another issue update.
       stateId: { in: allowedStates.map(state => state.id) },
@@ -257,6 +265,16 @@ export async function applyMonotonicForward(
     return {
       applied: false,
       reason: `Out-of-order event: incoming time ${eventDate.toISOString()} is older than lastAppliedEventTime ${current.lastAppliedEventTime.toISOString()}`,
+      issueId: input.issueId,
+      previousStateType: currentType,
+    };
+  }
+
+  if (incidentGate && !current.resolvedAt && lowerTypes.includes(currentType)) {
+    return {
+      applied: false,
+      incidentUnresolved: true,
+      reason: `Incident has no resolvedAt: stays ${currentType} until it is resolved (INV-1125)`,
       issueId: input.issueId,
       previousStateType: currentType,
     };
