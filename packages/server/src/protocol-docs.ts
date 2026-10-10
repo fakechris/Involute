@@ -144,6 +144,7 @@ Work nodes carry a delivery contract (\`outcome\`, \`scope\`, \`constraints\`,
 - Mentioning another item (\`INV-123\`, or a project alias prefix) in a description, contract field or comment records a \`RELATED_TO\` link automatically, unless the two are already linked; removing the mention keeps the link.
 - \`DERIVED_FROM\`, \`DISCOVERED_DURING\`, \`RELATED_TO\`, \`DUPLICATE_OF\`
 - \`DUPLICATE_OF\` (A → B, INV-1124) — when a person links it, an open A is closed (a candidate declined, committed work Canceled) with resolution \`duplicate\`; when an agent links it, A stays open and its owner is notified to decline it, because agents never close work. Both items get a note, and A's reporter is notified of B's later state changes. Removing the link does not reopen A.
+- \`REGRESSED_BY\` (A → B, INV-1120) — B introduced the regression A reports or fixes. IQL \`link:regressed_by:INV-5\` lists what INV-5 regressed; \`link:regressed_by:none\` lists work with no regression source. Moving work from Done or Canceled back to an open state is a reopen: it is recorded and counted (\`reopenCount\`), and \`bugSummary.metrics\` reports the reopen rate and how many Auto-Accept Gate acceptances were reopened.
 
 ## MCP tools
 

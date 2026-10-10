@@ -39,6 +39,12 @@ const relationsData: IssueRelationsQueryData = {
           to: self,
         },
         {
+          id: 'link-regressed-by',
+          type: 'REGRESSED_BY',
+          from: self,
+          to: { id: 'issue-702', identifier: 'INV-702', title: 'Change that broke it', commitmentStatus: 'COMMITTED', state: done },
+        },
+        {
           id: 'link-contains',
           type: 'CONTAINS',
           from: { id: 'issue-1', identifier: 'INV-1', title: 'Backlog item', commitmentStatus: 'COMMITTED', state: inProgress },
@@ -83,6 +89,7 @@ describe('issue relations in the detail drawer (INV-679)', () => {
     expect(within(relations).getByRole('list', { name: 'Blocking' })).toHaveTextContent('INV-700');
     expect(within(relations).getByRole('list', { name: 'Duplicated by' })).toHaveTextContent('INV-701');
     expect(within(relations).getByRole('list', { name: 'Duplicated by' })).toHaveTextContent('Candidate');
+    expect(within(relations).getByRole('list', { name: 'Regressed by' })).toHaveTextContent('INV-702');
     expect(within(relations).queryByText('INV-1')).not.toBeInTheDocument();
 
     const rows = within(blockedBy).getAllByRole('listitem');
@@ -117,6 +124,20 @@ describe('issue relations in the detail drawer (INV-679)', () => {
 
     await waitFor(() =>
       expect(workLink).toHaveBeenCalledWith({ variables: { fromId: 'issue-2', toId: 'INV-9', type: 'RELATED_TO' } }),
+    );
+  });
+
+  it('adds a regressed-by relation pointing at the work that introduced the regression (INV-1120)', async () => {
+    const { workLink } = stubLinkMutations();
+    const relations = await openDrawer();
+
+    fireEvent.click(within(relations).getByRole('button', { name: 'Add relation' }));
+    fireEvent.change(within(relations).getByLabelText('Relation type'), { target: { value: 'regressed-by' } });
+    fireEvent.change(within(relations).getByLabelText('Related issue identifier'), { target: { value: 'INV-12' } });
+    fireEvent.click(within(relations).getByRole('button', { name: 'Add' }));
+
+    await waitFor(() =>
+      expect(workLink).toHaveBeenCalledWith({ variables: { fromId: 'issue-2', toId: 'INV-12', type: 'REGRESSED_BY' } }),
     );
   });
 

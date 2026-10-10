@@ -2,6 +2,7 @@ import type { ActorKind, Issue, Prisma, PrismaClient, User } from '@prisma/clien
 
 import { notifyDuplicateReporters } from './duplicate-notes.js';
 import { createValidationError, WORK_REVISION_CONFLICT_MESSAGE } from './errors.js';
+import { recordReopenIfAny } from './work-reopen.js';
 
 export interface WriteActor {
   agentCredentialId?: string | null;
@@ -156,6 +157,8 @@ export async function recordWorkAudit(
   // where the reporters of its duplicates hear about it (INV-1124).
   if (input.before && input.before.stateId !== input.after.stateId) {
     await notifyDuplicateReporters(prisma, { workId: input.workId, auditId: created.id, toStateId: input.after.stateId, actorId: actor.actorId });
+    // Same reason: a terminal → open move is counted as a reopen here (INV-1120).
+    await recordReopenIfAny(prisma, { workId: input.workId, auditId: created.id, fromStateId: input.before.stateId, toStateId: input.after.stateId });
   }
   return created.id;
 }

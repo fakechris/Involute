@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient, type WorkResolution } from '@prisma/client';
 
+import { AUTO_ACCEPT_ACTOR_EMAIL } from './auto-accept-gate.js';
 import { BUG_LABEL_NAME, BUG_REPORT_SOURCE } from './bug-report.js';
 import { loadBugSlas } from './bug-sla.js';
 
@@ -26,6 +27,20 @@ export interface BugMetrics {
   byResolution: Array<{ resolution: WorkResolution; source: BugSource; count: number }>;
   /** Committed open bugs that no parent contains — the goal is zero (INV-749). */
   unplacedOpenCount: number;
+  /**
+   * Reopens (INV-1120), over committed bugs: closed at least once (closed now
+   * or reopened since), and those moved back to an open state at least once.
+   */
+  closedEverCount: number;
+  reopenedCount: number;
+  reopenRate: number | null;
+  /**
+   * Bugs the Auto-Accept Gate accepted (INV-1075) and those reopened after an
+   * acceptance of its — the direct signal of whether the gate can be trusted.
+   */
+  autoAcceptedCount: number;
+  reopenedAfterAutoAcceptCount: number;
+  reopenedAfterAutoAcceptRate: number | null;
 }
 
 type BugSource = 'HUMAN_REPORT' | 'AGENT' | 'OTHER';
@@ -34,6 +49,8 @@ interface AuditRow {
   workId: string;
   createdAt: Date;
   actorKind: string | null;
+  actorId: string | null;
+  stateChanged: boolean;
   isCreation: boolean;
   commitment: string | null;
 }
@@ -63,6 +80,7 @@ export async function loadBugMetrics(prisma: DatabaseClient, scope: Prisma.Issue
       parentId: true,
       commitmentStatus: true,
       resolution: true,
+      reopenCount: true,
       createdAt: true,
       state: { select: { type: true } },
     },
@@ -70,7 +88,9 @@ export async function loadBugMetrics(prisma: DatabaseClient, scope: Prisma.Issue
   const ids = bugs.map((bug) => bug.id);
   const audits = ids.length
     ? await prisma.$queryRaw<AuditRow[]>(Prisma.sql`
-        SELECT "workId", "createdAt", "actorKind"::text AS "actorKind", ("before" IS NULL) AS "isCreation",
+        SELECT "workId", "createdAt", "actorKind"::text AS "actorKind", "actorId"::text AS "actorId",
+               ("before" IS NOT NULL AND "before"->>'stateId' IS DISTINCT FROM "after"->>'stateId') AS "stateChanged",
+               ("before" IS NULL) AS "isCreation",
                "after"->>'commitmentStatus' AS "commitment"
         FROM "WorkAudit"
         WHERE "workId" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
@@ -133,6 +153,26 @@ export async function loadBugMetrics(prisma: DatabaseClient, scope: Prisma.Issue
   }
   breachedOpen.sort((left, right) => right.overdueHours - left.overdueHours);
   const closedTotal = slaMetCount + slaBreachedClosedCount;
+
+  const closedEver = committed.filter((bug) => bug.state.type === 'COMPLETED' || bug.state.type === 'CANCELED' || bug.reopenCount > 0);
+  const reopenedCount = committed.filter((bug) => bug.reopenCount > 0).length;
+  // The gate only ever moves work to Done, so any state change it made is an acceptance.
+  const gate = await prisma.user.findUnique({ where: { email: AUTO_ACCEPT_ACTOR_EMAIL }, select: { id: true } });
+  const committedIds = new Set(committed.map((bug) => bug.id));
+  const autoAccepted = new Set(
+    gate ? audits.filter((row) => row.actorId === gate.id && row.stateChanged && committedIds.has(row.workId)).map((row) => row.workId) : [],
+  );
+  const reopenedAfterAutoAccept = new Set(
+    autoAccepted.size
+      ? (
+          await prisma.workReopen.findMany({
+            where: { workId: { in: [...autoAccepted] }, afterAutoAccept: true },
+            select: { workId: true },
+          })
+        ).map((row) => row.workId)
+      : [],
+  );
+  const rate = (part: number, whole: number) => (whole ? Math.round((part / whole) * 1000) / 1000 : null);
   const p50 = percentile(triageHours, 0.5);
   const p90 = percentile(triageHours, 0.9);
 
@@ -151,5 +191,11 @@ export async function loadBugMetrics(prisma: DatabaseClient, scope: Prisma.Issue
       .map(([source, count]) => ({ source, count })),
     byResolution: [...resolutions.values()].sort((left, right) => right.count - left.count || left.resolution.localeCompare(right.resolution) || left.source.localeCompare(right.source)),
     unplacedOpenCount,
+    closedEverCount: closedEver.length,
+    reopenedCount,
+    reopenRate: rate(reopenedCount, closedEver.length),
+    autoAcceptedCount: autoAccepted.size,
+    reopenedAfterAutoAcceptCount: reopenedAfterAutoAccept.size,
+    reopenedAfterAutoAcceptRate: rate(reopenedAfterAutoAccept.size, autoAccepted.size),
   };
 }

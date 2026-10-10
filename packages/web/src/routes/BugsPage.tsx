@@ -298,6 +298,10 @@ const SOURCE_LABEL: Record<BugMetricsData['bySource'][number]['source'], string>
   OTHER: 'Other',
 };
 
+function formatRate(rate: number | null | undefined): string {
+  return rate === null || rate === undefined ? '—' : `${Math.round(rate * 100)}%`;
+}
+
 function formatHours(hours: number | null): string {
   if (hours === null) return '—';
   return hours < 48 ? `${hours}h` : `${Math.round(hours / 24)}d`;
@@ -335,6 +339,22 @@ function BugTriageMetrics({ metrics, onOpen }: { metrics: BugMetricsData; onOpen
           <span className="bugs-stat__value">{metrics.unplacedOpenCount}</span>
           <span className="bugs-stat__label">Open bugs with no parent (goal 0)</span>
         </div>
+        {metrics.reopenedCount !== undefined ? (
+          <div className="bugs-stat">
+            <span className="bugs-stat__value">{formatRate(metrics.reopenRate)}</span>
+            <span className="bugs-stat__label">
+              Reopened ({metrics.reopenedCount} of {metrics.closedEverCount ?? 0} closed)
+            </span>
+          </div>
+        ) : null}
+        {metrics.reopenedAfterAutoAcceptCount !== undefined ? (
+          <div className={`bugs-stat${metrics.reopenedAfterAutoAcceptCount ? ' bugs-stat--alert' : ''}`}>
+            <span className="bugs-stat__value">{formatRate(metrics.reopenedAfterAutoAcceptRate)}</span>
+            <span className="bugs-stat__label">
+              Reopened after auto-accept ({metrics.reopenedAfterAutoAcceptCount} of {metrics.autoAcceptedCount ?? 0})
+            </span>
+          </div>
+        ) : null}
       </section>
 
       <div className="bugs-grid">
