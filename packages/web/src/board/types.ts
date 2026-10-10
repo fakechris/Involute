@@ -315,6 +315,8 @@ export interface BugSummaryData {
   oldestOpenAgeDays: number | null;
   avgOpenAgeDays: number | null;
   createdPerWeek: Array<{ weekStart: string; count: number }>;
+  /** Open bugs most DUPLICATE_OF links point at (INV-1124); absent from older servers. */
+  mostDuplicated?: Array<{ id: string; identifier: string; title: string; priority: number; duplicateCount: number }>;
   /** Triage, SLA, source and placement (INV-751); absent from older servers. */
   metrics?: BugMetricsData;
 }

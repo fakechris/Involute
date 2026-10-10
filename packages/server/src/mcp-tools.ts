@@ -62,7 +62,8 @@ import { createComment, mentionTexts, updateIssue } from './issue-service.js';
 import { amendmentChanges, proposeContractAmendment } from './contract-amendment.js';
 import { dependencyHints } from './mention-links.js';
 import { researchLacksDownstream } from './work-hygiene.js';
-import { createWorkLink, deleteWorkLink } from './link-service.js';
+import { linkWork } from './duplicate-linkage.js';
+import { deleteWorkLink } from './link-service.js';
 import { buildProtocolGuide } from './protocol-docs.js';
 import { attachEvidence, reportRun } from './run-service.js';
 import { hasFixedBugEvidence, recordFixedBugRun, validateFixedBugEvidence } from './bug-report.js';
@@ -558,7 +559,7 @@ async function callMcpAction(
         ? await findPossibleDuplicates(context.prisma, context.semanticIndex, created, buildReadableIssueWhere(context))
         : [];
       if (possibleDuplicates.length > 0) {
-        notes.push(`Possible duplicates: ${possibleDuplicates.map((item) => `${item.identifier} (${item.title})`).join('; ')}. If one is the same bug, link this one to it (work_link DUPLICATE_OF) and tell the owner so it is declined.`);
+        notes.push(`Possible duplicates: ${possibleDuplicates.map((item) => `${item.identifier} (${item.title})`).join('; ')}. If one is the same bug, link this one to it (work_link DUPLICATE_OF): its owner is notified to decline it as a duplicate.`);
       }
       return {
         ...created,
@@ -721,12 +722,14 @@ async function callMcpAction(
       const to = await requireWork(context.prisma, requiredString(args.to_id, 'to_id'));
       await assertCanWriteIssue(context.prisma, context, from.id);
       await assertCanWriteIssue(context.prisma, context, to.id);
-      return createWorkLink(context.prisma, {
+      const { duplicate, link } = await linkWork(context.prisma, {
         actor: { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null },
         fromId: from.id,
         toId: to.id,
         type: parseWorkLinkType(requiredString(args.type, 'type'), 'type'),
       });
+      // DUPLICATE_OF (INV-1124): say whether the duplicate was closed or waits for a person.
+      return duplicate ? { ...link, duplicate } : link;
     }
     case 'work_unlink': {
       const from = await requireWork(context.prisma, requiredString(args.from_id, 'from_id'));
@@ -741,8 +744,9 @@ async function callMcpAction(
         where: { fromId_toId_type: { fromId: from.id, toId: to.id, type } },
       });
       if (!link) return { removed: false, fromId: from.id, toId: to.id, type };
+      let note: string | undefined;
       try {
-        await deleteWorkLink(context.prisma, link.id, { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null });
+        ({ note } = await deleteWorkLink(context.prisma, link.id, { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null }));
       } catch (error) {
         // Another caller may have removed this exact edge while we waited for
         // the graph lock. Never delete a newly created replacement by tuple.
@@ -751,7 +755,7 @@ async function callMcpAction(
         }
         throw error;
       }
-      return { removed: true, id: link.id, fromId: from.id, toId: to.id, type };
+      return { removed: true, id: link.id, fromId: from.id, toId: to.id, type, ...(note ? { note } : {}) };
     }
     case 'work_claim_release': {
       const work = await requireWork(context.prisma, requiredString(args.work_id, 'work_id'));

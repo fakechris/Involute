@@ -213,6 +213,36 @@ export function BugsPage() {
                   </table>
                 )}
               </section>
+
+              <section className="bugs-panel" aria-label="Most duplicated open bugs">
+                <h2 className="bugs-panel__title">Reported again most</h2>
+                {(summary.mostDuplicated ?? []).length === 0 ? (
+                  <p className="bugs-panel__empty">No open bug has been reported twice.</p>
+                ) : (
+                  <table className="bugs-table">
+                    <thead>
+                      <tr>
+                        <th>Bug</th>
+                        <th>Duplicates</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(summary.mostDuplicated ?? []).map((bug) => (
+                        <tr key={bug.id}>
+                          <td>
+                            <button type="button" className="hygiene-item" title="Often reported again: consider raising its priority" onClick={() => navigate(`/issue/${bug.id}`)}>
+                              <PriorityIcon level={bug.priority} size={12} />
+                              <span className="mono">{bug.identifier}</span>
+                              <span className="hygiene-item__title">{bug.title}</span>
+                            </button>
+                          </td>
+                          <td className="mono">{bug.duplicateCount}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </section>
             </div>
 
             <section className="bugs-panel" aria-label="Bug creation trend">
