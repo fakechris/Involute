@@ -183,6 +183,7 @@ export const ISSUE_UPDATE_MUTATION = gql`
         kind
         repository
         commitmentStatus
+        resolution
         outcome
         scope
         constraints
@@ -302,6 +303,7 @@ export const ISSUE_UNDELETE_MUTATION = gql`
         kind
         repository
         commitmentStatus
+        resolution
         outcome
         scope
         constraints
@@ -520,6 +522,7 @@ export const ISSUE_PAGE_QUERY = gql`
         }
       }
       commitmentStatus
+      resolution
       outcome
       scope
       constraints
@@ -951,6 +954,11 @@ export const BUGS_PAGE_QUERY = gql`
           overdueHours
         }
         bySource {
+          source
+          count
+        }
+        byResolution {
+          resolution
           source
           count
         }

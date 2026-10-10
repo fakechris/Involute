@@ -769,7 +769,7 @@ async function createIssueViaCli(options: {
 
 async function updateIssueViaCli(
   identifier: string,
-  input: { assignee?: string; labels?: string; state?: string; title?: string },
+  input: { assignee?: string; labels?: string; reason?: string; resolution?: string; state?: string; title?: string },
 ): Promise<IssueDetail> {
   const client = await createConfiguredGraphQLClient();
   const issue = await fetchIssueByIdentifier(identifier);
@@ -796,6 +796,15 @@ async function updateIssueViaCli(
     updateInput.title = input.title;
   }
 
+  // Moving to a Canceled state needs a resolution, and a bug a reason too (INV-1118).
+  if (input.resolution) {
+    updateInput.resolution = input.resolution.trim().toUpperCase().replace(/[\s-]+/g, '_');
+  }
+
+  if (input.reason) {
+    updateInput.reason = input.reason;
+  }
+
   if (input.assignee !== undefined) {
     updateInput.assigneeId = input.assignee;
   }
@@ -820,6 +829,7 @@ async function updateIssueViaCli(
   const result = await client.request<{
     issueUpdate: {
       success: boolean;
+      message?: string | null;
       issue: { id: string } | null;
     };
   }>(
@@ -827,6 +837,7 @@ async function updateIssueViaCli(
       mutation CliIssueUpdate($id: String!, $input: IssueUpdateInput!) {
         issueUpdate(id: $id, input: $input) {
           success
+          message
           issue {
             id
           }
@@ -840,7 +851,7 @@ async function updateIssueViaCli(
   );
 
   if (!result.issueUpdate.success) {
-    throw new CliError('Issue update failed.');
+    throw new CliError(result.issueUpdate.message ?? 'Issue update failed.');
   }
 
   const updatedIssue = await fetchIssueByIdentifier(identifier);
@@ -1258,7 +1269,7 @@ async function commitWorkViaCli(
 
 async function rejectWorkViaCli(
   id: string,
-  options: { reason?: string },
+  options: { reason?: string; resolution: string },
 ): Promise<{ commitmentStatus: string; identifier: string; revision: number }> {
   const client = await createConfiguredGraphQLClient();
   const bundle = await fetchWorkContext(id);
@@ -1270,6 +1281,7 @@ async function rejectWorkViaCli(
   const result = await client.request<{
     workReject: {
       issue: { commitmentStatus: string; identifier: string; revision: number } | null;
+      message?: string | null;
       success: boolean;
     };
   }>(
@@ -1277,6 +1289,7 @@ async function rejectWorkViaCli(
       mutation CliWorkReject($id: String!, $input: WorkRejectInput!) {
         workReject(id: $id, input: $input) {
           success
+          message
           issue { identifier commitmentStatus revision }
         }
       }
@@ -1285,13 +1298,14 @@ async function rejectWorkViaCli(
       id,
       input: {
         expectedRevision: bundle.work.revision,
+        resolution: options.resolution.trim().toUpperCase().replace(/[\s-]+/g, '_'),
         ...(options.reason ? { reason: options.reason } : {}),
       },
     },
   );
 
   if (!result.workReject.success || !result.workReject.issue) {
-    throw new CliError('Work reject failed.');
+    throw new CliError(result.workReject.message ?? 'Work reject failed.');
   }
 
   return result.workReject.issue;
@@ -1661,6 +1675,8 @@ export function createProgram(): Command {
     .description('Update an issue')
     .argument('<identifier>', 'Issue identifier')
     .option('--state <state>', 'New workflow state name')
+    .option('--resolution <resolution>', 'Why it is closed, when moving to a Canceled state: completed, wont_do, invalid, duplicate, cannot_reproduce or obsolete')
+    .option('--reason <reason>', 'Why (recorded on the audit; required to cancel a bug)')
     .option('--title <title>', 'New issue title')
     .option('--assignee <userId>', 'New assignee user ID')
     .option('--labels <labels>', 'Comma-separated label names')
@@ -1672,6 +1688,8 @@ export function createProgram(): Command {
         options: JsonOption & {
           assignee?: string;
           labels?: string;
+          reason?: string;
+          resolution?: string;
           state?: string;
           title?: string;
         },
@@ -1842,12 +1860,13 @@ export function createProgram(): Command {
     .command('reject')
     .description('Reject candidate work so it never enters the committed graph')
     .argument('<id>', 'Issue identifier or UUID')
-    .option('--reason <reason>', 'Why this candidate is being rejected')
+    .requiredOption('--resolution <resolution>', 'Why it is closed: completed, wont_do, invalid, duplicate, cannot_reproduce or obsolete')
+    .option('--reason <reason>', 'Why this candidate is being rejected (required for a bug)')
     .option('--json', 'Output machine-readable JSON')
     .action(async function (
       this: Command,
       id: string,
-      options: JsonOption & { reason?: string },
+      options: JsonOption & { reason?: string; resolution: string },
     ) {
       await runWithCliErrorHandling(async () => {
         const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });

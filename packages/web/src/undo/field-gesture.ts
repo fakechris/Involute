@@ -1,3 +1,4 @@
+import { resolutionLabel } from '../components/CloseReasonDialog';
 import type { IssueSummary, IssueUpdateMutationVariables } from '../board/types';
 
 /**
@@ -45,6 +46,8 @@ export function beforePatch(issue: IssueSummary, after: IssueFieldPatch): IssueF
       case 'parentId': before.parentId = issue.parent?.id ?? null; break;
       case 'kind': if (issue.kind) before.kind = issue.kind as NonNullable<IssueFieldPatch['kind']>; break;
       case 'snoozedUntil': before.snoozedUntil = (issue as { snoozedUntil?: string | null }).snoozedUntil ?? null; break;
+      // Undoing a cancel reopens the work, which clears its resolution (INV-1118).
+      case 'resolution': if (issue.resolution) before.resolution = issue.resolution; break;
       case 'outcome': case 'scope': case 'constraints': case 'acceptance': case 'verification':
         before[key] = ((issue as unknown as Record<string, unknown>)[key] as string | null | undefined) ?? null; break;
       default: break;
@@ -70,6 +73,8 @@ function describe(patch: IssueFieldPatch, names: FieldNames): string {
       case 'parentId': parts.push(value ? 'moved under another parent' : 'parent removed'); break;
       case 'kind': parts.push(`kind set to ${String(value)}`); break;
       case 'snoozedUntil': parts.push(value ? 'snoozed' : 'unsnoozed'); break;
+      case 'resolution': parts.push(`closed as ${resolutionLabel(String(value)) ?? String(value)}`); break;
+      case 'reason': break;
       default: parts.push(`${key} updated`); break;
     }
   }

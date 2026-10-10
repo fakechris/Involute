@@ -1,3 +1,4 @@
+import type { WorkResolution } from '../components/CloseReasonDialog';
 import type { WorkLinkType } from '../work/types';
 
 export interface TeamSummary {
@@ -127,6 +128,8 @@ export interface IssueSummary {
   title: string;
   kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
   commitmentStatus?: 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
+  /** Why a rejected or canceled item was closed (INV-1118). */
+  resolution?: WorkResolution | null;
   description?: string | null;
   repository?: string | null;
   outcome?: string | null;
@@ -290,6 +293,8 @@ export interface BugMetricsData {
   atRiskOpenCount: number;
   breachedOpen: Array<{ id: string; identifier: string; title: string; overdueHours: number }>;
   bySource: Array<{ source: 'HUMAN_REPORT' | 'AGENT' | 'OTHER'; count: number }>;
+  /** Rejected or canceled bugs by resolution and reporter (INV-1118). */
+  byResolution?: Array<{ resolution: WorkResolution; source: 'HUMAN_REPORT' | 'AGENT' | 'OTHER'; count: number }>;
   unplacedOpenCount: number;
 }
 
@@ -503,6 +508,10 @@ export interface IssueUpdateMutationVariables {
     constraints?: string | null;
     acceptance?: string | null;
     verification?: string | null;
+    /** Required when moving to a Canceled state (INV-1118). */
+    resolution?: WorkResolution;
+    /** Recorded on the audit; required to cancel a bug. */
+    reason?: string;
   };
 }
 

@@ -894,6 +894,16 @@ const typeDefs = /* GraphQL */ `
     REJECTED
   }
 
+  "Why work was closed without being done (INV-1118)."
+  enum WorkResolution {
+    COMPLETED
+    WONT_DO
+    INVALID
+    DUPLICATE
+    CANNOT_REPRODUCE
+    OBSOLETE
+  }
+
   enum WorkLinkType {
     CONTAINS
     BLOCKS
@@ -1046,6 +1056,8 @@ const typeDefs = /* GraphQL */ `
     repository: String
     alias: String
     autoAcceptBugs: Boolean!
+    "Why a rejected candidate or canceled work was closed; null while open (INV-1118)."
+    resolution: WorkResolution
     "Latest automatic-acceptance evaluation of this work, if any (INV-1075)."
     autoAccept: AutoAcceptEvaluation
     links(type: WorkLinkType): WorkLinkConnection!
@@ -1908,6 +1920,8 @@ const typeDefs = /* GraphQL */ `
     atRiskOpenCount: Int!
     breachedOpen: [BugBreach!]!
     bySource: [BugSourceCount!]!
+    "Rejected or canceled bugs by resolution and reporter (INV-1118)."
+    byResolution: [BugResolutionCount!]!
     "Committed open bugs no parent contains; the goal is zero."
     unplacedOpenCount: Int!
   }
@@ -1926,6 +1940,12 @@ const typeDefs = /* GraphQL */ `
   }
 
   type BugSourceCount {
+    source: BugSource!
+    count: Int!
+  }
+
+  type BugResolutionCount {
+    resolution: WorkResolution!
     source: BugSource!
     count: Int!
   }
@@ -1967,6 +1987,10 @@ const typeDefs = /* GraphQL */ `
     alias: String
     "On a PROJECT: accept bugs whose fix GitHub confirms (merged, checks green). People only (INV-1075)."
     autoAcceptBugs: Boolean
+    "Required when moving work to a Canceled state (INV-1118)."
+    resolution: WorkResolution
+    "Why, recorded on the audit; required to cancel a bug."
+    reason: String
     repository: String
     cascadeRepository: Boolean
     # Contract fields. Humans may rewrite them on committed work; agents are
@@ -2231,6 +2255,9 @@ const typeDefs = /* GraphQL */ `
 
   input WorkRejectInput {
     expectedRevision: Int!
+    "Required; refused with a message when missing (INV-1118)."
+    resolution: WorkResolution
+    "Free text; required to decline a bug."
     reason: String
     idempotencyKey: String
   }

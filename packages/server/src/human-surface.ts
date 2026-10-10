@@ -178,6 +178,7 @@ export const HUMAN_GATES: Array<{ text: string; mutation: string } | { text: str
   { text: 'Agents cannot rewrite committed contract fields', mutation: 'issueUpdate' },
   { text: 'Work owner must be a human assignee', mutation: 'issueUpdate' },
   { text: 'Only a person can turn automatic acceptance of verified bug fixes on or off.', mutation: 'issueUpdate' },
+  { text: 'Only a person cancels work', mutation: 'issueUpdate' },
   { text: 'Only a person may reconcile external effects.', mutation: 'executorUpdate' },
   { text: 'Instantiate an approved delivery unit and any predecessors', mutation: 'deliveryExecutionCreate' },
   { text: 'Only a person may approve or reject a delivery change set', mutation: 'deliveryChangeDecide' },

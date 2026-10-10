@@ -16,6 +16,7 @@ export const COMMIT_CANDIDATE_EVENT = 'involute:commit-candidate';
 export const SNOOZE_CANDIDATE_EVENT = 'involute:snooze-candidate';
 import { PlacementPicker } from '../components/PlacementPicker';
 import type { CreatePlacement } from '../work/placement';
+import { ResolutionSelect, type WorkResolution } from '../components/CloseReasonDialog';
 import {
   CANDIDATES_PAGE_QUERY,
   GRAPH_PROJECTS_QUERY,
@@ -416,6 +417,8 @@ export function CandidateCard({
   const startStates = states.filter((state) => state.type === 'UNSTARTED' || state.type === 'STARTED' || state.type === 'REVIEW' || state.type === 'BACKLOG');
   const [assigneeId, setAssigneeId] = useState(candidate.assignee?.id ?? humans[0]?.id ?? '');
   const [reason, setReason] = useState('');
+  // Rejecting says why first (INV-1118): a resolution, then the reason.
+  const [resolution, setResolution] = useState<WorkResolution | ''>('');
   const [error, setError] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<'commit' | 'reject' | 'snooze' | 'duplicate' | null>(null);
   const [duplicateOfId, setDuplicateOfId] = useState('');
@@ -426,6 +429,7 @@ export function CandidateCard({
   const [priority, setPriority] = useState(candidate.priority ?? 0);
   const needsPriority = isBug && !(priority >= 1 && priority <= 4);
   const needsReason = isBug && !reason.trim();
+  const rejectBlockedReason = !resolution ? 'Choose a resolution first: why is it closed?' : needsReason ? 'Say why this bug will not be fixed.' : null;
   const [runCommit] = useMutation<WorkCommitMutationData, WorkCommitMutationVariables>(WORK_COMMIT_MUTATION);
   const [runReject] = useMutation<WorkRejectMutationData, WorkRejectMutationVariables>(WORK_REJECT_MUTATION);
   const [runSnooze] = useMutation<SnoozeMutationData, SnoozeMutationVariables>(ISSUE_SNOOZE_MUTATION);
@@ -575,6 +579,7 @@ export function CandidateCard({
   }
 
   async function handleReject() {
+    if (!resolution) return;
     setError(null);
     setPendingAction('reject');
     try {
@@ -583,6 +588,7 @@ export function CandidateCard({
           id: candidate.id,
           input: {
             expectedRevision: candidate.revision,
+            resolution,
             ...(reason.trim() ? { reason: reason.trim() } : {}),
           },
         },
@@ -751,6 +757,10 @@ export function CandidateCard({
         </div>
       ) : null}
       <label className="observation-field">
+        <span>Resolution</span>
+        <ResolutionSelect ariaLabel={`Resolution for ${candidate.identifier}`} value={resolution} onChange={setResolution} />
+      </label>
+      <label className="observation-field">
         <span>Reject reason</span>
         <input
           aria-label={`Reject reason for ${candidate.identifier}`}
@@ -792,8 +802,8 @@ export function CandidateCard({
         <Btn
           variant="danger"
           icon={<IcoClose size={12} />}
-          disabled={pendingAction !== null || needsReason}
-          {...(needsReason ? { title: 'Say why this bug will not be fixed.' } : {})}
+          disabled={pendingAction !== null || Boolean(rejectBlockedReason)}
+          {...(rejectBlockedReason ? { title: rejectBlockedReason } : {})}
           onClick={() => void handleReject()}
         >
           {pendingAction === 'reject' ? 'Rejecting…' : 'Reject'}
@@ -873,6 +883,8 @@ export function CandidatesPage() {
   const [bulkAssigneeId, setBulkAssigneeId] = useState('');
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
   const [bulkAction, setBulkAction] = useState<'commit' | 'reject' | null>(null);
+  // One resolution for the whole batch (INV-1118); nothing is rejected until it is chosen.
+  const [bulkResolution, setBulkResolution] = useState<WorkResolution | ''>('');
   const [bulkProgress, setBulkProgress] = useState({ done: 0, total: 0 });
   const [bulkError, setBulkError] = useState<string | null>(null);
   // Candidates a batch refused for a blank acceptance: each gets a button that
@@ -1139,7 +1151,7 @@ export function CandidatesPage() {
   }
 
   async function handleBatchReject() {
-    if (selectedIds.length === 0 || isBulkProcessing) return;
+    if (selectedIds.length === 0 || isBulkProcessing || !bulkResolution) return;
     setIsBulkProcessing(true);
     setBulkAction('reject');
     setBulkError(null);
@@ -1154,15 +1166,17 @@ export function CandidatesPage() {
       const candidate = toReject[i];
       if (!candidate) continue;
       try {
-        await runReject({
+        const result = await runReject({
           variables: {
             id: candidate.id,
             input: {
               expectedRevision: candidate.revision,
+              resolution: bulkResolution,
               reason: 'Batch rejected by reviewer',
             },
           },
         });
+        if (result?.data && !result.data.workReject.success) throw new Error(result.data.workReject.message ?? 'refused');
         successCount++;
       } catch (err) {
         failCount++;
@@ -1404,10 +1418,12 @@ export function CandidatesPage() {
                       ? `Committing ${bulkProgress.done}/${bulkProgress.total}…`
                       : `Batch Commit (${selectedIds.length})`}
                   </Btn>
+                  <ResolutionSelect ariaLabel="Resolution for batch reject" value={bulkResolution} disabled={isBulkProcessing} onChange={setBulkResolution} />
                   <Btn
                     variant="danger"
                     icon={<IcoClose size={14} />}
-                    disabled={isBulkProcessing}
+                    disabled={isBulkProcessing || !bulkResolution}
+                    {...(!bulkResolution ? { title: 'Choose a resolution first: why are these closed?' } : {})}
                     onClick={() => void handleBatchReject()}
                   >
                     {isBulkProcessing && bulkAction === 'reject'

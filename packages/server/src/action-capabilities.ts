@@ -164,7 +164,7 @@ export const GRAPHQL_ONLY_FIELDS: Record<string, Record<string, string>> = {
   agentRequestAnswer: { overrideReason: 'Human override of an agent request claim; agents must hold their claim token.' },
   bugReport: { labelIds: 'The dedicated bug tool sets Type Bug. Apply existing extra labels with work_update(label_ids), or use work_propose(labels) with the same bug rules.' },
   workLinkDelete: { id: 'MCP work_unlink selects the same edge by its directed endpoints and type.' },
-  issueUpdate: { assigneeId: 'Human accountability is managed in the web UI; a claim never changes the assignee.', projectId: 'Legacy Project association; work hierarchy uses parentId on both surfaces.', autoAcceptBugs: 'Whether verified fixes may close themselves is a person\'s decision on the Projects page; an agent cannot widen its own acceptance (INV-1075).' },
+  issueUpdate: { assigneeId: 'Human accountability is managed in the web UI; a claim never changes the assignee.', projectId: 'Legacy Project association; work hierarchy uses parentId on both surfaces.', autoAcceptBugs: 'Whether verified fixes may close themselves is a person\'s decision on the Projects page; an agent cannot widen its own acceptance (INV-1075).', resolution: 'Only a person cancels work (agents never set CANCELED, INV-912); the resolution goes with that move (INV-1118).', reason: 'The close reason that goes with a person\'s cancel (INV-1118); agents explain themselves in run summaries and comments.' },
 };
 
 type ActionDetails = { prerequisites: string[]; permission: string; concurrency: string; receipt: string; recovery: string; humanGate: string };

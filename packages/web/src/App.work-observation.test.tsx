@@ -224,6 +224,9 @@ describe('K6 observation UI', () => {
       },
     });
 
+    fireEvent.change(screen.getByLabelText('Resolution for INV-9'), {
+      target: { value: 'DUPLICATE' },
+    });
     fireEvent.change(screen.getByLabelText('Reject reason for INV-9'), {
       target: { value: 'duplicate of INV-2' },
     });
@@ -235,6 +238,7 @@ describe('K6 observation UI', () => {
         id: 'issue-c',
         input: {
           expectedRevision: 1,
+          resolution: 'DUPLICATE',
           reason: 'duplicate of INV-2',
         },
       },

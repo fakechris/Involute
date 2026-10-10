@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient, type WorkResolution } from '@prisma/client';
 
 import { BUG_LABEL_NAME, BUG_REPORT_SOURCE } from './bug-report.js';
 import { loadBugSlas } from './bug-sla.js';
@@ -17,10 +17,18 @@ export interface BugMetrics {
   slaMetRate: number | null;
   atRiskOpenCount: number;
   breachedOpen: Array<{ id: string; identifier: string; title: string; overdueHours: number }>;
-  bySource: Array<{ source: 'HUMAN_REPORT' | 'AGENT' | 'OTHER'; count: number }>;
+  bySource: Array<{ source: BugSource; count: number }>;
+  /**
+   * Closed-without-fixing bugs by resolution and by who reported them
+   * (INV-1118): a high invalid / cannot_reproduce share from agents shows
+   * which reporter files noise.
+   */
+  byResolution: Array<{ resolution: WorkResolution; source: BugSource; count: number }>;
   /** Committed open bugs that no parent contains — the goal is zero (INV-749). */
   unplacedOpenCount: number;
 }
+
+type BugSource = 'HUMAN_REPORT' | 'AGENT' | 'OTHER';
 
 interface AuditRow {
   workId: string;
@@ -54,6 +62,7 @@ export async function loadBugMetrics(prisma: DatabaseClient, scope: Prisma.Issue
       source: true,
       parentId: true,
       commitmentStatus: true,
+      resolution: true,
       createdAt: true,
       state: { select: { type: true } },
     },
@@ -72,6 +81,7 @@ export async function loadBugMetrics(prisma: DatabaseClient, scope: Prisma.Issue
 
   const triageHours: number[] = [];
   const sources = { HUMAN_REPORT: 0, AGENT: 0, OTHER: 0 };
+  const resolutions = new Map<string, { resolution: WorkResolution; source: BugSource; count: number }>();
   for (const bug of bugs) {
     const rows = byWork.get(bug.id) ?? [];
     const creation = rows.find((row) => row.isCreation);
@@ -79,9 +89,14 @@ export async function loadBugMetrics(prisma: DatabaseClient, scope: Prisma.Issue
       const decided = rows.find((row) => row.commitment === 'COMMITTED' || row.commitment === 'REJECTED');
       if (decided) triageHours.push((decided.createdAt.getTime() - creation.createdAt.getTime()) / 3_600_000);
     }
-    if (bug.source?.startsWith(BUG_REPORT_SOURCE)) sources.HUMAN_REPORT += 1;
-    else if (creation?.actorKind === 'AGENT') sources.AGENT += 1;
-    else sources.OTHER += 1;
+    const source: BugSource = bug.source?.startsWith(BUG_REPORT_SOURCE) ? 'HUMAN_REPORT' : creation?.actorKind === 'AGENT' ? 'AGENT' : 'OTHER';
+    sources[source] += 1;
+    if (bug.resolution) {
+      const key = `${bug.resolution}:${source}`;
+      const entry = resolutions.get(key) ?? { resolution: bug.resolution, source, count: 0 };
+      entry.count += 1;
+      resolutions.set(key, entry);
+    }
   }
   triageHours.sort((left, right) => left - right);
 
@@ -131,9 +146,10 @@ export async function loadBugMetrics(prisma: DatabaseClient, scope: Prisma.Issue
     slaMetRate: closedTotal ? Math.round((slaMetCount / closedTotal) * 1000) / 1000 : null,
     atRiskOpenCount,
     breachedOpen,
-    bySource: (Object.entries(sources) as Array<[BugMetrics['bySource'][number]['source'], number]>)
+    bySource: (Object.entries(sources) as Array<[BugSource, number]>)
       .filter(([, count]) => count > 0)
       .map(([source, count]) => ({ source, count })),
+    byResolution: [...resolutions.values()].sort((left, right) => right.count - left.count || left.resolution.localeCompare(right.resolution) || left.source.localeCompare(right.source)),
     unplacedOpenCount,
   };
 }

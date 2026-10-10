@@ -66,7 +66,7 @@ describe('notifications follow their decisions (INV-1093)', () => {
     expect(isActionableNotification('work.proposed_batch')).toBe(true);
 
     await commitWork(prisma, proposed[0]!.id, { assigneeId: f.admin.id, expectedRevision: proposed[0]!.revision }, asPerson(f.admin));
-    await rejectWork(prisma, proposed[1]!.id, { expectedRevision: proposed[1]!.revision, reason: 'No.' }, asPerson(f.admin));
+    await rejectWork(prisma, proposed[1]!.id, { expectedRevision: proposed[1]!.revision, resolution: 'WONT_DO', reason: 'No.' }, asPerson(f.admin));
     await expect(prisma.notification.findFirstOrThrow({ where: { type: 'work.proposed_batch', userId: f.admin.id } })).resolves.toMatchObject({ resolvedAt: null });
 
     await commitWork(prisma, proposed[2]!.id, { assigneeId: f.admin.id, expectedRevision: proposed[2]!.revision }, asPerson(f.admin));
