@@ -10,8 +10,9 @@ import { useMutation, useQuery } from '@apollo/client/react';
 import { BOARD_PAGE_QUERY, USER_UPDATE_MUTATION, FILE_UPLOAD_MUTATION } from '../board/queries';
 import type { BoardPageQueryData, BoardPageQueryVariables, UserSummary, UserUpdateMutationData, UserUpdateMutationVariables, FileUploadMutationData, FileUploadMutationVariables } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
+import { ExtensionsTab } from './ExtensionsTab';
 
-type SettingsTab = 'profile' | 'preferences' | 'members' | 'teams' | 'security' | 'services' | 'labels' | 'features';
+type SettingsTab = 'profile' | 'preferences' | 'extensions' | 'members' | 'teams' | 'security' | 'services' | 'labels' | 'features';
 
 /** Settings → Administration (docs/permissions.md §7); the server refuses everyone else. */
 const ADMIN_TABS: ReadonlyArray<{ id: SettingsTab; label: string }> = [
@@ -65,6 +66,7 @@ export function SettingsPage() {
   const tabs: Array<{ id: SettingsTab; label: string }> = [
     { id: 'profile', label: 'Profile' },
     { id: 'preferences', label: 'Preferences' },
+    { id: 'extensions', label: 'Extensions' },
     ...(isAdmin ? ADMIN_TABS : []),
   ];
   const tab: SettingsTab = tabs.find((candidate) => candidate.id === requested)?.id ?? 'profile';
@@ -118,6 +120,7 @@ export function SettingsPage() {
         <div style={{ maxWidth: 640 }}>
           {tab === 'profile' && <ProfileTab />}
           {tab === 'preferences' && <PreferencesTab />}
+        {tab === 'extensions' && <ExtensionsTab />}
           {tab === 'labels' && <LabelsTab />}
           {tab === 'members' && <AdminMembersTab />}
           {tab === 'teams' && <AdminTeamsTab />}
