@@ -12,6 +12,14 @@ describe('board filter keys', () => {
     window.localStorage.clear();
   });
 
+  it('/ works with a Chinese input method, where the key types 、', async () => {
+    renderApp(App, { data: boardQueryResult, loading: false }, ['/?team=INV']);
+    await screen.findByRole('heading', { name: 'All issues' });
+    fireEvent.keyDown(window, { code: 'Slash', key: '、' });
+    const search = await screen.findByLabelText('Search board issues');
+    await waitFor(() => expect(search).toHaveFocus());
+  });
+
   it('opens the bar when a saved filter is in effect, and ⇧F clears everything', async () => {
     writeStoredBoardViewState('INV', { ...getDefaultBoardViewState(), labelIds: ['label-task'], query: 'backlog' });
     renderApp(App, { data: boardQueryResult, loading: false }, ['/?team=INV']);

@@ -124,6 +124,7 @@ import { ReportBugDialog } from '../components/ReportBugDialog';
 import { BacklogPage } from './BacklogPage';
 import { IcoFilter, IcoPlus, IcoBug, IcoList, IcoBoard, IcoClose, IcoChevR, IcoProject } from '../components/Icons';
 import { Btn, PriorityIcon } from '../components/Primitives';
+import { isSlashKey } from '../lib/keys';
 
 const ISSUE_PAGE_SIZE = 200;
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
@@ -971,7 +972,7 @@ export function BoardPage() {
         return;
       }
 
-      if (event.key === '/') {
+      if (isSlashKey(event)) {
         event.preventDefault();
         // The search box only exists while the bar is open: open it first (INV-1086).
         if (boardSearchInputRef.current) {
