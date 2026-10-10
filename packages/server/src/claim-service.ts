@@ -69,6 +69,7 @@ import { hasInitialDoneMarker, INITIAL_DONE_MARKER, notifyClosableResearch } fro
 import { researchLacksDownstream } from './work-hygiene.js';
 import { announceBug, composeDescription } from './bug-report.js';
 import { announceIncident, INCIDENT_DEFAULT_ACCEPTANCE } from './incident.js';
+import { notifyClosableIncidents } from './incident-closure.js';
 import {
   completeWorkIdempotency,
   hashIdempotencyRequest,
@@ -539,6 +540,8 @@ export async function proposeWork(
     // A new candidate reaches the people who decide it, batched (INV-1093);
     // a bug candidate is announced to triage by announceBug instead.
     else if (created.commitmentStatus === 'CANDIDATE') await projectProposedBatch(transaction, { eventId: createdEvent.id, proposerId: actor.actorId, work: created });
+    // A follow-up committed on filing (a bug) may be the last one an incident waited for (INV-1126).
+    if (created.commitmentStatus === 'COMMITTED') await notifyClosableIncidents(transaction, created);
     if (input.receipt) {
       // Same transaction as the write: a proposal and its receipt land
       // together or not at all.
@@ -806,6 +809,7 @@ export async function commitWork(
     await settleProposedBatches(transaction, { resolvedById: actor.actorId, work: updated });
 
     await notifyClosableResearch(transaction, updated);
+    await notifyClosableIncidents(transaction, updated);
 
     if (committedToDone && actor.actorId) {
       await recordStateChangeAcceptance(transaction, {

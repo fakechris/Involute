@@ -50,6 +50,7 @@ import { writeWorkTombstone } from './work-tombstone.js';
 import { assertSingleType, isBugWork, isResearchWork } from './labels.js';
 import { assertBugCloseReason, enqueueWorkCanceledEvent, parseWorkResolution } from './work-resolution.js';
 import { assertAgentMayCloseResearch, RESEARCH_CLOSE_REASON } from './research-closure.js';
+import { assertIncidentMayClose } from './incident-closure.js';
 import {
   INTERNAL_WRITE_ACTOR,
   recordWorkAudit,
@@ -234,6 +235,11 @@ export async function createIssueWithAudit(
       },
     });
 
+  // Created straight into Done, an incident meets the closing rule too (INV-1126).
+  if (labelConnect?.length && (await prisma.workflowState.findUnique({ where: { id: state.id }, select: { type: true } }))?.type === 'COMPLETED') {
+    await assertIncidentMayClose(prisma, created);
+  }
+
   await syncContainsFromParentId(prisma, created.id, created.parentId, actor);
   const auditId = await recordWorkAudit(prisma, {
       actor,
@@ -371,6 +377,17 @@ export async function updateIssue(
         } else {
           assertActorCan(actor.actorKind, 'accept');
         }
+      }
+
+      // An incident closes with its follow-ups (and, SEV1/SEV2, its postmortem),
+      // whoever closes it (INV-1126). Checked against the values this update saves.
+      if (state.type === 'COMPLETED' && state.id !== existingIssue.stateId) {
+        const severity = parseSeverity(input.severity);
+        await assertIncidentMayClose(transaction, {
+          ...existingIssue,
+          ...(input.description !== undefined ? { description: input.description } : {}),
+          ...(severity !== undefined ? { severity } : {}),
+        });
       }
 
       if (state.type === 'COMPLETED' && state.id !== existingIssue.stateId && actor.actorKind === 'HUMAN' && actor.actorId) {

@@ -2,6 +2,7 @@ import { requestNeedInfo, withdrawNeedInfo } from './need-info-service.js';
 import { protocolInfo } from './protocol-info.js';
 import { groupForAction, hidesFromCaller, MCP_TOOL_GROUPS, resolveMcpCall, type McpToolGroup } from './mcp-tool-groups.js';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
+import { postmortemDraftFor } from './postmortem.js';
 import { starTimelineEntry, unstarTimelineEntry, workTimelineFor, type TimelineEntry } from './work-activity-timeline.js';
 import { storeUpload } from './uploads.js';
 import { actionCapabilities } from './action-capabilities.js';
@@ -86,6 +87,7 @@ export type McpToolName =
   | 'work_view_save'
   | 'work_view_delete'
   | 'work_timeline'
+  | 'work_postmortem_draft'
   | 'work_timeline_star'
   | 'work_timeline_unstar'
   | 'work_get_context'
@@ -124,6 +126,7 @@ export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
   'work_list_ready',
   'work_views',
   'work_timeline',
+  'work_postmortem_draft',
   'agent_inbox',
   'protocol_get_guide',
 ];
@@ -846,6 +849,23 @@ async function callMcpAction(
       const timeline = await workTimelineFor(context, requiredString(args.work_id, 'work_id'), { starredOnly: args.starred_only === true });
       return { work_id: timeline.workId, identifier: timeline.identifier, truncated: timeline.truncated, entries: timeline.entries.map(timelineEntryForMcp) };
     }
+    case 'work_postmortem_draft': {
+      const draft = await postmortemDraftFor(context, requiredString(args.work_id, 'work_id'));
+      return {
+        work_id: draft.workId,
+        identifier: draft.identifier,
+        is_incident: draft.isIncident,
+        severity: draft.severity,
+        postmortem_required: draft.postmortemRequired,
+        timestamps: draft.timestamps.map((stamp) => ({ field: stamp.field, label: stamp.label, at: stamp.at?.toISOString() ?? null })),
+        starred_count: draft.starredCount,
+        timeline_truncated: draft.timelineTruncated,
+        follow_ups: draft.followUps.map((item) => ({ identifier: item.identifier, title: item.title, commitment_status: item.commitmentStatus, state: item.stateName })),
+        filename: draft.filename,
+        markdown: draft.markdown,
+        next: `Complete the TODO sections, then attach it: work_attach_file(work_id: "${draft.identifier}", filename: "${draft.filename}", mime_type: "text/markdown", content: <base64>).`,
+      };
+    }
     case 'work_timeline_star': {
       const result = await starTimelineEntry(context, requiredString(args.work_id, 'work_id'), requiredString(args.entry_key, 'entry_key'));
       return { work_id: result.workId, entry_key: result.entryKey, starred: true, starred_at: result.star.starredAt.toISOString(), starred_by: result.star.starredBy.name ?? result.star.starredBy.email ?? result.star.starredById };
@@ -1499,6 +1519,12 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     inputSchema: { type: 'object', properties: { work_id: { type: 'string', description: 'Work identifier (e.g. INV-104) or UUID' }, starred_only: { type: 'boolean' } }, required: ['work_id'] },
   },
   {
+    name: 'work_postmortem_draft',
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    description: 'Draft a postmortem (INV-1126) as markdown: the six sections (摘要 / 影响 / 时间线 / 促成因素 / 教训 / Follow-ups) filled with the incident, its impact timestamps, the starred timeline entries and the follow-ups DERIVED_FROM it. Writes nothing: complete the TODOs and attach it with work_attach_file. A SEV1/SEV2 incident cannot reach Done without an attachment.',
+    inputSchema: { type: 'object', properties: { work_id: { type: 'string', description: 'Work identifier (e.g. INV-104) or UUID' } }, required: ['work_id'] },
+  },
+  {
     name: 'work_timeline_star',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     description: 'Star a timeline entry as a key event (INV-1116), e.g. for a postmortem. Pass an entry key from work_timeline. Needs write access; starring a starred entry keeps the first star.',
@@ -1835,6 +1861,7 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_view_save: 'propose',
   work_view_delete: 'propose',
   work_timeline: 'read',
+  work_postmortem_draft: 'read',
   work_timeline_star: 'propose',
   work_timeline_unstar: 'propose',
   work_get_context: 'read',

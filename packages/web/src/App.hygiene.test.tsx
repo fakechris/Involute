@@ -22,6 +22,10 @@ const hygieneData: WorkHygieneQueryData = {
     researchWithoutDownstream: [{ ...ref(694, 'External projects study'), repository: 'fakechris/lumenbox' }],
     researchClosableCount: 1,
     researchClosable: [{ ...ref(940, 'Delivery package study'), repository: 'fakechris/Involute' }],
+    incidentsWithoutDownstreamCount: 1,
+    incidentsWithoutDownstream: [{ ...ref(1130, 'Board blank for everyone'), severity: 'SEV3' }],
+    incidentsWithoutPostmortemCount: 1,
+    incidentsWithoutPostmortem: [{ ...ref(1131, 'Sync stalled'), severity: 'SEV1' }],
   },
 };
 
@@ -37,6 +41,17 @@ describe('work graph health page (INV-721)', () => {
     expect(within(screen.getByRole('region', { name: 'Research with nothing derived' })).getByText('INV-694')).toBeInTheDocument();
     expect(summary).toHaveTextContent('1Research ready to close');
     expect(within(screen.getByRole('region', { name: 'Research ready to close' })).getByText('INV-940')).toBeInTheDocument();
+  });
+
+  it('lists incidents missing follow-ups or a postmortem (INV-1126)', async () => {
+    renderApp(App, { data: boardQueryResult, loading: false, hygieneData }, ['/hygiene']);
+    const summary = await screen.findByLabelText('Summary');
+    expect(summary).toHaveTextContent('1Incidents without follow-ups');
+    expect(summary).toHaveTextContent('1Incidents without a postmortem');
+    expect(within(screen.getByRole('region', { name: 'Incidents without follow-ups' })).getByText('INV-1130')).toBeInTheDocument();
+    const postmortem = screen.getByRole('region', { name: 'Incidents without a postmortem' });
+    expect(within(postmortem).getByText('INV-1131')).toBeInTheDocument();
+    expect(within(postmortem).getByText('SEV1')).toBeInTheDocument();
   });
 
   it('records a worded dependency in the right direction', async () => {
