@@ -121,6 +121,8 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   teamUpdateAccess: { kind: 'api-only', reason: 'Superseded by teamUpdate (name and visibility together), which the team settings page uses; kept for existing API clients.' },
   userUpdate: { kind: 'web', doc: 'USER_UPDATE_MUTATION', components: ['routes/SettingsPage.tsx'], test: 'routes/SettingsPage.test.tsx' },
   savedViewUpsert: { kind: 'web', doc: 'SAVED_VIEW_UPSERT_MUTATION', components: ['routes/ViewsPage.tsx'], label: 'Share with team', test: 'routes/ViewsPage.test.tsx' },
+  issueTimelineStar: { kind: 'web', doc: 'ISSUE_TIMELINE_STAR_MUTATION', components: ['components/IssueTimeline.tsx'], label: 'Star as key event', test: 'components/IssueTimeline.test.tsx' },
+  issueTimelineUnstar: { kind: 'web', doc: 'ISSUE_TIMELINE_UNSTAR_MUTATION', components: ['components/IssueTimeline.tsx'], label: 'Remove star', test: 'components/IssueTimeline.test.tsx' },
   savedViewDelete: { kind: 'web', doc: 'SAVED_VIEW_DELETE_MUTATION', components: ['routes/ViewsPage.tsx'], label: 'Delete view', test: 'routes/ViewsPage.test.tsx' },
   webhookCreate: { kind: 'web', doc: 'WEBHOOK_CREATE_MUTATION', components: ['routes/OpsPage.tsx'], label: 'Add webhook', test: 'routes/OpsPage.test.tsx' },
   webhookDelete: { kind: 'web', doc: 'WEBHOOK_DELETE_MUTATION', components: ['routes/OpsPage.tsx'], label: 'Delete webhook', test: 'routes/OpsPage.test.tsx' },

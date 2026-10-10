@@ -43,6 +43,7 @@ export const WORKGRAPH_TABLES: ReadonlyArray<{ table: string; self?: string[] }>
   { table: 'WorkReviewDecision' },
   { table: 'WorkAutoAcceptEvaluation' },
   { table: 'WorkAudit' },
+  { table: 'WorkTimelineStar' },
   { table: 'ContractAmendment' },
   { table: 'DeliveryPackage' },
   { table: 'DeliveryChangeSet' },
