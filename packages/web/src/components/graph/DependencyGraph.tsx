@@ -43,6 +43,7 @@ interface DrawnEdge {
 const OTHER_LINK_LABEL: Partial<Record<GraphEdge['type'], string>> = {
   RELATED_TO: 'related',
   DUPLICATE_OF: 'duplicate of',
+  REGRESSED_BY: 'regressed by',
   DERIVED_FROM: 'derived from',
   DISCOVERED_DURING: 'discovered during',
 };

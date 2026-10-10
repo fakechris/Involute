@@ -78,6 +78,8 @@ enum WorkLinkType {
   DISCOVERED_DURING
   RELATED_TO
   DUPLICATE_OF
+  // INV-1120: A REGRESSED_BY B — B introduced the regression A reports or fixes.
+  REGRESSED_BY
 }
 
 enum WorkRunStatus {
@@ -364,6 +366,9 @@ model Issue {
   priority          Int               @default(0)
   severity          IssueSeverity?
   reproducibility   BugReproducibility?
+  // INV-1121: the deploy a bug was found in (build SHA, 7–40 hex). No version
+  // numbers (decision INV-1130); the fix SHA is derived from merge evidence.
+  foundInSha        String?           @db.VarChar(40)
   kind              WorkKind          @default(ISSUE)
   commitmentStatus  CommitmentStatus  @default(COMMITTED)
   revision          Int               @default(1)
@@ -385,6 +390,9 @@ model Issue {
   autoAcceptBugs    Boolean           @default(false)
   // INV-1118: structured close reason; the free-text reason stays on WorkAudit.
   resolution        WorkResolution?
+  // INV-1120: how many times it left Done / Canceled for an open state.
+  reopenCount       Int               @default(0)
+  reopens           WorkReopen[]
   // INV-1125: Type: Incident only. Impact started ≤ detected / mitigated ≤
   // resolved; a missing mitigatedAt counts as resolvedAt in metrics.
   impactStartedAt   DateTime?
@@ -776,6 +784,23 @@ model WorkTombstone {
 // projected from audits, runs, evidence and comments; this row only records
 // which one, who starred it and when. Unstarring keeps the row (who and when),
 // so starring is on record both ways; at most one active star per entry.
+// INV-1120: one row per terminal → open move, written with the audit row that
+// recorded it, whatever surface made the move.
+model WorkReopen {
+  id              String            @id @default(uuid()) @db.Uuid
+  workId          String            @db.Uuid
+  work            Issue             @relation(fields: [workId], references: [id], onDelete: Cascade)
+  auditId         String            @unique @db.Uuid
+  audit           WorkAudit         @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  fromStateType   WorkflowStateType
+  toStateType     WorkflowStateType
+  // The Done / Canceled spell it left was entered by the Auto-Accept Gate (INV-1075).
+  afterAutoAccept Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+
+  @@index([workId, createdAt])
+}
+
 model WorkTimelineStar {
   id            String    @id @default(uuid()) @db.Uuid
   workId        String    @db.Uuid
@@ -814,6 +839,7 @@ model WorkAudit {
   after           Json
   createdAt       DateTime   @default(now())
   receipt         DecisionReceipt?
+  reopen          WorkReopen?
 
   @@index([workId, createdAt])
   @@index([actorId])

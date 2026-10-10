@@ -22,7 +22,7 @@ export interface McpToolGroup {
 export const MCP_TOOL_GROUPS: readonly McpToolGroup[] = [
   {
     name: 'work_relate',
-    description: 'Add or remove a typed relation between two work items (BLOCKS, DERIVED_FROM, DISCOVERED_DURING, RELATED_TO, DUPLICATE_OF; CONTAINS is added through parent_id on work_propose/work_update). action "link" creates it, "unlink" removes the exact directed edge — use unlink before correcting a reversed BLOCKS.',
+    description: 'Add or remove a typed relation between two work items (BLOCKS, DERIVED_FROM, DISCOVERED_DURING, RELATED_TO, DUPLICATE_OF, REGRESSED_BY; CONTAINS is added through parent_id on work_propose/work_update). action "link" creates it, "unlink" removes the exact directed edge — use unlink before correcting a reversed BLOCKS.',
     actions: { link: 'work_link', unlink: 'work_unlink' },
   },
   {
@@ -33,8 +33,8 @@ export const MCP_TOOL_GROUPS: readonly McpToolGroup[] = [
   },
   {
     name: 'work_timeline',
-    description: 'The issue timeline (INV-1116): action "list" (default) returns audit changes, runs, evidence and comments in time order with actors and entry keys (starred_only for key events); "star" marks an entry as a key event, "unstar" removes the star.',
-    actions: { list: 'work_timeline', star: 'work_timeline_star', unstar: 'work_timeline_unstar' },
+    description: 'The issue timeline (INV-1116): action "list" (default) returns audit changes, runs, evidence and comments in time order with actors and entry keys (starred_only for key events); "star" marks an entry as a key event, "unstar" removes the star; "postmortem_draft" returns a six-section postmortem markdown built from the starred entries, impact timestamps and follow-ups, to complete and attach with work_attach_file (INV-1126).',
+    actions: { list: 'work_timeline', star: 'work_timeline_star', unstar: 'work_timeline_unstar', postmortem_draft: 'work_postmortem_draft' },
     defaultAction: 'list',
   },
   {

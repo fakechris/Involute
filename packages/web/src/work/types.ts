@@ -9,7 +9,8 @@ export type WorkLinkType =
   | 'DERIVED_FROM'
   | 'DISCOVERED_DURING'
   | 'RELATED_TO'
-  | 'DUPLICATE_OF';
+  | 'DUPLICATE_OF'
+  | 'REGRESSED_BY';
 export type WorkRunStatus = 'QUEUED' | 'RUNNING' | 'BLOCKED' | 'COMPLETED' | 'FAILED';
 export type WorkEvidenceKind = 'PR' | 'TEST' | 'LOG' | 'SCREENSHOT' | 'ARTIFACT' | 'DECISION';
 export type ActorKind = 'HUMAN' | 'AGENT' | 'SERVICE';
@@ -490,6 +491,10 @@ export interface WorkHygieneQueryData {
     researchWithoutDownstream: Array<HygieneRef & { repository: string | null }>;
     researchClosableCount: number;
     researchClosable: Array<HygieneRef & { repository: string | null }>;
+    incidentsWithoutDownstreamCount: number;
+    incidentsWithoutDownstream: Array<HygieneRef & { severity: string | null }>;
+    incidentsWithoutPostmortemCount: number;
+    incidentsWithoutPostmortem: Array<HygieneRef & { severity: string | null }>;
   };
 }
 

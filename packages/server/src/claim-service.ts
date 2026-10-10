@@ -71,6 +71,7 @@ import { researchLacksDownstream } from './work-hygiene.js';
 import { announceBug, composeDescription } from './bug-report.js';
 import { announceIncident, INCIDENT_DEFAULT_ACCEPTANCE } from './incident.js';
 import { mergeIncidentTimes, readIncidentTimes } from './incident-timestamps.js';
+import { notifyClosableIncidents } from './incident-closure.js';
 import {
   completeWorkIdempotency,
   hashIdempotencyRequest,
@@ -86,6 +87,7 @@ import {
 } from './work-service.js';
 import { parseSeverity } from './severity.js';
 import { parseReproducibility } from './reproducibility.js';
+import { parseFoundInSha } from './found-in.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -125,6 +127,8 @@ export interface ProposeWorkInput {
   resolvedAt?: Date | string | null;
   /** ALWAYS / SOMETIMES / ONCE: how often a bug reproduces (INV-1122). */
   reproducibility?: string | null;
+  /** Deploy SHA (7–40 hex) a bug was found in (INV-1121). */
+  foundInSha?: string | null;
   /** Existing work (ids or identifiers) this proposal is blocked by — each becomes X BLOCKS new (INV-720). */
   blockedBy?: string[] | null;
   /** Existing work this proposal blocks — each becomes new BLOCKS X. */
@@ -451,6 +455,8 @@ export async function proposeWork(
     if (severity) createInput.severity = severity;
     const reproducibility = parseReproducibility(input.reproducibility);
     if (reproducibility) createInput.reproducibility = reproducibility;
+    const foundInSha = parseFoundInSha(input.foundInSha);
+    if (foundInSha) createInput.foundInSha = foundInSha;
     let directBug = false;
     if (isBug) {
       if (steps) createInput.description = composeDescription(input.description, steps);
@@ -564,6 +570,8 @@ export async function proposeWork(
     // A new candidate reaches the people who decide it, batched (INV-1093);
     // a bug candidate is announced to triage by announceBug instead.
     else if (created.commitmentStatus === 'CANDIDATE') await projectProposedBatch(transaction, { eventId: createdEvent.id, proposerId: actor.actorId, work: created });
+    // A follow-up committed on filing (a bug) may be the last one an incident waited for (INV-1126).
+    if (created.commitmentStatus === 'COMMITTED') await notifyClosableIncidents(transaction, created);
     if (input.receipt) {
       // Same transaction as the write: a proposal and its receipt land
       // together or not at all.
@@ -831,6 +839,7 @@ export async function commitWork(
     await settleProposedBatches(transaction, { resolvedById: actor.actorId, work: updated });
 
     await notifyClosableResearch(transaction, updated);
+    await notifyClosableIncidents(transaction, updated);
 
     if (committedToDone && actor.actorId) {
       await recordStateChangeAcceptance(transaction, {

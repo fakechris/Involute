@@ -43,6 +43,7 @@ export function beforePatch(issue: IssueSummary, after: IssueFieldPatch): IssueF
       case 'impactStartedAt': case 'detectedAt': case 'mitigatedAt': case 'resolvedAt':
         before[key] = issue[key] ?? null; break;
       case 'reproducibility': before.reproducibility = issue.reproducibility ?? null; break;
+      case 'foundInSha': before.foundInSha = issue.foundInSha ?? null; break;
       case 'assigneeId': before.assigneeId = issue.assignee?.id ?? null; break;
       case 'labelIds': before.labelIds = issue.labels.nodes.map((label) => label.id); break;
       case 'title': before.title = issue.title; break;
@@ -72,6 +73,7 @@ function describe(patch: IssueFieldPatch, names: FieldNames): string {
       case 'mitigatedAt': parts.push(value ? 'mitigation time set' : 'mitigation time cleared'); break;
       case 'resolvedAt': parts.push(value ? 'resolution time set' : 'resolution time cleared'); break;
       case 'reproducibility': parts.push(value ? `reproducibility set to ${String(value).toLowerCase()}` : 'reproducibility cleared'); break;
+      case 'foundInSha': parts.push(value ? `found in ${String(value).slice(0, 12)}` : 'found-in cleared'); break;
       case 'assigneeId': parts.push(value ? `assigned to ${names.userName?.(String(value)) ?? 'someone'}` : 'unassigned'); break;
       case 'labelIds': {
         const labels = names.labelNames?.(value as string[]) ?? [];
