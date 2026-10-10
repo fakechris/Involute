@@ -50,6 +50,9 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   actorReactivate: { kind: 'web', doc: 'ACTOR_REACTIVATE_MUTATION', components: ['components/AgentLifecycleActions.tsx'], label: 'Reactivate', test: 'App.agents-lifecycle.test.tsx' },
   actorTransferOwner: { kind: 'web', doc: 'ACTOR_TRANSFER_OWNER_MUTATION', components: ['components/AgentLifecycleActions.tsx'], label: 'Transfer owner', test: 'App.agents-lifecycle.test.tsx' },
   agentCredentialCreate: { kind: 'web', components: ['routes/AgentsTab.tsx'], test: 'App.agents-issue.test.tsx' },
+  // INV-1145: a person connects and disconnects the Involute Capture extension.
+  extensionTokenCreate: { kind: 'web', doc: 'EXTENSION_TOKEN_CREATE_MUTATION', components: ['routes/ExtensionConnectPage.tsx'], label: 'Connect extension', test: 'routes/ExtensionConnectPage.test.tsx' },
+  extensionTokenRevoke: { kind: 'web', doc: 'EXTENSION_TOKEN_REVOKE_MUTATION', components: ['routes/ExtensionsTab.tsx'], label: 'Disconnect', test: 'routes/ExtensionConnectPage.test.tsx' },
   agentCredentialRevoke: { kind: 'web', doc: 'AGENT_CREDENTIAL_REVOKE_MUTATION', components: ['routes/AgentsPage.tsx'], label: 'Revoke', test: 'App.agents-lifecycle.test.tsx' },
   agentRequestAnswer: {
     kind: 'web',
@@ -283,6 +286,9 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationSurface> = {
   'incident.declared': { kind: 'info', actionable: 'info' },
   // The Incident Lead closes it from the issue page once the postmortem is attached (INV-1126).
   'incident.closable': { kind: 'info', actionable: 'info' },
+  // An incident follow-up nears or passes its deadline (INV-1127): its owner and the Incident Lead hear once each.
+  'incident.follow_up_at_risk': { kind: 'info', actionable: 'info' },
+  'incident.follow_up_overdue': { kind: 'info', actionable: 'info' },
   'bug.sla_breached': { kind: 'info', actionable: 'info' },
   'contract.amendment_proposed': { kind: 'work', action: 'Accept change', component: 'components/ContractAmendmentPanel.tsx', actionable: 'CONTRACT_AMENDMENT' },
   'decision.requested': { kind: 'work', action: 'Respond to the agent', component: 'components/RespondToAgent.tsx', actionable: 'DECISION_REQUESTED' },

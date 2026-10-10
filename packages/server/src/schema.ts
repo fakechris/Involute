@@ -178,10 +178,12 @@ import { loadProjectWorkGraph, type ProjectWorkGraph } from './work-graph-view.j
 import { loadWorkTimelines } from './work-timeline.js';
 import { dependencyHints } from './mention-links.js';
 import { loadWorkHygiene } from './work-hygiene.js';
+import { EXTENSION_TOKEN_HUMAN_ONLY_MESSAGE, createExtensionToken, listExtensionTokens, revokeExtensionToken } from './extension-tokens.js';
 import { type AttentionItem, type AttentionKind, loadAttention, pageAttention, summarizeAttention } from './attention-service.js';
 import { BUG_LABEL_NAME, findSimilarBugs, reportBug, type BugReportInput } from './bug-report.js';
 import { normalizeWebOrigin } from './web-origins.js';
 import { loadBugSlas } from './bug-sla.js';
+import { FOLLOW_UP_LINK_WHERE, loadFollowUpDeadlines } from './follow-up-deadline.js';
 import { loadReviewWaits } from './review-wait.js';
 import { snapshotContract } from './evidence-contract.js';
 import { loadBugMetrics, type BugMetrics } from './bug-metrics.js';
@@ -238,6 +240,8 @@ type IssueParent = Issue & {
   cycle?: Cycle | null;
   /** Present only when the list read batched `openBlockers`; each link carries its blocker. */
   incomingLinks?: Array<WorkLink & { from?: Issue | null }> | null;
+  /** Present only when the list read batched `followUpDeadline`: its DERIVED_FROM links to incidents. */
+  outgoingLinks?: Array<Pick<WorkLink, 'toId'>> | null;
 };
 type WorkLinkParent = WorkLink & { from?: Issue | null; to?: Issue | null };
 type WorkClaimParent = WorkClaim & { actor?: User | null };
@@ -299,6 +303,8 @@ function buildIssueListInclude(
     includeComments?: boolean;
     /** Readable-team filter for the blockers; set to batch `openBlockers` into the list read. */
     openBlockers?: { readableWhere: Prisma.IssueWhereInput | undefined };
+    /** Batch the follow-up links so non-follow-ups resolve `followUpDeadline` without a query. */
+    followUpLinks?: boolean;
   } = {},
 ): Prisma.IssueInclude {
   const include: Prisma.IssueInclude = {
@@ -325,6 +331,10 @@ function buildIssueListInclude(
 
   if (options.openBlockers) {
     include.incomingLinks = buildOpenBlockerLinkQuery(options.openBlockers.readableWhere);
+  }
+
+  if (options.followUpLinks) {
+    include.outgoingLinks = { where: FOLLOW_UP_LINK_WHERE, select: { toId: true } };
   }
 
   if (options.includeComments) {
@@ -483,6 +493,8 @@ const typeDefs = /* GraphQL */ `
     """One agent's profile, by handle or id."""
     agentProfile(handle: String!): AgentProfile
     agentCredentials(teamId: String!): [AgentCredentialRecord!]!
+    "Your Involute Capture extension connections (INV-1145)."
+    extensionTokens: [ExtensionTokenRecord!]!
     webhooks(teamId: String!): [WebhookSubscriptionRecord!]!
     "Sync, inbound queue, outbox and webhooks at a glance; admins only (INV-796)."
     opsOverview: OpsOverview!
@@ -581,6 +593,10 @@ const typeDefs = /* GraphQL */ `
     """Provision a SERVICE actor for an external program (CI, cron, a bridge). Human-only."""
     serviceActorCreate(input: ServiceActorCreateInput!): ActorLifecyclePayload!
     agentCredentialRevoke(id: String!): AgentCredentialRevokePayload!
+    "Connect the Involute Capture extension: a token for the signed-in person that can only report bugs (INV-1145). Returned once."
+    extensionTokenCreate(name: String): ExtensionTokenCreatePayload!
+    "Disconnect one of your extension connections; it stops working at once (INV-1145)."
+    extensionTokenRevoke(id: String!): ExtensionTokenPayload!
     webhookCreate(input: WebhookCreateInput!): WebhookMutationPayload!
     "Create or update a saved view (INV-1005)."
     savedViewUpsert(input: SavedViewInput!): SavedViewPayload!
@@ -673,6 +689,29 @@ const typeDefs = /* GraphQL */ `
     BREACHED
     PAUSED
     MET
+  }
+
+  "The bug SLA clock's statuses plus DECLINED: canceled (e.g. resolution WONT_DO), never overdue (INV-1127)."
+  enum FollowUpDeadlineStatus {
+    ON_TRACK
+    AT_RISK
+    BREACHED
+    PAUSED
+    MET
+    DECLINED
+  }
+
+  "Deadline of an incident follow-up (INV-1127): the bug SLA clock with budget by priority (default Urgent 7d, High 14d, else 30d; FOLLOW_UP_DEADLINE_DAYS)."
+  type FollowUpDeadline {
+    status: FollowUpDeadlineStatus!
+    budgetHours: Int!
+    elapsedMs: Float!
+    remainingMs: Float!
+    "When it runs out if nothing changes; null while paused, closed or declined."
+    dueAt: String
+    startedAt: String!
+    "The incidents it was derived from, oldest first."
+    incidents: [Issue!]!
   }
 
   type WorkRestorePayload {
@@ -1194,6 +1233,8 @@ const typeDefs = /* GraphQL */ `
     dependencyHints: [String!]!
     "SLA for committed Type: Bug work; null otherwise (INV-750)."
     bugSla: BugSla
+    "Deadline for a committed ISSUE derived (DERIVED_FROM) from a Type: Incident; null otherwise (INV-1127)."
+    followUpDeadline: FollowUpDeadline
     "How long committed work has waited in Review; null outside Review (INV-1002). overdue is true for a bug past REVIEW_OVERDUE_MS (default 3 days)."
     reviewWait: ReviewWait
     "Files attached to this work, newest first (INV-1003): research reports and other private material that never enters git or an image."
@@ -1471,6 +1512,9 @@ const typeDefs = /* GraphQL */ `
     "SEV1/SEV2 incidents in Review or Done with no attachment: the postmortem is missing (INV-1126)."
     incidentsWithoutPostmortemCount: Int!
     incidentsWithoutPostmortem: [Issue!]!
+    "Open incident follow-ups past their deadline, most overdue first (INV-1127). Declined ones never count."
+    overdueFollowUpCount: Int!
+    overdueFollowUps: [Issue!]!
   }
 
   type WorkReferencePair {
@@ -1740,6 +1784,32 @@ const typeDefs = /* GraphQL */ `
     success: Boolean!
     credential: AgentCredentialRecord
     token: String
+    "Why the mutation was refused; null on success."
+    message: String
+  }
+
+  "A connection of the Involute Capture extension; the token itself is never shown again (INV-1145)."
+  type ExtensionTokenRecord {
+    id: ID!
+    name: String!
+    createdAt: DateTime!
+    expiresAt: DateTime!
+    revokedAt: DateTime
+    lastUsedAt: DateTime
+  }
+
+  type ExtensionTokenCreatePayload {
+    success: Boolean!
+    "The token, shown this once; the extension stores it."
+    token: String
+    extensionToken: ExtensionTokenRecord
+    "Why the mutation was refused; null on success."
+    message: String
+  }
+
+  type ExtensionTokenPayload {
+    success: Boolean!
+    extensionToken: ExtensionTokenRecord
     "Why the mutation was refused; null on success."
     message: String
   }
@@ -2885,6 +2955,7 @@ const resolvers = {
           ...(requestedIssueFields.has('openBlockers')
             ? { openBlockers: { readableWhere: buildReadableIssueWhere(context) } }
             : {}),
+          followUpLinks: requestedIssueFields.has('followUpDeadline'),
         }),
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: first + 1,
@@ -3433,6 +3504,8 @@ const resolvers = {
         .then(() => true, () => false);
       return { ...profile, viewerCanManage };
     },
+    extensionTokens: (_parent: unknown, _args: unknown, context: GraphQLContext) =>
+      listExtensionTokens(context.prisma, requireSessionPerson(context)),
     agentCredentials: async (
       _parent: unknown,
       args: { teamId: string },
@@ -3626,7 +3699,7 @@ const resolvers = {
       runMutationWithReason(async () => {
         requireAuthentication(context);
         await assertCanWriteTeam(context.prisma, context, args.input.teamId);
-        const created = await reportBug(context.prisma, args.input, writeActorFromViewer(context.viewer));
+        const created = await reportBug(context.prisma, args.input, writeActorFromViewer(context.viewer, surfaceOf(context)));
         return {
           issue: await getIssueById(context.prisma, created.id),
           success: true as const,
@@ -4400,6 +4473,16 @@ const resolvers = {
           token,
         };
       }, { credential: null, success: false as const, token: null }),
+    extensionTokenCreate: async (_parent: unknown, args: { name?: string | null }, context: GraphQLContext) =>
+      runMutation(async () => {
+        const { record, token } = await createExtensionToken(context.prisma, requireSessionPerson(context), { name: args.name ?? null });
+        return { extensionToken: record, success: true as const, token };
+      }, { extensionToken: null, success: false as const, token: null }),
+    extensionTokenRevoke: async (_parent: unknown, args: { id: string }, context: GraphQLContext) =>
+      runMutation(async () => {
+        const record = await revokeExtensionToken(context.prisma, requireSessionPerson(context), args.id);
+        return { extensionToken: record, success: true as const };
+      }, { extensionToken: null, success: false as const }),
     agentCredentialRevoke: async (
       _parent: unknown,
       args: { id: string },
@@ -5514,6 +5597,24 @@ const resolvers = {
     },
     attachments: (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) =>
       context.prisma.attachment.findMany({ where: { issueId: parent.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] }),
+    followUpDeadline: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
+      if (parent.commitmentStatus !== 'COMMITTED' || parent.kind !== 'ISSUE') return null;
+      // Batched by list reads: no link to an incident, no query.
+      if (parent.outgoingLinks && parent.outgoingLinks.length === 0) return null;
+      const deadline = (await loadFollowUpDeadlines(context.prisma, [parent.id])).get(parent.id);
+      if (!deadline) return null;
+      const incidents = await context.prisma.issue.findMany({ where: { id: { in: deadline.incidentIds }, ...buildReadableIssueWhere(context) } });
+      const order = new Map(deadline.incidentIds.map((id, index) => [id, index]));
+      return {
+        status: deadline.status,
+        budgetHours: Math.round(deadline.budgetMs / 3_600_000),
+        elapsedMs: deadline.elapsedMs,
+        remainingMs: deadline.remainingMs,
+        dueAt: deadline.dueAt?.toISOString() ?? null,
+        startedAt: deadline.startedAt.toISOString(),
+        incidents: incidents.sort((a, b) => order.get(a.id)! - order.get(b.id)!),
+      };
+    },
     bugSla: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
       if (parent.commitmentStatus !== 'COMMITTED') return null;
       // Labels are usually loaded with the issue: skip non-bugs without a query.
@@ -5778,6 +5879,22 @@ function timelineEntryRecord(entry: TimelineEntry) {
 /** GraphQL shape of a saved view: the state travels as JSON text. */
 function savedViewRecord(view: SavedView) {
   return { ...view, stateJson: JSON.stringify(view.state) };
+}
+
+/** Where a write came from, for the audit: the Capture extension is its own surface (INV-1145). */
+function surfaceOf(context: GraphQLContext): string {
+  return context.authMode === 'extension-token' ? 'extension' : 'graphql';
+}
+
+/**
+ * The signed-in person, in the browser: connecting or disconnecting the
+ * extension is never done by an agent, the static token, or the extension itself.
+ */
+function requireSessionPerson(context: GraphQLContext) {
+  const viewer = requireAuthentication(context);
+  // The browser session, or the static operator token acting for a named person (local and e2e).
+  if ((context.authMode !== 'session' && context.authMode !== 'token') || viewer.actorKind !== 'HUMAN') throw createValidationError(EXTENSION_TOKEN_HUMAN_ONLY_MESSAGE);
+  return viewer;
 }
 
 export function createGraphQLSchema(_prisma: PrismaClient) {

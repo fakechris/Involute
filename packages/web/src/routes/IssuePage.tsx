@@ -43,7 +43,7 @@ import { useContractAmendmentDecisions } from '../components/ContractAmendmentPa
 import { IssueRelations } from '../components/IssueRelations';
 import { NeedInfoControl, NeedInfoWithdrawButton } from '../components/NeedInfoControl';
 import { AddSubIssueButton } from '../components/AddSubIssueButton';
-import { BugSlaBadge } from '../components/BugSlaBadge';
+import { BugSlaBadge, FollowUpDeadlineBadge } from '../components/BugSlaBadge';
 import { ClaimControl } from '../components/ClaimControl';
 import { IssueTimeline } from '../components/IssueTimeline';
 import { WorkStructureEditor } from '../components/WorkStructureEditor';
@@ -813,6 +813,13 @@ export function IssuePage() {
               <div className="issue-panel__section">
                 <h2>Bug SLA</h2>
                 <BugSlaBadge sla={activeIssue.bugSla} showMet />
+              </div>
+            ) : null}
+
+            {activeIssue.followUpDeadline ? (
+              <div className="issue-panel__section">
+                <h2>Follow-up deadline</h2>
+                <FollowUpDeadlineBadge deadline={activeIssue.followUpDeadline} showMet />
               </div>
             ) : null}
 

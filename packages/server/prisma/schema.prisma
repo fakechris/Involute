@@ -298,6 +298,7 @@ model User {
   savedViews           SavedView[]          @relation("SavedViewOwner")
   timelineStars        WorkTimelineStar[]   @relation("WorkTimelineStarredBy")
   timelineUnstars      WorkTimelineStar[]   @relation("WorkTimelineUnstarredBy")
+  extensionTokens    ExtensionToken[] @relation("ExtensionTokenOwner")
 }
 
 model AgentCredential {
@@ -319,6 +320,23 @@ model AgentCredential {
 
   @@index([userId])
   @@index([revokedAt, expiresAt])
+}
+
+// A person's token for the Involute Capture browser extension (INV-1145):
+// acts as that person on /graphql, but only to report bugs, upload their
+// screenshots and read where a bug can go. Stored as a hash, shown once.
+model ExtensionToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  user       User      @relation("ExtensionTokenOwner", fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+
+  @@index([userId])
 }
 
 model Session {
