@@ -26,6 +26,8 @@ const RECALL_LIMIT = 500;
 const FULL_TEXT_MATCH_CAP = 5000;
 const MAX_TERMS = 8;
 const SNIPPET_RADIUS = 40;
+/** Characters kept each side of a needle found in an attachment (INV-1117); wider than a snippet. */
+const ATTACHMENT_WINDOW = 120;
 
 /** Where the words were found; `semantic` = close in meaning, no words matched (INV-927). */
 export type SearchField = 'identifier' | 'title' | 'contract' | 'description' | 'comment' | 'attachment' | 'run' | 'semantic';
@@ -173,13 +175,6 @@ export async function searchIssues(
       select: { id: true, summary: true },
       take: 5,
     },
-    // And text attachments that contain a word (INV-1117).
-    attachments: {
-      where: { OR: commentNeedles.map((needle) => ({ textContent: { contains: needle, mode: 'insensitive' as const } })) },
-      orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }],
-      select: { id: true, filename: true, textContent: true },
-      take: 3,
-    },
   } satisfies Prisma.IssueInclude;
   const recallLimit = input.recallLimit ?? RECALL_LIMIT;
   const recall = (where: Prisma.IssueWhereInput) =>
@@ -218,9 +213,11 @@ export async function searchIssues(
     rankedIds.length > 0 ? recall({ id: { in: rankedIds } }) : Promise.resolve([]),
   ]);
   const candidates = [...new Map([...broad, ...strong, ...ranked].map((issue) => [issue.id, issue])).values()];
+  const attachmentsByIssue = await loadAttachmentMatches(prisma, candidates.map((issue) => issue.id), parsed);
 
   const hits = candidates
-    .map(({ comments, runs, attachments, ...issue }) => scoreIssue(issue, comments, runs, attachments, parsed, ranks.get(issue.id) ?? 0))
+    .map(({ comments, runs, ...issue }) =>
+      scoreIssue(issue, comments, runs, attachmentsByIssue.get(issue.id) ?? [], parsed, ranks.get(issue.id) ?? 0))
     .filter((hit): hit is IssueSearchHit => hit !== null);
   hits.sort((left, right) =>
     right.score - left.score
@@ -332,6 +329,44 @@ async function rankByFullText(
   return new Map(rows.map((row) => [row.id, row.rank]));
 }
 
+
+/**
+ * Every text attachment of the candidates that contains some needle
+ * (INV-1117), however many there are, so a query whose words are spread over
+ * several files still scores. Attachments hold up to 100k characters each, so
+ * the database returns only a window around the first occurrence of each
+ * needle found; scoring and snippets need nothing more.
+ */
+async function loadAttachmentMatches(
+  prisma: DatabaseClient,
+  issueIds: string[],
+  parsed: ParsedSearchQuery,
+): Promise<Map<string, SearchableAttachment[]>> {
+  const needles = [...new Set(parsed.terms.flatMap((term) => term.needles))];
+  if (issueIds.length === 0 || needles.length === 0) return new Map();
+  const rows = await prisma.$queryRaw<Array<{ id: string; issueId: string; filename: string; textContent: string }>>`
+    SELECT attachment.id::text AS id, attachment."issueId"::text AS "issueId", attachment.filename,
+           string_agg(
+             substr(attachment."textContent", greatest(1, found.position - ${ATTACHMENT_WINDOW}::int), char_length(needle) + 2 * ${ATTACHMENT_WINDOW}::int),
+             ' … ' ORDER BY found.position
+           ) AS "textContent"
+      FROM "Attachment" attachment
+      CROSS JOIN unnest(${needles}::text[]) AS needle
+      CROSS JOIN LATERAL (SELECT strpos(lower(attachment."textContent"), needle) AS position) found
+     WHERE attachment."issueId"::text = ANY(${issueIds}::text[])
+       AND attachment."textContent" IS NOT NULL
+       AND found.position > 0
+     GROUP BY attachment.id
+     ORDER BY attachment."createdAt" ASC, attachment.id ASC
+  `;
+  const byIssue = new Map<string, SearchableAttachment[]>();
+  for (const row of rows) {
+    const list = byIssue.get(row.issueId) ?? [];
+    list.push({ id: row.id, filename: row.filename, textContent: row.textContent });
+    byIssue.set(row.issueId, list);
+  }
+  return byIssue;
+}
 
 /**
  * Null when some word is not found (and the item was not asked for by

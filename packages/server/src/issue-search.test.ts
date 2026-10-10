@@ -169,6 +169,29 @@ describe('Free-text search (INV-925)', () => {
     expect(identifiers(await searchIssues(prisma, { query: '误删恢复' }))).toEqual([studied.identifier]);
   });
 
+  it('scores words spread over many attachments of one work', async () => {
+    const studied = await work({ title: 'Many files' });
+    for (let index = 1; index <= 3; index += 1) await attach(studied, `part-${index}.md`, `第${index}部分提到alphaword`);
+    await attach(studied, 'part-4.md', '最后一份提到betaword');
+    await work({ title: 'unrelated' });
+
+    const [hit, ...rest] = await searchIssues(prisma, { query: 'alphaword betaword' });
+    expect(rest).toEqual([]);
+    expect(hit?.issue.identifier).toBe(studied.identifier);
+    expect(hit?.matchedField).toBe('attachment');
+    expect(hit?.attachmentFilename).toBe('part-1.md');
+  });
+
+  it('finds a word deep inside a long attachment and snippets around it', async () => {
+    const studied = await work({ title: 'Long log' });
+    await attach(studied, 'boot.log', `${'noise '.repeat(15_000)}kernelpanic at boot ${'noise '.repeat(100)}`);
+
+    const [hit] = await searchIssues(prisma, { query: 'kernelpanic' });
+    expect(hit?.issue.identifier).toBe(studied.identifier);
+    expect(hit?.snippet).toContain('kernelpanic at boot');
+    expect(hit!.snippet!.length).toBeLessThan(200);
+  });
+
   it('ranks a comment hit above an attachment-only hit, hides attachments of unreadable work, and forgets a deleted attachment', async () => {
     const inComment = await work({ title: 'A' });
     await comment(inComment, '快照策略');

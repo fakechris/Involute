@@ -35,9 +35,19 @@ describe('extractSearchableText (INV-1117)', () => {
     expect(extractSearchableText('page.html', 'text/html', text('<p>x</p>'))).toBeNull();
   });
 
-  it('caps the text at a fixed length', () => {
+  it('caps the text at a fixed number of code points without splitting a surrogate pair', () => {
     const long = 'a'.repeat(MAX_ATTACHMENT_TEXT_CHARS + 10);
     expect(extractSearchableText('big.txt', 'text/plain', text(long))).toHaveLength(MAX_ATTACHMENT_TEXT_CHARS);
+    const emoji = extractSearchableText('emoji.txt', 'text/plain', text('😀'.repeat(MAX_ATTACHMENT_TEXT_CHARS + 5)))!;
+    expect([...emoji]).toHaveLength(MAX_ATTACHMENT_TEXT_CHARS);
+    expect(emoji.endsWith('😀')).toBe(true);
+  });
+
+  it('caps a 50 MiB log quickly, without walking all of it', () => {
+    const huge = Buffer.alloc(50 * 1024 * 1024, 'x');
+    const started = performance.now();
+    expect(extractSearchableText('huge.log', 'text/plain', huge)).toHaveLength(MAX_ATTACHMENT_TEXT_CHARS);
+    expect(performance.now() - started).toBeLessThan(5_000);
   });
 });
 
@@ -89,5 +99,36 @@ describe('backfillAttachmentText (INV-1117)', () => {
 
     // Already-read files are not read again.
     expect(await backfillAttachmentText(prisma, uploadsDir)).toEqual({ indexed: 0, skipped: 1 });
+  });
+
+  it('only loads text candidates, a page at a time', async () => {
+    const state = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id } });
+    const issue = await prisma.issue.create({ data: { identifier: `${DEFAULT_TEAM_KEY}-7002`, teamId: team.id, stateId: state.id, title: 'Logs' } });
+    for (let index = 0; index < 5; index += 1) {
+      await writeFile(join(uploadsDir, `log-${index}.txt`), `line ${index}`);
+      await prisma.attachment.create({ data: { issueId: issue.id, uploaderId: admin.id, filename: `run-${index}.LOG`, mimeType: 'application/octet-stream', size: 1, url: `/uploads/log-${index}.txt` } });
+    }
+    await prisma.attachment.create({ data: { issueId: issue.id, uploaderId: admin.id, filename: 'shot.png', mimeType: 'image/png', size: 1, url: '/uploads/missing.png' } });
+    const findMany = prisma.attachment.findMany.bind(prisma.attachment);
+    const loaded: string[][] = [];
+    const spy = new Proxy(prisma, {
+      get(target, property) {
+        if (property !== 'attachment') return Reflect.get(target, property);
+        return new Proxy(target.attachment, {
+          get(model, key) {
+            if (key !== 'findMany') return Reflect.get(model, key);
+            return async (args: Parameters<typeof findMany>[0]) => {
+              const rows = await findMany(args);
+              loaded.push(rows.map((row) => row.filename));
+              return rows;
+            };
+          },
+        });
+      },
+    });
+
+    expect(await backfillAttachmentText(spy, uploadsDir, { pageSize: 2 })).toEqual({ indexed: 5, skipped: 0 });
+    expect(loaded.flat()).not.toContain('shot.png');
+    expect(loaded.every((page) => page.length <= 2)).toBe(true);
   });
 });
