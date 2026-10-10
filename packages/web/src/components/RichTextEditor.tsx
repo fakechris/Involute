@@ -20,6 +20,9 @@ interface RichTextEditorProps {
   /** Fired the first time the caret sits in an `@…` token, so the host can
    *  load the directory on demand instead of on every render. */
   onMentionStart?: () => void;
+  /** Inside a form with its own submit (the create drawer): no Comment button (INV-1132). */
+  hideSubmit?: boolean;
+  id?: string;
 }
 
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
@@ -91,6 +94,8 @@ export function RichTextEditor({
   ariaLabel,
   mentionables = [],
   onMentionStart,
+  hideSubmit = false,
+  id,
 }: RichTextEditorProps) {
   const mention = useMentionSuggest(mentionables);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -321,6 +326,7 @@ export function RichTextEditor({
     >
       <textarea
         ref={textareaRef}
+        id={id}
         className="rich-text-textarea"
         aria-label={ariaLabel ?? placeholder}
         value={value}
@@ -429,6 +435,8 @@ export function RichTextEditor({
             ↑ Uploading {uploadingCount} file{uploadingCount > 1 ? 's' : ''}…
           </span>
         ) : null}
+{hideSubmit ? null : (
+          <>
         <span style={{ fontSize: 12, color: 'var(--fg-dim)', marginRight: 4 }}>
           <Kbd keys={['⌘', '↵']} /> to submit
         </span>
@@ -450,6 +458,8 @@ export function RichTextEditor({
         >
           {submitLabel}
         </button>
+          </>
+        )}
       </div>
     </div>
       {mention.query !== null && mention.matches.length > 0 ? (

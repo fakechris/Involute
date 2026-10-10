@@ -310,6 +310,7 @@ export interface BugMetricsData {
 
 export interface BugsPageQueryData {
   bugSummary: BugSummaryData;
+  teams?: { nodes: Array<{ id: string; states?: { nodes: WorkflowStateSummary[] } }> };
   issues: {
     nodes: IssueSummary[];
     pageInfo: {

@@ -111,14 +111,14 @@ Agent credentials carry scopes. Scope enforcement happens on MCP tools:
 
 | Scope | Unlocks |
 |---|---|
-| \`read\` | \`work_catalog\`, \`work_search\`, \`work_get_context\` (with \`section\` for one paginated section), \`work_list_ready\`, \`agent_inbox\`, \`protocol_get_guide\` (always granted) |
-| \`propose\` | \`work_propose\`, \`work_file_bug\`, \`work_propose_amendment\` |
+| \`read\` | \`work_catalog\`, \`work_search\`, \`work_get_context\` (with \`section\` for one paginated section), \`work_list_ready\`, \`work_timeline\` (the issue timeline, INV-1116), \`agent_inbox\`, \`protocol_get_guide\` (always granted) |
+| \`propose\` | \`work_propose\`, \`work_file_bug\`, \`work_propose_amendment\`, \`work_timeline\` (action \`star\` / \`unstar\` a key event) |
 | \`update\` | \`work_update\`, \`work_comment\` |
 | \`link\` | \`work_relate\` (action \`link\` / \`unlink\`) |
 | \`claim\` | \`work_claim\` (action \`claim\` / \`release\`) |
 | \`report\` | \`run_report\`, \`evidence\` (action \`attach\` / \`retract\`) |
 
-Tools are grouped (INV-1046): a pair or family is one tool with an \`action\` argument — \`work_relate\`, \`work_view\`, \`work_claim\`, \`evidence\`, \`agent_request\`, \`delivery\`, \`executor\`. Where a default is named, the old call shape still works (\`work_claim(id)\` claims). The old names (\`work_link\`, \`evidence_attach\`, \`work_claim_release\`, \`agent_request_claim\`, \`work_executor_update\`, …) stay callable for one version and answer with a \`deprecated\` note; \`notification_mark_read\` became \`agent_inbox(ack: [...])\` and \`work_read_page\` became \`work_get_context(id, section, after)\`. \`tools/list\` is cut to what the credential can run: an agent never sees \`work_commit\` / \`work_uncommit\`, which are gated on actor kind (humans only), not tokens.
+Tools are grouped (INV-1046): a pair or family is one tool with an \`action\` argument — \`work_relate\`, \`work_view\`, \`work_timeline\`, \`work_claim\`, \`evidence\`, \`agent_request\`, \`delivery\`, \`executor\`. Where a default is named, the old call shape still works (\`work_claim(id)\` claims). The old names (\`work_link\`, \`evidence_attach\`, \`work_claim_release\`, \`agent_request_claim\`, \`work_executor_update\`, …) stay callable for one version and answer with a \`deprecated\` note; \`notification_mark_read\` became \`agent_inbox(ack: [...])\` and \`work_read_page\` became \`work_get_context(id, section, after)\`. \`tools/list\` is cut to what the credential can run: an agent never sees \`work_commit\` / \`work_uncommit\`, which are gated on actor kind (humans only), not tokens.
 
 ## Four state machines (do not collapse them)
 

@@ -982,11 +982,32 @@ export const BUGS_PAGE_QUERY = gql`
         unplacedOpenCount
       }
     }
+    # Each bug's team states, for changing status in place (INV-1133).
+    teams(filter: $teamFilter) {
+      nodes {
+        id
+        states {
+          nodes {
+            id
+            name
+            type
+            position
+          }
+        }
+      }
+    }
     issues(first: 100, filter: $issueFilter) {
       nodes {
         id
         identifier
         title
+        revision
+        assignee {
+          id
+          name
+          email
+          actorKind
+        }
         priority
         severity
         repository
@@ -1889,6 +1910,61 @@ export const VIEWER_ID_QUERY = gql`
   query ViewerId {
     viewer {
       id
+    }
+  }
+`;
+
+// INV-1116: the issue timeline, projected on the server from audits, runs,
+// evidence and comments; any entry can be starred as a key event.
+export const ISSUE_TIMELINE_QUERY = gql`
+  query IssueTimeline($issueId: String!) {
+    issueTimeline(issueId: $issueId) {
+      workId
+      truncated
+      entries {
+        key
+        kind
+        at
+        actorKind
+        actor {
+          id
+          name
+          email
+        }
+        summary
+        detail
+        url
+        sourceId
+        starred
+        starredAt
+        starredBy {
+          id
+          name
+          email
+        }
+      }
+    }
+  }
+`;
+
+export const ISSUE_TIMELINE_STAR_MUTATION = gql`
+  mutation IssueTimelineStar($input: IssueTimelineStarInput!) {
+    issueTimelineStar(input: $input) {
+      success
+      message
+      entryKey
+      starred
+    }
+  }
+`;
+
+export const ISSUE_TIMELINE_UNSTAR_MUTATION = gql`
+  mutation IssueTimelineUnstar($input: IssueTimelineStarInput!) {
+    issueTimelineUnstar(input: $input) {
+      success
+      message
+      entryKey
+      starred
     }
   }
 `;

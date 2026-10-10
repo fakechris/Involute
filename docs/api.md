@@ -752,7 +752,7 @@ codex mcp add involute --url https://involute.example.com/mcp
 codex mcp add involute-readonly --url https://involute.example.com/mcp/readonly
 ```
 
-Tools (INV-1046): an agent credential sees twenty — `protocol_get_guide`, `work_search`, `work_catalog`, `work_get_context`, `work_list_ready`, `agent_inbox`, `work_propose`, `work_file_bug`, `work_update`, `work_propose_amendment`, `work_comment`, `work_attach_file`, `work_relate`, `work_view`, `work_claim`, `run_report`, `evidence`, `agent_request`, `delivery`, `executor`. A pair or family is one tool with an `action` argument: `work_relate(action: link | unlink)`, `work_view(list | save | delete)`, `work_claim(claim | release)`, `evidence(attach | retract)`, `agent_request(claim | answer)`, `delivery(context | propose | execution_create)`, `executor(context | update)`; where a default is named the old call shape still works. Each grouped argument's description is prefixed with the action it belongs to and carries `x-actions`. `work_commit` and `work_uncommit` are listed only to human and system credentials. Old names (`work_link`, `evidence_attach`, `work_claim_release`, `agent_request_claim`, `work_executor_update`, …) stay callable for one version and answer with a `deprecated` field; `notification_mark_read` is now `agent_inbox(ack: [ids])` and `work_read_page` is `work_get_context(id, section, first, after)`. The readonly endpoint exposes the read-only tools and grouped tools with their read-only actions only. `tools/list` is the authoritative current catalog and advertises `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`) per tool. `work_search` and `work_list_ready` accept an IQL `filter` argument. Agent behavior is in `skills/involute/SKILL.md`.
+Tools (INV-1046): an agent credential sees twenty-one — `protocol_get_guide`, `work_search`, `work_catalog`, `work_get_context`, `work_list_ready`, `agent_inbox`, `work_propose`, `work_file_bug`, `work_update`, `work_propose_amendment`, `work_comment`, `work_attach_file`, `work_relate`, `work_view`, `work_timeline`, `work_claim`, `run_report`, `evidence`, `agent_request`, `delivery`, `executor`. A pair or family is one tool with an `action` argument: `work_relate(action: link | unlink)`, `work_view(list | save | delete)`, `work_timeline(list | star | unstar)`, `work_claim(claim | release)`, `evidence(attach | retract)`, `agent_request(claim | answer)`, `delivery(context | propose | execution_create)`, `executor(context | update)`; where a default is named the old call shape still works. Each grouped argument's description is prefixed with the action it belongs to and carries `x-actions`. `work_commit` and `work_uncommit` are listed only to human and system credentials. Old names (`work_link`, `evidence_attach`, `work_claim_release`, `agent_request_claim`, `work_executor_update`, …) stay callable for one version and answer with a `deprecated` field; `notification_mark_read` is now `agent_inbox(ack: [ids])` and `work_read_page` is `work_get_context(id, section, first, after)`. The readonly endpoint exposes the read-only tools and grouped tools with their read-only actions only. `tools/list` is the authoritative current catalog and advertises `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`) per tool. `work_search` and `work_list_ready` accept an IQL `filter` argument. Agent behavior is in `skills/involute/SKILL.md`.
 
 `work_search(paginate: true)` returns `{nodes, pageInfo}`; without it the existing array response is preserved. Continue with the same arguments and `after: pageInfo.endCursor`. `work_list_ready` also returns `pageInfo` and a cursor. Continuations expire after one hour, bind to the authenticated principal and query, recheck visibility, and exclude previously returned IDs. They are live queries rather than frozen snapshots. Keyword, segmentation, full-text and bounded semantic recall share the UI search implementation.
 
@@ -1183,6 +1183,24 @@ Each `AgentRequest` is anchored to a `rootCommentId`, not to the work item, and
 an answer is posted **into the thread its question was asked in**. So two people
 can ask two different questions of the same agent on the same work item, and
 neither the requests nor the answers cross.
+
+### Issue timeline and key events (INV-1116)
+
+`issueTimeline(issueId, starredOnly)` projects one work item's history into a
+time-ordered list: WorkAudit changes (created, state, commitment, assignee,
+priority, parent, other fields — long text only by name), runs (started /
+ended with status and phase), evidence (attached / retracted) and comments,
+each with its actor. Every entry has a stable `key` (`audit:<id>`,
+`run:<id>:started`, `run:<id>:ended`, `evidence:<id>`,
+`evidence:<id>:retracted`, `comment:<id>`). Reading needs read access to the
+work; a parent or superseding item the reader cannot see is never named.
+`issueTimelineStar` / `issueTimelineUnstar(input: { issueId, entryKey })` mark
+an entry as a key event (write access; starring twice keeps the first star;
+unstarring keeps the row with who and when). MCP: `work_timeline(action: list
+| star | unstar)`. The issue page shows the timeline under **Activity** with
+**Key events only**. Server code reads key events with
+`loadWorkTimeline(prisma, workId, { starredOnly: true })`
+(`work-activity-timeline.ts`).
 
 ### Saved views (INV-1005)
 
