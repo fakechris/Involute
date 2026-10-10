@@ -172,6 +172,7 @@ import { loadProjectWorkGraph, type ProjectWorkGraph } from './work-graph-view.j
 import { loadWorkTimelines } from './work-timeline.js';
 import { dependencyHints } from './mention-links.js';
 import { loadWorkHygiene } from './work-hygiene.js';
+import { type AttentionItem, type AttentionKind, loadAttention, pageAttention, summarizeAttention } from './attention-service.js';
 import { BUG_LABEL_NAME, findSimilarBugs, reportBug, type BugReportInput } from './bug-report.js';
 import { loadBugSlas } from './bug-sla.js';
 import { loadReviewWaits } from './review-wait.js';
@@ -422,6 +423,15 @@ const typeDefs = /* GraphQL */ `
     finished research nothing derives from. Lists are capped at 200; counts are exact.
     """
     workHygiene(teamKey: String!): WorkHygiene!
+    """
+    What the viewer is waiting to decide (INV-1091): candidates, finished work,
+    contract changes, delivery changes, agent questions, decision requests and,
+    for administrators, operations. Derived from the live state, so an item is
+    gone for everyone once decided; oldest wait first. attentionSummary counts
+    the same items.
+    """
+    attention(first: Int, after: String, kinds: [AttentionKind!], teamKey: String): AttentionConnection!
+    attentionSummary(teamKey: String): AttentionSummary!
     "Saved board/backlog views the viewer may use in this team: their own and the team's shared ones (INV-1005)."
     savedViews(teamKey: String!): [SavedView!]!
     candidateSummary(teamFilter: TeamFilter): CandidateSummary!
@@ -1216,6 +1226,50 @@ const typeDefs = /* GraphQL */ `
     success: Boolean!
     message: String
     id: ID
+  }
+
+  enum AttentionKind {
+    CONTRACT_AMENDMENT
+    WORK_REVIEW
+    CANDIDATE_COMMIT
+    DELIVERY_CHANGE
+    AGENT_REQUEST
+    DECISION_REQUESTED
+    OPS
+  }
+
+  "A decision the viewer is waiting to make (INV-1091)."
+  type AttentionItem {
+    "Stable across requests: <kind>:<subjectId>."
+    id: ID!
+    kind: AttentionKind!
+    "The row being decided: the work, contract amendment, delivery change set, agent request, run, webhook or sync dead letter."
+    subjectId: ID!
+    work: Issue
+    "When the wait for this decision began."
+    since: DateTime!
+    reason: String!
+    "Decisions available in place: ACCEPT, ANSWER, APPROVE, COMMIT, DECLINE, OPEN, REJECT, REPLY, RESPOND, RETURN."
+    actions: [String!]!
+    "Nearest EPIC or MILESTONE above the work, else its PROJECT; items sharing it belong together."
+    groupKey: ID
+    group: Issue
+  }
+
+  type AttentionConnection {
+    nodes: [AttentionItem!]!
+    pageInfo: PageInfo!
+  }
+
+  type AttentionKindCount {
+    kind: AttentionKind!
+    count: Int!
+    oldestSince: DateTime
+  }
+
+  type AttentionSummary {
+    total: Int!
+    byKind: [AttentionKindCount!]!
   }
 
   type WorkHygiene {
@@ -2367,6 +2421,13 @@ const typeDefs = /* GraphQL */ `
 `;
 
 const resolvers = {
+  AttentionItem: {
+    groupKey: (parent: AttentionItem) => parent.groupId,
+    group: (parent: AttentionItem, _args: unknown, context: GraphQLContext) =>
+      parent.groupId ? context.prisma.issue.findUnique({ where: { id: parent.groupId } }) : null,
+    work: (parent: AttentionItem, _args: unknown, context: GraphQLContext) =>
+      parent.workId ? context.prisma.issue.findUnique({ where: { id: parent.workId } }) : null,
+  },
   ContractAmendment: {
     changes: (parent: ContractAmendment) => amendmentChanges(parent),
     proposedBy: (parent: ContractAmendment, _args: Record<string, never>, context: GraphQLContext): Promise<User> =>
@@ -2898,6 +2959,18 @@ const resolvers = {
     },
     savedViews: async (_parent: unknown, args: { teamKey: string }, context: GraphQLContext) =>
       (await listSavedViews(context, args.teamKey)).map(savedViewRecord),
+    attention: async (
+      _parent: unknown,
+      args: { first?: number | null; after?: string | null; kinds?: AttentionKind[] | null; teamKey?: string | null },
+      context: GraphQLContext,
+    ) => {
+      const first = args.first ?? 50;
+      if (!Number.isInteger(first) || first < 1 || first > 200) throw createValidationError('Choose first between 1 and 200.');
+      const items = await loadAttention(context.prisma, context.viewer, buildReadableIssueWhere(context), { kinds: args.kinds, teamKey: args.teamKey });
+      return pageAttention(items, first, args.after ?? null);
+    },
+    attentionSummary: async (_parent: unknown, args: { teamKey?: string | null }, context: GraphQLContext) =>
+      summarizeAttention(await loadAttention(context.prisma, context.viewer, buildReadableIssueWhere(context), { teamKey: args.teamKey })),
     workHygiene: async (
       _parent: unknown,
       args: { teamKey: string },
