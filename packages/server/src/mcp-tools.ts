@@ -72,6 +72,7 @@ import { uncommitWork } from './work-uncommit.js';
 import { writeActorFromViewer } from './work-service.js';
 import { parseSeverity, SEVERITIES } from './severity.js';
 import { INCIDENT_TIME_ARGS, INCIDENT_TIME_FIELDS, readIncidentTimes, type IncidentTimeField } from './incident-timestamps.js';
+import { parseReproducibility, REPRODUCIBILITIES } from './reproducibility.js';
 
 export type McpToolName =
   | 'work_search'
@@ -198,6 +199,12 @@ function incidentTimeProperties(nullable: boolean) {
     resolved_at: { type, description: `${INCIDENT_TIME_HELP} When it was fixed; required before the incident moves to In Review (REVIEW or a completed run).${nullable ? ' null clears it.' : ''}` },
   };
 }
+/** Reproducibility on the write tools; the same three values as GraphQL BugReproducibility (INV-1122). */
+const REPRODUCIBILITY_PROPERTY = {
+  type: 'string',
+  enum: [...REPRODUCIBILITIES],
+  description: 'How often the bug shows up when someone tries: ALWAYS (every try), SOMETIMES (some tries), ONCE (seen once, not reproduced since). SOMETIMES and ONCE bugs are never auto-accepted — a merged PR with green CI cannot prove an intermittent bug gone — so a person accepts them. Optional (INV-1122).',
+};
 
 const RECEIPT_SCHEMA = {
   type: 'object',
@@ -476,6 +483,7 @@ async function callMcpAction(
       assignOptional(proposeInput, 'stepsToReproduce', optionalString(args.steps_to_reproduce));
       assignOptional(proposeInput, 'severity', parseSeverity(args.severity));
       Object.assign(proposeInput, readIncidentTimeArgs(args));
+      assignOptional(proposeInput, 'reproducibility', parseReproducibility(args.reproducibility));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
       assignOptional(proposeInput, 'verification', optionalString(args.verification));
       const kind = optionalString(args.kind);
@@ -544,6 +552,7 @@ async function callMcpAction(
       assignOptional(proposeInput, 'verification', optionalString(args.verification));
       assignOptional(proposeInput, 'description', optionalString(args.description));
       assignOptional(proposeInput, 'severity', parseSeverity(args.severity));
+      assignOptional(proposeInput, 'reproducibility', parseReproducibility(args.reproducibility));
       assignOptional(proposeInput, 'parentId', optionalString(args.parent_id));
       assignOptional(proposeInput, 'relatedWorkId', optionalString(args.related_work_id));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
@@ -690,6 +699,8 @@ async function callMcpAction(
       const severity = parseSeverity(args.severity);
       if (severity !== undefined) updateInput.severity = severity;
       Object.assign(updateInput, readIncidentTimeArgs(args));
+      const reproducibility = parseReproducibility(args.reproducibility);
+      if (reproducibility !== undefined) updateInput.reproducibility = reproducibility;
       if (args.cascade_repository !== undefined) {
         updateInput.cascadeRepository = Boolean(args.cascade_repository);
       } else if (args.repository !== undefined) {
@@ -1215,6 +1226,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         },
         severity: SEVERITY_PROPERTY,
         ...incidentTimeProperties(false),
+        reproducibility: REPRODUCIBILITY_PROPERTY,
         blocked_by: {
           type: 'array',
           items: { type: 'string' },
@@ -1257,6 +1269,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
           description: 'Required. Sets the SLA: 1 Urgent 24h, 2 High 48h, 3 Medium 7 days, 4 Low 7 days.',
         },
         severity: SEVERITY_PROPERTY,
+        reproducibility: REPRODUCIBILITY_PROPERTY,
         steps_to_reproduce: {
           type: 'string',
           description: 'Required. How to reproduce it.',
@@ -1401,6 +1414,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         priority: { type: 'integer' },
         severity: { ...SEVERITY_PROPERTY, type: ['string', 'null'], enum: [...SEVERITIES, null], description: `${SEVERITY_PROPERTY.description} null clears it; a change is audited with the old value.` },
         ...incidentTimeProperties(true),
+        reproducibility: { ...REPRODUCIBILITY_PROPERTY, type: ['string', 'null'], enum: [...REPRODUCIBILITIES, null], description: `${REPRODUCIBILITY_PROPERTY.description} null clears it; a change is audited with the old value.` },
         state: {
           type: 'string',
           description: 'Optional target workflow state: UNSTARTED (Ready), STARTED (In Progress), or REVIEW (In Review). DONE only for a committed ISSUE with Type: Research and no other actor\'s claim (INV-912). Never CANCELED.',

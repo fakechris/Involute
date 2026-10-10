@@ -136,6 +136,15 @@ enum IssueSeverity {
   SEV3
 }
 
+// How often a bug shows up when someone tries (INV-1122). A SOMETIMES or ONCE
+// bug is not proved fixed by a merged PR with green CI, so the bug gate
+// (INV-1075) leaves it for a person.
+enum BugReproducibility {
+  ALWAYS
+  SOMETIMES
+  ONCE
+}
+
 // A saved board/backlog view kept on the server (INV-1005): private to its
 // owner or shared with the team, visible on every device.
 model SavedView {
@@ -354,6 +363,7 @@ model Issue {
   team              Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
   priority          Int               @default(0)
   severity          IssueSeverity?
+  reproducibility   BugReproducibility?
   kind              WorkKind          @default(ISSUE)
   commitmentStatus  CommitmentStatus  @default(COMMITTED)
   revision          Int               @default(1)

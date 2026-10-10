@@ -90,6 +90,8 @@ export const TIMELINE_SOURCE_LIMIT = 1000;
 const PRIORITY_NAMES: Record<number, string> = { 0: 'No priority', 1: 'Urgent', 2: 'High', 3: 'Medium', 4: 'Low' };
 // INV-1115: impact, apart from priority.
 const SEVERITY_NAMES: Record<string, string> = { SEV1: 'SEV1 Critical', SEV2: 'SEV2 Major', SEV3: 'SEV3 Minor' };
+// INV-1122: how often a bug reproduces.
+const REPRODUCIBILITY_NAMES: Record<string, string> = { ALWAYS: 'Always', SOMETIMES: 'Sometimes', ONCE: 'Once' };
 const LONG_TEXT_FIELDS = new Set(['description', 'acceptance', 'scope', 'verification', 'outcome', 'constraints']);
 // Audit snapshot fields the timeline reports, in the order changes are listed.
 const REPORTED_FIELDS = [
@@ -102,6 +104,7 @@ const REPORTED_FIELDS = [
   'detectedAt',
   'mitigatedAt',
   'resolvedAt',
+  'reproducibility',
   'parentId',
   'title',
   'kind',
@@ -166,6 +169,8 @@ function display(field: string, value: unknown, lookups: Lookups): string | null
       return PRIORITY_NAMES[Number(value)] ?? text;
     case 'severity':
       return SEVERITY_NAMES[text] ?? text;
+    case 'reproducibility':
+      return REPRODUCIBILITY_NAMES[text] ?? text;
     case 'parentId':
     case 'supersededById':
       // Never name work the reader cannot read.
@@ -193,6 +198,9 @@ function changePhrase(change: TimelineChange, rawFrom: unknown, rawTo: unknown):
     case 'severity':
       if (!change.to) return 'Severity cleared';
       return change.from ? `Severity ${change.from} → ${change.to}` : `Severity set to ${change.to}`;
+    case 'reproducibility':
+      if (!change.to) return 'Reproducibility cleared';
+      return change.from ? `Reproducibility ${change.from} → ${change.to}` : `Reproduces: ${change.to}`;
     case 'parent':
       return change.to ? `Moved under ${change.to}` : 'Removed from its parent';
     case 'impact started':

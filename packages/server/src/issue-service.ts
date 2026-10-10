@@ -1,5 +1,5 @@
 import { reserveWorkIdempotency, hashIdempotencyRequest, completeWorkIdempotency } from './idempotency.js';
-import type { Comment, Issue, IssueSeverity, Prisma, PrismaClient, WorkflowState, WorkflowStateType, WorkResolution } from '@prisma/client';
+import type { BugReproducibility, Comment, Issue, IssueSeverity, Prisma, PrismaClient, WorkflowState, WorkflowStateType, WorkResolution } from '@prisma/client';
 
 import {
   ASSIGNEE_NOT_FOUND_MESSAGE,
@@ -62,6 +62,7 @@ import {
 import { resolveAttentionNotifications } from './notification-service.js';
 import { parseSeverity } from './severity.js';
 import { mergeIncidentTimes, readIncidentTimes } from './incident-timestamps.js';
+import { parseReproducibility } from './reproducibility.js';
 
 export interface CreateIssueInput {
   acceptance?: string | null;
@@ -85,6 +86,8 @@ export interface CreateIssueInput {
   detectedAt?: Date | null;
   mitigatedAt?: Date | null;
   resolvedAt?: Date | null;
+  /** How often a bug reproduces (INV-1122). */
+  reproducibility?: BugReproducibility | null;
   source?: string | null;
   stateId?: string | null;
   teamId: string;
@@ -125,6 +128,8 @@ export interface UpdateIssueInput {
   detectedAt?: Date | string | null;
   mitigatedAt?: Date | string | null;
   resolvedAt?: Date | string | null;
+  /** ALWAYS / SOMETIMES / ONCE; null clears it. SOMETIMES / ONCE keep a bug out of auto-accept (INV-1122). */
+  reproducibility?: BugReproducibility | string | null;
   snoozedUntil?: Date | null;
   stateId?: string | null;
   title?: string | null;
@@ -243,6 +248,7 @@ export async function createIssueWithAudit(
         detectedAt: input.detectedAt ?? null,
         mitigatedAt: input.mitigatedAt ?? null,
         resolvedAt: input.resolvedAt ?? null,
+        reproducibility: parseReproducibility(input.reproducibility) ?? null,
         projectId: input.projectId ?? null,
         repository: input.repository ?? null,
         scope: input.scope ?? null,
@@ -478,6 +484,11 @@ export async function updateIssue(
         const finalStateType = nextStateType ?? (await transaction.workflowState.findUnique({ where: { id: existingIssue.stateId }, select: { type: true } }))?.type;
         if (finalStateType === 'REVIEW' && !next.resolvedAt) throw createValidationError(INCIDENT_REVIEW_NEEDS_RESOLVED_MESSAGE);
       }
+    }
+
+    const reproducibility = parseReproducibility(input.reproducibility);
+    if (reproducibility !== undefined) {
+      data.reproducibility = reproducibility;
     }
 
     // Snooze is candidate-pool governance: committed work has a human owner

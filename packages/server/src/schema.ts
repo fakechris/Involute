@@ -646,6 +646,13 @@ const typeDefs = /* GraphQL */ `
     SEV3
   }
 
+  "How often a bug reproduces (INV-1122). SOMETIMES and ONCE bugs are never auto-accepted: green CI cannot prove an intermittent bug gone."
+  enum BugReproducibility {
+    ALWAYS
+    SOMETIMES
+    ONCE
+  }
+
   enum BugSlaStatus {
     ON_TRACK
     AT_RISK
@@ -1066,6 +1073,8 @@ const typeDefs = /* GraphQL */ `
     priority: Int!
     "How bad the effect is; null when not judged. Independent of priority and the SLA (INV-1115)."
     severity: IssueSeverity
+    "How often the bug reproduces; null when unknown (INV-1122)."
+    reproducibility: BugReproducibility
     createdAt: DateTime!
     updatedAt: DateTime!
     state: WorkflowState!
@@ -1967,6 +1976,8 @@ const typeDefs = /* GraphQL */ `
     priority: Int
     "Optional impact (INV-1115); the SLA still follows priority."
     severity: IssueSeverity
+    "Optional: how often it reproduces (INV-1122). SOMETIMES / ONCE keep the fix out of auto-accept."
+    reproducibility: BugReproducibility
     "Where it belongs (id or identifier: its PROJECT for No milestone, a MILESTONE, EPIC or ISSUE). Omit when unsure: the report goes to triage as a candidate."
     parentId: String
     repository: String
@@ -2116,6 +2127,8 @@ const typeDefs = /* GraphQL */ `
     mitigatedAt: DateTime
     "Required before an incident moves to In Review; null clears it (not while In Review)."
     resolvedAt: DateTime
+    "ALWAYS / SOMETIMES / ONCE; null clears it. SOMETIMES / ONCE keep a bug out of auto-accept (INV-1122)."
+    reproducibility: BugReproducibility
     projectId: String
     cycleId: String
     snoozedUntil: DateTime
@@ -2367,6 +2380,8 @@ const typeDefs = /* GraphQL */ `
     mitigatedAt: DateTime
     """Incident only: when it was fixed (the incident still starts In Progress)."""
     resolvedAt: DateTime
+    """How often a bug reproduces: ALWAYS / SOMETIMES / ONCE (INV-1122)."""
+    reproducibility: BugReproducibility
     """Existing work this proposal is blocked by (each X BLOCKS the new item)."""
     blockedBy: [String!]
     """Existing work this proposal blocks."""

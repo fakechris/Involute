@@ -198,6 +198,8 @@ export async function restoreDeletedIssue(
         priority: issue.priority,
         // Tombstones written before INV-1115 have no severity.
         severity: issue.severity ?? null,
+        // Tombstones written before INV-1122 have no reproducibility.
+        reproducibility: issue.reproducibility ?? null,
         // Tombstones written before INV-1118 have no resolution.
         resolution: issue.resolution ?? null,
         // Tombstones written before INV-1125 have no incident timestamps.

@@ -105,6 +105,21 @@ describe('structure editing of committed work (INV-791)', () => {
     expect(onUpdate).toHaveBeenLastCalledWith({ severity: null });
   });
 
+  it('sets and clears reproducibility on a bug only (INV-1122)', () => {
+    renderEditor(issue);
+    expect(screen.queryByLabelText('Bug reproducibility')).toBeNull();
+    cleanup();
+
+    const onUpdate = renderEditor({ ...issue, labels: { nodes: [{ name: 'Bug' }] } });
+    const reproducibility = screen.getByLabelText('Bug reproducibility') as HTMLSelectElement;
+    expect(reproducibility.value).toBe('');
+    expect(within(reproducibility).getAllByRole('option').map((option) => option.textContent)).toEqual(['Not known', 'Always', 'Sometimes', 'Once']);
+    fireEvent.change(reproducibility, { target: { value: 'ONCE' } });
+    expect(onUpdate).toHaveBeenLastCalledWith({ reproducibility: 'ONCE' });
+    fireEvent.change(reproducibility, { target: { value: '' } });
+    expect(onUpdate).toHaveBeenLastCalledWith({ reproducibility: null });
+  });
+
   it('offers only legal parents for the kind', () => {
     renderEditor({ ...issue, kind: 'EPIC' });
     expect(within(screen.getByLabelText('Location')).getAllByRole('option').map((option) => option.textContent)).toEqual([
