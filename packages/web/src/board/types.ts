@@ -137,6 +137,8 @@ export interface IssueSummary {
   resolution?: WorkResolution | null;
   description?: string | null;
   repository?: string | null;
+  /** Browser environment captured with a bug report (INV-1146). */
+  capture?: BugCapture | null;
   outcome?: string | null;
   scope?: string | null;
   constraints?: string | null;
@@ -563,6 +565,8 @@ export interface IssueUpdateMutationVariables {
     /** Move the CONTAINS subtree to the new repository too. */
     cascadeRepository?: boolean;
     alias?: string | null;
+    /** PROJECT only: http(s) origins its app is served from (INV-1146); [] clears. */
+    webOrigins?: string[] | null;
     /** PROJECT only, people only: verified bug fixes close themselves (INV-1075). */
     autoAcceptBugs?: boolean;
     kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
@@ -775,6 +779,8 @@ export interface ProjectIssueSummary {
   alias?: string | null;
   /** Verified bug fixes are accepted by the Auto-Accept Gate (INV-1075). */
   autoAcceptBugs?: boolean;
+  /** Origins its web app is served from; the capture extension routes bugs by them (INV-1146). */
+  webOrigins?: string[];
   priority: number;
   kind: 'PROJECT';
   createdAt: string;
@@ -990,4 +996,24 @@ export interface TeamTriageRotationMutationData {
 
 export interface TeamTriageRotationMutationVariables {
   input: { teamId: string; userIds: string[]; startsAt?: string | null };
+}
+
+/** What the capture extension recorded with a bug report (INV-1146); every field optional. */
+export interface BugCapture {
+  url?: string;
+  title?: string;
+  viewport?: { width: number; height: number; dpr: number };
+  userAgent?: string;
+  colorScheme?: 'light' | 'dark';
+  appVersion?: string;
+  consoleErrors?: Array<{ level: string; message: string; time: string | null }>;
+  failedRequests?: Array<{ method: string; url: string; status: number | null; durationMs: number | null }>;
+  element?: {
+    selector: string;
+    text: string | null;
+    box: { x: number; y: number; width: number; height: number } | null;
+    styles: Record<string, string>;
+  };
+  screenshotAttachmentId?: string;
+  screenshotUrl?: string;
 }

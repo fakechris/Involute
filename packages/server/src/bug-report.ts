@@ -17,6 +17,7 @@ import { currentTriager } from './bug-triage.js';
 import type { WriteActor } from './work-service.js';
 import { parseSeverity } from './severity.js';
 import { parseReproducibility } from './reproducibility.js';
+import { CAPTURE_MESSAGES, environmentSection, parseBugCapture, type BugCapture } from './bug-capture.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -37,6 +38,8 @@ export interface BugReportInput {
   parentId?: string | null;
   repository?: string | null;
   labelIds?: string[] | null;
+  /** Browser environment from the capture extension (INV-1146); validated by parseBugCapture. */
+  capture?: unknown;
 }
 
 /** Type: Bug — the existing "bug" label under any casing (INV-749). */
@@ -51,9 +54,10 @@ export async function findOrCreateBugLabel(prisma: DatabaseClient): Promise<Issu
   return created;
 }
 
-export function composeDescription(description: string | null | undefined, steps: string): string {
+export function composeDescription(description: string | null | undefined, steps: string, capture?: BugCapture | null): string {
   const body = description?.trim();
-  return `${body ? `${body}\n\n` : ''}### Steps to reproduce\n\n${steps}`;
+  const environment = capture ? environmentSection(capture) : '';
+  return `${body ? `${body}\n\n` : ''}### Steps to reproduce\n\n${steps}${environment ? `\n\n${environment}` : ''}`;
 }
 
 /**
@@ -68,18 +72,24 @@ export async function reportBug(prisma: PrismaClient, input: BugReportInput, act
   if (!steps) throw createValidationError(BUG_REPORT_STEPS_REQUIRED_MESSAGE);
   const severity = parseSeverity(input.severity) ?? null;
   const reproducibility = parseReproducibility(input.reproducibility) ?? null;
+  const capture = parseBugCapture(input.capture);
   // Outside the transaction: a failed INSERT would poison it.
   const bugLabel = await findOrCreateBugLabel(prisma);
   const labelIds = [...new Set([bugLabel.id, ...(input.labelIds ?? [])])];
 
   return prisma.$transaction(async (transaction) => {
+    const screenshot = capture?.screenshotAttachmentId
+      ? await claimableScreenshot(transaction, capture.screenshotAttachmentId, actor)
+      : null;
+    if (capture && screenshot) capture.screenshotUrl = screenshot.url;
     const base = {
-      description: composeDescription(input.description, steps),
+      description: composeDescription(input.description, steps, capture),
       kind: 'ISSUE' as const,
       labelIds,
       priority: input.priority ?? null,
       severity,
       reproducibility,
+      capture: capture ? (JSON.parse(JSON.stringify(capture)) as Prisma.InputJsonValue) : null,
       repository: input.repository ?? null,
       source: BUG_REPORT_SOURCE,
       teamId: input.teamId,
@@ -102,9 +112,27 @@ export async function reportBug(prisma: PrismaClient, input: BugReportInput, act
         : await placeNewWork(transaction, { ...base, parentId: input.parentId!.trim(), ...(ready ? { stateId: ready.id } : {}) }),
       actor,
     );
+    if (screenshot) {
+      // The screenshot becomes the bug's file, readable by whoever reads the bug.
+      await transaction.attachment.update({ where: { id: screenshot.id }, data: { issueId: issue.id } });
+    }
     await announceBug(transaction, issue, { triage });
     return issue;
   });
+}
+
+/**
+ * The capture's screenshot (INV-1146): an upload by the reporter that is not yet
+ * attached to anything, so a report cannot pull in someone else's file.
+ */
+async function claimableScreenshot(transaction: Prisma.TransactionClient, id: string, actor: WriteActor): Promise<{ id: string; url: string }> {
+  const attachment = /^[0-9a-f-]{36}$/i.test(id)
+    ? await transaction.attachment.findUnique({ where: { id }, select: { id: true, url: true, uploaderId: true, issueId: true, commentId: true } })
+    : null;
+  if (!attachment || attachment.issueId || attachment.commentId || !actor.actorId || attachment.uploaderId !== actor.actorId) {
+    throw createValidationError(CAPTURE_MESSAGES.screenshot);
+  }
+  return { id: attachment.id, url: attachment.url };
 }
 
 const CJK = /[\u3400-\u9fff]/;

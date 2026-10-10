@@ -56,6 +56,7 @@ import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { writeStoredShellIssue } from '../lib/app-shell-state';
 import { IcoChevL, IcoChevR, IcoCopy, IcoMore, IcoLink, IcoClose } from '../components/Icons';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
+import { BugCaptureSection } from '../components/BugCaptureSection';
 import { Avatar, Btn, Kbd } from '../components/Primitives';
 import { RichTextEditor } from '../components/RichTextEditor';
 
@@ -791,6 +792,8 @@ export function IssuePage() {
                 >Edit</button>
               </div>
             )}
+
+            {activeIssue.capture ? <BugCaptureSection capture={activeIssue.capture} /> : null}
 
             <ContractSection
               values={activeIssue}

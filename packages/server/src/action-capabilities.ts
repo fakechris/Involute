@@ -66,6 +66,7 @@ export const QUERY_EXEMPTIONS: Record<string, { reason: string; decision: string
   candidateSummary: { reason: 'Board-level counts for people deciding candidates.', decision: 'INV-79' },
   projectSummary: { reason: 'Portfolio summary for people.', decision: 'INV-79' },
   bugSummary: { reason: 'The /bugs statistics page for triage.', decision: 'INV-750' },
+  projectForOrigin: { reason: 'Routes a page to its PROJECT for the bug-capture extension and the web; agents know their repository.', decision: 'INV-1144' },
   similarBugs: { reason: 'Live suggestions while a person types a bug title; work_file_bug returns possible_duplicates on filing.', decision: 'INV-1000' },
   traceabilityAudit: { reason: 'Post-merge audit for operators.', decision: 'INV-449' },
   agentProfile: { reason: 'The agent directory page; agents identify each other through work_catalog(actors).', decision: 'INV-795' },
@@ -171,7 +172,7 @@ export const FIELD_TYPE_EXCEPTIONS: Record<string, Record<string, string>> = {};
 /** Explicit GraphQL-only inputs. No wildcard exemption: a newly added field fails coverage. */
 export const GRAPHQL_ONLY_FIELDS: Record<string, Record<string, string>> = {
   agentRequestAnswer: { overrideReason: 'Human override of an agent request claim; agents must hold their claim token.' },
-  bugReport: { labelIds: 'The dedicated bug tool sets Type Bug. Apply existing extra labels with work_update(label_ids), or use work_propose(labels) with the same bug rules.' },
+  bugReport: { labelIds: 'The dedicated bug tool sets Type Bug. Apply existing extra labels with work_update(label_ids), or use work_propose(labels) with the same bug rules.', capture: 'Browser environment collected by the capture extension from a page a person is looking at; an agent describes its reproduction in steps_to_reproduce (INV-1146, decision INV-1144).' },
   workLinkDelete: { id: 'MCP work_unlink selects the same edge by its directed endpoints and type.' },
   issueUpdate: { assigneeId: 'Human accountability is managed in the web UI; a claim never changes the assignee.', projectId: 'Legacy Project association; work hierarchy uses parentId on both surfaces.', autoAcceptBugs: 'Whether verified fixes may close themselves is a person\'s decision on the Projects page; an agent cannot widen its own acceptance (INV-1075).', resolution: 'Only a person cancels work (agents never set CANCELED, INV-912); the resolution goes with that move (INV-1118).', reason: 'The close reason that goes with a person\'s cancel (INV-1118); agents explain themselves in run summaries and comments.' },
 };

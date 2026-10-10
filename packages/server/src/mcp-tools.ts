@@ -689,6 +689,10 @@ async function callMcpAction(
       ] as const) {
         if (args[wire] !== undefined) updateInput[field] = args[wire] === null ? null : requiredString(args[wire], wire);
       }
+      if (args.web_origins !== undefined) {
+        if (args.web_origins !== null && (!Array.isArray(args.web_origins) || args.web_origins.some((value) => typeof value !== 'string'))) throw createValidationError('web_origins must be an array of http(s) origins; use [] to clear.');
+        updateInput.webOrigins = (args.web_origins ?? []) as string[];
+      }
       if (args.label_ids !== undefined) {
         if (!Array.isArray(args.label_ids) || args.label_ids.some((value) => typeof value !== 'string' || !value.trim())) throw createValidationError('label_ids must be an array of label IDs; use [] to clear.');
         updateInput.labelIds = args.label_ids as string[];
@@ -1420,6 +1424,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         kind: { type: 'string', enum: ['PROJECT', 'MILESTONE', 'EPIC', 'ISSUE', 'DECISION'] },
         cycle_id: { type: ['string', 'null'] },
         alias: { type: ['string', 'null'], description: 'PROJECT reference alias; null clears it.' },
+        web_origins: { type: ['array', 'null'], items: { type: 'string' }, description: 'PROJECT only: http(s) origins its app is served from (normalized to scheme://host[:port]); an origin another project has is refused; [] or null clears (INV-1146).' },
         description: { type: ['string', 'null'] },
         outcome: { type: ['string', 'null'] },
         scope: { type: ['string', 'null'] },

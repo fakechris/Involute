@@ -80,5 +80,9 @@ jobs:
           context: .
           push: true
           target: ${{ matrix.target }}
+          # The source SHA: the server's protocol info and the web app's
+          # involute-version meta (INV-1146) report which build is running.
+          build-args: |
+            INVOLUTE_BUILD_SHA=${{ github.sha }}
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.tags.outputs.tags }}
