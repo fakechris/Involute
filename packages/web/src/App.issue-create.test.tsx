@@ -152,6 +152,23 @@ describe('App issue creation', () => {
     expect(screen.getByText('Newest Sonata issue')).toBeInTheDocument();
   });
 
+  // INV-1132
+  it('switches to Report bug with what was typed when Bug is chosen, and takes screenshots in the description', async () => {
+    renderApp(placedState(), ['/']);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create issue' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Create issue drawer' });
+    fireEvent.change(within(dialog).getByLabelText('Issue title'), { target: { value: 'Save button overlaps' } });
+    fireEvent.change(within(dialog).getByLabelText('Issue description'), { target: { value: 'See the board header' } });
+    // The description is the comment editor: paste, drop or attach images.
+    expect(within(dialog).getByTitle('Attach file')).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText('Work type'), { target: { value: 'BUG' } });
+    const bug = await screen.findByRole('dialog', { name: 'Report bug drawer' });
+    expect(screen.queryByRole('dialog', { name: 'Create issue drawer' })).not.toBeInTheDocument();
+    expect((within(bug).getAllByRole('textbox')[0] as HTMLInputElement).value).toBe('Save button overlaps');
+    expect(within(bug).getByDisplayValue('See the board header')).toBeInTheDocument();
+  });
+
   it('creates an issue where the person puts it and shows it in the backlog column', async () => {
     const createIssue = mockCreate();
     renderApp(placedState(), ['/']);

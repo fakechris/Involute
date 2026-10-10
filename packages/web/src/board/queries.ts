@@ -975,11 +975,32 @@ export const BUGS_PAGE_QUERY = gql`
         unplacedOpenCount
       }
     }
+    # Each bug's team states, for changing status in place (INV-1133).
+    teams(filter: $teamFilter) {
+      nodes {
+        id
+        states {
+          nodes {
+            id
+            name
+            type
+            position
+          }
+        }
+      }
+    }
     issues(first: 100, filter: $issueFilter) {
       nodes {
         id
         identifier
         title
+        revision
+        assignee {
+          id
+          name
+          email
+          actorKind
+        }
         priority
         severity
         repository

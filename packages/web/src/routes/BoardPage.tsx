@@ -330,6 +330,7 @@ export function BoardPage() {
   const [isSavingState, setIsSavingState] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isReportBugOpen, setIsReportBugOpen] = useState(false);
+  const [reportBugPrefill, setReportBugPrefill] = useState({ description: '', title: '' });
   const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
   const [createPlacement, setCreatePlacement] = useState<CreatePlacement | null>(null);
@@ -925,6 +926,18 @@ export function BoardPage() {
         replace: true,
         state: {},
       });
+    }
+
+    // Report bug from another page (the Bugs page, INV-1133).
+    if (
+      !isBacklogView &&
+      location.state &&
+      typeof location.state === 'object' &&
+      'openReportBug' in location.state &&
+      location.state.openReportBug
+    ) {
+      setIsReportBugOpen(true);
+      navigate(location.pathname, { replace: true, state: {} });
     }
 
     window.addEventListener(OPEN_CREATE_ISSUE_EVENT, handleOpenCreateIssue as EventListener);
@@ -3342,16 +3355,27 @@ export function BoardPage() {
         onTitleChange={setCreateTitle}
         onDescriptionChange={setCreateDescription}
         onTeamChange={(teamKey) => setPendingTeamKey(teamKey === activeTeamKey ? null : teamKey)}
+        onReportBug={() => {
+          // Bug from the create drawer: carry what was typed over to Report bug (INV-1132).
+          setReportBugPrefill({ description: createDescription, title: createTitle });
+          setIsCreateOpen(false);
+          setIsReportBugOpen(true);
+        }}
       />
       {selectedTeam ? (
         <ReportBugDialog
+          initialTitle={reportBugPrefill.title}
+          initialDescription={reportBugPrefill.description}
           isOpen={isReportBugOpen}
           teamId={selectedTeam.id}
           teamKey={selectedTeam.key}
           projects={placeableProjects}
           labels={labels}
           boardRepository={rawProjectKey}
-          onClose={() => setIsReportBugOpen(false)}
+          onClose={() => {
+            setIsReportBugOpen(false);
+            setReportBugPrefill({ description: '', title: '' });
+          }}
         />
       ) : null}
     </main>
