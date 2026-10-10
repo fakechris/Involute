@@ -74,6 +74,7 @@ export const QUERY_EXEMPTIONS: Record<string, { reason: string; decision: string
   agentCredentials: { reason: 'Credential issuance and lifecycle belong to human administrators.', decision: 'INV-846' },
   webhooks: { reason: 'Integration credentials are administrative controls.', decision: 'INV-796' },
   opsOverview: { reason: 'Operations runbook view for administrators.', decision: 'INV-796' },
+  extensionTokens: { reason: 'A person lists their own browser-extension connections.', decision: 'INV-1145' },
   attention: { reason: 'The Needs you queue of decisions only people make; an agent learns of decisions through agent_inbox.', decision: 'INV-1090' },
   attentionSummary: { reason: 'The Needs you count for people; agents read agent_inbox.', decision: 'INV-1090' },
 };
@@ -145,6 +146,8 @@ export const MCP_EXEMPTIONS: Record<string, { reason: string; gate: 'administrat
   workRestore: { gate: 'candidate', reason: 'A person restores rejected work to the candidate queue.', decision: 'INV-79' },
   workReview: { gate: 'final-acceptance', reason: 'A person accepts delivery or returns it with feedback.', decision: 'INV-474' },
   issueCreate: { gate: 'candidate', reason: 'People create committed work; agents use work_propose or work_file_bug.', decision: 'INV-79' },
+  extensionTokenCreate: { gate: 'personal', reason: 'A person connects their own browser extension; agents have their own credentials.', decision: 'INV-1145' },
+  extensionTokenRevoke: { gate: 'personal', reason: 'A person disconnects their own browser extension.', decision: 'INV-1145' },
   issueDelete: { gate: 'administration', reason: 'Permanent deletion is a human administrative action; agent delivery preserves history.', decision: 'INV-846' },
   issueUndelete: { gate: 'administration', reason: 'Undoing a deletion is the same administrative act in reverse; agents never deleted it.', decision: 'INV-840' },
   commentDelete: { gate: 'personal', reason: 'People delete their comments; agents append an attributable correction with work_comment.', decision: 'INV-795' },
