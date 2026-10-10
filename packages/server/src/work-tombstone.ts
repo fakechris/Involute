@@ -196,6 +196,10 @@ export async function restoreDeletedIssue(
         assigneeId,
         parentId,
         priority: issue.priority,
+        // Tombstones written before INV-1115 have no severity.
+        severity: issue.severity ?? null,
+        // Tombstones written before INV-1118 have no resolution.
+        resolution: issue.resolution ?? null,
         kind: issue.kind,
         commitmentStatus: issue.commitmentStatus,
         revision: issue.revision + 1,

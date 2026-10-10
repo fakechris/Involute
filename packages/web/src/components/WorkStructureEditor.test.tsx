@@ -89,6 +89,22 @@ describe('structure editing of committed work (INV-791)', () => {
     expect(onUpdate).toHaveBeenLastCalledWith({ kind: 'EPIC' });
   });
 
+  it('sets and clears severity, apart from priority (INV-1115)', () => {
+    const onUpdate = renderEditor({ ...issue, severity: 'SEV2' });
+    const severity = screen.getByLabelText('Issue severity') as HTMLSelectElement;
+    expect(severity.value).toBe('SEV2');
+    expect(within(severity).getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'No severity',
+      'SEV1 Critical',
+      'SEV2 Major',
+      'SEV3 Minor',
+    ]);
+    fireEvent.change(severity, { target: { value: 'SEV1' } });
+    expect(onUpdate).toHaveBeenLastCalledWith({ severity: 'SEV1' });
+    fireEvent.change(severity, { target: { value: '' } });
+    expect(onUpdate).toHaveBeenLastCalledWith({ severity: null });
+  });
+
   it('offers only legal parents for the kind', () => {
     renderEditor({ ...issue, kind: 'EPIC' });
     expect(within(screen.getByLabelText('Location')).getAllByRole('option').map((option) => option.textContent)).toEqual([

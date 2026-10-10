@@ -7,7 +7,8 @@ import { loadProjectEnvironment } from '../prisma/env.ts';
 import { loadBugMetrics } from './bug-metrics.ts';
 import { reportBug } from './bug-report.ts';
 import { proposeWork, rejectWork } from './claim-service.ts';
-import { createIssue, updateIssue } from './issue-service.ts';
+import { createIssue, deleteIssue, updateIssue } from './issue-service.ts';
+import { restoreDeletedIssue } from './work-tombstone.ts';
 import { closeWorkAsDuplicate } from './work-close.ts';
 import { restoreWork } from './work-restore.ts';
 import { parseWorkResolution } from './work-resolution.ts';
@@ -96,6 +97,14 @@ describe('structured close reasons (INV-1118)', () => {
     expect(reopened.resolution).toBeNull();
     const chore = await createIssue(prisma, { teamId: team.id, title: 'Chore', parentId: projectId, repository: 'acme/app' });
     await expect(updateIssue(prisma, chore.id, { stateId: canceled.id, resolution: 'WONT_DO' }, asHuman())).resolves.toMatchObject({ resolution: 'WONT_DO' });
+  });
+
+  it('keeps the resolution when deleted canceled work is restored', async () => {
+    const chore = await createIssue(prisma, { teamId: team.id, title: 'Chore', parentId: projectId, repository: 'acme/app' });
+    await updateIssue(prisma, chore.id, { stateId: canceled.id, resolution: 'OBSOLETE' }, asHuman());
+    await deleteIssue(prisma, chore.id, asHuman());
+    const restored = await restoreDeletedIssue(prisma, chore.id, asHuman());
+    expect(restored.resolution).toBe('OBSOLETE');
   });
 
   it('refuses a resolution on work that is not being closed', async () => {

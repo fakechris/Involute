@@ -1,6 +1,9 @@
 import type { WorkResolution } from '../components/CloseReasonDialog';
 import type { WorkLinkType } from '../work/types';
 
+/** Impact (INV-1115): SEV1 Critical, SEV2 Major, SEV3 Minor. */
+export type IssueSeverity = 'SEV1' | 'SEV2' | 'SEV3';
+
 export interface TeamSummary {
   id: string;
   key: string;
@@ -140,6 +143,8 @@ export interface IssueSummary {
   /** An agent's open proposal to change this committed contract (INV-869). */
   pendingContractAmendment?: ContractAmendmentSummary | null;
   priority: number;
+  /** Impact, apart from priority; null when not judged (INV-1115). */
+  severity?: IssueSeverity | null;
   /** Committed bugs only (INV-750). */
   bugSla?: BugSlaSummary | null;
   createdAt: string;
@@ -258,6 +263,7 @@ export interface BugReportMutationVariables {
     description?: string | null;
     stepsToReproduce: string;
     priority: number;
+    severity?: IssueSeverity | null;
     /** Where it belongs; omitted when unsure, which sends it to triage (INV-749). */
     parentId?: string | null;
     labelIds?: string[];
@@ -272,6 +278,8 @@ export interface BugSummaryData {
   openCount: number;
   closedCount: number;
   byPriority: Array<{ priority: number; count: number }>;
+  /** Open bugs by severity, unjudged as null (INV-1115). */
+  bySeverity?: Array<{ severity: IssueSeverity | null; count: number }>;
   byRepository: Array<{ repository: string | null; openCount: number; closedCount: number }>;
   byTypeLabel: Array<{ label: string; count: number }>;
   unclaimedOpenCount: number;
@@ -491,6 +499,8 @@ export interface IssueUpdateMutationVariables {
     description?: string | null;
     labelIds?: string[];
     priority?: number;
+    /** SEV1–SEV3; null clears it (INV-1115). */
+    severity?: IssueSeverity | null;
     stateId?: string;
     title?: string;
     projectId?: string | null;

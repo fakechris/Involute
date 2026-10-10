@@ -66,6 +66,7 @@ export const BOARD_PAGE_QUERY = gql`
         title
         description
         priority
+        severity
         kind
         repository
         claim {
@@ -180,6 +181,7 @@ export const ISSUE_UPDATE_MUTATION = gql`
         title
         description
         priority
+        severity
         kind
         repository
         commitmentStatus
@@ -300,6 +302,7 @@ export const ISSUE_UNDELETE_MUTATION = gql`
         title
         description
         priority
+        severity
         kind
         repository
         commitmentStatus
@@ -508,6 +511,7 @@ export const ISSUE_PAGE_QUERY = gql`
       title
       description
       priority
+      severity
       kind
       repository
       claim {
@@ -804,6 +808,7 @@ export const ISSUE_CREATE_MUTATION = gql`
         title
         description
         priority
+        severity
         repository
         createdAt
         updatedAt
@@ -891,6 +896,7 @@ export const BUG_REPORT_MUTATION = gql`
         identifier
         title
         priority
+        severity
         repository
         commitmentStatus
       }
@@ -920,6 +926,10 @@ export const BUGS_PAGE_QUERY = gql`
       closedCount
       byPriority {
         priority
+        count
+      }
+      bySeverity {
+        severity
         count
       }
       byRepository {
@@ -971,6 +981,7 @@ export const BUGS_PAGE_QUERY = gql`
         identifier
         title
         priority
+        severity
         repository
         createdAt
         updatedAt
@@ -1012,6 +1023,7 @@ export const PROJECT_ISSUES_QUERY = gql`
         title
         description
         priority
+        severity
         kind
         repository
         alias
@@ -1279,6 +1291,7 @@ export const MILESTONE_ISSUES_QUERY = gql`
         scope
         acceptance
         priority
+        severity
         kind
         createdAt
         updatedAt

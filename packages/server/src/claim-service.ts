@@ -74,6 +74,7 @@ import {
   selectIssueSnapshot,
   type WriteActor,
 } from './work-service.js';
+import { parseSeverity } from './severity.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -100,6 +101,8 @@ export interface ProposeWorkInput {
   priority?: number | null;
   /** Steps to reproduce a bug; appended to the description (INV-751). */
   stepsToReproduce?: string | null;
+  /** SEV1 (Critical) / SEV2 (Major) / SEV3 (Minor): impact, apart from priority (INV-1115). */
+  severity?: string | null;
   /** Existing work (ids or identifiers) this proposal is blocked by — each becomes X BLOCKS new (INV-720). */
   blockedBy?: string[] | null;
   /** Existing work this proposal blocks — each becomes new BLOCKS X. */
@@ -416,6 +419,8 @@ export async function proposeWork(
     if (priority !== null) {
       createInput.priority = priority;
     }
+    const severity = parseSeverity(input.severity);
+    if (severity) createInput.severity = severity;
     let directBug = false;
     if (isBug) {
       if (steps) createInput.description = composeDescription(input.description, steps);

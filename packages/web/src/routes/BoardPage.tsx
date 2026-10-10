@@ -1977,6 +1977,7 @@ export function BoardPage() {
     await persistIssueUpdate(issue, update, (current) => ({
       ...current,
       ...(update.priority !== undefined ? { priority: update.priority } : {}),
+      ...(update.severity !== undefined ? { severity: update.severity } : {}),
       ...(update.kind ? { kind: update.kind } : {}),
     }));
   }

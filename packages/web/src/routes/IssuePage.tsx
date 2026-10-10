@@ -1187,6 +1187,7 @@ export function IssuePage() {
                   void persistIssueUpdate(activeIssue, update, (current) => ({
                     ...current,
                     ...(update.priority !== undefined ? { priority: update.priority } : {}),
+                    ...(update.severity !== undefined ? { severity: update.severity } : {}),
                     ...(update.kind ? { kind: update.kind } : {}),
                   })).catch(() => undefined);
                 }}

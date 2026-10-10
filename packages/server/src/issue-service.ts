@@ -1,5 +1,5 @@
 import { reserveWorkIdempotency, hashIdempotencyRequest, completeWorkIdempotency } from './idempotency.js';
-import type { Comment, Issue, Prisma, PrismaClient, WorkflowState, WorkflowStateType, WorkResolution } from '@prisma/client';
+import type { Comment, Issue, IssueSeverity, Prisma, PrismaClient, WorkflowState, WorkflowStateType, WorkResolution } from '@prisma/client';
 
 import {
   ASSIGNEE_NOT_FOUND_MESSAGE,
@@ -56,6 +56,7 @@ import {
   type WriteActor,
 } from './work-service.js';
 import { resolveAttentionNotifications } from './notification-service.js';
+import { parseSeverity } from './severity.js';
 
 export interface CreateIssueInput {
   acceptance?: string | null;
@@ -72,6 +73,8 @@ export interface CreateIssueInput {
   projectId?: string | null;
   repository?: string | null;
   scope?: string | null;
+  /** Impact, independent of priority (INV-1115). */
+  severity?: IssueSeverity | null;
   source?: string | null;
   stateId?: string | null;
   teamId: string;
@@ -101,6 +104,8 @@ export interface UpdateIssueInput {
   /** Why work is closed, when moving it to a CANCELED state (INV-1118). */
   resolution?: string | null;
   scope?: string | null;
+  /** SEV1–SEV3; null clears it. Never changes the SLA, which follows priority (INV-1115). */
+  severity?: IssueSeverity | string | null;
   snoozedUntil?: Date | null;
   stateId?: string | null;
   title?: string | null;
@@ -214,6 +219,7 @@ export async function createIssueWithAudit(
         outcome: input.outcome ?? null,
         parentId: input.parentId ?? null,
         priority: input.priority ?? 0,
+        severity: parseSeverity(input.severity) ?? null,
         projectId: input.projectId ?? null,
         repository: input.repository ?? null,
         scope: input.scope ?? null,
@@ -427,6 +433,12 @@ export async function updateIssue(
 
     if ('priority' in input && input.priority !== undefined && input.priority !== null) {
       data.priority = input.priority;
+    }
+
+    // Severity is re-judged like any field: the audit row keeps the old value (INV-1115).
+    const severity = parseSeverity(input.severity);
+    if (severity !== undefined) {
+      data.severity = severity;
     }
 
     // Snooze is candidate-pool governance: committed work has a human owner
