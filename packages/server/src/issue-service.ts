@@ -1,5 +1,5 @@
 import { reserveWorkIdempotency, hashIdempotencyRequest, completeWorkIdempotency } from './idempotency.js';
-import type { Comment, Issue, IssueSeverity, Prisma, PrismaClient, WorkflowState, WorkflowStateType, WorkResolution } from '@prisma/client';
+import type { BugReproducibility, Comment, Issue, IssueSeverity, Prisma, PrismaClient, WorkflowState, WorkflowStateType, WorkResolution } from '@prisma/client';
 
 import {
   ASSIGNEE_NOT_FOUND_MESSAGE,
@@ -60,6 +60,7 @@ import {
 } from './work-service.js';
 import { resolveAttentionNotifications } from './notification-service.js';
 import { parseSeverity } from './severity.js';
+import { parseReproducibility } from './reproducibility.js';
 
 export interface CreateIssueInput {
   acceptance?: string | null;
@@ -78,6 +79,8 @@ export interface CreateIssueInput {
   scope?: string | null;
   /** Impact, independent of priority (INV-1115). */
   severity?: IssueSeverity | null;
+  /** How often a bug reproduces (INV-1122). */
+  reproducibility?: BugReproducibility | null;
   source?: string | null;
   stateId?: string | null;
   teamId: string;
@@ -109,6 +112,8 @@ export interface UpdateIssueInput {
   scope?: string | null;
   /** SEV1–SEV3; null clears it. Never changes the SLA, which follows priority (INV-1115). */
   severity?: IssueSeverity | string | null;
+  /** ALWAYS / SOMETIMES / ONCE; null clears it. SOMETIMES / ONCE keep a bug out of auto-accept (INV-1122). */
+  reproducibility?: BugReproducibility | string | null;
   snoozedUntil?: Date | null;
   stateId?: string | null;
   title?: string | null;
@@ -223,6 +228,7 @@ export async function createIssueWithAudit(
         parentId: input.parentId ?? null,
         priority: input.priority ?? 0,
         severity: parseSeverity(input.severity) ?? null,
+        reproducibility: parseReproducibility(input.reproducibility) ?? null,
         projectId: input.projectId ?? null,
         repository: input.repository ?? null,
         scope: input.scope ?? null,
@@ -458,6 +464,11 @@ export async function updateIssue(
     const severity = parseSeverity(input.severity);
     if (severity !== undefined) {
       data.severity = severity;
+    }
+
+    const reproducibility = parseReproducibility(input.reproducibility);
+    if (reproducibility !== undefined) {
+      data.reproducibility = reproducibility;
     }
 
     // Snooze is candidate-pool governance: committed work has a human owner

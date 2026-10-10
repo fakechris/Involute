@@ -147,6 +147,30 @@ describe('bug auto-accept gate (INV-1075)', () => {
     expect((await f.evaluations()).at(-1)?.reasons.join(' ')).toContain('waits for a person');
   });
 
+  // INV-1122: green CI cannot prove an intermittent bug gone.
+  it('leaves SOMETIMES and ONCE bugs in Review with the reason, and still accepts ALWAYS', async () => {
+    for (const reproducibility of ['SOMETIMES', 'ONCE'] as const) {
+      await resetAndSeed(prisma);
+      const f = await fixture();
+      await prisma.issue.update({ where: { id: f.bug.id }, data: { reproducibility } });
+      // Everything else would pass: merged PR, green checks.
+      const gh = github({});
+      expect(await sweepBugAutoAccept(prisma, gh)).toEqual({ accepted: 0, skipped: 1 });
+      expect(await f.stateOf(), reproducibility).toBe('REVIEW');
+      expect(gh.calls, reproducibility).toEqual([]);
+      const [evaluation] = await f.evaluations();
+      expect(evaluation?.outcome).toBe('SKIPPED');
+      expect(evaluation?.reasons.join(' ')).toContain(`(${reproducibility})`);
+      expect(evaluation?.reasons.join(' ')).toContain('a person accepts it');
+    }
+
+    await resetAndSeed(prisma);
+    const always = await fixture();
+    await prisma.issue.update({ where: { id: always.bug.id }, data: { reproducibility: 'ALWAYS' } });
+    expect(await sweepBugAutoAccept(prisma, github({}))).toEqual({ accepted: 1, skipped: 0 });
+    expect(await always.stateOf()).toBe('COMPLETED');
+  });
+
   it('covers only the opted-in team, even when another team uses the same repository name', async () => {
     const f = await fixture();
     const other = await prisma.team.create({ data: { key: 'OTH', name: 'Other' } });
