@@ -26,6 +26,8 @@ const NORM_RULES: Array<[string, RegExp]> = [
   ['agent bug proposal refused without a priority', /proposal is refused/],
   ['agent-filed bugs never enter Candidates', /does not go to Candidates/],
   ['work_file_bug is the agent bug harness', /work_file_bug/],
+  ['incidents carry the Type label Incident', /labels: \['incident'\]/],
+  ['incidents start In Progress and announce incident.declared', /incident\.declared/],
 ];
 
 describe('protocol guide and AGENTS.md agree on norm v1 (INV-721)', () => {

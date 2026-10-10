@@ -1,10 +1,10 @@
 /**
- * The Type label group (Bug route v1, INV-748/749; Research, INV-912): Bug,
- * Feature, Improvement and Research, matched case-insensitively; an item
- * carries at most one.
+ * The Type label group (Bug route v1, INV-748/749; Research, INV-912;
+ * Incident, INV-1123): Bug, Feature, Improvement, Research and Incident,
+ * matched case-insensitively; an item carries at most one.
  * The server enforces it; the UI swaps instead of stacking.
  */
-const TYPE_KEYS: ReadonlySet<string> = new Set(['bug', 'feature', 'improvement', 'research']);
+const TYPE_KEYS: ReadonlySet<string> = new Set(['bug', 'feature', 'improvement', 'research', 'incident']);
 
 export function isTypeLabel(name: string): boolean {
   return TYPE_KEYS.has(name.trim().toLowerCase());

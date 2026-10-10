@@ -14,6 +14,12 @@ import {
   BUG_PROPOSE_STEPS_REQUIRED_MESSAGE,
   BUG_PROPOSE_ACCEPTANCE_REQUIRED_MESSAGE,
   BUG_PROPOSE_OWNER_REQUIRED_MESSAGE,
+  INCIDENT_IMPACT_REQUIRED_MESSAGE,
+  INCIDENT_OWNER_REQUIRED_MESSAGE,
+  INCIDENT_PARENT_REQUIRED_MESSAGE,
+  INCIDENT_SEVERITY_REQUIRED_MESSAGE,
+  INCIDENT_STARTED_STATE_MISSING_MESSAGE,
+  ISSUE_TYPE_EXCLUSIVE_MESSAGE,
   BUG_NO_BACKLOG_MESSAGE,
   BUG_REJECT_REASON_REQUIRED_MESSAGE,
   WORK_REJECT_RESOLUTION_REQUIRED_MESSAGE,
@@ -58,10 +64,11 @@ import { createWorkLink } from './link-service.js';
 import { isLegalContains, lockWorkGraph } from './graph-integrity.js';
 import { createIssueWithAudit, mentionTexts, recordStateChangeAcceptance, type CreateIssueInput } from './issue-service.js';
 import { linkMentionedWork } from './mention-links.js';
-import { findOrCreateLabelIds, isBugWork, isResearchWork, namesResearch } from './labels.js';
+import { findOrCreateLabelIds, isBugWork, isResearchWork, namesIncident, namesResearch } from './labels.js';
 import { hasInitialDoneMarker, INITIAL_DONE_MARKER, notifyClosableResearch } from './research-closure.js';
 import { researchLacksDownstream } from './work-hygiene.js';
 import { announceBug, composeDescription } from './bug-report.js';
+import { announceIncident, INCIDENT_DEFAULT_ACCEPTANCE } from './incident.js';
 import {
   completeWorkIdempotency,
   hashIdempotencyRequest,
@@ -300,6 +307,8 @@ export async function proposeWork(
   actor: WriteActor = INTERNAL_WRITE_ACTOR,
 ): Promise<Issue> {
   assertActorCan(actor.actorKind, 'propose');
+  // An incident's description is its impact statement (INV-1123): say that, not only that the format is wrong.
+  if (namesIncident(input.labels) && !nonEmpty(input.description)) throw createValidationError(INCIDENT_IMPACT_REQUIRED_MESSAGE);
   validateAgentDescription(input.description, actor);
   const { title: sanitizedTitle } = sanitizeWorkTitle(input.title);
 
@@ -405,6 +414,8 @@ export async function proposeWork(
     // like a human report placed in its project. Incomplete filings are
     // refused — they do not wait in Candidates.
     const isBug = (input.labels ?? []).some((label) => label.trim().toLowerCase() === 'bug');
+    const isIncident = namesIncident(input.labels);
+    if (isBug && isIncident) throw createValidationError(ISSUE_TYPE_EXCLUSIVE_MESSAGE);
     const steps = nonEmpty(input.stepsToReproduce);
     const priority = input.priority ?? null;
     // Any proposal may suggest a priority; the person who commits it can
@@ -455,6 +466,31 @@ export async function proposeWork(
         }
       }
     }
+    // Incidents (INV-1123): a fact, like a bug (decision INV-787) — committed
+    // when declared with a parent, a severity and an impact statement, and
+    // started at once (investigating) with the declarer's human as Incident
+    // Lead. Incomplete declarations are refused, not parked in Candidates.
+    if (isIncident) {
+      if (!parentWork || parentWork.commitmentStatus === 'REJECTED') throw createValidationError(INCIDENT_PARENT_REQUIRED_MESSAGE);
+      if (!severity) throw createValidationError(INCIDENT_SEVERITY_REQUIRED_MESSAGE);
+      const owner = await humanOwnerOf(transaction, actor);
+      if (!owner || !(await transaction.teamMembership.findFirst({ where: { teamId: input.teamId, userId: owner }, select: { id: true } }))) {
+        throw createValidationError(INCIDENT_OWNER_REQUIRED_MESSAGE);
+      }
+      const started = await transaction.workflowState.findFirst({
+        where: { teamId: input.teamId, type: 'STARTED' },
+        orderBy: { position: 'asc' },
+        select: { id: true },
+      });
+      if (!started) throw createValidationError(INCIDENT_STARTED_STATE_MISSING_MESSAGE);
+      createInput.commitmentStatus = 'COMMITTED';
+      createInput.assigneeId = owner;
+      createInput.stateId = started.id;
+      if (!nonEmpty(input.acceptance)) createInput.acceptance = INCIDENT_DEFAULT_ACCEPTANCE;
+      if (createInput.source?.includes('initial_state=BACKLOG')) {
+        createInput.source = createInput.source.replace(/;?initial_state=BACKLOG;?/, '').trim() || null;
+      }
+    }
     const { auditId: creationAuditId, issue: created } = await createIssueWithAudit(transaction, createInput, actor, { linkMentions: false });
     if (parentWork) {
       await createWorkLink(transaction, {
@@ -494,11 +530,12 @@ export async function proposeWork(
     }
     const createdEvent = await enqueueWorkEvent(transaction, {
       payload: { title: created.title, actorId: actor.actorId ?? null },
-      type: directBug ? 'work.committed' : 'work.proposed',
+      type: directBug || isIncident ? 'work.committed' : 'work.proposed',
       workId: created.id,
       workIdentifier: created.identifier,
     });
     if (isBug) await announceBug(transaction, created, { triage: !directBug });
+    else if (isIncident) await announceIncident(transaction, created, actor.actorId ?? null);
     // A new candidate reaches the people who decide it, batched (INV-1093);
     // a bug candidate is announced to triage by announceBug instead.
     else if (created.commitmentStatus === 'CANDIDATE') await projectProposedBatch(transaction, { eventId: createdEvent.id, proposerId: actor.actorId, work: created });

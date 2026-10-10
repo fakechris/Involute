@@ -122,8 +122,9 @@ import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
 import { KanbanView } from '../components/KanbanView';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
 import { ReportBugDialog } from '../components/ReportBugDialog';
+import { ReportIncidentDialog } from '../components/ReportIncidentDialog';
 import { BacklogPage } from './BacklogPage';
-import { IcoFilter, IcoPlus, IcoBug, IcoList, IcoBoard, IcoClose, IcoChevR, IcoProject } from '../components/Icons';
+import { IcoFilter, IcoPlus, IcoBug, IcoBell, IcoList, IcoBoard, IcoClose, IcoChevR, IcoProject } from '../components/Icons';
 import { Btn, PriorityIcon } from '../components/Primitives';
 import { isSlashKey } from '../lib/keys';
 
@@ -330,6 +331,7 @@ export function BoardPage() {
   const [isSavingState, setIsSavingState] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isReportBugOpen, setIsReportBugOpen] = useState(false);
+  const [isReportIncidentOpen, setIsReportIncidentOpen] = useState(false);
   const [reportBugPrefill, setReportBugPrefill] = useState({ description: '', title: '' });
   const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
@@ -2700,6 +2702,15 @@ export function BoardPage() {
                 setIsReportBugOpen(true);
               }}
             >Report bug</Btn>
+            <Btn
+              variant="ghost"
+              icon={<IcoBell size={12} />}
+              size="sm"
+              onClick={() => {
+                setMutationError(null);
+                setIsReportIncidentOpen(true);
+              }}
+            >Report incident</Btn>
           </>
         ) : null}
       </header>
@@ -3376,6 +3387,17 @@ export function BoardPage() {
             setIsReportBugOpen(false);
             setReportBugPrefill({ description: '', title: '' });
           }}
+        />
+      ) : null}
+      {selectedTeam ? (
+        <ReportIncidentDialog
+          isOpen={isReportIncidentOpen}
+          teamId={selectedTeam.id}
+          teamKey={selectedTeam.key}
+          projects={placeableProjects}
+          labels={labels}
+          boardRepository={rawProjectKey}
+          onClose={() => setIsReportIncidentOpen(false)}
         />
       ) : null}
     </main>

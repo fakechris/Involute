@@ -38,12 +38,12 @@ export async function findOrCreateLabelIds(prisma: DatabaseClient, names: string
 }
 
 /**
- * The Type label group (Bug route v1, INV-748/749; Research, INV-912): Bug,
- * Feature, Improvement and Research are ordinary labels, matched
- * case-insensitively (so the existing "bug" and "research" labels are those
- * Types), and an item carries at most one.
+ * The Type label group (Bug route v1, INV-748/749; Research, INV-912;
+ * Incident, INV-1123): Bug, Feature, Improvement, Research and Incident are
+ * ordinary labels, matched case-insensitively (so the existing "bug" and
+ * "research" labels are those Types), and an item carries at most one.
  */
-export const TYPE_LABEL_NAMES = ['Bug', 'Feature', 'Improvement', 'Research'] as const;
+export const TYPE_LABEL_NAMES = ['Bug', 'Feature', 'Improvement', 'Research', 'Incident'] as const;
 const TYPE_KEYS: ReadonlySet<string> = new Set(TYPE_LABEL_NAMES.map((name) => name.toLowerCase()));
 
 export function isTypeLabel(name: string): boolean {
@@ -69,6 +69,25 @@ export async function isResearchWork(prisma: DatabaseClient, workId: string): Pr
     where: { name: { equals: 'Research', mode: 'insensitive' }, issues: { some: { id: workId } } },
   });
   return count > 0;
+}
+
+/**
+ * Whether the work carries Type: Incident (INV-1123). Later incident rules —
+ * impact timestamps, postmortem before closing, follow-up deadlines — key on
+ * this check.
+ */
+export async function isIncidentWork(prisma: DatabaseClient, workId: string): Promise<boolean> {
+  const count = await prisma.issueLabel.count({
+    where: { name: { equals: INCIDENT_LABEL_NAME, mode: 'insensitive' }, issues: { some: { id: workId } } },
+  });
+  return count > 0;
+}
+
+export const INCIDENT_LABEL_NAME = 'Incident';
+
+/** Whether a label list names Type: Incident (for proposals, before the work exists). */
+export function namesIncident(labels: readonly string[] | null | undefined): boolean {
+  return (labels ?? []).some((label) => label.trim().toLowerCase() === 'incident');
 }
 
 /** Whether a label list names Type: Research (for proposals, before the work exists). */
