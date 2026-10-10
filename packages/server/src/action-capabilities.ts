@@ -22,6 +22,8 @@ export const PAIRS: Record<string, string> = {
   work_attach_file: 'fileUpload',
   work_view_save: 'savedViewUpsert',
   work_view_delete: 'savedViewDelete',
+  work_timeline_star: 'issueTimelineStar',
+  work_timeline_unstar: 'issueTimelineUnstar',
   work_executor_update: 'executorUpdate',
 };
 
@@ -40,6 +42,7 @@ export const READ_PAIRS: Record<string, string[]> = {
   work_executor_context: ['executorContextJson'],
   agent_inbox: ['notifications', 'unreadNotificationCount'],
   work_views: ['savedViews'],
+  work_timeline: ['issueTimeline'],
 };
 
 /** MCP read tools with no GraphQL counterpart, and why. */
@@ -90,6 +93,8 @@ export const RENAMED: Record<string, Record<string, string>> = {
   work_attach_file: { work_id: 'issueId', mime_type: 'mimeType' },
   // The web app sends the state as JSON text; MCP takes the object.
   work_view_save: { team_key: 'teamKey', state: 'stateJson' },
+  work_timeline_star: { work_id: 'issueId' },
+  work_timeline_unstar: { work_id: 'issueId' },
 };
 
 /** MCP arguments with no GraphQL field, and why a person does not need them. */
@@ -186,6 +191,8 @@ const DETAILS: Record<string, ActionDetails> = {
   work_delivery_propose: detail(['work_delivery_context'], 'Write access; proposals cannot expand authority themselves.', 'expected_revision.', 'Candidate delivery change.', 'Read delivery changes; a person approves or declines.', 'candidate'),
   work_view_save: detail(['work_views', 'work_catalog'], 'Read access to the team; TEAM visibility needs write access.', 'Pass id to update; otherwise each call creates a view.', 'The saved view.', 'Read work_views before retrying an uncertain save.'),
   work_view_delete: detail(['work_views'], 'Owner of the view, or a team owner for a shared view.', 'Deleting an absent view returns removed: false.', 'removed boolean.', 'Read work_views; recreate with work_view_save if removed by mistake.'),
+  work_timeline_star: detail(['work_timeline'], 'Write access to the work.', 'Starring a starred entry keeps the first star.', 'starred entry key, starred_at, starred_by.', 'Read work_timeline(starred_only) before retrying.'),
+  work_timeline_unstar: detail(['work_timeline'], 'Write access to the work.', 'Unstarring an unstarred entry returns removed: false.', 'removed boolean.', 'Star it again with work_timeline_star if removed by mistake.'),
   work_attach_file: detail(['work_get_context'], 'Write access to the work; the file is readable by whoever can read the work.', 'Each call stores a new file; attach once.', 'Attachment id and url.', 'Read Issue.attachments before retrying an uncertain upload; cite the url as artifact evidence.'),
   work_execution_create: detail(['work_delivery_context'], 'Valid candidate-approved grant and unit prerequisites.', 'expected_grant_revision; one implementation per unit/grant.', 'Implementation work.', 'Read existing unit after an uncertain result.'),
   work_executor_update: detail(['work_executor_context', 'work_delivery_context'], 'Approved executor and execution token; human reconciliation is exceptional.', 'expectedRevision, generation, effect key and receipt idempotencyKey.', 'Versioned dispatch, effect or delivery receipt.', 'Never replay unknown effects. Stop and reconcile with evidence; recover within approved budget.'),

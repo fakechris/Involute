@@ -6923,3 +6923,55 @@ a.bugs-stat {
   color: var(--fg-dim);
   margin-top: 2px;
 }
+
+/* Issue timeline (INV-1116): key-event stars and the filter */
+.issue-timeline__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.issue-timeline__filter {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-2);
+  background: transparent;
+  color: var(--fg-dim);
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+  text-transform: none;
+}
+
+.issue-timeline__filter[aria-pressed='true'] {
+  color: var(--fg);
+  border-color: var(--accent, var(--border));
+}
+
+.issue-timeline__star {
+  border: 0;
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.issue-timeline__star--on {
+  color: var(--warning, #d9a400);
+}
+
+.issue-timeline__actor {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.issue-timeline__detail {
+  color: var(--fg-muted);
+}
+
+.issue-timeline__error {
+  color: var(--danger, #c33);
+  font-size: 13px;
+  margin-bottom: 6px;
+}

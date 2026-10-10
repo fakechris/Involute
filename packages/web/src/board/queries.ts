@@ -1864,3 +1864,58 @@ export const VIEWER_ID_QUERY = gql`
     }
   }
 `;
+
+// INV-1116: the issue timeline, projected on the server from audits, runs,
+// evidence and comments; any entry can be starred as a key event.
+export const ISSUE_TIMELINE_QUERY = gql`
+  query IssueTimeline($issueId: String!) {
+    issueTimeline(issueId: $issueId) {
+      workId
+      truncated
+      entries {
+        key
+        kind
+        at
+        actorKind
+        actor {
+          id
+          name
+          email
+        }
+        summary
+        detail
+        url
+        sourceId
+        starred
+        starredAt
+        starredBy {
+          id
+          name
+          email
+        }
+      }
+    }
+  }
+`;
+
+export const ISSUE_TIMELINE_STAR_MUTATION = gql`
+  mutation IssueTimelineStar($input: IssueTimelineStarInput!) {
+    issueTimelineStar(input: $input) {
+      success
+      message
+      entryKey
+      starred
+    }
+  }
+`;
+
+export const ISSUE_TIMELINE_UNSTAR_MUTATION = gql`
+  mutation IssueTimelineUnstar($input: IssueTimelineStarInput!) {
+    issueTimelineUnstar(input: $input) {
+      success
+      message
+      entryKey
+      starred
+    }
+  }
+`;

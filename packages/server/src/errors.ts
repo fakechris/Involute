@@ -4,6 +4,9 @@ import { GraphQLError } from 'graphql';
 export const NOT_AUTHENTICATED_MESSAGE = 'Not authenticated';
 export const TEAM_NOT_FOUND_MESSAGE = 'Team not found.';
 export const ISSUE_NOT_FOUND_MESSAGE = 'Issue not found.';
+// INV-1116: starring refers to an entry of the projected issue timeline.
+export const TIMELINE_ENTRY_NOT_FOUND_MESSAGE = 'That timeline entry does not exist on this work item. Read the timeline and pass an entry key it lists.';
+export const TIMELINE_ENTRY_KEY_REQUIRED_MESSAGE = 'entryKey is required.';
 export const COMMENT_NOT_FOUND_MESSAGE = 'Comment not found.';
 export const COMMENT_PARENT_ISSUE_MISMATCH_MESSAGE =
   'Parent comment belongs to a different work item.';
@@ -242,6 +245,8 @@ const exposedErrorCodes = new Map<string, string>([
   [NOT_AUTHENTICATED_MESSAGE, 'UNAUTHENTICATED'],
   [TEAM_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ISSUE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [TIMELINE_ENTRY_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [TIMELINE_ENTRY_KEY_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [COMMENT_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [COMMENT_PARENT_ISSUE_MISMATCH_MESSAGE, 'BAD_USER_INPUT'],
   [MEMBERSHIP_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
