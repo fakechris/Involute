@@ -1403,6 +1403,12 @@ const typeDefs = /* GraphQL */ `
     "Research in Review whose derived items are all committed; its proposer can close it (INV-1001)."
     researchClosableCount: Int!
     researchClosable: [Issue!]!
+    "Incidents in Review or Done nothing derives from and not stating 无可执行点 (INV-1126)."
+    incidentsWithoutDownstreamCount: Int!
+    incidentsWithoutDownstream: [Issue!]!
+    "SEV1/SEV2 incidents in Review or Done with no attachment: the postmortem is missing (INV-1126)."
+    incidentsWithoutPostmortemCount: Int!
+    incidentsWithoutPostmortem: [Issue!]!
   }
 
   type WorkReferencePair {

@@ -159,6 +159,8 @@ export const DECISION_NOTIFICATION_TYPES = [
   'delivery.declined',
   // Every item derived from a research item is committed; its proposer can close it (INV-1001).
   'research.closable',
+  // Every follow-up of an incident is committed; its declarer and Incident Lead can close it (INV-1126).
+  'incident.closable',
 ] as const;
 export type DecisionNotificationType = (typeof DECISION_NOTIFICATION_TYPES)[number];
 
