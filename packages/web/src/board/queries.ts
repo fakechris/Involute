@@ -948,6 +948,13 @@ export const BUGS_PAGE_QUERY = gql`
         weekStart
         count
       }
+      mostDuplicated {
+        id
+        identifier
+        title
+        priority
+        duplicateCount
+      }
       metrics {
         triageHoursP50
         triageHoursP90

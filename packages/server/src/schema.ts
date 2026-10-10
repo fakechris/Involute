@@ -164,7 +164,8 @@ import { createComment, createIssue, createIssueInTransaction, deleteComment, de
 import { isActionableNotification, markNotificationRead, projectWorkNotifications, resolveAttentionNotifications } from './notification-service.js';
 import { auditMergedPrTraceability } from './traceability-audit.js';
 import { suggestedBranchName } from './branch-name.js';
-import { createWorkLink, deleteWorkLink, listIncidentLinks } from './link-service.js';
+import { linkWork } from './duplicate-linkage.js';
+import { deleteWorkLink, listIncidentLinks } from './link-service.js';
 import { writeActorFromViewer } from './work-service.js';
 import { findWorkTombstone, isTombstoneExpired, restoreDeletedIssue, TOMBSTONE_EXPIRED_MESSAGE, TOMBSTONE_NOT_FOUND_MESSAGE } from './work-tombstone.js';
 import { BUG_GATE_SOURCE } from './bug-auto-accept.js';
@@ -263,6 +264,7 @@ interface BugSummaryResultShape {
   oldestOpenAgeDays: number | null;
   avgOpenAgeDays: number | null;
   createdPerWeek: Array<{ weekStart: string; count: number }>;
+  mostDuplicated: Array<{ id: string; identifier: string; title: string; priority: number; duplicateCount: number }>;
   metrics: BugMetrics;
 }
 
@@ -283,6 +285,7 @@ const MAX_ISSUES_CONNECTION_FIRST = 200;
 
 
 const BUG_TREND_WEEKS = 8;
+const MOST_DUPLICATED_LIMIT = 10;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function buildIssueListInclude(
@@ -1933,8 +1936,18 @@ const typeDefs = /* GraphQL */ `
     oldestOpenAgeDays: Float
     avgOpenAgeDays: Float
     createdPerWeek: [BugWeekCount!]!
+    "Open bugs most often reported again: the most DUPLICATE_OF links point at them, most first, top 10 (INV-1124)."
+    mostDuplicated: [BugDuplicateCount!]!
     "Triage, SLA, source and placement (INV-751)."
     metrics: BugMetrics!
+  }
+
+  type BugDuplicateCount {
+    id: ID!
+    identifier: String!
+    title: String!
+    priority: Int!
+    duplicateCount: Int!
   }
 
   type BugMetrics {
@@ -2885,6 +2898,7 @@ const resolvers = {
           oldestOpenAgeDays: null,
           avgOpenAgeDays: null,
           createdPerWeek: emptyWeeks,
+          mostDuplicated: [],
           metrics,
         };
       }
@@ -2906,7 +2920,7 @@ const resolvers = {
       const trendCutoff = startOfUtcWeek(now);
       trendCutoff.setUTCDate(trendCutoff.getUTCDate() - (BUG_TREND_WEEKS - 1) * 7);
 
-      const [openBugs, closedRepoGroups, recentCreations] = await Promise.all([
+      const [openBugs, closedRepoGroups, recentCreations, duplicateGroups] = await Promise.all([
         context.prisma.issue.findMany({
           where: openWhere,
           select: {
@@ -2926,6 +2940,11 @@ const resolvers = {
         context.prisma.issue.findMany({
           where: { ...baseWhere, createdAt: { gte: trendCutoff } },
           select: { createdAt: true },
+        }),
+        context.prisma.workLink.groupBy({
+          by: ['toId'],
+          where: { type: 'DUPLICATE_OF', to: openWhere },
+          _count: { _all: true },
         }),
       ]);
 
@@ -2997,6 +3016,20 @@ const resolvers = {
       }
       const createdPerWeek = [...weekBuckets.entries()].map(([weekStart, count]) => ({ weekStart, count }));
 
+      const topDuplicated = duplicateGroups
+        .map((group) => ({ id: group.toId, duplicateCount: group._count._all }))
+        .sort((a, b) => b.duplicateCount - a.duplicateCount || a.id.localeCompare(b.id))
+        .slice(0, MOST_DUPLICATED_LIMIT);
+      const duplicatedIssues = await context.prisma.issue.findMany({
+        where: { id: { in: topDuplicated.map((entry) => entry.id) } },
+        select: { id: true, identifier: true, title: true, priority: true },
+      });
+      const duplicatedById = new Map(duplicatedIssues.map((issue) => [issue.id, issue]));
+      const mostDuplicated = topDuplicated.flatMap((entry) => {
+        const issue = duplicatedById.get(entry.id);
+        return issue ? [{ ...issue, duplicateCount: entry.duplicateCount }] : [];
+      });
+
       const openCount = openBugs.length;
       const closedCount = closedRepoGroups.reduce((sum, group) => sum + group._count._all, 0);
 
@@ -3013,6 +3046,7 @@ const resolvers = {
           : null,
         avgOpenAgeDays: openCount > 0 ? Math.round((ageSumDays / openCount) * 10) / 10 : null,
         createdPerWeek,
+        mostDuplicated,
         metrics,
       };
     },
@@ -3460,7 +3494,7 @@ const resolvers = {
         if (!to) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
         await assertCanWriteIssue(context.prisma, context, from.id);
         await assertCanWriteIssue(context.prisma, context, to.id);
-        const link = await createWorkLink(context.prisma, {
+        const { link } = await linkWork(context.prisma, {
           actor: writeActorFromViewer(context.viewer),
           fromId: from.id,
           toId: to.id,

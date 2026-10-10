@@ -142,6 +142,7 @@ Work nodes carry a delivery contract (\`outcome\`, \`scope\`, \`constraints\`,
 - \`BLOCKS\` — dependency; ready work has no incoming \`BLOCKS\` from unresolved work. When the source material says an item depends on / must come after another, record it: \`work_propose\` accepts \`blocked_by\` / \`blocks\`, or use \`work_link\`. Do not invent dependencies. \`work_commit\` warns when text reads like a dependency but no BLOCKS exists.
 - Mentioning another item (\`INV-123\`, or a project alias prefix) in a description, contract field or comment records a \`RELATED_TO\` link automatically, unless the two are already linked; removing the mention keeps the link.
 - \`DERIVED_FROM\`, \`DISCOVERED_DURING\`, \`RELATED_TO\`, \`DUPLICATE_OF\`
+- \`DUPLICATE_OF\` (A → B, INV-1124) — when a person links it, an open A is closed (a candidate declined, committed work Canceled) with resolution \`duplicate\`; when an agent links it, A stays open and its owner is notified to decline it, because agents never close work. Both items get a note, and A's reporter is notified of B's later state changes. Removing the link does not reopen A.
 
 ## MCP tools
 

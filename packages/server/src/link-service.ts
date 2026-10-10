@@ -9,6 +9,7 @@ import {
   WORK_LINK_SELF_REFERENCE_MESSAGE,
   WORK_LINK_TEAM_MISMATCH_MESSAGE,
 } from './errors.js';
+import { postDuplicateNote } from './duplicate-notes.js';
 import { assertContainsEndpoints, lockWorkGraph } from './graph-integrity.js';
 import { INTERNAL_WRITE_ACTOR, recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
 
@@ -30,6 +31,19 @@ export async function createWorkLink(
   if (isPrismaClient(prisma)) {
     return prisma.$transaction((transaction) => createWorkLink(transaction, input));
   }
+  return (await createWorkLinkDetailed(prisma, input)).link;
+}
+
+/**
+ * createWorkLink that also says whether the edge is new (`created: false` when
+ * it already existed), so a caller can attach side effects to the first write
+ * only — DUPLICATE_OF closing the duplicate (INV-1124). Runs in the caller's
+ * transaction.
+ */
+export async function createWorkLinkDetailed(
+  prisma: Prisma.TransactionClient,
+  input: CreateWorkLinkInput,
+): Promise<{ created: boolean; link: WorkLink }> {
 
   if (input.fromId === input.toId) {
     throw createValidationError(WORK_LINK_SELF_REFERENCE_MESSAGE);
@@ -87,7 +101,7 @@ export async function createWorkLink(
       await projectParent(prisma, toIssue, input.fromId, input.actor);
     }
 
-    return existing;
+    return { created: false, link: existing };
   }
 
   const actor = input.actor ?? INTERNAL_WRITE_ACTOR;
@@ -116,14 +130,14 @@ export async function createWorkLink(
     });
   }
 
-  return created;
+  return { created: true, link: created };
 }
 
 export async function deleteWorkLink(
   prisma: DatabaseClient,
   id: string,
   actor?: WriteActor | null,
-): Promise<Pick<WorkLink, 'id'>> {
+): Promise<Pick<WorkLink, 'id'> & { note?: string }> {
   if (isPrismaClient(prisma)) {
     return prisma.$transaction((transaction) => deleteWorkLink(transaction, id, actor));
   }
@@ -159,6 +173,21 @@ export async function deleteWorkLink(
       actor: { ...(actor ?? INTERNAL_WRITE_ACTOR), reason: `Removed ${existing.type} link ${existing.id}: ${existing.fromId} -> ${existing.toId}` },
       before: selectIssueSnapshot(before), after: selectIssueSnapshot(after), workId: before.id,
     });
+  }
+
+  // Removing DUPLICATE_OF does not reopen the duplicate it closed (INV-1124):
+  // it only says so, and a person reopens it if it is a separate problem.
+  if (existing.type === 'DUPLICATE_OF') {
+    const [duplicate, original] = await Promise.all([
+      prisma.issue.findUniqueOrThrow({ where: { id: existing.fromId }, select: { commitmentStatus: true, state: { select: { type: true } } } }),
+      prisma.issue.findUniqueOrThrow({ where: { id: existing.toId }, select: { identifier: true } }),
+    ]);
+    const closed = duplicate.commitmentStatus === 'REJECTED' || duplicate.state.type === 'COMPLETED' || duplicate.state.type === 'CANCELED';
+    const note = closed
+      ? `No longer marked as a duplicate of ${original.identifier}. Removing the link does not reopen this item; reopen it if it is a separate problem.`
+      : `No longer marked as a duplicate of ${original.identifier}.`;
+    await postDuplicateNote(prisma, { workId: existing.fromId, authorId: actor?.actorId, body: note });
+    return { id: existing.id, note };
   }
 
   return { id: existing.id };

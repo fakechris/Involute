@@ -31,6 +31,10 @@ const bugsPageData = {
       { weekStart: '2026-08-31', count: 1 },
       { weekStart: '2026-09-07', count: 2 },
     ],
+    mostDuplicated: [
+      { id: 'issue-high', identifier: 'INV-32', title: 'High wrong totals', priority: 2, duplicateCount: 3 },
+      { id: 'issue-urgent', identifier: 'INV-30', title: 'Urgent crash on save', priority: 1, duplicateCount: 1 },
+    ],
     metrics: {
       triageHoursP50: 3.5,
       triageHoursP90: 70,
@@ -161,6 +165,17 @@ describe('BugsPage', () => {
     ]);
   });
 
+  it('lists the open bugs reported again most, most duplicates first (INV-1124)', () => {
+    render(
+      <MemoryRouter>
+        <BugsPage />
+      </MemoryRouter>,
+    );
+    const panel = screen.getByLabelText('Most duplicated open bugs');
+    const rows = within(panel).getAllByRole('row').map((row) => row.textContent);
+    expect(rows).toEqual(['BugDuplicates', 'INV-32High wrong totals3', 'INV-30Urgent crash on save1']);
+    expect(within(panel).getByRole('button', { name: /INV-32/ })).toHaveAttribute('title', expect.stringMatching(/raising its priority/));
+  });
 
   it('renders the header stat cards', () => {
     render(

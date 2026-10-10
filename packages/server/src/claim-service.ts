@@ -44,6 +44,7 @@ import {
 } from './errors.js';
 import { findWorkByIdOrIdentifier, explainWorkNotReady,
   isWorkReadyForClaim } from './context-service.js';
+import { applyDuplicateOf } from './duplicate-linkage.js';
 import { enqueueWorkEvent } from './event-outbox.js';
 import { parseWorkResolution } from './work-resolution.js';
 import {
@@ -508,6 +509,12 @@ export async function proposeWork(
         auditId: creationAuditId,
         receipt: input.receipt,
       });
+    }
+    // Proposed as a duplicate (INV-1124): the same effects as linking it later,
+    // after the proposal itself is recorded so its events read in order.
+    if (related && relatedType === 'DUPLICATE_OF') {
+      const outcome = await applyDuplicateOf(transaction, { duplicateId: created.id, originalId: related.id, actor });
+      if (outcome.closed) return transaction.issue.findUniqueOrThrow({ where: { id: created.id } });
     }
     return created;
   });

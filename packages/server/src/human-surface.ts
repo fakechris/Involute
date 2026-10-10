@@ -268,6 +268,11 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationSurface> = {
   'attention.digest': { kind: 'inbox', actionable: 'info' },
   // The research proposer (usually an agent) closes it with work_update(state: DONE) (INV-1001).
   'research.closable': { kind: 'info', actionable: 'info' },
+  // DUPLICATE_OF (INV-1124): the duplicate's reporter, and while an agent's link
+  // leaves it open its deciders, who decline it on the work page (cancel with
+  // resolution Duplicate); then the reporter hears each state change of the original.
+  'duplicate.marked': { kind: 'info', actionable: 'info' },
+  'duplicate.original_changed': { kind: 'info', actionable: 'info' },
   'bug.sla_at_risk': { kind: 'info', actionable: 'info' },
   'bug.sla_breached': { kind: 'info', actionable: 'info' },
   'contract.amendment_proposed': { kind: 'work', action: 'Accept change', component: 'components/ContractAmendmentPanel.tsx', actionable: 'CONTRACT_AMENDMENT' },
