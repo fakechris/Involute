@@ -1993,6 +1993,7 @@ export function BoardPage() {
       ...current,
       ...(update.priority !== undefined ? { priority: update.priority } : {}),
       ...(update.severity !== undefined ? { severity: update.severity } : {}),
+      ...(update.reproducibility !== undefined ? { reproducibility: update.reproducibility } : {}),
       ...(update.kind ? { kind: update.kind } : {}),
     }));
   }

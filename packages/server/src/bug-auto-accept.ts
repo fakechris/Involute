@@ -4,6 +4,7 @@ import { ensureAutoAcceptActor } from './auto-accept-gate.js';
 import { lockWorkGraph } from './graph-integrity.js';
 import { configuredGitHubVerifier, verifyBugFix, type BugFixObservation, type GitHubVerifierOptions } from './github-evidence-verifier.js';
 import { reviewWorkInTransaction } from './run-service-review.js';
+import { isIntermittent } from './reproducibility.js';
 
 /**
  * The Auto-Accept Gate for bugs (INV-1075). A bug in a PROJECT that turned
@@ -12,7 +13,9 @@ import { reviewWorkInTransaction } from './run-service-review.js';
  * default branch, and the commit's checks green. The decision is recorded as
  * the SERVICE actor "Auto-Accept Gate", never as the agent; what the agent
  * wrote in summaries counts for nothing. Everything else stays for a person,
- * with the reason recorded where /in-review shows it.
+ * with the reason recorded where /in-review shows it. A bug that reproduces
+ * only SOMETIMES or ONCE is always left for a person (INV-1122): green CI on
+ * the fix cannot show an intermittent bug is gone.
  */
 export const BUG_GATE_SOURCE = 'bug-gate';
 /** A work whose last check failed is looked at again after this long. */
@@ -21,6 +24,12 @@ export const BUG_GATE_RETRY_MS = 10 * 60_000;
 export const BUG_GATE_BATCH = 50;
 
 const BUG_LABEL = { some: { name: { equals: 'bug', mode: 'insensitive' as const } } };
+
+/** Shown on /in-review for a SOMETIMES / ONCE bug (INV-1122). */
+export function intermittentReason(reproducibility: 'SOMETIMES' | 'ONCE'): string {
+  const how = reproducibility === 'ONCE' ? 'was seen only once' : 'reproduces only sometimes';
+  return `the bug ${how}; a merged fix with green CI cannot prove it gone, so a person accepts it (${reproducibility})`;
+}
 
 function reasonFor(observation: BugFixObservation): string {
   const code = observation.failureCode ?? 'UNKNOWN';
@@ -63,7 +72,7 @@ export async function sweepBugAutoAccept(
       state: { type: 'REVIEW' },
       labels: BUG_LABEL,
     },
-    select: { id: true },
+    select: { id: true, reproducibility: true },
   });
   // Longest-unchecked first, recently checked left out, so bugs that wait for a
   // person can never crowd out the rest (never checked sorts first).
@@ -81,8 +90,13 @@ export async function sweepBugAutoAccept(
   let accepted = 0;
   let skipped = 0;
   const gate = await ensureAutoAcceptActor(prisma);
-  for (const { id } of candidates) {
+  for (const { id, reproducibility } of candidates) {
     const run = await prisma.workRun.findFirst({ where: { workId: id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
+    // Intermittent: GitHub is not asked, whatever it would say.
+    if (isIntermittent(reproducibility)) {
+      skipped += await record(prisma, id, run?.id ?? null, gate.id, now, [intermittentReason(reproducibility)], null);
+      continue;
+    }
     if (!run || run.status !== 'COMPLETED' || !run.commitSha || !run.repository) {
       skipped += await record(prisma, id, run?.id ?? null, gate.id, now, ['the latest run is not a completed run with a commit sha'], null);
       continue;
@@ -115,8 +129,8 @@ export async function sweepBugAutoAccept(
       await tx.$queryRaw`SELECT id FROM "Issue" WHERE id = ${id}::uuid FOR UPDATE`;
       const fresh = await tx.issue.findUniqueOrThrow({ where: { id }, include: { state: true } });
       const latest = await tx.workRun.findFirst({ where: { workId: id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
-      // A person or a new run got there first: leave it.
-      if (fresh.state.type !== 'REVIEW' || latest?.id !== run.id) return false;
+      // A person or a new run got there first, or marked it intermittent meanwhile: leave it.
+      if (fresh.state.type !== 'REVIEW' || latest?.id !== run.id || isIntermittent(fresh.reproducibility)) return false;
       const { decision } = await reviewWorkInTransaction(tx, id, { decision: 'ACCEPTED', expectedRevision: fresh.revision, runId: run.id, reason },
         { actorId: gate.id, actorKind: 'SERVICE', surface: 'auto-accept-gate', reason });
       await persist(tx, id, run.id, gate.id, 'ACCEPTED', 'CLEAR', [reason], observation, decision.id);

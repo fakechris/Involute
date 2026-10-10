@@ -6,12 +6,14 @@ import { BUG_REPORT_MUTATION, SIMILAR_BUGS_QUERY } from '../board/queries';
 import type {
   BugReportMutationData,
   BugReportMutationVariables,
+  BugReproducibility,
   IssueSeverity,
   LabelSummary,
   ProjectSummaryItem,
   SimilarBugsQueryData,
 } from '../board/types';
 import { SEVERITY_OPTIONS } from '../board/severity';
+import { REPRODUCIBILITY_OPTIONS } from '../board/reproducibility';
 import { isTypeLabel } from '../work/labels';
 import { readLastPlacement, rememberPlacement, resolveInitialPlacement, type CreatePlacement, type PlacementSource } from '../work/placement';
 import { PlacementPicker } from './PlacementPicker';
@@ -61,6 +63,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
   const [steps, setSteps] = useState('');
   const [priority, setPriority] = useState(0);
   const [severity, setSeverity] = useState<IssueSeverity | ''>('');
+  const [reproducibility, setReproducibility] = useState<BugReproducibility | ''>('');
   const [placement, setPlacement] = useState<CreatePlacement | null>(null);
   const [placementSource, setPlacementSource] = useState<PlacementSource | null>(null);
   const [triage, setTriage] = useState(false);
@@ -98,6 +101,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
     setSteps('');
     setPriority(0);
     setSeverity('');
+    setReproducibility('');
     setPlacement(initial?.placement ?? null);
     setPlacementSource(initial?.source ?? null);
     setTriage(false);
@@ -141,6 +145,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
             stepsToReproduce: steps.trim(),
             priority,
             ...(severity ? { severity } : {}),
+            ...(reproducibility ? { reproducibility } : {}),
             ...(triage || !placement ? {} : { parentId: placement.parentId }),
             labelIds: selectedLabelIds,
           },
@@ -296,6 +301,23 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
                 >
                   <option value="">Not judged</option>
                   {SEVERITY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value} title={option.description}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field-stack">
+                <span>Reproduces (optional)</span>
+                <select
+                  aria-label="Bug reproducibility"
+                  title="How often it shows up when you try. Sometimes / Once: a person accepts the fix; it is never auto-accepted."
+                  value={reproducibility}
+                  disabled={isSaving}
+                  onChange={(event) => setReproducibility(event.target.value as BugReproducibility | '')}
+                >
+                  <option value="">Not known</option>
+                  {REPRODUCIBILITY_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value} title={option.description}>
                       {option.label}
                     </option>

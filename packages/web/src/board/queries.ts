@@ -67,6 +67,7 @@ export const BOARD_PAGE_QUERY = gql`
         description
         priority
         severity
+        reproducibility
         kind
         repository
         claim {
@@ -182,6 +183,7 @@ export const ISSUE_UPDATE_MUTATION = gql`
         description
         priority
         severity
+        reproducibility
         kind
         repository
         commitmentStatus
@@ -303,6 +305,7 @@ export const ISSUE_UNDELETE_MUTATION = gql`
         description
         priority
         severity
+        reproducibility
         kind
         repository
         commitmentStatus
@@ -512,6 +515,7 @@ export const ISSUE_PAGE_QUERY = gql`
       description
       priority
       severity
+      reproducibility
       kind
       repository
       claim {
@@ -903,6 +907,7 @@ export const BUG_REPORT_MUTATION = gql`
         title
         priority
         severity
+        reproducibility
         repository
         commitmentStatus
       }

@@ -109,6 +109,14 @@ describe('issue timeline (INV-1116)', () => {
     expect(entries.map((entry) => entry.summary)).toEqual(['Severity set to SEV2 Major', 'Severity SEV2 Major → SEV1 Critical', 'Severity cleared']);
   });
 
+  it('labels reproducibility changes (INV-1122) by name', async () => {
+    await updateIssue(prisma, work.id, { reproducibility: 'SOMETIMES' }, writeActorFromViewer(admin));
+    await updateIssue(prisma, work.id, { reproducibility: 'ALWAYS' }, writeActorFromViewer(admin));
+    await updateIssue(prisma, work.id, { reproducibility: null }, writeActorFromViewer(admin));
+    const entries = (await loadWorkTimeline(prisma, work.id)).entries.filter((entry) => entry.changes.some((change) => change.field === 'reproducibility'));
+    expect(entries.map((entry) => entry.summary)).toEqual(['Reproduces: Sometimes', 'Reproducibility Sometimes → Always', 'Reproducibility cleared']);
+  });
+
   it('shows nothing to a person who cannot read the work, and never names work they cannot read', async () => {
     await expect(workTimelineFor(human(outsider), work.identifier)).rejects.toThrow();
     await expect(callMcpTool(human(outsider), 'work_timeline', { work_id: work.identifier }, true)).rejects.toThrow();
