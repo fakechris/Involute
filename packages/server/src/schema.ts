@@ -178,6 +178,7 @@ import { loadProjectWorkGraph, type ProjectWorkGraph } from './work-graph-view.j
 import { loadWorkTimelines } from './work-timeline.js';
 import { dependencyHints } from './mention-links.js';
 import { loadWorkHygiene } from './work-hygiene.js';
+import { EXTENSION_TOKEN_HUMAN_ONLY_MESSAGE, createExtensionToken, listExtensionTokens, revokeExtensionToken } from './extension-tokens.js';
 import { type AttentionItem, type AttentionKind, loadAttention, pageAttention, summarizeAttention } from './attention-service.js';
 import { BUG_LABEL_NAME, findSimilarBugs, reportBug, type BugReportInput } from './bug-report.js';
 import { loadBugSlas } from './bug-sla.js';
@@ -489,6 +490,8 @@ const typeDefs = /* GraphQL */ `
     """One agent's profile, by handle or id."""
     agentProfile(handle: String!): AgentProfile
     agentCredentials(teamId: String!): [AgentCredentialRecord!]!
+    "Your Involute Capture extension connections (INV-1145)."
+    extensionTokens: [ExtensionTokenRecord!]!
     webhooks(teamId: String!): [WebhookSubscriptionRecord!]!
     "Sync, inbound queue, outbox and webhooks at a glance; admins only (INV-796)."
     opsOverview: OpsOverview!
@@ -587,6 +590,10 @@ const typeDefs = /* GraphQL */ `
     """Provision a SERVICE actor for an external program (CI, cron, a bridge). Human-only."""
     serviceActorCreate(input: ServiceActorCreateInput!): ActorLifecyclePayload!
     agentCredentialRevoke(id: String!): AgentCredentialRevokePayload!
+    "Connect the Involute Capture extension: a token for the signed-in person that can only report bugs (INV-1145). Returned once."
+    extensionTokenCreate(name: String): ExtensionTokenCreatePayload!
+    "Disconnect one of your extension connections; it stops working at once (INV-1145)."
+    extensionTokenRevoke(id: String!): ExtensionTokenPayload!
     webhookCreate(input: WebhookCreateInput!): WebhookMutationPayload!
     "Create or update a saved view (INV-1005)."
     savedViewUpsert(input: SavedViewInput!): SavedViewPayload!
@@ -1770,6 +1777,32 @@ const typeDefs = /* GraphQL */ `
     success: Boolean!
     credential: AgentCredentialRecord
     token: String
+    "Why the mutation was refused; null on success."
+    message: String
+  }
+
+  "A connection of the Involute Capture extension; the token itself is never shown again (INV-1145)."
+  type ExtensionTokenRecord {
+    id: ID!
+    name: String!
+    createdAt: DateTime!
+    expiresAt: DateTime!
+    revokedAt: DateTime
+    lastUsedAt: DateTime
+  }
+
+  type ExtensionTokenCreatePayload {
+    success: Boolean!
+    "The token, shown this once; the extension stores it."
+    token: String
+    extensionToken: ExtensionTokenRecord
+    "Why the mutation was refused; null on success."
+    message: String
+  }
+
+  type ExtensionTokenPayload {
+    success: Boolean!
+    extensionToken: ExtensionTokenRecord
     "Why the mutation was refused; null on success."
     message: String
   }
@@ -3434,6 +3467,8 @@ const resolvers = {
         .then(() => true, () => false);
       return { ...profile, viewerCanManage };
     },
+    extensionTokens: (_parent: unknown, _args: unknown, context: GraphQLContext) =>
+      listExtensionTokens(context.prisma, requireSessionPerson(context)),
     agentCredentials: async (
       _parent: unknown,
       args: { teamId: string },
@@ -3627,7 +3662,7 @@ const resolvers = {
       runMutationWithReason(async () => {
         requireAuthentication(context);
         await assertCanWriteTeam(context.prisma, context, args.input.teamId);
-        const created = await reportBug(context.prisma, args.input, writeActorFromViewer(context.viewer));
+        const created = await reportBug(context.prisma, args.input, writeActorFromViewer(context.viewer, surfaceOf(context)));
         return {
           issue: await getIssueById(context.prisma, created.id),
           success: true as const,
@@ -4401,6 +4436,16 @@ const resolvers = {
           token,
         };
       }, { credential: null, success: false as const, token: null }),
+    extensionTokenCreate: async (_parent: unknown, args: { name?: string | null }, context: GraphQLContext) =>
+      runMutation(async () => {
+        const { record, token } = await createExtensionToken(context.prisma, requireSessionPerson(context), { name: args.name ?? null });
+        return { extensionToken: record, success: true as const, token };
+      }, { extensionToken: null, success: false as const, token: null }),
+    extensionTokenRevoke: async (_parent: unknown, args: { id: string }, context: GraphQLContext) =>
+      runMutation(async () => {
+        const record = await revokeExtensionToken(context.prisma, requireSessionPerson(context), args.id);
+        return { extensionToken: record, success: true as const };
+      }, { extensionToken: null, success: false as const }),
     agentCredentialRevoke: async (
       _parent: unknown,
       args: { id: string },
@@ -5797,6 +5842,22 @@ function timelineEntryRecord(entry: TimelineEntry) {
 /** GraphQL shape of a saved view: the state travels as JSON text. */
 function savedViewRecord(view: SavedView) {
   return { ...view, stateJson: JSON.stringify(view.state) };
+}
+
+/** Where a write came from, for the audit: the Capture extension is its own surface (INV-1145). */
+function surfaceOf(context: GraphQLContext): string {
+  return context.authMode === 'extension-token' ? 'extension' : 'graphql';
+}
+
+/**
+ * The signed-in person, in the browser: connecting or disconnecting the
+ * extension is never done by an agent, the static token, or the extension itself.
+ */
+function requireSessionPerson(context: GraphQLContext) {
+  const viewer = requireAuthentication(context);
+  // The browser session, or the static operator token acting for a named person (local and e2e).
+  if ((context.authMode !== 'session' && context.authMode !== 'token') || viewer.actorKind !== 'HUMAN') throw createValidationError(EXTENSION_TOKEN_HUMAN_ONLY_MESSAGE);
+  return viewer;
 }
 
 export function createGraphQLSchema(_prisma: PrismaClient) {

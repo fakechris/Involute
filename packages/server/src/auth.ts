@@ -11,9 +11,12 @@ import { createNotAuthenticatedError, NOT_AUTHENTICATED_MESSAGE } from './errors
 import { getSessionRecord, readCookieValue, SESSION_COOKIE_NAME } from './session.js';
 import { resolveAgentPrincipal, touchLastSeen } from './agent-credentials.js';
 import { EMPTY_SHARE_SCOPE, resolveShareScope, type ShareScope } from './project-sharing.js';
+import { GraphQLError } from 'graphql';
+import { EXTENSION_TOKEN_PREFIX, EXTENSION_TOKEN_REFUSED_MESSAGE, extensionOperationAllowed, resolveExtensionPrincipal } from './extension-tokens.js';
 
 export interface GraphQLContext {
-  authMode: 'agent-token' | 'none' | 'session' | 'token';
+  /** extension-token: the Involute Capture extension acting for a person, limited to filing bugs (INV-1145). */
+  authMode: 'agent-token' | 'extension-token' | 'none' | 'session' | 'token';
   agentCredentialId?: string | null;
   agentScopes?: string[] | null;
   /** The team the acting credential is bound to (INV-592). An agent's access is this, not a membership. */
@@ -129,6 +132,13 @@ export function createAuthenticationPlugin(
   options: Omit<GraphQLContextOptions, 'request'>,
 ): Plugin {
   return {
+    // An extension token runs only the operations filing a bug needs (INV-1145).
+    onExecute({ args, setResultAndStopExecution }) {
+      const context = args.contextValue as Partial<GraphQLContext> | undefined;
+      if (context?.authMode !== 'extension-token') return;
+      if (extensionOperationAllowed(args.document, args.operationName, args.variableValues as Record<string, unknown> | undefined)) return;
+      setResultAndStopExecution({ errors: [new GraphQLError(EXTENSION_TOKEN_REFUSED_MESSAGE)] });
+    },
     async onRequest({ endResponse, fetchAPI, request }) {
       const authentication = await resolveRequestAuthentication({
         ...options,
@@ -193,6 +203,18 @@ async function computeRequestAuthentication({
   request,
   viewerAssertionSecret,
 }: GraphQLContextOptions): Promise<RequestAuthentication> {
+  // An extension token is checked before the session cookie: a request that
+  // carries both is the extension's, with its narrower rights, never the session's.
+  const bearer = extractTokenFromAuthorizationHeader(request.headers.get('authorization'));
+  if (bearer?.startsWith(EXTENSION_TOKEN_PREFIX)) {
+    // Good for /graphql only, as its person; anywhere else, or once revoked or
+    // expired, it authenticates nothing (INV-1145).
+    const principal = new URL(request.url).pathname === '/graphql' ? await resolveExtensionPrincipal(prisma, bearer) : null;
+    return principal
+      ? { authMode: 'extension-token', authorized: true, isTrustedSystem: false, viewer: principal.user }
+      : { authMode: 'none', authorized: false, isTrustedSystem: false, viewer: null };
+  }
+
   const sessionToken = readCookieValue(request.headers.get('cookie'), SESSION_COOKIE_NAME);
   const session = await getSessionRecord(prisma, sessionToken);
 
@@ -209,6 +231,7 @@ async function computeRequestAuthentication({
 
   const requestToken = extractTokenFromAuthorizationHeader(request.headers.get('authorization'));
   const pathname = new URL(request.url).pathname;
+
   const agent = (pathname === '/mcp' || pathname.startsWith('/mcp/'))
     ? await resolveAgentPrincipal(prisma, requestToken)
     : null;

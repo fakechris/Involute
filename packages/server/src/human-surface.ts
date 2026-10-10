@@ -50,6 +50,9 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   actorReactivate: { kind: 'web', doc: 'ACTOR_REACTIVATE_MUTATION', components: ['components/AgentLifecycleActions.tsx'], label: 'Reactivate', test: 'App.agents-lifecycle.test.tsx' },
   actorTransferOwner: { kind: 'web', doc: 'ACTOR_TRANSFER_OWNER_MUTATION', components: ['components/AgentLifecycleActions.tsx'], label: 'Transfer owner', test: 'App.agents-lifecycle.test.tsx' },
   agentCredentialCreate: { kind: 'web', components: ['routes/AgentsTab.tsx'], test: 'App.agents-issue.test.tsx' },
+  // INV-1145: a person connects and disconnects the Involute Capture extension.
+  extensionTokenCreate: { kind: 'web', doc: 'EXTENSION_TOKEN_CREATE_MUTATION', components: ['routes/ExtensionConnectPage.tsx'], label: 'Connect extension', test: 'routes/ExtensionConnectPage.test.tsx' },
+  extensionTokenRevoke: { kind: 'web', doc: 'EXTENSION_TOKEN_REVOKE_MUTATION', components: ['routes/ExtensionsTab.tsx'], label: 'Disconnect', test: 'routes/ExtensionConnectPage.test.tsx' },
   agentCredentialRevoke: { kind: 'web', doc: 'AGENT_CREDENTIAL_REVOKE_MUTATION', components: ['routes/AgentsPage.tsx'], label: 'Revoke', test: 'App.agents-lifecycle.test.tsx' },
   agentRequestAnswer: {
     kind: 'web',
