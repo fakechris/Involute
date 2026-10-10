@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Involute Capture",
+  "description": "File an Involute bug from the page you are on: screenshot, annotations, the element you point at and the page's context.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkqrOGcE/sf6/ILHacVV9SAN6/5duD6pLE42CyDXzvKZmtGAaVxEbnFrUtJqxOPU4ZpgkvUfe7tH4nUmHZYnEsBb1Ha2dhuEv9bMFVeOSK9dcMtO79UwMM1+ixvEmQC3fPlboXky5KgQDtK7PJpnP1RiLYj16NLQDPO3ta7yFd4AnGZmWxrRcaHUqwJDf++plGlbvkzQfFs22uTgvjZf6iMqFj8R+AW4Mi99j/ezLnLX4Rw2BFuchkiG+9M5JY4Xu1zsMZZYQPImYL9a35Uwspfuk2KTpXSiKw4Jet9cbKoumf/OcGz1SEVQ/dny+HBkc78nL7jDUmCm5WkqLrDWuewIDAQAB",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "sidePanel",
+    "storage"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Report a bug with Involute Capture"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "options_page": "options.html",
+  "commands": {
+    "capture-bug": {
+      "suggested_key": {
+        "default": "Alt+Shift+B"
+      },
+      "description": "Capture this page and report a bug"
+    }
+  },
+  "externally_connectable": {
+    "matches": [
+      "https://involute.lumenopen.com/*",
+      "http://127.0.0.1/*",
+      "http://localhost/*"
+    ]
+  }
+}

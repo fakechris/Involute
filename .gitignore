@@ -29,3 +29,4 @@ packages/server/prisma/*.d.ts
 packages/server/prisma/*.d.ts.map
 .gstack/
 research/
+dist-e2e

@@ -146,10 +146,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Deploy test database migrations
         run: pnpm --filter @turnkeyai/involute-server prisma:migrate:deploy
-      - name: Shared and CLI tests
+      - name: Shared, CLI and extension tests
         run: |
           pnpm --filter @turnkeyai/involute-shared test --run
           pnpm --filter @turnkeyai/involute test --run
+          pnpm --filter @turnkeyai/involute-extension test --run
 
   web-tests:
     needs: changes

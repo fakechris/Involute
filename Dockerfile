@@ -18,6 +18,7 @@ COPY packages/shared/package.json packages/shared/package.json
 COPY packages/server/package.json packages/server/package.json
 COPY packages/cli/package.json packages/cli/package.json
 COPY packages/web/package.json packages/web/package.json
+COPY packages/extension/package.json packages/extension/package.json
 
 # onnxruntime-node ships every platform's binaries; Linux images need only Linux's.
 # The pnpm store goes in the same layer: node_modules hard-links its files, so

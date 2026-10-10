@@ -25,7 +25,7 @@
     "hotfix:reflex": "pnpm --filter @turnkeyai/involute-server hotfix:reflex",
     "sync:skills": "scripts/sync-skills.sh",
     "prepare": "sh scripts/install-hooks.sh || true",
-    "test": "pnpm --filter @turnkeyai/involute-shared test --run && pnpm --filter @turnkeyai/involute-server test --run && pnpm --filter @turnkeyai/involute test --run && pnpm --filter @turnkeyai/involute-web test --run",
+    "test": "pnpm --filter @turnkeyai/involute-shared test --run && pnpm --filter @turnkeyai/involute-server test --run && pnpm --filter @turnkeyai/involute test --run && pnpm --filter @turnkeyai/involute-extension test --run && pnpm --filter @turnkeyai/involute-web test --run",
     "lint": "pnpm -r lint"
   },
   "devDependencies": {
