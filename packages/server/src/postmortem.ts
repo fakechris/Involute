@@ -1,8 +1,9 @@
-import type { CommitmentStatus, IssueSeverity } from '@prisma/client';
+import type { CommitmentStatus, Issue, IssueSeverity } from '@prisma/client';
 
 import { buildReadableIssueWhere } from './access-control.js';
 import type { GraphQLContext } from './auth.js';
 import { incidentNeedsPostmortem } from './incident-closure.js';
+import { INCIDENT_TIME_FIELDS, type IncidentTimeField } from './incident-timestamps.js';
 import { INCIDENT_LABEL_NAME } from './labels.js';
 import { workTimelineFor, type TimelineEntry } from './work-activity-timeline.js';
 
@@ -15,16 +16,13 @@ import { workTimelineFor, type TimelineEntry } from './work-activity-timeline.js
  */
 export const POSTMORTEM_SECTIONS = ['摘要', '影响', '时间线', '促成因素', '教训', 'Follow-ups'] as const;
 
-/**
- * Incident timestamps (INV-1125). Read by name from the work row so the draft
- * fills them in as soon as the columns exist, and says "未记录" until then.
- */
-export const INCIDENT_TIMESTAMP_FIELDS = [
-  ['impactStartedAt', '影响开始'],
-  ['detectedAt', '发现'],
-  ['mitigatedAt', '缓解'],
-  ['resolvedAt', '解决'],
-] as const;
+/** Incident impact timestamps (INV-1125), labelled for the draft. */
+const TIMESTAMP_LABELS: Record<IncidentTimeField, string> = {
+  impactStartedAt: '影响开始',
+  detectedAt: '发现',
+  mitigatedAt: '缓解',
+  resolvedAt: '解决',
+};
 
 export interface PostmortemTimestamp {
   field: string;
@@ -52,12 +50,8 @@ export interface PostmortemDraftInput {
   followUps: PostmortemFollowUp[];
 }
 
-export function incidentTimestamps(work: object): PostmortemTimestamp[] {
-  const row = work as Record<string, unknown>;
-  return INCIDENT_TIMESTAMP_FIELDS.map(([field, label]) => {
-    const value = row[field];
-    return { field, label, at: value instanceof Date ? value : null };
-  });
+export function incidentTimestamps(work: Pick<Issue, IncidentTimeField>): PostmortemTimestamp[] {
+  return INCIDENT_TIME_FIELDS.map((field) => ({ field, label: TIMESTAMP_LABELS[field], at: work[field] }));
 }
 
 const utc = (at: Date) => `${at.toISOString().slice(0, 16).replace('T', ' ')} UTC`;

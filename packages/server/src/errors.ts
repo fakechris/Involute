@@ -113,6 +113,23 @@ export const INCIDENT_OWNER_REQUIRED_MESSAGE =
   'An incident is committed directly (it does not go to Candidates): the declaring agent needs a human owner on this team, who becomes the Incident Lead.';
 export const INCIDENT_STARTED_STATE_MISSING_MESSAGE =
   'An incident starts In Progress (investigating), but this team has no started workflow state.';
+export const INCIDENT_TIMES_NOT_INCIDENT_MESSAGE =
+  'Impact timestamps (impact started, detected, mitigated, resolved) belong to Type: Incident only.';
+export const INCIDENT_TIME_INVALID_MESSAGE = 'Incident timestamps must be ISO 8601 date-times, e.g. 2026-10-09T14:30:00Z.';
+export const INCIDENT_TIME_REQUIRED_MESSAGE =
+  'Impact started and detected cannot be cleared: an incident always has them (move them instead).';
+export const INCIDENT_REVIEW_NEEDS_RESOLVED_MESSAGE =
+  'An incident goes to In Review once it is resolved: set resolvedAt (resolved_at) first.';
+export const INCIDENT_IMPACT_AFTER_DETECTED_MESSAGE =
+  'Incident timestamps out of order: impact started cannot be after detected. Move impact started earlier.';
+export const INCIDENT_IMPACT_AFTER_MITIGATED_MESSAGE =
+  'Incident timestamps out of order: impact started cannot be after mitigated.';
+export const INCIDENT_IMPACT_AFTER_RESOLVED_MESSAGE =
+  'Incident timestamps out of order: impact started cannot be after resolved.';
+export const INCIDENT_DETECTED_AFTER_RESOLVED_MESSAGE =
+  'Incident timestamps out of order: detected cannot be after resolved.';
+export const INCIDENT_MITIGATED_AFTER_RESOLVED_MESSAGE =
+  'Incident timestamps out of order: mitigated cannot be after resolved.';
 export const BUG_REJECT_REASON_REQUIRED_MESSAGE = 'Declining a bug needs a reason (zero-bug: fix it or say why not).';
 export const WORK_REJECT_RESOLUTION_REQUIRED_MESSAGE =
   'Rejecting a candidate needs a resolution: completed, wont_do, invalid, duplicate, cannot_reproduce or obsolete.';
@@ -364,6 +381,15 @@ const exposedErrorCodes = new Map<string, string>([
   [INCIDENT_IMPACT_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [INCIDENT_OWNER_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [INCIDENT_STARTED_STATE_MISSING_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_TIMES_NOT_INCIDENT_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_TIME_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_TIME_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_REVIEW_NEEDS_RESOLVED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_IMPACT_AFTER_DETECTED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_IMPACT_AFTER_MITIGATED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_IMPACT_AFTER_RESOLVED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_DETECTED_AFTER_RESOLVED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_MITIGATED_AFTER_RESOLVED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_REJECT_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_NO_BACKLOG_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_REJECT_RESOLUTION_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],

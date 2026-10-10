@@ -1102,6 +1102,14 @@ const typeDefs = /* GraphQL */ `
     autoAcceptBugs: Boolean!
     "Why a rejected candidate or canceled work was closed; null while open (INV-1118)."
     resolution: WorkResolution
+    "Type: Incident (INV-1125): when the impact began; never after the other timestamps."
+    impactStartedAt: DateTime
+    "Type: Incident: when it was noticed; defaults to the declaration time."
+    detectedAt: DateTime
+    "Type: Incident: when the impact stopped; null counts as resolvedAt in metrics."
+    mitigatedAt: DateTime
+    "Type: Incident: when it was fixed; required before In Review."
+    resolvedAt: DateTime
     "Latest automatic-acceptance evaluation of this work, if any (INV-1075)."
     autoAccept: AutoAcceptEvaluation
     links(type: WorkLinkType): WorkLinkConnection!
@@ -2118,6 +2126,13 @@ const typeDefs = /* GraphQL */ `
     priority: Int
     "SEV1–SEV3; null clears it. Audited like any field; never changes the SLA (INV-1115)."
     severity: IssueSeverity
+    "Type: Incident only (INV-1125). Impact started ≤ detected / mitigated ≤ resolved; out-of-order values are refused with the reason. Impact started and detected can be moved, not cleared."
+    impactStartedAt: DateTime
+    detectedAt: DateTime
+    "null clears it; a missing mitigation counts as the resolution time in metrics."
+    mitigatedAt: DateTime
+    "Required before an incident moves to In Review; null clears it (not while In Review)."
+    resolvedAt: DateTime
     "ALWAYS / SOMETIMES / ONCE; null clears it. SOMETIMES / ONCE keep a bug out of auto-accept (INV-1122)."
     reproducibility: BugReproducibility
     projectId: String
@@ -2363,6 +2378,14 @@ const typeDefs = /* GraphQL */ `
     stepsToReproduce: String
     """Impact, SEV1–SEV3, apart from priority (INV-1115). Required when labels include incident (INV-1123)."""
     severity: IssueSeverity
+    """Incident only (INV-1125): when the impact began; defaults to detectedAt."""
+    impactStartedAt: DateTime
+    """Incident only: when it was noticed; defaults to the declaration time."""
+    detectedAt: DateTime
+    """Incident only: when the impact stopped."""
+    mitigatedAt: DateTime
+    """Incident only: when it was fixed (the incident still starts In Progress)."""
+    resolvedAt: DateTime
     """How often a bug reproduces: ALWAYS / SOMETIMES / ONCE (INV-1122)."""
     reproducibility: BugReproducibility
     """Existing work this proposal is blocked by (each X BLOCKS the new item)."""

@@ -31,6 +31,8 @@ import {
   PROJECT_NOT_FOUND_MESSAGE,
   CYCLE_NOT_FOUND_MESSAGE,
   AGENT_DESCRIPTION_REQUIRED_MESSAGE,
+  INCIDENT_REVIEW_NEEDS_RESOLVED_MESSAGE,
+  INCIDENT_TIMES_NOT_INCIDENT_MESSAGE,
 } from './errors.js';
 import { assertActorCan, isAcceptStateType, sanitizeWorkTitle, validateAgentDescription } from './claim-service.js';
 import { assertNoWorkLinkCycle, syncContainsFromParentId } from './link-service.js';
@@ -47,7 +49,7 @@ import { orderWorkflowStates } from './workflow-state-order.js';
 export const AUTO_ACCEPT_BUGS_HUMAN_ONLY_MESSAGE = 'Only a person can turn automatic acceptance of verified bug fixes on or off.';
 export const AUTO_ACCEPT_BUGS_PROJECT_ONLY_MESSAGE = 'Automatic acceptance of verified bug fixes is set on a PROJECT.';
 import { writeWorkTombstone } from './work-tombstone.js';
-import { assertSingleType, isBugWork, isResearchWork } from './labels.js';
+import { assertSingleType, isBugWork, isIncidentWork, isResearchWork } from './labels.js';
 import { assertBugCloseReason, enqueueWorkCanceledEvent, parseWorkResolution } from './work-resolution.js';
 import { assertAgentMayCloseResearch, RESEARCH_CLOSE_REASON } from './research-closure.js';
 import { assertIncidentMayClose } from './incident-closure.js';
@@ -60,6 +62,7 @@ import {
 } from './work-service.js';
 import { resolveAttentionNotifications } from './notification-service.js';
 import { parseSeverity } from './severity.js';
+import { mergeIncidentTimes, readIncidentTimes } from './incident-timestamps.js';
 import { parseReproducibility } from './reproducibility.js';
 
 export interface CreateIssueInput {
@@ -79,6 +82,11 @@ export interface CreateIssueInput {
   scope?: string | null;
   /** Impact, independent of priority (INV-1115). */
   severity?: IssueSeverity | null;
+  /** Type: Incident impact timestamps (INV-1125); the caller has checked the order. */
+  impactStartedAt?: Date | null;
+  detectedAt?: Date | null;
+  mitigatedAt?: Date | null;
+  resolvedAt?: Date | null;
   /** How often a bug reproduces (INV-1122). */
   reproducibility?: BugReproducibility | null;
   source?: string | null;
@@ -112,6 +120,15 @@ export interface UpdateIssueInput {
   scope?: string | null;
   /** SEV1–SEV3; null clears it. Never changes the SLA, which follows priority (INV-1115). */
   severity?: IssueSeverity | string | null;
+  /**
+   * Type: Incident only (INV-1125): Date or ISO string. Impact started and
+   * detected can be moved, not cleared; mitigated and resolved take null.
+   * Order is checked against the stored values.
+   */
+  impactStartedAt?: Date | string | null;
+  detectedAt?: Date | string | null;
+  mitigatedAt?: Date | string | null;
+  resolvedAt?: Date | string | null;
   /** ALWAYS / SOMETIMES / ONCE; null clears it. SOMETIMES / ONCE keep a bug out of auto-accept (INV-1122). */
   reproducibility?: BugReproducibility | string | null;
   snoozedUntil?: Date | null;
@@ -228,6 +245,10 @@ export async function createIssueWithAudit(
         parentId: input.parentId ?? null,
         priority: input.priority ?? 0,
         severity: parseSeverity(input.severity) ?? null,
+        impactStartedAt: input.impactStartedAt ?? null,
+        detectedAt: input.detectedAt ?? null,
+        mitigatedAt: input.mitigatedAt ?? null,
+        resolvedAt: input.resolvedAt ?? null,
         reproducibility: parseReproducibility(input.reproducibility) ?? null,
         projectId: input.projectId ?? null,
         repository: input.repository ?? null,
@@ -464,6 +485,22 @@ export async function updateIssue(
     const severity = parseSeverity(input.severity);
     if (severity !== undefined) {
       data.severity = severity;
+    }
+
+    // Incident impact timestamps (INV-1125): Type: Incident only, kept in
+    // order, audited like any field; In Review needs resolvedAt.
+    const incidentTimes = readIncidentTimes(input);
+    const touchesIncidentTimes = Object.keys(incidentTimes).length > 0;
+    const entersReview = nextStateType === 'REVIEW' && existingIssue.stateId !== input.stateId;
+    if (touchesIncidentTimes || entersReview) {
+      const incident = await isIncidentWork(transaction, existingIssue.id);
+      if (touchesIncidentTimes && !incident) throw createValidationError(INCIDENT_TIMES_NOT_INCIDENT_MESSAGE);
+      if (incident) {
+        const { next, changed } = mergeIncidentTimes(existingIssue, incidentTimes);
+        Object.assign(data, changed);
+        const finalStateType = nextStateType ?? (await transaction.workflowState.findUnique({ where: { id: existingIssue.stateId }, select: { type: true } }))?.type;
+        if (finalStateType === 'REVIEW' && !next.resolvedAt) throw createValidationError(INCIDENT_REVIEW_NEEDS_RESOLVED_MESSAGE);
+      }
     }
 
     const reproducibility = parseReproducibility(input.reproducibility);

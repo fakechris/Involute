@@ -94,7 +94,7 @@ describe('incident closing and postmortem (INV-1126)', () => {
 
   it('applies on review acceptance too', async () => {
     const incident = await declare('SEV2');
-    const inReview = await updateIssue(prisma, incident.id, { stateId: review.id }, humanActor);
+    const inReview = await updateIssue(prisma, incident.id, { stateId: review.id, resolvedAt: new Date() }, humanActor);
     await expect(reviewWork(prisma, incident.id, { decision: 'ACCEPTED', expectedRevision: inReview.revision }, humanActor)).rejects.toThrow(INCIDENT_CLOSE_NO_DOWNSTREAM_MESSAGE);
     await followUp(incident.id);
     await attach(incident.id);
@@ -155,8 +155,8 @@ describe('incident closing and postmortem (INV-1126)', () => {
   it('lists incidents missing follow-ups or a postmortem on /hygiene', async () => {
     const severe = await declare('SEV1');
     const minor = await declare('SEV3');
-    await updateIssue(prisma, severe.id, { stateId: review.id }, humanActor);
-    await updateIssue(prisma, minor.id, { stateId: review.id }, humanActor);
+    await updateIssue(prisma, severe.id, { stateId: review.id, resolvedAt: new Date() }, humanActor);
+    await updateIssue(prisma, minor.id, { stateId: review.id, resolvedAt: new Date() }, humanActor);
     const hygiene = await loadWorkHygiene(prisma, { teamId: team.id, teamKey: DEFAULT_TEAM_KEY });
     expect(hygiene.incidentsWithoutDownstream.map((issue) => issue.id).sort()).toEqual([severe.id, minor.id].sort());
     expect(hygiene.incidentsWithoutPostmortem.map((issue) => issue.id)).toEqual([severe.id]);
@@ -173,9 +173,12 @@ describe('incident closing and postmortem (INV-1126)', () => {
     const asAgent = (): GraphQLContext => ({ prisma, viewer: agent, authMode: 'agent-token', agentScopes: ['read', 'propose'], agentTeamId: team.id, isTrustedSystem: false });
 
     it('drafts the six sections with starred entries and follow-ups through work_timeline', async () => {
-      const incident = await declare('SEV1');
+      const incident = await proposeWork(prisma, {
+        description: IMPACT, labels: ['incident'], parentId, severity: 'SEV1', teamId: team.id, title: 'Board blank SEV1',
+        impactStartedAt: '2026-10-09T07:50:00Z', detectedAt: '2026-10-09T08:02:00Z',
+      }, agentActor);
       await followUp(incident.id, 'Alert on blank board');
-      await updateIssue(prisma, incident.id, { stateId: review.id }, humanActor);
+      await updateIssue(prisma, incident.id, { stateId: review.id, resolvedAt: '2026-10-09T09:15:00Z' }, humanActor);
       const entries = (await loadWorkTimeline(prisma, incident.id)).entries;
       const moved = entries.find((entry) => entry.kind === 'STATE')!;
       await starTimelineEntry({ prisma, viewer: human, authMode: 'session', isTrustedSystem: false }, incident.identifier, moved.key);
@@ -186,12 +189,22 @@ describe('incident closing and postmortem (INV-1126)', () => {
       expect(draft.markdown).toContain(moved.summary);
       expect(draft.markdown).toContain('Alert on blank board — 待承诺（Candidates）');
       expect(draft.markdown).toContain('所有用户无法打开看板');
-      expect(draft.markdown).toContain('- 影响开始：未记录');
+      // The incident's own timestamps (INV-1125), not placeholders.
+      expect(draft.markdown).toContain('- 影响开始：2026-10-09 07:50 UTC');
+      expect(draft.markdown).toContain('- 发现：2026-10-09 08:02 UTC');
+      expect(draft.markdown).toContain('- 缓解：未记录');
+      expect(draft.markdown).toContain('- 解决：2026-10-09 09:15 UTC');
+      expect(draft.timestamps).toEqual([
+        { field: 'impactStartedAt', label: '影响开始', at: '2026-10-09T07:50:00.000Z' },
+        { field: 'detectedAt', label: '发现', at: '2026-10-09T08:02:00.000Z' },
+        { field: 'mitigatedAt', label: '缓解', at: null },
+        { field: 'resolvedAt', label: '解决', at: '2026-10-09T09:15:00.000Z' },
+      ]);
     });
 
-    it('fills impact timestamps once the incident records them (INV-1125)', () => {
+    it('renders recorded and unrecorded impact timestamps (INV-1125)', () => {
       const started = new Date(Date.UTC(2026, 9, 9, 8, 5));
-      const timestamps = incidentTimestamps({ impactStartedAt: started, detectedAt: null });
+      const timestamps = incidentTimestamps({ impactStartedAt: started, detectedAt: null, mitigatedAt: null, resolvedAt: null });
       expect(timestamps.map((stamp) => [stamp.field, stamp.at])).toEqual([['impactStartedAt', started], ['detectedAt', null], ['mitigatedAt', null], ['resolvedAt', null]]);
       const markdown = renderPostmortemDraft({
         identifier: 'INV-1', title: 'Outage', severity: 'SEV2', description: null, stateName: 'In Review', declaredAt: started,

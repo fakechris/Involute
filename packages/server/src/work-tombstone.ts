@@ -202,6 +202,11 @@ export async function restoreDeletedIssue(
         reproducibility: issue.reproducibility ?? null,
         // Tombstones written before INV-1118 have no resolution.
         resolution: issue.resolution ?? null,
+        // Tombstones written before INV-1125 have no incident timestamps.
+        impactStartedAt: issue.impactStartedAt ?? null,
+        detectedAt: issue.detectedAt ?? null,
+        mitigatedAt: issue.mitigatedAt ?? null,
+        resolvedAt: issue.resolvedAt ?? null,
         kind: issue.kind,
         commitmentStatus: issue.commitmentStatus,
         revision: issue.revision + 1,
