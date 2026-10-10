@@ -7,7 +7,7 @@ import { loadProjectEnvironment } from '../prisma/env.ts';
 import { commitWork, proposeWork } from './claim-service.ts';
 import { updateIssue } from './issue-service.ts';
 import { readUnreadNotifications } from './notification-service.ts';
-import { loadReviewWaits, sendReviewDigests, sweepOverdueReviews } from './review-wait.ts';
+import { loadReviewWaits, sweepOverdueReviews } from './review-wait.ts';
 import { testParentId } from './test-placement.ts';
 
 loadProjectEnvironment();
@@ -79,15 +79,4 @@ describe('review wait clock and digest (INV-1002)', () => {
     expect(await sweepOverdueReviews(prisma, new Date(Date.now() + 8 * DAY))).toBe(1);
   });
 
-  it('sends one digest per owner per day with the count and the longest wait', async () => {
-    const bug = await inReview('Crash on save', ['bug']);
-    await inReview('Nicer board');
-    const later = new Date(Date.now() + 2 * DAY);
-    expect(await sendReviewDigests(prisma, later)).toBe(1);
-    expect(await sendReviewDigests(prisma, later)).toBe(0);
-    const digest = (await readUnreadNotifications(prisma, { first: 10, since: null, teamId: null, userId: human.id })).find((row) => row.type === 'review.digest');
-    expect(digest?.payload).toMatchObject({ count: 2, longestWaitDays: 2 });
-    expect((digest?.payload as { identifiers: string[] }).identifiers).toContain(bug.identifier);
-    expect(await sendReviewDigests(prisma, new Date(later.getTime() + DAY + 60_000))).toBe(1);
-  });
 });

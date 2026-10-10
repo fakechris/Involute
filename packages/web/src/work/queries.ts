@@ -777,6 +777,13 @@ export const ATTENTION_PAGE_QUERY = gql`
           title
           kind
         }
+        overdue
+        unblocked
+        waitingOn {
+          id
+          identifier
+          title
+        }
         work {
           ...CandidateWorkFields
         }

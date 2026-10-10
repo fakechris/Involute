@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NeedsYouNavLink } from '../components/NeedsYouNavLink';
-import { AttentionPage, formatWait } from './AttentionPage';
+import { AttentionPage, formatWait, orderPack, packSummary, suggestedDecisions } from './AttentionPage';
 import type { AttentionItemNode, CandidateWork } from '../work/types';
 
 const HOUR = 3_600_000;
@@ -246,6 +246,59 @@ describe('Needs you (INV-1092)', () => {
     expect(formatWait('2026-10-10T11:59:30Z', now)).toBe('1m');
     expect(formatWait('2026-10-10T09:00:00Z', now)).toBe('3h');
     expect(formatWait('2026-10-07T12:00:00Z', now)).toBe('3d');
+  });
+});
+
+describe('Needs you by work tree (INV-1094)', () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it('puts each work tree in one pack with a one-line summary, and remembers the choice', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('tab', { name: 'By work tree' }));
+    const pack = screen.getByRole('region', { name: 'INV-1 Milestone' });
+    expect(within(pack).getByText('1 contract change, 1 finished item to accept, 3 candidates to commit')).toBeInTheDocument();
+    expect(window.localStorage.getItem('involute.todo.view')).toBe('tree');
+  });
+
+  it('leads a pack with what just became ready and marks what waits and what is overdue', () => {
+    nodes = [
+      node('CANDIDATE_COMMIT', 'c-1', work('c-1', 'INV-41', { commitmentStatus: 'CANDIDATE' }), ago(5 * HOUR), { waitingOn: [{ id: 'c-2', identifier: 'INV-42', title: 'x' }] }),
+      node('CANDIDATE_COMMIT', 'c-2', work('c-2', 'INV-42', { commitmentStatus: 'CANDIDATE' }), ago(4 * HOUR)),
+      node('CONTRACT_AMENDMENT', 'amend-1', work('w-amend', 'INV-30'), ago(HOUR), { unblocked: true }),
+      node('WORK_REVIEW', 'w-review', work('w-review', 'INV-20'), ago(100 * HOUR), { overdue: true }),
+    ];
+    expect(orderPack(nodes).map((entry) => entry.work?.identifier)).toEqual(['INV-30', 'INV-20', 'INV-42', 'INV-41']);
+    renderPage();
+    fireEvent.click(screen.getByRole('tab', { name: 'By work tree' }));
+    expect(screen.getByText('Waiting on INV-42')).toBeInTheDocument();
+    expect(screen.getByText('What blocked it is done')).toBeInTheDocument();
+    expect(screen.getByText('Overdue')).toBeInTheDocument();
+  });
+
+  it('offers the pack\'s suggested decisions only after showing the list, and stops at the first refusal', async () => {
+    mutation('ContractAmendmentAccept').mockResolvedValue({ data: { contractAmendmentAccept: { success: true } } });
+    mutation('WorkCommit')
+      .mockResolvedValueOnce({ data: { workCommit: { issue: null, message: 'Choose a parent first.', success: false } } })
+      .mockResolvedValue({ data: { workCommit: { issue: { id: 'x', identifier: 'x', revision: 2 }, success: true } } });
+    // Review and anything waiting on unfinished work are never in the pack's button.
+    expect(suggestedDecisions(nodes).map((entry) => entry.kind)).toEqual(['CONTRACT_AMENDMENT', 'CANDIDATE_COMMIT', 'CANDIDATE_COMMIT', 'CANDIDATE_COMMIT']);
+    renderPage();
+    fireEvent.click(screen.getByRole('tab', { name: 'By work tree' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Do the suggested decisions (4)' }));
+    const confirm = screen.getByRole('dialog', { name: 'Confirm decisions for INV-1 Milestone' });
+    expect(within(confirm).getAllByRole('listitem')).toHaveLength(4);
+    expect(mutations.ContractAmendmentAccept).not.toHaveBeenCalled();
+
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Confirm 4 decisions' }));
+    const results = await screen.findByRole('status', { name: 'Batch results' });
+    expect(within(results).getByText('Choose a parent first.')).toBeInTheDocument();
+    // The pack runs in its own order (longest wait first): the first commit is refused, the other three are left.
+    expect(within(results).getAllByText('Not done: stopped at the refusal above.')).toHaveLength(3);
+    expect(mutations.WorkCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it('summarises a pack in section order', () => {
+    expect(packSummary([node('OPS', 'o', null, ago(HOUR)), node('CANDIDATE_COMMIT', 'c', null, ago(HOUR)), node('CANDIDATE_COMMIT', 'd', null, ago(HOUR))])).toBe('2 candidates to commit, 1 operations item');
   });
 });
 
