@@ -140,7 +140,10 @@ export function ProjectsPage() {
   const [formAlias, setFormAlias] = useState('');
   const [formCascade, setFormCascade] = useState(true);
   const [formAutoAccept, setFormAutoAccept] = useState(false);
-  const [editingOriginal, setEditingOriginal] = useState<{ repository: string; alias: string; autoAcceptBugs: boolean } | null>(null);
+  // Where the project's web app runs (INV-1146): the bug-capture extension
+  // files a page's bug under the project that owns its origin.
+  const [formWebOrigins, setFormWebOrigins] = useState('');
+  const [editingOriginal, setEditingOriginal] = useState<{ repository: string; alias: string; autoAcceptBugs: boolean; webOrigins: string[] } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -182,6 +185,7 @@ export function ProjectsPage() {
     setFormAlias('');
     setFormCascade(true);
     setFormAutoAccept(false);
+    setFormWebOrigins('');
     setEditingOriginal(null);
     setFormError(null);
     dialogRef.current?.showModal();
@@ -199,7 +203,8 @@ export function ProjectsPage() {
     setFormAlias(project.alias ?? '');
     setFormCascade(true);
     setFormAutoAccept(project.autoAcceptBugs ?? false);
-    setEditingOriginal({ repository: project.repository ?? '', alias: project.alias ?? '', autoAcceptBugs: project.autoAcceptBugs ?? false });
+    setFormWebOrigins((project.webOrigins ?? []).join('\n'));
+    setEditingOriginal({ repository: project.repository ?? '', alias: project.alias ?? '', autoAcceptBugs: project.autoAcceptBugs ?? false, webOrigins: project.webOrigins ?? [] });
     setFormError(null);
     dialogRef.current?.showModal();
   }
@@ -209,6 +214,8 @@ export function ProjectsPage() {
     if (!formName.trim()) return;
     const repository = formRepository.trim();
     const alias = formAlias.trim().toUpperCase();
+    // Comma or line separated; the server normalizes and checks each one.
+    const webOrigins = formWebOrigins.split(/[\s,]+/).map((origin) => origin.trim()).filter(Boolean);
     if (repository && !REPOSITORY_PATTERN.test(repository)) {
       setFormError('Repository is owner/name, such as fakechris/lumenbox.');
       return;
@@ -243,14 +250,17 @@ export function ProjectsPage() {
           return;
         }
         projectId = payload.issue.id;
-        // issueCreate has no alias; set it on the new project.
-        if (alias) {
-          const aliased = await runUpdate({ variables: { id: projectId, input: { alias } }, refetchQueries });
+        // issueCreate has no alias or web origins; set them on the new project.
+        if (alias || webOrigins.length > 0) {
+          const aliased = await runUpdate({
+            variables: { id: projectId, input: { ...(alias ? { alias } : {}), ...(webOrigins.length > 0 ? { webOrigins } : {}) } },
+            refetchQueries,
+          });
           if (!aliased.data?.issueUpdate.success) {
-            setFormError(`The project was created, but its alias was not saved: ${aliased.data?.issueUpdate.message ?? 'refused.'}`);
+            setFormError(`The project was created, but its ${alias ? 'alias was' : 'web origins were'} not saved: ${aliased.data?.issueUpdate.message ?? 'refused.'}`);
             setDialogMode('edit');
             setSelectedProjectId(projectId);
-            setEditingOriginal({ repository, alias: '', autoAcceptBugs: false });
+            setEditingOriginal({ repository, alias: '', autoAcceptBugs: false, webOrigins: [] });
             return;
           }
         }
@@ -275,6 +285,9 @@ export function ProjectsPage() {
         }
         if (formAutoAccept !== (editingOriginal?.autoAcceptBugs ?? false)) {
           input.autoAcceptBugs = formAutoAccept;
+        }
+        if (webOrigins.join('\n') !== (editingOriginal?.webOrigins ?? []).join('\n')) {
+          input.webOrigins = webOrigins;
         }
         const updated = await runUpdate({ variables: { id: projectId, input }, refetchQueries });
         if (!updated.data?.issueUpdate.success) {
@@ -351,6 +364,19 @@ export function ProjectsPage() {
           PRs and branches in this repository are routed to this project. With an alias, they may reference work as{' '}
           <span className="mono">{(formAlias.trim() || 'ALIAS').toUpperCase()}-123</span> as well as by the team key.
         </p>
+        <label style={{ display: 'block', marginBottom: 12 }}>
+          <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Web origins</span>
+          <textarea
+            aria-label="Web origins"
+            style={{ width: '100%', height: 52, padding: '6px 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)', resize: 'vertical', fontFamily: 'var(--font-mono, monospace)' }}
+            value={formWebOrigins}
+            onChange={(e) => setFormWebOrigins(e.target.value)}
+            placeholder="https://app.example.com, http://localhost:5173"
+          />
+          <span style={{ display: 'block', fontSize: 13, color: 'var(--fg-dim)', marginTop: 4, lineHeight: 1.4 }}>
+            Where this project&apos;s web app runs, one per line or comma separated. Bugs reported from these pages with the capture extension go to this project.
+          </span>
+        </label>
         {dialogMode === 'edit' ? (
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12, fontSize: 14 }}>
             <input

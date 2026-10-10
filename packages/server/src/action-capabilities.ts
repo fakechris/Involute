@@ -66,6 +66,7 @@ export const QUERY_EXEMPTIONS: Record<string, { reason: string; decision: string
   candidateSummary: { reason: 'Board-level counts for people deciding candidates.', decision: 'INV-79' },
   projectSummary: { reason: 'Portfolio summary for people.', decision: 'INV-79' },
   bugSummary: { reason: 'The /bugs statistics page for triage.', decision: 'INV-750' },
+  projectForOrigin: { reason: 'Routes a page to its PROJECT for the bug-capture extension and the web; agents know their repository.', decision: 'INV-1144' },
   bugsFixedBetween: { reason: 'The deploy-range changelog on /bugs for people; agents read each bug\'s merge evidence with work_get_context.', decision: 'INV-1121' },
   serverBuild: { reason: 'The running build for the web shell (Report bug found-in default); agents read protocol.buildSha from protocol_get_guide.', decision: 'INV-1121' },
   similarBugs: { reason: 'Live suggestions while a person types a bug title; work_file_bug returns possible_duplicates on filing.', decision: 'INV-1000' },
@@ -74,6 +75,7 @@ export const QUERY_EXEMPTIONS: Record<string, { reason: string; decision: string
   agentCredentials: { reason: 'Credential issuance and lifecycle belong to human administrators.', decision: 'INV-846' },
   webhooks: { reason: 'Integration credentials are administrative controls.', decision: 'INV-796' },
   opsOverview: { reason: 'Operations runbook view for administrators.', decision: 'INV-796' },
+  extensionTokens: { reason: 'A person lists their own browser-extension connections.', decision: 'INV-1145' },
   attention: { reason: 'The Needs you queue of decisions only people make; an agent learns of decisions through agent_inbox.', decision: 'INV-1090' },
   attentionSummary: { reason: 'The Needs you count for people; agents read agent_inbox.', decision: 'INV-1090' },
 };
@@ -145,6 +147,8 @@ export const MCP_EXEMPTIONS: Record<string, { reason: string; gate: 'administrat
   workRestore: { gate: 'candidate', reason: 'A person restores rejected work to the candidate queue.', decision: 'INV-79' },
   workReview: { gate: 'final-acceptance', reason: 'A person accepts delivery or returns it with feedback.', decision: 'INV-474' },
   issueCreate: { gate: 'candidate', reason: 'People create committed work; agents use work_propose or work_file_bug.', decision: 'INV-79' },
+  extensionTokenCreate: { gate: 'personal', reason: 'A person connects their own browser extension; agents have their own credentials.', decision: 'INV-1145' },
+  extensionTokenRevoke: { gate: 'personal', reason: 'A person disconnects their own browser extension.', decision: 'INV-1145' },
   issueDelete: { gate: 'administration', reason: 'Permanent deletion is a human administrative action; agent delivery preserves history.', decision: 'INV-846' },
   issueUndelete: { gate: 'administration', reason: 'Undoing a deletion is the same administrative act in reverse; agents never deleted it.', decision: 'INV-840' },
   commentDelete: { gate: 'personal', reason: 'People delete their comments; agents append an attributable correction with work_comment.', decision: 'INV-795' },
@@ -173,7 +177,7 @@ export const FIELD_TYPE_EXCEPTIONS: Record<string, Record<string, string>> = {};
 /** Explicit GraphQL-only inputs. No wildcard exemption: a newly added field fails coverage. */
 export const GRAPHQL_ONLY_FIELDS: Record<string, Record<string, string>> = {
   agentRequestAnswer: { overrideReason: 'Human override of an agent request claim; agents must hold their claim token.' },
-  bugReport: { labelIds: 'The dedicated bug tool sets Type Bug. Apply existing extra labels with work_update(label_ids), or use work_propose(labels) with the same bug rules.' },
+  bugReport: { labelIds: 'The dedicated bug tool sets Type Bug. Apply existing extra labels with work_update(label_ids), or use work_propose(labels) with the same bug rules.', capture: 'Browser environment collected by the capture extension from a page a person is looking at; an agent describes its reproduction in steps_to_reproduce (INV-1146, decision INV-1144).' },
   workLinkDelete: { id: 'MCP work_unlink selects the same edge by its directed endpoints and type.' },
   issueUpdate: { assigneeId: 'Human accountability is managed in the web UI; a claim never changes the assignee.', projectId: 'Legacy Project association; work hierarchy uses parentId on both surfaces.', autoAcceptBugs: 'Whether verified fixes may close themselves is a person\'s decision on the Projects page; an agent cannot widen its own acceptance (INV-1075).', resolution: 'Only a person cancels work (agents never set CANCELED, INV-912); the resolution goes with that move (INV-1118).', reason: 'The close reason that goes with a person\'s cancel (INV-1118); agents explain themselves in run summaries and comments.' },
 };

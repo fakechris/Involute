@@ -298,6 +298,7 @@ model User {
   savedViews           SavedView[]          @relation("SavedViewOwner")
   timelineStars        WorkTimelineStar[]   @relation("WorkTimelineStarredBy")
   timelineUnstars      WorkTimelineStar[]   @relation("WorkTimelineUnstarredBy")
+  extensionTokens    ExtensionToken[] @relation("ExtensionTokenOwner")
 }
 
 model AgentCredential {
@@ -319,6 +320,23 @@ model AgentCredential {
 
   @@index([userId])
   @@index([revokedAt, expiresAt])
+}
+
+// A person's token for the Involute Capture browser extension (INV-1145):
+// acts as that person on /graphql, but only to report bugs, upload their
+// screenshots and read where a bug can go. Stored as a hash, shown once.
+model ExtensionToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  user       User      @relation("ExtensionTokenOwner", fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+
+  @@index([userId])
 }
 
 model Session {
@@ -388,6 +406,12 @@ model Issue {
   // INV-1075: on a PROJECT, bugs whose fix GitHub confirms (merged, checks green)
   // are accepted by the Auto-Accept Gate. Off by default; only people turn it on.
   autoAcceptBugs    Boolean           @default(false)
+  // INV-1146: on a PROJECT, the web origins (scheme://host[:port]) its app is
+  // served from, so the bug-capture extension can route a report to it.
+  webOrigins        String[]          @default([])
+  // INV-1146: browser environment captured with a bug report (page, viewport,
+  // console errors, failed requests, element); validated and size-capped.
+  capture           Json?
   // INV-1118: structured close reason; the free-text reason stays on WorkAudit.
   resolution        WorkResolution?
   // INV-1120: how many times it left Done / Canceled for an open state.

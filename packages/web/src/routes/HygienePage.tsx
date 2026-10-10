@@ -53,6 +53,7 @@ export function HygienePage() {
                 ['Dependencies without BLOCKS', hygiene.dependencyWithoutBlocksCount],
                 ['Research with nothing derived', hygiene.researchWithoutDownstreamCount],
                 ['Research ready to close', hygiene.researchClosableCount],
+                ['Research without an attachment', hygiene.researchWithoutAttachmentCount],
                 ['Incidents without follow-ups', hygiene.incidentsWithoutDownstreamCount],
                 ['Incidents without a postmortem', hygiene.incidentsWithoutPostmortemCount],
                 ['Overdue incident follow-ups', hygiene.overdueFollowUpCount],
@@ -127,6 +128,16 @@ export function HygienePage() {
               <p className="observation-hint">Everything derived from this research is committed; nothing is left to wait for. Its proposer closes it (an agent may, for Type: Research), or accept it here.</p>
               <ul className="hygiene-list">
                 {hygiene.researchClosable.map((item) => (
+                  <li key={item.id}>{itemButton(item)}</li>
+                ))}
+              </ul>
+            </section>
+
+            <section aria-label="Research without an attachment">
+              <h2>Research without an attachment · {hygiene.researchWithoutAttachmentCount}</h2>
+              <p className="observation-hint">Finished research keeps its report as a file on the item, so others can check it: attach it from the item's Files (agents: work_attach_file). It leaves this list once a file is attached.</p>
+              <ul className="hygiene-list">
+                {hygiene.researchWithoutAttachment.map((item) => (
                   <li key={item.id}>{itemButton(item)}</li>
                 ))}
               </ul>

@@ -64,7 +64,8 @@ import { markNotificationRead, readUnreadNotifications } from './notification-se
 import { createComment, mentionTexts, updateIssue } from './issue-service.js';
 import { amendmentChanges, proposeContractAmendment } from './contract-amendment.js';
 import { dependencyHints } from './mention-links.js';
-import { researchLacksDownstream } from './work-hygiene.js';
+import { RESEARCH_NO_ATTACHMENT_WARNING } from './research-closure.js';
+import { researchLacksAttachment, researchLacksDownstream } from './work-hygiene.js';
 import { linkWork } from './duplicate-linkage.js';
 import { deleteWorkLink } from './link-service.js';
 import { buildProtocolGuide } from './protocol-docs.js';
@@ -707,6 +708,10 @@ async function callMcpAction(
       ] as const) {
         if (args[wire] !== undefined) updateInput[field] = args[wire] === null ? null : requiredString(args[wire], wire);
       }
+      if (args.web_origins !== undefined) {
+        if (args.web_origins !== null && (!Array.isArray(args.web_origins) || args.web_origins.some((value) => typeof value !== 'string'))) throw createValidationError('web_origins must be an array of http(s) origins; use [] to clear.');
+        updateInput.webOrigins = (args.web_origins ?? []) as string[];
+      }
       if (args.label_ids !== undefined) {
         if (!Array.isArray(args.label_ids) || args.label_ids.some((value) => typeof value !== 'string' || !value.trim())) throw createValidationError('label_ids must be an array of label IDs; use [] to clear.');
         updateInput.labelIds = args.label_ids as string[];
@@ -769,13 +774,18 @@ async function callMcpAction(
         updateInput,
         { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null },
       );
+      const updateWarnings: string[] = [];
       if (rawTitle && updated.title !== rawTitle) {
-        return {
-          ...updated,
-          warning: `Status prefix was automatically removed from title: "${rawTitle}" -> "${updated.title}". Do not encode work status into titles; use work_claim and run_report to transition states.`,
-        };
+        updateWarnings.push(`Status prefix was automatically removed from title: "${rawTitle}" -> "${updated.title}". Do not encode work status into titles; use work_claim and run_report to transition states.`);
       }
-      return updated;
+      // Advisory only: research closed without its report attached (INV-1128).
+      if (updateInput.stateId && updateInput.stateId !== work.stateId) {
+        const target = await context.prisma.workflowState.findUnique({ where: { id: updateInput.stateId }, select: { type: true } });
+        if (target?.type === 'COMPLETED' && (await researchLacksAttachment(context.prisma, work.id).catch(() => false))) {
+          updateWarnings.push(RESEARCH_NO_ATTACHMENT_WARNING);
+        }
+      }
+      return updateWarnings.length ? { ...updated, warning: updateWarnings.join(' ') } : updated;
     }
     case 'work_link': {
       const from = await requireWork(context.prisma, requiredString(args.from_id, 'from_id'));
@@ -869,15 +879,16 @@ async function callMcpAction(
       }
       const reported = await reportRun(context.prisma, runInput, { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null });
       // Advisory only: the report is already committed, so a failed check is skipped.
-      const lacksDownstream =
-        runInput.status === 'completed' && (await researchLacksDownstream(context.prisma, work.id, runInput.summary).catch(() => false));
-      if (lacksDownstream) {
-        return {
-          ...reported,
-          warning: 'This is research with nothing derived from it yet. Propose its actionable points (DERIVED_FROM this item) and "won\'t do" conclusions as DECISIONs, or state "no actionable points" in the summary or verification.',
-        };
-      }
-      return reported;
+      const completed = runInput.status === 'completed';
+      const lacksDownstream = completed && (await researchLacksDownstream(context.prisma, work.id, runInput.summary).catch(() => false));
+      const lacksAttachment = completed && (await researchLacksAttachment(context.prisma, work.id).catch(() => false));
+      const warnings = [
+        ...(lacksDownstream
+          ? ['This is research with nothing derived from it yet. Propose its actionable points (DERIVED_FROM this item) and "won\'t do" conclusions as DECISIONs, or state "no actionable points" in the summary or verification.']
+          : []),
+        ...(lacksAttachment ? [RESEARCH_NO_ATTACHMENT_WARNING] : []),
+      ];
+      return warnings.length ? { ...reported, warning: warnings.join(' ') } : reported;
     }
     case 'work_views': {
       const views = await listSavedViews(context, requiredString(args.team_key, 'team_key'));
@@ -1442,6 +1453,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         kind: { type: 'string', enum: ['PROJECT', 'MILESTONE', 'EPIC', 'ISSUE', 'DECISION'] },
         cycle_id: { type: ['string', 'null'] },
         alias: { type: ['string', 'null'], description: 'PROJECT reference alias; null clears it.' },
+        web_origins: { type: ['array', 'null'], items: { type: 'string' }, description: 'PROJECT only: http(s) origins its app is served from (normalized to scheme://host[:port]); an origin another project has is refused; [] or null clears (INV-1146).' },
         description: { type: ['string', 'null'] },
         outcome: { type: ['string', 'null'] },
         scope: { type: ['string', 'null'] },

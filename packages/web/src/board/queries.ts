@@ -536,6 +536,7 @@ export const ISSUE_PAGE_QUERY = gql`
       foundInSha
       kind
       repository
+      capture
       claim {
         id
         leaseUntil
@@ -1122,6 +1123,7 @@ export const PROJECT_ISSUES_QUERY = gql`
         repository
         alias
         autoAcceptBugs
+        webOrigins
         createdAt
         updatedAt
         state {

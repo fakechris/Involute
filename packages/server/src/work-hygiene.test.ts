@@ -7,7 +7,7 @@ import { loadProjectEnvironment } from '../prisma/env.ts';
 import { proposeWork } from './claim-service.ts';
 import { createIssue } from './issue-service.ts';
 import { createWorkLink } from './link-service.ts';
-import { loadWorkHygiene, researchLacksDownstream } from './work-hygiene.ts';
+import { loadWorkHygiene, researchLacksAttachment, researchLacksDownstream } from './work-hygiene.ts';
 
 loadProjectEnvironment();
 const prisma = new PrismaClient();
@@ -97,5 +97,25 @@ describe('work hygiene and research traceability (INV-721)', () => {
 
     const plain = await proposeWork(prisma, { teamId: team.id, title: 'Not research' });
     expect(await researchLacksDownstream(prisma, plain.id)).toBe(false);
+  });
+  // INV-1128: finished research with no report attached is listed until a file is attached.
+  it('lists finished research with no attachment, until a file is attached', async () => {
+    const review = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'REVIEW' } });
+    const research = await proposeWork(prisma, { teamId: team.id, title: 'Vendor study', labels: ['research'] });
+    const open = await proposeWork(prisma, { teamId: team.id, title: 'Study in progress', labels: ['research'] });
+    await prisma.issue.update({ where: { id: research.id }, data: { commitmentStatus: 'COMMITTED', stateId: review.id } });
+    await prisma.issue.update({ where: { id: open.id }, data: { commitmentStatus: 'COMMITTED' } });
+    expect(await researchLacksAttachment(prisma, research.id)).toBe(true);
+    const hygiene = await loadWorkHygiene(prisma, { teamId: team.id, teamKey: DEFAULT_TEAM_KEY });
+    expect(hygiene.researchWithoutAttachment.map((issue) => issue.id)).toEqual([research.id]);
+    expect(hygiene.researchWithoutAttachmentCount).toBe(1);
+
+    const uploader = await prisma.user.findFirstOrThrow();
+    await prisma.attachment.create({ data: { issueId: research.id, uploaderId: uploader.id, filename: 'study.md', mimeType: 'text/markdown', size: 1, url: '/uploads/study.md' } });
+    expect(await researchLacksAttachment(prisma, research.id)).toBe(false);
+    expect((await loadWorkHygiene(prisma, { teamId: team.id, teamKey: DEFAULT_TEAM_KEY })).researchWithoutAttachmentCount).toBe(0);
+
+    const plain = await proposeWork(prisma, { teamId: team.id, title: 'Not research' });
+    expect(await researchLacksAttachment(prisma, plain.id)).toBe(false);
   });
 });

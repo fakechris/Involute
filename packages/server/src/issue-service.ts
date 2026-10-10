@@ -1,4 +1,5 @@
 import { reserveWorkIdempotency, hashIdempotencyRequest, completeWorkIdempotency } from './idempotency.js';
+import { validProjectWebOrigins } from './web-origins.js';
 import type { BugReproducibility, Comment, Issue, IssueSeverity, Prisma, PrismaClient, WorkflowState, WorkflowStateType, WorkResolution } from '@prisma/client';
 
 import {
@@ -90,6 +91,8 @@ export interface CreateIssueInput {
   resolvedAt?: Date | null;
   /** How often a bug reproduces (INV-1122). */
   reproducibility?: BugReproducibility | null;
+  /** Browser environment of a bug report (INV-1146), already validated. */
+  capture?: Prisma.InputJsonValue | null;
   /** Deploy SHA a bug was found in (INV-1121). */
   foundInSha?: string | null;
   source?: string | null;
@@ -102,6 +105,8 @@ export interface CreateIssueInput {
 export interface UpdateIssueInput {
   acceptance?: string | null;
   alias?: string | null;
+  /** PROJECT only (INV-1146): http(s) origins its app is served from; null or [] clears. */
+  webOrigins?: string[] | null;
   autoAcceptBugs?: boolean | null;
   assigneeId?: string | null;
   cascadeRepository?: boolean | null;
@@ -255,6 +260,7 @@ export async function createIssueWithAudit(
         mitigatedAt: input.mitigatedAt ?? null,
         resolvedAt: input.resolvedAt ?? null,
         reproducibility: parseReproducibility(input.reproducibility) ?? null,
+        ...(input.capture ? { capture: input.capture } : {}),
         foundInSha: parseFoundInSha(input.foundInSha) ?? null,
         projectId: input.projectId ?? null,
         repository: input.repository ?? null,
@@ -665,6 +671,10 @@ export async function updateIssue(
 
     if ('alias' in input) {
       data.alias = await validProjectAlias(transaction, existingIssue, input);
+    }
+
+    if ('webOrigins' in input && input.webOrigins !== undefined) {
+      data.webOrigins = await validProjectWebOrigins(transaction, existingIssue, input);
     }
 
     if ('autoAcceptBugs' in input && input.autoAcceptBugs !== undefined && input.autoAcceptBugs !== null) {

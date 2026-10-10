@@ -72,6 +72,7 @@ import {
 import { isQuestionKey, isSlashKey } from './lib/keys';
 
 const BoardPage = lazyRoute(async () => (await import('./routes/BoardPage')).BoardPage);
+const ExtensionConnectPage = lazyRoute(async () => (await import('./routes/ExtensionConnectPage')).ExtensionConnectPage);
 const AttentionPage = lazyRoute(async () => (await import('./routes/AttentionPage')).AttentionPage);
 const InboxPage = lazyRoute(async () => (await import('./routes/InboxPage')).InboxPage);
 const IssuePage = lazyRoute(async () => (await import('./routes/IssuePage')).IssuePage);
@@ -1369,6 +1370,7 @@ export function App() {
               <Route path="/ops" element={<OpsPage />} />
               <Route path="/work/:id" element={<WorkContextPage />} />
               <Route path="/todo" element={<AttentionPage />} />
+              <Route path="/extension/connect" element={<ExtensionConnectPage />} />
               <Route path="/inbox" element={<InboxPage />} />
               <Route path="/my-issues" element={<MyIssuesPage />} />
               <Route path="/views" element={<ViewsPage />} />
