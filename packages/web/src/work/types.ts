@@ -1,3 +1,4 @@
+import type { WorkResolution } from '../components/CloseReasonDialog';
 import type { ContractAmendmentSummary, UserSummary, WorkflowStateSummary, WorkflowStateType } from '../board/types';
 
 export type CommitmentStatus = 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
@@ -415,6 +416,8 @@ export interface WorkRejectMutationVariables {
   id: string;
   input: {
     expectedRevision: number;
+    /** Required (INV-1118). */
+    resolution: WorkResolution;
     reason?: string;
   };
 }
@@ -492,9 +495,11 @@ export interface WorkHygieneQueryData {
 
 export interface WorkSearchHit {
   /** `semantic`: close in meaning, no words matched (INV-927). */
-  matchedField: 'identifier' | 'title' | 'contract' | 'description' | 'comment' | 'run' | 'semantic';
+  matchedField: 'identifier' | 'title' | 'contract' | 'description' | 'comment' | 'attachment' | 'run' | 'semantic';
   snippet: string | null;
   commentId: string | null;
+  /** The attached file the snippet came from (INV-1117). */
+  attachmentFilename?: string | null;
   issue: {
     id: string;
     identifier: string;

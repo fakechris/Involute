@@ -76,4 +76,44 @@ describe('App board state flows', () => {
     );
   });
 
+  it('asks why before canceling, and sends the resolution with the move (INV-1118)', async () => {
+    const mutate = vi.fn().mockResolvedValue({
+      data: {
+        issueUpdate: {
+          success: true,
+          issue: { ...getIssue('issue-1'), state: { id: 'state-canceled', name: 'Canceled', type: 'CANCELED', position: 5 } },
+        },
+      } satisfies IssueUpdateMutationData,
+    });
+    apolloMocks.useMutation.mockReturnValue([mutate]);
+
+    renderTestApp();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+
+    // Keeping it open sends nothing.
+    fireEvent.change(within(drawer).getByLabelText('Issue state'), { target: { value: 'state-canceled' } });
+    const first = await screen.findByRole('dialog', { name: 'Close reason' });
+    fireEvent.click(within(first).getByRole('button', { name: 'Keep open' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Close reason' })).not.toBeInTheDocument());
+    expect(mutate).not.toHaveBeenCalled();
+
+    fireEvent.change(within(drawer).getByLabelText('Issue state'), { target: { value: 'state-canceled' } });
+    const dialog = await screen.findByRole('dialog', { name: 'Close reason' });
+    const submit = within(dialog).getByRole('button', { name: 'Cancel work' });
+    expect(submit).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText('Resolution'), { target: { value: 'OBSOLETE' } });
+    fireEvent.change(within(dialog).getByLabelText('Close reason text'), { target: { value: 'Superseded by INV-2' } });
+    fireEvent.click(submit);
+
+    await waitFor(() =>
+      expect(mutate).toHaveBeenCalledWith({
+        variables: {
+          id: 'issue-1',
+          input: { expectedRevision: 1, stateId: 'state-canceled', resolution: 'OBSOLETE', reason: 'Superseded by INV-2' },
+        },
+      }),
+    );
+  });
 });

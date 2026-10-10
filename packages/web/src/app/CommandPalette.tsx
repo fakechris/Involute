@@ -68,9 +68,10 @@ export function CommandPalette({
       label: `${hit.issue.identifier} · ${hit.issue.title}`,
       description: hit.snippet ?? `${hit.issue.team.key} · ${hit.issue.state.name}`,
       group: 'Issues',
-      hint: hit.matchedField === 'title' || hit.matchedField === 'identifier'
+      // A title or number match shows the state, unless the snippet came from a file (INV-1117).
+      hint: (hit.matchedField === 'title' || hit.matchedField === 'identifier') && !hit.attachmentFilename
         ? hit.issue.state.name
-        : matchLabel(hit.matchedField),
+        : matchLabel(hit),
       run: () => navigate(`/issue/${hit.issue.id}`),
     }));
     const serverIds = new Set(serverIssues.map((action) => action.id));

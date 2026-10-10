@@ -61,6 +61,7 @@ import { QuickPicker, type QuickPickerOption } from '../components/QuickPicker';
 import { isGotoChordPending } from '../app/goto-chord';
 import { BOARD_PICKER_EVENT } from './board-picker-event';
 import { fieldChange, type FieldUndoChange } from '../undo/field-gesture';
+import { isBugIssue, useCloseReason, type WorkResolution } from '../components/CloseReasonDialog';
 import {
   ACTIVE_TEAM_STORAGE_KEY,
   buildCommittedIssueFilter,
@@ -322,6 +323,7 @@ export function BoardPage() {
     return () => window.removeEventListener(BOARD_PICKER_EVENT, onPicker);
   }, []);
   const [bulkTargetStateId, setBulkTargetStateId] = useState('');
+  const { askCloseReason, closeReasonDialog } = useCloseReason();
   const [bulkAssigneeId, setBulkAssigneeId] = useState('');
   const [bulkLabelId, setBulkLabelId] = useState('');
   const [bulkRemoveLabelId, setBulkRemoveLabelId] = useState('');
@@ -330,6 +332,7 @@ export function BoardPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isReportBugOpen, setIsReportBugOpen] = useState(false);
   const [isReportIncidentOpen, setIsReportIncidentOpen] = useState(false);
+  const [reportBugPrefill, setReportBugPrefill] = useState({ description: '', title: '' });
   const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
   const [createPlacement, setCreatePlacement] = useState<CreatePlacement | null>(null);
@@ -927,6 +930,18 @@ export function BoardPage() {
       });
     }
 
+    // Report bug from another page (the Bugs page, INV-1133).
+    if (
+      !isBacklogView &&
+      location.state &&
+      typeof location.state === 'object' &&
+      'openReportBug' in location.state &&
+      location.state.openReportBug
+    ) {
+      setIsReportBugOpen(true);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+
     window.addEventListener(OPEN_CREATE_ISSUE_EVENT, handleOpenCreateIssue as EventListener);
 
     return () => {
@@ -1218,7 +1233,15 @@ export function BoardPage() {
     if (kind === 'state') {
       const state = selectedTeam?.states.nodes.find((item) => item.id === option.id);
       if (!state) return;
-      void applyFieldToIssues(ids, (issue) => (issue.state.id === state.id ? null : { stateId: state.id }), (issue) => ({ ...issue, state }));
+      void (async () => {
+        const moving = ids
+          .map((id) => boardVisibleIssues.find((issue) => issue.id === id))
+          .filter((issue): issue is IssueSummary => Boolean(issue) && issue?.state.id !== state.id);
+        const closing = cancelingIssues(state, moving);
+        const close = closing.length ? await askToCancel(closing) : {};
+        if (!close) return;
+        await applyFieldToIssues(ids, (issue) => (issue.state.id === state.id ? null : { stateId: state.id, ...close }), (issue) => ({ ...issue, state }));
+      })();
       return;
     }
     if (kind === 'priority') {
@@ -1268,6 +1291,11 @@ export function BoardPage() {
     if (issuesToUpdate.length === 0) {
       return;
     }
+    const closing = cancelingIssues(targetState, issuesToUpdate);
+    const close = closing.length ? await askToCancel(closing) : {};
+    if (!close) {
+      return;
+    }
 
     const previousIssuesById = new Map(
       issuesToUpdate.map((issue) => [issue.id, issueOverrides[issue.id] ?? issue]),
@@ -1297,6 +1325,7 @@ export function BoardPage() {
             input: {
               expectedRevision: issue.revision,
               stateId: bulkTargetStateId,
+              ...close,
             },
           },
         }),
@@ -1884,11 +1913,35 @@ export function BoardPage() {
     if (!state || issue.state.id === stateId) {
       return;
     }
+    const closing = cancelingIssues(state, [issue]);
+    const close = closing.length ? await askToCancel(closing) : {};
+    if (!close) {
+      return;
+    }
 
-    await persistIssueUpdate(issue, { stateId }, (current) => ({
+    await persistIssueUpdate(issue, { stateId, ...close }, (current) => ({
       ...current,
       state,
     }));
+  }
+
+  /**
+   * Moving work into a Canceled state asks why first (INV-1118). The items
+   * this move would cancel (none when the target is not Canceled), checked
+   * synchronously so ordinary moves save without waiting.
+   */
+  function cancelingIssues(target: { type: string }, moving: IssueSummary[]): IssueSummary[] {
+    return target.type === 'CANCELED' ? moving.filter((issue) => issue.state.type !== 'CANCELED') : [];
+  }
+
+  /** The resolution (and reason) to send, or null when the person keeps the work open. */
+  async function askToCancel(closing: IssueSummary[]): Promise<{ resolution?: WorkResolution; reason?: string } | null> {
+    const answer = await askCloseReason({
+      title: closing.length === 1 ? `Cancel ${closing[0]!.identifier}` : `Cancel ${closing.length} items`,
+      needsReason: closing.some(isBugIssue),
+    });
+    if (!answer) return null;
+    return { resolution: answer.resolution, ...(answer.reason ? { reason: answer.reason } : {}) };
   }
 
   async function persistTitleChange(issue: IssueSummary, title: string) {
@@ -2261,11 +2314,21 @@ export function BoardPage() {
       return;
     }
 
+    // The card already sits in the target column; ask from where it came.
+    const closing = cancelingIssues(targetState, [originState ? { ...issue, state: originState } : issue]);
+    const close = closing.length ? await askToCancel(closing) : {};
+    if (!close) {
+      if (originState) {
+        setIssueOverrides((currentOverrides) => replaceIssueOverride(currentOverrides, issueId, { ...issue, state: originState }));
+      }
+      return;
+    }
+
     try {
       // Call persistIssueUpdate directly instead of persistStateChange because
       // handleDragOver already updated issue.state optimistically, which would
       // cause persistStateChange to skip the mutation.
-      const updated = await persistIssueUpdate(issue, { stateId: targetStateId }, (current) => ({
+      const updated = await persistIssueUpdate(issue, { stateId: targetStateId, ...close }, (current) => ({
         ...current,
         state: targetState,
       }), false);
@@ -2442,9 +2505,14 @@ export function BoardPage() {
 
     const originState =
       selectedTeam?.states.nodes.find((state) => state.id === payload.stateId) ?? null;
+    const closing = cancelingIssues(targetState, [originState ? { ...issue, state: originState } : issue]);
+    const close = closing.length ? await askToCancel(closing) : {};
+    if (!close) {
+      return;
+    }
 
     try {
-      const updated = await persistIssueUpdate(issue, { stateId: targetStateId }, (current) => ({
+      const updated = await persistIssueUpdate(issue, { stateId: targetStateId, ...close }, (current) => ({
         ...current,
         state: targetState,
       }), false);
@@ -3237,6 +3305,7 @@ export function BoardPage() {
         </DndContext>
       )}
 
+      {closeReasonDialog}
       <IssueDetailDrawer
         issue={selectedIssue}
         team={selectedTeam}
@@ -3297,16 +3366,27 @@ export function BoardPage() {
         onTitleChange={setCreateTitle}
         onDescriptionChange={setCreateDescription}
         onTeamChange={(teamKey) => setPendingTeamKey(teamKey === activeTeamKey ? null : teamKey)}
+        onReportBug={() => {
+          // Bug from the create drawer: carry what was typed over to Report bug (INV-1132).
+          setReportBugPrefill({ description: createDescription, title: createTitle });
+          setIsCreateOpen(false);
+          setIsReportBugOpen(true);
+        }}
       />
       {selectedTeam ? (
         <ReportBugDialog
+          initialTitle={reportBugPrefill.title}
+          initialDescription={reportBugPrefill.description}
           isOpen={isReportBugOpen}
           teamId={selectedTeam.id}
           teamKey={selectedTeam.key}
           projects={placeableProjects}
           labels={labels}
           boardRepository={rawProjectKey}
-          onClose={() => setIsReportBugOpen(false)}
+          onClose={() => {
+            setIsReportBugOpen(false);
+            setReportBugPrefill({ description: '', title: '' });
+          }}
         />
       ) : null}
       {selectedTeam ? (

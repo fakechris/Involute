@@ -80,6 +80,16 @@ describe('Search page (INV-926)', () => {
     expect(within(results).getByRole('link', { name: /INV-1/ })).toHaveTextContent('Backlog · related');
   });
 
+  it('names the attached file a hit was found in (INV-1117)', async () => {
+    const inFile: WorkSearchQueryData = {
+      search: [{ ...searchData.search[0]!, matchedField: 'attachment', attachmentFilename: 'postmortem.md', snippet: '…用快照恢复…' }],
+    };
+    renderApp({ data: boardQueryResult, loading: false, searchData: inFile }, ['/search?q=快照']);
+
+    const results = await screen.findByRole('list', { name: 'Search results' });
+    expect(within(results).getByRole('link', { name: /INV-1/ })).toHaveTextContent('Backlog · in postmortem.md');
+  });
+
   it('opens from ⌘K with "View all results"', async () => {
     renderApp({ data: boardQueryResult, loading: false, searchData }, ['/']);
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();

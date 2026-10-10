@@ -585,9 +585,18 @@ describe('board status undo', () => {
       target: { value: 'state-canceled' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Apply to selected' }));
+    // Canceling asks why once for the whole batch (INV-1118).
+    const ask = await screen.findByRole('dialog', { name: 'Close reason' });
+    expect(ask).toHaveTextContent('Cancel 3 items');
+    fireEvent.change(within(ask).getByLabelText('Resolution'), { target: { value: 'WONT_DO' } });
+    // One of them is a bug, so a reason is needed too (zero-bug).
+    expect(within(ask).getByRole('button', { name: 'Cancel work' })).toBeDisabled();
+    fireEvent.change(within(ask).getByLabelText('Close reason text'), { target: { value: 'Out of scope' } });
+    fireEvent.click(within(ask).getByRole('button', { name: 'Cancel work' }));
 
     const moved = await screen.findByTestId('status-undo-toast');
     expect(moved).toHaveTextContent('moved to Canceled');
+    expect(updateIssue).toHaveBeenCalledWith(expect.objectContaining({ variables: expect.objectContaining({ input: expect.objectContaining({ resolution: 'WONT_DO' }) }) }));
     expect(moved).toHaveTextContent('INV-1');
     expect(moved).toHaveTextContent('INV-2');
     expect(moved).toHaveTextContent('INV-4');

@@ -13,7 +13,7 @@ primary entrypoint; the web board is an observation and governance surface.
 
 1. Search before creating work. Duplicates are noise.
 2. Fuzzy discoveries enter as candidates (\`work_propose\`), never as committed work.
-3. Committed work is created by a human (\`work_commit\`) or authorized batch delegation (\`pnpm candidates:batch-commit\`). Agents never unilaterally commit. The decision reaches the proposer: it appears in \`agent_inbox\` \`notifications\` (\`work.committed\`, \`work.rejected\` with the reason, \`work.uncommitted\`, review outcomes, and \`delivery.approved\` / \`delivery.declined\` for a delivery authorization — start on \`delivery.approved\`) — read it there, or read \`commitmentStatus\`, before telling anyone a candidate is still waiting (INV-968). A long-running agent need not poll: a webhook created with \`agent: <your handle>\` (Ops page or \`webhookCreate\`) is your push channel and delivers exactly those inbox events, plus dispatches addressed to you (INV-992).
+3. Committed work is created by a human (\`work_commit\`) or authorized batch delegation (\`pnpm candidates:batch-commit\`). Agents never unilaterally commit. The decision reaches the proposer: it appears in \`agent_inbox\` \`notifications\` (\`work.committed\`, \`work.rejected\` with the reason and its resolution (INV-1118), \`work.uncommitted\`, review outcomes, and \`delivery.approved\` / \`delivery.declined\` for a delivery authorization — start on \`delivery.approved\`) — read it there, or read \`commitmentStatus\`, before telling anyone a candidate is still waiting (INV-968). A long-running agent need not poll: a webhook created with \`agent: <your handle>\` (Ops page or \`webhookCreate\`) is your push channel and delivers exactly those inbox events, plus dispatches addressed to you (INV-992).
 4. Claim before executing (\`work_claim\`); report attempts with \`run_report\`. The claim response issues \`suggested_branch\` — use it verbatim as your git branch name. Never invent branch names containing issue identifiers: a harness-issued name is the only reference the traceability guard trusts unconditionally.
 5. Run complete is not work accepted. Self-reported PR/test summaries and URLs are unverified and require human review; they cannot trigger auto-accept. GitHub merge also stops at Review. Server verification is shadow-only, including CLEAR observations; only human review accepts work.
 6. Do not file local TODOs as work. If it is not worth a contract, keep it local.
@@ -112,14 +112,14 @@ Agent credentials carry scopes. Scope enforcement happens on MCP tools:
 
 | Scope | Unlocks |
 |---|---|
-| \`read\` | \`work_catalog\`, \`work_search\`, \`work_get_context\` (with \`section\` for one paginated section), \`work_list_ready\`, \`agent_inbox\`, \`protocol_get_guide\` (always granted) |
-| \`propose\` | \`work_propose\`, \`work_file_bug\`, \`work_propose_amendment\` |
+| \`read\` | \`work_catalog\`, \`work_search\`, \`work_get_context\` (with \`section\` for one paginated section), \`work_list_ready\`, \`work_timeline\` (the issue timeline, INV-1116), \`agent_inbox\`, \`protocol_get_guide\` (always granted) |
+| \`propose\` | \`work_propose\`, \`work_file_bug\`, \`work_propose_amendment\`, \`work_timeline\` (action \`star\` / \`unstar\` a key event) |
 | \`update\` | \`work_update\`, \`work_comment\` |
 | \`link\` | \`work_relate\` (action \`link\` / \`unlink\`) |
 | \`claim\` | \`work_claim\` (action \`claim\` / \`release\`) |
 | \`report\` | \`run_report\`, \`evidence\` (action \`attach\` / \`retract\`) |
 
-Tools are grouped (INV-1046): a pair or family is one tool with an \`action\` argument — \`work_relate\`, \`work_view\`, \`work_claim\`, \`evidence\`, \`agent_request\`, \`delivery\`, \`executor\`. Where a default is named, the old call shape still works (\`work_claim(id)\` claims). The old names (\`work_link\`, \`evidence_attach\`, \`work_claim_release\`, \`agent_request_claim\`, \`work_executor_update\`, …) stay callable for one version and answer with a \`deprecated\` note; \`notification_mark_read\` became \`agent_inbox(ack: [...])\` and \`work_read_page\` became \`work_get_context(id, section, after)\`. \`tools/list\` is cut to what the credential can run: an agent never sees \`work_commit\` / \`work_uncommit\`, which are gated on actor kind (humans only), not tokens.
+Tools are grouped (INV-1046): a pair or family is one tool with an \`action\` argument — \`work_relate\`, \`work_view\`, \`work_timeline\`, \`work_claim\`, \`evidence\`, \`agent_request\`, \`delivery\`, \`executor\`. Where a default is named, the old call shape still works (\`work_claim(id)\` claims). The old names (\`work_link\`, \`evidence_attach\`, \`work_claim_release\`, \`agent_request_claim\`, \`work_executor_update\`, …) stay callable for one version and answer with a \`deprecated\` note; \`notification_mark_read\` became \`agent_inbox(ack: [...])\` and \`work_read_page\` became \`work_get_context(id, section, after)\`. \`tools/list\` is cut to what the credential can run: an agent never sees \`work_commit\` / \`work_uncommit\`, which are gated on actor kind (humans only), not tokens.
 
 ## Four state machines (do not collapse them)
 

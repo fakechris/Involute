@@ -34,6 +34,9 @@ interface ReportBugDialogProps {
   labels: LabelSummary[];
   /** The board's project filter, to start the report there (INV-749). */
   boardRepository?: string | null;
+  /** What was typed in the create drawer before switching to Bug (INV-1132). */
+  initialTitle?: string;
+  initialDescription?: string;
   onClose: () => void;
 }
 
@@ -52,7 +55,7 @@ function useDebounced(value: string, delayMs: number): string {
  * to triage instead. Priority and steps to reproduce are required, and open
  * bugs with similar titles are shown so duplicates are caught before filing.
  */
-export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boardRepository, onClose }: ReportBugDialogProps) {
+export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boardRepository, initialTitle = '', initialDescription = '', onClose }: ReportBugDialogProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [steps, setSteps] = useState('');
@@ -67,6 +70,9 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const projectsRef = useRef(projects);
   projectsRef.current = projects;
+  // Read when the dialog opens, not while it is open: typing must not be reset.
+  const initialRef = useRef({ description: initialDescription, title: initialTitle });
+  initialRef.current = { description: initialDescription, title: initialTitle };
 
   const [runBugReport, bugReportMutationState] = useMutation<BugReportMutationData, BugReportMutationVariables>(BUG_REPORT_MUTATION);
   // The app-level apollo mock returns a bare [fn] tuple for unmatched
@@ -87,8 +93,8 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
       last: readLastPlacement(teamKey),
       projects: projectsRef.current,
     });
-    setTitle('');
-    setDescription('');
+    setTitle(initialRef.current.title);
+    setDescription(initialRef.current.description);
     setSteps('');
     setPriority(0);
     setSeverity('');
@@ -256,6 +262,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
                 disabled={isSaving}
                 placeholder="Expected vs actual behaviour, screenshots…"
                 ariaLabel="Bug description"
+                hideSubmit
               />
             </div>
 

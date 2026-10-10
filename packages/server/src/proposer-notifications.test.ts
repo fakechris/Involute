@@ -113,7 +113,7 @@ describe('the proposer hears the decision (INV-968)', () => {
 
   it('tells the proposer a candidate was declined, with the reason', async () => {
     const candidate = await proposeAsNova('Decline me');
-    await rejectWork(prisma, candidate.id, { expectedRevision: candidate.revision, reason: 'Duplicate of INV-1' }, human());
+    await rejectWork(prisma, candidate.id, { expectedRevision: candidate.revision, resolution: 'WONT_DO', reason: 'Duplicate of INV-1' }, human());
 
     const row = await prisma.notification.findFirstOrThrow({ where: { type: 'work.rejected', userId: nova.id } });
     expect((row.payload as { reason?: string }).reason).toBe('Duplicate of INV-1');

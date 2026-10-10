@@ -1,10 +1,21 @@
-import { useMemo } from 'react';
-import { useQuery } from '@apollo/client/react';
+import { RESOLUTION_OPTIONS } from '../components/CloseReasonDialog';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery } from '@apollo/client/react';
 import { Link, useNavigate } from 'react-router-dom';
 
-import { BUGS_PAGE_QUERY } from '../board/queries';
+import { BUGS_PAGE_QUERY, ISSUE_UPDATE_MUTATION } from '../board/queries';
 import { severityLabel } from '../board/severity';
-import type { BugMetricsData, BugsPageQueryData, BugsPageQueryVariables } from '../board/types';
+import type {
+  BugMetricsData,
+  BugsPageQueryData,
+  BugsPageQueryVariables,
+  IssueSummary,
+  IssueUpdateMutationData,
+  IssueUpdateMutationVariables,
+  WorkflowStateSummary,
+} from '../board/types';
+import { useListKeys } from '../components/useListKeys';
+import { fetchSessionState } from '../lib/session';
 import { readStoredTeamKey } from '../board/utils';
 import { IcoBug } from '../components/Icons';
 import { Btn, PriorityIcon } from '../components/Primitives';
@@ -60,6 +71,22 @@ export function BugsPage() {
       });
   }, [data?.issues.nodes]);
 
+  const statesByTeam = useMemo(
+    () => new Map((data?.teams?.nodes ?? []).map((team) => [team.id, [...(team.states?.nodes ?? [])].sort((a, b) => a.position - b.position)])),
+    [data?.teams?.nodes],
+  );
+  const [viewerId, setViewerId] = useState<string | null>(null);
+  useEffect(() => {
+    fetchSessionState().then((session) => setViewerId(session.viewer?.id ?? null)).catch(() => setViewerId(null));
+  }, []);
+  // J/K and Enter like the other queues (INV-1133); Enter opens the bug's own page.
+  const listKeys = useListKeys(openBugs, {
+    onClear: () => undefined,
+    onOpen: (issue) => navigate(`/issue/${encodeURIComponent(issue.identifier)}`),
+    onSelectAll: () => undefined,
+    onToggle: () => undefined,
+  });
+
   const urgentHighOpen =
     summary?.byPriority
       .filter((entry) => entry.priority === 1 || entry.priority === 2)
@@ -73,10 +100,9 @@ export function BugsPage() {
         <h1 className="page-header__title">Bugs</h1>
         <span className="mono observation-count">{summary?.openCount ?? 0}</span>
         <div style={{ flex: 1 }} />
-        <span className="observation-hint">
-          Bug reports land directly on the board with the bug label; agents pick them up via
-          bug.reported webhooks.
-        </span>
+        <Btn variant="accent" onClick={() => navigate('/', { state: { openReportBug: true } })}>
+          Report bug
+        </Btn>
       </div>
 
       <div className="page-content">
@@ -212,24 +238,18 @@ export function BugsPage() {
               {openBugs.length === 0 ? (
                 <p className="bugs-panel__empty">No open bugs. Nice.</p>
               ) : (
-                <div className="bugs-list" role="list">
+                <ul className="bugs-list" aria-label="Open bugs list">
                   {openBugs.map((issue) => (
-                    <button
-                      type="button"
-                      role="listitem"
+                    <BugRow
                       key={issue.id}
-                      className="bugs-list__item"
-                      onClick={() => navigate(`/?issue=${encodeURIComponent(issue.identifier)}`)}
-                    >
-                      <PriorityIcon level={issue.priority} size={12} />
-                      <span className="mono bugs-list__identifier">{issue.identifier}</span>
-                      <span className="bugs-list__title">{issue.title}</span>
-                      {issue.severity ? <span className="bugs-list__meta mono" title={severityLabel(issue.severity)}>{issue.severity}</span> : null}
-                      <span className="bugs-list__meta">{issue.state.name}</span>
-                      <span className="bugs-list__meta mono">{issue.repository ?? 'No project'}</span>
-                    </button>
+                      issue={issue}
+                      states={statesByTeam.get(issue.team.id) ?? []}
+                      viewerId={viewerId}
+                      focused={listKeys.focusedId === issue.id}
+                      onRefresh={() => void refetch()}
+                    />
                   ))}
-                </div>
+                </ul>
               )}
             </section>
           </div>
@@ -320,7 +340,145 @@ function BugTriageMetrics({ metrics, onOpen }: { metrics: BugMetricsData; onOpen
             </table>
           )}
         </section>
+        <BugResolutions metrics={metrics} />
       </div>
     </>
+  );
+}
+
+const SOURCES: Array<BugMetricsData['bySource'][number]['source']> = ['HUMAN_REPORT', 'AGENT', 'OTHER'];
+const FALSE_REPORT: ReadonlySet<string> = new Set(['INVALID', 'CANNOT_REPRODUCE']);
+
+/**
+ * Why bugs were closed without a fix, by who reported them (INV-1118). The
+ * false-report rate — invalid or cannot reproduce, over all bugs from that
+ * source — shows which reporter files noise.
+ */
+function BugResolutions({ metrics }: { metrics: BugMetricsData }) {
+  const rows = metrics.byResolution ?? [];
+  const resolutions = RESOLUTION_OPTIONS.filter((option) => rows.some((row) => row.resolution === option.value));
+  const count = (resolution: string, source: string) => rows.find((row) => row.resolution === resolution && row.source === source)?.count ?? 0;
+  const falseRate = (source: string) => {
+    const total = metrics.bySource.find((entry) => entry.source === source)?.count ?? 0;
+    if (!total) return '—';
+    const noise = rows.filter((row) => row.source === source && FALSE_REPORT.has(row.resolution)).reduce((sum, row) => sum + row.count, 0);
+    return `${Math.round((noise / total) * 100)}%`;
+  };
+  return (
+    <section className="bugs-panel" aria-label="Bugs closed without a fix">
+      <h2 className="bugs-panel__title">Closed without a fix</h2>
+      {resolutions.length === 0 ? (
+        <p className="bugs-panel__empty">No bug has been declined or canceled yet.</p>
+      ) : (
+        <table className="bugs-table">
+          <thead>
+            <tr>
+              <th>Resolution</th>
+              {SOURCES.map((source) => <th key={source}>{SOURCE_LABEL[source]}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {resolutions.map((option) => (
+              <tr key={option.value}>
+                <td>{option.label}</td>
+                {SOURCES.map((source) => <td key={source} className="mono">{count(option.value, source)}</td>)}
+              </tr>
+            ))}
+            <tr>
+              <td>False-report rate</td>
+              {SOURCES.map((source) => <td key={source} className="mono">{falseRate(source)}</td>)}
+            </tr>
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+const PRIORITIES: Array<[number, string]> = [
+  [1, 'Urgent'],
+  [2, 'High'],
+  [3, 'Medium'],
+  [4, 'Low'],
+];
+
+/**
+ * One open bug, decided where it is seen (INV-1133): the identifier opens its
+ * page, and status, priority and "Assign to me" change it in place. A refusal
+ * (a bug cannot go to Backlog; a stale revision) is shown on the row.
+ */
+export function BugRow({
+  issue,
+  states,
+  viewerId,
+  focused,
+  onRefresh,
+}: {
+  issue: IssueSummary;
+  states: WorkflowStateSummary[];
+  viewerId: string | null;
+  focused: boolean;
+  onRefresh: () => void;
+}) {
+  const [runUpdate, updateState] = useMutation<IssueUpdateMutationData, IssueUpdateMutationVariables>(ISSUE_UPDATE_MUTATION);
+  const [error, setError] = useState<string | null>(null);
+  const saving = Boolean(updateState?.loading);
+
+  async function update(input: IssueUpdateMutationVariables['input']) {
+    setError(null);
+    try {
+      const result = await runUpdate({ variables: { id: issue.id, input: { ...input, expectedRevision: issue.revision } } });
+      if (!result.data?.issueUpdate.success) {
+        setError(result.data?.issueUpdate.message ?? 'The change was not saved. Refresh and try again.');
+        return;
+      }
+      onRefresh();
+    } catch {
+      setError('The change was not saved. Refresh and try again.');
+    }
+  }
+
+  const mine = Boolean(viewerId && issue.assignee?.id === viewerId);
+  return (
+    <li className={`bugs-list__item${focused ? ' bugs-list__item--focused' : ''}`} data-list-key-id={issue.id} aria-current={focused ? 'true' : undefined}>
+      <PriorityIcon level={issue.priority} size={12} />
+      <Link className="mono bugs-list__identifier" to={`/issue/${encodeURIComponent(issue.identifier)}`}>
+        {issue.identifier}
+      </Link>
+      <Link className="bugs-list__title" to={`/issue/${encodeURIComponent(issue.identifier)}`}>
+        {issue.title}
+      </Link>
+      {issue.severity ? <span className="bugs-list__meta mono" title={severityLabel(issue.severity)}>{issue.severity}</span> : null}
+      <select
+        aria-label={`Status of ${issue.identifier}`}
+        value={issue.state.id}
+        disabled={saving || states.length === 0}
+        onChange={(event) => void update({ stateId: event.target.value })}
+      >
+        {(states.length ? states : [issue.state]).map((state) => (
+          <option key={state.id} value={state.id}>{state.name}</option>
+        ))}
+      </select>
+      <select
+        aria-label={`Priority of ${issue.identifier}`}
+        value={issue.priority}
+        disabled={saving}
+        onChange={(event) => void update({ priority: Number(event.target.value) })}
+      >
+        {issue.priority === 0 ? <option value={0}>No priority</option> : null}
+        {PRIORITIES.map(([value, label]) => (
+          <option key={value} value={value}>{label}</option>
+        ))}
+      </select>
+      {mine ? (
+        <span className="bugs-list__meta">Yours</span>
+      ) : (
+        <Btn variant="ghost" disabled={saving || !viewerId} onClick={() => void update({ assigneeId: viewerId })}>
+          Assign to me
+        </Btn>
+      )}
+      <span className="bugs-list__meta mono">{issue.repository ?? 'No project'}</span>
+      {error ? <span className="issue-relations__error" role="alert">{error}</span> : null}
+    </li>
   );
 }

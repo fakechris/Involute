@@ -1,3 +1,4 @@
+import { ResolutionSelect, type WorkResolution } from '../components/CloseReasonDialog';
 import { useMutation, useQuery } from '@apollo/client/react';
 
 import { ProjectSharing } from '../components/ProjectSharing';
@@ -130,6 +131,8 @@ export function ProjectsPage() {
   const [formName, setFormName] = useState('');
   const [formDesc, setFormDesc] = useState('');
   const [formStateId, setFormStateId] = useState('');
+  // Canceling a project says why (INV-1118).
+  const [formResolution, setFormResolution] = useState<WorkResolution | ''>('');
   const [formLeadId, setFormLeadId] = useState('');
   // GitHub routing (INV-793): which repository the project owns, and the
   // extra reference prefix its PRs may use (LUM-398 for lumenbox).
@@ -165,6 +168,9 @@ export function ProjectsPage() {
 
   const projects = data?.issues.nodes ?? [];
   const selectedProject = selectedProjectId ? projects.find((p) => p.id === selectedProjectId) ?? null : null;
+  const cancelingProject = dialogMode === 'edit'
+    && teamStates.find((state) => state.id === formStateId)?.type === 'CANCELED'
+    && selectedProject?.state?.id !== formStateId;
 
   function openCreateDialog() {
     setDialogMode('create');
@@ -187,6 +193,7 @@ export function ProjectsPage() {
     setFormName(project.title);
     setFormDesc(project.description ?? '');
     setFormStateId(project.state?.id ?? '');
+    setFormResolution('');
     setFormLeadId(project.assignee?.id ?? '');
     setFormRepository(project.repository ?? '');
     setFormAlias(project.alias ?? '');
@@ -255,6 +262,9 @@ export function ProjectsPage() {
         };
         if (formStateId) {
           input.stateId = formStateId;
+        }
+        if (cancelingProject && formResolution) {
+          input.resolution = formResolution;
         }
         if (repository !== (editingOriginal?.repository ?? '')) {
           input.repository = repository || null;
@@ -376,6 +386,12 @@ export function ProjectsPage() {
               {teamStates.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </label>
+          {cancelingProject ? (
+            <label style={{ flex: 1 }}>
+              <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Resolution</span>
+              <ResolutionSelect ariaLabel="Project resolution" value={formResolution} onChange={setFormResolution} />
+            </label>
+          ) : null}
           <label style={{ flex: 1 }}>
             <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Lead</span>
             <select

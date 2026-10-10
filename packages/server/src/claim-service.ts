@@ -1,7 +1,7 @@
 import { assertDeliveryExecution } from './delivery-grant.js';
 import { randomUUID } from 'node:crypto';
 import { assertExecutionAuthority, assertWorkToken, hashWorkToken, mintWorkToken } from './work-execution.js';
-import type { ActorKind, Issue, Prisma, PrismaClient, User, WorkClaim, WorkLinkType } from '@prisma/client';
+import type { ActorKind, Issue, Prisma, PrismaClient, User, WorkClaim, WorkResolution, WorkLinkType } from '@prisma/client';
 
 import {
   createNotFoundError,
@@ -22,6 +22,7 @@ import {
   ISSUE_TYPE_EXCLUSIVE_MESSAGE,
   BUG_NO_BACKLOG_MESSAGE,
   BUG_REJECT_REASON_REQUIRED_MESSAGE,
+  WORK_REJECT_RESOLUTION_REQUIRED_MESSAGE,
   ISSUE_CREATE_REQUIRES_PARENT_MESSAGE,
   PARENT_ISSUE_NOT_FOUND_MESSAGE,
   WORK_ALREADY_CLAIMED_MESSAGE,
@@ -50,6 +51,7 @@ import {
 import { findWorkByIdOrIdentifier, explainWorkNotReady,
   isWorkReadyForClaim } from './context-service.js';
 import { enqueueWorkEvent } from './event-outbox.js';
+import { parseWorkResolution } from './work-resolution.js';
 import {
   projectDecisionNotifications,
   projectProposedBatch,
@@ -148,6 +150,8 @@ export interface RejectWorkInput {
   expectedRevision: number;
   idempotencyKey?: string | null;
   reason?: string | null;
+  /** Why it is declined (INV-1118): required; enum name or its lowercase spelling. */
+  resolution?: string | null;
 }
 
 // Commit, reject and accept are the human gates: "agents propose, humans
@@ -851,50 +855,25 @@ export async function rejectWork(
       throw createValidationError(WORK_REVISION_CONFLICT_MESSAGE);
     }
 
-    await claimIssueRevision(transaction, existing.id, input.expectedRevision);
-
+    const resolution = parseWorkResolution(input.resolution);
+    if (!resolution) {
+      throw createValidationError(WORK_REJECT_RESOLUTION_REQUIRED_MESSAGE);
+    }
     const reason = nonEmpty(input.reason);
     if (!reason && (await isBugWork(transaction, existing.id))) {
       throw createValidationError(BUG_REJECT_REASON_REQUIRED_MESSAGE);
     }
-    const actorForAudit: WriteActor = { ...actor };
-    if (reason) {
-      actorForAudit.reason = reason;
-    }
+
+    await claimIssueRevision(transaction, existing.id, input.expectedRevision);
 
     const updated = await transaction.issue.update({
       where: { id: existing.id },
       data: {
         commitmentStatus: 'REJECTED',
+        resolution,
       },
     });
-
-    await recordWorkAudit(transaction, {
-      actor: actorForAudit,
-      after: selectIssueSnapshot(updated),
-      before: selectIssueSnapshot(existing),
-      workId: existing.id,
-    });
-
-    const rejectedEvent = await enqueueWorkEvent(transaction, {
-      payload: {
-        actorId: actor.actorId ?? null,
-        reason,
-      },
-      type: 'work.rejected',
-      updatedFrom: { commitmentStatus: existing.commitmentStatus, revision: existing.revision },
-      workId: updated.id,
-      workIdentifier: updated.identifier,
-    });
-    await projectDecisionNotifications(transaction, {
-      deciderId: actor.actorId,
-      eventId: rejectedEvent.id,
-      payload: { actorId: actor.actorId ?? null, reason },
-      type: 'work.rejected',
-      work: updated,
-    });
-    await resolveAttentionNotifications(transaction, { kind: 'CANDIDATE_COMMIT', resolution: 'declined', resolvedById: actor.actorId, workId: updated.id });
-    await settleProposedBatches(transaction, { resolvedById: actor.actorId, work: updated });
+    await finishRejection(transaction, { actor, before: existing, reason, resolution, updated });
 
     if (rejectIdempotencyId) {
       await completeWorkIdempotency(transaction, rejectIdempotencyId, updated.id);
@@ -902,6 +881,53 @@ export async function rejectWork(
 
     return updated;
   });
+}
+
+/**
+ * Everything a rejection records after the row changed (INV-1118): the audit
+ * with the reason, the work.rejected event and the decision notifications,
+ * all carrying the resolution. Shared with closeWorkAsDuplicate.
+ */
+export async function finishRejection(
+  transaction: Prisma.TransactionClient,
+  input: {
+    actor: WriteActor;
+    before: Issue;
+    updated: Issue;
+    reason: string | null;
+    resolution: WorkResolution;
+    duplicateOfId?: string | null;
+  },
+): Promise<void> {
+  const { actor, before, updated, reason, resolution } = input;
+  await recordWorkAudit(transaction, {
+    actor: reason ? { ...actor, reason } : actor,
+    after: selectIssueSnapshot(updated),
+    before: selectIssueSnapshot(before),
+    workId: before.id,
+  });
+  const payload = {
+    actorId: actor.actorId ?? null,
+    reason,
+    resolution,
+    ...(input.duplicateOfId ? { duplicateOfId: input.duplicateOfId } : {}),
+  };
+  const rejectedEvent = await enqueueWorkEvent(transaction, {
+    payload,
+    type: 'work.rejected',
+    updatedFrom: { commitmentStatus: before.commitmentStatus, revision: before.revision },
+    workId: updated.id,
+    workIdentifier: updated.identifier,
+  });
+  await projectDecisionNotifications(transaction, {
+    deciderId: actor.actorId,
+    eventId: rejectedEvent.id,
+    payload,
+    type: 'work.rejected',
+    work: updated,
+  });
+  await resolveAttentionNotifications(transaction, { kind: 'CANDIDATE_COMMIT', resolution: 'declined', resolvedById: actor.actorId, workId: updated.id });
+  await settleProposedBatches(transaction, { resolvedById: actor.actorId, work: updated });
 }
 
 export async function claimWork(
