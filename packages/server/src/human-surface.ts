@@ -10,11 +10,15 @@
  *   its label is still on screen, and a web test exercises it (INV-1004);
  * - every server message that tells someone a person must act maps to an
  *   entry;
- * - every notification a person receives says where it lands.
+ * - every notification a person receives says where it lands;
+ * - every gate and notification says whether it waits in Needs you (/todo),
+ *   and under which attention kind (INV-1095).
  *
  * Adding a human-only rule, a mutation or a notification without a place for a
  * person to act fails the test. Paths are relative to packages/web/src.
  */
+
+import type { AttentionKind } from './attention-service.js';
 
 export type HumanSurface =
   | {
@@ -167,43 +171,52 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
  * where that person does it: a mutation in MUTATION_SURFACES, or an open item
  * when no mutation exists yet.
  */
-export const HUMAN_GATES: Array<{ text: string; mutation: string } | { text: string; tracking: string }> = [
-  { text: 'Agents cannot commit work', mutation: 'workCommit' },
-  { text: 'Humans only. Requires acceptance', mutation: 'workCommit' },
-  { text: 'Committed work requires a human owner', mutation: 'workCommit' },
-  { text: 'Agents cannot reject work', mutation: 'workReject' },
-  { text: 'Agents cannot accept or cancel work', mutation: 'workReview' },
-  { text: 'Agents stop at Review except committed Research issues; Canceled remains human-only.', mutation: 'workReview' },
-  { text: 'Agents cannot transition work directly to COMPLETED or CANCELED', mutation: 'workReview' },
-  { text: 'Agents cannot rewrite committed contract fields', mutation: 'issueUpdate' },
-  { text: 'Work owner must be a human assignee', mutation: 'issueUpdate' },
-  { text: 'Only a person can turn automatic acceptance of verified bug fixes on or off.', mutation: 'issueUpdate' },
-  { text: 'Only a person may reconcile external effects.', mutation: 'executorUpdate' },
-  { text: 'Instantiate an approved delivery unit and any predecessors', mutation: 'deliveryExecutionCreate' },
-  { text: 'Only a person may approve or reject a delivery change set', mutation: 'deliveryChangeDecide' },
-  { text: 'Only a person can release a claim', mutation: 'workClaimRelease' },
-  { text: 'Only a person can restore a rejected candidate', mutation: 'workRestore' },
-  { text: 'Only a person can return committed work to the candidate queue', mutation: 'workUncommit' },
-  { text: 'Only a person may retract evidence', mutation: 'evidenceRetract' },
-  { text: 'Only a person may accept or reject a contract amendment', mutation: 'contractAmendmentAccept' },
-  { text: 'Agents cannot rewrite a committed contract; this records', mutation: 'contractAmendmentAccept' },
-  { text: "Human-only. Apply an agent's proposed contract change", mutation: 'contractAmendmentAccept' },
-  { text: "Human-only. Decline an agent's proposed contract change", mutation: 'contractAmendmentReject' },
-  { text: 'Human-only (delegated CLI or Web UI):', mutation: 'workCommit' },
-  { text: 'gated on actor kind (humans only)', mutation: 'workCommit' },
-  { text: 'Only a human may deactivate or reactivate an actor', mutation: 'actorDeactivate' },
-  { text: 'ends its ability to act. Human-only.', mutation: 'actorDeactivate' },
-  { text: 'Undo a deactivation. Human-only', mutation: 'actorReactivate' },
-  { text: 'Transfer accountability for a non-human actor to another human. Human-only', mutation: 'actorTransferOwner' },
-  { text: 'A new agent needs a human owner', mutation: 'agentCredentialCreate' },
-  { text: 'Only the person this request is addressed to may answer it', mutation: 'agentRequestAnswer' },
-  { text: 'Team membership is a human roster', mutation: 'teamMembershipUpsert' },
-  { text: 'the filing agent needs a human owner on this team', mutation: 'teamMembershipUpsert' },
-  { text: 'A triage rotation lists human members', mutation: 'teamTriageRotationUpdate' },
-  { text: 'Only a human may provision a service actor', mutation: 'serviceActorCreate' },
-  { text: 'Provision a SERVICE actor for an external program (CI, cron, a bridge). Human-only.', mutation: 'serviceActorCreate' },
-  { text: 'or declare a successor', mutation: 'actorSetSuccessor' },
-  { text: 'Only the person who asked may reply', mutation: 'agentRequestReply' },
+export type HumanGate = ({ text: string; mutation: string } | { text: string; tracking: string }) & {
+  /**
+   * Where the person who must act finds it waiting in Needs you (/todo): the
+   * attention kind that lists it, or why nothing waits there, citing the item
+   * that decided so (INV-1095).
+   */
+  attention: AttentionKind | { none: string };
+};
+
+export const HUMAN_GATES: HumanGate[] = [
+  { text: 'Agents cannot commit work', mutation: 'workCommit', attention: 'CANDIDATE_COMMIT' },
+  { text: 'Humans only. Requires acceptance', mutation: 'workCommit', attention: 'CANDIDATE_COMMIT' },
+  { text: 'Committed work requires a human owner', mutation: 'workCommit', attention: 'CANDIDATE_COMMIT' },
+  { text: 'Agents cannot reject work', mutation: 'workReject', attention: 'CANDIDATE_COMMIT' },
+  { text: 'Agents cannot accept or cancel work', mutation: 'workReview', attention: 'WORK_REVIEW' },
+  { text: 'Agents stop at Review except committed Research issues; Canceled remains human-only.', mutation: 'workReview', attention: 'WORK_REVIEW' },
+  { text: 'Agents cannot transition work directly to COMPLETED or CANCELED', mutation: 'workReview', attention: 'WORK_REVIEW' },
+  { text: 'Agents cannot rewrite committed contract fields', mutation: 'issueUpdate', attention: 'CONTRACT_AMENDMENT' },
+  { text: 'Work owner must be a human assignee', mutation: 'issueUpdate', attention: { none: 'Refuses an agent owner on the edit itself; nothing is left waiting (INV-1090).' } },
+  { text: 'Only a person can turn automatic acceptance of verified bug fixes on or off.', mutation: 'issueUpdate', attention: { none: 'A project setting a person changes when they choose to, not a pending decision (INV-1075).' } },
+  { text: 'Only a person may reconcile external effects.', mutation: 'executorUpdate', attention: { none: 'Reconciling is done from the executor panel when a receipt is disputed; not a queued decision (INV-944).' } },
+  { text: 'Instantiate an approved delivery unit and any predecessors', mutation: 'deliveryExecutionCreate', attention: { none: 'Follows an approval already decided under DELIVERY_CHANGE; starting it is the owner\'s choice of timing (INV-993).' } },
+  { text: 'Only a person may approve or reject a delivery change set', mutation: 'deliveryChangeDecide', attention: 'DELIVERY_CHANGE' },
+  { text: 'Only a person can release a claim', mutation: 'workClaimRelease', attention: { none: 'Releasing a claim is a correction a person makes when they choose to, not a request awaiting them (INV-789).' } },
+  { text: 'Only a person can restore a rejected candidate', mutation: 'workRestore', attention: { none: 'Undoing a rejection is a correction, not a pending decision (INV-792).' } },
+  { text: 'Only a person can return committed work to the candidate queue', mutation: 'workUncommit', attention: { none: 'Undoing a commit is a correction, not a pending decision (INV-844).' } },
+  { text: 'Only a person may retract evidence', mutation: 'evidenceRetract', attention: { none: 'Retracting a wrong link is a correction, not a pending decision (INV-598).' } },
+  { text: 'Only a person may accept or reject a contract amendment', mutation: 'contractAmendmentAccept', attention: 'CONTRACT_AMENDMENT' },
+  { text: 'Agents cannot rewrite a committed contract; this records', mutation: 'contractAmendmentAccept', attention: 'CONTRACT_AMENDMENT' },
+  { text: "Human-only. Apply an agent's proposed contract change", mutation: 'contractAmendmentAccept', attention: 'CONTRACT_AMENDMENT' },
+  { text: "Human-only. Decline an agent's proposed contract change", mutation: 'contractAmendmentReject', attention: 'CONTRACT_AMENDMENT' },
+  { text: 'Human-only (delegated CLI or Web UI):', mutation: 'workCommit', attention: 'CANDIDATE_COMMIT' },
+  { text: 'gated on actor kind (humans only)', mutation: 'workCommit', attention: 'CANDIDATE_COMMIT' },
+  { text: 'Only a human may deactivate or reactivate an actor', mutation: 'actorDeactivate', attention: { none: 'Actor administration, done when a person decides to (INV-586, INV-846).' } },
+  { text: 'ends its ability to act. Human-only.', mutation: 'actorDeactivate', attention: { none: 'Actor administration, done when a person decides to (INV-586, INV-846).' } },
+  { text: 'Undo a deactivation. Human-only', mutation: 'actorReactivate', attention: { none: 'Actor administration, done when a person decides to (INV-586, INV-846).' } },
+  { text: 'Transfer accountability for a non-human actor to another human. Human-only', mutation: 'actorTransferOwner', attention: { none: 'Actor administration, done when a person decides to (INV-586, INV-846).' } },
+  { text: 'A new agent needs a human owner', mutation: 'agentCredentialCreate', attention: { none: 'Actor administration, done when a person decides to (INV-586, INV-846).' } },
+  { text: 'Only the person this request is addressed to may answer it', mutation: 'agentRequestAnswer', attention: 'AGENT_REQUEST' },
+  { text: 'Team membership is a human roster', mutation: 'teamMembershipUpsert', attention: { none: 'Team and access administration, done when a person decides to (INV-846).' } },
+  { text: 'the filing agent needs a human owner on this team', mutation: 'teamMembershipUpsert', attention: { none: 'The bug is refused, not parked; the fix is adding the owner to the team, which is administration (INV-804, INV-846).' } },
+  { text: 'A triage rotation lists human members', mutation: 'teamTriageRotationUpdate', attention: { none: 'Team and access administration, done when a person decides to (INV-846).' } },
+  { text: 'Only a human may provision a service actor', mutation: 'serviceActorCreate', attention: { none: 'Actor administration, done when a person decides to (INV-586, INV-846).' } },
+  { text: 'Provision a SERVICE actor for an external program (CI, cron, a bridge). Human-only.', mutation: 'serviceActorCreate', attention: { none: 'Actor administration, done when a person decides to (INV-586, INV-846).' } },
+  { text: 'or declare a successor', mutation: 'actorSetSuccessor', attention: { none: 'Declaring a successor is administration; the expired request itself is re-asked in its thread (INV-562).' } },
+  { text: 'Only the person who asked may reply', mutation: 'agentRequestReply', attention: 'AGENT_REQUEST' },
 ];
 
 /** Recognises text that tells someone a person must act; every match must be in HUMAN_GATES. */
@@ -222,48 +235,56 @@ export type NotificationLanding =
   | { kind: 'info' }
   | { kind: 'gap'; tracking: string; note: string };
 
+/**
+ * Whether a notification asks for a decision that waits in Needs you (/todo),
+ * and under which attention kind, or only tells (INV-1095). Must agree with
+ * ACTIONABLE_NOTIFICATION_KINDS in notification-service.ts, which resolves
+ * the notification when the decision is made.
+ */
+export type NotificationSurface = NotificationLanding & { actionable: AttentionKind | 'info' };
+
 /** Every notification type written to a person's inbox. */
-export const NOTIFICATION_SURFACES: Record<string, NotificationLanding> = {
-  'run.completed': { kind: 'work', action: 'Human review', component: 'components/HumanReviewSection.tsx' },
-  'work.accepted': { kind: 'info' },
-  'work.review_rejected': { kind: 'info' },
+export const NOTIFICATION_SURFACES: Record<string, NotificationSurface> = {
+  'run.completed': { kind: 'work', action: 'Human review', component: 'components/HumanReviewSection.tsx', actionable: 'WORK_REVIEW' },
+  'work.accepted': { kind: 'info', actionable: 'info' },
+  'work.review_rejected': { kind: 'info', actionable: 'info' },
   // The proposer hears the decision on its proposal (INV-968).
-  'work.committed': { kind: 'info' },
-  'work.rejected': { kind: 'info' },
-  'work.uncommitted': { kind: 'info' },
+  'work.committed': { kind: 'info', actionable: 'info' },
+  'work.rejected': { kind: 'info', actionable: 'info' },
+  'work.uncommitted': { kind: 'info', actionable: 'info' },
   // A delivery authorization was decided; the agent reads it and starts, or stops (INV-990).
-  'delivery.approved': { kind: 'info' },
-  'delivery.declined': { kind: 'info' },
-  'work.claim_released': { kind: 'info' },
+  'delivery.approved': { kind: 'info', actionable: 'info' },
+  'delivery.declined': { kind: 'info', actionable: 'info' },
+  'work.claim_released': { kind: 'info', actionable: 'info' },
   // Written to the approved executor's (an agent's) inbox: start on it (INV-993).
-  'executor.dispatched': { kind: 'info' },
-  'work.claim_expired': { kind: 'info' },
+  'executor.dispatched': { kind: 'info', actionable: 'info' },
+  'work.claim_expired': { kind: 'info', actionable: 'info' },
   // The run went quiet; the owner looks at the work page and decides (INV-996).
-  'run.stale': { kind: 'info' },
+  'run.stale': { kind: 'info', actionable: 'info' },
   // A fixed bug waits past the review clock: the owner reviews it (INV-1002).
-  'review.overdue': { kind: 'work', action: 'Human review', component: 'components/HumanReviewSection.tsx' },
+  'review.overdue': { kind: 'work', action: 'Human review', component: 'components/HumanReviewSection.tsx', actionable: 'WORK_REVIEW' },
   // Daily: everything still waiting on the person, the same list as Needs you (INV-1094).
-  'attention.digest': { kind: 'inbox' },
+  'attention.digest': { kind: 'inbox', actionable: 'info' },
   // The research proposer (usually an agent) closes it with work_update(state: DONE) (INV-1001).
-  'research.closable': { kind: 'info' },
-  'bug.sla_at_risk': { kind: 'info' },
-  'bug.sla_breached': { kind: 'info' },
-  'contract.amendment_proposed': { kind: 'work', action: 'Accept change', component: 'components/ContractAmendmentPanel.tsx' },
-  'decision.requested': { kind: 'work', action: 'Respond to the agent', component: 'components/RespondToAgent.tsx' },
-  'agent.request_input_required': { kind: 'work', action: 'Reply to agent', component: 'components/AgentRequestActions.tsx' },
-  'bug.reported': { kind: 'work', action: 'Triage this candidate' },
-  'agent.request_expired': { kind: 'work', action: 'Answer', component: 'components/AgentRequestActions.tsx' },
-  'agent.request_handed_off': { kind: 'work', action: 'Answer', component: 'components/AgentRequestActions.tsx' },
-  'webhook.disabled': { kind: 'inbox' },
+  'research.closable': { kind: 'info', actionable: 'info' },
+  'bug.sla_at_risk': { kind: 'info', actionable: 'info' },
+  'bug.sla_breached': { kind: 'info', actionable: 'info' },
+  'contract.amendment_proposed': { kind: 'work', action: 'Accept change', component: 'components/ContractAmendmentPanel.tsx', actionable: 'CONTRACT_AMENDMENT' },
+  'decision.requested': { kind: 'work', action: 'Respond to the agent', component: 'components/RespondToAgent.tsx', actionable: 'DECISION_REQUESTED' },
+  'agent.request_input_required': { kind: 'work', action: 'Reply to agent', component: 'components/AgentRequestActions.tsx', actionable: 'AGENT_REQUEST' },
+  'bug.reported': { kind: 'work', action: 'Triage this candidate', actionable: 'CANDIDATE_COMMIT' },
+  'agent.request_expired': { kind: 'work', action: 'Answer', component: 'components/AgentRequestActions.tsx', actionable: 'info' },
+  'agent.request_handed_off': { kind: 'work', action: 'Answer', component: 'components/AgentRequestActions.tsx', actionable: 'AGENT_REQUEST' },
+  'webhook.disabled': { kind: 'inbox', actionable: 'OPS' },
   // INV-1093: decisions nobody was told about. Each is decided in Needs you (/todo).
-  'work.proposed_batch': { kind: 'inbox' },
-  'delivery.proposed': { kind: 'inbox' },
+  'work.proposed_batch': { kind: 'inbox', actionable: 'CANDIDATE_COMMIT' },
+  'delivery.proposed': { kind: 'inbox', actionable: 'DELIVERY_CHANGE' },
   // The unit ran out of attempts; the work page shows the package to re-plan.
-  'executor.exhausted': { kind: 'info' },
-  'ops.event.dead_letter': { kind: 'inbox' },
-  'ops.webhook.disabled': { kind: 'inbox' },
-  'ops.github_sync.dead_letter': { kind: 'inbox' },
-  'ops.github_inbound.dead_letter': { kind: 'inbox' },
-  'ops.github_inbound.payload_conflict': { kind: 'inbox' },
-  'ops.github.pr_unverified_reference': { kind: 'inbox' },
+  'executor.exhausted': { kind: 'info', actionable: 'info' },
+  'ops.event.dead_letter': { kind: 'inbox', actionable: 'info' },
+  'ops.webhook.disabled': { kind: 'inbox', actionable: 'info' },
+  'ops.github_sync.dead_letter': { kind: 'inbox', actionable: 'info' },
+  'ops.github_inbound.dead_letter': { kind: 'inbox', actionable: 'info' },
+  'ops.github_inbound.payload_conflict': { kind: 'inbox', actionable: 'info' },
+  'ops.github.pr_unverified_reference': { kind: 'inbox', actionable: 'info' },
 };
