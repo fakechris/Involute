@@ -29,6 +29,10 @@ export interface BugSla {
   startedAt: Date;
 }
 
+/** The same clock under its policy-neutral name (INV-1127). */
+export type SlaClock = BugSla;
+export type SlaClockStatus = BugSlaStatus;
+
 const STOPPED: ReadonlySet<WorkflowStateType> = new Set(['REVIEW', 'COMPLETED', 'CANCELED']);
 const CLOSED: ReadonlySet<WorkflowStateType> = new Set(['COMPLETED', 'CANCELED']);
 
@@ -55,20 +59,21 @@ function pausedWithin(start: number, end: number, pauses: SlaPause[], now: numbe
 }
 
 /**
- * A committed bug's SLA (INV-750). The clock starts at commitment, runs while
- * the bug is open and not in Review, stops in Review and when closed, and
- * resumes if it is reopened. It also stops while a needinfo to the bug's
- * reporter is open (INV-1119) and resumes when it is answered or withdrawn.
- * Pure: computed from the audit timeline and the reporter waits.
+ * An SLA clock (INV-750, generalised by INV-1127). It starts at commitment,
+ * runs while the work is open and not in Review, stops in Review and when
+ * closed, and resumes if it is reopened. It also stops while a needinfo to the
+ * work's reporter is open (INV-1119) and resumes when it is answered or
+ * withdrawn. Only the budget differs between policies (bug SLA, incident
+ * follow-up deadline). Pure: computed from the audit timeline and the waits.
  */
-export function computeBugSla(
+export function computeSlaClock(
   timeline: Pick<WorkTimelineEntry, 'committedAt' | 'transitions'>,
-  input: { priority: number; stateType: WorkflowStateType; createdAt: Date },
+  input: { budgetMs: number; stateType: WorkflowStateType; createdAt: Date },
   now: Date,
   pauses: SlaPause[] = [],
 ): BugSla {
   const startedAt = timeline.committedAt ?? input.createdAt;
-  const budgetMs = slaBudgetMs(input.priority);
+  const { budgetMs } = input;
   const spells = timeline.transitions
     .filter((transition) => transition.at.getTime() >= startedAt.getTime())
     .map((transition) => ({ at: transition.at.getTime(), type: transition.stateType }));
@@ -99,6 +104,26 @@ export function computeBugSla(
     dueAt: running ? new Date(now.getTime() + remainingMs) : null,
     startedAt,
   };
+}
+
+/** A committed bug's SLA (INV-750): the SLA clock with the bug budget by priority. */
+export function computeBugSla(
+  timeline: Pick<WorkTimelineEntry, 'committedAt' | 'transitions'>,
+  input: { priority: number; stateType: WorkflowStateType; createdAt: Date },
+  now: Date,
+  pauses: SlaPause[] = [],
+): BugSla {
+  return computeSlaClock(timeline, { budgetMs: slaBudgetMs(input.priority), stateType: input.stateType, createdAt: input.createdAt }, now, pauses);
+}
+
+/**
+ * Which reminders a sweep owes for a clock: none, at risk, or (breached) both —
+ * only the most severe one is sent, the milder one is recorded as done.
+ */
+export function owedSlaAlerts(status: BugSlaStatus): ReadonlyArray<'AT_RISK' | 'BREACHED'> {
+  if (status === 'BREACHED') return ['AT_RISK', 'BREACHED'];
+  if (status === 'AT_RISK') return ['AT_RISK'];
+  return [];
 }
 
 const BUG_WHERE = { labels: { some: { name: { equals: BUG_LABEL_NAME, mode: 'insensitive' as const } } } };
@@ -143,7 +168,7 @@ export async function sweepBugSlas(prisma: PrismaClient, now = new Date()): Prom
   const slas = await loadBugSlas(prisma, open.map((issue) => issue.id), now);
   let sent = 0;
   for (const [workId, sla] of slas) {
-    const kinds = sla.status === 'BREACHED' ? (['AT_RISK', 'BREACHED'] as const) : sla.status === 'AT_RISK' ? (['AT_RISK'] as const) : [];
+    const kinds = owedSlaAlerts(sla.status);
     // Only the most severe reminder is sent now; the milder one is recorded as done.
     for (const kind of kinds) {
       const sendThis = kind === kinds.at(-1);

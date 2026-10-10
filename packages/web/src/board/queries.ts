@@ -68,6 +68,7 @@ export const BOARD_PAGE_QUERY = gql`
         priority
         severity
         reproducibility
+        foundInSha
         kind
         repository
         claim {
@@ -117,6 +118,12 @@ export const BOARD_PAGE_QUERY = gql`
           title
         }
         bugSla {
+          status
+          remainingMs
+          dueAt
+          budgetHours
+        }
+        followUpDeadline {
           status
           remainingMs
           dueAt
@@ -188,6 +195,7 @@ export const ISSUE_UPDATE_MUTATION = gql`
         mitigatedAt
         resolvedAt
         reproducibility
+        foundInSha
         kind
         repository
         commitmentStatus
@@ -310,6 +318,7 @@ export const ISSUE_UNDELETE_MUTATION = gql`
         priority
         severity
         reproducibility
+        foundInSha
         kind
         repository
         commitmentStatus
@@ -524,6 +533,7 @@ export const ISSUE_PAGE_QUERY = gql`
       mitigatedAt
       resolvedAt
       reproducibility
+      foundInSha
       kind
       repository
       claim {
@@ -566,6 +576,17 @@ export const ISSUE_PAGE_QUERY = gql`
         remainingMs
         dueAt
         budgetHours
+      }
+      followUpDeadline {
+        status
+        remainingMs
+        dueAt
+        budgetHours
+        incidents {
+          id
+          identifier
+          title
+        }
       }
       createdAt
       updatedAt
@@ -916,6 +937,7 @@ export const BUG_REPORT_MUTATION = gql`
         priority
         severity
         reproducibility
+        foundInSha
         repository
         commitmentStatus
       }
@@ -1018,6 +1040,12 @@ export const BUGS_PAGE_QUERY = gql`
           count
         }
         unplacedOpenCount
+        closedEverCount
+        reopenedCount
+        reopenRate
+        autoAcceptedCount
+        reopenedAfterAutoAcceptCount
+        reopenedAfterAutoAcceptRate
       }
     }
     # Each bug's team states, for changing status in place (INV-1133).
@@ -2024,6 +2052,46 @@ export const ISSUE_TIMELINE_UNSTAR_MUTATION = gql`
       message
       entryKey
       starred
+    }
+  }
+`;
+
+// INV-1121: the running build; Report bug defaults a bug's found-in SHA to it.
+export const SERVER_BUILD_QUERY = gql`
+  query ServerBuild {
+    serverBuild {
+      buildSha
+      serverVersion
+    }
+  }
+`;
+
+// INV-1121: bugs whose GitHub-reported fix lies between two deploy SHAs.
+export const BUGS_FIXED_BETWEEN_QUERY = gql`
+  query BugsFixedBetween($repository: String!, $fromSha: String!, $toSha: String!) {
+    bugsFixedBetween(repository: $repository, fromSha: $fromSha, toSha: $toSha) {
+      known
+      failureCode
+      message
+      repository
+      fromSha
+      toSha
+      compareStatus
+      commitCount
+      bugs {
+        fixSha
+        prNumber
+        source
+        issue {
+          id
+          identifier
+          title
+          state {
+            name
+            type
+          }
+        }
+      }
     }
   }
 `;

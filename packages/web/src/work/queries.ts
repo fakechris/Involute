@@ -636,6 +636,13 @@ export const WORK_HYGIENE_QUERY = gql`
         title
         repository
       }
+      overdueFollowUpCount
+      overdueFollowUps {
+        id
+        identifier
+        title
+        repository
+      }
       incidentsWithoutDownstreamCount
       incidentsWithoutDownstream {
         id

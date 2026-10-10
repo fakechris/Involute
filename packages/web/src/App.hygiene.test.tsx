@@ -28,6 +28,8 @@ const hygieneData: WorkHygieneQueryData = {
     incidentsWithoutDownstream: [{ ...ref(1130, 'Board blank for everyone'), severity: 'SEV3' }],
     incidentsWithoutPostmortemCount: 1,
     incidentsWithoutPostmortem: [{ ...ref(1131, 'Sync stalled'), severity: 'SEV1' }],
+    overdueFollowUpCount: 1,
+    overdueFollowUps: [{ ...ref(1132, 'Guard docker prune'), repository: 'fakechris/Involute' }],
   },
 };
 
@@ -43,6 +45,8 @@ describe('work graph health page (INV-721)', () => {
     expect(within(screen.getByRole('region', { name: 'Research with nothing derived' })).getByText('INV-694')).toBeInTheDocument();
     expect(summary).toHaveTextContent('1Research ready to close');
     expect(within(screen.getByRole('region', { name: 'Research ready to close' })).getByText('INV-940')).toBeInTheDocument();
+    expect(summary).toHaveTextContent('1Overdue incident follow-ups');
+    expect(within(screen.getByRole('region', { name: 'Overdue incident follow-ups' })).getByText('INV-1132')).toBeInTheDocument();
   });
 
   it('lists incidents missing follow-ups or a postmortem (INV-1126)', async () => {

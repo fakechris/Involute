@@ -171,6 +171,8 @@ import { deleteWorkLink, listIncidentLinks } from './link-service.js';
 import { writeActorFromViewer } from './work-service.js';
 import { findWorkTombstone, isTombstoneExpired, restoreDeletedIssue, TOMBSTONE_EXPIRED_MESSAGE, TOMBSTONE_NOT_FOUND_MESSAGE } from './work-tombstone.js';
 import { BUG_GATE_SOURCE } from './bug-auto-accept.js';
+import { bugsFixedBetween } from './bugs-fixed-between.js';
+import { serverBuild } from './protocol-info.js';
 import { getUploadsDirectory } from './uploads.js';
 import { loadProjectWorkGraph, type ProjectWorkGraph } from './work-graph-view.js';
 import { loadWorkTimelines } from './work-timeline.js';
@@ -179,6 +181,7 @@ import { loadWorkHygiene } from './work-hygiene.js';
 import { type AttentionItem, type AttentionKind, loadAttention, pageAttention, summarizeAttention } from './attention-service.js';
 import { BUG_LABEL_NAME, findSimilarBugs, reportBug, type BugReportInput } from './bug-report.js';
 import { loadBugSlas } from './bug-sla.js';
+import { FOLLOW_UP_LINK_WHERE, loadFollowUpDeadlines } from './follow-up-deadline.js';
 import { loadReviewWaits } from './review-wait.js';
 import { snapshotContract } from './evidence-contract.js';
 import { loadBugMetrics, type BugMetrics } from './bug-metrics.js';
@@ -235,6 +238,8 @@ type IssueParent = Issue & {
   cycle?: Cycle | null;
   /** Present only when the list read batched `openBlockers`; each link carries its blocker. */
   incomingLinks?: Array<WorkLink & { from?: Issue | null }> | null;
+  /** Present only when the list read batched `followUpDeadline`: its DERIVED_FROM links to incidents. */
+  outgoingLinks?: Array<Pick<WorkLink, 'toId'>> | null;
 };
 type WorkLinkParent = WorkLink & { from?: Issue | null; to?: Issue | null };
 type WorkClaimParent = WorkClaim & { actor?: User | null };
@@ -296,6 +301,8 @@ function buildIssueListInclude(
     includeComments?: boolean;
     /** Readable-team filter for the blockers; set to batch `openBlockers` into the list read. */
     openBlockers?: { readableWhere: Prisma.IssueWhereInput | undefined };
+    /** Batch the follow-up links so non-follow-ups resolve `followUpDeadline` without a query. */
+    followUpLinks?: boolean;
   } = {},
 ): Prisma.IssueInclude {
   const include: Prisma.IssueInclude = {
@@ -322,6 +329,10 @@ function buildIssueListInclude(
 
   if (options.openBlockers) {
     include.incomingLinks = buildOpenBlockerLinkQuery(options.openBlockers.readableWhere);
+  }
+
+  if (options.followUpLinks) {
+    include.outgoingLinks = { where: FOLLOW_UP_LINK_WHERE, select: { toId: true } };
   }
 
   if (options.includeComments) {
@@ -455,6 +466,15 @@ const typeDefs = /* GraphQL */ `
     bugSummary(teamFilter: TeamFilter): BugSummaryResult!
     "Open bugs whose titles share words with the given title, best match first (INV-749)."
     similarBugs(teamId: String!, title: String!, first: Int): [Issue!]!
+    """
+    Bugs fixed between two deploys (INV-1121): GitHub's compare of fromSha...toSha
+    (7–40 hex) in the repository, and the readable bugs whose fix — a merge GitHub
+    reported, never an agent's claim — lies in that range, in deploy order.
+    known is false, with the reason, when the range cannot be listed.
+    """
+    bugsFixedBetween(repository: String!, fromSha: String!, toSha: String!): BugsFixedBetween!
+    "The build this server runs (INV-1121): the web app defaults a bug's found-in SHA to it. Null fields are unknown."
+    serverBuild: ServerBuild!
     """
     Free-text search over work items (INV-925): identifier, title, description,
     contract fields and comments, best match first. Every word must be found
@@ -661,6 +681,29 @@ const typeDefs = /* GraphQL */ `
     MET
   }
 
+  "The bug SLA clock's statuses plus DECLINED: canceled (e.g. resolution WONT_DO), never overdue (INV-1127)."
+  enum FollowUpDeadlineStatus {
+    ON_TRACK
+    AT_RISK
+    BREACHED
+    PAUSED
+    MET
+    DECLINED
+  }
+
+  "Deadline of an incident follow-up (INV-1127): the bug SLA clock with budget by priority (default Urgent 7d, High 14d, else 30d; FOLLOW_UP_DEADLINE_DAYS)."
+  type FollowUpDeadline {
+    status: FollowUpDeadlineStatus!
+    budgetHours: Int!
+    elapsedMs: Float!
+    remainingMs: Float!
+    "When it runs out if nothing changes; null while paused, closed or declined."
+    dueAt: String
+    startedAt: String!
+    "The incidents it was derived from, oldest first."
+    incidents: [Issue!]!
+  }
+
   type WorkRestorePayload {
     success: Boolean!
     "Why the restore was refused; null on success."
@@ -806,6 +849,44 @@ const typeDefs = /* GraphQL */ `
     issueCount: Int!
   }
 
+  type ServerBuild {
+    "Full source SHA of the build (INVOLUTE_BUILD_SHA); null when the image was built without it."
+    buildSha: String
+    serverVersion: String!
+  }
+
+  "Where a bug's fix SHA came from (INV-1121): always something GitHub reported."
+  enum BugFixSource {
+    "A signed pull_request.merged webhook or the sync engine: the merge commit."
+    MERGE_EVENT
+    "Evidence the verifier saw merged: the PR head."
+    VERIFIED_EVIDENCE
+    "The bug gate's GitHub check (INV-1075)."
+    BUG_GATE
+  }
+
+  type FixedBug {
+    issue: Issue!
+    "The fix commit inside the range (full SHA)."
+    fixSha: String!
+    prNumber: Int
+    source: BugFixSource!
+  }
+
+  type BugsFixedBetween {
+    "False when GitHub could not list the range (unknown SHA, reversed, too long, not configured, unavailable); bugs is then empty and means nothing."
+    known: Boolean!
+    failureCode: String
+    message: String
+    repository: String!
+    fromSha: String!
+    toSha: String!
+    "GitHub's compare status: ahead, identical or diverged."
+    compareStatus: String
+    commitCount: Int
+    bugs: [FixedBug!]!
+  }
+
   type ServerFeature {
     key: String!
     label: String!
@@ -949,6 +1030,8 @@ const typeDefs = /* GraphQL */ `
     DISCOVERED_DURING
     RELATED_TO
     DUPLICATE_OF
+    "A REGRESSED_BY B: B introduced the regression A reports or fixes (INV-1120)."
+    REGRESSED_BY
   }
 
   type Comment {
@@ -1075,6 +1158,8 @@ const typeDefs = /* GraphQL */ `
     severity: IssueSeverity
     "How often the bug reproduces; null when unknown (INV-1122)."
     reproducibility: BugReproducibility
+    "The deploy (build SHA, 7–40 hex) the bug was found in; null when not recorded (INV-1121). The fix SHA is derived from merge evidence, see bugsFixedBetween."
+    foundInSha: String
     createdAt: DateTime!
     updatedAt: DateTime!
     state: WorkflowState!
@@ -1102,6 +1187,8 @@ const typeDefs = /* GraphQL */ `
     autoAcceptBugs: Boolean!
     "Why a rejected candidate or canceled work was closed; null while open (INV-1118)."
     resolution: WorkResolution
+    "Times it moved from Done or Canceled back to an open state (INV-1120)."
+    reopenCount: Int!
     "Type: Incident (INV-1125): when the impact began; never after the other timestamps."
     impactStartedAt: DateTime
     "Type: Incident: when it was noticed; defaults to the declaration time."
@@ -1132,6 +1219,8 @@ const typeDefs = /* GraphQL */ `
     dependencyHints: [String!]!
     "SLA for committed Type: Bug work; null otherwise (INV-750)."
     bugSla: BugSla
+    "Deadline for a committed ISSUE derived (DERIVED_FROM) from a Type: Incident; null otherwise (INV-1127)."
+    followUpDeadline: FollowUpDeadline
     "How long committed work has waited in Review; null outside Review (INV-1002). overdue is true for a bug past REVIEW_OVERDUE_MS (default 3 days)."
     reviewWait: ReviewWait
     "Files attached to this work, newest first (INV-1003): research reports and other private material that never enters git or an image."
@@ -1412,6 +1501,9 @@ const typeDefs = /* GraphQL */ `
     "SEV1/SEV2 incidents in Review or Done with no attachment: the postmortem is missing (INV-1126)."
     incidentsWithoutPostmortemCount: Int!
     incidentsWithoutPostmortem: [Issue!]!
+    "Open incident follow-ups past their deadline, most overdue first (INV-1127). Declined ones never count."
+    overdueFollowUpCount: Int!
+    overdueFollowUps: [Issue!]!
   }
 
   type WorkReferencePair {
@@ -1987,6 +2079,8 @@ const typeDefs = /* GraphQL */ `
     severity: IssueSeverity
     "Optional: how often it reproduces (INV-1122). SOMETIMES / ONCE keep the fix out of auto-accept."
     reproducibility: BugReproducibility
+    "Optional deploy SHA (7–40 hex) it was found in (INV-1121); the web app defaults it to the running build (serverBuild.buildSha)."
+    foundInSha: String
     "Where it belongs (id or identifier: its PROJECT for No milestone, a MILESTONE, EPIC or ISSUE). Omit when unsure: the report goes to triage as a candidate."
     parentId: String
     repository: String
@@ -2071,6 +2165,18 @@ const typeDefs = /* GraphQL */ `
     byResolution: [BugResolutionCount!]!
     "Committed open bugs no parent contains; the goal is zero."
     unplacedOpenCount: Int!
+    "Bugs ever closed (closed now or reopened since) (INV-1120)."
+    closedEverCount: Int!
+    "Of those, bugs moved from Done or Canceled back to an open state at least once."
+    reopenedCount: Int!
+    "reopenedCount / closedEverCount; null before any bug was closed."
+    reopenRate: Float
+    "Bugs the Auto-Accept Gate accepted at least once (INV-1075)."
+    autoAcceptedCount: Int!
+    "Of those, bugs reopened after the gate accepted them."
+    reopenedAfterAutoAcceptCount: Int!
+    "reopenedAfterAutoAcceptCount / autoAcceptedCount; null before any auto-acceptance."
+    reopenedAfterAutoAcceptRate: Float
   }
 
   type BugBreach {
@@ -2138,6 +2244,8 @@ const typeDefs = /* GraphQL */ `
     resolvedAt: DateTime
     "ALWAYS / SOMETIMES / ONCE; null clears it. SOMETIMES / ONCE keep a bug out of auto-accept (INV-1122)."
     reproducibility: BugReproducibility
+    "Deploy SHA (7–40 hex) a bug was found in; null clears it (INV-1121)."
+    foundInSha: String
     projectId: String
     cycleId: String
     snoozedUntil: DateTime
@@ -2391,6 +2499,8 @@ const typeDefs = /* GraphQL */ `
     resolvedAt: DateTime
     """How often a bug reproduces: ALWAYS / SOMETIMES / ONCE (INV-1122)."""
     reproducibility: BugReproducibility
+    """Deploy SHA (7–40 hex) a bug was found in (INV-1121)."""
+    foundInSha: String
     """Existing work this proposal is blocked by (each X BLOCKS the new item)."""
     blockedBy: [String!]
     """Existing work this proposal blocks."""
@@ -2704,6 +2814,14 @@ const resolvers = {
     executorContextJson: async (_parent: unknown, args: { id: string }, context: GraphQLContext) => JSON.stringify(await executorContext(context, args.id)),
     deliveryContext: (_parent: unknown, args: { id: string }, context: GraphQLContext) => deliveryContext(context, args.id),
     deliveryChanges: (_parent: unknown, args: { first?: number; after?: string; repository?: string; noRepository?: boolean; teamKey?: string; bugsOnly?: boolean; workId?: string }, context: GraphQLContext) => pendingDeliveryChanges(context, args),
+    serverBuild: (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      requireAuthentication(context);
+      return serverBuild();
+    },
+    bugsFixedBetween: async (_parent: unknown, args: { repository: string; fromSha: string; toSha: string }, context: GraphQLContext) => {
+      requireAuthentication(context);
+      return bugsFixedBetween(context.prisma, args, buildReadableIssueWhere(context));
+    },
     serverFeatures: (_parent: unknown, _args: unknown, context: GraphQLContext): ServerFeature[] => {
       assertSettingsAdmin(context);
       return listServerFeatures();
@@ -2789,6 +2907,7 @@ const resolvers = {
           ...(requestedIssueFields.has('openBlockers')
             ? { openBlockers: { readableWhere: buildReadableIssueWhere(context) } }
             : {}),
+          followUpLinks: requestedIssueFields.has('followUpDeadline'),
         }),
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: first + 1,
@@ -5399,6 +5518,24 @@ const resolvers = {
     },
     attachments: (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) =>
       context.prisma.attachment.findMany({ where: { issueId: parent.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] }),
+    followUpDeadline: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
+      if (parent.commitmentStatus !== 'COMMITTED' || parent.kind !== 'ISSUE') return null;
+      // Batched by list reads: no link to an incident, no query.
+      if (parent.outgoingLinks && parent.outgoingLinks.length === 0) return null;
+      const deadline = (await loadFollowUpDeadlines(context.prisma, [parent.id])).get(parent.id);
+      if (!deadline) return null;
+      const incidents = await context.prisma.issue.findMany({ where: { id: { in: deadline.incidentIds }, ...buildReadableIssueWhere(context) } });
+      const order = new Map(deadline.incidentIds.map((id, index) => [id, index]));
+      return {
+        status: deadline.status,
+        budgetHours: Math.round(deadline.budgetMs / 3_600_000),
+        elapsedMs: deadline.elapsedMs,
+        remainingMs: deadline.remainingMs,
+        dueAt: deadline.dueAt?.toISOString() ?? null,
+        startedAt: deadline.startedAt.toISOString(),
+        incidents: incidents.sort((a, b) => order.get(a.id)! - order.get(b.id)!),
+      };
+    },
     bugSla: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
       if (parent.commitmentStatus !== 'COMMITTED') return null;
       // Labels are usually loaded with the issue: skip non-bugs without a query.

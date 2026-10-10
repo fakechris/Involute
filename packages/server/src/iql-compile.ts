@@ -40,7 +40,16 @@ const LINK_TYPE_ALIASES: Record<string, WorkLinkType> = {
   discovered_during: 'DISCOVERED_DURING',
   related_to: 'RELATED_TO',
   duplicate_of: 'DUPLICATE_OF',
+  regressed_by: 'REGRESSED_BY',
 };
+
+/**
+ * Aliases read from the matched item's side (INV-1120): `link:regressed_by:INV-5`
+ * is work that INV-5 regressed (an outgoing REGRESSED_BY to INV-5), and
+ * `link:regressed_by:none` is work with no regression source recorded. The
+ * other aliases match the item's incoming links, as `blocked-by` reads.
+ */
+const OUTGOING_LINK_ALIASES: ReadonlySet<string> = new Set(['regressed_by']);
 
 export interface IqlCompileContext {
   /** Resolves `assignee:me`; null turns the term into a no-match filter. */
@@ -244,6 +253,11 @@ function compileTerm(term: IqlTerm, context: IqlCompileContext): Prisma.IssueWhe
       const linkType = LINK_TYPE_ALIASES[rawType.toLowerCase()];
       if (!linkType) {
         throw iqlParseGraphQLError(`unknown link type "${rawType}".`);
+      }
+      if (OUTGOING_LINK_ALIASES.has(rawType.toLowerCase())) {
+        return clauseFor(target.toLowerCase() === 'none'
+          ? { outgoingLinks: { none: { type: linkType } } }
+          : { outgoingLinks: { some: { type: linkType, to: { identifier: { equals: target } } } } });
       }
       if (target.toLowerCase() === 'none') {
         return clauseFor({

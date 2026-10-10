@@ -56,6 +56,7 @@ export function HygienePage() {
                 ['Research without an attachment', hygiene.researchWithoutAttachmentCount],
                 ['Incidents without follow-ups', hygiene.incidentsWithoutDownstreamCount],
                 ['Incidents without a postmortem', hygiene.incidentsWithoutPostmortemCount],
+                ['Overdue incident follow-ups', hygiene.overdueFollowUpCount],
               ].map(([label, count]) => (
                 <div key={label as string} className={`hygiene-stat${count ? ' hygiene-stat--open' : ''}`}>
                   <span className="hygiene-stat__count">{count}</span>
@@ -137,6 +138,16 @@ export function HygienePage() {
               <p className="observation-hint">Finished research keeps its report as a file on the item, so others can check it: attach it from the item's Files (agents: work_attach_file). It leaves this list once a file is attached.</p>
               <ul className="hygiene-list">
                 {hygiene.researchWithoutAttachment.map((item) => (
+                  <li key={item.id}>{itemButton(item)}</li>
+                ))}
+              </ul>
+            </section>
+
+            <section aria-label="Overdue incident follow-ups">
+              <h2>Overdue incident follow-ups · {hygiene.overdueFollowUpCount}</h2>
+              <p className="observation-hint">Committed work derived from an incident, past its deadline (Urgent 7 days, High 14, otherwise 30 from commitment; paused in Review). Finish it, or decline it with a reason.</p>
+              <ul className="hygiene-list">
+                {hygiene.overdueFollowUps.map((item) => (
                   <li key={item.id}>{itemButton(item)}</li>
                 ))}
               </ul>
