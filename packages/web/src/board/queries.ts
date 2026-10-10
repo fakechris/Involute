@@ -68,6 +68,7 @@ export const BOARD_PAGE_QUERY = gql`
         priority
         severity
         reproducibility
+        foundInSha
         kind
         repository
         claim {
@@ -184,6 +185,7 @@ export const ISSUE_UPDATE_MUTATION = gql`
         priority
         severity
         reproducibility
+        foundInSha
         kind
         repository
         commitmentStatus
@@ -306,6 +308,7 @@ export const ISSUE_UNDELETE_MUTATION = gql`
         priority
         severity
         reproducibility
+        foundInSha
         kind
         repository
         commitmentStatus
@@ -516,6 +519,7 @@ export const ISSUE_PAGE_QUERY = gql`
       priority
       severity
       reproducibility
+      foundInSha
       kind
       repository
       claim {
@@ -908,6 +912,7 @@ export const BUG_REPORT_MUTATION = gql`
         priority
         severity
         reproducibility
+        foundInSha
         repository
         commitmentStatus
       }
@@ -2016,6 +2021,46 @@ export const ISSUE_TIMELINE_UNSTAR_MUTATION = gql`
       message
       entryKey
       starred
+    }
+  }
+`;
+
+// INV-1121: the running build; Report bug defaults a bug's found-in SHA to it.
+export const SERVER_BUILD_QUERY = gql`
+  query ServerBuild {
+    serverBuild {
+      buildSha
+      serverVersion
+    }
+  }
+`;
+
+// INV-1121: bugs whose GitHub-reported fix lies between two deploy SHAs.
+export const BUGS_FIXED_BETWEEN_QUERY = gql`
+  query BugsFixedBetween($repository: String!, $fromSha: String!, $toSha: String!) {
+    bugsFixedBetween(repository: $repository, fromSha: $fromSha, toSha: $toSha) {
+      known
+      failureCode
+      message
+      repository
+      fromSha
+      toSha
+      compareStatus
+      commitCount
+      bugs {
+        fixSha
+        prNumber
+        source
+        issue {
+          id
+          identifier
+          title
+          state {
+            name
+            type
+          }
+        }
+      }
     }
   }
 `;

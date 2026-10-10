@@ -60,6 +60,7 @@ import {
 import { resolveAttentionNotifications } from './notification-service.js';
 import { parseSeverity } from './severity.js';
 import { parseReproducibility } from './reproducibility.js';
+import { parseFoundInSha } from './found-in.js';
 
 export interface CreateIssueInput {
   acceptance?: string | null;
@@ -80,6 +81,8 @@ export interface CreateIssueInput {
   severity?: IssueSeverity | null;
   /** How often a bug reproduces (INV-1122). */
   reproducibility?: BugReproducibility | null;
+  /** Deploy SHA a bug was found in (INV-1121). */
+  foundInSha?: string | null;
   source?: string | null;
   stateId?: string | null;
   teamId: string;
@@ -113,6 +116,8 @@ export interface UpdateIssueInput {
   severity?: IssueSeverity | string | null;
   /** ALWAYS / SOMETIMES / ONCE; null clears it. SOMETIMES / ONCE keep a bug out of auto-accept (INV-1122). */
   reproducibility?: BugReproducibility | string | null;
+  /** Deploy SHA (7–40 hex) a bug was found in; null clears it (INV-1121). */
+  foundInSha?: string | null;
   snoozedUntil?: Date | null;
   stateId?: string | null;
   title?: string | null;
@@ -228,6 +233,7 @@ export async function createIssueWithAudit(
         priority: input.priority ?? 0,
         severity: parseSeverity(input.severity) ?? null,
         reproducibility: parseReproducibility(input.reproducibility) ?? null,
+        foundInSha: parseFoundInSha(input.foundInSha) ?? null,
         projectId: input.projectId ?? null,
         repository: input.repository ?? null,
         scope: input.scope ?? null,
@@ -452,6 +458,11 @@ export async function updateIssue(
     const reproducibility = parseReproducibility(input.reproducibility);
     if (reproducibility !== undefined) {
       data.reproducibility = reproducibility;
+    }
+
+    const foundInSha = parseFoundInSha(input.foundInSha);
+    if (foundInSha !== undefined) {
+      data.foundInSha = foundInSha;
     }
 
     // Snooze is candidate-pool governance: committed work has a human owner

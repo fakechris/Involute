@@ -65,6 +65,8 @@ export const QUERY_EXEMPTIONS: Record<string, { reason: string; decision: string
   candidateSummary: { reason: 'Board-level counts for people deciding candidates.', decision: 'INV-79' },
   projectSummary: { reason: 'Portfolio summary for people.', decision: 'INV-79' },
   bugSummary: { reason: 'The /bugs statistics page for triage.', decision: 'INV-750' },
+  bugsFixedBetween: { reason: 'The deploy-range changelog on /bugs for people; agents read each bug\'s merge evidence with work_get_context.', decision: 'INV-1121' },
+  serverBuild: { reason: 'The running build for the web shell (Report bug found-in default); agents read protocol.buildSha from protocol_get_guide.', decision: 'INV-1121' },
   similarBugs: { reason: 'Live suggestions while a person types a bug title; work_file_bug returns possible_duplicates on filing.', decision: 'INV-1000' },
   traceabilityAudit: { reason: 'Post-merge audit for operators.', decision: 'INV-449' },
   agentProfile: { reason: 'The agent directory page; agents identify each other through work_catalog(actors).', decision: 'INV-795' },

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@apollo/client/react';
 
 import { readStoredTeamKey } from '../board/utils';
@@ -16,6 +16,7 @@ export interface StructureUpdate {
   priority?: number;
   severity?: IssueSeverity | null;
   reproducibility?: BugReproducibility | null;
+  foundInSha?: string | null;
   kind?: WorkKind;
 }
 
@@ -25,6 +26,7 @@ interface StructuredWork {
   priority: number;
   severity?: IssueSeverity | null;
   reproducibility?: BugReproducibility | null;
+  foundInSha?: string | null;
   labels?: { nodes: Array<{ name: string }> } | null;
   repository?: string | null;
   parent?: { id: string; identifier: string; title: string; kind?: WorkKind | null } | null;
@@ -37,6 +39,8 @@ const PRIORITIES = [
   { value: 3, label: 'Medium' },
   { value: 4, label: 'Low' },
 ];
+
+const FOUND_IN_SHA = /^(sha-)?[0-9a-f]{7,40}$/i;
 
 const KINDS: Array<{ value: WorkKind; label: string }> = [
   { value: 'ISSUE', label: 'Issue' },
@@ -58,7 +62,7 @@ export function currentPlacement(work: StructuredWork): CreatePlacement | null {
  * Structure of committed work a person can change (INV-791): where it sits
  * (project, then No milestone / milestone / epic), its priority, its severity
  * (impact, apart from priority — INV-1115), for a bug how often it reproduces
- * (INV-1122) and its kind.
+ * (INV-1122) and the deploy SHA it was found in (INV-1121), and its kind.
  * Refusals — an illegal parent, a kind the hierarchy does not allow — come back
  * from the server with the reason, shown by the caller.
  */
@@ -79,7 +83,18 @@ export function WorkStructureEditor({
   const value = useMemo(() => currentPlacement(work), [work]);
   const kind = work.kind ?? 'ISSUE';
   // A bug, or anything already marked: how often it reproduces (INV-1122).
-  const showReproducibility = Boolean(work.reproducibility) || (work.labels?.nodes ?? []).some((label) => label.name.trim().toLowerCase() === 'bug');
+  const isBug = (work.labels?.nodes ?? []).some((label) => label.name.trim().toLowerCase() === 'bug');
+  const showReproducibility = Boolean(work.reproducibility) || isBug;
+  // INV-1121: the deploy it was found in, saved when the field is left.
+  const showFoundIn = Boolean(work.foundInSha) || isBug;
+  const [foundIn, setFoundIn] = useState(work.foundInSha ?? '');
+  useEffect(() => setFoundIn(work.foundInSha ?? ''), [work.foundInSha]);
+  const foundInValid = !foundIn.trim() || FOUND_IN_SHA.test(foundIn.trim());
+  function saveFoundIn() {
+    const next = foundIn.trim();
+    if (!foundInValid || next === (work.foundInSha ?? '')) return;
+    onUpdate({ foundInSha: next || null });
+  }
 
   return (
     <div className="work-structure">
@@ -149,6 +164,24 @@ export function WorkStructureEditor({
               </option>
             ))}
           </select>
+        </label>
+      ) : null}
+      {kind !== 'PROJECT' && showFoundIn ? (
+        <label className="field-stack">
+          <span>Found in</span>
+          <input
+            aria-label="Found in deploy SHA"
+            title="The deploy (commit SHA) the bug was seen on. Saved when you leave the field; empty clears it."
+            value={foundIn}
+            placeholder="Deploy SHA"
+            spellCheck={false}
+            disabled={disabled}
+            aria-invalid={!foundInValid}
+            onChange={(event) => setFoundIn(event.target.value)}
+            onBlur={saveFoundIn}
+            onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); saveFoundIn(); } }}
+          />
+          {!foundInValid ? <span className="observation-error" role="alert">A commit SHA: 7 to 40 hex characters.</span> : null}
         </label>
       ) : null}
       {kind !== 'PROJECT' ? (

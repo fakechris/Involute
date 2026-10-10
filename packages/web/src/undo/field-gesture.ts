@@ -41,6 +41,7 @@ export function beforePatch(issue: IssueSummary, after: IssueFieldPatch): IssueF
       case 'priority': before.priority = issue.priority; break;
       case 'severity': before.severity = issue.severity ?? null; break;
       case 'reproducibility': before.reproducibility = issue.reproducibility ?? null; break;
+      case 'foundInSha': before.foundInSha = issue.foundInSha ?? null; break;
       case 'assigneeId': before.assigneeId = issue.assignee?.id ?? null; break;
       case 'labelIds': before.labelIds = issue.labels.nodes.map((label) => label.id); break;
       case 'title': before.title = issue.title; break;
@@ -66,6 +67,7 @@ function describe(patch: IssueFieldPatch, names: FieldNames): string {
       case 'priority': parts.push(`priority set to ${PRIORITY_NAMES[Number(value)] ?? String(value)}`); break;
       case 'severity': parts.push(value ? `severity set to ${String(value)}` : 'severity cleared'); break;
       case 'reproducibility': parts.push(value ? `reproducibility set to ${String(value).toLowerCase()}` : 'reproducibility cleared'); break;
+      case 'foundInSha': parts.push(value ? `found in ${String(value).slice(0, 12)}` : 'found-in cleared'); break;
       case 'assigneeId': parts.push(value ? `assigned to ${names.userName?.(String(value)) ?? 'someone'}` : 'unassigned'); break;
       case 'labelIds': {
         const labels = names.labelNames?.(value as string[]) ?? [];

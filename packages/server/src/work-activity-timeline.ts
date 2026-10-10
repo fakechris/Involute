@@ -101,6 +101,7 @@ const REPORTED_FIELDS = [
   'priority',
   'severity',
   'reproducibility',
+  'foundInSha',
   'parentId',
   'title',
   'kind',
@@ -121,6 +122,7 @@ const FIELD_LABELS: Record<string, string> = {
   parentId: 'parent',
   cycleId: 'cycle',
   supersededById: 'superseded by',
+  foundInSha: 'found in',
 };
 
 type Snapshot = Record<string, unknown>;
@@ -154,6 +156,9 @@ function display(field: string, value: unknown, lookups: Lookups): string | null
       return SEVERITY_NAMES[text] ?? text;
     case 'reproducibility':
       return REPRODUCIBILITY_NAMES[text] ?? text;
+    case 'foundInSha':
+      // INV-1121: a deploy SHA, shown as its image-tag length.
+      return text.slice(0, 12);
     case 'parentId':
     case 'supersededById':
       // Never name work the reader cannot read.
@@ -184,6 +189,9 @@ function changePhrase(change: TimelineChange, rawFrom: unknown, rawTo: unknown):
     case 'reproducibility':
       if (!change.to) return 'Reproducibility cleared';
       return change.from ? `Reproducibility ${change.from} → ${change.to}` : `Reproduces: ${change.to}`;
+    case 'found in':
+      if (!change.to) return 'Found-in cleared';
+      return change.from ? `Found in ${change.from} → ${change.to}` : `Found in ${change.to}`;
     case 'parent':
       return change.to ? `Moved under ${change.to}` : 'Removed from its parent';
     default:

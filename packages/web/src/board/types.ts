@@ -149,6 +149,8 @@ export interface IssueSummary {
   severity?: IssueSeverity | null;
   /** How often the bug reproduces; null when unknown (INV-1122). */
   reproducibility?: BugReproducibility | null;
+  /** The deploy SHA the bug was found in; null when not recorded (INV-1121). */
+  foundInSha?: string | null;
   /** Committed bugs only (INV-750). */
   bugSla?: BugSlaSummary | null;
   createdAt: string;
@@ -273,6 +275,8 @@ export interface BugReportMutationVariables {
     priority: number;
     severity?: IssueSeverity | null;
     reproducibility?: BugReproducibility | null;
+    /** Deploy SHA it was found in; defaults to the running build (INV-1121). */
+    foundInSha?: string | null;
     /** Where it belongs; omitted when unsure, which sends it to triage (INV-749). */
     parentId?: string | null;
     labelIds?: string[];
@@ -544,6 +548,8 @@ export interface IssueUpdateMutationVariables {
     severity?: IssueSeverity | null;
     /** ALWAYS / SOMETIMES / ONCE; null clears it (INV-1122). */
     reproducibility?: BugReproducibility | null;
+    /** Deploy SHA (7–40 hex) it was found in; null clears it (INV-1121). */
+    foundInSha?: string | null;
     stateId?: string;
     title?: string;
     projectId?: string | null;
@@ -980,4 +986,31 @@ export interface TeamTriageRotationMutationData {
 
 export interface TeamTriageRotationMutationVariables {
   input: { teamId: string; userIds: string[]; startsAt?: string | null };
+}
+
+/** The build the server runs (INV-1121); Report bug defaults found-in to it. */
+export interface ServerBuildQueryData {
+  serverBuild: { buildSha: string | null; serverVersion: string };
+}
+
+export interface FixedBugSummary {
+  fixSha: string;
+  prNumber: number | null;
+  source: 'MERGE_EVENT' | 'VERIFIED_EVIDENCE' | 'BUG_GATE';
+  issue: { id: string; identifier: string; title: string; state: { name: string; type: string } };
+}
+
+/** Bugs fixed between two deploy SHAs (INV-1121); known false means the range is unknown. */
+export interface BugsFixedBetweenQueryData {
+  bugsFixedBetween: {
+    known: boolean;
+    failureCode: string | null;
+    message: string | null;
+    repository: string;
+    fromSha: string;
+    toSha: string;
+    compareStatus: string | null;
+    commitCount: number | null;
+    bugs: FixedBugSummary[];
+  };
 }

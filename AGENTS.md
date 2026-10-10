@@ -378,6 +378,8 @@ run 启动时冻结 scope/acceptance/constraints/repository 的内容哈希版�
 
 **唯一例外：项目开启的 bug 自动验收（INV-1075）**。人在 Projects 页为项目打开 Auto-accept verified bug fixes 后，该仓库处于 Review 的 Type: Bug，若 GitHub 自己显示修复已合并（或已在默认分支）且 CI checks 全绿，由系统 actor Auto-Accept Gate 移到 Done；agent 自报的任何内容都不算数，agent 也不能打开这个开关。其余情况仍停在 Review，原因写在 /in-review。复现频率为 SOMETIMES / ONCE（`reproducibility`，INV-1122）的 bug 一律留给人验收：偶发 bug 不能靠 PR 合并 + CI 绿证明已修好。
 
+**发现版本用部署 SHA（INV-1121）**：bug 的 `found_in_sha`（7–40 位 hex）记录在哪个部署上发现，web Report bug 默认填当前构建 SHA，agent 可从 `protocol_get_guide` 的 `protocol.buildSha` 取得后显式传入；不设版本号字段（DECISION INV-1130）。修复 SHA 不存储，只从 GitHub 报告的合并推出；/bugs 的 "Fixed between deploys" 按两个部署 SHA 列出其间修复的 bug，GitHub 无法列出区间时明确显示 unknown。
+
 ## 14. Incident Flow (事故申报，INV-1123)
 
 An incident — something happening, or that happened, that hurt users or the service — is an ISSUE with the Type label `Incident` (`labels: ['incident']`, any casing). It is the fifth Type beside Bug / Feature / Improvement / Research; at most one Type per item, so an item is never both Bug and Incident. Like a bug it is a fact, not a proposal, so it follows the direct-commit rule of decision INV-787 — and it starts investigating at once. Not an incident, just broken? File a bug (§12).
