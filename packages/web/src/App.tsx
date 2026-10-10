@@ -68,6 +68,7 @@ import {
   subscribeStatusUndo,
   undoStatusGesture,
 } from './undo/status-undo';
+import { isQuestionKey, isSlashKey } from './lib/keys';
 
 const BoardPage = lazyRoute(async () => (await import('./routes/BoardPage')).BoardPage);
 const InboxPage = lazyRoute(async () => (await import('./routes/InboxPage')).InboxPage);
@@ -536,7 +537,7 @@ export function App() {
         return;
       }
 
-      if ((event.metaKey || event.ctrlKey) && event.key === '/') {
+      if ((event.metaKey || event.ctrlKey) && isSlashKey(event)) {
         event.preventDefault();
         setIsShortcutsOpen((currentValue) => !currentValue);
         return;
@@ -621,7 +622,7 @@ export function App() {
         return;
       }
 
-      if (event.key === '?' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (isQuestionKey(event) && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
         setIsShortcutsOpen(true);
         return;

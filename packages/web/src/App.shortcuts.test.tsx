@@ -83,6 +83,13 @@ describe('App keyboard shortcuts and help dialog', () => {
     expect(screen.queryByRole('heading', { name: 'Candidates' })).not.toBeInTheDocument();
   });
 
+  it('opens keyboard shortcuts with ？ from a Chinese input method', async () => {
+    renderTestApp();
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { code: 'Slash', key: '？', shiftKey: true });
+    expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
+  });
+
   it('opens keyboard shortcuts dialog via ? key and closes with Escape', async () => {
     renderTestApp();
 
