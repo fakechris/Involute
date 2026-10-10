@@ -43,19 +43,27 @@ export async function recordReopenIfAny(
   return true;
 }
 
-/** Whether the audit that moved the work into the state it is leaving was the Auto-Accept Gate's. */
+/**
+ * Whether the closed spell the work is leaving was entered by the Auto-Accept
+ * Gate. The spell starts at the latest audit that moved the work from an open
+ * state (or from nothing, at creation) into Done / Canceled; later Done ↔
+ * Canceled moves stay inside the spell and do not change who entered it. The
+ * migration backfills historical reopens with the same rule.
+ */
 async function enteredByAutoAcceptGate(
   db: DatabaseClient,
-  input: { workId: string; auditId: string; fromStateId: string },
+  input: { workId: string; auditId: string },
 ): Promise<boolean> {
   const rows = await db.$queryRaw<Array<{ email: string | null }>>(Prisma.sql`
     SELECT u."email"
     FROM "WorkAudit" a
+    JOIN "WorkflowState" after_state ON after_state."id"::text = a."after"->>'stateId'
+    LEFT JOIN "WorkflowState" before_state ON before_state."id"::text = a."before"->>'stateId'
     LEFT JOIN "User" u ON u."id" = a."actorId"
     WHERE a."workId" = ${input.workId}::uuid
       AND a."id" <> ${input.auditId}::uuid
-      AND a."after"->>'stateId' = ${input.fromStateId}
-      AND (a."before" IS NULL OR a."before"->>'stateId' IS DISTINCT FROM ${input.fromStateId})
+      AND after_state."type" IN ('COMPLETED', 'CANCELED')
+      AND (before_state."type" IS NULL OR before_state."type" NOT IN ('COMPLETED', 'CANCELED'))
     ORDER BY a."createdAt" DESC, a."revision" DESC
     LIMIT 1`);
   return rows[0]?.email === AUTO_ACCEPT_ACTOR_EMAIL;

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { PrismaClient, type WorkflowStateType } from '@prisma/client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
@@ -120,6 +121,59 @@ describe('reopen events and counts (INV-1120)', () => {
       reopenedAfterAutoAcceptRate: 1,
     });
     expect(neverClosed.id).toBeDefined();
+  });
+
+  it('credits the gate for the whole closed spell it entered, even after a person moves Done to Canceled', async () => {
+    const s = await setup();
+    const gated = await s.bug('Wrong totals', 'REVIEW');
+    const agent = await prisma.user.create({ data: { name: 'Fixer', email: `fixer-${randomUUID()}@agents.test`, actorKind: 'AGENT', ownerId: s.human.id } });
+    await prisma.workRun.create({ data: { workId: gated.id, publicId: `RUN-${randomUUID()}`, actorId: agent.id, status: 'COMPLETED', repository: repo, commitSha: sha, pullRequestNumber: 7, startedAt: new Date(Date.now() - 60_000) } });
+    expect(await sweepBugAutoAccept(prisma, greenGithub())).toEqual({ accepted: 1, skipped: 0 });
+
+    await s.move(gated.id, 'CANCELED');
+    await s.move(gated.id, 'STARTED');
+    // A spell a person entered afterwards is theirs.
+    await s.move(gated.id, 'COMPLETED');
+    await s.move(gated.id, 'UNSTARTED');
+
+    const reopens = await prisma.workReopen.findMany({ where: { workId: gated.id }, orderBy: { createdAt: 'asc' } });
+    expect(reopens.map((row) => [row.fromStateType, row.afterAutoAccept])).toEqual([
+      ['CANCELED', true],
+      ['COMPLETED', false],
+    ]);
+  });
+
+  it('the migration backfills historical reopens from the audit trail with the same rule', async () => {
+    const s = await setup();
+    const gated = await s.bug('Wrong totals', 'REVIEW');
+    const agent = await prisma.user.create({ data: { name: 'Fixer', email: `fixer-${randomUUID()}@agents.test`, actorKind: 'AGENT', ownerId: s.human.id } });
+    await prisma.workRun.create({ data: { workId: gated.id, publicId: `RUN-${randomUUID()}`, actorId: agent.id, status: 'COMPLETED', repository: repo, commitSha: sha, pullRequestNumber: 7, startedAt: new Date(Date.now() - 60_000) } });
+    await sweepBugAutoAccept(prisma, greenGithub());
+    await s.move(gated.id, 'CANCELED');
+    await s.move(gated.id, 'REVIEW');
+    const manual = await s.bug('Typo');
+    await s.move(manual.id, 'COMPLETED');
+    await s.move(manual.id, 'STARTED');
+    await s.move(manual.id, 'CANCELED');
+    await s.move(manual.id, 'UNSTARTED');
+
+    const snapshot = async () => (await prisma.workReopen.findMany({ orderBy: [{ createdAt: 'asc' }, { auditId: 'asc' }] }))
+      .map((row) => [row.workId, row.auditId, row.fromStateType, row.toStateType, row.afterAutoAccept]);
+    const live = await snapshot();
+    expect(live).toHaveLength(3);
+
+    // Forget the live rows, as before the migration, and replay its backfill.
+    await prisma.workReopen.deleteMany();
+    await prisma.issue.updateMany({ data: { reopenCount: 0 } });
+    const sql = readFileSync(new URL('../prisma/migrations/20261010071120_work_reopen/migration.sql', import.meta.url), 'utf8');
+    const backfill = sql.slice(sql.indexOf('-- Backfill'));
+    for (const statement of backfill.split(/;\s*\n/).map((part) => part.replace(/^\s*--.*$/gm, '').trim()).filter(Boolean)) {
+      await prisma.$executeRawUnsafe(statement);
+    }
+
+    expect(await snapshot()).toEqual(live);
+    expect(await s.reopenCount(gated.id)).toBe(1);
+    expect(await s.reopenCount(manual.id)).toBe(2);
   });
 
   it('reports null rates before anything was closed or auto-accepted', async () => {
