@@ -20,6 +20,7 @@ const project = {
   title: 'LumenBox project',
   repository: 'fakechris/lumenbox',
   alias: null,
+  webOrigins: ['https://lumen.example.com'],
   children: { nodes: [] },
 };
 
@@ -104,6 +105,43 @@ describe('project routing settings', () => {
     await waitFor(() => expect(issueUpdate).toHaveBeenCalled());
     expect(issueCreate.mock.calls[0]![0].variables.input).toMatchObject({ kind: 'PROJECT', repository: 'fakechris/widgets' });
     expect(issueUpdate.mock.calls[0]![0].variables).toEqual({ id: 'proj-new', input: { alias: 'WID' } });
+  });
+
+  it('sets the web origins the capture extension routes by (INV-1146)', async () => {
+    const issueUpdate = vi.fn().mockResolvedValue({ data: { issueUpdate: { success: true, message: null, issue: null } } });
+    mockMutations({ issueUpdate });
+    const dialog = await openEdit();
+
+    fireEvent.change(within(dialog).getByLabelText('Web origins'), { target: { value: 'https://lumen.example.com,\nhttp://localhost:5173' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save', hidden: true }));
+
+    await waitFor(() => expect(issueUpdate).toHaveBeenCalled());
+    expect(issueUpdate.mock.calls[0]![0].variables.input).toMatchObject({ webOrigins: ['https://lumen.example.com', 'http://localhost:5173'] });
+    expect(issueUpdate.mock.calls[0]![0].variables.input).not.toHaveProperty('alias');
+  });
+
+  it('shows the server refusal of a web origin and keeps the dialog open', async () => {
+    const issueUpdate = vi.fn().mockResolvedValue({
+      data: { issueUpdate: { success: false, issue: null, message: 'That web origin already belongs to another project.' } },
+    });
+    mockMutations({ issueUpdate });
+    const dialog = await openEdit();
+
+    fireEvent.change(within(dialog).getByLabelText('Web origins'), { target: { value: 'https://taken.example.com' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save', hidden: true }));
+
+    expect(await within(dialog).findByRole('alert', { hidden: true })).toHaveTextContent('already belongs to another project');
+    expect((dialog as HTMLDialogElement).open).toBe(true);
+  });
+
+  it('leaves unchanged web origins out of the save', async () => {
+    const issueUpdate = vi.fn().mockResolvedValue({ data: { issueUpdate: { success: true, message: null, issue: null } } });
+    mockMutations({ issueUpdate });
+    const dialog = await openEdit();
+    expect(within(dialog).getByLabelText('Web origins')).toHaveValue('https://lumen.example.com');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save', hidden: true }));
+    await waitFor(() => expect(issueUpdate).toHaveBeenCalled());
+    expect(issueUpdate.mock.calls[0]![0].variables.input).not.toHaveProperty('webOrigins');
   });
 
   it('turns on auto-accept of verified bug fixes for the project (INV-1075)', async () => {
