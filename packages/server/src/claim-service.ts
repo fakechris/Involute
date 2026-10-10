@@ -83,6 +83,7 @@ import {
   type WriteActor,
 } from './work-service.js';
 import { parseSeverity } from './severity.js';
+import { parseReproducibility } from './reproducibility.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -111,6 +112,8 @@ export interface ProposeWorkInput {
   stepsToReproduce?: string | null;
   /** SEV1 (Critical) / SEV2 (Major) / SEV3 (Minor): impact, apart from priority (INV-1115). */
   severity?: string | null;
+  /** ALWAYS / SOMETIMES / ONCE: how often a bug reproduces (INV-1122). */
+  reproducibility?: string | null;
   /** Existing work (ids or identifiers) this proposal is blocked by — each becomes X BLOCKS new (INV-720). */
   blockedBy?: string[] | null;
   /** Existing work this proposal blocks — each becomes new BLOCKS X. */
@@ -433,6 +436,8 @@ export async function proposeWork(
     }
     const severity = parseSeverity(input.severity);
     if (severity) createInput.severity = severity;
+    const reproducibility = parseReproducibility(input.reproducibility);
+    if (reproducibility) createInput.reproducibility = reproducibility;
     let directBug = false;
     if (isBug) {
       if (steps) createInput.description = composeDescription(input.description, steps);

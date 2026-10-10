@@ -3,6 +3,8 @@ import type { WorkLinkType } from '../work/types';
 
 /** Impact (INV-1115): SEV1 Critical, SEV2 Major, SEV3 Minor. */
 export type IssueSeverity = 'SEV1' | 'SEV2' | 'SEV3';
+/** How often a bug reproduces (INV-1122); SOMETIMES / ONCE are never auto-accepted. */
+export type BugReproducibility = 'ALWAYS' | 'SOMETIMES' | 'ONCE';
 
 export interface TeamSummary {
   id: string;
@@ -145,6 +147,8 @@ export interface IssueSummary {
   priority: number;
   /** Impact, apart from priority; null when not judged (INV-1115). */
   severity?: IssueSeverity | null;
+  /** How often the bug reproduces; null when unknown (INV-1122). */
+  reproducibility?: BugReproducibility | null;
   /** Committed bugs only (INV-750). */
   bugSla?: BugSlaSummary | null;
   createdAt: string;
@@ -268,6 +272,7 @@ export interface BugReportMutationVariables {
     stepsToReproduce: string;
     priority: number;
     severity?: IssueSeverity | null;
+    reproducibility?: BugReproducibility | null;
     /** Where it belongs; omitted when unsure, which sends it to triage (INV-749). */
     parentId?: string | null;
     labelIds?: string[];
@@ -537,6 +542,8 @@ export interface IssueUpdateMutationVariables {
     priority?: number;
     /** SEV1–SEV3; null clears it (INV-1115). */
     severity?: IssueSeverity | null;
+    /** ALWAYS / SOMETIMES / ONCE; null clears it (INV-1122). */
+    reproducibility?: BugReproducibility | null;
     stateId?: string;
     title?: string;
     projectId?: string | null;
