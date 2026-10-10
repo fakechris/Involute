@@ -71,6 +71,8 @@ function formatNotificationType(type: string): string {
       return 'What needs you today';
     case 'research.closable':
       return 'Research can be closed';
+    case 'incident.closable':
+      return 'Incident can be closed';
     case 'delivery.approved':
       return 'Delivery authorized';
     case 'executor.dispatched':

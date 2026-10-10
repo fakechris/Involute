@@ -636,6 +636,20 @@ export const WORK_HYGIENE_QUERY = gql`
         title
         repository
       }
+      incidentsWithoutDownstreamCount
+      incidentsWithoutDownstream {
+        id
+        identifier
+        title
+        severity
+      }
+      incidentsWithoutPostmortemCount
+      incidentsWithoutPostmortem {
+        id
+        identifier
+        title
+        severity
+      }
     }
   }
 `;

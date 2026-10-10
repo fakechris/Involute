@@ -2,11 +2,13 @@ import type { Issue, Prisma, PrismaClient } from '@prisma/client';
 
 import { loadFollowUpDeadlines } from './follow-up-deadline.js';
 import { dependencyWordedReferences, extractTeamReferences } from './mention-links.js';
+import { incidentNeedsPostmortem } from './incident-closure.js';
+import { INCIDENT_LABEL_NAME } from './labels.js';
+import { contractTexts, missingCloseRequirements, saysNoActionable } from './work-closure.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
 export const RESEARCH_LABEL = 'research';
-const NO_ACTIONABLE = /无可执行点|no actionable/i;
 const LIST_LIMIT = 200;
 
 export interface ReferencePair {
@@ -26,6 +28,12 @@ export interface WorkHygiene {
   /** Research in Review whose derived items are all committed: nothing left to wait for (INV-1001). */
   researchClosable: Issue[];
   researchClosableCount: number;
+  /** Incidents in Review or Done nothing derives from and that do not say "无可执行点" (INV-1126). */
+  incidentsWithoutDownstream: Issue[];
+  incidentsWithoutDownstreamCount: number;
+  /** SEV1/SEV2 incidents in Review or Done with no attachment: the postmortem is missing (INV-1126). */
+  incidentsWithoutPostmortem: Issue[];
+  incidentsWithoutPostmortemCount: number;
   /** Open incident follow-ups past their deadline, most overdue first (INV-1127); declined ones never count. */
   overdueFollowUps: Issue[];
   overdueFollowUpCount: number;
@@ -35,8 +43,8 @@ function isResearch(issue: { labels: Array<{ name: string }> }): boolean {
   return issue.labels.some((label) => label.name.toLowerCase() === RESEARCH_LABEL);
 }
 
-function contractTexts(issue: Issue): Array<string | null> {
-  return [issue.description, issue.outcome, issue.scope, issue.constraints, issue.acceptance, issue.verification];
+function isIncident(issue: { labels: Array<{ name: string }> }): boolean {
+  return issue.labels.some((label) => label.name.toLowerCase() === INCIDENT_LABEL_NAME.toLowerCase());
 }
 
 /**
@@ -128,8 +136,21 @@ export async function loadWorkHygiene(
       isResearch(issue) &&
       (issue.state.type === 'REVIEW' || issue.state.type === 'COMPLETED') &&
       !derivedTargets.has(issue.id) &&
-      !contractTexts(issue).some((text) => text && NO_ACTIONABLE.test(text)),
+      !saysNoActionable(contractTexts(issue)),
   );
+
+  // Incidents being closed or closed (INV-1126): the follow-ups and, for
+  // SEV1/SEV2, the postmortem attachment the closing rule asks for.
+  const closingIncidents = issues.filter((issue) => isIncident(issue) && (issue.state.type === 'REVIEW' || issue.state.type === 'COMPLETED'));
+  const incidentsWithoutDownstream = closingIncidents.filter((issue) => !derivedTargets.has(issue.id) && !saysNoActionable(contractTexts(issue)));
+  const needingPostmortem = closingIncidents.filter((issue) => incidentNeedsPostmortem(issue.severity));
+  const attached = needingPostmortem.length
+    ? new Set(
+        (await prisma.attachment.findMany({ where: { issueId: { in: needingPostmortem.map((issue) => issue.id) } }, select: { issueId: true }, distinct: ['issueId'] }))
+          .map((row) => row.issueId),
+      )
+    : new Set<string | null>();
+  const incidentsWithoutPostmortem = needingPostmortem.filter((issue) => !attached.has(issue.id));
 
   const openDerived = issues.filter(
     (issue) =>
@@ -144,6 +165,10 @@ export async function loadWorkHygiene(
     .sort((a, b) => deadlines.get(a.id)!.remainingMs - deadlines.get(b.id)!.remainingMs);
 
   return {
+    incidentsWithoutDownstream: incidentsWithoutDownstream.slice(0, LIST_LIMIT),
+    incidentsWithoutDownstreamCount: incidentsWithoutDownstream.length,
+    incidentsWithoutPostmortem: incidentsWithoutPostmortem.slice(0, LIST_LIMIT),
+    incidentsWithoutPostmortemCount: incidentsWithoutPostmortem.length,
     unplaced: unplaced.slice(0, LIST_LIMIT),
     unplacedCount: unplaced.length,
     unlinkedMentions: unlinkedMentions.slice(0, LIST_LIMIT),
@@ -182,7 +207,5 @@ export async function closableResearchSources(prisma: DatabaseClient, workId: st
 export async function researchLacksDownstream(prisma: DatabaseClient, workId: string, extraText?: string | null): Promise<boolean> {
   const work = await prisma.issue.findUnique({ where: { id: workId }, include: { labels: { select: { name: true } } } });
   if (!work || !work.labels.some((label) => label.name.toLowerCase() === RESEARCH_LABEL)) return false;
-  const derived = await prisma.workLink.count({ where: { type: 'DERIVED_FROM', toId: workId } });
-  if (derived > 0) return false;
-  return ![...contractTexts(work), extraText ?? null].some((text) => text && NO_ACTIONABLE.test(text));
+  return (await missingCloseRequirements(prisma, work, ['downstream'], extraText)).length > 0;
 }

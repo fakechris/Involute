@@ -53,6 +53,8 @@ export function HygienePage() {
                 ['Dependencies without BLOCKS', hygiene.dependencyWithoutBlocksCount],
                 ['Research with nothing derived', hygiene.researchWithoutDownstreamCount],
                 ['Research ready to close', hygiene.researchClosableCount],
+                ['Incidents without follow-ups', hygiene.incidentsWithoutDownstreamCount],
+                ['Incidents without a postmortem', hygiene.incidentsWithoutPostmortemCount],
                 ['Overdue incident follow-ups', hygiene.overdueFollowUpCount],
               ].map(([label, count]) => (
                 <div key={label as string} className={`hygiene-stat${count ? ' hygiene-stat--open' : ''}`}>
@@ -136,6 +138,32 @@ export function HygienePage() {
               <ul className="hygiene-list">
                 {hygiene.overdueFollowUps.map((item) => (
                   <li key={item.id}>{itemButton(item)}</li>
+                ))}
+              </ul>
+            </section>
+
+            <section aria-label="Incidents without follow-ups">
+              <h2>Incidents without follow-ups · {hygiene.incidentsWithoutDownstreamCount}</h2>
+              <p className="observation-hint">An incident closes once it led somewhere: propose its follow-ups DERIVED_FROM it, or state "无可执行点" in its description. Until then it cannot move to Done.</p>
+              <ul className="hygiene-list">
+                {hygiene.incidentsWithoutDownstream.map((item) => (
+                  <li key={item.id}>
+                    {itemButton(item)}
+                    <span className="observation-card__meta">{item.severity ?? 'no severity'}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            <section aria-label="Incidents without a postmortem">
+              <h2>Incidents without a postmortem · {hygiene.incidentsWithoutPostmortemCount}</h2>
+              <p className="observation-hint">A SEV1 or SEV2 incident closes with its postmortem attached (docs/postmortem.md): attach it from the incident's Files.</p>
+              <ul className="hygiene-list">
+                {hygiene.incidentsWithoutPostmortem.map((item) => (
+                  <li key={item.id}>
+                    {itemButton(item)}
+                    <span className="observation-card__meta">{item.severity}</span>
+                  </li>
                 ))}
               </ul>
             </section>
