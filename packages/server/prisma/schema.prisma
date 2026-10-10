@@ -388,6 +388,12 @@ model Issue {
   autoAcceptBugs    Boolean           @default(false)
   // INV-1118: structured close reason; the free-text reason stays on WorkAudit.
   resolution        WorkResolution?
+  // INV-1125: Type: Incident only. Impact started ≤ detected / mitigated ≤
+  // resolved; a missing mitigatedAt counts as resolvedAt in metrics.
+  impactStartedAt   DateTime?
+  detectedAt        DateTime?
+  mitigatedAt       DateTime?
+  resolvedAt        DateTime?
   labels            IssueLabel[]
   comments          Comment[]
   embeddings        IssueEmbedding[]

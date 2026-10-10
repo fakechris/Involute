@@ -47,6 +47,7 @@ import { BugSlaBadge } from '../components/BugSlaBadge';
 import { ClaimControl } from '../components/ClaimControl';
 import { IssueTimeline } from '../components/IssueTimeline';
 import { WorkStructureEditor } from '../components/WorkStructureEditor';
+import { IncidentTimesPanel } from '../components/IncidentTimesPanel';
 import { toggleLabelId } from '../work/labels';
 import { mergeIssueWithPreservedComments } from '../board/utils';
 import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
@@ -1131,6 +1132,22 @@ export function IssuePage() {
               />
             </div>
           </div>
+
+          {/* Incident impact timestamps (INV-1125) */}
+          {activeIssue.labels.nodes.some((label) => label.name.trim().toLowerCase() === 'incident') ? (
+            <div className="issue-panel__prop-row" style={{ alignItems: 'flex-start' }}>
+              <div className="issue-panel__prop-label">Impact</div>
+              <div className="issue-panel__prop-value">
+                <IncidentTimesPanel
+                  work={activeIssue}
+                  disabled={isSavingState}
+                  onUpdate={(update) => {
+                    void persistIssueUpdate(activeIssue, update, (current) => ({ ...current, ...update })).catch(() => undefined);
+                  }}
+                />
+              </div>
+            </div>
+          ) : null}
 
           {/* Cycle */}
           <div className="issue-panel__prop-row">

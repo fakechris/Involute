@@ -82,6 +82,8 @@ export const RESEARCH_CLOSE_NOT_ISSUE_MESSAGE = 'Only an ISSUE with Type: Resear
 export const RESEARCH_CLOSE_NOT_COMMITTED_MESSAGE = 'A research item an agent closes must be committed first: a person commits it, then the agent may move it to Done.';
 export const RESEARCH_CLOSE_CLAIMED_MESSAGE = 'Another actor holds the claim on this research item; it closes when that claim ends or by its holder.';
 export const RESEARCH_CLOSE_NO_DOWNSTREAM_MESSAGE = 'Research closes once it led somewhere: propose its actionable points (ISSUE) or "won\'t do" decisions (DECISION) DERIVED_FROM it, or state "无可执行点" / "no actionable points" in its description, then close it (INV-1001).';
+export const INCIDENT_CLOSE_NO_DOWNSTREAM_MESSAGE = 'An incident closes once it led somewhere: propose its follow-ups (ISSUE) DERIVED_FROM it, or state "无可执行点" / "no actionable points" in its description, then move it to Done (INV-1126).';
+export const INCIDENT_CLOSE_NO_POSTMORTEM_MESSAGE = 'A SEV1 or SEV2 incident closes with its postmortem attached: draft it with work_timeline(action: "postmortem_draft"), complete it and attach it to the incident (Files, or work_attach_file), then move it to Done (INV-1126).';
 export const RESEARCH_INITIAL_DONE_ONLY_MESSAGE = 'initial_state DONE is only for an ISSUE labelled research (Type: Research); it lands in Done when a person commits it. Other work stops at In Review.';
 export const BUG_REPORT_PRIORITY_REQUIRED_MESSAGE = 'A bug report needs a priority (Urgent, High, Medium or Low).';
 export const BUG_REPORT_STEPS_REQUIRED_MESSAGE = 'A bug report needs steps to reproduce.';
@@ -111,6 +113,23 @@ export const INCIDENT_OWNER_REQUIRED_MESSAGE =
   'An incident is committed directly (it does not go to Candidates): the declaring agent needs a human owner on this team, who becomes the Incident Lead.';
 export const INCIDENT_STARTED_STATE_MISSING_MESSAGE =
   'An incident starts In Progress (investigating), but this team has no started workflow state.';
+export const INCIDENT_TIMES_NOT_INCIDENT_MESSAGE =
+  'Impact timestamps (impact started, detected, mitigated, resolved) belong to Type: Incident only.';
+export const INCIDENT_TIME_INVALID_MESSAGE = 'Incident timestamps must be ISO 8601 date-times, e.g. 2026-10-09T14:30:00Z.';
+export const INCIDENT_TIME_REQUIRED_MESSAGE =
+  'Impact started and detected cannot be cleared: an incident always has them (move them instead).';
+export const INCIDENT_REVIEW_NEEDS_RESOLVED_MESSAGE =
+  'An incident goes to In Review once it is resolved: set resolvedAt (resolved_at) first.';
+export const INCIDENT_IMPACT_AFTER_DETECTED_MESSAGE =
+  'Incident timestamps out of order: impact started cannot be after detected. Move impact started earlier.';
+export const INCIDENT_IMPACT_AFTER_MITIGATED_MESSAGE =
+  'Incident timestamps out of order: impact started cannot be after mitigated.';
+export const INCIDENT_IMPACT_AFTER_RESOLVED_MESSAGE =
+  'Incident timestamps out of order: impact started cannot be after resolved.';
+export const INCIDENT_DETECTED_AFTER_RESOLVED_MESSAGE =
+  'Incident timestamps out of order: detected cannot be after resolved.';
+export const INCIDENT_MITIGATED_AFTER_RESOLVED_MESSAGE =
+  'Incident timestamps out of order: mitigated cannot be after resolved.';
 export const BUG_REJECT_REASON_REQUIRED_MESSAGE = 'Declining a bug needs a reason (zero-bug: fix it or say why not).';
 export const WORK_REJECT_RESOLUTION_REQUIRED_MESSAGE =
   'Rejecting a candidate needs a resolution: completed, wont_do, invalid, duplicate, cannot_reproduce or obsolete.';
@@ -362,6 +381,15 @@ const exposedErrorCodes = new Map<string, string>([
   [INCIDENT_IMPACT_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [INCIDENT_OWNER_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [INCIDENT_STARTED_STATE_MISSING_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_TIMES_NOT_INCIDENT_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_TIME_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_TIME_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_REVIEW_NEEDS_RESOLVED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_IMPACT_AFTER_DETECTED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_IMPACT_AFTER_MITIGATED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_IMPACT_AFTER_RESOLVED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_DETECTED_AFTER_RESOLVED_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_MITIGATED_AFTER_RESOLVED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_REJECT_REASON_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_NO_BACKLOG_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_REJECT_RESOLUTION_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
@@ -374,6 +402,8 @@ const exposedErrorCodes = new Map<string, string>([
   [RESEARCH_CLOSE_CLAIMED_MESSAGE, 'FORBIDDEN'],
   [RESEARCH_CLOSE_NO_DOWNSTREAM_MESSAGE, 'FORBIDDEN'],
   [RESEARCH_INITIAL_DONE_ONLY_MESSAGE, 'BAD_USER_INPUT'],
+  [INCIDENT_CLOSE_NO_DOWNSTREAM_MESSAGE, 'FORBIDDEN'],
+  [INCIDENT_CLOSE_NO_POSTMORTEM_MESSAGE, 'FORBIDDEN'],
   [TRIAGE_ROTATION_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_REPORT_PRIORITY_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [BUG_REPORT_STEPS_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],

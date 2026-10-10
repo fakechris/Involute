@@ -50,6 +50,7 @@ export const READ_PAIRS: Record<string, string[]> = {
 /** MCP read tools with no GraphQL counterpart, and why. */
 export const AGENT_ONLY_READ_TOOLS: Record<string, string> = {
   protocol_get_guide: 'The agent protocol as markdown; people read docs/ and the web app itself.',
+  work_postmortem_draft: 'A markdown starting point an agent completes and attaches (INV-1126); people read the starred timeline on the issue page and write the postmortem from docs/postmortem.md.',
 };
 
 /** GraphQL queries that intentionally have no MCP tool; each names the decision it rests on. */

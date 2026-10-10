@@ -184,6 +184,10 @@ export const ISSUE_UPDATE_MUTATION = gql`
         description
         priority
         severity
+        impactStartedAt
+        detectedAt
+        mitigatedAt
+        resolvedAt
         reproducibility
         foundInSha
         kind
@@ -518,6 +522,10 @@ export const ISSUE_PAGE_QUERY = gql`
       description
       priority
       severity
+      impactStartedAt
+      detectedAt
+      mitigatedAt
+      resolvedAt
       reproducibility
       foundInSha
       kind

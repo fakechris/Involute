@@ -2,6 +2,7 @@ import { requestNeedInfo, withdrawNeedInfo } from './need-info-service.js';
 import { protocolInfo } from './protocol-info.js';
 import { groupForAction, hidesFromCaller, MCP_TOOL_GROUPS, resolveMcpCall, type McpToolGroup } from './mcp-tool-groups.js';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
+import { postmortemDraftFor } from './postmortem.js';
 import { starTimelineEntry, unstarTimelineEntry, workTimelineFor, type TimelineEntry } from './work-activity-timeline.js';
 import { storeUpload } from './uploads.js';
 import { actionCapabilities } from './action-capabilities.js';
@@ -71,6 +72,7 @@ import { hasFixedBugEvidence, recordFixedBugRun, validateFixedBugEvidence } from
 import { uncommitWork } from './work-uncommit.js';
 import { writeActorFromViewer } from './work-service.js';
 import { parseSeverity, SEVERITIES } from './severity.js';
+import { INCIDENT_TIME_ARGS, INCIDENT_TIME_FIELDS, readIncidentTimes, type IncidentTimeField } from './incident-timestamps.js';
 import { parseReproducibility, REPRODUCIBILITIES } from './reproducibility.js';
 import { parseFoundInSha } from './found-in.js';
 
@@ -88,6 +90,7 @@ export type McpToolName =
   | 'work_view_save'
   | 'work_view_delete'
   | 'work_timeline'
+  | 'work_postmortem_draft'
   | 'work_timeline_star'
   | 'work_timeline_unstar'
   | 'work_get_context'
@@ -126,6 +129,7 @@ export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
   'work_list_ready',
   'work_views',
   'work_timeline',
+  'work_postmortem_draft',
   'agent_inbox',
   'protocol_get_guide',
 ];
@@ -182,6 +186,23 @@ const SEVERITY_PROPERTY = {
   description: "Impact, separate from priority (which orders work and sets a bug's SLA): SEV1 Critical — outage, data loss or security exposure, no workaround; SEV2 Major — a core flow broken or degraded for many, painful workaround; SEV3 Minor — limited impact, a workaround exists. Unsure: pick the higher one. Optional (INV-1115).",
 };
 
+/** Incident impact timestamps on work_propose / work_update; same names as the GraphQL inputs (INV-1125). */
+function readIncidentTimeArgs(args: Record<string, unknown>): Partial<Record<IncidentTimeField, Date | null>> {
+  return readIncidentTimes(Object.fromEntries(INCIDENT_TIME_FIELDS.map((field) => [field, args[INCIDENT_TIME_ARGS[field]]])));
+}
+
+const INCIDENT_TIME_HELP =
+  'Type: Incident only (INV-1125), ISO 8601. Order: impact started ≤ detected / mitigated ≤ resolved; out-of-order values are refused.';
+
+function incidentTimeProperties(nullable: boolean) {
+  const type = nullable ? ['string', 'null'] : 'string';
+  return {
+    impact_started_at: { type, description: `${INCIDENT_TIME_HELP} When the impact began${nullable ? '; can be moved earlier, not cleared' : '; defaults to detected_at'}.` },
+    detected_at: { type, description: `${INCIDENT_TIME_HELP} When it was noticed${nullable ? '; can be moved, not cleared' : '; defaults to now'}.` },
+    mitigated_at: { type, description: `${INCIDENT_TIME_HELP} When the impact stopped; when absent, metrics use resolved_at.${nullable ? ' null clears it.' : ''}` },
+    resolved_at: { type, description: `${INCIDENT_TIME_HELP} When it was fixed; required before the incident moves to In Review (REVIEW or a completed run).${nullable ? ' null clears it.' : ''}` },
+  };
+}
 /** Reproducibility on the write tools; the same three values as GraphQL BugReproducibility (INV-1122). */
 const REPRODUCIBILITY_PROPERTY = {
   type: 'string',
@@ -472,6 +493,7 @@ async function callMcpAction(
       assignOptional(proposeInput, 'priority', optionalNumber(args.priority));
       assignOptional(proposeInput, 'stepsToReproduce', optionalString(args.steps_to_reproduce));
       assignOptional(proposeInput, 'severity', parseSeverity(args.severity));
+      Object.assign(proposeInput, readIncidentTimeArgs(args));
       assignOptional(proposeInput, 'reproducibility', parseReproducibility(args.reproducibility));
       assignOptional(proposeInput, 'foundInSha', parseFoundInSha(args.found_in_sha));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
@@ -689,6 +711,7 @@ async function callMcpAction(
       assignOptional(updateInput, 'priority', optionalNumber(args.priority));
       const severity = parseSeverity(args.severity);
       if (severity !== undefined) updateInput.severity = severity;
+      Object.assign(updateInput, readIncidentTimeArgs(args));
       const reproducibility = parseReproducibility(args.reproducibility);
       if (reproducibility !== undefined) updateInput.reproducibility = reproducibility;
       const foundInSha = parseFoundInSha(args.found_in_sha);
@@ -869,6 +892,23 @@ async function callMcpAction(
     case 'work_timeline': {
       const timeline = await workTimelineFor(context, requiredString(args.work_id, 'work_id'), { starredOnly: args.starred_only === true });
       return { work_id: timeline.workId, identifier: timeline.identifier, truncated: timeline.truncated, entries: timeline.entries.map(timelineEntryForMcp) };
+    }
+    case 'work_postmortem_draft': {
+      const draft = await postmortemDraftFor(context, requiredString(args.work_id, 'work_id'));
+      return {
+        work_id: draft.workId,
+        identifier: draft.identifier,
+        is_incident: draft.isIncident,
+        severity: draft.severity,
+        postmortem_required: draft.postmortemRequired,
+        timestamps: draft.timestamps.map((stamp) => ({ field: stamp.field, label: stamp.label, at: stamp.at?.toISOString() ?? null })),
+        starred_count: draft.starredCount,
+        timeline_truncated: draft.timelineTruncated,
+        follow_ups: draft.followUps.map((item) => ({ identifier: item.identifier, title: item.title, commitment_status: item.commitmentStatus, state: item.stateName })),
+        filename: draft.filename,
+        markdown: draft.markdown,
+        next: `Complete the TODO sections, then attach it: work_attach_file(work_id: "${draft.identifier}", filename: "${draft.filename}", mime_type: "text/markdown", content: <base64>).`,
+      };
     }
     case 'work_timeline_star': {
       const result = await starTimelineEntry(context, requiredString(args.work_id, 'work_id'), requiredString(args.entry_key, 'entry_key'));
@@ -1217,6 +1257,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
           description: 'Bugs: how to reproduce it; appended to the description under "Steps to reproduce". Fixed on the spot? Also pass initial_state REVIEW.',
         },
         severity: SEVERITY_PROPERTY,
+        ...incidentTimeProperties(false),
         reproducibility: REPRODUCIBILITY_PROPERTY,
         found_in_sha: FOUND_IN_SHA_PROPERTY,
         blocked_by: {
@@ -1406,6 +1447,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         },
         priority: { type: 'integer' },
         severity: { ...SEVERITY_PROPERTY, type: ['string', 'null'], enum: [...SEVERITIES, null], description: `${SEVERITY_PROPERTY.description} null clears it; a change is audited with the old value.` },
+        ...incidentTimeProperties(true),
         reproducibility: { ...REPRODUCIBILITY_PROPERTY, type: ['string', 'null'], enum: [...REPRODUCIBILITIES, null], description: `${REPRODUCIBILITY_PROPERTY.description} null clears it; a change is audited with the old value.` },
         found_in_sha: { ...FOUND_IN_SHA_PROPERTY, type: ['string', 'null'], description: `${FOUND_IN_SHA_PROPERTY.description} null clears it; a change is audited with the old value.` },
         state: {
@@ -1527,6 +1569,12 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
     description: 'The issue timeline (INV-1116): state, assignee, priority, placement and field changes from the audit trail, runs, evidence and comments, oldest first, each with its actor and a key you can star. starred_only returns just the key events.',
     inputSchema: { type: 'object', properties: { work_id: { type: 'string', description: 'Work identifier (e.g. INV-104) or UUID' }, starred_only: { type: 'boolean' } }, required: ['work_id'] },
+  },
+  {
+    name: 'work_postmortem_draft',
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    description: 'Draft a postmortem (INV-1126) as markdown: the six sections (摘要 / 影响 / 时间线 / 促成因素 / 教训 / Follow-ups) filled with the incident, its impact timestamps, the starred timeline entries and the follow-ups DERIVED_FROM it. Writes nothing: complete the TODOs and attach it with work_attach_file. A SEV1/SEV2 incident cannot reach Done without an attachment.',
+    inputSchema: { type: 'object', properties: { work_id: { type: 'string', description: 'Work identifier (e.g. INV-104) or UUID' } }, required: ['work_id'] },
   },
   {
     name: 'work_timeline_star',
@@ -1865,6 +1913,7 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_view_save: 'propose',
   work_view_delete: 'propose',
   work_timeline: 'read',
+  work_postmortem_draft: 'read',
   work_timeline_star: 'propose',
   work_timeline_unstar: 'propose',
   work_get_context: 'read',

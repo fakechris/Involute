@@ -40,6 +40,8 @@ export function beforePatch(issue: IssueSummary, after: IssueFieldPatch): IssueF
       case 'stateId': before.stateId = issue.state.id; break;
       case 'priority': before.priority = issue.priority; break;
       case 'severity': before.severity = issue.severity ?? null; break;
+      case 'impactStartedAt': case 'detectedAt': case 'mitigatedAt': case 'resolvedAt':
+        before[key] = issue[key] ?? null; break;
       case 'reproducibility': before.reproducibility = issue.reproducibility ?? null; break;
       case 'foundInSha': before.foundInSha = issue.foundInSha ?? null; break;
       case 'assigneeId': before.assigneeId = issue.assignee?.id ?? null; break;
@@ -66,6 +68,10 @@ function describe(patch: IssueFieldPatch, names: FieldNames): string {
       case 'stateId': parts.push(`moved to ${names.stateName?.(String(value)) ?? 'another state'}`); break;
       case 'priority': parts.push(`priority set to ${PRIORITY_NAMES[Number(value)] ?? String(value)}`); break;
       case 'severity': parts.push(value ? `severity set to ${String(value)}` : 'severity cleared'); break;
+      case 'impactStartedAt': parts.push('impact start time changed'); break;
+      case 'detectedAt': parts.push('detection time changed'); break;
+      case 'mitigatedAt': parts.push(value ? 'mitigation time set' : 'mitigation time cleared'); break;
+      case 'resolvedAt': parts.push(value ? 'resolution time set' : 'resolution time cleared'); break;
       case 'reproducibility': parts.push(value ? `reproducibility set to ${String(value).toLowerCase()}` : 'reproducibility cleared'); break;
       case 'foundInSha': parts.push(value ? `found in ${String(value).slice(0, 12)}` : 'found-in cleared'); break;
       case 'assigneeId': parts.push(value ? `assigned to ${names.userName?.(String(value)) ?? 'someone'}` : 'unassigned'); break;

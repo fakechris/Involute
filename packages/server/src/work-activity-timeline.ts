@@ -100,6 +100,10 @@ const REPORTED_FIELDS = [
   'assigneeId',
   'priority',
   'severity',
+  'impactStartedAt',
+  'detectedAt',
+  'mitigatedAt',
+  'resolvedAt',
   'reproducibility',
   'foundInSha',
   'parentId',
@@ -123,7 +127,19 @@ const FIELD_LABELS: Record<string, string> = {
   cycleId: 'cycle',
   supersededById: 'superseded by',
   foundInSha: 'found in',
+  // INV-1125: incident impact timestamps.
+  impactStartedAt: 'impact started',
+  detectedAt: 'detected',
+  mitigatedAt: 'mitigated',
+  resolvedAt: 'resolved',
 };
+const TIME_FIELDS = new Set(['impactStartedAt', 'detectedAt', 'mitigatedAt', 'resolvedAt']);
+
+/** "2026-10-09 14:30 UTC": audit snapshots keep these as ISO strings. */
+function displayTime(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
+}
 
 type Snapshot = Record<string, unknown>;
 
@@ -143,6 +159,7 @@ function display(field: string, value: unknown, lookups: Lookups): string | null
   if (value === null || value === undefined || value === '') return null;
   if (LONG_TEXT_FIELDS.has(field)) return null;
   const text = String(value);
+  if (TIME_FIELDS.has(field)) return displayTime(text);
   switch (field) {
     case 'stateId':
       return lookups.states.get(text) ?? 'an unknown state';
@@ -194,6 +211,12 @@ function changePhrase(change: TimelineChange, rawFrom: unknown, rawTo: unknown):
       return change.from ? `Found in ${change.from} → ${change.to}` : `Found in ${change.to}`;
     case 'parent':
       return change.to ? `Moved under ${change.to}` : 'Removed from its parent';
+    case 'impact started':
+    case 'detected':
+    case 'mitigated':
+    case 'resolved':
+      if (!change.to) return `Cleared ${change.field} time`;
+      return change.from ? `${capitalize(change.field)} ${change.from} → ${change.to}` : `${capitalize(change.field)} at ${change.to}`;
     default:
       if (LONG_TEXT_FIELDS.has(change.field)) return rawFrom ? `Edited ${change.field}` : `Set ${change.field}`;
       return change.to ? `${capitalize(change.field)} set to ${change.to}` : `Cleared ${change.field}`;
