@@ -149,6 +149,20 @@ describe('ReportBugDialog (INV-749)', () => {
     expect(mockRunBugReport.mock.calls[0]![0].variables.input).toMatchObject({ priority: 1, severity: 'SEV2' });
   });
 
+  it('sends an optional reproducibility (INV-1122)', async () => {
+    mockRunBugReport.mockResolvedValueOnce({
+      data: { bugReport: { success: true, message: null, issue: { id: 'issue-b4', identifier: 'INV-45', title: 'x', priority: 1, repository: null } } },
+    });
+    renderDialog();
+    fillRequired();
+    fireEvent.click(screen.getByLabelText('Not sure where it belongs — send to triage'));
+    fireEvent.change(screen.getByLabelText('Bug reproducibility'), { target: { value: 'SOMETIMES' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Report bug' }));
+
+    await waitFor(() => expect(mockRunBugReport).toHaveBeenCalledTimes(1));
+    expect(mockRunBugReport.mock.calls[0]![0].variables.input).toMatchObject({ priority: 1, reproducibility: 'SOMETIMES' });
+  });
+
   it('starts in the project the board is filtered to', () => {
     renderDialog({ boardRepository: 'fakechris/Involute' });
     expect(screen.getByLabelText('Project')).toHaveValue('fakechris/Involute');

@@ -5,8 +5,9 @@ import { readStoredTeamKey } from '../board/utils';
 import { GRAPH_PROJECTS_QUERY } from '../work/queries';
 import type { GraphProjectsQueryData, WorkKind } from '../work/types';
 import type { CreatePlacement } from '../work/placement';
-import type { IssueSeverity } from '../board/types';
+import type { BugReproducibility, IssueSeverity } from '../board/types';
 import { SEVERITY_OPTIONS } from '../board/severity';
+import { REPRODUCIBILITY_OPTIONS } from '../board/reproducibility';
 import { PlacementPicker } from './PlacementPicker';
 
 export interface StructureUpdate {
@@ -14,6 +15,7 @@ export interface StructureUpdate {
   repository?: string | null;
   priority?: number;
   severity?: IssueSeverity | null;
+  reproducibility?: BugReproducibility | null;
   kind?: WorkKind;
 }
 
@@ -22,6 +24,8 @@ interface StructuredWork {
   kind?: WorkKind | null;
   priority: number;
   severity?: IssueSeverity | null;
+  reproducibility?: BugReproducibility | null;
+  labels?: { nodes: Array<{ name: string }> } | null;
   repository?: string | null;
   parent?: { id: string; identifier: string; title: string; kind?: WorkKind | null } | null;
 }
@@ -53,7 +57,8 @@ export function currentPlacement(work: StructuredWork): CreatePlacement | null {
 /**
  * Structure of committed work a person can change (INV-791): where it sits
  * (project, then No milestone / milestone / epic), its priority, its severity
- * (impact, apart from priority — INV-1115) and its kind.
+ * (impact, apart from priority — INV-1115), for a bug how often it reproduces
+ * (INV-1122) and its kind.
  * Refusals — an illegal parent, a kind the hierarchy does not allow — come back
  * from the server with the reason, shown by the caller.
  */
@@ -73,6 +78,8 @@ export function WorkStructureEditor({
   const projects = data?.projectSummary?.projects ?? [];
   const value = useMemo(() => currentPlacement(work), [work]);
   const kind = work.kind ?? 'ISSUE';
+  // A bug, or anything already marked: how often it reproduces (INV-1122).
+  const showReproducibility = Boolean(work.reproducibility) || (work.labels?.nodes ?? []).some((label) => label.name.trim().toLowerCase() === 'bug');
 
   return (
     <div className="work-structure">
@@ -118,6 +125,25 @@ export function WorkStructureEditor({
           >
             <option value="">No severity</option>
             {SEVERITY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value} title={option.description}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      {kind !== 'PROJECT' && showReproducibility ? (
+        <label className="field-stack">
+          <span>Reproduces</span>
+          <select
+            aria-label="Bug reproducibility"
+            title="How often it shows up. Sometimes / Once: a person accepts the fix; it is never auto-accepted."
+            value={work.reproducibility ?? ''}
+            disabled={disabled}
+            onChange={(event) => onUpdate({ reproducibility: (event.target.value || null) as BugReproducibility | null })}
+          >
+            <option value="">Not known</option>
+            {REPRODUCIBILITY_OPTIONS.map((option) => (
               <option key={option.value} value={option.value} title={option.description}>
                 {option.label}
               </option>

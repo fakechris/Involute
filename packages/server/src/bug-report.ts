@@ -16,6 +16,7 @@ import { projectWorkNotifications } from './notification-service.js';
 import { currentTriager } from './bug-triage.js';
 import type { WriteActor } from './work-service.js';
 import { parseSeverity } from './severity.js';
+import { parseReproducibility } from './reproducibility.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -30,6 +31,8 @@ export interface BugReportInput {
   priority?: number | null;
   /** Optional impact, SEV1–SEV3 (INV-1115); the SLA still follows priority. */
   severity?: string | null;
+  /** Optional ALWAYS / SOMETIMES / ONCE (INV-1122); SOMETIMES and ONCE are never auto-accepted. */
+  reproducibility?: string | null;
   /** Where the bug belongs (id or identifier). Without it the report goes to triage as a candidate. */
   parentId?: string | null;
   repository?: string | null;
@@ -64,6 +67,7 @@ export async function reportBug(prisma: PrismaClient, input: BugReportInput, act
   const steps = input.stepsToReproduce?.trim();
   if (!steps) throw createValidationError(BUG_REPORT_STEPS_REQUIRED_MESSAGE);
   const severity = parseSeverity(input.severity) ?? null;
+  const reproducibility = parseReproducibility(input.reproducibility) ?? null;
   // Outside the transaction: a failed INSERT would poison it.
   const bugLabel = await findOrCreateBugLabel(prisma);
   const labelIds = [...new Set([bugLabel.id, ...(input.labelIds ?? [])])];
@@ -75,6 +79,7 @@ export async function reportBug(prisma: PrismaClient, input: BugReportInput, act
       labelIds,
       priority: input.priority ?? null,
       severity,
+      reproducibility,
       repository: input.repository ?? null,
       source: BUG_REPORT_SOURCE,
       teamId: input.teamId,
