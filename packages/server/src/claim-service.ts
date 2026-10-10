@@ -44,7 +44,12 @@ import {
 import { findWorkByIdOrIdentifier, explainWorkNotReady,
   isWorkReadyForClaim } from './context-service.js';
 import { enqueueWorkEvent } from './event-outbox.js';
-import { projectDecisionNotifications } from './notification-service.js';
+import {
+  projectDecisionNotifications,
+  projectProposedBatch,
+  resolveAttentionNotifications,
+  settleProposedBatches,
+} from './notification-service.js';
 import { attachDecisionReceipt, type ReceiptInput } from './decision-receipt.js';
 import { createWorkLink } from './link-service.js';
 import { isLegalContains, lockWorkGraph } from './graph-integrity.js';
@@ -477,13 +482,16 @@ export async function proposeWork(
     if (idempotencyId) {
       await completeWorkIdempotency(transaction, idempotencyId, created.id);
     }
-    await enqueueWorkEvent(transaction, {
+    const createdEvent = await enqueueWorkEvent(transaction, {
       payload: { title: created.title, actorId: actor.actorId ?? null },
       type: directBug ? 'work.committed' : 'work.proposed',
       workId: created.id,
       workIdentifier: created.identifier,
     });
     if (isBug) await announceBug(transaction, created, { triage: !directBug });
+    // A new candidate reaches the people who decide it, batched (INV-1093);
+    // a bug candidate is announced to triage by announceBug instead.
+    else if (created.commitmentStatus === 'CANDIDATE') await projectProposedBatch(transaction, { eventId: createdEvent.id, proposerId: actor.actorId, work: created });
     if (input.receipt) {
       // Same transaction as the write: a proposal and its receipt land
       // together or not at all.
@@ -740,6 +748,9 @@ export async function commitWork(
       type: 'work.committed',
       work: updated,
     });
+    // Whoever was asked to decide it no longer is (INV-1093).
+    await resolveAttentionNotifications(transaction, { kind: 'CANDIDATE_COMMIT', resolution: 'committed', resolvedById: actor.actorId, workId: updated.id });
+    await settleProposedBatches(transaction, { resolvedById: actor.actorId, work: updated });
 
     await notifyClosableResearch(transaction, updated);
 
@@ -840,6 +851,8 @@ export async function rejectWork(
       type: 'work.rejected',
       work: updated,
     });
+    await resolveAttentionNotifications(transaction, { kind: 'CANDIDATE_COMMIT', resolution: 'declined', resolvedById: actor.actorId, workId: updated.id });
+    await settleProposedBatches(transaction, { resolvedById: actor.actorId, work: updated });
 
     if (rejectIdempotencyId) {
       await completeWorkIdempotency(transaction, rejectIdempotencyId, updated.id);

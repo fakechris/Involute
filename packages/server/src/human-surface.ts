@@ -255,6 +255,11 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationLanding> = {
   'agent.request_expired': { kind: 'work', action: 'Answer', component: 'components/AgentRequestActions.tsx' },
   'agent.request_handed_off': { kind: 'work', action: 'Answer', component: 'components/AgentRequestActions.tsx' },
   'webhook.disabled': { kind: 'inbox' },
+  // INV-1093: decisions nobody was told about. Each is decided in Needs you (/todo).
+  'work.proposed_batch': { kind: 'inbox' },
+  'delivery.proposed': { kind: 'inbox' },
+  // The unit ran out of attempts; the work page shows the package to re-plan.
+  'executor.exhausted': { kind: 'info' },
   'ops.event.dead_letter': { kind: 'inbox' },
   'ops.webhook.disabled': { kind: 'inbox' },
   'ops.github_sync.dead_letter': { kind: 'inbox' },

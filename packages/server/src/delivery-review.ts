@@ -1,6 +1,6 @@
 import type { Issue, Prisma } from '@prisma/client';
 import { approvedDelivery, assertDeliveryExecution } from './delivery-grant.js';
-import { projectDecisionNotifications } from './notification-service.js';
+import { projectDecisionNotifications, projectWorkNotifications } from './notification-service.js';
 import { hasTechnicalDeliveryProof } from './delivery-readiness.js';
 import { snapshotContract } from './evidence-contract.js';
 import { createValidationError } from './errors.js';
@@ -67,7 +67,9 @@ export async function returnDeliveryChildren(tx: Prisma.TransactionClient, root:
       } else {
         const retry = !['RUNNING', 'STOP_REQUESTED'].includes(dispatch.state) && dispatch.generation < (binding?.unit.maxAttempts ?? 1);
         await tx.executorDispatch.update({ where: { id: dispatch.id }, data: { state: retry ? 'QUEUED' : 'EXHAUSTED', generation: { increment: 1 }, revision: { increment: 1 }, runId: null, leaseUntil: null, feedback: reason ?? 'Returned for changes' } });
-        await enqueueWorkEvent(tx, { type: retry ? 'executor.dispatched' : 'executor.exhausted', workId: task.id, workIdentifier: task.identifier, payload: { dispatchId: dispatch.id, generation: dispatch.generation + 1, feedback: reason, actorId: actor.actorId, protocolVersion: 1 } });
+        const dispatched = await enqueueWorkEvent(tx, { type: retry ? 'executor.dispatched' : 'executor.exhausted', workId: task.id, workIdentifier: task.identifier, payload: { dispatchId: dispatch.id, generation: dispatch.generation + 1, feedback: reason, actorId: actor.actorId, protocolVersion: 1 } });
+        // Out of attempts: a person has to decide what happens to the unit next (INV-1093).
+        if (!retry) await projectWorkNotifications(tx, { eventId: dispatched.id, payload: { dispatchId: dispatch.id, feedback: reason ?? null, packageIdentifier: root.identifier }, type: 'executor.exhausted', work: root });
       }
     }
     const decision = await tx.workReviewDecision.create({ data: { workId: task.id, runId: run?.id ?? null, reviewerId: actor.actorId!, decision: 'REJECTED', fromRevision: task.revision, toRevision: after.revision, reason: reason ?? `Returned with delivery package ${root.identifier}.` } });

@@ -1028,12 +1028,18 @@ model Notification {
   sourceEventId String?   @db.Uuid
   payload       Json      @default("{}")
   readAt        DateTime?
+  // The decision it asked for was made (INV-1093): when, by whom, and how
+  // (accepted, rejected, committed…). Set for every recipient at once.
+  resolvedAt    DateTime?
+  resolvedById  String?   @db.Uuid
+  resolution    String?
   emailedAt     DateTime?
   emailAttempts Int       @default(0)
   createdAt     DateTime  @default(now())
 
   @@unique([sourceEventId, userId])
   @@index([userId, readAt, createdAt])
+  @@index([workId, type])
 }
 
 // Phase 2: Idempotent GitHub webhook event log with physical unique constraint

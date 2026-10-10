@@ -123,24 +123,32 @@ export function NotificationsBell({ authenticated }: { authenticated: boolean })
       <button
         type="button"
         className="app-shell__footer-settings"
-        title="Notifications"
+        title={unreadCount > 0 ? 'Activity · unread' : 'Activity'}
+        aria-label={unreadCount > 0 ? 'Activity, unread' : 'Activity'}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         data-testid="notifications-bell"
         onClick={() => setIsOpen((open) => !open)}
       >
         <IcoBell size={14} />
-        {unreadCount > 0 ? (
-          <span className="notif-bell__badge" data-testid="notifications-badge">
-            {unreadCount > 9 ? '9+' : unreadCount}
-          </span>
-        ) : null}
+        {/* A dot, not a number: the only count in the app is Needs you (INV-1093). */}
+        {unreadCount > 0 ? <span className="notif-bell__dot" data-testid="notifications-badge" aria-hidden="true" /> : null}
       </button>
 
       {isOpen ? (
-        <div className="notif-bell__panel" role="dialog" aria-label="Notifications" data-testid="notifications-panel">
+        <div className="notif-bell__panel" role="dialog" aria-label="Activity" data-testid="notifications-panel">
           <div className="notif-bell__panel-head">
-            <strong>Notifications</strong>
+            <strong>Activity</strong>
+            <button
+              type="button"
+              className="notif-bell__link"
+              onClick={() => {
+                setIsOpen(false);
+                navigate('/inbox');
+              }}
+            >
+              Open Activity
+            </button>
             {unreadCount > 0 ? (
               <button
                 type="button"

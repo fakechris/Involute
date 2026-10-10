@@ -17,7 +17,7 @@ import {
 import { enqueueWorkEvent } from './event-outbox.js';
 import { lockWorkGraph } from './graph-integrity.js';
 import { updateIssue } from './issue-service.js';
-import { projectWorkNotifications } from './notification-service.js';
+import { projectWorkNotifications, resolveAttentionNotifications } from './notification-service.js';
 import { recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
 
 import type { ContractAmendment, Issue, Prisma, PrismaClient } from '@prisma/client';
@@ -216,6 +216,37 @@ async function settle(
   return tx.contractAmendment.findUniqueOrThrow({ where: { id: amendment.id } });
 }
 
+/**
+ * A decided amendment (INV-1093): the owner's notification asking for it is
+ * resolved, and the agent that proposed it hears the decision in its
+ * agent_inbox — before, only a webhook consumer could learn it.
+ */
+async function settleAmendmentNotifications(
+  tx: Prisma.TransactionClient,
+  input: {
+    amendment: ContractAmendment;
+    decidedById: string;
+    eventId: string;
+    note: string | null;
+    resolution: 'accepted' | 'rejected';
+    work: Issue;
+  },
+): Promise<void> {
+  await resolveAttentionNotifications(tx, { kind: 'CONTRACT_AMENDMENT', resolution: input.resolution, resolvedById: input.decidedById, workId: input.work.id });
+  if (input.amendment.proposedById === input.decidedById) return;
+  await tx.notification.createMany({
+    data: [{
+      payload: { amendmentId: input.amendment.id, decidedByActorId: input.decidedById, identifier: input.work.identifier, note: input.note, title: input.work.title },
+      sourceEventId: input.eventId,
+      teamId: input.work.teamId,
+      type: input.resolution === 'accepted' ? 'contract.amendment_accepted' : 'contract.amendment_rejected',
+      userId: input.amendment.proposedById,
+      workId: input.work.id,
+    }],
+    skipDuplicates: true,
+  });
+}
+
 export async function acceptContractAmendment(
   prisma: PrismaClient,
   input: { amendmentId: string; note?: string | null },
@@ -239,12 +270,13 @@ export async function acceptContractAmendment(
       reason: `contract amendment accepted: ${amendment.reason}${note ? ` (note: ${note})` : ''}`,
       sourceMessageId: amendment.id,
     });
-    await enqueueWorkEvent(tx, {
+    const event = await enqueueWorkEvent(tx, {
       payload: { amendmentId: amendment.id, decidedByActorId: decidedById, fields: Object.keys(storedValues(amendment.changes)), note },
       type: 'contract.amendment_accepted',
       workId: work.id,
       workIdentifier: work.identifier,
     });
+    await settleAmendmentNotifications(tx, { amendment, decidedById, eventId: event.id, note, resolution: 'accepted', work });
     return { amendment: settled, work: updated };
   });
 }
@@ -277,12 +309,13 @@ export async function rejectContractAmendment(
       before: snapshot,
       workId: work.id,
     });
-    await enqueueWorkEvent(tx, {
+    const event = await enqueueWorkEvent(tx, {
       payload: { amendmentId: amendment.id, decidedByActorId: decidedById, note },
       type: 'contract.amendment_rejected',
       workId: work.id,
       workIdentifier: work.identifier,
     });
+    await settleAmendmentNotifications(tx, { amendment, decidedById, eventId: event.id, note, resolution: 'rejected', work });
     return { amendment: settled, work };
   });
 }

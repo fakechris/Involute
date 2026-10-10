@@ -8,7 +8,7 @@ import {
   hashIdempotencyRequest,
   reserveWorkIdempotency,
 } from './idempotency.js';
-import { projectDecisionNotifications } from './notification-service.js';
+import { projectDecisionNotifications, resolveAttentionNotifications } from './notification-service.js';
 import {
   createNotFoundError,
   createValidationError,
@@ -169,6 +169,10 @@ export async function reviewWorkInTransaction(
       type: reviewEventType,
       work,
     });
+    // The review it was waiting for, and any decision its run asked for, are made (INV-1093).
+    const resolution = input.decision === 'ACCEPTED' ? 'accepted' : 'returned';
+    await resolveAttentionNotifications(transaction, { kind: 'WORK_REVIEW', resolution, resolvedById: actorId, workId: work.id });
+    await resolveAttentionNotifications(transaction, { kind: 'DECISION_REQUESTED', resolution, resolvedById: actorId, workId: work.id });
     if (reviewIdempotencyId) {
       await completeWorkIdempotency(transaction, reviewIdempotencyId, work.id, decision.id);
     }

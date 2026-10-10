@@ -14,7 +14,7 @@ const PATHNAME_LABELS: Record<string, string> = {
   '/in-review': 'In Review',
   '/bugs': 'Bugs',
   '/graph': 'Graph',
-  '/inbox': 'Inbox',
+  '/inbox': 'Activity',
   '/my-issues': 'My Issues',
   '/views': 'Views',
   '/projects': 'Projects',

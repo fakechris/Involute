@@ -34,9 +34,13 @@ describe('App keyboard shortcuts and help dialog', () => {
     expect(graphLink).toBeInTheDocument();
     expect(within(graphLink).getByText('G R')).toBeInTheDocument();
 
-    const inboxLink = screen.getByRole('link', { name: /^Inbox/i });
-    expect(inboxLink).toBeInTheDocument();
-    expect(within(inboxLink).getByText('G I')).toBeInTheDocument();
+    // Inbox is Activity since INV-1093; G I still goes there.
+    const activityLink = screen.getByRole('link', { name: /^Activity/i });
+    expect(activityLink).toHaveAttribute('href', '/inbox');
+    expect(within(activityLink).getByText('G I')).toBeInTheDocument();
+
+    const needsYouLink = screen.getByRole('link', { name: /^Needs you/i });
+    expect(within(needsYouLink).getByText('G T')).toBeInTheDocument();
 
     const myIssuesLink = screen.getByRole('link', { name: /^My Issues/i });
     expect(myIssuesLink).toBeInTheDocument();

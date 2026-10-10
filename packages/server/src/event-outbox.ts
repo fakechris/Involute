@@ -21,6 +21,8 @@ export const WORK_EVENT_TYPES = [
   // A delivery change set (INV-941) was approved or declined (INV-990).
   'delivery.approved',
   'delivery.declined',
+  // A delivery change set waits for a person (INV-1093).
+  'delivery.proposed',
   'work.claimed',
   'work.state_changed',
   'run.started',
@@ -557,6 +559,7 @@ async function accountSubscriptionOutcomes(
           subscription: {
             consecutiveFailures: disabled.consecutiveFailures,
             createdById: disabled.createdById,
+            id: disabled.id,
             label: disabled.label,
             url: disabled.url,
           },

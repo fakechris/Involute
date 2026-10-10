@@ -26,7 +26,7 @@ export const SHORTCUT_SECTIONS: ShortcutSection[] = [
       { id: 'nav-in-review', label: 'Go to In Review', description: 'Completed agent runs review', keys: ['G', 'N'] },
       { id: 'nav-bugs', label: 'Go to Bugs', description: 'Reported bugs queue', keys: ['G', 'U'] },
       { id: 'nav-graph', label: 'Go to Graph', description: 'Work-graph relationships view', keys: ['G', 'R'] },
-      { id: 'nav-inbox', label: 'Go to Inbox', description: 'Notifications and activity', keys: ['G', 'I'] },
+      { id: 'nav-inbox', label: 'Go to Activity', description: 'What happened on your work', keys: ['G', 'I'] },
       { id: 'nav-my-issues', label: 'Go to My Issues', description: 'Issues assigned to you', keys: ['G', 'M'] },
       { id: 'nav-projects', label: 'Go to Projects', description: 'Projects overview', keys: ['G', 'P'] },
       { id: 'nav-cycles', label: 'Go to Milestones', description: 'Milestones and delivery cycles', keys: ['G', 'V'] },

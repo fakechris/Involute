@@ -1322,6 +1322,14 @@ export const NOTIFICATIONS_PAGE_QUERY = gql`
         payload
         readAt
         createdAt
+        actionable
+        resolvedAt
+        resolution
+        resolvedBy {
+          id
+          name
+          email
+        }
         work {
           id
           identifier

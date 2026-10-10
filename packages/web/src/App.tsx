@@ -692,8 +692,8 @@ export function App() {
       },
       {
         id: 'go-inbox',
-        label: 'Go to inbox',
-        description: 'Open notifications and activity',
+        label: 'Go to Activity',
+        description: 'What happened on your work; decisions are in Needs you',
         group: 'Navigation',
         shortcut: 'G I',
         run: () => navigate('/inbox'),
@@ -989,9 +989,9 @@ export function App() {
               <span className="app-shell__link-label">Health</span>
               <kbd className="app-shell__link-kbd" aria-hidden="true">G H</kbd>
             </NavLink>
-            <NavLink to="/inbox" className={getNavLinkClassName} title="Go to Inbox · G I">
+            <NavLink to="/inbox" className={getNavLinkClassName} title="Go to Activity · G I">
               <span className="app-shell__nav-icon"><IcoInbox size={14} /></span>
-              <span className="app-shell__link-label">Inbox</span>
+              <span className="app-shell__link-label">Activity</span>
               <kbd className="app-shell__link-kbd" aria-hidden="true">G I</kbd>
             </NavLink>
             <NavLink to="/my-issues" className={getNavLinkClassName} title="Go to My Issues · G M">

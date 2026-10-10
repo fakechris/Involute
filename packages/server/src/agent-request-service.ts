@@ -19,6 +19,7 @@ import type {
   PrismaClient,
   WorkEvidenceKind,
 } from '@prisma/client';
+import { resolveAttentionNotifications } from './notification-service.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -611,6 +612,14 @@ export async function answerAgentRequestAsHuman(
       workId: request.work.id,
       workIdentifier: request.work.identifier,
     });
+    // The person it was handed to has answered it (INV-1093).
+    await resolveAttentionNotifications(tx, {
+      kind: 'AGENT_REQUEST',
+      payload: { key: 'requestId', value: request.id },
+      resolution: 'answered',
+      resolvedById: input.by.actorId,
+      types: ['agent.request_handed_off'],
+    });
     if (humanState === 'INPUT_REQUIRED') {
       await notifyRequesterAskedBack(tx, request, { commentId: comment.id, askedById: input.by.actorId });
     }
@@ -727,6 +736,13 @@ export async function replyToAgentRequest(
       type: 'agent.request_replied',
       workId: request.work.id,
       workIdentifier: request.work.identifier,
+    });
+    await resolveAttentionNotifications(tx, {
+      kind: 'AGENT_REQUEST',
+      payload: { key: 'requestId', value: request.id },
+      resolution: 'replied',
+      resolvedById: input.by.actorId,
+      types: ['agent.request_input_required'],
     });
     return tx.agentRequest.findUniqueOrThrow({ where: { id: request.id } });
   });
