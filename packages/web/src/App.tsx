@@ -51,6 +51,7 @@ import {
   type AppShellTeamSummary,
 } from './lib/app-shell-state';
 import { fetchSessionState, getGoogleLoginUrl, logoutSession, type SessionState } from './lib/session';
+import { SAVED_VIEWS_ACCOUNT_EVENT, setSavedViewsAccount } from './lib/saved-views-account';
 import { lazyRoute, RouteErrorBoundary } from './lib/lazy-route';
 import { CommentUndoHost } from './undo/CommentUndoHost';
 import { CommitUndoHost } from './undo/CommitUndoHost';
@@ -374,6 +375,8 @@ export function App() {
           return;
         }
 
+        // Saved views are read per account, and only once the account is known (INV-1194).
+        setSavedViewsAccount(nextSession.authenticated ? nextSession.viewer?.id ?? null : null);
         setSession(nextSession);
         setIsSessionLoaded(true);
       })
@@ -383,6 +386,7 @@ export function App() {
         }
 
         console.error('Could not load session state.', error);
+        setSavedViewsAccount(null);
         setSession(null);
         setSessionError('Could not load session state.');
         setIsSessionLoaded(true);
@@ -414,8 +418,14 @@ export function App() {
   }, [location.pathname]);
 
   useEffect(() => {
-    setSavedBoardViews(readSavedBoardViews(activeTeamKey));
-    setSavedBacklogViews(readSavedBacklogViews(activeTeamKey));
+    function reloadSavedViews() {
+      setSavedBoardViews(readSavedBoardViews(activeTeamKey));
+      setSavedBacklogViews(readSavedBacklogViews(activeTeamKey));
+    }
+    reloadSavedViews();
+    // Another account's copy once the session says who is signed in (INV-1194).
+    window.addEventListener(SAVED_VIEWS_ACCOUNT_EVENT, reloadSavedViews);
+    return () => window.removeEventListener(SAVED_VIEWS_ACCOUNT_EVENT, reloadSavedViews);
   }, [activeTeamKey]);
 
   useEffect(() => {
@@ -1293,6 +1303,7 @@ export function App() {
                   logoutSession()
                     .then((didLogout) => {
                       if (didLogout) {
+                        setSavedViewsAccount(null);
                         setSessionError(null);
                         setSession(null);
                         setIsSessionLoaded(true);

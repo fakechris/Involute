@@ -1,6 +1,7 @@
 import type { BoardGroupBy, BoardIssueGroup, IssueSummary, LabelSummary, UserSummary } from './types';
 import { looksLikeIql, matchesIql } from './iql-eval';
 import { readLocalStorageValue } from '../lib/storage';
+import { savedViewsStorageKey } from '../lib/saved-views-account';
 
 export type BoardSortField = 'identifier' | 'title' | 'updatedAt' | 'createdAt' | 'priority';
 export type BoardSortDirection = 'asc' | 'desc';
@@ -56,8 +57,9 @@ function getBoardViewStateStorageKey(teamKey: string) {
   return `involute.board.viewState.${teamKey}`;
 }
 
+// Per account as well as per team (INV-1194); null while nobody is signed in.
 function getSavedBoardViewsStorageKey(teamKey: string) {
-  return `involute.board.savedViews.${teamKey}`;
+  return savedViewsStorageKey('board', teamKey);
 }
 
 function isBoardSortField(value: unknown): value is BoardSortField {
@@ -181,7 +183,8 @@ export function readSavedBoardViews(teamKey: string | null): SavedBoardView[] {
     return [];
   }
 
-  const rawValue = readLocalStorageValue(getSavedBoardViewsStorageKey(teamKey));
+  const storageKey = getSavedBoardViewsStorageKey(teamKey);
+  const rawValue = storageKey ? readLocalStorageValue(storageKey) : null;
 
   if (!rawValue) {
     return [];
@@ -200,7 +203,8 @@ export function writeSavedBoardViews(teamKey: string | null, views: SavedBoardVi
   }
 
   try {
-    window.localStorage.setItem(getSavedBoardViewsStorageKey(teamKey), JSON.stringify(views));
+    const storageKey = getSavedBoardViewsStorageKey(teamKey);
+    if (storageKey) window.localStorage.setItem(storageKey, JSON.stringify(views));
   } catch {
     // Ignore storage failures in restricted browser contexts.
   }

@@ -14,6 +14,7 @@ import {
   type SavedBoardView,
   type SavedBoardViewsEventDetail,
 } from '../board/views';
+import { getSavedViewsAccount } from './saved-views-account';
 import { SAVED_VIEW_DELETE_MUTATION, SAVED_VIEW_UPSERT_MUTATION, SAVED_VIEWS_QUERY } from '../work/queries';
 
 /**
@@ -23,12 +24,14 @@ import { SAVED_VIEW_DELETE_MUTATION, SAVED_VIEW_UPSERT_MUTATION, SAVED_VIEWS_QUE
  * ones the server has not seen, then (2) mirrors every later local change
  * (save, rename, delete) to the server. The server is the source of truth:
  * what it returns replaces the local list, so a view saved on another device
- * shows up here.
+ * shows up here. It runs for one account (INV-1194): once another account is
+ * signed in, or the sync is stopped, answers still in flight are dropped instead
+ * of landing in the next account's copy.
  */
 type ServerView = { id: string; ownerId: string; name: string; kind: string; visibility: 'PRIVATE' | 'TEAM'; stateJson: string };
 type AnyView = SavedBoardView | SavedBacklogView;
 
-export const SAVED_VIEWS_MIGRATED_KEY = (teamKey: string) => `involute.views.migrated.${teamKey}`;
+export const SAVED_VIEWS_MIGRATED_KEY = (accountId: string, teamKey: string) => `involute.views.migrated.${accountId}.${teamKey}`;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function fromServer(view: ServerView): AnyView {
@@ -37,11 +40,14 @@ function fromServer(view: ServerView): AnyView {
   return { id: view.id, name: view.name, state: state as never, visibility: view.visibility, ownerId: view.ownerId };
 }
 
-export function startSavedViewsSync(client: ApolloClient, teamKey: string): () => void {
+export function startSavedViewsSync(client: ApolloClient, teamKey: string, accountId: string): () => void {
   let applying = false;
+  let stopped = false;
   let known = new Map<string, AnyView>();
+  const isLive = () => !stopped && getSavedViewsAccount() === accountId;
 
   const write = (kind: 'board' | 'backlog', views: AnyView[]) => {
+    if (!isLive()) return;
     applying = true;
     try {
       if (kind === 'board') writeSavedBoardViews(teamKey, views as SavedBoardView[]);
@@ -61,24 +67,26 @@ export function startSavedViewsSync(client: ApolloClient, teamKey: string): () =
 
   const pull = async () => {
     const result = await client.query<{ savedViews: ServerView[] }>({ query: SAVED_VIEWS_QUERY, variables: { teamKey }, fetchPolicy: 'network-only' });
+    if (!isLive()) return;
     const server = result.data?.savedViews ?? [];
     // Local views the server refused (success=false, e.g. a name over 120 characters) stay in
     // the browser: they may be the only copy (INV-1193). The migration is retried until none are left.
     const refused: Record<'board' | 'backlog', AnyView[]> = { board: [], backlog: [] };
     // One-time migration: local views the server does not have become private server views.
-    if (!window.localStorage.getItem(SAVED_VIEWS_MIGRATED_KEY(teamKey))) {
+    if (!window.localStorage.getItem(SAVED_VIEWS_MIGRATED_KEY(accountId, teamKey))) {
       const have = new Set(server.map((view) => view.id));
       for (const kind of ['board', 'backlog'] as const) {
         const local = kind === 'board' ? readSavedBoardViews(teamKey) : readSavedBacklogViews(teamKey);
         for (const view of local) {
           if (have.has(view.id)) continue;
           const saved = await upsert(kind, view);
+          if (!isLive()) return;
           if (saved) server.push(saved);
           else refused[kind].push(view);
         }
       }
       if (refused.board.length === 0 && refused.backlog.length === 0) {
-        window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY(teamKey), new Date().toISOString());
+        window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY(accountId, teamKey), new Date().toISOString());
       }
     }
     known = new Map(server.map((view) => [view.id, fromServer(view)]));
@@ -88,7 +96,7 @@ export function startSavedViewsSync(client: ApolloClient, teamKey: string): () =
 
   // A local change (the pages write localStorage and fire these events) is mirrored to the server.
   const mirror = (kind: 'board' | 'backlog') => async (event: Event) => {
-    if (applying) return;
+    if (applying || !isLive()) return;
     const detail = (event as CustomEvent<SavedBoardViewsEventDetail | SavedBacklogViewsEventDetail>).detail;
     if (!detail || detail.teamKey !== teamKey) return;
     const current = detail.views as AnyView[];
@@ -107,7 +115,7 @@ export function startSavedViewsSync(client: ApolloClient, teamKey: string): () =
     }
     for (const [id, before] of known) {
       const sameKind = kind === 'board' ? 'groupBy' in (before.state as object) : !('groupBy' in (before.state as object));
-      if (!currentIds.has(id) && sameKind && !replacements.has(id)) {
+      if (!currentIds.has(id) && sameKind && !replacements.has(id) && isLive()) {
         await client.mutate({ mutation: SAVED_VIEW_DELETE_MUTATION, variables: { id } });
         known.delete(id);
       }
@@ -122,6 +130,7 @@ export function startSavedViewsSync(client: ApolloClient, teamKey: string): () =
   window.addEventListener(BACKLOG_SAVED_VIEWS_EVENT, onBacklog);
   void pull().catch((error: unknown) => { console.error('[saved-views] could not load views from the server; using this browser\'s copy.', error); });
   return () => {
+    stopped = true;
     window.removeEventListener(BOARD_SAVED_VIEWS_EVENT, onBoard);
     window.removeEventListener(BACKLOG_SAVED_VIEWS_EVENT, onBacklog);
   };

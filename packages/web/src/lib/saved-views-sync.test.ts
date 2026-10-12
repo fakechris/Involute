@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { readSavedBoardViews, writeSavedBoardViews, type BoardViewState } from '../board/views';
 import { SAVED_VIEW_DELETE_MUTATION, SAVED_VIEW_UPSERT_MUTATION } from '../work/queries';
+import { setSavedViewsAccount } from './saved-views-account';
 import { SAVED_VIEWS_MIGRATED_KEY, startSavedViewsSync } from './saved-views-sync';
 
 type ServerView = { id: string; ownerId: string; name: string; kind: string; visibility: 'PRIVATE' | 'TEAM'; stateJson: string };
@@ -39,15 +40,15 @@ const deleteCalls = (mutate: ReturnType<typeof vi.fn>) => mutate.mock.calls.filt
 
 describe('saved views sync', () => {
   let stop: (() => void) | null = null;
-  beforeEach(() => { window.localStorage.clear(); });
-  afterEach(() => { stop?.(); stop = null; window.localStorage.clear(); });
+  beforeEach(() => { window.localStorage.clear(); setSavedViewsAccount('user-a'); });
+  afterEach(() => { stop?.(); stop = null; setSavedViewsAccount(null); window.localStorage.clear(); });
 
   // INV-1192: a view made in the browser (id view-<time>) gets a server UUID on its first upsert.
   it('keeps a newly created view on the server instead of deleting its new UUID in the same round', async () => {
-    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('INV'), 'done');
+    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'), 'done');
     const server: ServerView[] = [];
     const { client, mutate } = fakeClient(server);
-    stop = startSavedViewsSync(client, 'INV');
+    stop = startSavedViewsSync(client, 'INV', 'user-a');
     await flush();
 
     writeSavedBoardViews('INV', [{ id: 'view-1700000000000', name: 'Mine', state: BOARD_STATE }]);
@@ -60,10 +61,10 @@ describe('saved views sync', () => {
   });
 
   it('still deletes a server view that was removed locally', async () => {
-    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('INV'), 'done');
+    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'), 'done');
     const server: ServerView[] = [serverView(uuid(1), 'Keep'), serverView(uuid(2), 'Drop')];
     const { client, mutate } = fakeClient(server);
-    stop = startSavedViewsSync(client, 'INV');
+    stop = startSavedViewsSync(client, 'INV', 'user-a');
     await vi.waitFor(() => expect(readSavedBoardViews('INV')).toHaveLength(2));
 
     writeSavedBoardViews('INV', readSavedBoardViews('INV').filter((view) => view.name === 'Keep'));
@@ -81,23 +82,73 @@ describe('saved views sync', () => {
     ]);
     const server: ServerView[] = [];
     const first = fakeClient(server);
-    stop = startSavedViewsSync(first.client, 'INV');
+    stop = startSavedViewsSync(first.client, 'INV', 'user-a');
     await vi.waitFor(() => expect(upsertCalls(first.mutate)).toHaveLength(2));
     await flush();
 
     // Not declared done; the refused view is still here, the accepted one now carries its server id.
-    expect(window.localStorage.getItem(SAVED_VIEWS_MIGRATED_KEY('INV'))).toBeNull();
+    expect(window.localStorage.getItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'))).toBeNull();
     expect(readSavedBoardViews('INV').map((view) => [view.id, view.name])).toEqual([[uuid(100), 'Fine'], ['view-long', tooLong]]);
     stop();
 
     // The person shortens the name; the next start uploads only that view.
-    window.localStorage.setItem('involute.board.savedViews.INV', JSON.stringify(readSavedBoardViews('INV').map((view) => (view.id === 'view-long' ? { ...view, name: 'Shorter' } : view))));
+    window.localStorage.setItem('involute.board.savedViews.user-a.INV', JSON.stringify(readSavedBoardViews('INV').map((view) => (view.id === 'view-long' ? { ...view, name: 'Shorter' } : view))));
     const second = fakeClient(server);
-    stop = startSavedViewsSync(second.client, 'INV');
-    await vi.waitFor(() => expect(window.localStorage.getItem(SAVED_VIEWS_MIGRATED_KEY('INV'))).not.toBeNull());
+    stop = startSavedViewsSync(second.client, 'INV', 'user-a');
+    await vi.waitFor(() => expect(window.localStorage.getItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'))).not.toBeNull());
 
     expect(upsertCalls(second.mutate).map(([options]) => (options as { variables: { input: { name: string } } }).variables.input.name)).toEqual(['Shorter']);
     expect(server.map((view) => view.name)).toEqual(['Fine', 'Shorter']);
     expect(readSavedBoardViews('INV').map((view) => view.name)).toEqual(['Fine', 'Shorter']);
+  });
+
+  // INV-1194: the browser's copy belongs to one account.
+  it('drops a pull still in flight for the previous account instead of writing it into the next account\'s copy', async () => {
+    window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY('user-a', 'INV'), 'done');
+    let answer: (value: unknown) => void = () => {};
+    const query = vi.fn(() => new Promise((resolve) => { answer = resolve; }));
+    const mutate = vi.fn();
+    stop = startSavedViewsSync({ query, mutate } as unknown as ApolloClient, 'INV', 'user-a');
+
+    setSavedViewsAccount('user-b');
+    answer({ data: { savedViews: [serverView(uuid(1), 'A private')] } });
+    await flush();
+
+    expect(readSavedBoardViews('INV')).toEqual([]);
+    expect(Object.keys(window.localStorage).some((key) => key.includes('user-b'))).toBe(false);
+    setSavedViewsAccount('user-a');
+    expect(readSavedBoardViews('INV')).toEqual([]);
+  });
+
+  it('shows the next account nothing of the previous one when its own pull fails', async () => {
+    writeSavedBoardViews('INV', [{ id: uuid(1), name: 'A private', state: BOARD_STATE, visibility: 'PRIVATE', ownerId: 'user-a' }]);
+    setSavedViewsAccount('user-b');
+    const query = vi.fn(async () => { throw new Error('offline'); });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    stop = startSavedViewsSync({ query, mutate: vi.fn() } as unknown as ApolloClient, 'INV', 'user-b');
+    await flush();
+
+    expect(readSavedBoardViews('INV')).toEqual([]);
+    setSavedViewsAccount('user-a');
+    expect(readSavedBoardViews('INV').map((view) => view.name)).toEqual(['A private']);
+  });
+
+  it('moves only team-shared and own views out of a copy saved before views were kept per account', () => {
+    setSavedViewsAccount(null);
+    window.localStorage.setItem('involute.board.savedViews.INV', JSON.stringify([
+      { id: 'view-1', name: 'Nobody knows whose', state: BOARD_STATE },
+      { id: uuid(2), name: 'Shared', state: BOARD_STATE, visibility: 'TEAM', ownerId: 'user-a' },
+      { id: uuid(3), name: 'Bob own', state: BOARD_STATE, visibility: 'PRIVATE', ownerId: 'user-b' },
+      { id: uuid(4), name: 'Alice own', state: BOARD_STATE, visibility: 'PRIVATE', ownerId: 'user-a' },
+    ]));
+    window.localStorage.setItem('involute.views.migrated.INV', 'done');
+
+    setSavedViewsAccount('user-b');
+
+    expect(readSavedBoardViews('INV').map((view) => view.name)).toEqual(['Shared', 'Bob own']);
+    expect(window.localStorage.getItem('involute.board.savedViews.INV')).toBeNull();
+    expect(window.localStorage.getItem('involute.views.migrated.INV')).toBeNull();
+    setSavedViewsAccount('user-a');
+    expect(readSavedBoardViews('INV')).toEqual([]);
   });
 });
