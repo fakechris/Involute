@@ -1,6 +1,9 @@
-import type { PrismaClient, WorkRun } from '@prisma/client';
+import type { Prisma, PrismaClient, WorkRun } from '@prisma/client';
 
+import { buildReadableIssueWhere } from './access-control.js';
+import type { GraphQLContext } from './auth.js';
 import { enqueueWorkEvent } from './event-outbox.js';
+import { resolveShareScope } from './project-sharing.js';
 
 /**
  * Whether an execution still looks alive (INV-996). The same question INV-562
@@ -52,7 +55,8 @@ export async function sweepStaleRuns(prisma: PrismaClient, now = new Date(), sta
       const payload = { runId: run.id, publicId: run.publicId, actorId: run.actorId, lastActivityAt: run.lastActivityAt.toISOString(), silentMinutes, phase: run.phase, identifier: run.work.identifier, title: run.work.title };
       const event = await enqueueWorkEvent(tx, { payload, type: 'run.stale', workId: run.work.id, workIdentifier: run.work.identifier });
       const executor = run.actorId ? await tx.user.findUnique({ where: { id: run.actorId }, select: { ownerId: true } }) : null;
-      const recipients = [...new Set([run.work.assigneeId, executor?.ownerId].filter((userId): userId is string => Boolean(userId)))];
+      const candidates = [...new Set([run.work.assigneeId, executor?.ownerId].filter((userId): userId is string => Boolean(userId)))];
+      const recipients = await readersOf(tx, run.work.id, candidates);
       if (recipients.length) {
         await tx.notification.createMany({
           data: recipients.map((userId) => ({ payload, sourceEventId: event.id, teamId: run.work.teamId, type: 'run.stale', userId, workId: run.work.id })),
@@ -63,4 +67,28 @@ export async function sweepStaleRuns(prisma: PrismaClient, now = new Date(), sta
     });
   }
   return notified;
+}
+
+/**
+ * The note names the work, its title and the run's phase, so only people who
+ * may read the work get it (INV-1195): the same rules as the board — admin,
+ * team membership or PUBLIC team, or a project shared with them. Being the
+ * assignee or the executor's owner grants nothing by itself.
+ */
+async function readersOf(tx: Prisma.TransactionClient, workId: string, userIds: string[]): Promise<string[]> {
+  const readers: string[] = [];
+  for (const userId of userIds) {
+    const viewer = await tx.user.findUnique({ where: { id: userId } });
+    if (!viewer) continue;
+    const context: GraphQLContext = {
+      authMode: 'session',
+      isTrustedSystem: false,
+      prisma: tx as PrismaClient,
+      shareScope: await resolveShareScope(tx, viewer.id),
+      viewer,
+    };
+    const readable = await tx.issue.findFirst({ where: { AND: [{ id: workId }, buildReadableIssueWhere(context) ?? {}] }, select: { id: true } });
+    if (readable) readers.push(userId);
+  }
+  return readers;
 }
