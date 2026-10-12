@@ -7,10 +7,11 @@
  * out) nothing is read or stored.
  *
  * Copies written before this change (`involute.board.savedViews.<team>`) say
- * nothing about whose they are. When someone signs in, views in them that are
- * shared with the team or carry that person's ownerId move into their copy;
- * the rest — private views of an unknown owner — are dropped rather than handed
- * to whoever signs in first.
+ * nothing about whose they are, and since the server sync never ran they are
+ * everyone's only copy. The first account to sign in on this browser takes all
+ * of them into its own copy and the old key is removed, so no later account
+ * sees them. On a browser shared before this change that first account may
+ * receive views someone else saved — a one-time caveat chosen over losing them.
  */
 let account: string | null = null;
 
@@ -45,10 +46,15 @@ function adoptLegacySavedViews(accountId: string): void {
       if (!match) continue;
       let entries: unknown = [];
       try { entries = JSON.parse(window.localStorage.getItem(key) ?? '[]'); } catch { entries = []; }
-      const mine = (Array.isArray(entries) ? entries : []).filter((entry: { ownerId?: unknown; visibility?: unknown } | null) =>
-        Boolean(entry) && (entry!.visibility === 'TEAM' || entry!.ownerId === accountId));
+      const legacy = Array.isArray(entries) ? entries : [];
       const target = `involute.${match[1]}.savedViews.${accountId}.${match[2]}`;
-      if (mine.length > 0 && window.localStorage.getItem(target) === null) window.localStorage.setItem(target, JSON.stringify(mine));
+      if (legacy.length > 0) {
+        let existing: unknown = [];
+        try { existing = JSON.parse(window.localStorage.getItem(target) ?? '[]'); } catch { existing = []; }
+        const current = Array.isArray(existing) ? existing : [];
+        const ids = new Set(current.map((entry: { id?: unknown } | null) => entry?.id));
+        window.localStorage.setItem(target, JSON.stringify([...current, ...legacy.filter((entry: { id?: unknown } | null) => !ids.has(entry?.id))]));
+      }
       window.localStorage.removeItem(key);
     }
   } catch {

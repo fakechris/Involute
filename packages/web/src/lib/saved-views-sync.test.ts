@@ -133,19 +133,18 @@ describe('saved views sync', () => {
     expect(readSavedBoardViews('INV').map((view) => view.name)).toEqual(['A private']);
   });
 
-  it('moves only team-shared and own views out of a copy saved before views were kept per account', () => {
+  it('gives every view of a copy saved before views were kept per account to the first account, and none to the next', () => {
     setSavedViewsAccount(null);
     window.localStorage.setItem('involute.board.savedViews.INV', JSON.stringify([
       { id: 'view-1', name: 'Nobody knows whose', state: BOARD_STATE },
       { id: uuid(2), name: 'Shared', state: BOARD_STATE, visibility: 'TEAM', ownerId: 'user-a' },
-      { id: uuid(3), name: 'Bob own', state: BOARD_STATE, visibility: 'PRIVATE', ownerId: 'user-b' },
-      { id: uuid(4), name: 'Alice own', state: BOARD_STATE, visibility: 'PRIVATE', ownerId: 'user-a' },
+      { id: uuid(3), name: 'Private', state: BOARD_STATE, visibility: 'PRIVATE', ownerId: 'user-c' },
     ]));
     window.localStorage.setItem('involute.views.migrated.INV', 'done');
 
     setSavedViewsAccount('user-b');
 
-    expect(readSavedBoardViews('INV').map((view) => view.name)).toEqual(['Shared', 'Bob own']);
+    expect(readSavedBoardViews('INV').map((view) => view.name)).toEqual(['Nobody knows whose', 'Shared', 'Private']);
     expect(window.localStorage.getItem('involute.board.savedViews.INV')).toBeNull();
     expect(window.localStorage.getItem('involute.views.migrated.INV')).toBeNull();
     setSavedViewsAccount('user-a');
