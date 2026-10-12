@@ -8,6 +8,7 @@ import { LegacyTeamRedirect } from './routes/LegacyTeamRedirect';
 import { NotificationsBell } from './components/NotificationsBell';
 import { NeedsYouNavLink } from './components/NeedsYouNavLink';
 import { ShellTeamsSync } from './app/ShellTeamsSync';
+import { useSavedViewsSync } from './app/useSavedViewsSync';
 import { Avatar } from './components/Primitives';
 import {
   deriveViewLabel,
@@ -396,6 +397,10 @@ export function App() {
       cancelled = true;
     };
   }, []);
+
+  // The saved-views server sync runs for the signed-in account and active team (INV-1196).
+  // setSavedViewsAccount runs before setSession, so the sync starts with the account already set.
+  useSavedViewsSync(session?.authenticated ? session.viewer?.id ?? null : null, activeTeamKey);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -1447,7 +1452,6 @@ export function App() {
 export { CommandPalette } from './app/CommandPalette';
 export { KeyboardShortcutsDialog } from './app/KeyboardShortcutsDialog';
 export { TweaksPanel } from './app/TweaksPanel';
-export { useShellController } from './app/useShellController';
 export {
   getStoredDensity,
   getStoredSidebarWidth,
