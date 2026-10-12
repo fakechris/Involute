@@ -94,6 +94,8 @@ export function startSavedViewsSync(client: ApolloClient, teamKey: string): () =
       const saved = await upsert(kind, view);
       if (saved) {
         known.set(saved.id, fromServer(saved));
+        // The server's id is the view now: keep it out of the delete pass below (INV-1192).
+        currentIds.add(saved.id);
         if (saved.id !== view.id) replacements.set(view.id, fromServer(saved));
       }
     }
