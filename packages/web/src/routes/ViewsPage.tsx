@@ -7,6 +7,7 @@ import { SAVED_VIEW_DELETE_MUTATION, SAVED_VIEW_UPSERT_MUTATION } from '../work/
 import { readSavedBoardViews, writeSavedBoardViews, BOARD_SAVED_VIEWS_EVENT, dispatchApplyBoardView, type SavedBoardView } from '../board/views';
 import { readSavedBacklogViews, writeSavedBacklogViews, BACKLOG_SAVED_VIEWS_EVENT, dispatchApplyBacklogView, type SavedBacklogView } from '../backlog/views';
 import { readStoredTeamKey } from '../board/utils';
+import { SAVED_VIEWS_ACCOUNT_EVENT } from '../lib/saved-views-account';
 import { IcoPlus, IcoViews } from '../components/Icons';
 import { Btn } from '../components/Primitives';
 
@@ -71,11 +72,19 @@ export function ViewsPage() {
       setBacklogViews(readSavedBacklogViews(teamKey));
     }
 
+    function handleAccountChange() {
+      handleBoardUpdate();
+      handleBacklogUpdate();
+    }
+
     window.addEventListener(BOARD_SAVED_VIEWS_EVENT, handleBoardUpdate);
     window.addEventListener(BACKLOG_SAVED_VIEWS_EVENT, handleBacklogUpdate);
+    // The signed-in account's copy, once the session says who that is (INV-1194).
+    window.addEventListener(SAVED_VIEWS_ACCOUNT_EVENT, handleAccountChange);
     return () => {
       window.removeEventListener(BOARD_SAVED_VIEWS_EVENT, handleBoardUpdate);
       window.removeEventListener(BACKLOG_SAVED_VIEWS_EVENT, handleBacklogUpdate);
+      window.removeEventListener(SAVED_VIEWS_ACCOUNT_EVENT, handleAccountChange);
     };
   }, [teamKey]);
 

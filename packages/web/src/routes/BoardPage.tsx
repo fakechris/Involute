@@ -104,6 +104,7 @@ import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
 import type { ContractValues } from '../components/ContractSection';
 import { getBoardBootstrapErrorMessage } from '../lib/apollo';
 import { writeStoredShellIssues, writeStoredShellTeams } from '../lib/app-shell-state';
+import { SAVED_VIEWS_ACCOUNT_EVENT } from '../lib/saved-views-account';
 import { BoardCreateIssueDialog, DECISION_TEMPLATE, type CreatableKind } from '../components/BoardCreateIssueDialog';
 import type { StructureUpdate } from '../components/WorkStructureEditor';
 import {
@@ -496,6 +497,15 @@ export function BoardPage() {
         { replace: true },
       );
     }
+  }, [activeTeamKey]);
+
+  // The signed-in account's copy, once the session says who that is (INV-1194).
+  useEffect(() => {
+    function reloadSavedViews() {
+      setSavedBoardViews(readSavedBoardViews(activeTeamKey));
+    }
+    window.addEventListener(SAVED_VIEWS_ACCOUNT_EVENT, reloadSavedViews);
+    return () => window.removeEventListener(SAVED_VIEWS_ACCOUNT_EVENT, reloadSavedViews);
   }, [activeTeamKey]);
 
   useEffect(() => {

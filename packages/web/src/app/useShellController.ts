@@ -116,9 +116,10 @@ export function useShellController() {
   let apolloClient: ReturnType<typeof useApolloClient> | null = null;
   try { apolloClient = useApolloClient(); } catch { apolloClient = null; }
   useEffect(() => {
-    if (!apolloClient || !activeTeamKey || !session?.authenticated) return;
-    return startSavedViewsSync(apolloClient, activeTeamKey);
-  }, [apolloClient, activeTeamKey, session?.authenticated]);
+    const accountId = session?.authenticated ? session.viewer?.id : null;
+    if (!apolloClient || !activeTeamKey || !accountId) return;
+    return startSavedViewsSync(apolloClient, activeTeamKey, accountId);
+  }, [apolloClient, activeTeamKey, session?.authenticated, session?.viewer?.id]);
 
   useEffect(() => {
     function handleTeamsUpdate(event: Event) {

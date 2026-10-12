@@ -1,5 +1,6 @@
 import type { IssueSummary, TeamSummary, UserSummary } from '../board/types';
 import { readLocalStorageValue } from '../lib/storage';
+import { savedViewsStorageKey } from '../lib/saved-views-account';
 
 export type BacklogSortField =
   | 'identifier'
@@ -54,8 +55,9 @@ function getBacklogViewStateStorageKey(teamKey: string) {
   return `involute.backlog.viewState.${teamKey}`;
 }
 
+// Per account as well as per team (INV-1194); null while nobody is signed in.
 function getSavedBacklogViewsStorageKey(teamKey: string) {
-  return `involute.backlog.savedViews.${teamKey}`;
+  return savedViewsStorageKey('backlog', teamKey);
 }
 
 function isBacklogSortField(value: unknown): value is BacklogSortField {
@@ -172,7 +174,8 @@ export function readSavedBacklogViews(teamKey: string | null): SavedBacklogView[
     return [];
   }
 
-  const rawValue = readLocalStorageValue(getSavedBacklogViewsStorageKey(teamKey));
+  const storageKey = getSavedBacklogViewsStorageKey(teamKey);
+  const rawValue = storageKey ? readLocalStorageValue(storageKey) : null;
 
   if (!rawValue) {
     return [];
@@ -191,10 +194,8 @@ export function writeSavedBacklogViews(teamKey: string | null, views: SavedBackl
   }
 
   try {
-    window.localStorage.setItem(
-      getSavedBacklogViewsStorageKey(teamKey),
-      JSON.stringify(views),
-    );
+    const storageKey = getSavedBacklogViewsStorageKey(teamKey);
+    if (storageKey) window.localStorage.setItem(storageKey, JSON.stringify(views));
   } catch {
     // Ignore storage failures in restricted browser contexts.
   }
