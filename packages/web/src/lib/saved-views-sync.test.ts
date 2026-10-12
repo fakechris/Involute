@@ -71,4 +71,33 @@ describe('saved views sync', () => {
     expect(deleteCalls(mutate)[0]![0]).toMatchObject({ variables: { id: uuid(2) } });
     expect(server.map((view) => view.name)).toEqual(['Keep']);
   });
+
+  // INV-1193: an upsert the server refuses (success=false) must not cost the only copy of the view.
+  it('keeps local views the server refused during the first migration and retries them without duplicates', async () => {
+    const tooLong = 'x'.repeat(121);
+    writeSavedBoardViews('INV', [
+      { id: 'view-ok', name: 'Fine', state: BOARD_STATE },
+      { id: 'view-long', name: tooLong, state: BOARD_STATE },
+    ]);
+    const server: ServerView[] = [];
+    const first = fakeClient(server);
+    stop = startSavedViewsSync(first.client, 'INV');
+    await vi.waitFor(() => expect(upsertCalls(first.mutate)).toHaveLength(2));
+    await flush();
+
+    // Not declared done; the refused view is still here, the accepted one now carries its server id.
+    expect(window.localStorage.getItem(SAVED_VIEWS_MIGRATED_KEY('INV'))).toBeNull();
+    expect(readSavedBoardViews('INV').map((view) => [view.id, view.name])).toEqual([[uuid(100), 'Fine'], ['view-long', tooLong]]);
+    stop();
+
+    // The person shortens the name; the next start uploads only that view.
+    window.localStorage.setItem('involute.board.savedViews.INV', JSON.stringify(readSavedBoardViews('INV').map((view) => (view.id === 'view-long' ? { ...view, name: 'Shorter' } : view))));
+    const second = fakeClient(server);
+    stop = startSavedViewsSync(second.client, 'INV');
+    await vi.waitFor(() => expect(window.localStorage.getItem(SAVED_VIEWS_MIGRATED_KEY('INV'))).not.toBeNull());
+
+    expect(upsertCalls(second.mutate).map(([options]) => (options as { variables: { input: { name: string } } }).variables.input.name)).toEqual(['Shorter']);
+    expect(server.map((view) => view.name)).toEqual(['Fine', 'Shorter']);
+    expect(readSavedBoardViews('INV').map((view) => view.name)).toEqual(['Fine', 'Shorter']);
+  });
 });

@@ -62,6 +62,9 @@ export function startSavedViewsSync(client: ApolloClient, teamKey: string): () =
   const pull = async () => {
     const result = await client.query<{ savedViews: ServerView[] }>({ query: SAVED_VIEWS_QUERY, variables: { teamKey }, fetchPolicy: 'network-only' });
     const server = result.data?.savedViews ?? [];
+    // Local views the server refused (success=false, e.g. a name over 120 characters) stay in
+    // the browser: they may be the only copy (INV-1193). The migration is retried until none are left.
+    const refused: Record<'board' | 'backlog', AnyView[]> = { board: [], backlog: [] };
     // One-time migration: local views the server does not have become private server views.
     if (!window.localStorage.getItem(SAVED_VIEWS_MIGRATED_KEY(teamKey))) {
       const have = new Set(server.map((view) => view.id));
@@ -71,13 +74,16 @@ export function startSavedViewsSync(client: ApolloClient, teamKey: string): () =
           if (have.has(view.id)) continue;
           const saved = await upsert(kind, view);
           if (saved) server.push(saved);
+          else refused[kind].push(view);
         }
       }
-      window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY(teamKey), new Date().toISOString());
+      if (refused.board.length === 0 && refused.backlog.length === 0) {
+        window.localStorage.setItem(SAVED_VIEWS_MIGRATED_KEY(teamKey), new Date().toISOString());
+      }
     }
     known = new Map(server.map((view) => [view.id, fromServer(view)]));
-    write('board', server.filter((view) => view.kind === 'board').map(fromServer));
-    write('backlog', server.filter((view) => view.kind === 'backlog').map(fromServer));
+    write('board', [...server.filter((view) => view.kind === 'board').map(fromServer), ...refused.board]);
+    write('backlog', [...server.filter((view) => view.kind === 'backlog').map(fromServer), ...refused.backlog]);
   };
 
   // A local change (the pages write localStorage and fire these events) is mirrored to the server.
