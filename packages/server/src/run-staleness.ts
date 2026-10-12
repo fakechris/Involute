@@ -72,14 +72,16 @@ export async function sweepStaleRuns(prisma: PrismaClient, now = new Date(), sta
 /**
  * The note names the work, its title and the run's phase, so only people who
  * may read the work get it (INV-1195): the same rules as the board — admin,
- * team membership or PUBLIC team, or a project shared with them. Being the
- * assignee or the executor's owner grants nothing by itself.
+ * team membership or PUBLIC team, or a project shared with them; deactivated
+ * accounts get nothing. Being the assignee or the executor's owner grants
+ * nothing by itself.
  */
 async function readersOf(tx: Prisma.TransactionClient, workId: string, userIds: string[]): Promise<string[]> {
   const readers: string[] = [];
   for (const userId of userIds) {
     const viewer = await tx.user.findUnique({ where: { id: userId } });
-    if (!viewer) continue;
+    // A deactivated account is told nothing, like every other notification path.
+    if (!viewer || viewer.deactivatedAt) continue;
     const context: GraphQLContext = {
       authMode: 'session',
       isTrustedSystem: false,

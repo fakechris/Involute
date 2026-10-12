@@ -162,5 +162,19 @@ describe('run activity and staleness (INV-996)', () => {
       expect(await staleNotesFor(member.id)).toHaveLength(1);
       expect(await staleNotesFor(admin.id)).toHaveLength(1);
     });
+
+    it('does not tell a deactivated admin or a deactivated team member', async () => {
+      const member = await person('Gone');
+      await prisma.teamMembership.create({ data: { teamId: team.id, userId: member.id, role: 'EDITOR' } });
+      await staleRunOwnedBy(member);
+      const admin = await person('Retired', 'ADMIN');
+      await staleRunOwnedBy(admin);
+      await prisma.user.updateMany({ where: { id: { in: [member.id, admin.id] } }, data: { deactivatedAt: new Date() } });
+
+      expect(await sweepStaleRuns(prisma)).toBe(2);
+      expect(await staleNotesFor(member.id)).toHaveLength(0);
+      expect(await staleNotesFor(admin.id)).toHaveLength(0);
+      expect(await staleNotesFor(human.id)).toHaveLength(2);
+    });
   });
 });
