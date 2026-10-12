@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { setSavedViewsAccount } from '../lib/saved-views-account';
 import { SAVED_VIEW_DELETE_MUTATION, SAVED_VIEW_UPSERT_MUTATION } from '../work/queries';
 import { ViewsPage } from './ViewsPage';
 
@@ -19,14 +20,16 @@ vi.mock('@apollo/client/react', () => ({
 describe('ViewsPage saved views (INV-1005)', () => {
   beforeEach(() => {
     window.localStorage.clear();
+    // Saved views are kept per signed-in account (INV-1194).
+    setSavedViewsAccount('user-1');
     window.localStorage.setItem('involute.activeTeamKey', 'INV');
-    window.localStorage.setItem('involute.board.savedViews.INV', JSON.stringify([
+    window.localStorage.setItem('involute.board.savedViews.user-1.INV', JSON.stringify([
       { id: '11111111-1111-4111-8111-111111111111', name: 'Mine to review', state: { groupBy: 'status', sortField: 'updatedAt', sortDirection: 'desc', query: 'state:review', assigneeIds: [], labelIds: [], stateIds: [], viewMode: 'list' }, visibility: 'PRIVATE' },
     ]));
     mutationFor(SAVED_VIEW_UPSERT_MUTATION).mockResolvedValue({ data: { savedViewUpsert: { success: true } } });
     mutationFor(SAVED_VIEW_DELETE_MUTATION).mockResolvedValue({ data: { savedViewDelete: { success: true, id: '11111111-1111-4111-8111-111111111111' } } });
   });
-  afterEach(() => { cleanup(); mutations.forEach((fn) => fn.mockClear()); });
+  afterEach(() => { cleanup(); setSavedViewsAccount(null); mutations.forEach((fn) => fn.mockClear()); });
 
   const renderPage = () => render(<MemoryRouter><ViewsPage /></MemoryRouter>);
 
@@ -47,7 +50,7 @@ describe('ViewsPage saved views (INV-1005)', () => {
     fireEvent.click(within(card).getByRole('button', { name: 'Delete view' }));
     await waitFor(() => expect(mutationFor(SAVED_VIEW_DELETE_MUTATION)).toHaveBeenCalledWith({ variables: { id: '11111111-1111-4111-8111-111111111111' } }));
     await waitFor(() => expect(screen.queryByLabelText('View Mine to review')).toBeNull());
-    expect(JSON.parse(window.localStorage.getItem('involute.board.savedViews.INV') ?? '[]')).toEqual([]);
+    expect(JSON.parse(window.localStorage.getItem('involute.board.savedViews.user-1.INV') ?? '[]')).toEqual([]);
   });
 
   it('shows the server\'s reason when sharing is refused', async () => {

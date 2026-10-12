@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 
 import type { IssueSummary, TeamSummary, UserSummary } from '../board/types';
 import { openWorkSearch } from '../board/utils';
+import { SAVED_VIEWS_ACCOUNT_EVENT } from '../lib/saved-views-account';
 import {
   applyBacklogViewState,
   APPLY_BACKLOG_VIEW_EVENT,
@@ -45,6 +46,15 @@ export function BacklogPage({
     setViewState(readStoredBacklogViewState(teamKey));
     setSavedViews(readSavedBacklogViews(teamKey));
     setActiveSavedViewId('');
+  }, [teamKey]);
+
+  // The signed-in account's copy, once the session says who that is (INV-1194).
+  useEffect(() => {
+    function reloadSavedViews() {
+      setSavedViews(readSavedBacklogViews(teamKey));
+    }
+    window.addEventListener(SAVED_VIEWS_ACCOUNT_EVENT, reloadSavedViews);
+    return () => window.removeEventListener(SAVED_VIEWS_ACCOUNT_EVENT, reloadSavedViews);
   }, [teamKey]);
 
   useEffect(() => {
