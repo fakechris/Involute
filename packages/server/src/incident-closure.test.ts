@@ -188,7 +188,8 @@ describe('incident closing and postmortem (INV-1126)', () => {
       POSTMORTEM_SECTIONS.forEach((section, index) => expect(draft.markdown).toContain(`## ${index + 1}. ${section}`));
       expect(draft.markdown).toContain(moved.summary);
       expect(draft.markdown).toContain('Alert on blank board — 待承诺（Candidates）');
-      expect(draft.markdown).toContain('所有用户无法打开看板');
+      expect(draft.markdown).toContain('> 看板白屏');
+      expect(draft.markdown).not.toContain('所有用户无法打开看板');
       // The incident's own timestamps (INV-1125), not placeholders.
       expect(draft.markdown).toContain('- 影响开始：2026-10-09 07:50 UTC');
       expect(draft.markdown).toContain('- 发现：2026-10-09 08:02 UTC');

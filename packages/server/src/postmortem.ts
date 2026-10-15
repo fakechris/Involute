@@ -58,6 +58,54 @@ const utc = (at: Date) => `${at.toISOString().slice(0, 16).replace('T', ' ')} UT
 const cell = (text: string) => text.replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ');
 const actorName = (entry: TimelineEntry) => (entry.actor ? entry.actor.name ?? entry.actor.email ?? entry.actor.id : '系统');
 
+interface TimelineRow {
+  at: Date;
+  event: string;
+  source: '影响时间戳' | '标星条目';
+  actor: string;
+}
+
+/**
+ * The draft's timeline (INV-1212): starred entries plus the recorded impact
+ * timestamps, by time. An incident is often declared after the fact, so the
+ * starred entries alone would only show the declaration day.
+ */
+function timelineRows(input: Pick<PostmortemDraftInput, 'timestamps' | 'starred'>): TimelineRow[] {
+  const stamps: TimelineRow[] = input.timestamps.flatMap((stamp) =>
+    stamp.at ? [{ at: stamp.at, event: stamp.label, source: '影响时间戳' as const, actor: '—' }] : [],
+  );
+  const starred: TimelineRow[] = input.starred.map((entry) => {
+    const detail = entry.detail?.trim() ? ` — ${entry.detail.trim().slice(0, 200)}` : '';
+    return { at: entry.at, event: entry.summary + detail, source: '标星条目' as const, actor: actorName(entry) };
+  });
+  // Stable sort: at equal times an impact timestamp comes before a starred entry.
+  return [...stamps, ...starred].sort((a, b) => a.at.getTime() - b.at.getTime());
+}
+
+const HEADING = /^#{1,3}\s/;
+const SECTION_ONE = /^###\s*1\s*[.、．]/;
+
+/**
+ * The impact part of an incident description (INV-1212): the body of its
+ * "### 1." section, else the text before the first heading, else — no
+ * section structure to go by — the whole description.
+ */
+export function impactExcerpt(description: string | null): string | null {
+  const text = description?.trim();
+  if (!text) return null;
+  const lines = text.split('\n');
+  const firstHeading = lines.findIndex((line) => HEADING.test(line));
+  if (firstHeading === -1) return text;
+  const sectionOne = lines.findIndex((line) => SECTION_ONE.test(line));
+  if (sectionOne !== -1) {
+    const end = lines.findIndex((line, index) => index > sectionOne && HEADING.test(line));
+    const body = lines.slice(sectionOne + 1, end === -1 ? undefined : end).join('\n').trim();
+    if (body) return body;
+  }
+  const preamble = lines.slice(0, firstHeading).join('\n').trim();
+  return preamble || text;
+}
+
 export function renderPostmortemDraft(input: PostmortemDraftInput): string {
   const lines: string[] = [];
   const [summary, impact, timeline, factors, lessons, followUps] = POSTMORTEM_SECTIONS;
@@ -75,20 +123,19 @@ export function renderPostmortemDraft(input: PostmortemDraftInput): string {
   lines.push(`- 申报时间：${utc(input.declaredAt)}`);
   for (const stamp of input.timestamps) lines.push(`- ${stamp.label}：${stamp.at ? utc(stamp.at) : '未记录'}`);
   lines.push('', '申报时的影响描述：', '');
-  const described = input.description?.trim();
-  lines.push(described ? described.split('\n').map((line) => `> ${line}`).join('\n') : '> （无）', '');
+  const described = impactExcerpt(input.description);
+  lines.push(described ? described.split('\n').map((line) => (line ? `> ${line}` : '>')).join('\n') : '> （无）', '');
   lines.push('<!-- TODO：影响范围（用户数、功能、数据）、持续时长、是否违反 SLA。 -->', '');
 
   lines.push(`## 3. ${timeline}（自动，取标星条目）`, '');
+  const rows = timelineRows(input);
+  if (rows.length > 0) {
+    lines.push('| 时间 | 事件 | 来源 | 操作者 |', '|---|---|---|---|');
+    for (const row of rows) lines.push(`| ${utc(row.at)} | ${cell(row.event)} | ${row.source} | ${cell(row.actor)} |`);
+    lines.push('');
+  }
   if (input.starred.length === 0) {
     lines.push('尚无标星条目。用 `work_timeline(action: "star", entry_key)` 或事故页时间线的星标标记关键事件，再重新生成草稿。', '');
-  } else {
-    lines.push('| 时间 | 事件 | 操作者 |', '|---|---|---|');
-    for (const entry of input.starred) {
-      const detail = entry.detail?.trim() ? ` — ${entry.detail.trim().slice(0, 200)}` : '';
-      lines.push(`| ${utc(entry.at)} | ${cell(entry.summary + detail)} | ${cell(actorName(entry))} |`);
-    }
-    lines.push('');
   }
 
   lines.push(`## 4. ${factors}`, '', '<!-- TODO：列出多个促成因素（技术、流程、沟通、监控），不追单一根因；写事实，不追责个人。 -->', '- ', '- ', '');
