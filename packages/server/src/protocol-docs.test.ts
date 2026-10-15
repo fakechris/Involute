@@ -29,6 +29,7 @@ const NORM_RULES: Array<[string, RegExp]> = [
   ['work_file_bug is the agent bug harness', /work_file_bug/],
   ['incidents carry the Type label Incident', /labels: \['incident'\]/],
   ['incidents start In Progress and announce incident.declared', /incident\.declared/],
+  ['postmortem timeline merges impact timestamps and starred entries (INV-1212)', /时间线（自动：影响时间戳 \+ 标星条目）/],
 ];
 
 describe('protocol guide and AGENTS.md agree on norm v1 (INV-721)', () => {
