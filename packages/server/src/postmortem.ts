@@ -127,7 +127,7 @@ export function renderPostmortemDraft(input: PostmortemDraftInput): string {
   lines.push(described ? described.split('\n').map((line) => (line ? `> ${line}` : '>')).join('\n') : '> （无）', '');
   lines.push('<!-- TODO：影响范围（用户数、功能、数据）、持续时长、是否违反 SLA。 -->', '');
 
-  lines.push(`## 3. ${timeline}（自动，取标星条目）`, '');
+  lines.push(`## 3. ${timeline}（自动：影响时间戳 + 标星条目）`, '');
   const rows = timelineRows(input);
   if (rows.length > 0) {
     lines.push('| 时间 | 事件 | 来源 | 操作者 |', '|---|---|---|---|');

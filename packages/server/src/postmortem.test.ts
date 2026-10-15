@@ -59,7 +59,9 @@ function section(markdown: string, heading: string): string {
 
 describe('postmortem draft (INV-1212)', () => {
   it('merges the impact timestamps into the timeline, sorted with starred entries by time', () => {
-    const timeline = section(draft(), '## 3. 时间线');
+    const markdown = draft();
+    expect(markdown).toContain('## 3. 时间线（自动：影响时间戳 + 标星条目）');
+    const timeline = section(markdown, '## 3. 时间线');
     const rows = timeline.split('\n').filter((line) => /^\| \d{4}-/.test(line));
     expect(rows).toHaveLength(6);
     expect(rows.map((row) => row.slice(2, 22))).toEqual([

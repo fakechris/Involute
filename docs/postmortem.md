@@ -11,11 +11,15 @@ attached to the incident as a private file (INV-1003) — not committed to git.
 2. **影响** — scope (people, features, data), duration, SLA breach. The draft
    fills in the declaration time and the impact timestamps (impact started /
    detected / mitigated / resolved, INV-1125) when they are recorded, and
-   quotes the impact statement from the declaration.
-3. **时间线（自动，取标星条目）** — the timeline entries someone starred as key
-   events (INV-1116), oldest first, with time and actor. Star entries on the
-   issue page's timeline or with `work_timeline(action: "star")`, then
-   regenerate the draft.
+   quotes the impact statement from the declaration — the body of its
+   `### 1.` section, else the text before the first heading, else the whole
+   description (INV-1212).
+3. **时间线（自动：影响时间戳 + 标星条目）** — the recorded impact timestamps
+   (INV-1125) and the timeline entries someone starred as key events
+   (INV-1116), merged oldest first, with time, source (影响时间戳 / 标星条目)
+   and actor (INV-1212). A retroactively declared incident therefore still
+   shows when the impact happened. Star entries on the issue page's timeline
+   or with `work_timeline(action: "star")`, then regenerate the draft.
 4. **促成因素** — several contributing factors (technical, process,
    communication, monitoring). Do not chase a single root cause; state facts,
    not blame.
