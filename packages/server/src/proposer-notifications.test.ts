@@ -174,11 +174,14 @@ describe('the proposer hears the decision (INV-968)', () => {
     await commitAsAdmin(c4.id, c4.revision);
 
     // Every non-inbox tool response on /mcp carries unread_decisions (count=4, latest=3 in descending order)
-    const searchRes = (await callMcpTool(asAgent(nova), 'work_search', { query: 'Batch candidate' }, false)) as {
-      nodes: Array<{ identifier: string }>;
+    // Legacy array work_search preserves Array.isArray / .length while attaching unread_decisions
+    const searchRes = (await callMcpTool(asAgent(nova), 'work_search', { query: 'Batch candidate' }, false)) as Array<{
+      identifier: string;
+    }> & {
       unread_decisions?: { count: number; latest: Array<{ identifier: string; type: string; at: string }>; hint: string };
     };
-    expect(searchRes.nodes.length).toBeGreaterThanOrEqual(4);
+    expect(Array.isArray(searchRes)).toBe(true);
+    expect(searchRes.length).toBeGreaterThanOrEqual(4);
     expect(searchRes.unread_decisions).toBeDefined();
     expect(searchRes.unread_decisions?.count).toBe(4);
     expect(searchRes.unread_decisions?.latest).toHaveLength(3);
@@ -189,6 +192,13 @@ describe('the proposer hears the decision (INV-968)', () => {
     ]);
     expect(searchRes.unread_decisions?.latest.every((item) => item.type === 'work.committed')).toBe(true);
     expect(searchRes.unread_decisions?.hint).toContain('Read agent_inbox');
+
+    const paginatedSearchRes = (await callMcpTool(asAgent(nova), 'work_search', { query: 'Batch candidate', paginate: true }, false)) as {
+      nodes: Array<{ identifier: string }>;
+      unread_decisions?: { count: number };
+    };
+    expect(paginatedSearchRes.nodes.length).toBeGreaterThanOrEqual(4);
+    expect(paginatedSearchRes.unread_decisions?.count).toBe(4);
 
     const contextRes = (await callMcpTool(asAgent(nova), 'work_get_context', { id: c1.identifier }, false)) as {
       unread_decisions?: { count: number };

@@ -391,7 +391,7 @@ export async function callMcpTool(
     });
     if (unreadDecisions && output && typeof output === 'object') {
       output = Array.isArray(output)
-        ? { nodes: output, unread_decisions: unreadDecisions }
+        ? Object.assign([...output], { unread_decisions: unreadDecisions })
         : { ...(output as Record<string, unknown>), unread_decisions: unreadDecisions };
     }
   }

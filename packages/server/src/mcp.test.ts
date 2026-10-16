@@ -713,7 +713,29 @@ describe('Involute MCP', () => {
       assignee_id: viewer.id,
     });
 
-    // Agent calls work_search over HTTP /mcp -> response carries unread_decisions
+    // Agent calls legacy work_search (no paginate) over HTTP /mcp -> content[0].text stays a JSON array while unread_decisions is piggybacked
+    const legacySearchRes = await mcpRpcWithToken(
+      '/mcp',
+      {
+        id: 'search-legacy',
+        method: 'tools/call',
+        params: {
+          name: 'work_search',
+          arguments: { query: 'piggyback test' },
+        },
+      },
+      token,
+    );
+    const legacyArray = JSON.parse(legacySearchRes.body.result.content[0].text) as Array<{ identifier: string }>;
+    expect(Array.isArray(legacyArray)).toBe(true);
+    expect(legacyArray.map((n) => n.identifier)).toContain(candidate.identifier);
+    expect(legacySearchRes.body.result.unread_decisions.count).toBe(1);
+    const legacyUnreadBlock = JSON.parse(legacySearchRes.body.result.content[1].text) as {
+      unread_decisions: { count: number; latest: Array<{ identifier: string; type: string; at: string }> };
+    };
+    expect(legacyUnreadBlock.unread_decisions.count).toBe(1);
+
+    // Agent calls paginated work_search over HTTP /mcp -> single JSON object carries unread_decisions
     const searchRes = await mcpRpcWithToken(
       '/mcp',
       {
@@ -721,7 +743,7 @@ describe('Involute MCP', () => {
         method: 'tools/call',
         params: {
           name: 'work_search',
-          arguments: { query: 'piggyback test' },
+          arguments: { query: 'piggyback test', paginate: true },
         },
       },
       token,

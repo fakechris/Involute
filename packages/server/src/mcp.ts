@@ -152,13 +152,26 @@ async function dispatchMcpMethod(
         throw new Error('tools/call requires params.name');
       }
       const result = await callMcpTool(context, params.name, params.arguments ?? {}, readonly);
+      const unreadOnArray =
+        Array.isArray(result) && 'unread_decisions' in result
+          ? (result as { unread_decisions?: unknown }).unread_decisions
+          : undefined;
       return {
         content: [
           {
             type: 'text',
             text: JSON.stringify(result, jsonReplacer, 2),
           },
+          ...(unreadOnArray
+            ? [
+                {
+                  type: 'text',
+                  text: JSON.stringify({ unread_decisions: unreadOnArray }, jsonReplacer, 2),
+                },
+              ]
+            : []),
         ],
+        ...(unreadOnArray ? { unread_decisions: unreadOnArray } : {}),
       };
     }
     default:
