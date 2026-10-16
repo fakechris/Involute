@@ -22,6 +22,15 @@ primary entrypoint; the web board is an observation and governance surface.
 9. Every production code modification MUST be bound to an Involute work item (INV-xxx). Unlinked PRs are blocked by CI offline lint and synchronized via GitHub Webhooks.
 10. A change that makes something a person's job (a rule refusing agents, a mutation, a notification sent to people) ships with the web screen where a person does it, registered in \`packages/server/src/human-surface.ts\`. A field agents can write through MCP must be writable through GraphQL too. \`human-surface.test.ts\` and \`mcp-graphql-parity.test.ts\` fail otherwise (INV-795).
 
+## Status is read, not remembered (INV-1246)
+
+Work state changes asynchronously without telling you: a person may commit, decline, uncommit, accept, return, or amend work at any time in the Web UI or CLI. Never state an item's status (\`CANDIDATE\` vs \`COMMITTED\` vs \`REJECTED\`, workflow state, or review outcome) from session memory — even for items you proposed earlier in the same conversation.
+
+1. **Read before starting and before reporting.** At the start of a work turn, and before telling anyone whether a candidate or issue is still waiting, committed, in review, or done, call \`agent_inbox\` (or read \`commitmentStatus\` and \`state\` via \`work_get_context\` / \`work_search\`).
+2. **Clear handled notifications.** After acting on or reporting decisions from \`agent_inbox.notifications\`, pass their IDs in \`agent_inbox(ack: [...])\` so your inbox reflects only unhandled decisions.
+3. **Piggybacked \`unread_decisions\` envelope (INV-1245).** When the caller has unread notifications (\`readAt IS NULL\`), every non-\`agent_inbox\` MCP tool response on \`/mcp\` automatically carries a top-level \`unread_decisions\` summary (\`{ count, latest: [{ identifier, type, at }], hint }\`, up to 3 newest readable items; omitted when \`count === 0\` or on \`/mcp/readonly\`). This summary is a reminder only and does **not** mark notifications read — \`agent_inbox\` and \`commitmentStatus\` remain the source of truth, and handled notifications are cleared via \`agent_inbox(ack: [...])\`.
+4. **2026-10-16 counterexample (why memory fails).** An agent proposed 19 candidates (including a batch of 9 items) in one session. The human operator silently committed them in three batches (at \`01:43\`, \`06:54\`, and \`09:32\` UTC), producing 19 \`work.committed\` notifications in \`agent_inbox\`. Although the agent invoked more than a dozen Involute tools (\`work_file_bug\`, \`work_claim\`, \`run_report\`, \`evidence\`, \`work_comment\`) during that window, it never read \`agent_inbox\` or re-checked \`commitmentStatus\`, and later told the human from memory that all 9 already-\`COMMITTED\` items were "still waiting for your decision."
+
 ## Discovering actions
 
 Call \`work_catalog(kind: "capabilities")\` before planning a workflow. Its

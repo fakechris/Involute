@@ -60,7 +60,7 @@ import {
   FIXED_BUG_EVIDENCE_WITHOUT_REVIEW_MESSAGE,
 } from './errors.js';
 import { NOTIFICATION_NOT_FOUND_MESSAGE, TEAM_WRITE_FORBIDDEN_MESSAGE } from './errors.js';
-import { markNotificationRead, readUnreadNotifications } from './notification-service.js';
+import { markNotificationRead, readUnreadDecisionsSummary, readUnreadNotifications } from './notification-service.js';
 import { createComment, mentionTexts, updateIssue } from './issue-service.js';
 import { amendmentChanges, proposeContractAmendment } from './contract-amendment.js';
 import { dependencyHints } from './mention-links.js';
@@ -167,7 +167,7 @@ export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
 ];
 
 export const CANDIDATE_DECISION_NOTICE =
-  'A person commits or declines this candidate. Their decision arrives in your agent_inbox `notifications` (work.committed / work.rejected); check there, or read commitmentStatus with work_get_context, before telling anyone it is still waiting.';
+  'A person commits or declines this candidate; it may be decided at any time without you being told; do not cache its status. Their decision arrives in your agent_inbox `notifications` (work.committed / work.rejected); check there, or read commitmentStatus with work_get_context, before telling anyone it is still waiting.';
 
 const MCP_DONE_CANCEL_FORBIDDEN_TEXT =
   'Agents cannot transition work directly to COMPLETED or CANCELED. Agents stop at In Review; Done is human-gated — except a committed ISSUE with Type: Research, which an agent may move to Done (INV-912).';
@@ -371,10 +371,31 @@ export async function callMcpTool(
 ): Promise<unknown> {
   const resolved = resolveMcpCall(name, args);
   const result = await callMcpAction(context, resolved.action, resolved.args, readonly);
-  if (resolved.deprecated && result && typeof result === 'object' && !Array.isArray(result)) {
-    return { ...(result as Record<string, unknown>), deprecated: resolved.deprecated };
+  let output: unknown = result;
+  if (resolved.deprecated && output && typeof output === 'object' && !Array.isArray(output)) {
+    output = { ...(output as Record<string, unknown>), deprecated: resolved.deprecated };
   }
-  return result;
+  // INV-1245: Piggyback unread decisions on every non-inbox MCP response on /mcp
+  // so unread human decisions are visible on every tool call without polling.
+  if (
+    !readonly &&
+    resolved.action !== 'agent_inbox' &&
+    resolved.action !== 'notification_mark_read' &&
+    context.viewer?.id &&
+    (context.authMode !== 'agent-token' || Boolean(context.agentTeamId))
+  ) {
+    const unreadDecisions = await readUnreadDecisionsSummary(context.prisma, {
+      teamId: context.authMode === 'agent-token' ? context.agentTeamId ?? null : null,
+      userId: context.viewer.id,
+      workWhere: buildReadableIssueWhere(context),
+    });
+    if (unreadDecisions && output && typeof output === 'object') {
+      output = Array.isArray(output)
+        ? Object.assign([...output], { unread_decisions: unreadDecisions })
+        : { ...(output as Record<string, unknown>), unread_decisions: unreadDecisions };
+    }
+  }
+  return output;
 }
 
 async function callMcpAction(
@@ -1018,6 +1039,7 @@ async function callMcpAction(
             since: optionalDate(args.since),
             teamId: context.authMode === 'agent-token' ? context.agentTeamId ?? null : null,
             userId: actorId,
+            workWhere: buildReadableIssueWhere(context),
           })
         ).map((notification) => {
           const payload = (notification.payload ?? {}) as Record<string, unknown>;

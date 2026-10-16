@@ -35,5 +35,6 @@ New independently acceptable work discovered during a run, or a scoped follow-up
 - Never use propose as a TODO dump.
 - Candidate `initial_state` CANNOT be `CANCELED`, and CANNOT be `DONE` unless the item is a research ISSUE (`labels: ['research']`, Type: Research, INV-912) — that one lands in Done when a person commits it. Everything else stops at `In Review`; `Done` is human-gated.
 - Agents do not unilaterally `work_commit` or reject candidates via MCP — humans commit.
+- **Status is read, not remembered**: A person may silently commit or decline your proposed candidates at any time (in the Web UI `/candidates` or via batch-commit CLI) without telling you in chat. Before mentioning or reporting the status of any previously proposed candidate, always read `agent_inbox` (`notifications`: `work.committed` / `work.rejected`, then `ack` handled IDs) or check `commitmentStatus` via `work_get_context` — never assume it is still `CANDIDATE` from session memory.
 - For unplanned hotfixes / bugfixes: run `pnpm hotfix:reflex` to propose and link with `DISCOVERED_DURING`.
 - All production code changes must link to a committed `INV-xxx` (enforced by Layer 1 Git guardrail).

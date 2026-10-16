@@ -33,9 +33,10 @@ Connect: Streamable HTTP MCP at `http://127.0.0.1:4200/mcp` (local) with `Author
 4. Do not write local TODOs, grep results, or shell steps into Involute.
 5. `work_claim` after the user chooses a ready item — do not grab the whole queue. Use the returned `suggested_branch` verbatim as your git branch name; never invent branch names containing issue identifiers. Alias-prefixed references (e.g. `LUM-398` on a repo whose PROJECT node has `alias: LUM`) are also accepted and canonicalize to the team key (`INV-398`).
 6. `work_commit` and candidate rejection are **human** actions. Agents stop and ask.
-7. Run complete is not work accepted. **Never** move work to Done yourself.
-8. Expanding scope requires `work_update` with `expected_revision` or a new candidate linked `DISCOVERED_DURING`.
-9. Keep plans/findings local. Sync only phases, blockers, decisions, and evidence pointers.
+7. **Work state changes without telling you — status is read, not remembered.** Before starting a turn or stating any item's status, read `agent_inbox` (and pass `ack: [...]` to clear handled notifications) or `work_get_context` (`commitmentStatus`); never state candidate/committed status from memory. When you have unread notifications, non-inbox MCP tool responses piggyback an `unread_decisions` summary (`{ count, latest, hint }`) — treat it as a reminder only (`agent_inbox` and `commitmentStatus` remain the source of truth, and piggybacking does not mark notifications read).
+8. Run complete is not work accepted. **Never** move work to Done yourself.
+9. Expanding scope requires `work_update` with `expected_revision` or a new candidate linked `DISCOVERED_DURING`.
+10. Keep plans/findings local. Sync only phases, blockers, decisions, and evidence pointers.
 
 ## Unplanned Work & Hotfix Protocol (即时热修与计划外工作自动闭环法则)
 
@@ -60,7 +61,7 @@ Any bugfix or unplanned modification touching product source code MUST adhere to
 ## Typical loop
 
 ```text
-work_list_ready / work_search → work_get_context → work_claim
+agent_inbox (read & ack decisions) → work_list_ready / work_search → work_get_context → work_claim
 (local plan — do not upload)
 work_update or work_propose for newly confirmed work
 run_report + evidence(attach) → In Review (human accepts → Done)

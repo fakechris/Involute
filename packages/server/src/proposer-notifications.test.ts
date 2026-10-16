@@ -145,7 +145,7 @@ describe('the proposer hears the decision (INV-968)', () => {
     expect(await prisma.notification.count({ where: { sourceEventId: event.id } })).toBe(1);
   });
 
-  it('says on work_propose where the decision will arrive', async () => {
+  it('says on work_propose where the decision will arrive and warns not to cache status (INV-1246)', async () => {
     const parentId = await testParentId(prisma, team.id);
     const result = (await callMcpTool(asAgent(nova), 'work_propose', {
       description: DESCRIPTION,
@@ -155,5 +155,127 @@ describe('the proposer hears the decision (INV-968)', () => {
     }, false)) as { decision_notice?: string };
 
     expect(result.decision_notice).toBe(CANDIDATE_DECISION_NOTICE);
+    expect(result.decision_notice).toContain('it may be decided at any time without you being told; do not cache its status');
+  });
+
+  it('piggybacks unread_decisions on non-inbox MCP tool responses when unread notifications exist, without marking them read (INV-1245)', async () => {
+    // 0 unread: no unread_decisions field on any tool response
+    const cleanGet = (await callMcpTool(asAgent(nova), 'work_list_ready', { team_key: DEFAULT_TEAM_KEY }, false)) as Record<string, unknown>;
+    expect(cleanGet.unread_decisions).toBeUndefined();
+
+    // Propose 4 candidates as nova and commit them as admin
+    const c1 = await proposeAsNova('Batch candidate 1');
+    const c2 = await proposeAsNova('Batch candidate 2');
+    const c3 = await proposeAsNova('Batch candidate 3');
+    const c4 = await proposeAsNova('Batch candidate 4');
+    await commitAsAdmin(c1.id, c1.revision);
+    await commitAsAdmin(c2.id, c2.revision);
+    await commitAsAdmin(c3.id, c3.revision);
+    await commitAsAdmin(c4.id, c4.revision);
+
+    // Every non-inbox tool response on /mcp carries unread_decisions (count=4, latest=3 in descending order)
+    // Legacy array work_search preserves Array.isArray / .length while attaching unread_decisions
+    const searchRes = (await callMcpTool(asAgent(nova), 'work_search', { query: 'Batch candidate' }, false)) as Array<{
+      identifier: string;
+    }> & {
+      unread_decisions?: { count: number; latest: Array<{ identifier: string; type: string; at: string }>; hint: string };
+    };
+    expect(Array.isArray(searchRes)).toBe(true);
+    expect(searchRes.length).toBeGreaterThanOrEqual(4);
+    expect(searchRes.unread_decisions).toBeDefined();
+    expect(searchRes.unread_decisions?.count).toBe(4);
+    expect(searchRes.unread_decisions?.latest).toHaveLength(3);
+    expect(searchRes.unread_decisions?.latest.map((item) => item.identifier)).toEqual([
+      c4.identifier,
+      c3.identifier,
+      c2.identifier,
+    ]);
+    expect(searchRes.unread_decisions?.latest.every((item) => item.type === 'work.committed')).toBe(true);
+    expect(searchRes.unread_decisions?.hint).toContain('Read agent_inbox');
+
+    const paginatedSearchRes = (await callMcpTool(asAgent(nova), 'work_search', { query: 'Batch candidate', paginate: true }, false)) as {
+      nodes: Array<{ identifier: string }>;
+      unread_decisions?: { count: number };
+    };
+    expect(paginatedSearchRes.nodes.length).toBeGreaterThanOrEqual(4);
+    expect(paginatedSearchRes.unread_decisions?.count).toBe(4);
+
+    const contextRes = (await callMcpTool(asAgent(nova), 'work_get_context', { id: c1.identifier }, false)) as {
+      unread_decisions?: { count: number };
+    };
+    expect(contextRes.unread_decisions?.count).toBe(4);
+
+    const commentRes = (await callMcpTool({ ...asAgent(nova), agentScopes: ['read', 'propose', 'update'] }, 'work_comment', { work_id: c1.identifier, body: 'Checking status' }, false)) as {
+      unread_decisions?: { count: number };
+    };
+    expect(commentRes.unread_decisions?.count).toBe(4);
+
+    // /mcp/readonly does not piggyback unread_decisions
+    const readonlyContext = (await callMcpTool(asAgent(nova), 'work_get_context', { id: c1.identifier }, true)) as {
+      unread_decisions?: unknown;
+    };
+    expect(readonlyContext.unread_decisions).toBeUndefined();
+
+    // Piggybacking does not mark notifications read (readAt remains null)
+    const unreadInDb = await prisma.notification.count({ where: { userId: nova.id, readAt: null } });
+    expect(unreadInDb).toBe(4);
+
+    // Calling agent_inbox itself does not attach unread_decisions, and its count matches
+    const inboxRes = (await callMcpTool(asAgent(nova), 'agent_inbox', {}, false)) as {
+      notifications: Array<{ id: string }>;
+      unread_decisions?: unknown;
+    };
+    expect(inboxRes.unread_decisions).toBeUndefined();
+    expect(inboxRes.notifications).toHaveLength(4);
+
+    // Acking all notifications via agent_inbox(ack: [...]) clears unread_decisions on subsequent calls
+    const ackedInbox = (await callMcpTool(asAgent(nova), 'agent_inbox', {
+      ack: inboxRes.notifications.map((n) => n.id),
+    }, false)) as { notifications: unknown[] };
+    expect(ackedInbox.notifications).toEqual([]);
+
+    const afterAck = (await callMcpTool(asAgent(nova), 'work_get_context', { id: c1.identifier }, false)) as {
+      unread_decisions?: unknown;
+    };
+    expect(afterAck.unread_decisions).toBeUndefined();
+  });
+
+  it('excludes unreadable work items from unread_decisions count and latest (INV-1245)', async () => {
+    const privateTeam = await prisma.team.create({
+      data: { key: 'SEC', name: 'Secret Team', visibility: 'PRIVATE' },
+    });
+    const privateState = await prisma.workflowState.create({
+      data: { name: 'Ready', position: 1, teamId: privateTeam.id, type: 'UNSTARTED' },
+    });
+    const secretIssue = await prisma.issue.create({
+      data: {
+        commitmentStatus: 'COMMITTED',
+        identifier: 'SEC-1',
+        stateId: privateState.id,
+        teamId: privateTeam.id,
+        title: 'Secret committed work',
+      },
+    });
+    // Create an unscoped notification pointing to a private team's work item that nova (bound to DEFAULT_TEAM_KEY) cannot read
+    await prisma.notification.create({
+      data: {
+        payload: { decision: 'committed' },
+        teamId: null,
+        type: 'work.committed',
+        userId: nova.id,
+        workId: secretIssue.id,
+      },
+    });
+
+    // Neither agent_inbox nor unread_decisions exposes or counts the unreadable work item
+    const inbox = (await callMcpTool(asAgent(nova), 'agent_inbox', {}, false)) as {
+      notifications: Array<{ work_identifier: string | null }>;
+    };
+    expect(inbox.notifications).toEqual([]);
+
+    const ready = (await callMcpTool(asAgent(nova), 'work_list_ready', { team_key: DEFAULT_TEAM_KEY }, false)) as {
+      unread_decisions?: unknown;
+    };
+    expect(ready.unread_decisions).toBeUndefined();
   });
 });
