@@ -1018,11 +1018,34 @@ export function CandidatesPage() {
     return snoozedCandidates.filter((c) => c.repository === selectedProject);
   }, [snoozedCandidates, selectedProject]);
 
+  const selectableIdSet = useMemo(
+    () => new Set([...filteredActiveCandidates, ...filteredSnoozedCandidates].map((c) => c.id)),
+    [filteredActiveCandidates, filteredSnoozedCandidates],
+  );
+
+  // Drop selected IDs that are no longer in the rendered candidate list (e.g. after single-card commit/reject or refetch).
+  useEffect(() => {
+    if (loading || !data) return;
+    setSelectedIds((curr) => {
+      const next = curr.filter((id) => selectableIdSet.has(id));
+      return next.length === curr.length ? curr : next;
+    });
+    setAcceptanceMissing((curr) => {
+      const next = curr.filter((c) => selectableIdSet.has(c.id));
+      return next.length === curr.length ? curr : next;
+    });
+  }, [data, loading, selectableIdSet]);
+
   const allVisibleSelected =
     filteredActiveCandidates.length > 0 &&
     filteredActiveCandidates.every((c) => selectedIds.includes(c.id));
   const someVisibleSelected =
     filteredActiveCandidates.some((c) => selectedIds.includes(c.id));
+
+  function dropCandidateSelection(id: string) {
+    setSelectedIds((curr) => (curr.includes(id) ? curr.filter((item) => item !== id) : curr));
+    setAcceptanceMissing((curr) => (curr.some((c) => c.id === id) ? curr.filter((c) => c.id !== id) : curr));
+  }
 
   function toggleSelect(id: string) {
     setSelectedIds((curr) =>
@@ -1032,7 +1055,9 @@ export function CandidatesPage() {
 
   function selectAllVisible() {
     const visibleIds = filteredActiveCandidates.map((c) => c.id);
-    setSelectedIds((curr) => Array.from(new Set([...curr, ...visibleIds])));
+    setSelectedIds((curr) =>
+      Array.from(new Set([...curr.filter((id) => selectableIdSet.has(id)), ...visibleIds])),
+    );
   }
 
   function clearSelection() {
@@ -1359,9 +1384,18 @@ export function CandidatesPage() {
                 needsAttention={attentionId === candidate.id}
                 focused={listKeys.focusedId === candidate.id}
                 onToggleSelect={toggleSelect}
-                onCommitted={() => void refetch()}
-                onRejected={() => void refetch()}
-                onRefresh={() => void refetch()}
+                onCommitted={() => {
+                  dropCandidateSelection(candidate.id);
+                  void refetch();
+                }}
+                onRejected={() => {
+                  dropCandidateSelection(candidate.id);
+                  void refetch();
+                }}
+                onRefresh={() => {
+                  dropCandidateSelection(candidate.id);
+                  void refetch();
+                }}
                 onPriorityChange={(priority) =>
                   setPriorityById((curr) => ({ ...curr, [candidate.id]: priority }))
                 }
@@ -1452,9 +1486,18 @@ export function CandidatesPage() {
                     isSelected={selectedIds.includes(candidate.id)}
                     needsAttention={attentionId === candidate.id}
                     onToggleSelect={toggleSelect}
-                    onCommitted={() => void refetch()}
-                    onRejected={() => void refetch()}
-                    onRefresh={() => void refetch()}
+                    onCommitted={() => {
+                      dropCandidateSelection(candidate.id);
+                      void refetch();
+                    }}
+                    onRejected={() => {
+                      dropCandidateSelection(candidate.id);
+                      void refetch();
+                    }}
+                    onRefresh={() => {
+                      dropCandidateSelection(candidate.id);
+                      void refetch();
+                    }}
                   />
                 ))}
               </>

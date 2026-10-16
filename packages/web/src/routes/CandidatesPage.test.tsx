@@ -680,4 +680,50 @@ describe('CandidatesPage', () => {
     );
     queryDataHolder.current = null;
   });
+
+  describe('selection count synchronization (INV-1240)', () => {
+    it('prunes selectedIds when a single selected card is committed or when the candidate list shrinks', async () => {
+      const thirdCandidate = {
+        ...candidateItems[0]!,
+        id: 'cand-3',
+        identifier: 'INV-42',
+        title: 'Third candidate',
+      };
+      queryDataHolder.current = {
+        issues: { nodes: [...candidateItems, thirdCandidate], pageInfo: { endCursor: null, hasNextPage: false } },
+        teams: { nodes: mockTeams },
+      };
+      try {
+        const { rerender } = render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
+
+        fireEvent.click(screen.getByText(/Select all visible \(3\)/));
+        expect(screen.getByText('Clear selection (3)')).toBeInTheDocument();
+        expect(screen.getByText('Batch Commit (3)')).toBeInTheDocument();
+
+        const firstCard = screen.getByRole('article', { name: 'INV-40 candidate' });
+        fireEvent.change(within(firstCard).getByLabelText('Owner for INV-40'), { target: { value: 'user-admin' } });
+        fireEvent.click(within(firstCard).getByRole('button', { name: /Commit/ }));
+
+        await waitFor(() => {
+          expect(screen.getByText('Clear selection (2)')).toBeInTheDocument();
+          expect(screen.getByText('Batch Commit (2)')).toBeInTheDocument();
+        });
+
+        // Simulate refetch returning only the remaining 1 candidate (cand-3) after cand-2 was also removed externally.
+        queryDataHolder.current = {
+          issues: { nodes: [thirdCandidate], pageInfo: { endCursor: null, hasNextPage: false } },
+          teams: { nodes: mockTeams },
+        };
+        rerender(<MemoryRouter><CandidatesPage /></MemoryRouter>);
+
+        await waitFor(() => {
+          expect(screen.getByText(/Select all visible \(1\)/)).toBeInTheDocument();
+          expect(screen.getByText('Clear selection (1)')).toBeInTheDocument();
+          expect(screen.getByText('Batch Commit (1)')).toBeInTheDocument();
+        });
+      } finally {
+        queryDataHolder.current = null;
+      }
+    });
+  });
 });
