@@ -67,11 +67,17 @@ export function CommitUndoHost() {
         conflicts.push(item.identifier);
       }
     }
-    if (applied.length > 0 || conflicts.length > 0) {
+    const uncommitting = items[0]?.phase === 'committed';
+    if (uncommitting && (applied.length > 0 || conflicts.length > 0)) {
       window.dispatchEvent(new CustomEvent(SELECT_CANDIDATES, {
-        detail: { ids: items.map((item) => item.issueId) },
+        detail: { ids: applied.map((item) => item.issueId) },
       }));
       navigate('/candidates');
+    } else if (!uncommitting && applied.length > 0) {
+      const recommittedIds = new Set(applied.map((item) => item.issueId));
+      window.dispatchEvent(new CustomEvent(SELECT_CANDIDATES, {
+        detail: { ids: items.filter((item) => !recommittedIds.has(item.issueId)).map((item) => item.issueId) },
+      }));
     }
     return { applied, conflicts };
   };
