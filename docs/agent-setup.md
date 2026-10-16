@@ -176,6 +176,39 @@ claude mcp add --scope user --transport http involute https://involute.example.c
   --header "Authorization: Bearer inv_agent_…"
 ```
 
+#### Optional: Turn-start `UserPromptSubmit` inbox hook (INV-1247)
+
+When you have unread decisions in `agent_inbox`, non-inbox MCP tool responses
+automatically include `unread_decisions` (INV-1245). If you also want Claude Code
+to see unread decisions on turns where it has **not** called any Involute tool
+yet, add [`scripts/involute-inbox-hook.sh`](../scripts/involute-inbox-hook.sh)
+to your user-level `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/abs/path/to/Involute/scripts/involute-inbox-hook.sh",
+            "timeout": 2
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The hook reuses `mcpServers.involute` from `~/.claude.json`, calls `/mcp/readonly`
+`agent_inbox` with a ≤2s timeout, never marks notifications read (`readAt` stays
+`null`), injects a 1-line `additionalContext` summary only when `count > 0`, and
+outputs 0 bytes (exit 0) when there are no unread decisions or on network/timeout
+errors. Remove the hook entry from `~/.claude/settings.json` at any time to
+uninstall.
+
 ### Cursor
 
 User-level `~/.cursor/mcp.json` (not `<repo>/.cursor/mcp.json`):

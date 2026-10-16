@@ -664,6 +664,136 @@ describe('Involute MCP', () => {
     }
   });
 
+  it('leads initialize instructions with Status is read, not remembered and piggybacks unread_decisions on /mcp work_search (INV-1245 / INV-1246)', async () => {
+    const init = await mcpRpc('/mcp', { id: 'init-1246', method: 'initialize', params: {} });
+    expect(init.status).toBe(200);
+    const instructions = init.body.result.instructions as string;
+    expect(instructions.startsWith('Involute is a project-state kernel. Work state changes without telling you:')).toBe(true);
+    expect(instructions).toContain('Before stating any item\'s status, read it (agent_inbox notifications or commitmentStatus) — never from memory');
+
+    const agent = await prisma.user.create({
+      data: { actorKind: 'AGENT', email: 'hook-agent@agents.test.local', handle: 'hook-agent', name: 'Hook Agent', ownerId: viewer.id },
+    });
+    const token = 'inv_agent_test_unread_1245_token';
+    await prisma.agentCredential.create({
+      data: {
+        name: 'hook-agent-cred',
+        scopes: ['read', 'propose'],
+        teamId: team.id,
+        tokenHash: hashAgentToken(token),
+        userId: agent.id,
+      },
+    });
+
+    const parentId = await testParentId(prisma, team.id);
+    const proposed = await mcpRpcWithToken(
+      '/mcp',
+      {
+        id: 'propose-1',
+        method: 'tools/call',
+        params: {
+          name: 'work_propose',
+          arguments: {
+            team: DEFAULT_TEAM_KEY,
+            parent_id: parentId,
+            title: 'Candidate for unread_decisions piggyback test',
+            description: '### 1. 目标与架构定位\n测试\n\n### 2. 核心功能与交付范围\n测试\n\n### 3. 验收标准与验证方案\n测试',
+          },
+        },
+      },
+      token,
+    );
+    const candidate = JSON.parse(proposed.body.result.content[0].text) as { id: string; identifier: string; revision: number };
+
+    // Human commits the candidate -> creates unread work.committed notification for agent
+    await callTool('work_commit', {
+      id: candidate.identifier,
+      expected_revision: candidate.revision,
+      acceptance: 'Unread decisions piggyback is verified',
+      assignee_id: viewer.id,
+    });
+
+    // Agent calls work_search over HTTP /mcp -> response carries unread_decisions
+    const searchRes = await mcpRpcWithToken(
+      '/mcp',
+      {
+        id: 'search-1',
+        method: 'tools/call',
+        params: {
+          name: 'work_search',
+          arguments: { query: 'piggyback test' },
+        },
+      },
+      token,
+    );
+    const searchPayload = JSON.parse(searchRes.body.result.content[0].text) as {
+      nodes: Array<{ identifier: string }>;
+      unread_decisions: { count: number; latest: Array<{ identifier: string; type: string; at: string }>; hint: string };
+    };
+    expect(searchPayload.nodes.map((n) => n.identifier)).toContain(candidate.identifier);
+    expect(searchPayload.unread_decisions.count).toBe(1);
+    expect(searchPayload.unread_decisions.latest[0]).toMatchObject({
+      identifier: candidate.identifier,
+      type: 'work.committed',
+    });
+
+    // Test the Claude Code UserPromptSubmit hook (INV-1247) against the running server
+    const { runInvoluteInboxHook } = await import('../../../scripts/involute-inbox-hook.mjs');
+
+    // 1. With unread decision: outputs 1-line summary in hookSpecificOutput, does not mark readAt
+    const hookOut = await runInvoluteInboxHook({
+      env: {
+        INVOLUTE_MCP_URL: `${server.url}/mcp`,
+        INVOLUTE_AGENT_TOKEN: token,
+      },
+    });
+    expect(hookOut.trim()).not.toBe('');
+    const parsedHook = JSON.parse(hookOut.trim()) as {
+      hookSpecificOutput: { hookEventName: string; additionalContext: string };
+    };
+    expect(parsedHook.hookSpecificOutput.hookEventName).toBe('UserPromptSubmit');
+    expect(parsedHook.hookSpecificOutput.additionalContext).toContain(
+      `Involute: 1 unread decision (latest ${candidate.identifier} work.committed`,
+    );
+
+    // Notification is still unread (readAt === null)
+    const rowAfterHook = await prisma.notification.findFirstOrThrow({ where: { userId: agent.id } });
+    expect(rowAfterHook.readAt).toBeNull();
+
+    // 2. Unreachable server / timeout: exits silently with 0 bytes within <=2s
+    const startMs = Date.now();
+    const unreachableOut = await runInvoluteInboxHook({
+      env: {
+        INVOLUTE_MCP_URL: 'http://127.0.0.1:1/mcp/readonly',
+        INVOLUTE_AGENT_TOKEN: token,
+      },
+      timeoutMs: 500,
+    });
+    expect(unreachableOut).toBe('');
+    expect(Date.now() - startMs).toBeLessThan(2000);
+
+    // 3. After agent acks the notification in agent_inbox: hook outputs 0 bytes
+    await mcpRpcWithToken(
+      '/mcp',
+      {
+        id: 'ack-1',
+        method: 'tools/call',
+        params: {
+          name: 'agent_inbox',
+          arguments: { ack: [rowAfterHook.id] },
+        },
+      },
+      token,
+    );
+    const emptyHookOut = await runInvoluteInboxHook({
+      env: {
+        INVOLUTE_MCP_URL: `${server.url}/mcp`,
+        INVOLUTE_AGENT_TOKEN: token,
+      },
+    });
+    expect(emptyHookOut).toBe('');
+  });
+
 });
 
 function readyIdentifiers(result: { nodes?: Array<{ identifier: string }> }): string[] {

@@ -8,6 +8,9 @@ import { createGraphQLSchema } from './schema.ts';
 // could not (INV-786), so a person had no way to do what agents were told to
 // ask a person for. Every field an agent can write must be writable through
 // GraphQL, or be listed below with the reason it is agent-only.
+// Note (INV-1245): `unread_decisions` is an MCP response envelope field
+// piggybacked by `callMcpTool` when the caller has unread notifications; the
+// web UI already renders the persistent Inbox unread badge in the app shell.
 
 import {
   PAIRS, AGENT_ONLY_TOOLS, RENAMED, AGENT_ONLY_FIELDS, MCP_EXEMPTIONS, GRAPHQL_ONLY_FIELDS, actionCapabilities,

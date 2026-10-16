@@ -232,6 +232,27 @@ export async function markNotificationRead(
   });
 }
 
+function buildUnreadNotificationWhere(input: {
+  since?: Date | null | undefined;
+  teamId: string | null;
+  userId: string;
+  workWhere?: Prisma.IssueWhereInput | undefined;
+}): Prisma.NotificationWhereInput {
+  const andClauses: Prisma.NotificationWhereInput[] = [];
+  if (input.teamId) {
+    andClauses.push({ OR: [{ teamId: input.teamId }, { teamId: null }] });
+  }
+  if (input.workWhere) {
+    andClauses.push({ OR: [{ workId: null }, { work: input.workWhere }] });
+  }
+  return {
+    readAt: null,
+    userId: input.userId,
+    ...(input.since ? { createdAt: { gt: input.since } } : {}),
+    ...(andClauses.length === 1 ? andClauses[0] : andClauses.length > 1 ? { AND: andClauses } : {}),
+  };
+}
+
 /**
  * The caller's unread notifications, newest first: what agent_inbox shows an
  * agent next to its open requests. A team-bound agent credential sees the
@@ -239,19 +260,64 @@ export async function markNotificationRead(
  */
 export async function readUnreadNotifications(
   prisma: DatabaseClient,
-  input: { first: number; since: Date | null; teamId: string | null; userId: string },
+  input: { first: number; since: Date | null; teamId: string | null; userId: string; workWhere?: Prisma.IssueWhereInput | undefined },
 ) {
   return prisma.notification.findMany({
     include: { work: { select: { commitmentStatus: true, identifier: true, title: true } } },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: input.first,
-    where: {
-      readAt: null,
-      userId: input.userId,
-      ...(input.since ? { createdAt: { gt: input.since } } : {}),
-      ...(input.teamId ? { OR: [{ teamId: input.teamId }, { teamId: null }] } : {}),
-    },
+    where: buildUnreadNotificationWhere(input),
   });
+}
+
+export const UNREAD_DECISIONS_HINT =
+  'Read agent_inbox (and ack handled notifications) or work_get_context commitmentStatus before stating any work status; this summary is a reminder and does not mark notifications read.';
+
+export type UnreadDecisionsSummary = {
+  count: number;
+  latest: Array<{
+    identifier: string | null;
+    type: string;
+    at: string;
+  }>;
+  hint: string;
+};
+
+/**
+ * Lightweight unread decision summary piggybacked on non-inbox MCP tool
+ * responses (INV-1245): indexed count + up to 3 latest items without loading
+ * payloads or marking anything read.
+ */
+export async function readUnreadDecisionsSummary(
+  prisma: DatabaseClient,
+  input: { teamId: string | null; userId: string; workWhere?: Prisma.IssueWhereInput | undefined },
+): Promise<UnreadDecisionsSummary | null> {
+  const where = buildUnreadNotificationWhere(input);
+  const count = await prisma.notification.count({ where });
+  if (count === 0) {
+    return null;
+  }
+  const rows = await prisma.notification.findMany({
+    where,
+    select: {
+      createdAt: true,
+      type: true,
+      work: {
+        select: { identifier: true },
+      },
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: 3,
+  });
+  return {
+    count,
+    latest: rows.map((row) => ({
+      identifier: row.work?.identifier ?? null,
+      type: row.type,
+      at: row.createdAt.toISOString(),
+    })),
+    hint: UNREAD_DECISIONS_HINT,
+  };
 }
 
 /**
