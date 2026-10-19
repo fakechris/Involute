@@ -20,7 +20,7 @@ const sha = 'a'.repeat(40);
 beforeEach(async () => { await resetAndSeed(prisma); });
 afterAll(async () => { await resetAndSeed(prisma); await prisma.$disconnect(); });
 
-type Github = { merged?: boolean; head?: string; checks?: Array<{ status: string; conclusion: string | null }>; status?: number; compare?: string };
+type Github = { merged?: boolean; head?: string; mergeSha?: string; checks?: Array<{ status: string; conclusion: string | null }>; status?: number; compare?: string };
 function github(state: Github): GitHubVerifierOptions & { calls: string[] } {
   const calls: string[] = [];
   const respond = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
@@ -32,7 +32,7 @@ function github(state: Github): GitHubVerifierOptions & { calls: string[] } {
       const path = String(url).replace('https://api.github.com', '');
       calls.push(path);
       if (state.status) return respond({}, state.status);
-      if (path === `/repos/${repo}/pulls/12`) return respond({ number: 12, merged: state.merged ?? true, merge_commit_sha: 'b'.repeat(40), base: { repo: { full_name: repo } }, head: { sha: state.head ?? sha } });
+      if (path === `/repos/${repo}/pulls/12`) return respond({ number: 12, merged: state.merged ?? true, merge_commit_sha: state.mergeSha ?? 'b'.repeat(40), base: { repo: { full_name: repo } }, head: { sha: state.head ?? sha } });
       if (path === `/repos/${repo}`) return respond({ default_branch: 'main' });
       if (path.startsWith(`/repos/${repo}/compare/`)) return respond({ status: state.compare ?? 'behind' });
       if (path.startsWith(`/repos/${repo}/commits/${sha}/check-runs`)) {
@@ -75,6 +75,21 @@ describe('bug auto-accept gate (INV-1075)', () => {
     expect((await f.evaluations()).map((e) => [e.outcome, e.tier])).toEqual([['ACCEPTED', 'CLEAR']]);
     // The agent that did the work hears the outcome.
     expect(await prisma.notification.count({ where: { userId: f.agent.id, type: 'work.accepted' } })).toBe(1);
+  });
+
+  it('accepts a run that names the merge commit of a merged PR (INV-1279)', async () => {
+    const f = await fixture();
+    // The PR head moved on to another sha; the run holds the merge commit.
+    await sweepBugAutoAccept(prisma, github({ head: 'c'.repeat(40), mergeSha: sha }));
+    expect(await f.stateOf()).toBe('COMPLETED');
+    expect((await f.evaluations())[0]?.outcome).toBe('ACCEPTED');
+  });
+
+  it('does not take an unmerged PR\'s test-merge sha for the fix', async () => {
+    const f = await fixture();
+    await sweepBugAutoAccept(prisma, github({ head: 'c'.repeat(40), mergeSha: sha, merged: false }));
+    expect(await f.stateOf()).toBe('REVIEW');
+    expect((await f.evaluations())[0]?.reasons.join(' ')).toContain('PR_NOT_MERGED');
   });
 
   it('accepts a fix committed straight to the default branch when its checks are green', async () => {
