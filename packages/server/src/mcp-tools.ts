@@ -947,7 +947,7 @@ async function callMcpAction(
         follow_ups: draft.followUps.map((item) => ({ identifier: item.identifier, title: item.title, commitment_status: item.commitmentStatus, state: item.stateName })),
         filename: draft.filename,
         markdown: draft.markdown,
-        next: `Complete the TODO sections, then attach it: work_attach_file(work_id: "${draft.identifier}", filename: "${draft.filename}", mime_type: "text/markdown", content: <base64>).`,
+        next: `Complete the TODO sections, then attach it: work_attach_file(work_id: "${draft.identifier}", filename: "${draft.filename}", mime_type: "text/markdown", encoding: "utf-8", content: <markdown>) (or upload a local file directly with \`involute work attach-file ${draft.identifier} <path>\`).`,
       };
     }
     case 'work_timeline_star': {
@@ -959,20 +959,45 @@ async function callMcpAction(
       return { work_id: result.workId, entry_key: result.entryKey, starred: false, removed: result.removed };
     }
     case 'work_attach_file': {
-      // A private file on the work (INV-1003): research reports and the like
-      // that must never enter git or an image. Readers of the work may open it.
+      // A private file on the work (INV-1003, INV-1273): research reports and
+      // the like that must never enter git or an image. Readers of the work may
+      // open it. Supports plain UTF-8 or Base64, plus overwrite/append/delete.
       const work = await requireWork(context.prisma, requiredString(args.work_id, 'work_id'));
       await assertCanWriteIssue(context.prisma, context, work.id);
       if (!context.viewer) throw createValidationError('An authenticated actor is required to attach a file.');
+      const mode = (optionalString(args.mode)?.trim().toLowerCase() || 'create');
       const attachment = await storeUpload(context.prisma, {
-        filename: requiredString(args.filename, 'filename'),
-        mimeType: requiredString(args.mime_type, 'mime_type'),
-        content: requiredString(args.content, 'content'),
+        filename: optionalString(args.filename) ?? null,
+        mimeType: optionalString(args.mime_type) ?? null,
+        content: typeof args.content === 'string' ? args.content : null,
+        encoding: optionalString(args.encoding) ?? null,
+        mode,
+        attachmentId: optionalString(args.attachment_id) ?? null,
         issueId: work.id,
         uploaderId: context.viewer.id,
       });
+      if (mode === 'delete') {
+        return {
+          id: attachment.id,
+          filename: attachment.filename,
+          mime_type: attachment.mimeType,
+          size: attachment.size,
+          url: attachment.url,
+          work_id: work.id,
+          identifier: work.identifier,
+          mode,
+          deleted: true,
+        };
+      }
       return {
-        id: attachment.id, filename: attachment.filename, mime_type: attachment.mimeType, size: attachment.size, url: attachment.url, work_id: work.id, identifier: work.identifier,
+        id: attachment.id,
+        filename: attachment.filename,
+        mime_type: attachment.mimeType,
+        size: attachment.size,
+        url: attachment.url,
+        work_id: work.id,
+        identifier: work.identifier,
+        mode,
         warning: 'Stored under the work; people with read access open it from the issue page (Files). Pass its url to evidence_attach(kind: artifact) when it belongs to a run.',
       };
     }
@@ -1634,16 +1659,30 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     name: 'work_attach_file',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     description:
-      'Attach a private file to work (INV-1003): a research report, export or screenshot that must stay out of git and images. Stored server-side; readers of the work open it from the issue page. Base64 content, up to 50 MB. Returns the url to cite in evidence_attach(kind: artifact).',
+      'Attach, update, append or delete a private file on work (INV-1003, INV-1273): a research report, postmortem, export or screenshot that must stay out of git and images. Stored server-side; readers of the work open it from the issue page. Pass plain UTF-8 text (encoding: "utf-8", auto-detected for .md/.txt/.log/.json) or Base64 (encoding: "base64") up to 50 MB; for local files on disk, prefer `involute work attach-file <id> <path>` so the file is uploaded directly without LLM token round-trips. Returns the url to cite in evidence(action: "attach", kind: "artifact").',
     inputSchema: {
       type: 'object',
       properties: {
         work_id: { type: 'string', description: 'Work id or identifier the file belongs to.' },
-        filename: { type: 'string' },
-        mime_type: { type: 'string', description: 'e.g. text/markdown, application/pdf.' },
-        content: { type: 'string', description: 'Base64-encoded file content.' },
+        filename: { type: 'string', description: 'Attachment filename (e.g. report.md). Required when creating or matching by filename.' },
+        mime_type: { type: 'string', description: 'MIME type (e.g. text/markdown, application/pdf). Auto-inferred from filename extension when omitted.' },
+        content: { type: 'string', description: 'Plain UTF-8 text (for markdown/text/json/log) or Base64-encoded bytes. Omit when mode is "delete".' },
+        encoding: {
+          type: 'string',
+          enum: ['utf-8', 'base64'],
+          description: 'How `content` is encoded: "utf-8" for plain text/markdown, or "base64" for binary bytes. Auto-detected when omitted.',
+        },
+        mode: {
+          type: 'string',
+          enum: ['create', 'overwrite', 'append', 'delete'],
+          description: '"create" (default) adds a new attachment; "overwrite" replaces an existing attachment in-place; "append" appends to an existing attachment (or creates it if missing); "delete" removes a truncated or mistaken attachment.',
+        },
+        attachment_id: {
+          type: 'string',
+          description: 'Target attachment UUID when mode is "overwrite", "append", or "delete". When omitted, matches the latest attachment with the same `filename` on `work_id`.',
+        },
       },
-      required: ['work_id', 'filename', 'mime_type', 'content'],
+      required: ['work_id'],
     },
   },
   {

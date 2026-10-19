@@ -32,7 +32,7 @@ Agents call `work_timeline` with `action: "postmortem_draft"` and `work_id`.
 It writes nothing and returns `markdown` (the six sections, prefilled, with
 TODO markers), `filename` (`postmortem-<identifier>.md`), the timestamps, the
 starred-entry count and the follow-ups. Complete the TODOs, then attach it:
-`work_attach_file(work_id, filename, mime_type: "text/markdown", content)`.
+`work_attach_file(work_id, filename, encoding: "utf-8", content)` (or upload a local file directly with `involute work attach-file <work_id> <path>`).
 People write it from this template and attach it from the incident's Files.
 
 ## Closing rule

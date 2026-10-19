@@ -4,7 +4,7 @@ import { Command } from 'commander';
 import { realpathSync } from 'node:fs';
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, extname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { GraphQLClient } from 'graphql-request';
 import {
@@ -286,7 +286,7 @@ export async function createConfiguredGraphQLClient(configPath = getConfigPath()
 }
 
 function joinGraphqlEndpoint(serverUrl: string): string {
-  const trimmed = serverUrl.replace(/\/+$/, '');
+  const trimmed = serverUrl.replace(/\/+$/, '').replace(/\/mcp(?:\/readonly)?$/, '');
   return trimmed.endsWith('/graphql') ? trimmed : `${trimmed}/graphql`;
 }
 
@@ -1443,6 +1443,165 @@ async function attachEvidenceViaCli(
   };
 }
 
+const CLI_EXTENSION_MIME_TYPES: Record<string, string> = {
+  '.md': 'text/markdown',
+  '.markdown': 'text/markdown',
+  '.txt': 'text/plain',
+  '.log': 'text/x-log',
+  '.json': 'application/json',
+  '.csv': 'text/csv',
+  '.html': 'text/html',
+  '.htm': 'text/html',
+  '.xml': 'application/xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.pdf': 'application/pdf',
+};
+
+function inferCliMimeType(filename: string): string {
+  const ext = extname(filename).toLowerCase();
+  return CLI_EXTENSION_MIME_TYPES[ext] ?? 'application/octet-stream';
+}
+
+async function createGraphQLClientWithOverrides(overrides?: {
+  serverUrl?: string;
+  token?: string;
+}): Promise<GraphQLClient> {
+  const envServerUrl = process.env.INVOLUTE_SERVER_URL?.trim();
+  const envToken = (process.env.INVOLUTE_TOKEN ?? process.env.INVOLUTE_AGENT_TOKEN)?.trim();
+  if (!overrides?.serverUrl && !overrides?.token && !envServerUrl && !envToken) {
+    return createConfiguredGraphQLClient();
+  }
+  const config = await readConfig(getConfigPath());
+  const serverUrl = overrides?.serverUrl?.trim() || envServerUrl || config['server-url'];
+  if (!serverUrl) {
+    throw new CliError(
+      'Missing required config "server-url". Run `involute config set server-url <url>` or pass `--server-url <url>`.',
+    );
+  }
+  const token = overrides?.token?.trim() || envToken || config.token;
+  const viewerAssertion = process.env.INVOLUTE_VIEWER_ASSERTION ?? config['viewer-assertion'];
+  return new GraphQLClient(joinGraphqlEndpoint(serverUrl), {
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(viewerAssertion ? { [VIEWER_ASSERTION_HEADER]: viewerAssertion } : {}),
+    },
+  });
+}
+
+async function attachFileViaCli(
+  workId: string,
+  filePath: string | undefined,
+  options: {
+    attachmentId?: string;
+    filename?: string;
+    mimeType?: string;
+    mode?: string;
+    serverUrl?: string;
+    token?: string;
+  },
+): Promise<{
+  deleted: boolean;
+  filename: string;
+  id: string;
+  mimeType: string;
+  mode: string;
+  size: number;
+  url: string;
+  workIdentifier: string;
+}> {
+  const mode = (options.mode?.trim().toLowerCase() || 'create');
+  if (!['create', 'overwrite', 'append', 'delete'].includes(mode)) {
+    throw new CliError('Invalid --mode. Expected one of: create, overwrite, append, delete.');
+  }
+
+  let contentBase64: string | undefined;
+  let resolvedFilename = options.filename?.trim();
+  if (mode !== 'delete') {
+    if (!filePath) {
+      throw new CliError('Missing local file path. Pass `<file>` to upload, or `--mode delete` to remove an attachment.');
+    }
+    const bytes = await readFile(filePath);
+    contentBase64 = bytes.toString('base64');
+    if (!resolvedFilename) {
+      resolvedFilename = basename(filePath);
+    }
+  } else if (!resolvedFilename && filePath) {
+    resolvedFilename = basename(filePath);
+  }
+
+  if (!resolvedFilename && !options.attachmentId) {
+    throw new CliError('Pass a `<file>`, `--filename <name>`, or `--attachment-id <uuid>`.');
+  }
+
+  const resolvedMimeType =
+    options.mimeType?.trim() || (resolvedFilename ? inferCliMimeType(resolvedFilename) : undefined);
+
+  const client = await createGraphQLClientWithOverrides({
+    ...(options.serverUrl ? { serverUrl: options.serverUrl } : {}),
+    ...(options.token ? { token: options.token } : {}),
+  });
+
+  const result = await client.request<{
+    fileUpload: {
+      attachment: {
+        filename: string;
+        id: string;
+        mimeType: string;
+        size: number;
+        url: string;
+      } | null;
+      message?: string | null;
+      success: boolean;
+    };
+  }>(
+    /* GraphQL */ `
+      mutation CliWorkAttachFile($input: FileUploadInput!) {
+        fileUpload(input: $input) {
+          success
+          message
+          attachment {
+            id
+            filename
+            mimeType
+            size
+            url
+          }
+        }
+      }
+    `,
+    {
+      input: {
+        issueId: workId,
+        mode,
+        ...(resolvedFilename ? { filename: resolvedFilename } : {}),
+        ...(resolvedMimeType ? { mimeType: resolvedMimeType } : {}),
+        ...(contentBase64 !== undefined ? { content: contentBase64, encoding: 'base64' } : {}),
+        ...(options.attachmentId ? { attachmentId: options.attachmentId } : {}),
+      },
+    },
+  );
+
+  if (!result.fileUpload.success || !result.fileUpload.attachment) {
+    throw new CliError(result.fileUpload.message || 'File upload failed.');
+  }
+
+  return {
+    id: result.fileUpload.attachment.id,
+    filename: result.fileUpload.attachment.filename,
+    mimeType: result.fileUpload.attachment.mimeType,
+    size: result.fileUpload.attachment.size,
+    url: result.fileUpload.attachment.url,
+    mode,
+    deleted: mode === 'delete',
+    workIdentifier: workId,
+  };
+}
+
 async function reviewWorkViaCli(
   workId: string,
   input: { decision: 'accepted' | 'rejected'; reason?: string; runId?: string },
@@ -1965,6 +2124,38 @@ export function createProgram(): Command {
         const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
         const attached = await attachEvidenceViaCli(id, options);
         process.stdout.write(formatOutput(context.json ? attached : attached, context));
+      });
+    });
+
+  workCommand
+    .command('attach-file')
+    .description('Upload, overwrite, append, or delete a private attachment on work directly from a local file')
+    .argument('<id>', 'Work identifier or UUID')
+    .argument('[file]', 'Local file path to upload (omit when --mode delete is used with --filename or --attachment-id)')
+    .option('--filename <name>', 'Attachment filename (defaults to the local file basename)')
+    .option('--mime-type <type>', 'MIME type (inferred from filename extension when omitted)')
+    .option('--mode <mode>', 'create (default), overwrite, append, or delete', 'create')
+    .option('--attachment-id <uuid>', 'Target attachment UUID when mode is overwrite, append, or delete')
+    .option('--server-url <url>', 'Override server URL (or set INVOLUTE_SERVER_URL)')
+    .option('--token <token>', 'Override bearer token (or set INVOLUTE_TOKEN)')
+    .option('--json', 'Output machine-readable JSON')
+    .action(async function (
+      this: Command,
+      id: string,
+      file: string | undefined,
+      options: JsonOption & {
+        attachmentId?: string;
+        filename?: string;
+        mimeType?: string;
+        mode?: string;
+        serverUrl?: string;
+        token?: string;
+      },
+    ) {
+      await runWithCliErrorHandling(async () => {
+        const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
+        const attached = await attachFileViaCli(id, file, options);
+        process.stdout.write(formatOutput(attached, context));
       });
     });
 

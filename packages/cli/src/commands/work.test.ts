@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PrismaClient } from '@prisma/client';
@@ -16,6 +16,7 @@ const TEST_AUTH_TOKEN = 'cli-work-test-token';
 describe('work CLI commands', () => {
   let prisma: PrismaClient;
   let server: StartedServer;
+  let uploadsDir: string;
   let tempDir: string;
   let readyStateId: string;
   let parentIdentifier: string;
@@ -25,20 +26,26 @@ describe('work CLI commands', () => {
   beforeAll(async () => {
     prisma = new PrismaClient();
     await prisma.$connect();
+    uploadsDir = await mkdtemp(join(tmpdir(), 'involute-cli-uploads-'));
+    process.env.INVOLUTE_UPLOADS_DIR = uploadsDir;
     server = await startServer({
       allowAdminFallback: true,
       authToken: TEST_AUTH_TOKEN,
       port: 0,
       prisma,
+      uploadsDir,
     });
   });
 
   afterAll(async () => {
     await server.stop();
+    delete process.env.INVOLUTE_UPLOADS_DIR;
+    await rm(uploadsDir, { recursive: true, force: true }).catch(() => {});
     await prisma.$disconnect();
   });
 
   beforeEach(async () => {
+    await prisma.attachment.deleteMany();
     await prisma.comment.deleteMany();
     await prisma.issue.deleteMany();
     await prisma.workflowState.deleteMany();
@@ -255,6 +262,80 @@ describe('work CLI commands', () => {
     const rejected = JSON.parse(rejectOut) as { commitmentStatus: string; identifier: string };
     expect(rejected.identifier).toBe(proposed.identifier);
     expect(rejected.commitmentStatus).toBe('REJECTED');
+  });
+
+  it('uploads, overwrites, appends, and deletes local files directly from disk via work attach-file (INV-1273)', async () => {
+    const localFile = join(tempDir, 'incident-report.md');
+    const initialBody = '# Incident Report\n\nPart 1 of the markdown report.\n';
+    await writeFile(localFile, initialBody, 'utf8');
+
+    // Also verifies /mcp suffix on server-url is stripped automatically.
+    const created = await runCli(
+      ['work', 'attach-file', childIdentifier, localFile, '--server-url', `${server.url}/mcp`, '--json'],
+      tempDir,
+    );
+    expect(created.exitCode, created.stderr).toBe(0);
+    const createdJson = JSON.parse(created.stdout) as {
+      deleted: boolean;
+      filename: string;
+      id: string;
+      mimeType: string;
+      size: number;
+      url: string;
+    };
+    expect(createdJson).toMatchObject({
+      deleted: false,
+      filename: 'incident-report.md',
+      mimeType: 'text/markdown',
+      size: Buffer.byteLength(initialBody, 'utf8'),
+    });
+
+    const appendFile = join(tempDir, 'part2.md');
+    const appendBody = 'Part 2 appended directly from disk.\n';
+    await writeFile(appendFile, appendBody, 'utf8');
+    const appended = await runCli(
+      [
+        'work',
+        'attach-file',
+        childIdentifier,
+        appendFile,
+        '--filename',
+        'incident-report.md',
+        '--mode',
+        'append',
+        '--json',
+      ],
+      tempDir,
+    );
+    expect(appended.exitCode, appended.stderr).toBe(0);
+    const appendedJson = JSON.parse(appended.stdout) as { id: string; size: number; url: string };
+    expect(appendedJson.id).toBe(createdJson.id);
+    expect(appendedJson.size).toBe(Buffer.byteLength(initialBody + appendBody, 'utf8'));
+
+    const fetched = await fetch(`${server.url}${appendedJson.url}`, {
+      headers: { authorization: `Bearer ${TEST_AUTH_TOKEN}` },
+    });
+    expect(fetched.status).toBe(200);
+    expect(await fetched.text()).toBe(initialBody + appendBody);
+
+    const deleted = await runCli(
+      [
+        'work',
+        'attach-file',
+        childIdentifier,
+        '--attachment-id',
+        createdJson.id,
+        '--mode',
+        'delete',
+        '--json',
+      ],
+      tempDir,
+    );
+    expect(deleted.exitCode, deleted.stderr).toBe(0);
+    expect(JSON.parse(deleted.stdout)).toMatchObject({
+      deleted: true,
+      id: createdJson.id,
+    });
   });
 });
 

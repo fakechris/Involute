@@ -1226,15 +1226,24 @@ the server list into localStorage and migrates views it finds there once
 (`involute.views.migrated.<team>`); /views has **Share with team** / **Make
 private** / **Delete view**.
 
-### Private files on work (INV-1003)
+### Private files on work (INV-1003, INV-1273)
 
-`fileUpload(input: { filename, mimeType, content, issueId })` stores a file
-server-side and, with `issueId` (id or identifier), attaches it to that work;
-MCP `work_attach_file(work_id, filename, mime_type, content)` is the agent's
-side of the same thing. `Issue.attachments` lists them newest first and the
-issue page shows them under **Files**. `GET /uploads/<name>` serves a file only
-to its uploader, admins, trusted token bearers, or readers of the linked work.
-Research reports go this way, never into git or an image —
+`fileUpload(input: { filename, mimeType, content, encoding, mode, attachmentId, issueId })`
+stores, updates, appends or deletes a file server-side and, with `issueId` (id
+or identifier), attaches it to that work; MCP
+`work_attach_file(work_id, filename, mime_type?, content?, encoding?: 'utf-8' | 'base64', mode?: 'create' | 'overwrite' | 'append' | 'delete', attachment_id?)`
+is the agent's side of the same thing, and `involute work attach-file <id> [file] [--mode overwrite|append|delete]`
+uploads a local disk file directly without streaming its bytes through LLM
+tokens. Text files (`.md`, `.markdown`, `.txt`, `.log`, `.json`) accept plain
+UTF-8 text directly (`encoding: 'utf-8'`, auto-detected when `encoding` is
+omitted), and `mime_type` / `mimeType` is inferred from `filename` when
+omitted. `mode: 'overwrite'` replaces an existing attachment in-place (by
+`attachment_id` or the latest attachment with the same `filename` on the work
+item); `mode: 'append'` appends chunks into a single attachment; `mode: 'delete'`
+removes a truncated or mistaken upload. `Issue.attachments` lists them newest
+first and the issue page shows them under **Files**. `GET /uploads/<name>`
+serves a file only to its uploader, admins, trusted token bearers, or readers of
+the linked work. Research reports go this way, never into git or an image —
 `scripts/ci-research-guard.sh` fails CI when a `research/` path is tracked.
 
 ### Webhook subscriptions (Linear-style, per-endpoint secrets)
