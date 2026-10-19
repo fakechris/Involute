@@ -158,4 +158,68 @@ describe('work_attach_file (INV-1003)', () => {
     const huge = await mcp('work_attach_file', { work_id: parentId, filename: 'big.bin', mime_type: 'application/octet-stream', content: Buffer.alloc(51 * 1024 * 1024).toString('base64') });
     expect(huge.error).toMatch(/size limit/);
   });
+
+  // INV-1273: plain UTF-8 text, mime_type inference, and overwrite / append / delete modes.
+  it('accepts plain UTF-8 markdown (explicit or auto-detected), infers mime_type, and supports overwrite/append/delete (INV-1273)', async () => {
+    const parentId = await testParentId(prisma, team.id);
+    const work = await prisma.issue.findUniqueOrThrow({ where: { id: parentId } });
+    const truncated = '# Incident Report\n\nTruncated at 2787 bytes...';
+
+    // 1. Auto-detects plain UTF-8 markdown when encoding & mime_type are omitted.
+    const first = await mcp('work_attach_file', {
+      work_id: work.identifier,
+      filename: 'browser-slot-headofline-incident-20261019.md',
+      content: truncated,
+    });
+    expect(first.error).toBeUndefined();
+    expect(first.mime_type).toBe('text/markdown');
+    expect(first.size).toBe(Buffer.byteLength(truncated, 'utf8'));
+
+    // 2. Overwrite by matching filename on the same work item replaces content in-place.
+    const part1 = '# Incident Report (Full)\n\nSection 1: Overview.\n';
+    const overwritten = await mcp('work_attach_file', {
+      work_id: work.identifier,
+      filename: 'browser-slot-headofline-incident-20261019.md',
+      encoding: 'utf-8',
+      mode: 'overwrite',
+      content: part1,
+    });
+    expect(overwritten.id).toBe(first.id);
+    expect(overwritten.url).toBe(first.url);
+    expect(overwritten.size).toBe(Buffer.byteLength(part1, 'utf8'));
+
+    // 3. Append adds chunks to the existing attachment without creating split part1..N files.
+    const part2 = 'Section 2: Root Cause & Fix.\n';
+    const appended = await mcp('work_attach_file', {
+      work_id: work.identifier,
+      filename: 'browser-slot-headofline-incident-20261019.md',
+      encoding: 'utf-8',
+      mode: 'append',
+      content: part2,
+    });
+    expect(appended.id).toBe(first.id);
+    expect(appended.size).toBe(Buffer.byteLength(part1 + part2, 'utf8'));
+
+    const allOnWork = await prisma.attachment.findMany({ where: { issueId: work.id } });
+    expect(allOnWork).toHaveLength(1);
+
+    const download = await fetch(`${server.url}${appended.url}`, {
+      headers: { authorization: 'Bearer unused-static-token' },
+    });
+    expect(download.status).toBe(200);
+    expect(await download.text()).toBe(part1 + part2);
+
+    // 4. Delete removes the attachment record and underlying file.
+    const deleted = await mcp('work_attach_file', {
+      work_id: work.identifier,
+      attachment_id: first.id,
+      mode: 'delete',
+    });
+    expect(deleted).toMatchObject({ id: first.id, deleted: true, identifier: work.identifier });
+    expect(await prisma.attachment.findUnique({ where: { id: first.id } })).toBeNull();
+    const afterDeleteFetch = await fetch(`${server.url}${appended.url}`, {
+      headers: { authorization: 'Bearer unused-static-token' },
+    });
+    expect(afterDeleteFetch.status).toBe(404);
+  });
 });

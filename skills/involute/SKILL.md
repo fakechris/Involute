@@ -36,7 +36,7 @@ Connect: Streamable HTTP MCP at `http://127.0.0.1:4200/mcp` (local) with `Author
 7. **Work state changes without telling you — status is read, not remembered.** Before starting a turn or stating any item's status, read `agent_inbox` (and pass `ack: [...]` to clear handled notifications) or `work_get_context` (`commitmentStatus`); never state candidate/committed status from memory. When you have unread notifications, non-inbox MCP tool responses piggyback an `unread_decisions` summary (`{ count, latest, hint }`) — treat it as a reminder only (`agent_inbox` and `commitmentStatus` remain the source of truth, and piggybacking does not mark notifications read).
 8. Run complete is not work accepted. **Never** move work to Done yourself.
 9. Expanding scope requires `work_update` with `expected_revision` or a new candidate linked `DISCOVERED_DURING`.
-10. Keep plans/findings local. Sync only phases, blockers, decisions, and evidence pointers.
+10. Keep plans/findings local. Sync only phases, blockers, decisions, and evidence pointers. When attaching a report or postmortem to work (`work_attach_file`), pass plain UTF-8 (`encoding: 'utf-8'`) or upload local disk files directly with `involute work attach-file <id> <path>` — never `base64` + `cat` a local file through LLM tokens, and use `mode: 'overwrite' | 'append' | 'delete'` instead of leaving truncated or `part1..N` attachments.
 
 ## Unplanned Work & Hotfix Protocol (即时热修与计划外工作自动闭环法则)
 

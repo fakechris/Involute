@@ -178,7 +178,7 @@ import { loadProjectWorkGraph, type ProjectWorkGraph } from './work-graph-view.j
 import { loadWorkTimelines } from './work-timeline.js';
 import { dependencyHints } from './mention-links.js';
 import { loadWorkHygiene } from './work-hygiene.js';
-import { EXTENSION_TOKEN_HUMAN_ONLY_MESSAGE, createExtensionToken, listExtensionTokens, revokeExtensionToken } from './extension-tokens.js';
+import { EXTENSION_TOKEN_HUMAN_ONLY_MESSAGE, EXTENSION_TOKEN_REFUSED_MESSAGE, createExtensionToken, listExtensionTokens, revokeExtensionToken } from './extension-tokens.js';
 import { type AttentionItem, type AttentionKind, loadAttention, pageAttention, summarizeAttention } from './attention-service.js';
 import { BUG_LABEL_NAME, findSimilarBugs, reportBug, type BugReportInput } from './bug-report.js';
 import { normalizeWebOrigin } from './web-origins.js';
@@ -2427,9 +2427,15 @@ const typeDefs = /* GraphQL */ `
   }
 
   input FileUploadInput {
-    filename: String!
-    mimeType: String!
-    content: String!
+    filename: String
+    mimeType: String
+    content: String
+    "Content encoding: 'utf-8' for plain text/markdown, or 'base64' for binary bytes (auto-detected when omitted, INV-1273)."
+    encoding: String
+    "How to apply the upload: 'create' (default), 'overwrite', 'append', or 'delete' (INV-1273)."
+    mode: String
+    "Target attachment UUID when mode is 'overwrite', 'append', or 'delete' (matches latest same-filename attachment on issueId when omitted, INV-1273)."
+    attachmentId: String
     "Attach the file to this work (id or identifier): readers of the work may open it (INV-1003)."
     issueId: String
   }
@@ -5234,17 +5240,46 @@ const resolvers = {
       runMutation(async () => ({ success: true as const, id: (await deleteSavedView(context, args.id)) ? args.id : null }), { success: false as const, id: null }),
     fileUpload: async (
       _parent: unknown,
-      args: { input: { filename: string; mimeType: string; content: string; issueId?: string | null } },
+      args: {
+        input: {
+          filename?: string | null;
+          mimeType?: string | null;
+          content?: string | null;
+          encoding?: string | null;
+          mode?: string | null;
+          attachmentId?: string | null;
+          issueId?: string | null;
+        };
+      },
       context: GraphQLContext,
     ): Promise<{ attachment: Attachment | null; success: boolean }> => {
       const viewer = requireAuthentication(context);
       return runMutation(async () => {
+        if (
+          context.authMode === 'extension-token' &&
+          ((args.input.mode && args.input.mode.toLowerCase() !== 'create') || args.input.attachmentId || args.input.issueId)
+        ) {
+          throw createValidationError(EXTENSION_TOKEN_REFUSED_MESSAGE);
+        }
         let issueId: string | null = null;
         if (args.input.issueId) {
           const work = await findWorkByIdOrIdentifier(context.prisma, args.input.issueId);
           if (!work) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
           await assertCanWriteIssue(context.prisma, context, work.id);
           issueId = work.id;
+        }
+        if (args.input.attachmentId) {
+          const target = await context.prisma.attachment.findUnique({ where: { id: args.input.attachmentId } });
+          if (!target) throw createValidationError('Attachment not found.');
+          if (target.issueId) {
+            await assertCanWriteIssue(context.prisma, context, target.issueId);
+            if (issueId && issueId !== target.issueId) {
+              throw createValidationError('Attachment does not belong to that work item.');
+            }
+            issueId = target.issueId;
+          } else if (target.uploaderId !== viewer.id && viewer.globalRole !== 'ADMIN') {
+            throw createValidationError('You may only modify your own standalone uploads.');
+          }
         }
         const attachment = await storeUpload(context.prisma, { ...args.input, issueId, uploaderId: viewer.id });
         return { attachment, success: true as const };
