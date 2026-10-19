@@ -215,9 +215,14 @@ export async function verifyBugFix(input: BugFixRequest, options: GitHubVerifier
     if (input.pullRequestNumber) {
       const pr = await get(`/pulls/${input.pullRequestNumber}`);
       if (pr.number !== input.pullRequestNumber || object(object(pr.base).repo).full_name !== input.repository) throw new VerificationError('PR_MISMATCH', 'FAILED');
-      if (object(pr.head).sha !== input.commitSha) throw new VerificationError('HEAD_CHANGED', 'STALE');
-      if (pr.merged !== true) throw new VerificationError('PR_NOT_MERGED', 'PENDING');
-      result.source = { mode: 'pr', prNumber: input.pullRequestNumber, mergeSha: typeof pr.merge_commit_sha === 'string' ? pr.merge_commit_sha : null };
+      // The run may name the PR head or, once merged, its merge commit (INV-1279):
+      // agents report whichever they hold after merging; both are this fix.
+      const mergeSha = typeof pr.merge_commit_sha === 'string' ? pr.merge_commit_sha : null;
+      const merged = pr.merged === true;
+      const matched = object(pr.head).sha === input.commitSha ? 'head' : merged && mergeSha === input.commitSha ? 'merge' : null;
+      if (!matched) throw new VerificationError(!merged && mergeSha === input.commitSha ? 'PR_NOT_MERGED' : 'HEAD_CHANGED', !merged && mergeSha === input.commitSha ? 'PENDING' : 'STALE');
+      if (!merged) throw new VerificationError('PR_NOT_MERGED', 'PENDING');
+      result.source = { mode: 'pr', prNumber: input.pullRequestNumber, mergeSha, matched };
     } else {
       const repo = await get('');
       const branch = typeof repo.default_branch === 'string' ? repo.default_branch : null;
