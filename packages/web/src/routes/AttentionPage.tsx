@@ -77,6 +77,12 @@ const NOUNS: Record<AttentionKind, [string, string]> = {
   WORK_REVIEW: ['finished item to accept', 'finished items to accept'],
 };
 
+/** A group heading is "INV-788 Title…". Split it so the id stays mono and the title wraps. */
+export function splitGroupLabel(label: string): { identifier: string; title: string } | null {
+  const match = /^([A-Za-z]+-\d+)\s+([\s\S]+)$/.exec(label);
+  return match ? { identifier: match[1]!, title: match[2]! } : null;
+}
+
 /** "3 candidates to commit, 1 contract change" in section order. */
 export function packSummary(items: AttentionItemNode[]): string {
   return SECTIONS.flatMap(({ kind }) => {
@@ -414,7 +420,7 @@ export function AttentionPage() {
             {sections.map((section) => (
               <section key={section.key} className="attention-section" aria-label={section.title}>
                 <h2 className="attention-section__title">
-                  {section.title} <span className="attention-section__count">{section.count}</span>
+                  <GroupLabel text={section.title} /> <span className="attention-section__count">{section.count}</span>
                   {section.oldestSince ? <span className="observation-card__meta">oldest {formatWait(section.oldestSince)}</span> : null}
                 </h2>
                 {section.summary ? <p className="attention-section__summary">{section.summary}</p> : null}
@@ -444,7 +450,7 @@ export function AttentionPage() {
                 ) : null}
                 {section.groups.map((group) => (
                   <div key={group.key} className="attention-group">
-                    {group.label ? <div className="attention-group__label">{group.label}</div> : null}
+                    {group.label ? <GroupLabel className="attention-group__label" text={group.label} /> : null}
                     <ul>
                       {group.items.map((item) => (
                         <li
@@ -525,6 +531,16 @@ export function AttentionPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function GroupLabel({ className, text }: { className?: string; text: string }) {
+  const parts = splitGroupLabel(text);
+  return (
+    <span className={className}>
+      {parts ? <span className="mono">{parts.identifier}</span> : null}{parts ? ' ' : null}
+      <span className="attention-group__name">{parts?.title ?? text}</span>
+    </span>
   );
 }
 
