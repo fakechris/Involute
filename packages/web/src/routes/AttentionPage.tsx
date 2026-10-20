@@ -204,7 +204,27 @@ export function AttentionPage() {
     window.localStorage.setItem(VIEW_STORAGE_KEY, view);
   }, [view]);
   const sections = useMemo(() => (view === 'tree' ? buildPacks(items) : buildSections(items)), [items, view]);
-  const ordered = useMemo(() => sections.flatMap((section) => section.groups.flatMap((group) => group.items)), [sections]);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
+  function toggleGroup(groupKey: string) {
+    setCollapsedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+  }
+  const allItems = useMemo(() => sections.flatMap((section) => section.groups.flatMap((group) => group.items)), [sections]);
+  const ordered = useMemo(
+    () =>
+      sections.flatMap((section) => {
+        if (collapsedGroups.has(section.key)) return [];
+        return section.groups.flatMap((group) => {
+          if (group.label && collapsedGroups.has(`${section.key}:${group.key}`)) return [];
+          return group.items;
+        });
+      }),
+    [collapsedGroups, sections],
+  );
 
   const humansByTeam = useMemo(() => {
     const result = new Map<string, WorkUserSummary[]>();
@@ -232,10 +252,10 @@ export function AttentionPage() {
 
   useEffect(() => {
     setSelectedIds((current) => {
-      const kept = current.filter((id) => ordered.some((item) => item.id === id));
+      const kept = current.filter((id) => allItems.some((item) => item.id === id));
       return kept.length === current.length ? current : kept;
     });
-  }, [ordered]);
+  }, [allItems]);
 
   // One decision, by key or by the batch bar. Returns why it was refused, or null.
   async function accept(item: AttentionItemNode): Promise<string | null> {
@@ -417,7 +437,7 @@ export function AttentionPage() {
         <span className="observation-card__meta">J/K move · A accept or commit · R reason · H snooze · Z undo · X select</span>
       </div>
       {loading && !data ? <p className="observation-empty">Loading…</p> : null}
-      {data && ordered.length === 0 ? (
+      {data && allItems.length === 0 ? (
         <div className="empty-state">
           <h3>Nothing is waiting on your decision</h3>
           <p>
@@ -425,79 +445,134 @@ export function AttentionPage() {
           </p>
         </div>
       ) : null}
-      {ordered.length > 0 ? (
+      {allItems.length > 0 ? (
         <div className="page-content attention-layout">
           <div className="attention-list" aria-label="Waiting on your decision">
-            {sections.map((section) => (
-              <section key={section.key} className="attention-section" aria-label={section.title}>
-                <h2 className="attention-section__title">
-                  <GroupLabel className="attention-section__heading" kind={section.kind ?? null} text={section.title} />
-                  <span className="attention-section__count">{section.count}</span>
-                  {section.oldestSince ? <span className="observation-card__meta">oldest {formatWait(section.oldestSince)}</span> : null}
-                </h2>
-                {section.summary ? <p className="attention-section__summary">{section.summary}</p> : null}
-                {view === 'tree' && suggestedDecisions(section.groups[0]?.items ?? []).length > 0 ? (
-                  <Btn
-                    variant="subtle"
-                    onClick={() => setPackConfirm({ items: suggestedDecisions(section.groups[0]!.items), key: section.key, title: section.title })}
-                  >
-                    {`Do the suggested decisions (${suggestedDecisions(section.groups[0]!.items).length})`}
-                  </Btn>
-                ) : null}
-                {packConfirm?.key === section.key ? (
-                  <div className="attention-pack-confirm" role="dialog" aria-label={`Confirm decisions for ${section.title}`}>
-                    <p>These will be decided as proposed. Nothing that needs a reason is in the list.</p>
-                    <ul>
-                      {packConfirm.items.map((entry) => (
-                        <li key={entry.id}>
-                          <span className="mono">{entry.work?.identifier}</span> {entry.kind === 'CANDIDATE_COMMIT' ? 'commit' : entry.kind === 'CONTRACT_AMENDMENT' ? 'accept the contract change' : 'approve the delivery change'}
-                        </li>
-                      ))}
-                    </ul>
-                    <Btn variant="accent" disabled={batchPending} onClick={() => void runPack(packConfirm.items)}>
-                      {batchPending ? 'Deciding…' : `Confirm ${packConfirm.items.length} decisions`}
-                    </Btn>
-                    <Btn variant="ghost" onClick={() => setPackConfirm(null)}>Cancel</Btn>
-                  </div>
-                ) : null}
-                {section.groups.map((group) => (
-                  <div key={group.key} className="attention-group">
-                    {group.label ? <GroupLabel className="attention-group__label" kind={group.kind} text={group.label} /> : null}
-                    <ul>
-                      {group.items.map((item) => (
-                        <li
-                          key={item.id}
-                          data-list-key-id={item.id}
-                          aria-current={focused?.id === item.id ? 'true' : undefined}
-                          className={`attention-row${focused?.id === item.id ? ' attention-row--focused' : ''}${item.overdue ? ' attention-row--overdue' : ''}`}
-                          onClick={() => listKeys.setFocusedId(item.id)}
-                        >
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${item.work?.identifier ?? item.reason}`}
-                            checked={selectedIds.includes(item.id)}
-                            onClick={(event) => event.stopPropagation()}
-                            onChange={() => setSelectedIds((current) => (current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id]))}
-                          />
-                          <span className="attention-row__text">
-                            <span className="attention-row__title">
-                              {item.work ? <span className="mono">{item.work.identifier}</span> : null} {item.work?.title ?? item.reason}
-                            </span>
-                            <span className="attention-row__reason">{item.reason}</span>
-                            {item.unblocked ? <span className="attention-row__flag attention-row__flag--ready">What blocked it is done</span> : null}
-                            {(item.waitingOn ?? []).length > 0 ? (
-                              <span className="attention-row__flag">Waiting on {(item.waitingOn ?? []).map((blocker) => blocker.identifier).join(', ')}</span>
+            {sections.map((section) => {
+              const isSectionParent = view === 'tree';
+              const isSectionCollapsed = isSectionParent && collapsedGroups.has(section.key);
+              return (
+                <section
+                  key={section.key}
+                  className={`attention-section${isSectionParent ? ` attention-group attention-group--parent${isSectionCollapsed ? ' attention-group--collapsed' : ''}` : ''}`}
+                  aria-label={section.title}
+                >
+                  {isSectionParent ? (
+                    <h2 className="attention-section__title attention-section__title--parent">
+                      <button
+                        type="button"
+                        className="attention-group__header attention-group__label"
+                        aria-expanded={!isSectionCollapsed}
+                        aria-label={`${isSectionCollapsed ? 'Expand' : 'Collapse'} ${section.title}`}
+                        onClick={() => toggleGroup(section.key)}
+                      >
+                        <span className="attention-group__caret" aria-hidden="true">{isSectionCollapsed ? '▸' : '▾'}</span>
+                        <GroupLabel className="attention-section__heading" kind={section.kind ?? null} text={section.title} />
+                        <span className="attention-section__count attention-group__count">{section.count}</span>
+                        {section.oldestSince ? <span className="observation-card__meta">oldest {formatWait(section.oldestSince)}</span> : null}
+                      </button>
+                    </h2>
+                  ) : (
+                    <h2 className="attention-section__title">
+                      <GroupLabel className="attention-section__heading" kind={section.kind ?? null} text={section.title} />
+                      <span className="attention-section__count">{section.count}</span>
+                      {section.oldestSince ? <span className="observation-card__meta">oldest {formatWait(section.oldestSince)}</span> : null}
+                    </h2>
+                  )}
+                  {!isSectionCollapsed ? (
+                    <div className={isSectionParent ? 'attention-section__body' : undefined}>
+                      {section.summary ? <p className="attention-section__summary">{section.summary}</p> : null}
+                      {view === 'tree' && suggestedDecisions(section.groups[0]?.items ?? []).length > 0 ? (
+                        <div className="attention-section__actions">
+                          <Btn
+                            variant="subtle"
+                            onClick={() => setPackConfirm({ items: suggestedDecisions(section.groups[0]!.items), key: section.key, title: section.title })}
+                          >
+                            {`Do the suggested decisions (${suggestedDecisions(section.groups[0]!.items).length})`}
+                          </Btn>
+                        </div>
+                      ) : null}
+                      {packConfirm?.key === section.key ? (
+                        <div className="attention-pack-confirm" role="dialog" aria-label={`Confirm decisions for ${section.title}`}>
+                          <p>These will be decided as proposed. Nothing that needs a reason is in the list.</p>
+                          <ul>
+                            {packConfirm.items.map((entry) => (
+                              <li key={entry.id}>
+                                <span className="mono">{entry.work?.identifier}</span> {entry.kind === 'CANDIDATE_COMMIT' ? 'commit' : entry.kind === 'CONTRACT_AMENDMENT' ? 'accept the contract change' : 'approve the delivery change'}
+                              </li>
+                            ))}
+                          </ul>
+                          <Btn variant="accent" disabled={batchPending} onClick={() => void runPack(packConfirm.items)}>
+                            {batchPending ? 'Deciding…' : `Confirm ${packConfirm.items.length} decisions`}
+                          </Btn>
+                          <Btn variant="ghost" onClick={() => setPackConfirm(null)}>Cancel</Btn>
+                        </div>
+                      ) : null}
+                      {section.groups.map((group) => {
+                        const groupCollapseKey = `${section.key}:${group.key}`;
+                        const hasParentHeader = Boolean(group.label);
+                        const isGroupCollapsed = hasParentHeader && collapsedGroups.has(groupCollapseKey);
+                        return (
+                          <div
+                            key={group.key}
+                            className={`attention-group${hasParentHeader ? ' attention-group--parent' : ''}${isGroupCollapsed ? ' attention-group--collapsed' : ''}`}
+                          >
+                            {group.label ? (
+                              <button
+                                type="button"
+                                className="attention-group__header attention-group__label"
+                                aria-expanded={!isGroupCollapsed}
+                                aria-label={`${isGroupCollapsed ? 'Expand' : 'Collapse'} ${group.label}`}
+                                onClick={() => toggleGroup(groupCollapseKey)}
+                              >
+                                <span className="attention-group__caret" aria-hidden="true">{isGroupCollapsed ? '▸' : '▾'}</span>
+                                <GroupLabel className="attention-group__heading" kind={group.kind} text={group.label} />
+                                <span className="attention-group__count">
+                                  {group.items.length} {group.items.length === 1 ? 'item' : 'items'}
+                                </span>
+                              </button>
                             ) : null}
-                            {item.overdue ? <span className="attention-row__flag attention-row__flag--overdue">Overdue</span> : null}
-                          </span>
-                          <span className="observation-card__meta" title={new Date(item.since).toLocaleString()}>{formatWait(item.since)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </section>
-            ))}
+                            {!isGroupCollapsed ? (
+                              <ul className={hasParentHeader || isSectionParent ? 'attention-group__children' : undefined}>
+                                {group.items.map((item) => (
+                                  <li
+                                    key={item.id}
+                                    data-list-key-id={item.id}
+                                    aria-current={focused?.id === item.id ? 'true' : undefined}
+                                    className={`attention-row${hasParentHeader || isSectionParent ? ' attention-row--child' : ''}${focused?.id === item.id ? ' attention-row--focused' : ''}${item.overdue ? ' attention-row--overdue' : ''}`}
+                                    onClick={() => listKeys.setFocusedId(item.id)}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      aria-label={`Select ${item.work?.identifier ?? item.reason}`}
+                                      checked={selectedIds.includes(item.id)}
+                                      onClick={(event) => event.stopPropagation()}
+                                      onChange={() => setSelectedIds((current) => (current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id]))}
+                                    />
+                                    <span className="attention-row__text">
+                                      <span className="attention-row__title">
+                                        {item.work ? <span className="mono">{item.work.identifier}</span> : null} {item.work?.title ?? item.reason}
+                                      </span>
+                                      <span className="attention-row__reason">{item.reason}</span>
+                                      {item.unblocked ? <span className="attention-row__flag attention-row__flag--ready">What blocked it is done</span> : null}
+                                      {(item.waitingOn ?? []).length > 0 ? (
+                                        <span className="attention-row__flag">Waiting on {(item.waitingOn ?? []).map((blocker) => blocker.identifier).join(', ')}</span>
+                                      ) : null}
+                                      {item.overdue ? <span className="attention-row__flag attention-row__flag--overdue">Overdue</span> : null}
+                                    </span>
+                                    <span className="observation-card__meta" title={new Date(item.since).toLocaleString()}>{formatWait(item.since)}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })}
           </div>
           <div id="attention-decision" className="attention-decision" aria-label="Decision">
             {notice ? <p className="attention-notice" role="status">{notice}</p> : null}
@@ -510,7 +585,9 @@ export function AttentionPage() {
                 states={focused.work ? statesByTeam.get(focused.work.team.id) ?? [] : []}
                 refresh={refresh}
               />
-            ) : null}
+            ) : (
+              <p className="observation-empty">Expand a parent group on the left to inspect its items.</p>
+            )}
           </div>
         </div>
       ) : null}
@@ -551,13 +628,14 @@ function GroupLabel({ className, kind, text }: { className?: string; kind?: Work
   const identifier = match?.[1] ?? null;
   const title = match?.[2] ?? text;
   const kindLabel = kind ? KIND_LABEL[kind] : null;
-  // A group heading is a list caption, not a body paragraph. The kind is a badge;
-  // the title takes the remaining column and wraps there, so a long milestone or
-  // epic name cannot paint across the decision pane (INV-1302).
+  const kindModifier = kind ? ` attention-group__kind--${kind.toLowerCase()}` : '';
+  // A group heading is a collapsible parent container header, not a body paragraph.
+  // The kind is a badge; the title takes the remaining column and wraps there,
+  // so a long milestone or epic name cannot paint across the decision pane (INV-1302).
   return (
     <span className={className}>
-      {identifier ? <span className="mono">{identifier}</span> : null}
-      {kindLabel ? <span className="attention-group__kind">{kindLabel}</span> : null}
+      {identifier ? <span className="mono attention-group__id">{identifier}</span> : null}
+      {kindLabel ? <span className={`attention-group__kind${kindModifier}`}>{kindLabel}</span> : null}
       {identifier ? <span className="attention-group__name">{title}</span> : <span className="attention-group__name">{text}</span>}
     </span>
   );

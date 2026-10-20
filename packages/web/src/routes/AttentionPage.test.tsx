@@ -167,7 +167,7 @@ describe('Needs you (INV-1092)', () => {
     expect(within(decision).getByRole('button', { name: /Accept change/ })).toBeInTheDocument();
   });
 
-  it('marks a milestone or epic group heading with its kind, instead of a bare line of text (INV-1302)', () => {
+  it('renders a milestone, epic or project group as a collapsible parent container with nested child items (INV-1302)', () => {
     const milestoneTitle = '长任务闭环——人批准后 agent 被叫醒、持续执行到交付、退回能回到执行者、人验收到 Done';
     const epicTitle = '人类操作面补齐：服务端已有、但人在 UI 里无法完成的操作全部给出入口，并用守卫测试防止再次出现';
     nodes = [
@@ -181,17 +181,32 @@ describe('Needs you (INV-1092)', () => {
       }),
     ];
     renderPage();
-    const labels = [...document.querySelectorAll('.attention-group__label')];
+    const labels = [...document.querySelectorAll<HTMLButtonElement>('button.attention-group__header.attention-group__label')];
     const milestone = labels.find((label) => label.textContent?.includes('INV-989'));
     const epic = labels.find((label) => label.textContent?.includes('INV-788'));
+    expect(milestone).toHaveAttribute('aria-expanded', 'true');
     expect(milestone?.querySelector('.attention-group__kind')).toHaveTextContent('Milestone');
     expect(milestone?.querySelector('.attention-group__name')).toHaveTextContent(milestoneTitle);
+    expect(milestone?.querySelector('.attention-group__count')).toHaveTextContent('1 item');
+    expect(epic).toHaveAttribute('aria-expanded', 'true');
     expect(epic?.querySelector('.attention-group__kind')).toHaveTextContent('Epic');
     expect(epic?.querySelector('.attention-group__name')).toHaveTextContent(epicTitle);
-    // The title is its own track inside a caption, not a body-text run-on with the identifier.
-    expect(epic?.querySelector('.attention-group__name')).toHaveClass('attention-group__name');
-    expect(epic?.className).toBe('attention-group__label');
+    expect(epic?.closest('.attention-group')).toHaveClass('attention-group--parent');
+    expect(epic?.closest('.attention-group')?.querySelector('ul.attention-group__children li.attention-row--child')).toHaveTextContent('INV-21');
     expect(groupHeading({ identifier: 'INV-989', kind: 'MILESTONE', title: milestoneTitle }).kind).toBe('MILESTONE');
+
+    // Collapsing the Epic parent hides its child issue row and shifts focus to the remaining open group's child.
+    fireEvent.click(epic!);
+    expect(epic).toHaveAttribute('aria-expanded', 'false');
+    expect(epic?.closest('.attention-group')).toHaveClass('attention-group--collapsed');
+    const list = within(screen.getByLabelText('Waiting on your decision'));
+    expect(list.queryByText('INV-21')).toBeNull();
+    expect(list.getByText('INV-20').closest('li')).toHaveAttribute('aria-current', 'true');
+
+    // Clicking the parent header again expands its child issue rows back.
+    fireEvent.click(epic!);
+    expect(epic).toHaveAttribute('aria-expanded', 'true');
+    expect(list.getByText('INV-21')).toBeInTheDocument();
   });
 
   it('wraps a long Needs you title inside the list row (INV-1301)', () => {
@@ -291,12 +306,21 @@ describe('Needs you (INV-1092)', () => {
 describe('Needs you by work tree (INV-1094)', () => {
   beforeEach(() => window.localStorage.clear());
 
-  it('puts each work tree in one pack with a one-line summary, and remembers the choice', () => {
+  it('puts each work tree in one pack with a one-line summary, remembers the choice, and collapses or expands the parent pack (INV-1094, INV-1302)', () => {
     renderPage();
     fireEvent.click(screen.getByRole('tab', { name: 'By work tree' }));
     const pack = screen.getByRole('region', { name: 'INV-1 Milestone' });
     expect(within(pack).getByText('1 contract change, 1 finished item to accept, 3 candidates to commit')).toBeInTheDocument();
     expect(window.localStorage.getItem('involute.todo.view')).toBe('tree');
+
+    const toggle = within(pack).getByRole('button', { name: 'Collapse INV-1 Milestone' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(toggle);
+    expect(within(pack).getByRole('button', { name: 'Expand INV-1 Milestone' })).toHaveAttribute('aria-expanded', 'false');
+    expect(within(pack).queryByText('1 contract change, 1 finished item to accept, 3 candidates to commit')).toBeNull();
+
+    fireEvent.click(within(pack).getByRole('button', { name: 'Expand INV-1 Milestone' }));
+    expect(within(pack).getByText('1 contract change, 1 finished item to accept, 3 candidates to commit')).toBeInTheDocument();
   });
 
   it('leads a pack with what just became ready and marks what waits and what is overdue', () => {
