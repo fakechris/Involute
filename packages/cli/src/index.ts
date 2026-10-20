@@ -16,6 +16,7 @@ import { registerDoctorCommand } from './commands/doctor.js';
 import { registerExportCommand } from './commands/export.js';
 import { registerExecutorCommand, createExecutorMcpClient } from './commands/executor.js';
 import { registerImportCommand } from './commands/import.js';
+import { registerSyncCommand } from './commands/sync.js';
 
 type ConfigKey = 'server-url' | 'token' | 'viewer-assertion';
 
@@ -1698,6 +1699,7 @@ export function createProgram(): Command {
   });
   registerExportCommand(program);
   registerImportCommand(program);
+  registerSyncCommand(program);
 
   const runTeamsCommand = async function (this: Command, options: JsonOption = {}) {
     await runWithCliErrorHandling(async () => {

@@ -1,7 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
-
 export interface GoogleOAuthConfiguration {
-  adminEmails: string[];
   appOrigin: string;
   clientId: string | null;
   clientSecret: string | null;
@@ -37,7 +34,6 @@ const GOOGLE_AUTH_BASE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USER_INFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
 const GOOGLE_FETCH_TIMEOUT_MS = 10_000;
-const GOOGLE_ACCOUNT_CONFLICT_MESSAGE = 'Google account conflicts with an existing user record.';
 
 export function isGoogleOAuthConfigured(configuration: GoogleOAuthConfiguration): boolean {
   return Boolean(
@@ -124,40 +120,4 @@ export async function exchangeGoogleCodeForUserProfile(
     picture: userInfo.picture ?? null,
     subject: userInfo.sub,
   };
-}
-
-import { admitGoogleUser } from './workspace-access.js';
-
-export async function upsertGoogleOAuthUser(
-  prisma: PrismaClient,
-  profile: GoogleOAuthUserProfile,
-  configuration: GoogleOAuthConfiguration,
-): Promise<{ email: string; id: string; name: string }> {
-  if (!profile.emailVerified) {
-    throw new Error('Google account email must be verified.');
-  }
-
-  const existingBySubject = await prisma.user.findUnique({
-    where: {
-      googleSubject: profile.subject,
-    },
-  });
-  const existingByEmail = await prisma.user.findUnique({
-    where: {
-      email: profile.email,
-    },
-  });
-
-  if (existingBySubject && existingByEmail && existingBySubject.id !== existingByEmail.id) {
-    throw new Error(GOOGLE_ACCOUNT_CONFLICT_MESSAGE);
-  }
-
-  if (existingByEmail?.googleSubject && existingByEmail.googleSubject !== profile.subject) {
-    throw new Error(GOOGLE_ACCOUNT_CONFLICT_MESSAGE);
-  }
-
-  // Sign-in is invite-only (docs/permissions.md §1): link an existing row,
-  // admit an approved domain or the bootstrap allowlist, or refuse.
-  const user = await admitGoogleUser(prisma, profile, existingBySubject ?? existingByEmail, configuration.adminEmails);
-  return { email: user.email, id: user.id, name: user.name };
 }

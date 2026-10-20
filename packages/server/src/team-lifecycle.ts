@@ -27,7 +27,7 @@ type DatabaseClient = PrismaClient | Prisma.TransactionClient;
  * any team, except its last owner.
  */
 
-const DEFAULT_STATES: Array<{ name: string; type: WorkflowStateType }> = [
+export const DEFAULT_STATES: Array<{ name: string; type: WorkflowStateType }> = [
   { name: 'Backlog', type: 'BACKLOG' },
   { name: 'Ready', type: 'UNSTARTED' },
   { name: 'In Progress', type: 'STARTED' },
@@ -45,6 +45,30 @@ export async function canCreateTeams(prisma: DatabaseClient, viewer: TeamCreator
   if (viewer.globalRole === 'ADMIN') return true;
   if (viewer.globalRole !== 'USER') return false;
   return (await getWorkspaceSettings(prisma)).membersCanCreateTeams;
+}
+
+/**
+ * Create a team with the default workflow, without deciding who may create it.
+ *
+ * `createTeam` is the human path: it checks the workspace rules and makes the
+ * creator an Owner. The organisation sync (INV-1288) is the machine path: the
+ * team comes from a directory and its members from the same directory. Both
+ * need the same default workflow, so the workflow is defined in one place and
+ * a team without it would be a team nobody can file an issue in.
+ */
+export async function createTeamWithDefaultStates(
+  prisma: DatabaseClient,
+  input: { key: string; name: string; visibility?: TeamVisibility },
+): Promise<Team> {
+  const team = await prisma.team.create({
+    data: { key: input.key, name: input.name, visibility: input.visibility ?? 'PRIVATE' },
+  });
+
+  await prisma.workflowState.createMany({
+    data: DEFAULT_STATES.map((state, position) => ({ ...state, position, teamId: team.id })),
+  });
+
+  return team;
 }
 
 export async function createTeam(
@@ -65,9 +89,10 @@ export async function createTeam(
     ]);
     if (teamClash || aliasClash) throw createValidationError(TEAM_KEY_TAKEN_MESSAGE);
 
-    const team = await tx.team.create({ data: { key, name, visibility: input.visibility ?? 'PRIVATE' } });
-    await tx.workflowState.createMany({
-      data: DEFAULT_STATES.map((state, position) => ({ ...state, position, teamId: team.id })),
+    const team = await createTeamWithDefaultStates(tx, {
+      key,
+      name,
+      ...(input.visibility === undefined ? {} : { visibility: input.visibility }),
     });
     await tx.teamMembership.create({ data: { role: 'OWNER', teamId: team.id, userId: input.creator.id } });
     return team;

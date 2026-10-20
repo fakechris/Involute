@@ -1,0 +1,12 @@
+# Namespace for the private, self-hosted Involute deployment.
+#
+# This deployment is fully self-contained: it owns its own namespace,
+# database, secrets, services and ingress path. It does not share state with,
+# or depend on, any other Involute installation.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: involute
+  labels:
+    app.kubernetes.io/part-of: involute
+    app.kubernetes.io/managed-by: kubectl

@@ -1,0 +1,125 @@
+# DingTalk organisation sync — a recurring job.
+#
+# The import is a thing of its own: it turns the groups an organisation has
+# into teams, and the people in them into members. It is not part of
+# sign-in. The source is a parameter (`--provider`), so a second source would
+# add a command line, not a second system.
+#
+# The mapping says which DingTalk department becomes which Involute team. It
+# lives in a ConfigMap so an operator can change it without rebuilding an
+# image: edit the ConfigMap and the next run picks it up.
+#
+# The job reads the same Secret the server reads (`involute-dingtalk`), so the
+# sign-in flow and the directory sync always use one app and one identity.
+#
+# `--prune` is deliberately NOT set. Without it, somebody who left a
+# department keeps their membership until an operator says otherwise. Add it
+# to `args` when the membership should follow the directory exactly.
+#
+# Image tag: replace `sha-000000000000` with the real immutable tag, e.g.
+#   sed -i '' 's/sha-000000000000/sha-899ca2a1b2c3/g' 45-dingtalk-org-sync-cronjob.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: involute-dingtalk-org-mapping
+  namespace: involute
+  labels:
+    app.kubernetes.io/name: dingtalk-org-sync
+    app.kubernetes.io/component: job
+    app.kubernetes.io/part-of: involute
+data:
+  # Replace the departments below with the real ones. `deptId` is the DingTalk
+  # department id, `teamKey` is the Involute team key (2-10 letters or digits,
+  # starting with a letter), `role` is VIEWER / EDITOR / OWNER.
+  dingtalk-org-mapping.json: |
+    {
+      "departments": [
+        {
+          "deptId": 1,
+          "teamKey": "CORE",
+          "teamName": "核心研发",
+          "role": "EDITOR",
+          "includeSubDepartments": true
+        }
+      ]
+    }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dingtalk-org-sync
+  namespace: involute
+  labels:
+    app.kubernetes.io/name: dingtalk-org-sync
+    app.kubernetes.io/component: job
+    app.kubernetes.io/part-of: involute
+spec:
+  # Hourly, on the hour. The directory changes on human time, not on machine
+  # time, and the sync is cheap.
+  schedule: "17 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: dingtalk-org-sync
+            app.kubernetes.io/component: job
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            allowPrivilegeEscalation: false
+          containers:
+            - name: sync
+              image: docker.io/fakechris/involute-cli:sha-000000000000
+              imagePullPolicy: IfNotPresent
+              command:
+                - sh
+                - -lc
+              args:
+                - |
+                  set -e
+                  node packages/cli/dist/index.js sync organization \
+                    --provider dingtalk \
+                    --mapping /etc/involute/dingtalk-org-mapping.json
+              env:
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: involute-db
+                      key: postgresPassword
+                - name: DATABASE_URL
+                  value: "postgresql://involute:$(POSTGRES_PASSWORD)@involute-db:5432/involute?schema=public"
+                - name: DINGTALK_APP_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: involute-dingtalk
+                      key: appKey
+                - name: DINGTALK_APP_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: involute-dingtalk
+                      key: appSecret
+                - name: INVOLUTE_CONFIG_PATH
+                  value: "/tmp/involute-config.json"
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 1Gi
+              volumeMounts:
+                - name: mapping
+                  mountPath: /etc/involute
+                  readOnly: true
+          volumes:
+            - name: mapping
+              configMap:
+                name: involute-dingtalk-org-mapping
+                items:
+                  - key: dingtalk-org-mapping.json
+                    path: dingtalk-org-mapping.json

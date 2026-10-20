@@ -23,6 +23,7 @@ import { createYoga } from 'graphql-yoga';
 
 import { createAuthenticationPlugin, createGraphQLContext } from './auth.js';
 import { getAllowedBrowserOrigins, handleAuthRoutes } from './auth-routes.js';
+import { resolveAuthProviders } from './auth-providers/registry.js';
 import { handleDocsRoutes } from './docs-routes.js';
 import { getExposedError } from './errors.js';
 import type { GoogleOAuthConfiguration } from './google-oauth.js';
@@ -158,13 +159,26 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   });
 
   const googleOAuth = {
-    adminEmails: options.googleOAuth?.adminEmails ?? environment.adminEmailAllowlist,
     appOrigin: options.googleOAuth?.appOrigin ?? options.appOrigin ?? environment.appOrigin,
     clientId: options.googleOAuth?.clientId ?? environment.googleOAuthClientId,
     clientSecret: options.googleOAuth?.clientSecret ?? environment.googleOAuthClientSecret,
     redirectUri: options.googleOAuth?.redirectUri ?? environment.googleOAuthRedirectUri,
     scopes: options.googleOAuth?.scopes ?? ['openid', 'email', 'profile'],
   } satisfies GoogleOAuthConfiguration;
+
+  // Which sign-in lines this deployment offers (INV-1288). The public
+  // deployment keeps Google; a private one names DingTalk instead.
+  const authProviders = resolveAuthProviders({
+    appOrigin: options.appOrigin ?? environment.appOrigin,
+    dingTalk: {
+      appKey: environment.dingTalkAppKey,
+      appSecret: environment.dingTalkAppSecret,
+      redirectUri: environment.dingTalkRedirectUri,
+      scopes: environment.dingTalkScopes,
+    },
+    enabledProviderIds: environment.authProviderIds,
+    googleOAuth,
+  });
 
   const uploadsDir = options.uploadsDir ?? getUploadsDirectory();
   const rateLimitOptions =
@@ -311,8 +325,9 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
 
       return handleAuthRoutes({
         ...mcpAuth,
+        adminEmails: environment.adminEmailAllowlist,
         appOrigin: options.appOrigin ?? environment.appOrigin,
-        googleOAuth,
+        authProviders,
         request,
         response,
         sessionTtlSeconds: options.sessionTtlSeconds ?? environment.sessionTtlSeconds,

@@ -1,0 +1,113 @@
+# Postgres 16 for the self-hosted Involute deployment.
+#
+# Storage: the cluster's only storage class is `local` (openebs.io/local),
+# so the volume is node-bound (ReadWriteOnce, host-local). That is fine for a
+# single-replica database; do not scale this StatefulSet beyond 1 replica
+# without moving to a replicated Postgres or a different storage class.
+#
+# Secrets: the password comes from the `involute-db` Secret (see
+# 50-secrets.example.yaml). It is never written to this file.
+apiVersion: v1
+kind: Service
+metadata:
+  name: involute-db
+  namespace: involute
+  labels:
+    app.kubernetes.io/name: involute-db
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: involute
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: involute-db
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: involute-db
+  namespace: involute
+  labels:
+    app.kubernetes.io/name: involute-db
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: involute
+spec:
+  serviceName: involute-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: involute-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: involute-db
+        app.kubernetes.io/component: database
+    spec:
+      terminationGracePeriodSeconds: 30
+      restartPolicy: Always
+      securityContext:
+        allowPrivilegeEscalation: false
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              value: "involute"
+            - name: POSTGRES_USER
+              value: "involute"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: involute-db
+                  key: postgresPassword
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U involute -d involute
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U involute -d involute
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: involute-db
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: local
+        resources:
+          requests:
+            storage: 20Gi

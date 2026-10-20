@@ -25,6 +25,22 @@
     "./semantic-advice": {
       "types": "./dist/semantic-advice.d.ts",
       "import": "./dist/semantic-advice.js"
+    },
+    "./org-sync/engine": {
+      "types": "./dist/org-sync/engine.d.ts",
+      "import": "./dist/org-sync/engine.js"
+    },
+    "./org-sync/types": {
+      "types": "./dist/org-sync/types.d.ts",
+      "import": "./dist/org-sync/types.js"
+    },
+    "./dingtalk/adapter": {
+      "types": "./dist/dingtalk/adapter.d.ts",
+      "import": "./dist/dingtalk/adapter.js"
+    },
+    "./dingtalk/client": {
+      "types": "./dist/dingtalk/client.d.ts",
+      "import": "./dist/dingtalk/client.js"
     }
   },
   "scripts": {

@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { DEFAULT_PORT } from './constants.js';
+import { parseAuthProviderIds } from './auth-providers/registry.js';
 import { normalizeDatabaseUrl } from './database-url.js';
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
@@ -11,8 +12,14 @@ export interface ServerEnvironment {
   adminEmailAllowlist: string[];
   appOrigin: string;
   allowAdminFallback: boolean;
+  /** Which sign-in lines this deployment offers (INV-1288). */
+  authProviderIds: string[];
   databaseUrl: string;
   authToken: string;
+  dingTalkAppKey: string | null;
+  dingTalkAppSecret: string | null;
+  dingTalkRedirectUri: string | null;
+  dingTalkScopes: string[];
   googleOAuthClientId: string | null;
   googleOAuthClientSecret: string | null;
   googleOAuthRedirectUri: string | null;
@@ -61,6 +68,13 @@ export function getServerEnvironment(env: NodeJS.ProcessEnv = process.env): Serv
   const googleOAuthClientId = env.GOOGLE_OAUTH_CLIENT_ID?.trim() || null;
   const googleOAuthClientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() || null;
   const googleOAuthRedirectUri = env.GOOGLE_OAUTH_REDIRECT_URI?.trim() || null;
+  const dingTalkAppKey = env.DINGTALK_APP_KEY?.trim() || null;
+  const dingTalkAppSecret = env.DINGTALK_APP_SECRET?.trim() || null;
+  const dingTalkRedirectUri = env.DINGTALK_REDIRECT_URI?.trim() || null;
+  const dingTalkScopes = (env.DINGTALK_SCOPES ?? 'corpid')
+    .split(/[\s,]+/)
+    .map((scope) => scope.trim())
+    .filter(Boolean);
   const webhookSecret = env.INVOLUTE_WEBHOOK_SECRET?.trim() || null;
   const webhookUrls = env.INVOLUTE_WEBHOOK_URL?.trim() || null;
   const notificationEmail: NotificationEmailEnvironment = {
@@ -87,6 +101,30 @@ export function getServerEnvironment(env: NodeJS.ProcessEnv = process.env): Serv
     );
   }
 
+  const authProviderIds = parseAuthProviderIds(env.AUTH_PROVIDERS);
+
+  // A provider that is asked for but not configured is a misconfiguration, not a
+  // silent no-op: the person would see no button and think the workspace is broken.
+  // Only an explicit AUTH_PROVIDERS is a request; the default stays forgiving so
+  // a server without Google keeps working exactly as it did before INV-1288.
+  if (env.AUTH_PROVIDERS?.trim()) {
+    if (authProviderIds.includes('dingtalk') && (!dingTalkAppKey || !dingTalkAppSecret || !dingTalkRedirectUri)) {
+      throw new Error(
+        'AUTH_PROVIDERS includes dingtalk, which requires DINGTALK_APP_KEY, DINGTALK_APP_SECRET, and DINGTALK_REDIRECT_URI.',
+      );
+    }
+
+    if (authProviderIds.includes('google') && (!googleOAuthClientId || !googleOAuthClientSecret || !googleOAuthRedirectUri)) {
+      throw new Error(
+        'AUTH_PROVIDERS includes google, which requires GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, and GOOGLE_OAUTH_REDIRECT_URI.',
+      );
+    }
+  }
+
+  if (authProviderIds.length === 0) {
+    throw new Error('AUTH_PROVIDERS must name at least one sign-in line (google, dingtalk).');
+  }
+
   if (Boolean(webhookSecret) !== Boolean(webhookUrls)) {
     throw new Error('INVOLUTE_WEBHOOK_URL and INVOLUTE_WEBHOOK_SECRET must be configured together.');
   }
@@ -95,8 +133,13 @@ export function getServerEnvironment(env: NodeJS.ProcessEnv = process.env): Serv
     adminEmailAllowlist,
     appOrigin: env.APP_ORIGIN?.trim() || 'http://localhost:4201',
     allowAdminFallback,
+    authProviderIds,
     databaseUrl: env.DATABASE_URL ?? '',
     authToken: env.AUTH_TOKEN ?? '',
+    dingTalkAppKey,
+    dingTalkAppSecret,
+    dingTalkRedirectUri,
+    dingTalkScopes,
     googleOAuthClientId,
     googleOAuthClientSecret,
     googleOAuthRedirectUri,

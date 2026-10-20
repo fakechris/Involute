@@ -51,7 +51,7 @@ import {
   type AppShellIssueSummary,
   type AppShellTeamSummary,
 } from './lib/app-shell-state';
-import { fetchSessionState, getGoogleLoginUrl, logoutSession, type SessionState } from './lib/session';
+import { fetchSessionState, getGoogleLoginUrl, getProviderLoginUrl, logoutSession, type SessionState } from './lib/session';
 import { SAVED_VIEWS_ACCOUNT_EVENT, setSavedViewsAccount } from './lib/saved-views-account';
 import { lazyRoute, RouteErrorBoundary } from './lib/lazy-route';
 import { CommentUndoHost } from './undo/CommentUndoHost';
@@ -1325,6 +1325,16 @@ export function App() {
               >
                 Sign out
               </button>
+            ) : session?.authProviders && session.authProviders.length > 0 ? (
+              session.authProviders.map((provider) => (
+                <a
+                  key={provider.id}
+                  className="app-shell__session-action"
+                  href={getProviderLoginUrl(provider.startUrl)}
+                >
+                  {provider.label}
+                </a>
+              ))
             ) : session?.googleOAuthConfigured ? (
               <a className="app-shell__session-action" href={getGoogleLoginUrl()}>
                 Sign in with Google
@@ -1338,7 +1348,14 @@ export function App() {
         <header className="app-shell__mobilebar">
           <div className="app-shell__mobile-brand">Involute</div>
           <div className="app-shell__mobile-actions">
-            {!session?.authenticated && session?.googleOAuthConfigured ? (
+            {!session?.authenticated && session?.authProviders && session.authProviders.length > 0 ? (
+              <a
+                className="app-shell__session-action"
+                href={getProviderLoginUrl(session.authProviders[0]!.startUrl)}
+              >
+                Sign in
+              </a>
+            ) : !session?.authenticated && session?.googleOAuthConfigured ? (
               <a className="app-shell__session-action" href={getGoogleLoginUrl()}>
                 Sign in
               </a>
