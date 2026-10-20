@@ -16,8 +16,10 @@
 # department keeps their membership until an operator says otherwise. Add it
 # to `args` when the membership should follow the directory exactly.
 #
-# Image tag: replace `sha-000000000000` with the real immutable tag, e.g.
-#   sed -i '' 's/sha-000000000000/sha-899ca2a1b2c3/g' 45-dingtalk-org-sync-cronjob.yaml
+# Image tag: `sha-e524cb9eca96` — the build merged in PR #253. Tags are
+# immutable `sha-<12 hex>` strings, so a rollout always runs a known build.
+# To roll forward, edit the tag here and re-apply; never reuse a tag for a
+# different build.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -75,7 +77,7 @@ spec:
             allowPrivilegeEscalation: false
           containers:
             - name: sync
-              image: docker.io/fakechris/involute-cli:sha-000000000000
+              image: docker.io/fakechris/involute-cli:sha-e524cb9eca96
               imagePullPolicy: IfNotPresent
               command:
                 - sh

@@ -1,7 +1,9 @@
 # One-shot Redmine -> Involute import.
 #
-# Image tag: replace `sha-000000000000` with the real immutable tag, e.g.
-#   sed -i '' 's/sha-000000000000/sha-899ca2a1b2c3/g' 40-redmine-import-job.yaml
+# Image tag: `sha-e524cb9eca96` — the build merged in PR #253. Tags are
+# immutable `sha-<12 hex>` strings, so a rollout always runs a known build.
+# To roll forward, edit the tag here and re-apply; never reuse a tag for a
+# different build.
 #
 # The three CLI commands run in sequence in a single container:
 #   1. export the Redmine team into /exports
@@ -35,7 +37,7 @@ spec:
         allowPrivilegeEscalation: false
       containers:
         - name: import
-          image: docker.io/fakechris/involute-cli:sha-000000000000
+          image: docker.io/fakechris/involute-cli:sha-e524cb9eca96
           imagePullPolicy: IfNotPresent
           # The image entrypoint is `node packages/cli/dist/index.js`. Three
           # commands run in sequence, so the entrypoint is replaced by a shell
