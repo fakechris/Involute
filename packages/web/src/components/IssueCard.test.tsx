@@ -211,6 +211,15 @@ describe('IssueCard', () => {
     expect(badge).toHaveAttribute('title', 'Project: fakechris/QuantHarvest');
   });
 
+  it('keeps a long repository name inside the card and exposes the full name (INV-1300)', () => {
+    const issue = makeIssue({ repository: 'baoli/meituan_analyse' });
+    render(<IssueCard issue={issue} />);
+    const badge = screen.getByTestId('issue-repo-issue-1');
+    expect(badge).toHaveTextContent('meituan_analyse');
+    expect(badge).toHaveAttribute('title', 'Project: baoli/meituan_analyse');
+    expect(badge).toHaveClass('issue-card__repo-badge');
+  });
+
   it('does not render repository badge when repository is not present', () => {
     const issue = makeIssue({ repository: null });
     render(<IssueCard issue={issue} />);

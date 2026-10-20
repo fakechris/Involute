@@ -164,6 +164,15 @@ describe('Needs you (INV-1092)', () => {
     expect(within(decision).getByRole('button', { name: /Accept change/ })).toBeInTheDocument();
   });
 
+  it('wraps a long Needs you title inside the list row (INV-1301)', () => {
+    const longTitle = '长任务闭环——人批准后 agent 被叫醒、持续执行到交付、退回能回到执行者、人验收到 Done';
+    nodes = [node('WORK_REVIEW', 'w-long', work('w-long', 'INV-989', { title: longTitle }), ago(HOUR))];
+    renderPage();
+    const title = document.querySelector('.attention-row__title');
+    expect(title).toHaveTextContent(`INV-989 ${longTitle}`);
+    expect(title).toHaveClass('attention-row__title');
+  });
+
   it('J moves to finished work; A asks once, then accepts it as the review mutation', async () => {
     renderPage();
     press('j');

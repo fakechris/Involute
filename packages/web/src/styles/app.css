@@ -2106,6 +2106,7 @@ kbd {
 
 .issue-card__button {
   width: 100%;
+  min-width: 0;
   border: 0;
   background: transparent;
   padding: 6px 8px;
@@ -2117,11 +2118,14 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
   margin-bottom: 2px;
 }
 
 .issue-card__identifier {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 6px;
   font-family: var(--font-mono);
@@ -2134,24 +2138,27 @@ kbd {
 .issue-card__header-tags {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
+  min-width: 0;
   margin-left: auto;
 }
 
 .issue-card__repo-badge {
-  display: inline-flex;
-  align-items: center;
+  display: block;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 500;
-  line-height: 1;
+  line-height: 1.3;
   padding: 1.5px 5px;
   border-radius: var(--r-1);
   background: var(--bg-hover);
   color: var(--fg-muted);
   border: 1px solid var(--border);
-  max-width: 120px;
-  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   box-sizing: border-box;
@@ -6901,7 +6908,15 @@ a.bugs-stat {
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   overflow-wrap: anywhere;
+}
+
+.attention-row__title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .attention-row__reason {
@@ -6923,6 +6938,8 @@ a.bugs-stat {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .attention-batch-results {
