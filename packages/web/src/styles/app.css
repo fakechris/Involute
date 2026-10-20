@@ -6858,6 +6858,9 @@ a.bugs-stat {
   gap: 16px;
   min-width: 0;
   max-width: 100%;
+  /* A group heading is not a grid row. Without a clip, a long caption paints
+     across the sticky decision pane even when overflow-wrap is set (INV-1302). */
+  overflow: hidden;
 }
 
 .attention-section {
@@ -6874,7 +6877,24 @@ a.bugs-stat {
   font-size: 13px;
   font-weight: 600;
   margin: 0 0 6px;
-  overflow-wrap: anywhere;
+}
+
+.attention-section__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.attention-section__title .attention-group__name {
+  flex: 0 1 auto;
+}
+
+.attention-section__heading .mono ~ .attention-group__name {
+  flex: 1 0 100%;
 }
 
 .attention-section__count {
@@ -6882,27 +6902,36 @@ a.bugs-stat {
   color: var(--fg-muted);
 }
 
+.attention-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
+}
+
 .attention-group ul {
   list-style: none;
   margin: 0;
   padding: 0;
+  min-width: 0;
 }
 
 .attention-group__label {
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 2px;
   min-width: 0;
   max-width: 100%;
+  overflow: hidden;
   font-size: 12px;
   line-height: 1.4;
   color: var(--fg-muted);
   padding: 4px 8px 2px;
-  overflow-wrap: anywhere;
-  word-break: break-word;
 }
 
 .attention-group__kind {
-  display: inline-block;
-  margin: 0 6px;
   padding: 0 5px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -6912,10 +6941,13 @@ a.bugs-stat {
   line-height: 1.6;
   text-transform: uppercase;
   color: var(--fg-dim);
-  vertical-align: 1px;
+  white-space: nowrap;
 }
 
 .attention-group__name {
+  flex: 1 0 100%;
+  min-width: 0;
+  max-width: 100%;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
