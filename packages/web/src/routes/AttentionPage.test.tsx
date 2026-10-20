@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NeedsYouNavLink } from '../components/NeedsYouNavLink';
-import { AttentionPage, formatWait, orderPack, packSummary, splitGroupLabel, suggestedDecisions } from './AttentionPage';
+import { AttentionPage, formatWait, groupHeading, orderPack, packSummary, suggestedDecisions } from './AttentionPage';
 import type { AttentionItemNode, CandidateWork } from '../work/types';
 
 const HOUR = 3_600_000;
@@ -157,25 +157,38 @@ describe('Needs you (INV-1092)', () => {
     const candidates = screen.getByRole('region', { name: 'Commit candidates' });
     expect(within(candidates).getByText('3')).toBeInTheDocument();
     expect(within(candidates).getByText('oldest 5h')).toBeInTheDocument();
-    expect(within(candidates).getByText((_, node) => node?.classList.contains('attention-group__label') === true && node.textContent === 'INV-1 Milestone')).toBeInTheDocument();
+    const group = candidates.querySelector('.attention-group__label');
+    expect(group?.querySelector('.mono')).toHaveTextContent('INV-1');
+    expect(group?.querySelector('.attention-group__kind')).toHaveTextContent('Milestone');
+    expect(group?.querySelector('.attention-group__name')).toHaveTextContent('Milestone');
     // The first item's decision is open on the right: the contract change, with its diff and buttons.
     const decision = screen.getByLabelText('Decision');
     expect(within(decision).getByText('The rule changed.')).toBeInTheDocument();
     expect(within(decision).getByRole('button', { name: /Accept change/ })).toBeInTheDocument();
   });
 
-  it('renders a long group heading as a label, not a bare line of text (INV-1302)', () => {
+  it('marks a milestone or epic group heading with its kind, instead of a bare line of text (INV-1302)', () => {
+    const milestoneTitle = '长任务闭环——人批准后 agent 被叫醒、持续执行到交付、退回能回到执行者、人验收到 Done';
     const epicTitle = '人类操作面补齐：服务端已有、但人在 UI 里无法完成的操作全部给出入口，并用守卫测试防止再次出现';
-    nodes = [node('WORK_REVIEW', 'w-788', work('w-788', 'INV-20'), ago(HOUR), {
-      group: { id: 'epic-788', identifier: 'INV-788', kind: 'EPIC', title: epicTitle },
-      groupKey: 'epic-788',
-    })];
+    nodes = [
+      node('WORK_REVIEW', 'w-989', work('w-989', 'INV-20'), ago(HOUR), {
+        group: { id: 'ms-989', identifier: 'INV-989', kind: 'MILESTONE', title: milestoneTitle },
+        groupKey: 'ms-989',
+      }),
+      node('WORK_REVIEW', 'w-788', work('w-788', 'INV-21'), ago(2 * HOUR), {
+        group: { id: 'epic-788', identifier: 'INV-788', kind: 'EPIC', title: epicTitle },
+        groupKey: 'epic-788',
+      }),
+    ];
     renderPage();
-    const label = document.querySelector('.attention-group__label');
-    expect(label).toHaveTextContent(`INV-788 ${epicTitle}`);
-    expect(label?.querySelector('.mono')).toHaveTextContent('INV-788');
-    expect(label?.querySelector('.attention-group__name')).toHaveTextContent(epicTitle);
-    expect(splitGroupLabel(`INV-788 ${epicTitle}`)?.identifier).toBe('INV-788');
+    const labels = [...document.querySelectorAll('.attention-group__label')];
+    const milestone = labels.find((label) => label.textContent?.includes('INV-989'));
+    const epic = labels.find((label) => label.textContent?.includes('INV-788'));
+    expect(milestone?.querySelector('.attention-group__kind')).toHaveTextContent('Milestone');
+    expect(milestone?.querySelector('.attention-group__name')).toHaveTextContent(milestoneTitle);
+    expect(epic?.querySelector('.attention-group__kind')).toHaveTextContent('Epic');
+    expect(epic?.querySelector('.attention-group__name')).toHaveTextContent(epicTitle);
+    expect(groupHeading({ identifier: 'INV-989', kind: 'MILESTONE', title: milestoneTitle }).kind).toBe('MILESTONE');
   });
 
   it('wraps a long Needs you title inside the list row (INV-1301)', () => {
