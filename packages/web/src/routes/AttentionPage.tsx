@@ -431,7 +431,8 @@ export function AttentionPage() {
             {sections.map((section) => (
               <section key={section.key} className="attention-section" aria-label={section.title}>
                 <h2 className="attention-section__title">
-                  <GroupLabel kind={section.kind ?? null} text={section.title} /> <span className="attention-section__count">{section.count}</span>
+                  <GroupLabel className="attention-section__heading" kind={section.kind ?? null} text={section.title} />
+                  <span className="attention-section__count">{section.count}</span>
                   {section.oldestSince ? <span className="observation-card__meta">oldest {formatWait(section.oldestSince)}</span> : null}
                 </h2>
                 {section.summary ? <p className="attention-section__summary">{section.summary}</p> : null}
@@ -550,11 +551,14 @@ function GroupLabel({ className, kind, text }: { className?: string; kind?: Work
   const identifier = match?.[1] ?? null;
   const title = match?.[2] ?? text;
   const kindLabel = kind ? KIND_LABEL[kind] : null;
+  // A group heading is a list caption, not a body paragraph. The kind is a badge;
+  // the title takes the remaining column and wraps there, so a long milestone or
+  // epic name cannot paint across the decision pane (INV-1302).
   return (
     <span className={className}>
       {identifier ? <span className="mono">{identifier}</span> : null}
       {kindLabel ? <span className="attention-group__kind">{kindLabel}</span> : null}
-      <span className="attention-group__name">{identifier ? title : text}</span>
+      {identifier ? <span className="attention-group__name">{title}</span> : <span className="attention-group__name">{text}</span>}
     </span>
   );
 }

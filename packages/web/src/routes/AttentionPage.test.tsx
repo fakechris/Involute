@@ -188,6 +188,9 @@ describe('Needs you (INV-1092)', () => {
     expect(milestone?.querySelector('.attention-group__name')).toHaveTextContent(milestoneTitle);
     expect(epic?.querySelector('.attention-group__kind')).toHaveTextContent('Epic');
     expect(epic?.querySelector('.attention-group__name')).toHaveTextContent(epicTitle);
+    // The title is its own track inside a caption, not a body-text run-on with the identifier.
+    expect(epic?.querySelector('.attention-group__name')).toHaveClass('attention-group__name');
+    expect(epic?.className).toBe('attention-group__label');
     expect(groupHeading({ identifier: 'INV-989', kind: 'MILESTONE', title: milestoneTitle }).kind).toBe('MILESTONE');
   });
 
