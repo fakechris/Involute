@@ -15,12 +15,13 @@ import {
   INVITE_FORBIDDEN_MESSAGE,
   USER_SUSPEND_SELF_MESSAGE,
 } from './errors.ts';
-import { upsertGoogleOAuthUser } from './google-oauth.ts';
+import { upsertProviderUser } from './auth-providers/identity.ts';
 import { startServer, type StartedServer } from './index.ts';
 import { SESSION_COOKIE_NAME, createSession } from './session.ts';
 import {
   SignInRefusedError,
   deliverInvite,
+  hasLinkedIdentity,
   inviteUser,
   reactivateUser,
   revokeInvite,
@@ -33,11 +34,18 @@ loadProjectEnvironment();
 
 const prisma = new PrismaClientConstructor();
 
-function signIn(email: string, adminEmails: string[] = []) {
-  return upsertGoogleOAuthUser(
+/**
+ * Sign a person in through one sign-in line.
+ *
+ * The line is a parameter on purpose: the policy it gets is the same
+ * whichever one it is (INV-1288).
+ */
+function signIn(email: string, adminEmails: string[] = [], line = 'google') {
+  return upsertProviderUser(
     prisma,
-    { email, emailVerified: true, name: email.split('@')[0]!, picture: null, subject: `google-${email}` },
-    { adminEmails } as never,
+    { email, name: email.split('@')[0]!, picture: null, subject: `${line}-${email}` },
+    { id: line, subject: `${line}-${email}` },
+    adminEmails,
   );
 }
 
@@ -84,14 +92,18 @@ describe('workspace access (INV-847, docs/permissions.md)', () => {
         role: 'GUEST',
         teams: [{ role: 'VIEWER', teamId: team.id }],
       });
-      expect(userAccessStatus(invited)).toBe('PENDING');
+      expect(userAccessStatus(invited, await hasLinkedIdentity(prisma, invited.id))).toBe('PENDING');
 
       const signedIn = await signIn('guest@partner.io');
       const row = await prisma.user.findUniqueOrThrow({ where: { id: signedIn.id }, include: { memberships: true } });
       expect(row.id).toBe(invited.id);
       expect(row.globalRole).toBe('GUEST');
       expect(row.googleSubject).toBe('google-guest@partner.io');
-      expect(userAccessStatus(row)).toBe('ACTIVE');
+      // The identity table records the same fact, for every line.
+      expect(
+        await prisma.userIdentity.findFirst({ where: { userId: row.id } }),
+      ).toMatchObject({ provider: 'google', subject: 'google-guest@partner.io' });
+      expect(userAccessStatus(row, await hasLinkedIdentity(prisma, row.id))).toBe('ACTIVE');
       expect(row.memberships).toEqual([expect.objectContaining({ role: 'VIEWER', teamId: team.id })]);
     });
 

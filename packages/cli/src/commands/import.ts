@@ -20,6 +20,29 @@ export interface ImportOptions {
   file: string;
 }
 
+export interface RedmineImportOptions {
+  apiKey: string;
+  concurrency?: number;
+  output: string;
+  sourceUrl: string;
+  teamKey: string;
+  teamName: string;
+}
+
+export interface RedmineImportSummary {
+  exportDir: string;
+  generatedAt: string;
+  summary: {
+    comments: number;
+    issues: number;
+    labels: number;
+    namespace: string;
+    projects: number;
+    unmatchedUsers: number;
+    users: number;
+  };
+}
+
 export interface TeamImportOptions {
   keepExport?: boolean;
   output?: string;
@@ -124,6 +147,60 @@ export async function runImport(options: ImportOptions): Promise<void> {
   } finally {
     await prisma.$disconnect();
   }
+}
+
+/**
+ * Export a Redmine workspace into the export directory the importer reads.
+ *
+ * The API key opens a session on the Redmine web app; its REST API is off,
+ * so the exporter reads the same JSON the web controllers render.
+ */
+export async function runRedmineImport(options: RedmineImportOptions): Promise<RedmineImportSummary> {
+  const log = (message: string): void => {
+    process.stdout.write(`${message}\n`);
+  };
+
+  const { RedmineClient, exportRedmine } = await import('../redmine/index.js');
+
+  const client = new RedmineClient({
+    apiKey: options.apiKey,
+    baseUrl: options.sourceUrl,
+    concurrency: options.concurrency ?? 4,
+  });
+
+  log(`Exporting Redmine from ${options.sourceUrl}...`);
+  log('');
+
+  const summary = await exportRedmine({
+    client,
+    onProgress: log,
+    outputDir: options.output,
+    provenance: true,
+    sourceUrl: options.sourceUrl,
+    teamKey: options.teamKey,
+    teamName: options.teamName,
+  });
+
+  log('');
+  log('Redmine export summary:');
+  log(`  Projects: ${String(summary.projects)}`);
+  log(`  Issues:   ${String(summary.issues)}`);
+  log(`  Comments: ${String(summary.comments)}`);
+  log(`  Labels:   ${String(summary.labels)}`);
+  log(`  Users:    ${String(summary.users)}`);
+  log(`  Namespace: ${summary.namespace}`);
+  if (summary.unmatchedUsers > 0) {
+    log(`  WARNING:   ${String(summary.unmatchedUsers)} assignee(s) lost their owner (not in the Redmine user list)`);
+  }
+  log('');
+  log(`Export written to ${options.output}`);
+  log('Now run: involute import --file ' + options.output);
+
+  return {
+    exportDir: options.output,
+    generatedAt: new Date().toISOString(),
+    summary,
+  };
 }
 
 function formatVerificationResult(result: VerificationResult): string[] {
@@ -272,6 +349,51 @@ export function registerImportCommand(program: Command): void {
     .action(async (opts: TeamImportOptions) => {
       try {
         await runTeamImport(opts);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`Error: ${message}\n`);
+        process.exitCode = 1;
+      }
+    });
+
+  importCmd
+    .command('redmine')
+    .description('Export a Redmine workspace into the export directory the importer reads')
+    .requiredOption('--url <source-url>', 'Base URL of the Redmine, e.g. https://redmine.example.com')
+    .option('--api-key <api-key>', 'Redmine API key (sent as ?key=); falls back to REDMINE_API_KEY')
+    .requiredOption('--output <export-dir>', 'Directory the export is written to')
+    .option('--team-key <key>', 'Involute team key the identifiers use', 'RD')
+    .option('--team-name <name>', 'Involute team name', 'Redmine 迁移')
+    .option('--concurrency <n>', 'How many Redmine requests run at once', '4')
+    .action(async (opts: {
+      apiKey?: string | undefined;
+      concurrency?: string | undefined;
+      output?: string | undefined;
+      url?: string | undefined;
+      teamKey?: string | undefined;
+      teamName?: string | undefined;
+    }) => {
+      // The key may come from the environment so it never lands in a process
+      // list or a shell history.
+      const apiKey = opts.apiKey ?? process.env.REDMINE_API_KEY;
+
+      if (!opts.url || !apiKey || !opts.output) {
+        process.stderr.write(
+          "Error: --url and --output are required, and the API key must come from --api-key or REDMINE_API_KEY\n",
+        );
+        process.exitCode = 1;
+        return;
+      }
+
+      try {
+        await runRedmineImport({
+          apiKey,
+          concurrency: Number(opts.concurrency ?? '4'),
+          output: opts.output,
+          sourceUrl: opts.url,
+          teamKey: opts.teamKey ?? 'RD',
+          teamName: opts.teamName ?? 'Redmine 迁移',
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         process.stderr.write(`Error: ${message}\n`);

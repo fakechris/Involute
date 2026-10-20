@@ -25,6 +25,7 @@ import type {
 } from '@turnkeyai/involute-shared/import-format';
 import {
   parseExportedComments,
+  parseExportedHierarchy,
   parseExportedIssues,
   parseExportedLabels,
   parseExportedTeams,
@@ -34,6 +35,7 @@ import {
 import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { lockWorkGraph } from './graph-integrity.js';
+import { syncContainsFromParentId } from './link-service.js';
 
 export type ProgressCallback = (message: string) => void;
 
@@ -361,13 +363,15 @@ async function importIssues(
   userIdMap: Map<string, string>,
   labelIdMap: Map<string, string>,
   onProgress?: ProgressCallback,
+  hierarchyEnabled = false,
 ): Promise<{
   idMap: Map<string, string>;
   imported: number;
   skipped: number;
+  parentChildBackfills: number;
   warnings: ImportWarningRecord[];
 }> {
-  onProgress?.(`Importing ${String(issues.length)} issues (without parent references)...`);
+  onProgress?.(`Importing ${issues.length} issues${hierarchyEnabled ? ' (with hierarchy)' : ' (without parent references)'}...`);
   const existingMappings = await getExistingMappings(
     prisma,
     'issue',
@@ -378,7 +382,13 @@ async function importIssues(
   let skipped = 0;
   const warnings: ImportWarningRecord[] = [];
 
-  for (const issue of issues) {
+  // A parent has to exist before its child (INV-1288), so the source is walked
+  // in dependency order. A cycle in the source cannot be ordered; such a node
+  // is imported without its parent and reported.
+  const ordered = hierarchyEnabled ? orderByParent(issues) : issues;
+  let parentChildBackfills = 0;
+
+  for (const issue of ordered) {
     if (existingMappings.has(issue.id)) {
       skipped++;
       continue;
@@ -411,15 +421,39 @@ async function importIssues(
       .filter((id): id is string => id !== undefined)
       .map((id) => ({ id }));
 
+    // The parent is resolved from the legacy id map, so it must already exist.
+    let newParentId: string | null = null;
+    if (hierarchyEnabled && issue.parent) {
+      const mapped = idMap.get(issue.parent.id);
+      if (mapped) {
+        newParentId = mapped;
+      } else {
+        recordSkippedImport(
+          warnings,
+          {
+            entityType: 'issue',
+            legacyId: issue.id,
+            identifier: issue.identifier,
+            reason: `parent ${issue.parent.id} was not imported before this issue; the child was imported without a parent`,
+          },
+          onProgress,
+        );
+      }
+    }
+
     const data: Parameters<typeof prisma.issue.create>[0]['data'] = {
       identifier: issue.identifier,
       title: issue.title,
       description: issue.description,
+      priority: issue.priority,
       stateId: newStateId,
       teamId: newTeamId,
       assigneeId: newAssigneeId,
       createdAt: new Date(issue.createdAt),
       updatedAt: new Date(issue.updatedAt),
+      ...(issue.kind ? { kind: issue.kind } : {}),
+      ...(issue.repository ? { repository: issue.repository } : {}),
+      ...(newParentId ? { parentId: newParentId } : {}),
     };
 
     if (labelConnections.length > 0) {
@@ -444,6 +478,12 @@ async function importIssues(
       }
 
       const nextIssue = await transaction.issue.create({ data });
+      // The parent link and its CONTAINS edge are written together: the edge
+      // is what the work graph reads, and a parentId without it is a half edge.
+      if (newParentId) {
+        await syncContainsFromParentId(transaction, nextIssue.id, newParentId, null);
+        parentChildBackfills += 1;
+      }
       await createMapping(transaction, issue.id, nextIssue.id, 'issue');
       return nextIssue;
     });
@@ -452,8 +492,46 @@ async function importIssues(
     imported++;
   }
 
-  onProgress?.(`  Issues: ${String(imported)} imported, ${String(skipped)} skipped`);
-  return { idMap, imported, skipped, warnings };
+  onProgress?.(
+    `  Issues: ${String(imported)} imported, ${String(skipped)} skipped, ${String(parentChildBackfills)} linked to a parent`,
+  );
+  return { idMap, imported, skipped, parentChildBackfills, warnings };
+}
+
+/**
+ * Order issues so every parent comes before its children (INV-1288).
+ *
+ * Nodes that cannot be ordered — a parent that is not in the export, or a
+ * cycle — are left out and reported by the caller.
+ */
+function orderByParent(issues: ExportedIssue[]): ExportedIssue[] {
+  const byId = new Map(issues.map((issue) => [issue.id, issue]));
+  const ordered: ExportedIssue[] = [];
+  const visited = new Set<string>();
+  const inPath = new Set<string>();
+
+  const visit = (issue: ExportedIssue): void => {
+    if (visited.has(issue.id) || inPath.has(issue.id)) {
+      return;
+    }
+
+    inPath.add(issue.id);
+
+    const parent = issue.parent ? byId.get(issue.parent.id) : undefined;
+    if (parent) {
+      visit(parent);
+    }
+
+    inPath.delete(issue.id);
+    visited.add(issue.id);
+    ordered.push(issue);
+  };
+
+  for (const issue of issues) {
+    visit(issue);
+  }
+
+  return ordered;
 }
 
 function deferredParentRelationships(issues: ExportedIssue[], onProgress?: ProgressCallback): ImportWarningRecord[] {
@@ -673,6 +751,14 @@ export async function runImportPipeline(
   const users = await readValidatedJsonFile(join(exportDir, 'users.json'), parseExportedUsers);
   const issues = await readValidatedJsonFile(join(exportDir, 'issues.json'), parseExportedIssues);
 
+  // A hierarchy-aware export says so in `hierarchy.json` (INV-1288). A flat
+  // export — what Linear produces — has no such file and keeps the old
+  // behaviour: issues land without parents and the relationships are reported.
+  const hierarchyFile = join(exportDir, 'hierarchy.json');
+  const hierarchyEnabled = (await fileExists(hierarchyFile))
+    ? (await readValidatedJsonFile(hierarchyFile, parseExportedHierarchy)).enabled
+    : false;
+
   // Step 2: Import teams
   const teamResult = await importTeams(prisma, teams, onProgress);
 
@@ -690,7 +776,7 @@ export async function runImportPipeline(
   // Step 5: Import users
   const userResult = await importUsers(prisma, users, onProgress);
 
-  // Step 6: Import issues without parentId
+  // Step 6: Import issues
   const issueResult = await importIssues(
     prisma,
     issues,
@@ -699,11 +785,12 @@ export async function runImportPipeline(
     userResult.idMap,
     labelResult.idMap,
     onProgress,
+    hierarchyEnabled,
   );
 
   // Source issues have no declared repository/kind mapping. Keep relationships in
   // the source export and report them; never infer milestones or overwrite a repair.
-  const parentWarnings = deferredParentRelationships(issues, onProgress);
+  const parentWarnings = hierarchyEnabled ? [] : deferredParentRelationships(issues, onProgress);
 
   // Step 8: Import comments
   const commentResult = await importComments(
@@ -728,7 +815,7 @@ export async function runImportPipeline(
       users: userResult.imported + userResult.skipped,
       issues: issueResult.imported + issueResult.skipped,
       comments: commentResult.imported + commentResult.skipped,
-      parentChildBackfills: 0,
+      parentChildBackfills: issueResult.parentChildBackfills,
     },
     skipped: {
       teams: teamResult.skipped,

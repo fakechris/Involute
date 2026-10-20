@@ -1,6 +1,7 @@
 import type { GlobalRole, Prisma, PrismaClient, TeamMembershipRole, User, WorkspaceSettings } from '@prisma/client';
 
 import { recordActorAudit } from './actor-lifecycle.js';
+import { hasAnyIdentity } from './identities.js';
 import {
   GLOBAL_ROLE_LAST_ADMIN_MESSAGE,
   INVITE_ALREADY_MEMBER_MESSAGE,
@@ -25,11 +26,18 @@ type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 /**
  * Workspace access (INV-847, docs/permissions.md §1–2).
  *
- * Sign-in is invite-only: a Google account gets in when a user row already
- * exists for it (everyone who signed in before, and everyone invited), when
- * its domain is approved, or — to bootstrap a fresh server — when it is on
+ * Sign-in is invite-only: an account gets in when a user row already exists
+ * for it (everyone who signed in before, and everyone invited), when its
+ * domain is approved, or — to bootstrap a fresh server — when it is on
  * ADMIN_EMAIL_ALLOWLIST. An invite *is* a user row created before the first
- * sign-in; it stays "pending" until Google links it.
+ * sign-in; it stays "pending" until an identity links it.
+ *
+ * This file is the **policy**, and the policy is one policy (INV-1288). It
+ * does not know which sign-in line a person arrived through: Google, DingTalk
+ * and anything else get the same invite-only rule, the same approved domains,
+ * the same bootstrap allowlist, the same roles and the same team memberships.
+ * Who vouched for a sign-in is recorded by the provider layer; what that
+ * buys the person is decided here, once.
  */
 
 export const WORKSPACE_SETTINGS_ID = 'workspace';
@@ -137,11 +145,19 @@ async function activeAdminCount(prisma: DatabaseClient): Promise<number> {
 }
 
 /**
- * Link or create the user behind a verified Google profile, or refuse.
- * `existing` is the row already found by subject or email (the caller checks
- * for account conflicts first).
+ * Link or create the user behind a verified profile, or refuse.
+ *
+ * The policy is provider-neutral (INV-1288): the same invite-only rule, the
+ * same approved domains, the same bootstrap allowlist, whether the person
+ * arrived through Google or through DingTalk. `existing` is the row already
+ * found by subject or email (the caller checks for account conflicts first).
+ *
+ * The provider is deliberately **not** a parameter here. Which sign-in line
+ * vouched for this person is the provider layer's business; what that person
+ * gets in the workspace is this function's business, and it is the same for
+ * every line. The provider links its identity to the row this returns.
  */
-export async function admitGoogleUser(
+export async function admitUser(
   prisma: PrismaClient,
   profile: SignInProfile,
   existing: User | null,
@@ -159,7 +175,6 @@ export async function admitGoogleUser(
       data: {
         avatarUrl: profile.picture,
         email: profile.email,
-        googleSubject: profile.subject,
         name: profile.name,
         ...(recover ? { globalRole: 'ADMIN' as const } : {}),
       },
@@ -173,12 +188,11 @@ export async function admitGoogleUser(
   }
 
   return prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
+    const created = await tx.user.create({
       data: {
         avatarUrl: profile.picture,
         email: profile.email,
         globalRole: allowlisted ? 'ADMIN' : 'USER',
-        googleSubject: profile.subject,
         name: profile.name,
       },
     });
@@ -186,11 +200,11 @@ export async function admitGoogleUser(
     if (!allowlisted && settings.defaultTeamIds.length > 0) {
       const teams = await tx.team.findMany({ where: { id: { in: settings.defaultTeamIds } }, select: { id: true } });
       await tx.teamMembership.createMany({
-        data: teams.map((team) => ({ role: 'EDITOR' as const, teamId: team.id, userId: user.id })),
+        data: teams.map((team) => ({ role: 'EDITOR' as const, teamId: team.id, userId: created.id })),
         skipDuplicates: true,
       });
     }
-    return user;
+    return created;
   });
 }
 
@@ -237,7 +251,7 @@ export async function inviteUser(prisma: PrismaClient, input: InviteInput): Prom
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.user.findUnique({ where: { email } });
-    if (existing && (existing.googleSubject || existing.actorKind !== 'HUMAN')) {
+    if (existing && ((await hasLinkedIdentity(tx, existing.id)) || existing.actorKind !== 'HUMAN')) {
       throw createValidationError(INVITE_ALREADY_MEMBER_MESSAGE);
     }
     const now = new Date();
@@ -282,7 +296,7 @@ export async function revokeInvite(
   return prisma.$transaction(async (tx) => {
     const user = await tx.user.findUnique({ where: { id: input.userId } });
     if (!user) throw createNotFoundError(USER_NOT_FOUND_MESSAGE);
-    if (user.googleSubject || user.actorKind !== 'HUMAN' || user.deactivatedAt) {
+    if ((await hasLinkedIdentity(tx, user.id)) || user.actorKind !== 'HUMAN' || user.deactivatedAt) {
       throw createValidationError(INVITE_NOT_PENDING_MESSAGE);
     }
     const updated = await tx.user.update({ where: { id: user.id }, data: { deactivatedAt: new Date() } });
@@ -354,9 +368,23 @@ export async function reactivateUser(
 
 export type UserAccessStatus = 'ACTIVE' | 'PENDING' | 'SUSPENDED';
 
-export function userAccessStatus(user: Pick<User, 'actorKind' | 'deactivatedAt' | 'googleSubject'>): UserAccessStatus {
+/**
+ * Whether this person has ever signed in.
+ *
+ * The question is provider-neutral, and so is the answer: the identity store
+ * knows which lines a person has signed in through, and the policy only needs
+ * to know whether there was one. See `identities.ts`.
+ */
+export async function hasLinkedIdentity(prisma: DatabaseClient, userId: string): Promise<boolean> {
+  return hasAnyIdentity(prisma, userId);
+}
+
+export function userAccessStatus(
+  user: Pick<User, 'actorKind' | 'deactivatedAt'>,
+  hasIdentity: boolean,
+): UserAccessStatus {
   if (user.deactivatedAt) return 'SUSPENDED';
-  if (user.actorKind === 'HUMAN' && !user.googleSubject) return 'PENDING';
+  if (user.actorKind === 'HUMAN' && !hasIdentity) return 'PENDING';
   return 'ACTIVE';
 }
 
@@ -375,6 +403,11 @@ export interface InviteDelivery {
  * Invites work without mail: the row is what lets the person in. When SMTP
  * is configured (NOTIFICATION_EMAIL_*) an email goes out too; otherwise the
  * caller is told plainly that nothing was sent and given the link.
+ *
+ * The mail does not name a sign-in line. Which lines this deployment offers
+ * is the deployment's business (INV-1288), and an invitation that says
+ * "sign in with Google" is wrong the moment the deployment offers anything
+ * else. The person signs in with the address they were invited with.
  */
 export async function deliverInvite(
   input: { email: string; inviterName: string | null },
@@ -389,10 +422,10 @@ export async function deliverInvite(
     };
   }
   const who = input.inviterName ?? 'An admin';
-  const text = `${who} invited you to Involute.\n\nSign in with Google using ${input.email}:\n${signInUrl}\n`;
+  const text = `${who} invited you to Involute.\n\nSign in to Involute with ${input.email}:\n${signInUrl}\n`;
   try {
     await runtime.send({
-      html: `<p>${escapeHtml(who)} invited you to Involute.</p><p>Sign in with Google using <strong>${escapeHtml(input.email)}</strong>:<br><a href="${escapeHtml(signInUrl)}">${escapeHtml(signInUrl)}</a></p>`,
+      html: `<p>${escapeHtml(who)} invited you to Involute.</p><p>Sign in with <strong>${escapeHtml(input.email)}</strong>:<br><a href="${escapeHtml(signInUrl)}">${escapeHtml(signInUrl)}</a></p>`,
       subject: `${who} invited you to Involute`,
       text,
       to: input.email,

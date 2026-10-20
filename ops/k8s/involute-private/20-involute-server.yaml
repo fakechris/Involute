@@ -1,0 +1,220 @@
+# Involute API server (GraphQL) for the self-hosted deployment.
+#
+# Image tag: replace `sha-000000000000` with the real immutable tag, e.g.
+#   sed -i '' 's/sha-000000000000/sha-899ca2a1b2c3/g' 20-involute-server.yaml
+# The tag is a build artefact; keep it immutable (sha-<12 hex>) so a rollout
+# always runs a known build.
+#
+# Startup order: an initContainer applies Prisma migrations and only then the
+# server container starts. The initContainer runs the migrations from the
+# image itself (`/app/packages/server`, workdir `/app`), so no migration job
+# has to be run by hand after every deploy.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: involute-config
+  namespace: involute
+  labels:
+    app.kubernetes.io/name: involute-server
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: involute
+data:
+  # Public origin of this deployment. Change it to the host the browser uses
+  # (for example an ingress hostname) before exposing the app.
+  APP_ORIGIN: "http://involute.lumenopen.internal"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: involute-server
+  namespace: involute
+  labels:
+    app.kubernetes.io/name: involute-server
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: involute
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: involute-server
+  ports:
+    - name: http
+      port: 4200
+      targetPort: 4200
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: involute-server
+  namespace: involute
+  labels:
+    app.kubernetes.io/name: involute-server
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: involute
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: involute-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: involute-server
+        app.kubernetes.io/component: server
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        # The image runs as root, so runAsNonRoot cannot be set here.
+        allowPrivilegeEscalation: false
+      initContainers:
+        - name: migrate
+          image: docker.io/fakechris/involute-server:sha-000000000000
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -lc
+            - cd /app/packages/server && pnpm exec prisma migrate deploy
+          env:
+            # Order matters: Kubernetes expands $(VAR) only from variables
+            # defined earlier in the same env list.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: involute-db
+                  key: postgresPassword
+            - name: DATABASE_URL
+              value: "postgresql://involute:$(POSTGRES_PASSWORD)@involute-db:5432/involute?schema=public"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+      containers:
+        - name: server
+          image: docker.io/fakechris/involute-server:sha-000000000000
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 4200
+              protocol: TCP
+          env:
+            # Order matters: Kubernetes expands $(VAR) only from variables
+            # defined earlier in the same env list.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: involute-db
+                  key: postgresPassword
+            - name: DATABASE_URL
+              value: "postgresql://involute:$(POSTGRES_PASSWORD)@involute-db:5432/involute?schema=public"
+            - name: PORT
+              value: "4200"
+            - name: APP_ORIGIN
+              valueFrom:
+                configMapKeyRef:
+                  name: involute-config
+                  key: APP_ORIGIN
+            - name: AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: involute-auth
+                  key: authToken
+            - name: VIEWER_ASSERTION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: involute-auth
+                  key: viewerAssertionSecret
+            - name: ADMIN_EMAIL_ALLOWLIST
+              valueFrom:
+                secretKeyRef:
+                  name: involute-auth
+                  key: adminEmailAllowlist
+                  # Optional: an empty allowlist is valid for this deployment.
+                  optional: true
+            - name: ALLOW_ADMIN_FALLBACK
+              value: "false"
+            # Sign-in lines (INV-1288). This private deployment signs people in
+            # with DingTalk; the public deployment keeps Google. One codebase,
+            # two lines, chosen by this variable.
+            - name: AUTH_PROVIDERS
+              value: "dingtalk"
+            # Google OAuth is deliberately disabled in this deployment.
+            - name: GOOGLE_OAUTH_CLIENT_ID
+              value: ""
+            - name: GOOGLE_OAUTH_CLIENT_SECRET
+              value: ""
+            - name: GOOGLE_OAUTH_REDIRECT_URI
+              value: ""
+            - name: REQUIRE_GOOGLE_OAUTH
+              value: "false"
+            # DingTalk sign-in (enterprise app). The AppKey/AppSecret come from
+            # the DingTalk console; the redirect URI must be the one registered
+            # there, ending in /auth/dingtalk/callback.
+            - name: DINGTALK_APP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: involute-dingtalk
+                  key: appKey
+            - name: DINGTALK_APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: involute-dingtalk
+                  key: appSecret
+            - name: DINGTALK_REDIRECT_URI
+              valueFrom:
+                secretKeyRef:
+                  name: involute-dingtalk
+                  key: redirectUri
+            - name: DINGTALK_SCOPES
+              value: "corpid"
+            - name: SESSION_TTL_SECONDS
+              value: "2592000"
+            - name: INVOLUTE_UPLOADS_DIR
+              value: "/var/lib/involute/uploads"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4200
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4200
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              memory: 2Gi
+          volumeMounts:
+            - name: uploads
+              mountPath: /var/lib/involute/uploads
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: involute-uploads
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: involute-uploads
+  namespace: involute
+  labels:
+    app.kubernetes.io/name: involute-server
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: involute
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local
+  resources:
+    requests:
+      storage: 5Gi

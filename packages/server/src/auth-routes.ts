@@ -5,13 +5,9 @@ import type { PrismaClient } from '@prisma/client';
 import type { ServerResponse, IncomingMessage } from 'node:http';
 
 import { resolveRequestAuthentication, type GraphQLContextOptions } from './auth.js';
-import {
-  buildGoogleAuthorizationUrl,
-  exchangeGoogleCodeForUserProfile,
-  isGoogleOAuthConfigured,
-  type GoogleOAuthConfiguration,
-  upsertGoogleOAuthUser,
-} from './google-oauth.js';
+import { describeAuthProviders } from './auth-providers/registry.js';
+import { upsertProviderUser } from './auth-providers/identity.js';
+import type { AuthProvider } from './auth-providers/types.js';
 import {
   createSession,
   deleteSession,
@@ -26,7 +22,10 @@ import {
 
 export interface AuthRouteOptions extends Omit<GraphQLContextOptions, 'request'> {
   appOrigin: string;
-  googleOAuth: GoogleOAuthConfiguration;
+  /** The sign-in lines this deployment offers (INV-1288). */
+  authProviders: readonly AuthProvider[];
+  /** Emails that may bootstrap an admin; the allowlist is provider-neutral. */
+  adminEmails: readonly string[];
   request: IncomingMessage;
   response: ServerResponse;
   sessionTtlSeconds: number;
@@ -35,13 +34,14 @@ export interface AuthRouteOptions extends Omit<GraphQLContextOptions, 'request'>
 export async function handleAuthRoutes(options: AuthRouteOptions): Promise<boolean> {
   const pathname = getPathname(options.request.url);
 
-  if (pathname === '/auth/google/start') {
-    await handleGoogleStart(options);
-    return true;
-  }
+  const providerRoute = matchProviderRoute(pathname, options.authProviders);
 
-  if (pathname === '/auth/google/callback') {
-    await handleGoogleCallback(options);
+  if (providerRoute) {
+    if (providerRoute.step === 'start') {
+      await handleProviderStart(options, providerRoute.provider);
+    } else {
+      await handleProviderCallback(options, providerRoute.provider);
+    }
     return true;
   }
 
@@ -56,6 +56,29 @@ export async function handleAuthRoutes(options: AuthRouteOptions): Promise<boole
   }
 
   return false;
+}
+
+/**
+ * `/auth/<provider>/start` and `/auth/<provider>/callback`.
+ *
+ * The Google paths are exactly what they were before INV-1288 — the provider
+ * id is simply no longer hardcoded.
+ */
+function matchProviderRoute(
+  pathname: string,
+  providers: readonly AuthProvider[],
+): { provider: AuthProvider; step: 'start' | 'callback' } | null {
+  const match = /^\/auth\/([^/]+)\/(start|callback)$/.exec(pathname);
+  if (!match) {
+    return null;
+  }
+
+  const provider = providers.find((candidate) => candidate.id === match[1]);
+  if (!provider) {
+    return null;
+  }
+
+  return { provider, step: match[2] === 'start' ? 'start' : 'callback' };
 }
 
 export function getAllowedBrowserOrigins(appOrigin: string): string[] {
@@ -88,21 +111,21 @@ function getPathname(url: string | undefined): string {
   return questionMarkIndex === -1 ? url : url.slice(0, questionMarkIndex);
 }
 
-async function handleGoogleStart({
-  appOrigin,
-  googleOAuth,
-  request,
-  response,
-}: AuthRouteOptions): Promise<void> {
-  if (!isGoogleOAuthConfigured(googleOAuth)) {
+async function handleProviderStart(
+  options: AuthRouteOptions,
+  provider: AuthProvider,
+): Promise<void> {
+  const { appOrigin, response } = options;
+
+  if (!provider.isConfigured()) {
     respondJson(response, 503, {
-      error: 'Google OAuth is not configured.',
+      error: `${provider.label} is not configured.`,
     });
     return;
   }
 
   const state = randomBytes(24).toString('base64url');
-  const redirectUrl = buildGoogleAuthorizationUrl(googleOAuth, state);
+  const redirectUrl = provider.buildAuthorizationUrl(state);
   const secure = isSecureOrigin(appOrigin);
 
   response.statusCode = 302;
@@ -111,16 +134,14 @@ async function handleGoogleStart({
   response.end();
 }
 
-async function handleGoogleCallback({
-  appOrigin,
-  googleOAuth,
-  prisma,
-  request,
-  response,
-  sessionTtlSeconds,
-}: AuthRouteOptions): Promise<void> {
+async function handleProviderCallback(
+  options: AuthRouteOptions,
+  provider: AuthProvider,
+): Promise<void> {
+  const { appOrigin, adminEmails, prisma, request, response, sessionTtlSeconds } = options;
   const secure = isSecureOrigin(appOrigin);
-  const callbackUrl = new URL(request.url ?? '/auth/google/callback', googleOAuth.redirectUri ?? appOrigin);
+  const callbackPath = `/auth/${provider.id}/callback`;
+  const callbackUrl = new URL(request.url ?? callbackPath, appOrigin);
   const code = callbackUrl.searchParams.get('code');
   const returnedState = callbackUrl.searchParams.get('state');
   const storedState = readCookieValue(request.headers.cookie ?? null, OAUTH_STATE_COOKIE_NAME);
@@ -133,8 +154,13 @@ async function handleGoogleCallback({
   }
 
   try {
-    const profile = await exchangeGoogleCodeForUserProfile(code, googleOAuth);
-    const user = await upsertGoogleOAuthUser(prisma, profile, googleOAuth);
+    const profile = await provider.completeSignIn(code);
+    const user = await upsertProviderUser(
+      prisma,
+      profile,
+      { id: provider.id, subject: profile.subject },
+      adminEmails,
+    );
     const session = await createSession(prisma, user.id, sessionTtlSeconds);
 
     response.statusCode = 302;
@@ -157,8 +183,8 @@ async function handleGoogleCallback({
 async function handleSessionRequest({
   allowAdminFallback,
   appOrigin,
+  authProviders,
   authToken,
-  googleOAuth,
   prisma,
   request,
   response,
@@ -184,7 +210,12 @@ async function handleSessionRequest({
     {
       authMode: authentication.authMode,
       authenticated: authentication.authorized,
-      googleOAuthConfigured: isGoogleOAuthConfigured(googleOAuth),
+      // The buttons the web app shows (INV-1288). `googleOAuthConfigured` stays
+      // for the public web build, which still reads it.
+      authProviders: describeAuthProviders(authProviders),
+      googleOAuthConfigured: authProviders.some(
+        (provider) => provider.id === 'google' && provider.isConfigured(),
+      ),
       viewer: authentication.viewer
         ? {
             email: authentication.viewer.email,

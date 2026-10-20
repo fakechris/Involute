@@ -1,0 +1,86 @@
+# Involute web front-end (nginx) for the self-hosted deployment.
+#
+# Image tag: replace `sha-000000000000` with the real immutable tag, e.g.
+#   sed -i '' 's/sha-000000000000/sha-899ca2a1b2c3/g' 30-involute-web.yaml
+#
+# The web image is nginx with an envsubst template: INTERNAL_SERVER_ORIGIN
+# and WEB_PROXY_AUTHORIZATION are read from the container environment when
+# nginx starts. WEB_PROXY_AUTHORIZATION is empty on purpose — this deployment
+# does not proxy a shared token to the API.
+apiVersion: v1
+kind: Service
+metadata:
+  name: involute-web
+  namespace: involute
+  labels:
+    app.kubernetes.io/name: involute-web
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: involute
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: involute-web
+  ports:
+    - name: http
+      port: 4201
+      targetPort: 4201
+      protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: involute-web
+  namespace: involute
+  labels:
+    app.kubernetes.io/name: involute-web
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: involute
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: involute-web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: involute-web
+        app.kubernetes.io/component: web
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        allowPrivilegeEscalation: false
+      containers:
+        - name: web
+          image: docker.io/fakechris/involute-web:sha-000000000000
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 4201
+              protocol: TCP
+          env:
+            - name: INTERNAL_SERVER_ORIGIN
+              value: "http://involute-server:4200"
+            - name: WEB_PROXY_AUTHORIZATION
+              value: ""
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 4201
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 4201
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi

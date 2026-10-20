@@ -39,6 +39,38 @@ export interface ExportedIssue {
   assignee: { id: string; name: string; email: string } | null;
   labels: { nodes: Array<{ id: string; name: string }> };
   parent: { id: string } | null;
+  /**
+   * The work kind this node becomes (INV-1288). Absent means ISSUE, which is
+   * what a Linear export produces.
+   */
+  kind?: ExportedWorkKind | undefined;
+  /**
+   * The repository this node belongs to. A CONTAINS edge needs both ends to
+   * agree on it, so a source that builds a hierarchy states it here.
+   */
+  repository?: string | undefined;
+}
+
+/** The work kinds an import may create. */
+export type ExportedWorkKind = 'PROJECT' | 'MILESTONE' | 'EPIC' | 'ISSUE' | 'DECISION';
+
+const EXPORTED_WORK_KINDS: readonly ExportedWorkKind[] = [
+  'PROJECT',
+  'MILESTONE',
+  'EPIC',
+  'ISSUE',
+  'DECISION',
+];
+
+/**
+ * Whether an export carries its own hierarchy (INV-1288).
+ *
+ * The file is optional. Without it the pipeline imports issues flat and
+ * reports every source parent as deferred — what a Linear export needs.
+ * With it the pipeline creates the parents first and links the children.
+ */
+export interface ExportedHierarchy {
+  enabled: boolean;
 }
 
 export interface ExportedComment {
@@ -83,6 +115,14 @@ export function parseExportedComments(value: unknown, fileLabel = 'comments.json
   return expectArray(value, fileLabel).map((comment, index) =>
     parseExportedComment(comment, `${fileLabel}[${index}]`),
   );
+}
+
+export function parseExportedHierarchy(value: unknown, fileLabel = 'hierarchy.json'): ExportedHierarchy {
+  const object = expectObject(value, fileLabel);
+
+  return {
+    enabled: expectBoolean(object.enabled, `${fileLabel}.enabled`),
+  };
 }
 
 function parseExportedTeam(value: unknown, path: string): ExportedTeam {
@@ -152,9 +192,11 @@ function parseExportedIssue(value: unknown, path: string): ExportedIssue {
     description: expectNullableString(object.description, `${path}.description`),
     id: expectString(object.id, `${path}.id`),
     identifier: expectString(object.identifier, `${path}.identifier`),
+    kind: parseOptionalWorkKind(object.kind, `${path}.kind`),
     labels: { nodes: labelNodes },
     parent: parseNullableIdRef(object.parent, `${path}.parent`),
     priority: expectNumber(object.priority, `${path}.priority`),
+    repository: parseOptionalString(object.repository, `${path}.repository`),
     state: {
       id: expectString(state.id, `${path}.state.id`),
       name: expectString(state.name, `${path}.state.name`),
@@ -166,6 +208,28 @@ function parseExportedIssue(value: unknown, path: string): ExportedIssue {
     title: expectString(object.title, `${path}.title`),
     updatedAt: expectString(object.updatedAt, `${path}.updatedAt`),
   };
+}
+
+function parseOptionalWorkKind(value: unknown, path: string): ExportedWorkKind | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  const kind = expectString(value, path);
+
+  if (!EXPORTED_WORK_KINDS.includes(kind as ExportedWorkKind)) {
+    throw new Error(`${path} must be one of ${EXPORTED_WORK_KINDS.join(', ')}.`);
+  }
+
+  return kind as ExportedWorkKind;
+}
+
+function parseOptionalString(value: unknown, path: string): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  return expectString(value, path);
 }
 
 function parseExportedComment(value: unknown, path: string): ExportedComment {

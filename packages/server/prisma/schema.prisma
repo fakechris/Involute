@@ -186,6 +186,8 @@ model Team {
   agentCredentials AgentCredential[]
   /// Weekly bug triage rotation (INV-750): { userIds: string[], startsAt: ISO date }.
   triageRotation  Json?
+  /// Where this team comes from in an outside organisation (INV-1288).
+  externalRefs    ExternalOrganizationRef[]
 
   @@index([key])
   savedViews      SavedView[]
@@ -299,6 +301,45 @@ model User {
   timelineStars        WorkTimelineStar[]   @relation("WorkTimelineStarredBy")
   timelineUnstars      WorkTimelineStar[]   @relation("WorkTimelineUnstarredBy")
   extensionTokens    ExtensionToken[] @relation("ExtensionTokenOwner")
+  // Sign-in identities (INV-1288): one person may hold an account per auth
+  // provider, so a private deployment can run on DingTalk while the public one
+  // stays on Google. `googleSubject` above stays the Google link.
+  identities      UserIdentity[] @relation("UserIdentities")
+}
+
+/// A link between a team and one node of an outside organisation.
+///
+/// The organisation owns the node (a DingTalk department, say); the workspace
+/// owns the team. Keyed on (provider, externalId) so one department maps to one
+/// team, and the sync knows which teams it may change.
+model ExternalOrganizationRef {
+  id         String   @id @default(uuid()) @db.Uuid
+  provider   String
+  externalId String
+  teamId     String   @db.Uuid
+  team       Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([provider, externalId])
+  @@index([teamId])
+}
+
+/// A link between a person and one identity at one auth provider.
+///
+/// The provider owns the subject (Google `sub`, DingTalk `unionId`); the
+/// workspace owns the person. Keyed on (provider, subject) so the same
+/// provider never links two people, and one person may use several providers.
+model UserIdentity {
+  id        String   @id @default(uuid()) @db.Uuid
+  provider  String
+  subject   String
+  userId    String   @db.Uuid
+  user      User     @relation("UserIdentities", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([provider, subject])
+  @@index([userId])
 }
 
 model AgentCredential {

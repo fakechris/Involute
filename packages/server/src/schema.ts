@@ -138,6 +138,7 @@ import {
   canInvite,
   deliverInvite,
   getWorkspaceSettings,
+  hasLinkedIdentity,
   inviteUser,
   reactivateUser,
   revokeInvite,
@@ -5208,10 +5209,14 @@ const resolvers = {
           const targetEmail = args.input.email.trim().toLowerCase();
           const currentUser = await context.prisma.user.findUnique({
             where: { id: viewer.id },
-            select: { googleSubject: true, email: true },
+            select: { email: true },
           });
-          if (currentUser?.googleSubject && currentUser.email !== targetEmail) {
-            throw createValidationError('Cannot change email for Google-authenticated accounts.');
+          // The workspace keys people by email, and a sign-in line claims a
+          // person by it. Once an identity is linked, the address is the
+          // link: changing it would break the link, whichever line signed
+          // the person in (INV-1288).
+          if (currentUser && currentUser.email !== targetEmail && (await hasLinkedIdentity(context.prisma, viewer.id))) {
+            throw createValidationError('Cannot change email for an account linked to a sign-in identity.');
           }
           data.email = targetEmail;
         }
@@ -5401,7 +5406,8 @@ const resolvers = {
       parent.defaultTeamIds.length === 0 ? [] : context.prisma.team.findMany({ where: { id: { in: parent.defaultTeamIds } }, orderBy: { key: 'asc' } }),
   },
   User: {
-    accessStatus: (parent: UserParent): string => userAccessStatus(parent),
+    accessStatus: async (parent: UserParent, _args: Record<string, never>, context: GraphQLContext): Promise<string> =>
+      userAccessStatus(parent, await hasLinkedIdentity(context.prisma, parent.id)),
     invitedAt: (parent: UserParent): Date | null => parent.invitedAt ?? null,
     teamMemberships: async (parent: UserParent, _args: Record<string, never>, context: GraphQLContext) => {
       const readableTeam = buildReadableTeamWhere(context);

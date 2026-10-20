@@ -1,0 +1,86 @@
+# One-shot Redmine -> Involute import.
+#
+# Image tag: replace `sha-000000000000` with the real immutable tag, e.g.
+#   sed -i '' 's/sha-000000000000/sha-899ca2a1b2c3/g' 40-redmine-import-job.yaml
+#
+# The three CLI commands run in sequence in a single container:
+#   1. export the Redmine team into /exports
+#   2. import the exported snapshot into the Involute database
+#   3. verify the import against the export directory
+#
+# The Redmine API key is read from the `involute-redmine` Secret (key
+# `apiKey`) and is never written into this manifest.
+#
+# The job is intentionally re-runnable: delete the Job and re-apply to run it
+# again (see README.md).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redmine-import
+  namespace: involute
+  labels:
+    app.kubernetes.io/name: redmine-import
+    app.kubernetes.io/component: job
+    app.kubernetes.io/part-of: involute
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redmine-import
+        app.kubernetes.io/component: job
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        allowPrivilegeEscalation: false
+      containers:
+        - name: import
+          image: docker.io/fakechris/involute-cli:sha-000000000000
+          imagePullPolicy: IfNotPresent
+          # The image entrypoint is `node packages/cli/dist/index.js`. Three
+          # commands run in sequence, so the entrypoint is replaced by a shell
+          # that chains them; `set -e` stops at the first failure.
+          command:
+            - sh
+            - -lc
+          args:
+            - |
+              set -e
+              node packages/cli/dist/index.js import redmine --url https://redmine.91jinrong.com --api-key "$REDMINE_API_KEY" --output /exports --team-key RD --team-name "Redmine 迁移"
+              node packages/cli/dist/index.js import --file /exports
+              node packages/cli/dist/index.js import verify --file /exports
+          env:
+            # Order matters: Kubernetes expands $(VAR) only from variables
+            # defined earlier in the same env list.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: involute-db
+                  key: postgresPassword
+            - name: DATABASE_URL
+              value: "postgresql://involute:$(POSTGRES_PASSWORD)@involute-db:5432/involute?schema=public"
+            - name: REDMINE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: involute-redmine
+                  key: apiKey
+            - name: AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: involute-auth
+                  key: authToken
+            - name: INVOLUTE_CONFIG_PATH
+              value: "/tmp/involute-config.json"
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              memory: 3Gi
+          volumeMounts:
+            - name: exports
+              mountPath: /exports
+      volumes:
+        - name: exports
+          emptyDir:
+            sizeLimit: 20Gi
