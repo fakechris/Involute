@@ -431,7 +431,7 @@ export function AttentionPage() {
             {sections.map((section) => (
               <section key={section.key} className="attention-section" aria-label={section.title}>
                 <h2 className="attention-section__title">
-                  <GroupLabel kind={section.kind} text={section.title} /> <span className="attention-section__count">{section.count}</span>
+                  <GroupLabel kind={section.kind ?? null} text={section.title} /> <span className="attention-section__count">{section.count}</span>
                   {section.oldestSince ? <span className="observation-card__meta">oldest {formatWait(section.oldestSince)}</span> : null}
                 </h2>
                 {section.summary ? <p className="attention-section__summary">{section.summary}</p> : null}

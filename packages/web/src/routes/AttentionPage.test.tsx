@@ -188,7 +188,7 @@ describe('Needs you (INV-1092)', () => {
     expect(milestone?.querySelector('.attention-group__name')).toHaveTextContent(milestoneTitle);
     expect(epic?.querySelector('.attention-group__kind')).toHaveTextContent('Epic');
     expect(epic?.querySelector('.attention-group__name')).toHaveTextContent(epicTitle);
-    expect(groupHeading({ id: 'ms-989', identifier: 'INV-989', kind: 'MILESTONE', title: milestoneTitle }).kind).toBe('MILESTONE');
+    expect(groupHeading({ identifier: 'INV-989', kind: 'MILESTONE', title: milestoneTitle }).kind).toBe('MILESTONE');
   });
 
   it('wraps a long Needs you title inside the list row (INV-1301)', () => {
