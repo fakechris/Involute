@@ -6900,6 +6900,21 @@ a.bugs-stat {
   word-break: break-word;
 }
 
+.attention-group__kind {
+  display: inline-block;
+  margin: 0 6px;
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  vertical-align: 1px;
+}
+
 .attention-group__name {
   overflow-wrap: anywhere;
   word-break: break-word;

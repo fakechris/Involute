@@ -22,6 +22,7 @@ import type {
   WorkContextPageQueryVariables,
   WorkReviewMutationData,
   WorkReviewMutationVariables,
+  WorkKind,
   WorkUserSummary,
 } from '../work/types';
 import { CandidateCard, COMMIT_CANDIDATE_EVENT, SNOOZE_CANDIDATE_EVENT, commitUndoItem, humanUsers } from './CandidatesPage';
@@ -57,9 +58,11 @@ export function formatWait(since: string, now = Date.now()): string {
 interface Section {
   key: string;
   title: string;
+  /** Work-tree view: the container this pack belongs to. */
+  kind?: WorkKind | null;
   count: number;
   oldestSince: string | null;
-  groups: Array<{ key: string; label: string | null; items: AttentionItemNode[] }>;
+  groups: Array<{ key: string; label: string | null; kind: WorkKind | null; items: AttentionItemNode[] }>;
   /** Work-tree view: one sentence on what the pack holds (INV-1094). */
   summary?: string;
 }
@@ -77,10 +80,16 @@ const NOUNS: Record<AttentionKind, [string, string]> = {
   WORK_REVIEW: ['finished item to accept', 'finished items to accept'],
 };
 
-/** A group heading is "INV-788 Title…". Split it so the id stays mono and the title wraps. */
-export function splitGroupLabel(label: string): { identifier: string; title: string } | null {
-  const match = /^([A-Za-z]+-\d+)\s+([\s\S]+)$/.exec(label);
-  return match ? { identifier: match[1]!, title: match[2]! } : null;
+const KIND_LABEL: Partial<Record<WorkKind, string>> = {
+  EPIC: 'Epic',
+  MILESTONE: 'Milestone',
+  PROJECT: 'Project',
+};
+
+/** A container heading is its own row: identifier, kind, then the title. A long title wraps inside the list column. */
+export function groupHeading(group: { identifier: string; title: string; kind: WorkKind } | null): { label: string; kind: WorkKind | null } {
+  if (!group) return { kind: null, label: '' };
+  return { kind: group.kind, label: `${group.identifier} ${group.title}` };
 }
 
 /** "3 candidates to commit, 1 contract change" in section order. */
@@ -123,11 +132,12 @@ function buildPacks(items: AttentionItemNode[]): Section[] {
       const oldest = [...entries].sort((a, b) => a.since.localeCompare(b.since))[0]!.since;
       return {
         count: entries.length,
-        groups: [{ items: ordered, key, label: null }],
+        groups: [{ items: ordered, key, label: null, kind: null }],
         key: `pack:${key}`,
         oldestSince: oldest,
         summary: packSummary(entries),
         title: group ? `${group.identifier} ${group.title}` : 'Not placed',
+        kind: group?.kind ?? null,
         overdue: entries.some((entry) => entry.overdue),
       };
     })
@@ -151,11 +161,12 @@ function buildSections(items: AttentionItemNode[]): Section[] {
   return SECTIONS.flatMap(({ kind, title }) => {
     const ofKind = items.filter((item) => item.kind === kind).sort((a, b) => a.since.localeCompare(b.since));
     if (ofKind.length === 0) return [];
-    const groups = new Map<string, { key: string; label: string | null; items: AttentionItemNode[] }>();
+    const groups = new Map<string, { key: string; label: string | null; kind: WorkKind | null; items: AttentionItemNode[] }>();
     for (const item of ofKind) {
       const key = item.groupKey ?? '';
       if (!groups.has(key)) {
-        groups.set(key, { key, label: item.group ? `${item.group.identifier} ${item.group.title}` : null, items: [] });
+        const heading = groupHeading(item.group);
+        groups.set(key, { key, label: heading.label || null, kind: heading.kind, items: [] });
       }
       groups.get(key)!.items.push(item);
     }
@@ -420,7 +431,7 @@ export function AttentionPage() {
             {sections.map((section) => (
               <section key={section.key} className="attention-section" aria-label={section.title}>
                 <h2 className="attention-section__title">
-                  <GroupLabel text={section.title} /> <span className="attention-section__count">{section.count}</span>
+                  <GroupLabel kind={section.kind} text={section.title} /> <span className="attention-section__count">{section.count}</span>
                   {section.oldestSince ? <span className="observation-card__meta">oldest {formatWait(section.oldestSince)}</span> : null}
                 </h2>
                 {section.summary ? <p className="attention-section__summary">{section.summary}</p> : null}
@@ -450,7 +461,7 @@ export function AttentionPage() {
                 ) : null}
                 {section.groups.map((group) => (
                   <div key={group.key} className="attention-group">
-                    {group.label ? <GroupLabel className="attention-group__label" text={group.label} /> : null}
+                    {group.label ? <GroupLabel className="attention-group__label" kind={group.kind} text={group.label} /> : null}
                     <ul>
                       {group.items.map((item) => (
                         <li
@@ -534,12 +545,16 @@ export function AttentionPage() {
   );
 }
 
-function GroupLabel({ className, text }: { className?: string; text: string }) {
-  const parts = splitGroupLabel(text);
+function GroupLabel({ className, kind, text }: { className?: string; kind?: WorkKind | null; text: string }) {
+  const match = /^([A-Za-z]+-\d+)\s+([\s\S]+)$/.exec(text);
+  const identifier = match?.[1] ?? null;
+  const title = match?.[2] ?? text;
+  const kindLabel = kind ? KIND_LABEL[kind] : null;
   return (
     <span className={className}>
-      {parts ? <span className="mono">{parts.identifier}</span> : null}{parts ? ' ' : null}
-      <span className="attention-group__name">{parts?.title ?? text}</span>
+      {identifier ? <span className="mono">{identifier}</span> : null}
+      {kindLabel ? <span className="attention-group__kind">{kindLabel}</span> : null}
+      <span className="attention-group__name">{identifier ? title : text}</span>
     </span>
   );
 }
