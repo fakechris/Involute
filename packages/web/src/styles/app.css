@@ -6856,15 +6856,25 @@ a.bugs-stat {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.attention-section {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .attention-section__title {
   display: flex;
   align-items: baseline;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
   font-size: 13px;
   font-weight: 600;
   margin: 0 0 6px;
+  overflow-wrap: anywhere;
 }
 
 .attention-section__count {
@@ -6879,9 +6889,20 @@ a.bugs-stat {
 }
 
 .attention-group__label {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
   font-size: 12px;
+  line-height: 1.4;
   color: var(--fg-muted);
   padding: 4px 8px 2px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.attention-group__name {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .attention-row {

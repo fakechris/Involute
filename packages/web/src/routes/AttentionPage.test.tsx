@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NeedsYouNavLink } from '../components/NeedsYouNavLink';
-import { AttentionPage, formatWait, orderPack, packSummary, suggestedDecisions } from './AttentionPage';
+import { AttentionPage, formatWait, orderPack, packSummary, splitGroupLabel, suggestedDecisions } from './AttentionPage';
 import type { AttentionItemNode, CandidateWork } from '../work/types';
 
 const HOUR = 3_600_000;
@@ -157,11 +157,25 @@ describe('Needs you (INV-1092)', () => {
     const candidates = screen.getByRole('region', { name: 'Commit candidates' });
     expect(within(candidates).getByText('3')).toBeInTheDocument();
     expect(within(candidates).getByText('oldest 5h')).toBeInTheDocument();
-    expect(within(candidates).getByText('INV-1 Milestone')).toBeInTheDocument();
+    expect(within(candidates).getByText((_, node) => node?.classList.contains('attention-group__label') === true && node.textContent === 'INV-1 Milestone')).toBeInTheDocument();
     // The first item's decision is open on the right: the contract change, with its diff and buttons.
     const decision = screen.getByLabelText('Decision');
     expect(within(decision).getByText('The rule changed.')).toBeInTheDocument();
     expect(within(decision).getByRole('button', { name: /Accept change/ })).toBeInTheDocument();
+  });
+
+  it('renders a long group heading as a label, not a bare line of text (INV-1302)', () => {
+    const epicTitle = '人类操作面补齐：服务端已有、但人在 UI 里无法完成的操作全部给出入口，并用守卫测试防止再次出现';
+    nodes = [node('WORK_REVIEW', 'w-788', work('w-788', 'INV-20'), ago(HOUR), {
+      group: { id: 'epic-788', identifier: 'INV-788', kind: 'EPIC', title: epicTitle },
+      groupKey: 'epic-788',
+    })];
+    renderPage();
+    const label = document.querySelector('.attention-group__label');
+    expect(label).toHaveTextContent(`INV-788 ${epicTitle}`);
+    expect(label?.querySelector('.mono')).toHaveTextContent('INV-788');
+    expect(label?.querySelector('.attention-group__name')).toHaveTextContent(epicTitle);
+    expect(splitGroupLabel(`INV-788 ${epicTitle}`)?.identifier).toBe('INV-788');
   });
 
   it('wraps a long Needs you title inside the list row (INV-1301)', () => {
