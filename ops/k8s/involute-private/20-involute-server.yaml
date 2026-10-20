@@ -1,9 +1,9 @@
 # Involute API server (GraphQL) for the self-hosted deployment.
 #
-# Image tag: replace `sha-000000000000` with the real immutable tag, e.g.
-#   sed -i '' 's/sha-000000000000/sha-899ca2a1b2c3/g' 20-involute-server.yaml
-# The tag is a build artefact; keep it immutable (sha-<12 hex>) so a rollout
-# always runs a known build.
+# Image tag: `sha-e524cb9eca96` — the build merged in PR #253. Tags are
+# immutable `sha-<12 hex>` strings, so a rollout always runs a known build.
+# To roll forward, edit the tag here and re-apply; never reuse a tag for a
+# different build.
 #
 # Startup order: an initContainer applies Prisma migrations and only then the
 # server container starts. The initContainer runs the migrations from the
@@ -68,7 +68,7 @@ spec:
         allowPrivilegeEscalation: false
       initContainers:
         - name: migrate
-          image: docker.io/fakechris/involute-server:sha-000000000000
+          image: docker.io/fakechris/involute-server:sha-e524cb9eca96
           imagePullPolicy: IfNotPresent
           command:
             - sh
@@ -92,7 +92,7 @@ spec:
               memory: 1Gi
       containers:
         - name: server
-          image: docker.io/fakechris/involute-server:sha-000000000000
+          image: docker.io/fakechris/involute-server:sha-e524cb9eca96
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

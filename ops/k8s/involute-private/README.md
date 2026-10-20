@@ -42,16 +42,23 @@ Cluster API version targeted: **k8s 1.16** (`apps/v1`, `batch/v1`, `v1` only).
 
 ### Image tags
 
-Every manifest carries the placeholder tag `sha-000000000000`. Tags are
-immutable `sha-<12 hex>` strings. Substitute the real tag once, before
-applying:
+The manifests are pinned to the build merged in PR #253:
+
+| Image | Tag | Digest |
+|---|---|---|
+| `docker.io/fakechris/involute-server` | `sha-e524cb9eca96` | `sha256:7279a10c2862de911657765ede1da7a9d58cf36e7f948f88b5a482e44126e347` |
+| `docker.io/fakechris/involute-web` | `sha-e524cb9eca96` | `sha256:0cc239dc6bca81d2267dbc8d2a97a94da44bcaf0100d07f26eb207ba42641d1d` |
+| `docker.io/fakechris/involute-cli` | `sha-e524cb9eca96` | `sha256:54ea0eda1d72edd43496a20c89d68bbeeab4923fb3f10570239410c2207ad9aa` |
+
+Tags are immutable `sha-<12 hex>` strings, so a rollout always runs a known
+build. To roll forward, edit the tag in the four manifests and re-apply:
 
 ```bash
 cd ops/k8s/involute-private
-sed -i '' 's/sha-000000000000/sha-899ca2a1b2c3/g' 20-involute-server.yaml 30-involute-web.yaml 40-redmine-import-job.yaml 45-dingtalk-org-sync-cronjob.yaml
+sed -i '' 's/sha-e524cb9eca96/sha-<new-build>/g' 20-involute-server.yaml 30-involute-web.yaml 40-redmine-import-job.yaml 45-dingtalk-org-sync-cronjob.yaml
 ```
 
-Use the same tag for the three images unless the build produced different ones.
+Never reuse a tag for a different build.
 
 ---
 
