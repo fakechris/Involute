@@ -462,7 +462,9 @@ export function AttentionPage() {
                             onChange={() => setSelectedIds((current) => (current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id]))}
                           />
                           <span className="attention-row__text">
-                            {item.work ? <span className="mono">{item.work.identifier}</span> : null} {item.work?.title ?? item.reason}
+                            <span className="attention-row__title">
+                              {item.work ? <span className="mono">{item.work.identifier}</span> : null} {item.work?.title ?? item.reason}
+                            </span>
                             <span className="attention-row__reason">{item.reason}</span>
                             {item.unblocked ? <span className="attention-row__flag attention-row__flag--ready">What blocked it is done</span> : null}
                             {(item.waitingOn ?? []).length > 0 ? (
