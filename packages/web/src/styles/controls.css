@@ -229,6 +229,13 @@ select.control--ghost:focus-visible {
   cursor: inherit;
 }
 
+/* A wrap of checkboxes (label pickers). */
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
 /* ---------- Buttons: Btn and the .ui-action family ---------- */
 
 .ui-action {

@@ -5,9 +5,9 @@ import { controlClass, type ControlSize } from './TextInput';
 
 export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'size'> {
   /** `default`: bordered control. `ghost`: borderless until hovered (property rows; was `.issue-panel__prop-select`). */
-  variant?: 'default' | 'ghost';
-  size?: ControlSize;
-  ref?: Ref<HTMLSelectElement>;
+  variant?: 'default' | 'ghost' | undefined;
+  size?: ControlSize | undefined;
+  ref?: Ref<HTMLSelectElement> | undefined;
 }
 
 /**

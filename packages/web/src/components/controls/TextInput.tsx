@@ -10,8 +10,8 @@ export function controlClass(base: string, size: ControlSize | undefined, extra?
 
 export interface TextInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
   /** `md` 30px (default); `sm` 26px for dense rows. */
-  size?: ControlSize;
-  ref?: Ref<HTMLInputElement>;
+  size?: ControlSize | undefined;
+  ref?: Ref<HTMLInputElement> | undefined;
 }
 
 /** A single-line input on the shared `.control` base (docs/design-system.md §3.3). */

@@ -69,16 +69,16 @@ export function Kbd({ keys }: { keys: string | string[] }) {
 type BtnVariant = 'ghost' | 'subtle' | 'primary' | 'accent' | 'danger';
 
 export interface BtnProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
-  children?: ReactNode;
+  children?: ReactNode | undefined;
   /** `primary` is kept as an alias of `accent` (docs/design-system.md §3.4). */
-  variant?: BtnVariant;
-  size?: 'sm' | 'md';
-  icon?: ReactNode;
-  kbd?: string | string[];
-  active?: boolean;
+  variant?: BtnVariant | undefined;
+  size?: 'sm' | 'md' | undefined;
+  icon?: ReactNode | undefined;
+  kbd?: string | string[] | undefined;
+  active?: boolean | undefined;
   /** Busy: disabled, marked aria-busy, with a pulsing dot before the label. */
-  loading?: boolean;
-  style?: CSSProperties;
+  loading?: boolean | undefined;
+  style?: CSSProperties | undefined;
 }
 
 /**

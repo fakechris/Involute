@@ -23,12 +23,12 @@ export function useFieldControl(props: { id?: string | undefined; 'aria-describe
 export interface FieldProps {
   label: ReactNode;
   /** The control's id; generated when omitted and handed to the control inside. */
-  htmlFor?: string;
-  hint?: ReactNode;
-  error?: ReactNode;
+  htmlFor?: string | undefined;
+  hint?: ReactNode | undefined;
+  error?: ReactNode | undefined;
   /** `stack`: label above (default). `aside`: label and hint in a 180px column (settings rows). */
-  layout?: 'stack' | 'aside';
-  className?: string;
+  layout?: 'stack' | 'aside' | undefined;
+  className?: string | undefined;
   children: ReactNode;
 }
 

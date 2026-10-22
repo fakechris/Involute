@@ -2,8 +2,8 @@ import type { InputHTMLAttributes, ReactNode, Ref } from 'react';
 
 export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'size'> {
   /** Text beside the box; the whole row is the click target. */
-  label?: ReactNode;
-  ref?: Ref<HTMLInputElement>;
+  label?: ReactNode | undefined;
+  ref?: Ref<HTMLInputElement> | undefined;
 }
 
 /** A checkbox with its label on one row, tinted with the accent colour. */

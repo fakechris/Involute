@@ -4,7 +4,7 @@ import { useMutation } from '@apollo/client/react';
 import { FILE_UPLOAD_MUTATION } from '../board/queries';
 import type { FileUploadMutationData, FileUploadMutationVariables, UserSummary } from '../board/types';
 import { applyMention, findMentionQuery, useMentionSuggest } from './useMentionSuggest';
-import { IcoLink } from './Icons';
+import { IcoClip, IcoLink } from './Icons';
 import { Btn, Kbd } from './Primitives';
 
 interface RichTextEditorProps {
@@ -397,6 +397,7 @@ export function RichTextEditor({
                     handleLinkInsert();
                   }
                   if (e.key === 'Escape') {
+                    e.preventDefault();
                     setLinkPopoverOpen(false);
                     setLinkUrl('');
                   }
@@ -411,10 +412,11 @@ export function RichTextEditor({
         <button
           type="button"
           title="Attach file"
+          aria-label="Attach file"
           disabled={disabled}
           onClick={() => fileInputRef.current?.click()}
         >
-          📎
+          <IcoClip size={12} />
         </button>
         <input
           ref={fileInputRef}

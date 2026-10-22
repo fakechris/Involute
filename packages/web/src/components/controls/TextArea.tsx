@@ -4,8 +4,8 @@ import { useFieldControl } from './Field';
 import { controlClass, type ControlSize } from './TextInput';
 
 export interface TextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
-  size?: ControlSize;
-  ref?: Ref<HTMLTextAreaElement>;
+  size?: ControlSize | undefined;
+  ref?: Ref<HTMLTextAreaElement> | undefined;
 }
 
 /** A multi-line input on the shared `.control` base; resizes vertically. */

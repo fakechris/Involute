@@ -13,7 +13,10 @@ import type {
 import { SEVERITY_OPTIONS } from '../board/severity';
 import { isTypeLabel } from '../work/labels';
 import { readLastPlacement, rememberPlacement, resolveInitialPlacement, type CreatePlacement, type PlacementSource } from '../work/placement';
+import { Checkbox, Field, Select, TextArea, TextInput } from './controls';
+import { DialogShell } from './DialogShell';
 import { PlacementPicker } from './PlacementPicker';
+import { Btn } from './Primitives';
 
 const DECLARE_ERROR_MESSAGE = 'Could not report the incident. Please try again.';
 
@@ -118,137 +121,107 @@ export function ReportIncidentDialog({ isOpen, teamId, teamKey, projects, labels
   }
 
   return (
-    <aside className="issue-panel" aria-label="Report incident drawer" aria-modal="true" role="dialog">
-      <button
-        type="button"
-        className="issue-panel__backdrop"
-        aria-label="Close report incident drawer"
-        onClick={onClose}
-      />
-      <section className="issue-panel__frame">
-        <div className="issue-panel__header">
-          <div>
-            <p className="app-shell__eyebrow">Involute</p>
-            <h2>Report incident</h2>
-          </div>
-          <button type="button" className="issue-panel__close" onClick={onClose}>
-            Close
-          </button>
-        </div>
+    <DialogShell
+      variant="side"
+      title="Report incident"
+      eyebrow="Involute"
+      ariaLabel="Report incident drawer"
+      backdropLabel="Close report incident drawer"
+      onClose={onClose}
+      onSubmit={declared ? undefined : (event) => void handleSubmit(event)}
+      footer={declared ? (
+        <Link className="ui-action ui-action--accent ui-action--md" to={`/?issue=${encodeURIComponent(declared.identifier)}`} onClick={onClose}>
+          Open on board
+        </Link>
+      ) : (
+        <>
+          {errorMessage ? (
+            <p className="dialog-shell__error dialog-shell__footer-start" role="alert">{errorMessage}</p>
+          ) : null}
+          <Btn variant="ghost" size="md" onClick={onClose}>Cancel</Btn>
+          <Btn type="submit" variant="accent" size="md" disabled={!canSubmit} loading={isSaving}>
+            {isSaving ? 'Reporting…' : 'Report incident'}
+          </Btn>
+        </>
+      )}
+    >
+      {declared ? (
+        <p role="status">
+          Incident <span className="mono">{declared.identifier}</span> declared and in progress. You are the Incident Lead; the team was notified.
+        </p>
+      ) : (
+        <>
+          <Field label="Title" htmlFor="report-incident-title">
+            <TextInput
+              ref={titleInputRef}
+              aria-label="Incident title"
+              value={title}
+              disabled={isSaving}
+              onChange={(event) => setTitle(event.target.value)}
+            />
+          </Field>
 
-        {declared ? (
-          <div className="issue-panel__section">
-            <p role="status">
-              Incident <span className="mono">{declared.identifier}</span> declared and in progress. You are the Incident Lead; the team was notified.
-            </p>
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <Link className="ui-action ui-action--accent" to={`/?issue=${encodeURIComponent(declared.identifier)}`} onClick={onClose}>
-                Open on board
-              </Link>
-            </div>
-          </div>
-        ) : (
-          <form className="discussion-form" onSubmit={(event) => void handleSubmit(event)}>
-            <div className="issue-panel__section">
-              <label className="issue-panel__label" htmlFor="report-incident-title">
-                Title
-              </label>
-              <input
-                id="report-incident-title"
-                ref={titleInputRef}
-                aria-label="Incident title"
-                className="issue-panel__title-input"
-                value={title}
+          <Field label="Impact" htmlFor="report-incident-impact">
+            <TextArea
+              aria-label="Incident impact"
+              placeholder="Who or what is affected, how, since when…"
+              value={impact}
+              disabled={isSaving}
+              onChange={(event) => setImpact(event.target.value)}
+            />
+          </Field>
+
+          <div className="field-grid">
+            <Field label="Severity">
+              <Select
+                aria-label="Incident severity"
+                title="How bad the effect is. Unsure? Pick the higher one."
+                value={severity}
                 disabled={isSaving}
-                onChange={(event) => setTitle(event.target.value)}
-              />
-            </div>
-
-            <div className="issue-panel__section">
-              <label className="issue-panel__label" htmlFor="report-incident-impact">
-                Impact
-              </label>
-              <textarea
-                id="report-incident-impact"
-                aria-label="Incident impact"
-                className="issue-panel__textarea"
-                placeholder="Who or what is affected, how, since when…"
-                value={impact}
-                disabled={isSaving}
-                onChange={(event) => setImpact(event.target.value)}
-              />
-            </div>
-
-            <div className="issue-panel__section">
-              <label className="field-stack">
-                <span>Severity</span>
-                <select
-                  aria-label="Incident severity"
-                  title="How bad the effect is. Unsure? Pick the higher one."
-                  value={severity}
-                  disabled={isSaving}
-                  onChange={(event) => setSeverity(event.target.value as IssueSeverity | '')}
-                >
-                  <option value="" disabled>
-                    Choose a severity
+                onChange={(event) => setSeverity(event.target.value as IssueSeverity | '')}
+              >
+                <option value="" disabled>
+                  Choose a severity
+                </option>
+                {SEVERITY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value} title={option.description}>
+                    {option.label}
                   </option>
-                  {SEVERITY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value} title={option.description}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+                ))}
+              </Select>
+            </Field>
+          </div>
 
-            <div className="issue-panel__section">
-              <PlacementPicker
-                projects={projects}
-                value={placement}
-                source={placementSource}
-                disabled={isSaving}
-                onChange={(next) => {
-                  setPlacement(next);
-                  setPlacementSource(null);
-                }}
-              />
-            </div>
+          <PlacementPicker
+            projects={projects}
+            value={placement}
+            source={placementSource}
+            disabled={isSaving}
+            onChange={(next) => {
+              setPlacement(next);
+              setPlacementSource(null);
+            }}
+          />
 
-            {extraLabels.length > 0 ? (
-              <div className="issue-panel__section">
-                <span className="issue-panel__label">Labels</span>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {extraLabels.map((label) => (
-                    <label
-                      key={label.id}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedLabelIds.includes(label.id)}
-                        disabled={isSaving}
-                        onChange={() => toggleLabel(label.id)}
-                        aria-label={label.name}
-                      />
-                      {label.name}
-                    </label>
-                  ))}
-                </div>
+          {extraLabels.length > 0 ? (
+            <div className="field">
+              <span className="field__label">Labels</span>
+              <div className="checkbox-group">
+                {extraLabels.map((label) => (
+                  <Checkbox
+                    key={label.id}
+                    label={label.name}
+                    checked={selectedLabelIds.includes(label.id)}
+                    disabled={isSaving}
+                    onChange={() => toggleLabel(label.id)}
+                    aria-label={label.name}
+                  />
+                ))}
               </div>
-            ) : null}
-
-            {errorMessage ? (
-              <p role="alert" style={{ color: 'var(--fg-danger, #e5484d)', fontSize: 13 }}>
-                {errorMessage}
-              </p>
-            ) : null}
-
-            <button type="submit" className="ui-action ui-action--accent" disabled={!canSubmit}>
-              {isSaving ? 'Reporting…' : 'Report incident'}
-            </button>
-          </form>
-        )}
-      </section>
-    </aside>
+            </div>
+          ) : null}
+        </>
+      )}
+    </DialogShell>
   );
 }
