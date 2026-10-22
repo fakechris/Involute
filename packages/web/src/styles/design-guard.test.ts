@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 
 const SRC = join(__dirname, '..');
 
-const STYLESHEETS = ['styles/app.css', 'styles/controls.css', 'styles/layout.css', 'styles/in-review.css', 'components/delivery.css'];
+const STYLESHEETS = ['styles/app.css', 'styles/controls.css', 'styles/layout.css', 'styles/in-review.css', 'styles/content.css', 'components/delivery.css'];
 
 /**
  * Class tokens that may appear in TSX without a stylesheet rule.
@@ -55,6 +55,8 @@ const LOCAL_CUSTOM_PROPERTIES = new Set<string>([
   '--severity-tone',
   // Set inline by DataTable from its column widths and read by .data-table.
   '--data-table-columns',
+  // Set inline by MarkdownRenderer from its clamp prop and read by .markdown-content__body--clamped.
+  '--markdown-clamp',
 ]);
 
 /**

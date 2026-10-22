@@ -1,0 +1,206 @@
+/*
+ * Content presentation (INV-1315, docs/design-system.md §3 rules 6–9):
+ * rendered markdown, the one list row, and the Badge chip.
+ */
+
+/* ============================================================== */
+/* Markdown rendered content                                       */
+/* ============================================================== */
+
+.markdown-content {
+  font-size: 15px;
+  line-height: 1.6;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Inside cards, panels and lists. */
+.markdown-content--sm {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.markdown-content p,
+.markdown-content ul,
+.markdown-content ol,
+.markdown-content blockquote,
+.markdown-content hr,
+.markdown-content .markdown-content__table {
+  margin: 0 0 8px;
+}
+
+.markdown-content > :last-child,
+.markdown-content__body > :last-child,
+.markdown-content blockquote > :last-child,
+.markdown-content li > :last-child {
+  margin-bottom: 0;
+}
+
+/* Headings are card-sized: they never compete with the page title. */
+.markdown-content__h1,
+.markdown-content__h2,
+.markdown-content__h3,
+.markdown-content__h4 {
+  margin: 14px 0 6px;
+  color: var(--fg);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.markdown-content__h1 { font-size: 16px; }
+.markdown-content__h2 { font-size: 14px; }
+.markdown-content__h3 { font-size: 13px; }
+
+.markdown-content__h4 {
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.markdown-content > .markdown-content__h1:first-child,
+.markdown-content > .markdown-content__h2:first-child,
+.markdown-content > .markdown-content__h3:first-child,
+.markdown-content > .markdown-content__h4:first-child,
+.markdown-content__body > :first-child {
+  margin-top: 0;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  padding-left: 20px;
+}
+
+.markdown-content li + li {
+  margin-top: 2px;
+}
+
+.markdown-content li > ul,
+.markdown-content li > ol {
+  margin: 2px 0 0;
+}
+
+.markdown-content__task {
+  list-style: none;
+  margin-left: -18px;
+}
+
+.markdown-content__task > input[type="checkbox"] {
+  margin: 0 6px 0 0;
+  vertical-align: -1px;
+  accent-color: var(--accent);
+}
+
+.markdown-content blockquote {
+  padding: 2px 0 2px 10px;
+  border-left: 2px solid var(--border-strong);
+  color: var(--fg-dim);
+}
+
+.markdown-content hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+}
+
+.markdown-content__table {
+  overflow-x: auto;
+}
+
+.markdown-content table {
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+.markdown-content th,
+.markdown-content td {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-content th {
+  background: var(--bg-hover);
+  font-weight: 600;
+}
+
+.markdown-content strong {
+  font-weight: 600;
+}
+
+.markdown-content em {
+  font-style: italic;
+}
+
+.markdown-content code {
+  background: var(--bg-hover);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.93em;
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+}
+
+.markdown-content pre {
+  background: var(--bg-hover);
+  padding: 12px;
+  border-radius: var(--r-2);
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  margin: 0 0 8px;
+}
+
+.markdown-content pre code {
+  background: transparent;
+  padding: 0;
+  border: none;
+  font-size: 0.93em;
+  color: var(--fg);
+}
+
+.markdown-content a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-content a:hover {
+  opacity: 0.85;
+}
+
+.markdown-content img {
+  max-width: 100%;
+  border-radius: var(--r-2);
+  margin: 8px 0;
+  display: block;
+}
+
+.markdown-content video {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+  margin: 4px 0;
+}
+
+/* Clamped in list contexts; --markdown-clamp is the line count. */
+.markdown-content__body--clamped {
+  max-height: calc(var(--markdown-clamp, 6) * 1lh);
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, black calc(100% - 1.5lh), transparent);
+}
+
+.markdown-content__toggle {
+  margin-top: 4px;
+}
+
+/* @handle inside a comment body links to that agent's page (INV-573). */
+.markdown-mention {
+  font-weight: 500;
+  color: var(--accent, var(--fg));
+  text-decoration: none;
+  border-bottom: 1px solid currentColor;
+}
+
+.markdown-mention:hover {
+  opacity: 0.8;
+}

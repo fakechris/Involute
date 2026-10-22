@@ -3809,67 +3809,6 @@ kbd {
   border-color: var(--accent-border);
 }
 
-/* ============================================================== */
-/* Markdown rendered content                                       */
-/* ============================================================== */
-
-.markdown-content {
-  font-size: 15px;
-  line-height: 1.6;
-}
-
-.markdown-content strong {
-  font-weight: 600;
-}
-
-.markdown-content em {
-  font-style: italic;
-}
-
-.markdown-content code {
-  background: var(--bg-hover);
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-family: var(--font-mono);
-  font-size: 14px;
-  border: 1px solid var(--border);
-  color: var(--fg-muted);
-}
-
-.markdown-content pre {
-  background: var(--bg-hover);
-  padding: 12px;
-  border-radius: var(--r-2);
-  overflow-x: auto;
-  border: 1px solid var(--border);
-  margin: 8px 0;
-}
-
-.markdown-content pre code {
-  background: transparent;
-  padding: 0;
-  border: none;
-  font-size: 14px;
-  color: var(--fg);
-}
-
-.markdown-content a {
-  color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.markdown-content a:hover {
-  opacity: 0.85;
-}
-
-.markdown-content img {
-  max-width: 100%;
-  border-radius: var(--r-2);
-  margin: 8px 0;
-  display: block;
-}
-
 .upload-indicator {
   display: inline-flex;
   align-items: center;
@@ -4904,18 +4843,6 @@ kbd {
 .mention-suggest__detail {
   font-size: 11px;
   color: var(--fg-dim);
-}
-
-/* @handle inside a comment body links to that agent's page (INV-573). */
-.markdown-mention {
-  font-weight: 500;
-  color: var(--accent, var(--fg));
-  text-decoration: none;
-  border-bottom: 1px solid currentColor;
-}
-
-.markdown-mention:hover {
-  opacity: 0.8;
 }
 
 /* Decision receipt on an audit entry (INV-588). Rendered as a claim. */
