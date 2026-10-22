@@ -9,7 +9,8 @@ import { DELIVERY_DECIDE_MUTATION, DeliveryChangeQueue } from '../components/Del
 import { HumanReviewSection } from '../components/HumanReviewSection';
 import { PageBody, PageHeader } from '../components/layout';
 import { Btn } from '../components/Primitives';
-import { BulkActionBar, EmptyState, InlineError, LoadingState, SegmentedControl } from '../components/status';
+import { ListRow } from '../components/list';
+import { Badge, BulkActionBar, EmptyState, InlineError, LoadingState, SegmentedControl } from '../components/status';
 import { RespondToAgent } from '../components/RespondToAgent';
 import { useListKeys } from '../components/useListKeys';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
@@ -541,36 +542,36 @@ export function AttentionPage() {
                             {!isGroupCollapsed ? (
                               <ul className={hasParentHeader || isSectionParent ? 'attention-group__children' : undefined}>
                                 {group.items.map((item) => (
-                                  <li
+                                  <ListRow
                                     key={item.id}
                                     data-list-key-id={item.id}
                                     aria-current={focused?.id === item.id ? 'true' : undefined}
-                                    className={`attention-row${hasParentHeader || isSectionParent ? ' attention-row--child' : ''}${focused?.id === item.id ? ' attention-row--focused' : ''}${item.overdue ? ' attention-row--overdue' : ''}`}
+                                    current={focused?.id === item.id}
+                                    alert={item.overdue}
                                     onClick={() => listKeys.setFocusedId(item.id)}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      aria-label={`Select ${item.work?.identifier ?? item.reason}`}
-                                      checked={selectedIds.includes(item.id)}
-                                      onClick={(event) => event.stopPropagation()}
-                                      onChange={() => setSelectedIds((current) => (current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id]))}
-                                    />
-                                    <span className="attention-row__text">
-                                      <span className="attention-row__title">
-                                        {item.work ? <span className="mono">{item.work.identifier}</span> : null}{' '}
-                                        <span className="attention-row__title-text" title={item.work?.title ?? item.reason}>{item.work?.title ?? item.reason}</span>
-                                      </span>
-                                      <span className="attention-row__meta">
-                                        <span className="attention-row__reason" title={item.reason}>{item.reason}</span>
-                                        {item.unblocked ? <span className="attention-row__flag attention-row__flag--ready">What blocked it is done</span> : null}
+                                    leading={
+                                      <input
+                                        type="checkbox"
+                                        aria-label={`Select ${item.work?.identifier ?? item.reason}`}
+                                        checked={selectedIds.includes(item.id)}
+                                        onClick={(event) => event.stopPropagation()}
+                                        onChange={() => setSelectedIds((current) => (current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id]))}
+                                      />
+                                    }
+                                    id={item.work?.identifier}
+                                    title={item.work?.title ?? item.reason}
+                                    meta={<span title={new Date(item.since).toLocaleString()}>{formatWait(item.since)}</span>}
+                                    detail={
+                                      <>
+                                        <span className="list-row__note" title={item.reason}>{item.reason}</span>
+                                        {item.unblocked ? <Badge tone="accent">What blocked it is done</Badge> : null}
                                         {(item.waitingOn ?? []).length > 0 ? (
-                                          <span className="attention-row__flag">Waiting on {(item.waitingOn ?? []).map((blocker) => blocker.identifier).join(', ')}</span>
+                                          <Badge>Waiting on {(item.waitingOn ?? []).map((blocker) => blocker.identifier).join(', ')}</Badge>
                                         ) : null}
-                                        {item.overdue ? <span className="attention-row__flag attention-row__flag--overdue">Overdue</span> : null}
-                                      </span>
-                                    </span>
-                                    <span className="observation-card__meta" title={new Date(item.since).toLocaleString()}>{formatWait(item.since)}</span>
-                                  </li>
+                                        {item.overdue ? <Badge tone="danger">Overdue</Badge> : null}
+                                      </>
+                                    }
+                                  />
                                 ))}
                               </ul>
                             ) : null}

@@ -6,8 +6,43 @@ import { Btn } from '../Primitives';
 /**
  * State displays (docs/design-system.md §3 rule 7, INV-1314): one empty state,
  * one loading line, one inline error, one stat tile, one segmented control and
- * one bulk action bar. Styles: styles/layout.css.
+ * one bulk action bar. Styles: styles/layout.css. Badge (INV-1315): styles/content.css.
  */
+
+export type BadgeTone = 'neutral' | 'accent' | 'success' | 'warn' | 'danger';
+
+export interface BadgeProps {
+  children: ReactNode;
+  /** neutral (default): hairline chip; the others tint text and border. */
+  tone?: BadgeTone | undefined;
+  /** Monospace: team keys, severities, identifiers. */
+  mono?: boolean | undefined;
+  title?: string | undefined;
+  /** Makes the chip a button (e.g. "contract change proposed" opens the contract). */
+  onClick?: (() => void) | undefined;
+}
+
+/**
+ * The one small chip for a kind, state, team key or flag (docs/design-system.md
+ * §3 rule 7). Never wraps, never shrinks.
+ */
+export function Badge({ children, tone = 'neutral', mono = false, title, onClick }: BadgeProps) {
+  const className = ['badge', tone === 'neutral' ? null : `badge--${tone}`, mono ? 'badge--mono' : null, onClick ? 'badge--action' : null]
+    .filter(Boolean)
+    .join(' ');
+  if (onClick) {
+    return (
+      <button type="button" className={className} title={title} onClick={onClick}>
+        {children}
+      </button>
+    );
+  }
+  return (
+    <span className={className} title={title}>
+      {children}
+    </span>
+  );
+}
 
 export interface EmptyStateProps {
   /** Glyph in a 40px tile above the title (block size only). */

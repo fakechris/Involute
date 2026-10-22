@@ -1,6 +1,5 @@
 import { useQuery } from '@apollo/client/react';
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 import { INCIDENTS_PAGE_QUERY } from '../board/queries';
 import { severityLabel } from '../board/severity';
@@ -8,6 +7,7 @@ import type { IncidentsPageQueryData, IncidentsPageQueryVariables, IncidentSumma
 import { readStoredTeamKey } from '../board/utils';
 import { formatImpactDuration } from '../components/IncidentTimesPanel';
 import { IcoBell } from '../components/Icons';
+import { IssueRow } from '../components/list';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { Btn } from '../components/Primitives';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
@@ -38,7 +38,6 @@ function postmortemText(item: IncidentSummaryData['incidents'][number]): string 
  * and period comparisons would mislead (decision INV-1130).
  */
 export function IncidentsPage() {
-  const navigate = useNavigate();
   const teamKey = readStoredTeamKey();
   const { data, error, loading, refetch } = useQuery<IncidentsPageQueryData, IncidentsPageQueryVariables>(INCIDENTS_PAGE_QUERY, {
     variables: teamKey ? { teamFilter: { key: { eq: teamKey } } } : {},
@@ -202,10 +201,7 @@ export function IncidentsPage() {
                   {visibleIncidents.map((item) => (
                     <tr key={item.id} data-testid={`incident-${item.identifier}`}>
                       <td>
-                        <button type="button" className="hygiene-item" onClick={() => navigate(`/issue/${encodeURIComponent(item.identifier)}`)}>
-                          <span className="mono">{item.identifier}</span>
-                          <span className="hygiene-item__title">{item.title}</span>
-                        </button>
+                        <IssueRow as="div" variant="compact" issue={item} />
                       </td>
                       <td>{severityLabel(item.severity)}</td>
                       <td>{item.ongoing ? `Ongoing · ${formatImpactDuration(item.impactHours * HOUR_MS)}` : formatImpactDuration(item.impactHours * HOUR_MS)}</td>

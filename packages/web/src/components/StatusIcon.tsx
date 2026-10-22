@@ -22,7 +22,28 @@ export function getStatusKind(stateName: string): StatusKind {
   return 'unstarted';
 }
 
-/** The one place status colours are defined (docs/design-system.md §3 rule 9). */
+/** Workflow state type (BACKLOG, UNSTARTED, STARTED, REVIEW, COMPLETED, CANCELED) to its status kind. */
+export function statusKindForStateType(stateType: string): StatusKind {
+  switch (stateType.toUpperCase()) {
+    case 'BACKLOG':
+      return 'backlog';
+    case 'STARTED':
+      return 'started';
+    case 'REVIEW':
+      return 'review';
+    case 'COMPLETED':
+      return 'completed';
+    case 'CANCELED':
+      return 'canceled';
+    default:
+      return 'unstarted';
+  }
+}
+
+/**
+ * The one place status colours are defined (docs/design-system.md §3 rule 9).
+ * The graph, My Issues, Cycles and Projects read their status hues from here.
+ */
 export function getStatusColorVar(kind: StatusKind): string {
   switch (kind) {
     case 'backlog':
@@ -44,11 +65,13 @@ export function getStatusColorVar(kind: StatusKind): string {
 
 interface StatusIconProps {
   stateName: string;
+  /** When known, the state type decides the glyph; otherwise the name is guessed from. */
+  stateType?: string | undefined;
   size?: number;
 }
 
-export function StatusIcon({ stateName, size = 14 }: StatusIconProps) {
-  const kind = getStatusKind(stateName);
+export function StatusIcon({ stateName, stateType, size = 14 }: StatusIconProps) {
+  const kind = stateType ? statusKindForStateType(stateType) : getStatusKind(stateName);
   const color = getStatusColorVar(kind);
   const radius = 5.5;
   const center = 7;

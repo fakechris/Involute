@@ -51,9 +51,9 @@ describe('MyIssuesPage (INV-1314)', () => {
     );
     expect(screen.getByRole('heading', { level: 1, name: 'My Issues' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Project: acme/web' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Open issue INV-1' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Open issue INV-2' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Open issue INV-3' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Open issue INV-1' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Open issue INV-2' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Open issue INV-3' })).toBeNull();
     expect(screen.getByLabelText('Filter by state')).toHaveValue('');
   });
 

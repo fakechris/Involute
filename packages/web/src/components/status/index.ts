@@ -1,4 +1,5 @@
 export {
+  Badge,
   BulkActionBar,
   EmptyState,
   InlineError,
@@ -6,6 +7,8 @@ export {
   SegmentedControl,
   StatRow,
   StatTile,
+  type BadgeProps,
+  type BadgeTone,
   type BulkActionBarProps,
   type EmptyStateProps,
   type InlineErrorProps,

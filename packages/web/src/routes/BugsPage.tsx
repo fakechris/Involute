@@ -1,7 +1,7 @@
 import { RESOLUTION_OPTIONS } from '../components/CloseReasonDialog';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@apollo/client/react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 import { BUGS_PAGE_QUERY, ISSUE_UPDATE_MUTATION } from '../board/queries';
 import { severityLabel } from '../board/severity';
@@ -19,11 +19,12 @@ import { fetchSessionState } from '../lib/session';
 import { readStoredTeamKey } from '../board/utils';
 import { IcoBug } from '../components/Icons';
 import { FixedBetweenDeploys } from '../components/FixedBetweenDeploys';
+import { IssueRow, ListRow } from '../components/list';
 import { Btn, PriorityIcon } from '../components/Primitives';
 import { Select } from '../components/controls';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
-import { EmptyState, InlineError, LoadingState, StatRow, StatTile } from '../components/status';
+import { Badge, EmptyState, InlineError, LoadingState, StatRow, StatTile } from '../components/status';
 import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam, NO_REPOSITORY_OPTIONS } from './work-filter-match';
 
@@ -177,7 +178,7 @@ export function BugsPage() {
               <StatTile value={formatAge(summary.avgOpenAgeDays)} label="Avg open age (days)" />
             </StatRow>
 
-            {summary.metrics ? <BugTriageMetrics metrics={summary.metrics} onOpen={(id) => navigate(`/issue/${id}`)} /> : null}
+            {summary.metrics ? <BugTriageMetrics metrics={summary.metrics} /> : null}
 
             <FixedBetweenDeploys repositories={summary.byRepository.flatMap((row) => (row.repository ? [row.repository] : []))} />
 
@@ -272,11 +273,15 @@ export function BugsPage() {
                       {(summary.mostDuplicated ?? []).map((bug) => (
                         <tr key={bug.id}>
                           <td>
-                            <button type="button" className="hygiene-item" title="Often reported again: consider raising its priority" onClick={() => navigate(`/issue/${bug.id}`)}>
-                              <PriorityIcon level={bug.priority} size={12} />
-                              <span className="mono">{bug.identifier}</span>
-                              <span className="hygiene-item__title">{bug.title}</span>
-                            </button>
+                            <ListRow
+                              as="div"
+                              variant="compact"
+                              rowTitle="Often reported again: consider raising its priority"
+                              leading={<PriorityIcon level={bug.priority} size={12} />}
+                              id={bug.identifier}
+                              title={bug.title}
+                              to={`/issue/${encodeURIComponent(bug.identifier)}`}
+                            />
                           </td>
                           <td className="mono">{bug.duplicateCount}</td>
                         </tr>
@@ -312,7 +317,7 @@ export function BugsPage() {
               ) : visibleBugs.length === 0 ? (
                 <p className="bugs-panel__empty">No open bug matches these filters.</p>
               ) : (
-                <ul className="bugs-list" aria-label="Open bugs list">
+                <ul className="list-rows" aria-label="Open bugs list">
                   {visibleBugs.map((issue) => (
                     <BugRow
                       key={issue.id}
@@ -349,7 +354,7 @@ function formatHours(hours: number | null): string {
 }
 
 /** Bug route v1 health (INV-751): how fast bugs are triaged and fixed, and where they come from. */
-function BugTriageMetrics({ metrics, onOpen }: { metrics: BugMetricsData; onOpen: (id: string) => void }) {
+function BugTriageMetrics({ metrics }: { metrics: BugMetricsData }) {
   const slaClosed = metrics.slaMetCount + metrics.slaBreachedClosedCount;
   return (
     <>
@@ -394,15 +399,14 @@ function BugTriageMetrics({ metrics, onOpen }: { metrics: BugMetricsData; onOpen
           {metrics.breachedOpen.length === 0 ? (
             <p className="bugs-panel__empty">None — every open bug is within its SLA.</p>
           ) : (
-            <ul className="bugs-breaches">
+            <ul className="list-rows">
               {metrics.breachedOpen.map((bug) => (
-                <li key={bug.id}>
-                  <button type="button" className="hygiene-item" onClick={() => onOpen(bug.id)}>
-                    <span className="mono">{bug.identifier}</span>
-                    <span className="hygiene-item__title">{bug.title}</span>
-                  </button>
-                  <span className="bugs-breaches__overdue">{formatHours(bug.overdueHours)} over</span>
-                </li>
+                <IssueRow
+                  key={bug.id}
+                  issue={bug}
+                  alert
+                  meta={<Badge tone="danger">{formatHours(bug.overdueHours)} over</Badge>}
+                />
               ))}
             </ul>
           )}
@@ -524,47 +528,49 @@ export function BugRow({
 
   const mine = Boolean(viewerId && issue.assignee?.id === viewerId);
   return (
-    <li className={`bugs-list__item${focused ? ' bugs-list__item--focused' : ''}`} data-list-key-id={issue.id} aria-current={focused ? 'true' : undefined}>
-      <PriorityIcon level={issue.priority} size={12} />
-      <Link className="mono bugs-list__identifier" to={`/issue/${encodeURIComponent(issue.identifier)}`}>
-        {issue.identifier}
-      </Link>
-      <Link className="bugs-list__title" to={`/issue/${encodeURIComponent(issue.identifier)}`}>
-        {issue.title}
-      </Link>
-      {issue.severity ? <span className="bugs-list__meta mono" title={severityLabel(issue.severity)}>{issue.severity}</span> : null}
-      <Select
-        size="sm"
-        aria-label={`Status of ${issue.identifier}`}
-        value={issue.state.id}
-        disabled={saving || states.length === 0}
-        onChange={(event) => void update({ stateId: event.target.value })}
-      >
-        {(states.length ? states : [issue.state]).map((state) => (
-          <option key={state.id} value={state.id}>{state.name}</option>
-        ))}
-      </Select>
-      <Select
-        size="sm"
-        aria-label={`Priority of ${issue.identifier}`}
-        value={issue.priority}
-        disabled={saving}
-        onChange={(event) => void update({ priority: Number(event.target.value) })}
-      >
-        {issue.priority === 0 ? <option value={0}>No priority</option> : null}
-        {PRIORITIES.map(([value, label]) => (
-          <option key={value} value={value}>{label}</option>
-        ))}
-      </Select>
-      {mine ? (
-        <span className="bugs-list__meta">Yours</span>
-      ) : (
-        <Btn variant="ghost" disabled={saving || !viewerId} onClick={() => void update({ assigneeId: viewerId })}>
-          Assign to me
-        </Btn>
-      )}
-      <span className="bugs-list__meta mono">{issue.repository ?? 'No project'}</span>
-      {error ? <InlineError>{error}</InlineError> : null}
-    </li>
+    <IssueRow
+      issue={issue}
+      current={focused}
+      aria-current={focused ? 'true' : undefined}
+      data-list-key-id={issue.id}
+      showStatus={false}
+      showProject
+      meta={issue.severity ? <Badge mono title={severityLabel(issue.severity)}>{issue.severity}</Badge> : null}
+      detail={error ? <InlineError>{error}</InlineError> : null}
+      trailing={
+        <>
+          <Select
+            size="sm"
+            aria-label={`Status of ${issue.identifier}`}
+            value={issue.state.id}
+            disabled={saving || states.length === 0}
+            onChange={(event) => void update({ stateId: event.target.value })}
+          >
+            {(states.length ? states : [issue.state]).map((state) => (
+              <option key={state.id} value={state.id}>{state.name}</option>
+            ))}
+          </Select>
+          <Select
+            size="sm"
+            aria-label={`Priority of ${issue.identifier}`}
+            value={issue.priority}
+            disabled={saving}
+            onChange={(event) => void update({ priority: Number(event.target.value) })}
+          >
+            {issue.priority === 0 ? <option value={0}>No priority</option> : null}
+            {PRIORITIES.map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </Select>
+          {mine ? (
+            <Badge tone="accent">Yours</Badge>
+          ) : (
+            <Btn variant="ghost" disabled={saving || !viewerId} onClick={() => void update({ assigneeId: viewerId })}>
+              Assign to me
+            </Btn>
+          )}
+        </>
+      }
+    />
   );
 }

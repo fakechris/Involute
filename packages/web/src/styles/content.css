@@ -204,3 +204,320 @@
 .markdown-mention:hover {
   opacity: 0.8;
 }
+
+/* ============================================================== */
+/* ListRow / IssueRow (components/list/ListRow.tsx)                */
+/* ============================================================== */
+
+.list-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: var(--r-2);
+  font-size: 14px;
+  color: var(--fg);
+  list-style: none;
+}
+
+.list-row:hover,
+.list-row.is-current {
+  background: var(--bg-hover);
+}
+
+.list-row.is-current {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+/* Full-width page list (My Issues, Activity): one hairline per row. */
+.list-row--divided {
+  min-height: var(--row-h);
+  padding: 0 var(--pad-x, var(--content-gutter));
+  border-radius: 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.list-row--divided.list-row--multiline {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.list-row.is-unread {
+  background: var(--bg-raised);
+}
+
+.list-row.is-unread:hover {
+  background: var(--bg-hover);
+}
+
+/* An inline reference: a table cell, "A mentions B". */
+.list-row--compact {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 0;
+  border-radius: 0;
+  vertical-align: baseline;
+}
+
+.list-row--compact:hover {
+  background: transparent;
+}
+
+.list-row--compact .list-row__main:hover .list-row__title {
+  text-decoration: underline;
+}
+
+.list-row--multiline {
+  align-items: flex-start;
+}
+
+.list-row__leading,
+.list-row__trailing {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.list-row--multiline .list-row__leading {
+  margin-top: 2px;
+}
+
+.list-row__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.list-row__line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.list-row__main {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+}
+
+.list-row--compact .list-row__main {
+  flex: 0 1 auto;
+}
+
+button.list-row__main {
+  cursor: pointer;
+}
+
+/* The open link covers the row; controls in trailing and detail sit above it. */
+.list-row--opens .list-row__main::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.list-row--opens {
+  cursor: pointer;
+}
+
+.list-row__trailing,
+.list-row__detail a,
+.list-row__detail button,
+.list-row__detail select {
+  position: relative;
+  z-index: 1;
+}
+
+.list-row__id {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+
+.list-row.is-alert .list-row__id {
+  color: var(--danger);
+}
+
+.list-row__title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-row__meta {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+
+.list-row__state {
+  color: var(--fg-muted);
+}
+
+.list-row__age {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.list-row__detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.list-row__detail mark,
+.list-row__title mark {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: inherit;
+  border-radius: 2px;
+}
+
+/* A list of ListRows. */
+.list-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ============================================================== */
+/* Badge (components/status/Status.tsx)                            */
+/* ============================================================== */
+
+.badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+
+.badge--mono {
+  font-family: var(--font-mono);
+}
+
+.badge--accent {
+  border-color: var(--accent-border);
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+.badge--success {
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+  background: var(--success-weak);
+  color: var(--success);
+}
+
+.badge--warn {
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  color: var(--warn);
+}
+
+.badge--danger {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  background: var(--danger-weak);
+  color: var(--danger);
+}
+
+.badge--action {
+  cursor: pointer;
+}
+
+.badge--action:hover {
+  border-color: var(--border-strong);
+}
+
+.list-rows--divided {
+  gap: 0;
+}
+
+/* A search snippet under the row (was .search-result__snippet). */
+.list-row__snippet {
+  font-size: 13px;
+  color: var(--fg-dim);
+  white-space: normal;
+}
+
+.list-row__meta a,
+.list-row__meta button {
+  position: relative;
+  z-index: 1;
+}
+
+/* One muted line under the title that ellipsizes (Needs you reason). */
+.list-row__note {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-row__detail:has(> .list-row__note) {
+  flex-wrap: nowrap;
+}
+
+/* Needs you: a child row under a parent pack hangs off its rail (INV-1302). */
+.attention-group__children > .list-row::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 15px;
+  width: 4px;
+  height: 1px;
+  background: var(--border-strong);
+}
+
+/* Activity rows (InboxPage): type, then the item's title. */
+.inbox-item__type {
+  font-weight: 500;
+}
+
+.inbox-item__issue {
+  margin-left: 6px;
+  color: var(--fg-muted);
+}
+
+.list-row__detail > .inbox-item__details,
+.list-row__detail > .inbox-item__summary {
+  flex-basis: 100%;
+}
