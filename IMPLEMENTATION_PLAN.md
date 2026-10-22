@@ -196,17 +196,17 @@ Design: `docs/design-system.md`（规则 §3、原语目录 §4、审计证据 �
 ## Stage 1: 基础修复 + 守卫 — INV-1312
 **Goal**: 工单号永不折行；未定义类与 token 全部补齐或映射；Graph 节点裁剪；Needs you 父子行一套样式；design-guard 进 CI。
 **Success Criteria**: 截图中 Bugs / Health / Issue / Work / Needs you / Graph 的折行与重叠消失；`design-guard.test.ts` 全绿且能拦住新加的未定义 className；web test / typecheck exit 0。
-**Status**: In Progress
+**Status**: Complete — PR #255 merged 85a779c
 
 ## Stage 2: 控件与对话框 — INV-1313
 **Goal**: Field / TextInput / TextArea / Select / Checkbox + class-based Btn + DialogShell + DataTable；四个对话框与全部 Settings 表格迁移。
 **Success Criteria**: 裸 `<select` 为 0；`inputStyle` 常量为 0；Report bug 字段有统一间距与 footer；Members 的 actions 列对齐；web test / typecheck exit 0。
-**Status**: In Progress
+**Status**: Complete — PR #256 merged 4d9906a
 
 ## Stage 3: 页面骨架与筛选 — INV-1314
 **Goal**: PageHeader / PageToolbar / PageBody；六个列表页筛选区同一顺序同一缩进；BulkActionBar / SegmentedControl / StatTile / EmptyState 各一种。
 **Success Criteria**: 无自建 header；内联 style < 300；现有 Board / Backlog / In Review / Candidates 测试与 e2e 通过。
-**Status**: Not Started
+**Status**: In Progress — PR #TBD
 
 ## Stage 4: 内容呈现 — INV-1315
 **Goal**: MarkdownRenderer 块级语法并接入七处裸文本面板；ListRow 收敛工单行；Projects / Cycles / Views 卡片改 Card。

@@ -92,7 +92,7 @@ export function SearchPage() {
   const hits = query.trim() ? results.data?.search ?? [] : [];
 
   return (
-    <div className="observation-page search-page">
+    <div className="observation-page">
       <PageHeader title="Search" hint="Titles, descriptions, contracts and comments · every word must match" />
       <PageToolbar
         aria-label="Search filters"

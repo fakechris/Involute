@@ -591,13 +591,6 @@ select.control--ghost:focus-visible {
   padding: 12px;
 }
 
-.settings-shell__title {
-  padding: 6px 8px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--fg-dim);
-}
-
 .settings-shell__group + .settings-shell__group {
   margin-top: 8px;
 }

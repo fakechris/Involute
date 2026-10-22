@@ -96,9 +96,8 @@ export function ContractSection({
 
   return (
     <section ref={sectionRef} className="issue-panel__section contract-section" id="contract" aria-label="Contract">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <h2 style={{ margin: 0 }}>Contract</h2>
-        <div style={{ flex: 1 }} />
+      <div className="contract-section__head">
+        <h2 className="contract-section__title">Contract</h2>
         {editing ? null : (
           <button type="button" className="ui-action ui-action--subtle" onClick={() => setEditing(true)}>
             {missingAcceptance ? 'Add acceptance' : 'Edit contract'}

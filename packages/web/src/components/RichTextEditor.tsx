@@ -422,7 +422,7 @@ export function RichTextEditor({
           ref={fileInputRef}
           type="file"
           multiple
-          style={{ display: 'none' }}
+          hidden
           accept="image/jpeg,image/png,image/gif,image/webp,*/*"
           onChange={(e) => {
             if (e.target.files && e.target.files.length > 0) {
@@ -431,7 +431,7 @@ export function RichTextEditor({
             }
           }}
         />
-        <div style={{ flex: 1 }} />
+        <div className="rich-text__trail">
         {uploadingCount > 0 ? (
           <span className="upload-indicator">
             ↑ Uploading {uploadingCount} file{uploadingCount > 1 ? 's' : ''}…
@@ -439,7 +439,7 @@ export function RichTextEditor({
         ) : null}
 {hideSubmit ? null : (
           <>
-        <span style={{ fontSize: 12, color: 'var(--fg-dim)', marginRight: 4 }}>
+        <span className="rich-text__hint">
           <Kbd keys={['⌘', '↵']} /> to submit
         </span>
         <button
@@ -462,6 +462,7 @@ export function RichTextEditor({
         </button>
           </>
         )}
+        </div>
       </div>
     </div>
       {mention.query !== null && mention.matches.length > 0 ? (
