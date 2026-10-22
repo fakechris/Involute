@@ -1,9 +1,12 @@
+import { Btn } from './Primitives';
+
 interface BoardLoadMoreNoticeProps {
   errorMessage: string | null;
   hasMoreIssues: boolean;
   isLoadingMoreIssues: boolean;
   loadedCount?: number | undefined;
   totalCount?: number | undefined;
+  /** What the total counts, e.g. "in this project" / "in this team". */
   scopeLabel?: string | undefined;
   onLoadMore: () => void;
 }
@@ -14,7 +17,7 @@ export function BoardLoadMoreNotice({
   isLoadingMoreIssues,
   loadedCount,
   totalCount,
-  scopeLabel = '全团队共',
+  scopeLabel = 'in this team',
   onLoadMore,
 }: BoardLoadMoreNoticeProps) {
   if (!hasMoreIssues && !errorMessage) {
@@ -24,27 +27,19 @@ export function BoardLoadMoreNotice({
   const noticeText = errorMessage
     ? errorMessage
     : loadedCount && totalCount
-      ? `当前已加载前 ${loadedCount} 条工单（${scopeLabel} ${totalCount} 条）。点击加载剩余工单：`
-      : '当前显示前一页工单。点击加载更多以继续浏览全量工单：';
+      ? `Showing the first ${loadedCount} of ${totalCount} issues ${scopeLabel}.`
+      : 'Showing the first page of issues.';
 
   return (
     <section
-      className={`shell-notice${errorMessage ? ' shell-notice--error' : ''}`}
+      className={errorMessage ? 'load-more-notice load-more-notice--error' : 'load-more-notice'}
       role={errorMessage ? 'alert' : undefined}
-      style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '6px 14px', margin: '0 var(--content-gutter)', flexShrink: 0 }}
     >
-      <p style={{ margin: 0, fontSize: 13 }}>
-        {noticeText}
-      </p>
+      <p className="load-more-notice__text">{noticeText}</p>
       {hasMoreIssues ? (
-        <button
-          type="button"
-          className="board-load-more__button"
-          disabled={isLoadingMoreIssues}
-          onClick={onLoadMore}
-        >
+        <Btn variant="subtle" disabled={isLoadingMoreIssues} onClick={onLoadMore}>
           {isLoadingMoreIssues ? 'Loading more issues…' : 'Load more issues'}
-        </button>
+        </Btn>
       ) : null}
     </section>
   );

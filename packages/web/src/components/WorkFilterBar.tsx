@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
-import { Select } from './controls';
+import { Select, TextInput } from './controls';
 
 /**
  * The filters a person reaches for when deciding a batch (INV-1077): type,
@@ -112,8 +112,10 @@ export function WorkFilterBar({
         <option value="me">Mine</option>
         <option value="none">Unassigned</option>
       </Select>
-      <input
+      <TextInput
         type="search"
+        size="sm"
+        className="work-filter-bar__search"
         aria-label="Filter by text"
         placeholder="Search title or description"
         defaultValue={filters.q}

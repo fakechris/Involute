@@ -3099,7 +3099,7 @@ export function BoardPage() {
         hasMoreIssues={hasMoreIssues}
         isLoadingMoreIssues={isLoadingMoreIssues}
         loadedCount={visibleIssues.length}
-        scopeLabel={rawProjectKey ? '当前项目共' : '全团队共'}
+        scopeLabel={rawProjectKey ? 'in this project' : 'in this team'}
         totalCount={
           rawProjectKey
             ? (availableProjects.find(

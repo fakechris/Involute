@@ -3915,58 +3915,9 @@ kbd {
   }
 }
 
-/* ============================================================== */
-/* Page scaffolding (shared by new pages)                          */
-/* ============================================================== */
-
-.page-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 44px;
-  padding: 0 var(--pad-x, var(--content-gutter));
-  border-bottom: 1px solid var(--border-subtle);
-  flex-shrink: 0;
-  position: relative;
-  z-index: 20;
-  overflow: visible;
-}
-
-/* Header pieces keep their size; only the title shrinks (INV-1312). */
-.page-header > .mono,
-.page-header > .observation-card__status,
-.page-header > .observation-card__meta {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
 .page-content {
   flex: 1;
   overflow: auto;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 40px;
-  text-align: center;
-  color: var(--fg-dim);
-}
-
-.empty-state h3 {
-  font-size: 17px;
-  font-weight: 500;
-  color: var(--fg);
-  margin: 0 0 8px;
-}
-
-.empty-state p {
-  font-size: 15px;
-  margin: 0;
-  max-width: 360px;
-  line-height: 1.5;
 }
 
 /* ============================================================== */
@@ -4334,17 +4285,6 @@ kbd {
   flex-direction: column;
   height: 100%;
   background: var(--bg);
-}
-
-.page-header__title {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 15px;
-  font-weight: 500;
-  margin: 0;
 }
 
 .observation-count {
@@ -6719,35 +6659,6 @@ a.bugs-stat {
   margin: 0 0 6px;
 }
 
-/* Shared batch-decision filters on /in-review and /candidates (INV-1077). */
-.work-filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  padding: 0 24px 8px;
-}
-.work-filter-bar select,
-.work-filter-bar input {
-  font: inherit;
-  font-size: 12px;
-  padding: 4px 8px;
-  border: 1px solid var(--border, #d0d4da);
-  border-radius: 6px;
-  background: var(--bg-raised);
-  color: inherit;
-}
-.work-filter-bar input {
-  min-width: 200px;
-}
-.work-filter-bar__clear {
-  font: inherit;
-  font-size: 12px;
-  background: none;
-  border: none;
-  color: var(--accent);
-  cursor: pointer;
-}
 
 /* Filters in effect while the bar is closed stay visible and clearable (INV-1086). */
 .board-filter-indicator {
