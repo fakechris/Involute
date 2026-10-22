@@ -107,11 +107,19 @@
 
 /* ---------- PageToolbar ---------- */
 
+/*
+ * One wrapping row of controls. The filters slot is `display: contents`, so
+ * each filter (search, selects, menus, chips, "Clear all") is a toolbar item
+ * and wraps on its own: "Clear all" stays after the last filter, and the view
+ * slot sits at the right end of the last filter row, or on a row of its own
+ * when it does not fit there. A wrapped slot used to take the whole width and
+ * leave a dead block beside it (INV-1311).
+ */
 .page-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 12px;
+  gap: 6px;
   padding: 6px var(--pad-x);
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg);
@@ -130,14 +138,16 @@
 
 .page-toolbar__projects {
   flex-shrink: 0;
+  margin-right: 6px;
 }
 
 .page-toolbar__filters {
-  flex: 0 1 auto;
+  display: contents;
 }
 
 .page-toolbar__view {
   margin-left: auto;
+  padding-left: 6px;
 }
 
 /* ---------- PageBody ---------- */
