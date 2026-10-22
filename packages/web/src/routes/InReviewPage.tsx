@@ -301,8 +301,10 @@ export function InReviewPage() {
             extraOptions={noRepoCount > 0 || selectedProject === NO_REPOSITORY ? [{ key: NO_REPOSITORY, label: 'No repository', count: noRepoCount }] : []}
           />
         }
-        filters={<WorkFilterBar {...workFilters} />}
-        view={
+        filters={
+          <>
+          <WorkFilterBar {...workFilters} />
+          {/* The IQL query narrows the list, so it flows with the filters (INV-1311). */}
           <div className="in-review-filter" role="group" aria-label="In Review filter">
             <span className="in-review-filter__label">
               <IcoFilter size={12} /> IQL / view
@@ -329,6 +331,7 @@ export function InReviewPage() {
             </Btn>
             <span className="page-note">Active: {activeIql}</span>
           </div>
+          </>
         }
       />
 
@@ -352,12 +355,13 @@ export function InReviewPage() {
         ) : items.length === 0 ? (
           <EmptyState title="No work in review" body="Completed agent runs land here until a human accepts or returns them." />
         ) : (
+          <div className="in-review-queue">
+          <div className="in-review-list-toolbar">
+            <Btn variant="ghost" size="sm" onClick={selectAllVisible} disabled={!items.some((item) => !item.deliveryRootId)}>
+              Select all visible
+            </Btn>
+          </div>
           <div className="observation-list" role="list" aria-label="In Review items">
-            <div className="in-review-list-toolbar">
-              <Btn variant="ghost" size="sm" onClick={selectAllVisible} disabled={!items.some((item) => !item.deliveryRootId)}>
-                Select all visible
-              </Btn>
-            </div>
             {items.map((item) => {
               const checked = selectedIdSet.has(item.id);
               return (
@@ -472,6 +476,7 @@ export function InReviewPage() {
                 {loadingMore ? 'Loading...' : 'Load more'}
               </Btn>
             ) : null}
+          </div>
           </div>
         )}
 

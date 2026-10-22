@@ -41,7 +41,7 @@ export interface PageToolbarProps {
   projects?: ReactNode | undefined;
   /** What narrows the list: `WorkFilterBar`, search, FilterMenus, chips. */
   filters?: ReactNode | undefined;
-  /** How the list is shown: sort, saved views, view switch, IQL. Right-aligned. */
+  /** How the list is shown: sort, saved views, view switch. Right-aligned on the last filter row. */
   view?: ReactNode | undefined;
   'aria-label'?: string | undefined;
 }
