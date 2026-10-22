@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
 
 import { readStoredTeamKey } from '../board/utils';
 import { IcoCheck, IcoClose, IcoFilter } from '../components/Icons';
@@ -414,19 +415,19 @@ export function InReviewPage() {
                     ) : null}
                   </header>
                   <h2 className="observation-card__title">{item.title}</h2>
-                  {item.description ? <p className="observation-card__body">{item.description}</p> : null}
+                  {item.description ? <MarkdownRenderer content={item.description} clamp={6} size="sm" className="observation-card__body" /> : null}
                   <dl className="observation-contract">
                     <div>
                       <dt>Acceptance</dt>
-                      <dd>{item.acceptance || '-'}</dd>
+                      <dd>{item.acceptance?.trim() ? <MarkdownRenderer content={item.acceptance} size="sm" /> : '-'}</dd>
                     </div>
                     <div>
                       <dt>Verification</dt>
-                      <dd>{item.verification || '-'}</dd>
+                      <dd>{item.verification?.trim() ? <MarkdownRenderer content={item.verification} size="sm" /> : '-'}</dd>
                     </div>
                     <div>
                       <dt>Outcome</dt>
-                      <dd>{item.outcome || '-'}</dd>
+                      <dd>{item.outcome?.trim() ? <MarkdownRenderer content={item.outcome} size="sm" /> : '-'}</dd>
                     </div>
                     <div>
                       <dt>Repository</dt>

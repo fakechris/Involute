@@ -2965,9 +2965,6 @@ kbd {
 .issue-activity__body {
   margin: 0;
   color: var(--fg-muted);
-  line-height: 1.55;
-  white-space: pre-wrap;
-  font-size: 15px;
 }
 
 .discussion-entry {
@@ -4047,6 +4044,11 @@ kbd {
   align-items: baseline;
   gap: 8px;
   font-size: 14px;
+}
+
+/* A run or evidence summary takes its own line under the run's facts. */
+.work-context__summary {
+  flex-basis: 100%;
 }
 
 .work-context {
@@ -6099,8 +6101,7 @@ kbd {
   margin: 4px 0 8px;
 }
 .issue-peek__body {
-  white-space: pre-wrap;
-  color: var(--fg-muted, inherit);
+  color: var(--fg-muted);
 }
 /* The row J/K points at on /in-review and /candidates (INV-1087). */
 .observation-card--focused {
@@ -7094,8 +7095,6 @@ ul.bugs-list {
 
 .projects-detail__description {
   margin: 0;
-  font-size: 15px;
-  line-height: 1.5;
   color: var(--fg-muted);
 }
 

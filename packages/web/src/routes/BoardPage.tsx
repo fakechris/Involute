@@ -16,6 +16,7 @@ import {
 import { useMutation, useQuery } from '@apollo/client/react';
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
 
 import { looksLikeIql } from '../board/iql-eval';
 import {
@@ -2961,7 +2962,7 @@ export function BoardPage() {
           <div className="issue-peek__meta">
             {[peekIssue.state.name, peekIssue.assignee?.name ?? 'Unassigned', ['No priority', 'Urgent', 'High', 'Medium', 'Low'][peekIssue.priority] ?? '', ...peekIssue.labels.nodes.map((label) => label.name)].filter(Boolean).join(' · ')}
           </div>
-          {peekIssue.description ? <div className="issue-peek__body">{peekIssue.description.slice(0, 1200)}</div> : null}
+          {peekIssue.description ? <MarkdownRenderer content={peekIssue.description} clamp={12} size="sm" className="issue-peek__body" /> : null}
           <div className="issue-peek__meta">Space or Esc to close · Enter to open</div>
         </aside>
       ) : null}

@@ -218,6 +218,21 @@ describe('Needs you (INV-1092)', () => {
     expect(title).toHaveClass('attention-row__title');
   });
 
+  it('renders the decision panel description and acceptance as markdown (INV-1315)', () => {
+    nodes = [
+      node('WORK_REVIEW', 'w-md', work('w-md', 'INV-60', {
+        acceptance: '- [x] 测试通过\n- [ ] 人验收',
+        description: '### 1. 目标与架构定位\n说明。\n\n### 3. 验收标准与验证方案\n1. web test exit 0',
+      }), ago(HOUR)),
+    ];
+    renderPage();
+    const decision = screen.getByLabelText('Decision');
+    expect(within(decision).getByRole('heading', { name: '1. 目标与架构定位' })).toBeInTheDocument();
+    expect(within(decision).getByText('web test exit 0').closest('ol')).not.toBeNull();
+    expect(within(decision).getAllByRole('checkbox', { name: /done/i })).toHaveLength(2);
+    expect(decision.textContent).not.toContain('###');
+  });
+
   it('J moves to finished work; A asks once, then accepts it as the review mutation', async () => {
     renderPage();
     press('j');

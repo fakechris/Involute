@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
 
 import { AgentRequestActions } from '../components/AgentRequestActions';
 import { ContractAmendmentPanel, useContractAmendmentDecisions } from '../components/ContractAmendmentPanel';
@@ -684,9 +685,10 @@ function AttentionDecision({
       return item.work ? (
         <>
           {header}
+          {item.work.description ? <MarkdownRenderer content={item.work.description} clamp={8} size="sm" className="observation-card__body" /> : null}
           {item.work.acceptance ? (
             <dl className="observation-contract observation-contract--stack">
-              <div className="observation-contract__row"><dt>Acceptance</dt><dd>{item.work.acceptance}</dd></div>
+              <div className="observation-contract__row"><dt>Acceptance</dt><dd><MarkdownRenderer content={item.work.acceptance} size="sm" /></dd></div>
             </dl>
           ) : null}
           <p><Link to={`/work/${item.work.id}`}>Runs and evidence</Link></p>
@@ -752,7 +754,7 @@ function WorkContextDecision({
     const request = (bundle.work.agentRequests ?? []).find((entry) => entry.id === item.subjectId);
     return request ? (
       <div className="observation-card">
-        {request.body ? <p className="observation-card__body">{request.body}</p> : null}
+        {request.body ? <MarkdownRenderer content={request.body} size="sm" className="observation-card__body" /> : null}
         <AgentRequestActions request={request} viewer={viewer} />
       </div>
     ) : null;
@@ -764,7 +766,7 @@ function WorkContextDecision({
     : bundle.runs.map((entry) => entry.actor).find((actor) => actor && actor.actorKind === 'AGENT' && actor.handle) ?? null;
   return (
     <>
-      {run?.summary ? <p className="observation-card__body">{run.summary}</p> : null}
+      {run?.summary ? <MarkdownRenderer content={run.summary} size="sm" className="observation-card__body" /> : null}
       {agent ? <RespondToAgent workId={workId} agent={agent} /> : <EmptyState size="inline" title="No agent to answer on this work." />}
     </>
   );

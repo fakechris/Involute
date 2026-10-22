@@ -2,6 +2,7 @@ import { DeliverySection } from '../components/DeliveryPanel';
 import { useQuery } from '@apollo/client/react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
 
 import { IcoChevL } from '../components/Icons';
 import { Btn } from '../components/Primitives';
@@ -34,11 +35,12 @@ function formatWhen(value: string | null | undefined): string {
   return parsed.toLocaleString();
 }
 
-function ContractField({ label, value }: { label: string; value?: string | null | undefined }) {
+/** `markdown` for written contract text (outcome, scope, acceptance …); plain for short values. */
+function ContractField({ label, value, markdown = false }: { label: string; value?: string | null | undefined; markdown?: boolean }) {
   return (
     <div className="observation-contract__item">
       <dt>{label}</dt>
-      <dd>{value?.trim() ? value : '—'}</dd>
+      <dd>{value?.trim() ? (markdown ? <MarkdownRenderer content={value} size="sm" /> : value) : '—'}</dd>
     </div>
   );
 }
@@ -197,11 +199,11 @@ export function WorkContextPage() {
           ) : null}
           <dl className="observation-contract observation-contract--stack">
             <ContractField label="Kind" value={work.kind.toLowerCase()} />
-            <ContractField label="Outcome" value={work.outcome} />
-            <ContractField label="Scope" value={work.scope} />
-            <ContractField label="Constraints" value={work.constraints} />
-            <ContractField label="Acceptance" value={work.acceptance} />
-            <ContractField label="Verification" value={work.verification} />
+            <ContractField label="Outcome" value={work.outcome} markdown />
+            <ContractField label="Scope" value={work.scope} markdown />
+            <ContractField label="Constraints" value={work.constraints} markdown />
+            <ContractField label="Acceptance" value={work.acceptance} markdown />
+            <ContractField label="Verification" value={work.verification} markdown />
             <ContractField label="Repository" value={work.repository} />
             <ContractField label="Owner" value={work.assignee?.name ?? work.assignee?.email} />
           </dl>
@@ -235,7 +237,7 @@ export function WorkContextPage() {
                     <span className="observation-card__meta">last activity {formatWhen(run.lastActivityAt)}</span>
                   ) : null}
                   {run.phase ? <span>{run.phase}</span> : null}
-                  {run.summary ? <span>{run.summary}</span> : null}
+                  {run.summary ? <MarkdownRenderer content={run.summary} size="sm" className="work-context__summary" /> : null}
                   <span className="observation-card__meta">base rev {run.baseRevision ?? '—'}</span>
                   <span className="observation-card__meta">claim {run.claimId ?? '—'}</span>
                   <span className="observation-card__meta">actor {run.actorId ?? '—'}</span>
@@ -273,7 +275,7 @@ export function WorkContextPage() {
                       {item.retractReason ? ` — ${item.retractReason}` : ''}
                     </span>
                   ) : null}
-                  {item.summary ? <span>{item.summary}</span> : null}
+                  {item.summary ? <MarkdownRenderer content={item.summary} size="sm" className="work-context__summary" /> : null}
                   {item.retractedAt ? null : <EvidenceVerificationStatus evidence={item} />}
                   <RetractEvidence evidence={item} onRetracted={() => void refetch()} />
                   <span className="observation-card__meta">run {item.runId ?? '—'}</span>

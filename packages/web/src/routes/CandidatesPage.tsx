@@ -2,6 +2,7 @@ import { DeliveryChangeQueue } from '../components/DeliveryPanel';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
 
 import { readStoredTeamKey } from '../board/utils';
 import { recordCommitGesture, recordFieldGesture, type CommitUndoItem } from '../undo/status-undo';
@@ -649,7 +650,7 @@ export function CandidateCard({
         <span className="observation-card__meta">rev {candidate.revision}</span>
       </header>
       <h2 className="observation-card__title">{candidate.title}</h2>
-      {candidate.description ? <p className="observation-card__body">{candidate.description}</p> : null}
+      {candidate.description ? <MarkdownRenderer content={candidate.description} clamp={6} size="sm" className="observation-card__body" /> : null}
       <div className="observation-contract observation-contract--edit">
         {(
           [

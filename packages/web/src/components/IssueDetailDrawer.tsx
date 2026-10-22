@@ -500,7 +500,7 @@ export function IssueDetailDrawer({
                       <strong>{entry.title}</strong>
                       <time dateTime={entry.meta}>{formatCommentTimestamp(entry.meta)}</time>
                     </div>
-                    {entry.body ? <p className="issue-activity__body">{entry.body}</p> : null}
+                    {entry.body ? <MarkdownRenderer content={entry.body} size="sm" className="issue-activity__body" /> : null}
                   </article>
                 ))}
               </div>
