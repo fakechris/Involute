@@ -9,6 +9,9 @@ import type {
   TriagePerson,
 } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
+import { Field, Select, TextInput } from '../components/controls';
+import { Btn } from '../components/Primitives';
+import { SettingsSectionHeader } from '../components/SettingsShell';
 
 const personName = (person: TriagePerson) => person.name ?? person.email ?? person.id;
 
@@ -67,11 +70,10 @@ export function BugTriageTab({ teamKey: fixedTeamKey }: { teamKey?: string } = {
 
   return (
     <section aria-label="Bug triage rotation">
-      <h2 style={{ fontSize: 17, fontWeight: 500, margin: '0 0 4px' }}>Bug triage — {team.name}</h2>
-      <p className="observation-hint" style={{ margin: '0 0 16px' }}>
+      <SettingsSectionHeader title={`Bug triage — ${team.name}`}>
         One person a week looks at bug reports that were sent to triage and gets the SLA reminders with the bug&apos;s owner.
         Bugs are fixed or declined with a reason; they never wait in the backlog.
-      </p>
+      </SettingsSectionHeader>
       <p role="status">
         On duty this week: <strong>{team.currentTriager ? personName(team.currentTriager) : 'nobody (no rotation)'}</strong>
       </p>
@@ -85,24 +87,23 @@ export function BugTriageTab({ teamKey: fixedTeamKey }: { teamKey?: string } = {
               <span>
                 Week {index + 1}: {label}
               </span>
-              <button type="button" className="ui-action" aria-label={`Move ${label} up`} disabled={index === 0} onClick={() => move(index, -1)}>
+              <Btn variant="ghost" aria-label={`Move ${label} up`} disabled={index === 0} onClick={() => move(index, -1)}>
                 ↑
-              </button>
-              <button type="button" className="ui-action" aria-label={`Move ${label} down`} disabled={index === order.length - 1} onClick={() => move(index, 1)}>
+              </Btn>
+              <Btn variant="ghost" aria-label={`Move ${label} down`} disabled={index === order.length - 1} onClick={() => move(index, 1)}>
                 ↓
-              </button>
-              <button type="button" className="ui-action" aria-label={`Remove ${label}`} onClick={() => setOrder((current) => current.filter((item) => item !== id))}>
+              </Btn>
+              <Btn variant="subtle" aria-label={`Remove ${label}`} onClick={() => setOrder((current) => current.filter((item) => item !== id))}>
                 Remove
-              </button>
+              </Btn>
             </li>
           );
         })}
       </ol>
 
-      <div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap', margin: '12px 0' }}>
-        <label className="field-stack">
-          <span>Add a member</span>
-          <select
+      <div className="inline-form">
+        <Field label="Add a member">
+          <Select
             aria-label="Add to rotation"
             value=""
             onChange={(event) => event.target.value && setOrder((current) => [...current, event.target.value])}
@@ -113,15 +114,14 @@ export function BugTriageTab({ teamKey: fixedTeamKey }: { teamKey?: string } = {
                 {personName(user)}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="field-stack">
-          <span>First week starts</span>
-          <input type="date" aria-label="Rotation start" value={startsOn} onChange={(event) => setStartsOn(event.target.value)} />
-        </label>
-        <button type="button" className="ui-action ui-action--accent" disabled={updateState?.loading} onClick={() => void save()}>
+          </Select>
+        </Field>
+        <Field label="First week starts">
+          <TextInput type="date" aria-label="Rotation start" value={startsOn} onChange={(event) => setStartsOn(event.target.value)} />
+        </Field>
+        <Btn variant="accent" size="md" disabled={updateState?.loading} onClick={() => void save()}>
           Save rotation
-        </button>
+        </Btn>
       </div>
       {message ? (
         <p role={message.ok ? 'status' : 'alert'} style={{ color: message.ok ? 'var(--fg-dim)' : 'var(--danger)' }}>

@@ -128,6 +128,7 @@ import { BacklogPage } from './BacklogPage';
 import { IcoFilter, IcoPlus, IcoBug, IcoBell, IcoList, IcoBoard, IcoClose, IcoChevR, IcoProject } from '../components/Icons';
 import { Btn, PriorityIcon } from '../components/Primitives';
 import { isSlashKey } from '../lib/keys';
+import { Select } from '../components/controls';
 
 const ISSUE_PAGE_SIZE = 200;
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
@@ -2658,7 +2659,8 @@ export function BoardPage() {
         ) : null}
         <div style={{ flex: 1 }} />
         {teams.length > 1 ? (
-          <select
+          <Select
+            size="sm"
             aria-label="Select team"
             value={pendingTeamKey ?? activeTeamKey ?? selectedTeam?.key ?? ''}
             onChange={(event) => {
@@ -2669,16 +2671,11 @@ export function BoardPage() {
               }
               setPendingTeamKey(nextTeamKey);
             }}
-            style={{
-              height: 24, padding: '0 8px', fontSize: 13.5,
-              background: 'transparent', border: '1px solid var(--border)',
-              borderRadius: 'var(--r-2)', color: 'var(--fg)',
-            }}
           >
             {teams.map((team) => (
               <option key={team.id} value={team.key}>{team.name}</option>
             ))}
-          </select>
+          </Select>
         ) : null}
         <Btn variant="ghost" icon={<IcoFilter size={14} />} size="sm" onClick={() => setFilterBarVisible((v) => !v)}>{filterBarVisible ? 'Hide filters' : 'Filter'}</Btn>
         {!isBacklogView && !filterBarVisible && activeFilterCount > 0 ? (
@@ -2932,7 +2929,8 @@ export function BoardPage() {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>Sort</span>
-              <select
+              <Select
+                size="sm"
                 aria-label="Sort board by"
                 value={boardViewState.sortField}
                 onChange={(event) => {
@@ -2942,15 +2940,15 @@ export function BoardPage() {
                   }));
                   setActiveSavedBoardViewId('');
                 }}
-                style={{ height: 22, padding: '0 6px', fontSize: 13, fontWeight: 500, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
               >
                 <option value="updatedAt">Updated</option>
                 <option value="createdAt">Created</option>
                 <option value="priority">Priority</option>
                 <option value="identifier">ID</option>
                 <option value="title">Title</option>
-              </select>
-              <select
+              </Select>
+              <Select
+                size="sm"
                 aria-label="Sort board direction"
                 value={boardViewState.sortDirection}
                 onChange={(event) => {
@@ -2960,16 +2958,16 @@ export function BoardPage() {
                   }));
                   setActiveSavedBoardViewId('');
                 }}
-                style={{ height: 22, padding: '0 6px', fontSize: 13, fontWeight: 500, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
               >
                 <option value="asc">Asc</option>
                 <option value="desc">Desc</option>
-              </select>
+              </Select>
             </div>
 
             <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
               <span style={{ fontSize: 13, color: 'var(--fg-dim)', marginRight: 4 }}>Group</span>
-              <select
+              <Select
+                size="sm"
                 aria-label="Group board by"
                 value={boardViewState.groupBy}
                 onChange={(event) => {
@@ -2980,7 +2978,6 @@ export function BoardPage() {
                   setActiveSavedBoardViewId('');
                   setInlineCreateGroupId(null);
                 }}
-                style={{ height: 22, padding: '0 6px', fontSize: 13, fontWeight: 500, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
               >
                 <option value="status">Status</option>
                 <option value="project">Project</option>
@@ -2988,7 +2985,7 @@ export function BoardPage() {
                 <option value="assignee">Assignee</option>
                 <option value="label">Label</option>
                 <option value="none">None</option>
-              </select>
+              </Select>
             </div>
 
             <details style={{ position: 'relative', fontSize: 13 }}>
@@ -3006,7 +3003,8 @@ export function BoardPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
               <button type="button" onClick={() => { const name = window.prompt('View name'); if (name) { const nextView: SavedBoardView = { id: crypto.randomUUID(), name, state: { ...boardViewState } }; const nextViews = [...savedBoardViews, nextView]; setSavedBoardViews(nextViews); writeSavedBoardViews(activeTeamKey, nextViews); setActiveSavedBoardViewId(nextView.id); } }} style={{ height: 22, padding: '0 6px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 'var(--r-2)', background: 'transparent', color: 'var(--fg-muted)', cursor: 'pointer' }}>Save view</button>
               <button type="button" onClick={() => { resetBoardViewState(); setActiveSavedBoardViewId(''); }} style={{ height: 22, padding: '0 6px', fontSize: 13, border: 'none', background: 'transparent', color: 'var(--fg-dim)', cursor: 'pointer' }}>Clear</button>
-              <select
+              <Select
+                size="sm"
                 aria-label="Load saved board view"
                 value={activeSavedBoardViewId}
                 onChange={(event) => {
@@ -3015,13 +3013,12 @@ export function BoardPage() {
                   const view = savedBoardViews.find((v) => v.id === viewId);
                   if (view) { dispatchApplyBoardView({ state: view.state, viewId: view.id }); }
                 }}
-                style={{ height: 22, padding: '0 6px', fontSize: 13, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)', cursor: 'pointer' }}
               >
                 <option value="">Views</option>
                 {savedBoardViews.map((view) => (
                   <option key={view.id} value={view.id}>{view.name}</option>
                 ))}
-              </select>
+              </Select>
             </div>
 
             <div style={{
@@ -3063,36 +3060,32 @@ export function BoardPage() {
               <strong style={{ fontSize: 14 }}>{selectedIssueIds.length} selected</strong>
               <button type="button" className="ui-action ui-action--subtle" onClick={selectAllVisibleIssues}>Select all</button>
               <button type="button" className="ui-action ui-action--subtle" onClick={() => setSelectedIssueIds([])}>Clear</button>
-              <select aria-label="Bulk move selected issues to state" value={bulkTargetStateId} onChange={(event) => setBulkTargetStateId(event.target.value)}
-                style={{ height: 24, padding: '0 6px', fontSize: 13, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
+              <Select size="sm" aria-label="Bulk move selected issues to state" value={bulkTargetStateId} onChange={(event) => setBulkTargetStateId(event.target.value)}>
                 <option value="">Move to…</option>
                 {selectedTeam?.states.nodes.map((state) => (<option key={state.id} value={state.id}>{state.name}</option>))}
-              </select>
+              </Select>
               {bulkTargetStateId ? (
                 <button type="button" className="ui-action ui-action--accent" disabled={isSavingState} onClick={() => void applyBulkStateChange()}>Apply to selected</button>
               ) : null}
-              <select aria-label="Bulk assign selected issues" value={bulkAssigneeId} onChange={(event) => setBulkAssigneeId(event.target.value)}
-                style={{ height: 24, padding: '0 6px', fontSize: 13, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
+              <Select size="sm" aria-label="Bulk assign selected issues" value={bulkAssigneeId} onChange={(event) => setBulkAssigneeId(event.target.value)}>
                 <option value="">Assign to…</option>
                 <option value="unassigned">Unassigned</option>
                 {users.map((user) => (<option key={user.id} value={user.id}>{user.name ?? user.email ?? user.id}</option>))}
-              </select>
+              </Select>
               {bulkAssigneeId ? (
                 <button type="button" className="ui-action ui-action--subtle" disabled={isSavingState} onClick={() => void applyBulkAssigneeChange()}>Apply assignee</button>
               ) : null}
-              <select aria-label="Bulk add label to selected issues" value={bulkLabelId} onChange={(event) => setBulkLabelId(event.target.value)}
-                style={{ height: 24, padding: '0 6px', fontSize: 13, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
+              <Select size="sm" aria-label="Bulk add label to selected issues" value={bulkLabelId} onChange={(event) => setBulkLabelId(event.target.value)}>
                 <option value="">Add label…</option>
                 {labels.map((label) => (<option key={label.id} value={label.id}>{label.name}</option>))}
-              </select>
+              </Select>
               {bulkLabelId ? (
                 <button type="button" className="ui-action ui-action--subtle" disabled={isSavingState} onClick={() => void applyBulkLabelAdd()}>Add label</button>
               ) : null}
-              <select aria-label="Bulk remove label from selected issues" value={bulkRemoveLabelId} onChange={(event) => setBulkRemoveLabelId(event.target.value)}
-                style={{ height: 24, padding: '0 6px', fontSize: 13, background: 'transparent', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', color: 'var(--fg)' }}>
+              <Select size="sm" aria-label="Bulk remove label from selected issues" value={bulkRemoveLabelId} onChange={(event) => setBulkRemoveLabelId(event.target.value)}>
                 <option value="">Remove label…</option>
                 {labels.map((label) => (<option key={label.id} value={label.id}>{label.name}</option>))}
-              </select>
+              </Select>
               {bulkRemoveLabelId ? (
                 <button type="button" className="ui-action ui-action--subtle" disabled={isSavingState} onClick={() => void applyBulkLabelRemove()}>Remove label</button>
               ) : null}

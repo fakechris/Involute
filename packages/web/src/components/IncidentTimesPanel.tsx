@@ -4,6 +4,8 @@
  * lasted. The server keeps them in order and refuses anything else with a
  * message; a missing mitigation counts as the resolution time.
  */
+import { TextInput } from './controls';
+
 export type IncidentTimeField = 'impactStartedAt' | 'detectedAt' | 'mitigatedAt' | 'resolvedAt';
 
 export type IncidentTimes = Partial<Record<IncidentTimeField, string | null>>;
@@ -67,10 +69,11 @@ export function IncidentTimesPanel({
       {FIELDS.map(({ field, label, clearable }) => (
         <label key={field} className="incident-times__row">
           <span className="incident-times__label">{label}</span>
-          <input
+          <TextInput
             type="datetime-local"
+            size="sm"
             aria-label={label}
-            className="issue-panel__prop-select"
+            className="control-grow"
             disabled={disabled}
             value={toLocalInput(work[field])}
             onChange={(event) => {

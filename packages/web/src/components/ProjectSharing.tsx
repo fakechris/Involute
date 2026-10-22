@@ -6,6 +6,7 @@ import {
   WORK_SHARE_REMOVE_MUTATION,
   WORK_SHARE_UPSERT_MUTATION,
 } from '../board/queries';
+import { Select, TextInput } from './controls';
 import { Btn } from './Primitives';
 
 type ShareRole = 'VIEWER' | 'EDITOR';
@@ -35,12 +36,6 @@ interface MutationResult {
 const ROLE_COPY: Record<ShareRole, string> = {
   VIEWER: 'Can view',
   EDITOR: 'Can edit',
-};
-
-const inputStyle: React.CSSProperties = {
-  height: 30, padding: '0 10px',
-  background: 'var(--bg-raised)', border: '1px solid var(--border)',
-  borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)',
 };
 
 function displayName(user: ShareUser): string {
@@ -123,7 +118,7 @@ export function ProjectSharing({
       </p>
 
       <div className="project-sharing__link">
-        <input readOnly aria-label="Share link" value={shareUrl} style={{ ...inputStyle, flex: 1 }} />
+        <TextInput readOnly aria-label="Share link" value={shareUrl} className="control-grow" />
         <Btn
           variant="subtle"
           size="md"
@@ -146,11 +141,11 @@ export function ProjectSharing({
                 {displayName(share.user)}
                 {share.user.actorKind === 'AGENT' ? <span className="actor-badge__kind"> AGENT</span> : null}
               </span>
-              <select
+              <Select
+                size="sm"
                 aria-label={`Role for ${displayName(share.user)}`}
                 value={share.role}
                 disabled={pending}
-                style={inputStyle}
                 onChange={(event) => void run(
                   () => runUpsert({ variables: { role: event.target.value as ShareRole, userId: share.user.id, workId: projectId } }),
                   'workShareUpsert',
@@ -158,7 +153,7 @@ export function ProjectSharing({
               >
                 <option value="VIEWER">{ROLE_COPY.VIEWER}</option>
                 <option value="EDITOR">{ROLE_COPY.EDITOR}</option>
-              </select>
+              </Select>
               <Btn
                 variant="ghost"
                 size="md"
@@ -176,19 +171,19 @@ export function ProjectSharing({
       )}
 
       <div className="project-sharing__add">
-        <select aria-label="Share with" value={userId} style={{ ...inputStyle, flex: 1 }} onChange={(event) => setUserId(event.target.value)}>
+        <Select aria-label="Share with" value={userId} className="control-grow" onChange={(event) => setUserId(event.target.value)}>
           <option value="">Choose a person or agent</option>
           {candidates.map((user) => (
             <option key={user.id} value={user.id}>
               {displayName(user)}{user.actorKind === 'AGENT' ? ' · agent' : ''}
             </option>
           ))}
-        </select>
-        <select aria-label="Share role" value={role} style={inputStyle} onChange={(event) => setRole(event.target.value as ShareRole)}>
+        </Select>
+        <Select aria-label="Share role" value={role} onChange={(event) => setRole(event.target.value as ShareRole)}>
           <option value="VIEWER">{ROLE_COPY.VIEWER}</option>
           <option value="EDITOR">{ROLE_COPY.EDITOR}</option>
-        </select>
-        <Btn variant="primary" size="md" disabled={!userId || pending} onClick={() => void add()}>
+        </Select>
+        <Btn variant="accent" size="md" disabled={!userId || pending} onClick={() => void add()}>
           Share
         </Btn>
       </div>

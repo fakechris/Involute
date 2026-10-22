@@ -100,6 +100,9 @@
   --prio-med: #71675d;
   --prio-low: #a99f93;
   --prio-none: #cdc4b6;
+
+  /* Text on a user-chosen colour swatch (avatars): dark in both themes. */
+  --on-color: #0b0b0c;
 }
 
 /* ===== DARK — "Vault": near-black + deep blue + cyan ===== */
@@ -145,6 +148,8 @@
   --prio-med: #7d8aa0;
   --prio-low: #55606f;
   --prio-none: #2c3a4f;
+
+  --on-color: #0b0b0c;
 }
 
 * {
@@ -1672,14 +1677,10 @@ kbd {
   background: color-mix(in srgb, var(--success-weak) 55%, var(--bg-raised));
 }
 
-/* Action buttons
-   .btn* and .ui-action--primary are older names still used by a few pages
-   (Projects / Cycles / Views dialogs, Settings, Contract). They alias the
-   .ui-action family until the Btn stage of INV-1311 removes them. */
+/* Action buttons — the .ui-action family behind Btn (INV-1313); sizes,
+   ghost / subtle / danger variants and states live in controls.css. */
 .board-load-more__button,
-.ui-action--accent,
-.ui-action--primary,
-.btn--accent {
+.ui-action--accent {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1695,23 +1696,18 @@ kbd {
 }
 
 .board-load-more__button:hover,
-.ui-action--accent:hover,
-.ui-action--primary:hover,
-.btn--accent:hover {
+.ui-action--accent:hover {
   filter: brightness(0.98);
 }
 
 .board-load-more__button:disabled,
 .ui-action--accent:disabled,
-.ui-action--primary:disabled,
-.ui-action--subtle:disabled,
-.btn:disabled {
+.ui-action--subtle:disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
 
-.ui-action,
-.btn {
+.ui-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1726,41 +1722,17 @@ kbd {
   transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
 
-.ui-action--subtle:hover,
-.btn--subtle:hover,
-.btn--ghost:hover {
+.ui-action--subtle:hover {
   background: var(--bg-hover);
   color: var(--fg);
 }
 
-/* The accent variants sit on .ui-action / .btn, which come later in this file
-   and would reset them to a transparent outline: keep the accent fill. */
-.ui-action.ui-action--accent,
-.ui-action.ui-action--primary,
-.btn.btn--accent {
+/* The accent variant sits on .ui-action, which comes later in this file and
+   would reset it to a transparent outline: keep the accent fill. */
+.ui-action.ui-action--accent {
   border-color: var(--accent-border);
   background: var(--accent);
   color: var(--accent-fg);
-}
-
-.btn--ghost {
-  border-color: transparent;
-}
-
-.btn--sm {
-  min-height: 22px;
-  padding: 0 8px;
-  font-size: 12px;
-}
-
-.btn--md {
-  min-height: 26px;
-}
-
-.btn.is-active {
-  border-color: var(--border-strong);
-  background: var(--bg-active);
-  color: var(--fg);
 }
 
 /* Utilities */
@@ -2797,13 +2769,7 @@ kbd {
   gap: 4px;
 }
 
-.issue-panel__label {
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--fg-dim);
-}
+/* .issue-panel__label: defined once, with .field-stack span above (sentence case, INV-1313). */
 
 /*
   Auto-growing title. The ::after mirrors the text in the same grid cell, so
@@ -3067,31 +3033,6 @@ kbd {
   width: 92px;
   flex-shrink: 0;
   color: var(--fg-dim);
-}
-
-.issue-panel__prop-select {
-  flex: 1;
-  min-width: 0;
-  height: 24px;
-  padding: 0 4px;
-  border: 1px solid transparent;
-  border-radius: var(--r-1);
-  background: transparent;
-  font-size: 14px;
-  color: var(--fg);
-  cursor: pointer;
-  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
-}
-
-.issue-panel__prop-select:hover {
-  background: var(--bg-hover);
-  border-color: var(--border);
-}
-
-.issue-panel__prop-select:focus {
-  outline: none;
-  border-color: var(--border-strong);
-  background: var(--bg-hover);
 }
 
 /* Divider */
@@ -4383,21 +4324,6 @@ kbd {
   50% { opacity: 0.5; }
 }
 
-/* Dialog modal */
-.dialog-modal {
-  border: 1px solid var(--border);
-  border-radius: var(--r-3);
-  background: var(--bg-raised);
-  color: var(--fg);
-  box-shadow: var(--shadow-lg);
-  padding: 0;
-  max-width: 480px;
-  width: calc(100vw - 40px);
-}
-
-.dialog-modal::backdrop {
-  background: var(--bg-overlay);
-}
 
 /* ============================================================== */
 /* Observation / governance surfaces (K6)                          */
@@ -5633,64 +5559,6 @@ kbd {
 
 .agent-directory__row--deactivated {
   opacity: 0.6;
-}
-
-.agent-credentials {
-  border: 1px solid var(--border);
-  border-radius: var(--r-3);
-  overflow: hidden;
-  margin-bottom: 24px;
-}
-
-.agent-credentials__head,
-.agent-credentials__row {
-  display: grid;
-  grid-template-columns: 1fr 220px 90px;
-  gap: 8px;
-  align-items: center;
-  padding: 10px 12px;
-  font-size: 14.5px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.agent-credentials__head {
-  padding: 8px 12px;
-  background: var(--bg-sunken);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--fg-dim);
-}
-
-.agent-credentials__row:last-child {
-  border-bottom: none;
-}
-
-.agent-credentials__row--revoked {
-  opacity: 0.55;
-}
-
-.agent-credentials__empty {
-  padding: 14px 12px;
-  font-size: 14px;
-  color: var(--fg-dim);
-}
-
-.agent-credentials__action {
-  text-align: right;
-}
-
-@media (max-width: 780px) {
-  .agent-credentials__head {
-    display: none;
-  }
-
-  .agent-credentials__row {
-    grid-template-columns: 1fr;
-  }
-
-  .agent-credentials__action {
-    text-align: left;
-  }
 }
 
 /* ============================================================== */

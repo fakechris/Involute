@@ -17,7 +17,10 @@ import { SEVERITY_OPTIONS } from '../board/severity';
 import { REPRODUCIBILITY_OPTIONS } from '../board/reproducibility';
 import { isTypeLabel } from '../work/labels';
 import { readLastPlacement, rememberPlacement, resolveInitialPlacement, type CreatePlacement, type PlacementSource } from '../work/placement';
+import { Checkbox, Field, Select, TextArea, TextInput } from './controls';
+import { DialogShell } from './DialogShell';
 import { PlacementPicker } from './PlacementPicker';
+import { Btn } from './Primitives';
 import { RichTextEditor } from './RichTextEditor';
 
 const PRIORITY_OPTIONS = [
@@ -184,229 +187,198 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
   }
 
   return (
-    <aside className="issue-panel" aria-label="Report bug drawer" aria-modal="true" role="dialog">
-      <button
-        type="button"
-        className="issue-panel__backdrop"
-        aria-label="Close report bug drawer"
-        onClick={onClose}
-      />
-      <section className="issue-panel__frame">
-        <div className="issue-panel__header">
-          <div>
-            <p className="app-shell__eyebrow">Involute</p>
-            <h2>Report bug</h2>
-          </div>
-          <button type="button" className="issue-panel__close" onClick={onClose}>
-            Close
-          </button>
-        </div>
+    <DialogShell
+      variant="side"
+      title="Report bug"
+      eyebrow="Involute"
+      ariaLabel="Report bug drawer"
+      backdropLabel="Close report bug drawer"
+      onClose={onClose}
+      onSubmit={reported ? undefined : (event) => void handleSubmit(event)}
+      footer={reported ? (
+        <>
+          <Btn variant="subtle" size="md" onClick={reportAnother}>Report another</Btn>
+          <Link
+            className="ui-action ui-action--accent ui-action--md"
+            to={reported.triage ? '/candidates' : `/?issue=${encodeURIComponent(reported.identifier)}`}
+            onClick={onClose}
+          >
+            {reported.triage ? 'Open triage' : 'Open on board'}
+          </Link>
+        </>
+      ) : (
+        <>
+          {errorMessage ? (
+            <p className="dialog-shell__error dialog-shell__footer-start" role="alert">{errorMessage}</p>
+          ) : null}
+          <Btn variant="ghost" size="md" onClick={onClose}>Cancel</Btn>
+          <Btn type="submit" variant="accent" size="md" disabled={!canSubmit} loading={isSaving}>
+            {isSaving ? 'Reporting…' : 'Report bug'}
+          </Btn>
+        </>
+      )}
+    >
+      {reported ? (
+        <p role="status">
+          Bug <span className="mono">{reported.identifier}</span>{' '}
+          {reported.triage
+            ? 'sent to triage. Someone will place it and commit it or decline it.'
+            : 'reported. The team was notified.'}
+        </p>
+      ) : (
+        <>
+          <Field label="Title" htmlFor="report-bug-title">
+            <TextInput
+              ref={titleInputRef}
+              aria-label="Bug title"
+              value={title}
+              disabled={isSaving}
+              onChange={(event) => setTitle(event.target.value)}
+            />
+          </Field>
+          {similarBugs.length > 0 ? (
+            <div className="similar-bugs" role="region" aria-label="Similar open bugs">
+              <span className="observation-hint">Similar open bugs — is it one of these?</span>
+              <ul>
+                {similarBugs.map((bug) => (
+                  <li key={bug.id}>
+                    <Link to={`/issue/${bug.id}`} onClick={onClose}>
+                      <span className="mono">{bug.identifier}</span> {bug.title}
+                    </Link>{' '}
+                    <span className="observation-card__meta">{bug.state.name}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
-        {reported ? (
-          <div className="issue-panel__section">
-            <p role="status">
-              Bug <span className="mono">{reported.identifier}</span>{' '}
-              {reported.triage
-                ? 'sent to triage. Someone will place it and commit it or decline it.'
-                : 'reported. The team was notified.'}
-            </p>
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <Link
-                className="ui-action ui-action--accent"
-                to={reported.triage ? '/candidates' : `/?issue=${encodeURIComponent(reported.identifier)}`}
-                onClick={onClose}
+          <Field label="Steps to reproduce" htmlFor="report-bug-steps">
+            <TextArea
+              aria-label="Steps to reproduce"
+              placeholder={'1. Open …\n2. Click …\n3. See …'}
+              value={steps}
+              disabled={isSaving}
+              onChange={(event) => setSteps(event.target.value)}
+            />
+          </Field>
+
+          <div className="field">
+            <span className="field__label">Description</span>
+            <RichTextEditor
+              value={description}
+              onChange={setDescription}
+              disabled={isSaving}
+              placeholder="Expected vs actual behaviour, screenshots…"
+              ariaLabel="Bug description"
+              hideSubmit
+            />
+          </div>
+
+          <div className="field-grid">
+            <Field label="Priority">
+              <Select
+                aria-label="Bug priority"
+                value={priority}
+                disabled={isSaving}
+                onChange={(event) => setPriority(Number(event.target.value))}
               >
-                {reported.triage ? 'Open triage' : 'Open on board'}
-              </Link>
-              <button type="button" className="ui-action" onClick={reportAnother}>
-                Report another
-              </button>
-            </div>
-          </div>
-        ) : (
-          <form className="discussion-form" onSubmit={(event) => void handleSubmit(event)}>
-            <div className="issue-panel__section">
-              <label className="issue-panel__label" htmlFor="report-bug-title">
-                Title
-              </label>
-              <input
-                id="report-bug-title"
-                ref={titleInputRef}
-                aria-label="Bug title"
-                className="issue-panel__title-input"
-                value={title}
-                disabled={isSaving}
-                onChange={(event) => setTitle(event.target.value)}
-              />
-              {similarBugs.length > 0 ? (
-                <div className="similar-bugs" role="region" aria-label="Similar open bugs">
-                  <span className="observation-hint">Similar open bugs — is it one of these?</span>
-                  <ul>
-                    {similarBugs.map((bug) => (
-                      <li key={bug.id}>
-                        <Link to={`/issue/${bug.id}`} onClick={onClose}>
-                          <span className="mono">{bug.identifier}</span> {bug.title}
-                        </Link>{' '}
-                        <span className="observation-card__meta">{bug.state.name}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="issue-panel__section">
-              <label className="issue-panel__label" htmlFor="report-bug-steps">
-                Steps to reproduce
-              </label>
-              <textarea
-                id="report-bug-steps"
-                aria-label="Steps to reproduce"
-                className="issue-panel__textarea"
-                placeholder={'1. Open …\n2. Click …\n3. See …'}
-                value={steps}
-                disabled={isSaving}
-                onChange={(event) => setSteps(event.target.value)}
-              />
-            </div>
-
-            <div className="issue-panel__section">
-              <span className="issue-panel__label">Description</span>
-              <RichTextEditor
-                value={description}
-                onChange={setDescription}
-                disabled={isSaving}
-                placeholder="Expected vs actual behaviour, screenshots…"
-                ariaLabel="Bug description"
-                hideSubmit
-              />
-            </div>
-
-            <div className="issue-panel__section">
-              <label className="field-stack">
-                <span>Priority</span>
-                <select
-                  aria-label="Bug priority"
-                  value={priority}
-                  disabled={isSaving}
-                  onChange={(event) => setPriority(Number(event.target.value))}
-                >
-                  <option value={0} disabled>
-                    Choose a priority
+                <option value={0} disabled>
+                  Choose a priority
+                </option>
+                {PRIORITY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
-                  {PRIORITY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field-stack">
-                <span>Severity (optional)</span>
-                <select
-                  aria-label="Bug severity"
-                  title="How bad the effect is, apart from priority. Unsure? Pick the higher one."
-                  value={severity}
-                  disabled={isSaving}
-                  onChange={(event) => setSeverity(event.target.value as IssueSeverity | '')}
-                >
-                  <option value="">Not judged</option>
-                  {SEVERITY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value} title={option.description}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field-stack">
-                <span>Reproduces (optional)</span>
-                <select
-                  aria-label="Bug reproducibility"
-                  title="How often it shows up when you try. Sometimes / Once: a person accepts the fix; it is never auto-accepted."
-                  value={reproducibility}
-                  disabled={isSaving}
-                  onChange={(event) => setReproducibility(event.target.value as BugReproducibility | '')}
-                >
-                  <option value="">Not known</option>
-                  {REPRODUCIBILITY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value} title={option.description}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field-stack">
-                <span>Found in (deploy SHA)</span>
-                <input
-                  aria-label="Found in deploy SHA"
-                  title="The deploy you saw it on: its commit SHA. Starts as the build this server runs; clear it if you saw it elsewhere."
-                  value={foundInSha ?? runningBuildSha ?? ''}
-                  placeholder="Build unknown"
-                  spellCheck={false}
-                  disabled={isSaving}
-                  aria-invalid={!foundInValid}
-                  onChange={(event) => setFoundInSha(event.target.value)}
-                />
-                {!foundInValid ? <span className="observation-error" role="alert">A commit SHA: 7 to 40 hex characters.</span> : null}
-              </label>
-            </div>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Severity (optional)">
+              <Select
+                aria-label="Bug severity"
+                title="How bad the effect is, apart from priority. Unsure? Pick the higher one."
+                value={severity}
+                disabled={isSaving}
+                onChange={(event) => setSeverity(event.target.value as IssueSeverity | '')}
+              >
+                <option value="">Not judged</option>
+                {SEVERITY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value} title={option.description}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Reproduces (optional)">
+              <Select
+                aria-label="Bug reproducibility"
+                title="How often it shows up when you try. Sometimes / Once: a person accepts the fix; it is never auto-accepted."
+                value={reproducibility}
+                disabled={isSaving}
+                onChange={(event) => setReproducibility(event.target.value as BugReproducibility | '')}
+              >
+                <option value="">Not known</option>
+                {REPRODUCIBILITY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value} title={option.description}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Found in (deploy SHA)" error={!foundInValid ? 'A commit SHA: 7 to 40 hex characters.' : undefined}>
+              <TextInput
+                aria-label="Found in deploy SHA"
+                title="The deploy you saw it on: its commit SHA. Starts as the build this server runs; clear it if you saw it elsewhere."
+                value={foundInSha ?? runningBuildSha ?? ''}
+                placeholder="Build unknown"
+                spellCheck={false}
+                disabled={isSaving}
+                onChange={(event) => setFoundInSha(event.target.value)}
+              />
+            </Field>
+          </div>
 
-            <div className="issue-panel__section">
-              {triage ? (
-                <p className="observation-hint">It goes to triage; whoever commits it chooses where it belongs.</p>
-              ) : (
-                <PlacementPicker
-                  projects={projects}
-                  value={placement}
-                  source={placementSource}
-                  disabled={isSaving}
-                  onChange={(next) => {
-                    setPlacement(next);
-                    setPlacementSource(null);
-                  }}
-                />
-              )}
-              <label className="create-issue__more" style={{ marginTop: 8 }}>
-                <input type="checkbox" checked={triage} disabled={isSaving} onChange={(event) => setTriage(event.target.checked)} />
-                Not sure where it belongs — send to triage
-              </label>
-            </div>
+          <div className="field">
+            {triage ? (
+              <p className="observation-hint">It goes to triage; whoever commits it chooses where it belongs.</p>
+            ) : (
+              <PlacementPicker
+                projects={projects}
+                value={placement}
+                source={placementSource}
+                disabled={isSaving}
+                onChange={(next) => {
+                  setPlacement(next);
+                  setPlacementSource(null);
+                }}
+              />
+            )}
+            <Checkbox
+              label="Not sure where it belongs — send to triage"
+              checked={triage}
+              disabled={isSaving}
+              onChange={(event) => setTriage(event.target.checked)}
+            />
+          </div>
 
-            {extraLabels.length > 0 ? (
-              <div className="issue-panel__section">
-                <span className="issue-panel__label">Labels</span>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {extraLabels.map((label) => (
-                    <label
-                      key={label.id}
-                      style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedLabelIds.includes(label.id)}
-                        disabled={isSaving}
-                        onChange={() => toggleLabel(label.id)}
-                        aria-label={label.name}
-                      />
-                      {label.name}
-                    </label>
-                  ))}
-                </div>
+          {extraLabels.length > 0 ? (
+            <div className="field">
+              <span className="field__label">Labels</span>
+              <div className="checkbox-group">
+                {extraLabels.map((label) => (
+                  <Checkbox
+                    key={label.id}
+                    label={label.name}
+                    checked={selectedLabelIds.includes(label.id)}
+                    disabled={isSaving}
+                    onChange={() => toggleLabel(label.id)}
+                    aria-label={label.name}
+                  />
+                ))}
               </div>
-            ) : null}
-
-            {errorMessage ? (
-              <p role="alert" style={{ color: 'var(--danger)', fontSize: 13 }}>
-                {errorMessage}
-              </p>
-            ) : null}
-
-            <button type="submit" className="ui-action ui-action--accent" disabled={!canSubmit}>
-              {isSaving ? 'Reporting…' : 'Report bug'}
-            </button>
-          </form>
-        )}
-      </section>
-    </aside>
+            </div>
+          ) : null}
+        </>
+      )}
+    </DialogShell>
   );
 }

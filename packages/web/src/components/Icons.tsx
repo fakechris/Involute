@@ -110,6 +110,10 @@ export function IcoLink({ size = 14, ...rest }: IconProps) {
   return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><path d="M6 8a2 2 0 0 0 3 0l2.5-2.5a2 2 0 0 0-3-3L7 4M8 6a2 2 0 0 0-3 0L2.5 8.5a2 2 0 0 0 3 3L7 10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>);
 }
 
+export function IcoClip({ size = 14, ...rest }: IconProps) {
+  return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><path d="M11.5 6.6 7.1 11a3 3 0 0 1-4.2-4.2l4.6-4.6a2 2 0 0 1 2.8 2.8L5.8 9.5a1 1 0 0 1-1.4-1.4l4.1-4.1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>);
+}
+
 export function IcoCopy({ size = 14, ...rest }: IconProps) {
   return (<svg width={size} height={size} viewBox="0 0 14 14" fill="none" {...rest}><rect x="2" y="4" width="7" height="8" rx="1" stroke="currentColor" strokeWidth="1.2"/><path d="M5 4V3a1 1 0 0 1 1-1h5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-1" stroke="currentColor" strokeWidth="1.2"/></svg>);
 }

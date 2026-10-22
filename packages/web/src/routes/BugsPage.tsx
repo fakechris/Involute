@@ -20,6 +20,7 @@ import { readStoredTeamKey } from '../board/utils';
 import { IcoBug } from '../components/Icons';
 import { FixedBetweenDeploys } from '../components/FixedBetweenDeploys';
 import { Btn, PriorityIcon } from '../components/Primitives';
+import { Select } from '../components/controls';
 
 const CLOSED_STATE_TYPES = new Set(['COMPLETED', 'CANCELED']);
 const BUG_LABEL_NAMES = ['bug', 'Bug', 'BUG'];
@@ -502,7 +503,8 @@ export function BugRow({
         {issue.title}
       </Link>
       {issue.severity ? <span className="bugs-list__meta mono" title={severityLabel(issue.severity)}>{issue.severity}</span> : null}
-      <select
+      <Select
+        size="sm"
         aria-label={`Status of ${issue.identifier}`}
         value={issue.state.id}
         disabled={saving || states.length === 0}
@@ -511,8 +513,9 @@ export function BugRow({
         {(states.length ? states : [issue.state]).map((state) => (
           <option key={state.id} value={state.id}>{state.name}</option>
         ))}
-      </select>
-      <select
+      </Select>
+      <Select
+        size="sm"
         aria-label={`Priority of ${issue.identifier}`}
         value={issue.priority}
         disabled={saving}
@@ -522,7 +525,7 @@ export function BugRow({
         {PRIORITIES.map(([value, label]) => (
           <option key={value} value={value}>{label}</option>
         ))}
-      </select>
+      </Select>
       {mine ? (
         <span className="bugs-list__meta">Yours</span>
       ) : (

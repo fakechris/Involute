@@ -3,6 +3,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { IcoPlus, IcoTeam } from '../components/Icons';
 import { Avatar, Btn } from '../components/Primitives';
+import { Checkbox, Field, TextInput } from '../components/controls';
+import { SettingsSectionHeader, SettingsShell } from '../components/SettingsShell';
 import { AdminMembersTab, AdminSecurityTab, AdminTeamsTab } from './AdministrationTabs';
 import { EmailNotificationsField, LabelsTab, ServerFeaturesTab, ServiceActorForm } from './WorkspaceSettingsTabs';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
@@ -46,12 +48,6 @@ function getStoredDensity(): DensityMode {
   return 'cozy';
 }
 
-const inputStyle: React.CSSProperties = {
-  width: '100%', height: 30, padding: '0 10px',
-  background: 'var(--bg-raised)', border: '1px solid var(--border)',
-  borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)',
-};
-
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [isAdmin, setIsAdmin] = useState(false);
@@ -72,94 +68,43 @@ export function SettingsPage() {
   const tab: SettingsTab = tabs.find((candidate) => candidate.id === requested)?.id ?? 'profile';
   const setTab = (next: SettingsTab) => setSearchParams(next === 'profile' ? {} : { tab: next }, { replace: true });
 
-  return (
-    <div style={{ display: 'flex', height: '100%', background: 'var(--bg)' }}>
-      <div style={{
-        width: 200, flexShrink: 0,
-        borderRight: '1px solid var(--border-subtle)',
-        padding: 12, background: 'var(--bg-sunken)',
-      }}>
-        <div style={{
-          padding: '6px 8px 12px',
-          fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)',
-          letterSpacing: '0.04em',
-        }}>
-          SETTINGS
-        </div>
-        {tabs.map((t) => (
-          <div key={`group-${t.id}`}>
-          {t.id === ADMIN_TABS[0]!.id ? (
-            <div style={{ padding: '14px 8px 6px', fontSize: 12, fontWeight: 500, color: 'var(--fg-dim)', letterSpacing: '0.04em' }}>
-              ADMINISTRATION
-            </div>
-          ) : null}
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            style={{
-              display: 'block', width: '100%', textAlign: 'left',
-              height: 26, padding: '0 8px',
-              borderRadius: 'var(--r-2)',
-              color: tab === t.id ? 'var(--fg)' : 'var(--fg-muted)',
-              background: tab === t.id ? 'var(--bg-active)' : 'transparent',
-              fontSize: 14.5, fontWeight: tab === t.id ? 500 : 400,
-              marginBottom: 1,
-              transition: 'background var(--dur-1) var(--ease), color var(--dur-1) var(--ease)',
-            }}
-            onMouseEnter={(e) => { if (tab !== t.id) e.currentTarget.style.background = 'var(--bg-hover)'; }}
-            onMouseLeave={(e) => { if (tab !== t.id) e.currentTarget.style.background = 'transparent'; }}
-          >
-            {t.label}
-          </button>
-          </div>
-        ))}
-      </div>
+  const personalTabs = tabs.filter((t) => !ADMIN_TABS.some((admin) => admin.id === t.id));
+  const adminTabs = tabs.filter((t) => ADMIN_TABS.some((admin) => admin.id === t.id));
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '32px 40px' }}>
-        <div style={{ maxWidth: 640 }}>
-          {tab === 'profile' && <ProfileTab />}
-          {tab === 'preferences' && <PreferencesTab />}
-        {tab === 'extensions' && <ExtensionsTab />}
-          {tab === 'labels' && <LabelsTab />}
-          {tab === 'members' && <AdminMembersTab />}
-          {tab === 'teams' && <AdminTeamsTab />}
-          {tab === 'security' && <AdminSecurityTab />}
-          {tab === 'services' && <ServiceActorForm />}
-          {tab === 'features' && <ServerFeaturesTab />}
-        </div>
-      </div>
-    </div>
+  return (
+    <SettingsShell
+      navLabel="Settings sections"
+      title="Settings"
+      groups={[
+        { items: personalTabs },
+        ...(adminTabs.length > 0 ? [{ label: 'Administration', items: adminTabs }] : []),
+      ]}
+      active={tab}
+      onSelect={setTab}
+    >
+      {tab === 'profile' && <ProfileTab />}
+      {tab === 'preferences' && <PreferencesTab />}
+      {tab === 'extensions' && <ExtensionsTab />}
+      {tab === 'labels' && <LabelsTab />}
+      {tab === 'members' && <AdminMembersTab />}
+      {tab === 'teams' && <AdminTeamsTab />}
+      {tab === 'security' && <AdminSecurityTab />}
+      {tab === 'services' && <ServiceActorForm />}
+      {tab === 'features' && <ServerFeaturesTab />}
+    </SettingsShell>
   );
 }
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 style={{
-      fontSize: 17, fontWeight: 500, margin: '0 0 4px',
-      color: 'var(--fg)', letterSpacing: '-0.005em',
-    }}>
-      {children}
-    </h2>
-  );
+  return <SettingsSectionHeader title={children} />;
 }
 
 function SectionSub({ children }: { children: React.ReactNode }) {
-  return (
-    <p style={{ fontSize: 14.5, color: 'var(--fg-dim)', margin: '0 0 24px' }}>{children}</p>
-  );
+  return <p className="settings-section__sub">{children}</p>;
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom: 20, display: 'flex', gap: 40 }}>
-      <div style={{ width: 180, flexShrink: 0 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 500, color: 'var(--fg)', marginBottom: 2 }}>{label}</div>
-        {hint && <div style={{ fontSize: 13.5, color: 'var(--fg-dim)', lineHeight: 1.5 }}>{hint}</div>}
-      </div>
-      <div style={{ flex: 1 }}>{children}</div>
-    </div>
-  );
+function SettingRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return <Field label={label} hint={hint} layout="aside">{children}</Field>;
 }
 
 function ProfileTab() {
@@ -215,7 +160,7 @@ function ProfileTab() {
     <>
       <SectionHeading>Profile</SectionHeading>
       <SectionSub>Your personal information.</SectionSub>
-      <Field label="Avatar" hint="Displayed on your issues and comments.">
+      <SettingRow label="Avatar" hint="Displayed on your issues and comments.">
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <div style={{
             width: 48, height: 48, borderRadius: '50%',
@@ -234,23 +179,22 @@ function ProfileTab() {
             onChange={handleAvatarChange}
           />
         </div>
-      </Field>
-      <Field label="Full name">
-        <input
-          style={inputStyle}
+      </SettingRow>
+      <SettingRow label="Full name">
+        <TextInput
           value={name}
           onChange={(e) => setName(e.target.value)}
           onBlur={handleNameBlur}
         />
-      </Field>
-      <Field label="Email" hint="Used for sign-in and notifications.">
-        <input
-          style={inputStyle}
+      </SettingRow>
+      <SettingRow label="Email" hint="Used for sign-in and notifications.">
+        <TextInput
+          type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           onBlur={handleEmailBlur}
         />
-      </Field>
+      </SettingRow>
     </>
   );
 }
@@ -302,67 +246,52 @@ function PreferencesTab() {
     <>
       <SectionHeading>Preferences</SectionHeading>
       <SectionSub>Customize how Involute feels.</SectionSub>
-      <Field label="Theme" hint="Light, dark, or follow system.">
+      <SettingRow label="Theme" hint="Light, dark, or follow system.">
         <div style={{ display: 'flex', gap: 8 }}>
           {(['Light', 'Dark', 'System'] as const).map((t) => {
             const isActive = t === 'System' ? useSystemTheme : (!useSystemTheme && theme === t.toLowerCase());
             return (
-              <button
+              <Btn
                 key={t}
-                type="button"
+                variant="subtle"
+                size="md"
+                active={isActive}
                 onClick={() => t === 'System' ? handleSystemTheme() : handleThemeChange(t.toLowerCase() as ThemeMode)}
-                style={{
-                  padding: '6px 12px', fontSize: 14,
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--r-2)',
-                  background: isActive ? 'var(--bg-active)' : 'transparent',
-                  color: 'var(--fg)',
-                  cursor: 'pointer',
-                }}
               >
                 {t}
-              </button>
+              </Btn>
             );
           })}
         </div>
-      </Field>
-      <Field label="Density" hint="How tightly rows and cards pack.">
+      </SettingRow>
+      <SettingRow label="Density" hint="How tightly rows and cards pack.">
         <div style={{ display: 'flex', gap: 8 }}>
           {(['Compact', 'Cozy', 'Comfortable'] as const).map((t) => {
             const value = t.toLowerCase() as DensityMode;
             return (
-              <button
+              <Btn
                 key={t}
-                type="button"
+                variant="subtle"
+                size="md"
+                active={density === value}
                 onClick={() => handleDensityChange(value)}
-                style={{
-                  padding: '6px 12px', fontSize: 14,
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--r-2)',
-                  background: density === value ? 'var(--bg-active)' : 'transparent',
-                  color: 'var(--fg)',
-                  cursor: 'pointer',
-                }}
               >
                 {t}
-              </button>
+              </Btn>
             );
           })}
         </div>
-      </Field>
-      <Field label="Email notifications" hint="Also send inbox notifications to your email address.">
+      </SettingRow>
+      <SettingRow label="Email notifications" hint="Also send inbox notifications to your email address.">
         <EmailNotificationsField />
-      </Field>
-      <Field label="Keyboard shortcuts" hint="Enable single-key navigation shortcuts.">
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-          <input
-            type="checkbox"
-            checked={shortcutsEnabled}
-            onChange={(e) => handleShortcutsToggle(e.target.checked)}
-          />
-          <span style={{ fontSize: 14.5 }}>{shortcutsEnabled ? 'Enabled' : 'Disabled'}</span>
-        </label>
-      </Field>
+      </SettingRow>
+      <SettingRow label="Keyboard shortcuts" hint="Enable single-key navigation shortcuts.">
+        <Checkbox
+          label={shortcutsEnabled ? 'Enabled' : 'Disabled'}
+          checked={shortcutsEnabled}
+          onChange={(e) => handleShortcutsToggle(e.target.checked)}
+        />
+      </SettingRow>
     </>
   );
 }

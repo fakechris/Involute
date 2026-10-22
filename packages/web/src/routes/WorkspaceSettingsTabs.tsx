@@ -2,6 +2,10 @@ import { useState } from 'react';
 import { useMutation, useQuery } from '@apollo/client/react';
 
 import { readStoredTeamKey } from '../board/utils';
+import { Checkbox, Field, Select, TextInput } from '../components/controls';
+import { DataTable } from '../components/DataTable';
+import { Btn } from '../components/Primitives';
+import { SettingsSectionHeader } from '../components/SettingsShell';
 import {
   EMAIL_NOTIFICATIONS_QUERY,
   LABEL_CREATE_MUTATION,
@@ -38,15 +42,6 @@ export function NoticeLine({ notice }: { notice: Notice }) {
     </p>
   );
 }
-
-export const inputStyle: React.CSSProperties = {
-  height: 28, padding: '0 8px', fontSize: 14, color: 'var(--fg)',
-  background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)',
-};
-
-export const rowStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--border-subtle)',
-};
 
 /** Runs a settings mutation and turns its payload into a notice: the server's reason when refused. */
 export async function attempt<T>(
@@ -89,57 +84,65 @@ export function LabelsTab() {
 
   return (
     <section aria-label="Labels">
-      <h2 style={{ fontSize: 17, fontWeight: 500, margin: '0 0 4px' }}>Labels</h2>
-      <p style={{ fontSize: 14, color: 'var(--fg-muted)', margin: '0 0 12px' }}>
+      <SettingsSectionHeader title="Labels">
         Labels are shared by every team. Bug, Feature, Improvement and research are built in and cannot be renamed or deleted.
-      </p>
+      </SettingsSectionHeader>
       <form
-        style={{ display: 'flex', gap: 8, marginBottom: 12 }}
+        className="inline-form"
         onSubmit={(event) => {
           event.preventDefault();
           void attempt(() => runCreate({ variables: { name: newName } }), (d) => d.labelCreate, `Created ${newName.trim()}.`, setNotice)
             .then((ok) => { if (ok) { setNewName(''); void refetch(); } });
         }}
       >
-        <input aria-label="New label name" placeholder="New label" value={newName} onChange={(e) => setNewName(e.target.value)} style={inputStyle} />
-        <button type="submit" className="ui-action ui-action--subtle" disabled={!newName.trim()}>Add label</button>
+        <TextInput aria-label="New label name" placeholder="New label" value={newName} onChange={(e) => setNewName(e.target.value)} />
+        <Btn type="submit" variant="subtle" size="md" disabled={!newName.trim()}>Add label</Btn>
       </form>
       <NoticeLine notice={notice} />
-      <div role="list" aria-label="Label list">
-        {labels.map((label) => {
-          const builtIn = BUILT_IN_LABELS.has(label.name.toLowerCase());
-          const isEditing = editing?.id === label.id;
-          return (
-            <div key={label.id} role="listitem" style={rowStyle}>
-              {isEditing ? (
-                <input
-                  aria-label={`Rename ${label.name}`}
-                  value={editing.name}
-                  onChange={(e) => setEditing({ id: label.id, name: e.target.value })}
-                  style={{ ...inputStyle, flex: 1 }}
-                />
-              ) : (
-                <span style={{ flex: 1, fontSize: 14.5 }}>{label.name}</span>
-              )}
-              <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{label.issueCount} items</span>
-              {builtIn ? (
-                <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>built in</span>
-              ) : isEditing ? (
+      <DataTable
+        label="Label list"
+        rows={labels}
+        rowKey={(label) => label.id}
+        empty="No labels yet."
+        columns={[
+          {
+            key: 'name',
+            header: 'Name',
+            render: (label) => (editing?.id === label.id ? (
+              <TextInput
+                size="sm"
+                aria-label={`Rename ${label.name}`}
+                value={editing.name}
+                onChange={(e) => setEditing({ id: label.id, name: e.target.value })}
+              />
+            ) : label.name),
+          },
+          { key: 'items', header: 'Items', width: '90px', render: (label) => <span className="data-table__secondary">{label.issueCount} items</span> },
+          {
+            key: 'actions',
+            header: '',
+            align: 'end',
+            render: (label) => {
+              if (BUILT_IN_LABELS.has(label.name.toLowerCase())) {
+                return <span className="data-table__secondary">built in</span>;
+              }
+              if (editing?.id === label.id) {
+                return (
+                  <>
+                    <Btn
+                      variant="subtle"
+                      onClick={() => void attempt(() => runUpdate({ variables: { id: label.id, name: editing.name } }), (d) => d.labelUpdate, 'Label renamed.', setNotice)
+                        .then((ok) => { if (ok) { setEditing(null); void refetch(); } })}
+                    >Save</Btn>
+                    <Btn variant="ghost" onClick={() => setEditing(null)}>Cancel</Btn>
+                  </>
+                );
+              }
+              return (
                 <>
-                  <button
-                    type="button"
-                    className="ui-action ui-action--subtle"
-                    onClick={() => void attempt(() => runUpdate({ variables: { id: label.id, name: editing.name } }), (d) => d.labelUpdate, 'Label renamed.', setNotice)
-                      .then((ok) => { if (ok) { setEditing(null); void refetch(); } })}
-                  >Save</button>
-                  <button type="button" className="ui-action ui-action--subtle" onClick={() => setEditing(null)}>Cancel</button>
-                </>
-              ) : (
-                <>
-                  <button type="button" className="ui-action ui-action--subtle" onClick={() => setEditing({ id: label.id, name: label.name })}>Rename</button>
-                  <button
-                    type="button"
-                    className="ui-action ui-action--subtle"
+                  <Btn variant="subtle" onClick={() => setEditing({ id: label.id, name: label.name })}>Rename</Btn>
+                  <Btn
+                    variant="danger"
                     aria-label={`Delete label ${label.name}`}
                     onClick={() => {
                       const warning = label.issueCount > 0 ? ` It will be removed from ${label.issueCount} items.` : '';
@@ -147,13 +150,13 @@ export function LabelsTab() {
                       void attempt(() => runDelete({ variables: { id: label.id } }), (d) => d.labelDelete, `Deleted ${label.name}.`, setNotice)
                         .then((ok) => { if (ok) void refetch(); });
                     }}
-                  >Delete</button>
+                  >Delete</Btn>
                 </>
-              )}
-            </div>
-          );
-        })}
-      </div>
+              );
+            },
+          },
+        ]}
+      />
     </section>
   );
 }
@@ -201,74 +204,83 @@ export function WorkflowStatesTab({ teamKey: fixedTeamKey }: { teamKey?: string 
 
   return (
     <section aria-label="Workflow states">
-      <h2 style={{ fontSize: 17, fontWeight: 500, margin: '0 0 4px' }}>Workflow states — {team.name}</h2>
-      <p style={{ fontSize: 14, color: 'var(--fg-muted)', margin: '0 0 12px' }}>
+      <SettingsSectionHeader title={`Workflow states — ${team.name}`}>
         Agents and GitHub move work by a state&apos;s type, into the first state of that type. Names and order are yours; a
         new state goes last, so it never takes over that role. A state can be deleted once it holds no work and another state
         of its type remains.
-      </p>
+      </SettingsSectionHeader>
       <NoticeLine notice={notice} />
-      <div role="list" aria-label="State list">
-        {states.map((state, index) => {
-          const isRenaming = renaming?.id === state.id;
-          return (
-            <div key={state.id} role="listitem" style={rowStyle}>
-              {isRenaming ? (
-                <input
-                  aria-label={`Rename state ${state.name}`}
-                  value={renaming.name}
-                  onChange={(e) => setRenaming({ id: state.id, name: e.target.value })}
-                  style={{ ...inputStyle, flex: 1 }}
-                />
-              ) : (
-                <span style={{ flex: 1, fontSize: 14.5 }}>{state.name}</span>
-              )}
-              <span style={{ fontSize: 13, color: 'var(--fg-dim)', width: 90 }}>{TYPE_LABELS[state.type]}</span>
-              <span style={{ fontSize: 13, color: 'var(--fg-dim)', width: 70 }}>{state.issueCount} items</span>
-              <button type="button" className="ui-action ui-action--subtle" aria-label={`Move ${state.name} up`} disabled={index === 0} onClick={() => void move(index, -1)}>↑</button>
-              <button type="button" className="ui-action ui-action--subtle" aria-label={`Move ${state.name} down`} disabled={index === states.length - 1} onClick={() => void move(index, 1)}>↓</button>
-              {isRenaming ? (
+      <DataTable
+        label="State list"
+        rows={states}
+        rowKey={(state) => state.id}
+        columns={[
+          {
+            key: 'name',
+            header: 'Name',
+            render: (state) => (renaming?.id === state.id ? (
+              <TextInput
+                size="sm"
+                aria-label={`Rename state ${state.name}`}
+                value={renaming.name}
+                onChange={(e) => setRenaming({ id: state.id, name: e.target.value })}
+              />
+            ) : state.name),
+          },
+          { key: 'type', header: 'Type', width: '100px', render: (state) => <span className="data-table__secondary">{TYPE_LABELS[state.type]}</span> },
+          { key: 'items', header: 'Items', width: '80px', render: (state) => <span className="data-table__secondary">{state.issueCount} items</span> },
+          {
+            key: 'actions',
+            header: '',
+            align: 'end',
+            render: (state) => {
+              const index = states.indexOf(state);
+              return (
                 <>
-                  <button
-                    type="button"
-                    className="ui-action ui-action--subtle"
-                    onClick={() => void attempt(() => runUpdate({ variables: { id: state.id, input: { name: renaming.name } } }), (d) => d.workflowStateUpdate, 'State renamed.', setNotice)
-                      .then((ok) => { if (ok) { setRenaming(null); void refetch(); } })}
-                  >Save</button>
-                  <button type="button" className="ui-action ui-action--subtle" onClick={() => setRenaming(null)}>Cancel</button>
+                  <Btn variant="ghost" aria-label={`Move ${state.name} up`} disabled={index === 0} onClick={() => void move(index, -1)}>↑</Btn>
+                  <Btn variant="ghost" aria-label={`Move ${state.name} down`} disabled={index === states.length - 1} onClick={() => void move(index, 1)}>↓</Btn>
+                  {renaming?.id === state.id ? (
+                    <>
+                      <Btn
+                        variant="subtle"
+                        onClick={() => void attempt(() => runUpdate({ variables: { id: state.id, input: { name: renaming.name } } }), (d) => d.workflowStateUpdate, 'State renamed.', setNotice)
+                          .then((ok) => { if (ok) { setRenaming(null); void refetch(); } })}
+                      >Save</Btn>
+                      <Btn variant="ghost" onClick={() => setRenaming(null)}>Cancel</Btn>
+                    </>
+                  ) : (
+                    <>
+                      <Btn variant="subtle" onClick={() => setRenaming({ id: state.id, name: state.name })}>Rename</Btn>
+                      <Btn
+                        variant="danger"
+                        aria-label={`Delete state ${state.name}`}
+                        onClick={() => {
+                          if (!window.confirm(`Delete the state "${state.name}"?`)) return;
+                          void attempt(() => runDelete({ variables: { id: state.id } }), (d) => d.workflowStateDelete, `Deleted ${state.name}.`, setNotice)
+                            .then((ok) => { if (ok) void refetch(); });
+                        }}
+                      >Delete</Btn>
+                    </>
+                  )}
                 </>
-              ) : (
-                <>
-                  <button type="button" className="ui-action ui-action--subtle" onClick={() => setRenaming({ id: state.id, name: state.name })}>Rename</button>
-                  <button
-                    type="button"
-                    className="ui-action ui-action--subtle"
-                    aria-label={`Delete state ${state.name}`}
-                    onClick={() => {
-                      if (!window.confirm(`Delete the state "${state.name}"?`)) return;
-                      void attempt(() => runDelete({ variables: { id: state.id } }), (d) => d.workflowStateDelete, `Deleted ${state.name}.`, setNotice)
-                        .then((ok) => { if (ok) void refetch(); });
-                    }}
-                  >Delete</button>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </div>
+              );
+            },
+          },
+        ]}
+      />
       <form
-        style={{ display: 'flex', gap: 8, marginTop: 12 }}
+        className="inline-form"
         onSubmit={(event) => {
           event.preventDefault();
           void attempt(() => runCreate({ variables: { input: { teamId: team.id, name: newName, type: newType } } }), (d) => d.workflowStateCreate, `Added ${newName.trim()}.`, setNotice)
             .then((ok) => { if (ok) { setNewName(''); void refetch(); } });
         }}
       >
-        <input aria-label="New state name" placeholder="New state" value={newName} onChange={(e) => setNewName(e.target.value)} style={inputStyle} />
-        <select aria-label="New state type" value={newType} onChange={(e) => setNewType(e.target.value as WorkflowStateType)} style={inputStyle}>
+        <TextInput aria-label="New state name" placeholder="New state" value={newName} onChange={(e) => setNewName(e.target.value)} />
+        <Select aria-label="New state type" value={newType} onChange={(e) => setNewType(e.target.value as WorkflowStateType)}>
           {STATE_TYPES.map((type) => <option key={type} value={type}>{TYPE_LABELS[type]}</option>)}
-        </select>
-        <button type="submit" className="ui-action ui-action--subtle" disabled={!newName.trim()}>Add state</button>
+        </Select>
+        <Btn type="submit" variant="subtle" size="md" disabled={!newName.trim()}>Add state</Btn>
       </form>
     </section>
   );
@@ -284,19 +296,19 @@ export function ServerFeaturesTab() {
   if (loading && !data) return <p role="status">Loading…</p>;
   return (
     <section aria-label="Server features">
-      <h2 style={{ fontSize: 17, fontWeight: 500, margin: '0 0 4px' }}>Server features</h2>
-      <p style={{ fontSize: 14, color: 'var(--fg-muted)', margin: '0 0 12px' }}>
+      <SettingsSectionHeader title="Server features">
         What this deployment runs, read from its environment. Change them in the server&apos;s .env and restart; values are never shown here.
-      </p>
-      <div role="list" aria-label="Feature list">
-        {(data?.serverFeatures ?? []).map((feature) => (
-          <div key={feature.key} role="listitem" style={rowStyle}>
-            <span style={{ width: 180, fontSize: 14.5 }}>{feature.label}</span>
-            <span style={{ width: 50, fontSize: 13, color: feature.enabled ? 'var(--fg)' : 'var(--fg-dim)' }}>{feature.enabled ? 'On' : 'Off'}</span>
-            <span style={{ flex: 1, fontSize: 13, color: 'var(--fg-dim)' }}>{feature.detail}</span>
-          </div>
-        ))}
-      </div>
+      </SettingsSectionHeader>
+      <DataTable
+        label="Feature list"
+        rows={data?.serverFeatures ?? []}
+        rowKey={(feature) => feature.key}
+        columns={[
+          { key: 'feature', header: 'Feature', width: 'minmax(0, 1fr)', render: (feature) => feature.label },
+          { key: 'state', header: 'State', width: '60px', render: (feature) => (feature.enabled ? 'On' : <span className="data-table__secondary">Off</span>) },
+          { key: 'detail', header: 'Detail', width: 'minmax(0, 2fr)', render: (feature) => <span className="data-table__secondary">{feature.detail}</span> },
+        ]}
+      />
     </section>
   );
 }
@@ -315,13 +327,12 @@ export function ServiceActorForm({ onCreated }: { onCreated?: () => void }) {
   const [notice, setNotice] = useState<Notice>(null);
 
   return (
-    <section aria-label="New service actor" style={{ marginTop: 24 }}>
-      <h3 style={{ fontSize: 15, fontWeight: 500, margin: '0 0 4px' }}>New service actor</h3>
-      <p style={{ fontSize: 14, color: 'var(--fg-muted)', margin: '0 0 8px' }}>
+    <section aria-label="New service actor">
+      <SettingsSectionHeader title="New service actor">
         For a program such as CI, a cron job or a bridge. You are its owner; issue it a credential afterwards.
-      </p>
+      </SettingsSectionHeader>
       <form
-        style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
+        className="inline-form"
         onSubmit={(event) => {
           event.preventDefault();
           void attempt(
@@ -336,10 +347,16 @@ export function ServiceActorForm({ onCreated }: { onCreated?: () => void }) {
           });
         }}
       >
-        <input aria-label="Service name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
-        <input aria-label="Service handle" placeholder="handle" value={handle} onChange={(e) => setHandle(e.target.value)} style={inputStyle} />
-        <input aria-label="Service description" placeholder="What it does" value={description} onChange={(e) => setDescription(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
-        <button type="submit" className="ui-action ui-action--subtle" disabled={!name.trim() || !handle.trim()}>Create service</button>
+        <Field label="Name">
+          <TextInput aria-label="Service name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="Handle">
+          <TextInput aria-label="Service handle" placeholder="handle" value={handle} onChange={(e) => setHandle(e.target.value)} />
+        </Field>
+        <Field label="What it does">
+          <TextInput aria-label="Service description" placeholder="What it does" value={description} onChange={(e) => setDescription(e.target.value)} />
+        </Field>
+        <Btn type="submit" variant="subtle" size="md" disabled={!name.trim() || !handle.trim()}>Create service</Btn>
       </form>
       <NoticeLine notice={notice} />
     </section>
@@ -359,9 +376,8 @@ export function EmailNotificationsField() {
 
   return (
     <div>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-        <input
-          type="checkbox"
+      <Checkbox
+          label={enabled ? 'Email me inbox notifications' : 'Inbox only'}
           aria-label="Email notifications"
           checked={enabled}
           disabled={loading && !data}
@@ -374,9 +390,7 @@ export function EmailNotificationsField() {
               setNotice,
             );
           }}
-        />
-        <span style={{ fontSize: 14.5 }}>{enabled ? 'Email me inbox notifications' : 'Inbox only'}</span>
-      </label>
+      />
       <NoticeLine notice={notice} />
     </div>
   );

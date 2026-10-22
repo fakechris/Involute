@@ -14,9 +14,6 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // jsdom has no <dialog> modal support.
-  HTMLDialogElement.prototype.showModal = vi.fn();
-  HTMLDialogElement.prototype.close = vi.fn();
   mockRunIssueCreate.mockResolvedValue({ data: { issueCreate: { success: true, message: null, issue: { id: 'm-new' } } } });
   mockRunIssueUpdate.mockResolvedValue({ data: { issueUpdate: { success: true, message: null, issue: { id: 'milestone-1' } } } });
 });
@@ -170,7 +167,7 @@ describe('CyclesPage', () => {
       </MemoryRouter>,
     );
     fireEvent.click(screen.getAllByRole('button', { name: 'New milestone' })[0]!);
-    const form = screen.getByRole('heading', { name: 'New milestone', hidden: true }).closest('form')!;
+    const form = screen.getByRole('dialog', { name: 'New milestone' });
     const create = within(form).getByRole('button', { name: 'Create', hidden: true });
     expect(create).toBeDisabled();
     fireEvent.change(screen.getByPlaceholderText('e.g. Release v1.0 or Core Engine'), { target: { value: 'GA' } });
@@ -186,9 +183,16 @@ describe('CyclesPage', () => {
       outcome: 'Customers on v1',
     });
 
+    // A created milestone closes the dialog; a refused one keeps it open with the reason.
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New milestone' })).not.toBeInTheDocument());
     mockRunIssueCreate.mockResolvedValueOnce({ data: { issueCreate: { success: false, message: 'CONTAINS cannot cross repository boundaries.', issue: null } } });
-    fireEvent.click(create);
-    expect(await within(form).findByRole('alert', { hidden: true })).toHaveTextContent('CONTAINS cannot cross repository boundaries.');
+    fireEvent.click(screen.getAllByRole('button', { name: 'New milestone' })[0]!);
+    const retry = screen.getByRole('dialog', { name: 'New milestone' });
+    fireEvent.change(within(retry).getByPlaceholderText('e.g. Release v1.0 or Core Engine'), { target: { value: 'GA' } });
+    fireEvent.change(within(retry).getByLabelText('Project'), { target: { value: 'acme/app' } });
+    fireEvent.click(within(retry).getByRole('button', { name: 'Create' }));
+    expect(await within(retry).findByRole('alert')).toHaveTextContent('CONTAINS cannot cross repository boundaries.');
+    expect(screen.getByRole('dialog', { name: 'New milestone' })).toBeInTheDocument();
   });
 
   it('edits a milestone outcome', async () => {
@@ -201,7 +205,7 @@ describe('CyclesPage', () => {
     const outcome = screen.getByLabelText('Milestone outcome') as HTMLTextAreaElement;
     expect(outcome.value).toBe('Beta ready');
     fireEvent.change(outcome, { target: { value: 'Beta ready for 10 teams' } });
-    const form = screen.getByRole('heading', { name: 'Edit milestone', hidden: true }).closest('form')!;
+    const form = screen.getByRole('dialog', { name: 'Edit milestone' });
     fireEvent.click(within(form).getByRole('button', { name: 'Save', hidden: true }));
     await waitFor(() =>
       expect(mockRunIssueUpdate).toHaveBeenCalledWith({

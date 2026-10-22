@@ -144,7 +144,7 @@ export function ContractSection({
             </p>
           ) : null}
           <div style={{ display: 'flex', gap: 6 }}>
-            <button type="button" className="ui-action ui-action--primary" disabled={saving} onClick={() => void save()}>
+            <button type="button" className="ui-action ui-action--accent" disabled={saving} onClick={() => void save()}>
               Save contract
             </button>
             <button

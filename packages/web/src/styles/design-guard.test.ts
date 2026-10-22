@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 
 const SRC = join(__dirname, '..');
 
-const STYLESHEETS = ['styles/app.css', 'styles/in-review.css', 'components/delivery.css'];
+const STYLESHEETS = ['styles/app.css', 'styles/controls.css', 'styles/in-review.css', 'components/delivery.css'];
 
 /**
  * Class tokens that may appear in TSX without a stylesheet rule.
@@ -53,17 +53,17 @@ const LOCAL_CUSTOM_PROPERTIES = new Set<string>([
   '--proj-border',
   // Set per severity modifier on the severity chip and read by its base rule.
   '--severity-tone',
+  // Set inline by DataTable from its column widths and read by .data-table.
+  '--data-table-columns',
 ]);
 
 /**
- * TSX files allowed to contain colour literals. Primitives.tsx is being moved
- * onto tokens by the parallel primitives stage (INV-1311) and will leave this list.
+ * TSX files allowed to contain colour literals.
  */
 const COLOR_LITERAL_ALLOWLIST = new Set<string>([
   'components/Icons.tsx', // Google logo: brand colours are fixed by Google
   'components/StatusIcon.tsx', // the one place status colours are defined (§3 rule 9)
   'components/graph/graph-colors.ts', // graph palette, mirrors StatusIcon
-  'components/Primitives.tsx', // inline Btn/Badge, moving to classes in INV-1311
 ]);
 
 function walk(dir: string): string[] {

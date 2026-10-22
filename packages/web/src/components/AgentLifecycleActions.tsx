@@ -8,6 +8,7 @@ import {
   AGENT_OWNER_CANDIDATES_QUERY,
 } from '../board/queries';
 import type { UserSummary } from '../board/types';
+import { Select, TextInput } from './controls';
 import { Btn } from './Primitives';
 
 type Mode = 'idle' | 'deactivate' | 'transfer';
@@ -15,12 +16,6 @@ type Mode = 'idle' | 'deactivate' | 'transfer';
 interface OwnerCandidatesData {
   users: { nodes: Array<Pick<UserSummary, 'id' | 'name' | 'email' | 'actorKind' | 'deactivatedAt'>> };
 }
-
-const inputStyle: React.CSSProperties = {
-  width: '100%', height: 30, padding: '0 10px',
-  background: 'var(--bg-raised)', border: '1px solid var(--border)',
-  borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)',
-};
 
 /**
  * The lifecycle controls for one actor (INV-605): deactivate, reactivate,
@@ -76,8 +71,7 @@ export function AgentLifecycleActions({
   }
 
   const reasonField = (label: string) => (
-    <input
-      style={inputStyle}
+    <TextInput
       aria-label={label}
       placeholder={label}
       value={reason}
@@ -140,12 +134,12 @@ export function AgentLifecycleActions({
           <p className="agent-directory__meta">
             The owner is the human accountable for this actor and where its escalations end.
           </p>
-          <select style={inputStyle} aria-label="New owner" value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>
+          <Select aria-label="New owner" value={ownerId} onChange={(event) => setOwnerId(event.target.value)}>
             <option value="">{candidates.loading ? 'Loading people…' : 'Choose a person'}</option>
             {humans.map((user) => (
               <option key={user.id} value={user.id}>{user.name ?? user.email ?? user.id}</option>
             ))}
-          </select>
+          </Select>
           {reasonField('Reason for transferring')}
           <div className="agent-lifecycle__actions">
             <Btn variant="primary" size="md" disabled={pending || !ownerId} onClick={() => void submit(

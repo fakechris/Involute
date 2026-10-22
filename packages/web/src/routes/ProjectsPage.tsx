@@ -2,7 +2,7 @@ import { ResolutionSelect, type WorkResolution } from '../components/CloseReason
 import { useMutation, useQuery } from '@apollo/client/react';
 
 import { ProjectSharing } from '../components/ProjectSharing';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
 import {
@@ -30,6 +30,8 @@ import type {
 import { readStoredTeamKey } from '../board/utils';
 import { IcoChevL, IcoMore, IcoPlus, IcoProject } from '../components/Icons';
 import { Avatar, Btn } from '../components/Primitives';
+import { DialogShell } from '../components/DialogShell';
+import { Checkbox, Field, Select, TextArea, TextInput } from '../components/controls';
 
 function statusBadgeColor(type: WorkflowStateType): string {
   switch (type) {
@@ -125,7 +127,7 @@ const ALIAS_PATTERN = /^[A-Z]{2,10}$/;
 export function ProjectsPage() {
   const navigate = useNavigate();
   const teamKey = readStoredTeamKey();
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create');
   const [formName, setFormName] = useState('');
@@ -188,7 +190,7 @@ export function ProjectsPage() {
     setFormWebOrigins('');
     setEditingOriginal(null);
     setFormError(null);
-    dialogRef.current?.showModal();
+    setIsDialogOpen(true);
   }
 
   function openEditDialog(project: ProjectIssueSummary) {
@@ -206,7 +208,7 @@ export function ProjectsPage() {
     setFormWebOrigins((project.webOrigins ?? []).join('\n'));
     setEditingOriginal({ repository: project.repository ?? '', alias: project.alias ?? '', autoAcceptBugs: project.autoAcceptBugs ?? false, webOrigins: project.webOrigins ?? [] });
     setFormError(null);
-    dialogRef.current?.showModal();
+    setIsDialogOpen(true);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -295,7 +297,7 @@ export function ProjectsPage() {
           return;
         }
       }
-      dialogRef.current?.close();
+      setIsDialogOpen(false);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'The project was not saved.');
     } finally {
@@ -314,133 +316,126 @@ export function ProjectsPage() {
 
   // Rendered in both views: Edit lives in the detail view's menu (INV-793).
   const projectDialog = (
-    <dialog ref={dialogRef} className="dialog-modal" onClick={(e) => { if (e.target === dialogRef.current) dialogRef.current?.close(); }}>
-      <form onSubmit={handleSubmit} style={{ padding: 20, minWidth: 380 }}>
-        <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 500 }}>
-          {dialogMode === 'create' ? 'New project' : 'Edit project'}
-        </h3>
-        <label style={{ display: 'block', marginBottom: 12 }}>
-          <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Name</span>
-          <input
-            style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)' }}
+    isDialogOpen ? (
+      <DialogShell
+        variant="modal"
+        title={dialogMode === 'create' ? 'New project' : 'Edit project'}
+        onClose={() => setIsDialogOpen(false)}
+        onSubmit={handleSubmit}
+        footer={(
+          <>
+            <Btn variant="subtle" size="md" onClick={() => setIsDialogOpen(false)}>Cancel</Btn>
+            <Btn type="submit" variant="accent" size="md" disabled={saving}>
+              {dialogMode === 'create' ? 'Create' : 'Save'}
+            </Btn>
+          </>
+        )}
+      >
+        <Field label="Name">
+          <TextInput
             value={formName}
             onChange={(e) => setFormName(e.target.value)}
             placeholder="Project name"
             required
           />
-        </label>
-        <label style={{ display: 'block', marginBottom: 12 }}>
-          <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Description</span>
-          <textarea
-            style={{ width: '100%', height: 60, padding: '6px 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)', resize: 'vertical' }}
+        </Field>
+        <Field label="Description">
+          <TextArea
+            size="sm"
             value={formDesc}
             onChange={(e) => setFormDesc(e.target.value)}
             placeholder="Optional description"
           />
-        </label>
-        <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
-          <label style={{ flex: 2 }}>
-            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>GitHub repository</span>
-            <input
+        </Field>
+        <div className="field-grid">
+          <Field label="GitHub repository">
+            <TextInput
               aria-label="GitHub repository"
-              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)' }}
               value={formRepository}
               onChange={(e) => setFormRepository(e.target.value)}
               placeholder="owner/name"
             />
-          </label>
-          <label style={{ flex: 1 }}>
-            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Reference alias</span>
-            <input
+          </Field>
+          <Field label="Reference alias">
+            <TextInput
               aria-label="Reference alias"
-              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)', textTransform: 'uppercase' }}
               value={formAlias}
               onChange={(e) => setFormAlias(e.target.value)}
               placeholder="e.g. LUM"
             />
-          </label>
+          </Field>
         </div>
-        <p style={{ fontSize: 13, color: 'var(--fg-dim)', margin: '0 0 12px', lineHeight: 1.4 }}>
+        <p className="field__hint">
           PRs and branches in this repository are routed to this project. With an alias, they may reference work as{' '}
           <span className="mono">{(formAlias.trim() || 'ALIAS').toUpperCase()}-123</span> as well as by the team key.
         </p>
-        <label style={{ display: 'block', marginBottom: 12 }}>
-          <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Web origins</span>
-          <textarea
+        <Field
+          label="Web origins"
+          hint="Where this project's web app runs, one per line or comma separated. Bugs reported from these pages with the capture extension go to this project."
+        >
+          <TextArea
             aria-label="Web origins"
-            style={{ width: '100%', height: 52, padding: '6px 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)', resize: 'vertical', fontFamily: 'var(--font-mono, monospace)' }}
+            size="sm"
+            className="mono"
             value={formWebOrigins}
             onChange={(e) => setFormWebOrigins(e.target.value)}
             placeholder="https://app.example.com, http://localhost:5173"
           />
-          <span style={{ display: 'block', fontSize: 13, color: 'var(--fg-dim)', marginTop: 4, lineHeight: 1.4 }}>
-            Where this project&apos;s web app runs, one per line or comma separated. Bugs reported from these pages with the capture extension go to this project.
-          </span>
-        </label>
+        </Field>
         {dialogMode === 'edit' ? (
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12, fontSize: 14 }}>
-            <input
-              type="checkbox"
-              aria-label="Auto-accept verified bug fixes"
-              checked={formAutoAccept}
-              // Turning it on needs a repository; turning it off never does.
-              disabled={!formRepository.trim() && !formAutoAccept}
-              onChange={(e) => setFormAutoAccept(e.target.checked)}
-            />
-            <span>
-              Auto-accept verified bug fixes
-              <span style={{ display: 'block', fontSize: 13, color: 'var(--fg-dim)', lineHeight: 1.4 }}>
-                A bug in Review moves to Done when GitHub shows its fix merged (or on the default branch) with CI checks green. Anything else waits for you, with the reason on /in-review. You can move an auto-accepted bug back to Review.
-              </span>
-            </span>
-          </label>
+          <Checkbox
+            aria-label="Auto-accept verified bug fixes"
+            checked={formAutoAccept}
+            // Turning it on needs a repository; turning it off never does.
+            disabled={!formRepository.trim() && !formAutoAccept}
+            onChange={(e) => setFormAutoAccept(e.target.checked)}
+            label={(
+              <>
+                Auto-accept verified bug fixes
+                <br />
+                <span className="field__hint">
+                  A bug in Review moves to Done when GitHub shows its fix merged (or on the default branch) with CI checks green. Anything else waits for you, with the reason on /in-review. You can move an auto-accepted bug back to Review.
+                </span>
+              </>
+            )}
+          />
         ) : null}
         {dialogMode === 'edit' && editingOriginal?.repository && formRepository.trim() !== editingOriginal.repository ? (
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 14 }}>
-            <input type="checkbox" checked={formCascade} onChange={(e) => setFormCascade(e.target.checked)} />
-            Move the project&apos;s work from {editingOriginal.repository} to the new repository too
-          </label>
+          <Checkbox
+            checked={formCascade}
+            onChange={(e) => setFormCascade(e.target.checked)}
+            label={<>Move the project&apos;s work from {editingOriginal.repository} to the new repository too</>}
+          />
         ) : null}
-        <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-          <label style={{ flex: 1 }}>
-            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Status</span>
-            <select
-              style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
+        <div className="field-grid">
+          <Field label="Status">
+            <Select
               value={formStateId}
               onChange={(e) => setFormStateId(e.target.value)}
             >
               {teamStates.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </label>
+            </Select>
+          </Field>
           {cancelingProject ? (
-            <label style={{ flex: 1 }}>
-              <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Resolution</span>
+            <Field label="Resolution">
               <ResolutionSelect ariaLabel="Project resolution" value={formResolution} onChange={setFormResolution} />
-            </label>
+            </Field>
           ) : null}
-          <label style={{ flex: 1 }}>
-            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Lead</span>
-            <select
-              style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
+          <Field label="Lead">
+            <Select
               value={formLeadId}
               onChange={(e) => setFormLeadId(e.target.value)}
             >
               <option value="">No lead</option>
               {users.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email ?? u.id}</option>)}
-            </select>
-          </label>
+            </Select>
+          </Field>
         </div>
         {formError ? (
-          <p role="alert" style={{ fontSize: 14, color: 'var(--danger)', margin: '0 0 12px' }}>{formError}</p>
+          <p role="alert" className="dialog-shell__error">{formError}</p>
         ) : null}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button type="button" className="btn btn--subtle btn--md" onClick={() => dialogRef.current?.close()}>Cancel</button>
-          <button type="submit" className="btn btn--accent btn--md" disabled={saving}>
-            {dialogMode === 'create' ? 'Create' : 'Save'}
-          </button>
-        </div>
-      </form>
-    </dialog>
+      </DialogShell>
+    ) : null
   );
 
   if (selectedProject) {
@@ -563,19 +558,7 @@ export function ProjectsPage() {
                       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
                         <Link
                           to={`/?project=${encodeURIComponent(project.repository || project.title)}`}
-                          className="btn btn--subtle"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            fontSize: 12,
-                            padding: '2px 8px',
-                            borderRadius: 'var(--r-1)',
-                            textDecoration: 'none',
-                            color: 'var(--accent)',
-                            border: '1px solid var(--border)',
-                            background: 'var(--bg)',
-                          }}
+                          className="ui-action ui-action--subtle ui-action--sm"
                           onClick={(e) => e.stopPropagation()}
                           title={`Open ${project.title} on board`}
                         >
@@ -583,19 +566,7 @@ export function ProjectsPage() {
                         </Link>
                         <Link
                           to={`/graph?project=${encodeURIComponent(project.repository || project.title)}`}
-                          className="btn btn--subtle"
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            fontSize: 12,
-                            padding: '2px 8px',
-                            borderRadius: 'var(--r-1)',
-                            textDecoration: 'none',
-                            color: 'var(--fg-muted)',
-                            border: '1px solid var(--border)',
-                            background: 'var(--bg)',
-                          }}
+                          className="ui-action ui-action--subtle ui-action--sm"
                           onClick={(e) => e.stopPropagation()}
                           title={`Open ${project.title} on graph`}
                         >

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation } from '@apollo/client/react';
 
 import { EVIDENCE_ATTACH_MUTATION, type MutationResult } from '../ops/queries';
+import { Select } from './controls';
 
 const KINDS = [
   ['pr', 'Pull request'],
@@ -52,13 +53,13 @@ export function EvidenceAttachForm({ workId }: { workId: string }) {
   }
   return (
     <div className="request-actions">
-      <select aria-label="Evidence kind" value={kind} onChange={(event) => setKind(event.target.value)}>
+      <Select aria-label="Evidence kind" value={kind} onChange={(event) => setKind(event.target.value)}>
         {KINDS.map(([value, label]) => (
           <option key={value} value={value}>
             {label}
           </option>
         ))}
-      </select>
+      </Select>
       <input aria-label="Evidence URL" placeholder="https://…" value={url} onChange={(event) => setUrl(event.target.value)} />
       <input aria-label="Evidence summary" placeholder="What it shows (optional)" value={summary} onChange={(event) => setSummary(event.target.value)} />
       <button type="button" className="ui-action ui-action--accent" disabled={!url.trim() || state?.loading} onClick={() => void submit()}>

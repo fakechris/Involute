@@ -1,5 +1,9 @@
 import { useCallback, useRef, useState, type FormEvent, type ReactNode } from 'react';
 
+import { Field, Select, TextArea } from './controls';
+import { DialogShell } from './DialogShell';
+import { Btn } from './Primitives';
+
 /** Why work was closed without being done (INV-1118); mirrors the server enum. */
 export type WorkResolution = 'COMPLETED' | 'WONT_DO' | 'INVALID' | 'DUPLICATE' | 'CANNOT_REPRODUCE' | 'OBSOLETE';
 
@@ -23,19 +27,20 @@ export interface CloseReason {
 }
 
 /** A resolution picker; empty until a person chooses, so nothing is closed by default. */
-export function ResolutionSelect({ value, onChange, ariaLabel, disabled }: {
+export function ResolutionSelect({ value, onChange, ariaLabel, disabled, size }: {
   value: WorkResolution | '';
   onChange: (value: WorkResolution | '') => void;
   ariaLabel: string;
   disabled?: boolean;
+  size?: 'sm' | 'md';
 }) {
   return (
-    <select aria-label={ariaLabel} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value as WorkResolution | '')}>
+    <Select aria-label={ariaLabel} value={value} disabled={disabled} size={size} onChange={(event) => onChange(event.target.value as WorkResolution | '')}>
       <option value="">Choose why…</option>
       {RESOLUTION_OPTIONS.map((option) => (
         <option key={option.value} value={option.value}>{option.label}</option>
       ))}
-    </select>
+    </Select>
   );
 }
 
@@ -61,36 +66,29 @@ function CloseReasonDialog({ request, onDone }: { request: PendingRequest; onDon
   }
 
   return (
-    <aside className="issue-panel" aria-label="Close reason" aria-modal="true" role="dialog">
-      <button type="button" className="issue-panel__backdrop" aria-label="Keep it open" onClick={() => onDone(null)} />
-      <section className="issue-panel__frame">
-        <div className="issue-panel__header">
-          <div>
-            <p className="app-shell__eyebrow">Close without doing it</p>
-            <h2>{request.title}</h2>
-          </div>
-        </div>
-        <form className="discussion-form" onSubmit={submit}>
-          <div className="issue-panel__section">
-            <label className="field-stack">
-              <span>Resolution</span>
-              <ResolutionSelect ariaLabel="Resolution" value={resolution} onChange={setResolution} />
-            </label>
-          </div>
-          <div className="issue-panel__section">
-            <label className="field-stack">
-              <span>Reason{request.needsReason ? '' : ' (optional)'}</span>
-              <textarea aria-label="Close reason text" value={reason} onChange={(event) => setReason(event.target.value)} />
-            </label>
-          </div>
-          {missing ? <p className="observation-card__meta">{missing}</p> : null}
-          <div className="issue-panel__section">
-            <button type="submit" className="ui-action ui-action--accent" disabled={Boolean(missing)}>Cancel work</button>
-            <button type="button" className="ui-action ui-action--subtle" onClick={() => onDone(null)}>Keep open</button>
-          </div>
-        </form>
-      </section>
-    </aside>
+    <DialogShell
+      variant="modal"
+      title={request.title}
+      eyebrow="Close without doing it"
+      ariaLabel="Close reason"
+      backdropLabel="Keep it open"
+      onClose={() => onDone(null)}
+      onSubmit={submit}
+      footer={
+        <>
+          {missing ? <p className="observation-card__meta dialog-shell__footer-start">{missing}</p> : null}
+          <Btn variant="subtle" size="md" onClick={() => onDone(null)}>Keep open</Btn>
+          <Btn type="submit" variant="accent" size="md" disabled={Boolean(missing)}>Cancel work</Btn>
+        </>
+      }
+    >
+      <Field label="Resolution">
+        <ResolutionSelect ariaLabel="Resolution" value={resolution} onChange={setResolution} />
+      </Field>
+      <Field label={`Reason${request.needsReason ? '' : ' (optional)'}`}>
+        <TextArea aria-label="Close reason text" value={reason} onChange={(event) => setReason(event.target.value)} />
+      </Field>
+    </DialogShell>
   );
 }
 

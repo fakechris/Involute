@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation } from '@apollo/client/react';
 import { useNavigate } from 'react-router-dom';
 
@@ -10,6 +10,8 @@ import { readStoredTeamKey } from '../board/utils';
 import { SAVED_VIEWS_ACCOUNT_EVENT } from '../lib/saved-views-account';
 import { IcoPlus, IcoViews } from '../components/Icons';
 import { Btn } from '../components/Primitives';
+import { DialogShell } from '../components/DialogShell';
+import { Field, Select, TextInput } from '../components/controls';
 
 interface ViewEntry {
   id: string;
@@ -24,7 +26,7 @@ export function ViewsPage() {
   const teamKey = readStoredTeamKey();
   const [boardViews, setBoardViews] = useState<SavedBoardView[]>(() => readSavedBoardViews(teamKey));
   const [backlogViews, setBacklogViews] = useState<SavedBacklogView[]>(() => readSavedBacklogViews(teamKey));
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [runUpsert] = useMutation<{ savedViewUpsert: { success: boolean; message?: string | null } }>(SAVED_VIEW_UPSERT_MUTATION);
   const [runDelete] = useMutation<{ savedViewDelete: { success: boolean; message?: string | null } }>(SAVED_VIEW_DELETE_MUTATION);
   const [error, setError] = useState<string | null>(null);
@@ -109,7 +111,7 @@ export function ViewsPage() {
         <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={() => {
           setNewViewName('');
           setNewViewKind('Board');
-          dialogRef.current?.showModal();
+          setIsDialogOpen(true);
         }}>New view</Btn>
       </div>
 
@@ -197,8 +199,11 @@ export function ViewsPage() {
         )}
       </div>
 
-      <dialog ref={dialogRef} className="dialog-modal" onClick={(e) => { if (e.target === dialogRef.current) dialogRef.current?.close(); }}>
-        <form
+      {isDialogOpen ? (
+        <DialogShell
+          variant="modal"
+          title="New view"
+          onClose={() => setIsDialogOpen(false)}
           onSubmit={(e) => {
             e.preventDefault();
             if (!newViewName.trim() || !teamKey) return;
@@ -212,39 +217,35 @@ export function ViewsPage() {
               writeSavedBacklogViews(teamKey, next);
               setBacklogViews(next);
             }
-            dialogRef.current?.close();
+            setIsDialogOpen(false);
             navigate(newViewKind === 'Board' ? '/' : '/backlog');
           }}
-          style={{ padding: 20, minWidth: 300 }}
+          footer={(
+            <>
+              <Btn variant="subtle" size="md" onClick={() => setIsDialogOpen(false)}>Cancel</Btn>
+              <Btn type="submit" variant="accent" size="md">Create</Btn>
+            </>
+          )}
         >
-          <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 500 }}>New view</h3>
-          <label style={{ display: 'block', marginBottom: 12 }}>
-            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Name</span>
-            <input
-              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)' }}
+          <Field label="Name">
+            <TextInput
               value={newViewName}
               onChange={(e) => setNewViewName(e.target.value)}
               placeholder="View name"
               required
             />
-          </label>
-          <label style={{ display: 'block', marginBottom: 16 }}>
-            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Type</span>
-            <select
-              style={{ width: '100%', height: 30, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
+          </Field>
+          <Field label="Type">
+            <Select
               value={newViewKind}
               onChange={(e) => setNewViewKind(e.target.value as 'Board' | 'Backlog')}
             >
               <option value="Board">Board</option>
               <option value="Backlog">Backlog</option>
-            </select>
-          </label>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn--subtle btn--md" onClick={() => dialogRef.current?.close()}>Cancel</button>
-            <button type="submit" className="btn btn--accent btn--md">Create</button>
-          </div>
-        </form>
-      </dialog>
+            </Select>
+          </Field>
+        </DialogShell>
+      ) : null}
     </div>
   );
 }

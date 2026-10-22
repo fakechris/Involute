@@ -2,7 +2,10 @@ import { useEffect, useRef, type FormEvent } from 'react';
 
 import type { TeamSummary } from '../board/types';
 import type { CreatePlacement, PlaceableProject, PlacementSource } from '../work/placement';
+import { Checkbox, Field, Select, TextInput } from './controls';
+import { DialogShell } from './DialogShell';
 import { PlacementPicker } from './PlacementPicker';
+import { Btn } from './Primitives';
 import { RichTextEditor } from './RichTextEditor';
 
 export type CreatableKind = 'ISSUE' | 'EPIC' | 'DECISION';
@@ -71,140 +74,115 @@ export function BoardCreateIssueDialog({
   }
 
   return (
-    <aside className="issue-panel" aria-label="Create issue drawer" aria-modal="true" role="dialog">
-      <button
-        type="button"
-        className="issue-panel__backdrop"
-        aria-label="Close create issue drawer"
-        onClick={onClose}
-      />
-      <section className="issue-panel__frame">
-        <div className="issue-panel__header">
-          <div>
-            <p className="app-shell__eyebrow">Involute</p>
-            <h2>Create issue</h2>
+    <DialogShell
+      variant="modal"
+      title="Create issue"
+      eyebrow="Involute"
+      ariaLabel="Create issue drawer"
+      backdropLabel="Close create issue drawer"
+      onClose={onClose}
+      onSubmit={onSubmit}
+      formRef={formRef}
+      formProps={{
+        onKeyDown: (event) => {
+          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            formRef.current?.requestSubmit();
+          }
+        },
+      }}
+      footer={
+        <>
+          <div className="dialog-shell__footer-start">
+            <Checkbox label="Create more" checked={createMore} onChange={(event) => onCreateMoreChange(event.target.checked)} />
+            {!placement ? <span className="observation-hint">Choose where it belongs</span> : null}
           </div>
-          <button type="button" className="issue-panel__close" onClick={onClose}>
-            Close
-          </button>
-        </div>
-
-        <form
-          ref={formRef}
-          className="discussion-form"
-          onSubmit={onSubmit}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-              event.preventDefault();
-              formRef.current?.requestSubmit();
-            }
+          <Btn
+            type="submit"
+            variant="accent"
+            size="md"
+            disabled={isSaving || !createTitle.trim() || !selectedTeam || !placement}
+            title="Create issue (⌘/Ctrl + Enter)"
+          >
+            Create issue
+          </Btn>
+        </>
+      }
+    >
+      <Field label="Type">
+        <Select
+          aria-label="Work type"
+          value={createKind}
+          disabled={isSaving}
+          onChange={(event) => {
+            if (event.target.value === 'BUG') onReportBug?.();
+            else onCreateKindChange(event.target.value as CreatableKind);
           }}
         >
-          <div className="issue-panel__section">
-            <label className="field-stack">
-              <span>Type</span>
-              <select
-                aria-label="Work type"
-                value={createKind}
-                disabled={isSaving}
-                onChange={(event) => {
-                  if (event.target.value === 'BUG') onReportBug?.();
-                  else onCreateKindChange(event.target.value as CreatableKind);
-                }}
-              >
-                <option value="ISSUE">Issue</option>
-                <option value="EPIC">Epic</option>
-                <option value="DECISION">Decision</option>
-                {onReportBug ? <option value="BUG">Bug — report with steps and priority</option> : null}
-              </select>
-            </label>
-          </div>
+          <option value="ISSUE">Issue</option>
+          <option value="EPIC">Epic</option>
+          <option value="DECISION">Decision</option>
+          {onReportBug ? <option value="BUG">Bug — report with steps and priority</option> : null}
+        </Select>
+      </Field>
 
-          <div className="issue-panel__section">
-            <label className="issue-panel__label" htmlFor="create-issue-title">
-              Title
-            </label>
-            <input
-              id="create-issue-title"
-              ref={titleInputRef}
-              aria-label="Issue title"
-              className="issue-panel__title-input"
-              value={createTitle}
-              disabled={isSaving}
-              onChange={(event) => onTitleChange(event.target.value)}
-            />
-          </div>
+      <Field label="Title" htmlFor="create-issue-title">
+        <TextInput
+          ref={titleInputRef}
+          aria-label="Issue title"
+          value={createTitle}
+          disabled={isSaving}
+          onChange={(event) => onTitleChange(event.target.value)}
+        />
+      </Field>
 
-          <div className="issue-panel__section">
-            <label className="issue-panel__label" htmlFor="create-issue-description">
-              Description
-            </label>
-            {/* Paste, drop or attach screenshots like in a comment (INV-1132). */}
-            <RichTextEditor
-              id="create-issue-description"
-              ariaLabel="Issue description"
-              placeholder="Describe it; paste or drop screenshots"
-              value={createDescription}
-              disabled={isSaving}
-              onChange={onDescriptionChange}
-              hideSubmit
-            />
-          </div>
+      <div className="field">
+        <label className="field__label" htmlFor="create-issue-description">
+          Description
+        </label>
+        {/* Paste, drop or attach screenshots like in a comment (INV-1132). */}
+        <RichTextEditor
+          id="create-issue-description"
+          ariaLabel="Issue description"
+          placeholder="Describe it; paste or drop screenshots"
+          value={createDescription}
+          disabled={isSaving}
+          onChange={onDescriptionChange}
+          hideSubmit
+        />
+      </div>
 
-          {teams.length > 1 ? (
-            <div className="issue-panel__section">
-              <label className="field-stack">
-                <span>Team</span>
-                <select
-                  aria-label="Select team"
-                  value={selectedTeam?.key ?? ''}
-                  disabled={isSaving}
-                  onChange={(event) => onTeamChange(event.target.value)}
-                >
-                  {teams.map((team) => (
-                    <option key={team.id} value={team.key}>
-                      {team.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          ) : null}
+      {teams.length > 1 ? (
+        <Field label="Team">
+          <Select
+            aria-label="Select team"
+            value={selectedTeam?.key ?? ''}
+            disabled={isSaving}
+            onChange={(event) => onTeamChange(event.target.value)}
+          >
+            {teams.map((team) => (
+              <option key={team.id} value={team.key}>
+                {team.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      ) : null}
 
-          <div className="issue-panel__section">
-            <PlacementPicker
-              projects={projects}
-              value={placement}
-              source={placementSource}
-              kind={createKind}
-              disabled={isSaving}
-              onChange={onPlacementChange}
-            />
-          </div>
+      <PlacementPicker
+        projects={projects}
+        value={placement}
+        source={placementSource}
+        kind={createKind}
+        disabled={isSaving}
+        onChange={onPlacementChange}
+      />
 
-          {errorMessage ? (
-            <p className="issue-relations__error" role="alert">
-              {errorMessage}
-            </p>
-          ) : null}
-
-          <div className="create-issue__actions">
-            <label className="create-issue__more">
-              <input type="checkbox" checked={createMore} onChange={(event) => onCreateMoreChange(event.target.checked)} />
-              Create more
-            </label>
-            {!placement ? <span className="observation-hint">Choose where it belongs</span> : null}
-            <button
-              type="submit"
-              className="ui-action ui-action--accent"
-              disabled={isSaving || !createTitle.trim() || !selectedTeam || !placement}
-              title="Create issue (⌘/Ctrl + Enter)"
-            >
-              Create issue
-            </button>
-          </div>
-        </form>
-      </section>
-    </aside>
+      {errorMessage ? (
+        <p className="dialog-shell__error" role="alert">
+          {errorMessage}
+        </p>
+      ) : null}
+    </DialogShell>
   );
 }

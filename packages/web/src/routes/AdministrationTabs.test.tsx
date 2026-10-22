@@ -93,6 +93,12 @@ describe('Administration → Members', () => {
     const rowOf = (name: string) => screen.getByText(name).closest('[role="row"]') as HTMLElement;
     expect(within(rowOf('Ana')).queryByRole('button', { name: 'Suspend' })).not.toBeInTheDocument();
     expect(within(rowOf('Ana')).getByLabelText('Workspace role for Ana')).toBeDisabled();
+    // Person / Teams / Status / Role / Actions: the access action sits in the last column on every row (INV-1313).
+    const header = within(screen.getByRole('table', { name: 'People' })).getAllByRole('columnheader').map((cell) => cell.textContent);
+    expect(header).toEqual(['Person', 'Teams', 'Status', 'Role', '']);
+    const actionsOf = (name: string) => within(rowOf(name)).getAllByRole('cell').at(-1) as HTMLElement;
+    expect(within(actionsOf('Bo')).getByRole('button', { name: 'Suspend' })).toBeInTheDocument();
+    expect(within(actionsOf('cy')).getByRole('button', { name: 'Revoke invite' })).toBeInTheDocument();
 
     vi.spyOn(window, 'prompt').mockReturnValue('covers on-call');
     mutations.UserSetGlobalRole!.mockResolvedValue(ok('userSetGlobalRole'));

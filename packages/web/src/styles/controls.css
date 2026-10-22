@@ -1,0 +1,779 @@
+/* ============================================================
+   Shared primitives (INV-1313, docs/design-system.md §3.3–3.6):
+   form controls (Field / TextInput / TextArea / Select / Checkbox),
+   buttons (Btn on .ui-action), DialogShell, DataTable, SettingsShell.
+   Imported after app.css, so equal-specificity rules here win.
+   ============================================================ */
+
+/* ---------- Field ---------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.field__label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--fg-dim);
+}
+
+.field__hint {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--fg-dim);
+}
+
+.field__error {
+  font-size: 12px;
+  color: var(--danger);
+}
+
+.field > .control,
+.field__control > .control {
+  width: 100%;
+}
+
+/* Settings rows: label + hint in a 180px column, control on the right. */
+.field--aside {
+  flex-direction: row;
+  gap: 40px;
+  margin-bottom: 20px;
+}
+
+.field--aside .field__aside {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 180px;
+  flex-shrink: 0;
+}
+
+.field--aside .field__label {
+  font-size: 14px;
+  color: var(--fg);
+}
+
+.field--aside .field__control {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .field--aside {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .field--aside .field__aside {
+    width: auto;
+  }
+}
+
+/* Several short fields side by side (priority / severity / …). */
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+/* A vertical stack of fields in a dialog or form. */
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ---------- .control base: TextInput / TextArea / Select ---------- */
+
+/* :is(element.class) (0,1,1) beats the older `.field-stack select`-style rules. */
+:is(input.control-input, select.control-select, textarea.control-textarea) {
+  height: calc(var(--row-h, 32px) - 2px);
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  background-color: var(--bg-raised);
+  padding: 0 10px;
+  color: var(--fg);
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: none;
+  transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
+}
+
+:is(input.control-input, select.control-select, textarea.control-textarea)::placeholder {
+  color: var(--fg-faint);
+}
+
+:is(input.control-input, select.control-select, textarea.control-textarea):hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+:is(input.control-input, select.control-select, textarea.control-textarea):focus-visible {
+  border-color: var(--accent-border);
+}
+
+:is(input.control-input, select.control-select, textarea.control-textarea):disabled {
+  cursor: not-allowed;
+  background-color: var(--bg-sunken);
+  color: var(--fg-dim);
+  opacity: 0.7;
+}
+
+:is(input.control-input, select.control-select, textarea.control-textarea)[aria-invalid="true"] {
+  border-color: color-mix(in srgb, var(--danger) 60%, var(--border));
+}
+
+:is(input.control-input, select.control-select, textarea.control-textarea)--sm {
+  height: calc(var(--row-h, 32px) - 6px);
+  border-radius: var(--r-2);
+  padding: 0 8px;
+  font-size: 13.5px;
+}
+
+textarea.control-textarea {
+  height: auto;
+  min-height: 76px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+textarea.control--sm {
+  height: auto;
+  min-height: 56px;
+  padding: 6px 8px;
+}
+
+/* Native select, own chevron: two hairline triangles drawn in --fg-dim. */
+select.control-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--fg-dim) 50%),
+    linear-gradient(135deg, var(--fg-dim) 50%, transparent 50%);
+  background-position:
+    calc(100% - 15px) 50%,
+    calc(100% - 10px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+select.control--sm {
+  padding-right: 24px;
+  background-position:
+    calc(100% - 13px) 50%,
+    calc(100% - 8px) 50%;
+}
+
+select.control-select:disabled {
+  cursor: not-allowed;
+}
+
+/* Ghost: borderless until hovered; the property rows of the issue panel. */
+select.control--ghost {
+  flex: 1 1 auto;
+  height: 24px;
+  border-color: transparent;
+  border-radius: var(--r-1);
+  background-color: transparent;
+  padding: 0 22px 0 4px;
+  background-position:
+    calc(100% - 12px) 50%,
+    calc(100% - 7px) 50%;
+}
+
+select.control--ghost:hover:not(:disabled),
+select.control--ghost:focus-visible {
+  border-color: var(--border);
+  background-color: var(--bg-hover);
+}
+
+/* ---------- Checkbox ---------- */
+
+.checkbox {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.checkbox--disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.checkbox__input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: inherit;
+}
+
+/* Beside a label, the box lines up with its first line. */
+.checkbox > .checkbox__input {
+  margin-top: 3px;
+}
+
+.checkbox__label {
+  min-width: 0;
+}
+
+/* A wrap of checkboxes (label pickers). */
+.checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+/* ---------- Buttons: Btn and the .ui-action family ---------- */
+
+.ui-action {
+  gap: 6px;
+  white-space: nowrap;
+  line-height: 1;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.ui-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.ui-action--sm {
+  height: 24px;
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 13.5px;
+}
+
+.ui-action--md {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 10px;
+}
+
+.ui-action--icon {
+  padding: 0;
+  width: 24px;
+}
+
+.ui-action--md.ui-action--icon {
+  width: 28px;
+}
+
+.ui-action--accent:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+.ui-action--subtle {
+  background: var(--bg-raised);
+  color: var(--fg);
+}
+
+.ui-action--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--fg-muted);
+}
+
+.ui-action--ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.ui-action--ghost.is-active {
+  background: var(--bg-active);
+  color: var(--fg);
+}
+
+.ui-action--subtle.is-active {
+  background: var(--bg-active);
+}
+
+.ui-action--danger {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--danger);
+}
+
+.ui-action--danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+  background: var(--danger-weak);
+}
+
+.ui-action__kbd {
+  margin-left: 4px;
+  opacity: 0.7;
+}
+
+.ui-action.is-loading {
+  cursor: progress;
+}
+
+.ui-action__spinner {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: ui-action-pulse 900ms var(--ease) infinite;
+}
+
+@keyframes ui-action-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+/* ---------- DialogShell ---------- */
+
+.dialog-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+}
+
+.dialog-shell__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: var(--bg-overlay);
+  padding: 0;
+  cursor: pointer;
+}
+
+.dialog-shell__frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-lg);
+  outline: none;
+}
+
+.dialog-shell--side {
+  justify-content: flex-end;
+}
+
+.dialog-shell--side .dialog-shell__frame {
+  width: min(720px, calc(100vw - 24px));
+  height: 100%;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.dialog-shell--modal {
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+.dialog-shell--modal .dialog-shell__frame {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  border: 1px solid var(--border);
+  border-radius: var(--r-4);
+  overflow: hidden;
+}
+
+.dialog-shell__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 12px var(--content-gutter);
+}
+
+.dialog-shell__heading {
+  min-width: 0;
+}
+
+.dialog-shell__eyebrow {
+  margin: 0 0 2px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.dialog-shell__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.dialog-shell__form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dialog-shell__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px var(--content-gutter);
+}
+
+.dialog-shell__footer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--border-subtle);
+  background: inherit;
+  padding: 12px var(--content-gutter);
+}
+
+/* Footer content that belongs on the left (a "Create more" checkbox, a hint). */
+.dialog-shell__footer-start {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-right: auto;
+  min-width: 0;
+}
+
+.dialog-shell__error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+/* ---------- DataTable ---------- */
+
+.data-table {
+  display: grid;
+  grid-template-columns: var(--data-table-columns);
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  overflow: hidden;
+  margin-bottom: 24px;
+  background: var(--bg-raised);
+}
+
+.data-table__row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  column-gap: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 8px 12px;
+  font-size: 14px;
+}
+
+.data-table__row:last-child {
+  border-bottom: none;
+}
+
+.data-table__row--head {
+  background: var(--bg-sunken);
+  padding: 7px 12px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--fg-dim);
+}
+
+.data-table__row--muted {
+  opacity: 0.55;
+}
+
+.data-table__cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.data-table__cell--end {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.data-table__primary {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.data-table__primary > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-table__secondary {
+  font-size: 12.5px;
+  color: var(--fg-dim);
+}
+
+.data-table__empty {
+  grid-column: 1 / -1;
+  padding: 14px 12px;
+  font-size: 14px;
+  color: var(--fg-dim);
+}
+
+@media (max-width: 720px) {
+  .data-table {
+    display: block;
+  }
+
+  .data-table__row--head {
+    display: none;
+  }
+
+  .data-table__row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .data-table__cell,
+  .data-table__cell--end {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .data-table__cell[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 96px;
+    font-size: 12px;
+    color: var(--fg-dim);
+  }
+}
+
+/* ---------- SettingsShell ---------- */
+
+.settings-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  background: var(--bg);
+}
+
+.settings-shell__nav {
+  width: 200px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-sunken);
+  padding: 12px;
+}
+
+.settings-shell__title {
+  padding: 6px 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-dim);
+}
+
+.settings-shell__group + .settings-shell__group {
+  margin-top: 8px;
+}
+
+.settings-shell__group-label {
+  padding: 8px 8px 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg-dim);
+}
+
+.settings-shell__item {
+  display: block;
+  width: 100%;
+  height: 28px;
+  margin-bottom: 1px;
+  border-radius: var(--r-2);
+  padding: 0 8px;
+  text-align: left;
+  font-size: 14px;
+  color: var(--fg-muted);
+  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+}
+
+.settings-shell__item:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.settings-shell__item.is-active {
+  background: var(--bg-active);
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.settings-shell__content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 24px var(--pad-x);
+}
+
+.settings-shell__inner {
+  max-width: 760px;
+}
+
+.settings-section__title {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.settings-section__sub {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: var(--fg-dim);
+}
+
+/* A row of inline controls (invite / create forms above a table). */
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.inline-form > .field {
+  flex: 1 1 160px;
+}
+
+.inline-form > .inline-form__narrow {
+  flex: 0 1 140px;
+}
+
+/* A control that takes the rest of its flex row. */
+.control-grow {
+  flex: 1 1 auto;
+}
+
+.settings-section__title--sub {
+  margin-top: 28px;
+  font-size: 15px;
+}
+
+.settings-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+/* Settings → Members */
+.admin-invite {
+  margin-bottom: 20px;
+}
+
+.admin-invite__teams {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 10px;
+}
+
+.admin-invite__team,
+.admin-members__team {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.admin-members__teams {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.admin-members__warning {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  color: var(--warn);
+}
+
+/* Team settings → Agents */
+.agents-tab__team {
+  max-width: 320px;
+  margin-bottom: 20px;
+}
+
+.agents-tab__fresh {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 20px;
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--border));
+  border-radius: var(--r-3);
+  background: var(--bg-raised);
+  padding: 12px 14px;
+}
+
+.agents-tab__fresh-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.agents-tab__token {
+  font-size: 13px;
+  word-break: break-all;
+  user-select: all;
+}
+
+.agents-tab__fresh-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.agents-tab__form {
+  max-width: 460px;
+}
+
+@media (max-width: 720px) {
+  .settings-shell {
+    flex-direction: column;
+  }
+
+  .settings-shell__nav {
+    width: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+}

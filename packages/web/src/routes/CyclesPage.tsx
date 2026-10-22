@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@apollo/client/react';
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import {
@@ -43,6 +43,8 @@ import type {
 import { readStoredTeamKey } from '../board/utils';
 import { IcoCycle, IcoPlus, IcoSettings } from '../components/Icons';
 import { Btn, StatusIconPrimitive } from '../components/Primitives';
+import { DialogShell } from '../components/DialogShell';
+import { Field, TextArea, TextInput } from '../components/controls';
 import { getStatusColorVar } from '../components/StatusIcon';
 
 type ViewTab = 'milestones' | 'cycles';
@@ -85,8 +87,8 @@ export function CyclesPage() {
   const [teamKey, setTeamKey] = useState<string | null>(() => readStoredTeamKey());
   const [activeTab, setActiveTab] = useState<ViewTab>('milestones');
 
-  const cycleDialogRef = useRef<HTMLDialogElement>(null);
-  const milestoneDialogRef = useRef<HTMLDialogElement>(null);
+  const [isCycleDialogOpen, setIsCycleDialogOpen] = useState(false);
+  const [isMilestoneDialogOpen, setIsMilestoneDialogOpen] = useState(false);
 
   useEffect(() => {
     function handleActiveTeamKeyChange(event: Event) {
@@ -197,7 +199,7 @@ export function CyclesPage() {
     setMilestonePlacement(null);
     setMilestoneError(null);
     setMilestoneOutcome('');
-    milestoneDialogRef.current?.showModal();
+    setIsMilestoneDialogOpen(true);
   }
 
   function openEditMilestone(milestone: MilestoneIssueSummary) {
@@ -207,7 +209,7 @@ export function CyclesPage() {
     setMilestoneDescription(milestone.description ?? '');
     setMilestoneOutcome(milestone.outcome ?? '');
     setMilestoneError(null);
-    milestoneDialogRef.current?.showModal();
+    setIsMilestoneDialogOpen(true);
   }
 
   async function handleMilestoneSubmit(e: React.FormEvent) {
@@ -253,7 +255,7 @@ export function CyclesPage() {
     }
 
     void refetchMilestones();
-    milestoneDialogRef.current?.close();
+    setIsMilestoneDialogOpen(false);
   }
 
   async function handleMilestoneDelete(id: string) {
@@ -270,7 +272,7 @@ export function CyclesPage() {
     setFormStartsAt(now.toISOString().slice(0, 10));
     const end = new Date(now.getTime() + 14 * 86400000);
     setFormEndsAt(end.toISOString().slice(0, 10));
-    cycleDialogRef.current?.showModal();
+    setIsCycleDialogOpen(true);
   }
 
   function openEditCycleDialog(cycle: CycleSummary) {
@@ -279,7 +281,7 @@ export function CyclesPage() {
     setFormName(cycle.name);
     setFormStartsAt(new Date(cycle.startsAt).toISOString().slice(0, 10));
     setFormEndsAt(new Date(cycle.endsAt).toISOString().slice(0, 10));
-    cycleDialogRef.current?.showModal();
+    setIsCycleDialogOpen(true);
   }
 
   async function handleCycleSubmit(e: React.FormEvent) {
@@ -310,7 +312,7 @@ export function CyclesPage() {
       });
     }
     void refetchCycles();
-    cycleDialogRef.current?.close();
+    setIsCycleDialogOpen(false);
   }
 
   async function handleCycleDelete(cycleId: string) {
@@ -390,22 +392,12 @@ export function CyclesPage() {
         )}
 
         <div style={{ display: 'inline-flex', marginLeft: 16, border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 1 }}>
-          <button
-            type="button"
-            className={activeTab === 'milestones' ? 'btn btn--subtle btn--sm is-active' : 'btn btn--ghost btn--sm'}
-            onClick={() => setActiveTab('milestones')}
-            style={{ fontSize: 12, height: 24, padding: '0 8px' }}
-          >
+          <Btn variant="ghost" size="sm" active={activeTab === 'milestones'} onClick={() => setActiveTab('milestones')}>
             Milestones (Work Graph)
-          </button>
-          <button
-            type="button"
-            className={activeTab === 'cycles' ? 'btn btn--subtle btn--sm is-active' : 'btn btn--ghost btn--sm'}
-            onClick={() => setActiveTab('cycles')}
-            style={{ fontSize: 12, height: 24, padding: '0 8px' }}
-          >
+          </Btn>
+          <Btn variant="ghost" size="sm" active={activeTab === 'cycles'} onClick={() => setActiveTab('cycles')}>
             Cycles (Legacy)
-          </button>
+          </Btn>
         </div>
 
         <div style={{ flex: 1 }} />
@@ -639,111 +631,106 @@ export function CyclesPage() {
       </div>
 
       {/* Milestone Dialog */}
-      <dialog ref={milestoneDialogRef} className="dialog-modal" onClick={(e) => { if (e.target === milestoneDialogRef.current) milestoneDialogRef.current?.close(); }}>
-        <form onSubmit={(e) => void handleMilestoneSubmit(e)} style={{ padding: 20, minWidth: 360 }}>
-          <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 500 }}>
-            {milestoneDialogMode === 'create' ? 'New milestone' : 'Edit milestone'}
-          </h3>
-          <label style={{ display: 'block', marginBottom: 12 }}>
-            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Title</span>
-            <input
-              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)' }}
+      {isMilestoneDialogOpen ? (
+        <DialogShell
+          variant="modal"
+          title={milestoneDialogMode === 'create' ? 'New milestone' : 'Edit milestone'}
+          onClose={() => setIsMilestoneDialogOpen(false)}
+          onSubmit={(e) => void handleMilestoneSubmit(e)}
+          footer={(
+            <>
+              <Btn variant="subtle" size="md" onClick={() => setIsMilestoneDialogOpen(false)}>Cancel</Btn>
+              <Btn type="submit" variant="accent" size="md" disabled={milestoneDialogMode === 'create' && !milestonePlacement}>
+                {milestoneDialogMode === 'create' ? 'Create' : 'Save'}
+              </Btn>
+            </>
+          )}
+        >
+          <Field label="Title">
+            <TextInput
               value={milestoneTitle}
               onChange={(e) => setMilestoneTitle(e.target.value)}
               placeholder="e.g. Release v1.0 or Core Engine"
               required
             />
-          </label>
-          <label style={{ display: 'block', marginBottom: 16 }}>
-            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Description</span>
-            <textarea
-              style={{ width: '100%', minHeight: 60, padding: '6px 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)', resize: 'vertical' }}
+          </Field>
+          <Field label="Description">
+            <TextArea
               value={milestoneDescription}
               onChange={(e) => setMilestoneDescription(e.target.value)}
               placeholder="Milestone goals and deliverables"
             />
-          </label>
-          <label style={{ display: 'block', marginBottom: 16 }}>
-            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Outcome</span>
-            <textarea
+          </Field>
+          <Field label="Outcome">
+            <TextArea
               aria-label="Milestone outcome"
-              style={{ width: '100%', minHeight: 48, padding: '6px 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)', resize: 'vertical' }}
+              size="sm"
               value={milestoneOutcome}
               onChange={(e) => setMilestoneOutcome(e.target.value)}
               placeholder="What is true once this milestone is done"
             />
-          </label>
+          </Field>
           {milestoneDialogMode === 'create' ? (
-            <div style={{ marginBottom: 16 }}>
-              <PlacementPicker
-                projects={milestoneProjects}
-                value={milestonePlacement}
-                source={null}
-                kind="MILESTONE"
-                onChange={setMilestonePlacement}
-              />
-            </div>
+            <PlacementPicker
+              projects={milestoneProjects}
+              value={milestonePlacement}
+              source={null}
+              kind="MILESTONE"
+              onChange={setMilestonePlacement}
+            />
           ) : null}
           {milestoneError ? (
-            <p role="alert" className="issue-relations__error" style={{ marginBottom: 12 }}>
+            <p role="alert" className="dialog-shell__error">
               {milestoneError}
             </p>
           ) : null}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn--subtle btn--md" onClick={() => milestoneDialogRef.current?.close()}>Cancel</button>
-            <button type="submit" className="btn btn--accent btn--md" disabled={milestoneDialogMode === 'create' && !milestonePlacement}>
-              {milestoneDialogMode === 'create' ? 'Create' : 'Save'}
-            </button>
-          </div>
-        </form>
-      </dialog>
+        </DialogShell>
+      ) : null}
 
       {/* Cycle Dialog */}
-      <dialog ref={cycleDialogRef} className="dialog-modal" onClick={(e) => { if (e.target === cycleDialogRef.current) cycleDialogRef.current?.close(); }}>
-        <form onSubmit={(e) => void handleCycleSubmit(e)} style={{ padding: 20, minWidth: 340 }}>
-          <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 500 }}>
-            {cycleDialogMode === 'create' ? 'New cycle' : 'Edit cycle'}
-          </h3>
-          <label style={{ display: 'block', marginBottom: 12 }}>
-            <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Name</span>
-            <input
-              style={{ width: '100%', height: 30, padding: '0 10px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14.5, color: 'var(--fg)' }}
+      {isCycleDialogOpen ? (
+        <DialogShell
+          variant="modal"
+          title={cycleDialogMode === 'create' ? 'New cycle' : 'Edit cycle'}
+          onClose={() => setIsCycleDialogOpen(false)}
+          onSubmit={(e) => void handleCycleSubmit(e)}
+          footer={(
+            <>
+              <Btn variant="subtle" size="md" onClick={() => setIsCycleDialogOpen(false)}>Cancel</Btn>
+              <Btn type="submit" variant="accent" size="md">
+                {cycleDialogMode === 'create' ? 'Create' : 'Save'}
+              </Btn>
+            </>
+          )}
+        >
+          <Field label="Name">
+            <TextInput
               value={formName}
               onChange={(e) => setFormName(e.target.value)}
               placeholder="e.g. Sprint 1"
               required
             />
-          </label>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-            <label style={{ flex: 1 }}>
-              <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>Start date</span>
-              <input
+          </Field>
+          <div className="field-grid">
+            <Field label="Start date">
+              <TextInput
                 type="date"
-                style={{ width: '100%', height: 30, padding: '0 8px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
                 value={formStartsAt}
                 onChange={(e) => setFormStartsAt(e.target.value)}
                 required
               />
-            </label>
-            <label style={{ flex: 1 }}>
-              <span style={{ fontSize: 14, color: 'var(--fg-dim)', display: 'block', marginBottom: 4 }}>End date</span>
-              <input
+            </Field>
+            <Field label="End date">
+              <TextInput
                 type="date"
-                style={{ width: '100%', height: 30, padding: '0 8px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 14, color: 'var(--fg)' }}
                 value={formEndsAt}
                 onChange={(e) => setFormEndsAt(e.target.value)}
                 required
               />
-            </label>
+            </Field>
           </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn--subtle btn--md" onClick={() => cycleDialogRef.current?.close()}>Cancel</button>
-            <button type="submit" className="btn btn--accent btn--md">
-              {cycleDialogMode === 'create' ? 'Create' : 'Save'}
-            </button>
-          </div>
-        </form>
-      </dialog>
+        </DialogShell>
+      ) : null}
     </div>
   );
 }
@@ -774,7 +761,7 @@ function MilestoneRow({
       <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{childCount} tasks</span>
       <Btn variant="ghost" size="sm" onClick={onNavigate}>Context</Btn>
       <Btn variant="ghost" size="sm" onClick={onEdit}>Edit</Btn>
-      <Btn variant="ghost" size="sm" onClick={onDelete} style={{ color: 'var(--danger)' }}>Delete</Btn>
+      <Btn variant="danger" size="sm" onClick={onDelete}>Delete</Btn>
     </div>
   );
 }
@@ -794,7 +781,7 @@ function CycleRow({ cycle, onEdit, onDelete }: { cycle: CycleSummary; onEdit: ()
       </span>
       <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{issueCount} issues</span>
       <Btn variant="ghost" size="sm" onClick={onEdit}>Edit</Btn>
-      <Btn variant="ghost" size="sm" onClick={onDelete} style={{ color: 'var(--danger)' }}>Delete</Btn>
+      <Btn variant="danger" size="sm" onClick={onDelete}>Delete</Btn>
     </div>
   );
 }

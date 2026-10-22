@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@apollo/client/react';
 
 import { ACTOR_SET_SUCCESSOR_MUTATION, AGENT_OWNER_CANDIDATES_QUERY } from '../board/queries';
 import type { UserSummary } from '../board/types';
+import { Select } from './controls';
 
 interface CandidatesData {
   users: { nodes: Array<Pick<UserSummary, 'id' | 'name' | 'email' | 'actorKind' | 'deactivatedAt'>> };
@@ -49,14 +50,14 @@ export function ActorSuccessorControl({
   return (
     <label className="field-stack">
       <span>Successor</span>
-      <select aria-label="Successor" value={successorId} disabled={state?.loading} onChange={(event) => void save(event.target.value)}>
+      <Select aria-label="Successor" value={successorId} disabled={state?.loading} onChange={(event) => void save(event.target.value)}>
         <option value="">None declared</option>
         {options.map((user) => (
           <option key={user.id} value={user.id}>
             {user.name ?? user.email ?? user.id}
           </option>
         ))}
-      </select>
+      </Select>
       {error ? (
         <span role="alert" className="issue-relations__error">
           {error}

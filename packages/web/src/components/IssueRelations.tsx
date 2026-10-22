@@ -20,6 +20,7 @@ import { Btn } from './Primitives';
 import { StatusIcon } from './StatusIcon';
 import { LINKS_CHANGED_EVENT, type LinksChangedDetail } from '../undo/LinkUndoHost';
 import { recordLinkGesture } from '../undo/status-undo';
+import { Select } from './controls';
 
 /**
  * How a typed link reads from the open issue's side. A link is stored once,
@@ -279,7 +280,7 @@ export function IssueRelations({ issueId, disabled = false, onOpen }: IssueRelat
             submitAdd();
           }}
         >
-          <select
+          <Select
             aria-label="Relation type"
             value={relationKey}
             disabled={pending}
@@ -290,7 +291,7 @@ export function IssueRelations({ issueId, disabled = false, onOpen }: IssueRelat
                 {relation.label}
               </option>
             ))}
-          </select>
+          </Select>
           <input
             aria-label="Related issue identifier"
             placeholder="INV-123"
