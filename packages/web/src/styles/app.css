@@ -2706,13 +2706,7 @@ kbd {
   gap: 4px;
 }
 
-.issue-panel__label {
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--fg-dim);
-}
+/* .issue-panel__label: defined once, with .field-stack span above (sentence case, INV-1313). */
 
 /*
   Auto-growing title. The ::after mirrors the text in the same grid cell, so

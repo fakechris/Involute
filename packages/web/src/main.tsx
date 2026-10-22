@@ -6,6 +6,7 @@ import { App } from './App';
 import { AppApolloProvider } from './lib/apollo';
 import { RevisitRefresh } from './lib/revisit-refresh';
 import './styles/app.css';
+import './styles/controls.css';
 import './styles/in-review.css';
 
 const rootElement = document.getElementById('root');
