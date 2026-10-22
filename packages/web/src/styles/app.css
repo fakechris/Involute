@@ -1886,9 +1886,10 @@ kbd {
 
 .issue-card__header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 4px 6px;
   min-width: 0;
   margin-bottom: 2px;
 }
@@ -1907,6 +1908,8 @@ kbd {
 
 .issue-card__header-tags {
   display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 4px;
@@ -1920,6 +1923,8 @@ kbd {
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 500;
