@@ -269,5 +269,21 @@ describe('InReviewPage', () => {
     fireEvent.keyDown(window, { key: 'A', shiftKey: true });
     expect(screen.getByText('2 selected')).toBeInTheDocument();
   });
-});
 
+  it('renders a three-section description as headings and lists, clamped, and the acceptance as markdown (INV-1315)', () => {
+    const original = reviewItems[0]!.description;
+    reviewItems[0]!.description = '### 1. 目标与架构定位\n让验收可读。\n\n### 2. 核心功能与交付范围\n- 渲染标题\n- 渲染列表';
+    try {
+      render(<MemoryRouter><InReviewPage /></MemoryRouter>);
+      const card = screen.getByRole('listitem', { name: 'INV-101 in review' });
+      expect(within(card).getByRole('heading', { name: '1. 目标与架构定位' })).toBeInTheDocument();
+      expect(within(card).getByRole('heading', { name: '2. 核心功能与交付范围' })).toBeInTheDocument();
+      expect(within(card).getByText('渲染标题').closest('ul')).not.toBeNull();
+      expect(card.textContent).not.toContain('###');
+      expect(card.querySelector('.observation-card__body .markdown-content__body--clamped')).not.toBeNull();
+      expect(within(card).getByText('Bulk accept audited').closest('.markdown-content')).not.toBeNull();
+    } finally {
+      reviewItems[0]!.description = original;
+    }
+  });
+});

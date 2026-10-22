@@ -9,6 +9,7 @@ import './styles/app.css';
 import './styles/controls.css';
 import './styles/layout.css';
 import './styles/in-review.css';
+import './styles/content.css';
 
 const rootElement = document.getElementById('root');
 

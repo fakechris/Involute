@@ -17,6 +17,7 @@ import type {
 } from '../board/types';
 import { IcoCheck, IcoInbox } from '../components/Icons';
 import { Btn } from '../components/Primitives';
+import { ListRow } from '../components/list';
 import { PageBody, PageHeader } from '../components/layout';
 import { EmptyState, SegmentedControl } from '../components/status';
 
@@ -284,11 +285,13 @@ export function InboxPage() {
             const resolved = resolutionText(item);
 
             return (
-              <div
+              <ListRow
+                as="div"
+                variant="divided"
                 role="button"
                 tabIndex={0}
                 key={item.id}
-                className={`inbox-item${isUnread ? ' inbox-item--unread' : ''}`}
+                unread={isUnread}
                 onClick={() => handleOpenGroup(group)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -296,67 +299,64 @@ export function InboxPage() {
                     handleOpenGroup(group);
                   }
                 }}
-              >
-                <div className="inbox-avatar-wrap">
-                  <div className="inbox-item__glyph">⚡</div>
-                  {isUnread && <span className="inbox-unread-dot" />}
-                </div>
-
-                <div className="inbox-item__content">
-                  <div className="inbox-item__line">
-                    <strong>{formatNotificationType(item.type)}</strong>
-                    {item.work && (
-                      <>
-                        <span className="inbox-item__on"> on </span>
-                        <span className="mono inbox-item__id">
-                          {item.work.identifier}
-                        </span>
-                      </>
+                leading={
+                  <span className="inbox-avatar-wrap">
+                    <span className="inbox-item__glyph">⚡</span>
+                    {isUnread && <span className="inbox-unread-dot" />}
+                  </span>
+                }
+                id={item.work?.identifier}
+                title={
+                  <>
+                    <strong className="inbox-item__type">{formatNotificationType(item.type)}</strong>
+                    {item.work ? <span className="inbox-item__issue">{item.work.title}</span> : null}
+                  </>
+                }
+                titleText={item.work ? `${formatNotificationType(item.type)} · ${item.work.title}` : formatNotificationType(item.type)}
+                detail={
+                  item.actionable || more.length > 0 || !item.work || summary ? (
+                    <>
+                      {item.actionable ? (
+                        resolved ? (
+                          <span className="inbox-item__resolution">{resolved}</span>
+                        ) : (
+                          <Link className="inbox-item__ops-link" to="/todo" onClick={(event) => event.stopPropagation()}>
+                            Waiting on you · Needs you
+                          </Link>
+                        )
+                      ) : null}
+                      {more.length > 0 ? (
+                        <span className="inbox-item__more">+{more.length} more on this item</span>
+                      ) : null}
+                      {!item.work ? <NotificationDetails payload={item.payload} /> : null}
+                      {!item.work && OPS_SECTION[item.type] ? (
+                        <Link className="inbox-item__ops-link" to={`/ops#${OPS_SECTION[item.type]}`} onClick={(event) => event.stopPropagation()}>
+                          Open in Ops
+                        </Link>
+                      ) : null}
+                      {summary && (
+                        <span className="inbox-item__summary">{summary}</span>
+                      )}
+                    </>
+                  ) : null
+                }
+                trailing={
+                  <>
+                    <span className="inbox-item__time">{formatRelative(item.createdAt)}</span>
+                    {isUnread && (
+                      <button
+                        type="button"
+                        className="inbox-item__mark-read"
+                        title="Mark as read"
+                        aria-label="Mark as read"
+                        onClick={(e) => handleMarkGroupRead(e, group)}
+                      >
+                        <IcoCheck size={12} />
+                      </button>
                     )}
-                  </div>
-                  {item.work && (
-                    <div className="inbox-item__issue truncate">
-                      {item.work.title}
-                    </div>
-                  )}
-                  {item.actionable ? (
-                    resolved ? (
-                      <div className="inbox-item__resolution">{resolved}</div>
-                    ) : (
-                      <Link className="inbox-item__ops-link" to="/todo" onClick={(event) => event.stopPropagation()}>
-                        Waiting on you · Needs you
-                      </Link>
-                    )
-                  ) : null}
-                  {more.length > 0 ? (
-                    <div className="inbox-item__more">+{more.length} more on this item</div>
-                  ) : null}
-                  {!item.work ? <NotificationDetails payload={item.payload} /> : null}
-                  {!item.work && OPS_SECTION[item.type] ? (
-                    <Link className="inbox-item__ops-link" to={`/ops#${OPS_SECTION[item.type]}`} onClick={(event) => event.stopPropagation()}>
-                      Open in Ops
-                    </Link>
-                  ) : null}
-                  {summary && (
-                    <div className="inbox-item__summary">{summary}</div>
-                  )}
-                </div>
-
-                <div className="inbox-item__trail">
-                  <span className="inbox-item__time">{formatRelative(item.createdAt)}</span>
-                  {isUnread && (
-                    <button
-                      type="button"
-                      className="inbox-item__mark-read"
-                      title="Mark as read"
-                      aria-label="Mark as read"
-                      onClick={(e) => handleMarkGroupRead(e, group)}
-                    >
-                      <IcoCheck size={12} />
-                    </button>
-                  )}
-                </div>
-              </div>
+                  </>
+                }
+              />
             );
           })
         )}

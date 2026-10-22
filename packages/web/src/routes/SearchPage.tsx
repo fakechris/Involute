@@ -1,6 +1,6 @@
 import { useQuery } from '@apollo/client/react';
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
 import { highlight } from '../components/highlight';
@@ -10,6 +10,7 @@ import { matchLabel } from '../work/search-labels';
 import type { GraphProjectsQueryData, SearchLabelsQueryData, WorkSearchQueryData } from '../work/types';
 import { Select, TextInput } from '../components/controls';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
+import { IssueRow } from '../components/list';
 import { Btn } from '../components/Primitives';
 import { EmptyState, InlineError, LoadingState } from '../components/status';
 
@@ -174,18 +175,15 @@ export function SearchPage() {
             <p className="observation-hint" role="status">
               {hits.length === RESULT_LIMIT ? `Top ${RESULT_LIMIT} results` : `${hits.length} result${hits.length === 1 ? '' : 's'}`}
             </p>
-            <ul className="search-results" aria-label="Search results">
+            <ul className="list-rows" aria-label="Search results">
               {hits.map((hit) => (
-                <li key={hit.issue.id} className="search-result">
-                  <Link to={`/issue/${hit.issue.id}`} className="search-result__link">
-                    <span className="mono search-result__identifier">{hit.issue.identifier}</span>
-                    <span className="search-result__title">{highlight(hit.issue.title, query)}</span>
-                    <span className="search-result__meta">
-                      {hit.issue.state.name} · {matchLabel(hit)}
-                    </span>
-                  </Link>
-                  {hit.snippet ? <p className="search-result__snippet">{highlight(hit.snippet, query)}</p> : null}
-                </li>
+                <IssueRow
+                  key={hit.issue.id}
+                  issue={hit.issue}
+                  titleNode={highlight(hit.issue.title, query)}
+                  meta={`${hit.issue.state.name} · ${matchLabel(hit)}`}
+                  detail={hit.snippet ? <span className="list-row__snippet">{highlight(hit.snippet, query)}</span> : null}
+                />
               ))}
             </ul>
           </>

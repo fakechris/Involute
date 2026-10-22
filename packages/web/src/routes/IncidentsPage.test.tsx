@@ -78,7 +78,7 @@ describe('IncidentsPage (INV-1129)', () => {
     expect(screen.getByTestId('incident-INV-1')).toHaveTextContent('1 of 2 done · 1 overdue');
     expect(screen.getByText('2 declined or duplicate incidents are not counted.')).toBeInTheDocument();
 
-    fireEvent.click(within(screen.getByTestId('incident-INV-1')).getByRole('button'));
+    fireEvent.click(within(screen.getByTestId('incident-INV-1')).getByRole('link', { name: /INV-1/ }));
     expect(screen.getByTestId('where')).toHaveTextContent('/issue/INV-1');
   });
 

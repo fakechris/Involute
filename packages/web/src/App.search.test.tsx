@@ -43,8 +43,8 @@ describe('Search page (INV-926)', () => {
 
     const results = await screen.findByRole('list', { name: 'Search results' });
     const link = within(results).getByRole('link', { name: /INV-1/ });
-    expect(link).toHaveAttribute('href', '/issue/issue-1');
-    expect(link).toHaveTextContent('in contract');
+    expect(link).toHaveAttribute('href', '/issue/INV-1');
+    expect(link.closest('li')).toHaveTextContent('in contract');
     expect(within(results).getByText('审批', { selector: 'mark' })).toBeInTheDocument();
     expect(searchVariables().at(-1)).toEqual({ query: '审批', first: 100 });
   });
@@ -77,7 +77,7 @@ describe('Search page (INV-926)', () => {
     renderApp({ data: boardQueryResult, loading: false, searchData: related }, ['/search?q=发版后要刷新']);
 
     const results = await screen.findByRole('list', { name: 'Search results' });
-    expect(within(results).getByRole('link', { name: /INV-1/ })).toHaveTextContent('Backlog · related');
+    expect(within(results).getByRole('link', { name: /INV-1/ }).closest('li')).toHaveTextContent('Backlog · related');
   });
 
   it('names the attached file a hit was found in (INV-1117)', async () => {
@@ -87,7 +87,7 @@ describe('Search page (INV-926)', () => {
     renderApp({ data: boardQueryResult, loading: false, searchData: inFile }, ['/search?q=快照']);
 
     const results = await screen.findByRole('list', { name: 'Search results' });
-    expect(within(results).getByRole('link', { name: /INV-1/ })).toHaveTextContent('Backlog · in postmortem.md');
+    expect(within(results).getByRole('link', { name: /INV-1/ }).closest('li')).toHaveTextContent('Backlog · in postmortem.md');
   });
 
   it('opens from ⌘K with "View all results"', async () => {

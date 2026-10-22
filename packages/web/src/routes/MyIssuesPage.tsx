@@ -1,16 +1,15 @@
 import { useQuery } from '@apollo/client/react';
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 import { BOARD_PAGE_QUERY } from '../board/queries';
 import type { BoardPageQueryData, BoardPageQueryVariables, IssueSummary, WorkflowStateType } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 import { Select } from '../components/controls';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
-import { Avatar, PriorityIcon, StatusIconPrimitive } from '../components/Primitives';
+import { IssueRow } from '../components/list';
+import { Avatar } from '../components/Primitives';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
 import { EmptyState, LoadingState } from '../components/status';
-import { getStatusColorVar } from '../components/StatusIcon';
 import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam, NO_REPOSITORY_OPTIONS } from './work-filter-match';
 
@@ -39,35 +38,12 @@ function classifyState(stateType: WorkflowStateType): 'progress' | 'todo' | 'bac
   }
 }
 
-function getStateType(stateType: WorkflowStateType): string {
-  switch (stateType) {
-    case 'COMPLETED': return 'completed';
-    case 'CANCELED': return 'canceled';
-    case 'STARTED': return 'started';
-    case 'BACKLOG': return 'backlog';
-    case 'UNSTARTED':
-    default: return 'unstarted';
-  }
-}
-
-function getStateColor(stateType: WorkflowStateType): string {
-  const type = getStateType(stateType);
-  switch (type) {
-    case 'completed': return getStatusColorVar('completed');
-    case 'canceled': return getStatusColorVar('canceled');
-    case 'started': return getStatusColorVar('started');
-    case 'backlog': return getStatusColorVar('backlog');
-    default: return getStatusColorVar('unstarted');
-  }
-}
-
 interface IssueGroup {
   label: string;
   items: IssueSummary[];
 }
 
 export function MyIssuesPage() {
-  const navigate = useNavigate();
   const teamKey = readStoredTeamKey();
   const [filterStateType, setFilterStateType] = useState<WorkflowStateType | ''>('');
   const [project, setProject] = useProjectParam();
@@ -180,26 +156,18 @@ export function MyIssuesPage() {
                   <span className="issue-group-header__label">{g.label}</span>
                   <span className="issue-group-header__count">{g.items.length}</span>
                 </div>
-                {g.items.map((issue) => (
-                  <button
-                    type="button"
-                    key={issue.id}
-                    className="my-issues-row"
-                    onClick={() => navigate(`/issue/${issue.id}`)}
-                    aria-label={`Open issue ${issue.identifier}`}
-                  >
-                    <span className="mono my-issues-row__dim">{issue.identifier}</span>
-                    <PriorityIcon level={issue.priority} size={14} />
-                    <StatusIconPrimitive
-                      stateType={getStateType(issue.state.type)}
-                      stateColor={getStateColor(issue.state.type)}
-                      size={14}
+                <ul className="list-rows list-rows--divided" aria-label={g.label}>
+                  {g.items.map((issue) => (
+                    <IssueRow
+                      key={issue.id}
+                      issue={issue}
+                      variant="divided"
+                      openLabel={`Open issue ${issue.identifier}`}
+                      showState
+                      age={formatTimeAgo(issue.updatedAt)}
                     />
-                    <span className="my-issues-row__title">{issue.title}</span>
-                    <span className="my-issues-row__state">{issue.state.name}</span>
-                    <span className="mono my-issues-row__dim">{formatTimeAgo(issue.updatedAt)}</span>
-                  </button>
-                ))}
+                  ))}
+                </ul>
               </div>
             ),
           )

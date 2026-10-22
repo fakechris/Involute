@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
 
 import { readStoredTeamKey } from '../board/utils';
 import { IcoCheck, IcoClose, IcoFilter } from '../components/Icons';
@@ -8,7 +9,7 @@ import { TextInput } from '../components/controls';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { Btn } from '../components/Primitives';
 import { ProjectFilterCombobox, type AvailableProject } from '../components/ProjectFilterCombobox';
-import { BulkActionBar, EmptyState, InlineError, LoadingState } from '../components/status';
+import { Badge, BulkActionBar, EmptyState, InlineError, LoadingState } from '../components/status';
 import { filtersToIql, joinIql, useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { useListKeys } from '../components/useListKeys';
 import { IN_REVIEW_PAGE_QUERY, IN_REVIEW_PROJECTS_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
@@ -384,7 +385,7 @@ export function InReviewPage() {
                     >
                       {item.identifier}
                     </button>
-                    <span className="observation-card__status">in review</span>
+                    <Badge tone="accent">in review</Badge>
                     {item.reviewWait ? (
                       <span className={`observation-card__meta${item.reviewWait.overdue ? ' observation-card__meta--overdue' : ''}`} title={`In Review since ${item.reviewWait.since}`}>
                         waiting {formatWaitDays(item.reviewWait.waitMs)}{item.reviewWait.overdue ? ' · overdue' : ''}
@@ -395,17 +396,16 @@ export function InReviewPage() {
                         not auto-accepted: {item.autoAccept.reasons.join('; ')}
                       </span>
                     ) : null}
-                    <span className="observation-card__meta">{item.team.key}</span>
+                    <Badge mono>{item.team.key}</Badge>
                     <span className="observation-card__meta">rev {item.revision}</span>
                     {item.pendingContractAmendment ? (
-                      <button
-                        type="button"
-                        className="observation-card__status"
+                      <Badge
+                        tone="warn"
                         title="An agent proposed a change to this contract; decide it before reviewing against the old one."
                         onClick={() => navigate(`/issue/${item.id}#contract`)}
                       >
                         contract change proposed
-                      </button>
+                      </Badge>
                     ) : null}
                     {item.assignee ? (
                       <span className="observation-card__meta">
@@ -414,19 +414,19 @@ export function InReviewPage() {
                     ) : null}
                   </header>
                   <h2 className="observation-card__title">{item.title}</h2>
-                  {item.description ? <p className="observation-card__body">{item.description}</p> : null}
+                  {item.description ? <MarkdownRenderer content={item.description} clamp={6} size="sm" className="observation-card__body" /> : null}
                   <dl className="observation-contract">
                     <div>
                       <dt>Acceptance</dt>
-                      <dd>{item.acceptance || '-'}</dd>
+                      <dd>{item.acceptance?.trim() ? <MarkdownRenderer content={item.acceptance} size="sm" /> : '-'}</dd>
                     </div>
                     <div>
                       <dt>Verification</dt>
-                      <dd>{item.verification || '-'}</dd>
+                      <dd>{item.verification?.trim() ? <MarkdownRenderer content={item.verification} size="sm" /> : '-'}</dd>
                     </div>
                     <div>
                       <dt>Outcome</dt>
-                      <dd>{item.outcome || '-'}</dd>
+                      <dd>{item.outcome?.trim() ? <MarkdownRenderer content={item.outcome} size="sm" /> : '-'}</dd>
                     </div>
                     <div>
                       <dt>Repository</dt>

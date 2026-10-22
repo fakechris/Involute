@@ -1,5 +1,6 @@
 import { ResolutionSelect, type WorkResolution } from '../components/CloseReasonDialog';
 import { useMutation, useQuery } from '@apollo/client/react';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
 
 import { ProjectSharing } from '../components/ProjectSharing';
 import { useState } from 'react';
@@ -471,7 +472,7 @@ export function ProjectsPage() {
                 <button
                   key={project.id}
                   type="button"
-                  className="projects-card"
+                  className="card card--interactive projects-card"
                   onClick={() => setSelectedProjectId(project.id)}
                 >
                   <div className="projects-card__head">
@@ -597,7 +598,7 @@ function ProjectDetailView({
 
       <PageBody width="wide">
         {project.description && (
-          <p className="projects-detail__description">{project.description}</p>
+          <MarkdownRenderer content={project.description} size="sm" className="projects-detail__description" />
         )}
 
         <div className="projects-detail__facts">

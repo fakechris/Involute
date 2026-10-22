@@ -214,8 +214,8 @@ describe('BugsPage', () => {
     );
     const panel = screen.getByLabelText('Most duplicated open bugs');
     const rows = within(panel).getAllByRole('row').map((row) => row.textContent);
-    expect(rows).toEqual(['BugDuplicates', 'INV-32High wrong totals3', 'INV-30Urgent crash on save1']);
-    expect(within(panel).getByRole('button', { name: /INV-32/ })).toHaveAttribute('title', expect.stringMatching(/raising its priority/));
+    expect(rows).toEqual(['BugDuplicates', 'INV-32 High wrong totals3', 'INV-30 Urgent crash on save1']);
+    expect(within(panel).getByRole('link', { name: /INV-32/ }).closest('.list-row')).toHaveAttribute('title', expect.stringMatching(/raising its priority/));
   });
 
   it('renders the header stat cards', () => {
@@ -299,7 +299,7 @@ describe('BugsPage', () => {
     mockUpdate.mockResolvedValue({ data: { issueUpdate: { issue: null, success: true } } });
     render(<MemoryRouter><BugsPage /></MemoryRouter>);
     const list = screen.getByRole('list', { name: 'Open bugs list' });
-    expect(within(list).getByRole('link', { name: 'INV-30' })).toHaveAttribute('href', '/issue/INV-30');
+    expect(within(list).getByRole('link', { name: /^INV-30\b/ })).toHaveAttribute('href', '/issue/INV-30');
 
     fireEvent.change(within(list).getByLabelText('Priority of INV-30'), { target: { value: '2' } });
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledWith({ variables: { id: 'issue-urgent', input: { expectedRevision: 4, priority: 2 } } }));

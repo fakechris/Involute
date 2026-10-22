@@ -1,0 +1,100 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`MarkdownRenderer blocks (INV-1315) > renders pipe tables with header, rows and alignment 1`] = `
+<div
+  class="markdown-content"
+>
+  <div
+    class="markdown-content__table"
+  >
+    <table>
+      <thead>
+        <tr>
+          <th
+            align="left"
+          >
+            Name
+          </th>
+          <th
+            align="right"
+          >
+            Count
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td
+            align="left"
+          >
+            a
+          </td>
+          <td
+            align="right"
+          >
+            1
+          </td>
+        </tr>
+        <tr>
+          <td
+            align="left"
+          >
+            <code>
+              b
+            </code>
+          </td>
+          <td
+            align="right"
+          >
+            2
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+`;
+
+exports[`MarkdownRenderer blocks (INV-1315) > renders the three-section description as headings and lists, not literal ### 1`] = `
+<div
+  class="markdown-content"
+>
+  <h5
+    class="markdown-content__h3"
+  >
+    1. 目标与架构定位
+  </h5>
+  <p>
+    让验收卡片可读。
+  </p>
+  <h5
+    class="markdown-content__h3"
+  >
+    2. 核心功能与交付范围
+  </h5>
+  <ul>
+    <li>
+      MarkdownRenderer 支持块级语法
+    </li>
+    <li>
+      接入 In Review
+    </li>
+  </ul>
+  <h5
+    class="markdown-content__h3"
+  >
+    3. 验收标准与验证方案
+  </h5>
+  <ol>
+    <li>
+      <code>
+        pnpm test
+      </code>
+       exit 0
+    </li>
+    <li>
+      typecheck exit 0
+    </li>
+  </ol>
+</div>
+`;

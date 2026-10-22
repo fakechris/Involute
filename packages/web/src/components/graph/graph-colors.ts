@@ -1,14 +1,16 @@
 import type { WorkflowStateType } from '../../board/types';
+import { getStatusColorVar, statusKindForStateType } from '../StatusIcon';
 
-// Same hues StatusIcon draws, keyed by state type so the graph and the board agree.
-export const STATE_TYPE_COLOR: Record<WorkflowStateType, string> = {
-  BACKLOG: '#6b7280',
-  UNSTARTED: '#64748b',
-  STARTED: '#f59e0b',
-  REVIEW: '#7c88ff',
-  COMPLETED: '#10b981',
-  CANCELED: '#ef4444',
-};
+const STATE_TYPES: WorkflowStateType[] = ['BACKLOG', 'UNSTARTED', 'STARTED', 'REVIEW', 'COMPLETED', 'CANCELED'];
+
+/**
+ * The hues StatusIcon draws, keyed by state type so the graph and the board
+ * agree. Read from StatusIcon — the one place status colours are defined
+ * (docs/design-system.md §3 rule 9).
+ */
+export const STATE_TYPE_COLOR = Object.fromEntries(
+  STATE_TYPES.map((type) => [type, getStatusColorVar(statusKindForStateType(type))]),
+) as Record<WorkflowStateType, string>;
 
 export const STATE_TYPE_ORDER: WorkflowStateType[] = ['COMPLETED', 'REVIEW', 'STARTED', 'UNSTARTED', 'BACKLOG', 'CANCELED'];
 

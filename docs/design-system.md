@@ -69,12 +69,18 @@
 
 | 原语 | 文件 | 替代的旧做法 |
 |---|---|---|
-| `PageHeader` `PageToolbar` `PageBody` | `components/layout/Page.tsx` | 5 种 header、8 种宽度 |
+| `PageHeader` `PageToolbar` `PageBody` | `components/layout/Page.tsx`（`components/layout/index.ts`）+ `styles/layout.css` | 5 种 header、8 种宽度 |
 | `Field` `TextInput` `TextArea` `Select` `Checkbox` | `components/controls/*.tsx` + `styles/controls.css` | 12 种字段、79 个裸 select、5 个 `inputStyle` |
 | `Btn`（重写） | `components/Primitives.tsx` | `.btn*` `.ui-action--primary` 内联按钮 |
 | `DialogShell` | `components/DialogShell.tsx` | `.issue-panel` 复用、`<dialog>` 内联 |
-| `ListRow` `DataTable` | `components/list/*.tsx` | 9 种行、`rowStyle` |
-| `StatTile` `EmptyState` `InlineError` `LoadingState` `SegmentedControl` `BulkActionBar` `Badge` | `components/status/*.tsx` | 见 §2.2 |
-| `MarkdownRenderer`（块级） | `components/MarkdownRenderer.tsx` | 裸文本 |
+| `DataTable` | `components/DataTable.tsx` | 设置页表格、`rowStyle` |
+| `ListRow` `IssueRow` | `components/list/ListRow.tsx`（`components/list/index.ts`）+ `styles/content.css` | 9 种行：My Issues grid、`bugs-list`、`search-result`、`hygiene-item`、`inbox-item`、`attention-row` 已迁移；保留 `IssueCard`（Board）、`.observation-card`（In Review / Candidates 的卡片）与 Backlog 表格 |
+| `StatTile` `StatRow` `EmptyState` `InlineError` `LoadingState` `SegmentedControl` `BulkActionBar` `Badge` | `components/status/Status.tsx`（`components/status/index.ts`）+ `styles/layout.css`（`Badge`：`styles/content.css`） | 见 §2.2；`Badge` 替代 `.observation-card__status`、`.views-card__kind`、`.context-chip`、`attention-row__flag` |
+| `FilterChip` `FilterMenu` `FilterSearch` `SortControl` `SavedViewControl` | `components/filters/Filters.tsx`（`components/filters/index.ts`）+ `styles/layout.css` | 5 种筛选区 |
+| `MarkdownRenderer`（块级 + `clamp`） | `components/MarkdownRenderer.tsx` + `styles/content.css` | 裸文本；标题 / 列表 / 任务列表 / 引用 / 分割线 / 表格 / 代码块 |
+| `.card`（样式类，不是组件） | `styles/content.css` | Projects / Cycles / Views 各自的卡片外壳 |
+| 状态色 | `components/StatusIcon.tsx`（`getStatusColorVar` / `statusKindForStateType`） | `graph-colors.ts` 与时间线 CSS 里的重复 hex |
+
+ListRow 打开规则：路由自带抽屉时打开 `?issue=<identifier>`（`IssueRow open="drawer"`），否则进入 `/issue/:identifier`；In Review 卡片的工单号仍进入 `/work/:id`（上下文页）。
 
 迁移进度见 `IMPLEMENTATION_PLAN.md` 的「UI 一致性」章节；每个阶段对应一张 Involute 工单。

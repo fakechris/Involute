@@ -192,7 +192,7 @@ describe('Needs you (INV-1092)', () => {
     expect(epic?.querySelector('.attention-group__kind')).toHaveTextContent('Epic');
     expect(epic?.querySelector('.attention-group__name')).toHaveTextContent(epicTitle);
     expect(epic?.closest('.attention-group')).toHaveClass('attention-group--parent');
-    expect(epic?.closest('.attention-group')?.querySelector('ul.attention-group__children li.attention-row--child')).toHaveTextContent('INV-21');
+    expect(epic?.closest('.attention-group')?.querySelector('ul.attention-group__children li.list-row')).toHaveTextContent('INV-21');
     expect(groupHeading({ identifier: 'INV-989', kind: 'MILESTONE', title: milestoneTitle }).kind).toBe('MILESTONE');
 
     // Collapsing the Epic parent hides its child issue row and shifts focus to the remaining open group's child.
@@ -213,9 +213,24 @@ describe('Needs you (INV-1092)', () => {
     const longTitle = '长任务闭环——人批准后 agent 被叫醒、持续执行到交付、退回能回到执行者、人验收到 Done';
     nodes = [node('WORK_REVIEW', 'w-long', work('w-long', 'INV-989', { title: longTitle }), ago(HOUR))];
     renderPage();
-    const title = document.querySelector('.attention-row__title');
+    const title = document.querySelector('.list-row__main');
     expect(title).toHaveTextContent(`INV-989 ${longTitle}`);
-    expect(title).toHaveClass('attention-row__title');
+    expect(title?.querySelector('.list-row__title')).toHaveAttribute('title', longTitle);
+  });
+
+  it('renders the decision panel description and acceptance as markdown (INV-1315)', () => {
+    nodes = [
+      node('WORK_REVIEW', 'w-md', work('w-md', 'INV-60', {
+        acceptance: '- [x] 测试通过\n- [ ] 人验收',
+        description: '### 1. 目标与架构定位\n说明。\n\n### 3. 验收标准与验证方案\n1. web test exit 0',
+      }), ago(HOUR)),
+    ];
+    renderPage();
+    const decision = screen.getByLabelText('Decision');
+    expect(within(decision).getByRole('heading', { name: '1. 目标与架构定位' })).toBeInTheDocument();
+    expect(within(decision).getByText('web test exit 0').closest('ol')).not.toBeNull();
+    expect(within(decision).getAllByRole('checkbox', { name: /done/i })).toHaveLength(2);
+    expect(decision.textContent).not.toContain('###');
   });
 
   it('J moves to finished work; A asks once, then accepts it as the review mutation', async () => {
