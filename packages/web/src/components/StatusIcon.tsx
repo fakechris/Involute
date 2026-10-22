@@ -1,4 +1,4 @@
-type StatusKind = 'backlog' | 'unstarted' | 'started' | 'review' | 'completed' | 'canceled';
+export type StatusKind = 'backlog' | 'unstarted' | 'started' | 'review' | 'completed' | 'canceled';
 
 export function getStatusKind(stateName: string): StatusKind {
   const normalized = stateName.toLowerCase();
@@ -22,7 +22,8 @@ export function getStatusKind(stateName: string): StatusKind {
   return 'unstarted';
 }
 
-function getStatusColorVar(kind: StatusKind): string {
+/** The one place status colours are defined (docs/design-system.md §3 rule 9). */
+export function getStatusColorVar(kind: StatusKind): string {
   switch (kind) {
     case 'backlog':
       return '#6b7280';

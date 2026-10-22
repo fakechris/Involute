@@ -43,6 +43,7 @@ import type {
 import { readStoredTeamKey } from '../board/utils';
 import { IcoCycle, IcoPlus, IcoSettings } from '../components/Icons';
 import { Btn, StatusIconPrimitive } from '../components/Primitives';
+import { getStatusColorVar } from '../components/StatusIcon';
 
 type ViewTab = 'milestones' | 'cycles';
 
@@ -58,11 +59,11 @@ function getStateType(stateType: WorkflowStateType): string {
 
 function getStateColor(stateType: WorkflowStateType): string {
   switch (stateType) {
-    case 'COMPLETED': return '#10b981';
-    case 'CANCELED': return '#ef4444';
-    case 'STARTED': return '#f59e0b';
-    case 'BACKLOG': return '#6b7280';
-    default: return '#64748b';
+    case 'COMPLETED': return getStatusColorVar('completed');
+    case 'CANCELED': return getStatusColorVar('canceled');
+    case 'STARTED': return getStatusColorVar('started');
+    case 'BACKLOG': return getStatusColorVar('backlog');
+    default: return getStatusColorVar('unstarted');
   }
 }
 

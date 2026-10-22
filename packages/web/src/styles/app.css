@@ -1094,6 +1094,30 @@ kbd {
   flex-shrink: 0;
 }
 
+/* Rows of project pills: the board bar, the combobox quick pills, and the
+   project switchers on In Review and Candidates. */
+.board-project-pills,
+.project-combobox__quick-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.project-combobox__quick-pills {
+  display: inline-flex;
+}
+
+.board-page__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 44px;
+  padding: 0 var(--pad-x, var(--content-gutter));
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
 .board-project-pill {
   display: inline-flex;
   align-items: center;
@@ -1646,9 +1670,14 @@ kbd {
   background: color-mix(in srgb, var(--success-weak) 55%, var(--bg-raised));
 }
 
-/* Action buttons */
+/* Action buttons
+   .btn* and .ui-action--primary are older names still used by a few pages
+   (Projects / Cycles / Views dialogs, Settings, Contract). They alias the
+   .ui-action family until the Btn stage of INV-1311 removes them. */
 .board-load-more__button,
-.ui-action--accent {
+.ui-action--accent,
+.ui-action--primary,
+.btn--accent {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1664,18 +1693,23 @@ kbd {
 }
 
 .board-load-more__button:hover,
-.ui-action--accent:hover {
+.ui-action--accent:hover,
+.ui-action--primary:hover,
+.btn--accent:hover {
   filter: brightness(0.98);
 }
 
 .board-load-more__button:disabled,
 .ui-action--accent:disabled,
-.ui-action--subtle:disabled {
+.ui-action--primary:disabled,
+.ui-action--subtle:disabled,
+.btn:disabled {
   cursor: not-allowed;
   opacity: 0.45;
 }
 
-.ui-action {
+.ui-action,
+.btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1690,9 +1724,58 @@ kbd {
   transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
 
-.ui-action--subtle:hover {
+.ui-action--subtle:hover,
+.btn--subtle:hover,
+.btn--ghost:hover {
   background: var(--bg-hover);
   color: var(--fg);
+}
+
+/* .ui-action--primary / .btn--accent sit on .ui-action / .btn: keep the accent fill. */
+.ui-action.ui-action--primary,
+.btn.btn--accent {
+  border-color: var(--accent-border);
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.btn--ghost {
+  border-color: transparent;
+}
+
+.btn--sm {
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.btn--md {
+  min-height: 26px;
+}
+
+.btn.is-active {
+  border-color: var(--border-strong);
+  background: var(--bg-active);
+  color: var(--fg);
+}
+
+/* Utilities */
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ============================================================== */
@@ -1806,7 +1889,7 @@ kbd {
 
 .access-agent-card p {
   margin: 2px 0 0;
-  color: var(--text-muted);
+  color: var(--fg-dim);
   font-size: 12px;
 }
 
@@ -2243,7 +2326,7 @@ kbd {
   font-size: 11px;
   font-weight: 500;
   font-family: var(--font-mono);
-  border-radius: var(--r-full, 9999px);
+  border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--bg-hover);
   color: var(--fg-muted);
@@ -2253,7 +2336,7 @@ kbd {
 }
 
 .board-project-legend__pill:hover {
-  border-color: var(--border-hover, var(--border));
+  border-color: var(--border-strong);
   color: var(--fg);
 }
 
@@ -4290,7 +4373,7 @@ kbd {
   border-radius: var(--r-3);
   background: var(--bg-raised);
   color: var(--fg);
-  box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+  box-shadow: var(--shadow-lg);
   padding: 0;
   max-width: 480px;
   width: calc(100vw - 40px);
@@ -4414,6 +4497,32 @@ kbd {
 
 .observation-contract--stack {
   grid-template-columns: 1fr;
+}
+
+.observation-contract--edit {
+  align-items: start;
+}
+
+.observation-contract__item,
+.observation-contract__row {
+  min-width: 0;
+}
+
+.observation-section-title {
+  margin: 16px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+
+.saved-view-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  background: var(--bg-raised);
+  padding: 12px 14px;
 }
 
 .observation-contract dt,
@@ -4600,6 +4709,13 @@ kbd {
   text-align: left;
 }
 
+.commit-glance__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .commit-glance__project:hover {
   background: var(--bg-hover);
 }
@@ -4657,12 +4773,11 @@ kbd {
   justify-content: space-between;
   gap: 16px;
   background: var(--bg-raised);
-  border: 1px solid var(--accent);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
   border-radius: var(--r-3);
   padding: 12px 18px;
   margin-top: 16px;
-  backdrop-filter: blur(12px);
   animation: slideUp 0.15s ease-out;
 }
 
@@ -4722,7 +4837,7 @@ kbd {
   cursor: pointer;
 }
 .observation-card--attention {
-  outline: 2px solid var(--accent, #5b8def);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
   transition: outline-color 0.3s ease;
 }
@@ -4930,7 +5045,7 @@ kbd {
   align-items: center;
   gap: 8px;
   padding: 6px 14px;
-  border-radius: var(--r-full);
+  border-radius: 999px;
   background: var(--bg-raised);
   border: 1px solid var(--border-strong);
   box-shadow: var(--shadow-lg);
@@ -5043,7 +5158,7 @@ kbd {
   gap: 16px;
   padding: 14px 20px;
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
+  background: var(--bg-raised);
 }
 
 .shortcuts-dialog__title-area {
@@ -5228,7 +5343,7 @@ kbd {
   justify-content: space-between;
   padding: 10px 20px;
   border-top: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
+  background: var(--bg-raised);
   font-size: 12px;
   color: var(--fg-dim);
 }
@@ -6451,7 +6566,7 @@ kbd {
 }
 
 .bug-sla--at-risk {
-  color: #b45309;
+  color: var(--warn);
   border-color: rgba(217, 119, 6, 0.5);
 }
 
@@ -6518,7 +6633,7 @@ a.bugs-stat {
 
 .review-binding__stale,
 .review-verification--warn {
-  color: #b45309;
+  color: var(--warn);
 }
 
 .review-verification {
@@ -6527,7 +6642,7 @@ a.bugs-stat {
 }
 
 .review-verification--ok {
-  color: #15803d;
+  color: var(--success);
 }
 
 .review-verification--bad {
@@ -6667,9 +6782,9 @@ a.bugs-stat {
 .contract-section__missing {
   margin: 8px 0 0;
   padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--warning, #d97706) 45%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--border));
   border-radius: var(--r-2);
-  background: color-mix(in srgb, var(--warning, #d97706) 10%, var(--bg-raised));
+  background: color-mix(in srgb, var(--warn) 10%, var(--bg-raised));
   font-size: 13.5px;
   color: var(--fg);
 }
@@ -6703,7 +6818,7 @@ a.bugs-stat {
   padding: 4px 8px;
   border: 1px solid var(--border, #d0d4da);
   border-radius: 6px;
-  background: var(--surface, transparent);
+  background: var(--bg-raised);
   color: inherit;
 }
 .work-filter-bar input {
@@ -6714,7 +6829,7 @@ a.bugs-stat {
   font-size: 12px;
   background: none;
   border: none;
-  color: var(--accent, #5b8def);
+  color: var(--accent);
   cursor: pointer;
 }
 
@@ -6734,8 +6849,8 @@ a.bugs-stat {
   border-radius: var(--r-1, 4px);
 }
 .board-filter-indicator__open {
-  color: var(--accent, #5b8def);
-  background: var(--accent-subtle, rgba(91, 141, 239, 0.12)) !important;
+  color: var(--accent);
+  background: var(--accent-weak) !important;
 }
 .board-filter-indicator__clear {
   color: var(--fg-dim, #888);
@@ -6802,11 +6917,11 @@ a.bugs-stat {
   font-size: 13px;
 }
 .quick-picker__option--active {
-  background: var(--accent-subtle, rgba(91, 141, 239, 0.12));
+  background: var(--accent-weak);
 }
 .quick-picker__check {
   width: 12px;
-  color: var(--accent, #5b8def);
+  color: var(--accent);
 }
 .quick-picker__key {
   margin-left: auto;
@@ -6841,7 +6956,7 @@ a.bugs-stat {
 }
 /* The row J/K points at on /in-review and /candidates (INV-1087). */
 .observation-card--focused {
-  box-shadow: inset 3px 0 0 var(--accent, #5b8def);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 /* Needs you (INV-1092): the queue on the left, the decision on the right. */
@@ -7122,7 +7237,7 @@ a.bugs-stat {
 
 .attention-row--focused {
   background: var(--bg-hover, rgba(127, 127, 127, 0.08));
-  box-shadow: inset 3px 0 0 var(--accent, #5b8def);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .attention-row__text {
@@ -7247,7 +7362,7 @@ a.bugs-stat {
 }
 
 .issue-timeline__star--on {
-  color: var(--warning, #d9a400);
+  color: var(--warn);
 }
 
 .issue-timeline__actor {

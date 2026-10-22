@@ -238,7 +238,7 @@ export function ReportIncidentDialog({ isOpen, teamId, teamKey, projects, labels
             ) : null}
 
             {errorMessage ? (
-              <p role="alert" style={{ color: 'var(--fg-danger, #e5484d)', fontSize: 13 }}>
+              <p role="alert" style={{ color: 'var(--danger)', fontSize: 13 }}>
                 {errorMessage}
               </p>
             ) : null}

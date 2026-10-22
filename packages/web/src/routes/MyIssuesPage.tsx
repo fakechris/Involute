@@ -7,6 +7,7 @@ import type { BoardPageQueryData, BoardPageQueryVariables, IssueSummary, Workflo
 import { readStoredTeamKey } from '../board/utils';
 import { IcoFilter } from '../components/Icons';
 import { Avatar, Btn, PriorityIcon, StatusIconPrimitive } from '../components/Primitives';
+import { getStatusColorVar } from '../components/StatusIcon';
 
 function formatTimeAgo(date: string): string {
   const parsed = new Date(date).getTime();
@@ -47,11 +48,11 @@ function getStateType(stateType: WorkflowStateType): string {
 function getStateColor(stateType: WorkflowStateType): string {
   const type = getStateType(stateType);
   switch (type) {
-    case 'completed': return '#10b981';
-    case 'canceled': return '#ef4444';
-    case 'started': return '#f59e0b';
-    case 'backlog': return '#6b7280';
-    default: return '#64748b';
+    case 'completed': return getStatusColorVar('completed');
+    case 'canceled': return getStatusColorVar('canceled');
+    case 'started': return getStatusColorVar('started');
+    case 'backlog': return getStatusColorVar('backlog');
+    default: return getStatusColorVar('unstarted');
   }
 }
 

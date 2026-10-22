@@ -111,7 +111,7 @@ export function ContractAmendmentPanel({
         </p>
       ) : null}
       {error ? (
-        <p role="alert" className="issue-panel__inline-hint" style={{ margin: '6px 0 0', color: 'var(--danger, #d14343)' }}>
+        <p role="alert" className="issue-panel__inline-hint" style={{ margin: '6px 0 0', color: 'var(--danger)' }}>
           {error}
         </p>
       ) : null}

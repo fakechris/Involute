@@ -222,7 +222,7 @@ export function ProjectFilterCombobox({
 
       {/* Quick Pills (if showQuickPills and <= 4 projects) */}
       {showQuickPills && projects.length > 0 && projects.length <= 4 ? (
-        <div className="project-combobox__quick-pills" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <div className="project-combobox__quick-pills">
           {projects.map((p) => {
             const isActive =
               Boolean(selectedProjectKey) &&
