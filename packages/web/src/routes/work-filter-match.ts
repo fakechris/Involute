@@ -1,6 +1,6 @@
 import { useSearchParams } from 'react-router-dom';
 
-import type { AvailableProject } from '../components/ProjectFilterCombobox';
+import type { AvailableProject, ProjectFilterExtraOption } from '../components/ProjectFilterCombobox';
 import type { WorkFilters } from '../components/WorkFilterBar';
 
 /**
@@ -11,6 +11,9 @@ import type { WorkFilters } from '../components/WorkFilterBar';
  */
 
 const TYPES = ['bug', 'feature', 'improvement', 'research'];
+
+/** The combobox item for work with no repository (`project=__none__`). */
+export const NO_REPOSITORY_OPTIONS: ReadonlyArray<ProjectFilterExtraOption> = [{ key: '__none__', label: 'No repository' }];
 
 export interface FilterableWork {
   title: string;

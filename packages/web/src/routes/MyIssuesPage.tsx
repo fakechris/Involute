@@ -12,7 +12,7 @@ import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
 import { EmptyState, LoadingState } from '../components/status';
 import { getStatusColorVar } from '../components/StatusIcon';
 import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
-import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam } from './work-filter-match';
+import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam, NO_REPOSITORY_OPTIONS } from './work-filter-match';
 
 function formatTimeAgo(date: string): string {
   const parsed = new Date(date).getTime();
@@ -143,6 +143,7 @@ export function MyIssuesPage() {
             selectedProjectKey={project || null}
             totalCount={allIssues.length}
             onSelectProject={setProject}
+            extraOptions={NO_REPOSITORY_OPTIONS}
             showQuickPills
           />
         }

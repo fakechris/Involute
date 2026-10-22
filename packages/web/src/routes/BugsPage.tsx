@@ -25,7 +25,7 @@ import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
 import { EmptyState, InlineError, LoadingState, StatRow, StatTile } from '../components/status';
 import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
-import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam } from './work-filter-match';
+import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam, NO_REPOSITORY_OPTIONS } from './work-filter-match';
 
 const CLOSED_STATE_TYPES = new Set(['COMPLETED', 'CANCELED']);
 const BUG_LABEL_NAMES = ['bug', 'Bug', 'BUG'];
@@ -146,6 +146,7 @@ export function BugsPage() {
             selectedProjectKey={project || null}
             totalCount={summary?.openCount ?? 0}
             onSelectProject={setProject}
+            extraOptions={NO_REPOSITORY_OPTIONS}
             showQuickPills
           />
         }

@@ -13,7 +13,7 @@ import { Btn } from '../components/Primitives';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
 import { EmptyState, LoadingState, StatRow, StatTile } from '../components/status';
 import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
-import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam } from './work-filter-match';
+import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam, NO_REPOSITORY_OPTIONS } from './work-filter-match';
 
 const HOUR_MS = 3_600_000;
 
@@ -74,6 +74,7 @@ export function IncidentsPage() {
             selectedProjectKey={project || null}
             totalCount={counted}
             onSelectProject={setProject}
+            extraOptions={NO_REPOSITORY_OPTIONS}
             showQuickPills
           />
         }
