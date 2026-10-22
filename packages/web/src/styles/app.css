@@ -1774,6 +1774,14 @@ kbd {
   overflow: auto;
 }
 
+.backlog-surface--padded {
+  padding: 20px var(--pad-x);
+}
+
+.backlog-table__none {
+  color: var(--fg-faint);
+}
+
 .backlog-table {
   width: 100%;
   border-collapse: collapse;
@@ -2596,6 +2604,32 @@ kbd {
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--fg-dim);
+}
+
+.issue-group-header__icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.issue-group-header__progress {
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+/* Board list view: the scrolling column of grouped issue rows. */
+.board-list {
+  flex: 1;
+  position: relative;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.issue-group-empty {
+  padding: 10px var(--content-gutter);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 14px;
+  color: var(--fg-faint);
 }
 
 /* ============================================================== */
@@ -4031,6 +4065,7 @@ kbd {
 
 /* Group header with inline create button */
 .issue-group-header__create {
+  margin-left: auto;
   width: 20px;
   height: 20px;
   border-radius: var(--r-2);
@@ -6773,6 +6808,11 @@ a.bugs-stat {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
   font-size: 13px;
 }
+.issue-peek__id {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
 .issue-peek__meta {
   color: var(--fg-dim);
   margin: 4px 0 8px;
@@ -7300,4 +7340,201 @@ ul.bugs-list {
   flex-shrink: 0;
   font-size: 12px;
   max-width: 130px;
+}
+
+/* In Review / Candidates / Needs you on the page skeleton (INV-1314). */
+
+/* In Review IQL view row, now in the PageToolbar `view` slot: the toolbar
+   draws the gutter and hairline, so the old strip spacing goes. */
+.page-toolbar .in-review-filter {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  gap: 6px;
+}
+
+.in-review-filter__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.in-review-filter__input {
+  width: 220px;
+  font-family: var(--font-mono);
+}
+
+/* "waiting 4d · overdue" on an In Review card (was the borrowed .issue-relations__error). */
+.observation-card__meta--overdue {
+  color: var(--danger);
+}
+
+/* Candidates: pagination row under the list. */
+.candidates-pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* Candidates: batch failure text + "Fill acceptance for …" buttons in the bulk bar status line. */
+.candidates-bulk-error {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--danger);
+}
+
+/* My Issues and Search on the page skeleton (INV-1314). */
+
+/* My Issues row (was an inline-styled grid button with JS hover). */
+.my-issues-row {
+  display: grid;
+  grid-template-columns: max-content 14px 14px minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  height: var(--row-h);
+  padding: 0 var(--pad-x);
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+
+.my-issues-row:hover {
+  background: var(--bg-hover);
+}
+
+.my-issues-row__dim {
+  font-size: 13px;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+
+.my-issues-row__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+
+.my-issues-row__state {
+  font-size: 13px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+/* Search box in the /search toolbar (was .search-page__form). */
+.search-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-box__input {
+  width: 320px;
+}
+
+/* Inbox, Agents, Settings and the sidebar on the page skeleton (INV-1314). */
+
+/* Inbox row pieces (were inline styles). */
+.inbox-item__glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-1);
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.inbox-item__on {
+  color: var(--fg-dim);
+}
+
+.inbox-item__id {
+  color: var(--fg-muted);
+}
+
+.inbox-item__summary {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--fg-dim);
+}
+
+.inbox-item__trail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.inbox-item__mark-read {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--r-1);
+  background: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+
+.inbox-item__mark-read:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+/* Agents: hint paragraph right under a section label; profile intro block. */
+.agent-directory__hint {
+  margin-top: 0;
+}
+
+.agent-profile__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Settings → Profile avatar row. */
+.settings-avatar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-avatar__initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 23px;
+  font-weight: 600;
+}
+
+/* Sidebar search trigger label (was inline). */
+.app-shell__search-label {
+  flex: 1;
+  text-align: left;
 }

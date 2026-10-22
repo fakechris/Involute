@@ -37,6 +37,36 @@
   min-width: 0;
 }
 
+/* Breadcrumb in the back slot: [KEY] Team › */
+.page-header__crumb-key {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-1);
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.page-header__crumb {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.page-header__crumb-sep {
+  display: inline-flex;
+  color: var(--fg-faint);
+}
+
+/* Hairline between groups of header actions. */
+.page-header__divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+}
+
 .page-header__icon {
   display: inline-flex;
   color: var(--fg-dim);
@@ -330,8 +360,8 @@
   color: var(--fg);
 }
 
-/* Dim one-line note inside a toolbar ("Loaded view: …"). */
-.filter-note {
+/* Dim one-line note in a header or toolbar ("Loaded view: …", "Switching to …"). */
+.page-note {
   font-size: 12px;
   color: var(--fg-dim);
   white-space: nowrap;
@@ -475,8 +505,8 @@
   background: color-mix(in srgb, var(--danger-weak) 55%, var(--bg-raised));
 }
 
-/* A one-line notice strip under the toolbar (partial page loaded, load failed). */
-.load-more-notice {
+/* A one-line notice strip under the toolbar (partial page loaded, save failed). */
+.page-notice {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -487,11 +517,11 @@
   flex-shrink: 0;
 }
 
-.load-more-notice--error {
+.page-notice--error {
   background: color-mix(in srgb, var(--danger-weak) 55%, var(--bg-raised));
 }
 
-.load-more-notice__text {
+.page-notice__text {
   margin: 0;
   font-size: 13px;
   color: var(--fg-muted);

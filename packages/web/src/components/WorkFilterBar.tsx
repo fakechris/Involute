@@ -15,7 +15,8 @@ export interface WorkFilters {
   q: string;
 }
 
-const KEYS = ['type', 'kind', 'priority', 'owner', 'q'] as const;
+export const WORK_FILTER_KEYS = ['type', 'kind', 'priority', 'owner', 'q'] as const;
+const KEYS = WORK_FILTER_KEYS;
 const TYPES = ['bug', 'feature', 'improvement', 'research'];
 
 export function readWorkFilters(params: URLSearchParams): WorkFilters {

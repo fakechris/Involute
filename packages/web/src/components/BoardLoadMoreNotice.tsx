@@ -32,10 +32,10 @@ export function BoardLoadMoreNotice({
 
   return (
     <section
-      className={errorMessage ? 'load-more-notice load-more-notice--error' : 'load-more-notice'}
+      className={errorMessage ? 'page-notice page-notice--error' : 'page-notice'}
       role={errorMessage ? 'alert' : undefined}
     >
-      <p className="load-more-notice__text">{noticeText}</p>
+      <p className="page-notice__text">{noticeText}</p>
       {hasMoreIssues ? (
         <Btn variant="subtle" disabled={isLoadingMoreIssues} onClick={onLoadMore}>
           {isLoadingMoreIssues ? 'Loading more issues…' : 'Load more issues'}
