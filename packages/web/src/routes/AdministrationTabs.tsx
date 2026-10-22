@@ -269,12 +269,12 @@ export function AdminMembersTab() {
                 </span>
               ))}
               {user.globalRole === 'GUEST' && user.teamMemberships.length > 0 ? (
-                <span style={{ display: 'block', color: 'var(--warning, #b45309)' }}>
+                <span style={{ display: 'block', color: 'var(--warn)' }}>
                   A guest still sees all work of the teams listed here.
                 </span>
               ) : null}
             </span>
-            <span role="cell" style={{ width: 110, fontSize: 12.5, color: user.accessStatus === 'ACTIVE' ? 'var(--fg-dim)' : 'var(--warning, #b45309)' }}>
+            <span role="cell" style={{ width: 110, fontSize: 12.5, color: user.accessStatus === 'ACTIVE' ? 'var(--fg-dim)' : 'var(--warn)' }}>
               {STATUS_LABEL[user.accessStatus] ?? user.accessStatus}
               <span style={{ display: 'block', color: 'var(--fg-dim)' }}>
                 {user.accessStatus === 'PENDING' ? `invited ${formatDate(user.invitedAt)}` : `seen ${formatDate(user.lastSeenAt)}`}

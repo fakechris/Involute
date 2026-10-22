@@ -262,7 +262,7 @@ export function AgentsTab({ teamKey: fixedTeamKey }: { teamKey?: string } = {}) 
 
       {fresh && (
         <div style={{
-          border: '1px solid var(--border-warning, var(--border))', borderRadius: 'var(--r-3)',
+          border: '1px solid var(--warn)', borderRadius: 'var(--r-3)',
           padding: '12px 14px', marginBottom: 20, background: 'var(--bg-raised)',
         }}>
           <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6 }}>Copy this token now — it will not be shown again.</div>
@@ -280,7 +280,7 @@ export function AgentsTab({ teamKey: fixedTeamKey }: { teamKey?: string } = {}) 
         </div>
       )}
 
-      {error && <div style={{ color: 'var(--fg-danger, #f87171)', fontSize: 14, marginBottom: 16 }}>{error}</div>}
+      {error && <div style={{ color: 'var(--danger)', fontSize: 14, marginBottom: 16 }}>{error}</div>}
 
       {loading ? (
         <div style={{ padding: 20, color: 'var(--fg-dim)', fontSize: 14 }}>Loading agents…</div>

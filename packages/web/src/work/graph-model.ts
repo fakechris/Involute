@@ -243,7 +243,8 @@ export interface Layout {
   height: number;
 }
 
-export const LAYOUT = { nodeWidth: 188, nodeHeight: 46, columnGap: 52, rowGap: 12, padding: 20 } as const;
+// A node holds a head row and a two-line title (INV-1312); edges anchor on these numbers.
+export const LAYOUT = { nodeWidth: 220, nodeHeight: 62, columnGap: 52, rowGap: 12, padding: 20 } as const;
 
 /**
  * Layered left-to-right layout: each node sits one layer right of its deepest

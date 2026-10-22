@@ -33,7 +33,7 @@ export type Notice = { ok: boolean; text: string } | null;
 export function NoticeLine({ notice }: { notice: Notice }) {
   if (!notice) return null;
   return (
-    <p role={notice.ok ? 'status' : 'alert'} style={{ fontSize: 14, color: notice.ok ? 'var(--fg-muted)' : 'var(--danger, #d14343)' }}>
+    <p role={notice.ok ? 'status' : 'alert'} style={{ fontSize: 14, color: notice.ok ? 'var(--fg-muted)' : 'var(--danger)' }}>
       {notice.text}
     </p>
   );

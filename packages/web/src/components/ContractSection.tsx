@@ -139,7 +139,7 @@ export function ContractSection({
             </label>
           ))}
           {error ? (
-            <p role="alert" className="issue-panel__inline-hint" style={{ margin: 0, color: 'var(--danger, #d14343)' }}>
+            <p role="alert" className="issue-panel__inline-hint" style={{ margin: 0, color: 'var(--danger)' }}>
               {error}
             </p>
           ) : null}
