@@ -1,4 +1,4 @@
-import type { CSSProperties, MouseEvent, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, CSSProperties, ReactNode } from 'react';
 import { IcoPrio, IcoStatus } from './Icons';
 
 interface AvatarUser {
@@ -28,7 +28,7 @@ export function Avatar({ user, size = 20 }: { user?: AvatarUser | null | undefin
   return (
     <div title={user.name} style={{
       width: size, height: size, borderRadius: '50%',
-      background: user.color ?? 'var(--fg-dim)', color: '#0b0b0c',
+      background: user.color ?? 'var(--fg-dim)', color: 'var(--on-color)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: Math.max(9, size * 0.42), fontWeight: 600, letterSpacing: '-0.02em',
       fontFamily: 'var(--font-sans)',
@@ -68,74 +68,59 @@ export function Kbd({ keys }: { keys: string | string[] }) {
 
 type BtnVariant = 'ghost' | 'subtle' | 'primary' | 'accent' | 'danger';
 
-export function Btn({
-  children, variant = 'ghost', size = 'sm', icon, kbd, onClick, active, disabled, title, style,
-}: {
+export interface BtnProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
   children?: ReactNode;
+  /** `primary` is kept as an alias of `accent` (docs/design-system.md §3.4). */
   variant?: BtnVariant;
   size?: 'sm' | 'md';
   icon?: ReactNode;
   kbd?: string | string[];
-  onClick?: () => void;
   active?: boolean;
-  disabled?: boolean;
-  title?: string;
+  /** Busy: disabled, marked aria-busy, with a pulsing dot before the label. */
+  loading?: boolean;
   style?: CSSProperties;
-}) {
-  const base: CSSProperties = {
-    display: 'inline-flex', alignItems: 'center', gap: 6,
-    height: size === 'md' ? 28 : 24,
-    padding: icon && !children ? 0 : (size === 'md' ? '0 10px' : '0 8px'),
-    width: icon && !children ? (size === 'md' ? 28 : 24) : undefined,
-    justifyContent: 'center',
-    fontSize: 14, fontWeight: 500,
-    borderRadius: 'var(--r-2)',
-    transition: 'background var(--dur-1) var(--ease), color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease)',
-    border: '1px solid transparent',
-    color: 'var(--fg-muted)',
-    whiteSpace: 'nowrap',
-    cursor: 'pointer',
-  };
-  const variants: Record<BtnVariant, CSSProperties> = {
-    ghost: { background: active ? 'var(--bg-active)' : 'transparent', color: active ? 'var(--fg)' : 'var(--fg-muted)' },
-    subtle: { background: 'var(--bg-hover)', color: 'var(--fg)', border: '1px solid var(--border)' },
-    primary: { background: 'var(--fg)', color: 'var(--bg)', fontWeight: 500 },
-    accent: { background: 'var(--accent)', color: 'var(--accent-fg)', fontWeight: 500 },
-    danger: { background: 'transparent', color: 'var(--danger)', border: '1px solid var(--border)' },
-  };
-  const handleEnter = (e: MouseEvent<HTMLButtonElement>) => {
-    if (variant === 'ghost' && !active) {
-      e.currentTarget.style.background = 'var(--bg-hover)';
-      e.currentTarget.style.color = 'var(--fg)';
-    }
-  };
-  const handleLeave = (e: MouseEvent<HTMLButtonElement>) => {
-    if (variant === 'ghost' && !active) {
-      e.currentTarget.style.background = 'transparent';
-      e.currentTarget.style.color = 'var(--fg-muted)';
-    }
-  };
+}
+
+/**
+ * The one button (docs/design-system.md §3.4): class-based on the `.ui-action`
+ * family in styles/controls.css. Variants accent | subtle | ghost | danger,
+ * sizes sm (24px) | md (28px); `icon` with no children is a square icon button.
+ */
+export function Btn({
+  children, variant = 'ghost', size = 'sm', icon, kbd, active, disabled, loading, className, type = 'button', ...rest
+}: BtnProps) {
+  const resolved = variant === 'primary' ? 'accent' : variant;
+  const iconOnly = Boolean(icon) && !children;
+  const classes = [
+    'ui-action',
+    `ui-action--${resolved}`,
+    `ui-action--${size}`,
+    iconOnly ? 'ui-action--icon' : null,
+    active ? 'is-active' : null,
+    loading ? 'is-loading' : null,
+    className,
+  ].filter(Boolean).join(' ');
   return (
     <button
-      type="button"
-      disabled={disabled}
-      title={title}
-      onClick={onClick}
-      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
-      style={{ ...base, ...variants[variant], ...(disabled ? { cursor: 'not-allowed', opacity: 0.55 } : {}), ...style }}
+      {...rest}
+      type={type}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      aria-pressed={active ?? rest['aria-pressed']}
+      className={classes}
     >
+      {loading ? <span className="ui-action__spinner" aria-hidden="true" /> : null}
       {icon}
       {children ? <span>{children}</span> : null}
-      {kbd ? <span aria-hidden="true" style={{ marginLeft: 4, opacity: 0.7 }}><Kbd keys={kbd} /></span> : null}
+      {kbd ? <span aria-hidden="true" className="ui-action__kbd"><Kbd keys={kbd} /></span> : null}
     </button>
   );
 }
 
 export function PriorityIcon({ level, size = 14 }: { level: number; size?: number }) {
   const colors: Record<number, string> = {
-    0: '#6b7280', 1: '#ef4444', 2: '#f97316',
-    3: '#eab308', 4: '#3b82f6',
+    0: 'var(--prio-none)', 1: 'var(--prio-urgent)', 2: 'var(--prio-high)',
+    3: 'var(--prio-med)', 4: 'var(--prio-low)',
   };
   return <span style={{ color: colors[level], display: 'inline-flex' }}><IcoPrio level={level} size={size} /></span>;
 }
