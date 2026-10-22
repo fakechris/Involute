@@ -5,11 +5,6 @@
    Imported after app.css, so equal-specificity rules here win.
    ============================================================ */
 
-:root {
-  /* Text on a user-chosen colour swatch (avatars): always dark, both themes. */
-  --on-color: #0b0b0c;
-}
-
 /* ---------- Field ---------- */
 
 .field {
@@ -98,8 +93,8 @@
 
 /* ---------- .control base: TextInput / TextArea / Select ---------- */
 
-/* :is(element).control (0,1,1) beats the older `.field-stack select`-style rules. */
-:is(input, select, textarea).control {
+/* :is(element.class) (0,1,1) beats the older `.field-stack select`-style rules. */
+:is(input.control-input, select.control-select, textarea.control-textarea) {
   height: calc(var(--row-h, 32px) - 2px);
   min-width: 0;
   max-width: 100%;
@@ -114,37 +109,37 @@
   transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
 }
 
-:is(input, select, textarea).control::placeholder {
+:is(input.control-input, select.control-select, textarea.control-textarea)::placeholder {
   color: var(--fg-faint);
 }
 
-:is(input, select, textarea).control:hover:not(:disabled) {
+:is(input.control-input, select.control-select, textarea.control-textarea):hover:not(:disabled) {
   border-color: var(--border-strong);
 }
 
-:is(input, select, textarea).control:focus-visible {
+:is(input.control-input, select.control-select, textarea.control-textarea):focus-visible {
   border-color: var(--accent-border);
 }
 
-:is(input, select, textarea).control:disabled {
+:is(input.control-input, select.control-select, textarea.control-textarea):disabled {
   cursor: not-allowed;
   background-color: var(--bg-sunken);
   color: var(--fg-dim);
   opacity: 0.7;
 }
 
-:is(input, select, textarea).control[aria-invalid="true"] {
+:is(input.control-input, select.control-select, textarea.control-textarea)[aria-invalid="true"] {
   border-color: color-mix(in srgb, var(--danger) 60%, var(--border));
 }
 
-:is(input, select, textarea).control--sm {
+:is(input.control-input, select.control-select, textarea.control-textarea)--sm {
   height: calc(var(--row-h, 32px) - 6px);
   border-radius: var(--r-2);
   padding: 0 8px;
   font-size: 13.5px;
 }
 
-textarea.control {
+textarea.control-textarea {
   height: auto;
   min-height: 76px;
   padding: 8px 10px;
@@ -158,7 +153,7 @@ textarea.control--sm {
 }
 
 /* Native select, own chevron: two hairline triangles drawn in --fg-dim. */
-select.control {
+select.control-select {
   appearance: none;
   -webkit-appearance: none;
   padding-right: 28px;
@@ -181,7 +176,7 @@ select.control--sm {
     calc(100% - 8px) 50%;
 }
 
-select.control:disabled {
+select.control-select:disabled {
   cursor: not-allowed;
 }
 
@@ -234,6 +229,10 @@ select.control--ghost:focus-visible {
   margin-top: 3px;
 }
 
+.checkbox__label {
+  min-width: 0;
+}
+
 /* A wrap of checkboxes (label pickers). */
 .checkbox-group {
   display: flex;
@@ -276,13 +275,6 @@ select.control--ghost:focus-visible {
 
 .ui-action--md.ui-action--icon {
   width: 28px;
-}
-
-.ui-action--accent {
-  /* app.css declares .ui-action after .ui-action--accent, which reset its fill. */
-  border-color: var(--accent-border);
-  background: var(--accent);
-  color: var(--accent-fg);
 }
 
 .ui-action--accent:hover:not(:disabled) {

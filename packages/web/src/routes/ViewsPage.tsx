@@ -141,7 +141,7 @@ export function ViewsPage() {
               gap: 12,
             }}>
               {views.map((v) => (
-                <div key={v.id} className="saved-view-card" aria-label={`View ${v.name}`} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div key={v.id} className="saved-view-card" aria-label={`View ${v.name}`}>
                 <button
                   type="button"
                   onClick={() => {

@@ -551,14 +551,17 @@ export function AttentionPage() {
                                     />
                                     <span className="attention-row__text">
                                       <span className="attention-row__title">
-                                        {item.work ? <span className="mono">{item.work.identifier}</span> : null} {item.work?.title ?? item.reason}
+                                        {item.work ? <span className="mono">{item.work.identifier}</span> : null}{' '}
+                                        <span className="attention-row__title-text" title={item.work?.title ?? item.reason}>{item.work?.title ?? item.reason}</span>
                                       </span>
-                                      <span className="attention-row__reason">{item.reason}</span>
-                                      {item.unblocked ? <span className="attention-row__flag attention-row__flag--ready">What blocked it is done</span> : null}
-                                      {(item.waitingOn ?? []).length > 0 ? (
-                                        <span className="attention-row__flag">Waiting on {(item.waitingOn ?? []).map((blocker) => blocker.identifier).join(', ')}</span>
-                                      ) : null}
-                                      {item.overdue ? <span className="attention-row__flag attention-row__flag--overdue">Overdue</span> : null}
+                                      <span className="attention-row__meta">
+                                        <span className="attention-row__reason" title={item.reason}>{item.reason}</span>
+                                        {item.unblocked ? <span className="attention-row__flag attention-row__flag--ready">What blocked it is done</span> : null}
+                                        {(item.waitingOn ?? []).length > 0 ? (
+                                          <span className="attention-row__flag">Waiting on {(item.waitingOn ?? []).map((blocker) => blocker.identifier).join(', ')}</span>
+                                        ) : null}
+                                        {item.overdue ? <span className="attention-row__flag attention-row__flag--overdue">Overdue</span> : null}
+                                      </span>
                                     </span>
                                     <span className="observation-card__meta" title={new Date(item.since).toLocaleString()}>{formatWait(item.since)}</span>
                                   </li>
@@ -657,7 +660,7 @@ function AttentionDecision({
   const header = item.work ? (
     <div className="attention-decision__header">
       <Link className="mono" to={`/work/${item.work.id}`}>{item.work.identifier}</Link>
-      <strong>{item.work.title}</strong>
+      <strong className="attention-decision__title">{item.work.title}</strong>
     </div>
   ) : null;
 

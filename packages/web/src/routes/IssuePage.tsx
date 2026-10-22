@@ -592,7 +592,7 @@ export function IssuePage() {
 
   return (
     <main className="issue-panel issue-panel--page" aria-label="Issue detail page">
-      <h1 className="sr-only" style={{ position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0 }}>Issue detail</h1>
+      <h1 className="sr-only">Issue detail</h1>
       {closeReasonDialog}
       {/* ── Header ── */}
       <div className="issue-panel__header">
@@ -898,7 +898,7 @@ export function IssuePage() {
                       <div key={request.id} id={`request-${request.id}`} role="listitem" className="issue-children__row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                         <span className="mono" style={{ fontSize: 11, color: 'var(--fg-faint)', minWidth: 44 }}>{request.needInfo ? 'needinfo' : request.hopCount === 0 ? 'asked' : `hop ${request.hopCount}`}</span>
                         {index === 0 && request.hopCount > 0 ? (
-                          <span style={{ fontSize: 12, color: 'var(--warning, #b80)' }} title="The chain's earlier requests are not in this page's result">chain incomplete</span>
+                          <span style={{ fontSize: 12, color: 'var(--warn)' }} title="The chain's earlier requests are not in this page's result">chain incomplete</span>
                         ) : null}
                         <ActorBadge actor={request.targetActor} onSelect={(picked) => navigate(`/agents/${picked}`)} />
                         <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>{request.state}</span>
@@ -966,7 +966,7 @@ export function IssuePage() {
                                 style={{ font: 'inherit', padding: 6 }}
                               />
                             ) : null}
-                            {answerError ? <span style={{ color: 'var(--danger, #c33)', fontSize: 12 }}>{answerError}</span> : null}
+                            {answerError ? <span style={{ color: 'var(--danger)', fontSize: 12 }}>{answerError}</span> : null}
                             <div style={{ display: 'flex', gap: 6 }}>
                               <Btn variant="subtle" onClick={() => setAnsweringRequestId(null)}>Cancel</Btn>
                               <button type="submit" className="ui-action" disabled={answerBody.trim().length === 0}>Post answer and complete</button>

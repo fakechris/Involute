@@ -2617,11 +2617,7 @@ export function BoardPage() {
           <div className="issue-peek__meta">Space or Esc to close · Enter to open</div>
         </aside>
       ) : null}
-      <header className="board-page__header" style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        height: 44, padding: '0 var(--pad-x, var(--content-gutter))',
-        borderBottom: '1px solid var(--border-subtle)', flexShrink: 0,
-      }}>
+      <header className="board-page__header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, whiteSpace: 'nowrap' }}>
           {selectedTeam ? (
             <Link

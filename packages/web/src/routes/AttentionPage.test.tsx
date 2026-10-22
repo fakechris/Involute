@@ -209,7 +209,7 @@ describe('Needs you (INV-1092)', () => {
     expect(list.getByText('INV-21')).toBeInTheDocument();
   });
 
-  it('wraps a long Needs you title inside the list row (INV-1301)', () => {
+  it('keeps a long Needs you title inside the list row (INV-1301, INV-1312)', () => {
     const longTitle = '长任务闭环——人批准后 agent 被叫醒、持续执行到交付、退回能回到执行者、人验收到 Done';
     nodes = [node('WORK_REVIEW', 'w-long', work('w-long', 'INV-989', { title: longTitle }), ago(HOUR))];
     renderPage();

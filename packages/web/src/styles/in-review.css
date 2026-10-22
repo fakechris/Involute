@@ -69,9 +69,4 @@
   accent-color: var(--accent);
 }
 
-.observation-card--selected {
-  border-color: var(--accent) !important;
-  background: var(--bg-hover) !important;
-  box-shadow: 0 0 0 1px var(--accent);
-}
 
