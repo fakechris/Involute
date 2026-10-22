@@ -44,7 +44,7 @@ describe('a viewer who may neither write nor manage', () => {
     renderApp({ data: noAccess, loading: false }, ['/settings']);
 
     expect(await screen.findByRole('button', { name: 'Preferences' })).toBeInTheDocument();
-    expect(screen.queryByText('ADMINISTRATION')).not.toBeInTheDocument();
+    expect(screen.queryByText('Administration')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Security' })).not.toBeInTheDocument();
   });
 

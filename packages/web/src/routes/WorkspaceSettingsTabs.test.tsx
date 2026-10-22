@@ -87,8 +87,8 @@ const refused = (field: string, message: string) => ({ data: { [field]: { succes
 describe('labels', () => {
   it('adds, renames and deletes labels, and keeps built-in labels read only', async () => {
     render(<LabelsTab />);
-    const list = screen.getByRole('list', { name: 'Label list' });
-    const bugRow = within(list).getByText('Bug').closest('[role="listitem"]') as HTMLElement;
+    const list = screen.getByRole('table', { name: 'Label list' });
+    const bugRow = within(list).getByText('Bug').closest('[role="row"]') as HTMLElement;
     expect(within(bugRow).getByText('built in')).toBeInTheDocument();
     expect(within(bugRow).queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
 
@@ -99,7 +99,7 @@ describe('labels', () => {
     expect(await screen.findByText('Created api.')).toBeInTheDocument();
 
     mutations.LabelUpdate!.mockResolvedValue(refused('labelUpdate', 'A label with that name already exists (names ignore case).'));
-    const webRow = within(list).getByText('web').closest('[role="listitem"]') as HTMLElement;
+    const webRow = within(list).getByText('web').closest('[role="row"]') as HTMLElement;
     fireEvent.click(within(webRow).getByRole('button', { name: 'Rename' }));
     fireEvent.change(screen.getByLabelText('Rename web'), { target: { value: 'API' } });
     fireEvent.click(within(webRow).getByRole('button', { name: 'Save' }));
@@ -141,9 +141,9 @@ describe('workflow states', () => {
 describe('server features, service actors and email', () => {
   it('shows each feature as on or off', () => {
     render(<ServerFeaturesTab />);
-    const list = screen.getByRole('list', { name: 'Feature list' });
-    expect(within(list).getByText('GitHub sync').parentElement).toHaveTextContent('On');
-    expect(within(list).getByText('Email notifications').parentElement).toHaveTextContent('Off');
+    const list = screen.getByRole('table', { name: 'Feature list' });
+    expect(within(list).getByText('GitHub sync').closest('[role="row"]')).toHaveTextContent('On');
+    expect(within(list).getByText('Email notifications').closest('[role="row"]')).toHaveTextContent('Off');
   });
 
   it('creates a service actor', async () => {

@@ -16,7 +16,11 @@ import { writeStoredTeamKey } from '../board/utils';
 import { AgentsTab } from './AgentsTab';
 import { BugTriageTab } from './BugTriageTab';
 import type { Refusable } from './settings-queries';
-import { NoticeLine, WorkflowStatesTab, attempt, inputStyle, rowStyle, type Notice } from './WorkspaceSettingsTabs';
+import { NoticeLine, WorkflowStatesTab, attempt, type Notice } from './WorkspaceSettingsTabs';
+import { Field, Select, TextInput } from '../components/controls';
+import { DataTable } from '../components/DataTable';
+import { Btn } from '../components/Primitives';
+import { SettingsSectionHeader, SettingsShell } from '../components/SettingsShell';
 
 // A team's own pages (INV-850, docs/permissions.md §7): its roster and its
 // settings live under the team, not scattered across the workspace.
@@ -133,45 +137,62 @@ export function TeamMembersPage() {
 
         {team.viewerCanJoin ? (
           <p>
-            <button type="button" className="ui-action ui-action--primary" onClick={() => void attempt(() => runJoin({ variables: { teamId: team.id } }), (d) => d.teamJoin, `You joined ${team.key}.`, setNotice).then(refreshOn)}>
+            <Btn variant="accent" size="md" onClick={() => void attempt(() => runJoin({ variables: { teamId: team.id } }), (d) => d.teamJoin, `You joined ${team.key}.`, setNotice).then(refreshOn)}>
               Join {team.key}
-            </button>
+            </Btn>
           </p>
         ) : null}
 
         {canManage ? (
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '8px 0 16px' }} aria-label="Add member">
-            <input style={{ ...inputStyle, flex: 1, minWidth: 220 }} aria-label="Member email" placeholder="name@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <select style={inputStyle} aria-label="New member role" value={role} onChange={(e) => setRole(e.target.value as TeamRole)}>
-              <option value="VIEWER">Viewer</option>
-              <option value="EDITOR">Member</option>
-              <option value="OWNER">Owner</option>
-            </select>
-            <button type="button" className="ui-action ui-action--primary" disabled={!email.trim()} onClick={add}>Add to team</button>
+          <div className="inline-form" role="group" aria-label="Add member">
+            <Field label="Email">
+              <TextInput aria-label="Member email" type="email" placeholder="name@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </Field>
+            <Field label="Role" className="inline-form__narrow">
+              <Select aria-label="New member role" value={role} onChange={(e) => setRole(e.target.value as TeamRole)}>
+                <option value="VIEWER">Viewer</option>
+                <option value="EDITOR">Member</option>
+                <option value="OWNER">Owner</option>
+              </Select>
+            </Field>
+            <Btn variant="accent" size="md" disabled={!email.trim()} onClick={add}>Add to team</Btn>
           </div>
         ) : null}
 
-        <div role="table" aria-label="Team members">
-          {roster.length === 0 ? <p style={{ color: 'var(--fg-dim)' }}>Nobody is on this team yet.</p> : null}
-          {roster.map((membership) => {
-            const person = membership.user;
-            const name = person.name ?? person.email ?? 'Someone';
-            const isViewer = person.id === viewerId;
-            return (
-              <div key={membership.id} role="row" style={rowStyle}>
-                <span role="cell" style={{ flex: 1, minWidth: 0 }}>
-                  {name}{isViewer ? ' (you)' : ''}
-                  <span style={{ display: 'block', fontSize: 12.5, color: 'var(--fg-dim)' }}>
-                    {person.email}
-                    {person.globalRole === 'GUEST' ? ' · guest' : ''}
-                    {person.accessStatus === 'PENDING' ? ' · invited, not signed in yet' : ''}
-                    {person.accessStatus === 'SUSPENDED' ? ' · suspended' : ''}
+        <DataTable
+          label="Team members"
+          rows={roster}
+          rowKey={(membership) => membership.id}
+          empty="Nobody is on this team yet."
+          columns={[
+            {
+              key: 'person',
+              header: 'Person',
+              render: (membership) => {
+                const person = membership.user;
+                return (
+                  <span className="data-table__primary">
+                    <span>{person.name ?? person.email ?? 'Someone'}{person.id === viewerId ? ' (you)' : ''}</span>
+                    <span className="data-table__secondary">
+                      {person.email}
+                      {person.globalRole === 'GUEST' ? ' · guest' : ''}
+                      {person.accessStatus === 'PENDING' ? ' · invited, not signed in yet' : ''}
+                      {person.accessStatus === 'SUSPENDED' ? ' · suspended' : ''}
+                    </span>
                   </span>
-                </span>
-                {canManage ? (
-                  <select
-                    role="cell"
-                    style={inputStyle}
+                );
+              },
+            },
+            {
+              key: 'role',
+              header: 'Role',
+              width: '120px',
+              render: (membership) => {
+                const person = membership.user;
+                const name = person.name ?? person.email ?? 'Someone';
+                return canManage ? (
+                  <Select
+                    size="sm"
                     aria-label={`Team role for ${name}`}
                     value={membership.role}
                     onChange={(e) => void attempt(
@@ -184,40 +205,48 @@ export function TeamMembersPage() {
                     <option value="VIEWER">Viewer</option>
                     <option value="EDITOR">Member</option>
                     {person.globalRole !== 'GUEST' ? <option value="OWNER">Owner</option> : null}
-                  </select>
+                  </Select>
                 ) : (
-                  <span role="cell" style={{ fontSize: 13.5, color: 'var(--fg-muted)' }}>{TEAM_ROLE_LABEL[membership.role]}</span>
-                )}
-                <span role="cell" style={{ width: 90, textAlign: 'right' }}>
-                  {isViewer ? (
-                    <button
-                      type="button"
-                      className="ui-action ui-action--subtle"
+                  <span className="data-table__secondary">{TEAM_ROLE_LABEL[membership.role]}</span>
+                );
+              },
+            },
+            {
+              key: 'actions',
+              header: '',
+              align: 'end',
+              render: (membership) => {
+                const person = membership.user;
+                const name = person.name ?? person.email ?? 'Someone';
+                if (person.id === viewerId) {
+                  return (
+                    <Btn
+                      variant="subtle"
                       onClick={() => {
                         if (!window.confirm(`Leave ${team.key}?`)) return;
                         void attempt(() => runLeave({ variables: { teamId: team.id } }), (d) => d.teamLeave, `You left ${team.key}.`, setNotice).then(refreshOn);
                       }}
-                    >Leave</button>
-                  ) : canManage ? (
-                    <button
-                      type="button"
-                      className="ui-action ui-action--subtle"
-                      onClick={() => {
-                        if (!window.confirm(`Remove ${name} from ${team.key}?`)) return;
-                        void attempt(
-                          () => runRemove({ variables: { input: { teamId: team.id, userId: person.id } } }),
-                          (d) => d.teamMembershipRemove,
-                          `${name} is no longer on ${team.key}.`,
-                          setNotice,
-                        ).then(refreshOn);
-                      }}
-                    >Remove</button>
-                  ) : null}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+                    >Leave</Btn>
+                  );
+                }
+                return canManage ? (
+                  <Btn
+                    variant="danger"
+                    onClick={() => {
+                      if (!window.confirm(`Remove ${name} from ${team.key}?`)) return;
+                      void attempt(
+                        () => runRemove({ variables: { input: { teamId: team.id, userId: person.id } } }),
+                        (d) => d.teamMembershipRemove,
+                        `${name} is no longer on ${team.key}.`,
+                        setNotice,
+                      ).then(refreshOn);
+                    }}
+                  >Remove</Btn>
+                ) : null;
+              },
+            },
+          ]}
+        />
       </div>
     </div>
   );
@@ -253,27 +282,17 @@ export function TeamSettingsPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
       <TeamHeader team={team} current="settings" />
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <nav aria-label="Team settings sections" style={{ width: 180, padding: 12, borderRight: '1px solid var(--border-subtle)' }}>
-          {SECTIONS.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              className={`ui-action ${section === s.id ? 'ui-action--primary' : 'ui-action--subtle'}`}
-              style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 4 }}
-              onClick={() => setSearchParams(s.id === 'general' ? {} : { section: s.id }, { replace: true })}
-            >
-              {s.label}
-            </button>
-          ))}
-        </nav>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '24px 32px', maxWidth: 720 }}>
-          {section === 'general' ? <TeamGeneral team={team} onSaved={() => void query.refetch()} /> : null}
-          {section === 'states' ? <WorkflowStatesTab teamKey={team.key} /> : null}
-          {section === 'triage' ? <BugTriageTab teamKey={team.key} /> : null}
-          {section === 'agents' ? <AgentsTab teamKey={team.key} /> : null}
-        </div>
-      </div>
+      <SettingsShell
+        navLabel="Team settings sections"
+        groups={[{ items: SECTIONS }]}
+        active={section}
+        onSelect={(id) => setSearchParams(id === 'general' ? {} : { section: id }, { replace: true })}
+      >
+        {section === 'general' ? <TeamGeneral team={team} onSaved={() => void query.refetch()} /> : null}
+        {section === 'states' ? <WorkflowStatesTab teamKey={team.key} /> : null}
+        {section === 'triage' ? <BugTriageTab teamKey={team.key} /> : null}
+        {section === 'agents' ? <AgentsTab teamKey={team.key} /> : null}
+      </SettingsShell>
     </div>
   );
 }
@@ -289,48 +308,47 @@ function TeamGeneral({ team, onSaved }: { team: TeamPageTeam; onSaved: () => voi
 
   return (
     <section aria-label="General">
-      <h2 style={{ fontSize: 17, fontWeight: 500, margin: '0 0 12px' }}>General</h2>
+      <SettingsSectionHeader title="General" />
       <NoticeLine notice={notice} />
-      <label style={{ display: 'block', marginBottom: 12 }}>
-        <span style={{ display: 'block', fontSize: 14, marginBottom: 4 }}>Name</span>
-        <input style={{ ...inputStyle, width: '100%' }} aria-label="Team name" value={name} onChange={(e) => setName(e.target.value)} />
-      </label>
-      <p style={{ fontSize: 13, color: 'var(--fg-dim)', margin: '0 0 12px' }}>
-        Key <span className="mono">{team.key}</span> is the prefix of every identifier and cannot change.
-      </p>
-      <label style={{ display: 'block', marginBottom: 16 }}>
-        <span style={{ display: 'block', fontSize: 14, marginBottom: 4 }}>Visibility</span>
-        <select style={inputStyle} aria-label="Team visibility" value={visibility} onChange={(e) => setVisibility(e.target.value as 'PRIVATE' | 'PUBLIC')}>
-          <option value="PRIVATE">Private — only members and admins see it</option>
-          <option value="PUBLIC">Public — every workspace member sees it and can join</option>
-        </select>
-      </label>
-      <button
-        type="button"
-        className="ui-action ui-action--primary"
-        onClick={() => void attempt(
-          () => runUpdate({ variables: { input: { teamId: team.id, name: name.trim(), visibility } } }),
-          (d) => d.teamUpdate,
-          'Team settings saved.',
-          setNotice,
-        ).then(refreshOn)}
-      >Save team settings</button>
+      <div className="form-stack">
+        <Field label="Name" hint={<>Key <span className="mono">{team.key}</span> is the prefix of every identifier and cannot change.</>}>
+          <TextInput aria-label="Team name" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="Visibility">
+          <Select aria-label="Team visibility" value={visibility} onChange={(e) => setVisibility(e.target.value as 'PRIVATE' | 'PUBLIC')}>
+            <option value="PRIVATE">Private — only members and admins see it</option>
+            <option value="PUBLIC">Public — every workspace member sees it and can join</option>
+          </Select>
+        </Field>
+        <div>
+          <Btn
+            variant="accent"
+            size="md"
+            onClick={() => void attempt(
+              () => runUpdate({ variables: { input: { teamId: team.id, name: name.trim(), visibility } } }),
+              (d) => d.teamUpdate,
+              'Team settings saved.',
+              setNotice,
+            ).then(refreshOn)}
+          >Save team settings</Btn>
+        </div>
+      </div>
 
-      <h3 style={{ fontSize: 15, fontWeight: 500, margin: '28px 0 6px' }}>Archive</h3>
-      <p style={{ fontSize: 13.5, color: 'var(--fg-dim)', margin: '0 0 8px' }}>
+      <h3 className="settings-section__title settings-section__title--sub">Archive</h3>
+      <p className="settings-section__sub">
         An archived team is read-only and leaves the sidebar. Nothing is deleted; identifiers keep resolving.
       </p>
       {team.archivedAt ? (
-        <button type="button" className="ui-action ui-action--subtle" onClick={() => void attempt(() => runUnarchive({ variables: { teamId: team.id } }), (d) => d.teamUnarchive, `${team.key} is active again.`, setNotice).then(refreshOn)}>Unarchive team</button>
+        <Btn variant="subtle" size="md" onClick={() => void attempt(() => runUnarchive({ variables: { teamId: team.id } }), (d) => d.teamUnarchive, `${team.key} is active again.`, setNotice).then(refreshOn)}>Unarchive team</Btn>
       ) : (
-        <button
-          type="button"
-          className="ui-action ui-action--subtle"
+        <Btn
+          variant="danger"
+          size="md"
           onClick={() => {
             if (!window.confirm(`Archive ${team.key}? It becomes read-only for everyone.`)) return;
             void attempt(() => runArchive({ variables: { teamId: team.id } }), (d) => d.teamArchive, `${team.key} is archived.`, setNotice).then(refreshOn);
           }}
-        >Archive team</button>
+        >Archive team</Btn>
       )}
     </section>
   );

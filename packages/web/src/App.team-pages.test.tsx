@@ -59,7 +59,8 @@ describe('team members page', () => {
     renderApp({ data: boardQueryResult, teamPageData: teamPage(), loading: false }, ['/teams/INV/members']);
 
     const table = await screen.findByRole('table', { name: 'Team members' });
-    expect(within(table).getAllByRole('row')).toHaveLength(3);
+    // One header row, then one row per member.
+    expect(within(table).getAllByRole('row')).toHaveLength(4);
     // A guest is never offered Owner.
     const cyRole = within(table).getByLabelText('Team role for Cy');
     expect(within(cyRole).queryByRole('option', { name: 'Owner' })).not.toBeInTheDocument();

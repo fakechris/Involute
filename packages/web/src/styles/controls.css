@@ -208,7 +208,7 @@ select.control--ghost:focus-visible {
 
 .checkbox {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   font-size: 14px;
   color: var(--fg-muted);
@@ -227,6 +227,11 @@ select.control--ghost:focus-visible {
   flex-shrink: 0;
   accent-color: var(--accent);
   cursor: inherit;
+}
+
+/* Beside a label, the box lines up with its first line. */
+.checkbox > .checkbox__input {
+  margin-top: 3px;
 }
 
 /* A wrap of checkboxes (label pickers). */
@@ -671,6 +676,102 @@ select.control--ghost:focus-visible {
 
 .inline-form > .field {
   flex: 1 1 160px;
+}
+
+.inline-form > .inline-form__narrow {
+  flex: 0 1 140px;
+}
+
+/* A control that takes the rest of its flex row. */
+.control-grow {
+  flex: 1 1 auto;
+}
+
+.settings-section__title--sub {
+  margin-top: 28px;
+  font-size: 15px;
+}
+
+.settings-fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+/* Settings → Members */
+.admin-invite {
+  margin-bottom: 20px;
+}
+
+.admin-invite__teams {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 10px;
+}
+
+.admin-invite__team,
+.admin-members__team {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.admin-members__teams {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.admin-members__warning {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  color: var(--warn);
+}
+
+/* Team settings → Agents */
+.agents-tab__team {
+  max-width: 320px;
+  margin-bottom: 20px;
+}
+
+.agents-tab__fresh {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 20px;
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--border));
+  border-radius: var(--r-3);
+  background: var(--bg-raised);
+  padding: 12px 14px;
+}
+
+.agents-tab__fresh-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.agents-tab__token {
+  font-size: 13px;
+  word-break: break-all;
+  user-select: all;
+}
+
+.agents-tab__fresh-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.agents-tab__form {
+  max-width: 460px;
 }
 
 @media (max-width: 720px) {
