@@ -6069,6 +6069,9 @@ kbd {
   color: var(--fg);
   text-align: left;
   cursor: pointer;
+  /* Nothing paints into the next column: the node clips (INV-1312). */
+  min-width: 0;
+  overflow: hidden;
   transition: opacity var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
 }
 
@@ -6089,26 +6092,38 @@ kbd {
   display: flex;
   align-items: center;
   gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   font-size: 11.5px;
 }
 
 .dependency-node__id {
+  flex: 0 0 auto;
+  white-space: nowrap;
   font-family: var(--font-mono);
   color: var(--fg-dim);
 }
 
 .dependency-node__blocked {
+  flex: 0 0 auto;
   margin-left: auto;
+  white-space: nowrap;
   font-size: 10.5px;
   font-weight: 600;
   color: var(--warn);
 }
 
+/* Two lines, then an ellipsis; the native title tooltip has the full text. */
 .dependency-node__title {
-  font-size: 12.5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  font-size: 12.5px;
+  line-height: 1.3;
 }
 
 .dependency-graph__dimmed {
