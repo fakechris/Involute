@@ -1733,7 +1733,9 @@ kbd {
   color: var(--fg);
 }
 
-/* .ui-action--primary / .btn--accent sit on .ui-action / .btn: keep the accent fill. */
+/* The accent variants sit on .ui-action / .btn, which come later in this file
+   and would reset them to a transparent outline: keep the accent fill. */
+.ui-action.ui-action--accent,
 .ui-action.ui-action--primary,
 .btn.btn--accent {
   border-color: var(--accent-border);
