@@ -7008,7 +7008,7 @@ a.bugs-stat {
 /* Needs you (INV-1092): the queue on the left, the decision on the right. */
 .attention-layout {
   display: grid;
-  grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+  grid-template-columns: minmax(360px, 480px) minmax(0, 1fr);
   gap: 20px;
   align-items: start;
 }
@@ -7084,13 +7084,13 @@ a.bugs-stat {
 }
 
 .attention-section__summary {
-  margin: 4px 12px 0;
-  font-size: 11.5px;
+  margin: 4px 10px 2px;
+  font-size: 12px;
   color: var(--fg-muted);
 }
 
 .attention-section__actions {
-  padding: 2px 12px 4px;
+  padding: 2px 10px 4px;
 }
 
 .attention-group {
@@ -7177,6 +7177,11 @@ a.bugs-stat {
   max-width: 100%;
 }
 
+.attention-group__label .mono,
+.attention-group__id {
+  flex: 0 0 auto;
+}
+
 .attention-group__id {
   font-size: 11.5px;
   font-weight: 600;
@@ -7245,9 +7250,9 @@ a.bugs-stat {
 
 .attention-group ul.attention-group__children {
   position: relative;
-  margin: 4px 6px 6px 18px;
-  padding-left: 10px;
-  border-left: 2px solid var(--border-strong);
+  margin: 4px 6px 6px 10px;
+  padding-left: 5px;
+  border-left: 1px solid var(--border-strong);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -7258,7 +7263,7 @@ a.bugs-stat {
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 8px;
   align-items: start;
-  padding: 6px 8px;
+  padding: 6px 10px;
   border-radius: var(--r-2, 6px);
   cursor: pointer;
 }
@@ -7270,9 +7275,9 @@ a.bugs-stat {
 .attention-row--child::before {
   content: '';
   position: absolute;
-  left: -10px;
+  left: -5px;
   top: 15px;
-  width: 8px;
+  width: 4px;
   height: 1px;
   background: var(--border-strong);
 }
@@ -7293,13 +7298,28 @@ a.bugs-stat {
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
-  overflow-wrap: anywhere;
 }
 
-.attention-row__title {
+/* Line 1: id + title on one line; line 2: reason + flag chips (INV-1312). */
+.attention-row__title,
+.attention-row__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   min-width: 0;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+}
+
+.attention-row__title > .mono {
+  flex: 0 0 auto;
+}
+
+.attention-row__title-text,
+.attention-row__reason {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .attention-row__reason {
@@ -7321,6 +7341,15 @@ a.bugs-stat {
   flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
+  min-width: 0;
+}
+
+.attention-decision__header > .mono {
+  flex: 0 0 auto;
+}
+
+/* Only the title text may break anywhere; the identifier stays whole. */
+.attention-decision__title {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -7426,25 +7455,31 @@ a.bugs-stat {
   margin-bottom: 6px;
 }
 
-/* Work-tree packs and waits in Needs you (INV-1094). */
-.attention-section__summary {
-  margin: 0 0 6px;
-  font-size: 12.5px;
-  color: var(--fg-muted);
-}
-
+/* Work-tree packs and waits in Needs you (INV-1094): flags are chips on the
+   reason line (INV-1312). */
 .attention-row__flag {
-  font-size: 11.5px;
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
   color: var(--fg-dim);
 }
 
 .attention-row__flag--ready {
+  border-color: var(--accent-border);
   color: var(--accent);
 }
 
+.attention-row__flag--overdue {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+
 .attention-row__flag--overdue,
-.attention-row--overdue .attention-row__text > .mono {
-  color: var(--danger, #e5484d);
+.attention-row--overdue .attention-row__title > .mono {
+  color: var(--danger);
 }
 
 .attention-pack-confirm {
