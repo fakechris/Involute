@@ -206,9 +206,9 @@ Design: `docs/design-system.md`（规则 §3、原语目录 §4、审计证据 �
 ## Stage 3: 页面骨架与筛选 — INV-1314
 **Goal**: PageHeader / PageToolbar / PageBody；六个列表页筛选区同一顺序同一缩进；BulkActionBar / SegmentedControl / StatTile / EmptyState 各一种。
 **Success Criteria**: 无自建 header；内联 style < 300；现有 Board / Backlog / In Review / Candidates 测试与 e2e 通过。
-**Status**: In Progress — PR #257
+**Status**: Complete — PR #257 merged 5924b0d
 
 ## Stage 4: 内容呈现 — INV-1315
 **Goal**: MarkdownRenderer 块级语法并接入七处裸文本面板；ListRow 收敛工单行；Projects / Cycles / Views 卡片改 Card。
 **Success Criteria**: In Review 卡片三段式渲染为标题 + 列表；工单行只剩 IssueCard / IssueRow；三页内联 style 各 < 10。
-**Status**: Not Started
+**Status**: In Progress — PR #258
