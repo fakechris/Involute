@@ -42,10 +42,17 @@
   border-color: var(--accent);
 }
 
+/* "Select all visible" sits 8px above the cards, outside the role=list (INV-1311). */
+.in-review-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 880px;
+}
+
 .in-review-list-toolbar {
   display: flex;
   gap: 8px;
-  margin-bottom: 8px;
 }
 
 .in-review-select {

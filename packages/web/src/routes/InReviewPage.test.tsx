@@ -200,6 +200,26 @@ describe('InReviewPage', () => {
     expect(mockRunReview).toHaveBeenLastCalledWith({ variables: { id: 'issue-r2', input: { decision: 'REJECTED', expectedRevision: 2 } } });
   });
 
+  it('keeps the IQL query with the filters and "Select all visible" outside the list (INV-1311)', () => {
+    const { container } = render(
+      <MemoryRouter>
+        <InReviewPage />
+      </MemoryRouter>,
+    );
+
+    // The IQL group flows with the filters, so it wraps left-aligned instead of
+    // leaving an empty block in a right-aligned view slot.
+    const iql = screen.getByRole('group', { name: 'In Review filter' });
+    expect(iql.closest('.page-toolbar__filters')).not.toBeNull();
+    expect(container.querySelector('.page-toolbar__view')).toBeNull();
+
+    // A list holds only list items: the select-all row sits just above it.
+    const list = screen.getByRole('list', { name: 'In Review items' });
+    const selectAll = screen.getByRole('button', { name: 'Select all visible' });
+    expect(list.contains(selectAll)).toBe(false);
+    expect(selectAll.closest('.in-review-queue')).toBe(list.parentElement);
+  });
+
   it('applies a custom IQL filter from the view bar', () => {
     render(
       <MemoryRouter>
