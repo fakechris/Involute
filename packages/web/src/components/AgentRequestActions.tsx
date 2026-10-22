@@ -5,6 +5,7 @@ import { AGENT_REQUEST_ANSWER_MUTATION, AGENT_REQUEST_REPLY_MUTATION } from '../
 import type { SessionViewer } from '../lib/session';
 import type { WorkContextRequest } from '../work/types';
 import { Select } from './controls';
+import { InlineError } from './status';
 
 const OPEN = new Set(['SUBMITTED', 'WORKING', 'submitted', 'working']);
 const ASKED_BACK = new Set(['INPUT_REQUIRED', 'input-required']);
@@ -92,9 +93,9 @@ export function AgentRequestActions({ request, viewer }: { request: WorkContextR
         {onBehalf ? `${label} on their behalf` : label}
       </button>
       {error ? (
-        <span role="alert" className="issue-relations__error">
+        <InlineError>
           {error}
-        </span>
+        </InlineError>
       ) : null}
     </div>
   );

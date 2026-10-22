@@ -60,6 +60,8 @@ import { BugCaptureSection } from '../components/BugCaptureSection';
 import { Avatar, Btn, Kbd } from '../components/Primitives';
 import { RichTextEditor } from '../components/RichTextEditor';
 import { Select } from '../components/controls';
+import { PageBody, PageHeader } from '../components/layout';
+import { EmptyState, LoadingState } from '../components/status';
 
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
 
@@ -533,13 +535,10 @@ export function IssuePage() {
 
     return (
       <main className="board-page board-page--state">
-        <header className="app-shell__header">
-          <div>
-            <p className="app-shell__eyebrow">Involute</p>
-            <h1>Issue detail</h1>
-          </div>
-        </header>
-        <BootstrapErrorNotice state={errorState} />
+        <PageHeader title="Issue detail" />
+        <PageBody>
+          <BootstrapErrorNotice state={errorState} />
+        </PageBody>
       </main>
     );
   }
@@ -547,15 +546,10 @@ export function IssuePage() {
   if (loading && !data) {
     return (
       <main className="board-page board-page--state">
-        <header className="app-shell__header">
-          <div>
-            <p className="app-shell__eyebrow">Involute</p>
-            <h1>Issue detail</h1>
-          </div>
-        </header>
-        <section className="shell-notice" aria-live="polite">
-          Loading issue…
-        </section>
+        <PageHeader title="Issue detail" />
+        <PageBody>
+          <LoadingState>Loading issue…</LoadingState>
+        </PageBody>
       </main>
     );
   }
@@ -563,15 +557,10 @@ export function IssuePage() {
   if (!issueSnapshot || !selectedTeam) {
     return (
       <main className="board-page board-page--state">
-        <header className="app-shell__header">
-          <div>
-            <p className="app-shell__eyebrow">Involute</p>
-            <h1>Issue detail</h1>
-          </div>
-        </header>
-        <section className="shell-notice">
-          <p>Issue not found.</p>
-        </section>
+        <PageHeader title="Issue detail" />
+        <PageBody>
+          <EmptyState title="Issue not found." />
+        </PageBody>
       </main>
     );
   }

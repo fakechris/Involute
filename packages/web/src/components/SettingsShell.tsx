@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import { PageHeader } from './layout';
+
 export interface SettingsNavGroup<Id extends string> {
   /** Group heading in the rail (sentence case); the first group may omit it. */
   label?: string | undefined;
@@ -9,7 +11,10 @@ export interface SettingsNavGroup<Id extends string> {
 export interface SettingsShellProps<Id extends string> {
   /** Accessible name of the section navigation. */
   navLabel: string;
-  /** Heading above the rail, e.g. "Settings". */
+  /**
+   * Page title, e.g. "Settings": rendered as a PageHeader (the page's h1) above
+   * rail and content. Omit it when the route draws its own header (team pages).
+   */
   title?: string | undefined;
   groups: ReadonlyArray<SettingsNavGroup<Id>>;
   active: Id;
@@ -18,14 +23,14 @@ export interface SettingsShellProps<Id extends string> {
 }
 
 /**
- * The settings layout shared by workspace and team settings: a 200px side rail
- * of sections and a content column (padding 24px var(--pad-x), max-width 760).
+ * The settings layout shared by workspace and team settings: an optional
+ * PageHeader, then a 200px side rail of sections and a content column
+ * (padding 24px var(--pad-x), max-width 760).
  */
 export function SettingsShell<Id extends string>({ navLabel, title, groups, active, onSelect, children }: SettingsShellProps<Id>) {
-  return (
+  const shell = (
     <div className="settings-shell">
       <nav className="settings-shell__nav" aria-label={navLabel}>
-        {title ? <div className="settings-shell__title">{title}</div> : null}
         {groups.map((group, index) => (
           <div key={group.label ?? `group-${index}`} className="settings-shell__group">
             {group.label ? <div className="settings-shell__group-label">{group.label}</div> : null}
@@ -46,6 +51,13 @@ export function SettingsShell<Id extends string>({ navLabel, title, groups, acti
       <div className="settings-shell__content">
         <div className="settings-shell__inner">{children}</div>
       </div>
+    </div>
+  );
+  if (!title) return shell;
+  return (
+    <div className="observation-page">
+      <PageHeader title={title} />
+      {shell}
     </div>
   );
 }

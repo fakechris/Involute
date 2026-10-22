@@ -17,6 +17,8 @@ import type {
 } from '../board/types';
 import { IcoCheck, IcoInbox } from '../components/Icons';
 import { Btn } from '../components/Primitives';
+import { PageBody, PageHeader } from '../components/layout';
+import { EmptyState, SegmentedControl } from '../components/status';
 
 type InboxFilter = 'all' | 'unread';
 
@@ -233,50 +235,47 @@ export function InboxPage() {
 
   return (
     <main className="inbox-page" aria-label="Activity">
-      <header className="inbox-page__header">
-        <IcoInbox size={14} style={{ color: 'var(--fg-dim)' }} />
-        <span className="inbox-page__title">Activity</span>
-        {/* No number here: what waits on you is counted once, in Needs you (INV-1093). */}
-        <Link className="inbox-page__todo-link" to="/todo">What needs you</Link>
-        <div style={{ flex: 1 }} />
-        {unreadCount > 0 && (
-          <Btn
-            variant="ghost"
-            size="sm"
-            disabled={markingAll}
-            onClick={() => void handleMarkAllRead()}
-            style={{ marginRight: 8 }}
-          >
-            Mark all read
-          </Btn>
-        )}
-        <div className="inbox-page__toggle" role="tablist" aria-label="Activity filter">
-          {(['all', 'unread'] as const).map((key) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={filter === key}
-              className={filter === key ? 'is-active' : ''}
-              onClick={() => setFilter(key)}
-            >
-              {key}
-            </button>
-          ))}
-        </div>
-      </header>
+      <PageHeader
+        icon={<IcoInbox size={14} />}
+        title="Activity"
+        /* No number here: what waits on you is counted once, in Needs you (INV-1093). */
+        hint={<Link className="inbox-page__todo-link" to="/todo">What needs you</Link>}
+        actions={
+          <>
+            {unreadCount > 0 && (
+              <Btn
+                variant="ghost"
+                size="sm"
+                disabled={markingAll}
+                onClick={() => void handleMarkAllRead()}
+              >
+                Mark all read
+              </Btn>
+            )}
+            <SegmentedControl
+              aria-label="Activity filter"
+              semantics="tabs"
+              value={filter}
+              onChange={setFilter}
+              options={[
+                { value: 'all', label: 'all' },
+                { value: 'unread', label: 'unread' },
+              ]}
+            />
+          </>
+        }
+      />
 
-      <div className="inbox-page__list">
+      <PageBody width="full" padding="none">
         {error && notifications.length === 0 ? (
-          <p className="inbox-page__empty" role="alert">
-            Could not load activity. Confirm the API server is running and try again.
-          </p>
+          <EmptyState
+            title="Could not load activity"
+            body={<span role="alert">Confirm the API server is running and try again.</span>}
+          />
         ) : loading && notifications.length === 0 ? (
-          <p className="inbox-page__empty">Loading…</p>
+          <EmptyState title="Loading…" />
         ) : notifications.length === 0 ? (
-          <p className="inbox-page__empty">
-            {filter === 'unread' ? 'Nothing unread.' : 'No activity yet.'}
-          </p>
+          <EmptyState title={filter === 'unread' ? 'Nothing unread.' : 'No activity yet.'} />
         ) : (
           groupActivity(notifications).map(({ item, more }) => {
             const group = [item, ...more];
@@ -299,23 +298,7 @@ export function InboxPage() {
                 }}
               >
                 <div className="inbox-avatar-wrap">
-                  <div
-                    style={{
-                      width: 24,
-                      height: 24,
-                      borderRadius: 6,
-                      background: 'var(--bg-hover)',
-                      border: '1px solid var(--border)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: 'var(--fg-muted)',
-                    }}
-                  >
-                    ⚡
-                  </div>
+                  <div className="inbox-item__glyph">⚡</div>
                   {isUnread && <span className="inbox-unread-dot" />}
                 </div>
 
@@ -324,8 +307,8 @@ export function InboxPage() {
                     <strong>{formatNotificationType(item.type)}</strong>
                     {item.work && (
                       <>
-                        <span style={{ color: 'var(--fg-dim)' }}> on </span>
-                        <span className="mono" style={{ color: 'var(--fg-muted)' }}>
+                        <span className="inbox-item__on"> on </span>
+                        <span className="mono inbox-item__id">
                           {item.work.identifier}
                         </span>
                       </>
@@ -355,40 +338,19 @@ export function InboxPage() {
                     </Link>
                   ) : null}
                   {summary && (
-                    <div
-                      style={{
-                        fontSize: 12.5,
-                        color: 'var(--fg-dim)',
-                        marginTop: 2,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {summary}
-                    </div>
+                    <div className="inbox-item__summary">{summary}</div>
                   )}
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <div className="inbox-item__trail">
                   <span className="inbox-item__time">{formatRelative(item.createdAt)}</span>
                   {isUnread && (
                     <button
                       type="button"
+                      className="inbox-item__mark-read"
                       title="Mark as read"
                       aria-label="Mark as read"
                       onClick={(e) => handleMarkGroupRead(e, group)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        padding: 4,
-                        cursor: 'pointer',
-                        color: 'var(--fg-dim)',
-                        borderRadius: 4,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
                     >
                       <IcoCheck size={12} />
                     </button>
@@ -398,7 +360,7 @@ export function InboxPage() {
             );
           })
         )}
-      </div>
+      </PageBody>
     </main>
   );
 }

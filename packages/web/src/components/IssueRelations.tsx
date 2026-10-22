@@ -21,6 +21,7 @@ import { StatusIcon } from './StatusIcon';
 import { LINKS_CHANGED_EVENT, type LinksChangedDetail } from '../undo/LinkUndoHost';
 import { recordLinkGesture } from '../undo/status-undo';
 import { Select } from './controls';
+import { InlineError } from './status';
 
 /**
  * How a typed link reads from the open issue's side. A link is stored once,
@@ -202,7 +203,7 @@ export function IssueRelations({ issueId, disabled = false, onOpen }: IssueRelat
       </div>
 
       {loadError && links.length === 0 ? (
-        <p className="issue-relations__error" role="alert">Could not load relations.</p>
+        <InlineError>Could not load relations.</InlineError>
       ) : loading && !data ? (
         <p className="issue-panel__empty-hint">Loading relations…</p>
       ) : groups.length === 0 && !adding ? (
@@ -319,9 +320,9 @@ export function IssueRelations({ issueId, disabled = false, onOpen }: IssueRelat
       ) : null}
 
       {error ? (
-        <p className="issue-relations__error" role="alert">
+        <InlineError>
           {error}
-        </p>
+        </InlineError>
       ) : null}
     </div>
   );

@@ -5,6 +5,7 @@ import { IcoPlus, IcoTeam } from '../components/Icons';
 import { Avatar, Btn } from '../components/Primitives';
 import { Checkbox, Field, TextInput } from '../components/controls';
 import { SettingsSectionHeader, SettingsShell } from '../components/SettingsShell';
+import { SegmentedControl } from '../components/status';
 import { AdminMembersTab, AdminSecurityTab, AdminTeamsTab } from './AdministrationTabs';
 import { EmailNotificationsField, LabelsTab, ServerFeaturesTab, ServiceActorForm } from './WorkspaceSettingsTabs';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
@@ -161,21 +162,14 @@ function ProfileTab() {
       <SectionHeading>Profile</SectionHeading>
       <SectionSub>Your personal information.</SectionSub>
       <SettingRow label="Avatar" hint="Displayed on your issues and comments.">
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <div style={{
-            width: 48, height: 48, borderRadius: '50%',
-            background: 'var(--accent)', color: 'var(--accent-fg)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 23, fontWeight: 600,
-          }}>
-            {initials}
-          </div>
+        <div className="settings-avatar">
+          <div className="settings-avatar__initials">{initials}</div>
           <Btn variant="subtle" size="md" onClick={() => fileInputRef.current?.click()}>Change</Btn>
           <input
             ref={fileInputRef}
             type="file"
             accept="image/*"
-            style={{ display: 'none' }}
+            hidden
             onChange={handleAvatarChange}
           />
         </div>
@@ -247,40 +241,28 @@ function PreferencesTab() {
       <SectionHeading>Preferences</SectionHeading>
       <SectionSub>Customize how Involute feels.</SectionSub>
       <SettingRow label="Theme" hint="Light, dark, or follow system.">
-        <div style={{ display: 'flex', gap: 8 }}>
-          {(['Light', 'Dark', 'System'] as const).map((t) => {
-            const isActive = t === 'System' ? useSystemTheme : (!useSystemTheme && theme === t.toLowerCase());
-            return (
-              <Btn
-                key={t}
-                variant="subtle"
-                size="md"
-                active={isActive}
-                onClick={() => t === 'System' ? handleSystemTheme() : handleThemeChange(t.toLowerCase() as ThemeMode)}
-              >
-                {t}
-              </Btn>
-            );
-          })}
-        </div>
+        <SegmentedControl
+          aria-label="Theme"
+          value={useSystemTheme ? 'system' : theme}
+          onChange={(next) => next === 'system' ? handleSystemTheme() : handleThemeChange(next)}
+          options={[
+            { value: 'light', label: 'Light' },
+            { value: 'dark', label: 'Dark' },
+            { value: 'system', label: 'System' },
+          ]}
+        />
       </SettingRow>
       <SettingRow label="Density" hint="How tightly rows and cards pack.">
-        <div style={{ display: 'flex', gap: 8 }}>
-          {(['Compact', 'Cozy', 'Comfortable'] as const).map((t) => {
-            const value = t.toLowerCase() as DensityMode;
-            return (
-              <Btn
-                key={t}
-                variant="subtle"
-                size="md"
-                active={density === value}
-                onClick={() => handleDensityChange(value)}
-              >
-                {t}
-              </Btn>
-            );
-          })}
-        </div>
+        <SegmentedControl<DensityMode>
+          aria-label="Density"
+          value={density}
+          onChange={handleDensityChange}
+          options={[
+            { value: 'compact', label: 'Compact' },
+            { value: 'cozy', label: 'Cozy' },
+            { value: 'comfortable', label: 'Comfortable' },
+          ]}
+        />
       </SettingRow>
       <SettingRow label="Email notifications" hint="Also send inbox notifications to your email address.">
         <EmailNotificationsField />

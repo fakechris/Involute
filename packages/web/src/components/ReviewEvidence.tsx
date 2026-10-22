@@ -3,6 +3,7 @@ import { useMutation } from '@apollo/client/react';
 
 import { EVIDENCE_RETRACT_MUTATION } from '../work/queries';
 import type { WorkEvidenceSummary, WorkRunSummary } from '../work/types';
+import { InlineError } from './status';
 
 /**
  * What a reviewer needs before accepting (INV-790): what each run was bound to
@@ -112,9 +113,9 @@ export function RetractEvidence({ evidence, onRetracted }: { evidence: WorkEvide
         Cancel
       </button>
       {error ? (
-        <span role="alert" className="issue-relations__error">
+        <InlineError>
           {error}
-        </span>
+        </InlineError>
       ) : null}
     </span>
   );

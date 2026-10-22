@@ -72,6 +72,8 @@ import {
   undoStatusGesture,
 } from './undo/status-undo';
 import { isQuestionKey, isSlashKey } from './lib/keys';
+import { PageBody } from './components/layout';
+import { LoadingState } from './components/status';
 
 const BoardPage = lazyRoute(async () => (await import('./routes/BoardPage')).BoardPage);
 const ExtensionConnectPage = lazyRoute(async () => (await import('./routes/ExtensionConnectPage')).ExtensionConnectPage);
@@ -971,7 +973,7 @@ export function App() {
             aria-label="Open command palette"
           >
             <span className="app-shell__nav-icon"><IcoSearch size={14} /></span>
-            <span style={{ flex: 1, textAlign: 'left' }}>Search</span>
+            <span className="app-shell__search-label">Search</span>
             <kbd>⌘K</kbd>
           </button>
 
@@ -1384,9 +1386,9 @@ export function App() {
           <Suspense
             fallback={
               <main className="board-page board-page--state">
-                <section className="shell-notice">
-                  <p>Loading view…</p>
-                </section>
+                <PageBody>
+                  <LoadingState>Loading view…</LoadingState>
+                </PageBody>
               </main>
             }
           >

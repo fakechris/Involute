@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ISSUE_TIMELINE_QUERY, ISSUE_TIMELINE_STAR_MUTATION, ISSUE_TIMELINE_UNSTAR_MUTATION } from '../board/queries';
 import type { CommentSummary } from '../board/types';
 import { IcoLabel } from './Icons';
+import { EmptyState } from './status';
 
 interface TimelineActor {
   id: string;
@@ -155,7 +156,7 @@ export function IssueTimeline({
       {error ? <div role="alert" className="issue-timeline__error">{error}</div> : null}
       <div className="issue-activity" aria-label="Issue activity">
         {visible.length === 0 && starredOnly ? (
-          <div className="observation-empty">No key events yet. Star an entry to mark it.</div>
+          <EmptyState size="inline" title="No key events yet. Star an entry to mark it." />
         ) : null}
         {visible.map((row) =>
           row.type === 'comment' ? (
@@ -186,7 +187,7 @@ export function IssueTimeline({
           ),
         )}
       </div>
-      {data?.issueTimeline?.truncated ? <div className="observation-empty">Older entries are not shown.</div> : null}
+      {data?.issueTimeline?.truncated ? <EmptyState size="inline" title="Older entries are not shown." /> : null}
     </div>
   );
 }

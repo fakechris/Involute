@@ -5,6 +5,7 @@ import { NEED_INFO_REQUEST_MUTATION, NEED_INFO_WITHDRAW_MUTATION } from '../boar
 import type { AgentRequestSummary, UserSummary } from '../board/types';
 import type { SessionViewer } from '../lib/session';
 import { Select } from './controls';
+import { InlineError } from './status';
 
 // Needs you drops a needinfo once it is answered or withdrawn.
 const REFETCH = ['IssuePage', 'WorkContextPage', 'AttentionPage'];
@@ -96,9 +97,9 @@ export function NeedInfoControl({
         Send needinfo
       </button>
       {error ? (
-        <span role="alert" className="issue-relations__error">
+        <InlineError>
           {error}
-        </span>
+        </InlineError>
       ) : null}
     </div>
   );
@@ -146,9 +147,9 @@ export function NeedInfoWithdrawButton({
         Withdraw needinfo
       </button>
       {error ? (
-        <span role="alert" className="issue-relations__error">
+        <InlineError>
           {error}
-        </span>
+        </InlineError>
       ) : null}
     </>
   );
