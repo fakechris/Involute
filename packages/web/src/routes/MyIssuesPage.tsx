@@ -190,7 +190,7 @@ export function MyIssuesPage() {
                     aria-label={`Open issue ${issue.identifier}`}
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '64px 14px 14px 1fr auto auto',
+                      gridTemplateColumns: 'minmax(64px, max-content) 14px 14px 1fr auto auto',
                       gap: 10,
                       alignItems: 'center',
                       height: 'var(--row-h)',
