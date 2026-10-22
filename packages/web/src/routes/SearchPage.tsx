@@ -8,7 +8,10 @@ import { ProjectFilterCombobox, type AvailableProject } from '../components/Proj
 import { GRAPH_PROJECTS_QUERY, SEARCH_LABELS_QUERY, WORK_SEARCH_QUERY } from '../work/queries';
 import { matchLabel } from '../work/search-labels';
 import type { GraphProjectsQueryData, SearchLabelsQueryData, WorkSearchQueryData } from '../work/types';
-import { Select } from '../components/controls';
+import { Select, TextInput } from '../components/controls';
+import { PageBody, PageHeader, PageToolbar } from '../components/layout';
+import { Btn } from '../components/Primitives';
+import { EmptyState, InlineError, LoadingState } from '../components/status';
 
 const RESULT_LIMIT = 100;
 const KINDS = ['ISSUE', 'EPIC', 'MILESTONE', 'PROJECT', 'DECISION'] as const;
@@ -90,85 +93,82 @@ export function SearchPage() {
 
   return (
     <div className="observation-page search-page">
-      <div className="page-header">
-        <h1 className="page-header__title">Search</h1>
-        <span className="observation-hint">Titles, descriptions, contracts and comments · every word must match</span>
-      </div>
-      <div className="page-content observation-content">
-        <form
-          className="search-page__form"
-          role="search"
-          onSubmit={(event) => {
-            event.preventDefault();
-            update({ q: draft.trim() });
-          }}
-        >
-          <input
-            aria-label="Search all work"
-            className="search-page__input"
-            placeholder="Words, &quot;a phrase&quot;, or INV-123"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            autoFocus
-          />
-          <button type="submit" className="ui-action">Search</button>
-        </form>
-
-        <div className="search-page__filters" aria-label="Search filters">
-          <label>
-            <span>Kind</span>
-            <Select size="sm" aria-label="Kind" value={filters.kind} onChange={(event) => update({ kind: event.target.value })}>
-              <option value="">Any</option>
-              {KINDS.map((kind) => <option key={kind} value={kind}>{kind.toLowerCase()}</option>)}
-            </Select>
-          </label>
-          <label>
-            <span>State</span>
-            <Select size="sm" aria-label="State" value={filters.state} onChange={(event) => update({ state: event.target.value })}>
-              <option value="">Any</option>
-              {STATE_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </Select>
-          </label>
-          <label>
-            <span>Label</span>
-            <Select size="sm" aria-label="Label" value={filters.label} onChange={(event) => update({ label: event.target.value })}>
-              <option value="">Any</option>
-              {(labelsQuery.data?.issueLabels.nodes ?? []).map((label) => (
-                <option key={label.id} value={label.name}>{label.name}</option>
-              ))}
-            </Select>
-          </label>
-          {projects.length > 0 ? (
+      <PageHeader title="Search" hint="Titles, descriptions, contracts and comments · every word must match" />
+      <PageToolbar
+        aria-label="Search filters"
+        projects={
+          projects.length > 0 ? (
             <ProjectFilterCombobox
               projects={projects}
               selectedProjectKey={project || null}
               onSelectProject={(key) => update({ project: key ?? '' })}
               placeholder="Any project"
+              showQuickPills
             />
-          ) : null}
-          <label className="search-page__iql">
-            <span>IQL</span>
-            <input
-              key={filters.iql}
-              aria-label="IQL filter"
-              placeholder="e.g. assignee:me priority:1"
-              defaultValue={filters.iql}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') update({ iql: event.currentTarget.value });
+          ) : null
+        }
+        filters={
+          <>
+            <form
+              className="search-box"
+              role="search"
+              onSubmit={(event) => {
+                event.preventDefault();
+                update({ q: draft.trim() });
               }}
-              onBlur={(event) => update({ iql: event.target.value })}
-            />
-          </label>
-        </div>
-
+            >
+              <TextInput
+                size="sm"
+                aria-label="Search all work"
+                className="search-box__input"
+                placeholder="Words, &quot;a phrase&quot;, or INV-123"
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                autoFocus
+              />
+              <Btn type="submit" variant="subtle">Search</Btn>
+            </form>
+            <Select size="sm" aria-label="Kind" value={filters.kind} onChange={(event) => update({ kind: event.target.value })}>
+              <option value="">Any kind</option>
+              {KINDS.map((kind) => <option key={kind} value={kind}>{kind.toLowerCase()}</option>)}
+            </Select>
+            <Select size="sm" aria-label="State" value={filters.state} onChange={(event) => update({ state: event.target.value })}>
+              <option value="">Any state</option>
+              {STATE_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+            <Select size="sm" aria-label="Label" value={filters.label} onChange={(event) => update({ label: event.target.value })}>
+              <option value="">Any label</option>
+              {(labelsQuery.data?.issueLabels.nodes ?? []).map((label) => (
+                <option key={label.id} value={label.name}>{label.name}</option>
+              ))}
+            </Select>
+          </>
+        }
+        view={
+          <TextInput
+            size="sm"
+            key={filters.iql}
+            aria-label="IQL filter"
+            placeholder="IQL, e.g. assignee:me priority:1"
+            defaultValue={filters.iql}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') update({ iql: event.currentTarget.value });
+            }}
+            onBlur={(event) => update({ iql: event.target.value })}
+          />
+        }
+      />
+      <PageBody>
         {!query.trim() ? (
-          <p className="observation-empty">Type words to search all work you can read.</p>
+          <EmptyState size="inline" title="Type words to search all work you can read." />
         ) : results.error ? (
-          <div className="empty-state" role="alert">{results.error.message}</div>
+          <InlineError variant="block">{results.error.message}</InlineError>
         ) : results.loading && !results.data ? (
-          <p className="observation-empty" role="status">Searching…</p>
+          <LoadingState>Searching…</LoadingState>
         ) : hits.length === 0 ? (
-          <p className="observation-empty" role="status">Nothing matches every word{iql || project ? ' with these filters' : ''}.</p>
+          <div role="status">
+            <EmptyState size="inline" title={`Nothing matches every word${iql || project ? ' with these filters' : ''}.`} />
+          </div>
         ) : (
           <>
             <p className="observation-hint" role="status">
@@ -190,7 +190,7 @@ export function SearchPage() {
             </ul>
           </>
         )}
-      </div>
+      </PageBody>
     </div>
   );
 }

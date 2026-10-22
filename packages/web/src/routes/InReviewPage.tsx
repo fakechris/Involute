@@ -4,7 +4,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
 import { IcoCheck, IcoClose, IcoFilter } from '../components/Icons';
+import { TextInput } from '../components/controls';
+import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { Btn } from '../components/Primitives';
+import { ProjectFilterCombobox, type AvailableProject } from '../components/ProjectFilterCombobox';
+import { BulkActionBar, EmptyState, InlineError, LoadingState } from '../components/status';
 import { filtersToIql, joinIql, useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { useListKeys } from '../components/useListKeys';
 import { IN_REVIEW_PAGE_QUERY, IN_REVIEW_PROJECTS_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
@@ -17,6 +21,8 @@ import type {
 } from '../work/types';
 
 const DEFAULT_IQL = 'state:"In Review"';
+/** `?project=` value for work with no repository (same as /candidates). */
+const NO_REPOSITORY = '__none__';
 const IN_REVIEW_VIEW_STORAGE_KEY = 'involute.inReview.iqlQuery';
 const BULK_ACCEPT_ERROR = 'Some selected items could not be accepted. Refresh and retry failed rows.';
 const BULK_REJECT_ERROR = 'Some selected items could not be returned. Refresh and retry failed rows.';
@@ -53,7 +59,7 @@ function buildFilter(teamKey: string | null, repository: string | null = null): 
     state: { type: { eq: 'REVIEW' } },
     ...(teamKey ? { team: { key: { eq: teamKey } } } : {}),
     // One project at a time, so "Select all" never reaches into another (INV-1076).
-    ...(repository ? { repository: { eq: repository } } : {}),
+    ...(repository === NO_REPOSITORY ? { repository: { isNull: true } } : repository ? { repository: { eq: repository } } : {}),
   } as InReviewPageQueryVariables['filter'];
 }
 
@@ -100,9 +106,16 @@ export function InReviewPage() {
     }
     return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b));
   }, [projectData]);
-  // Counts come from the first 200 items; past that they read as a floor ("200+").
-  const countsTruncated = projectData?.issues?.pageInfo?.hasNextPage === true;
-  const allCount = `${projectData?.issues?.nodes?.length ?? 0}${countsTruncated ? '+' : ''}`;
+  const noRepoCount = useMemo(
+    () => (projectData?.issues?.nodes ?? []).filter((node) => !node.repository).length,
+    [projectData],
+  );
+  const projectOptions = useMemo<AvailableProject[]>(() => {
+    const entries = selectedProject && selectedProject !== NO_REPOSITORY && !projectCounts.some(([repo]) => repo === selectedProject)
+      ? [...projectCounts, [selectedProject, 0] as [string, number]]
+      : projectCounts;
+    return entries.map(([repo, count]) => ({ id: repo, identifier: '', name: repo, key: repo, issueCount: count }));
+  }, [projectCounts, selectedProject]);
   function selectProject(repo: string | null) {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -269,53 +282,33 @@ export function InReviewPage() {
 
   return (
     <div className="observation-page">
-      <div className="page-header">
-        <h1 className="page-header__title">In Review</h1>
-        <span className="mono observation-count">{items.length}</span>
-        <div style={{ flex: 1 }} />
-        <span className="observation-hint">
-          Human bulk accept or return - audited via workReview. Agents cannot silently Done.
-        </span>
-      </div>
+      <PageHeader
+        title="In Review"
+        count={items.length}
+        hint="Human bulk accept or return - audited via workReview. Agents cannot silently Done."
+      />
 
-      <div className="page-content observation-content">
-        {projectCounts.length > 0 || selectedProject ? (
-          <div className="board-project-pills" role="tablist" aria-label="Project switcher">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={!selectedProject}
-              className={`board-project-pill${!selectedProject ? ' board-project-pill--active' : ''}`}
-              onClick={() => selectProject(null)}
-            >
-              <span className="board-project-pill__name">All Projects</span>
-              <span className="board-project-pill__count">{allCount}</span>
-            </button>
-            {(selectedProject && !projectCounts.some(([repo]) => repo === selectedProject)
-              ? [...projectCounts, [selectedProject, 0] as [string, number]]
-              : projectCounts
-            ).map(([repo, count]) => (
-              <button
-                key={repo}
-                type="button"
-                role="tab"
-                aria-selected={selectedProject === repo}
-                className={`board-project-pill${selectedProject === repo ? ' board-project-pill--active' : ''}`}
-                onClick={() => selectProject(repo)}
-              >
-                <span className="board-project-pill__name">{repo}</span>
-                <span className="board-project-pill__count">{count}{countsTruncated ? '+' : ''}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-        <WorkFilterBar {...workFilters} />
-        <section className="in-review-filter" aria-label="In Review filter">
-          <label className="observation-field observation-field--inline">
-            <span>
+      <PageToolbar
+        aria-label="In Review filters"
+        projects={
+          <ProjectFilterCombobox
+            projects={projectOptions}
+            selectedProjectKey={selectedProject}
+            totalCount={projectData?.issues?.nodes?.length ?? 0}
+            onSelectProject={selectProject}
+            showQuickPills
+            extraOptions={noRepoCount > 0 || selectedProject === NO_REPOSITORY ? [{ key: NO_REPOSITORY, label: 'No repository', count: noRepoCount }] : []}
+          />
+        }
+        filters={<WorkFilterBar {...workFilters} />}
+        view={
+          <div className="in-review-filter" role="group" aria-label="In Review filter">
+            <span className="in-review-filter__label">
               <IcoFilter size={12} /> IQL / view
             </span>
-            <input
+            <TextInput
+              size="sm"
+              className="in-review-filter__input"
               aria-label="In Review IQL filter"
               value={iqlDraft}
               onChange={(event) => setIqlDraft(event.target.value)}
@@ -327,90 +320,42 @@ export function InReviewPage() {
               }}
               placeholder='state:"In Review"'
             />
-          </label>
-          <Btn variant="subtle" size="sm" onClick={applyIqlFilter}>
-            Apply filter
-          </Btn>
-          <Btn variant="ghost" size="sm" onClick={resetInReviewFilter}>
-            Reset to In Review
-          </Btn>
-          <span className="observation-card__meta">Active: {activeIql}</span>
-        </section>
+            <Btn variant="subtle" size="sm" onClick={applyIqlFilter}>
+              Apply filter
+            </Btn>
+            <Btn variant="ghost" size="sm" onClick={resetInReviewFilter}>
+              Reset to In Review
+            </Btn>
+            <span className="page-note">Active: {activeIql}</span>
+          </div>
+        }
+      />
 
-        {selectedIds.length > 0 ? (
-          <section className="issue-bulkbar in-review-bulkbar" aria-label="Bulk review actions">
-            <div className="issue-bulkbar__meta">
-              <strong>{selectedIds.length} selected</strong>
-              <span>Bulk actions call workReview (human-audited)</span>
-            </div>
-            <div className="issue-bulkbar__actions">
-              <Btn variant="ghost" size="sm" onClick={selectAllVisible} disabled={!items.some((item) => !item.deliveryRootId)}>
-                Select all
-              </Btn>
-              <Btn variant="ghost" size="sm" onClick={clearSelection}>
-                Clear
-              </Btn>
-              <label className="observation-field observation-field--inline">
-                <span>Reason</span>
-                <input
-                  aria-label="Bulk review reason"
-                  value={bulkReason}
-                  onChange={(event) => setBulkReason(event.target.value)}
-                  placeholder="Optional decision note"
-                />
-              </label>
-              <Btn
-                variant="accent"
-                icon={<IcoCheck size={12} />}
-                disabled={pendingAction !== null}
-                onClick={() => void applyBulkReview('ACCEPTED')}
-              >
-                {pendingAction === 'accept' ? 'Accepting...' : 'Bulk accept'}
-              </Btn>
-              <Btn
-                variant="danger"
-                icon={<IcoClose size={12} />}
-                disabled={pendingAction !== null}
-                onClick={() => void applyBulkReview('REJECTED')}
-              >
-                {pendingAction === 'reject' ? 'Returning...' : 'Bulk reject / return'}
-              </Btn>
-            </div>
-          </section>
-        ) : null}
-
-        {bulkError ? (
-          <p className="observation-error" role="alert">
-            {bulkError}
-          </p>
-        ) : null}
+      <PageBody>
+        {bulkError && selectedIds.length === 0 ? <InlineError>{bulkError}</InlineError> : null}
 
         {error ? (
-          <div className="empty-state" role="alert">
-            <h3>Could not load In Review queue</h3>
-            <p>Confirm the API server is running, then retry.</p>
-            <Btn variant="subtle" onClick={() => void refetch()}>
-              Retry
-            </Btn>
+          <div role="alert">
+            <EmptyState
+              title="Could not load In Review queue"
+              body="Confirm the API server is running, then retry."
+              action={
+                <Btn variant="subtle" onClick={() => void refetch()}>
+                  Retry
+                </Btn>
+              }
+            />
           </div>
         ) : loading && items.length === 0 ? (
-          <p className="observation-empty">Loading In Review...</p>
+          <LoadingState>Loading In Review...</LoadingState>
         ) : items.length === 0 ? (
-          <div className="empty-state">
-            <h3>No work in review</h3>
-            <p>Completed agent runs land here until a human accepts or returns them.</p>
-          </div>
+          <EmptyState title="No work in review" body="Completed agent runs land here until a human accepts or returns them." />
         ) : (
           <div className="observation-list" role="list" aria-label="In Review items">
             <div className="in-review-list-toolbar">
               <Btn variant="ghost" size="sm" onClick={selectAllVisible} disabled={!items.some((item) => !item.deliveryRootId)}>
                 Select all visible
               </Btn>
-              {selectedIds.length > 0 ? (
-                <Btn variant="ghost" size="sm" onClick={clearSelection}>
-                  Clear selection
-                </Btn>
-              ) : null}
             </div>
             {items.map((item) => {
               const checked = selectedIdSet.has(item.id);
@@ -441,7 +386,7 @@ export function InReviewPage() {
                     </button>
                     <span className="observation-card__status">in review</span>
                     {item.reviewWait ? (
-                      <span className={`observation-card__meta${item.reviewWait.overdue ? ' issue-relations__error' : ''}`} title={`In Review since ${item.reviewWait.since}`}>
+                      <span className={`observation-card__meta${item.reviewWait.overdue ? ' observation-card__meta--overdue' : ''}`} title={`In Review since ${item.reviewWait.since}`}>
                         waiting {formatWaitDays(item.reviewWait.waitMs)}{item.reviewWait.overdue ? ' · overdue' : ''}
                       </span>
                     ) : null}
@@ -488,11 +433,7 @@ export function InReviewPage() {
                       <dd>{item.repository || '-'}</dd>
                     </div>
                   </dl>
-                  {itemErrors[item.id] ? (
-                    <p className="observation-error" role="alert">
-                      {itemErrors[item.id]}
-                    </p>
-                  ) : null}
+                  {itemErrors[item.id] ? <InlineError>{itemErrors[item.id]}</InlineError> : null}
                   <div className="observation-card__actions">
                     {item.deliveryRootId ? <Btn variant="accent" onClick={() => navigate(`/work/${item.deliveryRootId}`)}>Review delivery package</Btn> : <>
                     <Btn
@@ -521,7 +462,7 @@ export function InReviewPage() {
             })}
             {paginationError ? (
               <div role="alert">
-                <p>Could not load more In Review items.</p>
+                <InlineError role="none">Could not load more In Review items.</InlineError>
                 <Btn variant="subtle" disabled={loadingMore} onClick={() => void handleLoadMore()}>
                   Retry loading more
                 </Btn>
@@ -533,7 +474,40 @@ export function InReviewPage() {
             ) : null}
           </div>
         )}
-      </div>
+
+        <BulkActionBar
+          aria-label="Bulk review actions"
+          count={selectedIds.length}
+          onClear={clearSelection}
+          status={
+            bulkError ? <InlineError>{bulkError}</InlineError> : <span>Bulk actions call workReview (human-audited)</span>
+          }
+        >
+          <TextInput
+            size="sm"
+            aria-label="Bulk review reason"
+            value={bulkReason}
+            onChange={(event) => setBulkReason(event.target.value)}
+            placeholder="Reason (optional decision note)"
+          />
+          <Btn
+            variant="accent"
+            icon={<IcoCheck size={12} />}
+            disabled={pendingAction !== null}
+            onClick={() => void applyBulkReview('ACCEPTED')}
+          >
+            {pendingAction === 'accept' ? 'Accepting...' : 'Bulk accept'}
+          </Btn>
+          <Btn
+            variant="danger"
+            icon={<IcoClose size={12} />}
+            disabled={pendingAction !== null}
+            onClick={() => void applyBulkReview('REJECTED')}
+          >
+            {pendingAction === 'reject' ? 'Returning...' : 'Bulk reject / return'}
+          </Btn>
+        </BulkActionBar>
+      </PageBody>
     </div>
   );
 }

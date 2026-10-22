@@ -82,6 +82,19 @@ describe('IncidentsPage (INV-1129)', () => {
     expect(screen.getByTestId('where')).toHaveTextContent('/issue/INV-1');
   });
 
+  it('narrows the incident list by project and text from the URL (INV-1314)', () => {
+    serve({ incidentSummary: summary });
+    render(
+      <MemoryRouter initialEntries={['/incidents?project=acme/incidents&q=board']}>
+        <IncidentsPage />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('button', { name: 'Project: acme/incidents' })).toBeInTheDocument();
+    expect(screen.getByTestId('incident-INV-1')).toBeInTheDocument();
+    expect(screen.queryByTestId('incident-INV-2')).toBeNull();
+    expect(screen.queryByTestId('incident-INV-3')).toBeNull();
+  });
+
   it('shows an empty state with no incidents', () => {
     serve({
       incidentSummary: {

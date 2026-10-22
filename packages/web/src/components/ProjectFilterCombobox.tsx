@@ -18,7 +18,21 @@ export interface ProjectFilterComboboxProps {
   className?: string;
   placeholder?: string;
   showQuickPills?: boolean;
+  /**
+   * Scopes that are not projects, listed after "All Projects" and offered as
+   * quick pills too — e.g. `{ key: '__none__', label: 'No repository' }`.
+   * Selecting one calls `onSelectProject(key)`.
+   */
+  extraOptions?: ReadonlyArray<ProjectFilterExtraOption>;
 }
+
+export interface ProjectFilterExtraOption {
+  key: string;
+  label: string;
+  count?: number;
+}
+
+const NO_EXTRA_OPTIONS: ReadonlyArray<ProjectFilterExtraOption> = [];
 
 export function ProjectFilterCombobox({
   projects,
@@ -28,6 +42,7 @@ export function ProjectFilterCombobox({
   className = '',
   placeholder = 'Filter projects...',
   showQuickPills = false,
+  extraOptions = NO_EXTRA_OPTIONS,
 }: ProjectFilterComboboxProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -38,9 +53,11 @@ export function ProjectFilterCombobox({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLUListElement | null>(null);
 
+  const activeExtra = selectedProjectKey ? extraOptions.find((option) => option.key === selectedProjectKey) ?? null : null;
+
   // Matching for selected project: Pass 1 exact, Pass 2 fuzzy
   const activeProject = useMemo(() => {
-    if (!selectedProjectKey) return null;
+    if (!selectedProjectKey || extraOptions.some((option) => option.key === selectedProjectKey)) return null;
     const target = selectedProjectKey.trim().toLowerCase();
 
     const exactMatch = projects.find((p) => {
@@ -63,7 +80,7 @@ export function ProjectFilterCombobox({
         );
       }) ?? null
     );
-  }, [projects, selectedProjectKey]);
+  }, [projects, selectedProjectKey, extraOptions]);
 
   // Search filtering matches identifier, name, key or title
   const filteredProjects = useMemo(() => {
@@ -78,7 +95,8 @@ export function ProjectFilterCombobox({
     );
   }, [projects, searchQuery]);
 
-  const totalSelectable = filteredProjects.length + 1;
+  const extraCount = extraOptions.length;
+  const totalSelectable = filteredProjects.length + extraCount + 1;
 
   const handleOpen = useCallback(() => {
     setIsOpen(true);
@@ -155,8 +173,11 @@ export function ProjectFilterCombobox({
       e.preventDefault();
       if (highlightedIndex === 0) {
         handleSelect(null);
+      } else if (highlightedIndex <= extraCount) {
+        const extra = extraOptions[highlightedIndex - 1];
+        if (extra) handleSelect(extra.key);
       } else {
-        const item = filteredProjects[highlightedIndex - 1];
+        const item = filteredProjects[highlightedIndex - 1 - extraCount];
         const first = filteredProjects[0];
         if (item) {
           handleSelect(item.name);
@@ -174,21 +195,26 @@ export function ProjectFilterCombobox({
       style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 6 }}
     >
       {/* Combobox Trigger Group */}
-      <div className={`project-combobox__trigger-group${activeProject ? ' project-combobox__trigger-group--active' : ''}`}>
+      <div className={`project-combobox__trigger-group${activeProject || activeExtra ? ' project-combobox__trigger-group--active' : ''}`}>
         <button
           ref={triggerRef}
           type="button"
-          className={`project-combobox__trigger${activeProject ? ' project-combobox__trigger--active' : ''}`}
+          className={`project-combobox__trigger${activeProject || activeExtra ? ' project-combobox__trigger--active' : ''}`}
           onClick={() => (isOpen ? handleClose() : handleOpen())}
           aria-haspopup="listbox"
           aria-expanded={isOpen}
-          aria-label={activeProject ? `Project: ${activeProject.name}` : 'Filter by project'}
-          title={activeProject ? `Project: ${activeProject.name} (${activeProject.identifier})` : 'Filter by project'}
+          aria-label={activeProject ? `Project: ${activeProject.name}` : activeExtra ? `Project: ${activeExtra.label}` : 'Filter by project'}
+          title={activeProject ? `Project: ${activeProject.name} (${activeProject.identifier})` : activeExtra ? `Project: ${activeExtra.label}` : 'Filter by project'}
         >
-          <IcoProject size={13} style={{ color: activeProject ? 'var(--accent)' : 'var(--fg-dim)', flexShrink: 0 }} />
-          {activeProject ? (
+          <IcoProject size={13} style={{ color: activeProject || activeExtra ? 'var(--accent)' : 'var(--fg-dim)', flexShrink: 0 }} />
+          {activeExtra ? (
             <>
-              <span className="mono project-combobox__trigger-id">{activeProject.identifier}</span>
+              <span className="project-combobox__trigger-name">{activeExtra.label}</span>
+              {activeExtra.count !== undefined ? <span className="project-combobox__trigger-count">{activeExtra.count}</span> : null}
+            </>
+          ) : activeProject ? (
+            <>
+              {activeProject.identifier ? <span className="mono project-combobox__trigger-id">{activeProject.identifier}</span> : null}
               <span className="project-combobox__trigger-name">{activeProject.name}</span>
               <span className="project-combobox__trigger-count">{activeProject.issueCount}</span>
             </>
@@ -204,7 +230,7 @@ export function ProjectFilterCombobox({
           <span className="project-combobox__trigger-chevron" aria-hidden="true">▾</span>
         </button>
 
-        {activeProject ? (
+        {activeProject || activeExtra ? (
           <button
             type="button"
             className="project-combobox__clear-btn"
@@ -222,7 +248,7 @@ export function ProjectFilterCombobox({
 
       {/* Quick Pills (if showQuickPills and <= 4 projects) */}
       {showQuickPills && projects.length > 0 && projects.length <= 4 ? (
-        <div className="project-combobox__quick-pills">
+        <div className="project-combobox__quick-pills" role="group" aria-label="Quick project filters">
           {projects.map((p) => {
             const isActive =
               Boolean(selectedProjectKey) &&
@@ -235,12 +261,28 @@ export function ProjectFilterCombobox({
                 key={p.id}
                 type="button"
                 className={`board-project-pill${isActive ? ' board-project-pill--active' : ''}`}
+                aria-pressed={isActive}
                 onClick={() => onSelectProject(isActive ? null : p.name)}
                 title={`Filter to ${p.name} (${p.issueCount} issues)`}
               >
-                <span className="mono board-project-pill__id">{p.identifier}</span>
+                {p.identifier ? <span className="mono board-project-pill__id">{p.identifier}</span> : null}
                 <span className="board-project-pill__name">{p.name}</span>
                 <span className="board-project-pill__count">{p.issueCount}</span>
+              </button>
+            );
+          })}
+          {extraOptions.map((option) => {
+            const isActive = activeExtra?.key === option.key;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                className={`board-project-pill${isActive ? ' board-project-pill--active' : ''}`}
+                aria-pressed={isActive}
+                onClick={() => onSelectProject(isActive ? null : option.key)}
+              >
+                <span className="board-project-pill__name">{option.label}</span>
+                {option.count !== undefined ? <span className="board-project-pill__count">{option.count}</span> : null}
               </button>
             );
           })}
@@ -299,20 +341,41 @@ export function ProjectFilterCombobox({
           <ul ref={listRef} className="project-combobox__list" role="listbox">
             {/* "All Projects" Option */}
             <li
-              className={`project-combobox__item${highlightedIndex === 0 ? ' project-combobox__item--highlighted' : ''}${!activeProject ? ' project-combobox__item--selected' : ''}`}
+              className={`project-combobox__item${highlightedIndex === 0 ? ' project-combobox__item--highlighted' : ''}${!activeProject && !activeExtra ? ' project-combobox__item--selected' : ''}`}
               role="option"
-              aria-selected={!activeProject}
+              aria-selected={!activeProject && !activeExtra}
               onClick={() => handleSelect(null)}
               onMouseEnter={() => setHighlightedIndex(0)}
             >
               <span className="project-combobox__item-check">
-                {!activeProject ? <IcoCheck size={12} /> : null}
+                {!activeProject && !activeExtra ? <IcoCheck size={12} /> : null}
               </span>
               <span className="project-combobox__item-name">All Projects</span>
               {totalCount > 0 ? (
                 <span className="project-combobox__item-count">{totalCount}</span>
               ) : null}
             </li>
+
+            {extraOptions.map((option, index) => {
+              const itemIndex = index + 1;
+              const isSelected = activeExtra?.key === option.key;
+              return (
+                <li
+                  key={option.key}
+                  className={`project-combobox__item${highlightedIndex === itemIndex ? ' project-combobox__item--highlighted' : ''}${isSelected ? ' project-combobox__item--selected' : ''}`}
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => handleSelect(option.key)}
+                  onMouseEnter={() => setHighlightedIndex(itemIndex)}
+                >
+                  <span className="project-combobox__item-check">
+                    {isSelected ? <IcoCheck size={12} /> : null}
+                  </span>
+                  <span className="project-combobox__item-name">{option.label}</span>
+                  {option.count !== undefined ? <span className="project-combobox__item-count">{option.count}</span> : null}
+                </li>
+              );
+            })}
 
             <div className="project-combobox__divider" />
 
@@ -321,7 +384,7 @@ export function ProjectFilterCombobox({
               <li className="project-combobox__empty">No matching projects</li>
             ) : (
               filteredProjects.map((p, index) => {
-                const itemIndex = index + 1;
+                const itemIndex = index + 1 + extraCount;
                 const isSelected =
                   Boolean(selectedProjectKey) &&
                   (selectedProjectKey?.toLowerCase() === p.key.toLowerCase() ||
@@ -342,7 +405,7 @@ export function ProjectFilterCombobox({
                     <span className="project-combobox__item-check">
                       {isSelected ? <IcoCheck size={12} /> : null}
                     </span>
-                    <span className="mono project-combobox__item-id">{p.identifier}</span>
+                    {p.identifier ? <span className="mono project-combobox__item-id">{p.identifier}</span> : null}
                     <span className="project-combobox__item-name" title={p.title || p.name}>
                       {p.name}
                     </span>

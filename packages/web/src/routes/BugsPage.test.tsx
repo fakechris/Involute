@@ -226,14 +226,14 @@ describe('BugsPage', () => {
     );
 
     const stats = screen.getByLabelText('Bug statistics');
-    const cards = within(stats).getAllByText(/./, { selector: '.bugs-stat__label' });
+    const cards = within(stats).getAllByText(/./, { selector: '.stat-tile__label' });
     expect(cards.map((card) => card.textContent)).toEqual([
       'Open',
       'Unclaimed',
       'Urgent + High open',
       'Avg open age (days)',
     ]);
-    const values = within(stats).getAllByText(/./, { selector: '.bugs-stat__value' });
+    const values = within(stats).getAllByText(/./, { selector: '.stat-tile__value' });
     expect(values.map((value) => value.textContent)).toEqual(['3', '2', '2', '6']);
   });
 
@@ -279,6 +279,19 @@ describe('BugsPage', () => {
     expect(items[1]).toHaveTextContent('INV-32');
     expect(items[2]).toHaveTextContent('INV-31');
     expect(screen.queryByText('Fixed last week')).not.toBeInTheDocument();
+  });
+
+  it('narrows the open bugs by project and work filters from the URL (INV-1314)', () => {
+    render(
+      <MemoryRouter initialEntries={['/bugs?project=fakechris/Involute&priority=2']}>
+        <BugsPage />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('button', { name: 'Project: fakechris/Involute' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Filter by priority')).toHaveValue('2');
+    const items = within(screen.getByRole('list', { name: 'Open bugs list' })).getAllByRole('listitem');
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent('INV-32');
   });
 
   // INV-1133
