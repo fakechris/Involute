@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { Btn } from '../components/Primitives';
+import { PageBody, PageHeader } from '../components/layout';
+import { InlineError } from '../components/status';
 import { allowedExtensionIds, type ExtensionConnectMessage } from '../extension/constants';
 import { EXTENSION_TOKEN_CREATE_MUTATION, EXTENSION_TOKEN_REVOKE_MUTATION } from '../extension/queries';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
@@ -94,14 +96,12 @@ export function ExtensionConnectPage() {
 
   return (
     <div className="observation-page">
-      <div className="page-header">
-        <h1 className="page-header__title">Connect Involute Capture</h1>
-      </div>
-      <div className="page-content" style={{ maxWidth: 560 }}>
+      <PageHeader title="Connect Involute Capture" />
+      <PageBody width="narrow">
         {!known ? (
-          <p className="issue-relations__error" role="alert">
+          <InlineError>
             This page was opened by an extension Involute does not know ({extensionId}). Nothing will be sent to it.
-          </p>
+          </InlineError>
         ) : (
           <>
             <p>
@@ -114,14 +114,16 @@ export function ExtensionConnectPage() {
             {status.kind === 'connected' ? (
               <p role="status">Connected. You can close this tab and file bugs from the extension.</p>
             ) : (
-              <Btn variant="accent" disabled={!viewer || status.kind === 'working'} onClick={() => void connect()}>
-                {status.kind === 'working' ? 'Connecting…' : 'Connect extension'}
-              </Btn>
+              <div>
+                <Btn variant="accent" disabled={!viewer || status.kind === 'working'} onClick={() => void connect()}>
+                  {status.kind === 'working' ? 'Connecting…' : 'Connect extension'}
+                </Btn>
+              </div>
             )}
-            {status.kind === 'error' ? <p className="issue-relations__error" role="alert">{status.message}</p> : null}
+            {status.kind === 'error' ? <InlineError>{status.message}</InlineError> : null}
           </>
         )}
-      </div>
+      </PageBody>
     </div>
   );
 }

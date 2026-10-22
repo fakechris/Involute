@@ -45,6 +45,8 @@ import { IcoCycle, IcoPlus, IcoSettings } from '../components/Icons';
 import { Btn, StatusIconPrimitive } from '../components/Primitives';
 import { DialogShell } from '../components/DialogShell';
 import { Field, TextArea, TextInput } from '../components/controls';
+import { PageBody, PageHeader } from '../components/layout';
+import { EmptyState, LoadingState, SegmentedControl } from '../components/status';
 import { getStatusColorVar } from '../components/StatusIcon';
 
 type ViewTab = 'milestones' | 'cycles';
@@ -321,193 +323,117 @@ export function CyclesPage() {
     void refetchCycles();
   }
 
-  function renderMilestoneProgress(milestone: MilestoneIssueSummary) {
-    const children = milestone.children?.nodes ?? [];
-    const total = children.length;
+  function renderProgress(items: Array<{ state: { type: WorkflowStateType } }>, withCount: boolean) {
+    const total = items.length;
     if (total === 0) return null;
-    const completed = children.filter(
+    const completed = items.filter(
       (c) => c.state.type === 'COMPLETED' || c.state.type === 'CANCELED',
     ).length;
     const pct = Math.round((completed / total) * 100);
 
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-        <div
-          style={{
-            flex: 1,
-            height: 4,
-            borderRadius: 2,
-            background: 'var(--bg-hover)',
-            overflow: 'hidden',
-          }}
-        >
-          <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
+      <div className="cycles-progress">
+        <div className="cycles-progress__track">
+          <div className="cycles-progress__fill" style={{ width: `${pct}%` }} />
         </div>
-        <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
-          {completed}/{total} ({pct}%)
+        <span className="cycles-progress__label">
+          {withCount ? `${completed}/${total} (${pct}%)` : `${pct}%`}
         </span>
       </div>
     );
   }
 
-  function renderCycleProgress(cycle: CycleSummary) {
-    const issues = cycle.issues?.nodes ?? [];
-    const total = issues.length;
-    if (total === 0) return null;
-    const completed = issues.filter(
-      (i) => i.state.type === 'COMPLETED' || i.state.type === 'CANCELED',
-    ).length;
-    const pct = Math.round((completed / total) * 100);
+  function renderIssueLinks(items: Array<{ id: string; identifier: string; title: string; state: { type: WorkflowStateType } }>) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-        <div style={{
-          flex: 1, height: 4, borderRadius: 2,
-          background: 'var(--bg-hover)', overflow: 'hidden',
-        }}>
-          <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
-        </div>
-        <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{pct}%</span>
+      <div className="cycles-card__issues">
+        {items.map((child) => (
+          <button
+            key={child.id}
+            type="button"
+            className="cycles-issue"
+            onClick={() => navigate(`/issue/${child.id}`)}
+          >
+            <StatusIconPrimitive stateType={getStateType(child.state.type)} stateColor={getStateColor(child.state.type)} size={14} />
+            <span className="mono cycles-issue__id">{child.identifier}</span>
+            <span className="cycles-issue__title">{child.title}</span>
+          </button>
+        ))}
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
-      <div className="page-header">
-        <span style={{ color: 'var(--fg-dim)', display: 'inline-flex' }}><IcoCycle /></span>
-        <span style={{ fontSize: 15, fontWeight: 500 }}>
-          {activeTab === 'milestones' ? 'Milestones' : 'Cycles'}
-        </span>
-        {teamKey && (
+    <div className="observation-page">
+      <PageHeader
+        icon={<IcoCycle />}
+        title={activeTab === 'milestones' ? 'Milestones' : 'Cycles'}
+        hint={teamKey ? <span className="mono context-chip">{teamKey}</span> : null}
+        actions={(
           <>
-            <span style={{ color: 'var(--fg-faint)', fontSize: 14 }}>·</span>
-            <span className="mono" style={{
-              fontSize: 12, padding: '1px 5px', borderRadius: 3,
-              background: 'var(--bg-hover)', border: '1px solid var(--border)',
-              color: 'var(--fg-muted)',
-            }}>
-              {teamKey}
-            </span>
+            <SegmentedControl
+              aria-label="Planning view"
+              value={activeTab}
+              onChange={setActiveTab}
+              options={[
+                { value: 'milestones', label: 'Milestones (Work Graph)' },
+                { value: 'cycles', label: 'Cycles (Legacy)' },
+              ]}
+            />
+            {!canWriteTeam ? null : activeTab === 'milestones' ? (
+              <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={openCreateMilestone}>
+                New milestone
+              </Btn>
+            ) : (
+              <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={openCreateCycleDialog}>
+                New cycle
+              </Btn>
+            )}
           </>
         )}
+      />
 
-        <div style={{ display: 'inline-flex', marginLeft: 16, border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 1 }}>
-          <Btn variant="ghost" size="sm" active={activeTab === 'milestones'} onClick={() => setActiveTab('milestones')}>
-            Milestones (Work Graph)
-          </Btn>
-          <Btn variant="ghost" size="sm" active={activeTab === 'cycles'} onClick={() => setActiveTab('cycles')}>
-            Cycles (Legacy)
-          </Btn>
-        </div>
-
-        <div style={{ flex: 1 }} />
-        {!canWriteTeam ? null : activeTab === 'milestones' ? (
-          <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={openCreateMilestone}>
-            New milestone
-          </Btn>
-        ) : (
-          <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={openCreateCycleDialog}>
-            New cycle
-          </Btn>
-        )}
-      </div>
-
-      <div className="page-content">
+      <PageBody width="wide">
         {activeTab === 'milestones' ? (
           milestoneLoading ? (
-            <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 14 }}>
-              Loading milestones…
-            </div>
+            <LoadingState>Loading milestones…</LoadingState>
           ) : milestones.length === 0 ? (
-            <div className="empty-state">
-              <div style={{
-                width: 48, height: 48, borderRadius: 12,
-                border: '1px solid var(--border)', background: 'var(--bg-raised)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
-              }}>
-                <IcoCycle size={22} style={{ color: 'var(--fg-faint)' }} />
-              </div>
-              <h3>No milestones configured</h3>
-              <p>Milestones group work nodes into deliverables with outcome criteria and child tasks.</p>
-              {canWriteTeam ? (<Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateMilestone} style={{ marginTop: 12 }}>
-                New milestone
-              </Btn>) : null}
-            </div>
+            <EmptyState
+              icon={<IcoCycle size={20} />}
+              title="No milestones configured"
+              body="Milestones group work nodes into deliverables with outcome criteria and child tasks."
+              action={canWriteTeam ? (
+                <Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateMilestone}>
+                  New milestone
+                </Btn>
+              ) : null}
+            />
           ) : (
-            <div style={{ padding: '20px var(--pad-x)' }}>
+            <>
               {activeMilestones.length > 0 && (
-                <section style={{ marginBottom: 32 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
-                    IN PROGRESS
-                  </div>
+                <section className="cycles-section">
+                  <h2 className="cycles-section__title">In progress</h2>
                   {activeMilestones.map((milestone) => (
-                    <div
-                      key={milestone.id}
-                      style={{
-                        border: '1px solid var(--accent-border)',
-                        borderRadius: 'var(--r-3)',
-                        padding: 16,
-                        background: 'var(--bg-raised)',
-                        marginBottom: 12,
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>
-                          {milestone.identifier}
-                        </span>
-                        <span style={{ fontSize: 15, fontWeight: 500 }}>{milestone.title}</span>
-                        <div style={{ flex: 1 }} />
-                        <Btn
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigate(`/work/${milestone.id}`)}
-                          style={{ marginRight: 6 }}
-                        >
+                    <div key={milestone.id} className="cycles-card">
+                      <div className="cycles-card__head">
+                        <span className="mono cycles-row__id">{milestone.identifier}</span>
+                        <span className="cycles-row__title">{milestone.title}</span>
+                        <Btn variant="ghost" size="sm" onClick={() => navigate(`/work/${milestone.id}`)}>
                           Work context
                         </Btn>
                         <Btn variant="ghost" icon={<IcoSettings size={12} />} size="sm" onClick={() => openEditMilestone(milestone)}>
                           Configure
                         </Btn>
                       </div>
-                      {renderMilestoneProgress(milestone)}
-                      {(milestone.children?.nodes ?? []).length > 0 && (
-                        <div style={{ marginTop: 12, borderTop: '1px solid var(--border-subtle)', paddingTop: 8 }}>
-                          {milestone.children.nodes.map((child) => (
-                            <button
-                              key={child.id}
-                              type="button"
-                              onClick={() => navigate(`/issue/${child.id}`)}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 8,
-                                width: '100%',
-                                padding: '6px 0',
-                                background: 'none',
-                                border: 'none',
-                                cursor: 'pointer',
-                                fontSize: 14,
-                                color: 'var(--fg)',
-                                textAlign: 'left',
-                              }}
-                            >
-                              <StatusIconPrimitive stateType={getStateType(child.state.type)} stateColor={getStateColor(child.state.type)} size={14} />
-                              <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>{child.identifier}</span>
-                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{child.title}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                      {renderProgress(milestone.children?.nodes ?? [], true)}
+                      {(milestone.children?.nodes ?? []).length > 0 && renderIssueLinks(milestone.children.nodes)}
                     </div>
                   ))}
                 </section>
               )}
 
               {upcomingMilestones.length > 0 && (
-                <section style={{ marginBottom: 32 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
-                    UPCOMING & BACKLOG
-                  </div>
+                <section className="cycles-section">
+                  <h2 className="cycles-section__title">Upcoming &amp; backlog</h2>
                   {upcomingMilestones.map((milestone) => (
                     <MilestoneRow
                       key={milestone.id}
@@ -521,10 +447,8 @@ export function CyclesPage() {
               )}
 
               {completedMilestones.length > 0 && (
-                <section>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
-                    COMPLETED
-                  </div>
+                <section className="cycles-section">
+                  <h2 className="cycles-section__title">Completed</h2>
                   {completedMilestones.map((milestone) => (
                     <MilestoneRow
                       key={milestone.id}
@@ -536,79 +460,46 @@ export function CyclesPage() {
                   ))}
                 </section>
               )}
-            </div>
+            </>
           )
         ) : (
           cyclesLoading ? (
-            <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 14 }}>
-              Loading cycles…
-            </div>
+            <LoadingState>Loading cycles…</LoadingState>
           ) : cycles.length === 0 ? (
-            <div className="empty-state">
-              <div style={{
-                width: 48, height: 48, borderRadius: 12,
-                border: '1px solid var(--border)', background: 'var(--bg-raised)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
-              }}>
-                <IcoCycle size={22} style={{ color: 'var(--fg-faint)' }} />
-              </div>
-              <h3>No cycles configured</h3>
-              <p>Create a cycle to group issues into time-boxed sprints.</p>
-              {canWriteTeam ? (<Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateCycleDialog} style={{ marginTop: 12 }}>
-                New cycle
-              </Btn>) : null}
-            </div>
+            <EmptyState
+              icon={<IcoCycle size={20} />}
+              title="No cycles configured"
+              body="Create a cycle to group issues into time-boxed sprints."
+              action={canWriteTeam ? (
+                <Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateCycleDialog}>
+                  New cycle
+                </Btn>
+              ) : null}
+            />
           ) : (
-            <div style={{ padding: '20px var(--pad-x)' }}>
+            <>
               {activeCycle && (
-                <section style={{ marginBottom: 32 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
-                    ACTIVE CYCLE
-                  </div>
-                  <div style={{
-                    border: '1px solid var(--accent-border)', borderRadius: 'var(--r-3)',
-                    padding: 16, background: 'var(--bg-raised)',
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 15, fontWeight: 500 }}>{activeCycle.name}</span>
-                      <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
+                <section className="cycles-section">
+                  <h2 className="cycles-section__title">Active cycle</h2>
+                  <div className="cycles-card">
+                    <div className="cycles-card__head">
+                      <span className="cycles-row__title">{activeCycle.name}</span>
+                      <span className="cycles-row__meta">
                         {formatDate(activeCycle.startsAt)} – {formatDate(activeCycle.endsAt)}
                       </span>
-                      <div style={{ flex: 1 }} />
                       <Btn variant="ghost" icon={<IcoSettings size={12} />} size="sm" onClick={() => openEditCycleDialog(activeCycle)}>
                         Configure
                       </Btn>
                     </div>
-                    {renderCycleProgress(activeCycle)}
-                    {(activeCycle.issues?.nodes ?? []).length > 0 && (
-                      <div style={{ marginTop: 12 }}>
-                        {activeCycle.issues!.nodes.map((issue) => (
-                          <button
-                            key={issue.id}
-                            type="button"
-                            onClick={() => navigate(`/issue/${issue.id}`)}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: 8,
-                              width: '100%', padding: '6px 0', background: 'none', border: 'none',
-                              cursor: 'pointer', fontSize: 14.5, color: 'var(--fg)', textAlign: 'left',
-                            }}
-                          >
-                            <StatusIconPrimitive stateType={getStateType(issue.state.type)} stateColor={getStateColor(issue.state.type)} size={14} />
-                            <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>{issue.identifier}</span>
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.title}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
+                    {renderProgress(activeCycle.issues?.nodes ?? [], false)}
+                    {(activeCycle.issues?.nodes ?? []).length > 0 && renderIssueLinks(activeCycle.issues!.nodes)}
                   </div>
                 </section>
               )}
 
               {upcomingCycles.length > 0 && (
-                <section style={{ marginBottom: 32 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
-                    UPCOMING
-                  </div>
+                <section className="cycles-section">
+                  <h2 className="cycles-section__title">Upcoming</h2>
                   {upcomingCycles.map((cycle) => (
                     <CycleRow key={cycle.id} cycle={cycle} onEdit={() => openEditCycleDialog(cycle)} onDelete={() => void handleCycleDelete(cycle.id)} />
                   ))}
@@ -616,19 +507,17 @@ export function CyclesPage() {
               )}
 
               {completedCycles.length > 0 && (
-                <section>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', marginBottom: 8, letterSpacing: '0.03em' }}>
-                    COMPLETED
-                  </div>
+                <section className="cycles-section">
+                  <h2 className="cycles-section__title">Completed</h2>
                   {completedCycles.map((cycle) => (
                     <CycleRow key={cycle.id} cycle={cycle} onEdit={() => openEditCycleDialog(cycle)} onDelete={() => void handleCycleDelete(cycle.id)} />
                   ))}
                 </section>
               )}
-            </div>
+            </>
           )
         )}
-      </div>
+      </PageBody>
 
       {/* Milestone Dialog */}
       {isMilestoneDialogOpen ? (
@@ -748,17 +637,11 @@ function MilestoneRow({
 }) {
   const childCount = milestone.children?.nodes.length ?? 0;
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 12,
-      padding: '10px 12px', borderRadius: 'var(--r-2)',
-      border: '1px solid var(--border)', marginBottom: 6, background: 'var(--bg-raised)',
-    }}>
-      <IcoCycle size={14} style={{ color: 'var(--fg-dim)' }} />
-      <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>
-        {milestone.identifier}
-      </span>
-      <span style={{ fontSize: 15, fontWeight: 500, flex: 1 }}>{milestone.title}</span>
-      <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{childCount} tasks</span>
+    <div className="cycles-row">
+      <span className="cycles-row__icon"><IcoCycle size={14} /></span>
+      <span className="mono cycles-row__id">{milestone.identifier}</span>
+      <span className="cycles-row__title">{milestone.title}</span>
+      <span className="mono cycles-row__meta">{childCount} tasks</span>
       <Btn variant="ghost" size="sm" onClick={onNavigate}>Context</Btn>
       <Btn variant="ghost" size="sm" onClick={onEdit}>Edit</Btn>
       <Btn variant="danger" size="sm" onClick={onDelete}>Delete</Btn>
@@ -769,17 +652,13 @@ function MilestoneRow({
 function CycleRow({ cycle, onEdit, onDelete }: { cycle: CycleSummary; onEdit: () => void; onDelete: () => void }) {
   const issueCount = cycle.issues?.nodes.length ?? 0;
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 12,
-      padding: '10px 12px', borderRadius: 'var(--r-2)',
-      border: '1px solid var(--border)', marginBottom: 6, background: 'var(--bg-raised)',
-    }}>
-      <IcoCycle size={14} style={{ color: 'var(--fg-dim)' }} />
-      <span style={{ fontSize: 15, fontWeight: 500, flex: 1 }}>{cycle.name}</span>
-      <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
+    <div className="cycles-row">
+      <span className="cycles-row__icon"><IcoCycle size={14} /></span>
+      <span className="cycles-row__title">{cycle.name}</span>
+      <span className="cycles-row__meta">
         {formatDate(cycle.startsAt)} – {formatDate(cycle.endsAt)}
       </span>
-      <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{issueCount} issues</span>
+      <span className="mono cycles-row__meta">{issueCount} issues</span>
       <Btn variant="ghost" size="sm" onClick={onEdit}>Edit</Btn>
       <Btn variant="danger" size="sm" onClick={onDelete}>Delete</Btn>
     </div>

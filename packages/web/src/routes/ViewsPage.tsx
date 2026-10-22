@@ -12,6 +12,8 @@ import { IcoPlus, IcoViews } from '../components/Icons';
 import { Btn } from '../components/Primitives';
 import { DialogShell } from '../components/DialogShell';
 import { Field, Select, TextInput } from '../components/controls';
+import { PageBody, PageHeader } from '../components/layout';
+import { EmptyState, InlineError } from '../components/status';
 
 interface ViewEntry {
   id: string;
@@ -102,48 +104,35 @@ export function ViewsPage() {
   }, [boardViews, backlogViews]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
-      <div className="page-header">
-        <span style={{ color: 'var(--fg-dim)', display: 'inline-flex' }}><IcoViews /></span>
-        <span style={{ fontSize: 15, fontWeight: 500 }}>Views</span>
-        <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{views.length}</span>
-        <div style={{ flex: 1 }} />
-        <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={() => {
-          setNewViewName('');
-          setNewViewKind('Board');
-          setIsDialogOpen(true);
-        }}>New view</Btn>
-      </div>
+    <div className="observation-page">
+      <PageHeader
+        icon={<IcoViews />}
+        title="Views"
+        count={views.length}
+        actions={(
+          <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={() => {
+            setNewViewName('');
+            setNewViewKind('Board');
+            setIsDialogOpen(true);
+          }}>New view</Btn>
+        )}
+      />
 
-      <div className="page-content">
-        {error ? <p className="issue-relations__error" role="alert">{error}</p> : null}
+      <PageBody width="wide">
+        {error ? <InlineError>{error}</InlineError> : null}
         {views.length === 0 ? (
-          <div className="empty-state">
-            <div style={{
-              width: 48, height: 48, borderRadius: 12,
-              border: '1px solid var(--border)',
-              background: 'var(--bg-raised)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              marginBottom: 16,
-            }}>
-              <IcoViews size={22} style={{ color: 'var(--fg-faint)' }} />
-            </div>
-            <h3>No saved views</h3>
-            <p>
-              Save a filter on the Board or Backlog page to create a reusable view. Saved views will appear here.
-            </p>
-          </div>
+          <EmptyState
+            icon={<IcoViews size={20} />}
+            title="No saved views"
+            body="Save a filter on the Board or Backlog page to create a reusable view. Saved views will appear here."
+          />
         ) : (
-          <div style={{ padding: '20px var(--pad-x)' }}>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-              gap: 12,
-            }}>
-              {views.map((v) => (
-                <div key={v.id} className="saved-view-card" aria-label={`View ${v.name}`}>
+          <div className="views-grid">
+            {views.map((v) => (
+              <div key={v.id} className="saved-view-card" aria-label={`View ${v.name}`}>
                 <button
                   type="button"
+                  className="views-card__open"
                   onClick={() => {
                     if (v.kind === 'Board') {
                       dispatchApplyBoardView({ state: (v.view as SavedBoardView).state, viewId: v.id });
@@ -152,52 +141,29 @@ export function ViewsPage() {
                     }
                     navigate(v.route);
                   }}
-                  style={{
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--r-3)',
-                    background: 'var(--bg-raised)',
-                    padding: 14,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'border-color var(--dur-1) var(--ease)',
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <span style={{ color: 'var(--accent)', display: 'inline-flex' }}><IcoViews size={14} /></span>
-                    <span style={{
-                      fontSize: 15, fontWeight: 500, flex: 1,
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {v.name}
-                    </span>
-                  </div>
-                  <span style={{
-                    fontSize: 12, padding: '2px 7px', borderRadius: 10,
-                    background: v.kind === 'Board' ? 'var(--accent-weak)' : 'var(--bg-hover)',
-                    color: v.kind === 'Board' ? 'var(--accent)' : 'var(--fg-muted)',
-                    border: `1px solid ${v.kind === 'Board' ? 'var(--accent-border)' : 'var(--border)'}`,
-                    fontWeight: 500,
-                  }}>
-                    {v.kind}
+                  <span className="views-card__title">
+                    <span className="views-card__icon"><IcoViews size={14} /></span>
+                    <span className="views-card__name">{v.name}</span>
                   </span>
-                  {v.view.visibility === 'TEAM' ? <span className="observation-card__meta" style={{ marginLeft: 8 }}>shared with team</span> : null}
+                  <span className="views-card__meta">
+                    <span className={v.kind === 'Board' ? 'views-card__kind views-card__kind--board' : 'views-card__kind'}>{v.kind}</span>
+                    {v.view.visibility === 'TEAM' ? <span className="observation-card__meta">shared with team</span> : null}
+                  </span>
                 </button>
-                <div className="request-actions" style={{ display: 'flex', gap: 6 }}>
+                <div className="request-actions">
                   {v.view.visibility === 'TEAM' ? (
-                    <button type="button" className="ui-action" onClick={() => void setVisibility(v, 'PRIVATE')}>Make private</button>
+                    <Btn variant="ghost" onClick={() => void setVisibility(v, 'PRIVATE')}>Make private</Btn>
                   ) : (
-                    <button type="button" className="ui-action" onClick={() => void setVisibility(v, 'TEAM')}>Share with team</button>
+                    <Btn variant="ghost" onClick={() => void setVisibility(v, 'TEAM')}>Share with team</Btn>
                   )}
-                  <button type="button" className="ui-action" onClick={() => void remove(v)}>Delete view</button>
+                  <Btn variant="ghost" onClick={() => void remove(v)}>Delete view</Btn>
                 </div>
-                </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         )}
-      </div>
+      </PageBody>
 
       {isDialogOpen ? (
         <DialogShell

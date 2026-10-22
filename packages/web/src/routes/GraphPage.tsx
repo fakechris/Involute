@@ -8,6 +8,10 @@ import { openCreateIssueSurface } from '../app/shellStorage';
 import { GraphOutline } from '../components/graph/GraphOutline';
 import { ProjectTimeline } from '../components/graph/ProjectTimeline';
 import { IcoGraph } from '../components/Icons';
+import { Checkbox } from '../components/controls';
+import { PageBody, PageHeader, PageToolbar } from '../components/layout';
+import { Btn } from '../components/Primitives';
+import { EmptyState, LoadingState, SegmentedControl } from '../components/status';
 import { ProjectFilterCombobox, type AvailableProject } from '../components/ProjectFilterCombobox';
 import { buildOutline, type GraphNode } from '../work/graph-model';
 import { defaultZoom, type TimelineEntry, type TimelineZoom } from '../work/timeline-model';
@@ -146,12 +150,10 @@ export function GraphPage() {
 
   return (
     <div className="observation-page">
-      <div className="page-header" style={{ gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ color: 'var(--fg-dim)', display: 'inline-flex' }}>
-          <IcoGraph />
-        </span>
-        <h1 className="page-header__title">Graph</h1>
-        {projects.length > 0 ? (
+      <PageHeader icon={<IcoGraph />} title="Graph" />
+      <PageToolbar
+        aria-label="Graph controls"
+        projects={projects.length > 0 ? (
           <ProjectFilterCombobox
             projects={projects}
             selectedProjectKey={project}
@@ -160,50 +162,29 @@ export function GraphPage() {
             placeholder="Choose a project"
           />
         ) : null}
-        {project ? (
-          <div className="graph-tabs" role="tablist" aria-label="Graph view">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={view === 'outline'}
-              onClick={() => update({ view: null })}
-            >
-              Outline
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={view === 'dependencies'}
-              onClick={() => update({ view: 'dependencies' })}
-            >
-              Dependencies{blockCount > 0 ? ` · ${blockCount}` : ''}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={view === 'timeline'}
-              onClick={() => update({ view: 'timeline' })}
-            >
-              Timeline
-            </button>
-          </div>
+        view={project ? (
+          <>
+            <SegmentedControl
+              semantics="tabs"
+              aria-label="Graph view"
+              value={view}
+              onChange={(next) => update({ view: next === 'outline' ? null : next })}
+              options={[
+                { value: 'outline', label: 'Outline' },
+                { value: 'dependencies', label: `Dependencies${blockCount > 0 ? ` · ${blockCount}` : ''}` },
+                { value: 'timeline', label: 'Timeline' },
+              ]}
+            />
+            <Checkbox
+              label="Include candidates"
+              checked={includeCandidates}
+              onChange={(event) => update({ candidates: event.target.checked ? '1' : null })}
+            />
+          </>
         ) : null}
-        <div style={{ flex: 1 }} />
-        {project ? (
-          <div className="graph-options">
-            <label>
-              <input
-                type="checkbox"
-                checked={includeCandidates}
-                onChange={(event) => update({ candidates: event.target.checked ? '1' : null })}
-              />
-              Include candidates
-            </label>
-          </div>
-        ) : null}
-      </div>
+      />
 
-      <div className="page-content observation-content">
+      <PageBody width="full">
         {!project ? (
           <ProjectChooser
             projects={projects}
@@ -212,18 +193,20 @@ export function GraphPage() {
             onChoose={(key) => update({ project: key })}
           />
         ) : graphQuery.error ? (
-          <div className="empty-state" role="alert">
-            <h3>Could not load this project's graph</h3>
-            <p>{graphQuery.error.message}</p>
-            <button type="button" onClick={() => void graphQuery.refetch()}>Retry</button>
+          <div role="alert">
+            <EmptyState
+              title="Could not load this project's graph"
+              body={graphQuery.error.message}
+              action={<Btn variant="subtle" onClick={() => void graphQuery.refetch()}>Retry</Btn>}
+            />
           </div>
         ) : graphQuery.loading && !graph ? (
-          <p className="observation-empty" role="status">Loading graph…</p>
+          <LoadingState>Loading graph…</LoadingState>
         ) : graph && nodes.length === 0 ? (
-          <div className="empty-state" role="status">
-            <h3>No work in {project}</h3>
-            <p>Nothing committed resolves to this project{includeCandidates ? ', including candidates' : ''}.</p>
-          </div>
+          <EmptyState
+            title={`No work in ${project}`}
+            body={`Nothing committed resolves to this project${includeCandidates ? ', including candidates' : ''}.`}
+          />
         ) : graph ? (
           <>
             {graph.truncated ? (
@@ -241,13 +224,15 @@ export function GraphPage() {
               />
             ) : view === 'timeline' ? (
               timelineQuery.error ? (
-                <div className="empty-state" role="alert">
-                  <h3>Could not load the timeline</h3>
-                  <p>{timelineQuery.error.message}</p>
-                  <button type="button" onClick={() => void timelineQuery.refetch()}>Retry</button>
+                <div role="alert">
+                  <EmptyState
+                    title="Could not load the timeline"
+                    body={timelineQuery.error.message}
+                    action={<Btn variant="subtle" onClick={() => void timelineQuery.refetch()}>Retry</Btn>}
+                  />
                 </div>
               ) : !timeline.loaded ? (
-                <p className="observation-empty">Loading timeline…</p>
+                <LoadingState>Loading timeline…</LoadingState>
               ) : (
                 <ProjectTimeline
                   outline={outline}
@@ -277,7 +262,7 @@ export function GraphPage() {
             )}
           </>
         ) : null}
-      </div>
+      </PageBody>
     </div>
   );
 }
@@ -295,18 +280,18 @@ function ProjectChooser({
 }) {
   if (failed) {
     return (
-      <div className="empty-state" role="alert">
-        <h3>Could not load projects</h3>
+      <div role="alert">
+        <EmptyState title="Could not load projects" />
       </div>
     );
   }
-  if (loading && projects.length === 0) return <p className="observation-empty">Loading projects…</p>;
+  if (loading && projects.length === 0) return <LoadingState>Loading projects…</LoadingState>;
   if (projects.length === 0) {
     return (
-      <div className="empty-state">
-        <h3>No projects yet</h3>
-        <p>The graph is drawn per project; work declaring a repository forms one.</p>
-      </div>
+      <EmptyState
+        title="No projects yet"
+        body="The graph is drawn per project; work declaring a repository forms one."
+      />
     );
   }
   return (

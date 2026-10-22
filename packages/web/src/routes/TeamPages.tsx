@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@apollo/client/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import {
@@ -21,6 +21,8 @@ import { Field, Select, TextInput } from '../components/controls';
 import { DataTable } from '../components/DataTable';
 import { Btn } from '../components/Primitives';
 import { SettingsSectionHeader, SettingsShell } from '../components/SettingsShell';
+import { PageBody, PageHeader } from '../components/layout';
+import { EmptyState, InlineError, LoadingState } from '../components/status';
 
 // A team's own pages (INV-850, docs/permissions.md §7): its roster and its
 // settings live under the team, not scattered across the workspace.
@@ -61,32 +63,38 @@ function useTeamPage() {
   }, [team?.key]);
   return { key: key.toUpperCase(), query, team, viewerId: query.data?.viewer?.id ?? null };
 }
-
 function TeamHeader({ team, current }: { team: TeamPageTeam; current: 'members' | 'settings' }) {
   return (
-    <div className="page-header">
-      <span className="mono" style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>{team.key}</span>
-      <span style={{ fontSize: 15, fontWeight: 500 }}>{team.name}</span>
-      <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
-        {team.visibility === 'PUBLIC' ? 'Public team' : 'Private team'}
-        {team.archivedAt ? ' · archived, read-only' : ''}
-      </span>
-      <div style={{ flex: 1 }} />
-      <nav aria-label="Team pages" style={{ display: 'flex', gap: 12, fontSize: 14 }}>
-        {current === 'members' ? <strong>Members</strong> : <Link to={`/teams/${team.key}/members`}>Members</Link>}
-        {team.viewerCanManage
-          ? (current === 'settings' ? <strong>Settings</strong> : <Link to={`/teams/${team.key}/settings`}>Settings</Link>)
-          : null}
-      </nav>
+    <PageHeader
+      back={<span className="mono team-page__key">{team.key}</span>}
+      title={team.name}
+      hint={`${team.visibility === 'PUBLIC' ? 'Public team' : 'Private team'}${team.archivedAt ? ' · archived, read-only' : ''}`}
+      actions={(
+        <nav aria-label="Team pages" className="team-page__nav">
+          {current === 'members' ? <strong>Members</strong> : <Link to={`/teams/${team.key}/members`}>Members</Link>}
+          {team.viewerCanManage
+            ? (current === 'settings' ? <strong>Settings</strong> : <Link to={`/teams/${team.key}/settings`}>Settings</Link>)
+            : null}
+        </nav>
+      )}
+    />
+  );
+}
+
+/** Loading, failure and not-found states of a team page: one line in the body. */
+function TeamPageState({ children }: { children: ReactNode }) {
+  return (
+    <div className="observation-page">
+      <PageBody width="default">{children}</PageBody>
     </div>
   );
 }
 
 function NotFound({ teamKey }: { teamKey: string }) {
   return (
-    <div className="page-content" style={{ padding: 32 }}>
-      <p>No team {teamKey} that you can see.</p>
-    </div>
+    <TeamPageState>
+      <EmptyState size="inline" title={`No team ${teamKey} that you can see.`} />
+    </TeamPageState>
   );
 }
 
@@ -102,8 +110,8 @@ export function TeamMembersPage() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<TeamRole>('EDITOR');
 
-  if (query.error) return <p role="alert" style={{ padding: 32 }}>Could not load the team: {query.error.message}</p>;
-  if (query.loading && !query.data) return <p role="status" style={{ padding: 32 }}>Loading…</p>;
+  if (query.error) return <TeamPageState><InlineError>Could not load the team: {query.error.message}</InlineError></TeamPageState>;
+  if (query.loading && !query.data) return <TeamPageState><LoadingState /></TeamPageState>;
   if (!team) return <NotFound teamKey={key} />;
 
   const canManage = team.viewerCanManage && !team.archivedAt;
@@ -126,10 +134,10 @@ export function TeamMembersPage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
+    <div className="observation-page">
       <TeamHeader team={team} current="members" />
-      <div className="page-content" style={{ padding: '20px var(--pad-x)', maxWidth: 760 }}>
-        <p style={{ fontSize: 13.5, color: 'var(--fg-dim)', margin: '0 0 12px' }}>
+      <PageBody width="default">
+        <p className="team-page__lead">
           Roles are per team: a Viewer reads the team&apos;s work, a Member also creates and edits it, an Owner also
           manages members, settings and agents. To give someone one project instead, share it from the Projects page.
         </p>
@@ -247,7 +255,7 @@ export function TeamMembersPage() {
             },
           ]}
         />
-      </div>
+      </PageBody>
     </div>
   );
 }
@@ -267,20 +275,22 @@ export function TeamSettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const section = (SECTIONS.find((s) => s.id === searchParams.get('section'))?.id ?? 'general');
 
-  if (query.error) return <p role="alert" style={{ padding: 32 }}>Could not load the team: {query.error.message}</p>;
-  if (query.loading && !query.data) return <p role="status" style={{ padding: 32 }}>Loading…</p>;
+  if (query.error) return <TeamPageState><InlineError>Could not load the team: {query.error.message}</InlineError></TeamPageState>;
+  if (query.loading && !query.data) return <TeamPageState><LoadingState /></TeamPageState>;
   if (!team) return <NotFound teamKey={key} />;
   if (!team.viewerCanManage) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div className="observation-page">
         <TeamHeader team={team} current="settings" />
-        <p style={{ padding: 32 }}>Only this team&apos;s owners and workspace admins change its settings.</p>
+        <PageBody width="default">
+          <p className="team-page__lead">Only this team&apos;s owners and workspace admins change its settings.</p>
+        </PageBody>
       </div>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
+    <div className="observation-page">
       <TeamHeader team={team} current="settings" />
       <SettingsShell
         navLabel="Team settings sections"

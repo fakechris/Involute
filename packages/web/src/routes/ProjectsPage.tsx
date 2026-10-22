@@ -32,16 +32,25 @@ import { IcoChevL, IcoMore, IcoPlus, IcoProject } from '../components/Icons';
 import { Avatar, Btn } from '../components/Primitives';
 import { DialogShell } from '../components/DialogShell';
 import { Checkbox, Field, Select, TextArea, TextInput } from '../components/controls';
+import { PageBody, PageHeader } from '../components/layout';
+import { EmptyState, LoadingState } from '../components/status';
 
-function statusBadgeColor(type: WorkflowStateType): string {
-  switch (type) {
-    case 'STARTED': return 'var(--accent)';
-    case 'COMPLETED': return 'var(--success)';
-    case 'REVIEW': return 'var(--warn)';
-    case 'CANCELED': return 'var(--fg-dim)';
-    default: return 'var(--fg-muted)';
-  }
+/** The project's workflow state as a pill, tinted by state type. */
+function ProjectStateBadge({ project }: { project: { state: { name: string; type: WorkflowStateType } } }) {
+  return (
+    <span className={`projects-state projects-state--${project.state.type.toLowerCase()}`}>
+      {project.state.name}
+    </span>
+  );
 }
+
+const PROGRESS_SEGMENTS: ReadonlyArray<{ type: WorkflowStateType; label: string }> = [
+  { type: 'COMPLETED', label: 'Done' },
+  { type: 'REVIEW', label: 'Review' },
+  { type: 'STARTED', label: 'Active' },
+  { type: 'UNSTARTED', label: 'Ready' },
+  { type: 'BACKLOG', label: 'Backlog' },
+];
 
 function ProjectProgressBar({
   issues,
@@ -51,71 +60,38 @@ function ProjectProgressBar({
   const total = issues.length;
   if (total === 0) return null;
 
+  const segments = PROGRESS_SEGMENTS
+    .map((segment) => ({ ...segment, count: issues.filter((i) => i.state?.type === segment.type).length }))
+    .filter((segment) => segment.count > 0);
   const completed = issues.filter((i) => i.state?.type === 'COMPLETED').length;
-  const review = issues.filter((i) => i.state?.type === 'REVIEW').length;
-  const started = issues.filter((i) => i.state?.type === 'STARTED').length;
-  const unstarted = issues.filter((i) => i.state?.type === 'UNSTARTED').length;
-  const backlog = issues.filter((i) => i.state?.type === 'BACKLOG').length;
   const percent = Math.round((completed / total) * 100);
+  const countOf = (type: WorkflowStateType) => issues.filter((i) => i.state?.type === type).length;
 
   return (
-    <div style={{ marginTop: 10, marginBottom: 6 }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          fontSize: 12,
-          color: 'var(--fg-dim)',
-          marginBottom: 6,
-        }}
-      >
-        <span style={{ fontWeight: 600, color: 'var(--fg)' }}>{percent}% complete</span>
+    <div className="projects-progress">
+      <div className="projects-progress__summary">
+        <span className="projects-progress__percent">{percent}% complete</span>
         <span>{completed}/{total} issues</span>
       </div>
       <div
-        style={{
-          display: 'flex',
-          height: 6,
-          borderRadius: 3,
-          overflow: 'hidden',
-          background: 'var(--bg-sunken)',
-          border: '1px solid var(--border)',
-          gap: 1,
-        }}
-        title={`Completed: ${completed} | In Review: ${review} | In Progress: ${started} | Ready: ${unstarted} | Backlog: ${backlog}`}
+        className="projects-progress__bar"
+        title={`Completed: ${countOf('COMPLETED')} | In Review: ${countOf('REVIEW')} | In Progress: ${countOf('STARTED')} | Ready: ${countOf('UNSTARTED')} | Backlog: ${countOf('BACKLOG')}`}
       >
-        {completed > 0 && (
-          <div style={{ width: `${(completed / total) * 100}%`, background: 'var(--success)' }} />
-        )}
-        {review > 0 && (
-          <div style={{ width: `${(review / total) * 100}%`, background: 'var(--warn)' }} />
-        )}
-        {started > 0 && (
-          <div style={{ width: `${(started / total) * 100}%`, background: 'var(--accent)' }} />
-        )}
-        {unstarted > 0 && (
-          <div style={{ width: `${(unstarted / total) * 100}%`, background: 'var(--fg-muted)' }} />
-        )}
-        {backlog > 0 && (
-          <div style={{ width: `${(backlog / total) * 100}%`, background: 'var(--border-strong)' }} />
-        )}
+        {segments.map((segment) => (
+          <div
+            key={segment.type}
+            className={`projects-progress__segment projects-state--${segment.type.toLowerCase()}`}
+            style={{ width: `${(segment.count / total) * 100}%` }}
+          />
+        ))}
       </div>
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 8,
-          fontSize: 11.5,
-          color: 'var(--fg-muted)',
-          marginTop: 6,
-        }}
-      >
-        {completed > 0 && <span>🟢 {completed} Done</span>}
-        {review > 0 && <span>🟡 {review} Review</span>}
-        {started > 0 && <span>🔵 {started} Active</span>}
-        {unstarted > 0 && <span>⚪ {unstarted} Ready</span>}
-        {backlog > 0 && <span>📦 {backlog} Backlog</span>}
+      <div className="projects-progress__legend">
+        {segments.map((segment) => (
+          <span key={segment.type} className="projects-progress__key">
+            <span className={`projects-progress__dot projects-state--${segment.type.toLowerCase()}`} aria-hidden="true" />
+            {segment.count} {segment.label}
+          </span>
+        ))}
       </div>
     </div>
   );
@@ -455,132 +431,102 @@ export function ProjectsPage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
-      <div className="page-header">
-        <span style={{ color: 'var(--fg-dim)', display: 'inline-flex' }}><IcoProject /></span>
-        <span style={{ fontSize: 15, fontWeight: 500 }}>Projects</span>
-        <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>{projects.length}</span>
-        <div style={{ flex: 1 }} />
-        {canCreate ? <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={openCreateDialog}>New project</Btn> : null}
-      </div>
+    <div className="observation-page">
+      <PageHeader
+        icon={<IcoProject />}
+        title="Projects"
+        count={projects.length}
+        actions={canCreate ? <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={openCreateDialog}>New project</Btn> : null}
+      />
 
-      <div className="page-content">
+      <PageBody width="wide">
         {error ? (
-          <div className="empty-state" role="alert">
-            <h3>Could not load projects</h3>
-            <p>{error.message}</p>
-            <Btn variant="subtle" size="sm" onClick={() => void refetch()} style={{ marginTop: 12 }}>
-              Retry
-            </Btn>
+          <div role="alert">
+            <EmptyState
+              title="Could not load projects"
+              body={error.message}
+              action={<Btn variant="subtle" size="sm" onClick={() => void refetch()}>Retry</Btn>}
+            />
           </div>
         ) : loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 14 }}>
-            Loading projects…
-          </div>
+          <LoadingState>Loading projects…</LoadingState>
         ) : projects.length === 0 ? (
-          <div className="empty-state">
-            <div style={{
-              width: 48, height: 48, borderRadius: 12,
-              border: '1px solid var(--border)', background: 'var(--bg-raised)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16,
-            }}>
-              <IcoProject size={22} style={{ color: 'var(--fg-faint)' }} />
-            </div>
-            <h3>No projects yet</h3>
-            {canCreate ? (
-              <>
-                <p>Create a project work node (kind: PROJECT) to organize related tasks towards a goal.</p>
-                <Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateDialog} style={{ marginTop: 12 }}>
-                  New project
-                </Btn>
-              </>
-            ) : (
-              <p>You have no access to a team&apos;s projects yet. Ask a team owner to add you, or to share a project with you.</p>
-            )}
-          </div>
+          <EmptyState
+            icon={<IcoProject size={20} />}
+            title="No projects yet"
+            body={canCreate
+              ? 'Create a project work node (kind: PROJECT) to organize related tasks towards a goal.'
+              : 'You have no access to a team’s projects yet. Ask a team owner to add you, or to share a project with you.'}
+            action={canCreate ? (
+              <Btn variant="subtle" icon={<IcoPlus size={12} />} size="md" onClick={openCreateDialog}>
+                New project
+              </Btn>
+            ) : null}
+          />
         ) : (
-          <div style={{ padding: '20px var(--pad-x)' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 14 }}>
-              {projects.map((project) => {
-                const childIssues = project.children?.nodes ?? [];
-                return (
-                  <button
-                    key={project.id}
-                    type="button"
-                    onClick={() => setSelectedProjectId(project.id)}
-                    style={{
-                      border: '1px solid var(--border)', borderRadius: 'var(--r-3)',
-                      background: 'var(--bg-raised)', padding: 16, cursor: 'pointer',
-                      textAlign: 'left', transition: 'border-color var(--dur-1) var(--ease)',
-                      display: 'flex', flexDirection: 'column', gap: 8,
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--border-strong)'; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className="mono" style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
-                        {project.identifier}
+          <div className="projects-grid">
+            {projects.map((project) => {
+              const childIssues = project.children?.nodes ?? [];
+              return (
+                <button
+                  key={project.id}
+                  type="button"
+                  className="projects-card"
+                  onClick={() => setSelectedProjectId(project.id)}
+                >
+                  <div className="projects-card__head">
+                    <span className="mono projects-identifier">{project.identifier}</span>
+                    <span className="projects-card__title">{project.title}</span>
+                    {project.repository && (
+                      <span
+                        className="issue-card__repo-badge"
+                        title={`Repository: ${project.repository}`}
+                      >
+                        {project.repository.includes('/') ? project.repository.split('/')[1] : project.repository}
                       </span>
-                      <span style={{ fontSize: 15, fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {project.title}
+                    )}
+                    {project.alias && (
+                      <span className="mono projects-card__alias" title={`PRs may reference this project's work as ${project.alias}-123`}>
+                        {project.alias}
                       </span>
-                      {project.repository && (
-                        <span
-                          className="issue-card__repo-badge"
-                          title={`Repository: ${project.repository}`}
-                        >
-                          {project.repository.includes('/') ? project.repository.split('/')[1] : project.repository}
-                        </span>
-                      )}
-                      {project.alias && (
-                        <span className="mono" title={`PRs may reference this project's work as ${project.alias}-123`} style={{ fontSize: 12, color: 'var(--fg-dim)' }}>
-                          {project.alias}
-                        </span>
-                      )}
-                    </div>
+                    )}
+                  </div>
 
-                    <ProjectProgressBar issues={childIssues} />
+                  <ProjectProgressBar issues={childIssues} />
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', paddingTop: 8, borderTop: '1px solid var(--border-subtle)' }}>
-                      <span style={{
-                        fontSize: 12, padding: '2px 7px', borderRadius: 10,
-                        background: 'var(--bg-hover)', color: statusBadgeColor(project.state.type),
-                        border: '1px solid var(--border)', fontWeight: 500,
-                      }}>
-                        {project.state.name}
+                  <div className="projects-card__foot">
+                    <ProjectStateBadge project={project} />
+                    {project.assignee && (
+                      <span className="projects-person projects-person--sm">
+                        <Avatar user={{ name: project.assignee.name ?? undefined }} size={14} />
+                        {project.assignee.name}
                       </span>
-                      {project.assignee && (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, color: 'var(--fg-dim)' }}>
-                          <Avatar user={{ name: project.assignee.name ?? undefined }} size={14} />
-                          {project.assignee.name}
-                        </span>
-                      )}
-                      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <Link
-                          to={`/?project=${encodeURIComponent(project.repository || project.title)}`}
-                          className="ui-action ui-action--subtle ui-action--sm"
-                          onClick={(e) => e.stopPropagation()}
-                          title={`Open ${project.title} on board`}
-                        >
-                          Board →
-                        </Link>
-                        <Link
-                          to={`/graph?project=${encodeURIComponent(project.repository || project.title)}`}
-                          className="ui-action ui-action--subtle ui-action--sm"
-                          onClick={(e) => e.stopPropagation()}
-                          title={`Open ${project.title} on graph`}
-                        >
-                          Graph →
-                        </Link>
-                      </div>
+                    )}
+                    <div className="projects-card__links">
+                      <Link
+                        to={`/?project=${encodeURIComponent(project.repository || project.title)}`}
+                        className="ui-action ui-action--subtle ui-action--sm"
+                        onClick={(e) => e.stopPropagation()}
+                        title={`Open ${project.title} on board`}
+                      >
+                        Board →
+                      </Link>
+                      <Link
+                        to={`/graph?project=${encodeURIComponent(project.repository || project.title)}`}
+                        className="ui-action ui-action--subtle ui-action--sm"
+                        onClick={(e) => e.stopPropagation()}
+                        title={`Open ${project.title} on graph`}
+                      >
+                        Graph →
+                      </Link>
                     </div>
-                  </button>
-                );
-              })}
-            </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
-      </div>
+      </PageBody>
 
       {projectDialog}
     </div>
@@ -612,79 +558,51 @@ function ProjectDetailView({
   const issues = project.children?.nodes ?? [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: 'var(--bg)' }}>
-      <div className="page-header">
-        <Btn variant="ghost" icon={<IcoChevL size={12} />} size="sm" onClick={onBack}>Projects</Btn>
-        <span className="mono" style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>{project.identifier}</span>
-        <span style={{ fontSize: 15, fontWeight: 500 }}>{project.title}</span>
-        <span style={{
-          fontSize: 12, padding: '2px 7px', borderRadius: 10,
-          background: 'var(--bg-hover)', color: statusBadgeColor(project.state.type),
-          border: '1px solid var(--border)', fontWeight: 500,
-        }}>
-          {project.state.name}
-        </span>
-        <div style={{ flex: 1 }} />
-        <Btn
-          variant="subtle"
-          size="sm"
-          onClick={() => navigate(`/?project=${encodeURIComponent(project.repository || project.title)}`)}
-          style={{ marginRight: 8 }}
-        >
-          Open on Board →
-        </Btn>
-        <Btn
-          variant="subtle"
-          size="sm"
-          onClick={() => navigate(`/graph?project=${encodeURIComponent(project.repository || project.title)}`)}
-          style={{ marginRight: 8 }}
-        >
-          Graph →
-        </Btn>
-        <Btn variant="subtle" size="sm" onClick={() => navigate(`/work/${project.id}`)} style={{ marginRight: 8 }}>
-          Work context
-        </Btn>
-        <div style={{ position: 'relative' }}>
-          <Btn variant="ghost" icon={<IcoMore size={14} />} size="sm" title="Project actions" onClick={() => setMenuOpen(!menuOpen)} />
-          {menuOpen && (
-            <div style={{
-              position: 'absolute', top: '100%', right: 0, marginTop: 4,
-              background: 'var(--bg-raised)', border: '1px solid var(--border)',
-              borderRadius: 'var(--r-2)', padding: 4, minWidth: 120, zIndex: 10,
-            }}>
-              <button
-                type="button"
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', fontSize: 14, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg)', borderRadius: 'var(--r-1)' }}
-                onClick={() => { setMenuOpen(false); onEdit(); }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', fontSize: 14, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', borderRadius: 'var(--r-1)' }}
-                onClick={() => { setMenuOpen(false); onDelete(); }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
-              >
-                Delete
-              </button>
+    <div className="observation-page">
+      <PageHeader
+        back={<Btn variant="ghost" icon={<IcoChevL size={12} />} size="sm" onClick={onBack}>Projects</Btn>}
+        title={(
+          <>
+            <span className="mono projects-identifier">{project.identifier}</span> {project.title}
+          </>
+        )}
+        hint={<ProjectStateBadge project={project} />}
+        actions={(
+          <>
+            <Btn variant="subtle" size="sm" onClick={() => navigate(`/?project=${encodeURIComponent(project.repository || project.title)}`)}>
+              Open on Board →
+            </Btn>
+            <Btn variant="subtle" size="sm" onClick={() => navigate(`/graph?project=${encodeURIComponent(project.repository || project.title)}`)}>
+              Graph →
+            </Btn>
+            <Btn variant="subtle" size="sm" onClick={() => navigate(`/work/${project.id}`)}>
+              Work context
+            </Btn>
+            <div className="projects-menu">
+              <Btn variant="ghost" icon={<IcoMore size={14} />} size="sm" title="Project actions" onClick={() => setMenuOpen(!menuOpen)} />
+              {menuOpen && (
+                <div className="projects-menu__popover">
+                  <button type="button" className="projects-menu__item" onClick={() => { setMenuOpen(false); onEdit(); }}>
+                    Edit
+                  </button>
+                  <button type="button" className="projects-menu__item projects-menu__item--danger" onClick={() => { setMenuOpen(false); onDelete(); }}>
+                    Delete
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
+          </>
+        )}
+      />
 
-      <div className="page-content" style={{ padding: '20px var(--pad-x)' }}>
+      <PageBody width="wide">
         {project.description && (
-          <p style={{ fontSize: 15, color: 'var(--fg-muted)', marginBottom: 16, lineHeight: 1.5 }}>
-            {project.description}
-          </p>
+          <p className="projects-detail__description">{project.description}</p>
         )}
 
-        <div style={{ display: 'flex', gap: 24, marginBottom: 16, fontSize: 14, color: 'var(--fg-dim)' }}>
+        <div className="projects-detail__facts">
           {project.assignee && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span className="projects-person">
               <Avatar user={{ name: project.assignee.name ?? undefined }} size={18} />
               Lead: {project.assignee.name}
             </span>
@@ -694,37 +612,24 @@ function ProjectDetailView({
           <span>{issues.length} child issues (CONTAINS)</span>
         </div>
 
-        <div style={{ marginBottom: 20 }}>
-          <ProjectProgressBar issues={issues} />
-        </div>
+        <ProjectProgressBar issues={issues} />
 
         <ProjectSharing projectId={project.id} shareUrl={shareUrl} />
 
         {issues.length > 0 ? (
-          <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-3)', overflow: 'hidden' }}>
-            {issues.map((issue, i) => (
+          <div className="projects-issues">
+            {issues.map((issue) => (
               <button
                 key={issue.id}
                 type="button"
+                className="projects-issues__row"
                 onClick={() => navigate(`/issue/${issue.id}`)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  width: '100%', padding: '10px 12px', background: 'none', border: 'none',
-                  borderBottom: i < issues.length - 1 ? '1px solid var(--border-subtle)' : 'none',
-                  cursor: 'pointer', textAlign: 'left', color: 'var(--fg)', fontSize: 14.5,
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
               >
-                <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)', minWidth: 60, flex: '0 0 auto' }}>{issue.identifier}</span>
-                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.title}</span>
-                {issue.state && (
-                  <span style={{ fontSize: 12, color: 'var(--fg-muted)', padding: '2px 6px', background: 'var(--bg-hover)', borderRadius: 4 }}>
-                    {issue.state.name}
-                  </span>
-                )}
+                <span className="mono projects-issues__id">{issue.identifier}</span>
+                <span className="projects-issues__title">{issue.title}</span>
+                {issue.state && <span className="projects-issues__state">{issue.state.name}</span>}
                 {issue.assignee && (
-                  <span style={{ fontSize: 12, color: 'var(--fg-dim)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span className="projects-person projects-person--sm">
                     <Avatar user={{ name: issue.assignee.name ?? undefined }} size={14} />
                     {issue.assignee.name}
                   </span>
@@ -733,11 +638,12 @@ function ProjectDetailView({
             ))}
           </div>
         ) : (
-          <div style={{ padding: 20, textAlign: 'center', color: 'var(--fg-dim)', fontSize: 14 }}>
-            No child issues linked via CONTAINS yet. Link tasks from their issue page or via MCP work_link.
-          </div>
+          <EmptyState
+            size="inline"
+            title="No child issues linked via CONTAINS yet. Link tasks from their issue page or via MCP work_link."
+          />
         )}
-      </div>
+      </PageBody>
     </div>
   );
 }
