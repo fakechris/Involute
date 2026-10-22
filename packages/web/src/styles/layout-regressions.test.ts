@@ -21,6 +21,13 @@ function ruleBody(css: string, selector: string): string {
 }
 
 describe('layout regressions (INV-1311)', () => {
+  it('never lets a list squeeze its rows, so detail lines cannot overlap the next row', () => {
+    // Activity rows sat in the flush PageBody flex column (min-height 0): an
+    // overflowing list shrank each row to --row-h and its detail drew over the next.
+    const css = readSheet('content.css');
+    expect(ruleBody(css, '.list-row')).toMatch(/flex-shrink:\s*0/);
+  });
+
   it('lets each filter wrap on its own and keeps the view slot on the last filter row', () => {
     // A wrapped filters slot took the whole width, so "Clear all" sat alone on
     // a row and the view controls dropped below an empty block.

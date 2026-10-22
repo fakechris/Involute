@@ -209,9 +209,16 @@
 /* ListRow / IssueRow (components/list/ListRow.tsx)                */
 /* ============================================================== */
 
+/*
+ * flex-shrink: 0 — a row is never squeezed by its list. Page lists sit in the
+ * flush PageBody column (flex, min-height 0); without it an overflowing list
+ * shrank every row to min-height (--row-h) and each detail line was drawn over
+ * the next row (Activity, INV-1311).
+ */
 .list-row {
   position: relative;
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -255,6 +262,7 @@
 /* An inline reference: a table cell, "A mentions B". */
 .list-row--compact {
   display: inline-flex;
+  flex-shrink: 1;
   max-width: 100%;
   padding: 0;
   border-radius: 0;
