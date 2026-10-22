@@ -14,6 +14,7 @@ import {
 } from '../../work/timeline-model';
 import { StatusIcon } from '../StatusIcon';
 import { STATE_TYPE_COLOR } from './graph-colors';
+import { Select } from '../controls';
 
 export interface TimelineCycle {
   id: string;
@@ -112,11 +113,11 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
         <div className="graph-options">
           <label>
             Scale
-            <select aria-label="Timeline scale" value={zoom} onChange={(event) => onZoomChange(event.target.value as TimelineZoom)}>
+            <Select aria-label="Timeline scale" value={zoom} onChange={(event) => onZoomChange(event.target.value as TimelineZoom)}>
               <option value="day">Days</option>
               <option value="week">Weeks</option>
               <option value="month">Months</option>
-            </select>
+            </Select>
           </label>
         </div>
         <div className="dependency-graph__legend" aria-label="Timeline legend">

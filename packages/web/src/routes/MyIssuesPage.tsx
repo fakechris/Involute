@@ -7,6 +7,7 @@ import type { BoardPageQueryData, BoardPageQueryVariables, IssueSummary, Workflo
 import { readStoredTeamKey } from '../board/utils';
 import { IcoFilter } from '../components/Icons';
 import { Avatar, Btn, PriorityIcon, StatusIconPrimitive } from '../components/Primitives';
+import { Select } from '../components/controls';
 
 function formatTimeAgo(date: string): string {
   const parsed = new Date(date).getTime();
@@ -127,8 +128,8 @@ export function MyIssuesPage() {
       </div>
       {filterOpen && (
         <div style={{ display: 'flex', gap: 12, padding: '8px var(--pad-x)', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-sunken)' }}>
-          <select
-            style={{ height: 26, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 13, color: 'var(--fg)' }}
+          <Select
+            size="sm"
             value={filterStateType}
             onChange={(e) => setFilterStateType(e.target.value as WorkflowStateType | '')}
           >
@@ -138,9 +139,9 @@ export function MyIssuesPage() {
             <option value="STARTED">Started</option>
             <option value="COMPLETED">Completed</option>
             <option value="CANCELED">Canceled</option>
-          </select>
-          <select
-            style={{ height: 26, padding: '0 6px', background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', fontSize: 13, color: 'var(--fg)' }}
+          </Select>
+          <Select
+            size="sm"
             value={filterPriority}
             onChange={(e) => setFilterPriority(e.target.value === '' ? '' : Number(e.target.value))}
           >
@@ -150,7 +151,7 @@ export function MyIssuesPage() {
             <option value="2">High</option>
             <option value="3">Medium</option>
             <option value="4">Low</option>
-          </select>
+          </Select>
           {(filterStateType || filterPriority !== '') && (
             <button
               type="button"

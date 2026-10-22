@@ -4,6 +4,7 @@ import { useMutation } from '@apollo/client/react';
 import { AGENT_REQUEST_ANSWER_MUTATION, AGENT_REQUEST_REPLY_MUTATION } from '../board/queries';
 import type { SessionViewer } from '../lib/session';
 import type { WorkContextRequest } from '../work/types';
+import { Select } from './controls';
 
 const OPEN = new Set(['SUBMITTED', 'WORKING', 'submitted', 'working']);
 const ASKED_BACK = new Set(['INPUT_REQUIRED', 'input-required']);
@@ -68,11 +69,11 @@ export function AgentRequestActions({ request, viewer }: { request: WorkContextR
         onChange={(event) => setBody(event.target.value)}
       />
       {answering ? (
-        <select aria-label="Answer as" value={state} onChange={(event) => setState(event.target.value as AnswerState)}>
+        <Select aria-label="Answer as" value={state} onChange={(event) => setState(event.target.value as AnswerState)}>
           <option value="completed">Done</option>
           <option value="failed">Cannot do it</option>
           <option value="input-required">Ask back</option>
-        </select>
+        </Select>
       ) : null}
       {onBehalf ? (
         <input

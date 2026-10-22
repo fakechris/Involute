@@ -14,6 +14,7 @@ import {
 } from '../../work/graph-model';
 import { StatusIcon } from '../StatusIcon';
 import { milestoneHue, STATE_TYPE_COLOR } from './graph-colors';
+import { Select } from '../controls';
 
 export type FocusHops = 1 | 2 | 'all';
 
@@ -158,7 +159,7 @@ export function DependencyGraph({
       </label>
       <label>
         Focus depth
-        <select
+        <Select
           aria-label="Focus depth"
           value={String(hops)}
           onChange={(event) => onHopsChange(event.target.value === 'all' ? 'all' : event.target.value === '1' ? 1 : 2)}
@@ -166,7 +167,7 @@ export function DependencyGraph({
           <option value="1">1 step</option>
           <option value="2">2 steps</option>
           <option value="all">Whole chain</option>
-        </select>
+        </Select>
       </label>
     </div>
   );

@@ -124,7 +124,7 @@ export function ContractAmendmentPanel({
           <div style={{ display: 'flex', gap: 6 }}>
             <button
               type="button"
-              className="ui-action ui-action--primary"
+              className="ui-action ui-action--accent"
               disabled={busy || !note.trim()}
               onClick={() => void decide(() => onReject(amendment.id, note.trim()))}
             >
@@ -139,7 +139,7 @@ export function ContractAmendmentPanel({
         <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
           <button
             type="button"
-            className="ui-action ui-action--primary"
+            className="ui-action ui-action--accent"
             disabled={busy || amendment.stale}
             onClick={() => void decide(() => onAccept(amendment.id))}
           >

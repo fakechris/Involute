@@ -17,6 +17,7 @@ import {
   writeSavedBacklogViews,
   writeStoredBacklogViewState,
 } from '../backlog/views';
+import { Select } from '../components/controls';
 
 interface BacklogPageProps {
   issues: IssueSummary[];
@@ -251,7 +252,8 @@ export function BacklogPage({
 
           <label className="field-stack">
             <span>Sort</span>
-            <select
+            <Select
+              size="sm"
               aria-label="Sort backlog by"
               value={viewState.sortField}
               onChange={(event) => {
@@ -268,12 +270,13 @@ export function BacklogPage({
               <option value="assignee">Assignee</option>
               <option value="updatedAt">Updated</option>
               <option value="createdAt">Created</option>
-            </select>
+            </Select>
           </label>
 
           <label className="field-stack">
             <span>Direction</span>
-            <select
+            <Select
+              size="sm"
               aria-label="Sort backlog direction"
               value={viewState.sortDirection}
               onChange={(event) => {
@@ -286,14 +289,15 @@ export function BacklogPage({
             >
               <option value="asc">Ascending</option>
               <option value="desc">Descending</option>
-            </select>
+            </Select>
           </label>
         </div>
 
         <div className="backlog-toolbar__secondary">
           <label className="field-stack">
             <span>Saved view</span>
-            <select
+            <Select
+              size="sm"
               aria-label="Load saved backlog view"
               value={activeSavedViewId}
               onChange={(event) => loadSavedView(event.target.value)}
@@ -304,7 +308,7 @@ export function BacklogPage({
                   {view.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
           <button type="button" className="ui-action ui-action--subtle" onClick={saveCurrentView}>

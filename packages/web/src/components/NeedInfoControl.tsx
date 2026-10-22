@@ -4,6 +4,7 @@ import { useMutation } from '@apollo/client/react';
 import { NEED_INFO_REQUEST_MUTATION, NEED_INFO_WITHDRAW_MUTATION } from '../board/queries';
 import type { AgentRequestSummary, UserSummary } from '../board/types';
 import type { SessionViewer } from '../lib/session';
+import { Select } from './controls';
 
 // Needs you drops a needinfo once it is answered or withdrawn.
 const REFETCH = ['IssuePage', 'WorkContextPage', 'AttentionPage'];
@@ -67,7 +68,7 @@ export function NeedInfoControl({
 
   return (
     <div className="request-actions" role="group" aria-label="Ask for info">
-      <select aria-label="Who should answer" value={targetId} onChange={(event) => setTargetId(event.target.value)}>
+      <Select aria-label="Who should answer" value={targetId} onChange={(event) => setTargetId(event.target.value)}>
         <option value="">Choose who should answer</option>
         {choices.map((person) => (
           <option key={person.id} value={person.id}>
@@ -75,7 +76,7 @@ export function NeedInfoControl({
             {person.actorKind === 'AGENT' ? ' (agent)' : ''}
           </option>
         ))}
-      </select>
+      </Select>
       <textarea
         aria-label="What do you need to know"
         placeholder="What do you need to know? Their next comment here answers it."

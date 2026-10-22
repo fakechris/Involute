@@ -8,6 +8,7 @@ import { ProjectFilterCombobox, type AvailableProject } from '../components/Proj
 import { GRAPH_PROJECTS_QUERY, SEARCH_LABELS_QUERY, WORK_SEARCH_QUERY } from '../work/queries';
 import { matchLabel } from '../work/search-labels';
 import type { GraphProjectsQueryData, SearchLabelsQueryData, WorkSearchQueryData } from '../work/types';
+import { Select } from '../components/controls';
 
 const RESULT_LIMIT = 100;
 const KINDS = ['ISSUE', 'EPIC', 'MILESTONE', 'PROJECT', 'DECISION'] as const;
@@ -116,26 +117,26 @@ export function SearchPage() {
         <div className="search-page__filters" aria-label="Search filters">
           <label>
             <span>Kind</span>
-            <select aria-label="Kind" value={filters.kind} onChange={(event) => update({ kind: event.target.value })}>
+            <Select size="sm" aria-label="Kind" value={filters.kind} onChange={(event) => update({ kind: event.target.value })}>
               <option value="">Any</option>
               {KINDS.map((kind) => <option key={kind} value={kind}>{kind.toLowerCase()}</option>)}
-            </select>
+            </Select>
           </label>
           <label>
             <span>State</span>
-            <select aria-label="State" value={filters.state} onChange={(event) => update({ state: event.target.value })}>
+            <Select size="sm" aria-label="State" value={filters.state} onChange={(event) => update({ state: event.target.value })}>
               <option value="">Any</option>
               {STATE_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
+            </Select>
           </label>
           <label>
             <span>Label</span>
-            <select aria-label="Label" value={filters.label} onChange={(event) => update({ label: event.target.value })}>
+            <Select size="sm" aria-label="Label" value={filters.label} onChange={(event) => update({ label: event.target.value })}>
               <option value="">Any</option>
               {(labelsQuery.data?.issueLabels.nodes ?? []).map((label) => (
                 <option key={label.id} value={label.name}>{label.name}</option>
               ))}
-            </select>
+            </Select>
           </label>
           {projects.length > 0 ? (
             <ProjectFilterCombobox

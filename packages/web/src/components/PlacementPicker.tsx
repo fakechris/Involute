@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { PLACEMENT_OPTIONS_QUERY } from '../work/queries';
 import type { PlacementOptionsQueryData, WorkKind } from '../work/types';
 import { noMilestonePlacement, type CreatePlacement, type PlaceableProject, type PlacementSource } from '../work/placement';
+import { Select } from './controls';
 
 interface PlacementPickerProps {
   projects: Array<PlaceableProject & { name: string }>;
@@ -87,7 +88,7 @@ export function PlacementPicker({
           Project
           {source === 'last' ? <span className="placement-picker__hint"> · Last used</span> : null}
         </span>
-        <select
+        <Select
           aria-label="Project"
           value={repository}
           disabled={disabled}
@@ -99,11 +100,11 @@ export function PlacementPicker({
               {candidate.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="field-stack">
         <span>Location</span>
-        <select
+        <Select
           aria-label="Location"
           value={value?.parentId ?? ''}
           disabled={disabled || !repository}
@@ -120,7 +121,7 @@ export function PlacementPicker({
               {option.identifier} — {option.title}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
     </div>
   );

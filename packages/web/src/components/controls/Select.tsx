@@ -11,7 +11,7 @@ export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement
 }
 
 /**
- * The only place a native `<select>` is rendered (docs/design-system.md §3.3):
+ * The only place a native select element is rendered (docs/design-system.md §3.3):
  * `appearance: none` with a drawn chevron, so every select looks the same in
  * both themes. Behaviour is the native element's.
  */

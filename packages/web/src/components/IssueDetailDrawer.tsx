@@ -16,6 +16,7 @@ import { toggleLabelId } from '../work/labels';
 import { RichTextEditor } from './RichTextEditor';
 import { AGENTS_QUERY, ISSUE_CONTRACT_QUERY } from '../board/queries';
 import { useContractAmendmentDecisions } from './ContractAmendmentPanel';
+import { Select } from './controls';
 
 interface IssueDetailDrawerProps {
   issue: IssueSummary | null;
@@ -568,7 +569,7 @@ export function IssueDetailDrawer({
               <div className="issue-panel__property-group">
                 <label className="field-stack">
                   <span>State</span>
-                  <select
+                  <Select
                     aria-label="Issue state"
                     value={selectedStateId}
                     disabled={savingState}
@@ -583,14 +584,14 @@ export function IssueDetailDrawer({
                         {state.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
               </div>
 
               <div className="issue-panel__property-group">
                 <label className="field-stack">
                   <span>Assignee</span>
-                  <select
+                  <Select
                     aria-label="Issue assignee"
                     value={selectedAssigneeId}
                     disabled={savingState}
@@ -606,7 +607,7 @@ export function IssueDetailDrawer({
                         {user.name ?? user.email ?? user.id}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
               </div>
 

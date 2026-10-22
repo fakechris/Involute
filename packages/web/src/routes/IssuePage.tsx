@@ -59,6 +59,7 @@ import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { BugCaptureSection } from '../components/BugCaptureSection';
 import { Avatar, Btn, Kbd } from '../components/Primitives';
 import { RichTextEditor } from '../components/RichTextEditor';
+import { Select } from '../components/controls';
 
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
 
@@ -1039,9 +1040,9 @@ export function IssuePage() {
           <div className="issue-panel__prop-row">
             <div className="issue-panel__prop-label">Status</div>
             <div className="issue-panel__prop-value">
-              <select
+              <Select
                 aria-label="Issue state"
-                className="issue-panel__prop-select"
+                variant="ghost"
                 value={selectedStateId}
                 disabled={isSavingState}
                 onChange={(e) => {
@@ -1053,7 +1054,7 @@ export function IssuePage() {
                 {states.map((s) => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
           {activeIssue.resolution ? (
@@ -1071,9 +1072,9 @@ export function IssuePage() {
                 user={activeIssue.assignee ? { name: activeIssue.assignee.name || undefined } : null}
                 size={18}
               />
-              <select
+              <Select
                 aria-label="Issue assignee"
-                className="issue-panel__prop-select"
+                variant="ghost"
                 value={selectedAssigneeId}
                 disabled={isSavingState}
                 onChange={(e) => {
@@ -1088,7 +1089,7 @@ export function IssuePage() {
                     {u.name ?? u.email ?? u.id}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
 
@@ -1163,9 +1164,9 @@ export function IssuePage() {
           <div className="issue-panel__prop-row">
             <div className="issue-panel__prop-label">Cycle</div>
             <div className="issue-panel__prop-value">
-              <select
+              <Select
                 aria-label="Issue cycle"
-                className="issue-panel__prop-select"
+                variant="ghost"
                 value={activeIssue.cycleId ?? ''}
                 disabled={isSavingState}
                 onChange={(e) => {
@@ -1180,7 +1181,7 @@ export function IssuePage() {
                 {(cyclesData?.cycles?.nodes ?? []).map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
 

@@ -2,6 +2,7 @@ import { gql } from '@apollo/client';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Select } from './controls';
 const CONTEXT = gql`query ExecutorPanel($id: String!) { executorContextJson(id: $id) }`;
 const UPDATE = gql`mutation ExecutorAction($workId: String!, $operation: String!, $detailsJson: String) { executorUpdate(workId: $workId, operation: $operation, detailsJson: $detailsJson) { success message resultJson } }`;
 type Receipt = { id: string; final?: boolean; generation: number; payload: { commitSha: string; pullRequestNumber: number | null; mergedSha?: string | null; environment: string | null; deployedSha: string | null; health: string; behavior: string; evidenceUrls: string[] }; assessment: { versionMatches: boolean | null } | null };
@@ -42,7 +43,7 @@ export function ExecutorPanel({ workId, canDispatch = false }: { workId: string;
           {effect.resolution ? <p>Reconciled: {effect.resolution.outcome} · {effect.resolution.reason} · <a href={effect.resolution.evidenceUrl}>Reconciliation evidence</a></p> : null}
           {context.viewerCanReconcile && effect.state === 'STARTED' ? <details><summary>Reconcile external effect</summary>
             <p>Inspect the external system and release any active implementation claim first. This records an observation; it does not accept the delivery.</p>
-            <label>Observed result<select value={resolution.outcome} onChange={(event) => setResolutions({ ...resolutions, [effect.id]: { ...resolution, outcome: event.target.value } })}><option value="FAILED">Did not complete</option><option value="COMPLETED">Completed</option></select></label>
+            <label>Observed result<Select value={resolution.outcome} onChange={(event) => setResolutions({ ...resolutions, [effect.id]: { ...resolution, outcome: event.target.value } })}><option value="FAILED">Did not complete</option><option value="COMPLETED">Completed</option></Select></label>
             <label>Reconciliation reason<textarea value={resolution.reason} onChange={(event) => setResolutions({ ...resolutions, [effect.id]: { ...resolution, reason: event.target.value } })} /></label>
             <label>Evidence URL<input type="url" value={resolution.evidenceUrl} onChange={(event) => setResolutions({ ...resolutions, [effect.id]: { ...resolution, evidenceUrl: event.target.value } })} /></label>
             <label>Observed SHA (optional)<input value={resolution.observedSha} onChange={(event) => setResolutions({ ...resolutions, [effect.id]: { ...resolution, observedSha: event.target.value } })} /></label>

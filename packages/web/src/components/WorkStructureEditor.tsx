@@ -9,6 +9,7 @@ import type { BugReproducibility, IssueSeverity } from '../board/types';
 import { SEVERITY_OPTIONS } from '../board/severity';
 import { REPRODUCIBILITY_OPTIONS } from '../board/reproducibility';
 import { PlacementPicker } from './PlacementPicker';
+import { Select } from './controls';
 
 export interface StructureUpdate {
   parentId?: string | null;
@@ -115,7 +116,7 @@ export function WorkStructureEditor({
       ) : null}
       <label className="field-stack">
         <span>Priority</span>
-        <select
+        <Select
           aria-label="Issue priority"
           value={work.priority}
           disabled={disabled}
@@ -126,12 +127,12 @@ export function WorkStructureEditor({
               {option.label}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       {kind !== 'PROJECT' ? (
         <label className="field-stack">
           <span>Severity</span>
-          <select
+          <Select
             aria-label="Issue severity"
             title="Impact, apart from priority. Unsure? Pick the higher one."
             value={work.severity ?? ''}
@@ -144,13 +145,13 @@ export function WorkStructureEditor({
                 {option.label}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       ) : null}
       {kind !== 'PROJECT' && showReproducibility ? (
         <label className="field-stack">
           <span>Reproduces</span>
-          <select
+          <Select
             aria-label="Bug reproducibility"
             title="How often it shows up. Sometimes / Once: a person accepts the fix; it is never auto-accepted."
             value={work.reproducibility ?? ''}
@@ -163,7 +164,7 @@ export function WorkStructureEditor({
                 {option.label}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       ) : null}
       {kind !== 'PROJECT' && showFoundIn ? (
@@ -187,7 +188,7 @@ export function WorkStructureEditor({
       {kind !== 'PROJECT' ? (
         <label className="field-stack">
           <span>Kind</span>
-          <select
+          <Select
             aria-label="Issue kind"
             value={kind}
             disabled={disabled}
@@ -198,7 +199,7 @@ export function WorkStructureEditor({
                 {option.label}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       ) : null}
     </div>

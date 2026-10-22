@@ -41,6 +41,7 @@ import type {
   WorkKind,
   WorkUserSummary,
 } from '../work/types';
+import { Select } from '../components/controls';
 
 const COMMIT_ERROR_MESSAGE = 'We could not commit this candidate. Check acceptance, owner, and revision.';
 
@@ -251,7 +252,8 @@ function ParentField({
   return (
     <label className="observation-field observation-parent observation-parent--missing">
       <span>Parent (required to commit)</span>
-      <select
+      <Select
+        size="sm"
         aria-label={`Parent for ${candidate.identifier}`}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -263,7 +265,7 @@ function ParentField({
             {option.kind === 'PROJECT' && candidate.kind === 'ISSUE' ? `No milestone (${option.identifier})` : `${option.identifier} — ${option.title}`}
           </option>
         ))}
-      </select>
+      </Select>
     </label>
   );
 }
@@ -687,7 +689,8 @@ export function CandidateCard({
       {startStates.length > 0 ? (
         <label className="observation-field">
           <span>Starts in</span>
-          <select
+          <Select
+            size="sm"
             aria-label={`Starting state for ${candidate.identifier}`}
             value={targetStateId}
             onChange={(event) => setTargetStateId(event.target.value)}
@@ -698,12 +701,13 @@ export function CandidateCard({
                 {state.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       ) : null}
       <label className="observation-field">
         <span>Human owner</span>
-        <select
+        <Select
+          size="sm"
           aria-label={`Owner for ${candidate.identifier}`}
           value={assigneeId}
           onChange={(event) => setAssigneeId(event.target.value)}
@@ -714,13 +718,14 @@ export function CandidateCard({
               {user.name ?? user.email ?? user.id}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <ParentField candidate={candidate} value={parentChoice} onChange={setParentChoice} />
       {isBug ? (
         <label className="observation-field">
           <span>Priority (sets the SLA)</span>
-          <select
+          <Select
+            size="sm"
             aria-label={`Priority for ${candidate.identifier}`}
             value={priority}
             onChange={(event) => {
@@ -736,7 +741,7 @@ export function CandidateCard({
             <option value={2}>High — 48h</option>
             <option value={3}>Medium — 7 days</option>
             <option value={4}>Low — 7 days</option>
-          </select>
+          </Select>
         </label>
       ) : null}
       {(candidate.dependencyHints ?? []).length > 0 ? (
@@ -829,7 +834,8 @@ export function CandidateCard({
       {!snoozed && otherCandidates.length > 0 ? (
         <label className="observation-field observation-field--inline">
           <span>Mark duplicate of</span>
-          <select
+          <Select
+            size="sm"
             aria-label={`Mark ${candidate.identifier} as duplicate of`}
             value={duplicateOfId}
             onChange={(event) => setDuplicateOfId(event.target.value)}
@@ -840,7 +846,7 @@ export function CandidateCard({
                 {other.identifier} — {other.title}
               </option>
             ))}
-          </select>
+          </Select>
           <Btn
             variant="subtle"
             disabled={!duplicateOfId || pendingAction !== null}
@@ -1410,7 +1416,8 @@ export function CandidatesPage() {
                   </span>
                   <label className="candidates-bulkbar__field">
                     <span>Owner:</span>
-                    <select
+                    <Select
+                      size="sm"
                       value={bulkAssigneeId}
                       onChange={(e) => setBulkAssigneeId(e.target.value)}
                       aria-label="Batch commit owner"
@@ -1420,7 +1427,7 @@ export function CandidatesPage() {
                           {u.name ?? u.email ?? u.id}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
                 </div>
                 <div className="candidates-bulkbar__right">
