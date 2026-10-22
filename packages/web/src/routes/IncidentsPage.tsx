@@ -1,4 +1,5 @@
 import { useQuery } from '@apollo/client/react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { INCIDENTS_PAGE_QUERY } from '../board/queries';
@@ -6,7 +7,13 @@ import { severityLabel } from '../board/severity';
 import type { IncidentsPageQueryData, IncidentsPageQueryVariables, IncidentSummaryData } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 import { formatImpactDuration } from '../components/IncidentTimesPanel';
+import { IcoBell } from '../components/Icons';
+import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { Btn } from '../components/Primitives';
+import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
+import { EmptyState, LoadingState, StatRow, StatTile } from '../components/status';
+import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
+import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam, NO_REPOSITORY_OPTIONS } from './work-filter-match';
 
 const HOUR_MS = 3_600_000;
 
@@ -39,75 +46,94 @@ export function IncidentsPage() {
   });
   const summary = data?.incidentSummary ?? null;
   const counted = summary ? summary.openCount + summary.resolvedCount : 0;
+  // Project and text filters narrow the incident list; the metrics stay team-wide (INV-1314).
+  // Every incident is an ISSUE with Type: Incident; owner and priority are not on the row.
+  const [project, setProject] = useProjectParam();
+  const workFilters = useWorkFilters();
+  const projects = useMemo(
+    () => projectsFromCounts((summary?.byRepository ?? []).map((row) => ({ repository: row.repository, count: row.openCount + row.resolvedCount }))),
+    [summary?.byRepository],
+  );
+  const visibleIncidents = useMemo(
+    () =>
+      (summary?.incidents ?? []).filter((item) =>
+        matchesProject(item.repository, project) &&
+        matchesWorkFilters({ title: item.title, kind: 'ISSUE', labelNames: ['incident'] }, workFilters.filters, null),
+      ),
+    [summary?.incidents, project, workFilters.filters],
+  );
 
   return (
     <div className="observation-page">
-      <div className="page-header">
-        <h1 className="page-header__title">Incidents</h1>
-        <span className="mono observation-count">{summary?.openCount ?? 0}</span>
-      </div>
+      <PageHeader icon={<IcoBell size={14} />} title="Incidents" count={summary?.openCount ?? 0} />
+      <PageToolbar
+        aria-label="Incident filters"
+        projects={
+          <ProjectFilterCombobox
+            projects={projects}
+            selectedProjectKey={project || null}
+            totalCount={counted}
+            onSelectProject={setProject}
+            extraOptions={NO_REPOSITORY_OPTIONS}
+            showQuickPills
+          />
+        }
+        filters={<WorkFilterBar {...workFilters} />}
+      />
 
-      <div className="page-content">
+      <PageBody width="wide">
         {error ? (
-          <div className="empty-state" role="alert">
-            <h3>Could not load incident metrics</h3>
-            <p>Confirm the API server is running, then retry.</p>
-            <Btn variant="subtle" onClick={() => void refetch()}>
-              Retry
-            </Btn>
+          <div role="alert">
+            <EmptyState
+              title="Could not load incident metrics"
+              body="Confirm the API server is running, then retry."
+              action={
+                <Btn variant="subtle" onClick={() => void refetch()}>
+                  Retry
+                </Btn>
+              }
+            />
           </div>
         ) : loading && !summary ? (
-          <p className="observation-empty">Loading incidents...</p>
+          <LoadingState>Loading incidents…</LoadingState>
         ) : summary && counted === 0 ? (
-          <div className="empty-state">
-            <h3>No incidents</h3>
-            <p>
-              Declared incidents (Type: Incident) appear here with their MTTR, MTTM and follow-up progress. Declare one from the board with
-              Report incident.
-            </p>
-            {summary.excludedCount > 0 ? <p>{summary.excludedCount} declined or duplicate incidents are not counted.</p> : null}
-          </div>
+          <EmptyState
+            title="No incidents"
+            body={
+              <>
+                Declared incidents (Type: Incident) appear here with their MTTR, MTTM and follow-up progress. Declare one from the board with
+                Report incident.
+                {summary.excludedCount > 0 ? ` ${summary.excludedCount} declined or duplicate incidents are not counted.` : null}
+              </>
+            }
+          />
         ) : summary ? (
           <div className="bugs-content">
-            <section className="bugs-stats" aria-label="Incident statistics">
-              <div className="bugs-stat">
-                <span className="bugs-stat__value">{summary.openCount}</span>
-                <span className="bugs-stat__label">Ongoing</span>
-              </div>
-              <div className="bugs-stat">
-                <span className="bugs-stat__value">{summary.resolvedCount}</span>
-                <span className="bugs-stat__label">Resolved</span>
-              </div>
-              <div className="bugs-stat" title="Mean time from impact start to mitigation (resolution when mitigation was not recorded)">
-                <span className="bugs-stat__value">{formatAverage(summary.mttmHours, summary.mttmSampleCount)}</span>
-                <span className="bugs-stat__label">MTTM</span>
-              </div>
-              <div className="bugs-stat" title="Mean time from impact start to resolution">
-                <span className="bugs-stat__value">{formatAverage(summary.mttrHours, summary.mttrSampleCount)}</span>
-                <span className="bugs-stat__label">MTTR</span>
-              </div>
-            </section>
+            <StatRow aria-label="Incident statistics">
+              <StatTile value={summary.openCount} label="Ongoing" />
+              <StatTile value={summary.resolvedCount} label="Resolved" />
+              <StatTile
+                title="Mean time from impact start to mitigation (resolution when mitigation was not recorded)"
+                value={formatAverage(summary.mttmHours, summary.mttmSampleCount)}
+                label="MTTM"
+              />
+              <StatTile
+                title="Mean time from impact start to resolution"
+                value={formatAverage(summary.mttrHours, summary.mttrSampleCount)}
+                label="MTTR"
+              />
+            </StatRow>
 
-            <section className="bugs-stats" aria-label="Follow-ups">
-              <div className="bugs-stat" title="Completed / (total − declined): a declined follow-up is no longer owed">
-                <span className="bugs-stat__value">{formatRate(summary.followUps.completionRate)}</span>
-                <span className="bugs-stat__label">
-                  Follow-ups done ({summary.followUps.completed} of {summary.followUps.total - summary.followUps.declined})
-                </span>
-              </div>
-              <div className="bugs-stat">
-                <span className="bugs-stat__value">{summary.followUps.overdueOpen}</span>
-                <span className="bugs-stat__label">Overdue, still open</span>
-              </div>
-              <div className="bugs-stat">
-                <span className="bugs-stat__value">{summary.followUps.overdue}</span>
-                <span className="bugs-stat__label">Overdue in total</span>
-              </div>
-              <div className="bugs-stat">
-                <span className="bugs-stat__value">{summary.followUps.declined}</span>
-                <span className="bugs-stat__label">Declined</span>
-              </div>
-            </section>
+            <StatRow aria-label="Follow-ups">
+              <StatTile
+                title="Completed / (total − declined): a declined follow-up is no longer owed"
+                value={formatRate(summary.followUps.completionRate)}
+                label={`Follow-ups done (${summary.followUps.completed} of ${summary.followUps.total - summary.followUps.declined})`}
+              />
+              <StatTile value={summary.followUps.overdueOpen} label="Overdue, still open" />
+              <StatTile value={summary.followUps.overdue} label="Overdue in total" />
+              <StatTile value={summary.followUps.declined} label="Declined" />
+            </StatRow>
 
             <div className="bugs-grid">
               <section className="bugs-panel" aria-label="Incidents by severity">
@@ -168,7 +194,12 @@ export function IncidentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {summary.incidents.map((item) => (
+                  {visibleIncidents.length === 0 ? (
+                    <tr>
+                      <td colSpan={5}>No incident matches these filters.</td>
+                    </tr>
+                  ) : null}
+                  {visibleIncidents.map((item) => (
                     <tr key={item.id} data-testid={`incident-${item.identifier}`}>
                       <td>
                         <button type="button" className="hygiene-item" onClick={() => navigate(`/issue/${encodeURIComponent(item.identifier)}`)}>
@@ -194,7 +225,7 @@ export function IncidentsPage() {
             </section>
           </div>
         ) : null}
-      </div>
+      </PageBody>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Btn } from './Primitives';
 import { WORK_REVIEW_MUTATION } from '../work/queries';
 import type { WorkReviewMutationData, WorkReviewMutationVariables } from '../work/types';
+import { InlineError } from './status';
 
 /**
  * The human gate on finished work: accept it or send it back, with an
@@ -62,7 +63,7 @@ export function HumanReviewSection({
           placeholder="Optional decision note"
         />
       </label>
-      {reviewError ? <p className="observation-error" role="alert">{reviewError}</p> : null}
+      {reviewError ? <InlineError>{reviewError}</InlineError> : null}
       <div className="observation-card__actions">
         <Btn variant="accent" disabled={reviewPending !== null} onClick={() => void handleReview('ACCEPTED')}>
           {reviewPending === 'ACCEPTED' ? 'Accepting…' : 'Accept'}

@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { IssueSummary, TeamSummary, UserSummary } from '../board/types';
 import { openWorkSearch } from '../board/utils';
@@ -7,7 +6,6 @@ import { SAVED_VIEWS_ACCOUNT_EVENT } from '../lib/saved-views-account';
 import {
   applyBacklogViewState,
   APPLY_BACKLOG_VIEW_EVENT,
-  buildBacklogViewSummary,
   getDefaultBacklogViewState,
   readSavedBacklogViews,
   readStoredBacklogViewState,
@@ -17,7 +15,10 @@ import {
   writeSavedBacklogViews,
   writeStoredBacklogViewState,
 } from '../backlog/views';
-import { Select } from '../components/controls';
+import { FilterChip, FilterMenu, FilterSearch, SavedViewControl, SortControl } from '../components/filters';
+import { PageBody, PageToolbar } from '../components/layout';
+import { EmptyState, LoadingState } from '../components/status';
+import { WorkFilterBar, useWorkFilters } from '../components/WorkFilterBar';
 
 interface BacklogPageProps {
   issues: IssueSummary[];
@@ -28,6 +29,12 @@ interface BacklogPageProps {
   selectedTeam: TeamSummary | null;
   users: UserSummary[];
   onSelectIssue: (issue: IssueSummary) => void;
+  /** The Board's project combobox, shown in the toolbar's `projects` slot. */
+  projectFilter?: ReactNode | undefined;
+  /** Notices from the Board (partial load, save errors), under the toolbar. */
+  notices?: ReactNode | undefined;
+  /** The Board's first page is still loading. */
+  loading?: boolean | undefined;
 }
 
 export function BacklogPage({
@@ -36,7 +43,11 @@ export function BacklogPage({
   selectedTeam,
   users,
   onSelectIssue,
+  projectFilter,
+  notices,
+  loading = false,
 }: BacklogPageProps) {
+  const workFilterState = useWorkFilters();
   const teamKey = selectedTeam?.key ?? null;
   const [viewState, setViewState] = useState<BacklogViewState>(() => readStoredBacklogViewState(teamKey));
   const [savedViews, setSavedViews] = useState<SavedBacklogView[]>(() => readSavedBacklogViews(teamKey));
@@ -117,10 +128,6 @@ export function BacklogPage({
     () => applyBacklogViewState(issues, viewState, users),
     [issues, users, viewState],
   );
-  const activeFilterTokens = useMemo(
-    () => buildBacklogViewSummary(viewState, selectedTeam, users, labels),
-    [labels, selectedTeam, users, viewState],
-  );
 
   function toggleFilterValue(key: 'stateIds' | 'assigneeIds' | 'labelIds', value: string) {
     setViewState((currentState) => {
@@ -189,288 +196,191 @@ export function BacklogPage({
     writeSavedBacklogViews(teamKey, nextSavedViews);
   }
 
-  return (
-    <main className="backlog-page">
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '8px 16px',
-          background: 'var(--bg-raised)',
-          borderBottom: '1px solid var(--border)',
-          fontSize: 13,
-          color: 'var(--fg-muted)',
+  const teamStates = selectedTeam?.states.nodes ?? [];
+  const userName = (userId: string) => {
+    if (userId === 'unassigned') return 'Unassigned';
+    const user = users.find((candidate) => candidate.id === userId);
+    return user?.name ?? user?.email ?? userId;
+  };
+  const toggleAndUnload = (key: 'stateIds' | 'assigneeIds' | 'labelIds', value: string) => {
+    toggleFilterValue(key, value);
+    setActiveSavedViewId('');
+  };
+
+  // The same toolbar pieces as the Board (INV-1314): projects → filters → view.
+  const filters = (
+    <>
+      <FilterSearch
+        ref={searchInputRef}
+        aria-label="Search backlog issues"
+        placeholder="Filter by identifier, title, or description"
+        value={viewState.query}
+        shortcut="/"
+        onChange={(query) => {
+          setViewState((currentState) => ({ ...currentState, query }));
+          setActiveSavedViewId('');
         }}
-      >
-        <span>
-          <strong>Committed Backlog:</strong> Prioritized work items queued for future execution. For agent proposals and candidate work awaiting human triage, view{' '}
-          <Link to="/candidates" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
-            Candidates
-          </Link>
-          .
-        </span>
-      </div>
-      <section className="backlog-toolbar">
-        <div className="backlog-toolbar__primary">
-          <label className="field-stack backlog-toolbar__search">
-            <span>Search</span>
-            <input
-              ref={searchInputRef}
-              aria-label="Search backlog issues"
-              placeholder="Filter by identifier, title, or description"
-              value={viewState.query}
-              onChange={(event) => {
-                setViewState((currentState) => ({
-                  ...currentState,
-                  query: event.target.value,
-                }));
-                setActiveSavedViewId('');
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Escape' && viewState.query) {
-                  event.preventDefault();
-                  setViewState((currentState) => ({
-                    ...currentState,
-                    query: '',
-                  }));
-                  setActiveSavedViewId('');
-                }
-              }}
-            />
-          </label>
-          {viewState.query.trim() ? (
-            // The box filters what the list loaded; this searches everything (INV-925).
-            <button
-              type="button"
-              className="search-all-work"
-              onClick={() => openWorkSearch(viewState.query.trim())}
-            >
-              Search all work →
-            </button>
-          ) : null}
-
-          <label className="field-stack">
-            <span>Sort</span>
-            <Select
-              size="sm"
-              aria-label="Sort backlog by"
-              value={viewState.sortField}
-              onChange={(event) => {
-                setViewState((currentState) => ({
-                  ...currentState,
-                  sortField: event.target.value as BacklogViewState['sortField'],
-                }));
-                setActiveSavedViewId('');
-              }}
-            >
-              <option value="identifier">Identifier</option>
-              <option value="title">Title</option>
-              <option value="state">State</option>
-              <option value="assignee">Assignee</option>
-              <option value="updatedAt">Updated</option>
-              <option value="createdAt">Created</option>
-            </Select>
-          </label>
-
-          <label className="field-stack">
-            <span>Direction</span>
-            <Select
-              size="sm"
-              aria-label="Sort backlog direction"
-              value={viewState.sortDirection}
-              onChange={(event) => {
-                setViewState((currentState) => ({
-                  ...currentState,
-                  sortDirection: event.target.value as BacklogViewState['sortDirection'],
-                }));
-                setActiveSavedViewId('');
-              }}
-            >
-              <option value="asc">Ascending</option>
-              <option value="desc">Descending</option>
-            </Select>
-          </label>
-        </div>
-
-        <div className="backlog-toolbar__secondary">
-          <label className="field-stack">
-            <span>Saved view</span>
-            <Select
-              size="sm"
-              aria-label="Load saved backlog view"
-              value={activeSavedViewId}
-              onChange={(event) => loadSavedView(event.target.value)}
-            >
-              <option value="">Current filters</option>
-              {savedViews.map((view) => (
-                <option key={view.id} value={view.id}>
-                  {view.name}
-                </option>
-              ))}
-            </Select>
-          </label>
-
-          <button type="button" className="ui-action ui-action--subtle" onClick={saveCurrentView}>
-            Save view
+        trailing={(
+          // The box filters what the list loaded; this searches everything (INV-925).
+          <button type="button" className="search-all-work" onClick={() => openWorkSearch(viewState.query.trim())}>
+            Search all work →
           </button>
-          <button
-            type="button"
-            className="ui-action ui-action--subtle"
-            disabled={!activeSavedViewId}
-            onClick={deleteSavedView}
-          >
-            Delete view
-          </button>
-          <button type="button" className="ui-action ui-action--subtle" onClick={resetViewState}>
-            Clear
-          </button>
-        </div>
-      </section>
+        )}
+      />
+      <WorkFilterBar {...workFilterState} />
+      <FilterMenu
+        label="States"
+        options={teamStates.map((state) => ({ value: state.id, label: state.name }))}
+        selected={viewState.stateIds}
+        onToggle={(stateId) => toggleAndUnload('stateIds', stateId)}
+      />
+      <FilterMenu
+        label="Labels"
+        options={labels.map((label) => ({ value: label.id, label: label.name }))}
+        selected={viewState.labelIds}
+        onToggle={(labelId) => toggleAndUnload('labelIds', labelId)}
+      />
+      <FilterMenu
+        label="Assignees"
+        options={[
+          { value: 'unassigned', label: 'Unassigned' },
+          ...users.map((user) => ({ value: user.id, label: user.name ?? user.email ?? user.id })),
+        ]}
+        selected={viewState.assigneeIds}
+        onToggle={(assigneeId) => toggleAndUnload('assigneeIds', assigneeId)}
+      />
+      {viewState.stateIds.map((stateId) => {
+        const stateName = teamStates.find((state) => state.id === stateId)?.name ?? stateId;
+        return (
+          <FilterChip key={stateId} removeLabel={`Remove State: ${stateName}`} onRemove={() => toggleAndUnload('stateIds', stateId)}>
+            State: {stateName}
+          </FilterChip>
+        );
+      })}
+      {viewState.assigneeIds.map((assigneeId) => (
+        <FilterChip key={assigneeId} removeLabel={`Remove Assignee: ${userName(assigneeId)}`} onRemove={() => toggleAndUnload('assigneeIds', assigneeId)}>
+          Assignee: {userName(assigneeId)}
+        </FilterChip>
+      ))}
+      {viewState.labelIds.map((labelId) => {
+        const labelName = labels.find((label) => label.id === labelId)?.name ?? labelId;
+        return (
+          <FilterChip key={labelId} removeLabel={`Remove Label: ${labelName}`} onRemove={() => toggleAndUnload('labelIds', labelId)}>
+            Label: {labelName}
+          </FilterChip>
+        );
+      })}
+      <span className="page-note">
+        {filteredIssues.length} visible
+        {activeSavedViewId ? ` · Loaded view: ${savedViews.find((view) => view.id === activeSavedViewId)?.name ?? 'Unknown'}` : ''}
+      </span>
+    </>
+  );
 
-      <section className="backlog-filter-row" aria-label="Backlog filters">
-        <details className="backlog-filter">
-          <summary>States {viewState.stateIds.length > 0 ? `(${viewState.stateIds.length})` : ''}</summary>
-          <div className="backlog-filter__menu">
-            {selectedTeam?.states.nodes.map((state) => (
-              <label key={state.id} className="backlog-filter__option">
-                <input
-                  type="checkbox"
-                  checked={viewState.stateIds.includes(state.id)}
-                  onChange={() => {
-                    toggleFilterValue('stateIds', state.id);
-                    setActiveSavedViewId('');
-                  }}
-                />
-                <span>{state.name}</span>
-              </label>
-            ))}
+  const view = (
+    <>
+      <SortControl
+        sort={{
+          'aria-label': 'Sort backlog by',
+          value: viewState.sortField,
+          options: [
+            { value: 'identifier', label: 'Identifier' },
+            { value: 'title', label: 'Title' },
+            { value: 'state', label: 'State' },
+            { value: 'assignee', label: 'Assignee' },
+            { value: 'updatedAt', label: 'Updated' },
+            { value: 'createdAt', label: 'Created' },
+          ],
+          onChange: (sortField: BacklogViewState['sortField']) => {
+            setViewState((currentState) => ({ ...currentState, sortField }));
+            setActiveSavedViewId('');
+          },
+        }}
+        direction={{
+          'aria-label': 'Sort backlog direction',
+          value: viewState.sortDirection,
+          onChange: (sortDirection) => {
+            setViewState((currentState) => ({ ...currentState, sortDirection }));
+            setActiveSavedViewId('');
+          },
+        }}
+      />
+      <SavedViewControl
+        aria-label="Load saved backlog view"
+        placeholder="Current filters"
+        views={savedViews}
+        activeViewId={activeSavedViewId}
+        onLoad={loadSavedView}
+        onSave={saveCurrentView}
+        onDelete={deleteSavedView}
+        onClear={resetViewState}
+      />
+    </>
+  );
+
+  return (
+    <>
+      <PageToolbar aria-label="Backlog filters" projects={projectFilter} filters={filters} view={view} />
+      {notices}
+      <PageBody width="full" padding="none">
+        {loading ? (
+          <div className="backlog-surface backlog-surface--padded">
+            <LoadingState>Loading board…</LoadingState>
           </div>
-        </details>
-
-        <details className="backlog-filter">
-          <summary>Assignees {viewState.assigneeIds.length > 0 ? `(${viewState.assigneeIds.length})` : ''}</summary>
-          <div className="backlog-filter__menu">
-            <label className="backlog-filter__option">
-              <input
-                type="checkbox"
-                checked={viewState.assigneeIds.includes('unassigned')}
-                onChange={() => {
-                  toggleFilterValue('assigneeIds', 'unassigned');
-                  setActiveSavedViewId('');
-                }}
-              />
-              <span>Unassigned</span>
-            </label>
-            {users.map((user) => (
-              <label key={user.id} className="backlog-filter__option">
-                <input
-                  type="checkbox"
-                  checked={viewState.assigneeIds.includes(user.id)}
-                  onChange={() => {
-                    toggleFilterValue('assigneeIds', user.id);
-                    setActiveSavedViewId('');
-                  }}
-                />
-                <span>{user.name ?? user.email ?? user.id}</span>
-              </label>
-            ))}
-          </div>
-        </details>
-
-        <details className="backlog-filter">
-          <summary>Labels {viewState.labelIds.length > 0 ? `(${viewState.labelIds.length})` : ''}</summary>
-          <div className="backlog-filter__menu">
-            {labels.map((label) => (
-              <label key={label.id} className="backlog-filter__option">
-                <input
-                  type="checkbox"
-                  checked={viewState.labelIds.includes(label.id)}
-                  onChange={() => {
-                    toggleFilterValue('labelIds', label.id);
-                    setActiveSavedViewId('');
-                  }}
-                />
-                <span>{label.name}</span>
-              </label>
-            ))}
-          </div>
-        </details>
-      </section>
-
-      <section className="backlog-active-view" aria-label="Active backlog view">
-        <div className="backlog-active-view__meta">
-          <strong>{filteredIssues.length} visible issues</strong>
-          <span>
-            {activeSavedViewId
-              ? `Loaded view: ${savedViews.find((view) => view.id === activeSavedViewId)?.name ?? 'Unknown'}`
-              : 'Unsaved working view'}
-          </span>
-        </div>
-        <div className="backlog-active-view__tokens">
-          {activeFilterTokens.map((token) => (
-            <span key={token} className="context-chip">
-              {token}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      {filteredIssues.length > 0 ? (
-        <div className="backlog-surface">
-          <table className="backlog-table">
-            <thead>
-              <tr>
-                <th scope="col">Identifier</th>
-                <th scope="col">Title</th>
-                <th scope="col">Project</th>
-                <th scope="col">State</th>
-                <th scope="col">Labels</th>
-                <th scope="col">Assignee</th>
-                <th scope="col">Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredIssues.map((issue) => (
-                <tr key={issue.id}>
-                  <td>{issue.identifier}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="backlog-table__issue-link"
-                      onClick={() => onSelectIssue(issue)}
-                    >
-                      {issue.title}
-                    </button>
-                  </td>
-                  <td>
-                    {issue.repository ? (
-                      <span className="issue-card__repo-badge" title={issue.repository}>
-                        {issue.repository.includes('/') ? issue.repository.split('/')[1] : issue.repository}
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--fg-faint)' }}>—</span>
-                    )}
-                  </td>
-                  <td>{issue.state.name}</td>
-                  <td>
-                    {issue.labels.nodes.length > 0
-                      ? [...new Set(issue.labels.nodes.map((label) => label.name))].join(', ')
-                      : '—'}
-                  </td>
-                  <td>{issue.assignee?.name ?? issue.assignee?.email ?? 'Unassigned'}</td>
-                  <td>{formatBacklogTimestamp(issue.updatedAt)}</td>
+        ) : filteredIssues.length > 0 ? (
+          <div className="backlog-surface">
+            <table className="backlog-table">
+              <thead>
+                <tr>
+                  <th scope="col">Identifier</th>
+                  <th scope="col">Title</th>
+                  <th scope="col">Project</th>
+                  <th scope="col">State</th>
+                  <th scope="col">Labels</th>
+                  <th scope="col">Assignee</th>
+                  <th scope="col">Updated</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <section className="shell-notice">
-          <p>No issues match the current backlog view.</p>
-        </section>
-      )}
-    </main>
+              </thead>
+              <tbody>
+                {filteredIssues.map((issue) => (
+                  <tr key={issue.id}>
+                    <td>{issue.identifier}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="backlog-table__issue-link"
+                        onClick={() => onSelectIssue(issue)}
+                      >
+                        {issue.title}
+                      </button>
+                    </td>
+                    <td>
+                      {issue.repository ? (
+                        <span className="issue-card__repo-badge" title={issue.repository}>
+                          {issue.repository.includes('/') ? issue.repository.split('/')[1] : issue.repository}
+                        </span>
+                      ) : (
+                        <span className="backlog-table__none">—</span>
+                      )}
+                    </td>
+                    <td>{issue.state.name}</td>
+                    <td>
+                      {issue.labels.nodes.length > 0
+                        ? [...new Set(issue.labels.nodes.map((label) => label.name))].join(', ')
+                        : '—'}
+                    </td>
+                    <td>{issue.assignee?.name ?? issue.assignee?.email ?? 'Unassigned'}</td>
+                    <td>{formatBacklogTimestamp(issue.updatedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState title="No issues match the current backlog view." />
+        )}
+      </PageBody>
+    </>
   );
 }
 

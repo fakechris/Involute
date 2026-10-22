@@ -7,7 +7,10 @@ import { readStoredTeamKey } from '../board/utils';
 import { recordCommitGesture, recordFieldGesture, type CommitUndoItem } from '../undo/status-undo';
 import { selectCandidatesEventName } from '../undo/CommitUndoHost';
 import { IcoCheck, IcoClose } from '../components/Icons';
+import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { Btn } from '../components/Primitives';
+import { ProjectFilterCombobox, type AvailableProject } from '../components/ProjectFilterCombobox';
+import { BulkActionBar, EmptyState, InlineError, LoadingState } from '../components/status';
 import { filtersToIql, useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { useListKeys } from '../components/useListKeys';
 
@@ -283,15 +286,10 @@ function RejectedWorkList({ teamKey }: { teamKey: string | null }) {
     variables: { filter: { commitmentStatus: 'REJECTED', ...(teamKey ? { team: { key: { eq: teamKey } } } : {}) } },
   });
   const items = data?.issues.nodes ?? [];
-  if (error) return <p className="observation-error" role="alert">Could not load rejected work.</p>;
-  if (loading && items.length === 0) return <p className="observation-empty">Loading rejected work…</p>;
+  if (error) return <InlineError>Could not load rejected work.</InlineError>;
+  if (loading && items.length === 0) return <LoadingState>Loading rejected work…</LoadingState>;
   if (items.length === 0) {
-    return (
-      <div className="empty-state">
-        <h3>No rejected work</h3>
-        <p>Rejected candidates appear here, with the reason, so a wrong call can be undone.</p>
-      </div>
-    );
+    return <EmptyState title="No rejected work" body="Rejected candidates appear here, with the reason, so a wrong call can be undone." />;
   }
   return (
     <div className="observation-list" role="list" aria-label="Rejected work">
@@ -340,11 +338,7 @@ function RejectedWorkRow({
         <span>Reason to restore</span>
         <input aria-label={`Reason to restore ${item.identifier}`} value={reason} onChange={(event) => setReason(event.target.value)} />
       </label>
-      {error ? (
-        <p className="observation-error" role="alert">
-          {error}
-        </p>
-      ) : null}
+      {error ? <InlineError>{error}</InlineError> : null}
       <div className="observation-card__actions">
         <Btn variant="accent" disabled={!reason.trim() || Boolean(state?.loading)} onClick={() => void restore()}>
           Restore to candidate
@@ -774,11 +768,7 @@ export function CandidateCard({
           placeholder={isBug ? 'Required to decline a bug' : 'Optional'}
         />
       </label>
-      {error ? (
-        <p className="observation-error" role="alert">
-          {error}
-        </p>
-      ) : null}
+      {error ? <InlineError>{error}</InlineError> : null}
       <div className="observation-card__actions">
         {(() => {
           const blocked = pendingAction !== null || snoozed || (missingParent && !parentChoice) || needsPriority;
@@ -995,6 +985,17 @@ export function CandidatesPage() {
     const match = summaryProjects.find((p) => p.repository === selectedProject);
     return match ? match.totalCount : candidates.filter((c) => c.repository === selectedProject).length;
   }, [selectedProject, totalCandidateCount, noRepoCount, summaryProjects, candidates]);
+
+  const projectOptions = useMemo<AvailableProject[]>(() => {
+    const repos = selectedProject && selectedProject !== '__none__' && !repositories.includes(selectedProject)
+      ? [...repositories, selectedProject]
+      : repositories;
+    return repos.map((repo) => {
+      const projectMeta = summaryProjects.find((p) => p.repository === repo);
+      const count = projectMeta ? projectMeta.totalCount : candidates.filter((c) => c.repository === repo).length;
+      return { id: repo, identifier: '', name: repo, key: repo, issueCount: count };
+    });
+  }, [repositories, selectedProject, summaryProjects, candidates]);
 
   function selectProject(repo: string | null) {
     setSearchParams((prev) => {
@@ -1256,98 +1257,64 @@ export function CandidatesPage() {
 
   return (
     <div className="observation-page">
-      <div className="page-header">
-        <h1 className="page-header__title">Candidates</h1>
-        <span className="mono observation-count">{currentProjectTotal}</span>
-        <button
-          type="button"
-          className={`board-project-pill${showRejected ? ' board-project-pill--active' : ''}`}
-          aria-pressed={showRejected}
-          onClick={() =>
-            setSearchParams((previous) => {
-              const next = new URLSearchParams(previous);
-              if (showRejected) next.delete('view');
-              else next.set('view', 'rejected');
-              return next;
-            })
-          }
-        >
-          Rejected
-        </button>
-        <div style={{ flex: 1 }} />
-        <span className="observation-hint">Proposed work waits here until a human commits it.</span>
-      </div>
+      <PageHeader
+        title="Candidates"
+        count={currentProjectTotal}
+        hint="Proposed work waits here until a human commits it."
+      />
 
-      {!showRejected ? <WorkFilterBar {...workFilters} /> : null}
-      {repositories.length > 0 || noRepoCount > 0 ? (
-        <div className="board-project-pills" role="tablist" aria-label="Project switcher" style={{ padding: '0 24px 8px' }}>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={!selectedProject}
-            className={`board-project-pill${!selectedProject ? ' board-project-pill--active' : ''}`}
-            onClick={() => selectProject(null)}
+      <PageToolbar
+        aria-label="Candidate filters"
+        projects={
+          repositories.length > 0 || noRepoCount > 0 || selectedProject ? (
+            <ProjectFilterCombobox
+              projects={projectOptions}
+              selectedProjectKey={selectedProject}
+              totalCount={totalCandidateCount}
+              onSelectProject={selectProject}
+              showQuickPills
+              extraOptions={noRepoCount > 0 || selectedProject === '__none__' ? [{ key: '__none__', label: 'No repository', count: noRepoCount }] : []}
+            />
+          ) : null
+        }
+        filters={!showRejected ? <WorkFilterBar {...workFilters} /> : null}
+        view={
+          <Btn
+            variant="subtle"
+            active={showRejected}
+            onClick={() =>
+              setSearchParams((previous) => {
+                const next = new URLSearchParams(previous);
+                if (showRejected) next.delete('view');
+                else next.set('view', 'rejected');
+                return next;
+              })
+            }
           >
-            <span className="board-project-pill__name">All Projects</span>
-            <span className="board-project-pill__count">{totalCandidateCount}</span>
-          </button>
-          {repositories.map((repo) => {
-            const projectMeta = summaryProjects.find((p) => p.repository === repo);
-            const count = projectMeta ? projectMeta.totalCount : candidates.filter((c) => c.repository === repo).length;
-            const isActive = selectedProject === repo;
-            return (
-              <button
-                key={repo}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                className={`board-project-pill${isActive ? ' board-project-pill--active' : ''}`}
-                onClick={() => selectProject(repo)}
-              >
-                <span className="board-project-pill__name">{repo}</span>
-                <span className="board-project-pill__count">{count}</span>
-              </button>
-            );
-          })}
-          {noRepoCount > 0 ? (
-            <button
-              type="button"
-              role="tab"
-              aria-selected={selectedProject === '__none__'}
-              className={`board-project-pill${selectedProject === '__none__' ? ' board-project-pill--active' : ''}`}
-              onClick={() => selectProject('__none__')}
-            >
-              <span className="board-project-pill__name">No Repository</span>
-              <span className="board-project-pill__count">{noRepoCount}</span>
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+            Rejected
+          </Btn>
+        }
+      />
 
-      <div className="page-content observation-content">
+      <PageBody>
         {!showRejected ? <DeliveryChangeQueue repository={repositoryFilter?.eq} noRepository={repositoryFilter?.isNull} teamKey={teamKey} bugsOnly={bugsOnly} /> : null}
         {showRejected ? (
           <RejectedWorkList teamKey={teamKey} />
         ) : error ? (
-          <div className="empty-state" role="alert">
-            <h3>Could not load candidates</h3>
-            <p>The request failed before the candidate queue could be read.</p>
-            <Btn variant="subtle" onClick={() => void refetch()}>Retry</Btn>
+          <div role="alert">
+            <EmptyState
+              title="Could not load candidates"
+              body="The request failed before the candidate queue could be read."
+              action={<Btn variant="subtle" onClick={() => void refetch()}>Retry</Btn>}
+            />
           </div>
         ) : loading && candidates.length === 0 ? (
-          <p className="observation-empty">Loading candidates…</p>
+          <LoadingState>Loading candidates…</LoadingState>
         ) : candidates.length === 0 ? (
-          <div className="empty-state">
-            <h3>No candidate work</h3>
-            <p>Agents propose here. The board only shows committed issues.</p>
-          </div>
+          <EmptyState title="No candidate work" body="Agents propose here. The board only shows committed issues." />
         ) : (
           <div className="observation-list">
-            {bulkError && selectedIds.length === 0 ? (
-              <p className="observation-error candidates-bulk-result" role="alert">
-                {bulkError}
-              </p>
-            ) : null}
+            {bulkError && selectedIds.length === 0 ? <InlineError>{bulkError}</InlineError> : null}
             {filteredActiveCandidates.length > 0 ? (
               <div className="candidates-toolbar">
                 <label className="candidates-toolbar__select-all">
@@ -1367,15 +1334,6 @@ export function CandidatesPage() {
                   />
                   <span>Select all visible ({filteredActiveCandidates.length})</span>
                 </label>
-                {selectedIds.length > 0 ? (
-                  <button
-                    type="button"
-                    className="candidates-toolbar__clear-btn"
-                    onClick={clearSelection}
-                  >
-                    Clear selection ({selectedIds.length})
-                  </button>
-                ) : null}
               </div>
             ) : null}
 
@@ -1407,76 +1365,6 @@ export function CandidatesPage() {
                 }
               />
             ))}
-
-            {selectedIds.length > 0 ? (
-              <div className="candidates-bulkbar">
-                <div className="candidates-bulkbar__left">
-                  <span className="candidates-bulkbar__count">
-                    <strong>{selectedIds.length}</strong> selected
-                  </span>
-                  <label className="candidates-bulkbar__field">
-                    <span>Owner:</span>
-                    <Select
-                      size="sm"
-                      value={bulkAssigneeId}
-                      onChange={(e) => setBulkAssigneeId(e.target.value)}
-                      aria-label="Batch commit owner"
-                    >
-                      {allHumans.map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name ?? u.email ?? u.id}
-                        </option>
-                      ))}
-                    </Select>
-                  </label>
-                </div>
-                <div className="candidates-bulkbar__right">
-                  {bulkError ? (
-                    <span className="candidates-bulkbar__error" role="alert">
-                      {bulkError}
-                      {acceptanceMissing.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          className="candidates-bulkbar__fix"
-                          onClick={() => focusAcceptance(c)}
-                        >
-                          Fill acceptance for {c.identifier}
-                        </button>
-                      ))}
-                    </span>
-                  ) : null}
-                  <Btn
-                    variant="accent"
-                    icon={<IcoCheck size={14} />}
-                    disabled={isBulkProcessing || selectedBugsNeedingPriority.length > 0}
-                    {...(selectedBugsNeedingPriority.length > 0
-                      ? { title: 'Choose a priority on each bug card first: it sets the SLA.' }
-                      : {})}
-                    onClick={() => void handleBatchCommit()}
-                  >
-                    {isBulkProcessing && bulkAction === 'commit'
-                      ? `Committing ${bulkProgress.done}/${bulkProgress.total}…`
-                      : `Batch Commit (${selectedIds.length})`}
-                  </Btn>
-                  <ResolutionSelect ariaLabel="Resolution for batch reject" value={bulkResolution} disabled={isBulkProcessing} onChange={setBulkResolution} />
-                  <Btn
-                    variant="danger"
-                    icon={<IcoClose size={14} />}
-                    disabled={isBulkProcessing || !bulkResolution}
-                    {...(!bulkResolution ? { title: 'Choose a resolution first: why are these closed?' } : {})}
-                    onClick={() => void handleBatchReject()}
-                  >
-                    {isBulkProcessing && bulkAction === 'reject'
-                      ? `Rejecting ${bulkProgress.done}/${bulkProgress.total}…`
-                      : `Batch Reject (${selectedIds.length})`}
-                  </Btn>
-                  <Btn variant="ghost" disabled={isBulkProcessing} onClick={clearSelection}>
-                    Cancel
-                  </Btn>
-                </div>
-              </div>
-            ) : null}
 
             {filteredSnoozedCandidates.length > 0 ? (
               <>
@@ -1511,15 +1399,15 @@ export function CandidatesPage() {
             ) : null}
 
             {paginationError ? (
-              <div role="alert" style={{ marginTop: '16px' }}>
-                <p>Could not load more candidates.</p>
+              <div role="alert" className="candidates-pagination">
+                <InlineError role="none">Could not load more candidates.</InlineError>
                 <Btn variant="subtle" disabled={loadingMore} onClick={() => void handleLoadMore()}>
                   Retry loading more
                 </Btn>
               </div>
             ) : pageInfo?.hasNextPage ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '16px' }}>
-                <span className="mono observation-hint" style={{ fontSize: '13px' }}>
+              <div className="candidates-pagination">
+                <span className="mono page-note">
                   Showing {candidates.length} of {currentProjectTotal} candidates
                   {currentProjectTotal > candidates.length ? ` (${currentProjectTotal - candidates.length} remaining)` : ''}
                 </span>
@@ -1528,15 +1416,74 @@ export function CandidatesPage() {
                 </Btn>
               </div>
             ) : candidates.length > 50 ? (
-              <div style={{ marginTop: '16px' }}>
-                <span className="mono observation-hint" style={{ fontSize: '13px' }}>
+              <div className="candidates-pagination">
+                <span className="mono page-note">
                   All {candidates.length} candidates loaded
                 </span>
               </div>
             ) : null}
           </div>
         )}
-      </div>
+
+        {!showRejected ? (
+          <BulkActionBar
+            count={selectedIds.length}
+            onClear={clearSelection}
+            clearLabel={`Clear selection (${selectedIds.length})`}
+            status={
+              bulkError ? (
+                <span className="candidates-bulk-error" role="alert">
+                  {bulkError}
+                  {acceptanceMissing.map((c) => (
+                    <Btn key={c.id} variant="ghost" onClick={() => focusAcceptance(c)}>
+                      Fill acceptance for {c.identifier}
+                    </Btn>
+                  ))}
+                </span>
+              ) : null
+            }
+          >
+            <span className="page-note">Owner</span>
+            <Select
+                size="sm"
+                value={bulkAssigneeId}
+                onChange={(e) => setBulkAssigneeId(e.target.value)}
+                aria-label="Batch commit owner"
+              >
+                {allHumans.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name ?? u.email ?? u.id}
+                  </option>
+                ))}
+              </Select>
+            <Btn
+              variant="accent"
+              icon={<IcoCheck size={14} />}
+              disabled={isBulkProcessing || selectedBugsNeedingPriority.length > 0}
+              {...(selectedBugsNeedingPriority.length > 0
+                ? { title: 'Choose a priority on each bug card first: it sets the SLA.' }
+                : {})}
+              onClick={() => void handleBatchCommit()}
+            >
+              {isBulkProcessing && bulkAction === 'commit'
+                ? `Committing ${bulkProgress.done}/${bulkProgress.total}…`
+                : `Batch Commit (${selectedIds.length})`}
+            </Btn>
+            <ResolutionSelect ariaLabel="Resolution for batch reject" value={bulkResolution} disabled={isBulkProcessing} onChange={setBulkResolution} />
+            <Btn
+              variant="danger"
+              icon={<IcoClose size={14} />}
+              disabled={isBulkProcessing || !bulkResolution}
+              {...(!bulkResolution ? { title: 'Choose a resolution first: why are these closed?' } : {})}
+              onClick={() => void handleBatchReject()}
+            >
+              {isBulkProcessing && bulkAction === 'reject'
+                ? `Rejecting ${bulkProgress.done}/${bulkProgress.total}…`
+                : `Batch Reject (${selectedIds.length})`}
+            </Btn>
+          </BulkActionBar>
+        ) : null}
+      </PageBody>
 
       {commitGlance ? (
         <CommitGlanceDialog glance={commitGlance} onClose={() => setCommitGlance(null)} />

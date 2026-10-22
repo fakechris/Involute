@@ -110,7 +110,7 @@ describe('InReviewPage', () => {
     );
     const first = screen.getByRole('listitem', { name: 'INV-101 in review' });
     expect(within(first).getByText('waiting 4d · overdue')).toBeInTheDocument();
-    expect(within(first).getByText('waiting 4d · overdue')).toHaveClass('issue-relations__error');
+    expect(within(first).getByText('waiting 4d · overdue')).toHaveClass('observation-card__meta--overdue');
   });
 
   it('marks work whose contract has a proposed change waiting (INV-869)', () => {
@@ -220,10 +220,11 @@ describe('InReviewPage', () => {
         <InReviewPage />
       </MemoryRouter>,
     );
-    const switcher = screen.getByRole('tablist', { name: 'Project switcher' });
-    expect(within(switcher).getByRole('tab', { name: /All Projects/ })).toHaveAttribute('aria-selected', 'true');
-    fireEvent.click(within(switcher).getByRole('tab', { name: /fakechris\/Involute/ }));
-    expect(within(switcher).getByRole('tab', { name: /fakechris\/Involute/ })).toHaveAttribute('aria-selected', 'true');
+    // The shared project combobox (INV-1314): All Projects until a quick pill is picked.
+    expect(screen.getByRole('button', { name: 'Filter by project' })).toHaveTextContent('All Projects');
+    const pills = screen.getByRole('group', { name: 'Quick project filters' });
+    fireEvent.click(within(pills).getByRole('button', { name: /fakechris\/Involute/ }));
+    expect(within(pills).getByRole('button', { name: /fakechris\/Involute/ })).toHaveAttribute('aria-pressed', 'true');
     const calls = (useQuery as unknown as { mock: { calls: Array<[unknown, { variables: { filter: Record<string, unknown> } }]> } }).mock.calls;
     expect(calls.some(([, options]) => (options.variables.filter as { repository?: { eq: string } }).repository?.eq === 'fakechris/Involute')).toBe(true);
   });

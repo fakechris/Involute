@@ -182,7 +182,7 @@ export function WorkStructureEditor({
             onBlur={saveFoundIn}
             onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); saveFoundIn(); } }}
           />
-          {!foundInValid ? <span className="observation-error" role="alert">A commit SHA: 7 to 40 hex characters.</span> : null}
+          {!foundInValid ? <span className="field__error" role="alert">A commit SHA: 7 to 40 hex characters.</span> : null}
         </label>
       ) : null}
       {kind !== 'PROJECT' ? (

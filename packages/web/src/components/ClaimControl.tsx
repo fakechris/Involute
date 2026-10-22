@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation } from '@apollo/client/react';
 
 import { WORK_CLAIM_RELEASE_MUTATION } from '../board/queries';
+import { InlineError } from './status';
 
 export interface ClaimSummary {
   leaseUntil: string;
@@ -68,9 +69,9 @@ export function ClaimControl({ workId, claim }: { workId: string; claim: ClaimSu
         </button>
       )}
       {error ? (
-        <span role="alert" className="issue-relations__error">
+        <InlineError>
           {error}
-        </span>
+        </InlineError>
       ) : null}
     </span>
   );

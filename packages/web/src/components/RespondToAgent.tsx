@@ -3,6 +3,7 @@ import { useMutation } from '@apollo/client/react';
 
 import { COMMENT_CREATE_MUTATION } from '../board/queries';
 import type { CommentCreateMutationVariables } from '../board/types';
+import { InlineError } from './status';
 
 /**
  * Answer an agent that asked for a decision (INV-794): the reply is a comment
@@ -49,9 +50,9 @@ export function RespondToAgent({ workId, agent }: { workId: string; agent: { id:
       </button>
       {sent ? <span role="status">Sent to @{agent.handle}.</span> : null}
       {error ? (
-        <span role="alert" className="issue-relations__error">
+        <InlineError>
           {error}
-        </span>
+        </InlineError>
       ) : null}
     </div>
   );

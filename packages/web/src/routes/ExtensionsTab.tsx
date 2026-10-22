@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 
 import { Btn } from '../components/Primitives';
 import { EXTENSION_TOKEN_REVOKE_MUTATION, EXTENSION_TOKENS_QUERY, type ExtensionTokenRow } from '../extension/queries';
+import { EmptyState, InlineError } from '../components/status';
 
 function when(value: string | null): string {
   return value ? new Date(value).toLocaleString() : '—';
@@ -33,8 +34,8 @@ export function ExtensionsTab() {
       <p className="observation-card__meta">
         Browser extensions you connected to file bugs from any page. <Link to="/extension/connect">Connect another</Link>.
       </p>
-      {loading && rows.length === 0 ? <p className="observation-empty">Loading…</p> : null}
-      {!loading && rows.length === 0 ? <p className="observation-empty">No extension is connected.</p> : null}
+      {loading && rows.length === 0 ? <EmptyState size="inline" title="Loading…" /> : null}
+      {!loading && rows.length === 0 ? <EmptyState size="inline" title="No extension is connected." /> : null}
       {rows.length > 0 ? (
         <table className="bugs-table">
           <thead>
@@ -62,7 +63,7 @@ export function ExtensionsTab() {
           </tbody>
         </table>
       ) : null}
-      {error ? <p className="issue-relations__error" role="alert">{error}</p> : null}
+      {error ? <InlineError>{error}</InlineError> : null}
     </section>
   );
 }

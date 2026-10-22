@@ -60,6 +60,8 @@ import { BugCaptureSection } from '../components/BugCaptureSection';
 import { Avatar, Btn, Kbd } from '../components/Primitives';
 import { RichTextEditor } from '../components/RichTextEditor';
 import { Select } from '../components/controls';
+import { PageBody, PageHeader } from '../components/layout';
+import { EmptyState, LoadingState } from '../components/status';
 
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
 
@@ -533,13 +535,10 @@ export function IssuePage() {
 
     return (
       <main className="board-page board-page--state">
-        <header className="app-shell__header">
-          <div>
-            <p className="app-shell__eyebrow">Involute</p>
-            <h1>Issue detail</h1>
-          </div>
-        </header>
-        <BootstrapErrorNotice state={errorState} />
+        <PageHeader title="Issue detail" />
+        <PageBody>
+          <BootstrapErrorNotice state={errorState} />
+        </PageBody>
       </main>
     );
   }
@@ -547,15 +546,10 @@ export function IssuePage() {
   if (loading && !data) {
     return (
       <main className="board-page board-page--state">
-        <header className="app-shell__header">
-          <div>
-            <p className="app-shell__eyebrow">Involute</p>
-            <h1>Issue detail</h1>
-          </div>
-        </header>
-        <section className="shell-notice" aria-live="polite">
-          Loading issue…
-        </section>
+        <PageHeader title="Issue detail" />
+        <PageBody>
+          <LoadingState>Loading issue…</LoadingState>
+        </PageBody>
       </main>
     );
   }
@@ -563,15 +557,10 @@ export function IssuePage() {
   if (!issueSnapshot || !selectedTeam) {
     return (
       <main className="board-page board-page--state">
-        <header className="app-shell__header">
-          <div>
-            <p className="app-shell__eyebrow">Involute</p>
-            <h1>Issue detail</h1>
-          </div>
-        </header>
-        <section className="shell-notice">
-          <p>Issue not found.</p>
-        </section>
+        <PageHeader title="Issue detail" />
+        <PageBody>
+          <EmptyState title="Issue not found." />
+        </PageBody>
       </main>
     );
   }
@@ -602,30 +591,23 @@ export function IssuePage() {
           </Btn>
           {activeIssue.parent ? (
             <>
-              <span style={{ color: 'var(--fg-faint)', display: 'inline-flex' }}>
+              <span className="issue-panel__crumb-sep" aria-hidden="true">
                 <IcoChevR size={10} />
               </span>
               <button
                 type="button"
                 onClick={() => navigate(`/issue/${activeIssue.parent!.id}`)}
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontSize: 13, color: 'var(--fg-muted)', padding: '2px 4px',
-                  borderRadius: 'var(--r-1)',
-                }}
-                className="mono"
+                className="mono issue-panel__crumb-link"
                 title={activeIssue.parent.title}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
               >
                 {activeIssue.parent.identifier}
               </button>
             </>
           ) : null}
-          <span style={{ color: 'var(--fg-faint)', display: 'inline-flex' }}>
+          <span className="issue-panel__crumb-sep" aria-hidden="true">
             <IcoChevR size={10} />
           </span>
-          <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
+          <span className="mono issue-panel__crumb-id">
             {activeIssue.identifier}
           </span>
           {activeIssue.provenance ? (
@@ -653,41 +635,32 @@ export function IssuePage() {
             </span>
           ) : null}
         </div>
-        <div style={{ flex: 1 }} />
-        <div className="issue-panel__header-actions">
+        <div className="issue-panel__header-actions issue-panel__header-actions--end">
           <Btn variant="subtle" onClick={() => navigate(`/work/${activeIssue.id}`)}>
             Work context
           </Btn>
           <Btn variant="ghost" icon={<IcoChevL />} title="Previous issue" onClick={() => navigate(-1)} />
           <Btn variant="ghost" icon={<IcoChevR />} title="Next issue" onClick={() => navigate(1)} />
-          <div style={{ position: 'relative' }}>
+          <div className="issue-panel__menu">
             <Btn variant="ghost" icon={<IcoMore />} title="More" onClick={() => setMoreMenuOpen(!moreMenuOpen)} />
             {moreMenuOpen && (
-              <div style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 10,
-                background: 'var(--bg-raised)', border: '1px solid var(--border)',
-                borderRadius: 'var(--r-2)', padding: 4, minWidth: 140,
-              }}>
+              <div className="issue-panel__menu-popover">
                 <button
                   type="button"
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 10px', fontSize: 14, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--fg)', borderRadius: 'var(--r-1)' }}
+                  className="issue-panel__menu-item"
                   onClick={() => { setMoreMenuOpen(false); handleCopyLink(); }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
                 >
                   <IcoCopy size={12} /> Copy link
                 </button>
                 <button
                   type="button"
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 10px', fontSize: 14, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', borderRadius: 'var(--r-1)' }}
+                  className="issue-panel__menu-item issue-panel__menu-item--danger"
                   onClick={() => {
                     setMoreMenuOpen(false);
                     if (confirmIssueDelete()) {
                       void persistIssueDelete(activeIssue).catch(() => undefined);
                     }
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
                 >
                   <IcoClose size={12} /> Delete issue
                 </button>
@@ -1189,11 +1162,7 @@ export function IssuePage() {
           <div className="issue-panel__prop-row">
             <div className="issue-panel__prop-label">Team</div>
             <div className="issue-panel__prop-value">
-              <span className="mono" style={{
-                fontSize: 12, padding: '1px 5px', borderRadius: 3,
-                background: 'var(--bg-hover)', border: '1px solid var(--border)',
-                color: 'var(--fg-muted)',
-              }}>
+              <span className="mono page-header__crumb-key">
                 {selectedTeam.key}
               </span>
             </div>
@@ -1208,10 +1177,9 @@ export function IssuePage() {
             className="issue-panel__action-btn"
             onClick={handleCopyLink}
           >
-            <span style={{ color: 'var(--fg-dim)', display: 'inline-flex' }}><IcoCopy size={13} /></span>
+            <span className="issue-panel__action-icon"><IcoCopy size={13} /></span>
             <span>Copy issue URL</span>
-            <div style={{ flex: 1 }} />
-            <Kbd keys={['⌘', 'L']} />
+            <span className="issue-panel__action-kbd"><Kbd keys={['⌘', 'L']} /></span>
           </button>
 
           <button
@@ -1222,7 +1190,7 @@ export function IssuePage() {
               void navigator.clipboard.writeText(link);
             }}
           >
-            <span style={{ color: 'var(--fg-dim)', display: 'inline-flex' }}><IcoLink size={13} /></span>
+            <span className="issue-panel__action-icon"><IcoLink size={13} /></span>
             <span>Copy markdown link</span>
           </button>
 
@@ -1235,7 +1203,7 @@ export function IssuePage() {
               void persistIssueDelete(activeIssue).catch(() => undefined);
             }}
           >
-            <span style={{ display: 'inline-flex' }}><IcoClose size={13} /></span>
+            <span className="issue-panel__action-icon issue-panel__action-icon--inherit"><IcoClose size={13} /></span>
             <span>Delete</span>
           </button>
 

@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 
 const SRC = join(__dirname, '..');
 
-const STYLESHEETS = ['styles/app.css', 'styles/controls.css', 'styles/in-review.css', 'components/delivery.css'];
+const STYLESHEETS = ['styles/app.css', 'styles/controls.css', 'styles/layout.css', 'styles/in-review.css', 'components/delivery.css'];
 
 /**
  * Class tokens that may appear in TSX without a stylesheet rule.

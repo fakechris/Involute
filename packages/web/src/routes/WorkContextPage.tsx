@@ -14,6 +14,8 @@ import { EvidenceAttachForm } from '../components/EvidenceAttachForm';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { WORK_CONTEXT_PAGE_QUERY } from '../work/queries';
 import { HumanReviewSection } from '../components/HumanReviewSection';
+import { PageBody, PageHeader } from '../components/layout';
+import { EmptyState, LoadingState } from '../components/status';
 import type {
   ReceiptReferenceSummary,
   WorkContextPageQueryData,
@@ -54,7 +56,7 @@ function RelatedList({
     <section className="work-context__section">
       <h2>{label}</h2>
       {items.length === 0 ? (
-        <p className="observation-empty">None</p>
+        <EmptyState size="inline" title="None" />
       ) : (
         <ul className="work-context__links">
           {items.map((item) => (
@@ -99,10 +101,10 @@ export function WorkContextPage() {
   if (loading && !bundle) {
     return (
       <div className="observation-page">
-        <div className="page-header">
-          <h1 className="page-header__title">Work context</h1>
-        </div>
-        <p className="observation-empty">Loading work context…</p>
+        <PageHeader title="Work context" />
+        <PageBody width="default">
+          <LoadingState>Loading work context…</LoadingState>
+        </PageBody>
       </div>
     );
   }
@@ -110,14 +112,16 @@ export function WorkContextPage() {
   if (error) {
     return (
       <div className="observation-page">
-        <div className="page-header">
-          <h1 className="page-header__title">Work context</h1>
-        </div>
-        <div className="empty-state" role="alert">
-          <h3>Could not load work context</h3>
-          <p>The kernel request failed; this is not being reported as a missing work item.</p>
-          <Btn variant="subtle" onClick={() => void refetch()}>Retry</Btn>
-        </div>
+        <PageHeader title="Work context" />
+        <PageBody width="default">
+          <div role="alert">
+            <EmptyState
+              title="Could not load work context"
+              body="The kernel request failed; this is not being reported as a missing work item."
+              action={<Btn variant="subtle" onClick={() => void refetch()}>Retry</Btn>}
+            />
+          </div>
+        </PageBody>
       </div>
     );
   }
@@ -125,13 +129,10 @@ export function WorkContextPage() {
   if (!bundle) {
     return (
       <div className="observation-page">
-        <div className="page-header">
-          <h1 className="page-header__title">Work context</h1>
-        </div>
-        <div className="empty-state">
-          <h3>Work not found</h3>
-          <p>Context is loaded from the kernel by identifier or UUID.</p>
-        </div>
+        <PageHeader title="Work context" />
+        <PageBody width="default">
+          <EmptyState title="Work not found" body="Context is loaded from the kernel by identifier or UUID." />
+        </PageBody>
       </div>
     );
   }
@@ -140,21 +141,32 @@ export function WorkContextPage() {
 
   return (
     <div className="observation-page">
-      <div className="page-header">
-        <Btn variant="ghost" icon={<IcoChevL size={12} />} onClick={() => navigate(-1)}>
-          Back
-        </Btn>
-        <span className="mono">{work.identifier}</span>
-        <span className="page-header__title">{work.title}</span>
-        <span className="observation-card__status">{work.commitmentStatus.toLowerCase()}</span>
-        <span className="observation-card__meta">{work.state.name}</span>
-        <span className="observation-card__meta">rev {work.revision}</span>
-        <div style={{ flex: 1 }} />
-        <Btn variant="subtle" onClick={() => navigate(`/issue/${work.id}`)}>
-          Issue editor
-        </Btn>
-      </div>
-      <div className="page-content observation-content work-context">
+      <PageHeader
+        back={(
+          <>
+            <Btn variant="ghost" icon={<IcoChevL size={12} />} onClick={() => navigate(-1)}>
+              Back
+            </Btn>
+            <span className="mono">{work.identifier}</span>
+          </>
+        )}
+        title={work.title}
+        hint={(
+          <>
+            <span className="observation-card__status">{work.commitmentStatus.toLowerCase()}</span>
+            {' '}
+            <span className="observation-card__meta">{work.state.name}</span>
+            {' · '}
+            <span className="observation-card__meta">rev {work.revision}</span>
+          </>
+        )}
+        actions={(
+          <Btn variant="subtle" onClick={() => navigate(`/issue/${work.id}`)}>
+            Issue editor
+          </Btn>
+        )}
+      />
+      <PageBody width="default" className="work-context">
         <DeliverySection workId={work.id} />
         {work.commitmentStatus === 'CANDIDATE' ? (
           <section className="work-context__section">
@@ -169,9 +181,8 @@ export function WorkContextPage() {
           </section>
         ) : null}
         <section className="work-context__section">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="work-context__section-head">
             <h2>Contract</h2>
-            <div style={{ flex: 1 }} />
             <Btn variant="subtle" onClick={() => navigate(`/issue/${work.id}#contract`)}>
               Edit contract
             </Btn>
@@ -210,7 +221,7 @@ export function WorkContextPage() {
           <h2>Runs</h2>
           {latestAgent ? <RespondToAgent workId={bundle.work.id} agent={latestAgent} /> : null}
           {bundle.runs.length === 0 ? (
-            <p className="observation-empty">No runs</p>
+            <EmptyState size="inline" title="No runs" />
           ) : (
             <ul className="work-context__timeline">
               {bundle.runs.map((run) => (
@@ -218,7 +229,7 @@ export function WorkContextPage() {
                   <strong className="mono">{run.publicId}</strong>
                   <span>{run.status.toLowerCase()}</span>
                   {run.presence === 'stale' ? (
-                    <span className="issue-relations__error" title="No run_report, evidence or comment from the executor for over the stale threshold">stale</span>
+                    <span className="work-context__stale" title="No run_report, evidence or comment from the executor for over the stale threshold">stale</span>
                   ) : null}
                   {run.status === 'RUNNING' && run.lastActivityAt ? (
                     <span className="observation-card__meta">last activity {formatWhen(run.lastActivityAt)}</span>
@@ -246,7 +257,7 @@ export function WorkContextPage() {
           <h2>Evidence</h2>
           <EvidenceAttachForm workId={bundle.work.id} />
           {bundle.evidence.length === 0 ? (
-            <p className="observation-empty">No evidence</p>
+            <EmptyState size="inline" title="No evidence" />
           ) : (
             <ul className="work-context__timeline">
               {bundle.evidence.map((item) => (
@@ -276,7 +287,7 @@ export function WorkContextPage() {
         <section className="work-context__section">
           <h2>Review decisions</h2>
           {bundle.reviewDecisions.length === 0 ? (
-            <p className="observation-empty">No review decisions</p>
+            <EmptyState size="inline" title="No review decisions" />
           ) : (
             <ul className="work-context__timeline">
               {bundle.reviewDecisions.map((decision) => (
@@ -295,7 +306,7 @@ export function WorkContextPage() {
         <section className="work-context__section">
           <h2>Requests</h2>
           {(bundle.work.agentRequests ?? []).length === 0 ? (
-            <p className="observation-empty">No requests to agents</p>
+            <EmptyState size="inline" title="No requests to agents" />
           ) : (
             <ul className="work-context__timeline">
               {[...(bundle.work.agentRequests ?? [])]
@@ -319,7 +330,7 @@ export function WorkContextPage() {
         <section className="work-context__section">
           <h2>Audits</h2>
           {bundle.audits.length === 0 ? (
-            <p className="observation-empty">No audits</p>
+            <EmptyState size="inline" title="No audits" />
           ) : (
             <ul className="work-context__timeline">
               {bundle.audits.map((audit) => (
@@ -373,7 +384,7 @@ export function WorkContextPage() {
             </ul>
           )}
         </section>
-      </div>
+      </PageBody>
     </div>
   );
 }

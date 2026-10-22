@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react';
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client/react';
 import { Link, useLocation } from 'react-router-dom';
 
+import { PageBody, PageHeader } from '../components/layout';
+import { Btn } from '../components/Primitives';
+import { EmptyState, InlineError, LoadingState } from '../components/status';
+
 import {
   OPS_INBOUND_REPLAY_MUTATION,
   OPS_OVERVIEW_QUERY,
@@ -48,35 +52,34 @@ export function OpsPage() {
   if (forbidden) {
     return (
       <div className="observation-page">
-        <div className="page-header"><h1 className="page-header__title">Ops</h1></div>
-        <div className="page-content observation-content">
-          <p className="observation-empty">The ops page is for workspace admins.</p>
-        </div>
+        <PageHeader title="Ops" />
+        <PageBody width="wide">
+          <EmptyState size="inline" title="The ops page is for workspace admins." />
+        </PageBody>
       </div>
     );
   }
 
   return (
     <div className="observation-page">
-      <div className="page-header">
-        <h1 className="page-header__title">Ops</h1>
-        <span className="observation-hint">Sync, inbound queue, outbox, webhooks and traceability · admins only</span>
-      </div>
-      <div className="page-content observation-content ops">
+      <PageHeader title="Ops" hint="Sync, inbound queue, outbox, webhooks and traceability · admins only" />
+      <PageBody width="wide" className="ops">
         {error ? (
-          <div className="empty-state" role="alert">
-            <h3>Could not load ops</h3>
-            <p>{error.message}</p>
-            <button type="button" onClick={() => void refetch()}>Retry</button>
+          <div role="alert">
+            <EmptyState
+              title="Could not load ops"
+              body={error.message}
+              action={<Btn variant="subtle" onClick={() => void refetch()}>Retry</Btn>}
+            />
           </div>
         ) : loading && !overview ? (
-          <p className="observation-empty" role="status">Loading…</p>
+          <LoadingState />
         ) : overview ? (
           <>
             <section id="sync" className="work-context__section">
               <h2>GitHub sync</h2>
               {overview.watermarks.length === 0 ? (
-                <p className="observation-empty">No repository has synced yet.</p>
+                <EmptyState size="inline" title="No repository has synced yet." />
               ) : (
                 <table className="ops-table" aria-label="Sync watermarks">
                   <thead><tr><th>Repository</th><th>Synced up to</th><th>Last run</th></tr></thead>
@@ -93,7 +96,7 @@ export function OpsPage() {
               <h2>Sync dead letters</h2>
               <p className="observation-hint">PRs that failed three times. Clearing one makes the next sync (within 10 minutes) retry it.</p>
               {overview.syncDeadLetters.length === 0 ? (
-                <p className="observation-empty">None.</p>
+                <EmptyState size="inline" title="None." />
               ) : (
                 <ul className="work-context__timeline">
                   {overview.syncDeadLetters.map((row) => (
@@ -149,7 +152,7 @@ export function OpsPage() {
               <h2>Outbox failures</h2>
               <p className="observation-hint">Events not yet delivered that failed, newest first.</p>
               {overview.outboxFailures.length === 0 ? (
-                <p className="observation-empty">None.</p>
+                <EmptyState size="inline" title="None." />
               ) : (
                 <table className="ops-table" aria-label="Outbox failures">
                   <thead><tr><th>Event</th><th>Attempts</th><th>Last error</th><th>Created</th><th>Dead-lettered</th></tr></thead>
@@ -172,7 +175,7 @@ export function OpsPage() {
               <h2>Webhooks</h2>
               <WebhookCreateForm />
               {overview.webhooks.length === 0 ? (
-                <p className="observation-empty">No subscriptions.</p>
+                <EmptyState size="inline" title="No subscriptions." />
               ) : (
                 <ul className="work-context__timeline">
                   {overview.webhooks.map((webhook) => <WebhookRow key={webhook.id} webhook={webhook} />)}
@@ -188,7 +191,7 @@ export function OpsPage() {
             <section id="audit" className="work-context__section">
               <h2>Ops audit</h2>
               {overview.audits.length === 0 ? (
-                <p className="observation-empty">No ops actions yet.</p>
+                <EmptyState size="inline" title="No ops actions yet." />
               ) : (
                 <ul className="work-context__timeline" aria-label="Ops audit">
                   {overview.audits.map((audit) => (
@@ -204,7 +207,7 @@ export function OpsPage() {
             </section>
           </>
         ) : null}
-      </div>
+      </PageBody>
     </div>
   );
 }
@@ -251,7 +254,7 @@ function ReasonAction({
         {label}
       </button>
       <button type="button" className="ui-action" onClick={() => setOpen(false)}>Cancel</button>
-      {error ? <span role="alert" className="issue-relations__error">{error}</span> : null}
+      {error ? <InlineError>{error}</InlineError> : null}
     </div>
   );
 }
@@ -317,7 +320,7 @@ function WebhookCreateForm() {
         Add webhook
       </button>
       {secret ? <SecretOnce secret={secret} /> : null}
-      {error ? <span role="alert" className="issue-relations__error">{error}</span> : null}
+      {error ? <InlineError>{error}</InlineError> : null}
     </div>
   );
 }
@@ -361,7 +364,7 @@ function WebhookRow({ webhook }: { webhook: OpsWebhook }) {
       <span className="mono">{webhook.url}</span>
       <span>{webhook.teamId ? 'one team' : 'all teams'}</span>
       {webhook.actorId ? <span>push channel for @{webhook.actorHandle ?? webhook.actorId}</span> : null}
-      <span className={webhook.enabled ? '' : 'issue-relations__error'}>
+      <span className={webhook.enabled ? undefined : 'ops__disabled'}>
         {webhook.enabled ? 'enabled' : `disabled${webhook.consecutiveFailures ? ` after ${webhook.consecutiveFailures} failures` : ''}`}
       </span>
       <div className="request-actions">
@@ -397,7 +400,7 @@ function WebhookRow({ webhook }: { webhook: OpsWebhook }) {
         </button>
       </div>
       {secret ? <SecretOnce secret={secret} /> : null}
-      {error ? <span role="alert" className="issue-relations__error">{error}</span> : null}
+      {error ? <InlineError>{error}</InlineError> : null}
     </li>
   );
 }
@@ -436,16 +439,16 @@ function TraceabilityAudit() {
           Run audit
         </button>
       </div>
-      {error ? <p role="alert" className="issue-relations__error">{error.message}</p> : null}
+      {error ? <InlineError>{error.message}</InlineError> : null}
       {audit ? (
         <>
           <p role="status">
             {audit.scannedPrCount} merged PRs in {audit.days} days · {audit.anomalies.length} to look at
           </p>
           {audit.repoErrors.map((repoError) => (
-            <p key={repoError.repository} className="issue-relations__error">
+            <InlineError key={repoError.repository} role="none">
               {repoError.repository} not scanned: {repoError.message}
-            </p>
+            </InlineError>
           ))}
           <ul className="work-context__timeline" aria-label="Traceability anomalies">
             {audit.anomalies.map((anomaly) => (

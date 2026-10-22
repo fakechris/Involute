@@ -6,6 +6,9 @@ import { readStoredTeamKey } from '../board/utils';
 import { WORK_LINK_MUTATION, WORK_HYGIENE_QUERY } from '../work/queries';
 import type { WorkHygieneQueryData, HygieneRef } from '../work/types';
 import type { WorkLinkMutationData, WorkLinkMutationVariables } from '../board/types';
+import { PageBody, PageHeader } from '../components/layout';
+import { Btn } from '../components/Primitives';
+import { EmptyState, InlineError, LoadingState, StatRow, StatTile } from '../components/status';
 
 /**
  * Where the team's work graph falls short of norm v1 (INV-718/721): the
@@ -31,22 +34,21 @@ export function HygienePage() {
 
   return (
     <div className="observation-page">
-      <div className="page-header">
-        <h1 className="page-header__title">Work graph health</h1>
-        <span className="observation-hint">Team {teamKey} · committed work against norm v1</span>
-      </div>
-      <div className="page-content observation-content">
+      <PageHeader title="Work graph health" hint={`Team ${teamKey} · committed work against norm v1`} />
+      <PageBody width="wide">
         {error ? (
-          <div className="empty-state" role="alert">
-            <h3>Could not load the health check</h3>
-            <p>{error.message}</p>
-            <button type="button" onClick={() => void refetch()}>Retry</button>
+          <div role="alert">
+            <EmptyState
+              title="Could not load the health check"
+              body={error.message}
+              action={<Btn variant="subtle" onClick={() => void refetch()}>Retry</Btn>}
+            />
           </div>
         ) : loading && !hygiene ? (
-          <p className="observation-empty" role="status">Loading…</p>
+          <LoadingState />
         ) : hygiene ? (
           <div className="hygiene">
-            <div className="hygiene-summary" aria-label="Summary">
+            <StatRow aria-label="Summary">
               {[
                 ['Not in any project tree', hygiene.unplacedCount],
                 ['Mentions without a link', hygiene.unlinkedMentionCount],
@@ -58,12 +60,9 @@ export function HygienePage() {
                 ['Incidents without a postmortem', hygiene.incidentsWithoutPostmortemCount],
                 ['Overdue incident follow-ups', hygiene.overdueFollowUpCount],
               ].map(([label, count]) => (
-                <div key={label as string} className={`hygiene-stat${count ? ' hygiene-stat--open' : ''}`}>
-                  <span className="hygiene-stat__count">{count}</span>
-                  <span>{label}</span>
-                </div>
+                <StatTile key={label as string} tone={count ? 'warn' : 'success'} value={count} label={label} />
               ))}
-            </div>
+            </StatRow>
 
             <section aria-label="Not in any project tree">
               <h2>Not in any project tree · {hygiene.unplacedCount}</h2>
@@ -81,7 +80,7 @@ export function HygienePage() {
             <section aria-label="Dependencies without BLOCKS">
               <h2>Dependencies without BLOCKS · {hygiene.dependencyWithoutBlocksCount}</h2>
               <p className="observation-hint">The text reads like one depends on the other. Record it if it is true; ignore it if the mention is only an example.</p>
-              {linkError ? <p className="hygiene-error" role="alert">{linkError}</p> : null}
+              {linkError ? <InlineError>{linkError}</InlineError> : null}
               <ul className="hygiene-list">
                 {hygiene.dependencyWithoutBlocks.map((pair) => (
                   <li key={`${pair.from.id}>${pair.to.id}`}>
@@ -194,7 +193,7 @@ export function HygienePage() {
             </section>
           </div>
         ) : null}
-      </div>
+      </PageBody>
     </div>
   );
 }

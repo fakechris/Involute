@@ -167,15 +167,17 @@ describe('CandidatesPage', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'Candidates' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /All Projects/ })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /fakechris\/Involute/ })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /fakechris\/lumenbox/ })).toBeInTheDocument();
+    // The shared project combobox with quick pills (INV-1314).
+    expect(screen.getByRole('button', { name: 'Filter by project' })).toHaveTextContent('All Projects');
+    const pills = screen.getByRole('group', { name: 'Quick project filters' });
+    expect(within(pills).getByRole('button', { name: /fakechris\/Involute/ })).toBeInTheDocument();
+    expect(within(pills).getByRole('button', { name: /fakechris\/lumenbox/ })).toBeInTheDocument();
 
     expect(screen.getByText('INV-40')).toBeInTheDocument();
     expect(screen.getByText('INV-21')).toBeInTheDocument();
 
     // Click project tab "fakechris/Involute"
-    fireEvent.click(screen.getByRole('tab', { name: /fakechris\/Involute/ }));
+    fireEvent.click(within(pills).getByRole('button', { name: /fakechris\/Involute/ }));
     expect(screen.getByText('INV-40')).toBeInTheDocument();
     expect(screen.queryByText('INV-21')).not.toBeInTheDocument();
   });
@@ -190,7 +192,7 @@ describe('CandidatesPage', () => {
     const first = screen.getAllByRole('article')[0]!;
     expect(first).toHaveAttribute('aria-current', 'true');
     fireEvent.keyDown(window, { key: 'x' });
-    expect(screen.getByText(/1 selected|selected \(1\)|Clear selection \(1\)/)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Bulk actions' })).toHaveTextContent('1 selected');
     fireEvent.keyDown(window, { key: 'X', shiftKey: true });
     fireEvent.keyDown(window, { key: 'A', shiftKey: true });
     expect(screen.getByRole('button', { name: /Batch Commit \(2\)/ })).toBeInTheDocument();

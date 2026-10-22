@@ -3,6 +3,7 @@ import { useMutation } from '@apollo/client/react';
 
 import { EVIDENCE_ATTACH_MUTATION, type MutationResult } from '../ops/queries';
 import { Select } from './controls';
+import { InlineError } from './status';
 
 const KINDS = [
   ['pr', 'Pull request'],
@@ -69,9 +70,9 @@ export function EvidenceAttachForm({ workId }: { workId: string }) {
         Cancel
       </button>
       {error ? (
-        <span role="alert" className="issue-relations__error">
+        <InlineError>
           {error}
-        </span>
+        </InlineError>
       ) : null}
     </div>
   );

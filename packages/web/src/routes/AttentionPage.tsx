@@ -6,7 +6,9 @@ import { AgentRequestActions } from '../components/AgentRequestActions';
 import { ContractAmendmentPanel, useContractAmendmentDecisions } from '../components/ContractAmendmentPanel';
 import { DELIVERY_DECIDE_MUTATION, DeliveryChangeQueue } from '../components/DeliveryPanel';
 import { HumanReviewSection } from '../components/HumanReviewSection';
+import { PageBody, PageHeader } from '../components/layout';
 import { Btn } from '../components/Primitives';
+import { BulkActionBar, EmptyState, InlineError, LoadingState, SegmentedControl } from '../components/status';
 import { RespondToAgent } from '../components/RespondToAgent';
 import { useListKeys } from '../components/useListKeys';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
@@ -412,41 +414,44 @@ export function AttentionPage() {
   if (error && !data) {
     return (
       <div className="observation-page">
-        <div className="page-header"><h1 className="page-header__title">Needs you</h1></div>
-        <div className="empty-state" role="alert">
-          <h3>Could not load what needs you</h3>
-          <Btn variant="subtle" onClick={() => void refetch()}>Retry</Btn>
-        </div>
+        <PageHeader title="Needs you" />
+        <PageBody>
+          <div role="alert">
+            <EmptyState title="Could not load what needs you" action={<Btn variant="subtle" onClick={() => void refetch()}>Retry</Btn>} />
+          </div>
+        </PageBody>
       </div>
     );
   }
 
   return (
     <div className="observation-page attention-page">
-      <div className="page-header">
-        <h1 className="page-header__title">Needs you</h1>
-        <span className="observation-card__meta">{data ? `${data.attentionSummary.total} waiting on your decision` : ''}</span>
-        <div className="inbox-page__toggle" role="tablist" aria-label="Group by">
-          {(['kind', 'tree'] as const).map((key) => (
-            <button key={key} type="button" role="tab" aria-selected={view === key} className={view === key ? 'is-active' : ''} onClick={() => setView(key)}>
-              {key === 'kind' ? 'By kind' : 'By work tree'}
-            </button>
-          ))}
-        </div>
-        <div style={{ flex: 1 }} />
-        <span className="observation-card__meta">J/K move · A accept or commit · R reason · H snooze · Z undo · X select</span>
-      </div>
-      {loading && !data ? <p className="observation-empty">Loading…</p> : null}
+      <PageHeader
+        title="Needs you"
+        hint={data ? `${data.attentionSummary.total} waiting on your decision` : undefined}
+        actions={
+          <>
+          <span className="page-note">J/K move · A accept or commit · R reason · H snooze · Z undo · X select</span>
+          <SegmentedControl
+            aria-label="Group by"
+            semantics="tabs"
+            options={[{ value: 'kind', label: 'By kind' }, { value: 'tree', label: 'By work tree' }]}
+            value={view}
+            onChange={setView}
+          />
+          </>
+        }
+      />
+      <PageBody width="full">
+      {loading && !data ? <LoadingState>Loading…</LoadingState> : null}
       {data && allItems.length === 0 ? (
-        <div className="empty-state">
-          <h3>Nothing is waiting on your decision</h3>
-          <p>
-            What happened recently is in <Link to="/inbox">Activity</Link>.
-          </p>
-        </div>
+        <EmptyState
+          title="Nothing is waiting on your decision"
+          body={<>What happened recently is in <Link to="/inbox">Activity</Link>.</>}
+        />
       ) : null}
       {allItems.length > 0 ? (
-        <div className="page-content attention-layout">
+        <div className="attention-layout">
           <div className="attention-list" aria-label="Waiting on your decision">
             {sections.map((section) => {
               const isSectionParent = view === 'tree';
@@ -589,25 +594,9 @@ export function AttentionPage() {
                 refresh={refresh}
               />
             ) : (
-              <p className="observation-empty">Expand a parent group on the left to inspect its items.</p>
+              <EmptyState size="inline" title="Expand a parent group on the left to inspect its items." />
             )}
           </div>
-        </div>
-      ) : null}
-      {selected.length > 0 ? (
-        <div className="candidates-bulkbar" role="region" aria-label="Batch decisions">
-          <span className="candidates-bulkbar__count">{selected.length} selected</span>
-          {batchable.length > 0 ? (
-            <Btn variant="accent" disabled={batchPending} onClick={() => void runBatch()}>
-              {batchPending ? 'Deciding…' : `Accept or commit ${batchable.length}`}
-            </Btn>
-          ) : null}
-          {oneByOne > 0 ? (
-            <span className="observation-card__meta">
-              {oneByOne} of these need a decision one at a time; declining or returning needs a reason.
-            </span>
-          ) : null}
-          <Btn variant="ghost" onClick={() => setSelectedIds([])}>Clear</Btn>
         </div>
       ) : null}
       {batchResults.length > 0 ? (
@@ -615,13 +604,26 @@ export function AttentionPage() {
           <ul>
             {batchResults.map((result) => (
               <li key={result.id}>
-                <span className="mono">{result.label}</span> {result.message ? <span className="issue-relations__error">{result.message}</span> : 'done'}
+                <span className="mono">{result.label}</span> {result.message ? <InlineError role="none">{result.message}</InlineError> : 'done'}
               </li>
             ))}
           </ul>
           <Btn variant="ghost" onClick={() => setBatchResults([])}>Dismiss</Btn>
         </div>
       ) : null}
+      <BulkActionBar
+        aria-label="Batch decisions"
+        count={selected.length}
+        onClear={() => setSelectedIds([])}
+        status={oneByOne > 0 ? `${oneByOne} of these need a decision one at a time; declining or returning needs a reason.` : undefined}
+      >
+        {batchable.length > 0 ? (
+          <Btn variant="accent" disabled={batchPending} onClick={() => void runBatch()}>
+            {batchPending ? 'Deciding…' : `Accept or commit ${batchable.length}`}
+          </Btn>
+        ) : null}
+      </BulkActionBar>
+      </PageBody>
     </div>
   );
 }
@@ -739,7 +741,7 @@ function WorkContextDecision({
     await refresh();
   });
   const bundle = data?.workContext ?? null;
-  if (loading && !bundle) return <p className="observation-empty">Loading…</p>;
+  if (loading && !bundle) return <LoadingState>Loading…</LoadingState>;
   if (!bundle) return null;
 
   if (item.kind === 'CONTRACT_AMENDMENT') {
@@ -763,7 +765,7 @@ function WorkContextDecision({
   return (
     <>
       {run?.summary ? <p className="observation-card__body">{run.summary}</p> : null}
-      {agent ? <RespondToAgent workId={workId} agent={agent} /> : <p className="observation-empty">No agent to answer on this work.</p>}
+      {agent ? <RespondToAgent workId={workId} agent={agent} /> : <EmptyState size="inline" title="No agent to answer on this work." />}
     </>
   );
 }

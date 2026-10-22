@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@apollo/client/react';
 import { ACTOR_SET_SUCCESSOR_MUTATION, AGENT_OWNER_CANDIDATES_QUERY } from '../board/queries';
 import type { UserSummary } from '../board/types';
 import { Select } from './controls';
+import { InlineError } from './status';
 
 interface CandidatesData {
   users: { nodes: Array<Pick<UserSummary, 'id' | 'name' | 'email' | 'actorKind' | 'deactivatedAt'>> };
@@ -59,9 +60,9 @@ export function ActorSuccessorControl({
         ))}
       </Select>
       {error ? (
-        <span role="alert" className="issue-relations__error">
+        <InlineError>
           {error}
-        </span>
+        </InlineError>
       ) : null}
     </label>
   );

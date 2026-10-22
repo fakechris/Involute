@@ -125,10 +125,14 @@ import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
 import { ReportBugDialog } from '../components/ReportBugDialog';
 import { ReportIncidentDialog } from '../components/ReportIncidentDialog';
 import { BacklogPage } from './BacklogPage';
-import { IcoFilter, IcoPlus, IcoBug, IcoBell, IcoList, IcoBoard, IcoClose, IcoChevR, IcoProject } from '../components/Icons';
+import { IcoFilter, IcoPlus, IcoBug, IcoBell, IcoList, IcoBoard, IcoChevR, IcoProject } from '../components/Icons';
 import { Btn, PriorityIcon } from '../components/Primitives';
 import { isSlashKey } from '../lib/keys';
 import { Select } from '../components/controls';
+import { PageBody, PageHeader, PageToolbar } from '../components/layout';
+import { FilterChip, FilterMenu, FilterSearch, SavedViewControl, SortControl } from '../components/filters';
+import { BulkActionBar, LoadingState, SegmentedControl } from '../components/status';
+import { WORK_FILTER_KEYS, WorkFilterBar, filtersToIql, hasWorkFilters, joinIql, useWorkFilters } from '../components/WorkFilterBar';
 
 const ISSUE_PAGE_SIZE = 200;
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
@@ -234,20 +238,24 @@ export function BoardPage() {
     return { eq: rawProjectKey };
   }, [rawProjectKey]);
 
+  // Type / kind / priority / owner / text from the shared filter bar (URL
+  // params, INV-1077) join the board's own query as IQL, so the server filters.
+  const workFilterState = useWorkFilters();
+  const effectiveBoardQuery = joinIql(boardViewState.query, filtersToIql(workFilterState.filters));
   const boardQueryVariables = useMemo<BoardPageQueryVariables>(
     () => ({
       first: ISSUE_PAGE_SIZE,
       ...(queryTeamKey ? { teamFilter: { key: { eq: queryTeamKey } } } : {}),
-      ...(looksLikeIql(boardViewState.query) ? { query: boardViewState.query.trim() } : {}),
+      ...(looksLikeIql(effectiveBoardQuery) ? { query: effectiveBoardQuery } : {}),
       filter: {
         ...buildCommittedIssueFilter(queryTeamKey, repositoryFilter),
-        ...(boardViewState.query.trim() && !looksLikeIql(boardViewState.query) ? { text: boardViewState.query.trim() } : {}),
+        ...(effectiveBoardQuery && !looksLikeIql(effectiveBoardQuery) ? { text: effectiveBoardQuery } : {}),
         ...(boardViewState.stateIds.length ? { stateIds: boardViewState.stateIds } : {}),
         ...(boardViewState.assigneeIds.length ? { assigneeIds: boardViewState.assigneeIds } : {}),
         ...(boardViewState.labelIds.length ? { labelIds: boardViewState.labelIds } : {}),
       },
     }),
-    [queryTeamKey, repositoryFilter, boardViewState.query, boardViewState.stateIds, boardViewState.assigneeIds, boardViewState.labelIds],
+    [queryTeamKey, repositoryFilter, effectiveBoardQuery, boardViewState.stateIds, boardViewState.assigneeIds, boardViewState.labelIds],
   );
   const location = useLocation();
   const isBacklogView = location.pathname === '/backlog';
@@ -268,7 +276,7 @@ export function BoardPage() {
   // IQL can depend on graph joins and viewer identity unavailable locally.
   // Re-check membership on the server after mutations instead of admitting
   // local overlays into a result set they may no longer match.
-  const iqlMutationOptions = looksLikeIql(boardViewState.query)
+  const iqlMutationOptions = looksLikeIql(effectiveBoardQuery)
     ? { refetchQueries: ['BoardPage'], awaitRefetchQueries: true }
     : undefined;
   const [runIssueUpdate] = useMutation<IssueUpdateMutationData, IssueUpdateMutationVariables>(
@@ -401,7 +409,8 @@ export function BoardPage() {
     (boardViewState.projectKey ? 1 : 0) +
     boardViewState.assigneeIds.length +
     boardViewState.stateIds.length +
-    boardViewState.labelIds.length;
+    boardViewState.labelIds.length +
+    WORK_FILTER_KEYS.filter((key) => workFilterState.filters[key] !== '').length;
   const [filterBarVisible, setFilterBarVisible] = useState(() => activeFilterCount > 0);
   const clearAllFiltersRef = useRef<() => void>(() => undefined);
   const [collapsedColumns, setCollapsedColumns] = useState<Record<string, boolean>>(() => {
@@ -1733,7 +1742,19 @@ export function BoardPage() {
 
   clearAllFiltersRef.current = () => {
     resetBoardViewState();
-    handleSelectProject(null);
+    // One URL update for the project and the shared filters, so neither
+    // write overwrites the other.
+    setResolvedMapping(null);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('project');
+        for (const key of WORK_FILTER_KEYS) next.delete(key);
+        return next;
+      },
+      { replace: true },
+    );
+    setBoardViewState((s) => ({ ...s, projectKey: null }));
   };
 
   function resetBoardViewState() {
@@ -2582,12 +2603,7 @@ export function BoardPage() {
 
     return (
       <main className="board-page board-page--state">
-        <header className="app-shell__header">
-          <div>
-            <p className="app-shell__eyebrow">Involute</p>
-            <h1>Board</h1>
-          </div>
-        </header>
+        <PageHeader title="Board" />
         <BootstrapErrorNotice state={errorState} />
       </main>
     );
@@ -2595,6 +2611,338 @@ export function BoardPage() {
 
   const peekIssue = peekIssueId ? boardVisibleIssues.find((issue) => issue.id === peekIssueId) ?? null : null;
   const pickerTitles = { state: 'Change status', priority: 'Set priority', assignee: 'Assign to', label: 'Toggle label' } as const;
+  const headerActions = (
+    <>
+      {isTeamSwitching ? (
+        <span className="page-note" aria-live="polite">
+          Switching to {teams.find((team) => team.key === pendingTeamKey)?.name ?? pendingTeamKey}…
+        </span>
+      ) : null}
+      {teams.length > 1 ? (
+        <Select
+          size="sm"
+          aria-label="Select team"
+          value={pendingTeamKey ?? activeTeamKey ?? selectedTeam?.key ?? ''}
+          onChange={(event) => {
+            const nextTeamKey = event.target.value;
+            if (nextTeamKey === activeTeamKey) {
+              setPendingTeamKey(null);
+              return;
+            }
+            setPendingTeamKey(nextTeamKey);
+          }}
+        >
+          {teams.map((team) => (
+            <option key={team.id} value={team.key}>{team.name}</option>
+          ))}
+        </Select>
+      ) : null}
+      {!isBacklogView ? (
+        <Btn variant="ghost" icon={<IcoFilter size={14} />} size="sm" onClick={() => setFilterBarVisible((v) => !v)}>{filterBarVisible ? 'Hide filters' : 'Filter'}</Btn>
+      ) : null}
+      {!isBacklogView && !filterBarVisible && activeFilterCount > 0 ? (
+        <span className="board-filter-indicator" role="status">
+          <button type="button" className="board-filter-indicator__open" onClick={() => setFilterBarVisible(true)}>
+            {activeFilterCount} {activeFilterCount === 1 ? 'filter' : 'filters'}
+          </button>
+          <button type="button" className="board-filter-indicator__clear" aria-label="Clear all filters" title="Clear all filters (⇧F)" onClick={() => clearAllFiltersRef.current()}>
+            Clear
+          </button>
+        </span>
+      ) : null}
+      {canWriteTeam ? (
+        <>
+          <span className="page-header__divider" aria-hidden="true" />
+          <Btn
+            variant="subtle"
+            icon={<IcoPlus size={12} />}
+            kbd="C"
+            size="sm"
+            onClick={() => openCreateDialog()}
+          >Create issue</Btn>
+          <Btn
+            variant="ghost"
+            icon={<IcoBug size={12} />}
+            size="sm"
+            onClick={() => {
+              setMutationError(null);
+              setIsReportBugOpen(true);
+            }}
+          >Report bug</Btn>
+          <Btn
+            variant="ghost"
+            icon={<IcoBell size={12} />}
+            size="sm"
+            onClick={() => {
+              setMutationError(null);
+              setIsReportIncidentOpen(true);
+            }}
+          >Report incident</Btn>
+        </>
+      ) : null}
+    </>
+  );
+
+  // Project scope: one combobox with quick pills, on the Board and the Backlog alike.
+  const projectFilter = availableProjects.length > 0 ? (
+    <ProjectFilterCombobox
+      projects={availableProjects}
+      selectedProjectKey={rawProjectKey}
+      totalCount={queryData?.projectSummary?.totalCount ?? visibleIssues.length}
+      onSelectProject={handleSelectProject}
+      showQuickPills
+    />
+  ) : null;
+
+  const userName = (userId: string) => {
+    if (userId === 'unassigned') return 'Unassigned';
+    const user = users.find((candidate) => candidate.id === userId);
+    return user?.name ?? user?.email ?? userId;
+  };
+  const teamStates = selectedTeam?.states.nodes ?? [];
+  const hasBoardFilters = Boolean(
+    boardViewState.query || boardViewState.projectKey || boardViewState.assigneeIds.length > 0
+    || boardViewState.stateIds.length > 0 || boardViewState.labelIds.length > 0 || hasWorkFilters(workFilterState.filters),
+  );
+
+  const boardFilters = filterBarVisible ? (
+    <>
+      <FilterSearch
+        ref={boardSearchInputRef}
+        aria-label="Search board issues"
+        placeholder="Filter by identifier, title…"
+        value={boardViewState.query}
+        shortcut="/"
+        blurOnEmptyEscape
+        onChange={(query) => {
+          setBoardViewState((currentState) => ({ ...currentState, query }));
+          setActiveSavedBoardViewId('');
+        }}
+        trailing={(
+          // Search across all work, including candidates outside this board.
+          <button type="button" className="search-all-work" onClick={() => openWorkSearch(boardViewState.query.trim())}>
+            Search all work →
+          </button>
+        )}
+      />
+      <WorkFilterBar {...workFilterState} />
+      <FilterMenu
+        label="States"
+        options={teamStates.map((state) => ({ value: state.id, label: state.name }))}
+        selected={boardViewState.stateIds}
+        onToggle={(stateId) => toggleBoardFilterValue('stateIds', stateId)}
+      />
+      <FilterMenu
+        label="Labels"
+        options={labels.map((label) => ({ value: label.id, label: label.name }))}
+        selected={boardViewState.labelIds}
+        onToggle={(labelId) => toggleBoardFilterValue('labelIds', labelId)}
+      />
+      <FilterMenu
+        label="Assignees"
+        options={[
+          { value: 'unassigned', label: 'Unassigned' },
+          ...users.map((user) => ({ value: user.id, label: user.name ?? user.email ?? user.id, 'aria-label': user.name ?? user.email ?? user.id })),
+        ]}
+        selected={boardViewState.assigneeIds}
+        onToggle={(assigneeId) => toggleBoardFilterValue('assigneeIds', assigneeId)}
+      />
+      {boardViewState.projectKey ? (
+        <FilterChip removeLabel={`Remove Project: ${boardViewState.projectKey}`} onRemove={() => handleSelectProject(null)}>
+          Project: {boardViewState.projectKey}
+        </FilterChip>
+      ) : null}
+      {boardViewState.stateIds.map((stateId) => {
+        const stateName = teamStates.find((state) => state.id === stateId)?.name ?? stateId;
+        return (
+          <FilterChip key={stateId} removeLabel={`Remove State: ${stateName}`} onRemove={() => toggleBoardFilterValue('stateIds', stateId)}>
+            State: {stateName}
+          </FilterChip>
+        );
+      })}
+      {boardViewState.assigneeIds.map((assigneeId) => (
+        <FilterChip key={assigneeId} removeLabel={`Remove Assignee: ${userName(assigneeId)}`} onRemove={() => toggleBoardFilterValue('assigneeIds', assigneeId)}>
+          Assignee: {userName(assigneeId)}
+        </FilterChip>
+      ))}
+      {boardViewState.labelIds.map((labelId) => {
+        const labelName = labels.find((label) => label.id === labelId)?.name ?? labelId;
+        return (
+          <FilterChip key={labelId} removeLabel={`Remove Label: ${labelName}`} onRemove={() => toggleBoardFilterValue('labelIds', labelId)}>
+            Label: {labelName}
+          </FilterChip>
+        );
+      })}
+      {hasBoardFilters ? (
+        <button type="button" className="filter-clear" title="Clear all filters (⇧F)" onClick={() => clearAllFiltersRef.current()}>Clear all</button>
+      ) : null}
+      {activeSavedBoardViewId ? (
+        <span className="page-note">
+          Loaded view: {savedBoardViews.find((v) => v.id === activeSavedBoardViewId)?.name ?? 'Unknown'}
+        </span>
+      ) : null}
+    </>
+  ) : null;
+
+  const boardViewControls = (
+    <>
+      {filterBarVisible ? (
+        <>
+          <SortControl
+            sort={{
+              'aria-label': 'Sort board by',
+              value: boardViewState.sortField,
+              options: [
+                { value: 'updatedAt', label: 'Updated' },
+                { value: 'createdAt', label: 'Created' },
+                { value: 'priority', label: 'Priority' },
+                { value: 'identifier', label: 'ID' },
+                { value: 'title', label: 'Title' },
+              ],
+              onChange: (sortField: BoardViewState['sortField']) => {
+                setBoardViewState((currentState) => ({ ...currentState, sortField }));
+                setActiveSavedBoardViewId('');
+              },
+            }}
+            direction={{
+              'aria-label': 'Sort board direction',
+              value: boardViewState.sortDirection,
+              onChange: (sortDirection) => {
+                setBoardViewState((currentState) => ({ ...currentState, sortDirection }));
+                setActiveSavedBoardViewId('');
+              },
+            }}
+            group={{
+              'aria-label': 'Group board by',
+              value: boardViewState.groupBy,
+              options: [
+                { value: 'status', label: 'Status' },
+                { value: 'project', label: 'Project' },
+                { value: 'priority', label: 'Priority' },
+                { value: 'assignee', label: 'Assignee' },
+                { value: 'label', label: 'Label' },
+                { value: 'none', label: 'None' },
+              ],
+              onChange: (groupBy: BoardGroupBy) => {
+                setBoardViewState((currentState) => ({ ...currentState, groupBy }));
+                setActiveSavedBoardViewId('');
+                setInlineCreateGroupId(null);
+              },
+            }}
+          />
+          <FilterMenu
+            label="Columns"
+            align="end"
+            hideCount
+            options={teamStates.map((state) => ({ value: state.id, label: state.name, 'aria-label': `Toggle ${state.name} column` }))}
+            selected={teamStates.filter((state) => !collapsedColumns[state.id]).map((state) => state.id)}
+            onToggle={toggleColumnCollapse}
+          />
+          <SavedViewControl
+            aria-label="Load saved board view"
+            placeholder="Views"
+            views={savedBoardViews}
+            activeViewId={activeSavedBoardViewId}
+            onLoad={(viewId) => {
+              setActiveSavedBoardViewId(viewId);
+              const view = savedBoardViews.find((v) => v.id === viewId);
+              if (view) { dispatchApplyBoardView({ state: view.state, viewId: view.id }); }
+            }}
+            onSave={() => {
+              const name = window.prompt('View name');
+              if (!name) return;
+              const nextView: SavedBoardView = { id: crypto.randomUUID(), name, state: { ...boardViewState } };
+              const nextViews = [...savedBoardViews, nextView];
+              setSavedBoardViews(nextViews);
+              writeSavedBoardViews(activeTeamKey, nextViews);
+              setActiveSavedBoardViewId(nextView.id);
+            }}
+            onDelete={() => {
+              const nextViews = savedBoardViews.filter((view) => view.id !== activeSavedBoardViewId);
+              setSavedBoardViews(nextViews);
+              writeSavedBoardViews(activeTeamKey, nextViews);
+              setActiveSavedBoardViewId('');
+            }}
+            onClear={() => { resetBoardViewState(); setActiveSavedBoardViewId(''); }}
+          />
+        </>
+      ) : null}
+      <SegmentedControl
+        aria-label="Board layout"
+        value={boardViewState.viewMode}
+        options={[
+          { value: 'list' as BoardViewMode, label: 'List', icon: <IcoList size={12} /> },
+          { value: 'board' as BoardViewMode, label: 'Board', icon: <IcoBoard size={12} /> },
+        ]}
+        onChange={(viewMode) => {
+          setBoardViewState((s) => ({ ...s, viewMode }));
+          setInlineCreateGroupId(null);
+        }}
+      />
+    </>
+  );
+
+  const notices = (
+    <>
+      {mutationError ? (
+        <section className="page-notice page-notice--error" role="alert">
+          <p className="page-notice__text">{mutationError}</p>
+        </section>
+      ) : null}
+      <BoardLoadMoreNotice
+        errorMessage={loadMoreIssuesError}
+        hasMoreIssues={hasMoreIssues}
+        isLoadingMoreIssues={isLoadingMoreIssues}
+        loadedCount={visibleIssues.length}
+        scopeLabel={rawProjectKey ? 'in this project' : 'in this team'}
+        totalCount={
+          rawProjectKey
+            ? (availableProjects.find(
+                (p) =>
+                  p.key.toLowerCase() === rawProjectKey.toLowerCase() ||
+                  p.name.toLowerCase() === rawProjectKey.toLowerCase(),
+              )?.issueCount ?? undefined)
+            : (queryData?.projectSummary?.totalCount ?? undefined)
+        }
+        onLoadMore={() => void handleLoadMoreIssues()}
+      />
+    </>
+  );
+
+  const bulkActionBar = (
+    <BulkActionBar count={selectedIssueIds.length} onSelectAll={selectAllVisibleIssues} onClear={() => setSelectedIssueIds([])}>
+      <Select size="sm" aria-label="Bulk move selected issues to state" value={bulkTargetStateId} onChange={(event) => setBulkTargetStateId(event.target.value)}>
+        <option value="">Move to…</option>
+        {teamStates.map((state) => (<option key={state.id} value={state.id}>{state.name}</option>))}
+      </Select>
+      {bulkTargetStateId ? (
+        <Btn variant="accent" disabled={isSavingState} onClick={() => void applyBulkStateChange()}>Apply to selected</Btn>
+      ) : null}
+      <Select size="sm" aria-label="Bulk assign selected issues" value={bulkAssigneeId} onChange={(event) => setBulkAssigneeId(event.target.value)}>
+        <option value="">Assign to…</option>
+        <option value="unassigned">Unassigned</option>
+        {users.map((user) => (<option key={user.id} value={user.id}>{user.name ?? user.email ?? user.id}</option>))}
+      </Select>
+      {bulkAssigneeId ? (
+        <Btn variant="subtle" disabled={isSavingState} onClick={() => void applyBulkAssigneeChange()}>Apply assignee</Btn>
+      ) : null}
+      <Select size="sm" aria-label="Bulk add label to selected issues" value={bulkLabelId} onChange={(event) => setBulkLabelId(event.target.value)}>
+        <option value="">Add label…</option>
+        {labels.map((label) => (<option key={label.id} value={label.id}>{label.name}</option>))}
+      </Select>
+      {bulkLabelId ? (
+        <Btn variant="subtle" disabled={isSavingState} onClick={() => void applyBulkLabelAdd()}>Add label</Btn>
+      ) : null}
+      <Select size="sm" aria-label="Bulk remove label from selected issues" value={bulkRemoveLabelId} onChange={(event) => setBulkRemoveLabelId(event.target.value)}>
+        <option value="">Remove label…</option>
+        {labels.map((label) => (<option key={label.id} value={label.id}>{label.name}</option>))}
+      </Select>
+      {bulkRemoveLabelId ? (
+        <Btn variant="subtle" disabled={isSavingState} onClick={() => void applyBulkLabelRemove()}>Remove label</Btn>
+      ) : null}
+    </BulkActionBar>
+  );
+
 
   return (
     <main className="board-page">
@@ -2608,7 +2956,7 @@ export function BoardPage() {
       ) : null}
       {peekIssue ? (
         <aside className="issue-peek" role="dialog" aria-label={`Peek ${peekIssue.identifier}`}>
-          <div className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>{peekIssue.identifier}</div>
+          <div className="mono issue-peek__id">{peekIssue.identifier}</div>
           <strong>{peekIssue.title}</strong>
           <div className="issue-peek__meta">
             {[peekIssue.state.name, peekIssue.assignee?.name ?? 'Unassigned', ['No priority', 'Urgent', 'High', 'Medium', 'Low'][peekIssue.priority] ?? '', ...peekIssue.labels.nodes.map((label) => label.name)].filter(Boolean).join(' · ')}
@@ -2617,514 +2965,57 @@ export function BoardPage() {
           <div className="issue-peek__meta">Space or Esc to close · Enter to open</div>
         </aside>
       ) : null}
-      <header className="board-page__header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, whiteSpace: 'nowrap' }}>
-          {selectedTeam ? (
-            <Link
-              to={`/?team=${encodeURIComponent(selectedTeam.key)}`}
-              className="mono"
-              style={{
-                fontSize: 12, fontWeight: 500, padding: '1px 5px', borderRadius: 3,
-                background: 'var(--bg-hover)', border: '1px solid var(--border)', color: 'var(--fg-muted)',
-                textDecoration: 'none',
-              }}
-            >
-              {selectedTeam.key}
-            </Link>
-          ) : null}
-          <span style={{ fontSize: 15, fontWeight: 500, color: 'var(--fg)' }}>
-            {selectedTeam?.name ?? 'Involute'}
-          </span>
-          <span style={{ color: 'var(--fg-faint)', display: 'inline-flex' }}>
-            <IcoChevR size={12} />
-          </span>
-          <h1 style={{ fontSize: 15, fontWeight: 400, color: 'var(--fg-muted)', margin: 0 }}>
-            {activeProject ? activeProject.name : isBacklogView ? 'Backlog' : 'All issues'}
-          </h1>
-          <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)', marginLeft: 4 }}>
-            {activeProject
-              ? activeProject.issueCount
-              : (queryData?.projectSummary?.totalCount ?? boardVisibleIssues.length)}
-          </span>
-        </div>
-        <p className="app-shell__subtext" style={{ fontSize: 13, color: 'var(--fg-dim)', margin: 0 }}>
-          {isBacklogView
-            ? `List view for ${selectedTeam?.name ?? 'your workspace'} issues.`
-            : `Workflow overview for ${selectedTeam?.name ?? 'your workspace'}.`}
-        </p>
-        {isTeamSwitching ? (
-          <span style={{ fontSize: 13, color: 'var(--fg-dim)' }} aria-live="polite">
-            Switching to {teams.find((team) => team.key === pendingTeamKey)?.name ?? pendingTeamKey}…
-          </span>
-        ) : null}
-        <div style={{ flex: 1 }} />
-        {teams.length > 1 ? (
-          <Select
-            size="sm"
-            aria-label="Select team"
-            value={pendingTeamKey ?? activeTeamKey ?? selectedTeam?.key ?? ''}
-            onChange={(event) => {
-              const nextTeamKey = event.target.value;
-              if (nextTeamKey === activeTeamKey) {
-                setPendingTeamKey(null);
-                return;
-              }
-              setPendingTeamKey(nextTeamKey);
-            }}
-          >
-            {teams.map((team) => (
-              <option key={team.id} value={team.key}>{team.name}</option>
-            ))}
-          </Select>
-        ) : null}
-        <Btn variant="ghost" icon={<IcoFilter size={14} />} size="sm" onClick={() => setFilterBarVisible((v) => !v)}>{filterBarVisible ? 'Hide filters' : 'Filter'}</Btn>
-        {!isBacklogView && !filterBarVisible && activeFilterCount > 0 ? (
-          <span className="board-filter-indicator" role="status">
-            <button type="button" className="board-filter-indicator__open" onClick={() => setFilterBarVisible(true)}>
-              {activeFilterCount} {activeFilterCount === 1 ? 'filter' : 'filters'}
-            </button>
-            <button type="button" className="board-filter-indicator__clear" aria-label="Clear all filters" title="Clear all filters (⇧F)" onClick={() => clearAllFiltersRef.current()}>
-              Clear
-            </button>
-          </span>
-        ) : null}
-        <div style={{ width: 1, height: 16, background: 'var(--border)' }} />
-        {canWriteTeam ? (
+      <PageHeader
+        back={(
           <>
-            <Btn
-              variant="subtle"
-              icon={<IcoPlus size={12} />}
-              kbd="C"
-              size="sm"
-              onClick={() => openCreateDialog()}
-            >Create issue</Btn>
-            <Btn
-              variant="ghost"
-              icon={<IcoBug size={12} />}
-              size="sm"
-              onClick={() => {
-                setMutationError(null);
-                setIsReportBugOpen(true);
-              }}
-            >Report bug</Btn>
-            <Btn
-              variant="ghost"
-              icon={<IcoBell size={12} />}
-              size="sm"
-              onClick={() => {
-                setMutationError(null);
-                setIsReportIncidentOpen(true);
-              }}
-            >Report incident</Btn>
+            {selectedTeam ? (
+              <Link to={`/?team=${encodeURIComponent(selectedTeam.key)}`} className="mono page-header__crumb-key">
+                {selectedTeam.key}
+              </Link>
+            ) : null}
+            <span className="page-header__crumb">{selectedTeam?.name ?? 'Involute'}</span>
+            <span className="page-header__crumb-sep" aria-hidden="true"><IcoChevR size={12} /></span>
           </>
-        ) : null}
-      </header>
-
-      {availableProjects.length > 0 && (
-        <div className="board-project-bar" role="navigation" aria-label="Filter by project">
-          <ProjectFilterCombobox
-            projects={availableProjects}
-            selectedProjectKey={rawProjectKey}
-            totalCount={queryData?.projectSummary?.totalCount ?? visibleIssues.length}
-            onSelectProject={handleSelectProject}
-            showQuickPills={false}
-          />
-          <div className="board-project-legend" aria-label="Project legend">
-            {availableProjects.map((p) => {
-              const isPillActive = Boolean(rawProjectKey && (rawProjectKey.toLowerCase() === p.key.toLowerCase() || rawProjectKey.toLowerCase() === p.name.toLowerCase()));
-              const colorClass = getProjectColorClass(p.key);
-              const shortName = p.key.includes('/') ? p.key.split('/')[1] : p.name;
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  className={`board-project-legend__pill${isPillActive ? ' board-project-legend__pill--active' : ''}`}
-                  onClick={() => handleSelectProject(isPillActive ? null : p.key)}
-                  title={`${p.title || p.name} (${p.issueCount} issues) · 点击${isPillActive ? '取消' : ''}过滤`}
-                >
-                  <span
-                    className={`board-project-legend__dot ${colorClass ?? ''}`}
-                  />
-                  <span>{shortName}</span>
-                  <span style={{ opacity: 0.65, fontSize: 10 }}>{p.issueCount}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {mutationError ? (
-        <section className="shell-notice shell-notice--error" role="alert">
-          <p>{mutationError}</p>
-        </section>
-      ) : null}
-
-      {!isBacklogView && filterBarVisible ? (
-        <>
-          <section style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '4px var(--pad-x, var(--content-gutter))',
-            borderBottom: '1px solid var(--border-subtle)',
-            flexWrap: 'wrap', background: 'var(--bg)', flexShrink: 0,
-          }} aria-label="Board filters">
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '0 8px', height: 24, minWidth: 220,
-              border: '1px solid var(--border)', borderRadius: 'var(--r-2)',
-            }}>
-              <span style={{ color: 'var(--fg-dim)', display: 'inline-flex' }}>
-                <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.3"/><path d="m9 9 3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-              </span>
-              <input
-                ref={boardSearchInputRef}
-                aria-label="Search board issues"
-                placeholder="Filter by identifier, title…"
-                value={boardViewState.query}
-                onChange={(event) => {
-                  setBoardViewState((currentState) => ({
-                    ...currentState,
-                    query: event.target.value,
-                  }));
-                  setActiveSavedBoardViewId('');
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== 'Escape') return;
-                  event.preventDefault();
-                  // First Esc clears the text, the next one leaves the box.
-                  if (boardViewState.query) {
-                    setBoardViewState((currentState) => ({ ...currentState, query: '' }));
-                    setActiveSavedBoardViewId('');
-                  } else {
-                    event.currentTarget.blur();
-                  }
-                }}
-                style={{ flex: 1, fontSize: 14, color: 'var(--fg)', background: 'transparent', height: 22, border: 'none', outline: 'none' }}
-              />
-              {boardViewState.query.trim() ? (
-                // Search across all work, including candidates outside this board.
-                <button
-                  type="button"
-                  className="search-all-work"
-                  onClick={() => openWorkSearch(boardViewState.query.trim())}
-                >
-                  Search all work →
-                </button>
-              ) : null}
-              <kbd>/</kbd>
-            </div>
-
-            <details style={{ position: 'relative', fontSize: 13 }}>
-              <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>States</summary>
-              <fieldset style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140 }}>
-                {(selectedTeam?.states.nodes ?? []).map((state) => (
-                  <label key={state.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={boardViewState.stateIds.includes(state.id)} onChange={() => toggleBoardFilterValue('stateIds', state.id)} aria-label={state.name} />
-                    {state.name}
-                  </label>
-                ))}
-              </fieldset>
-            </details>
-
-            <details style={{ position: 'relative', fontSize: 13 }}>
-              <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>Labels</summary>
-              <fieldset style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140 }}>
-                {labels.map((label) => (
-                  <label key={label.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={boardViewState.labelIds.includes(label.id)} onChange={() => toggleBoardFilterValue('labelIds', label.id)} aria-label={label.name} />
-                    {label.name}
-                  </label>
-                ))}
-              </fieldset>
-            </details>
-
-            <details style={{ position: 'relative', fontSize: 13 }}>
-              <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>Assignees</summary>
-              <fieldset style={{ position: 'absolute', top: '100%', left: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={boardViewState.assigneeIds.includes('unassigned')} onChange={() => toggleBoardFilterValue('assigneeIds', 'unassigned')} aria-label="Unassigned" />
-                  Unassigned
-                </label>
-                {users.map((user) => (
-                  <label key={user.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={boardViewState.assigneeIds.includes(user.id)} onChange={() => toggleBoardFilterValue('assigneeIds', user.id)} aria-label={user.name ?? user.email ?? user.id} />
-                    {user.name ?? user.email}
-                  </label>
-                ))}
-              </fieldset>
-            </details>
-
-            {boardViewState.projectKey ? (
-              <button
-                type="button"
-                aria-label={`Remove Project: ${boardViewState.projectKey}`}
-                onClick={() => handleSelectProject(null)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
-                  fontSize: 13, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
-                  background: 'var(--bg-active)', color: 'var(--fg)', cursor: 'pointer',
-                }}
-              >
-                Project: {boardViewState.projectKey}
-                <span style={{ color: 'var(--fg-dim)', display: 'inline-flex', marginLeft: 2 }}><IcoClose size={10} /></span>
-              </button>
-            ) : null}
-
-            {boardViewState.stateIds.map((stateId) => {
-              const state = selectedTeam?.states.nodes.find((s) => s.id === stateId);
-              return (
-                <button key={stateId} type="button" aria-label={`Remove State: ${state?.name ?? stateId}`} onClick={() => toggleBoardFilterValue('stateIds', stateId)} style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
-                  fontSize: 13, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
-                  background: 'var(--bg-active)', color: 'var(--fg)', cursor: 'pointer',
-                }}>{state?.name ?? stateId}
-                  <span style={{ color: 'var(--fg-dim)', display: 'inline-flex', marginLeft: 2 }}><IcoClose size={10} /></span>
-                </button>
-              );
-            })}
-
-            {boardViewState.assigneeIds.map((assigneeId) => {
-              const user = users.find((u) => u.id === assigneeId);
-              return (
-                <button key={assigneeId} type="button" aria-label={`Remove Assignee: ${assigneeId === 'unassigned' ? 'Unassigned' : (user?.name ?? user?.email ?? assigneeId)}`} onClick={() => toggleBoardFilterValue('assigneeIds', assigneeId)} style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
-                  fontSize: 13, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
-                  background: 'var(--bg-active)', color: 'var(--fg)', cursor: 'pointer',
-                }}>
-                  Assignee: {assigneeId === 'unassigned' ? 'Unassigned' : (user?.name ?? user?.email ?? assigneeId)}
-                  <span style={{ color: 'var(--fg-dim)', display: 'inline-flex', marginLeft: 2 }}><IcoClose size={10} /></span>
-                </button>
-              );
-            })}
-
-            {boardViewState.labelIds.map((labelId) => {
-              const label = labels.find((l) => l.id === labelId);
-              return (
-                <button key={labelId} type="button" aria-label={`Remove Label: ${label?.name ?? labelId}`} onClick={() => toggleBoardFilterValue('labelIds', labelId)} style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px',
-                  fontSize: 13, fontWeight: 500, border: '1px solid var(--border-strong)', borderRadius: 11,
-                  background: 'var(--bg-active)', color: 'var(--fg)', cursor: 'pointer',
-                }}>
-                  Label: {label?.name ?? labelId}
-                  <span style={{ color: 'var(--fg-dim)', display: 'inline-flex', marginLeft: 2 }}><IcoClose size={10} /></span>
-                </button>
-              );
-            })}
-
-            {(boardViewState.query || boardViewState.projectKey || boardViewState.assigneeIds.length > 0 || boardViewState.stateIds.length > 0 || boardViewState.labelIds.length > 0) ? (
-              <button type="button" title="Clear all filters (⇧F)" onClick={() => clearAllFiltersRef.current()} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 4, height: 22, padding: '0 8px',
-                fontSize: 13, fontWeight: 500, color: 'var(--fg-dim)', cursor: 'pointer',
-                background: 'transparent', border: 'none',
-              }}>Clear all</button>
-            ) : null}
-
-            {activeSavedBoardViewId ? (
-              <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
-                Loaded view: {savedBoardViews.find((v) => v.id === activeSavedBoardViewId)?.name ?? 'Unknown'}
-              </span>
-            ) : null}
-
-            <div style={{ flex: 1 }} />
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 13, color: 'var(--fg-dim)' }}>Sort</span>
-              <Select
-                size="sm"
-                aria-label="Sort board by"
-                value={boardViewState.sortField}
-                onChange={(event) => {
-                  setBoardViewState((currentState) => ({
-                    ...currentState,
-                    sortField: event.target.value as BoardViewState['sortField'],
-                  }));
-                  setActiveSavedBoardViewId('');
-                }}
-              >
-                <option value="updatedAt">Updated</option>
-                <option value="createdAt">Created</option>
-                <option value="priority">Priority</option>
-                <option value="identifier">ID</option>
-                <option value="title">Title</option>
-              </Select>
-              <Select
-                size="sm"
-                aria-label="Sort board direction"
-                value={boardViewState.sortDirection}
-                onChange={(event) => {
-                  setBoardViewState((currentState) => ({
-                    ...currentState,
-                    sortDirection: event.target.value as 'asc' | 'desc',
-                  }));
-                  setActiveSavedBoardViewId('');
-                }}
-              >
-                <option value="asc">Asc</option>
-                <option value="desc">Desc</option>
-              </Select>
-            </div>
-
-            <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-              <span style={{ fontSize: 13, color: 'var(--fg-dim)', marginRight: 4 }}>Group</span>
-              <Select
-                size="sm"
-                aria-label="Group board by"
-                value={boardViewState.groupBy}
-                onChange={(event) => {
-                  setBoardViewState((currentState) => ({
-                    ...currentState,
-                    groupBy: event.target.value as BoardGroupBy,
-                  }));
-                  setActiveSavedBoardViewId('');
-                  setInlineCreateGroupId(null);
-                }}
-              >
-                <option value="status">Status</option>
-                <option value="project">Project</option>
-                <option value="priority">Priority</option>
-                <option value="assignee">Assignee</option>
-                <option value="label">Label</option>
-                <option value="none">None</option>
-              </Select>
-            </div>
-
-            <details style={{ position: 'relative', fontSize: 13 }}>
-              <summary style={{ cursor: 'pointer', padding: '2px 8px', borderRadius: 'var(--r-1)', color: 'var(--fg-muted)' }}>Columns</summary>
-              <fieldset style={{ position: 'absolute', top: '100%', right: 0, zIndex: 10, background: 'var(--bg-raised)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 8, display: 'flex', flexDirection: 'column', gap: 4, minWidth: 160 }}>
-                {(selectedTeam?.states.nodes ?? []).map((state) => (
-                  <label key={state.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={!collapsedColumns[state.id]} onChange={() => toggleColumnCollapse(state.id)} aria-label={`Toggle ${state.name} column`} />
-                    {state.name}
-                  </label>
-                ))}
-              </fieldset>
-            </details>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginLeft: 4 }}>
-              <button type="button" onClick={() => { const name = window.prompt('View name'); if (name) { const nextView: SavedBoardView = { id: crypto.randomUUID(), name, state: { ...boardViewState } }; const nextViews = [...savedBoardViews, nextView]; setSavedBoardViews(nextViews); writeSavedBoardViews(activeTeamKey, nextViews); setActiveSavedBoardViewId(nextView.id); } }} style={{ height: 22, padding: '0 6px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 'var(--r-2)', background: 'transparent', color: 'var(--fg-muted)', cursor: 'pointer' }}>Save view</button>
-              <button type="button" onClick={() => { resetBoardViewState(); setActiveSavedBoardViewId(''); }} style={{ height: 22, padding: '0 6px', fontSize: 13, border: 'none', background: 'transparent', color: 'var(--fg-dim)', cursor: 'pointer' }}>Clear</button>
-              <Select
-                size="sm"
-                aria-label="Load saved board view"
-                value={activeSavedBoardViewId}
-                onChange={(event) => {
-                  const viewId = event.target.value;
-                  setActiveSavedBoardViewId(viewId);
-                  const view = savedBoardViews.find((v) => v.id === viewId);
-                  if (view) { dispatchApplyBoardView({ state: view.state, viewId: view.id }); }
-                }}
-              >
-                <option value="">Views</option>
-                {savedBoardViews.map((view) => (
-                  <option key={view.id} value={view.id}>{view.name}</option>
-                ))}
-              </Select>
-            </div>
-
-            <div style={{
-              display: 'flex', alignItems: 'center',
-              border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: 1, marginLeft: 4,
-            }}>
-              <button type="button" onClick={() => {
-                setBoardViewState((s) => ({ ...s, viewMode: 'list' as BoardViewMode }));
-                setInlineCreateGroupId(null);
-              }} style={{
-                height: 20, padding: '0 6px', display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontSize: 13, fontWeight: 500, borderRadius: 'var(--r-1)', border: 'none', cursor: 'pointer',
-                color: boardViewState.viewMode === 'list' ? 'var(--fg)' : 'var(--fg-muted)',
-                background: boardViewState.viewMode === 'list' ? 'var(--bg-active)' : 'transparent',
-              }}>
-                <IcoList size={12} /> List
-              </button>
-              <button type="button" onClick={() => {
-                setBoardViewState((s) => ({ ...s, viewMode: 'board' as BoardViewMode }));
-                setInlineCreateGroupId(null);
-              }} style={{
-                height: 20, padding: '0 6px', display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontSize: 13, fontWeight: 500, borderRadius: 'var(--r-1)', border: 'none', cursor: 'pointer',
-                color: boardViewState.viewMode === 'board' ? 'var(--fg)' : 'var(--fg-muted)',
-                background: boardViewState.viewMode === 'board' ? 'var(--bg-active)' : 'transparent',
-              }}>
-                <IcoBoard size={12} /> Board
-              </button>
-            </div>
-          </section>
-
-          {selectedIssueIds.length > 0 ? (
-            <section style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '6px var(--pad-x, var(--content-gutter))',
-              borderBottom: '1px solid var(--border-subtle)',
-              background: 'var(--bg-sunken)', fontSize: 14,
-            }} aria-label="Bulk actions">
-              <strong style={{ fontSize: 14 }}>{selectedIssueIds.length} selected</strong>
-              <button type="button" className="ui-action ui-action--subtle" onClick={selectAllVisibleIssues}>Select all</button>
-              <button type="button" className="ui-action ui-action--subtle" onClick={() => setSelectedIssueIds([])}>Clear</button>
-              <Select size="sm" aria-label="Bulk move selected issues to state" value={bulkTargetStateId} onChange={(event) => setBulkTargetStateId(event.target.value)}>
-                <option value="">Move to…</option>
-                {selectedTeam?.states.nodes.map((state) => (<option key={state.id} value={state.id}>{state.name}</option>))}
-              </Select>
-              {bulkTargetStateId ? (
-                <button type="button" className="ui-action ui-action--accent" disabled={isSavingState} onClick={() => void applyBulkStateChange()}>Apply to selected</button>
-              ) : null}
-              <Select size="sm" aria-label="Bulk assign selected issues" value={bulkAssigneeId} onChange={(event) => setBulkAssigneeId(event.target.value)}>
-                <option value="">Assign to…</option>
-                <option value="unassigned">Unassigned</option>
-                {users.map((user) => (<option key={user.id} value={user.id}>{user.name ?? user.email ?? user.id}</option>))}
-              </Select>
-              {bulkAssigneeId ? (
-                <button type="button" className="ui-action ui-action--subtle" disabled={isSavingState} onClick={() => void applyBulkAssigneeChange()}>Apply assignee</button>
-              ) : null}
-              <Select size="sm" aria-label="Bulk add label to selected issues" value={bulkLabelId} onChange={(event) => setBulkLabelId(event.target.value)}>
-                <option value="">Add label…</option>
-                {labels.map((label) => (<option key={label.id} value={label.id}>{label.name}</option>))}
-              </Select>
-              {bulkLabelId ? (
-                <button type="button" className="ui-action ui-action--subtle" disabled={isSavingState} onClick={() => void applyBulkLabelAdd()}>Add label</button>
-              ) : null}
-              <Select size="sm" aria-label="Bulk remove label from selected issues" value={bulkRemoveLabelId} onChange={(event) => setBulkRemoveLabelId(event.target.value)}>
-                <option value="">Remove label…</option>
-                {labels.map((label) => (<option key={label.id} value={label.id}>{label.name}</option>))}
-              </Select>
-              {bulkRemoveLabelId ? (
-                <button type="button" className="ui-action ui-action--subtle" disabled={isSavingState} onClick={() => void applyBulkLabelRemove()}>Remove label</button>
-              ) : null}
-            </section>
-          ) : null}
-        </>
-      ) : null}
-
-      <BoardLoadMoreNotice
-        errorMessage={loadMoreIssuesError}
-        hasMoreIssues={hasMoreIssues}
-        isLoadingMoreIssues={isLoadingMoreIssues}
-        loadedCount={visibleIssues.length}
-        scopeLabel={rawProjectKey ? '当前项目共' : '全团队共'}
-        totalCount={
-          rawProjectKey
-            ? (availableProjects.find(
-                (p) =>
-                  p.key.toLowerCase() === rawProjectKey.toLowerCase() ||
-                  p.name.toLowerCase() === rawProjectKey.toLowerCase(),
-              )?.issueCount ?? undefined)
-            : (queryData?.projectSummary?.totalCount ?? undefined)
-        }
-        onLoadMore={() => void handleLoadMoreIssues()}
+        )}
+        title={activeProject ? activeProject.name : isBacklogView ? 'Backlog' : 'All issues'}
+        count={activeProject
+          ? activeProject.issueCount
+          : (queryData?.projectSummary?.totalCount ?? boardVisibleIssues.length)}
+        hint={isBacklogView ? (
+          <>
+            <span>{`List view for ${selectedTeam?.name ?? 'your workspace'} issues.`}</span>{' '}
+            <span>Agent proposals wait in <Link to="/candidates">Candidates</Link>.</span>
+          </>
+        ) : (
+          <span>{`Workflow overview for ${selectedTeam?.name ?? 'your workspace'}.`}</span>
+        )}
+        actions={headerActions}
       />
 
-      {loading && !queryData ? (
-        <section className="shell-notice" aria-live="polite">
-          Loading board…
-        </section>
-      ) : isBacklogView ? (
+      {isBacklogView ? (
         <BacklogPage
           issues={visibleIssues}
           labels={labels}
           selectedTeam={selectedTeam}
           users={users}
           onSelectIssue={openIssue}
+          projectFilter={projectFilter}
+          notices={notices}
+          loading={loading && !queryData}
         />
       ) : (
+        <>
+          <PageToolbar aria-label="Board filters" projects={projectFilter} filters={boardFilters} view={boardViewControls} />
+          {notices}
+        </>
+      )}
+
+      {isBacklogView ? null : loading && !queryData ? (
+        <PageBody>
+          <LoadingState>Loading board…</LoadingState>
+        </PageBody>
+      ) : (
+        <PageBody width="full" padding="none">
         <DndContext
           sensors={sensors}
           collisionDetection={kanbanCollisionDetection}
@@ -3224,7 +3115,7 @@ export function BoardPage() {
               onFilterProject={handleSelectProject}
             />
           ) : (
-            <section style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }} aria-label="Issue list">
+            <section className="board-list" aria-label="Issue list">
               {issueGroups.map((group: BoardIssueGroup) => (
                 <div key={group.id}>
                   {boardViewState.groupBy !== 'none' && (
@@ -3233,18 +3124,17 @@ export function BoardPage() {
                         <PriorityIcon level={group.meta.priority} size={13} />
                       )}
                       {group.meta?.repository !== undefined && (
-                        <span style={{ color: 'var(--accent)', display: 'inline-flex', marginRight: 4 }}>
+                        <span className="issue-group-header__icon">
                           <IcoProject size={13} />
                         </span>
                       )}
                       <span className="issue-group-header__label">{group.label}</span>
                       <span className="issue-group-header__count">{group.issues.length}</span>
                       {group.meta?.repository !== undefined && group.issues.length > 0 && (
-                        <span style={{ fontSize: 12, color: 'var(--fg-dim)', marginLeft: 8 }}>
+                        <span className="issue-group-header__progress">
                           {group.issues.filter((i) => i.state.type === 'COMPLETED').length}/{group.issues.length} completed
                         </span>
                       )}
-                      <div style={{ flex: 1 }} />
                       <button
                         type="button"
                         className="issue-group-header__create"
@@ -3287,13 +3177,7 @@ export function BoardPage() {
                     />
                   ))}
                   {group.issues.length === 0 && boardViewState.groupBy !== 'none' && inlineCreateGroupId !== group.id && (
-                    <div style={{
-                      padding: '10px var(--content-gutter)',
-                      fontSize: 14, color: 'var(--fg-faint)',
-                      borderBottom: '1px solid var(--border-subtle)',
-                    }}>
-                      No issues
-                    </div>
+                    <div className="issue-group-empty">No issues</div>
                   )}
                 </div>
               ))}
@@ -3304,6 +3188,8 @@ export function BoardPage() {
             {activeIssue ? <IssueCard issue={activeIssue} sortable={false} /> : null}
           </DragOverlay>
         </DndContext>
+        {bulkActionBar}
+        </PageBody>
       )}
 
       {closeReasonDialog}

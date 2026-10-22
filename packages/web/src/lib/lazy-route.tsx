@@ -1,5 +1,9 @@
 import { Component, lazy, type ComponentType, type ErrorInfo, type ReactNode } from 'react';
 
+import { PageBody } from '../components/layout';
+import { Btn } from '../components/Primitives';
+import { EmptyState } from '../components/status';
+
 const RELOAD_KEY = 'involute.chunkReloadAt';
 const RELOAD_GUARD_MS = 30_000;
 
@@ -81,12 +85,12 @@ export class RouteErrorBoundary extends Component<RouteErrorBoundaryProps, { err
     const stale = isChunkLoadError(this.state.error);
     return (
       <main className="board-page board-page--state">
-        <section className="shell-notice" role="alert">
-          <p>{stale ? 'A new version of Involute is available.' : 'This page failed to load.'}</p>
-          <button type="button" className="ui-action ui-action--accent" onClick={() => window.location.reload()}>
-            Reload
-          </button>
-        </section>
+        <PageBody>
+          <EmptyState
+            title={<span role="alert">{stale ? 'A new version of Involute is available.' : 'This page failed to load.'}</span>}
+            action={<Btn variant="accent" onClick={() => window.location.reload()}>Reload</Btn>}
+          />
+        </PageBody>
       </main>
     );
   }

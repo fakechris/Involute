@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
-import { Select } from './controls';
+import { Select, TextInput } from './controls';
 
 /**
  * The filters a person reaches for when deciding a batch (INV-1077): type,
@@ -15,7 +15,8 @@ export interface WorkFilters {
   q: string;
 }
 
-const KEYS = ['type', 'kind', 'priority', 'owner', 'q'] as const;
+export const WORK_FILTER_KEYS = ['type', 'kind', 'priority', 'owner', 'q'] as const;
+const KEYS = WORK_FILTER_KEYS;
 const TYPES = ['bug', 'feature', 'improvement', 'research'];
 
 export function readWorkFilters(params: URLSearchParams): WorkFilters {
@@ -112,8 +113,10 @@ export function WorkFilterBar({
         <option value="me">Mine</option>
         <option value="none">Unassigned</option>
       </Select>
-      <input
+      <TextInput
         type="search"
+        size="sm"
+        className="work-filter-bar__search"
         aria-label="Filter by text"
         placeholder="Search title or description"
         defaultValue={filters.q}

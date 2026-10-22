@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { BUGS_FIXED_BETWEEN_QUERY, SERVER_BUILD_QUERY } from '../board/queries';
 import type { BugsFixedBetweenQueryData, ServerBuildQueryData } from '../board/types';
 import { Select } from './controls';
+import { InlineError } from './status';
 
 const SHA = /^(sha-)?[0-9a-f]{7,40}$/i;
 
@@ -57,11 +58,11 @@ export function FixedBetweenDeploys({ repositories }: { repositories: string[] }
           List fixes
         </button>
       </form>
-      {error ? <p role="alert" className="issue-relations__error">{error.message}</p> : null}
+      {error ? <InlineError>{error.message}</InlineError> : null}
       {result && !result.known ? (
-        <p role="alert" className="issue-relations__error">
+        <InlineError>
           Unknown range: {result.message ?? 'GitHub could not list the commits between these SHAs.'} ({result.failureCode})
-        </p>
+        </InlineError>
       ) : null}
       {result?.known ? (
         result.bugs.length === 0 ? (

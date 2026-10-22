@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@apollo/client/react';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { AGENTS_QUERY, AGENT_CREDENTIAL_REVOKE_MUTATION, AGENT_PROFILE_QUERY } from '../board/queries';
@@ -9,6 +9,9 @@ import { ActorBadge } from '../components/ActorBadge';
 import { ActorSuccessorControl } from '../components/ActorSuccessorControl';
 import { AgentLifecycleActions } from '../components/AgentLifecycleActions';
 import { Btn } from '../components/Primitives';
+import { Checkbox } from '../components/controls';
+import { PageBody, PageHeader } from '../components/layout';
+import { EmptyState, InlineError, LoadingState } from '../components/status';
 
 interface AgentTimelineEntry {
   at: string;
@@ -84,38 +87,39 @@ function AgentList() {
   ]), [agents]);
 
   if (loading) {
-    return <div className="page-shell"><p>Loading agents…</p></div>;
+    return <AgentsStatePage title="Agents"><LoadingState>Loading agents…</LoadingState></AgentsStatePage>;
   }
 
   if (error) {
-    return <div className="page-shell"><p>Could not load agents: {error.message}</p></div>;
+    return <AgentsStatePage title="Agents"><InlineError>Could not load agents: {error.message}</InlineError></AgentsStatePage>;
   }
 
   return (
-    <div className="page-shell">
-      <header className="page-shell__header">
-        <h1>Agents</h1>
+    <div className="observation-page">
+      <PageHeader
+        title="Agents"
+        count={agents.length}
+        actions={
+          <Checkbox
+            label="Show deactivated"
+            checked={showDeactivated}
+            onChange={(event) => setShowDeactivated(event.target.checked)}
+          />
+        }
+      />
+      <PageBody>
         <p className="agent-directory__meta">
           {agents.length} actor{agents.length === 1 ? '' : 's'}. Only agents with a handle can be
           mentioned. Credentials are issued by team owners in the team's <Link to={`/teams/${encodeURIComponent(readStoredTeamKey() ?? 'INV')}/settings?section=agents`}>Settings → Agents</Link>.
         </p>
-        <label className="agent-directory__toggle">
-          <input
-            type="checkbox"
-            checked={showDeactivated}
-            onChange={(event) => setShowDeactivated(event.target.checked)}
-          />
-          Show deactivated
-        </label>
-      </header>
 
       {agents.length === 0 ? (
-        <p className="discussion-empty">No agent actors yet.</p>
+        <EmptyState size="inline" title="No agent actors yet." />
       ) : (
         groups.filter((group) => group.rows.length > 0).map((group) => (
           <section key={group.key} className="issue-panel__section" aria-label={group.label}>
             <span className="issue-panel__label">{group.label}</span>
-            <p className="agent-directory__meta" style={{ marginTop: 0 }}>{group.hint}</p>
+            <p className="agent-directory__meta agent-directory__hint">{group.hint}</p>
             <ul className="agent-directory__list">
               {group.rows.map((agent) => (
                 <li
@@ -149,6 +153,17 @@ function AgentList() {
           </section>
         ))
       )}
+      </PageBody>
+    </div>
+  );
+}
+
+/** Header + body around a loading, error or not-found message. */
+function AgentsStatePage({ title, back, children }: { title: string; back?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="observation-page">
+      <PageHeader title={title} back={back} />
+      <PageBody>{children}</PageBody>
     </div>
   );
 }
@@ -183,38 +198,36 @@ function AgentProfile({ handle }: { handle: string }) {
     }
   }
 
+  const backToAgents = <Btn variant="subtle" onClick={() => navigate('/agents')}>← Agents</Btn>;
+
   if (loading) {
-    return <div className="page-shell"><p>Loading agent…</p></div>;
+    return <AgentsStatePage title="Agent" back={backToAgents}><LoadingState>Loading agent…</LoadingState></AgentsStatePage>;
   }
 
   if (error) {
-    return <div className="page-shell"><p>Could not load this agent: {error.message}</p></div>;
+    return <AgentsStatePage title="Agent" back={backToAgents}><InlineError>Could not load this agent: {error.message}</InlineError></AgentsStatePage>;
   }
 
   const profile = data?.agentProfile;
 
   if (!profile) {
     return (
-      <div className="page-shell">
-        <p>No agent matches “{handle}”.</p>
-        <button type="button" className="ui-action ui-action--subtle" onClick={() => navigate('/agents')}>
-          Back to agents
-        </button>
-      </div>
+      <AgentsStatePage title="Agent" back={backToAgents}>
+        <EmptyState
+          title={`No agent matches “${handle}”.`}
+          action={<Btn variant="subtle" onClick={() => navigate('/agents')}>Back to agents</Btn>}
+        />
+      </AgentsStatePage>
     );
   }
 
   const { actor, counts, credentials, receipts, timeline, viewerCanManage } = profile;
 
   return (
-    <div className="page-shell">
-      <header className="page-shell__header">
-        <button type="button" className="ui-action ui-action--subtle" onClick={() => navigate('/agents')}>
-          ← Agents
-        </button>
-        <h1>
-          <ActorBadge actor={actor} />
-        </h1>
+    <div className="observation-page">
+      <PageHeader back={backToAgents} title={<ActorBadge actor={actor} />} />
+      <PageBody>
+      <div className="agent-profile__intro">
         {actor.description ? (
           <p className="agent-directory__meta">{actor.description}</p>
         ) : null}
@@ -229,7 +242,7 @@ function AgentProfile({ handle }: { handle: string }) {
             Agent card: <code>{actor.agentCardUrl}</code>
           </p>
         ) : null}
-      </header>
+      </div>
 
       {viewerCanManage ? (
         <>
@@ -248,7 +261,7 @@ function AgentProfile({ handle }: { handle: string }) {
 
       <section className="issue-panel__section">
         <span className="issue-panel__label">Origin</span>
-        <p className="agent-directory__meta" style={{ marginTop: 0 }}>
+        <p className="agent-directory__meta agent-directory__hint">
           Issue a new credential for this actor in a team's <Link to={`/teams/${encodeURIComponent(credentials[0]?.teamKey ?? readStoredTeamKey() ?? 'INV')}/settings?section=agents`}>Settings → Agents</Link>.
         </p>
         {revokeError ? <p className="agent-lifecycle__error" role="alert">{revokeError}</p> : null}
@@ -284,7 +297,7 @@ function AgentProfile({ handle }: { handle: string }) {
 
       <section className="issue-panel__section">
         <span className="issue-panel__label">Decision receipts</span>
-        <p className="discussion-empty" style={{ marginTop: 0 }}>
+        <p className="discussion-empty agent-directory__hint">
           The actor's own account of what it knew and why it decided — a claim by the actor, bound to the audited write it explains. Not verified by the system.
         </p>
         {receipts.length === 0 ? (
@@ -293,7 +306,7 @@ function AgentProfile({ handle }: { handle: string }) {
           <ul className="agent-directory__list">
             {receipts.map((entry) => (
               <li key={entry.receipt.id} className="agent-directory__row" id={`receipt-${entry.receipt.id}`}>
-                <details className="decision-receipt" style={{ marginTop: 0 }}>
+                <details className="decision-receipt agent-directory__hint">
                   <summary>
                     <strong>Claimed by {entry.receipt.actor.handle ? `@${entry.receipt.actor.handle}` : entry.receipt.actor.name}</strong>
                     {entry.receipt.sessionId ? ` in session ${entry.receipt.sessionId}` : ' (no session recorded)'}
@@ -367,6 +380,7 @@ function AgentProfile({ handle }: { handle: string }) {
           </ol>
         )}
       </section>
+      </PageBody>
     </div>
   );
 }

@@ -921,45 +921,9 @@ kbd {
 }
 
 /* Header: slim 44px breadcrumb-style bar */
-.app-shell__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  height: 44px;
-  padding: 0 var(--content-gutter);
-  border-bottom: 1px solid var(--border-subtle);
-  margin: 0;
-  flex-shrink: 0;
-}
-
-.app-shell__header-copy {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  flex-wrap: nowrap;
-  white-space: nowrap;
-}
 
 .app-shell__eyebrow {
   display: none;
-}
-
-.app-shell__header h1 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--fg);
-  letter-spacing: 0;
-}
-
-.app-shell__header-inline-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  flex-wrap: nowrap;
 }
 
 .context-chip {
@@ -998,10 +962,6 @@ kbd {
   color: var(--accent);
 }
 
-.app-shell__subtext {
-  display: none;
-}
-
 /* Mobilebar */
 .app-shell__mobilebar {
   display: none;
@@ -1017,7 +977,6 @@ kbd {
 /* ============================================================== */
 
 .board-page,
-.backlog-page,
 .access-page {
   min-width: 0;
   display: flex;
@@ -1027,83 +986,8 @@ kbd {
   overflow: hidden;
 }
 
-.board-page__controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-}
-
-.board-page__mode-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  background: transparent;
-  padding: 1px;
-}
-
-.board-page__mode-button,
-.board-page__ghost-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 22px;
-  border-radius: var(--r-1);
-  background: transparent;
-  padding: 0 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--fg-muted);
-  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
-}
-
-.board-page__mode-button:hover,
-.board-page__ghost-action:hover {
-  background: var(--bg-hover);
-  color: var(--fg);
-}
-
-.board-page__mode-button--active {
-  background: var(--bg-active);
-  color: var(--fg);
-}
-
-.board-page__ghost-action {
-  border: 1px solid var(--border);
-  min-height: 24px;
-  padding: 0 10px;
-}
-
-.board-project-bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px var(--pad-x, var(--content-gutter));
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-raised, var(--bg));
-  position: relative;
-  z-index: 20;
-  overflow: visible;
-  flex-shrink: 0;
-}
-
-.board-project-bar__label {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--fg-dim);
-  margin-right: 2px;
-  flex-shrink: 0;
-}
-
 /* Rows of project pills: the board bar, the combobox quick pills, and the
    project switchers on In Review and Candidates. */
-.board-project-pills,
 .project-combobox__quick-pills {
   display: flex;
   flex-wrap: wrap;
@@ -1113,16 +997,6 @@ kbd {
 
 .project-combobox__quick-pills {
   display: inline-flex;
-}
-
-.board-page__header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 44px;
-  padding: 0 var(--pad-x, var(--content-gutter));
-  border-bottom: 1px solid var(--border-subtle);
-  flex-shrink: 0;
 }
 
 .board-project-pill {
@@ -1452,127 +1326,6 @@ kbd {
 }
 
 /* Toolbars (replaces card-style viewbars) — flat strip */
-.board-viewbar,
-.board-filter-row,
-.board-active-view,
-.issue-bulkbar,
-.backlog-toolbar,
-.backlog-filter-row,
-.backlog-active-view {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  border-bottom: 1px solid var(--border-subtle);
-  border-radius: 0;
-  background: var(--bg);
-  padding: 8px var(--content-gutter);
-  flex-shrink: 0;
-}
-
-.issue-bulkbar,
-.board-viewbar,
-.backlog-toolbar {
-  justify-content: space-between;
-}
-
-.issue-bulkbar__actions,
-.board-viewbar__primary,
-.board-viewbar__secondary,
-.backlog-toolbar__primary,
-.backlog-toolbar__secondary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.board-viewbar__search,
-.backlog-toolbar__search {
-  min-width: min(280px, 100%);
-  flex: 1 1 240px;
-}
-
-.board-filter,
-.backlog-filter {
-  min-width: 140px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  background: transparent;
-}
-
-.board-filter summary,
-.backlog-filter summary {
-  cursor: pointer;
-  list-style: none;
-  padding: 6px 10px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--fg-muted);
-}
-
-.board-filter summary::-webkit-details-marker,
-.backlog-filter summary::-webkit-details-marker {
-  display: none;
-}
-
-.board-filter__menu,
-.backlog-filter__menu {
-  display: flex;
-  max-height: 220px;
-  flex-direction: column;
-  gap: 4px;
-  overflow-y: auto;
-  border-top: 1px solid var(--border-subtle);
-  padding: 6px 8px 8px;
-}
-
-.board-filter__option,
-.backlog-filter__option {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 22px;
-  color: var(--fg-muted);
-  font-size: 14px;
-}
-
-.board-active-view,
-.backlog-active-view {
-  justify-content: space-between;
-  padding: 6px var(--content-gutter);
-}
-
-.issue-bulkbar__meta,
-.board-active-view__meta,
-.backlog-active-view__meta {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-
-.issue-bulkbar__meta strong,
-.board-active-view__meta strong,
-.backlog-active-view__meta strong {
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.issue-bulkbar__meta span,
-.board-active-view__meta span,
-.backlog-active-view__meta span {
-  font-size: 13px;
-  color: var(--fg-dim);
-}
-
-.board-active-view__tokens,
-.backlog-active-view__tokens {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
 
 /* Field stack (inline form pairs) */
 .field-stack {
@@ -1672,14 +1425,8 @@ kbd {
   background: color-mix(in srgb, var(--danger-weak) 55%, var(--bg-raised));
 }
 
-.shell-notice--success {
-  border-color: color-mix(in srgb, var(--success) 44%, var(--border));
-  background: color-mix(in srgb, var(--success-weak) 55%, var(--bg-raised));
-}
-
 /* Action buttons — the .ui-action family behind Btn (INV-1313); sizes,
    ghost / subtle / danger variants and states live in controls.css. */
-.board-load-more__button,
 .ui-action--accent {
   display: inline-flex;
   align-items: center;
@@ -1695,12 +1442,10 @@ kbd {
   transition: filter var(--dur-1) var(--ease), opacity var(--dur-1) var(--ease);
 }
 
-.board-load-more__button:hover,
 .ui-action--accent:hover {
   filter: brightness(0.98);
 }
 
-.board-load-more__button:disabled,
 .ui-action--accent:disabled,
 .ui-action--subtle:disabled {
   cursor: not-allowed;
@@ -1758,12 +1503,6 @@ kbd {
 /* Backlog (table)                                                 */
 /* ============================================================== */
 
-.backlog-page {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
 .backlog-surface {
   flex: 1;
   min-height: 0;
@@ -1772,6 +1511,14 @@ kbd {
   background: var(--bg);
   box-shadow: none;
   overflow: auto;
+}
+
+.backlog-surface--padded {
+  padding: 20px var(--pad-x);
+}
+
+.backlog-table__none {
+  color: var(--fg-faint);
 }
 
 .backlog-table {
@@ -2265,72 +2012,6 @@ kbd {
   border-color: var(--proj-border);
 }
 
-.board-project-legend__dot[class*='proj-color-'] {
-  background-color: var(--proj-fg);
-}
-
-.board-project-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px var(--content-gutter);
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg);
-  flex-wrap: wrap;
-}
-
-.board-project-legend {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  overflow-x: auto;
-  padding: 2px 0;
-  scrollbar-width: none;
-  flex: 1;
-  min-width: 0;
-}
-
-.board-project-legend::-webkit-scrollbar {
-  display: none;
-}
-
-.board-project-legend__pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 500;
-  font-family: var(--font-mono);
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg-hover);
-  color: var(--fg-muted);
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s ease;
-}
-
-.board-project-legend__pill:hover {
-  border-color: var(--border-strong);
-  color: var(--fg);
-}
-
-.board-project-legend__pill--active {
-  background: var(--accent-weak);
-  border-color: var(--accent);
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.board-project-legend__dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-
 .issue-card__title {
   margin: 0 0 2px;
   font-size: 12.5px;
@@ -2596,6 +2277,32 @@ kbd {
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--fg-dim);
+}
+
+.issue-group-header__icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.issue-group-header__progress {
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+/* Board list view: the scrolling column of grouped issue rows. */
+.board-list {
+  flex: 1;
+  position: relative;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.issue-group-empty {
+  padding: 10px var(--content-gutter);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 14px;
+  color: var(--fg-faint);
 }
 
 /* ============================================================== */
@@ -3220,12 +2927,6 @@ kbd {
   font-family: var(--font-mono);
 }
 
-.issue-relations__error,
-.hygiene-error {
-  font-size: 13px;
-  color: var(--danger);
-}
-
 /* ============================================================== */
 /* Activity / discussion (issue detail)                            */
 /* ============================================================== */
@@ -3480,37 +3181,6 @@ kbd {
 }
 
 /* Search page (INV-926). */
-.search-page__form {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.search-page__input {
-  flex: 1;
-  font-size: 15px;
-}
-
-.search-page__filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.search-page__filters label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  font-size: 12px;
-  color: var(--fg-muted);
-}
-
-.search-page__iql {
-  flex: 1;
-  min-width: 200px;
-}
 
 .search-results {
   list-style: none;
@@ -3727,50 +3397,6 @@ kbd {
   min-height: 0;
 }
 
-.inbox-page__header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 44px;
-  padding: 0 var(--content-gutter);
-  border-bottom: 1px solid var(--border-subtle);
-  flex-shrink: 0;
-}
-
-.inbox-page__title {
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.inbox-page__toggle {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  padding: 1px;
-}
-
-.inbox-page__toggle button {
-  min-height: 20px;
-  padding: 0 8px;
-  border-radius: var(--r-1);
-  background: transparent;
-  color: var(--fg-muted);
-  font-size: 13px;
-  font-weight: 500;
-  text-transform: capitalize;
-}
-
-.inbox-page__toggle button.is-active {
-  background: var(--bg-active);
-  color: var(--fg);
-}
-
-.inbox-page__list {
-  flex: 1;
-  overflow: auto;
-}
-
 .inbox-item {
   display: flex;
   align-items: flex-start;
@@ -3835,13 +3461,6 @@ kbd {
   color: var(--fg-dim);
   flex-shrink: 0;
   margin-top: 4px;
-}
-
-.inbox-page__empty {
-  padding: 60px var(--content-gutter);
-  text-align: center;
-  color: var(--fg-dim);
-  font-size: 14px;
 }
 
 /* ============================================================== */
@@ -3913,60 +3532,6 @@ kbd {
   .issue-panel--page .issue-panel__main {
     padding: 20px var(--content-gutter) 40px;
   }
-}
-
-/* ============================================================== */
-/* Page scaffolding (shared by new pages)                          */
-/* ============================================================== */
-
-.page-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 44px;
-  padding: 0 var(--pad-x, var(--content-gutter));
-  border-bottom: 1px solid var(--border-subtle);
-  flex-shrink: 0;
-  position: relative;
-  z-index: 20;
-  overflow: visible;
-}
-
-/* Header pieces keep their size; only the title shrinks (INV-1312). */
-.page-header > .mono,
-.page-header > .observation-card__status,
-.page-header > .observation-card__meta {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
-.page-content {
-  flex: 1;
-  overflow: auto;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 40px;
-  text-align: center;
-  color: var(--fg-dim);
-}
-
-.empty-state h3 {
-  font-size: 17px;
-  font-weight: 500;
-  color: var(--fg);
-  margin: 0 0 8px;
-}
-
-.empty-state p {
-  font-size: 15px;
-  margin: 0;
-  max-width: 360px;
-  line-height: 1.5;
 }
 
 /* ============================================================== */
@@ -4080,6 +3645,7 @@ kbd {
 
 /* Group header with inline create button */
 .issue-group-header__create {
+  margin-left: auto;
   width: 20px;
   height: 20px;
   border-radius: var(--r-2);
@@ -4096,11 +3662,6 @@ kbd {
 }
 
 @media (max-width: 780px) {
-  .app-shell__header {
-    flex-direction: row;
-    height: auto;
-    padding: 8px var(--content-gutter);
-  }
 
   .board-grid {
     flex-direction: column;
@@ -4324,7 +3885,6 @@ kbd {
   50% { opacity: 0.5; }
 }
 
-
 /* ============================================================== */
 /* Observation / governance surfaces (K6)                          */
 /* ============================================================== */
@@ -4336,17 +3896,6 @@ kbd {
   background: var(--bg);
 }
 
-.page-header__title {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 15px;
-  font-weight: 500;
-  margin: 0;
-}
-
 .observation-count {
   font-size: 13px;
   color: var(--fg-dim);
@@ -4355,10 +3904,6 @@ kbd {
 .observation-hint {
   font-size: 12px;
   color: var(--fg-dim);
-}
-
-.observation-content {
-  padding: 20px var(--pad-x, var(--content-gutter));
 }
 
 .observation-list {
@@ -4541,16 +4086,6 @@ kbd {
   color: var(--fg-muted);
 }
 
-.candidates-bulk-result {
-  margin: 0;
-}
-
-.observation-error {
-  margin: 0;
-  color: var(--danger);
-  font-size: 13px;
-}
-
 .observation-empty {
   color: var(--fg-dim);
   font-size: 14px;
@@ -4699,93 +4234,8 @@ kbd {
   accent-color: var(--accent);
 }
 
-.candidates-toolbar__clear-btn {
-  background: none;
-  border: none;
-  color: var(--accent);
-  font-size: 12.5px;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: var(--r-1);
-}
-
-.candidates-toolbar__clear-btn:hover {
-  text-decoration: underline;
-}
-
-.candidates-bulkbar {
-  position: sticky;
-  bottom: 24px;
-  z-index: 50;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-md);
-  border-radius: var(--r-3);
-  padding: 12px 18px;
-  margin-top: 16px;
-  animation: slideUp 0.15s ease-out;
-}
-
-.candidates-bulkbar__left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.candidates-bulkbar__count {
-  font-size: 13.5px;
-  color: var(--fg);
-}
-
-.candidates-bulkbar__field {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  color: var(--fg-muted);
-}
-
-.candidates-bulkbar__field select {
-  height: 28px;
-  padding: 0 8px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  color: var(--fg);
-  font-size: 12.5px;
-}
-
-.candidates-bulkbar__right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.candidates-bulkbar__error {
-  font-size: 12px;
-  color: var(--danger);
-  margin-right: 8px;
-}
-
 /* A batch refusal names the card to fix; the button takes the person there (INV-1047). */
-.candidates-bulkbar__fix {
-  margin-left: 8px;
-  padding: 2px 8px;
-  border: 1px solid currentColor;
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
+
 .observation-card--attention {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -4804,7 +4254,6 @@ kbd {
   border-radius: var(--r-1);
 }
 
-
 /* Bugs page (/bugs) */
 .bugs-content {
   display: flex;
@@ -4812,33 +4261,6 @@ kbd {
   gap: 16px;
   padding: 16px var(--pad-x, var(--content-gutter));
   max-width: 960px;
-}
-
-.bugs-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 10px;
-}
-
-.bugs-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  background: var(--bg-raised);
-}
-
-.bugs-stat__value {
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--fg);
-}
-
-.bugs-stat__label {
-  font-size: 12px;
-  color: var(--fg-dim);
 }
 
 .bugs-grid {
@@ -5310,7 +4732,6 @@ kbd {
   opacity: 0.7;
 }
 
-
 /* INV-573: an actor is legible where you read it — kind, handle, runtime,
    and when it was last around. Previously a comment showed only a name, so a
    person could not tell an agent from a colleague. */
@@ -5485,26 +4906,6 @@ kbd {
   color: var(--fg-dim);
 }
 
-.page-shell {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 20px var(--content-gutter);
-  overflow-y: auto;
-}
-
-.page-shell__header {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.page-shell__header h1 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-}
-
 /* @handle inside a comment body links to that agent's page (INV-573). */
 .markdown-mention {
   font-weight: 500;
@@ -5516,7 +4917,6 @@ kbd {
 .markdown-mention:hover {
   opacity: 0.8;
 }
-
 
 /* Decision receipt on an audit entry (INV-588). Rendered as a claim. */
 .decision-receipt { margin-top: 6px; width: 100%; font-size: 12px; }
@@ -5548,14 +4948,6 @@ kbd {
 }
 
 /* Agent directory + credential list (INV-607) */
-.agent-directory__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  font-size: 13px;
-  color: var(--fg-dim);
-}
 
 .agent-directory__row--deactivated {
   opacity: 0.6;
@@ -5564,32 +4956,6 @@ kbd {
 /* ============================================================== */
 /* Project graph (INV-681)                                         */
 /* ============================================================== */
-
-.graph-tabs {
-  display: inline-flex;
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  overflow: hidden;
-}
-
-.graph-tabs button {
-  border: 0;
-  background: none;
-  color: var(--fg-muted);
-  font-size: 13px;
-  padding: 4px 12px;
-  cursor: pointer;
-}
-
-.graph-tabs button + button {
-  border-left: 1px solid var(--border);
-}
-
-.graph-tabs button[aria-selected='true'] {
-  background: var(--bg-hover);
-  color: var(--fg);
-  font-weight: 500;
-}
 
 .graph-options {
   display: inline-flex;
@@ -6338,34 +5704,6 @@ kbd {
   max-width: 1100px;
 }
 
-.hygiene-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 10px;
-}
-
-.hygiene-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-3);
-  background: var(--bg-raised);
-  font-size: 13px;
-  color: var(--fg-muted);
-}
-
-.hygiene-stat__count {
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--success);
-}
-
-.hygiene-stat--open .hygiene-stat__count {
-  color: var(--warn);
-}
-
 .hygiene h2 {
   font-size: 14px;
   font-weight: 600;
@@ -6510,14 +5848,6 @@ kbd {
 }
 
 /* /bugs triage and SLA (INV-751). */
-a.bugs-stat {
-  color: inherit;
-  text-decoration: none;
-}
-
-.bugs-stat--alert .bugs-stat__value {
-  color: var(--danger);
-}
 
 .bugs-breaches {
   margin: 0;
@@ -6719,36 +6049,6 @@ a.bugs-stat {
   margin: 0 0 6px;
 }
 
-/* Shared batch-decision filters on /in-review and /candidates (INV-1077). */
-.work-filter-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  padding: 0 24px 8px;
-}
-.work-filter-bar select,
-.work-filter-bar input {
-  font: inherit;
-  font-size: 12px;
-  padding: 4px 8px;
-  border: 1px solid var(--border, #d0d4da);
-  border-radius: 6px;
-  background: var(--bg-raised);
-  color: inherit;
-}
-.work-filter-bar input {
-  min-width: 200px;
-}
-.work-filter-bar__clear {
-  font: inherit;
-  font-size: 12px;
-  background: none;
-  border: none;
-  color: var(--accent);
-  cursor: pointer;
-}
-
 /* Filters in effect while the bar is closed stay visible and clearable (INV-1086). */
 .board-filter-indicator {
   display: inline-flex;
@@ -6862,6 +6162,11 @@ a.bugs-stat {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
   font-size: 13px;
 }
+.issue-peek__id {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
 .issue-peek__meta {
   color: var(--fg-dim);
   margin: 4px 0 8px;
@@ -7389,4 +6694,822 @@ ul.bugs-list {
   flex-shrink: 0;
   font-size: 12px;
   max-width: 130px;
+}
+
+/* In Review / Candidates / Needs you on the page skeleton (INV-1314). */
+
+/* In Review IQL view row, now in the PageToolbar `view` slot: the toolbar
+   draws the gutter and hairline, so the old strip spacing goes. */
+.page-toolbar .in-review-filter {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  gap: 6px;
+}
+
+.in-review-filter__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.in-review-filter__input {
+  width: 220px;
+  font-family: var(--font-mono);
+}
+
+/* "waiting 4d · overdue" on an In Review card (was the borrowed .issue-relations__error). */
+.observation-card__meta--overdue {
+  color: var(--danger);
+}
+
+/* Candidates: pagination row under the list. */
+.candidates-pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* Candidates: batch failure text + "Fill acceptance for …" buttons in the bulk bar status line. */
+.candidates-bulk-error {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--danger);
+}
+
+/* My Issues and Search on the page skeleton (INV-1314). */
+
+/* My Issues row (was an inline-styled grid button with JS hover). */
+.my-issues-row {
+  display: grid;
+  grid-template-columns: max-content 14px 14px minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  height: var(--row-h);
+  padding: 0 var(--pad-x);
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+
+.my-issues-row:hover {
+  background: var(--bg-hover);
+}
+
+.my-issues-row__dim {
+  font-size: 13px;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+
+.my-issues-row__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+
+.my-issues-row__state {
+  font-size: 13px;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+/* Search box in the /search toolbar (was .search-page__form). */
+.search-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.search-box__input {
+  width: 320px;
+}
+
+/* Inbox, Agents, Settings and the sidebar on the page skeleton (INV-1314). */
+
+/* Inbox row pieces (were inline styles). */
+.inbox-item__glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-1);
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.inbox-item__on {
+  color: var(--fg-dim);
+}
+
+.inbox-item__id {
+  color: var(--fg-muted);
+}
+
+.inbox-item__summary {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--fg-dim);
+}
+
+.inbox-item__trail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.inbox-item__mark-read {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: 0;
+  border-radius: var(--r-1);
+  background: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+
+.inbox-item__mark-read:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+/* Agents: hint paragraph right under a section label; profile intro block. */
+.agent-directory__hint {
+  margin-top: 0;
+}
+
+.agent-profile__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Settings → Profile avatar row. */
+.settings-avatar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-avatar__initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 23px;
+  font-weight: 600;
+}
+
+/* Sidebar search trigger label (was inline). */
+.app-shell__search-label {
+  flex: 1;
+  text-align: left;
+}
+
+/* Views, Projects, Cycles, Team pages, Work context and Ops on the page skeleton (INV-1314). */
+
+.views-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.views-card__open {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.views-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.views-card__icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.views-card__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.views-card__open:hover .views-card__name {
+  text-decoration: underline;
+}
+
+.views-card__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.views-card__kind {
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.views-card__kind--board {
+  border-color: var(--accent-border);
+  background: var(--accent-weak);
+  color: var(--accent);
+}
+
+/* ---------- Projects page (INV-1314) ---------- */
+
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 14px;
+}
+
+.projects-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  background: var(--bg-raised);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease);
+}
+
+.projects-card:hover {
+  border-color: var(--border-strong);
+}
+
+.projects-card__head,
+.projects-card__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.projects-card__foot {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.projects-identifier {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.projects-card__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.projects-card__alias {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.projects-card__links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* State pill and progress segments share the state-type tints. */
+.projects-state {
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.projects-state--started { color: var(--accent); }
+.projects-state--completed { color: var(--success); }
+.projects-state--review { color: var(--warn); }
+.projects-state--canceled { color: var(--fg-dim); }
+
+.projects-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.projects-person--sm {
+  gap: 4px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.projects-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0;
+}
+
+.projects-progress__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.projects-progress__percent {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.projects-progress__bar {
+  display: flex;
+  gap: 1px;
+  height: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--bg-sunken);
+}
+
+.projects-progress__segment,
+.projects-progress__dot {
+  background: var(--fg-muted);
+}
+
+.projects-progress__segment.projects-state--completed,
+.projects-progress__dot.projects-state--completed { background: var(--success); }
+.projects-progress__segment.projects-state--review,
+.projects-progress__dot.projects-state--review { background: var(--warn); }
+.projects-progress__segment.projects-state--started,
+.projects-progress__dot.projects-state--started { background: var(--accent); }
+.projects-progress__segment.projects-state--backlog,
+.projects-progress__dot.projects-state--backlog { background: var(--border-strong); }
+
+.projects-progress__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.projects-progress__key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.projects-progress__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.projects-menu {
+  position: relative;
+}
+
+.projects-menu__popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  min-width: 120px;
+  margin-top: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-md);
+}
+
+.projects-menu__item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--r-1);
+  background: none;
+  color: var(--fg);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.projects-menu__item:hover {
+  background: var(--bg-hover);
+}
+
+.projects-menu__item--danger {
+  color: var(--danger);
+}
+
+.projects-detail__description {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--fg-muted);
+}
+
+.projects-detail__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  font-size: 14px;
+  color: var(--fg-dim);
+}
+
+.projects-issues {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+}
+
+.projects-issues__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: none;
+  color: var(--fg);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.projects-issues__row:last-child {
+  border-bottom: 0;
+}
+
+.projects-issues__row:hover {
+  background: var(--bg-hover);
+}
+
+.projects-issues__id {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.projects-issues__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projects-issues__state {
+  padding: 2px 6px;
+  border-radius: var(--r-1);
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* ---------- Milestones / Cycles page (INV-1314) ---------- */
+
+.cycles-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.cycles-section__title {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-dim);
+}
+
+.cycles-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--r-3);
+  background: var(--bg-raised);
+}
+
+.cycles-card__head,
+.cycles-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cycles-row {
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--bg-raised);
+}
+
+.cycles-row__icon {
+  display: inline-flex;
+  color: var(--fg-dim);
+}
+
+.cycles-row__id {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.cycles-row__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.cycles-row__meta {
+  font-size: 13px;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+
+.cycles-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cycles-progress__track {
+  flex: 1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--bg-hover);
+}
+
+.cycles-progress__fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.cycles-progress__label {
+  font-size: 13px;
+  color: var(--fg-dim);
+}
+
+.cycles-card__issues {
+  display: flex;
+  flex-direction: column;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.cycles-issue {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cycles-issue:hover .cycles-issue__title {
+  text-decoration: underline;
+}
+
+.cycles-issue__id {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+
+.cycles-issue__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Team pages (INV-1314) ---------- */
+
+.team-page__key {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.team-page__nav {
+  display: flex;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.team-page__lead {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-dim);
+}
+
+/* ---------- Work context page (INV-1314) ---------- */
+
+.work-context__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* A run with no recent activity: a warning tag, not an error. */
+.work-context__stale {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--warn);
+}
+
+/* ---------- Ops page (INV-1314) ---------- */
+
+.ops__disabled {
+  color: var(--danger);
+}
+
+/* Issue page header crumbs, More menu and action rows (were inline, INV-1314). */
+.issue-panel__crumb-sep {
+  display: inline-flex;
+  color: var(--fg-faint);
+}
+
+.issue-panel__crumb-link {
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--r-1);
+  background: none;
+  color: var(--fg-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.issue-panel__crumb-link:hover {
+  background: var(--bg-hover);
+}
+
+.issue-panel__crumb-id {
+  font-size: 13px;
+  color: var(--fg-dim);
+}
+
+.issue-panel__header-actions--end {
+  margin-left: auto;
+}
+
+.issue-panel__menu {
+  position: relative;
+}
+
+.issue-panel__menu-popover {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  min-width: 140px;
+  margin-top: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-md);
+}
+
+.issue-panel__menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--r-1);
+  background: none;
+  color: var(--fg);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.issue-panel__menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.issue-panel__menu-item--danger {
+  color: var(--danger);
+}
+
+.issue-panel__action-icon {
+  display: inline-flex;
+  color: var(--fg-dim);
+}
+
+.issue-panel__action-icon--inherit {
+  color: inherit;
+}
+
+.issue-panel__action-kbd {
+  margin-left: auto;
+}
+
+/* Contract section heading row. */
+.contract-section__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.contract-section__title {
+  flex: 1;
+  margin: 0;
+}
+
+/* Rich text toolbar: upload state, hint and submit pushed to the right. */
+.rich-text__trail {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.rich-text__hint {
+  margin-right: 4px;
+  font-size: 12px;
+  color: var(--fg-dim);
 }

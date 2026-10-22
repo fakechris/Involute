@@ -21,6 +21,11 @@ import { IcoBug } from '../components/Icons';
 import { FixedBetweenDeploys } from '../components/FixedBetweenDeploys';
 import { Btn, PriorityIcon } from '../components/Primitives';
 import { Select } from '../components/controls';
+import { PageBody, PageHeader, PageToolbar } from '../components/layout';
+import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
+import { EmptyState, InlineError, LoadingState, StatRow, StatTile } from '../components/status';
+import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
+import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam, NO_REPOSITORY_OPTIONS } from './work-filter-match';
 
 const CLOSED_STATE_TYPES = new Set(['COMPLETED', 'CANCELED']);
 const BUG_LABEL_NAMES = ['bug', 'Bug', 'BUG'];
@@ -81,8 +86,34 @@ export function BugsPage() {
   useEffect(() => {
     fetchSessionState().then((session) => setViewerId(session.viewer?.id ?? null)).catch(() => setViewerId(null));
   }, []);
+  // Project and work filters narrow the open-bug list; the statistics stay team-wide (INV-1314).
+  const [project, setProject] = useProjectParam();
+  const workFilters = useWorkFilters();
+  const projects = useMemo(
+    () => projectsFromCounts((summary?.byRepository ?? []).map((row) => ({ repository: row.repository, count: row.openCount }))),
+    [summary?.byRepository],
+  );
+  const visibleBugs = useMemo(
+    () =>
+      openBugs.filter((issue) =>
+        matchesProject(issue.repository, project) &&
+        matchesWorkFilters(
+          {
+            title: issue.title,
+            description: issue.description,
+            kind: issue.kind,
+            priority: issue.priority,
+            labelNames: issue.labels.nodes.map((label) => label.name),
+            assigneeId: issue.assignee?.id ?? null,
+          },
+          workFilters.filters,
+          viewerId,
+        ),
+      ),
+    [openBugs, project, workFilters.filters, viewerId],
+  );
   // J/K and Enter like the other queues (INV-1133); Enter opens the bug's own page.
-  const listKeys = useListKeys(openBugs, {
+  const listKeys = useListKeys(visibleBugs, {
     onClear: () => undefined,
     onOpen: (issue) => navigate(`/issue/${encodeURIComponent(issue.identifier)}`),
     onSelectAll: () => undefined,
@@ -97,47 +128,54 @@ export function BugsPage() {
 
   return (
     <div className="observation-page">
-      <div className="page-header">
-        <IcoBug size={14} style={{ color: 'var(--fg-dim)' }} />
-        <h1 className="page-header__title">Bugs</h1>
-        <span className="mono observation-count">{summary?.openCount ?? 0}</span>
-        <div style={{ flex: 1 }} />
-        <Btn variant="accent" onClick={() => navigate('/', { state: { openReportBug: true } })}>
-          Report bug
-        </Btn>
-      </div>
+      <PageHeader
+        icon={<IcoBug size={14} />}
+        title="Bugs"
+        count={summary?.openCount ?? 0}
+        actions={
+          <Btn variant="accent" onClick={() => navigate('/', { state: { openReportBug: true } })}>
+            Report bug
+          </Btn>
+        }
+      />
+      <PageToolbar
+        aria-label="Bug filters"
+        projects={
+          <ProjectFilterCombobox
+            projects={projects}
+            selectedProjectKey={project || null}
+            totalCount={summary?.openCount ?? 0}
+            onSelectProject={setProject}
+            extraOptions={NO_REPOSITORY_OPTIONS}
+            showQuickPills
+          />
+        }
+        filters={<WorkFilterBar {...workFilters} />}
+      />
 
-      <div className="page-content">
+      <PageBody width="wide">
         {error ? (
-          <div className="empty-state" role="alert">
-            <h3>Could not load bug statistics</h3>
-            <p>Confirm the API server is running, then retry.</p>
-            <Btn variant="subtle" onClick={() => void refetch()}>
-              Retry
-            </Btn>
+          <div role="alert">
+            <EmptyState
+              title="Could not load bug statistics"
+              body="Confirm the API server is running, then retry."
+              action={
+                <Btn variant="subtle" onClick={() => void refetch()}>
+                  Retry
+                </Btn>
+              }
+            />
           </div>
         ) : loading && !summary ? (
-          <p className="observation-empty">Loading bugs...</p>
+          <LoadingState>Loading bugs…</LoadingState>
         ) : summary ? (
           <div className="bugs-content">
-            <section className="bugs-stats" aria-label="Bug statistics">
-              <div className="bugs-stat">
-                <span className="bugs-stat__value">{summary.openCount}</span>
-                <span className="bugs-stat__label">Open</span>
-              </div>
-              <div className="bugs-stat">
-                <span className="bugs-stat__value">{summary.unclaimedOpenCount}</span>
-                <span className="bugs-stat__label">Unclaimed</span>
-              </div>
-              <div className="bugs-stat">
-                <span className="bugs-stat__value">{urgentHighOpen}</span>
-                <span className="bugs-stat__label">Urgent + High open</span>
-              </div>
-              <div className="bugs-stat">
-                <span className="bugs-stat__value">{formatAge(summary.avgOpenAgeDays)}</span>
-                <span className="bugs-stat__label">Avg open age (days)</span>
-              </div>
-            </section>
+            <StatRow aria-label="Bug statistics">
+              <StatTile value={summary.openCount} label="Open" />
+              <StatTile value={summary.unclaimedOpenCount} label="Unclaimed" />
+              <StatTile value={urgentHighOpen} label="Urgent + High open" />
+              <StatTile value={formatAge(summary.avgOpenAgeDays)} label="Avg open age (days)" />
+            </StatRow>
 
             {summary.metrics ? <BugTriageMetrics metrics={summary.metrics} onOpen={(id) => navigate(`/issue/${id}`)} /> : null}
 
@@ -271,9 +309,11 @@ export function BugsPage() {
               <h2 className="bugs-panel__title">Open bugs</h2>
               {openBugs.length === 0 ? (
                 <p className="bugs-panel__empty">No open bugs. Nice.</p>
+              ) : visibleBugs.length === 0 ? (
+                <p className="bugs-panel__empty">No open bug matches these filters.</p>
               ) : (
                 <ul className="bugs-list" aria-label="Open bugs list">
-                  {openBugs.map((issue) => (
+                  {visibleBugs.map((issue) => (
                     <BugRow
                       key={issue.id}
                       issue={issue}
@@ -288,7 +328,7 @@ export function BugsPage() {
             </section>
           </div>
         ) : null}
-      </div>
+      </PageBody>
     </div>
   );
 }
@@ -313,50 +353,40 @@ function BugTriageMetrics({ metrics, onOpen }: { metrics: BugMetricsData; onOpen
   const slaClosed = metrics.slaMetCount + metrics.slaBreachedClosedCount;
   return (
     <>
-      <section className="bugs-stats" aria-label="Triage and SLA">
-        <Link className="bugs-stat" to="/candidates?type=bug">
-          <span className="bugs-stat__value">{metrics.untriagedCount}</span>
-          <span className="bugs-stat__label">Waiting in triage</span>
-        </Link>
-        <div className="bugs-stat">
-          <span className="bugs-stat__value">
-            {formatHours(metrics.triageHoursP50)} / {formatHours(metrics.triageHoursP90)}
-          </span>
-          <span className="bugs-stat__label">Triage time p50 / p90 ({metrics.triagedCount} triaged)</span>
-        </div>
-        <div className="bugs-stat">
-          <span className="bugs-stat__value">{metrics.slaMetRate === null ? '—' : `${Math.round(metrics.slaMetRate * 100)}%`}</span>
-          <span className="bugs-stat__label">
-            Fixed within SLA ({metrics.slaMetCount} of {slaClosed})
-          </span>
-        </div>
-        <div className={`bugs-stat${metrics.breachedOpen.length ? ' bugs-stat--alert' : ''}`}>
-          <span className="bugs-stat__value">
-            {metrics.breachedOpen.length} / {metrics.atRiskOpenCount}
-          </span>
-          <span className="bugs-stat__label">Open past SLA / at risk</span>
-        </div>
-        <div className={`bugs-stat${metrics.unplacedOpenCount ? ' bugs-stat--alert' : ''}`}>
-          <span className="bugs-stat__value">{metrics.unplacedOpenCount}</span>
-          <span className="bugs-stat__label">Open bugs with no parent (goal 0)</span>
-        </div>
+      <StatRow aria-label="Triage and SLA">
+        <StatTile to="/candidates?type=bug" value={metrics.untriagedCount} label="Waiting in triage" />
+        <StatTile
+          value={`${formatHours(metrics.triageHoursP50)} / ${formatHours(metrics.triageHoursP90)}`}
+          label={`Triage time p50 / p90 (${metrics.triagedCount} triaged)`}
+        />
+        <StatTile
+          value={metrics.slaMetRate === null ? '—' : `${Math.round(metrics.slaMetRate * 100)}%`}
+          label={`Fixed within SLA (${metrics.slaMetCount} of ${slaClosed})`}
+        />
+        <StatTile
+          tone={metrics.breachedOpen.length ? 'alert' : 'default'}
+          value={`${metrics.breachedOpen.length} / ${metrics.atRiskOpenCount}`}
+          label="Open past SLA / at risk"
+        />
+        <StatTile
+          tone={metrics.unplacedOpenCount ? 'alert' : 'default'}
+          value={metrics.unplacedOpenCount}
+          label="Open bugs with no parent (goal 0)"
+        />
         {metrics.reopenedCount !== undefined ? (
-          <div className="bugs-stat">
-            <span className="bugs-stat__value">{formatRate(metrics.reopenRate)}</span>
-            <span className="bugs-stat__label">
-              Reopened ({metrics.reopenedCount} of {metrics.closedEverCount ?? 0} closed)
-            </span>
-          </div>
+          <StatTile
+            value={formatRate(metrics.reopenRate)}
+            label={`Reopened (${metrics.reopenedCount} of ${metrics.closedEverCount ?? 0} closed)`}
+          />
         ) : null}
         {metrics.reopenedAfterAutoAcceptCount !== undefined ? (
-          <div className={`bugs-stat${metrics.reopenedAfterAutoAcceptCount ? ' bugs-stat--alert' : ''}`}>
-            <span className="bugs-stat__value">{formatRate(metrics.reopenedAfterAutoAcceptRate)}</span>
-            <span className="bugs-stat__label">
-              Reopened after auto-accept ({metrics.reopenedAfterAutoAcceptCount} of {metrics.autoAcceptedCount ?? 0})
-            </span>
-          </div>
+          <StatTile
+            tone={metrics.reopenedAfterAutoAcceptCount ? 'alert' : 'default'}
+            value={formatRate(metrics.reopenedAfterAutoAcceptRate)}
+            label={`Reopened after auto-accept (${metrics.reopenedAfterAutoAcceptCount} of ${metrics.autoAcceptedCount ?? 0})`}
+          />
         ) : null}
-      </section>
+      </StatRow>
 
       <div className="bugs-grid">
         <section className="bugs-panel" aria-label="Open bugs past their SLA">
@@ -534,7 +564,7 @@ export function BugRow({
         </Btn>
       )}
       <span className="bugs-list__meta mono">{issue.repository ?? 'No project'}</span>
-      {error ? <span className="issue-relations__error" role="alert">{error}</span> : null}
+      {error ? <InlineError>{error}</InlineError> : null}
     </li>
   );
 }

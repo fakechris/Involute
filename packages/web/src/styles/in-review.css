@@ -42,14 +42,6 @@
   border-color: var(--accent);
 }
 
-.in-review-bulkbar {
-  margin-bottom: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  background: var(--bg-sunken);
-  padding: 8px 12px;
-}
-
 .in-review-list-toolbar {
   display: flex;
   gap: 8px;
@@ -68,5 +60,4 @@
   cursor: pointer;
   accent-color: var(--accent);
 }
-
 
