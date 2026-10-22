@@ -472,7 +472,7 @@ export function ProjectsPage() {
                 <button
                   key={project.id}
                   type="button"
-                  className="projects-card"
+                  className="card card--interactive projects-card"
                   onClick={() => setSelectedProjectId(project.id)}
                 >
                   <div className="projects-card__head">

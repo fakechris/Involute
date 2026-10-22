@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 
 import { openBlockersOf, type GraphEdge, type GraphNode, type Outline, type OutlineItem } from '../../work/graph-model';
 import {
@@ -108,7 +108,14 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
   const last = series.at(-1)!;
 
   return (
-    <div className="project-timeline">
+    <div
+      className="project-timeline"
+      style={{
+        '--timeline-started': STATE_TYPE_COLOR.STARTED,
+        '--timeline-review': STATE_TYPE_COLOR.REVIEW,
+        '--timeline-completed': STATE_TYPE_COLOR.COMPLETED,
+      } as CSSProperties}
+    >
       <div className="dependency-graph__toolbar">
         <div className="graph-options">
           <label>
@@ -122,9 +129,9 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
         </div>
         <div className="dependency-graph__legend" aria-label="Timeline legend">
           <span className="dependency-graph__legend-item"><i className="timeline-swatch timeline-swatch--waiting" />Waiting</span>
-          <span className="dependency-graph__legend-item"><i className="timeline-swatch" style={{ background: STATE_TYPE_COLOR.STARTED }} />In Progress</span>
-          <span className="dependency-graph__legend-item"><i className="timeline-swatch" style={{ background: STATE_TYPE_COLOR.REVIEW }} />In Review</span>
-          <span className="dependency-graph__legend-item"><i className="timeline-dot" style={{ background: STATE_TYPE_COLOR.COMPLETED }} />Done</span>
+          <span className="dependency-graph__legend-item"><i className="timeline-swatch timeline-swatch--started" />In Progress</span>
+          <span className="dependency-graph__legend-item"><i className="timeline-swatch timeline-swatch--review" />In Review</span>
+          <span className="dependency-graph__legend-item"><i className="timeline-dot timeline-dot--completed" />Done</span>
           {withoutHistory > 0 ? (
             <span className="dependency-graph__legend-item">{withoutHistory} without recorded history</span>
           ) : null}

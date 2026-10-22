@@ -13,7 +13,7 @@ import { Btn } from '../components/Primitives';
 import { DialogShell } from '../components/DialogShell';
 import { Field, Select, TextInput } from '../components/controls';
 import { PageBody, PageHeader } from '../components/layout';
-import { EmptyState, InlineError } from '../components/status';
+import { Badge, EmptyState, InlineError } from '../components/status';
 
 interface ViewEntry {
   id: string;
@@ -129,7 +129,7 @@ export function ViewsPage() {
         ) : (
           <div className="views-grid">
             {views.map((v) => (
-              <div key={v.id} className="saved-view-card" aria-label={`View ${v.name}`}>
+              <div key={v.id} className="card saved-view-card" aria-label={`View ${v.name}`}>
                 <button
                   type="button"
                   className="views-card__open"
@@ -147,7 +147,7 @@ export function ViewsPage() {
                     <span className="views-card__name">{v.name}</span>
                   </span>
                   <span className="views-card__meta">
-                    <span className={v.kind === 'Board' ? 'views-card__kind views-card__kind--board' : 'views-card__kind'}>{v.kind}</span>
+                    <Badge tone={v.kind === 'Board' ? 'accent' : 'neutral'}>{v.kind}</Badge>
                     {v.view.visibility === 'TEAM' ? <span className="observation-card__meta">shared with team</span> : null}
                   </span>
                 </button>

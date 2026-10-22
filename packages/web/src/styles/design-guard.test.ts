@@ -57,6 +57,10 @@ const LOCAL_CUSTOM_PROPERTIES = new Set<string>([
   '--data-table-columns',
   // Set inline by MarkdownRenderer from its clamp prop and read by .markdown-content__body--clamped.
   '--markdown-clamp',
+  // Set inline on .project-timeline from StatusIcon's status hues and read by its swatches and series.
+  '--timeline-started',
+  '--timeline-review',
+  '--timeline-completed',
 ]);
 
 /**
@@ -65,7 +69,6 @@ const LOCAL_CUSTOM_PROPERTIES = new Set<string>([
 const COLOR_LITERAL_ALLOWLIST = new Set<string>([
   'components/Icons.tsx', // Google logo: brand colours are fixed by Google
   'components/StatusIcon.tsx', // the one place status colours are defined (§3 rule 9)
-  'components/graph/graph-colors.ts', // graph palette, mirrors StatusIcon
 ]);
 
 function walk(dir: string): string[] {

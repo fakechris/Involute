@@ -926,42 +926,6 @@ kbd {
   display: none;
 }
 
-.context-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-1);
-  background: var(--bg-hover);
-  padding: 0 5px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--fg-muted);
-  letter-spacing: 0.02em;
-}
-
-.context-chip--interactive {
-  cursor: pointer;
-  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
-}
-
-.context-chip--interactive:hover {
-  background: var(--bg-active);
-  color: var(--fg);
-}
-
-.context-chip--interactive:disabled {
-  cursor: default;
-  opacity: 0.82;
-}
-
-.context-chip--team {
-  border-color: var(--accent-border);
-  background: var(--accent-weak);
-  color: var(--accent);
-}
-
 /* Mobilebar */
 .app-shell__mobilebar {
   display: none;
@@ -3683,22 +3647,6 @@ kbd {
   padding: 0;
 }
 
-.observation-card__status {
-  font-size: 11px;
-  text-transform: lowercase;
-  color: var(--fg-muted);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 1px 8px;
-}
-
-.observation-card__status--target {
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  font-weight: 500;
-}
-
 .observation-card__meta {
   font-size: 12px;
   color: var(--fg-dim);
@@ -3750,13 +3698,8 @@ kbd {
   color: var(--fg-muted);
 }
 
-.saved-view-card {
-  display: flex;
-  flex-direction: column;
+.card.saved-view-card {
   gap: 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-3);
-  background: var(--bg-raised);
   padding: 12px 14px;
 }
 
@@ -3985,10 +3928,6 @@ kbd {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   transition: outline-color 0.3s ease;
-}
-.observation-card__status--missing {
-  color: var(--danger, #c0392b);
-  border-color: currentColor;
 }
 
 .observation-card__repo {
@@ -5307,7 +5246,7 @@ kbd {
 .timeline-span__fill {
   display: block;
   height: 100%;
-  background: #10b981;
+  background: var(--timeline-completed);
   opacity: 0.6;
 }
 
@@ -5318,7 +5257,7 @@ kbd {
   height: 12px;
   margin-left: -6px;
   transform: rotate(45deg);
-  background: #10b981;
+  background: var(--timeline-completed);
   border: 1px solid var(--bg-raised);
 }
 
@@ -5367,8 +5306,8 @@ kbd {
 }
 
 .timeline-series--scope { stroke: var(--fg-dim); stroke-dasharray: 4 3; }
-.timeline-series--started { stroke: #f59e0b; }
-.timeline-series--completed { stroke: #10b981; stroke-width: 2; }
+.timeline-series--started { stroke: var(--timeline-started); }
+.timeline-series--completed { stroke: var(--timeline-completed); stroke-width: 2; }
 
 .timeline-line {
   display: inline-block;
@@ -5378,8 +5317,13 @@ kbd {
 }
 
 .timeline-line--scope { border-top: 2px dashed var(--fg-dim); }
-.timeline-line--started { border-color: #f59e0b; }
-.timeline-line--completed { border-color: #10b981; }
+.timeline-line--started { border-color: var(--timeline-started); }
+.timeline-line--completed { border-color: var(--timeline-completed); }
+
+/* Legend swatches; the hues are set on .project-timeline from StatusIcon (INV-1315). */
+.timeline-swatch--started { background: var(--timeline-started); }
+.timeline-swatch--review { background: var(--timeline-review); }
+.timeline-dot--completed { background: var(--timeline-completed); }
 
 /* Work graph health (INV-721) */
 
@@ -6383,22 +6327,6 @@ kbd {
   gap: 8px;
 }
 
-.views-card__kind {
-  padding: 2px 7px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-hover);
-  color: var(--fg-muted);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.views-card__kind--board {
-  border-color: var(--accent-border);
-  background: var(--accent-weak);
-  color: var(--accent);
-}
-
 /* ---------- Projects page (INV-1314) ---------- */
 
 .projects-grid {
@@ -6408,21 +6336,8 @@ kbd {
 }
 
 .projects-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-3);
-  background: var(--bg-raised);
   color: inherit;
   text-align: left;
-  cursor: pointer;
-  transition: border-color var(--dur-1) var(--ease);
-}
-
-.projects-card:hover {
-  border-color: var(--border-strong);
 }
 
 .projects-card__head,
@@ -6682,35 +6597,15 @@ kbd {
   color: var(--fg-dim);
 }
 
-.cycles-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px;
-  border: 1px solid var(--accent-border);
-  border-radius: var(--r-3);
-  background: var(--bg-raised);
+.card.cycles-card {
+  border-color: var(--accent-border);
 }
 
-.cycles-card__head,
-.cycles-row {
+.cycles-card__head {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
-}
-
-.cycles-row {
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  background: var(--bg-raised);
-}
-
-.cycles-row__icon {
-  display: inline-flex;
-  color: var(--fg-dim);
 }
 
 .cycles-row__id {
@@ -6765,37 +6660,6 @@ kbd {
   flex-direction: column;
   padding-top: 8px;
   border-top: 1px solid var(--border-subtle);
-}
-
-.cycles-issue {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 0;
-  border: 0;
-  background: none;
-  color: var(--fg);
-  font-size: 14px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.cycles-issue:hover .cycles-issue__title {
-  text-decoration: underline;
-}
-
-.cycles-issue__id {
-  flex: 0 0 auto;
-  font-size: 12px;
-  color: var(--fg-dim);
-}
-
-.cycles-issue__title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* ---------- Team pages (INV-1314) ---------- */

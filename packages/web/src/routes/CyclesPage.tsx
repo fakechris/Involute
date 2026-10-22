@@ -42,34 +42,15 @@ import type {
 } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 import { IcoCycle, IcoPlus, IcoSettings } from '../components/Icons';
-import { Btn, StatusIconPrimitive } from '../components/Primitives';
+import { Btn } from '../components/Primitives';
+import { IssueRow, ListRow } from '../components/list';
+import { STATE_TYPE_LABEL } from '../components/graph/graph-colors';
 import { DialogShell } from '../components/DialogShell';
 import { Field, TextArea, TextInput } from '../components/controls';
 import { PageBody, PageHeader } from '../components/layout';
-import { EmptyState, LoadingState, SegmentedControl } from '../components/status';
-import { getStatusColorVar } from '../components/StatusIcon';
+import { Badge, EmptyState, LoadingState, SegmentedControl } from '../components/status';
 
 type ViewTab = 'milestones' | 'cycles';
-
-function getStateType(stateType: WorkflowStateType): string {
-  switch (stateType) {
-    case 'COMPLETED': return 'completed';
-    case 'CANCELED': return 'canceled';
-    case 'STARTED': return 'started';
-    case 'BACKLOG': return 'backlog';
-    default: return 'unstarted';
-  }
-}
-
-function getStateColor(stateType: WorkflowStateType): string {
-  switch (stateType) {
-    case 'COMPLETED': return getStatusColorVar('completed');
-    case 'CANCELED': return getStatusColorVar('canceled');
-    case 'STARTED': return getStatusColorVar('started');
-    case 'BACKLOG': return getStatusColorVar('backlog');
-    default: return getStatusColorVar('unstarted');
-  }
-}
 
 function formatDate(iso: string): string {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(iso));
@@ -345,20 +326,11 @@ export function CyclesPage() {
 
   function renderIssueLinks(items: Array<{ id: string; identifier: string; title: string; state: { type: WorkflowStateType } }>) {
     return (
-      <div className="cycles-card__issues">
+      <ul className="list-rows cycles-card__issues">
         {items.map((child) => (
-          <button
-            key={child.id}
-            type="button"
-            className="cycles-issue"
-            onClick={() => navigate(`/issue/${child.id}`)}
-          >
-            <StatusIconPrimitive stateType={getStateType(child.state.type)} stateColor={getStateColor(child.state.type)} size={14} />
-            <span className="mono cycles-issue__id">{child.identifier}</span>
-            <span className="cycles-issue__title">{child.title}</span>
-          </button>
+          <IssueRow key={child.id} issue={{ ...child, state: { name: STATE_TYPE_LABEL[child.state.type], type: child.state.type } }} />
         ))}
-      </div>
+      </ul>
     );
   }
 
@@ -367,7 +339,7 @@ export function CyclesPage() {
       <PageHeader
         icon={<IcoCycle />}
         title={activeTab === 'milestones' ? 'Milestones' : 'Cycles'}
-        hint={teamKey ? <span className="mono context-chip">{teamKey}</span> : null}
+        hint={teamKey ? <Badge mono>{teamKey}</Badge> : null}
         actions={(
           <>
             <SegmentedControl
@@ -413,7 +385,7 @@ export function CyclesPage() {
                 <section className="cycles-section">
                   <h2 className="cycles-section__title">In progress</h2>
                   {activeMilestones.map((milestone) => (
-                    <div key={milestone.id} className="cycles-card">
+                    <div key={milestone.id} className="card cycles-card">
                       <div className="cycles-card__head">
                         <span className="mono cycles-row__id">{milestone.identifier}</span>
                         <span className="cycles-row__title">{milestone.title}</span>
@@ -481,7 +453,7 @@ export function CyclesPage() {
               {activeCycle && (
                 <section className="cycles-section">
                   <h2 className="cycles-section__title">Active cycle</h2>
-                  <div className="cycles-card">
+                  <div className="card cycles-card">
                     <div className="cycles-card__head">
                       <span className="cycles-row__title">{activeCycle.name}</span>
                       <span className="cycles-row__meta">
@@ -637,30 +609,42 @@ function MilestoneRow({
 }) {
   const childCount = milestone.children?.nodes.length ?? 0;
   return (
-    <div className="cycles-row">
-      <span className="cycles-row__icon"><IcoCycle size={14} /></span>
-      <span className="mono cycles-row__id">{milestone.identifier}</span>
-      <span className="cycles-row__title">{milestone.title}</span>
-      <span className="mono cycles-row__meta">{childCount} tasks</span>
-      <Btn variant="ghost" size="sm" onClick={onNavigate}>Context</Btn>
-      <Btn variant="ghost" size="sm" onClick={onEdit}>Edit</Btn>
-      <Btn variant="danger" size="sm" onClick={onDelete}>Delete</Btn>
-    </div>
+    <ListRow
+      as="div"
+      leading={<IcoCycle size={14} />}
+      id={milestone.identifier}
+      title={milestone.title}
+      meta={<span className="mono">{childCount} tasks</span>}
+      trailing={
+        <>
+          <Btn variant="ghost" size="sm" onClick={onNavigate}>Context</Btn>
+          <Btn variant="ghost" size="sm" onClick={onEdit}>Edit</Btn>
+          <Btn variant="danger" size="sm" onClick={onDelete}>Delete</Btn>
+        </>
+      }
+    />
   );
 }
 
 function CycleRow({ cycle, onEdit, onDelete }: { cycle: CycleSummary; onEdit: () => void; onDelete: () => void }) {
   const issueCount = cycle.issues?.nodes.length ?? 0;
   return (
-    <div className="cycles-row">
-      <span className="cycles-row__icon"><IcoCycle size={14} /></span>
-      <span className="cycles-row__title">{cycle.name}</span>
-      <span className="cycles-row__meta">
-        {formatDate(cycle.startsAt)} – {formatDate(cycle.endsAt)}
-      </span>
-      <span className="mono cycles-row__meta">{issueCount} issues</span>
-      <Btn variant="ghost" size="sm" onClick={onEdit}>Edit</Btn>
-      <Btn variant="danger" size="sm" onClick={onDelete}>Delete</Btn>
-    </div>
+    <ListRow
+      as="div"
+      leading={<IcoCycle size={14} />}
+      title={cycle.name}
+      meta={
+        <>
+          <span>{formatDate(cycle.startsAt)} – {formatDate(cycle.endsAt)}</span>
+          <span className="mono">{issueCount} issues</span>
+        </>
+      }
+      trailing={
+        <>
+          <Btn variant="ghost" size="sm" onClick={onEdit}>Edit</Btn>
+          <Btn variant="danger" size="sm" onClick={onDelete}>Delete</Btn>
+        </>
+      }
+    />
   );
 }

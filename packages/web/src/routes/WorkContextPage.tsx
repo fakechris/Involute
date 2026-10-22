@@ -16,7 +16,7 @@ import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { WORK_CONTEXT_PAGE_QUERY } from '../work/queries';
 import { HumanReviewSection } from '../components/HumanReviewSection';
 import { PageBody, PageHeader } from '../components/layout';
-import { EmptyState, LoadingState } from '../components/status';
+import { Badge, EmptyState, LoadingState } from '../components/status';
 import type {
   ReceiptReferenceSummary,
   WorkContextPageQueryData,
@@ -155,7 +155,7 @@ export function WorkContextPage() {
         title={work.title}
         hint={(
           <>
-            <span className="observation-card__status">{work.commitmentStatus.toLowerCase()}</span>
+            <Badge tone="accent">{work.commitmentStatus.toLowerCase()}</Badge>
             {' '}
             <span className="observation-card__meta">{work.state.name}</span>
             {' · '}

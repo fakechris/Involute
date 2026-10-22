@@ -11,7 +11,7 @@ import { IcoCheck, IcoClose } from '../components/Icons';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { Btn } from '../components/Primitives';
 import { ProjectFilterCombobox, type AvailableProject } from '../components/ProjectFilterCombobox';
-import { BulkActionBar, EmptyState, InlineError, LoadingState } from '../components/status';
+import { Badge, BulkActionBar, EmptyState, InlineError, LoadingState } from '../components/status';
 import { filtersToIql, useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { useListKeys } from '../components/useListKeys';
 
@@ -330,7 +330,7 @@ function RejectedWorkRow({
     <article className="observation-card" role="listitem" aria-label={`${item.identifier} rejected`}>
       <header className="observation-card__header">
         <span className="observation-card__id">{item.identifier}</span>
-        <span className="observation-card__status">rejected</span>
+        <Badge tone="danger">rejected</Badge>
         {item.repository ? <span className="observation-card__meta">{item.repository}</span> : null}
       </header>
       <h2 className="observation-card__title">{item.title}</h2>
@@ -629,18 +629,18 @@ export function CandidateCard({
         >
           {candidate.identifier}
         </button>
-        <span className="observation-card__status">{snoozed ? 'snoozed candidate' : 'candidate'}</span>
+        <Badge tone="accent">{snoozed ? 'snoozed candidate' : 'candidate'}</Badge>
         {!acceptance.trim() ? (
-          <span className="observation-card__status observation-card__status--missing" title="Committing needs acceptance criteria; fill the Acceptance box on this card.">
+          <Badge tone="danger" title="Committing needs acceptance criteria; fill the Acceptance box on this card.">
             Needs acceptance
-          </span>
+          </Badge>
         ) : null}
         {(() => {
           const badge = targetStateBadge(candidate);
           return badge ? (
-            <span className="observation-card__status observation-card__status--target" title={badge.title}>
+            <Badge tone="accent" title={badge.title}>
               {badge.label}
-            </span>
+            </Badge>
           ) : null;
         })()}
         <span className="observation-card__meta">{candidate.team.key}</span>

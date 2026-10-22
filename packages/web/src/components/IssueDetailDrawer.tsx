@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@apollo/client/react';
+import { Badge } from './status';
 
 import { ContractSection, type ContractValues } from './ContractSection';
 import type { CommentSummary, ContractAmendmentSummary, IssueSummary, TeamSummary, UserSummary } from '../board/types';
@@ -279,7 +280,7 @@ export function IssueDetailDrawer({
       <section className={`issue-panel__frame${layout === 'page' ? ' issue-panel__frame--page' : ''}`}>
         <div className="issue-panel__header">
           <div className="issue-panel__title-row">
-            {team ? <span className="context-chip context-chip--team">{team.key}</span> : null}
+            {team ? <Badge tone="accent" mono>{team.key}</Badge> : null}
             <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
               {activeIssue.identifier}
             </span>

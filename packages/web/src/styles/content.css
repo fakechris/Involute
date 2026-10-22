@@ -521,3 +521,27 @@ button.list-row__main {
 .list-row__detail > .inbox-item__summary {
   flex-basis: 100%;
 }
+
+/* ============================================================== */
+/* Card: the one raised surface for Projects, Cycles and Views     */
+/* (page-specific classes keep only their differences).            */
+/* ============================================================== */
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  background: var(--bg-raised);
+}
+
+.card--interactive {
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease);
+}
+
+.card--interactive:hover {
+  border-color: var(--border-strong);
+}

@@ -9,7 +9,7 @@ import { TextInput } from '../components/controls';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { Btn } from '../components/Primitives';
 import { ProjectFilterCombobox, type AvailableProject } from '../components/ProjectFilterCombobox';
-import { BulkActionBar, EmptyState, InlineError, LoadingState } from '../components/status';
+import { Badge, BulkActionBar, EmptyState, InlineError, LoadingState } from '../components/status';
 import { filtersToIql, joinIql, useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { useListKeys } from '../components/useListKeys';
 import { IN_REVIEW_PAGE_QUERY, IN_REVIEW_PROJECTS_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
@@ -385,7 +385,7 @@ export function InReviewPage() {
                     >
                       {item.identifier}
                     </button>
-                    <span className="observation-card__status">in review</span>
+                    <Badge tone="accent">in review</Badge>
                     {item.reviewWait ? (
                       <span className={`observation-card__meta${item.reviewWait.overdue ? ' observation-card__meta--overdue' : ''}`} title={`In Review since ${item.reviewWait.since}`}>
                         waiting {formatWaitDays(item.reviewWait.waitMs)}{item.reviewWait.overdue ? ' · overdue' : ''}
@@ -396,17 +396,16 @@ export function InReviewPage() {
                         not auto-accepted: {item.autoAccept.reasons.join('; ')}
                       </span>
                     ) : null}
-                    <span className="observation-card__meta">{item.team.key}</span>
+                    <Badge mono>{item.team.key}</Badge>
                     <span className="observation-card__meta">rev {item.revision}</span>
                     {item.pendingContractAmendment ? (
-                      <button
-                        type="button"
-                        className="observation-card__status"
+                      <Badge
+                        tone="warn"
                         title="An agent proposed a change to this contract; decide it before reviewing against the old one."
                         onClick={() => navigate(`/issue/${item.id}#contract`)}
                       >
                         contract change proposed
-                      </button>
+                      </Badge>
                     ) : null}
                     {item.assignee ? (
                       <span className="observation-card__meta">
