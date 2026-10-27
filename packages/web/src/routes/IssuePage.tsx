@@ -160,7 +160,7 @@ export function IssuePage() {
   // Local UI state (previously in IssueDetailDrawer)
   const [selectedStateId, setSelectedStateId] = useState('');
   const { askCloseReason, closeReasonDialog } = useCloseReason();
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(issueSnapshot?.title ?? '');
   const [description, setDescription] = useState('');
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [selectedAssigneeId, setSelectedAssigneeId] = useState('');
@@ -169,6 +169,17 @@ export function IssuePage() {
   const [commentBody, setCommentBody] = useState('');
   const isSavingTitleRef = useRef(false);
   const titleTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // The title draft follows the issue when its id or saved title changes — adjusted
+  // during render, not in an effect (INV-1388). An effect ran after the first paint:
+  // the field showed empty, and typing before the effect flushed was overwritten
+  // by the saved title, so the edit was silently dropped.
+  const [titleSource, setTitleSource] = useState({ id: issueSnapshot?.id, title: issueSnapshot?.title });
+  if (titleSource.id !== issueSnapshot?.id || titleSource.title !== issueSnapshot?.title) {
+    setTitleSource({ id: issueSnapshot?.id, title: issueSnapshot?.title });
+    setTitle(issueSnapshot?.title ?? '');
+    setIsEditingTitle(false);
+  }
 
   useEffect(() => {
     setLocalIssue(data?.issue ?? null);
@@ -185,11 +196,6 @@ export function IssuePage() {
   useEffect(() => {
     setSelectedStateId(issueSnapshot?.state.id ?? '');
   }, [issueSnapshot?.id, issueSnapshot?.state.id]);
-
-  useEffect(() => {
-    setTitle(issueSnapshot?.title ?? '');
-    setIsEditingTitle(false);
-  }, [issueSnapshot?.id, issueSnapshot?.title]);
 
   useEffect(() => {
     const el = titleTextareaRef.current;
