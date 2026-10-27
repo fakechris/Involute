@@ -84,7 +84,10 @@ describe('project graph page (INV-681)', () => {
     renderGraph('/graph');
     expect(await screen.findByRole('heading', { name: 'Graph' })).toBeInTheDocument();
     expect(screen.getByText('Choose a project to see its structure and dependencies.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /fakechris\/lumenbox/ })).toBeInTheDocument();
+    const chooser = screen.getByText('Choose a project to see its structure and dependencies.').closest('.graph-chooser') as HTMLElement;
+    expect(within(chooser).getByRole('button', { name: /fakechris\/lumenbox/ })).toBeInTheDocument();
+    // The toolbar offers the same projects as quick pills (INV-1386).
+    expect(within(screen.getByRole('group', { name: 'Quick project filters' })).getByRole('button', { name: /fakechris\/lumenbox/ })).toBeInTheDocument();
   });
 
   it('outlines the CONTAINS tree with roll-up progress, blocked markers and unplaced work', async () => {
