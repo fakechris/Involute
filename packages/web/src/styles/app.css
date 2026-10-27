@@ -928,10 +928,6 @@ kbd {
 
 /* Header: slim 44px breadcrumb-style bar */
 
-.app-shell__eyebrow {
-  display: none;
-}
-
 /* Mobilebar */
 .app-shell__mobilebar {
   display: none;
@@ -1351,48 +1347,6 @@ kbd {
 .field-stack--readonly strong {
   font-size: 15px;
   font-weight: 500;
-}
-
-/* Notices */
-.shell-notice {
-  border: 1px solid var(--border);
-  border-radius: var(--r-3);
-  background: var(--bg-raised);
-  box-shadow: none;
-  padding: 12px 14px;
-  margin: var(--content-gutter);
-}
-
-.shell-notice h2 {
-  margin: 0 0 4px;
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.shell-notice p {
-  margin: 0;
-  font-size: 14px;
-  color: var(--fg-dim);
-}
-
-.shell-notice__actions {
-  margin-top: 10px;
-}
-
-.shell-notice__action {
-  display: inline-block;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  background: var(--bg-raised);
-  color: var(--fg);
-  font-size: 14px;
-  text-decoration: none;
-}
-
-.shell-notice--error {
-  border-color: color-mix(in srgb, var(--danger) 44%, var(--border));
-  background: color-mix(in srgb, var(--danger-weak) 55%, var(--bg-raised));
 }
 
 /* Action buttons — the .ui-action family behind Btn (INV-1313); sizes,
@@ -3881,15 +3835,7 @@ kbd {
   margin-bottom: 16px;
 }
 
-.commit-glance__frame {
-  width: min(460px, calc(100vw - 24px));
-}
 
-.commit-glance__warning {
-  margin: 0 0 10px;
-  font-size: 13px;
-  color: var(--danger);
-}
 
 .commit-glance__list {
   display: flex;
@@ -3932,11 +3878,6 @@ kbd {
   color: var(--fg-muted);
 }
 
-.commit-glance__footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 
 .candidates-toolbar__select-all {
   display: inline-flex;
@@ -5511,6 +5452,11 @@ kbd {
   font-size: 13px;
 }
 
+.claim-control__none {
+  font-size: 13px;
+  color: var(--fg-dim);
+}
+
 /* Inbox details for notifications without a work item (INV-794). */
 .inbox-item__details {
   display: grid;
@@ -5838,6 +5784,131 @@ kbd {
 }
 
 .attention-section__title:not(.attention-section__title--parent) .attention-group__name {
+  flex: 0 1 auto;
+}
+
+.attention-section__heading .mono ~ .attention-group__name {
+  flex: 1 0 100%;
+}
+
+.attention-section__count {
+  font-family: var(--font-mono);
+  color: var(--fg-muted);
+}
+
+.attention-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.attention-section__summary {
+  margin: 4px 10px 2px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.attention-section__actions {
+  padding: 2px 10px 4px;
+}
+
+.attention-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.attention-group--parent {
+  border: 1px solid var(--border);
+  border-radius: var(--r-2, 8px);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+
+.attention-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.attention-group__header {
+  appearance: none;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sunken);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-1, 120ms) var(--ease);
+}
+
+.attention-section__title--parent .attention-group__header {
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+}
+
+.attention-group--collapsed > .attention-group__header,
+.attention-group--collapsed > .attention-section__title--parent > .attention-group__header {
+  border-bottom-color: transparent;
+}
+
+.attention-group__header:hover {
+  background: var(--bg-hover);
+}
+
+.attention-group__header:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.attention-group__caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-raised);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--fg-muted);
+  user-select: none;
+}
+
+.attention-group__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 3px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.attention-group__label .mono,
+.attention-group__id {
+  flex: 0 0 auto;
+}
+
+.attention-group__id {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+
+.attention-group__name {
   flex: 0 1 auto;
 }
 
@@ -6741,11 +6812,6 @@ kbd {
 }
 
 /* Issue page header crumbs, More menu and action rows (were inline, INV-1314). */
-.issue-panel__crumb-sep {
-  display: inline-flex;
-  color: var(--fg-faint);
-}
-
 .issue-panel__crumb-link {
   padding: 2px 4px;
   border: 0;
@@ -6763,10 +6829,6 @@ kbd {
 .issue-panel__crumb-id {
   font-size: 13px;
   color: var(--fg-dim);
-}
-
-.issue-panel__header-actions--end {
-  margin-left: auto;
 }
 
 .issue-panel__menu {

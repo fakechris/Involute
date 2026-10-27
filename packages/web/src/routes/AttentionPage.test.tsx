@@ -159,7 +159,7 @@ describe('Needs you (INV-1092)', () => {
     expect(within(candidates).getByText('oldest 5h')).toBeInTheDocument();
     const group = candidates.querySelector('.attention-group__label');
     expect(group?.querySelector('.mono')).toHaveTextContent('INV-1');
-    expect(group?.querySelector('.attention-group__kind')).toHaveTextContent('Milestone');
+    expect(group).toHaveAccessibleName(/^Collapse Milestone INV-1 /);
     expect(group?.querySelector('.attention-group__name')).toHaveTextContent('Milestone');
     // The first item's decision is open on the right: the contract change, with its diff and buttons.
     const decision = screen.getByLabelText('Decision');
@@ -185,11 +185,11 @@ describe('Needs you (INV-1092)', () => {
     const milestone = labels.find((label) => label.textContent?.includes('INV-989'));
     const epic = labels.find((label) => label.textContent?.includes('INV-788'));
     expect(milestone).toHaveAttribute('aria-expanded', 'true');
-    expect(milestone?.querySelector('.attention-group__kind')).toHaveTextContent('Milestone');
+    expect(milestone).toHaveAccessibleName(`Collapse Milestone INV-989 ${milestoneTitle}`);
     expect(milestone?.querySelector('.attention-group__name')).toHaveTextContent(milestoneTitle);
     expect(milestone?.querySelector('.attention-group__count')).toHaveTextContent('1 item');
     expect(epic).toHaveAttribute('aria-expanded', 'true');
-    expect(epic?.querySelector('.attention-group__kind')).toHaveTextContent('Epic');
+    expect(epic).toHaveAccessibleName(`Collapse Epic INV-788 ${epicTitle}`);
     expect(epic?.querySelector('.attention-group__name')).toHaveTextContent(epicTitle);
     expect(epic?.closest('.attention-group')).toHaveClass('attention-group--parent');
     expect(epic?.closest('.attention-group')?.querySelector('ul.attention-group__children li.list-row')).toHaveTextContent('INV-21');

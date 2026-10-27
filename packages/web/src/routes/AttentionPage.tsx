@@ -10,7 +10,7 @@ import { HumanReviewSection } from '../components/HumanReviewSection';
 import { PageBody, PageHeader } from '../components/layout';
 import { Btn } from '../components/Primitives';
 import { ListRow } from '../components/list';
-import { Badge, BulkActionBar, EmptyState, InlineError, LoadingState, SegmentedControl } from '../components/status';
+import { Badge, BulkActionBar, EmptyState, InlineError, LoadingState, SegmentedControl, type BadgeTone } from '../components/status';
 import { RespondToAgent } from '../components/RespondToAgent';
 import { useListKeys } from '../components/useListKeys';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
@@ -82,6 +82,12 @@ const NOUNS: Record<AttentionKind, [string, string]> = {
   DELIVERY_CHANGE: ['delivery approval', 'delivery approvals'],
   OPS: ['operations item', 'operations items'],
   WORK_REVIEW: ['finished item to accept', 'finished items to accept'],
+};
+
+/** Group header kind chip (INV-1385): a project reads as success, a milestone as accent. */
+const KIND_TONE: Partial<Record<WorkKind, BadgeTone>> = {
+  PROJECT: 'success',
+  MILESTONE: 'accent',
 };
 
 const KIND_LABEL: Partial<Record<WorkKind, string>> = {
@@ -529,7 +535,7 @@ export function AttentionPage() {
                                 type="button"
                                 className="attention-group__header attention-group__label"
                                 aria-expanded={!isGroupCollapsed}
-                                aria-label={`${isGroupCollapsed ? 'Expand' : 'Collapse'} ${group.label}`}
+                                aria-label={`${isGroupCollapsed ? 'Expand' : 'Collapse'} ${group.kind && KIND_LABEL[group.kind] ? `${KIND_LABEL[group.kind]} ` : ''}${group.label}`}
                                 onClick={() => toggleGroup(groupCollapseKey)}
                               >
                                 <span className="attention-group__caret" aria-hidden="true">{isGroupCollapsed ? '▸' : '▾'}</span>
@@ -635,14 +641,13 @@ function GroupLabel({ className, kind, text }: { className?: string; kind?: Work
   const identifier = match?.[1] ?? null;
   const title = match?.[2] ?? text;
   const kindLabel = kind ? KIND_LABEL[kind] : null;
-  const kindModifier = kind ? ` attention-group__kind--${kind.toLowerCase()}` : '';
   // A group heading is a collapsible parent container header, not a body paragraph.
   // The kind is a badge; the title takes the remaining column and wraps there,
   // so a long milestone or epic name cannot paint across the decision pane (INV-1302).
   return (
     <span className={className}>
       {identifier ? <span className="mono attention-group__id">{identifier}</span> : null}
-      {kindLabel ? <span className={`attention-group__kind${kindModifier}`}>{kindLabel}</span> : null}
+      {kindLabel && kind ? <Badge tone={KIND_TONE[kind] ?? 'neutral'}>{kindLabel}</Badge> : null}
       {identifier ? <span className="attention-group__name">{title}</span> : <span className="attention-group__name">{text}</span>}
     </span>
   );

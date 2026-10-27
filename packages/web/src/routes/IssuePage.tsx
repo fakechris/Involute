@@ -587,94 +587,98 @@ export function IssuePage() {
 
   return (
     <main className="issue-panel issue-panel--page" aria-label="Issue detail page">
-      <h1 className="sr-only">Issue detail</h1>
       {closeReasonDialog}
       {/* ── Header ── */}
-      <div className="issue-panel__header">
-        <div className="issue-panel__title-row">
-          <Btn variant="ghost" icon={<IcoChevL size={12} />} onClick={() => navigate(-1)}>
-            {selectedTeam.key}
-          </Btn>
-          {activeIssue.parent ? (
-            <>
-              <span className="issue-panel__crumb-sep" aria-hidden="true">
-                <IcoChevR size={10} />
-              </span>
-              <button
-                type="button"
-                onClick={() => navigate(`/issue/${activeIssue.parent!.id}`)}
-                className="mono issue-panel__crumb-link"
-                title={activeIssue.parent.title}
-              >
-                {activeIssue.parent.identifier}
-              </button>
-            </>
-          ) : null}
-          <span className="issue-panel__crumb-sep" aria-hidden="true">
-            <IcoChevR size={10} />
-          </span>
-          <span className="mono issue-panel__crumb-id">
-            {activeIssue.identifier}
-          </span>
-          {activeIssue.provenance ? (
-            <span className="issue-panel__provenance">
-              {activeIssue.provenance.actor ? (
-                <>
-                  proposed by{' '}
-                  <ActorBadge
-                    actor={activeIssue.provenance.actor}
-                    onSelect={(picked) => navigate(`/agents/${picked}`)}
-                  />
-                </>
-              ) : (
-                <>
-                  proposed via{' '}
-                  {[
-                    activeIssue.provenance.source,
-                    activeIssue.provenance.surface,
-                    activeIssue.provenance.actorKind?.toLowerCase(),
-                  ]
-                    .filter(Boolean)
-                    .join(' · ') || 'an unidentified path'}
-                </>
-              )}
+      <PageHeader
+        back={(
+          <>
+            <Btn variant="ghost" icon={<IcoChevL size={12} />} onClick={() => navigate(-1)}>
+              {selectedTeam.key}
+            </Btn>
+            {activeIssue.parent ? (
+              <>
+                <span className="page-header__crumb-sep" aria-hidden="true">
+                  <IcoChevR size={10} />
+                </span>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/issue/${activeIssue.parent!.id}`)}
+                  className="mono issue-panel__crumb-link"
+                  title={activeIssue.parent.title}
+                >
+                  {activeIssue.parent.identifier}
+                </button>
+              </>
+            ) : null}
+            <span className="page-header__crumb-sep" aria-hidden="true">
+              <IcoChevR size={10} />
             </span>
-          ) : null}
-        </div>
-        <div className="issue-panel__header-actions issue-panel__header-actions--end">
-          <Btn variant="subtle" onClick={() => navigate(`/work/${activeIssue.id}`)}>
-            Work context
-          </Btn>
-          <Btn variant="ghost" icon={<IcoChevL />} title="Previous issue" onClick={() => navigate(-1)} />
-          <Btn variant="ghost" icon={<IcoChevR />} title="Next issue" onClick={() => navigate(1)} />
-          <div className="issue-panel__menu">
-            <Btn variant="ghost" icon={<IcoMore />} title="More" onClick={() => setMoreMenuOpen(!moreMenuOpen)} />
-            {moreMenuOpen && (
-              <div className="issue-panel__menu-popover">
-                <button
-                  type="button"
-                  className="issue-panel__menu-item"
-                  onClick={() => { setMoreMenuOpen(false); handleCopyLink(); }}
-                >
-                  <IcoCopy size={12} /> Copy link
-                </button>
-                <button
-                  type="button"
-                  className="issue-panel__menu-item issue-panel__menu-item--danger"
-                  onClick={() => {
-                    setMoreMenuOpen(false);
-                    if (confirmIssueDelete()) {
-                      void persistIssueDelete(activeIssue).catch(() => undefined);
-                    }
-                  }}
-                >
-                  <IcoClose size={12} /> Delete issue
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+          </>
+        )}
+        title={(
+          <>
+            <span className="mono issue-panel__crumb-id" aria-hidden="true">{activeIssue.identifier}</span>
+            <span className="sr-only">Issue detail</span>
+          </>
+        )}
+        hint={activeIssue.provenance ? (
+          activeIssue.provenance.actor ? (
+            <>
+              proposed by{' '}
+              <ActorBadge
+                actor={activeIssue.provenance.actor}
+                onSelect={(picked) => navigate(`/agents/${picked}`)}
+              />
+            </>
+          ) : (
+            <>
+              proposed via{' '}
+              {[
+                activeIssue.provenance.source,
+                activeIssue.provenance.surface,
+                activeIssue.provenance.actorKind?.toLowerCase(),
+              ]
+                .filter(Boolean)
+                .join(' · ') || 'an unidentified path'}
+            </>
+          )
+        ) : undefined}
+        actions={(
+          <>
+            <Btn variant="subtle" onClick={() => navigate(`/work/${activeIssue.id}`)}>
+              Work context
+            </Btn>
+            <Btn variant="ghost" icon={<IcoChevL />} title="Previous issue" onClick={() => navigate(-1)} />
+            <Btn variant="ghost" icon={<IcoChevR />} title="Next issue" onClick={() => navigate(1)} />
+            <div className="issue-panel__menu">
+              <Btn variant="ghost" icon={<IcoMore />} title="More" onClick={() => setMoreMenuOpen(!moreMenuOpen)} />
+              {moreMenuOpen && (
+                <div className="issue-panel__menu-popover">
+                  <button
+                    type="button"
+                    className="issue-panel__menu-item"
+                    onClick={() => { setMoreMenuOpen(false); handleCopyLink(); }}
+                  >
+                    <IcoCopy size={12} /> Copy link
+                  </button>
+                  <button
+                    type="button"
+                    className="issue-panel__menu-item issue-panel__menu-item--danger"
+                    onClick={() => {
+                      setMoreMenuOpen(false);
+                      if (confirmIssueDelete()) {
+                        void persistIssueDelete(activeIssue).catch(() => undefined);
+                      }
+                    }}
+                  >
+                    <IcoClose size={12} /> Delete issue
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      />
 
       {/* ── Body: two columns ── */}
       <div className="issue-panel__body">

@@ -46,6 +46,7 @@ import type {
   WorkUserSummary,
 } from '../work/types';
 import { Select } from '../components/controls';
+import { DialogShell } from '../components/DialogShell';
 
 const COMMIT_ERROR_MESSAGE = 'We could not commit this candidate. Check acceptance, owner, and revision.';
 
@@ -138,64 +139,39 @@ function CommitGlanceDialog({
   const successCount = glance.committed.length;
 
   return (
-    <aside className="issue-panel" aria-label="Batch commit summary" aria-modal="true" role="dialog">
-      <button
-        type="button"
-        className="issue-panel__backdrop"
-        aria-label="Close commit summary"
-        onClick={onClose}
-      />
-      <section className="issue-panel__frame commit-glance__frame">
-        <div className="issue-panel__header">
-          <div>
-            <p className="app-shell__eyebrow">Involute</p>
-            <h2>
-              Committed {successCount} work item{successCount === 1 ? '' : 's'}
-            </h2>
-          </div>
-          <button type="button" className="issue-panel__close" onClick={onClose}>
-            Close
-          </button>
-        </div>
-
-        <div className="issue-panel__section">
-          {glance.failCount > 0 ? (
-            <p className="commit-glance__warning" role="alert">
-              {glance.failCount} failed — they remain in the queue.
-            </p>
-          ) : null}
-          <ul className="commit-glance__list">
-            {groups.map(([repository, count]) => {
-              const shortName = repository ? repository.split('/').pop() || repository : 'No project';
-              const target = repository
-                ? `/?team=${teamKey ?? ''}&project=${encodeURIComponent(repository)}`
-                : `/?team=${teamKey ?? ''}&project=__none__`;
-              return (
-                <li key={repository ?? '__none__'}>
-                  <Link className="commit-glance__project" to={target} onClick={onClose}>
-                    <span className="commit-glance__name">{shortName}</span>
-                    <span className="commit-glance__count">× {count}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-
-        <div className="issue-panel__section commit-glance__footer">
-          <Link
-            className="ui-action ui-action--accent"
-            to={`/?team=${teamKey ?? ''}`}
-            onClick={onClose}
-          >
-            View all on board
-          </Link>
-          <button type="button" className="ui-action" onClick={onClose}>
-            Close
-          </button>
-        </div>
-      </section>
-    </aside>
+    <DialogShell
+      variant="modal"
+      ariaLabel="Batch commit summary"
+      backdropLabel="Close commit summary"
+      eyebrow="Involute"
+      title={`Committed ${successCount} work item${successCount === 1 ? '' : 's'}`}
+      onClose={onClose}
+      footer={
+        <Link className="ui-action ui-action--accent" to={`/?team=${teamKey ?? ''}`} onClick={onClose}>
+          View all on board
+        </Link>
+      }
+    >
+      {glance.failCount > 0 ? (
+        <InlineError>{glance.failCount} failed — they remain in the queue.</InlineError>
+      ) : null}
+      <ul className="commit-glance__list">
+        {groups.map(([repository, count]) => {
+          const shortName = repository ? repository.split('/').pop() || repository : 'No project';
+          const target = repository
+            ? `/?team=${teamKey ?? ''}&project=${encodeURIComponent(repository)}`
+            : `/?team=${teamKey ?? ''}&project=__none__`;
+          return (
+            <li key={repository ?? '__none__'}>
+              <Link className="commit-glance__project" to={target} onClick={onClose}>
+                <span className="commit-glance__name">{shortName}</span>
+                <span className="commit-glance__count">× {count}</span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </DialogShell>
   );
 }
 
