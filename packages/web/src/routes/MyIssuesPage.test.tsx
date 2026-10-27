@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useQuery } from '@apollo/client/react';
 
 import { MyIssuesPage } from './MyIssuesPage';
+import { expectRowOpensDrawer, renderWithDrawerHost } from '../test/drawer-host-harness';
+
+vi.mock('../components/RouteIssueDrawer', () => import('../test/route-issue-drawer-stub'));
 
 vi.mock('@apollo/client/react', () => ({ useQuery: vi.fn() }));
 
@@ -65,5 +68,15 @@ describe('MyIssuesPage (INV-1314)', () => {
       </MemoryRouter>,
     );
     expect(screen.getByRole('heading', { name: 'No issues assigned to you' })).toBeInTheDocument();
+  });
+
+  it('opens a row in the drawer and Esc closes it, keeping the filters (INV-1387)', async () => {
+    vi.mocked(useQuery).mockReturnValue({
+      data: { issues: { nodes: [issue('INV-1', 'Fix login', 'acme/web', 1, 'STARTED')] } },
+      loading: false,
+    } as never);
+    const url = '/my-issues?project=acme/web&priority=1';
+    renderWithDrawerHost(<MyIssuesPage />, url);
+    await expectRowOpensDrawer(screen.getByRole('link', { name: 'Open issue INV-1' }), 'INV-1', url);
   });
 });

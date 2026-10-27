@@ -841,7 +841,7 @@ export function renderApp(
       const issueId = String(options.variables.id);
       return {
         data: {
-          issue: queryState.data?.issues.nodes.find((issue) => issue.id === issueId) ?? null,
+          issue: queryState.data?.issues.nodes.find((issue) => issue.id === issueId || issue.identifier === issueId) ?? null,
           users: queryState.data?.users ?? { nodes: [] },
           issueLabels: queryState.data?.issueLabels ?? { nodes: [] },
         },

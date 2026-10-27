@@ -3,6 +3,9 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BugsPage } from './BugsPage';
+import { expectRowOpensDrawer, renderWithDrawerHost } from '../test/drawer-host-harness';
+
+vi.mock('../components/RouteIssueDrawer', () => import('../test/route-issue-drawer-stub'));
 
 const bugsPageData = {
   bugSummary: {
@@ -331,5 +334,14 @@ describe('BugsPage', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Report bug' }));
     expect(screen.getByTestId('location-state')).toHaveTextContent('{"openReportBug":true}');
+  });
+
+  // INV-1387
+  it('opens bugs in the drawer from the open list, Past their SLA and Reported again', async () => {
+    const url = '/bugs?project=fakechris/Involute&priority=1';
+    renderWithDrawerHost(<BugsPage />, url);
+    await expectRowOpensDrawer(within(screen.getByRole('list', { name: 'Open bugs list' })).getByRole('link', { name: /^INV-30\b/ }), 'INV-30', url);
+    await expectRowOpensDrawer(within(screen.getByLabelText('Open bugs past their SLA')).getByRole('link', { name: /INV-30/ }), 'INV-30', url);
+    await expectRowOpensDrawer(within(screen.getByLabelText('Most duplicated open bugs')).getByRole('link', { name: /INV-32/ }), 'INV-32', url);
   });
 });

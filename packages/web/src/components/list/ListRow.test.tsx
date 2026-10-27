@@ -116,7 +116,17 @@ describe('IssueRow', () => {
       </ul>,
       '/board?view=list',
     );
-    expect(screen.getByRole('link', { name: /INV-9/ })).toHaveAttribute('href', '/board?view=list&issue=INV-9');
+    const link = screen.getByRole('link', { name: /INV-9/ });
+    // The href is the full page, so the browser opens it on ⌘/Ctrl/middle click (INV-1387) …
+    expect(link).toHaveAttribute('href', '/issue/INV-9');
+    // … a modified click is left to the browser …
+    fireEvent.click(link, { metaKey: true });
+    fireEvent.click(link, { ctrlKey: true });
+    expect(screen.getByTestId('where')).toHaveTextContent('/board?view=list');
+    expect(screen.getByTestId('where')).not.toHaveTextContent('issue=');
+    // … and a plain click opens the drawer on this route, keeping its params.
+    fireEvent.click(link);
+    expect(screen.getByTestId('where')).toHaveTextContent('/board?view=list&issue=INV-9');
   });
 
   it('is not a link with open="none"', () => {

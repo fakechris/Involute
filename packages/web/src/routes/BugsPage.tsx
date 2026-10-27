@@ -19,7 +19,7 @@ import { fetchSessionState } from '../lib/session';
 import { readStoredTeamKey } from '../board/utils';
 import { IcoBug } from '../components/Icons';
 import { FixedBetweenDeploys } from '../components/FixedBetweenDeploys';
-import { IssueRow, ListRow } from '../components/list';
+import { IssueRow, ListRow, useIssueHref } from '../components/list';
 import { Btn, PriorityIcon } from '../components/Primitives';
 import { Select } from '../components/controls';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
@@ -44,6 +44,7 @@ function formatWeekLabel(weekStart: string): string {
 
 export function BugsPage() {
   const navigate = useNavigate();
+  const issueHref = useIssueHref();
   const teamKey = readStoredTeamKey();
 
   const queryVariables: BugsPageQueryVariables = {
@@ -113,10 +114,10 @@ export function BugsPage() {
       ),
     [openBugs, project, workFilters.filters, viewerId],
   );
-  // J/K and Enter like the other queues (INV-1133); Enter opens the bug's own page.
+  // J/K and Enter like the other queues (INV-1133); Enter opens the bug in the drawer, like a click (INV-1387).
   const listKeys = useListKeys(visibleBugs, {
     onClear: () => undefined,
-    onOpen: (issue) => navigate(`/issue/${encodeURIComponent(issue.identifier)}`),
+    onOpen: (issue) => navigate(issueHref(issue, 'drawer'), { preventScrollReset: true }),
     onSelectAll: () => undefined,
     onToggle: () => undefined,
   });
@@ -281,6 +282,7 @@ export function BugsPage() {
                               id={bug.identifier}
                               title={bug.title}
                               to={`/issue/${encodeURIComponent(bug.identifier)}`}
+                              clickTo={issueHref(bug, 'drawer')}
                             />
                           </td>
                           <td className="mono">{bug.duplicateCount}</td>
@@ -404,6 +406,7 @@ function BugTriageMetrics({ metrics }: { metrics: BugMetricsData }) {
                 <IssueRow
                   key={bug.id}
                   issue={bug}
+                  open="drawer"
                   alert
                   meta={<Badge tone="danger">{formatHours(bug.overdueHours)} over</Badge>}
                 />
@@ -530,6 +533,7 @@ export function BugRow({
   return (
     <IssueRow
       issue={issue}
+      open="drawer"
       current={focused}
       aria-current={focused ? 'true' : undefined}
       data-list-key-id={issue.id}

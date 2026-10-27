@@ -180,6 +180,7 @@ export function SearchPage() {
                 <IssueRow
                   key={hit.issue.id}
                   issue={hit.issue}
+                  open="drawer"
                   titleNode={highlight(hit.issue.title, query)}
                   meta={`${hit.issue.state.name} · ${matchLabel(hit)}`}
                   detail={hit.snippet ? <span className="list-row__snippet">{highlight(hit.snippet, query)}</span> : null}

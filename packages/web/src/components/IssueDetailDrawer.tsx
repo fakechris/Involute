@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@apollo/client/react';
 import { Badge } from './status';
 
@@ -333,6 +333,11 @@ export function IssueDetailDrawer({
                   Next
                 </button>
               </div>
+            ) : null}
+            {layout === 'drawer' ? (
+              <Link className="ui-action ui-action--subtle" to={`/issue/${encodeURIComponent(activeIssue.identifier)}`}>
+                Open full page
+              </Link>
             ) : null}
             <button
               type="button"

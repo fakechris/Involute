@@ -1,5 +1,5 @@
-import type { HTMLAttributes, ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import type { HTMLAttributes, MouseEvent, ReactNode } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import { LabelPill, PriorityIcon } from '../Primitives';
 import { StatusIcon } from '../StatusIcon';
@@ -27,6 +27,12 @@ export interface ListRowProps extends Omit<HTMLAttributes<HTMLElement>, 'title' 
   detail?: ReactNode;
   /** Route the id + title link to. */
   to?: string | undefined;
+  /**
+   * A plain click goes here instead of `to` (the issue drawer, `?issue=` on
+   * this route, INV-1387). The link keeps `to` as its href, so ⌘/Ctrl-,
+   * Shift- and middle-click still open the full page in a new tab or window.
+   */
+  clickTo?: string | undefined;
   /** Click handler for the id + title when there is no route. */
   onOpen?: (() => void) | undefined;
   /** Accessible name of the open link/button (default: its text). */
@@ -56,6 +62,7 @@ export function ListRow({
   trailing,
   detail,
   to,
+  clickTo,
   onOpen,
   openLabel,
   variant = 'plain',
@@ -66,7 +73,15 @@ export function ListRow({
   className,
   ...rest
 }: ListRowProps) {
+  const navigate = useNavigate();
   const opens = Boolean(to || onOpen);
+  const handleLinkClick = clickTo
+    ? (event: MouseEvent<HTMLAnchorElement>) => {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        event.preventDefault();
+        navigate(clickTo, { preventScrollReset: true });
+      }
+    : undefined;
   const classes = [
     'list-row',
     variant === 'plain' ? null : `list-row--${variant}`,
@@ -90,7 +105,7 @@ export function ListRow({
     </>
   );
   const main = to ? (
-    <Link className="list-row__main" to={to} aria-label={openLabel}>
+    <Link className="list-row__main" to={to} aria-label={openLabel} onClick={handleLinkClick}>
       {mainContent}
     </Link>
   ) : onOpen ? (
@@ -141,7 +156,7 @@ export interface IssueRowWork {
 
 /**
  * Where a row opens an item: the drawer (`?issue=<identifier>` on the current
- * route) on routes that host it, the issue page otherwise.
+ * route, other params kept) or the issue page.
  */
 export function useIssueHref(): (work: Pick<IssueRowWork, 'identifier'>, open: 'page' | 'drawer') => string {
   const location = useLocation();
@@ -157,7 +172,11 @@ export function useIssueHref(): (work: Pick<IssueRowWork, 'identifier'>, open: '
 
 export interface IssueRowProps extends Omit<ListRowProps, 'id' | 'title' | 'to' | 'leading'> {
   issue: IssueRowWork;
-  /** `page` (default): /issue/:identifier. `drawer`: ?issue= on this route. `none`: not a link. */
+  /**
+   * `page` (default): /issue/:identifier. `drawer`: a click sets ?issue= on this
+   * route (IssueDrawerHost shows it) while the href stays the issue page, so
+   * modifier and middle clicks open the page. `none`: not a link.
+   */
   open?: 'page' | 'drawer' | 'none' | undefined;
   /** Replaces the plain title (e.g. with highlighted search words). */
   titleNode?: ReactNode;
@@ -220,7 +239,8 @@ export function IssueRow({
       id={issue.identifier}
       title={titleNode ?? issue.title}
       titleText={issue.title}
-      to={open === 'none' ? undefined : issueHref(issue, open)}
+      to={open === 'none' ? undefined : issueHref(issue, 'page')}
+      clickTo={open === 'drawer' ? issueHref(issue, 'drawer') : undefined}
       meta={hasMeta ? metaParts : undefined}
     />
   );

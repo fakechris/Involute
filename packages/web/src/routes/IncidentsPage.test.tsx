@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useQuery } from '@apollo/client/react';
 
 import { IncidentsPage } from './IncidentsPage';
+import { expectRowOpensDrawer, renderWithDrawerHost } from '../test/drawer-host-harness';
+
+vi.mock('../components/RouteIssueDrawer', () => import('../test/route-issue-drawer-stub'));
 
 const summary = {
   openCount: 1,
@@ -78,8 +81,19 @@ describe('IncidentsPage (INV-1129)', () => {
     expect(screen.getByTestId('incident-INV-1')).toHaveTextContent('1 of 2 done · 1 overdue');
     expect(screen.getByText('2 declined or duplicate incidents are not counted.')).toBeInTheDocument();
 
-    fireEvent.click(within(screen.getByTestId('incident-INV-1')).getByRole('link', { name: /INV-1/ }));
-    expect(screen.getByTestId('where')).toHaveTextContent('/issue/INV-1');
+    // The row opens the drawer in place (INV-1387); its href is still the issue page.
+    const link = within(screen.getByTestId('incident-INV-1')).getByRole('link', { name: /INV-1/ });
+    expect(link).toHaveAttribute('href', '/issue/INV-1');
+    fireEvent.click(link);
+    expect(screen.queryByTestId('where')).toBeNull();
+    expect(screen.getByTestId('incident-INV-1')).toBeInTheDocument();
+  });
+
+  it('opens an incident in the drawer and Esc closes it, keeping the filters (INV-1387)', async () => {
+    serve({ incidentSummary: summary });
+    const url = '/incidents?project=acme/incidents&q=board';
+    renderWithDrawerHost(<IncidentsPage />, url);
+    await expectRowOpensDrawer(within(screen.getByTestId('incident-INV-1')).getByRole('link', { name: /INV-1/ }), 'INV-1', url);
   });
 
   it('narrows the incident list by project and text from the URL (INV-1314)', () => {
