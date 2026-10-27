@@ -81,6 +81,6 @@
 | `.card`（样式类，不是组件） | `styles/content.css` | Projects / Cycles / Views 各自的卡片外壳 |
 | 状态色 | `components/StatusIcon.tsx`（`getStatusColorVar` / `statusKindForStateType`） | `graph-colors.ts` 与时间线 CSS 里的重复 hex |
 
-ListRow 打开规则：路由自带抽屉时打开 `?issue=<identifier>`（`IssueRow open="drawer"`），否则进入 `/issue/:identifier`；In Review 卡片的工单号仍进入 `/work/:id`（上下文页）。
+ListRow 打开规则：列表行（My Issues / Bugs / Search / Incidents / Health）用 `IssueRow open="drawer"`：单击在当前路由加 `?issue=<identifier>`，由 App 壳里的 `IssueDrawerHost` 打开抽屉（Board / Backlog 自带抽屉）；链接 href 仍是 `/issue/:identifier`，⌘/Ctrl/中键交给浏览器打开整页；关闭只去掉 `issue` 参数（INV-1387）。Needs you 与 In Review 不变；In Review 卡片的工单号仍进入 `/work/:id`（上下文页）。
 
 迁移进度见 `IMPLEMENTATION_PLAN.md` 的「UI 一致性」章节；每个阶段对应一张 Involute 工单。

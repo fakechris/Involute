@@ -7,6 +7,7 @@ import { KeyboardShortcutsDialog } from './app/KeyboardShortcutsDialog';
 import { LegacyTeamRedirect } from './routes/LegacyTeamRedirect';
 import { NotificationsBell } from './components/NotificationsBell';
 import { NeedsYouNavLink } from './components/NeedsYouNavLink';
+import { IssueDrawerHost } from './components/IssueDrawerHost';
 import { ShellTeamsSync } from './app/ShellTeamsSync';
 import { useSavedViewsSync } from './app/useSavedViewsSync';
 import { Avatar } from './components/Primitives';
@@ -1424,6 +1425,8 @@ export function App() {
               <Route path="/issue/:id" element={<IssuePage />} />
               <Route path="/issues/:id" element={<IssuePage />} />
             </Routes>
+            {/* ?issue= opens the drawer on any route that does not host its own (INV-1387). */}
+            <IssueDrawerHost />
           </Suspense>
           </RouteErrorBoundary>
         </div>

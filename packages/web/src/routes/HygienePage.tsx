@@ -24,7 +24,7 @@ export function HygienePage() {
   const [linkError, setLinkError] = useState<string | null>(null);
   const hygiene = data?.workHygiene;
   /** "A mentions B": the second item as an inline reference. */
-  const itemRef = (ref: HygieneRef) => <IssueRow as="div" variant="compact" issue={ref} />;
+  const itemRef = (ref: HygieneRef) => <IssueRow as="div" variant="compact" issue={ref} open="drawer" />;
 
   return (
     <div className="observation-page">
@@ -63,7 +63,7 @@ export function HygienePage() {
               <p className="observation-hint">No parent chain reaches a PROJECT of the same repository. Give each a parent (it may sit directly under the project as "No milestone").</p>
               <ul className="list-rows">
                 {hygiene.unplaced.map((item) => (
-                  <IssueRow key={item.id} issue={item} meta={`${item.kind} · ${item.repository ?? 'no repository'}`} />
+                  <IssueRow open="drawer" key={item.id} issue={item} meta={`${item.kind} · ${item.repository ?? 'no repository'}`} />
                 ))}
               </ul>
             </section>
@@ -75,6 +75,7 @@ export function HygienePage() {
               <ul className="list-rows">
                 {hygiene.dependencyWithoutBlocks.map((pair) => (
                   <IssueRow
+                    open="drawer"
                     key={`${pair.from.id}>${pair.to.id}`}
                     issue={pair.from}
                     meta={<>mentions {itemRef(pair.to)}</>}
@@ -110,7 +111,7 @@ export function HygienePage() {
               <p className="observation-hint">Finished research should lead somewhere: propose its actionable points and "won't do" decisions DERIVED_FROM it, or state "no actionable points".</p>
               <ul className="list-rows">
                 {hygiene.researchWithoutDownstream.map((item) => (
-                  <IssueRow key={item.id} issue={item} />
+                  <IssueRow open="drawer" key={item.id} issue={item} />
                 ))}
               </ul>
             </section>
@@ -120,7 +121,7 @@ export function HygienePage() {
               <p className="observation-hint">Everything derived from this research is committed; nothing is left to wait for. Its proposer closes it (an agent may, for Type: Research), or accept it here.</p>
               <ul className="list-rows">
                 {hygiene.researchClosable.map((item) => (
-                  <IssueRow key={item.id} issue={item} />
+                  <IssueRow open="drawer" key={item.id} issue={item} />
                 ))}
               </ul>
             </section>
@@ -130,7 +131,7 @@ export function HygienePage() {
               <p className="observation-hint">Finished research keeps its report as a file on the item, so others can check it: attach it from the item's Files (agents: work_attach_file). It leaves this list once a file is attached.</p>
               <ul className="list-rows">
                 {hygiene.researchWithoutAttachment.map((item) => (
-                  <IssueRow key={item.id} issue={item} />
+                  <IssueRow open="drawer" key={item.id} issue={item} />
                 ))}
               </ul>
             </section>
@@ -140,7 +141,7 @@ export function HygienePage() {
               <p className="observation-hint">Committed work derived from an incident, past its deadline (Urgent 7 days, High 14, otherwise 30 from commitment; paused in Review). Finish it, or decline it with a reason.</p>
               <ul className="list-rows">
                 {hygiene.overdueFollowUps.map((item) => (
-                  <IssueRow key={item.id} issue={item} />
+                  <IssueRow open="drawer" key={item.id} issue={item} />
                 ))}
               </ul>
             </section>
@@ -150,7 +151,7 @@ export function HygienePage() {
               <p className="observation-hint">An incident closes once it led somewhere: propose its follow-ups DERIVED_FROM it, or state "无可执行点" in its description. Until then it cannot move to Done.</p>
               <ul className="list-rows">
                 {hygiene.incidentsWithoutDownstream.map((item) => (
-                  <IssueRow key={item.id} issue={item} meta={<Badge mono>{item.severity ?? 'no severity'}</Badge>} />
+                  <IssueRow open="drawer" key={item.id} issue={item} meta={<Badge mono>{item.severity ?? 'no severity'}</Badge>} />
                 ))}
               </ul>
             </section>
@@ -160,7 +161,7 @@ export function HygienePage() {
               <p className="observation-hint">A SEV1 or SEV2 incident closes with its postmortem attached (docs/postmortem.md): attach it from the incident's Files.</p>
               <ul className="list-rows">
                 {hygiene.incidentsWithoutPostmortem.map((item) => (
-                  <IssueRow key={item.id} issue={item} meta={<Badge mono>{item.severity}</Badge>} />
+                  <IssueRow open="drawer" key={item.id} issue={item} meta={<Badge mono>{item.severity}</Badge>} />
                 ))}
               </ul>
             </section>
@@ -170,7 +171,7 @@ export function HygienePage() {
               <p className="observation-hint">Written before mentions were linked automatically. New mentions link themselves.</p>
               <ul className="list-rows">
                 {hygiene.unlinkedMentions.map((pair) => (
-                  <IssueRow key={`${pair.from.id}>${pair.to.id}`} issue={pair.from} meta={<>mentions {itemRef(pair.to)}</>} />
+                  <IssueRow open="drawer" key={`${pair.from.id}>${pair.to.id}`} issue={pair.from} meta={<>mentions {itemRef(pair.to)}</>} />
                 ))}
               </ul>
             </section>

@@ -162,6 +162,7 @@ export function MyIssuesPage() {
                       key={issue.id}
                       issue={issue}
                       variant="divided"
+                      open="drawer"
                       openLabel={`Open issue ${issue.identifier}`}
                       showState
                       age={formatTimeAgo(issue.updatedAt)}

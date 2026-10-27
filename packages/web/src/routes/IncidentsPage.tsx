@@ -201,7 +201,7 @@ export function IncidentsPage() {
                   {visibleIncidents.map((item) => (
                     <tr key={item.id} data-testid={`incident-${item.identifier}`}>
                       <td>
-                        <IssueRow as="div" variant="compact" issue={item} />
+                        <IssueRow as="div" variant="compact" issue={item} open="drawer" />
                       </td>
                       <td>{severityLabel(item.severity)}</td>
                       <td>{item.ongoing ? `Ongoing · ${formatImpactDuration(item.impactHours * HOUR_MS)}` : formatImpactDuration(item.impactHours * HOUR_MS)}</td>
