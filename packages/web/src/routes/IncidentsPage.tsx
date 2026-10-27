@@ -37,6 +37,9 @@ function postmortemText(item: IncidentSummaryData['incidents'][number]): string 
  * their sample size — a month brings single-digit incidents, so percentiles
  * and period comparisons would mislead (decision INV-1130).
  */
+/** Incident rows carry no owner or priority, so those filters would match nothing (INV-1385). */
+const INCIDENT_HIDDEN_FILTERS = ['priority', 'owner'] as const;
+
 export function IncidentsPage() {
   const teamKey = readStoredTeamKey();
   const { data, error, loading, refetch } = useQuery<IncidentsPageQueryData, IncidentsPageQueryVariables>(INCIDENTS_PAGE_QUERY, {
@@ -77,7 +80,7 @@ export function IncidentsPage() {
             showQuickPills
           />
         }
-        filters={<WorkFilterBar {...workFilters} />}
+        filters={<WorkFilterBar {...workFilters} hide={INCIDENT_HIDDEN_FILTERS} />}
       />
 
       <PageBody width="wide">

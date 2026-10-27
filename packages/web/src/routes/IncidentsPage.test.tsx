@@ -109,6 +109,19 @@ describe('IncidentsPage (INV-1129)', () => {
     expect(screen.queryByTestId('incident-INV-3')).toBeNull();
   });
 
+  it('offers no priority or owner filter: incident rows carry neither (INV-1385)', () => {
+    serve({ incidentSummary: summary });
+    render(
+      <MemoryRouter initialEntries={['/incidents']}>
+        <IncidentsPage />
+      </MemoryRouter>,
+    );
+    const filters = screen.getByRole('group', { name: 'Filters' });
+    expect(within(filters).queryByRole('combobox', { name: 'Filter by priority' })).toBeNull();
+    expect(within(filters).queryByRole('combobox', { name: 'Filter by owner' })).toBeNull();
+    expect(within(filters).getByRole('searchbox', { name: 'Filter by text' })).toBeInTheDocument();
+  });
+
   it('shows an empty state with no incidents', () => {
     serve({
       incidentSummary: {

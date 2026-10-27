@@ -6296,8 +6296,8 @@ kbd {
   gap: 6px;
 }
 
-.search-box__input {
-  width: 320px;
+.search-box__iql {
+  width: 220px;
 }
 
 /* Inbox, Agents, Settings and the sidebar on the page skeleton (INV-1314). */

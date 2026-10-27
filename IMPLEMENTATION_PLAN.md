@@ -211,4 +211,9 @@ Design: `docs/design-system.md`（规则 §3、原语目录 §4、审计证据 �
 ## Stage 4: 内容呈现 — INV-1315
 **Goal**: MarkdownRenderer 块级语法并接入七处裸文本面板；ListRow 收敛工单行；Projects / Cycles / Views 卡片改 Card。
 **Success Criteria**: In Review 卡片三段式渲染为标题 + 列表；工单行只剩 IssueCard / IssueRow；三页内联 style 各 < 10。
-**Status**: In Progress — PR #258
+**Status**: Complete — PR #258 merged 49e2b99
+
+## Stage 5: 收尾 — INV-1385
+**Goal**: 暗色主题逐页检查并修复可读性；最后四处离开骨架的界面（Issue 页头、Candidates 提交摘要、BootstrapErrorNotice、ClaimControl 的 Unclaimed）回到原语；`--warn-weak` / `--accent-solid` token；Incidents 隐藏无数据筛选；Search 查询框与其它列表页一致；Settings → Administration → Agents 入口；design-guard 内联 style 基线。
+**Success Criteria**: 13 个页面亮 / 暗截图无低于 WCAG AA 的文字对比度（自动对比度扫描为 0）；web typecheck / test exit 0。
+**Status**: In Progress

@@ -6,7 +6,8 @@
  *   (a) a class used in TSX that no stylesheet defines (it renders unstyled);
  *   (b) a `var(--x)` whose token is not defined in a token block (it silently
  *       falls back to a hard-coded value, often unreadable in dark mode);
- *   (c) a hex / rgb() colour literal in TSX (colours come from tokens).
+ *   (c) a hex / rgb() colour literal in TSX (colours come from tokens);
+ *   (d) a new inline `style={{` in TSX (layout and colour live in stylesheets).
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -69,6 +70,14 @@ const COLOR_LITERAL_ALLOWLIST = new Set<string>([
   'components/Icons.tsx', // Google logo: brand colours are fixed by Google
   'components/StatusIcon.tsx', // the one place status colours are defined (§3 rule 9)
 ]);
+
+/**
+ * How many `style={{` the non-test TSX may contain (INV-1385). This is a
+ * ceiling, not a target: when you move inline styles into a stylesheet, lower
+ * it to the new count in the same change. Never raise it — put the new styles
+ * in a class (styles/*.css) instead.
+ */
+const INLINE_STYLE_BASELINE = 126;
 
 function walk(dir: string): string[] {
   const files: string[] = [];
@@ -238,6 +247,15 @@ describe('design guard', () => {
       }
     }
     expect([...new Set(offenders)].sort()).toEqual([]);
+  });
+
+  it('TSX adds no inline style={{ beyond the baseline', () => {
+    const counts = tsxFiles
+      .map((file): [string, number] => [relative(SRC, file), readFileSync(file, 'utf8').split('style={{').length - 1])
+      .filter(([, count]) => count > 0);
+    const total = counts.reduce((sum, [, count]) => sum + count, 0);
+    const worst = counts.sort((a, b) => b[1] - a[1]).slice(0, 5).map(([file, count]) => `${file}: ${count}`);
+    expect(total, `inline styles: ${total} (baseline ${INLINE_STYLE_BASELINE}); most in ${worst.join(', ')}`).toBeLessThanOrEqual(INLINE_STYLE_BASELINE);
   });
 
   it('the extractor sees classes in strings, ternaries and template literals', () => {

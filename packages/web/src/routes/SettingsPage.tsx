@@ -6,7 +6,7 @@ import { Avatar, Btn } from '../components/Primitives';
 import { Checkbox, Field, TextInput } from '../components/controls';
 import { SettingsSectionHeader, SettingsShell } from '../components/SettingsShell';
 import { SegmentedControl } from '../components/status';
-import { AdminMembersTab, AdminSecurityTab, AdminTeamsTab } from './AdministrationTabs';
+import { AdminAgentsTab, AdminMembersTab, AdminSecurityTab, AdminTeamsTab } from './AdministrationTabs';
 import { EmailNotificationsField, LabelsTab, ServerFeaturesTab, ServiceActorForm } from './WorkspaceSettingsTabs';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { useMutation, useQuery } from '@apollo/client/react';
@@ -15,12 +15,13 @@ import type { BoardPageQueryData, BoardPageQueryVariables, UserSummary, UserUpda
 import { readStoredTeamKey } from '../board/utils';
 import { ExtensionsTab } from './ExtensionsTab';
 
-type SettingsTab = 'profile' | 'preferences' | 'extensions' | 'members' | 'teams' | 'security' | 'services' | 'labels' | 'features';
+type SettingsTab = 'profile' | 'preferences' | 'extensions' | 'members' | 'teams' | 'agents' | 'security' | 'services' | 'labels' | 'features';
 
 /** Settings → Administration (docs/permissions.md §7); the server refuses everyone else. */
 const ADMIN_TABS: ReadonlyArray<{ id: SettingsTab; label: string }> = [
   { id: 'members', label: 'Members' },
   { id: 'teams', label: 'Teams' },
+  { id: 'agents', label: 'Agents' },
   { id: 'security', label: 'Security' },
   { id: 'services', label: 'Service actors' },
   { id: 'labels', label: 'Labels' },
@@ -89,6 +90,7 @@ export function SettingsPage() {
       {tab === 'labels' && <LabelsTab />}
       {tab === 'members' && <AdminMembersTab />}
       {tab === 'teams' && <AdminTeamsTab />}
+      {tab === 'agents' && <AdminAgentsTab />}
       {tab === 'security' && <AdminSecurityTab />}
       {tab === 'services' && <ServiceActorForm />}
       {tab === 'features' && <ServerFeaturesTab />}
