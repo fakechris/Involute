@@ -456,7 +456,7 @@ button.list-row__main {
 
 .badge--warn {
   border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
-  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  background: var(--warn-weak);
   color: var(--warn);
 }
 

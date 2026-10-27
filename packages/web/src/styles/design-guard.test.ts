@@ -30,7 +30,6 @@ const ALLOWED_UNDEFINED_CLASSES = new Set<string>([
   'contract-amendment', // region around the amendment panel
   'ops', // Ops page content scope
   'attention-page', // Needs you page scope
-  'work-structure', // wrapper of the structure editor's field-stack labels
 ]);
 
 /**

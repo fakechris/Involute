@@ -1103,7 +1103,7 @@ export function IssuePage() {
           </div>
 
           {/* Where it sits, priority and kind (INV-791) */}
-          <div className="issue-panel__prop-row" style={{ alignItems: 'flex-start' }}>
+          <div className="issue-panel__prop-row issue-panel__prop-row--top">
             <div className="issue-panel__prop-label">Structure</div>
             <div className="issue-panel__prop-value">
               <WorkStructureEditor

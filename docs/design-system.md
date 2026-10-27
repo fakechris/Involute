@@ -15,7 +15,7 @@
 | 背景 | 平面、暖色纸张；无渐变、无模糊、无 emoji | `--bg` `--bg-raised` `--bg-sunken` `--bg-hover` |
 | 结构 | 1px 发丝线承担全部结构；行内卡片无阴影；阴影只给外壳与浮层 | `--border` `--border-subtle` `--shadow-md/lg` |
 | 圆角 | 控件 10 / 面板 12 / 卡片 16 / 外壳 20 / 胶囊 999；微元素 6–8 | `--r-1`…`--r-6` |
-| 颜色 | 一个强调色（陶土 / 深蓝），四个语义色 | `--accent` `--danger` `--success` `--warn` `--info` |
+| 颜色 | 一个强调色（陶土 / 深蓝），四个语义色；`--accent` 是文字色，承载 `--accent-fg` 的填充用 `--accent-solid`（暗色下更深，INV-1385）；浅底用 `--*-weak`，不在徽章上写 `color-mix` 底色 | `--accent` `--accent-solid` `--danger` `--success` `--warn` `--info` `--accent-weak` `--danger-weak` `--success-weak` `--warn-weak` |
 | 动效 | 120–180ms，只动颜色 / 透明度 / 宽度；hover 是着色不是位移 | `--dur-1..3` `--ease` |
 | 密度 | 三档密度通过 token 切换，页面不自己定行高 | `--row-h` `--pad-x` `--pad-y` `--content-gutter` |
 

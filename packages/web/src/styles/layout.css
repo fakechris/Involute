@@ -445,6 +445,11 @@
   font-size: 13px;
 }
 
+/* The box shows focus (border above); no second ring on the bare input inside it. */
+.filter-search__input:focus-visible {
+  outline: none;
+}
+
 .filter-search__kbd {
   flex-shrink: 0;
 }
