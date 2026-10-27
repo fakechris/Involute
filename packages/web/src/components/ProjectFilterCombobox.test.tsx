@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 afterEach(() => {
@@ -126,5 +126,108 @@ describe('ProjectFilterCombobox', () => {
     // Second Escape closes popover
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(screen.queryByPlaceholderText('Filter projects...')).not.toBeInTheDocument();
+  });
+});
+
+describe('ProjectFilterCombobox quick pills (INV-1386)', () => {
+  const many: AvailableProject[] = [
+    { id: 'p1', identifier: 'INV-1', name: 'fakechris/alpha', key: 'INV-1', issueCount: 10 },
+    { id: 'p2', identifier: 'INV-2', name: 'fakechris/bravo', key: 'INV-2', issueCount: 60 },
+    { id: 'p3', identifier: 'INV-3', name: 'fakechris/charlie', key: 'INV-3', issueCount: 30 },
+    { id: 'p4', identifier: 'INV-4', name: 'fakechris/delta', key: 'INV-4', issueCount: 50 },
+    { id: 'p5', identifier: 'INV-5', name: 'fakechris/echo', key: 'INV-5', issueCount: 40 },
+    { id: 'p6', identifier: 'INV-6', name: 'fakechris/foxtrot', key: 'INV-6', issueCount: 20 },
+    { id: 'p7', identifier: 'INV-7', name: 'fakechris/golf-with-a-very-long-repository-name', key: 'INV-7', issueCount: 1 },
+  ];
+  const busiest = ['fakechris/bravo', 'fakechris/delta', 'fakechris/echo', 'fakechris/charlie', 'fakechris/foxtrot'];
+
+  afterEach(() => {
+    window.localStorage.clear();
+  });
+
+  function pillNames() {
+    const group = screen.getByRole('group', { name: 'Quick project filters' });
+    return within(group)
+      .getAllByRole('button')
+      .map((button) => button.getAttribute('aria-label') ?? button.textContent);
+  }
+
+  it('shows All projects plus the five busiest projects when nothing was used yet', () => {
+    render(<ProjectFilterCombobox projects={many} selectedProjectKey={null} onSelectProject={vi.fn()} showQuickPills teamKey="INV" />);
+    expect(pillNames()).toEqual(['All projects', ...busiest]);
+    // The pill shows the name after owner/; the full name stays the accessible name.
+    expect(screen.getByRole('button', { name: 'fakechris/bravo' })).toHaveTextContent('bravo60');
+    expect(screen.getByRole('button', { name: 'All projects' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('pins projects picked from the dropdown, newest first, and keeps teams apart', () => {
+    const onSelect = vi.fn();
+    const { rerender } = render(<ProjectFilterCombobox projects={many} selectedProjectKey={null} onSelectProject={onSelect} showQuickPills teamKey="INV" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Filter by project' }));
+    fireEvent.click(screen.getByRole('option', { name: /golf-with/ }));
+    expect(onSelect).toHaveBeenLastCalledWith('fakechris/golf-with-a-very-long-repository-name');
+    fireEvent.click(screen.getByRole('button', { name: 'Filter by project' }));
+    fireEvent.click(screen.getByRole('option', { name: /alpha/ }));
+    expect(pillNames()).toEqual([
+      'All projects',
+      'fakechris/alpha',
+      'fakechris/golf-with-a-very-long-repository-name',
+      'fakechris/bravo',
+      'fakechris/delta',
+      'fakechris/echo',
+    ]);
+
+    rerender(<ProjectFilterCombobox projects={many} selectedProjectKey={null} onSelectProject={onSelect} showQuickPills teamKey="OPS" />);
+    expect(pillNames()).toEqual(['All projects', ...busiest]);
+    rerender(<ProjectFilterCombobox projects={many} selectedProjectKey={null} onSelectProject={onSelect} showQuickPills teamKey="INV" />);
+    expect(pillNames()[1]).toBe('fakechris/alpha');
+  });
+
+  it('reads the active team from storage when no team is passed', () => {
+    window.localStorage.setItem('involute.activeTeamKey', 'OPS');
+    window.localStorage.setItem('involute.projectRecents.OPS', JSON.stringify(['fakechris/alpha']));
+    render(<ProjectFilterCombobox projects={many} selectedProjectKey={null} onSelectProject={vi.fn()} showQuickPills />);
+    expect(pillNames().slice(0, 3)).toEqual(['All projects', 'fakechris/alpha', 'fakechris/bravo']);
+  });
+
+  it('moves a clicked pill to the front of the recents', () => {
+    const onSelect = vi.fn();
+    render(<ProjectFilterCombobox projects={many} selectedProjectKey={null} onSelectProject={onSelect} showQuickPills teamKey="INV" />);
+    fireEvent.click(screen.getByRole('button', { name: 'fakechris/foxtrot' }));
+    expect(onSelect).toHaveBeenCalledWith('fakechris/foxtrot');
+    expect(pillNames()[1]).toBe('fakechris/foxtrot');
+  });
+
+  it('adds the selected project as a highlighted pill when it is not pinned', () => {
+    render(<ProjectFilterCombobox projects={many} selectedProjectKey="fakechris/alpha" onSelectProject={vi.fn()} showQuickPills teamKey="INV" />);
+    expect(pillNames()).toEqual(['All projects', ...busiest, 'fakechris/alpha']);
+    expect(screen.getByRole('button', { name: 'fakechris/alpha' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'All projects' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('keeps extra scopes such as No repository in the dropdown only', () => {
+    const onSelect = vi.fn();
+    render(
+      <ProjectFilterCombobox
+        projects={many}
+        selectedProjectKey={null}
+        onSelectProject={onSelect}
+        showQuickPills
+        teamKey="INV"
+        extraOptions={[{ key: '__none__', label: 'No repository', count: 3 }]}
+      />,
+    );
+    expect(pillNames()).not.toContain('No repository');
+    fireEvent.click(screen.getByRole('button', { name: 'Filter by project' }));
+    fireEvent.click(screen.getByRole('option', { name: /No repository/ }));
+    expect(onSelect).toHaveBeenCalledWith('__none__');
+    expect(window.localStorage.getItem('involute.projectRecents.INV')).toBeNull();
+  });
+
+  it('All projects clears the filter', () => {
+    const onSelect = vi.fn();
+    render(<ProjectFilterCombobox projects={many} selectedProjectKey="fakechris/bravo" onSelectProject={onSelect} showQuickPills teamKey="INV" />);
+    fireEvent.click(screen.getByRole('button', { name: 'All projects' }));
+    expect(onSelect).toHaveBeenCalledWith(null);
   });
 });
