@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { IcoCheck, IcoClose, IcoProject } from './Icons';
+import { readStoredTeamKey } from '../board/utils';
+import { pickPinnedProjects, projectMatches, readProjectRecents, recordProjectRecent, shortProjectName } from './project-recents';
 
 export interface AvailableProject {
   id: string;
@@ -17,10 +19,20 @@ export interface ProjectFilterComboboxProps {
   onSelectProject: (projectKey: string | null) => void;
   className?: string;
   placeholder?: string;
+  /**
+   * Quick pills (INV-1386): "All projects", the five projects this team used
+   * most recently (filled up by issue count), and the selected project when it
+   * is not among them. Everything else stays in the dropdown.
+   */
   showQuickPills?: boolean;
   /**
-   * Scopes that are not projects, listed after "All Projects" and offered as
-   * quick pills too — e.g. `{ key: '__none__', label: 'No repository' }`.
+   * Team whose recent projects the pills show. Defaults to the active team
+   * stored by the shell.
+   */
+  teamKey?: string | null;
+  /**
+   * Scopes that are not projects, listed after "All Projects" in the dropdown
+   * (never as quick pills) — e.g. `{ key: '__none__', label: 'No repository' }`.
    * Selecting one calls `onSelectProject(key)`.
    */
   extraOptions?: ReadonlyArray<ProjectFilterExtraOption>;
@@ -43,7 +55,11 @@ export function ProjectFilterCombobox({
   placeholder = 'Filter projects...',
   showQuickPills = false,
   extraOptions = NO_EXTRA_OPTIONS,
+  teamKey,
 }: ProjectFilterComboboxProps) {
+  const recentsTeam = teamKey === undefined ? readStoredTeamKey() : teamKey;
+  const [recentsState, setRecentsState] = useState(() => ({ team: recentsTeam, recents: readProjectRecents(recentsTeam) }));
+  const recents = recentsState.team === recentsTeam ? recentsState.recents : readProjectRecents(recentsTeam);
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(0);
@@ -110,14 +126,29 @@ export function ProjectFilterCombobox({
     triggerRef.current?.focus();
   }, []);
 
+  // Every project choice (pill or dropdown) moves that project to the front of
+  // this team's recents; "All projects" and extra scopes are not remembered.
+  const selectProject = useCallback(
+    (projectKey: string | null) => {
+      if (projectKey && !extraOptions.some((option) => option.key === projectKey)) {
+        setRecentsState({ team: recentsTeam, recents: recordProjectRecent(recentsTeam, projectKey) });
+      }
+      onSelectProject(projectKey);
+    },
+    [extraOptions, onSelectProject, recentsTeam],
+  );
+
+  const pinnedProjects = useMemo(() => (showQuickPills ? pickPinnedProjects(projects, recents) : []), [showQuickPills, projects, recents]);
+  const pillProjects = activeProject && !pinnedProjects.includes(activeProject) ? [...pinnedProjects, activeProject] : pinnedProjects;
+
   const handleSelect = useCallback(
     (projectKey: string | null) => {
-      onSelectProject(projectKey);
+      selectProject(projectKey);
       setIsOpen(false);
       setSearchQuery('');
       triggerRef.current?.focus();
     },
-    [onSelectProject],
+    [selectProject],
   );
 
   // Close on outside click
@@ -246,43 +277,31 @@ export function ProjectFilterCombobox({
         ) : null}
       </div>
 
-      {/* Quick Pills (if showQuickPills and <= 4 projects) */}
-      {showQuickPills && projects.length > 0 && projects.length <= 4 ? (
+      {/* Quick Pills: All projects + recents (filled by issue count) + the selection */}
+      {showQuickPills && projects.length > 0 ? (
         <div className="project-combobox__quick-pills" role="group" aria-label="Quick project filters">
-          {projects.map((p) => {
-            const isActive =
-              Boolean(selectedProjectKey) &&
-              (selectedProjectKey?.toLowerCase() === p.key.toLowerCase() ||
-                selectedProjectKey?.toLowerCase() === p.name.toLowerCase() ||
-                selectedProjectKey?.toLowerCase() === p.identifier.toLowerCase() ||
-                Boolean(p.title && selectedProjectKey?.toLowerCase() === p.title.toLowerCase()));
+          <button
+            type="button"
+            className={`board-project-pill${!activeProject && !activeExtra ? ' board-project-pill--active' : ''}`}
+            aria-pressed={!activeProject && !activeExtra}
+            onClick={() => selectProject(null)}
+          >
+            <span className="board-project-pill__name">All projects</span>
+          </button>
+          {pillProjects.map((p) => {
+            const isActive = projectMatches(p, selectedProjectKey) || p === activeProject;
             return (
               <button
                 key={p.id}
                 type="button"
-                className={`board-project-pill${isActive ? ' board-project-pill--active' : ''}`}
+                className={`board-project-pill board-project-pill--pinned${isActive ? ' board-project-pill--active' : ''}`}
                 aria-pressed={isActive}
-                onClick={() => onSelectProject(isActive ? null : p.name)}
-                title={`Filter to ${p.name} (${p.issueCount} issues)`}
+                aria-label={p.name}
+                onClick={() => (isActive ? selectProject(null) : selectProject(p.name))}
+                title={`Filter to ${p.name}${p.identifier ? ` (${p.identifier})` : ''} · ${p.issueCount} issues`}
               >
-                {p.identifier ? <span className="mono board-project-pill__id">{p.identifier}</span> : null}
-                <span className="board-project-pill__name">{p.name}</span>
+                <span className="board-project-pill__name">{shortProjectName(p.name)}</span>
                 <span className="board-project-pill__count">{p.issueCount}</span>
-              </button>
-            );
-          })}
-          {extraOptions.map((option) => {
-            const isActive = activeExtra?.key === option.key;
-            return (
-              <button
-                key={option.key}
-                type="button"
-                className={`board-project-pill${isActive ? ' board-project-pill--active' : ''}`}
-                aria-pressed={isActive}
-                onClick={() => onSelectProject(isActive ? null : option.key)}
-              >
-                <span className="board-project-pill__name">{option.label}</span>
-                {option.count !== undefined ? <span className="board-project-pill__count">{option.count}</span> : null}
               </button>
             );
           })}

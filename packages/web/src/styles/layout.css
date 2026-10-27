@@ -145,6 +145,39 @@
   display: contents;
 }
 
+/*
+ * Project quick pills (INV-1386): "All projects" + up to five recent projects
+ * + the selection. They stay on one line and scroll sideways instead of
+ * wrapping the toolbar; long repository names show the part after owner/ and
+ * ellipsize.
+ */
+.page-toolbar__projects {
+  flex-wrap: nowrap;
+  flex-shrink: 1;
+  max-width: 100%;
+}
+
+.project-combobox__quick-pills {
+  flex-wrap: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.project-combobox__quick-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.project-combobox:has(.project-combobox__quick-pills) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.board-project-pill--pinned .board-project-pill__name {
+  max-width: 140px;
+}
+
 .page-toolbar__view {
   margin-left: auto;
   padding-left: 6px;

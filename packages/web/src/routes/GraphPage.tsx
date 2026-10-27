@@ -160,6 +160,7 @@ export function GraphPage() {
             {...(projectsQuery.data ? { totalCount: projectsQuery.data.projectSummary.totalCount } : {})}
             onSelectProject={(key) => update({ project: key, focus: null })}
             placeholder="Choose a project"
+            showQuickPills
           />
         ) : null}
         view={project ? (
