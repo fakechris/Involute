@@ -218,9 +218,11 @@ beforeEach(() => {
   dndMocks.lastContextProps = null;
   dndMocks.useSensor.mockClear();
   dndMocks.useSensors.mockClear();
+  // A fresh Response per call: a body can be read once, and the shell and the page
+  // both ask for the session (INV-1388: one shared Response logged "Body is unusable").
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue(
+    vi.fn().mockImplementation(async () =>
       new Response(
         JSON.stringify({
           authMode: 'none',
