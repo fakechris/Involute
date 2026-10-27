@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 
 import { BUGS_FIXED_BETWEEN_QUERY, SERVER_BUILD_QUERY } from '../board/queries';
 import type { BugsFixedBetweenQueryData, ServerBuildQueryData } from '../board/types';
-import { Select } from './controls';
+import { Select, TextInput } from './controls';
 import { InlineError } from './status';
 
 const SHA = /^(sha-)?[0-9a-f]{7,40}$/i;
@@ -52,8 +52,8 @@ export function FixedBetweenDeploys({ repositories }: { repositories: string[] }
           {repositories.length === 0 ? <option value="">No project</option> : null}
           {repositories.map((name) => <option key={name} value={name}>{name}</option>)}
         </Select>
-        <input aria-label="From deploy SHA" placeholder="From SHA (older)" spellCheck={false} value={fromSha} onChange={(event) => setFromSha(event.target.value)} />
-        <input aria-label="To deploy SHA" placeholder="To SHA (newer)" spellCheck={false} value={toSha ?? runningBuildSha ?? ''} onChange={(event) => setToSha(event.target.value)} />
+        <TextInput aria-label="From deploy SHA" placeholder="From SHA (older)" spellCheck={false} value={fromSha} onChange={(event) => setFromSha(event.target.value)} />
+        <TextInput aria-label="To deploy SHA" placeholder="To SHA (newer)" spellCheck={false} value={toSha ?? runningBuildSha ?? ''} onChange={(event) => setToSha(event.target.value)} />
         <button type="submit" className="ui-action ui-action--accent" disabled={!valid || loading}>
           List fixes
         </button>

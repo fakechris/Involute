@@ -77,6 +77,9 @@
   --fg-faint: #b0a89d;
 
   --accent: #9f4f24;
+  /* Fill behind --accent-fg text (buttons, counts, avatars). Same as --accent here;
+     darker in dark, where --accent is tuned for text on dark surfaces (INV-1385). */
+  --accent-solid: #9f4f24;
   --accent-fg: #fffdfa;
   --accent-weak: rgba(159, 79, 36, 0.1);
   --accent-border: rgba(159, 79, 36, 0.24);
@@ -86,6 +89,7 @@
   --success: #2f7d52;
   --success-weak: rgba(47, 125, 82, 0.1);
   --warn: #a85e10;
+  --warn-weak: rgba(168, 94, 16, 0.1);
   --info: #2563bb;
 
   /* elevation — only shell + pop; inline cards carry none */
@@ -122,10 +126,11 @@
 
   --fg: #e6edf5;
   --fg-muted: #c2cfde;
-  --fg-dim: #7d8aa0;
+  --fg-dim: #8794aa;
   --fg-faint: #55606f;
 
-  --accent: #3b82f6;
+  --accent: #60a5fa;
+  --accent-solid: #2563eb;
   --accent-fg: #ffffff;
   --accent-weak: rgba(59, 130, 246, 0.16);
   --accent-border: rgba(59, 130, 246, 0.3);
@@ -135,6 +140,7 @@
   --success: #22c55e;
   --success-weak: rgba(34, 197, 94, 0.15);
   --warn: #fbbf24;
+  --warn-weak: rgba(251, 191, 36, 0.14);
   --info: #06b6d4;
 
   --shadow-sm: none;
@@ -322,7 +328,7 @@ kbd {
   align-items: center;
   justify-content: center;
   border-radius: 5px;
-  background: var(--accent);
+  background: var(--accent-solid);
   color: var(--accent-fg);
   font-family: var(--font-mono);
   font-size: 14px;
@@ -448,7 +454,7 @@ kbd {
   padding: 0 5px;
   min-width: 16px;
   text-align: center;
-  background: var(--accent);
+  background: var(--accent-solid);
   color: var(--accent-fg);
   border-radius: 8px;
   height: 15px;
@@ -922,10 +928,6 @@ kbd {
 
 /* Header: slim 44px breadcrumb-style bar */
 
-.app-shell__eyebrow {
-  display: none;
-}
-
 /* Mobilebar */
 .app-shell__mobilebar {
   display: none;
@@ -1019,7 +1021,7 @@ kbd {
 }
 
 .board-project-pill--active .board-project-pill__count {
-  background: var(--accent);
+  background: var(--accent-solid);
   color: #fff;
 }
 
@@ -1110,7 +1112,7 @@ kbd {
 }
 
 .project-combobox__trigger--active .project-combobox__trigger-count {
-  background: var(--accent);
+  background: var(--accent-solid);
   color: #fff;
 }
 
@@ -1272,7 +1274,7 @@ kbd {
 }
 
 .project-combobox__item--selected .project-combobox__item-count {
-  background: var(--accent);
+  background: var(--accent-solid);
   color: #fff;
 }
 
@@ -1347,48 +1349,6 @@ kbd {
   font-weight: 500;
 }
 
-/* Notices */
-.shell-notice {
-  border: 1px solid var(--border);
-  border-radius: var(--r-3);
-  background: var(--bg-raised);
-  box-shadow: none;
-  padding: 12px 14px;
-  margin: var(--content-gutter);
-}
-
-.shell-notice h2 {
-  margin: 0 0 4px;
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.shell-notice p {
-  margin: 0;
-  font-size: 14px;
-  color: var(--fg-dim);
-}
-
-.shell-notice__actions {
-  margin-top: 10px;
-}
-
-.shell-notice__action {
-  display: inline-block;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-2);
-  background: var(--bg-raised);
-  color: var(--fg);
-  font-size: 14px;
-  text-decoration: none;
-}
-
-.shell-notice--error {
-  border-color: color-mix(in srgb, var(--danger) 44%, var(--border));
-  background: color-mix(in srgb, var(--danger-weak) 55%, var(--bg-raised));
-}
-
 /* Action buttons — the .ui-action family behind Btn (INV-1313); sizes,
    ghost / subtle / danger variants and states live in controls.css. */
 .ui-action--accent {
@@ -1398,7 +1358,7 @@ kbd {
   min-height: 26px;
   border: 1px solid var(--accent-border);
   border-radius: var(--r-2);
-  background: var(--accent);
+  background: var(--accent-solid);
   padding: 0 10px;
   color: var(--accent-fg);
   font-size: 14px;
@@ -1440,7 +1400,7 @@ kbd {
    would reset it to a transparent outline: keep the accent fill. */
 .ui-action.ui-action--accent {
   border-color: var(--accent-border);
-  background: var(--accent);
+  background: var(--accent-solid);
   color: var(--accent-fg);
 }
 
@@ -2061,7 +2021,7 @@ kbd {
   padding: 1.5px 5px;
   border-radius: var(--r-1);
   color: var(--warn);
-  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  background: var(--warn-weak);
   border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent);
 }
 
@@ -2103,7 +2063,7 @@ kbd {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: var(--accent);
+  background: var(--accent-solid);
   color: var(--accent-fg);
   font-size: 11px;
   font-weight: 600;
@@ -2332,6 +2292,7 @@ kbd {
 
 .issue-panel__properties {
   display: flex;
+  flex-shrink: 0;
   flex-direction: column;
   gap: 10px;
 }
@@ -2561,6 +2522,7 @@ kbd {
 
 .issue-panel__prop-row {
   display: flex;
+  flex-shrink: 0; /* the rail scrolls; rows never squash into each other (INV-1385) */
   align-items: center;
   gap: 8px;
   min-height: 26px;
@@ -2579,6 +2541,27 @@ kbd {
   align-items: center;
   gap: 6px;
   color: var(--fg);
+}
+
+/* Structure editor in the 260px rail: one column, fields fill the rail (INV-1385). */
+.issue-panel__prop-row--top {
+  align-items: flex-start;
+}
+
+.issue-panel__prop-row--top > .issue-panel__prop-value {
+  min-width: 0;
+}
+
+.issue-panel--page .work-structure {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.issue-panel--page .work-structure .placement-picker {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
 }
 
 /* Incident impact timestamps (INV-1125) */
@@ -3216,7 +3199,7 @@ kbd {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--accent-solid);
   border: 2px solid var(--bg);
 }
 
@@ -3852,15 +3835,7 @@ kbd {
   margin-bottom: 16px;
 }
 
-.commit-glance__frame {
-  width: min(460px, calc(100vw - 24px));
-}
 
-.commit-glance__warning {
-  margin: 0 0 10px;
-  font-size: 13px;
-  color: var(--danger);
-}
 
 .commit-glance__list {
   display: flex;
@@ -3903,11 +3878,6 @@ kbd {
   color: var(--fg-muted);
 }
 
-.commit-glance__footer {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 
 .candidates-toolbar__select-all {
   display: inline-flex;
@@ -4034,7 +4004,7 @@ kbd {
 
 .bugs-trend__bar {
   width: 70%;
-  background: var(--accent);
+  background: var(--accent-solid);
   border-radius: var(--r-1) var(--r-1) 0 0;
   opacity: 0.85;
 }
@@ -4070,7 +4040,7 @@ kbd {
 }
 
 .goto-chord-indicator kbd {
-  background: var(--accent);
+  background: var(--accent-solid);
   color: var(--accent-fg);
   border: none;
   font-weight: 600;
@@ -4652,7 +4622,7 @@ kbd {
   padding: 1.5px 5px;
   border-radius: var(--r-1);
   color: var(--warn);
-  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  background: var(--warn-weak);
   border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent);
   flex-shrink: 0;
 }
@@ -5411,12 +5381,14 @@ kbd {
 
 .bug-sla--at-risk {
   color: var(--warn);
-  border-color: rgba(217, 119, 6, 0.5);
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--border));
+  background: var(--warn-weak);
 }
 
 .bug-sla--breached {
   color: var(--danger);
-  border-color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  background: var(--danger-weak);
 }
 
 .triage-rotation {
@@ -5478,6 +5450,11 @@ kbd {
   gap: 8px;
   align-items: center;
   font-size: 13px;
+}
+
+.claim-control__none {
+  font-size: 13px;
+  color: var(--fg-dim);
 }
 
 /* Inbox details for notifications without a work item (INV-794). */
@@ -5931,6 +5908,131 @@ kbd {
   color: var(--fg-muted);
 }
 
+.attention-group__name {
+  flex: 0 1 auto;
+}
+
+.attention-section__heading .mono ~ .attention-group__name {
+  flex: 1 0 100%;
+}
+
+.attention-section__count {
+  font-family: var(--font-mono);
+  color: var(--fg-muted);
+}
+
+.attention-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.attention-section__summary {
+  margin: 4px 10px 2px;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.attention-section__actions {
+  padding: 2px 10px 4px;
+}
+
+.attention-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.attention-group--parent {
+  border: 1px solid var(--border);
+  border-radius: var(--r-2, 8px);
+  background: var(--bg-raised);
+  overflow: hidden;
+}
+
+.attention-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.attention-group__header {
+  appearance: none;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sunken);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-1, 120ms) var(--ease);
+}
+
+.attention-section__title--parent .attention-group__header {
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+}
+
+.attention-group--collapsed > .attention-group__header,
+.attention-group--collapsed > .attention-section__title--parent > .attention-group__header {
+  border-bottom-color: transparent;
+}
+
+.attention-group__header:hover {
+  background: var(--bg-hover);
+}
+
+.attention-group__header:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.attention-group__caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--bg-raised);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--fg-muted);
+  user-select: none;
+}
+
+.attention-group__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 3px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.attention-group__label .mono,
+.attention-group__id {
+  flex: 0 0 auto;
+}
+
+.attention-group__id {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-muted);
+}
+
 .attention-group__kind {
   padding: 1px 6px;
   border: 1px solid var(--border-strong);
@@ -6061,7 +6163,7 @@ kbd {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--accent-solid);
 }
 
 .inbox-page__todo-link {
@@ -6194,8 +6296,8 @@ kbd {
   gap: 6px;
 }
 
-.search-box__input {
-  width: 320px;
+.search-box__iql {
+  width: 220px;
 }
 
 /* Inbox, Agents, Settings and the sidebar on the page skeleton (INV-1314). */
@@ -6266,7 +6368,7 @@ kbd {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--accent-solid);
   color: var(--accent-fg);
   font-size: 23px;
   font-weight: 600;
@@ -6652,7 +6754,7 @@ kbd {
 .cycles-progress__fill {
   height: 100%;
   border-radius: 2px;
-  background: var(--accent);
+  background: var(--accent-solid);
 }
 
 .cycles-progress__label {
@@ -6710,11 +6812,6 @@ kbd {
 }
 
 /* Issue page header crumbs, More menu and action rows (were inline, INV-1314). */
-.issue-panel__crumb-sep {
-  display: inline-flex;
-  color: var(--fg-faint);
-}
-
 .issue-panel__crumb-link {
   padding: 2px 4px;
   border: 0;
@@ -6732,10 +6829,6 @@ kbd {
 .issue-panel__crumb-id {
   font-size: 13px;
   color: var(--fg-dim);
-}
-
-.issue-panel__header-actions--end {
-  margin-left: auto;
 }
 
 .issue-panel__menu {

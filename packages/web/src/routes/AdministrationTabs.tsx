@@ -7,6 +7,7 @@ import {
   TEAM_MEMBERSHIP_REMOVE_MUTATION,
   TEAM_MEMBERSHIP_UPSERT_MUTATION,
   ADMIN_TEAMS_QUERY,
+  SHELL_TEAMS_QUERY,
   TEAM_ARCHIVE_MUTATION,
   TEAM_CREATE_MUTATION,
   TEAM_UNARCHIVE_MUTATION,
@@ -23,6 +24,8 @@ import { Checkbox, Field, Select, TextArea, TextInput } from '../components/cont
 import { DataTable } from '../components/DataTable';
 import { Btn } from '../components/Primitives';
 import { SettingsSectionHeader } from '../components/SettingsShell';
+import { EmptyState, InlineError, LoadingState } from '../components/status';
+import type { TeamSummary } from '../board/types';
 
 // Settings → Administration (INV-849, docs/permissions.md §7). Admins only;
 // the server refuses everyone else, so these tabs are shown to admins.
@@ -451,6 +454,53 @@ export function AdminTeamsTab() {
           },
         ]}
       />
+    </section>
+  );
+}
+
+// --- Agents ----------------------------------------------------------------
+
+/**
+ * Settings → Administration → Agents (INV-1385): agents are created and
+ * revoked per team, in team settings. This entry only lists the teams the
+ * viewer can manage and links to each team's Agents section; no new mutation.
+ */
+export function AdminAgentsTab() {
+  const { data, loading, error } = useQuery<{ teams: { nodes: TeamSummary[] } }>(SHELL_TEAMS_QUERY, { fetchPolicy: 'cache-and-network' });
+  if (error) return <InlineError>Could not load teams: {error.message}</InlineError>;
+  if (loading && !data) return <LoadingState>Loading teams…</LoadingState>;
+  const teams = (data?.teams.nodes ?? []).filter((team) => team.viewerCanManage);
+
+  return (
+    <section aria-label="Agents">
+      {sectionIntro('Agents', 'Agents belong to a team: create them, give each a human owner and revoke their tokens in that team\'s settings. Teams you can manage are listed here.')}
+      {teams.length === 0 ? (
+        <EmptyState size="inline" title="You manage no team." body="A team owner or a workspace admin manages a team's agents." />
+      ) : (
+        <DataTable
+          label="Teams whose agents you manage"
+          rows={teams}
+          rowKey={(team) => team.id}
+          columns={[
+            { key: 'key', header: 'Key', width: 'max-content', render: (team) => <span className="mono">{team.key}</span> },
+            { key: 'team', header: 'Team', render: (team) => team.name },
+            {
+              key: 'actions',
+              header: '',
+              align: 'end',
+              render: (team) => (
+                <Link
+                  className="ui-action ui-action--ghost ui-action--sm"
+                  to={`/teams/${encodeURIComponent(team.key)}/settings?section=agents`}
+                  aria-label={`${team.key} agents`}
+                >
+                  Agents
+                </Link>
+              ),
+            },
+          ]}
+        />
+      )}
     </section>
   );
 }

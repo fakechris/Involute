@@ -453,7 +453,7 @@ export function RichTextEditor({
             borderRadius: 'var(--r-2)', border: '1px solid transparent', cursor: 'pointer',
             whiteSpace: 'nowrap',
             ...(value.trim()
-              ? { background: 'var(--accent)', color: 'var(--accent-fg)', borderColor: 'var(--accent-border)' }
+              ? { background: 'var(--accent-solid)', color: 'var(--accent-fg)', borderColor: 'var(--accent-border)' }
               : { background: 'transparent', color: 'var(--fg-muted)', borderColor: 'var(--border)' }),
             ...(disabled || !value.trim() ? { opacity: 0.5, cursor: 'not-allowed' } : {}),
           }}

@@ -445,6 +445,11 @@
   font-size: 13px;
 }
 
+/* The box shows focus (border above); no second ring on the bare input inside it. */
+.filter-search__input:focus-visible {
+  outline: none;
+}
+
 .filter-search__kbd {
   flex-shrink: 0;
 }
@@ -546,6 +551,24 @@
   border: 1px solid color-mix(in srgb, var(--danger) 44%, var(--border));
   border-radius: var(--r-2);
   background: color-mix(in srgb, var(--danger-weak) 55%, var(--bg-raised));
+}
+
+/* BootstrapErrorNotice: title, description, then the way in (sign in). */
+.bootstrap-error__title {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.bootstrap-error__body {
+  display: block;
+  color: var(--fg-muted);
+}
+
+.bootstrap-error__action {
+  margin-top: 10px;
+  text-decoration: none;
 }
 
 /* A one-line notice strip under the toolbar (partial page loaded, save failed). */

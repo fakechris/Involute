@@ -1,5 +1,5 @@
 import { useQuery } from '@apollo/client/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
@@ -9,6 +9,7 @@ import { GRAPH_PROJECTS_QUERY, SEARCH_LABELS_QUERY, WORK_SEARCH_QUERY } from '..
 import { matchLabel } from '../work/search-labels';
 import type { GraphProjectsQueryData, SearchLabelsQueryData, WorkSearchQueryData } from '../work/types';
 import { Select, TextInput } from '../components/controls';
+import { FilterSearch } from '../components/filters';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { IssueRow } from '../components/list';
 import { Btn } from '../components/Primitives';
@@ -50,6 +51,9 @@ export function SearchPage() {
   };
   const [draft, setDraft] = useState(query);
   useEffect(() => setDraft(query), [query]);
+  // The query box takes focus on arrival, as the old autoFocus input did.
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => searchInputRef.current?.focus(), []);
 
   function update(changes: Record<string, string>) {
     setSearchParams((previous) => {
@@ -118,16 +122,14 @@ export function SearchPage() {
                 update({ q: draft.trim() });
               }}
             >
-              <TextInput
-                size="sm"
+              <FilterSearch
+                ref={searchInputRef}
                 aria-label="Search all work"
-                className="search-box__input"
                 placeholder="Words, &quot;a phrase&quot;, or INV-123"
                 value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                autoFocus
+                onChange={setDraft}
               />
-              <Btn type="submit" variant="subtle">Search</Btn>
+              <Btn type="submit" variant="subtle" size="sm">Search</Btn>
             </form>
             <Select size="sm" aria-label="Kind" value={filters.kind} onChange={(event) => update({ kind: event.target.value })}>
               <option value="">Any kind</option>
@@ -143,20 +145,19 @@ export function SearchPage() {
                 <option key={label.id} value={label.name}>{label.name}</option>
               ))}
             </Select>
+            <TextInput
+              size="sm"
+              key={filters.iql}
+              className="search-box__iql"
+              aria-label="IQL filter"
+              placeholder="IQL, e.g. assignee:me priority:1"
+              defaultValue={filters.iql}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') update({ iql: event.currentTarget.value });
+              }}
+              onBlur={(event) => update({ iql: event.target.value })}
+            />
           </>
-        }
-        view={
-          <TextInput
-            size="sm"
-            key={filters.iql}
-            aria-label="IQL filter"
-            placeholder="IQL, e.g. assignee:me priority:1"
-            defaultValue={filters.iql}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') update({ iql: event.currentTarget.value });
-            }}
-            onBlur={(event) => update({ iql: event.target.value })}
-          />
         }
       />
       <PageBody>

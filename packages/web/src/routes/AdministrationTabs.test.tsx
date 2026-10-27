@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AdminMembersTab, AdminSecurityTab, AdminTeamsTab } from './AdministrationTabs';
+import { AdminAgentsTab, AdminMembersTab, AdminSecurityTab, AdminTeamsTab } from './AdministrationTabs';
 
 // INV-849: Settings → Administration (docs/permissions.md §7).
 
@@ -31,7 +31,15 @@ const queryData: Record<string, unknown> = {
       ],
     },
   },
-  WorkspaceSecurity: {
+  ShellTeams: {
+    teams: {
+      nodes: [
+        { ...teamInv, issueCount: 3, viewerCanManage: true, viewerCanWrite: true },
+        { id: 'team-lum', key: 'LUM', name: 'LumenBox', issueCount: 1, viewerCanManage: false, viewerCanWrite: true },
+      ],
+    },
+  },
+    WorkspaceSecurity: {
     workspaceSettings: { approvedDomains: ['x.com'], defaultTeams: [], membersCanInvite: false, membersCanCreateTeams: false },
     teams: { nodes: [teamInv] },
   },
@@ -129,6 +137,15 @@ describe('Administration → Teams', () => {
     mutations.TeamArchive!.mockResolvedValue(ok('teamArchive'));
     fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
     await waitFor(() => expect(mutations.TeamArchive).toHaveBeenCalledWith({ variables: { teamId: 'team-inv' } }));
+  });
+});
+
+describe('Administration → Agents (INV-1385)', () => {
+  it('lists only the teams the viewer manages and links to each team\'s Agents section', () => {
+    inRouter(<AdminAgentsTab />);
+    const table = screen.getByRole('table', { name: 'Teams whose agents you manage' });
+    expect(within(table).getByRole('link', { name: 'INV agents' })).toHaveAttribute('href', '/teams/INV/settings?section=agents');
+    expect(within(table).queryByText('LumenBox')).toBeNull();
   });
 });
 

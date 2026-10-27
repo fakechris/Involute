@@ -24,7 +24,7 @@ export function ClaimControl({ workId, claim }: { workId: string; claim: ClaimSu
     { workId: string; reason: string }
   >(WORK_CLAIM_RELEASE_MUTATION, { refetchQueries: ['BoardPage', 'IssuePage', 'WorkContextPage'] });
 
-  if (!claim) return <span className="observation-empty">Unclaimed</span>;
+  if (!claim) return <span className="claim-control__none">Unclaimed</span>;
   const holder = claim.actor.name ?? claim.actor.email ?? 'someone';
 
   async function release() {

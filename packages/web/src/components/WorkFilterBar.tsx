@@ -77,42 +77,54 @@ export function useWorkFilters(onChange?: () => void) {
   return { filters, setFilter, clearFilters };
 }
 
-export function WorkFilterBar({
-  filters,
-  setFilter,
-  clearFilters,
-}: ReturnType<typeof useWorkFilters>) {
+export type WorkFilterField = 'type' | 'kind' | 'priority' | 'owner';
+
+export interface WorkFilterBarProps extends ReturnType<typeof useWorkFilters> {
+  /** Filters with no data behind them on this page (e.g. Incidents carry no owner or priority on the row). */
+  hide?: ReadonlyArray<WorkFilterField> | undefined;
+}
+
+export function WorkFilterBar({ filters, setFilter, clearFilters, hide = [] }: WorkFilterBarProps) {
+  const shows = (field: WorkFilterField) => !hide.includes(field);
   return (
     <div className="work-filter-bar" role="group" aria-label="Filters">
-      <Select size="sm" aria-label="Filter by type" value={filters.type} onChange={(event) => setFilter('type', event.target.value as WorkFilters['type'])}>
-        <option value="">All types</option>
-        <option value="bug">Bug</option>
-        <option value="feature">Feature</option>
-        <option value="improvement">Improvement</option>
-        <option value="research">Research</option>
-        <option value="untyped">No type</option>
-      </Select>
-      <Select size="sm" aria-label="Filter by kind" value={filters.kind} onChange={(event) => setFilter('kind', event.target.value as WorkFilters['kind'])}>
-        <option value="">All kinds</option>
-        <option value="ISSUE">Issue</option>
-        <option value="EPIC">Epic</option>
-        <option value="MILESTONE">Milestone</option>
-        <option value="DECISION">Decision</option>
-        <option value="PROJECT">Project</option>
-      </Select>
-      <Select size="sm" aria-label="Filter by priority" value={filters.priority} onChange={(event) => setFilter('priority', event.target.value as WorkFilters['priority'])}>
-        <option value="">Any priority</option>
-        <option value="1">Urgent</option>
-        <option value="2">High</option>
-        <option value="3">Medium</option>
-        <option value="4">Low</option>
-        <option value="0">No priority</option>
-      </Select>
-      <Select size="sm" aria-label="Filter by owner" value={filters.owner} onChange={(event) => setFilter('owner', event.target.value as WorkFilters['owner'])}>
-        <option value="">Any owner</option>
-        <option value="me">Mine</option>
-        <option value="none">Unassigned</option>
-      </Select>
+      {shows('type') ? (
+        <Select size="sm" aria-label="Filter by type" value={filters.type} onChange={(event) => setFilter('type', event.target.value as WorkFilters['type'])}>
+          <option value="">All types</option>
+          <option value="bug">Bug</option>
+          <option value="feature">Feature</option>
+          <option value="improvement">Improvement</option>
+          <option value="research">Research</option>
+          <option value="untyped">No type</option>
+        </Select>
+      ) : null}
+      {shows('kind') ? (
+        <Select size="sm" aria-label="Filter by kind" value={filters.kind} onChange={(event) => setFilter('kind', event.target.value as WorkFilters['kind'])}>
+          <option value="">All kinds</option>
+          <option value="ISSUE">Issue</option>
+          <option value="EPIC">Epic</option>
+          <option value="MILESTONE">Milestone</option>
+          <option value="DECISION">Decision</option>
+          <option value="PROJECT">Project</option>
+        </Select>
+      ) : null}
+      {shows('priority') ? (
+        <Select size="sm" aria-label="Filter by priority" value={filters.priority} onChange={(event) => setFilter('priority', event.target.value as WorkFilters['priority'])}>
+          <option value="">Any priority</option>
+          <option value="1">Urgent</option>
+          <option value="2">High</option>
+          <option value="3">Medium</option>
+          <option value="4">Low</option>
+          <option value="0">No priority</option>
+        </Select>
+      ) : null}
+      {shows('owner') ? (
+        <Select size="sm" aria-label="Filter by owner" value={filters.owner} onChange={(event) => setFilter('owner', event.target.value as WorkFilters['owner'])}>
+          <option value="">Any owner</option>
+          <option value="me">Mine</option>
+          <option value="none">Unassigned</option>
+        </Select>
+      ) : null}
       <TextInput
         type="search"
         size="sm"

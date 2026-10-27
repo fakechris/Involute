@@ -39,7 +39,7 @@ export function PageHeader({ icon, title, count, hint, back, actions }: PageHead
 export interface PageToolbarProps {
   /** Project scope: `ProjectFilterCombobox` (with quick pills). Always first. */
   projects?: ReactNode | undefined;
-  /** What narrows the list: `WorkFilterBar`, search, FilterMenus, chips. */
+  /** What narrows the list: `WorkFilterBar`, search, IQL, FilterMenus, chips. */
   filters?: ReactNode | undefined;
   /** How the list is shown: sort, saved views, view switch. Right-aligned on the last filter row. */
   view?: ReactNode | undefined;
