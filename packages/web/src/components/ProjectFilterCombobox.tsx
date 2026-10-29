@@ -202,6 +202,16 @@ export function ProjectFilterCombobox({
 
     if (e.key === 'Enter') {
       e.preventDefault();
+      // A typed search makes Enter commit the highlighted match — the first
+      // one when nothing is highlighted — instead of the "All Projects" row,
+      // which silently cleared the filter (INV-1430).
+      if (searchQuery.trim() && filteredProjects.length > 0) {
+        const item = filteredProjects[Math.max(0, highlightedIndex - 1 - extraCount)] ?? filteredProjects[0];
+        if (item) {
+          handleSelect(item.name);
+        }
+        return;
+      }
       if (highlightedIndex === 0) {
         handleSelect(null);
       } else if (highlightedIndex <= extraCount) {

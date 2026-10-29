@@ -76,6 +76,9 @@ export function buildIssueWhere(
         { identifier: contains }, { title: contains }, { description: contains },
         { parent: { is: { OR: [{ title: contains }, { identifier: contains }] } } },
         { project: { is: { name: contains } } },
+        // The repository is where a project's name (e.g. meituan_analyse)
+        // often only lives; issues whose title is Chinese must still be found.
+        { repository: contains },
       ] });
     }
   }

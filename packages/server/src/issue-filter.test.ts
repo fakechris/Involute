@@ -25,6 +25,20 @@ describe('buildIssueWhere', () => {
     expect(buildIssueWhere({ commitmentStatus: 'COMMITTED', includeSuperseded: true }, null)).toEqual({ commitmentStatus: 'COMMITTED' });
   });
 
+  it('matches free-text against the repository so a repo fragment finds the project (INV-1430)', () => {
+    expect(buildIssueWhere({ text: 'meituan' }, null)).toEqual({ OR: [
+      { identifier: { contains: 'meituan', mode: 'insensitive' } },
+      { title: { contains: 'meituan', mode: 'insensitive' } },
+      { description: { contains: 'meituan', mode: 'insensitive' } },
+      { parent: { is: { OR: [
+        { title: { contains: 'meituan', mode: 'insensitive' } },
+        { identifier: { contains: 'meituan', mode: 'insensitive' } },
+      ] } } },
+      { project: { is: { name: { contains: 'meituan', mode: 'insensitive' } } } },
+      { repository: { contains: 'meituan', mode: 'insensitive' } },
+    ] });
+  });
+
   it('combines commitment status with a team key', () => {
     expect(
       buildIssueWhere(
