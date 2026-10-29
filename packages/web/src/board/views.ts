@@ -268,6 +268,7 @@ export function applyBoardViewState(
           issue.parent?.title ?? '',
           issue.parent?.identifier ?? '',
           issue.project?.name ?? '',
+          issue.repository ?? '',
         ].join(' ').toLowerCase();
 
         if (!haystack.includes(normalizedQuery)) {

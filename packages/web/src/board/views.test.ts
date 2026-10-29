@@ -137,4 +137,14 @@ describe('query by issue number (INV-608)', () => {
     const state = { ...getDefaultBoardViewState(), query: 'mentions 602' };
     expect(applyBoardViewState(issues, state, []).map((i) => i.identifier)).toEqual(['INV-7']);
   });
+
+  it('matches the repository so a repo fragment finds issues whose text never names it (INV-1430)', () => {
+    const issues = [
+      makeIssue('38', 'baoli/meituan_analyse', '账户初始化状态不可见'),
+      makeIssue('39', 'fakechris/Involute', 'Unrelated'),
+    ];
+
+    const state = { ...getDefaultBoardViewState(), query: 'meituan' };
+    expect(applyBoardViewState(issues, state, []).map((i) => i.id)).toEqual(['38']);
+  });
 });

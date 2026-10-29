@@ -101,6 +101,62 @@ describe('ProjectFilterCombobox', () => {
     expect(onSelect).toHaveBeenCalledWith('fakechris/Involute');
   });
 
+  it('Enter after typing selects the first matching project instead of All Projects (INV-1430)', () => {
+    const onSelect = vi.fn();
+    render(
+      <ProjectFilterCombobox
+        projects={mockProjects}
+        selectedProjectKey={null}
+        totalCount={64}
+        onSelectProject={onSelect}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /filter by project/i }));
+    const input = screen.getByPlaceholderText('Filter projects...');
+    fireEvent.change(input, { target: { value: 'lumen' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onSelect).toHaveBeenCalledWith('fakechris/lumenbox');
+  });
+
+  it('Enter after typing still follows the row the keyboard highlighted', () => {
+    const onSelect = vi.fn();
+    render(
+      <ProjectFilterCombobox
+        projects={mockProjects}
+        selectedProjectKey={null}
+        totalCount={64}
+        onSelectProject={onSelect}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /filter by project/i }));
+    const input = screen.getByPlaceholderText('Filter projects...');
+    fireEvent.change(input, { target: { value: 'fakechris' } });
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onSelect).toHaveBeenCalledWith('fakechris/Involute');
+  });
+
+  it('Enter on the untyped first row still clears to All Projects', () => {
+    const onSelect = vi.fn();
+    render(
+      <ProjectFilterCombobox
+        projects={mockProjects}
+        selectedProjectKey="fakechris/lumenbox"
+        totalCount={64}
+        onSelectProject={onSelect}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /project: fakechris\/lumenbox/i }));
+    fireEvent.keyDown(screen.getByPlaceholderText('Filter projects...'), { key: 'Enter' });
+
+    expect(onSelect).toHaveBeenCalledWith(null);
+  });
+
   it('handles two-stage Escape: first clears search input, second closes popover', () => {
     render(
       <ProjectFilterCombobox
