@@ -25,6 +25,18 @@ Connect: Streamable HTTP MCP at `http://127.0.0.1:4200/mcp` (local) with `Author
 | [agent-setup](../agent-setup/SKILL.md) | Wire MCP + Bearer token (secrets stay out of git) |
 | [project-onboarding](../project-onboarding/SKILL.md) | Initial repo onboarding, 3-tier tree, reality alignment |
 
+## Cross-system references (INV-1434)
+
+Conclusions live here; outside material lives in OVP; session evidence lives in planofplan. Point between them with text references, never runtime calls — full rules in `docs/cross-system-refs.md`.
+
+| Prefix | Resolve with |
+|---|---|
+| `ovp:source/<sha256>` · `ovp:claim/<key>` · `ovp:pack/<dir>` | OVP MCP `find` / `claim` (local) |
+| `inv:INV-<n>` | this MCP, `work_get_context` |
+| `pop:<provider>:<session>#<message>@<revision>` | planofplan MCP (local): `read_session` to get the full `SourceRef`, then `read_message` |
+
+A research item cites the `ovp:source/…` it rests on and the `pop:…` session that produced it, and has its report attached. Only clients resolve references, one hop at a time.
+
 ## Hard rules (all skills)
 
 1. Search before propose. Duplicate titles are a failure.
