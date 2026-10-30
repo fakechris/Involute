@@ -351,7 +351,7 @@ features:
 - **收尾需有下游（INV-1001）**：既无 `DERIVED_FROM` 派生项、描述里也没写"无可执行点"的调研，agent 收尾（`work_update(state: 'DONE')`）被拒并说明；带 `initial_state: 'DONE'` 的此类提案在人承诺时落在 Review 而非 Done。派生项全部承诺后，提案者的 `agent_inbox` 收到一条 `research.closable`——这时收尾；`/hygiene` 的"Research ready to close"列出同样的条目。
 - **收尾检查附件（INV-1128）**：调研 `run_report(completed)` 或 `work_update(state: 'DONE')` 时若工单上没有任何附件，结果带 `warning` 提醒用 `work_attach_file` 挂报告（只提醒、不拒绝）；`/hygiene` 的"Research without an attachment"列出处于 Review / Done 而无附件的调研，挂上文件即消失。SEV1/SEV2 事故无复盘附件进 Done 被拒，见 §14（INV-1126）。
 - `source` 字段不再承担溯源。
-- **跨系统引用（INV-1434，决定 INV-1433）**：调研的结论归 Involute；所依据的外部原文若已被 OVP 收录，在描述或评论里写 `ovp:source/<sha256>`；产生它的会话写 `pop:<provider>:<session_id>`。只存引用文本，服务端之间不互相调用，由客户端（agent 或 recall）一跳解析。格式与解析对照表见 `docs/cross-system-refs.md`。
+- **跨系统引用（INV-1434，决定 INV-1433）**：调研的结论归 Involute；所依据的外部原文若已被 OVP 收录，在描述或评论里写 `ovp://source/<sha256>`（OVP 自己的 URI）；产生它的会话写 `pop:<provider>:<session_id>`。只存引用文本，服务端之间不互相调用，由客户端（agent 或 recall）一跳解析。格式与解析对照表见 `docs/cross-system-refs.md`。
 
 ## 12. Bug Management Flow (缺陷上报与处理闭环)
 
