@@ -33,7 +33,7 @@ Conclusions live here; outside material lives in OVP; session evidence lives in 
 |---|---|
 | `ovp:source/<sha256>` · `ovp:claim/<key>` · `ovp:pack/<dir>` | OVP MCP `find` / `claim` (local) |
 | `inv:INV-<n>` | this MCP, `work_get_context` |
-| `pop:<provider>:<session>#<message>@<revision>` | planofplan MCP `read_message` / `read_session` (local) |
+| `pop:<provider>:<session>#<message>@<revision>` | planofplan MCP (local): `read_session` to get the full `SourceRef`, then `read_message` |
 
 A research item cites the `ovp:source/…` it rests on and the `pop:…` session that produced it, and has its report attached. Only clients resolve references, one hop at a time.
 

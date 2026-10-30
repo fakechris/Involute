@@ -27,7 +27,15 @@ The message and revision parts of `pop:` are optional; with a revision the refer
 | `ovp:source/…`, `ovp:pack/…` | OVP (local) | `find` / `ovp_read_note` |
 | `ovp:claim/…` | OVP (local) | `claim` |
 | `inv:…` | Involute (remote) | `work_get_context` |
-| `pop:…` | planofplan (local) | `read_message` (with message id) / `read_session` |
+| `pop:…` | planofplan (local) | `read_session`, then `read_message` with the full `SourceRef` (see below) |
+
+### Resolving `pop:`
+
+A `pop:` reference is not a complete `SourceRef`: `read_message` needs all six fields (`provider`, `session_id`, `message_id`, `source_seq`, `source_revision`, `parser_version`) and rejects a mismatch as `STALE_SOURCE`. So:
+
+1. `read_session(session_id)` (or `message_search` scoped to the session) and find the message by `message_id`; take its current `source_ref`.
+2. If the reference carries `@<revision>` and it differs from the current `source_revision`, report **changed since cited** — do not present the new text as what was cited.
+3. `read_message(source_ref)` for the full text. A session-only reference stops at step 1.
 
 ## Rules — no circular calls
 
