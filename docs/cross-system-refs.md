@@ -14,9 +14,11 @@ A conclusion about an outside project lives in an Involute research item, with t
 
 | Prefix | Form | Example |
 |---|---|---|
-| `ovp:` | `ovp:source/<sha256>` · `ovp:claim/<claim_key>` · `ovp:pack/<reader dir>` | `ovp:source/ddd5d59fd01d1589…` |
+| `ovp://` | `ovp://source/<sha256>` · `ovp://claim/<claim_key>` · `ovp://theme-page/<id>` — OVP's own URIs, served by its MCP `resources/read` | `ovp://source/ddd5d59fd01d1589…` |
 | `inv:` | `inv:INV-<n>`, optionally `#RUN-<n>` or `#comment-<uuid>` | `inv:INV-1289` |
 | `pop:` | `pop:<provider>:<session_id>#<message_id>@<source_revision>` — planofplan's `SourceRef` | `pop:claude:agent-ad51950ed6c1e202d` |
+
+`ovp://` is not ours to define: OVP's tools already emit these URIs and resolve them, so references use exactly that form. A claim is cited by its stable `claim_key` (`ck-…`), not its `claim_id`. A reader pack has no URI of its own; cite its `reader.md` path, which `ovp_read_note` reads.
 
 The message and revision parts of `pop:` are optional; with a revision the reference pins content, without one it points at whatever the session holds now. An OVP sha256 may be shortened to 8+ hex characters when it is unambiguous in prose; tools write the full value.
 
@@ -24,8 +26,9 @@ The message and revision parts of `pop:` are optional; with a revision the refer
 
 | Prefix | MCP | Tool |
 |---|---|---|
-| `ovp:source/…`, `ovp:pack/…` | OVP (local) | `find` / `ovp_read_note` |
-| `ovp:claim/…` | OVP (local) | `claim` |
+| `ovp://…` (any) | OVP (local) | `resources/read` with the URI as is |
+| `ovp://source/…` | OVP (local) | `ovp_read_note` (paged) |
+| `ovp://claim/…` | OVP (local) | `claim` |
 | `inv:…` | Involute (remote) | `work_get_context` |
 | `pop:…` | planofplan (local) | `read_session`, then `read_message` with the full `SourceRef` (see below) |
 
@@ -46,6 +49,6 @@ A `pop:` reference is not a complete `SourceRef`: `read_message` needs all six f
 
 ## Writing references
 
-- **Research items:** the description (or a comment, once committed) cites the `ovp:source/…` the conclusion rests on, when OVP has ingested it, and the `pop:…` session that produced it. The report is attached, not left only in a local directory.
+- **Research items:** the description (or a comment, once committed) cites the `ovp://source/…` the conclusion rests on, when OVP has ingested it, and the `pop:…` session that produced it. The report is attached, not left only in a local directory.
 - **Run receipts:** `evidence` items may use these prefixes as `ref` with `kind: "url"` until a dedicated kind exists.
 - References stay text for now. Whether they become structured fields is decided after the `recall` two-week experiment.
