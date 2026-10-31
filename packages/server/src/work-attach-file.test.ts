@@ -125,7 +125,7 @@ describe('work_attach_file (INV-1003)', () => {
   it('reminds an agent closing research with no attachment, and stops once a file is attached', async () => {
     const description = '### 1. 目标与架构定位\n调研。\n### 2. 核心功能与交付范围\n结论。\n### 3. 验收标准与验证方案\n来源固定。\n无可执行点。';
     const research = async (title: string) => {
-      const candidate = await proposeWork(prisma, { description, labels: ['research'], parentId: await testParentId(prisma, team.id), teamId: team.id, title }, { actorId: agent.id, actorKind: 'AGENT', surface: 'mcp' });
+      const candidate = await proposeWork(prisma, { acceptance: 'Findings recorded.', description, labels: ['research'], parentId: await testParentId(prisma, team.id), teamId: team.id, title }, { actorId: agent.id, actorKind: 'AGENT', surface: 'mcp' });
       return commitWork(prisma, candidate.id, { acceptance: 'Findings recorded.', assigneeId: human.id, expectedRevision: candidate.revision }, { actorId: human.id, actorKind: 'HUMAN', surface: 'graphql' });
     };
     const finish = async (identifier: string) => {

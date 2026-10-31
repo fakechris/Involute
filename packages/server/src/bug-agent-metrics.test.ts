@@ -71,7 +71,7 @@ describe('agent-filed bugs and bug metrics (INV-751 / INV-787)', () => {
     const rejectedParent = await createIssue(prisma, { teamId: team.id, title: 'Dropped', repository: 'acme/app', parentId: projectId });
     await prisma.issue.update({ where: { id: rejectedParent.id }, data: { commitmentStatus: 'REJECTED' } });
     await expect(fileBug({ parentId: rejectedParent.id, priority: 1, stepsToReproduce: 'x' })).rejects.toThrow(/does not go to Candidates/);
-    const plain = await proposeWork(prisma, { teamId: team.id, title: 'Idea', description: DESCRIPTION, parentId: projectId, priority: 1, stepsToReproduce: 'x' }, asAgent());
+    const plain = await proposeWork(prisma, { acceptance: '指标可核对。', teamId: team.id, title: 'Idea', description: DESCRIPTION, parentId: projectId, priority: 1, stepsToReproduce: 'x' }, asAgent());
     expect(plain.commitmentStatus).toBe('CANDIDATE');
   });
 
