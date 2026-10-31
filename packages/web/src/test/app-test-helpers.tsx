@@ -622,12 +622,15 @@ export function renderApp(
       };
     }
 
-    if (source.includes('query ProjectWorkTimeline')) {
+    // The timeline view reads the graph and the audit trail in one request (INV-1445).
+    if (source.includes('query ProjectWorkGraphTimeline')) {
+      const graph = queryState.graphData?.workGraph;
+      const trail = queryState.timelineData?.workGraph;
       return {
-        data: options?.skip ? undefined : queryState.timelineData,
-        error: undefined,
-        loading: false,
-        refetch: vi.fn().mockResolvedValue(undefined),
+        data: options?.skip || !graph ? undefined : { workGraph: { ...graph, ...trail } },
+        error: queryState.error,
+        loading: queryState.loading ?? false,
+        refetch: queryState.refetch ?? vi.fn().mockResolvedValue(undefined),
       };
     }
 

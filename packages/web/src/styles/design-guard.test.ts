@@ -61,6 +61,9 @@ const LOCAL_CUSTOM_PROPERTIES = new Set<string>([
   '--timeline-started',
   '--timeline-review',
   '--timeline-completed',
+  // Set inline on .project-timeline__grid from the visible row window and read by its spacers.
+  '--timeline-row-offset',
+  '--timeline-row-offset-bottom',
 ]);
 
 /**

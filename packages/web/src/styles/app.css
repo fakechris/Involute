@@ -5127,6 +5127,20 @@ kbd {
   background: var(--bg-raised);
 }
 
+/* Rows above and below the visible window keep the scrollbar the length of
+   the whole outline while only the visible rows are mounted (INV-1444). */
+.project-timeline__spacer {
+  grid-column: 1 / -1;
+}
+
+.project-timeline__spacer--top {
+  height: var(--timeline-row-offset);
+}
+
+.project-timeline__spacer--bottom {
+  height: var(--timeline-row-offset-bottom);
+}
+
 .timeline-tick {
   position: absolute;
   bottom: 4px;
