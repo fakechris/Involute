@@ -244,6 +244,83 @@ export const PROJECT_WORK_GRAPH_QUERY = gql`
   }
 `;
 
+// The Timeline view needs the graph and the audit trail together. Two queries
+// meant the server resolved the whole project twice (INV-1445), so the timeline
+// view reads both in one request; the outline and dependency views keep the
+// lighter document that carries no audit trail.
+export const PROJECT_WORK_GRAPH_TIMELINE_QUERY = gql`
+  query ProjectWorkGraphTimeline($project: String!, $includeCandidates: Boolean) {
+    workGraph(project: $project, includeCandidates: $includeCandidates) {
+      repository
+      truncated
+      root {
+        id
+        identifier
+        title
+      }
+      nodes {
+        id
+        identifier
+        title
+        kind
+        commitmentStatus
+        state {
+          id
+          name
+          type
+        }
+        assignee {
+          id
+          name
+        }
+      }
+      externalNodes {
+        id
+        identifier
+        title
+        kind
+        commitmentStatus
+        state {
+          id
+          name
+          type
+        }
+        assignee {
+          id
+          name
+        }
+      }
+      edges {
+        id
+        type
+        fromId
+        toId
+      }
+      timeline {
+        workId
+        committedAt
+        startedAt
+        reviewAt
+        completedAt
+        canceledAt
+        history
+        transitions {
+          at
+          stateName
+          stateType
+        }
+      }
+      cycles {
+        id
+        name
+        number
+        startsAt
+        endsAt
+      }
+    }
+  }
+`;
+
 export const WORK_CONTEXT_PAGE_QUERY = gql`
   query WorkContextPage($id: String!) {
     workContext(id: $id) {
@@ -504,36 +581,6 @@ export const ISSUE_SNOOZE_MUTATION = gql`
         id
         revision
         snoozedUntil
-      }
-    }
-  }
-`;
-
-// Timeline data for the /graph Timeline view (INV-682); fetched only when that
-// view is open, since it reads every item's audit trail.
-export const PROJECT_WORK_TIMELINE_QUERY = gql`
-  query ProjectWorkTimeline($project: String!, $includeCandidates: Boolean) {
-    workGraph(project: $project, includeCandidates: $includeCandidates) {
-      timeline {
-        workId
-        committedAt
-        startedAt
-        reviewAt
-        completedAt
-        canceledAt
-        history
-        transitions {
-          at
-          stateName
-          stateType
-        }
-      }
-      cycles {
-        id
-        name
-        number
-        startsAt
-        endsAt
       }
     }
   }
