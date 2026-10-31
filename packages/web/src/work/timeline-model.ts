@@ -125,6 +125,7 @@ function aggregateOf(entry: TimelineEntry | undefined): SpanAggregate {
   };
 }
 
+/** Two subtrees side by side: the earliest start, the latest finish, how much is left open. */
 function mergeAggregates(left: SpanAggregate, right: SpanAggregate): SpanAggregate {
   return {
     from: left.from === null ? right.from : right.from === null ? left.from : Math.min(left.from, right.from),
@@ -135,6 +136,7 @@ function mergeAggregates(left: SpanAggregate, right: SpanAggregate): SpanAggrega
   };
 }
 
+/** A subtree's aggregate as a drawn span: null when nothing in it has dates. */
 function spanOf(aggregate: SpanAggregate, now: Date): ContainerSpan | null {
   if (aggregate.from === null) return null;
   const end = aggregate.open ? now.getTime() : aggregate.to ?? now.getTime();
@@ -165,7 +167,8 @@ export function containerSpan(item: OutlineItem, entries: Map<string, TimelineEn
  * Every container's extent in one pass, bottom-up. `containerSpan` walks a
  * container's whole subtree again per container, which is quadratic in a deep
  * outline; here each leaf is visited once and every container reuses its
- * children's aggregate.
+ * children's aggregate. Only containers get an extent — a leaf has none of its
+ * own to draw, it only feeds the container above it.
  */
 export function containerSpans(
   items: OutlineItem[],
@@ -175,9 +178,7 @@ export function containerSpans(
   const spans = new Map<string, ContainerSpan | null>();
   const visit = (item: OutlineItem): SpanAggregate => {
     if (item.children.length === 0) {
-      const aggregate = aggregateOf(entries.get(item.node.id));
-      spans.set(item.node.id, spanOf(aggregate, now));
-      return aggregate;
+      return aggregateOf(entries.get(item.node.id));
     }
     let aggregate = EMPTY_AGGREGATE;
     for (const child of item.children) aggregate = mergeAggregates(aggregate, visit(child));

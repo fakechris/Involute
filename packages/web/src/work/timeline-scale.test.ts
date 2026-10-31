@@ -81,12 +81,21 @@ describe('timeline at the node limit', () => {
     // Same answer, and the indexed way is the one the views use.
     expect(indexed()).toBe(scanned());
 
-    const indexedStart = performance.now();
-    indexed();
-    const indexedMs = performance.now() - indexedStart;
-    const scannedStart = performance.now();
-    scanned();
-    const scannedMs = performance.now() - scannedStart;
+    // Both paths are measured the same way: one warm-up run that is thrown
+    // away, then the fastest of three. A single cold run measures the JIT as
+    // much as the algorithm, and whichever path runs first pays for it.
+    const fastest = (run: () => number): number => {
+      run();
+      let lowest = Number.POSITIVE_INFINITY;
+      for (let round = 0; round < 3; round += 1) {
+        const start = performance.now();
+        run();
+        lowest = Math.min(lowest, performance.now() - start);
+      }
+      return lowest;
+    };
+    const indexedMs = fastest(indexed);
+    const scannedMs = fastest(scanned);
 
     // A per-row scan is quadratic in the edges; the index is one pass. The
     // margin is wide on purpose: CI machines are slower than the numbers here.

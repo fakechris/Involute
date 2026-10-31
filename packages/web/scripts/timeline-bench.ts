@@ -71,7 +71,25 @@ function flatten(items: any[], out: any[] = []): any[] {
 }
 
 const now = new Date('2026-10-30T00:00:00Z');
-console.log('nodes  edges  | blockers: scan  index | containers: per-container  batch | cumulative');
+const ROUNDS = 3;
+
+/**
+ * One warm-up run that is thrown away, then the fastest of ROUNDS. A single
+ * cold sample measures the JIT as much as the algorithm, and whichever path
+ * runs first pays for it — so both sides are measured the same way.
+ */
+function fastest(run: () => void): number {
+  run();
+  let lowest = Number.POSITIVE_INFINITY;
+  for (let round = 0; round < ROUNDS; round += 1) {
+    const start = performance.now();
+    run();
+    lowest = Math.min(lowest, performance.now() - start);
+  }
+  return lowest;
+}
+
+console.log('nodes  edges  | blockers: per-row scan  index | containers: per-container  batch | cumulative');
 
 for (const n of [500, 1000, 2000]) {
   const { nodes, edges } = build(n);
@@ -80,27 +98,27 @@ for (const n of [500, 1000, 2000]) {
   const outline = buildOutline(nodes, edges, 'PROJECT');
   const rows = flatten([...outline.roots, ...outline.unplaced]);
 
-  const t0 = performance.now();
-  for (const row of rows) openBlockersOf(row.node.id, edges, byId);
-  const scanMs = performance.now() - t0;
+  const scanMs = fastest(() => {
+    for (const row of rows) openBlockersOf(row.node.id, edges, byId);
+  });
 
-  const t1 = performance.now();
-  const index = buildBlockerIndex(edges, byId);
-  for (const row of rows) index.get(row.node.id);
-  const indexMs = performance.now() - t1;
+  const indexMs = fastest(() => {
+    const index = buildBlockerIndex(edges, byId);
+    for (const row of rows) index.get(row.node.id);
+  });
 
-  const t2 = performance.now();
-  for (const row of rows) if (row.children.length) containerSpan(row, entries, now);
-  const perContainerMs = performance.now() - t2;
+  const perContainerMs = fastest(() => {
+    for (const row of rows) if (row.children.length) containerSpan(row, entries, now);
+  });
 
-  const t3 = performance.now();
-  containerSpans([...outline.roots, ...outline.unplaced], entries, now);
-  const batchMs = performance.now() - t3;
+  const batchMs = fastest(() => {
+    containerSpans([...outline.roots, ...outline.unplaced], entries, now);
+  });
 
   const range = timeRange([...entries.values()], now, 'week');
-  const t4 = performance.now();
-  cumulativeSeries([...entries.values()], range);
-  const cumulativeMs = performance.now() - t4;
+  const cumulativeMs = fastest(() => {
+    cumulativeSeries([...entries.values()], range);
+  });
 
   console.log(
     [

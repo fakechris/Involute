@@ -145,6 +145,13 @@ describe('containerSpans', () => {
     }
   });
 
+  it('gives only containers an extent; a leaf has none of its own to draw', () => {
+    const spans = containerSpans([...outline.roots, ...outline.unplaced], entries, now);
+    expect(spans.has('m')).toBe(true);
+    expect(spans.has('m2')).toBe(true);
+    expect(spans.has('a')).toBe(false);
+  });
+
   it('counts leaves without recorded history as work and keeps the open one open', () => {
     const spans = containerSpans([...outline.roots, ...outline.unplaced], entries, now);
     // a and e are done, b is still open, c has no history at all, d was canceled.

@@ -54,8 +54,16 @@ export function classifyBlockEdge(from: GraphNode, to: GraphNode): BlockEdgeStat
 /** Shared so a row without blockers keeps the same reference across renders. */
 export const NO_OPEN_BLOCKERS: GraphNode[] = [];
 
+/**
+ * Open blockers of one node, found by scanning the edges. A view that draws
+ * every row would ask it once per row — O(nodes × edges) — so such a view
+ * builds the index once (`buildBlockerIndex`) and looks each node up.
+ */
 export function openBlockersOf(nodeId: string, edges: GraphEdge[], byId: Map<string, GraphNode>): GraphNode[] {
-  return buildBlockerIndex(edges, byId).get(nodeId) ?? NO_OPEN_BLOCKERS;
+  return edges
+    .filter((edge) => edge.type === 'BLOCKS' && edge.toId === nodeId)
+    .map((edge) => byId.get(edge.fromId))
+    .filter((node): node is GraphNode => Boolean(node && isOpenBlocker(node)));
 }
 
 /**
