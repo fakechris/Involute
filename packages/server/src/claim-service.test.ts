@@ -19,6 +19,7 @@ import {
   WORK_REVISION_CONFLICT_MESSAGE,
   WORK_IDEMPOTENCY_CONFLICT_MESSAGE,
   AGENT_DESCRIPTION_REQUIRED_MESSAGE,
+  AGENT_ACCEPTANCE_REQUIRED_MESSAGE,
   RESEARCH_INITIAL_DONE_ONLY_MESSAGE,
 } from './errors.ts';
 import { claimWork, commitWork, proposeWork, rejectWork } from './claim-service.ts';
@@ -419,7 +420,7 @@ describe('claim service', () => {
   it('forbids agents from committing and does not treat In Progress as a claim', async () => {
     const candidate = await proposeWork(
       prisma,
-      { parentId: await testParentId(prisma, team.id), teamId: team.id,
+      { acceptance: '测试验收可复核。', parentId: await testParentId(prisma, team.id), teamId: team.id,
         title: 'Agent discovered',
         description: '### 1. 目标与架构定位\n测试定位\n### 2. 核心功能与交付范围\n测试范围\n### 3. 验收标准与验证方案\n测试验证',
       },
@@ -570,22 +571,6 @@ describe('claim service', () => {
 
     it('enforces mandatory 3-section Chinese description on AGENT proposals', async () => {
       const agentActor = { actorId: agent.id, actorKind: 'AGENT' as const, surface: 'mcp' };
-
-      // Empty description rejected for agent
-      await expect(
-        proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Agent work with no desc' }, agentActor),
-      ).rejects.toThrow(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
-
-      // Incomplete description missing 3 sections rejected for agent
-      await expect(
-        proposeWork(
-          prisma,
-          { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Agent work', description: 'Just a short note' },
-          agentActor,
-        ),
-      ).rejects.toThrow(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
-
-      // Valid 3 sections accepted for agent
       const validDesc = [
         '### 1. 目标与架构定位',
         '实现底层通信协议加固',
@@ -595,12 +580,64 @@ describe('claim service', () => {
         'pnpm test 全部通过',
       ].join('\n');
 
+      // Empty description rejected for agent
+      await expect(
+        proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Agent work with no desc', acceptance: '协议加固可复跑验证' }, agentActor),
+      ).rejects.toThrow(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
+
+      // Incomplete description missing 3 sections rejected for agent
+      await expect(
+        proposeWork(
+          prisma,
+          { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Agent work', description: 'Just a short note', acceptance: '协议加固可复跑验证' },
+          agentActor,
+        ),
+      ).rejects.toThrow(AGENT_DESCRIPTION_REQUIRED_MESSAGE);
+
+      // Valid 3 sections accepted for agent
       const proposed = await proposeWork(
         prisma,
-        { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Agent valid work', description: validDesc },
+        { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Agent valid work', description: validDesc, acceptance: '协议加固可复跑验证' },
         agentActor,
       );
       expect(proposed.description).toBe(validDesc);
+    });
+
+    it('refuses an AGENT proposal without acceptance (INV-1449)', async () => {
+      const agentActor = { actorId: agent.id, actorKind: 'AGENT' as const, surface: 'mcp' };
+      const validDesc = [
+        '### 1. 目标与架构定位',
+        '定位',
+        '### 2. 核心功能与交付范围',
+        '范围',
+        '### 3. 验收标准与验证方案',
+        '测试全绿',
+      ].join('\n');
+
+      // A structured description alone is not acceptance: blank refused.
+      await expect(
+        proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Agent work, no acceptance', description: validDesc }, agentActor),
+      ).rejects.toThrow(AGENT_ACCEPTANCE_REQUIRED_MESSAGE);
+
+      // Whitespace-only is blank too.
+      await expect(
+        proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Agent work, blank acceptance', description: validDesc, acceptance: '   ' }, agentActor),
+      ).rejects.toThrow(AGENT_ACCEPTANCE_REQUIRED_MESSAGE);
+
+      // People keep filling the box on the card instead.
+      await expect(
+        proposeWork(prisma, { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Human work, no acceptance' }, { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'web' }),
+      ).resolves.toMatchObject({ commitmentStatus: 'CANDIDATE' });
+
+      // The remediation path stays open: an agent may backfill acceptance on
+      // its own candidate before a person commits it.
+      const backfilled = await proposeWork(
+        prisma,
+        { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Agent backfill target', description: validDesc, acceptance: '先补一条' },
+        agentActor,
+      );
+      const updated = await updateIssue(prisma, backfilled.id, { acceptance: '回补后的验收标准', expectedRevision: backfilled.revision }, agentActor);
+      expect(updated.acceptance).toBe('回补后的验收标准');
     });
 
     it('enforces description gate when updating candidate work as an agent', async () => {
@@ -616,7 +653,7 @@ describe('claim service', () => {
 
       const candidate = await proposeWork(
         prisma,
-        { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Candidate for update', description: validDesc },
+        { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Candidate for update', description: validDesc, acceptance: '初始验收标准' },
         agentActor,
       );
 

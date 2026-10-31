@@ -99,7 +99,7 @@ describe('reproducibility (INV-1122)', () => {
     const refused = await fileBug({ title: 'Bad value', reproducibility: 'RARELY' });
     expect(refused.error).toMatch(/ALWAYS \(every try\)/);
 
-    const proposed = await mcp('work_propose', { team: DEFAULT_TEAM_KEY, title: 'Crash once', description: DESCRIPTION, parent_id: parentId, reproducibility: 'ONCE' });
+    const proposed = await mcp('work_propose', { team: DEFAULT_TEAM_KEY, title: 'Crash once', acceptance: '不再复现。', description: DESCRIPTION, parent_id: parentId, reproducibility: 'ONCE' });
     expect(proposed.reproducibility).toBe('ONCE');
 
     const updated = await mcp('work_update', { id: bug.identifier, expected_revision: bug.revision, reproducibility: 'ALWAYS' });

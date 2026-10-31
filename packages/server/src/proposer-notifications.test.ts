@@ -53,7 +53,7 @@ describe('the proposer hears the decision (INV-968)', () => {
   async function proposeAsNova(title: string) {
     return proposeWork(
       prisma,
-      { description: DESCRIPTION, parentId: await testParentId(prisma, team.id), teamId: team.id, title },
+      { acceptance: '通知可达且可清。', description: DESCRIPTION, parentId: await testParentId(prisma, team.id), teamId: team.id, title },
       { actorId: nova.id, actorKind: 'AGENT', surface: 'mcp' },
     );
   }
@@ -148,6 +148,7 @@ describe('the proposer hears the decision (INV-968)', () => {
   it('says on work_propose where the decision will arrive and warns not to cache status (INV-1246)', async () => {
     const parentId = await testParentId(prisma, team.id);
     const result = (await callMcpTool(asAgent(nova), 'work_propose', {
+      acceptance: '决定通知可达。',
       description: DESCRIPTION,
       parent_id: parentId,
       team: DEFAULT_TEAM_KEY,

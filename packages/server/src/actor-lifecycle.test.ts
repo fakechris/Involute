@@ -108,7 +108,7 @@ describe('actor lifecycle (INV-586)', () => {
       const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
       const work = await proposeWork(
         prisma,
-        { parentId: await testParentId(prisma, team.id), description: DESCRIPTION, teamId: team.id, title: 'Owned but not assigned' },
+        { acceptance: '归属可核对。', parentId: await testParentId(prisma, team.id), description: DESCRIPTION, teamId: team.id, title: 'Owned but not assigned' },
         { actorId: credential.userId, actorKind: 'AGENT', surface: 'test' },
       );
 
@@ -127,7 +127,7 @@ describe('actor lifecycle (INV-586)', () => {
       const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
       await proposeWork(
         prisma,
-        { parentId: await testParentId(prisma, team.id), description: DESCRIPTION, teamId: team.id, title: 'History' },
+        { acceptance: '历史可追溯。', parentId: await testParentId(prisma, team.id), description: DESCRIPTION, teamId: team.id, title: 'History' },
         { actorId: credential.userId, actorKind: 'AGENT', surface: 'test' },
       );
 
@@ -145,7 +145,7 @@ describe('actor lifecycle (INV-586)', () => {
       const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
       const work = await proposeWork(
         prisma,
-        { parentId: await testParentId(prisma, team.id), description: DESCRIPTION, teamId: team.id, title: 'Before deactivation' },
+        { acceptance: '历史可追溯。', parentId: await testParentId(prisma, team.id), description: DESCRIPTION, teamId: team.id, title: 'Before deactivation' },
         { actorId: credential.userId, actorKind: 'AGENT', surface: 'test' },
       );
 

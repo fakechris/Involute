@@ -179,7 +179,7 @@ describe('found-in SHA and bugs fixed between deploys (INV-1121)', () => {
       inRange = await prisma.issue.findUniqueOrThrow({ where: { id: (await fileBug({ title: 'Fixed by merge' })).id } });
       viaEvidence = await prisma.issue.findUniqueOrThrow({ where: { id: (await fileBug({ title: 'Fixed by verified PR' })).id } });
       outOfRange = await prisma.issue.findUniqueOrThrow({ where: { id: (await fileBug({ title: 'Fixed earlier' })).id } });
-      const feature = await mcp('work_propose', { team: DEFAULT_TEAM_KEY, title: 'A feature', description: DESCRIPTION, parent_id: parentId, repository: REPO });
+      const feature = await mcp('work_propose', { team: DEFAULT_TEAM_KEY, title: 'A feature', acceptance: '功能可用。', description: DESCRIPTION, parent_id: parentId, repository: REPO });
       notABug = await prisma.issue.findUniqueOrThrow({ where: { id: feature.id } });
       await merged(inRange, sha('b'), 11);
       await merged(outOfRange, sha('0'), 9);

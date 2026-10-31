@@ -99,7 +99,7 @@ describe('severity (INV-1115)', () => {
     const refused = await fileBug({ title: 'Bad severity', severity: 'SEV9' });
     expect(refused.error).toMatch(/SEV1 \(Critical\)/);
 
-    const proposed = await mcp('work_propose', { team: DEFAULT_TEAM_KEY, title: 'Slow search', description: DESCRIPTION, parent_id: parentId, severity: 'SEV3' });
+    const proposed = await mcp('work_propose', { team: DEFAULT_TEAM_KEY, title: 'Slow search', acceptance: '搜索恢复到基线时延。', description: DESCRIPTION, parent_id: parentId, severity: 'SEV3' });
     expect(proposed.severity).toBe('SEV3');
 
     const updated = await mcp('work_update', { id: bug.identifier, expected_revision: bug.revision, severity: 'SEV1' });

@@ -240,6 +240,13 @@ export const NOTIFICATION_NOT_FOUND_MESSAGE = 'Notification not found.';
 export const SNOOZE_REQUIRES_CANDIDATE_MESSAGE = 'Only candidate work can be snoozed.';
 export const AGENT_DESCRIPTION_REQUIRED_MESSAGE =
   "Agent proposals require a rich structured Chinese description with three sections: '### 1. 目标与架构定位', '### 2. 核心功能与交付范围', and '### 3. 验收标准与验证方案'. Lazy references (e.g. 'ref docs/...') are strictly rejected.";
+// INV-1449: commit refuses blank acceptance and agents cannot write it onto
+// committed work (INV-869), so an acceptance-less candidate can only sit in
+// Candidates and block every batch commit until a person fills the box by
+// hand — the same reasoning that made acceptance required for bugs (INV-836),
+// extended to every agent proposal.
+export const AGENT_ACCEPTANCE_REQUIRED_MESSAGE =
+  'An agent proposal needs acceptance: what must be true when this work is done. Committing is refused without it and agents cannot add it after commit, so the candidate would block the batch commit until a person fills the box by hand. Pass acceptance with the proposal — section 3 of your description (验收标准与验证方案) is the source to draw from.';
 // Dynamic IQL failures carry this prefix; getExposedError lets them through so
 // agents see exactly which term failed to parse.
 export const IQL_PARSE_ERROR_PREFIX = 'Invalid IQL query:';
@@ -477,6 +484,7 @@ const exposedErrorCodes = new Map<string, string>([
   [NOTIFICATION_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [SNOOZE_REQUIRES_CANDIDATE_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_DESCRIPTION_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
+  [AGENT_ACCEPTANCE_REQUIRED_MESSAGE, 'BAD_USER_INPUT'],
   [PROJECT_ALIAS_FORMAT_MESSAGE, 'BAD_USER_INPUT'],
   [PROJECT_ALIAS_KIND_MESSAGE, 'BAD_USER_INPUT'],
   [PROJECT_ALIAS_TAKEN_MESSAGE, 'BAD_USER_INPUT'],
