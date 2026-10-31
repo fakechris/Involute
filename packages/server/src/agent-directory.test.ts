@@ -52,7 +52,7 @@ describe('agent profile is bounded by what the viewer may read (INV-597 follow-u
     const team = await prisma.team.update({ where: { key: DEFAULT_TEAM_KEY }, data: { visibility: 'PRIVATE' } });
     const { credential } = await issueAgentCredential(prisma, { handle: 'mia', name: 'Mia', ownerId: admin.id, teamKey: DEFAULT_TEAM_KEY });
     await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), description: ['### 1. 目标与架构定位', 'x', '### 2. 核心功能与交付范围', 'x', '### 3. 验收标准与验证方案', 'x'].join('\n'),
-      receipt: { reasoning: 'private reasoning' }, teamId: team.id, title: 'Private work',
+      acceptance: '私有团队内可读。', receipt: { reasoning: 'private reasoning' }, teamId: team.id, title: 'Private work',
     }, { actorId: credential.userId, actorKind: 'AGENT', surface: 'test' });
 
     const outsider = await prisma.user.create({ data: { actorKind: 'HUMAN', email: 'outsider@humans.test.local', name: 'Outsider' } });
@@ -228,7 +228,7 @@ describe('agent directory and profile (INV-573)', () => {
 
       const created = await proposeWork(
         prisma,
-        { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Proposed by an agent', description: AGENT_DESCRIPTION },
+        { acceptance: '来源记录可核对。', parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Proposed by an agent', description: AGENT_DESCRIPTION },
         { actorId: credential.userId, actorKind: 'AGENT', surface: 'test' },
       );
 
@@ -345,7 +345,7 @@ describe('agent directory and profile (INV-573)', () => {
       });
       const created = await proposeWork(
         prisma,
-        { parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Proposed by an agent', description: AGENT_DESCRIPTION },
+        { acceptance: '来源记录可核对。', parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Proposed by an agent', description: AGENT_DESCRIPTION },
         { actorId: credential.userId, actorKind: 'AGENT', surface: 'test' },
       );
 

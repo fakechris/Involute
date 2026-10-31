@@ -1280,7 +1280,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_propose',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    description: 'Create candidate work. Does not enter the ready queue. Search for duplicates first; the result lists possible_duplicates (existing work close in meaning) when semantic search is on. A bug (labels ["bug"]) is committed directly and never enters Candidates; it requires parent_id (or an inheritable related_work_id), priority 1–4, and steps_to_reproduce — omit any and the proposal is refused.',
+    description: 'Create candidate work. Does not enter the ready queue. Search for duplicates first; the result lists possible_duplicates (existing work close in meaning) when semantic search is on. acceptance is required (INV-1449): committing refuses blank acceptance and agents cannot add it after commit, so an acceptance-less candidate would block the batch commit; draw it from section 3 (验收标准与验证方案) of the description. A bug (labels ["bug"]) is committed directly and never enters Candidates; it requires parent_id (or an inheritable related_work_id), priority 1–4, and steps_to_reproduce — omit any and the proposal is refused.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1296,7 +1296,10 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         outcome: { type: 'string' },
         scope: { type: 'string' },
         constraints: { type: 'string' },
-        acceptance: { type: 'string' },
+        acceptance: {
+          type: 'string',
+          description: 'Required. What must be true when this work is done — the reviewer commits against it, and committing is refused without it. Draw it from section 3 (验收标准与验证方案) of the description.',
+        },
         verification: { type: 'string' },
         kind: { type: 'string', enum: ['ISSUE', 'PROJECT', 'MILESTONE', 'DECISION', 'EPIC'] },
         parent_id: {
@@ -1344,7 +1347,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
           description: 'Optional initial target state upon human commit: BACKLOG (Backlog), UNSTARTED (Ready), STARTED (In Progress), or REVIEW (In Review). Defaults to UNSTARTED. CANNOT be CANCELED, and CANNOT be DONE except for an ISSUE labelled research (Type: Research), which then lands in Done when a person commits it (INV-912).',
         },
       },
-      required: ['team', 'title'],
+      required: ['team', 'title', 'acceptance'],
     },
   },
   {
