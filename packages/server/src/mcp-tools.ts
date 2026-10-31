@@ -37,6 +37,7 @@ import {
   assertCanWriteTeam,
   buildReadableIssueWhere,
  assertCanReadIssue,
+  resolveTeamIdOrKey,
 } from './access-control.js';
 import type { GraphQLContext } from './auth.js';
 import { claimWork, commitWork, isDoneStateRequest, normalizeInitialStateType, proposeWork } from './claim-service.js';
@@ -50,7 +51,6 @@ import {
 } from './context-service.js';
 import {
   ISSUE_NOT_FOUND_MESSAGE,
-  TEAM_NOT_FOUND_MESSAGE,
   WORKFLOW_STATE_NOT_FOUND_MESSAGE,
   WORK_LINK_NOT_FOUND_MESSAGE,
   createNotFoundError,
@@ -453,7 +453,8 @@ async function callMcpAction(
       };
       if (args.kind === 'incident_summary') {
         // The /incidents numbers (INV-1129), scoped like the web page: readable work, optionally one team.
-        const teamId = optionalString(args.team_id);
+        const teamRef = optionalString(args.team_id);
+        const teamId = teamRef ? await resolveTeamIdOrKey(context.prisma, teamRef) : null;
         const readable = buildReadableIssueWhere(context);
         return loadIncidentSummary(context.prisma, { ...(teamId ? { teamId } : {}), ...(readable ?? {}) });
       }
@@ -501,7 +502,7 @@ async function callMcpAction(
       return readyWorkPage(context, readyInput, optionalString(args.after));
     }
     case 'work_propose': {
-      const teamId = await resolveTeamId(context.prisma, requiredString(args.team, 'team'));
+      const teamId = await resolveTeamIdOrKey(context.prisma, requiredString(args.team, 'team'));
       await assertCanWriteTeam(context.prisma, context, teamId);
       const rawTitle = requiredString(args.title, 'title');
       const proposeInput: Parameters<typeof proposeWork>[1] = {
@@ -574,7 +575,7 @@ async function callMcpAction(
       return notes.length ? { ...result, warning: notes.join(' ') } : result;
     }
     case 'work_file_bug': {
-      const teamId = await resolveTeamId(context.prisma, requiredString(args.team, 'team'));
+      const teamId = await resolveTeamIdOrKey(context.prisma, requiredString(args.team, 'team'));
       await assertCanWriteTeam(context.prisma, context, teamId);
       const rawTitle = requiredString(args.title, 'title');
       // Domain labels ride along; a second Type label is refused by the server as usual (INV-1000).
@@ -1206,8 +1207,8 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_catalog',
     annotations: { readOnlyHint: true, destructiveHint: false },
-    description: 'Discover readable teams, states, labels, actors and cycles with pagination, or credential capabilities and policy constraints. kind "incident_summary" returns the /incidents numbers (INV-1129): open/resolved counts by severity and project, MTTR and MTTM as plain averages with sample counts, follow-up completion and overdue counts, and the incident list (team_id narrows to one team). Human owners and agent executors are distinct. Catalog visibility uses the web API access rules.',
-    inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: [...CATALOG_KINDS, 'capabilities', 'incident_summary'] }, team_id: { type: 'string' }, first: { type: 'integer', minimum: 1, maximum: 200 }, after: { type: 'string' } }, required: ['kind'] },
+    description: 'Discover readable teams, states, labels, actors and cycles with pagination, or credential capabilities and policy constraints. kind "incident_summary" returns the /incidents numbers (INV-1129): open/resolved counts by severity and project, MTTR and MTTM as plain averages with sample counts, follow-up completion and overdue counts, and the incident list (team_id narrows to one team and accepts the team id or the team key). Human owners and agent executors are distinct. Catalog visibility uses the web API access rules.',
+    inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: [...CATALOG_KINDS, 'capabilities', 'incident_summary'] }, team_id: { type: 'string', description: 'The team to narrow to: a team id (UUID) or a team key (e.g. INV).' }, first: { type: 'integer', minimum: 1, maximum: 200 }, after: { type: 'string' } }, required: ['kind'] },
   },
   {
     name: 'work_read_page',
@@ -1838,23 +1839,6 @@ async function requireWork(prisma: PrismaClient, id: string) {
     throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
   }
   return work;
-}
-
-async function resolveTeamId(prisma: PrismaClient, teamIdOrKey: string): Promise<string> {
-  try {
-    const byId = await prisma.team.findUnique({ where: { id: teamIdOrKey } });
-    if (byId) {
-      return byId.id;
-    }
-  } catch {
-    // Non-UUID values fall through to key lookup.
-  }
-
-  const byKey = await prisma.team.findUnique({ where: { key: teamIdOrKey } });
-  if (!byKey) {
-    throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
-  }
-  return byKey.id;
 }
 
 function requiredString(value: unknown, name: string): string {
