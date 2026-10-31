@@ -6,6 +6,7 @@ import {
   axisTicks,
   defaultZoom,
   containerSpan,
+  containerSpans,
   cumulativeSeries,
   PX_PER_DAY,
   rangeWidth,
@@ -113,6 +114,42 @@ describe('containerSpan', () => {
 
   it('is null when no leaf has recorded history', () => {
     expect(containerSpan(milestone, new Map(), now)).toBeNull();
+  });
+});
+
+describe('containerSpans', () => {
+  const outline = buildOutline(
+    [node('m', 'MILESTONE'), node('m2', 'MILESTONE'), node('a'), node('b'), node('c'), node('d'), node('e')],
+    [
+      { id: '1', type: 'CONTAINS', fromId: 'm', toId: 'm2' },
+      { id: '2', type: 'CONTAINS', fromId: 'm2', toId: 'a' },
+      { id: '3', type: 'CONTAINS', fromId: 'm2', toId: 'b' },
+      { id: '4', type: 'CONTAINS', fromId: 'm', toId: 'c' },
+      { id: '5', type: 'CONTAINS', fromId: 'm', toId: 'd' },
+      { id: '6', type: 'CONTAINS', fromId: 'm', toId: 'e' },
+    ],
+    'm',
+  );
+  const entries = new Map([
+    ['a', entry('a', [[2, 'UNSTARTED'], [4, 'STARTED'], [9, 'COMPLETED']])],
+    ['b', entry('b', [[3, 'STARTED']])],
+    ['c', entry('c', [], { history: 'NONE' })],
+    ['d', entry('d', [[5, 'STARTED'], [11, 'CANCELED']])],
+    ['e', entry('e', [[6, 'STARTED'], [10, 'COMPLETED']])],
+  ]);
+
+  it('gives every container the extent the single-container walk gives it', () => {
+    const spans = containerSpans([...outline.roots, ...outline.unplaced], entries, now);
+    for (const container of [outline.roots[0]!, outline.roots[0]!.children[0]!]) {
+      expect(spans.get(container.node.id)).toEqual(containerSpan(container, entries, now));
+    }
+  });
+
+  it('counts leaves without recorded history as work and keeps the open one open', () => {
+    const spans = containerSpans([...outline.roots, ...outline.unplaced], entries, now);
+    // a and e are done, b is still open, c has no history at all, d was canceled.
+    expect(spans.get('m')).toEqual({ from: day(3), to: now, open: true, done: 2, total: 5 });
+    expect(spans.get('m2')).toEqual({ from: day(3), to: now, open: true, done: 1, total: 2 });
   });
 });
 

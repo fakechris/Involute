@@ -3,11 +3,13 @@ import { describe, expect, it } from 'vitest';
 import type { WorkflowStateType } from '../board/types';
 import {
   blockNeighbourhood,
+  buildBlockerIndex,
   buildOutline,
   classifyBlockEdge,
   layoutDag,
   LAYOUT,
   milestoneIndex,
+  openBlockersOf,
   rollUpToMilestones,
   type GraphEdge,
   type GraphNode,
@@ -49,6 +51,27 @@ describe('classifyBlockEdge', () => {
     expect(classifyBlockEdge(node('a', 'COMPLETED'), node('b', 'STARTED'))).toBe('resolved');
     expect(classifyBlockEdge(node('a', 'CANCELED'), node('b', 'UNSTARTED'))).toBe('resolved');
     expect(classifyBlockEdge(node('a', 'STARTED', { commitmentStatus: 'CANDIDATE' }), node('b', 'STARTED'))).toBe('resolved');
+  });
+});
+
+describe('blocker index', () => {
+  const nodes = [node('a', 'STARTED'), node('b', 'STARTED'), node('c', 'COMPLETED'), node('d', 'UNSTARTED', { commitmentStatus: 'CANDIDATE' })];
+  const edges = [edge('a', 'b'), edge('c', 'b'), edge('d', 'b'), edge('a', 'b2'), edge('x', 'b', 'RELATED_TO')];
+  const byId = new Map(nodes.map((item) => [item.id, item]));
+
+  it('lists the same open blockers as the per-node scan', () => {
+    const index = buildBlockerIndex(edges, byId);
+    for (const item of nodes) {
+      expect((index.get(item.id) ?? []).map((blocker) => blocker.id)).toEqual(openBlockersOf(item.id, edges, byId).map((blocker) => blocker.id));
+    }
+  });
+
+  it('counts only open committed blockers on BLOCKS edges', () => {
+    const index = buildBlockerIndex(edges, byId);
+    // c is Done and d is only a candidate, so neither gates b.
+    expect(index.get('b')?.map((blocker) => blocker.id)).toEqual(['a']);
+    expect(index.get('b2')?.map((blocker) => blocker.id)).toEqual(['a']);
+    expect(index.has('a')).toBe(false);
   });
 });
 

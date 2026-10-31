@@ -1,14 +1,15 @@
-import { useMemo, useState, type CSSProperties } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 
-import { openBlockersOf, type GraphEdge, type GraphNode, type Outline, type OutlineItem } from '../../work/graph-model';
+import { buildBlockerIndex, type GraphEdge, type GraphNode, type Outline, type OutlineItem } from '../../work/graph-model';
 import {
   axisTicks,
-  containerSpan,
+  containerSpans,
   cumulativeSeries,
   rangeWidth,
   spellsOf,
   timeRange,
   xFor,
+  type ContainerSpan,
   type TimelineEntry,
   type TimelineZoom,
 } from '../../work/timeline-model';
@@ -39,9 +40,20 @@ interface ProjectTimelineProps {
 const LABEL_WIDTH = 300;
 const ROW_HEIGHT = 30;
 const CHART_HEIGHT = 96;
+const AXIS_HEIGHT = 26;
+const AXIS_HEIGHT_WITH_CYCLES = 44;
+/** Past this many rows the viewport renders only the rows it can show (INV-1444). */
+const VIRTUALIZE_ABOVE = 150;
+/** Rows kept above and below the visible window so scrolling does not tear. */
+const OVERSCAN = 12;
+/** Viewport height used before it has been measured (hidden panel, test renderer). */
+const FALLBACK_VIEWPORT_HEIGHT = 1200;
 
 const DAY_FORMAT = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
 const fmt = (date: Date | null) => (date ? DAY_FORMAT.format(date) : '—');
+
+/** Shared so an unblocked row keeps the same reference across renders. */
+const NO_BLOCKERS: GraphNode[] = [];
 
 interface FlatRow {
   item: OutlineItem;
@@ -83,16 +95,57 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
     return leaves;
   }, [entries, outline]);
   const series = useMemo(() => cumulativeSeries(leafEntries, range), [leafEntries, range]);
-  const rows = flatten([...outline.roots, ...outline.unplaced], collapsed);
+  const rows = useMemo(() => flatten([...outline.roots, ...outline.unplaced], collapsed), [outline, collapsed]);
   const withoutHistory = allEntries.filter((entry) => entry.history === 'NONE').length;
-  const x = (date: Date) => xFor(date, range, zoom);
-  const toggle = (id: string) =>
-    setCollapsed((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+
+  // One pass over the edges instead of one scan per row (INV-1443).
+  const blockersByNode = useMemo(() => buildBlockerIndex(edges, byId), [edges, byId]);
+  // Every container's extent in one bottom-up pass (INV-1443).
+  const spans = useMemo(() => containerSpans([...outline.roots, ...outline.unplaced], entries, now), [outline, entries, now]);
+
+  const x = useCallback((date: Date) => xFor(date, range, zoom), [range, zoom]);
+  const toggle = useCallback(
+    (id: string) =>
+      setCollapsed((current) => {
+        const next = new Set(current);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      }),
+    [],
+  );
+
+  // Only the rows the viewport can show are mounted (INV-1444).
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const virtualize = rows.length > VIRTUALIZE_ABOVE;
+
+  useEffect(() => {
+    const element = viewportRef.current;
+    if (!element || !virtualize) return;
+    const measure = () => setViewportHeight(element.clientHeight);
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [virtualize]);
+
+  const headerHeight = CHART_HEIGHT + (cycles.length ? AXIS_HEIGHT_WITH_CYCLES : AXIS_HEIGHT);
+  const visibleRange = useMemo(() => {
+    if (!virtualize) return { start: 0, end: rows.length };
+    const height = viewportHeight || FALLBACK_VIEWPORT_HEIGHT;
+    const maxScroll = Math.max(0, rows.length * ROW_HEIGHT + headerHeight - height);
+    const top = Math.min(scrollTop, maxScroll);
+    const first = Math.floor((top - headerHeight) / ROW_HEIGHT) - OVERSCAN;
+    const last = Math.ceil((top + height - headerHeight) / ROW_HEIGHT) + OVERSCAN;
+    const start = Math.max(0, Math.min(first, rows.length));
+    const end = Math.max(start, Math.min(last, rows.length));
+    return { start, end };
+  }, [virtualize, rows.length, scrollTop, viewportHeight, headerHeight]);
+
+  const visibleRows = rows.slice(visibleRange.start, visibleRange.end);
+  const topOffset = visibleRange.start * ROW_HEIGHT;
+  const bottomOffset = (rows.length - visibleRange.end) * ROW_HEIGHT;
 
   const maxScope = Math.max(1, ...series.map((point) => point.scope));
   const y = (count: number) => CHART_HEIGHT - 8 - (count / maxScope) * (CHART_HEIGHT - 20);
@@ -106,6 +159,9 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
       })
       .join(' ');
   const last = series.at(-1)!;
+  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(event.currentTarget.scrollTop);
+  }, []);
 
   return (
     <div
@@ -138,8 +194,23 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
         </div>
       </div>
 
-      <div className="project-timeline__viewport" role="region" aria-label="Project timeline">
-        <div className="project-timeline__grid" style={{ gridTemplateColumns: `${LABEL_WIDTH}px ${width}px` }}>
+      <div
+        className="project-timeline__viewport"
+        role="region"
+        aria-label="Project timeline"
+        ref={viewportRef}
+        onScroll={handleScroll}
+      >
+        <div
+          className="project-timeline__grid"
+          style={{
+            gridTemplateColumns: `${LABEL_WIDTH}px ${width}px`,
+            // The rows above and below the visible window keep the scrollbar
+            // the length of the whole outline (INV-1444).
+            '--timeline-row-offset': `${topOffset}px`,
+            '--timeline-row-offset-bottom': `${bottomOffset}px`,
+          } as CSSProperties}
+        >
           {/* Cumulative chart */}
           <div className="project-timeline__label project-timeline__chart-label">
             <strong>Progress</strong>
@@ -163,7 +234,7 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
 
           {/* Axis + cycles */}
           <div className="project-timeline__label project-timeline__axis-label">Item</div>
-          <div className="project-timeline__lane project-timeline__axis" style={{ height: cycles.length ? 44 : 26 }}>
+          <div className="project-timeline__lane project-timeline__axis" style={{ height: cycles.length ? AXIS_HEIGHT_WITH_CYCLES : AXIS_HEIGHT }}>
             {cycles.map((cycle) => {
               const left = Math.max(0, x(cycle.startsAt));
               const right = Math.min(width, x(cycle.endsAt));
@@ -181,11 +252,12 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
             ))}
           </div>
 
-          {rows.map(({ item, depth }) => {
+          {topOffset > 0 ? <div className="project-timeline__spacer project-timeline__spacer--top" aria-hidden="true" /> : null}
+
+          {visibleRows.map(({ item, depth }) => {
             const { node } = item;
             const entry = entries.get(node.id);
             const isContainer = item.children.length > 0;
-            const blockers = openBlockersOf(node.id, edges, byId);
             return (
               <TimelineRow
                 key={node.id}
@@ -193,17 +265,19 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
                 depth={depth}
                 isContainer={isContainer}
                 isCollapsed={collapsed.has(node.id)}
-                onToggle={() => toggle(node.id)}
-                onOpen={() => onOpen(node.id)}
-                blockers={blockers}
+                onToggle={toggle}
+                onOpen={onOpen}
+                blockers={blockersByNode.get(node.id) ?? NO_BLOCKERS}
                 entry={entry}
-                span={isContainer ? containerSpan(item, entries, now) : null}
+                span={isContainer ? spans.get(node.id) ?? null : null}
                 x={x}
                 width={width}
                 now={now}
               />
             );
           })}
+
+          {bottomOffset > 0 ? <div className="project-timeline__spacer project-timeline__spacer--bottom" aria-hidden="true" /> : null}
         </div>
         <div className="timeline-today" style={{ left: LABEL_WIDTH + x(now) }} aria-hidden="true" title={`Today, ${fmt(now)}`} />
       </div>
@@ -216,17 +290,18 @@ interface TimelineRowProps {
   depth: number;
   isContainer: boolean;
   isCollapsed: boolean;
-  onToggle: () => void;
-  onOpen: () => void;
+  onToggle: (id: string) => void;
+  onOpen: (id: string) => void;
   blockers: GraphNode[];
   entry: TimelineEntry | undefined;
-  span: ReturnType<typeof containerSpan>;
+  span: ContainerSpan | null;
   x: (date: Date) => number;
   width: number;
   now: Date;
 }
 
-function TimelineRow({ node, depth, isContainer, isCollapsed, onToggle, onOpen, blockers, entry, span, x, width, now }: TimelineRowProps) {
+/** Rows are memoized: a collapse or a scale change redraws only what changed (INV-1443). */
+const TimelineRow = memo(function TimelineRow({ node, depth, isContainer, isCollapsed, onToggle, onOpen, blockers, entry, span, x, width, now }: TimelineRowProps) {
   const summary = entry
     ? `${node.identifier}: started ${fmt(entry.startedAt)}, review ${fmt(entry.reviewAt)}, done ${fmt(entry.completedAt)}`
     : node.identifier;
@@ -288,13 +363,13 @@ function TimelineRow({ node, depth, isContainer, isCollapsed, onToggle, onOpen, 
         aria-label={`${node.identifier} ${node.title}`}
       >
         {isContainer ? (
-          <button type="button" className="graph-outline__caret" aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${node.identifier}`} onClick={onToggle}>
+          <button type="button" className="graph-outline__caret" aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${node.identifier}`} onClick={() => onToggle(node.id)}>
             {isCollapsed ? '▸' : '▾'}
           </button>
         ) : (
           <span className="graph-outline__caret" aria-hidden="true" />
         )}
-        <button type="button" className="graph-outline__open" onClick={onOpen} aria-label={`Open ${node.identifier}`}>
+        <button type="button" className="graph-outline__open" onClick={() => onOpen(node.id)} aria-label={`Open ${node.identifier}`}>
           <StatusIcon stateName={node.stateName} size={11} />
           <span className="graph-outline__id">{node.identifier}</span>
           <span className="graph-outline__title">{node.title}</span>
@@ -315,4 +390,4 @@ function TimelineRow({ node, depth, isContainer, isCollapsed, onToggle, onOpen, 
       </div>
     </>
   );
-}
+});

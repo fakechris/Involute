@@ -100,35 +100,92 @@ export interface ContainerSpan {
   total: number;
 }
 
+/** What a subtree contributes to its container: first start, last finish, how much is left. */
+interface SpanAggregate {
+  from: number | null;
+  to: number | null;
+  open: boolean;
+  done: number;
+  total: number;
+}
+
+const EMPTY_AGGREGATE: SpanAggregate = { from: null, to: null, open: false, done: 0, total: 0 };
+
+/** One leaf's contribution. A leaf without recorded history counts as work but has no dates. */
+function aggregateOf(entry: TimelineEntry | undefined): SpanAggregate {
+  if (!entry || entry.history === 'NONE') return { ...EMPTY_AGGREGATE, total: 1 };
+  const begin = entry.startedAt ?? entry.committedAt ?? entry.transitions[0]?.at ?? null;
+  const finish = entry.completedAt ?? entry.canceledAt;
+  return {
+    from: begin ? begin.getTime() : null,
+    to: finish ? finish.getTime() : null,
+    open: !finish,
+    done: entry.completedAt ? 1 : 0,
+    total: 1,
+  };
+}
+
+function mergeAggregates(left: SpanAggregate, right: SpanAggregate): SpanAggregate {
+  return {
+    from: left.from === null ? right.from : right.from === null ? left.from : Math.min(left.from, right.from),
+    to: left.to === null ? right.to : right.to === null ? left.to : Math.max(left.to, right.to),
+    open: left.open || right.open,
+    done: left.done + right.done,
+    total: left.total + right.total,
+  };
+}
+
+function spanOf(aggregate: SpanAggregate, now: Date): ContainerSpan | null {
+  if (aggregate.from === null) return null;
+  const end = aggregate.open ? now.getTime() : aggregate.to ?? now.getTime();
+  return {
+    from: new Date(aggregate.from),
+    to: new Date(Math.max(end, aggregate.from)),
+    open: aggregate.open,
+    done: aggregate.done,
+    total: aggregate.total,
+  };
+}
+
 /** Container extent from its leaves: first commitment/start to last finish (or now). */
 export function containerSpan(item: OutlineItem, entries: Map<string, TimelineEntry>, now: Date): ContainerSpan | null {
-  let from: number | null = null;
-  let to: number | null = null;
-  let open = false;
-  let done = 0;
-  let total = 0;
+  let aggregate = EMPTY_AGGREGATE;
   const visit = (node: OutlineItem) => {
     if (node.children.length > 0) {
       node.children.forEach(visit);
       return;
     }
-    total += 1;
-    const entry = entries.get(node.node.id);
-    if (!entry || entry.history === 'NONE') return;
-    const begin = entry.startedAt ?? entry.committedAt ?? entry.transitions[0]?.at ?? null;
-    if (begin && (from === null || begin.getTime() < from)) from = begin.getTime();
-    const finish = entry.completedAt ?? entry.canceledAt;
-    if (entry.completedAt) done += 1;
-    if (finish) {
-      if (to === null || finish.getTime() > to) to = finish.getTime();
-    } else {
-      open = true;
-    }
+    aggregate = mergeAggregates(aggregate, aggregateOf(entries.get(node.node.id)));
   };
   visit(item);
-  if (from === null) return null;
-  const end = open ? now.getTime() : to ?? now.getTime();
-  return { from: new Date(from), to: new Date(Math.max(end, from)), open, done, total };
+  return spanOf(aggregate, now);
+}
+
+/**
+ * Every container's extent in one pass, bottom-up. `containerSpan` walks a
+ * container's whole subtree again per container, which is quadratic in a deep
+ * outline; here each leaf is visited once and every container reuses its
+ * children's aggregate.
+ */
+export function containerSpans(
+  items: OutlineItem[],
+  entries: Map<string, TimelineEntry>,
+  now: Date,
+): Map<string, ContainerSpan | null> {
+  const spans = new Map<string, ContainerSpan | null>();
+  const visit = (item: OutlineItem): SpanAggregate => {
+    if (item.children.length === 0) {
+      const aggregate = aggregateOf(entries.get(item.node.id));
+      spans.set(item.node.id, spanOf(aggregate, now));
+      return aggregate;
+    }
+    let aggregate = EMPTY_AGGREGATE;
+    for (const child of item.children) aggregate = mergeAggregates(aggregate, visit(child));
+    spans.set(item.node.id, spanOf(aggregate, now));
+    return aggregate;
+  };
+  for (const item of items) visit(item);
+  return spans;
 }
 
 export interface CumulativePoint {

@@ -358,6 +358,17 @@ export interface ProjectWorkGraphQueryData {
   };
 }
 
+/**
+ * The graph document and the merged timeline document share one shape; the
+ * merged one adds the audit trail (INV-1445).
+ */
+export interface ProjectWorkGraphTimelineQueryData extends ProjectWorkGraphQueryData {
+  workGraph: ProjectWorkGraphQueryData['workGraph'] & {
+    timeline?: ProjectWorkTimelineQueryData['workGraph']['timeline'];
+    cycles?: ProjectWorkTimelineQueryData['workGraph']['cycles'];
+  };
+}
+
 export interface ProjectWorkGraphQueryVariables {
   project: string;
   includeCandidates?: boolean;

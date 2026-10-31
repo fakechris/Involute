@@ -1,5 +1,5 @@
 import { useQuery } from '@apollo/client/react';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
@@ -15,12 +15,11 @@ import { EmptyState, LoadingState, SegmentedControl } from '../components/status
 import { ProjectFilterCombobox, type AvailableProject } from '../components/ProjectFilterCombobox';
 import { buildOutline, type GraphNode } from '../work/graph-model';
 import { defaultZoom, type TimelineEntry, type TimelineZoom } from '../work/timeline-model';
-import { GRAPH_PROJECTS_QUERY, PROJECT_WORK_GRAPH_QUERY, PROJECT_WORK_TIMELINE_QUERY } from '../work/queries';
+import { GRAPH_PROJECTS_QUERY, PROJECT_WORK_GRAPH_QUERY, PROJECT_WORK_GRAPH_TIMELINE_QUERY } from '../work/queries';
 import type {
   GraphProjectsQueryData,
-  ProjectWorkGraphQueryData,
+  ProjectWorkGraphTimelineQueryData,
   ProjectWorkGraphQueryVariables,
-  ProjectWorkTimelineQueryData,
   WorkGraphNodeRecord,
 } from '../work/types';
 
@@ -68,17 +67,17 @@ export function GraphPage() {
   const projectsQuery = useQuery<GraphProjectsQueryData>(GRAPH_PROJECTS_QUERY, {
     variables: teamKey ? { teamFilter: { key: { eq: teamKey } } } : {},
   });
-  const graphQuery = useQuery<ProjectWorkGraphQueryData, ProjectWorkGraphQueryVariables>(PROJECT_WORK_GRAPH_QUERY, {
-    variables: { project: project ?? '', includeCandidates },
-    skip: !project,
-  });
-  // The timeline reads every item's audit trail, so it is fetched only when shown.
-  const timelineQuery = useQuery<ProjectWorkTimelineQueryData, ProjectWorkGraphQueryVariables>(PROJECT_WORK_TIMELINE_QUERY, {
-    variables: { project: project ?? '', includeCandidates },
-    skip: !project || view !== 'timeline',
-  });
+  // The timeline view reads every item's audit trail, so it asks for the graph
+  // and the trail in one request instead of resolving the project twice (INV-1445).
+  const graphQuery = useQuery<ProjectWorkGraphTimelineQueryData, ProjectWorkGraphQueryVariables>(
+    view === 'timeline' ? PROJECT_WORK_GRAPH_TIMELINE_QUERY : PROJECT_WORK_GRAPH_QUERY,
+    {
+      variables: { project: project ?? '', includeCandidates },
+      skip: !project,
+    },
+  );
   const timeline = useMemo(() => {
-    const data = timelineQuery.data?.workGraph;
+    const data = graphQuery.data?.workGraph;
     const entries = new Map<string, TimelineEntry>(
       (data?.timeline ?? []).map((entry) => [
         entry.workId,
@@ -95,8 +94,8 @@ export function GraphPage() {
       ]),
     );
     const cycles = (data?.cycles ?? []).map((cycle) => ({ ...cycle, startsAt: new Date(cycle.startsAt), endsAt: new Date(cycle.endsAt) }));
-    return { entries, cycles, loaded: Boolean(data) };
-  }, [timelineQuery.data]);
+    return { entries, cycles, loaded: Boolean(graphQuery.data) };
+  }, [graphQuery.data]);
   const scale = chosenScale ?? defaultZoom([...timeline.entries.values()], new Date());
 
   const projects = useMemo<AvailableProject[]>(
@@ -137,7 +136,7 @@ export function GraphPage() {
     );
   }
 
-  const openIssue = (id: string) => navigate(`/issue/${id}`);
+  const openIssue = useCallback((id: string) => navigate(`/issue/${id}`), [navigate]);
   // New work from a container row lands in it (INV-744); a project row means "No milestone".
   const graphRepository = graph?.repository ?? null;
   const createIn = graphRepository
@@ -196,13 +195,13 @@ export function GraphPage() {
         ) : graphQuery.error ? (
           <div role="alert">
             <EmptyState
-              title="Could not load this project's graph"
+              title={view === 'timeline' ? 'Could not load the timeline' : "Could not load this project's graph"}
               body={graphQuery.error.message}
               action={<Btn variant="subtle" onClick={() => void graphQuery.refetch()}>Retry</Btn>}
             />
           </div>
         ) : graphQuery.loading && !graph ? (
-          <LoadingState>Loading graph…</LoadingState>
+          <LoadingState>{view === 'timeline' ? 'Loading timeline…' : 'Loading graph…'}</LoadingState>
         ) : graph && nodes.length === 0 ? (
           <EmptyState
             title={`No work in ${project}`}
@@ -224,15 +223,7 @@ export function GraphPage() {
                 {...(createIn ? { onCreateIn: createIn } : {})}
               />
             ) : view === 'timeline' ? (
-              timelineQuery.error ? (
-                <div role="alert">
-                  <EmptyState
-                    title="Could not load the timeline"
-                    body={timelineQuery.error.message}
-                    action={<Btn variant="subtle" onClick={() => void timelineQuery.refetch()}>Retry</Btn>}
-                  />
-                </div>
-              ) : !timeline.loaded ? (
+              !timeline.loaded ? (
                 <LoadingState>Loading timeline…</LoadingState>
               ) : (
                 <ProjectTimeline
