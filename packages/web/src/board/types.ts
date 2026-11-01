@@ -807,6 +807,8 @@ export interface ProjectIssueSummary {
   autoAcceptBugs?: boolean;
   /** Origins its web app is served from; the capture extension routes bugs by them (INV-1146). */
   webOrigins?: string[];
+  /** Resolved autonomy of the project's work (INV-1489). */
+  autonomy?: { level: number; source: string; name: string; requested: number; requestedBy: string; observing?: boolean } | null;
   priority: number;
   kind: 'PROJECT';
   createdAt: string;

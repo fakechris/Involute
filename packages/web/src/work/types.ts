@@ -603,6 +603,8 @@ export interface AttentionItemNode {
   unblocked?: boolean;
   /** Unfinished work that BLOCKS it. */
   waitingOn?: Array<{ id: string; identifier: string; title: string }>;
+  /** While its scope observes a higher level: what that level would have done (INV-1489). */
+  wouldBeAutomatic?: string | null;
 }
 
 export interface AttentionPageQueryData {

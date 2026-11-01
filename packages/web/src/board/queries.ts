@@ -1130,6 +1130,7 @@ export const PROJECT_ISSUES_QUERY = gql`
         alias
         autoAcceptBugs
         webOrigins
+        autonomy { level source name requested requestedBy observing }
         createdAt
         updatedAt
         state {

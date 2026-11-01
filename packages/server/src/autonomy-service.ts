@@ -11,9 +11,11 @@
 import { Prisma, type AgentTrustLevel, type AutonomyScope, type PrismaClient } from '@prisma/client';
 
 import {
-  type AutonomyLevel, type Gate, type GateTable, type PolicyRow, type ResolvedAutonomy,
-  GATES, LEVEL_DESCRIPTIONS, POLICY_AUDIT, isAutonomyLevel, resolveAutonomy, validateGateTable, validatePredicate,
+  type AutonomyFacts, type AutonomyLevel, type Gate, type GateTable, type PolicyRow, type ResolvedAutonomy,
+  BUILT_IN_LOCKS, CONDITION_FIELDS, GATES, LEVEL_DESCRIPTIONS, LEVEL_PRESETS, POLICY_AUDIT, decide, describeFacts, isAutonomyLevel, resolveAutonomy, validateGateTable, validatePredicate,
 } from './autonomy-policy.js';
+import { amendmentChanges } from './contract-amendment.js';
+import { isTypeLabel } from './labels.js';
 import { createValidationError } from './errors.js';
 import { recordOpsAudit } from './ops-service.js';
 import { WORKSPACE_SETTINGS_ID } from './workspace-access.js';
@@ -27,10 +29,10 @@ export const POLICY_LOCKED_WORKSPACE_ONLY_MESSAGE = 'Locked gates are set on the
 
 export interface PolicyScopeRef { scope: AutonomyScope; scopeId: string }
 
-function toPolicyRow(row: { level: number; gates: Prisma.JsonValue; locked: string[]; observeUntil: Date | null; version: number } | null | undefined): PolicyRow | null {
+function toPolicyRow(row: { level: number; gates: Prisma.JsonValue; locked: string[]; observeUntil: Date | null; version: number; paused?: boolean } | null | undefined): PolicyRow | null {
   if (!row) return null;
   const level = (isAutonomyLevel(row.level) ? row.level : 0) as AutonomyLevel;
-  return { level, gates: (row.gates ?? {}) as GateTable, locked: row.locked, observeUntil: row.observeUntil, version: row.version };
+  return { level, gates: (row.gates ?? {}) as GateTable, locked: row.locked, observeUntil: row.observeUntil, version: row.version, paused: row.paused ?? false };
 }
 
 /** The active policy row for one scope, or null when none was ever set. */
@@ -88,6 +90,34 @@ export interface SetPolicyInput extends PolicyScopeRef {
   reason: string | null | undefined;
   /** Days to only observe before the level acts; null or 0 turns it on at once (decision INV-1486: optional). */
   observeDays?: number | null;
+  /** WORKSPACE only (INV-1489). Omitted fields keep the previous version's value. */
+  paused?: boolean | null;
+  defaultLevel?: number | null;
+  templates?: unknown;
+}
+
+export interface AutonomyTemplate { name: string; level: AutonomyLevel; gates?: GateTable }
+
+/** The three presets a workspace starts with (docs/autonomy-policy.md §2.1). */
+export const DEFAULT_TEMPLATES: AutonomyTemplate[] = [
+  { name: 'Low-risk pass-through', level: 1 },
+  { name: 'Bugs on autopilot', level: 2, gates: autoAcceptBugsGates() },
+  { name: 'Hands-off', level: 3 },
+];
+
+export const POLICY_WORKSPACE_ONLY_MESSAGE = 'Pause, default level and templates are set on the workspace policy only.';
+
+function validateTemplates(value: unknown): AutonomyTemplate[] {
+  if (value === undefined || value === null) return DEFAULT_TEMPLATES;
+  if (!Array.isArray(value) || value.length > 20) throw createValidationError('Invalid policy: templates must be a list of at most 20.');
+  return value.map((entry, index) => {
+    const template = entry as Partial<AutonomyTemplate>;
+    if (!template || typeof template.name !== 'string' || !template.name.trim() || template.name.length > 60) throw createValidationError(`Invalid policy: templates[${index}].name`);
+    if (!isAutonomyLevel(template.level)) throw createValidationError(`Invalid policy: templates[${index}].level must be 0–3`);
+    const problems = validateGateTable(template.gates);
+    if (problems.length) throw createValidationError(`Invalid policy: templates[${index}] ${problems.join('; ')}`);
+    return { name: template.name.trim(), level: template.level, ...(template.gates ? { gates: template.gates as GateTable } : {}) };
+  });
 }
 
 function requireReason(reason: string | null | undefined): string {
@@ -107,6 +137,9 @@ export async function setWorkflowPolicy(prisma: PrismaClient, input: SetPolicyIn
   const problems = [...validateGateTable(input.gates), ...(input.intake === undefined || input.intake === null ? [] : validatePredicate(input.intake, 'intake'))];
   if (problems.length) throw createValidationError(`Invalid policy: ${problems.join('; ')}`);
   if (input.locked && input.locked.length && input.scope !== 'WORKSPACE') throw createValidationError(POLICY_LOCKED_WORKSPACE_ONLY_MESSAGE);
+  if (input.scope !== 'WORKSPACE' && (input.paused !== undefined && input.paused !== null || input.defaultLevel !== undefined && input.defaultLevel !== null || input.templates !== undefined && input.templates !== null)) throw createValidationError(POLICY_WORKSPACE_ONLY_MESSAGE);
+  if (input.defaultLevel !== undefined && input.defaultLevel !== null && !isAutonomyLevel(input.defaultLevel)) throw createValidationError(POLICY_LEVEL_INVALID_MESSAGE);
+  if (input.locked?.some((id) => !GATES.includes(id as Gate) && !BUILT_IN_LOCKS.some((lock) => lock.id === id))) throw createValidationError('Invalid policy: locked names a gate or a built-in lock id.');
   if (input.scope === 'WORKSPACE' && input.scopeId !== WORKSPACE_SETTINGS_ID) throw createValidationError(POLICY_SCOPE_INVALID_MESSAGE);
   if (input.scope === 'TEAM' && !(await prisma.team.findUnique({ where: { id: input.scopeId }, select: { id: true } }))) throw createValidationError(POLICY_SCOPE_INVALID_MESSAGE);
   if (input.scope === 'PROJECT') {
@@ -129,6 +162,9 @@ export async function setWorkflowPolicy(prisma: PrismaClient, input: SetPolicyIn
         version: (previous?.version ?? 0) + 1,
         reason,
         observeUntil,
+        paused: input.scope === 'WORKSPACE' ? input.paused ?? previous?.paused ?? false : false,
+        defaultLevel: input.scope === 'WORKSPACE' ? input.defaultLevel ?? previous?.defaultLevel ?? 0 : 0,
+        templates: (input.scope === 'WORKSPACE' ? (input.templates === undefined || input.templates === null ? (previous?.templates ?? DEFAULT_TEMPLATES) : validateTemplates(input.templates)) : []) as Prisma.InputJsonValue,
         createdById: byActorId,
       },
     });
@@ -137,7 +173,7 @@ export async function setWorkflowPolicy(prisma: PrismaClient, input: SetPolicyIn
       subject: `${input.scope.toLowerCase()}:${input.scopeId}`,
       byActorId,
       reason,
-      details: { from: previous ? { level: previous.level, version: previous.version } : null, to: { level: created.level, version: created.version, observeUntil: observeUntil?.toISOString() ?? null } },
+      details: { from: previous ? { level: previous.level, version: previous.version, paused: previous.paused } : null, to: { level: created.level, version: created.version, observeUntil: observeUntil?.toISOString() ?? null, paused: created.paused } },
     });
     return created;
   });
@@ -195,4 +231,110 @@ export function autonomyToGraphQL(view: AutonomyView) {
     locked: view.locked,
     projectId: view.projectId,
   };
+}
+
+/** Removes a TEAM or PROJECT override so the scope inherits again; the history stays (INV-1489). */
+export async function clearWorkflowPolicy(prisma: PrismaClient, ref: PolicyScopeRef, reason: string | null | undefined, byActorId: string | null): Promise<boolean> {
+  if (ref.scope === 'WORKSPACE') throw createValidationError('The workspace policy is edited, not cleared; set its level to 0 instead.');
+  const trimmed = requireReason(reason);
+  return prisma.$transaction(async (tx) => {
+    const previous = await readActivePolicy(tx, ref);
+    if (!previous) return false;
+    await tx.workflowPolicy.update({ where: { id: previous.id }, data: { active: false } });
+    await recordOpsAudit(tx, { action: POLICY_AUDIT.changed, subject: `${ref.scope.toLowerCase()}:${ref.scopeId}`, byActorId, reason: trimmed, details: { from: { level: previous.level, version: previous.version }, to: null } });
+    return true;
+  });
+}
+
+export interface AutonomySettingsView {
+  scope: AutonomyScope;
+  scopeId: string;
+  active: Awaited<ReturnType<typeof readActivePolicy>>;
+  history: NonNullable<Awaited<ReturnType<typeof readActivePolicy>>>[];
+  ceiling: AutonomyLevel;
+  paused: boolean;
+  defaultLevel: AutonomyLevel;
+  templates: AutonomyTemplate[];
+  levels: Array<{ level: AutonomyLevel; name: string; descriptionEn: string; descriptionZh: string; gates: Array<{ gate: Gate; decider: string }> }>;
+  builtInLocks: Array<{ id: string; gate: Gate; reason: string }>;
+  gates: Gate[];
+  conditionFields: string[];
+}
+
+/** What a settings page needs for one scope: its active row and history, the workspace frame, and the level catalogue. */
+export async function readAutonomySettings(prisma: DatabaseClient, ref: PolicyScopeRef): Promise<AutonomySettingsView> {
+  const [active, history, workspace] = await Promise.all([
+    readActivePolicy(prisma, ref),
+    prisma.workflowPolicy.findMany({ where: { scope: ref.scope, scopeId: ref.scopeId }, orderBy: { version: 'desc' }, take: 50 }),
+    ref.scope === 'WORKSPACE' ? Promise.resolve(null) : readActivePolicy(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID }),
+  ]);
+  const frame = ref.scope === 'WORKSPACE' ? active : workspace;
+  const level = (value: number | null | undefined): AutonomyLevel => (isAutonomyLevel(value) ? value : 0);
+  return {
+    scope: ref.scope,
+    scopeId: ref.scopeId,
+    active,
+    history,
+    ceiling: frame?.paused ? 0 : level(frame?.level),
+    paused: frame?.paused ?? false,
+    defaultLevel: level(frame?.defaultLevel),
+    templates: (Array.isArray(frame?.templates) ? (frame!.templates as unknown as AutonomyTemplate[]) : DEFAULT_TEMPLATES),
+    levels: ([0, 1, 2, 3] as const).map((value) => ({ level: value, name: LEVEL_DESCRIPTIONS[value].name, descriptionEn: LEVEL_DESCRIPTIONS[value].en, descriptionZh: LEVEL_DESCRIPTIONS[value].zh, gates: GATES.map((gate) => ({ gate, decider: LEVEL_PRESETS[value][gate].decider })) })),
+    builtInLocks: BUILT_IN_LOCKS.map((lock) => ({ id: lock.id, gate: lock.gate, reason: lock.reason })),
+    gates: [...GATES],
+    conditionFields: [...CONDITION_FIELDS],
+  };
+}
+
+type FactsWork = { id: string; priority: number; severity: string | null; reproducibility: string | null; source: string | null; description: string | null; acceptance: string | null; labels?: Array<{ name: string }> };
+
+/** The structured facts a condition may look at, read from the stored item (docs/autonomy-policy.md §3). */
+export async function factsForWork(prisma: DatabaseClient, work: FactsWork): Promise<AutonomyFacts> {
+  const labels = work.labels ?? (await prisma.issue.findUnique({ where: { id: work.id }, select: { labels: { select: { name: true } } } }))?.labels ?? [];
+  const names = labels.map((entry) => entry.name);
+  const type = names.find((name) => isTypeLabel(name))?.toLowerCase() ?? null;
+  const evaluation = await prisma.workAutoAcceptEvaluation.findFirst({ where: { workId: work.id }, orderBy: { createdAt: 'desc' }, select: { tier: true, signals: true } });
+  const signals = (evaluation?.signals ?? {}) as Record<string, unknown>;
+  const facts: AutonomyFacts = {
+    type,
+    labels: names.map((name) => name.toLowerCase()),
+    priority: work.priority,
+    severity: work.severity,
+    reproducibility: work.reproducibility,
+    source: work.source,
+    has_steps: /steps to reproduce|复现步骤/i.test(work.description ?? ''),
+    has_acceptance: Boolean(work.acceptance?.trim()),
+  };
+  if (evaluation) facts.auto_accept_grade = evaluation.tier;
+  if (typeof signals.merged === 'boolean') facts.pr_merged = signals.merged;
+  if (typeof signals.checks === 'string') facts.checks = signals.checks;
+  return facts;
+}
+
+/**
+ * For a Needs you row while its scope is observing: what the chosen level
+ * would have done, or null when nothing would change (INV-1489). Only a label;
+ * the decision stays with the person.
+ */
+export async function observeLabelFor(
+  prisma: DatabaseClient,
+  item: { kind: string; subjectId: string; workId: string | null },
+): Promise<string | null> {
+  if (!item.workId) return null;
+  const gate: Gate | null = item.kind === 'CANDIDATE_COMMIT' ? 'candidate_commit' : item.kind === 'CONTRACT_AMENDMENT' ? 'contract_amendment' : item.kind === 'WORK_REVIEW' ? 'review_accept' : null;
+  if (!gate) return null;
+  const work = await prisma.issue.findUnique({ where: { id: item.workId }, include: { labels: { select: { name: true } } } });
+  if (!work) return null;
+  const resolved = await loadAutonomyFor(prisma, work);
+  if (!resolved.observing) return null;
+  const facts = await factsForWork(prisma, work);
+  if (gate === 'contract_amendment') {
+    const amendment = await prisma.contractAmendment.findUnique({ where: { id: item.subjectId } });
+    if (!amendment) return null;
+    facts.amendment_fields = amendmentChanges(amendment).map((change) => change.field);
+  }
+  const decision = decide(resolved, gate, facts);
+  if (!decision.matched) return null;
+  const summary = describeFacts(resolved.gates[gate].condition, facts);
+  return `Would be handled under L${resolved.requested}${summary ? `: ${summary}` : ''}`;
 }

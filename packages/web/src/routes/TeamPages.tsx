@@ -14,6 +14,7 @@ import {
 } from '../board/queries';
 import { writeStoredTeamKey } from '../board/utils';
 import { AgentsTab } from './AgentsTab';
+import { TeamAutonomySection } from './AutonomyTab';
 import { BugTriageTab } from './BugTriageTab';
 import type { Refusable } from './settings-queries';
 import { NoticeLine, WorkflowStatesTab, attempt, type Notice } from './WorkspaceSettingsTabs';
@@ -262,11 +263,12 @@ export function TeamMembersPage() {
 
 // --- Settings --------------------------------------------------------------
 
-type SettingsSection = 'general' | 'states' | 'triage' | 'agents';
+type SettingsSection = 'general' | 'states' | 'triage' | 'autonomy' | 'agents';
 const SECTIONS: Array<{ id: SettingsSection; label: string }> = [
   { id: 'general', label: 'General' },
   { id: 'states', label: 'Workflow states' },
   { id: 'triage', label: 'Bug triage' },
+  { id: 'autonomy', label: 'Autonomy' },
   { id: 'agents', label: 'Agents' },
 ];
 
@@ -301,6 +303,7 @@ export function TeamSettingsPage() {
         {section === 'general' ? <TeamGeneral team={team} onSaved={() => void query.refetch()} /> : null}
         {section === 'states' ? <WorkflowStatesTab teamKey={team.key} /> : null}
         {section === 'triage' ? <BugTriageTab teamKey={team.key} /> : null}
+        {section === 'autonomy' ? <TeamAutonomySection teamId={team.id} /> : null}
         {section === 'agents' ? <AgentsTab teamKey={team.key} /> : null}
       </SettingsShell>
     </div>

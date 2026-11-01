@@ -212,7 +212,7 @@ export function evaluatePredicate(predicate: Predicate, facts: AutonomyFacts): b
 
 export type AgentTrust = 'OBSERVE' | 'L1' | 'L2' | 'L3';
 
-export interface PolicyRow { level: AutonomyLevel; gates?: GateTable | null; locked?: string[] | null; observeUntil?: Date | null; version?: number }
+export interface PolicyRow { level: AutonomyLevel; gates?: GateTable | null; locked?: string[] | null; observeUntil?: Date | null; version?: number; paused?: boolean | null }
 
 export interface ResolveInput {
   workspace?: PolicyRow | null;
@@ -223,7 +223,7 @@ export interface ResolveInput {
   now?: Date;
 }
 
-export type LevelSource = 'default' | 'workspace' | 'team' | 'project' | 'agent_trust' | 'ceiling';
+export type LevelSource = 'default' | 'workspace' | 'team' | 'project' | 'agent_trust' | 'ceiling' | 'paused';
 
 export interface ResolvedGate { decider: Decider; condition?: Predicate; from: 'preset' | 'workspace' | 'team' | 'project' | 'locked'; locked?: string }
 
@@ -237,6 +237,8 @@ export interface ResolvedAutonomy {
   agentTrust: AgentTrust | null;
   /** True while the chosen level is only being observed: deciders are reported as what they would be, nothing acts on them. */
   observing: boolean;
+  /** The workspace switch is off: everything is L0 whatever the scopes say. */
+  paused: boolean;
   gates: Record<Gate, ResolvedGate>;
   locked: string[];
 }
@@ -253,14 +255,16 @@ function clampLevel(value: number): AutonomyLevel {
  * gates and the built-in locks are applied last (docs/autonomy-policy.md §6).
  */
 export function resolveAutonomy(input: ResolveInput): ResolvedAutonomy {
-  const ceiling = clampLevel(input.workspace?.level ?? 0);
+  // Pause all autonomy (INV-1489): every scope reads as L0 until an Admin turns it back on.
+  const paused = Boolean(input.workspace?.paused);
+  const ceiling = paused ? 0 : clampLevel(input.workspace?.level ?? 0);
   const requestedRow = input.project ?? input.team ?? null;
   const requestedBy: ResolvedAutonomy['requestedBy'] = input.project ? 'project' : input.team ? 'team' : input.workspace ? 'workspace' : 'default';
   const requested = clampLevel(requestedRow?.level ?? 0);
 
   let level = requested;
   let source: LevelSource = requestedBy;
-  if (ceiling < level) { level = ceiling; source = 'ceiling'; }
+  if (ceiling < level) { level = ceiling; source = paused ? 'paused' : 'ceiling'; }
   if (input.agentTrust) {
     const trust = TRUST_LEVEL[input.agentTrust];
     if (trust < level) { level = trust; source = 'agent_trust'; }
@@ -293,7 +297,7 @@ export function resolveAutonomy(input: ResolveInput): ResolvedAutonomy {
     gates[lock.gate] = { ...rule, locked: rule.locked ? `${rule.locked},${lock.id}` : lock.id };
   }
 
-  return { level, source, ceiling, requested, requestedBy, agentTrust: input.agentTrust ?? null, observing, gates, locked: [...lockedIds] };
+  return { level, source, ceiling, requested, requestedBy, agentTrust: input.agentTrust ?? null, observing, paused, gates, locked: [...lockedIds] };
 }
 
 export interface Decision { decider: Decider; matched: boolean; reason: string }
@@ -322,3 +326,16 @@ export const POLICY_AUDIT = {
   autoDecision: 'policy.auto_decision',
   override: 'policy.override',
 } as const;
+
+/** Human-readable summary of the facts a condition looked at, for "Would be handled under L2: type bug, priority 2". */
+export function describeFacts(predicate: Predicate | undefined, facts: AutonomyFacts): string {
+  if (!predicate) return '';
+  const fields = new Set<ConditionField>();
+  const walk = (node: Predicate) => {
+    if ('all' in node) node.all.forEach(walk);
+    else if ('any' in node) node.any.forEach(walk);
+    else fields.add(node.field);
+  };
+  walk(predicate);
+  return [...fields].filter((field) => facts[field] !== undefined && facts[field] !== null).map((field) => `${field} ${Array.isArray(facts[field]) ? (facts[field] as Scalar[]).join('/') : String(facts[field])}`).join(', ');
+}

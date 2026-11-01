@@ -1,6 +1,7 @@
 import { executorContext, executorUpdate, type ExecutorInput } from './executor-service.js';
+import { WORKSPACE_SETTINGS_ID } from './workspace-access.js';
 import type { AutonomyScope } from '@prisma/client';
-import { POLICY_SCOPE_INVALID_MESSAGE, autonomyToGraphQL, loadAutonomyFor, setWorkflowPolicy } from './autonomy-service.js';
+import { POLICY_SCOPE_INVALID_MESSAGE, autonomyToGraphQL, clearWorkflowPolicy, loadAutonomyFor, observeLabelFor, readAutonomySettings, setWorkflowPolicy } from './autonomy-service.js';
 import type { SavedView } from '@prisma/client';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
 import { starTimelineEntry, unstarTimelineEntry, workTimelineFor, type TimelineEntry } from './work-activity-timeline.js';
@@ -455,6 +456,8 @@ const typeDefs = /* GraphQL */ `
     viewer: User
     viewerCapabilities: ViewerCapabilities!
     workspaceSettings: WorkspaceSettings!
+    "Autonomy policy of one scope with its history and the workspace frame (INV-1489). Signed-in people only."
+    autonomySettings(scope: AutonomyScope!, scopeId: String!): AutonomySettings!
     issue(id: String!): Issue
     """
     The work items behind references in prose (INV-1466): a batch of
@@ -566,6 +569,8 @@ const typeDefs = /* GraphQL */ `
     Writes a new version; the history stays (INV-1488). No gate opens until INV-1491+.
     """
     workflowPolicySet(input: WorkflowPolicySetInput!): WorkflowPolicyPayload!
+    "Remove a team or project override so it inherits again (INV-1489)."
+    workflowPolicyClear(input: WorkflowPolicyClearInput!): WorkflowPolicyClearPayload!
     "A person ends an agent's claim now, with a reason (INV-789); open runs under it are closed."
     workClaimRelease(workId: String!, reason: String!, claimToken: String): WorkClaimReleasePayload!
     "Clear a sync dead letter so the next reconciliation retries that PR; admins only, audited (INV-796)."
@@ -1530,6 +1535,8 @@ const typeDefs = /* GraphQL */ `
     waitingOn: [Issue!]!
     "Everything that blocked this work is finished, so its decision is ready now."
     unblocked: Boolean!
+    "While the item's team or project observes a higher level: what that level would have done, else null (INV-1489)."
+    wouldBeAutomatic: String
   }
 
   type AttentionConnection {
@@ -2600,6 +2607,65 @@ const typeDefs = /* GraphQL */ `
     reason: String!
     "Observe for N days before the level acts; omit or 0 to turn it on now."
     observeDays: Int
+    "WORKSPACE only: pause all autonomy (every scope reads as L0)."
+    paused: Boolean
+    "WORKSPACE only: the level new teams start at."
+    defaultLevel: Int
+    "WORKSPACE only: named presets [{ name, level, gates? }]."
+    templates: Json
+  }
+
+  input WorkflowPolicyClearInput {
+    scope: AutonomyScope!
+    scopeId: String!
+    reason: String!
+  }
+
+  type WorkflowPolicyClearPayload {
+    success: Boolean!
+    message: String
+    cleared: Boolean!
+  }
+
+  type AutonomyLevelInfo {
+    level: Int!
+    name: String!
+    descriptionEn: String!
+    descriptionZh: String!
+    gates: [AutonomyPresetGate!]!
+  }
+
+  type AutonomyPresetGate {
+    gate: String!
+    decider: String!
+  }
+
+  type AutonomyLock {
+    id: String!
+    gate: String!
+    reason: String!
+  }
+
+  type AutonomyTemplate {
+    name: String!
+    level: Int!
+    gates: Json
+  }
+
+  type AutonomySettings {
+    scope: AutonomyScope!
+    scopeId: String!
+    active: WorkflowPolicy
+    history: [WorkflowPolicy!]!
+    "The workspace ceiling (0 while paused)."
+    ceiling: Int!
+    paused: Boolean!
+    defaultLevel: Int!
+    templates: [AutonomyTemplate!]!
+    levels: [AutonomyLevelInfo!]!
+    builtInLocks: [AutonomyLock!]!
+    gates: [String!]!
+    conditionFields: [String!]!
   }
 
   type WorkflowPolicyPayload {
@@ -2620,6 +2686,9 @@ const typeDefs = /* GraphQL */ `
     reason: String
     observeUntil: DateTime
     active: Boolean!
+    paused: Boolean!
+    defaultLevel: Int!
+    templates: Json!
     createdAt: DateTime!
   }
 
@@ -3002,6 +3071,7 @@ const resolvers = {
       parent.workId ? context.prisma.issue.findUnique({ where: { id: parent.workId } }) : null,
     waitingOn: (parent: AttentionItem, _args: unknown, context: GraphQLContext) =>
       parent.waitingOnIds.length ? context.prisma.issue.findMany({ where: { id: { in: parent.waitingOnIds } }, orderBy: { identifier: 'asc' } }) : [],
+    wouldBeAutomatic: (parent: AttentionItem, _args: unknown, context: GraphQLContext) => observeLabelFor(context.prisma, parent),
   },
   ContractAmendment: {
     changes: (parent: ContractAmendment) => amendmentChanges(parent),
@@ -3092,6 +3162,11 @@ const resolvers = {
         canInvite: await canInvite(context.prisma, human ? { actorId: human.id, actorKind: human.actorKind, globalRole: human.globalRole } : null),
         isAdmin: human?.globalRole === 'ADMIN',
       };
+    },
+    autonomySettings: async (_parent: unknown, args: { scope: AutonomyScope; scopeId: string }, context: GraphQLContext) => {
+      if (!context.isTrustedSystem && context.viewer?.actorKind !== 'HUMAN') throw createValidationError('Autonomy settings are read by signed-in people; agents read Issue.autonomy (INV-1489).');
+      if (args.scope === 'WORKSPACE' && args.scopeId !== WORKSPACE_SETTINGS_ID) throw createValidationError(POLICY_SCOPE_INVALID_MESSAGE);
+      return readAutonomySettings(context.prisma, args);
     },
     workspaceSettings: async (_parent: unknown, _args: Record<string, never>, context: GraphQLContext) => {
       assertSettingsAdmin(context);
@@ -5119,6 +5194,23 @@ const resolvers = {
         const policy = await setWorkflowPolicy(context.prisma, input, context.viewer?.id ?? null);
         return { success: true as const, policy };
       }, { success: false as const, policy: null }),
+    workflowPolicyClear: async (
+      _parent: unknown,
+      args: { input: { scope: AutonomyScope; scopeId: string; reason: string } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; cleared: boolean }> =>
+      runMutationWithReason(async () => {
+        const { input } = args;
+        if (input.scope === 'TEAM') {
+          await assertCanManageTeam(context.prisma, context, input.scopeId);
+        } else if (input.scope === 'PROJECT') {
+          const project = await context.prisma.issue.findUnique({ where: { id: input.scopeId }, select: { teamId: true } });
+          if (!project) throw createValidationError(POLICY_SCOPE_INVALID_MESSAGE);
+          await assertCanManageTeam(context.prisma, context, project.teamId);
+        }
+        const cleared = await clearWorkflowPolicy(context.prisma, input, input.reason, context.viewer?.id ?? null);
+        return { success: true as const, cleared };
+      }, { success: false as const, cleared: false }),
     teamTriageRotationUpdate: async (
       _parent: unknown,
       args: { input: { teamId: string; userIds: string[]; startsAt?: string | null } },

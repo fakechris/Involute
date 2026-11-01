@@ -138,15 +138,16 @@ describe('project routing settings', () => {
     expect(issueUpdate.mock.calls[0]![0].variables.input).not.toHaveProperty('webOrigins');
   });
 
-  it('turns on auto-accept of verified bug fixes for the project (INV-1075)', async () => {
-    const issueUpdate = vi.fn().mockResolvedValue({ data: { issueUpdate: { success: true, message: null, issue: null } } });
-    mockMutations({ issueUpdate });
+  it('sets a project autonomy override in place of the old auto-accept switch (INV-1075 → INV-1489)', async () => {
+    const workflowPolicySet = vi.fn().mockResolvedValue({ data: { workflowPolicySet: { success: true, message: null } } });
+    mockMutations({ workflowPolicySet });
     const dialog = await openEdit();
-    const toggle = within(dialog).getByLabelText('Auto-accept verified bug fixes');
-    expect(toggle).not.toBeChecked();
-    fireEvent.click(toggle);
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Save', hidden: true }));
-    await waitFor(() => expect(issueUpdate).toHaveBeenCalled());
-    expect(issueUpdate.mock.calls[0]![0].variables.input).toMatchObject({ autoAcceptBugs: true });
+    expect(within(dialog).queryByLabelText('Auto-accept verified bug fixes')).not.toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Override for this project' }));
+    fireEvent.change(within(dialog).getByLabelText('Project autonomy level'), { target: { value: '2' } });
+    fireEvent.change(within(dialog).getByLabelText('Reason for the project autonomy change'), { target: { value: 'bugs may close themselves' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Apply autonomy' }));
+    await waitFor(() => expect(workflowPolicySet).toHaveBeenCalled());
+    expect(workflowPolicySet.mock.calls[0]![0]).toEqual({ variables: { input: { scope: 'PROJECT', scopeId: 'proj-1', level: 2, reason: 'bugs may close themselves' } } });
   });
 });
