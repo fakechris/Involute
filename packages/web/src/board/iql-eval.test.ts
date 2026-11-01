@@ -1,19 +1,24 @@
 import { describe, expect, it } from 'vitest';
 
-import { matchesIql } from './iql-eval';
-import type { IssueSummary } from './types';
+import { looksLikeIql } from './iql-eval';
 
-const issue = (severity: IssueSummary['severity']) => ({ severity } as unknown as IssueSummary);
+// The board asks the server to filter and keeps its answer (INV-1470); this
+// only tells the two apart, so plain text goes to the server's text search and
+// IQL goes to its query argument.
+describe('looksLikeIql', () => {
+  it('reads a field term as IQL', () => {
+    expect(looksLikeIql('state:Ready')).toBe(true);
+    expect(looksLikeIql('severity:sev1')).toBe(true);
+    expect(looksLikeIql('-state:Ready')).toBe(true);
+  });
 
-// Saved views read severity: the way the server does (INV-1115).
-describe('matchesIql severity', () => {
-  it('matches listed severities, none for unjudged, and negation', () => {
-    expect(matchesIql('severity:sev1', issue('SEV1'), null)).toBe(true);
-    expect(matchesIql('severity:sev1,sev2', issue('SEV2'), null)).toBe(true);
-    expect(matchesIql('severity:sev1', issue('SEV3'), null)).toBe(false);
-    expect(matchesIql('severity:none', issue(null), null)).toBe(true);
-    expect(matchesIql('severity:none', issue(undefined), null)).toBe(true);
-    expect(matchesIql('-severity:sev1', issue(null), null)).toBe(true);
-    expect(matchesIql('severity:!=sev1', issue('SEV1'), null)).toBe(false);
+  it('reads plain text as plain text', () => {
+    expect(looksLikeIql('meituan')).toBe(false);
+    expect(looksLikeIql('143')).toBe(false);
+    expect(looksLikeIql('')).toBe(false);
+  });
+
+  it('falls back to plain text when the query does not parse', () => {
+    expect(looksLikeIql('unknownfield:x')).toBe(false);
   });
 });

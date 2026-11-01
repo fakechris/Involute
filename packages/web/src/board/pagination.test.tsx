@@ -36,8 +36,8 @@ it('keeps a later-page issue open after its detail query writes to the cache', a
       } };
     } else if (operation.operationName === 'GraphProjects') {
       data = { projectSummary: { totalCount: 201, projects: [] } };
-    } else if (operation.operationName === 'IssueContract') {
-      data = { issue: { __typename: 'Issue', id: 'later', revision: 2, commitmentStatus: 'COMMITTED', outcome: null, scope: null, constraints: null, acceptance: null, verification: null, pendingContractAmendment: null } };
+    } else if (operation.operationName === 'IssueDetail') {
+      data = { issue: { __typename: 'Issue', id: 'later', revision: 2, commitmentStatus: 'COMMITTED', description: null, outcome: null, scope: null, constraints: null, acceptance: null, verification: null, pendingContractAmendment: null } };
     } else {
       data = { issue: null };
     }
@@ -48,7 +48,7 @@ it('keeps a later-page issue open after its detail query writes to the cache', a
   render(<ApolloProvider client={client}><MemoryRouter><BoardPage /></MemoryRouter></ApolloProvider>);
   fireEvent.click(await screen.findByRole('button', { name: 'Load more issues' }));
   fireEvent.click(await screen.findByText('Later page item'));
-  await waitFor(() => expect(requests).toContain('IssueContract'));
+  await waitFor(() => expect(requests).toContain('IssueDetail'));
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
   expect(screen.getByRole('dialog')).toBeInTheDocument();
   expect(screen.getByTestId('issue-card-later')).toBeInTheDocument();

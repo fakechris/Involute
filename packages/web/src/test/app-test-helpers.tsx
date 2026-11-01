@@ -511,8 +511,10 @@ type QueryState = {
   refetch?: ReturnType<typeof vi.fn>;
   relationsData?: IssueRelationsQueryData;
   workContextData?: WorkContextPageQueryData;
-  /** The board drawer's contract query (INV-896); absent, it answers from the board's own issue. */
-  contractData?: { issue: Record<string, unknown> | null };
+  /** The open issue's own detail query — contract, amendment and body (INV-896, INV-1470); absent, it answers from the board's own issue. */
+  detailData?: { issue: Record<string, unknown> | null };
+  /** The detail query is still on its way (INV-1470): the body has not arrived. */
+  detailLoading?: boolean;
   contractRefetch?: ReturnType<typeof vi.fn>;
   /** Server search hits for the command palette (INV-925); absent, nothing matches. */
   searchData?: WorkSearchQueryData;
@@ -669,13 +671,13 @@ export function renderApp(
       };
     }
 
-    if (source.includes('query IssueContract')) {
+    if (source.includes('query IssueDetail')) {
       const issueId = String(options?.variables?.id ?? '');
       const fromBoard = (queryState.data?.issues.nodes ?? []).find((issue) => issue.id === issueId);
       return {
-        data: options?.skip ? undefined : (queryState.contractData ?? { issue: fromBoard ?? null }),
+        data: options?.skip ? undefined : (queryState.detailData ?? { issue: fromBoard ?? null }),
         error: undefined,
-        loading: false,
+        loading: queryState.detailLoading ?? false,
         refetch: queryState.contractRefetch ?? vi.fn().mockResolvedValue(undefined),
       };
     }

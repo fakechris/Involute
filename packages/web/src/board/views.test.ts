@@ -133,18 +133,26 @@ describe('query by issue number (INV-608)', () => {
     expect(applyBoardViewState(issues, exact, []).map((i) => i.identifier)).toEqual(['INV-602']);
   });
 
-  it('keeps full-text matching once the query is not purely digits', () => {
+  it('leaves a text query to the server and keeps what it matched (INV-1470)', () => {
     const state = { ...getDefaultBoardViewState(), query: 'mentions 602' };
-    expect(applyBoardViewState(issues, state, []).map((i) => i.identifier)).toEqual(['INV-7']);
+    // The board list carries no descriptions any more, so a second client-side
+    // search would drop the issues the server matched on their text. The
+    // server searches the same fields (identifier, title, description, parent,
+    // project, repository) and the board keeps its answer.
+    expect(applyBoardViewState(issues, state, []).map((i) => i.identifier).sort()).toEqual(
+      ['INV-6', 'INV-60', 'INV-602', 'INV-1602', 'INV-7'].sort(),
+    );
   });
 
-  it('matches the repository so a repo fragment finds issues whose text never names it (INV-1430)', () => {
+  it('leaves the repository match to the server too (INV-1430, INV-1470)', () => {
     const issues = [
       makeIssue('38', 'baoli/meituan_analyse', '账户初始化状态不可见'),
       makeIssue('39', 'fakechris/Involute', 'Unrelated'),
     ];
 
     const state = { ...getDefaultBoardViewState(), query: 'meituan' };
-    expect(applyBoardViewState(issues, state, []).map((i) => i.id)).toEqual(['38']);
+    // The repository is one of the fields the server searches (see
+    // issue-filter.test.ts); the board does not search it again.
+    expect(applyBoardViewState(issues, state, []).map((i) => i.id).sort()).toEqual(['38', '39']);
   });
 });
