@@ -16,6 +16,7 @@ import { useListKeys } from '../components/useListKeys';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { recordCommitGesture, undoStatusGesture } from '../undo/status-undo';
 import { ATTENTION_PAGE_QUERY, CONTRACT_AMENDMENT_REOPEN_MUTATION, WORK_COMMIT_MUTATION, WORK_CONTEXT_PAGE_QUERY, WORK_REVIEW_MUTATION, WORK_UNCOMMIT_MUTATION } from '../work/queries';
+import { ISSUE_UPDATE_MUTATION } from '../board/queries';
 import type {
   HandledItemNode,
   AttentionItemNode,
@@ -609,7 +610,7 @@ export function AttentionPage() {
           </div>
         </div>
       ) : null}
-      <HandledForYou items={data?.handledForYou ?? []} onChanged={refresh} />
+      <HandledForYou items={data?.handledForYou ?? []} reviewStateFor={(teamId) => statesByTeam.get(teamId)?.find((state) => state.type === 'REVIEW')?.id ?? null} onChanged={refresh} />
       {batchResults.length > 0 ? (
         <div className="attention-batch-results" role="status" aria-label="Batch results">
           <ul>
@@ -786,7 +787,8 @@ function WorkContextDecision({
  * policy decided on its own in the last week, each with why and a one-click
  * return. Collapsed by default: it is information, not a queue.
  */
-function HandledForYou({ items, onChanged }: { items: HandledItemNode[]; onChanged: () => unknown }) {
+function HandledForYou({ items, reviewStateFor, onChanged }: { items: HandledItemNode[]; reviewStateFor: (teamId: string) => string | null; onChanged: () => unknown }) {
+  const [runReopenWork] = useMutation<{ issueUpdate: { success: boolean; message?: string | null } }, { id: string; input: { stateId: string; expectedRevision: number } }>(ISSUE_UPDATE_MUTATION);
   const [runUncommit] = useMutation<{ workUncommit: { success: boolean; message?: string | null } }, { id: string; expectedRevision: number }>(WORK_UNCOMMIT_MUTATION);
   const [runReopen] = useMutation<{ contractAmendmentReopen: { success: boolean; message?: string | null } }, { input: { amendmentId: string; reason: string } }>(CONTRACT_AMENDMENT_REOPEN_MUTATION);
   const [notice, setNotice] = useState<{ id: string; text: string; ok: boolean } | null>(null);
@@ -797,6 +799,16 @@ function HandledForYou({ items, onChanged }: { items: HandledItemNode[]; onChang
     const result = await runUncommit({ variables: { id: item.work.id, expectedRevision: item.work.revision } });
     const payload = result.data?.workUncommit;
     setNotice({ id: item.id, ok: Boolean(payload?.success), text: payload?.success ? `${item.work.identifier} is a candidate again; counted as an override of the policy.` : payload?.message ?? 'Could not return it.' });
+    if (payload?.success) await onChanged();
+  }
+
+  // Return to Review (INV-1492): the same state change the issue page offers; counted as an override.
+  async function returnToReview(item: HandledItemNode) {
+    const stateId = reviewStateFor(item.work.team.id);
+    if (!stateId) { setNotice({ id: item.id, ok: false, text: 'This team has no Review state.' }); return; }
+    const result = await runReopenWork({ variables: { id: item.work.id, input: { stateId, expectedRevision: item.work.revision } } });
+    const payload = result.data?.issueUpdate;
+    setNotice({ id: item.id, ok: Boolean(payload?.success), text: payload?.success ? `${item.work.identifier} is back in Review; counted as an override of the policy.` : payload?.message ?? 'Could not return it.' });
     if (payload?.success) await onChanged();
   }
 
@@ -829,6 +841,8 @@ function HandledForYou({ items, onChanged }: { items: HandledItemNode[]; onChang
                 ) : (
                   <Btn size="sm" variant="ghost" onClick={() => setReasonFor({ id: item.id, text: '' })}>Return to me</Btn>
                 )
+              ) : item.gate === 'review_accept' ? (
+                <Btn size="sm" variant="ghost" onClick={() => void returnToReview(item)}>Return to Review</Btn>
               ) : (
                 <Btn size="sm" variant="ghost" onClick={() => void returnToCandidates(item)}>Return to candidates</Btn>
               )

@@ -122,10 +122,10 @@ export async function loadHandledForYou(prisma: DatabaseClient, readable: Prisma
     select: { workId: true, createdAt: true },
   });
   return rows.map((row) => {
-    const gate: Gate = row.reason!.includes('contract_amendment') ? 'contract_amendment' : 'candidate_commit';
+    const gate: Gate = row.reason!.includes('contract_amendment') ? 'contract_amendment' : row.reason!.includes('review_accept') ? 'review_accept' : 'candidate_commit';
     const version = /policy v(\d+)/.exec(row.reason!)?.[1];
     const undone = overrides.some((override) => override.workId === row.workId && override.createdAt > row.createdAt);
-    const reversible = !undone && (gate === 'contract_amendment' || (row.work.commitmentStatus === 'COMMITTED' && !row.work.claim && row.work.runs.length === 0));
+    const reversible = !undone && (gate === 'contract_amendment' || gate === 'review_accept' || (row.work.commitmentStatus === 'COMMITTED' && !row.work.claim && row.work.runs.length === 0));
     return {
       id: row.id,
       gate,

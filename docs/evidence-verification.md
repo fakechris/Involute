@@ -66,6 +66,8 @@ A PROJECT can turn on **Auto-accept verified bug fixes** (Projects page → Edit
 
 All true: the bug moves to Done as the SERVICE actor **Auto-Accept Gate** (`work.accepted`, audit, the run's agent is notified; the decision reason names the PR or commit). Anything else leaves it in Review, and `Issue.autoAccept` / `/in-review` say why (`NO_CHECKS`, `PR_NOT_MERGED`, `COMMIT_NOT_ON_DEFAULT_BRANCH`, `RATE_OR_PERMISSION_LIMIT`, …); the same run is asked again after 10 minutes. A person returned the run? It waits for a person. A person can move an auto-accepted bug back to Review from its issue page (**Return to Review**). The repository must be in `GITHUB_VERIFICATION_REPOSITORIES` with credentials configured, or every bug reports `VERIFIER_NOT_CONFIGURED`.
 
+Since INV-1492 the same sweep also serves the autonomy policy: in a team or project at L2+ (docs/autonomy-policy.md) any Type in Review is checked the same way for the agent that delivered it, with the policy named in the decision reason and `POLICY_LEVEL_TOO_LOW` / `AGENT_TRUST_TOO_LOW` / `LOCKED_GATE` as the extra reasons for waiting. Returning such an item to Review is counted as a policy override.
+
 ## Run the A→B relay locally (INV-994)
 
 Production has no verifier configured (decision 2026-10-07: the GitHub App is not
