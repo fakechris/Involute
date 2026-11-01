@@ -215,6 +215,7 @@ model IssueLabel {
 
 model User {
   id             String    @id @default(uuid()) @db.Uuid
+  agentTrust     AgentTrust? @relation("AgentTrustActor")
   name           String
   email          String    @unique
   avatarUrl      String?
@@ -1450,4 +1451,53 @@ model ExecutorDeliveryReceipt {
   payload Json
   createdAt DateTime @default(now())
   @@unique([dispatchId, generation, idempotencyKey])
+}
+
+// INV-1488: who decides at each human gate, as policy a workspace sets, a team
+// adopts and a project may override (docs/autonomy-policy.md). Rows are
+// versioned: a change inserts a new active row and deactivates the previous one.
+enum AutonomyScope {
+  WORKSPACE
+  TEAM
+  PROJECT
+}
+
+model WorkflowPolicy {
+  id           String        @id @default(uuid()) @db.Uuid
+  scope        AutonomyScope
+  // WORKSPACE: WORKSPACE_SETTINGS_ID; TEAM: Team.id; PROJECT: the PROJECT Issue.id.
+  scopeId      String
+  level        Int           @default(0)
+  // { [gate]: { decider, condition? } } overrides on top of the level preset.
+  gates        Json          @default("{}")
+  // L3 team intake rule; null means nothing is committed without a person.
+  intake       Json?
+  // WORKSPACE only: gates that stay with a person at every level.
+  locked       String[]      @default([])
+  version      Int           @default(1)
+  reason       String?
+  observeUntil DateTime?
+  active       Boolean       @default(true)
+  createdById  String?       @db.Uuid
+  createdAt    DateTime      @default(now())
+
+  @@index([scope, scopeId, active])
+}
+
+// INV-1488: a clamp, not a scope. New agents start at OBSERVE whatever the
+// project allows; a person promotes with a reason.
+enum AgentTrustLevel {
+  OBSERVE
+  L1
+  L2
+  L3
+}
+
+model AgentTrust {
+  actorId   String          @id @db.Uuid
+  actor     User            @relation("AgentTrustActor", fields: [actorId], references: [id], onDelete: Cascade)
+  level     AgentTrustLevel @default(OBSERVE)
+  setById   String?         @db.Uuid
+  reason    String?
+  updatedAt DateTime        @default(now()) @updatedAt
 }
