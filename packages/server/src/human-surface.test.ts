@@ -270,6 +270,16 @@ describe('human surface registry (INV-795)', () => {
 
   it('says for every human gate whether it waits in Needs you (INV-1095)', () => {
     expect(gateAttentionProblems(HUMAN_GATES)).toEqual([]);
+    // A gate a policy may open (INV-1491) must show its automatic decisions in
+    // Handled for you, and that list must be tested on the web and the server.
+    const policyGates = HUMAN_GATES.filter((gate) => (gate as { policy?: string }).policy);
+    expect(policyGates.length).toBeGreaterThan(0);
+    const attentionPageTest = readFileSync(join(webSrc, 'routes/AttentionPage.test.tsx'), 'utf8');
+    const gateTest = readFileSync(join(serverSrc, 'autonomy-gate.test.ts'), 'utf8');
+    for (const gate of policyGates) {
+      expect(attentionPageTest, `${gate.text}: Handled for you is not tested on the web`).toContain('Handled for you');
+      expect(gateTest, `${gate.text}: no server test for policy ${(gate as { policy: string }).policy}`).toContain((gate as { policy: string }).policy);
+    }
   });
 
   it('says for every notification whether it asks for a decision, agreeing with notification-service (INV-1095)', () => {

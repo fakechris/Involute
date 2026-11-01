@@ -1,5 +1,6 @@
 import type { Issue, Prisma } from '@prisma/client';
 
+import { POLICY_AUDIT } from './autonomy-policy.js';
 import { findWorkByIdOrIdentifier } from './context-service.js';
 import {
   createNotFoundError,
@@ -88,8 +89,11 @@ export async function uncommitWork(
       },
     });
     await syncContainsFromParentId(transaction, restored.id, snapshot.parentId, actor);
+    // Undoing the Autonomy Gate's commit is an override the policy and the agent are measured by (INV-1491).
+    const committedBy = await transaction.workAudit.findFirst({ where: { workId: work.id, revision: work.revision }, orderBy: { createdAt: 'desc' }, select: { reason: true } });
+    const undoReason = committedBy?.reason?.startsWith(POLICY_AUDIT.autoDecision) ? `${POLICY_AUDIT.override}: returned to candidates (was ${committedBy.reason})` : 'Returned to candidate: undo commit';
     await recordWorkAudit(transaction, {
-      actor: { ...actor, reason: 'Returned to candidate: undo commit' },
+      actor: { ...actor, reason: undoReason },
       after: selectIssueSnapshot(restored),
       before: selectIssueSnapshot(work),
       workId: work.id,

@@ -838,3 +838,27 @@ select.control--ghost:focus-visible {
 .agent-trust__allowed--off {
   color: var(--fg-muted);
 }
+
+/* Handled for you on Needs you (INV-1491). */
+.attention-handled {
+  margin-top: 16px;
+}
+.attention-handled summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+.attention-handled__list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: grid;
+  gap: 6px;
+}
+.attention-handled__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+  font-size: 13px;
+}

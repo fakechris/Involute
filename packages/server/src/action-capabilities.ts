@@ -55,6 +55,7 @@ export const AGENT_ONLY_READ_TOOLS: Record<string, string> = {
 
 /** GraphQL queries that intentionally have no MCP tool; each names the decision it rests on. */
 export const QUERY_EXEMPTIONS: Record<string, { reason: string; decision: string }> = {
+  handledForYou: { reason: 'The Handled for you list on /todo for people; agents see the same decisions as audits on each item (work_get_context).', decision: 'INV-1486' },
   autonomySettings: { reason: 'Policy pages for Admins and team Owners; an agent reads the resolved level on each item (work_get_context autonomy).', decision: 'INV-1486' },
   viewer: { reason: 'The signed-in person; an agent is its credential (work_catalog actors).', decision: 'INV-846' },
   workspaceSettings: { reason: 'Sign-in and access policy are administration.', decision: 'INV-846' },
@@ -144,6 +145,7 @@ export const AGENT_ONLY_FIELDS: Record<string, Record<string, string>> = {
 export const MCP_EXEMPTIONS: Record<string, { reason: string; gate: 'administration' | 'candidate' | 'final-acceptance' | 'personal' | 'deprecated'; decision: string }> = {
   workflowPolicySet: { gate: 'administration', reason: 'A person sets how far agents may go; an agent never widens its own autonomy (docs/autonomy-policy.md).', decision: 'INV-1486' },
   workflowPolicyClear: { gate: 'administration', reason: 'A person removes a team or project autonomy override.', decision: 'INV-1486' },
+  contractAmendmentReopen: { gate: 'candidate', reason: 'A person takes back an amendment the Autonomy Gate accepted (Return to me).', decision: 'INV-1486' },
   agentTrustSet: { gate: 'administration', reason: 'A person promotes or demotes an agent’s trust level; an agent never raises its own (INV-1490).', decision: 'INV-1486' },
   deliveryChangeDecide: { gate: 'candidate', reason: 'A person approves or declines changes to delivery authority.', decision: 'INV-941' },
   contractAmendmentAccept: { gate: 'candidate', reason: 'A person approves a proposed committed-contract amendment.', decision: 'INV-869' },
