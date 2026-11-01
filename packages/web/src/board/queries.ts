@@ -1567,6 +1567,18 @@ export const AGENT_PROFILE_QUERY = gql`
         runs
         evidence
       }
+      trust {
+        level
+        descriptionEn
+        descriptionZh
+        reason
+        updatedAt
+        setBy { id name handle }
+        allowed { claimWork fileBugs autoCommit autoAccept delegate }
+        metrics { windowDays deliveries bugsFiled falseReports falseReportRate reopens overrides overridesLastWeek }
+        suggestedLevel
+        warning
+      }
       credentials {
         id
         name
@@ -1617,6 +1629,16 @@ export const AGENT_OWNER_CANDIDATES_QUERY = gql`
         actorKind
         deactivatedAt
       }
+    }
+  }
+`;
+
+export const AGENT_TRUST_SET_MUTATION = gql`
+  mutation AgentTrustSet($input: AgentTrustSetInput!) {
+    agentTrustSet(input: $input) {
+      success
+      message
+      trust { level reason updatedAt }
     }
   }
 `;

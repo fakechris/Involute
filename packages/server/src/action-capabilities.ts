@@ -144,6 +144,7 @@ export const AGENT_ONLY_FIELDS: Record<string, Record<string, string>> = {
 export const MCP_EXEMPTIONS: Record<string, { reason: string; gate: 'administration' | 'candidate' | 'final-acceptance' | 'personal' | 'deprecated'; decision: string }> = {
   workflowPolicySet: { gate: 'administration', reason: 'A person sets how far agents may go; an agent never widens its own autonomy (docs/autonomy-policy.md).', decision: 'INV-1486' },
   workflowPolicyClear: { gate: 'administration', reason: 'A person removes a team or project autonomy override.', decision: 'INV-1486' },
+  agentTrustSet: { gate: 'administration', reason: 'A person promotes or demotes an agent’s trust level; an agent never raises its own (INV-1490).', decision: 'INV-1486' },
   deliveryChangeDecide: { gate: 'candidate', reason: 'A person approves or declines changes to delivery authority.', decision: 'INV-941' },
   contractAmendmentAccept: { gate: 'candidate', reason: 'A person approves a proposed committed-contract amendment.', decision: 'INV-869' },
   contractAmendmentReject: { gate: 'candidate', reason: 'A person declines a committed-contract amendment.', decision: 'INV-869' },

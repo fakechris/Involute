@@ -824,3 +824,17 @@ select.control--ghost:focus-visible {
   gap: 8px;
   align-items: center;
 }
+
+/* Agent trust panel (INV-1490). */
+.agent-trust__allowed {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 13px;
+}
+.agent-trust__allowed--off {
+  color: var(--fg-muted);
+}

@@ -1,4 +1,6 @@
 import { executorContext, executorUpdate, type ExecutorInput } from './executor-service.js';
+import type { AgentTrustLevel } from '@prisma/client';
+import { TRUST_LEVEL_DESCRIPTIONS, adviseTrust, allowedAt, loadAgentTrustMetrics, readAgentTrust, setAgentTrust } from './agent-trust.js';
 import { WORKSPACE_SETTINGS_ID } from './workspace-access.js';
 import type { AutonomyScope } from '@prisma/client';
 import { POLICY_SCOPE_INVALID_MESSAGE, autonomyToGraphQL, clearWorkflowPolicy, loadAutonomyFor, observeLabelFor, readAutonomySettings, setWorkflowPolicy } from './autonomy-service.js';
@@ -571,6 +573,8 @@ const typeDefs = /* GraphQL */ `
     workflowPolicySet(input: WorkflowPolicySetInput!): WorkflowPolicyPayload!
     "Remove a team or project override so it inherits again (INV-1489)."
     workflowPolicyClear(input: WorkflowPolicyClearInput!): WorkflowPolicyClearPayload!
+    "Promote or demote an agent's trust level with a reason (the actor's owner, a team Owner over it, or an Admin; INV-1490)."
+    agentTrustSet(input: AgentTrustSetInput!): AgentTrustPayload!
     "A person ends an agent's claim now, with a reason (INV-789); open runs under it are closed."
     workClaimRelease(workId: String!, reason: String!, claimToken: String): WorkClaimReleasePayload!
     "Clear a sync dead letter so the next reconciliation retries that PR; admins only, audited (INV-796)."
@@ -1152,9 +1156,64 @@ const typeDefs = /* GraphQL */ `
   }
 
   """Who an agent is and what it has actually done (INV-573)."""
+  enum AgentTrustLevel {
+    OBSERVE
+    L1
+    L2
+    L3
+  }
+
+  type AgentTrustMetrics {
+    windowDays: Int!
+    deliveries: Int!
+    bugsFiled: Int!
+    falseReports: Int!
+    "Per cent of bugs it filed that were closed invalid / cannot reproduce / duplicate; null when it filed none."
+    falseReportRate: Float
+    reopens: Int!
+    overrides: Int!
+    overridesLastWeek: Int!
+  }
+
+  type AgentTrustAllowed {
+    claimWork: Boolean!
+    fileBugs: Boolean!
+    autoCommit: Boolean!
+    autoAccept: Boolean!
+    delegate: Boolean!
+  }
+
+  "How far this agent may go on its own, as a clamp on the project's autonomy (INV-1490)."
+  type AgentTrust {
+    level: AgentTrustLevel!
+    descriptionEn: String!
+    descriptionZh: String!
+    setBy: User
+    reason: String
+    updatedAt: DateTime
+    allowed: AgentTrustAllowed!
+    metrics: AgentTrustMetrics!
+    "Advice from the last 30 days; never applied by the server."
+    suggestedLevel: AgentTrustLevel
+    warning: String
+  }
+
+  input AgentTrustSetInput {
+    actorId: ID!
+    level: AgentTrustLevel!
+    reason: String!
+  }
+
+  type AgentTrustPayload {
+    success: Boolean!
+    message: String
+    trust: AgentTrust
+  }
+
   type AgentProfile {
     actor: User!
     counts: AgentActivityCounts!
+    trust: AgentTrust!
     """When and how this actor was created, and what it was granted."""
     credentials: [AgentCredentialSummary!]!
     """Whether the viewer may deactivate, reactivate or re-own this actor (owner or ADMIN)."""
@@ -3062,6 +3121,9 @@ const resolvers = {
     actionable: (parent: { type: string }) => isActionableNotification(parent.type),
     resolvedBy: (parent: { resolvedById?: string | null }, _args: unknown, context: GraphQLContext) =>
       parent.resolvedById ? context.prisma.user.findUnique({ where: { id: parent.resolvedById } }) : null,
+  },
+  AgentProfile: {
+    trust: (parent: { actor: { id: string } }, _args: unknown, context: GraphQLContext) => agentTrustView(context.prisma, parent.actor.id),
   },
   AttentionItem: {
     groupKey: (parent: AttentionItem) => parent.groupId,
@@ -5194,6 +5256,17 @@ const resolvers = {
         const policy = await setWorkflowPolicy(context.prisma, input, context.viewer?.id ?? null);
         return { success: true as const, policy };
       }, { success: false as const, policy: null }),
+    agentTrustSet: async (
+      _parent: unknown,
+      args: { input: { actorId: string; level: AgentTrustLevel; reason: string } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; trust: unknown }> =>
+      runMutationWithReason(async () => {
+        if (context.authMode === 'agent-token' || context.viewer?.actorKind === 'AGENT') throw createValidationError('An agent cannot change a trust level, its own or another’s (INV-1490).');
+        await assertCanManageActor(context.prisma, context, args.input.actorId);
+        await setAgentTrust(context.prisma, args.input, context.viewer?.id ?? null);
+        return { success: true as const, trust: await agentTrustView(context.prisma, args.input.actorId) };
+      }, { success: false as const, trust: null }),
     workflowPolicyClear: async (
       _parent: unknown,
       args: { input: { scope: AutonomyScope; scopeId: string; reason: string } },
@@ -6798,4 +6871,23 @@ function assertWorkspaceAdmin(context: GraphQLContext): void {
   if (context.viewer?.actorKind !== 'HUMAN' || context.viewer.globalRole !== 'ADMIN') {
     throw createValidationError('Only a workspace Admin sets the workspace autonomy policy (INV-1488).');
   }
+}
+
+/** The GraphQL `AgentTrust` object for one agent: level (OBSERVE when no row), allowed actions, 30-day metrics and advice (INV-1490). */
+async function agentTrustView(prisma: GraphQLContext['prisma'], actorId: string) {
+  const [row, metrics] = await Promise.all([readAgentTrust(prisma, actorId), loadAgentTrustMetrics(prisma, actorId)]);
+  const level: AgentTrustLevel = row?.level ?? 'OBSERVE';
+  const advice = adviseTrust(level, metrics);
+  return {
+    level,
+    descriptionEn: TRUST_LEVEL_DESCRIPTIONS[level].en,
+    descriptionZh: TRUST_LEVEL_DESCRIPTIONS[level].zh,
+    setBy: row?.setById ? await prisma.user.findUnique({ where: { id: row.setById } }) : null,
+    reason: row?.reason ?? null,
+    updatedAt: row?.updatedAt ?? null,
+    allowed: allowedAt(level),
+    metrics,
+    suggestedLevel: advice.suggestedLevel,
+    warning: advice.warning,
+  };
 }
