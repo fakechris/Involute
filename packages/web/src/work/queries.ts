@@ -879,7 +879,7 @@ export const ATTENTION_PAGE_QUERY = gql`
       amendmentId
       undone
       reversible
-      work { id identifier title revision }
+      work { id identifier title revision team { id } }
     }
     attention(first: $first) {
       nodes {

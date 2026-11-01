@@ -617,7 +617,7 @@ export interface HandledItemNode {
   amendmentId: string | null;
   undone: boolean;
   reversible: boolean;
-  work: { id: string; identifier: string; title: string; revision: number };
+  work: { id: string; identifier: string; title: string; revision: number; team: { id: string } };
 }
 
 export interface AttentionPageQueryData {

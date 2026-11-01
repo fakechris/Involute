@@ -73,7 +73,7 @@ vi.mock('@apollo/client/react', () => ({
               id: 'team-1',
               key: 'INV',
               memberships: { nodes: [{ id: 'm1', user: { actorKind: 'HUMAN', email: 'owner@test', id: 'user-1', name: 'Owner' } }] },
-              states: { nodes: [{ id: 'state-ready', name: 'Ready', type: 'UNSTARTED' }] },
+              states: { nodes: [{ id: 'state-ready', name: 'Ready', type: 'UNSTARTED' }, { id: 'state-review', name: 'In Review', type: 'REVIEW' }] },
             }],
           },
         },
@@ -226,15 +226,17 @@ describe('Needs you (INV-1092)', () => {
     nodes = [node('CANDIDATE_COMMIT', 'w-9', work('w-9', 'INV-19'), ago(HOUR))];
     total = 1;
     handled = [
-      { id: 'a1', gate: 'candidate_commit', reason: 'policy.auto_decision: candidate_commit by team policy v2 (L1) — matched: type bug, priority 2', at: ago(HOUR), policyVersion: 2, amendmentId: null, undone: false, reversible: true, work: { id: 'w-20', identifier: 'INV-20', title: 'Auto one', revision: 3 } },
-      { id: 'a2', gate: 'contract_amendment', reason: 'policy.auto_decision: contract_amendment by team policy v2 (L1) — matched: amendment_fields verification', at: ago(2 * HOUR), policyVersion: 2, amendmentId: 'amend-9', undone: false, reversible: true, work: { id: 'w-21', identifier: 'INV-21', title: 'Auto two', revision: 1 } },
-      { id: 'a3', gate: 'candidate_commit', reason: 'policy.auto_decision: candidate_commit by team policy v1 (L1)', at: ago(3 * HOUR), policyVersion: 1, amendmentId: null, undone: true, reversible: false, work: { id: 'w-22', identifier: 'INV-22', title: 'Auto three', revision: 2 } },
+      { id: 'a1', gate: 'candidate_commit', reason: 'policy.auto_decision: candidate_commit by team policy v2 (L1) — matched: type bug, priority 2', at: ago(HOUR), policyVersion: 2, amendmentId: null, undone: false, reversible: true, work: { id: 'w-20', identifier: 'INV-20', title: 'Auto one', revision: 3, team: { id: 'team-1' } } },
+      { id: 'a2', gate: 'contract_amendment', reason: 'policy.auto_decision: contract_amendment by team policy v2 (L1) — matched: amendment_fields verification', at: ago(2 * HOUR), policyVersion: 2, amendmentId: 'amend-9', undone: false, reversible: true, work: { id: 'w-21', identifier: 'INV-21', title: 'Auto two', revision: 1, team: { id: 'team-1' } } },
+      { id: 'a3', gate: 'candidate_commit', reason: 'policy.auto_decision: candidate_commit by team policy v1 (L1)', at: ago(3 * HOUR), policyVersion: 1, amendmentId: null, undone: true, reversible: false, work: { id: 'w-22', identifier: 'INV-22', title: 'Auto three', revision: 2, team: { id: 'team-1' } } },
+      { id: 'a4', gate: 'review_accept', reason: 'policy.auto_decision: review_accept by team policy v2 (L2) — matched: auto_accept_grade CLEAR, pr_merged true, checks green; GitHub confirms PR #40 merged; 2 CI check(s) green.', at: ago(4 * HOUR), policyVersion: 2, amendmentId: null, undone: false, reversible: true, work: { id: 'w-23', identifier: 'INV-23', title: 'Auto four', revision: 5, team: { id: 'team-1' } } },
     ];
     mutation('WorkUncommit').mockResolvedValue({ data: { workUncommit: { success: true, message: null } } });
     mutation('ContractAmendmentReopen').mockResolvedValue({ data: { contractAmendmentReopen: { success: true, message: null } } });
+    mutation('IssueUpdate').mockResolvedValue({ data: { issueUpdate: { success: true, message: null } } });
     renderPage();
     const group = screen.getByRole('group', { name: 'Handled for you' });
-    expect(within(group).getByText(/Handled for you \(3\)/)).toBeInTheDocument();
+    expect(within(group).getByText(/Handled for you \(4\)/)).toBeInTheDocument();
     expect(within(group).getByText(/Why: candidate_commit by team policy v2/)).toBeInTheDocument();
     expect(within(group).getByText('Returned')).toBeInTheDocument();
     fireEvent.click(within(group).getByRole('button', { name: 'Return to candidates' }));
@@ -244,6 +246,9 @@ describe('Needs you (INV-1092)', () => {
     fireEvent.change(within(group).getByLabelText('Reason for returning INV-21'), { target: { value: 'read it first' } });
     fireEvent.click(within(group).getByRole('button', { name: 'Confirm return' }));
     await waitFor(() => expect(mutation('ContractAmendmentReopen')).toHaveBeenCalledWith({ variables: { input: { amendmentId: 'amend-9', reason: 'read it first' } } }));
+    // An auto-acceptance (INV-1492) goes back to Review with the team's Review state, as the issue page does.
+    fireEvent.click(within(group).getByRole('button', { name: 'Return to Review' }));
+    await waitFor(() => expect(mutation('IssueUpdate')).toHaveBeenCalledWith({ variables: { id: 'w-23', input: { stateId: 'state-review', expectedRevision: 5 } } }));
     handled = [];
   });
 
