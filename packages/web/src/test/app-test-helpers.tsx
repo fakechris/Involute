@@ -518,6 +518,8 @@ type QueryState = {
   searchData?: WorkSearchQueryData;
   /** The hover previews behind work references in prose (INV-1466). */
   previewsData?: WorkPreviewsQueryData;
+  /** The single issue a ?issue= link names (INV-1469); absent, the board's own issue answers. */
+  issuePageData?: { issue: IssueSummary | null };
 };
 
 export function renderApp(
@@ -856,9 +858,15 @@ export function renderApp(
 
     if (options?.variables && 'id' in options.variables) {
       const issueId = String(options.variables.id);
+      // A ?issue= link may name an issue the board does not list (INV-1469);
+      // the test states it, otherwise the board's own issue answers.
+      const issue =
+        queryState.issuePageData?.issue ??
+        queryState.data?.issues.nodes.find((candidate) => candidate.id === issueId || candidate.identifier === issueId) ??
+        null;
       return {
         data: {
-          issue: queryState.data?.issues.nodes.find((issue) => issue.id === issueId || issue.identifier === issueId) ?? null,
+          issue,
           users: queryState.data?.users ?? { nodes: [] },
           issueLabels: queryState.data?.issueLabels ?? { nodes: [] },
         },
