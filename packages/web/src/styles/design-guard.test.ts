@@ -67,6 +67,9 @@ const LOCAL_CUSTOM_PROPERTIES = new Set<string>([
   // Set inline on .project-timeline__grid from the fact window and read by the coverage gap band.
   '--timeline-gap-left',
   '--timeline-gap-width',
+  // Set when the hover card of a work reference is placed (INV-1466) and read by .work-reference__popover.
+  '--work-reference-top',
+  '--work-reference-left',
 ]);
 
 /**

@@ -118,6 +118,7 @@ import type {
 } from './issue-service.js';
 import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
 import { searchIssues, type IssueSearchHit } from './issue-search.js';
+import { resolveIssuePreviews, type IssuePreviewRecord } from './issue-preview.js';
 import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
 
 import { requireAuthentication, type GraphQLContext } from './auth.js';
@@ -407,6 +408,35 @@ const typeDefs = /* GraphQL */ `
     attachmentFilename: String
   }
 
+  """
+  A work item as a hover preview: what a reference in prose points at
+  (INV-1466). Only what a reader may see is returned — an item they cannot
+  read is simply not in the list, so its reference stays plain text.
+  """
+  type IssuePreview {
+    id: ID!
+    "The reference as the reader wrote it, normalized (uppercased)."
+    reference: String!
+    "The item's own identifier — the canonical form of the reference."
+    identifier: String!
+    title: String!
+    "The workflow state's display name (Ready, In Progress, In Review…)."
+    stateName: String!
+    "The workflow state type (UNSTARTED, STARTED, REVIEW, COMPLETED, CANCELED)."
+    stateType: WorkflowStateType!
+    commitmentStatus: CommitmentStatus!
+    priority: Int!
+    kind: WorkKind!
+    repository: String
+    "The team the item belongs to."
+    teamKey: String!
+    "The Type label (Bug, Feature, Improvement, Research, Incident); null when the item carries none."
+    typeLabel: String
+    "The opening of the description, whitespace-collapsed; null when there is none."
+    excerpt: String
+    updatedAt: DateTime!
+  }
+
   type DeliveryGrant { revision: Int! policyJson: String! approvedAt: DateTime! approvedById: String! revokedAt: DateTime }
   type DeliveryExecution { issue: Issue! technicalReady: Boolean! }
   type DeliveryContext { viewerCanWrite: Boolean! work: Issue! grant: DeliveryGrant units: [DeliveryExecution!]! authorizationValid: Boolean! authorizationMessage: String! }
@@ -424,6 +454,13 @@ const typeDefs = /* GraphQL */ `
     viewerCapabilities: ViewerCapabilities!
     workspaceSettings: WorkspaceSettings!
     issue(id: String!): Issue
+    """
+    The work items behind references in prose (INV-1466): a batch of
+    identifiers (as typed, e.g. "INV-1446" or the project alias "LUM-398")
+    resolved to the small card the web app shows when a reader hovers a
+    reference. Only readable items come back.
+    """
+    issuePreviews(identifiers: [String!]!): [IssuePreview!]!
     issues(first: Int!, after: String, filter: IssueFilter, query: String): IssueConnection!
     "Archived teams are left out unless includeArchived is true."
     teams(filter: TeamFilter, includeArchived: Boolean): TeamConnection!
@@ -3005,6 +3042,13 @@ const resolvers = {
       }
 
       return issue;
+    },
+    issuePreviews: async (
+      _parent: unknown,
+      args: { identifiers: string[] },
+      context: GraphQLContext,
+    ): Promise<IssuePreviewRecord[]> => {
+      return resolveIssuePreviews(context.prisma, args.identifiers ?? [], buildReadableIssueWhere(context));
     },
     issues: async (
       _parent: unknown,

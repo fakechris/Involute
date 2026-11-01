@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 
 import { App } from './App';
+import { WorkReferenceProvider } from './components/WorkReference';
 import { AppApolloProvider } from './lib/apollo';
 import { RevisitRefresh } from './lib/revisit-refresh';
 import './styles/app.css';
@@ -22,7 +23,10 @@ ReactDOM.createRoot(rootElement).render(
     <AppApolloProvider>
       <BrowserRouter>
         <RevisitRefresh />
-        <App />
+        {/* The references in prose ask the server about themselves (INV-1466). */}
+        <WorkReferenceProvider>
+          <App />
+        </WorkReferenceProvider>
       </BrowserRouter>
     </AppApolloProvider>
   </React.StrictMode>,

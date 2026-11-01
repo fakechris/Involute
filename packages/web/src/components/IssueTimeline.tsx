@@ -5,6 +5,7 @@ import { ISSUE_TIMELINE_QUERY, ISSUE_TIMELINE_STAR_MUTATION, ISSUE_TIMELINE_UNST
 import type { CommentSummary } from '../board/types';
 import { IcoLabel } from './Icons';
 import { EmptyState } from './status';
+import { WorkReferenceText } from './WorkReference';
 
 interface TimelineActor {
   id: string;
@@ -173,7 +174,9 @@ export function IssueTimeline({
               <span style={{ flex: 1, minWidth: 0 }}>
                 {actorName(row.entry.actor) ? <strong className="issue-timeline__actor">{actorName(row.entry.actor)}</strong> : null}{' '}
                 {row.entry.summary}
-                {row.entry.detail ? <span className="issue-timeline__detail"> — {row.entry.detail}</span> : null}
+                {row.entry.detail ? (
+                  <span className="issue-timeline__detail"> — <WorkReferenceText text={row.entry.detail} /></span>
+                ) : null}
                 {row.entry.url ? (
                   <>
                     {' '}
