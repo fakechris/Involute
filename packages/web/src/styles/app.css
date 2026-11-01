@@ -2682,6 +2682,214 @@ kbd {
   white-space: nowrap;
 }
 
+/* Neighbourhood of one item (INV-1496) */
+
+.issue-neighbourhood {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.issue-neighbourhood__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.issue-neighbourhood__rollups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.issue-neighbourhood__rollup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-2);
+  background: var(--bg-hover);
+}
+
+.issue-neighbourhood__rollup-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.issue-neighbourhood__rollup-id {
+  font-size: 11.5px;
+  color: var(--fg-dim);
+  flex-shrink: 0;
+}
+
+.issue-neighbourhood__rollup-title {
+  font-size: 12.5px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-neighbourhood__bar {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--bg-hover);
+  overflow: hidden;
+}
+
+.issue-neighbourhood__bar::-webkit-progress-bar {
+  background: var(--bg-hover);
+  border-radius: 2px;
+}
+
+.issue-neighbourhood__bar::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.issue-neighbourhood__bar::-moz-progress-bar {
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.issue-neighbourhood__rollup-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--fg-dim);
+}
+
+.issue-neighbourhood__chip {
+  padding: 0 5px;
+  border-radius: var(--r-1);
+  font-size: 10.5px;
+  line-height: 16px;
+  border: 1px solid var(--border);
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+
+.issue-neighbourhood__chip--progress {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-weak);
+}
+
+.issue-neighbourhood__chip--blocked {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-weak);
+}
+
+.issue-neighbourhood__toggle {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 12px;
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+
+.issue-neighbourhood__spine,
+.issue-neighbourhood__group {
+  display: flex;
+  flex-direction: column;
+}
+
+.issue-neighbourhood__group {
+  gap: 2px;
+}
+
+.issue-neighbourhood__group-label {
+  font-size: 12px;
+  color: var(--fg-dim);
+  margin-top: 4px;
+}
+
+.issue-neighbourhood__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding-right: 8px;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  text-align: left;
+  font-size: 12.5px;
+  cursor: pointer;
+  color: inherit;
+}
+
+.issue-neighbourhood__row:hover {
+  background: var(--bg-hover);
+}
+
+.issue-neighbourhood__row--focus {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.issue-neighbourhood__row--blocked .issue-neighbourhood__id {
+  color: var(--danger);
+}
+
+.issue-neighbourhood__id {
+  font-size: 12px;
+  color: var(--fg-dim);
+  flex-shrink: 0;
+}
+
+.issue-neighbourhood__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The ladder: each rung steps in. The depth is a data attribute, not an
+   inline style, so the indent stays in the stylesheet. */
+
+.issue-neighbourhood__row[data-depth='0'] { padding-left: 8px; }
+.issue-neighbourhood__row[data-depth='1'] { padding-left: 21px; }
+.issue-neighbourhood__row[data-depth='2'] { padding-left: 34px; }
+.issue-neighbourhood__row[data-depth='3'] { padding-left: 47px; }
+.issue-neighbourhood__row[data-depth='4'] { padding-left: 60px; }
+.issue-neighbourhood__row[data-depth='5'] { padding-left: 73px; }
+.issue-neighbourhood__row[data-depth='6'] { padding-left: 86px; }
+.issue-neighbourhood__row[data-depth='7'] { padding-left: 99px; }
+
+/* The page variant reads wider than the drawer's column. */
+
+.issue-neighbourhood__rollups--page {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.issue-neighbourhood__rollups--page .issue-neighbourhood__rollup {
+  flex: 1 1 260px;
+  max-width: 420px;
+}
+
+.issue-neighbourhood__spine--page .issue-neighbourhood__row {
+  height: 32px;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
 /* Relations (issue detail, INV-679) */
 
 .issue-relations {

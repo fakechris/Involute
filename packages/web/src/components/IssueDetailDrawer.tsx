@@ -9,6 +9,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { ActorBadge } from './ActorBadge';
 import { DeliverySection } from './DeliveryPanel';
 import { IssueRelations } from './IssueRelations';
+import { IssueNeighbourhood } from './graph/IssueNeighbourhood';
 import { AddSubIssueButton } from './AddSubIssueButton';
 import { BugSlaBadge, FollowUpDeadlineBadge } from './BugSlaBadge';
 import { ClaimControl } from './ClaimControl';
@@ -513,6 +514,19 @@ export function IssueDetailDrawer({
                 onClick={() => navigate(`/work/${activeIssue.id}`)}
               >Work context</button>
             </div>
+
+            {/*
+                The neighbourhood comes before the lists it summarises: it is the
+                orientation — where this item sits, how its milestone is going,
+                what it waits on — and "Sub-issues" and "Relations" are the
+                detail under it (INV-1496).
+            */}
+            <IssueNeighbourhood
+              key={`neighbourhood-${activeIssue.id}`}
+              issueId={activeIssue.id}
+              issueIdentifier={activeIssue.identifier}
+              onOpen={(issueId) => navigate(`/issue/${issueId}`)}
+            />
 
             {activeIssue.children.nodes.length > 0 ? (
               <div className="issue-panel__section">

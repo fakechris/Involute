@@ -374,8 +374,37 @@ export interface ProjectWorkGraphQueryVariables {
   includeCandidates?: boolean;
 }
 
-export interface GraphProjectsQueryData {
-  projectSummary: {
+/** Progress over one item's committed descendants (INV-1496). */
+export interface WorkRollupRecord {
+  id: string;
+  identifier: string;
+  title: string;
+  kind: WorkKind;
+  total: number;
+  completed: number;
+  inProgress: number;
+  blocked: number;
+  canceled: number;
+}
+
+/** One item's neighbourhood: the chain above it, its children, siblings and dependencies. */
+export interface IssueGraphQueryData {
+  issueGraph: {
+    focus: WorkGraphNodeRecord;
+    nodes: WorkGraphNodeRecord[];
+    ancestors: WorkGraphNodeRecord[];
+    edges: Array<{ id: string; type: WorkLinkType; fromId: string; toId: string }>;
+    rollups: WorkRollupRecord[];
+    truncated: boolean;
+  };
+}
+
+export interface IssueGraphQueryVariables {
+  id: string;
+  depth?: number;
+}
+
+export interface GraphProjectsQueryData {  projectSummary: {
     totalCount: number;
     projects: Array<{ repository: string; name: string; identifier: string | null; totalCount: number }>;
   };

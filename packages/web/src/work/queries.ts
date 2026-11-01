@@ -244,6 +244,83 @@ export const PROJECT_WORK_GRAPH_QUERY = gql`
   }
 `;
 
+// One item's neighbourhood (INV-1496): the chain above it, its children, its
+// siblings and the BLOCKS chain around it. `depth` is how many BLOCKS steps
+// the read may follow from the focus; the client asks again when the reader
+// widens the lens.
+export const ISSUE_GRAPH_QUERY = gql`
+  query IssueGraph($id: String!, $depth: Int) {
+    issueGraph(id: $id, depth: $depth) {
+      truncated
+      focus {
+        id
+        identifier
+        title
+        kind
+        commitmentStatus
+        state {
+          id
+          name
+          type
+        }
+        assignee {
+          id
+          name
+        }
+      }
+      nodes {
+        id
+        identifier
+        title
+        kind
+        commitmentStatus
+        state {
+          id
+          name
+          type
+        }
+        assignee {
+          id
+          name
+        }
+      }
+      ancestors {
+        id
+        identifier
+        title
+        kind
+        commitmentStatus
+        state {
+          id
+          name
+          type
+        }
+        assignee {
+          id
+          name
+        }
+      }
+      edges {
+        id
+        type
+        fromId
+        toId
+      }
+      rollups {
+        id
+        identifier
+        title
+        kind
+        total
+        completed
+        inProgress
+        blocked
+        canceled
+      }
+    }
+  }
+`;
+
 // The Timeline view needs the graph and the audit trail together. Two queries
 // meant the server resolved the whole project twice (INV-1445), so the timeline
 // view reads both in one request; the outline and dependency views keep the

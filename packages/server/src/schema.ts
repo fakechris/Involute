@@ -182,6 +182,7 @@ import { bugsFixedBetween } from './bugs-fixed-between.js';
 import { serverBuild } from './protocol-info.js';
 import { getUploadsDirectory } from './uploads.js';
 import { loadProjectWorkGraph, type ProjectWorkGraph } from './work-graph-view.js';
+import { loadIssueWorkGraph, type IssueWorkGraph } from './issue-graph-view.js';
 import { loadWorkTimelines } from './work-timeline.js';
 import { dependencyHints } from './mention-links.js';
 import { loadWorkHygiene } from './work-hygiene.js';
@@ -487,6 +488,12 @@ const typeDefs = /* GraphQL */ `
     queue uses — and every typed link touching them.
     """
     workGraph(project: String!, includeCandidates: Boolean): WorkGraph!
+    """
+    One work item's neighbourhood (INV-1496): the CONTAINS chain above it, its
+    direct children, its siblings, and the BLOCKS chain around it — the same
+    typed work graph read from a single item instead of from a project.
+    """
+    issueGraph(id: String!, depth: Int): IssueGraph!
     """
     Where a team's committed work falls short of work-graph norm v1 (INV-718/721):
     unplaced items, mentions without links, prose dependencies without BLOCKS,
@@ -1447,6 +1454,45 @@ const typeDefs = /* GraphQL */ `
     timeline: [WorkTimelineEntry!]!
     """The team's cycles, for the timeline's cycle band."""
     cycles: [Cycle!]!
+  }
+
+  """
+  One work item's neighbourhood (INV-1496): the CONTAINS chain above it, its
+  direct children, its siblings, and the BLOCKS chain around it.
+  """
+  type IssueGraph {
+    """The item the neighbourhood is centred on."""
+    focus: Issue!
+    """Every item in the neighbourhood this viewer may read."""
+    nodes: [Issue!]!
+    """The typed links between those items."""
+    edges: [WorkGraphEdge!]!
+    """The CONTAINS chain, topmost ancestor first, ending at the focus's parent."""
+    ancestors: [Issue!]!
+    """
+    Progress over the nearest milestone / epic ancestors, nearest first. The
+    counts are by state category, so "3 of 8 done" and "2 in flight" are both
+    readable from one row.
+    """
+    rollups: [WorkRollup!]!
+    """True when the neighbourhood has more items than one read returns."""
+    truncated: Boolean!
+  }
+
+  """Progress over one item's committed descendants (INV-1496)."""
+  type WorkRollup {
+    id: ID!
+    identifier: String!
+    title: String!
+    kind: WorkKind!
+    """Committed descendants below the item; the item itself is not counted."""
+    total: Int!
+    completed: Int!
+    """Started, plus waiting for a human in review."""
+    inProgress: Int!
+    """Descendants waiting on something that is not finished yet."""
+    blocked: Int!
+    canceled: Int!
   }
 
   enum WorkHistoryCompleteness {
@@ -3790,6 +3836,22 @@ const resolvers = {
         { project: args.project, includeCandidates: args.includeCandidates ?? false },
         buildReadableIssueWhere(context),
       ),
+    issueGraph: async (
+      _parent: unknown,
+      args: { id: string; depth?: number | null },
+      context: GraphQLContext,
+    ): Promise<IssueWorkGraph> => {
+      const work = await findWorkByIdOrIdentifier(context.prisma, args.id);
+      if (!work) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+      // The neighbourhood of an item the reader may not open is not the
+      // reader's business — refuse before anything is read.
+      await assertCanReadIssue(context.prisma, context, work.id);
+      return loadIssueWorkGraph(
+        context.prisma,
+        { id: work.id, depth: args.depth ?? null },
+        buildReadableIssueWhere(context),
+      );
+    },
     readyWork: async (
       _parent: unknown,
       args: { filter?: ListReadyWorkInput | null; query?: string | null },
