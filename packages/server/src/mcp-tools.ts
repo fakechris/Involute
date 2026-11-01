@@ -1,4 +1,5 @@
 import { requestNeedInfo, withdrawNeedInfo } from './need-info-service.js';
+import { autonomyToGraphQL, loadAutonomyFor } from './autonomy-service.js';
 import { protocolInfo } from './protocol-info.js';
 import { groupForAction, hidesFromCaller, MCP_TOOL_GROUPS, resolveMcpCall, type McpToolGroup } from './mcp-tool-groups.js';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
@@ -488,7 +489,8 @@ async function callMcpAction(
       bundle.blockedBy = bundle.blockedBy.filter((item) => visible.has(item.id));
       bundle.blocks = bundle.blocks.filter((item) => visible.has(item.id));
       const pages = await Promise.all(WORK_SECTIONS.map((section) => readWorkPage(context.prisma, work.id, section, section === 'audits' ? 20 : 10, null, buildReadableIssueWhere(context))));
-      return { ...bundle, pages: Object.fromEntries(pages.map((page) => [page.section, page])), continuation: 'Call work_get_context(id, section, after=pageInfo.endCursor) while hasNextPage is true.' };
+      const autonomy = autonomyToGraphQL(await loadAutonomyFor(context.prisma, { id: work.id, teamId: work.teamId, kind: work.kind, parentId: work.parentId ?? null }, context.viewer ? { id: context.viewer.id, actorKind: context.viewer.actorKind } : null));
+      return { ...bundle, autonomy, pages: Object.fromEntries(pages.map((page) => [page.section, page])), continuation: 'Call work_get_context(id, section, after=pageInfo.endCursor) while hasNextPage is true.' };
     }
     case 'work_list_ready': {
       const readyInput: Parameters<typeof listReadyWork>[1] = {};

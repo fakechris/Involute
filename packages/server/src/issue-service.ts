@@ -1,4 +1,5 @@
 import { reserveWorkIdempotency, hashIdempotencyRequest, completeWorkIdempotency } from './idempotency.js';
+import { syncAutoAcceptBugsPolicy } from './autonomy-service.js';
 import { validProjectWebOrigins } from './web-origins.js';
 import type { BugReproducibility, Comment, Issue, IssueSeverity, Prisma, PrismaClient, WorkflowState, WorkflowStateType, WorkResolution } from '@prisma/client';
 
@@ -682,6 +683,8 @@ export async function updateIssue(
       if (actor.actorKind !== 'HUMAN') throw createValidationError(AUTO_ACCEPT_BUGS_HUMAN_ONLY_MESSAGE);
       if ((('kind' in input && input.kind) || existingIssue.kind) !== 'PROJECT') throw createValidationError(AUTO_ACCEPT_BUGS_PROJECT_ONLY_MESSAGE);
       data.autoAcceptBugs = input.autoAcceptBugs;
+      // The same switch, as policy: an L2 / Type Bug override on the project (INV-1488).
+      await syncAutoAcceptBugsPolicy(transaction, id, input.autoAcceptBugs, actor.actorId ?? null);
     }
 
     if ('kind' in input && input.kind) {

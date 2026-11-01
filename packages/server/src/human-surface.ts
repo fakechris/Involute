@@ -42,6 +42,8 @@ export type HumanSurface =
   | { kind: 'gap'; tracking: string; note: string };
 
 export const MUTATION_SURFACES: Record<string, HumanSurface> = {
+  // INV-1488 ships the policy data and mutation; the three settings pages are INV-1489.
+  workflowPolicySet: { kind: 'gap', tracking: 'INV-1489', note: 'Administration → Autonomy, Team settings → Autonomy and the project override arrive with INV-1489.' },
   executorUpdate: { kind: 'web', components: ['components/ExecutorPanel.tsx'], label: 'Stop executor', test: 'components/ExecutorPanel.test.tsx' },
   deliveryChangePropose: { kind: 'web', components: ['components/DeliveryPanel.tsx'], label: 'Propose delivery change', test: 'components/DeliveryPanel.test.tsx' },
   deliveryChangeDecide: { kind: 'web', doc: 'DELIVERY_DECIDE_MUTATION', components: ['components/DeliveryPanel.tsx', 'routes/AttentionPage.tsx'], label: 'Approve delivery change', test: 'components/DeliveryPanel.test.tsx' },

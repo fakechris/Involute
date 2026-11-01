@@ -1,6 +1,6 @@
 # Autonomy policy: who decides at each gate (design, INV-1485)
 
-Status: **design, not implemented**. Behaviour today is unchanged: commit, reject,
+Status: **design; step 1 (INV-1488) implemented** — `WorkflowPolicy` / `AgentTrust` rows, the pure resolver `autonomy-policy.ts`, `Issue.autonomy` and MCP `work_get_context.autonomy`, `workflowPolicySet` for Admins and team Owners. No gate opens yet. Behaviour today is unchanged: commit, reject,
 accept and contract amendments are human-only, and the only configurable gate is
 `PROJECT.autoAcceptBugs` (INV-1075). This page is the product and data design
 that turns those constants into a policy a workspace sets, a team adopts and a
