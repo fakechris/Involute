@@ -326,7 +326,6 @@ export async function observeLabelFor(
   const work = await prisma.issue.findUnique({ where: { id: item.workId }, include: { labels: { select: { name: true } } } });
   if (!work) return null;
   const resolved = await loadAutonomyFor(prisma, work);
-  if (!resolved.observing) return null;
   const facts = await factsForWork(prisma, work);
   if (gate === 'contract_amendment') {
     const amendment = await prisma.contractAmendment.findUnique({ where: { id: item.subjectId } });
@@ -334,7 +333,13 @@ export async function observeLabelFor(
     facts.amendment_fields = amendmentChanges(amendment).map((change) => change.field);
   }
   const decision = decide(resolved, gate, facts);
-  if (!decision.matched) return null;
-  const summary = describeFacts(resolved.gates[gate].condition, facts);
-  return `Would be handled under L${resolved.requested}${summary ? `: ${summary}` : ''}`;
+  if (resolved.observing) {
+    if (!decision.matched) return null;
+    const summary = describeFacts(resolved.gates[gate].condition, facts);
+    return `Would be handled under L${resolved.requested}${summary ? `: ${summary}` : ''}`;
+  }
+  // Live policy with an auto gate that did not act: say why it is still a person's decision (INV-1491).
+  // A matched gate that did not act (a person proposed it, or the commit was refused) says nothing here: the gate acts at proposal time and its refusal is on the timeline.
+  if (resolved.gates[gate].decider === 'auto' && !decision.matched) return decision.reason;
+  return null;
 }

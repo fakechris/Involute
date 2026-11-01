@@ -15,8 +15,9 @@ import { RespondToAgent } from '../components/RespondToAgent';
 import { useListKeys } from '../components/useListKeys';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { recordCommitGesture, undoStatusGesture } from '../undo/status-undo';
-import { ATTENTION_PAGE_QUERY, WORK_COMMIT_MUTATION, WORK_CONTEXT_PAGE_QUERY, WORK_REVIEW_MUTATION } from '../work/queries';
+import { ATTENTION_PAGE_QUERY, CONTRACT_AMENDMENT_REOPEN_MUTATION, WORK_COMMIT_MUTATION, WORK_CONTEXT_PAGE_QUERY, WORK_REVIEW_MUTATION, WORK_UNCOMMIT_MUTATION } from '../work/queries';
 import type {
+  HandledItemNode,
   AttentionItemNode,
   AttentionKind,
   AttentionPageQueryData,
@@ -608,6 +609,7 @@ export function AttentionPage() {
           </div>
         </div>
       ) : null}
+      <HandledForYou items={data?.handledForYou ?? []} onChanged={refresh} />
       {batchResults.length > 0 ? (
         <div className="attention-batch-results" role="status" aria-label="Batch results">
           <ul>
@@ -776,5 +778,65 @@ function WorkContextDecision({
       {run?.summary ? <MarkdownRenderer content={run.summary} size="sm" className="observation-card__body" /> : null}
       {agent ? <RespondToAgent workId={workId} agent={agent} /> : <EmptyState size="inline" title="No agent to answer on this work." />}
     </>
+  );
+}
+
+/**
+ * Handled for you (INV-1491, docs/autonomy-policy.md §4): what the autonomy
+ * policy decided on its own in the last week, each with why and a one-click
+ * return. Collapsed by default: it is information, not a queue.
+ */
+function HandledForYou({ items, onChanged }: { items: HandledItemNode[]; onChanged: () => unknown }) {
+  const [runUncommit] = useMutation<{ workUncommit: { success: boolean; message?: string | null } }, { id: string; expectedRevision: number }>(WORK_UNCOMMIT_MUTATION);
+  const [runReopen] = useMutation<{ contractAmendmentReopen: { success: boolean; message?: string | null } }, { input: { amendmentId: string; reason: string } }>(CONTRACT_AMENDMENT_REOPEN_MUTATION);
+  const [notice, setNotice] = useState<{ id: string; text: string; ok: boolean } | null>(null);
+  const [reasonFor, setReasonFor] = useState<{ id: string; text: string } | null>(null);
+  if (items.length === 0) return null;
+
+  async function returnToCandidates(item: HandledItemNode) {
+    const result = await runUncommit({ variables: { id: item.work.id, expectedRevision: item.work.revision } });
+    const payload = result.data?.workUncommit;
+    setNotice({ id: item.id, ok: Boolean(payload?.success), text: payload?.success ? `${item.work.identifier} is a candidate again; counted as an override of the policy.` : payload?.message ?? 'Could not return it.' });
+    if (payload?.success) await onChanged();
+  }
+
+  async function returnToMe(item: HandledItemNode, reason: string) {
+    if (!item.amendmentId) return;
+    const result = await runReopen({ variables: { input: { amendmentId: item.amendmentId, reason } } });
+    const payload = result.data?.contractAmendmentReopen;
+    setNotice({ id: item.id, ok: Boolean(payload?.success), text: payload?.success ? `The amendment on ${item.work.identifier} waits for you again; the contract was reverted.` : payload?.message ?? 'Could not return it.' });
+    setReasonFor(null);
+    if (payload?.success) await onChanged();
+  }
+
+  return (
+    <details className="attention-handled" aria-label="Handled for you">
+      <summary>Handled for you ({items.length}) — automatic decisions this week</summary>
+      <ul className="attention-handled__list">
+        {items.map((item) => (
+          <li key={item.id} className="attention-handled__row">
+            <span className="mono">{item.work.identifier}</span>{' '}
+            <span>{item.gate === 'candidate_commit' ? 'Auto-committed' : item.gate === 'contract_amendment' ? 'Amendment auto-accepted' : 'Auto-accepted'}</span>{' '}
+            <span className="list-row__note" title={item.reason}>{item.reason.replace(/^policy\.auto_decision:\s*/, 'Why: ')}</span>{' '}
+            <span title={new Date(item.at).toLocaleString()}>{formatWait(item.at)} ago</span>{' '}
+            {item.undone ? <Badge>Returned</Badge> : item.reversible ? (
+              item.gate === 'contract_amendment' ? (
+                reasonFor?.id === item.id ? (
+                  <span className="inline-form">
+                    <input aria-label={`Reason for returning ${item.work.identifier}`} value={reasonFor.text} placeholder="Why" onChange={(event) => setReasonFor({ id: item.id, text: event.target.value })} />
+                    <Btn size="sm" variant="accent" disabled={!reasonFor.text.trim()} onClick={() => void returnToMe(item, reasonFor.text.trim())}>Confirm return</Btn>
+                  </span>
+                ) : (
+                  <Btn size="sm" variant="ghost" onClick={() => setReasonFor({ id: item.id, text: '' })}>Return to me</Btn>
+                )
+              ) : (
+                <Btn size="sm" variant="ghost" onClick={() => void returnToCandidates(item)}>Return to candidates</Btn>
+              )
+            ) : <Badge>In progress</Badge>}
+            {notice?.id === item.id ? <span role={notice.ok ? 'status' : 'alert'} className="list-row__note">{notice.text}</span> : null}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }

@@ -607,7 +607,21 @@ export interface AttentionItemNode {
   wouldBeAutomatic?: string | null;
 }
 
+/** One automatic decision of the Autonomy Gate (INV-1491). */
+export interface HandledItemNode {
+  id: string;
+  gate: 'candidate_commit' | 'contract_amendment' | 'review_accept';
+  reason: string;
+  at: string;
+  policyVersion: number | null;
+  amendmentId: string | null;
+  undone: boolean;
+  reversible: boolean;
+  work: { id: string; identifier: string; title: string; revision: number };
+}
+
 export interface AttentionPageQueryData {
+  handledForYou?: HandledItemNode[];
   attentionSummary: { total: number; byKind: Array<{ kind: AttentionKind; count: number; oldestSince: string | null }> };
   attention: { nodes: AttentionItemNode[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } };
   teams: { nodes: Array<Omit<CandidatesPageQueryData['teams']['nodes'][number], 'name'>> };
