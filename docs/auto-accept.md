@@ -93,3 +93,10 @@ Every gate pass leaves:
 - No remote GitHub API polling; agents declare objective signals in evidence
   summaries they attach
 - No Ops / runtime infra changes beyond schema migration + server code
+
+## Beyond bugs
+
+Opening this gate for other Types, and the other human gates (commit,
+amendment), is designed as a workspace → team → project policy with levels
+L0–L3 in [autonomy-policy.md](autonomy-policy.md) (INV-1485). Not implemented;
+this page remains the rule until it is.
