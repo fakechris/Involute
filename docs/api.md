@@ -228,6 +228,33 @@ query Issue($id: String!) {
 }
 ```
 
+### `issuePreviews(identifiers: [String!]!)`
+
+Resolves the work references a reader finds in prose (INV-1466): the small card the web app shows when a reader hovers `INV-1446` in a description, a comment or a run summary.
+
+Identifiers are given as the reader wrote them (`INV-1446`, `inv-1446`, or a project alias such as `LUM-398`, which resolves to `INV-398` and asserts the item belongs to that project). Only work the caller may read is returned — a reference to someone else's item simply does not come back, so it stays plain text on the page.
+
+```graphql
+query WorkPreviews($identifiers: [String!]!) {
+  issuePreviews(identifiers: $identifiers) {
+    id
+    reference        # the reference as it was written
+    identifier       # the item's own identifier
+    title
+    stateName
+    stateType
+    commitmentStatus
+    priority
+    kind
+    repository
+    teamKey
+    typeLabel
+    excerpt
+    updatedAt
+  }
+}
+```
+
 ### `issues(first: Int!, after: String, filter: IssueFilter)`
 
 Returns the issue connection. The server clamps `first` to a safe limit.
@@ -451,6 +478,12 @@ Severity (INV-1115): `Issue.severity: IssueSeverity` (`SEV1` Critical / `SEV2` M
 Reopens and regressions (INV-1120): a move from Done or Canceled to an open state, from any surface, writes a `WorkReopen` row with its `WorkAudit` and adds one to `Issue.reopenCount`; the row records whether the closed spell was entered by the Auto-Accept Gate (INV-1075). `bugSummary.metrics { closedEverCount reopenedCount reopenRate autoAcceptedCount reopenedAfterAutoAcceptCount reopenedAfterAutoAcceptRate }` counts committed bugs; rates are null with no denominator. `REGRESSED_BY` (A → B: B introduced the regression in A) is created like any typed link (`workLink`, MCP `work_relate`); IQL `link:regressed_by:INV-5` lists what INV-5 regressed and `link:regressed_by:none` lists work with no regression source.
 
 Reproducibility (INV-1122): `Issue.reproducibility: BugReproducibility` (`ALWAYS` / `SOMETIMES` / `ONCE`, nullable) says how often a bug shows up. Written through `issueUpdate`, `bugReport`, `workPropose` and MCP `work_update` / `work_propose` / `work_file_bug` (`reproducibility`; `null` clears it on update) and carried in audit snapshots. The bug gate (INV-1075) never auto-accepts a `SOMETIMES` or `ONCE` bug: it records a SKIPPED evaluation whose reason /in-review shows, without asking GitHub.
+
+### Autonomy (INV-1488)
+
+`Issue.autonomy: Autonomy!` is the resolved autonomy of a work item (docs/autonomy-policy.md): `level` 0–3 after the workspace ceiling and the acting agent's trust, `source` (`default` / `workspace` / `team` / `project` / `ceiling` / `agent_trust`), the level's `name` with `descriptionEn` / `descriptionZh`, `requested` / `requestedBy`, `observing`, the six `gates` (`gate`, `decider` human / auto / none, typed `condition`, `from`, `locked`) and `locked`. MCP `work_get_context` returns the same object as `autonomy`. In this step nothing acts on it: every gate still waits for a person; the deciders open in INV-1491 (L1), INV-1492 (L2) and INV-1493 (L3).
+
+`workflowPolicySet(input)` writes a new policy version for `scope` WORKSPACE (Admin; `scopeId` is the workspace id; may set `locked`), TEAM (team Owner or Admin; `scopeId` a team id) or PROJECT (team Owner or Admin; a committed PROJECT work id). `level` 0–3, optional `gates` overrides (`{ gate: { decider, condition? } }`, conditions only over the fields listed in `autonomy-policy.ts` `CONDITION_FIELDS`, unknown fields refused), optional L3 `intake` predicate, required `reason`, optional `observeDays` (0 or absent turns the level on now; observing is advice, never forced, decision INV-1486). Each write deactivates the previous row and records OpsAudit `policy.changed`. Agents have no MCP tool for it (`MCP_EXEMPTIONS`, INV-1486). Setting `PROJECT.autoAcceptBugs` (INV-1075) also writes or removes an L2 / Type Bug project override so the two never disagree; the bug gate still reads the column.
 
 Found-in (INV-1121): `Issue.foundInSha: String` (nullable, 7–40 lowercase hex) is the deploy a bug was found in — Involute deploys by SHA and has no version numbers (decision INV-1130). Written through `issueUpdate`, `bugReport`, `workPropose` and MCP `work_update` / `work_propose` / `work_file_bug` (`found_in_sha`; a `sha-` prefix is accepted, `null` clears it on update) and carried in audit snapshots and the timeline. The web Report bug dialog defaults it to `serverBuild.buildSha`, the server's `INVOLUTE_BUILD_SHA` (the published images set it to the source commit). The fix SHA is not stored: `bugsFixedBetween(repository, fromSha, toSha)` asks GitHub for the commits of `fromSha...toSha` (verifier credentials, `GITHUB_VERIFICATION_REPOSITORIES`; at most 1000 commits) and returns the readable bugs whose fix — a merge commit from a `pull_request.merged` webhook/sync, the head of evidence verified merged, or the bug gate's GitHub check — lies in it, in deploy order. When GitHub cannot list the range (unknown SHA, reversed range, too long, not configured, rate limit) the result has `known: false`, a `failureCode` and a `message`, never an empty success. /bugs has a "Fixed between deploys" form.
 

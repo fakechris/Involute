@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { boardQueryResult, renderApp } from './test/app-test-helpers';
+import { apolloMocks, boardQueryResult, getDocumentSource, renderApp } from './test/app-test-helpers';
 import { App } from './App';
 import type { GraphProjectsQueryData, ProjectWorkGraphQueryData, ProjectWorkTimelineQueryData, WorkGraphNodeRecord } from './work/types';
 
@@ -75,8 +75,66 @@ const timelineData: ProjectWorkTimelineQueryData = {
   },
 };
 
-function renderGraph(path: string) {
-  return renderApp(App, { data: boardQueryResult, loading: false, graphData, graphProjectsData: projectsData, timelineData }, [path]);
+function renderGraph(path: string, overrides: { graphData?: ProjectWorkGraphQueryData; timelineData?: ProjectWorkTimelineQueryData } = {}) {
+  return renderApp(
+    App,
+    {
+      data: boardQueryResult,
+      loading: false,
+      graphData: overrides.graphData ?? graphData,
+      graphProjectsData: projectsData,
+      timelineData: overrides.timelineData ?? timelineData,
+    },
+    [path],
+  );
+}
+
+/**
+ * The distinct workGraph documents the page asked for. A re-render asks again
+ * with the same document, which Apollo answers from its cache; what matters is
+ * that the page only ever uses one.
+ */
+function graphQueryDocuments(): string[] {
+  const sources = apolloMocks.useQuery.mock.calls.map(([document]) => getDocumentSource(document));
+  return [...new Set(sources.filter((source) => source.includes('query ProjectWorkGraph')))];
+}
+
+/** A project big enough to switch the timeline to its windowed rows. */
+function bigProject(count: number): { graph: ProjectWorkGraphQueryData; timeline: ProjectWorkTimelineQueryData } {
+  const nodes: WorkGraphNodeRecord[] = [
+    record('inv-96', 'fakechris/lumenbox', states.progress, 'PROJECT'),
+    record('inv-141', 'Big milestone', states.progress, 'MILESTONE'),
+  ];
+  const edges: ProjectWorkGraphQueryData['workGraph']['edges'] = [{ id: 'c0', type: 'CONTAINS', fromId: 'inv-96', toId: 'inv-141' }];
+  const trail: ProjectWorkTimelineQueryData['workGraph']['timeline'] = [];
+  for (let index = 0; index < count; index += 1) {
+    const id = `inv-1${String(index).padStart(4, '0')}`;
+    nodes.push(record(id, `Item ${index}`, states.ready));
+    edges.push({ id: `c-${index}`, type: 'CONTAINS', fromId: 'inv-141', toId: id });
+    trail.push({
+      workId: id,
+      committedAt: iso(2),
+      startedAt: null,
+      reviewAt: null,
+      completedAt: null,
+      canceledAt: null,
+      history: 'FULL',
+      transitions: [transition(2, 'UNSTARTED', 'Ready')],
+    });
+  }
+  return {
+    graph: {
+      workGraph: {
+        repository: 'fakechris/lumenbox',
+        truncated: false,
+        root: { id: 'inv-96', identifier: 'INV-96', title: 'fakechris/lumenbox' },
+        nodes,
+        externalNodes: [],
+        edges,
+      },
+    },
+    timeline: { workGraph: { timeline: trail, cycles: [] } },
+  };
 }
 
 describe('project graph page (INV-681)', () => {
@@ -187,6 +245,77 @@ describe('project graph page (INV-681)', () => {
 
     // The milestone spans its leaves; one of its three is done.
     expect(container.querySelector('[data-work-id="inv-141"] .timeline-span')).toHaveAttribute('title', expect.stringContaining('1/3 done'));
+  });
+
+  it('narrows the timeline to the fact window in the URL and lists the same items (INV-1446)', async () => {
+    const { container } = renderGraph('/graph?project=fakechris/lumenbox&view=timeline&scale=day&from=2026-09-03&to=2026-09-07');
+    await screen.findByRole('region', { name: 'Project timeline' });
+
+    // The items that recorded nothing inside the window are gone.
+    expect(container.querySelector('[data-work-id="inv-638"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-work-id="inv-700"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-work-id="inv-636"]')).toBeInTheDocument();
+
+    // The list holds the same items as the rows.
+    const list = screen.getByRole('region', { name: 'Items in this window' });
+    expect(within(list).getByRole('button', { name: 'Open INV-636' })).toBeInTheDocument();
+    expect(within(list).queryByRole('button', { name: 'Open INV-638' })).not.toBeInTheDocument();
+
+    // The bars are trimmed to the window: this one finished on the 8th, outside it.
+    const done = container.querySelector('[data-work-id="inv-637"]')!;
+    expect(done.querySelectorAll('.timeline-dot')).toHaveLength(0);
+    expect(done.querySelectorAll('.timeline-bar')).toHaveLength(2);
+  });
+
+  it('writes the fact window into the URL so a link can be shared (INV-1446)', async () => {
+    const { container } = renderGraph('/graph?project=fakechris/lumenbox&view=timeline&scale=day&from=2026-09-03&to=2026-09-07');
+    await screen.findByRole('region', { name: 'Project timeline' });
+    expect(screen.getByLabelText('Timeline window from')).toHaveValue('2026-09-03');
+
+    fireEvent.change(screen.getByLabelText('Timeline window from'), { target: { value: '2026-09-05' } });
+
+    // The window moved, so the item that recorded only on the 4th is gone.
+    expect(container.querySelector('[data-work-id="inv-636"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-work-id="inv-637"]')).toBeInTheDocument();
+    expect(screen.getByLabelText('Timeline window from')).toHaveValue('2026-09-05');
+  });
+
+  it('marks the stretch of the window that predates the recorded history (INV-1446)', async () => {
+    const { container } = renderGraph('/graph?project=fakechris/lumenbox&view=timeline&scale=day&from=2026-09-01&to=2026-09-07');
+    await screen.findByRole('region', { name: 'Project timeline' });
+    expect(container.querySelector('.timeline-gap')).toBeInTheDocument();
+    expect(screen.getByText(/no recorded history before/)).toBeInTheDocument();
+  });
+
+  it('reads the graph and its audit trail in one request on the timeline view (INV-1445)', async () => {
+    renderGraph('/graph?project=fakechris/lumenbox&view=timeline');
+    await screen.findByRole('region', { name: 'Project timeline' });
+
+    const documents = graphQueryDocuments();
+    expect(documents).toHaveLength(1);
+    expect(documents[0]).toContain('query ProjectWorkGraphTimeline');
+    expect(documents[0]).toContain('timeline');
+  });
+
+  it('keeps the outline view on the lighter graph document', async () => {
+    renderGraph('/graph?project=fakechris/lumenbox');
+    await screen.findByRole('tree', { name: 'Project outline' });
+
+    const documents = graphQueryDocuments();
+    expect(documents).toHaveLength(1);
+    expect(documents[0]).not.toContain('timeline');
+  });
+
+  it('mounts only the visible rows of a large project (INV-1444)', async () => {
+    const big = bigProject(2000);
+    const { container } = renderGraph('/graph?project=fakechris/lumenbox&view=timeline', { graphData: big.graph, timelineData: big.timeline });
+    await screen.findByRole('region', { name: 'Project timeline' });
+
+    const rows = container.querySelectorAll('[data-work-id]');
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.length).toBeLessThan(200);
+    // The rows that are not mounted still take their place on the scrollbar.
+    expect(container.querySelector('.project-timeline__spacer--bottom')).toBeInTheDocument();
   });
 
   it('keeps the chosen scale in the URL', async () => {

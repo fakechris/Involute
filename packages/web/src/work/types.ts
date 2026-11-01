@@ -358,6 +358,17 @@ export interface ProjectWorkGraphQueryData {
   };
 }
 
+/**
+ * The graph document and the merged timeline document share one shape; the
+ * merged one adds the audit trail (INV-1445).
+ */
+export interface ProjectWorkGraphTimelineQueryData extends ProjectWorkGraphQueryData {
+  workGraph: ProjectWorkGraphQueryData['workGraph'] & {
+    timeline?: ProjectWorkTimelineQueryData['workGraph']['timeline'];
+    cycles?: ProjectWorkTimelineQueryData['workGraph']['cycles'];
+  };
+}
+
 export interface ProjectWorkGraphQueryVariables {
   project: string;
   includeCandidates?: boolean;
@@ -520,6 +531,37 @@ export interface WorkSearchHit {
 
 export interface WorkSearchQueryData {
   search: WorkSearchHit[];
+}
+
+/**
+ * What a reference in prose points at (INV-1466): the small card a reader
+ * sees when they hover a work reference.
+ */
+export interface WorkPreview {
+  id: string;
+  /** The reference as the reader wrote it, normalized. */
+  reference: string;
+  /** The item's own identifier — the canonical form of the reference. */
+  identifier: string;
+  title: string;
+  stateName: string;
+  stateType: string;
+  commitmentStatus: CommitmentStatus;
+  priority: number;
+  kind: WorkKind;
+  repository: string | null;
+  teamKey: string;
+  typeLabel: string | null;
+  excerpt: string | null;
+  updatedAt: string;
+}
+
+export interface WorkPreviewsQueryData {
+  issuePreviews: WorkPreview[];
+}
+
+export interface WorkPreviewsQueryVariables {
+  identifiers: string[];
 }
 
 export interface SearchLabelsQueryData {

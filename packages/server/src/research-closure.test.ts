@@ -76,7 +76,7 @@ describe('research closure (Type: Research)', () => {
   async function proposeAndCommit(labels: string[], kind: 'ISSUE' | 'MILESTONE' = 'ISSUE') {
     const candidate = await proposeWork(
       prisma,
-      { description: DESCRIPTION, kind, labels, parentId: await parentFor(kind), teamId: team.id, title: `Study ${labels.join(',')}` },
+      { acceptance: '产出可核对。', description: DESCRIPTION, kind, labels, parentId: await parentFor(kind), teamId: team.id, title: `Study ${labels.join(',')}` },
       agentActor,
     );
     return commit(candidate);
@@ -122,7 +122,7 @@ describe('research closure (Type: Research)', () => {
   it('refuses a research candidate that nobody has committed', async () => {
     const candidate = await proposeWork(
       prisma,
-      { description: DESCRIPTION, labels: ['research'], parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Uncommitted study' },
+      { acceptance: '产出可核对。', description: DESCRIPTION, labels: ['research'], parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Uncommitted study' },
       agentActor,
     );
     await expect(updateIssue(prisma, candidate.id, { stateId: done.id }, agentActor)).rejects.toThrow(RESEARCH_CLOSE_NOT_COMMITTED_MESSAGE);
@@ -171,6 +171,7 @@ describe('research closure (Type: Research)', () => {
     const candidate = await proposeWork(
       prisma,
       {
+        acceptance: '产出可核对。',
         description: DESCRIPTION,
         initialState: 'DONE',
         labels: ['research'],
@@ -193,7 +194,7 @@ describe('research closure (Type: Research)', () => {
   it('honours the state a person picks at commit over initial_state DONE', async () => {
     const candidate = await proposeWork(
       prisma,
-      { description: DESCRIPTION, initialState: 'DONE', labels: ['research'], parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Study the person keeps open' },
+      { acceptance: '产出可核对。', description: DESCRIPTION, initialState: 'DONE', labels: ['research'], parentId: await testParentId(prisma, team.id), teamId: team.id, title: 'Study the person keeps open' },
       agentActor,
     );
     const committed = await commit(candidate, review.id);
@@ -203,20 +204,20 @@ describe('research closure (Type: Research)', () => {
   it('refuses initial_state DONE for anything that is not a research ISSUE', async () => {
     const parentId = await testParentId(prisma, team.id);
     await expect(
-      proposeWork(prisma, { description: DESCRIPTION, initialState: 'DONE', labels: ['feature'], parentId, teamId: team.id, title: 'Feature' }, agentActor),
+      proposeWork(prisma, { acceptance: '产出可核对。', description: DESCRIPTION, initialState: 'DONE', labels: ['feature'], parentId, teamId: team.id, title: 'Feature' }, agentActor),
     ).rejects.toThrow(RESEARCH_INITIAL_DONE_ONLY_MESSAGE);
     await expect(
-      proposeWork(prisma, { description: DESCRIPTION, initialState: 'DONE', parentId, teamId: team.id, title: 'Untyped' }, agentActor),
+      proposeWork(prisma, { acceptance: '产出可核对。', description: DESCRIPTION, initialState: 'DONE', parentId, teamId: team.id, title: 'Untyped' }, agentActor),
     ).rejects.toThrow(RESEARCH_INITIAL_DONE_ONLY_MESSAGE);
     await expect(
       proposeWork(
         prisma,
-        { description: DESCRIPTION, initialState: 'DONE', kind: 'MILESTONE', labels: ['research'], parentId: await parentFor('MILESTONE'), teamId: team.id, title: 'Research milestone' },
+        { acceptance: '产出可核对。', description: DESCRIPTION, initialState: 'DONE', kind: 'MILESTONE', labels: ['research'], parentId: await parentFor('MILESTONE'), teamId: team.id, title: 'Research milestone' },
         agentActor,
       ),
     ).rejects.toThrow(RESEARCH_INITIAL_DONE_ONLY_MESSAGE);
     await expect(
-      proposeWork(prisma, { description: DESCRIPTION, initialState: 'CANCELED', labels: ['research'], parentId, teamId: team.id, title: 'Canceled' }, agentActor),
+      proposeWork(prisma, { acceptance: '产出可核对。', description: DESCRIPTION, initialState: 'CANCELED', labels: ['research'], parentId, teamId: team.id, title: 'Canceled' }, agentActor),
     ).rejects.toThrow(/cannot be COMPLETED or CANCELED/);
   });
   // INV-1001: research closes once it led somewhere, and its proposer hears when it can.
@@ -224,13 +225,13 @@ describe('research closure (Type: Research)', () => {
     async function bareResearch() {
       const candidate = await proposeWork(
         prisma,
-        { description: BARE_DESCRIPTION, labels: ['research'], parentId: await parentFor('ISSUE'), teamId: team.id, title: 'Study with no note' },
+        { acceptance: '产出文件路径与结论可核对。', description: BARE_DESCRIPTION, labels: ['research'], parentId: await parentFor('ISSUE'), teamId: team.id, title: 'Study with no note' },
         agentActor,
       );
       return commit(candidate, review.id);
     }
     const derive = (researchId: string, title: string) =>
-      proposeWork(prisma, { description: DESCRIPTION, relatedWorkId: researchId, relatedWorkType: 'DERIVED_FROM', teamId: team.id, title }, agentActor);
+      proposeWork(prisma, { acceptance: '派生项可交付。', description: DESCRIPTION, relatedWorkId: researchId, relatedWorkType: 'DERIVED_FROM', teamId: team.id, title }, agentActor);
 
     it('refuses to close research nothing derives from, until something does', async () => {
       const research = await bareResearch();
@@ -260,7 +261,7 @@ describe('research closure (Type: Research)', () => {
     it('lands an initial_state DONE research in Review instead when nothing derives from it', async () => {
       const candidate = await proposeWork(
         prisma,
-        { description: BARE_DESCRIPTION, initialState: 'DONE', labels: ['research'], parentId: await parentFor('ISSUE'), teamId: team.id, title: 'Claims done' },
+        { acceptance: '产出文件路径可核对。', description: BARE_DESCRIPTION, initialState: 'DONE', labels: ['research'], parentId: await parentFor('ISSUE'), teamId: team.id, title: 'Claims done' },
         agentActor,
       );
       const committed = await commit(candidate);

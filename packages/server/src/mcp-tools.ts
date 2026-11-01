@@ -1,4 +1,5 @@
 import { requestNeedInfo, withdrawNeedInfo } from './need-info-service.js';
+import { autonomyToGraphQL, loadAutonomyFor } from './autonomy-service.js';
 import { protocolInfo } from './protocol-info.js';
 import { groupForAction, hidesFromCaller, MCP_TOOL_GROUPS, resolveMcpCall, type McpToolGroup } from './mcp-tool-groups.js';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
@@ -37,6 +38,7 @@ import {
   assertCanWriteTeam,
   buildReadableIssueWhere,
  assertCanReadIssue,
+  resolveTeamIdOrKey,
 } from './access-control.js';
 import type { GraphQLContext } from './auth.js';
 import { claimWork, commitWork, isDoneStateRequest, normalizeInitialStateType, proposeWork } from './claim-service.js';
@@ -50,7 +52,6 @@ import {
 } from './context-service.js';
 import {
   ISSUE_NOT_FOUND_MESSAGE,
-  TEAM_NOT_FOUND_MESSAGE,
   WORKFLOW_STATE_NOT_FOUND_MESSAGE,
   WORK_LINK_NOT_FOUND_MESSAGE,
   createNotFoundError,
@@ -453,7 +454,8 @@ async function callMcpAction(
       };
       if (args.kind === 'incident_summary') {
         // The /incidents numbers (INV-1129), scoped like the web page: readable work, optionally one team.
-        const teamId = optionalString(args.team_id);
+        const teamRef = optionalString(args.team_id);
+        const teamId = teamRef ? await resolveTeamIdOrKey(context.prisma, teamRef) : null;
         const readable = buildReadableIssueWhere(context);
         return loadIncidentSummary(context.prisma, { ...(teamId ? { teamId } : {}), ...(readable ?? {}) });
       }
@@ -487,7 +489,8 @@ async function callMcpAction(
       bundle.blockedBy = bundle.blockedBy.filter((item) => visible.has(item.id));
       bundle.blocks = bundle.blocks.filter((item) => visible.has(item.id));
       const pages = await Promise.all(WORK_SECTIONS.map((section) => readWorkPage(context.prisma, work.id, section, section === 'audits' ? 20 : 10, null, buildReadableIssueWhere(context))));
-      return { ...bundle, pages: Object.fromEntries(pages.map((page) => [page.section, page])), continuation: 'Call work_get_context(id, section, after=pageInfo.endCursor) while hasNextPage is true.' };
+      const autonomy = autonomyToGraphQL(await loadAutonomyFor(context.prisma, { id: work.id, teamId: work.teamId, kind: work.kind, parentId: work.parentId ?? null }, context.viewer ? { id: context.viewer.id, actorKind: context.viewer.actorKind } : null));
+      return { ...bundle, autonomy, pages: Object.fromEntries(pages.map((page) => [page.section, page])), continuation: 'Call work_get_context(id, section, after=pageInfo.endCursor) while hasNextPage is true.' };
     }
     case 'work_list_ready': {
       const readyInput: Parameters<typeof listReadyWork>[1] = {};
@@ -501,7 +504,7 @@ async function callMcpAction(
       return readyWorkPage(context, readyInput, optionalString(args.after));
     }
     case 'work_propose': {
-      const teamId = await resolveTeamId(context.prisma, requiredString(args.team, 'team'));
+      const teamId = await resolveTeamIdOrKey(context.prisma, requiredString(args.team, 'team'));
       await assertCanWriteTeam(context.prisma, context, teamId);
       const rawTitle = requiredString(args.title, 'title');
       const proposeInput: Parameters<typeof proposeWork>[1] = {
@@ -574,7 +577,7 @@ async function callMcpAction(
       return notes.length ? { ...result, warning: notes.join(' ') } : result;
     }
     case 'work_file_bug': {
-      const teamId = await resolveTeamId(context.prisma, requiredString(args.team, 'team'));
+      const teamId = await resolveTeamIdOrKey(context.prisma, requiredString(args.team, 'team'));
       await assertCanWriteTeam(context.prisma, context, teamId);
       const rawTitle = requiredString(args.title, 'title');
       // Domain labels ride along; a second Type label is refused by the server as usual (INV-1000).
@@ -1206,8 +1209,8 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_catalog',
     annotations: { readOnlyHint: true, destructiveHint: false },
-    description: 'Discover readable teams, states, labels, actors and cycles with pagination, or credential capabilities and policy constraints. kind "incident_summary" returns the /incidents numbers (INV-1129): open/resolved counts by severity and project, MTTR and MTTM as plain averages with sample counts, follow-up completion and overdue counts, and the incident list (team_id narrows to one team). Human owners and agent executors are distinct. Catalog visibility uses the web API access rules.',
-    inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: [...CATALOG_KINDS, 'capabilities', 'incident_summary'] }, team_id: { type: 'string' }, first: { type: 'integer', minimum: 1, maximum: 200 }, after: { type: 'string' } }, required: ['kind'] },
+    description: 'Discover readable teams, states, labels, actors and cycles with pagination, or credential capabilities and policy constraints. kind "incident_summary" returns the /incidents numbers (INV-1129): open/resolved counts by severity and project, MTTR and MTTM as plain averages with sample counts, follow-up completion and overdue counts, and the incident list (team_id narrows to one team and accepts the team id or the team key). Human owners and agent executors are distinct. Catalog visibility uses the web API access rules.',
+    inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: [...CATALOG_KINDS, 'capabilities', 'incident_summary'] }, team_id: { type: 'string', description: 'The team to narrow to: a team id (UUID) or a team key (e.g. INV).' }, first: { type: 'integer', minimum: 1, maximum: 200 }, after: { type: 'string' } }, required: ['kind'] },
   },
   {
     name: 'work_read_page',
@@ -1280,7 +1283,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_propose',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    description: 'Create candidate work. Does not enter the ready queue. Search for duplicates first; the result lists possible_duplicates (existing work close in meaning) when semantic search is on. A bug (labels ["bug"]) is committed directly and never enters Candidates; it requires parent_id (or an inheritable related_work_id), priority 1–4, and steps_to_reproduce — omit any and the proposal is refused.',
+    description: 'Create candidate work. Does not enter the ready queue. Search for duplicates first; the result lists possible_duplicates (existing work close in meaning) when semantic search is on. acceptance is required (INV-1449): committing refuses blank acceptance and agents cannot add it after commit, so an acceptance-less candidate would block the batch commit; draw it from section 3 (验收标准与验证方案) of the description. A bug (labels ["bug"]) is committed directly and never enters Candidates; it requires parent_id (or an inheritable related_work_id), priority 1–4, and steps_to_reproduce — omit any and the proposal is refused.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1296,7 +1299,10 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         outcome: { type: 'string' },
         scope: { type: 'string' },
         constraints: { type: 'string' },
-        acceptance: { type: 'string' },
+        acceptance: {
+          type: 'string',
+          description: 'Required. What must be true when this work is done — the reviewer commits against it, and committing is refused without it. Draw it from section 3 (验收标准与验证方案) of the description.',
+        },
         verification: { type: 'string' },
         kind: { type: 'string', enum: ['ISSUE', 'PROJECT', 'MILESTONE', 'DECISION', 'EPIC'] },
         parent_id: {
@@ -1344,7 +1350,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
           description: 'Optional initial target state upon human commit: BACKLOG (Backlog), UNSTARTED (Ready), STARTED (In Progress), or REVIEW (In Review). Defaults to UNSTARTED. CANNOT be CANCELED, and CANNOT be DONE except for an ISSUE labelled research (Type: Research), which then lands in Done when a person commits it (INV-912).',
         },
       },
-      required: ['team', 'title'],
+      required: ['team', 'title', 'acceptance'],
     },
   },
   {
@@ -1838,23 +1844,6 @@ async function requireWork(prisma: PrismaClient, id: string) {
     throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
   }
   return work;
-}
-
-async function resolveTeamId(prisma: PrismaClient, teamIdOrKey: string): Promise<string> {
-  try {
-    const byId = await prisma.team.findUnique({ where: { id: teamIdOrKey } });
-    if (byId) {
-      return byId.id;
-    }
-  } catch {
-    // Non-UUID values fall through to key lookup.
-  }
-
-  const byKey = await prisma.team.findUnique({ where: { key: teamIdOrKey } });
-  if (!byKey) {
-    throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
-  }
-  return byKey.id;
 }
 
 function requiredString(value: unknown, name: string): string {

@@ -28,7 +28,7 @@ describe('work graph export and import (INV-1007)', () => {
     const humanActor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' };
     const agentActor = { actorId: agent.id, actorKind: 'AGENT' as const, surface: 'test' };
     const parentId = await testParentId(prisma, team.id);
-    const candidate = await proposeWork(prisma, { parentId, teamId: team.id, title: '导出回路', labels: ['feature'], description: '### 1. 目标与架构定位\nx\n### 2. 核心功能与交付范围\nx\n### 3. 验收标准与验证方案\nx' }, agentActor);
+    const candidate = await proposeWork(prisma, { acceptance: 'Round trip intact.', parentId, teamId: team.id, title: '导出回路', labels: ['feature'], description: '### 1. 目标与架构定位\nx\n### 2. 核心功能与交付范围\nx\n### 3. 验收标准与验证方案\nx' }, agentActor);
     const blocker = await proposeWork(prisma, { parentId, teamId: team.id, title: 'Blocker', blocks: [candidate.identifier] }, humanActor);
     const work = await commitWork(prisma, candidate.id, { acceptance: 'Round trip intact.', assigneeId: human.id, expectedRevision: candidate.revision }, humanActor);
     await createComment(prisma, { issueId: work.id, body: 'Root comment' }, human.id);

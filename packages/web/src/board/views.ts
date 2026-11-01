@@ -1,5 +1,4 @@
 import type { BoardGroupBy, BoardIssueGroup, IssueSummary, LabelSummary, UserSummary } from './types';
-import { looksLikeIql, matchesIql } from './iql-eval';
 import { readLocalStorageValue } from '../lib/storage';
 import { savedViewsStorageKey } from '../lib/saved-views-account';
 
@@ -242,7 +241,6 @@ export function applyBoardViewState(
   users: UserSummary[],
 ): IssueSummary[] {
   const normalizedQuery = state.query.trim().toLowerCase();
-  const usesIql = normalizedQuery.length > 0 && looksLikeIql(state.query.trim());
   // Digits alone mean "find by number" (INV-608): a person typing 602 wants
   // INV-602, not every title that mentions 602 and not INV-1602. The number
   // part of the identifier must start with what was typed, so each further
@@ -252,30 +250,17 @@ export function applyBoardViewState(
 
   const nextIssues = issues.filter((issue) => {
     if (numericQuery) {
+      // Digits still narrow the board here: the server matches the identifier
+      // loosely ("contains -143"), this keeps the number a prefix (INV-608).
       if (!identifierNumber(issue.identifier).startsWith(numericQuery)) {
         return false;
       }
-    } else if (normalizedQuery) {
-      if (usesIql) {
-        if (!matchesIql(state.query.trim(), issue, null)) {
-          return false;
-        }
-      } else {
-        const haystack = [
-          issue.identifier,
-          issue.title,
-          issue.description ?? '',
-          issue.parent?.title ?? '',
-          issue.parent?.identifier ?? '',
-          issue.project?.name ?? '',
-          issue.repository ?? '',
-        ].join(' ').toLowerCase();
-
-        if (!haystack.includes(normalizedQuery)) {
-          return false;
-        }
-      }
     }
+    // Everything else is the server's search: it looked at the same fields
+    // (identifier, title, description, parent, project, repository) and
+    // returned what matched. The board keeps that answer instead of searching
+    // again — the list does not carry the descriptions any more (INV-1470),
+    // so a second pass would drop the issues the server matched on theirs.
 
     if (state.assigneeIds.length > 0) {
       const assigneeKey = issue.assignee?.id ?? 'unassigned';

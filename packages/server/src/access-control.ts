@@ -121,6 +121,26 @@ function buildMemberTeamWhere(context: GraphQLContext): Prisma.TeamWhereInput | 
   };
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * A team reference is a team id or a team key: the web app, `work_propose`
+ * and `work_search` all name teams by key, so a tool that takes `team_id`
+ * accepts either (INV-1451). Resolves to the team's id; an unknown reference
+ * is a plain not-found, never a database error.
+ */
+export async function resolveTeamIdOrKey(prisma: PrismaClient, idOrKey: string): Promise<string> {
+  const reference = idOrKey.trim();
+  if (UUID_PATTERN.test(reference)) {
+    const byId = await prisma.team.findUnique({ where: { id: reference }, select: { id: true } });
+    if (byId) return byId.id;
+  }
+
+  const byKey = await prisma.team.findUnique({ where: { key: reference }, select: { id: true } });
+  if (!byKey) throw createNotFoundError(TEAM_NOT_FOUND_MESSAGE);
+  return byKey.id;
+}
+
 export async function assertCanReadTeam(
   prisma: PrismaClient,
   context: GraphQLContext,

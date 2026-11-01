@@ -1,4 +1,6 @@
 import { executorContext, executorUpdate, type ExecutorInput } from './executor-service.js';
+import type { AutonomyScope } from '@prisma/client';
+import { POLICY_SCOPE_INVALID_MESSAGE, autonomyToGraphQL, loadAutonomyFor, setWorkflowPolicy } from './autonomy-service.js';
 import type { SavedView } from '@prisma/client';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
 import { starTimelineEntry, unstarTimelineEntry, workTimelineFor, type TimelineEntry } from './work-activity-timeline.js';
@@ -118,6 +120,7 @@ import type {
 } from './issue-service.js';
 import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
 import { searchIssues, type IssueSearchHit } from './issue-search.js';
+import { resolveIssuePreviews, type IssuePreviewRecord } from './issue-preview.js';
 import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
 
 import { requireAuthentication, type GraphQLContext } from './auth.js';
@@ -407,6 +410,35 @@ const typeDefs = /* GraphQL */ `
     attachmentFilename: String
   }
 
+  """
+  A work item as a hover preview: what a reference in prose points at
+  (INV-1466). Only what a reader may see is returned — an item they cannot
+  read is simply not in the list, so its reference stays plain text.
+  """
+  type IssuePreview {
+    id: ID!
+    "The reference as the reader wrote it, normalized (uppercased)."
+    reference: String!
+    "The item's own identifier — the canonical form of the reference."
+    identifier: String!
+    title: String!
+    "The workflow state's display name (Ready, In Progress, In Review…)."
+    stateName: String!
+    "The workflow state type (UNSTARTED, STARTED, REVIEW, COMPLETED, CANCELED)."
+    stateType: WorkflowStateType!
+    commitmentStatus: CommitmentStatus!
+    priority: Int!
+    kind: WorkKind!
+    repository: String
+    "The team the item belongs to."
+    teamKey: String!
+    "The Type label (Bug, Feature, Improvement, Research, Incident); null when the item carries none."
+    typeLabel: String
+    "The opening of the description, whitespace-collapsed; null when there is none."
+    excerpt: String
+    updatedAt: DateTime!
+  }
+
   type DeliveryGrant { revision: Int! policyJson: String! approvedAt: DateTime! approvedById: String! revokedAt: DateTime }
   type DeliveryExecution { issue: Issue! technicalReady: Boolean! }
   type DeliveryContext { viewerCanWrite: Boolean! work: Issue! grant: DeliveryGrant units: [DeliveryExecution!]! authorizationValid: Boolean! authorizationMessage: String! }
@@ -424,6 +456,13 @@ const typeDefs = /* GraphQL */ `
     viewerCapabilities: ViewerCapabilities!
     workspaceSettings: WorkspaceSettings!
     issue(id: String!): Issue
+    """
+    The work items behind references in prose (INV-1466): a batch of
+    identifiers (as typed, e.g. "INV-1446" or the project alias "LUM-398")
+    resolved to the small card the web app shows when a reader hovers a
+    reference. Only readable items come back.
+    """
+    issuePreviews(identifiers: [String!]!): [IssuePreview!]!
     issues(first: Int!, after: String, filter: IssueFilter, query: String): IssueConnection!
     "Archived teams are left out unless includeArchived is true."
     teams(filter: TeamFilter, includeArchived: Boolean): TeamConnection!
@@ -522,6 +561,11 @@ const typeDefs = /* GraphQL */ `
     commentDelete(id: String!): CommentDeletePayload!
     teamUpdateAccess(input: TeamUpdateAccessInput!): TeamUpdateAccessPayload!
     teamTriageRotationUpdate(input: TeamTriageRotationInput!): TeamTriageRotationPayload!
+    """
+    Set the autonomy policy of the workspace (Admin), a team or a project (team Owner or Admin).
+    Writes a new version; the history stays (INV-1488). No gate opens until INV-1491+.
+    """
+    workflowPolicySet(input: WorkflowPolicySetInput!): WorkflowPolicyPayload!
     "A person ends an agent's claim now, with a reason (INV-789); open runs under it are closed."
     workClaimRelease(workId: String!, reason: String!, claimToken: String): WorkClaimReleasePayload!
     "Clear a sync dead letter so the next reconciliation retries that PR; admins only, audited (INV-796)."
@@ -1217,6 +1261,12 @@ const typeDefs = /* GraphQL */ `
     resolvedAt: DateTime
     "Latest automatic-acceptance evaluation of this work, if any (INV-1075)."
     autoAccept: AutoAcceptEvaluation
+    """
+    Who decides at each human gate for this item: the effective level L0–L3,
+    where it came from and the per-gate deciders (INV-1488, docs/autonomy-policy.md).
+    Read-only here; the same object is in MCP work_get_context.
+    """
+    autonomy: Autonomy!
     links(type: WorkLinkType): WorkLinkConnection!
     """
     Committed work that still blocks this item: incoming BLOCKS links whose
@@ -2496,6 +2546,83 @@ const typeDefs = /* GraphQL */ `
     accepted: Boolean!
   }
 
+  enum AutonomyScope {
+    WORKSPACE
+    TEAM
+    PROJECT
+  }
+
+  "One gate's decider after resolution (INV-1488)."
+  type AutonomyGate {
+    gate: String!
+    "human, auto or none."
+    decider: String!
+    "Typed predicate the auto decider needs; null means unconditional."
+    condition: Json
+    "Which scope set it: preset, workspace, team, project."
+    from: String!
+    "Built-in locks that keep this gate with a person when they match."
+    locked: String
+  }
+
+  "The effective autonomy of a work item (INV-1488, docs/autonomy-policy.md)."
+  type Autonomy {
+    "Effective level 0–3 after ceiling and agent trust."
+    level: Int!
+    "default, workspace, team, project, ceiling or agent_trust: what decided the level."
+    source: String!
+    "Level name and bilingual description for the effective level."
+    name: String!
+    descriptionEn: String!
+    descriptionZh: String!
+    ceiling: Int!
+    "The level the team or project asked for before clamping."
+    requested: Int!
+    requestedBy: String!
+    "True while the requested level is only being observed."
+    observing: Boolean!
+    gates: [AutonomyGate!]!
+    locked: [String!]!
+    projectId: String
+  }
+
+  input WorkflowPolicySetInput {
+    scope: AutonomyScope!
+    "WORKSPACE: the workspace id; TEAM: a team id; PROJECT: a committed PROJECT work id."
+    scopeId: String!
+    level: Int!
+    "Per-gate overrides within the level, as JSON { gate: { decider, condition? } }."
+    gates: Json
+    "L3 team intake rule, a typed predicate."
+    intake: Json
+    "WORKSPACE only: additional gates that stay with a person at every level."
+    locked: [String!]
+    reason: String!
+    "Observe for N days before the level acts; omit or 0 to turn it on now."
+    observeDays: Int
+  }
+
+  type WorkflowPolicyPayload {
+    success: Boolean!
+    message: String
+    policy: WorkflowPolicy
+  }
+
+  type WorkflowPolicy {
+    id: ID!
+    scope: AutonomyScope!
+    scopeId: String!
+    level: Int!
+    gates: Json!
+    intake: Json
+    locked: [String!]!
+    version: Int!
+    reason: String
+    observeUntil: DateTime
+    active: Boolean!
+    createdAt: DateTime!
+  }
+
   type IssueUndeletePayload {
     success: Boolean!
     issue: Issue
@@ -3005,6 +3132,13 @@ const resolvers = {
       }
 
       return issue;
+    },
+    issuePreviews: async (
+      _parent: unknown,
+      args: { identifiers: string[] },
+      context: GraphQLContext,
+    ): Promise<IssuePreviewRecord[]> => {
+      return resolveIssuePreviews(context.prisma, args.identifiers ?? [], buildReadableIssueWhere(context));
     },
     issues: async (
       _parent: unknown,
@@ -4966,6 +5100,25 @@ const resolvers = {
         await releaseClaim(context.prisma, { workId: work.id, reason: args.reason, claimToken: args.claimToken ?? null }, writeActorFromViewer(context.viewer));
         return { issue: await getIssueById(context.prisma, work.id), success: true as const };
       }, { issue: null, success: false as const }),
+    workflowPolicySet: async (
+      _parent: unknown,
+      args: { input: { scope: AutonomyScope; scopeId: string; level: number; gates?: unknown; intake?: unknown; locked?: string[] | null; reason: string; observeDays?: number | null } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; policy: unknown }> =>
+      runMutationWithReason(async () => {
+        const { input } = args;
+        if (input.scope === 'WORKSPACE') {
+          assertWorkspaceAdmin(context);
+        } else if (input.scope === 'TEAM') {
+          await assertCanManageTeam(context.prisma, context, input.scopeId);
+        } else {
+          const project = await context.prisma.issue.findUnique({ where: { id: input.scopeId }, select: { teamId: true } });
+          if (!project) throw createValidationError(POLICY_SCOPE_INVALID_MESSAGE);
+          await assertCanManageTeam(context.prisma, context, project.teamId);
+        }
+        const policy = await setWorkflowPolicy(context.prisma, input, context.viewer?.id ?? null);
+        return { success: true as const, policy };
+      }, { success: false as const, policy: null }),
     teamTriageRotationUpdate: async (
       _parent: unknown,
       args: { input: { teamId: string; userIds: string[]; startsAt?: string | null } },
@@ -5712,6 +5865,10 @@ const resolvers = {
         select: { reason: true },
       });
       return audit?.reason ?? null;
+    },
+    autonomy: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
+      const view = await loadAutonomyFor(context.prisma, { id: parent.id, teamId: parent.teamId, kind: parent.kind, parentId: parent.parentId ?? null }, context.viewer ? { id: context.viewer.id, actorKind: context.viewer.actorKind } : null);
+      return autonomyToGraphQL(view);
     },
     autoAccept: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
       const evaluation = await context.prisma.workAutoAcceptEvaluation.findFirst({
@@ -6542,4 +6699,11 @@ function collectIssueConnectionFieldName(
   }
 
   collectIssueConnectionFieldNames(field.selectionSet, fragments, fieldNames, false);
+}
+
+function assertWorkspaceAdmin(context: GraphQLContext): void {
+  if (context.isTrustedSystem) return;
+  if (context.viewer?.actorKind !== 'HUMAN' || context.viewer.globalRole !== 'ADMIN') {
+    throw createValidationError('Only a workspace Admin sets the workspace autonomy policy (INV-1488).');
+  }
 }

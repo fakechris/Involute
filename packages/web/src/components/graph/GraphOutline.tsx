@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
-import { openBlockersOf, type GraphEdge, type GraphNode, type Outline, type OutlineItem } from '../../work/graph-model';
+import { buildBlockerIndex, NO_OPEN_BLOCKERS, type GraphEdge, type GraphNode, type Outline, type OutlineItem } from '../../work/graph-model';
 import { StatusIcon } from '../StatusIcon';
 import { STATE_TYPE_COLOR, STATE_TYPE_LABEL, STATE_TYPE_ORDER } from './graph-colors';
 
@@ -27,6 +27,9 @@ export function GraphOutline({ outline, edges, byId, onOpen, onCreateIn }: Graph
       return next;
     });
 
+  // One pass over the edges instead of one scan per row (INV-1443).
+  const blockersByNode = useMemo(() => buildBlockerIndex(edges, byId), [edges, byId]);
+
   const renderItems = (items: OutlineItem[], depth: number) =>
     items.map((item) => (
       <OutlineRow
@@ -37,8 +40,7 @@ export function GraphOutline({ outline, edges, byId, onOpen, onCreateIn }: Graph
         onToggle={toggle}
         onOpen={onOpen}
         {...(onCreateIn ? { onCreateIn } : {})}
-        edges={edges}
-        byId={byId}
+        blockers={blockersByNode.get(item.node.id) ?? NO_OPEN_BLOCKERS}
         renderChildren={renderItems}
       />
     ));
@@ -66,16 +68,14 @@ interface OutlineRowProps {
   onToggle: (id: string) => void;
   onOpen: (id: string) => void;
   onCreateIn?: (container: GraphNode) => void;
-  edges: GraphEdge[];
-  byId: Map<string, GraphNode>;
+  blockers: GraphNode[];
   renderChildren: (items: OutlineItem[], depth: number) => React.ReactNode;
 }
 
-function OutlineRow({ item, depth, collapsed, onToggle, onOpen, onCreateIn, edges, byId, renderChildren }: OutlineRowProps) {
+function OutlineRow({ item, depth, collapsed, onToggle, onOpen, onCreateIn, blockers, renderChildren }: OutlineRowProps) {
   const { node, children } = item;
   const hasChildren = children.length > 0;
   const isCollapsed = collapsed.has(node.id);
-  const blockers = openBlockersOf(node.id, edges, byId);
   const done = item.rollup.COMPLETED ?? 0;
 
   return (

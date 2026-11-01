@@ -2,13 +2,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import {
   blockNeighbourhood,
+  buildBlockerIndex,
   classifyBlockEdge,
   layoutDag,
   LAYOUT,
   milestoneIndex,
-  openBlockersOf,
   rollUpToMilestones,
   type BlockEdgeStatus,
+  NO_OPEN_BLOCKERS,
   type GraphEdge,
   type GraphNode,
 } from '../../work/graph-model';
@@ -78,6 +79,8 @@ export function DependencyGraph({
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const milestones = useMemo(() => milestoneIndex(nodes, edges), [nodes, edges]);
+  // One pass over the edges instead of one scan per node (INV-1443).
+  const blockersByNode = useMemo(() => buildBlockerIndex(edges, byId), [edges, byId]);
 
   const view = useMemo(() => {
     if (rollup) {
@@ -276,7 +279,7 @@ export function DependencyGraph({
                 const position = layout.nodes.get(node.id);
                 if (!position) return null;
                 const milestone = rollup ? null : milestones.get(node.id) ?? null;
-                const blockers = rollup ? [] : openBlockersOf(node.id, edges, byId);
+                const blockers = rollup ? [] : blockersByNode.get(node.id) ?? NO_OPEN_BLOCKERS;
                 const dimmed = highlighted && !highlighted.has(node.id);
                 return (
                   <button

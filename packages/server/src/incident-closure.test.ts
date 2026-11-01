@@ -58,7 +58,7 @@ describe('incident closing and postmortem (INV-1126)', () => {
   const declare = (severity: 'SEV1' | 'SEV2' | 'SEV3', description = IMPACT) =>
     proposeWork(prisma, { description, labels: ['incident'], parentId, severity, teamId: team.id, title: `Board blank ${severity}` }, agentActor);
   const followUp = (incidentId: string, title = 'Alert on blank board') =>
-    proposeWork(prisma, { description: FOLLOW_UP, relatedWorkId: incidentId, relatedWorkType: 'DERIVED_FROM', teamId: team.id, title }, agentActor);
+    proposeWork(prisma, { acceptance: 'Alert fires.', description: FOLLOW_UP, relatedWorkId: incidentId, relatedWorkType: 'DERIVED_FROM', teamId: team.id, title }, agentActor);
   const commit = (candidate: Issue) =>
     commitWork(prisma, candidate.id, { acceptance: 'Alert fires.', assigneeId: human.id, expectedRevision: candidate.revision }, humanActor);
   const attach = (workId: string) =>

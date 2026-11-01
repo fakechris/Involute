@@ -1,10 +1,12 @@
 import type { GraphQLContext } from './auth.js';
-import { buildReadableTeamWhere, buildVisibleUsersWhere } from './access-control.js';
+import { buildReadableTeamWhere, buildVisibleUsersWhere, resolveTeamIdOrKey } from './access-control.js';
 import { createValidationError } from './errors.js';
 
 export const CATALOG_KINDS = ['teams', 'states', 'labels', 'actors', 'cycles'] as const;
-export async function readWorkCatalog(context: GraphQLContext, kind: string, first = 50, after?: string | null, teamId?: string | null) {
+export async function readWorkCatalog(context: GraphQLContext, kind: string, first = 50, after?: string | null, teamRef?: string | null) {
   if (!(CATALOG_KINDS as readonly string[]).includes(kind) || !Number.isInteger(first) || first < 1 || first > 200) throw createValidationError('Choose a catalog kind and first between 1 and 200.');
+  // The caller names a team by key or by id; the filters below need its id (INV-1451).
+  const teamId = teamRef ? await resolveTeamIdOrKey(context.prisma, teamRef) : null;
   let boundary: string | undefined;
   if (after) {
     try {

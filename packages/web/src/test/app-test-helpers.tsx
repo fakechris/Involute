@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, vi } from 'vitest';
 
 import { App } from '../App';
+import { WorkReferenceProvider } from '../components/WorkReference';
 import { resetStatusUndo } from '../undo/status-undo';
 import type {
   AccessPageQueryData,
@@ -29,6 +30,7 @@ import type {
   PlacementOptionsQueryData,
   WorkHygieneQueryData,
   WorkSearchQueryData,
+  WorkPreviewsQueryData,
 } from '../work/types';
 export type {
   AccessPageQueryData,
@@ -509,11 +511,17 @@ type QueryState = {
   refetch?: ReturnType<typeof vi.fn>;
   relationsData?: IssueRelationsQueryData;
   workContextData?: WorkContextPageQueryData;
-  /** The board drawer's contract query (INV-896); absent, it answers from the board's own issue. */
-  contractData?: { issue: Record<string, unknown> | null };
+  /** The open issue's own detail query — contract, amendment and body (INV-896, INV-1470); absent, it answers from the board's own issue. */
+  detailData?: { issue: Record<string, unknown> | null };
+  /** The detail query is still on its way (INV-1470): the body has not arrived. */
+  detailLoading?: boolean;
   contractRefetch?: ReturnType<typeof vi.fn>;
   /** Server search hits for the command palette (INV-925); absent, nothing matches. */
   searchData?: WorkSearchQueryData;
+  /** The hover previews behind work references in prose (INV-1466). */
+  previewsData?: WorkPreviewsQueryData;
+  /** The single issue a ?issue= link names (INV-1469); absent, the board's own issue answers. */
+  issuePageData?: { issue: IssueSummary | null };
 };
 
 export function renderApp(
@@ -541,6 +549,16 @@ export function renderApp(
     if (source.includes('query WorkSearch')) {
       return {
         data: options?.skip ? undefined : (queryState.searchData ?? { search: [] }),
+        error: undefined,
+        loading: false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    // The hover previews behind work references in prose (INV-1466).
+    if (source.includes('query WorkPreviews')) {
+      return {
+        data: options?.skip ? undefined : (queryState.previewsData ?? { issuePreviews: [] }),
         error: undefined,
         loading: false,
         refetch: vi.fn().mockResolvedValue(undefined),
@@ -622,12 +640,15 @@ export function renderApp(
       };
     }
 
-    if (source.includes('query ProjectWorkTimeline')) {
+    // The timeline view reads the graph and the audit trail in one request (INV-1445).
+    if (source.includes('query ProjectWorkGraphTimeline')) {
+      const graph = queryState.graphData?.workGraph;
+      const trail = queryState.timelineData?.workGraph;
       return {
-        data: options?.skip ? undefined : queryState.timelineData,
-        error: undefined,
-        loading: false,
-        refetch: vi.fn().mockResolvedValue(undefined),
+        data: options?.skip || !graph ? undefined : { workGraph: { ...graph, ...trail } },
+        error: queryState.error,
+        loading: queryState.loading ?? false,
+        refetch: queryState.refetch ?? vi.fn().mockResolvedValue(undefined),
       };
     }
 
@@ -650,13 +671,13 @@ export function renderApp(
       };
     }
 
-    if (source.includes('query IssueContract')) {
+    if (source.includes('query IssueDetail')) {
       const issueId = String(options?.variables?.id ?? '');
       const fromBoard = (queryState.data?.issues.nodes ?? []).find((issue) => issue.id === issueId);
       return {
-        data: options?.skip ? undefined : (queryState.contractData ?? { issue: fromBoard ?? null }),
+        data: options?.skip ? undefined : (queryState.detailData ?? { issue: fromBoard ?? null }),
         error: undefined,
-        loading: false,
+        loading: queryState.detailLoading ?? false,
         refetch: queryState.contractRefetch ?? vi.fn().mockResolvedValue(undefined),
       };
     }
@@ -839,9 +860,15 @@ export function renderApp(
 
     if (options?.variables && 'id' in options.variables) {
       const issueId = String(options.variables.id);
+      // A ?issue= link may name an issue the board does not list (INV-1469);
+      // the test states it, otherwise the board's own issue answers.
+      const issue =
+        queryState.issuePageData?.issue ??
+        queryState.data?.issues.nodes.find((candidate) => candidate.id === issueId || candidate.identifier === issueId) ??
+        null;
       return {
         data: {
-          issue: queryState.data?.issues.nodes.find((issue) => issue.id === issueId || issue.identifier === issueId) ?? null,
+          issue,
           users: queryState.data?.users ?? { nodes: [] },
           issueLabels: queryState.data?.issueLabels ?? { nodes: [] },
         },
@@ -861,7 +888,9 @@ export function renderApp(
 
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <AppComponent />
+      <WorkReferenceProvider>
+        <AppComponent />
+      </WorkReferenceProvider>
     </MemoryRouter>,
   );
 }

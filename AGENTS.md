@@ -48,7 +48,7 @@ flowchart TD
 ## 4. Agent Operational Rules
 
 1. **Search Before Proposing**: Always execute `work_search` to avoid duplicate titles or redundant milestones.
-2. **Propose, Never Unilaterally Commit**: Agents propose candidates (`kind: 'MILESTONE'` or `'ISSUE'`); only humans commit them. Specify `initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED'` on `work_propose` so committed items route directly to the proper phase upon human approval. **Two exceptions — bugs (decision INV-787, §12.5)**: a bug filed with a parent, a priority and steps to reproduce is committed at once; **incidents (INV-1123, §14)**: an incident declared with a parent, a severity and an impact statement is committed at once, In Progress.
+2. **Propose, Never Unilaterally Commit**: Agents propose candidates (`kind: 'MILESTONE'` or `'ISSUE'`); only humans commit them. Every proposal carries the `acceptance` contract field (INV-1449, §5.2 — the server refuses agent proposals without it). Specify `initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED'` on `work_propose` so committed items route directly to the proper phase upon human approval. **Two exceptions — bugs (decision INV-787, §12.5)**: a bug filed with a parent, a priority and steps to reproduce is committed at once; **incidents (INV-1123, §14)**: an incident declared with a parent, a severity and an impact statement is committed at once, In Progress.
 3. **No Scratchpad Pollution**: Do not dump local grep output, shell logs, or transient scratchpad thoughts into Involute. Only track discrete, independently acceptable deliverables.
 4. **Claim-Driven Execution**: Call `work_claim` to lease a specific task after confirmation.
 5. **Report Runs with Evidence**: As execution progresses, record phases with `run_report`. On completion, attach durable evidence (PR, commit SHA, test exit code, or artifact URL) with `evidence(action: 'attach')` (the old name `evidence_attach` still works for one version, INV-1046).
@@ -90,6 +90,7 @@ When an agent onboards a repository for the first time, it MUST get everything r
      - `### 1. 目标与架构定位`: Role in system architecture, why it is needed.
      - `### 2. 核心功能与交付范围`: Exact modules, UI components, APIs, behavior changes.
      - `### 3. 验收标准与验证方案`: Concrete vitest/jest commands, exit 0 criteria, PR checks.
+   - **Mandatory `acceptance` field (INV-1449)**: every agent proposal MUST also pass the `acceptance` contract field — commit refuses blank acceptance and agents cannot add it after commit, so an acceptance-less candidate blocks the batch commit until a person fills the box by hand. The server refuses such proposals at `work_propose` time (same rule as bugs since INV-836). Draw `acceptance` from §3 of the description (a condensed version works well); bugs and incidents keep their own rules.
 3. **Codebase Reality Alignment & Candidate Initial State (现状与代码真实进度对齐)**:
    - **Direct State Routing via `initial_state` in `work_propose`**:
      `work_propose` accepts `initial_state: 'REVIEW' | 'STARTED' | 'UNSTARTED' | 'BACKLOG'` (or `'IN_REVIEW' | 'IN_PROGRESS' | 'READY'`).
@@ -135,6 +136,7 @@ Any bugfix or unplanned modification touching product source code MUST adhere to
    - **在向用户输出回复前，Agent 必须强制调用 `work_propose`**；
    - 参数固定为：
      - `kind: 'ISSUE'`
+     - `acceptance`：必带（INV-1449）——commit 拒绝空验收标准且 agent 事后不能补，缺了只会卡住批量提交；从描述 §3 提炼即可
      - `related_work_id: <当前处理任务ID 或 所属父里程碑ID>`
      - `related_work_type: 'DISCOVERED_DURING'`
      - `parent_id`：可省略——省略时自动继承被关联项所在的里程碑（同仓库）；跨仓库发现的问题必须显式给出目标仓库的父级（§4.8）
@@ -344,7 +346,7 @@ features:
 
 ### 11.4 调研在工作图中的表示（工作图规范 v1 C 条，INV-718 / INV-721）
 - 调研正文留在 `research/`（纳入版本管理的仓库可用 `docs/research/`），不进工单；**要让人或其他 agent 核对时，用 `work_attach_file(work_id, filename, content, encoding: 'utf-8', mode?: 'create' | 'overwrite' | 'append' | 'delete', attachment_id?)`（或对本地已有文件直接运行 `involute work attach-file <id> <path>`，无需经 LLM token 朗读或 Base64 编码）把报告作为私有附件挂到调研工单（INV-1003, INV-1273）**——存在服务端 uploads，只有能读该工单的人能从 issue 页 Files 打开，不进 git、不进镜像；CI 的 `scripts/ci-research-guard.sh` 对被 track 的 `research/` 文件报错。
-- **每次调研是一张带 `research` 标签的 ISSUE**（`work_propose(labels: ['research'], parent_id: <里程碑或 PROJECT>)`），描述写要点与文档路径；产出文件路径作为 evidence。
+- **每次调研是一张带 `research` 标签的 ISSUE**（`work_propose(labels: ['research'], parent_id: <里程碑或 PROJECT>)`），描述写要点与文档路径；产出文件路径作为 evidence。research 提案同样必带 `acceptance`（INV-1449，写清"产出文件路径/结论可核对"即可）。
 - **Type: Research 可由 agent 收尾（INV-912）**：调研的交付物就是条目本身。提案时可带 `initial_state: 'DONE'`，人承诺即进入 Done；已承诺的调研 ISSUE，agent 可用 `work_update(state: 'DONE')` 收尾（未承诺、非 ISSUE、被他人认领或描述不合三段式时拒绝）。CANCELED 仍只有人能设；派生的开发项不随之关闭。
 - 可执行点以 ISSUE、"明确不做"以 DECISION 提案，二者均 `DERIVED_FROM` 指向调研工单。
 - 调研进入 Review 前：下游已提案，或在 summary / verification 写明"无可执行点"；否则 `run_report(completed)` 会给出提醒，并出现在 `/hygiene` 巡检视图。

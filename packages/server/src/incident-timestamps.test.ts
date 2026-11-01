@@ -134,9 +134,9 @@ describe('incident impact timestamps (INV-1125)', () => {
   });
 
   it('refuses the timestamps on work that is not an incident', async () => {
-    const proposed = await callTool('work_propose', { title: 'Plain candidate', description: IMPACT, parent_id: parentId, detected_at: t(7).toISOString() });
+    const proposed = await callTool('work_propose', { title: 'Plain candidate', acceptance: '时间戳口径正确。', description: IMPACT, parent_id: parentId, detected_at: t(7).toISOString() });
     expect(proposed.error).toBe(INCIDENT_TIMES_NOT_INCIDENT_MESSAGE);
-    const plain = await callTool('work_propose', { title: 'Plain candidate', description: IMPACT, parent_id: parentId });
+    const plain = await callTool('work_propose', { title: 'Plain candidate', acceptance: '时间戳口径正确。', description: IMPACT, parent_id: parentId });
     expect((await callTool('work_update', { id: plain.id, expected_revision: plain.revision, resolved_at: t(9).toISOString() })).error).toBe(INCIDENT_TIMES_NOT_INCIDENT_MESSAGE);
     const viaWeb = await graphqlUpdate(plain.id, { resolvedAt: t(9).toISOString() });
     expect(viaWeb).toMatchObject({ success: false, message: INCIDENT_TIMES_NOT_INCIDENT_MESSAGE });

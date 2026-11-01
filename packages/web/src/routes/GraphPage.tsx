@@ -1,5 +1,5 @@
 import { useQuery } from '@apollo/client/react';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
@@ -14,13 +14,12 @@ import { Btn } from '../components/Primitives';
 import { EmptyState, LoadingState, SegmentedControl } from '../components/status';
 import { ProjectFilterCombobox, type AvailableProject } from '../components/ProjectFilterCombobox';
 import { buildOutline, type GraphNode } from '../work/graph-model';
-import { defaultZoom, type TimelineEntry, type TimelineZoom } from '../work/timeline-model';
-import { GRAPH_PROJECTS_QUERY, PROJECT_WORK_GRAPH_QUERY, PROJECT_WORK_TIMELINE_QUERY } from '../work/queries';
+import { defaultZoom, formatDay, parseFactWindow, zoomForWindow, type TimelineEntry, type TimelineZoom } from '../work/timeline-model';
+import { GRAPH_PROJECTS_QUERY, PROJECT_WORK_GRAPH_QUERY, PROJECT_WORK_GRAPH_TIMELINE_QUERY } from '../work/queries';
 import type {
   GraphProjectsQueryData,
-  ProjectWorkGraphQueryData,
+  ProjectWorkGraphTimelineQueryData,
   ProjectWorkGraphQueryVariables,
-  ProjectWorkTimelineQueryData,
   WorkGraphNodeRecord,
 } from '../work/types';
 
@@ -64,21 +63,28 @@ export function GraphPage() {
   const includeCandidates = searchParams.get('candidates') === '1';
   const showOtherLinks = searchParams.get('links') === 'all';
   const teamKey = readStoredTeamKey();
+  // One "now" for the page, so the window and the scale it picks stay put.
+  const now = useMemo(() => new Date(), []);
+  // The fact window the reader is looking at (INV-1446).
+  const factWindow = useMemo(
+    () => parseFactWindow(searchParams.get('from'), searchParams.get('to'), now),
+    [searchParams, now],
+  );
 
   const projectsQuery = useQuery<GraphProjectsQueryData>(GRAPH_PROJECTS_QUERY, {
     variables: teamKey ? { teamFilter: { key: { eq: teamKey } } } : {},
   });
-  const graphQuery = useQuery<ProjectWorkGraphQueryData, ProjectWorkGraphQueryVariables>(PROJECT_WORK_GRAPH_QUERY, {
-    variables: { project: project ?? '', includeCandidates },
-    skip: !project,
-  });
-  // The timeline reads every item's audit trail, so it is fetched only when shown.
-  const timelineQuery = useQuery<ProjectWorkTimelineQueryData, ProjectWorkGraphQueryVariables>(PROJECT_WORK_TIMELINE_QUERY, {
-    variables: { project: project ?? '', includeCandidates },
-    skip: !project || view !== 'timeline',
-  });
+  // The timeline view reads every item's audit trail, so it asks for the graph
+  // and the trail in one request instead of resolving the project twice (INV-1445).
+  const graphQuery = useQuery<ProjectWorkGraphTimelineQueryData, ProjectWorkGraphQueryVariables>(
+    view === 'timeline' ? PROJECT_WORK_GRAPH_TIMELINE_QUERY : PROJECT_WORK_GRAPH_QUERY,
+    {
+      variables: { project: project ?? '', includeCandidates },
+      skip: !project,
+    },
+  );
   const timeline = useMemo(() => {
-    const data = timelineQuery.data?.workGraph;
+    const data = graphQuery.data?.workGraph;
     const entries = new Map<string, TimelineEntry>(
       (data?.timeline ?? []).map((entry) => [
         entry.workId,
@@ -95,9 +101,10 @@ export function GraphPage() {
       ]),
     );
     const cycles = (data?.cycles ?? []).map((cycle) => ({ ...cycle, startsAt: new Date(cycle.startsAt), endsAt: new Date(cycle.endsAt) }));
-    return { entries, cycles, loaded: Boolean(data) };
-  }, [timelineQuery.data]);
-  const scale = chosenScale ?? defaultZoom([...timeline.entries.values()], new Date());
+    return { entries, cycles, loaded: Boolean(graphQuery.data) };
+  }, [graphQuery.data]);
+  // A window is a lens: the scale follows the window, not the whole history.
+  const scale = chosenScale ?? (factWindow ? zoomForWindow(factWindow) : defaultZoom([...timeline.entries.values()], now));
 
   const projects = useMemo<AvailableProject[]>(
     () =>
@@ -137,7 +144,7 @@ export function GraphPage() {
     );
   }
 
-  const openIssue = (id: string) => navigate(`/issue/${id}`);
+  const openIssue = useCallback((id: string) => navigate(`/issue/${id}`), [navigate]);
   // New work from a container row lands in it (INV-744); a project row means "No milestone".
   const graphRepository = graph?.repository ?? null;
   const createIn = graphRepository
@@ -196,13 +203,13 @@ export function GraphPage() {
         ) : graphQuery.error ? (
           <div role="alert">
             <EmptyState
-              title="Could not load this project's graph"
+              title={view === 'timeline' ? 'Could not load the timeline' : "Could not load this project's graph"}
               body={graphQuery.error.message}
               action={<Btn variant="subtle" onClick={() => void graphQuery.refetch()}>Retry</Btn>}
             />
           </div>
         ) : graphQuery.loading && !graph ? (
-          <LoadingState>Loading graph…</LoadingState>
+          <LoadingState>{view === 'timeline' ? 'Loading timeline…' : 'Loading graph…'}</LoadingState>
         ) : graph && nodes.length === 0 ? (
           <EmptyState
             title={`No work in ${project}`}
@@ -224,15 +231,7 @@ export function GraphPage() {
                 {...(createIn ? { onCreateIn: createIn } : {})}
               />
             ) : view === 'timeline' ? (
-              timelineQuery.error ? (
-                <div role="alert">
-                  <EmptyState
-                    title="Could not load the timeline"
-                    body={timelineQuery.error.message}
-                    action={<Btn variant="subtle" onClick={() => void timelineQuery.refetch()}>Retry</Btn>}
-                  />
-                </div>
-              ) : !timeline.loaded ? (
+              !timeline.loaded ? (
                 <LoadingState>Loading timeline…</LoadingState>
               ) : (
                 <ProjectTimeline
@@ -243,6 +242,10 @@ export function GraphPage() {
                   cycles={timeline.cycles}
                   zoom={scale}
                   onZoomChange={(value) => update({ scale: value })}
+                  window={factWindow}
+                  onWindowChange={(value) =>
+                    update({ from: value ? formatDay(value.from) : null, to: value ? formatDay(value.to) : null })
+                  }
                   onOpen={openIssue}
                 />
               )

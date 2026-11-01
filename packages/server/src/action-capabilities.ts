@@ -78,6 +78,7 @@ export const QUERY_EXEMPTIONS: Record<string, { reason: string; decision: string
   extensionTokens: { reason: 'A person lists their own browser-extension connections.', decision: 'INV-1145' },
   attention: { reason: 'The Needs you queue of decisions only people make; an agent learns of decisions through agent_inbox.', decision: 'INV-1090' },
   attentionSummary: { reason: 'The Needs you count for people; agents read agent_inbox.', decision: 'INV-1090' },
+  issuePreviews: { reason: 'The hover card a reader sees when they hover a work reference in prose; agents read the item itself with work_get_context.', decision: 'INV-1466' },
 };
 
 /** MCP write tools with no GraphQL counterpart, and why. */
@@ -140,6 +141,7 @@ export const AGENT_ONLY_FIELDS: Record<string, Record<string, string>> = {
  * rule (INV-1004) — a reason alone is not an exemption.
  */
 export const MCP_EXEMPTIONS: Record<string, { reason: string; gate: 'administration' | 'candidate' | 'final-acceptance' | 'personal' | 'deprecated'; decision: string }> = {
+  workflowPolicySet: { gate: 'administration', reason: 'A person sets how far agents may go; an agent never widens its own autonomy (docs/autonomy-policy.md).', decision: 'INV-1486' },
   deliveryChangeDecide: { gate: 'candidate', reason: 'A person approves or declines changes to delivery authority.', decision: 'INV-941' },
   contractAmendmentAccept: { gate: 'candidate', reason: 'A person approves a proposed committed-contract amendment.', decision: 'INV-869' },
   contractAmendmentReject: { gate: 'candidate', reason: 'A person declines a committed-contract amendment.', decision: 'INV-869' },

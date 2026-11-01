@@ -36,7 +36,7 @@ describe('decision receipts (INV-588)', () => {
 
     const created = await proposeWork(
       prisma,
-      { parentId: await testParentId(prisma, team.id), description: DESCRIPTION,
+      { acceptance: '可核对。', parentId: await testParentId(prisma, team.id), description: DESCRIPTION,
         receipt: {
           evidence: [{ kind: 'commit', ref: 'abc123', version: 'abc123' }],
           inputs: [{ kind: 'comment', ref: 'c-1', excerpt: 'please split this' }],
@@ -62,7 +62,7 @@ describe('decision receipts (INV-588)', () => {
   it('marks references preserved only when they pin what was seen', async () => {
     const { mia, team } = await agentAndTeam(prisma);
 
-    const created = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), description: DESCRIPTION,
+    const created = await proposeWork(prisma, { acceptance: '可核对。', parentId: await testParentId(prisma, team.id), description: DESCRIPTION,
       receipt: {
         evidence: [
           { kind: 'url', ref: 'https://example.test/doc' },                       // bare pointer
@@ -92,7 +92,7 @@ describe('decision receipts (INV-588)', () => {
     const { mia, team } = await agentAndTeam(prisma);
     const impostor = await prisma.user.findFirstOrThrow({ where: { actorKind: 'HUMAN' } });
 
-    await expect(proposeWork(prisma, { parentId: await testParentId(prisma, team.id), description: DESCRIPTION,
+    await expect(proposeWork(prisma, { acceptance: '可核对。', parentId: await testParentId(prisma, team.id), description: DESCRIPTION,
       receipt: { actorId: impostor.id, reasoning: 'I am someone else' },
       teamId: team.id,
       title: 'Forged',
@@ -106,7 +106,7 @@ describe('decision receipts (INV-588)', () => {
   it('requires reasoning', async () => {
     const { mia, team } = await agentAndTeam(prisma);
 
-    await expect(proposeWork(prisma, { parentId: await testParentId(prisma, team.id), description: DESCRIPTION,
+    await expect(proposeWork(prisma, { acceptance: '可核对。', parentId: await testParentId(prisma, team.id), description: DESCRIPTION,
       receipt: { reasoning: '   ' },
       teamId: team.id,
       title: 'Empty',
@@ -115,7 +115,7 @@ describe('decision receipts (INV-588)', () => {
 
   it('is immutable: a second receipt on the same audit is refused', async () => {
     const { mia, team } = await agentAndTeam(prisma);
-    const created = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), description: DESCRIPTION, receipt: { reasoning: 'first' }, teamId: team.id, title: 'Once',
+    const created = await proposeWork(prisma, { acceptance: '可核对。', parentId: await testParentId(prisma, team.id), description: DESCRIPTION, receipt: { reasoning: 'first' }, teamId: team.id, title: 'Once',
     }, { actorId: mia.id, actorKind: 'AGENT', surface: 'test' });
     const audit = await prisma.workAudit.findFirstOrThrow({ where: { workId: created.id } });
 
@@ -200,7 +200,7 @@ describe('receipts on run_report (INV-588)', () => {
 
   it('a completing report carries its receipt on the review-transition audit', async () => {
     const { mia, team } = await agentAndTeam(prisma);
-    const created = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), description: DESCRIPTION, teamId: team.id, title: 'Run me' },
+    const created = await proposeWork(prisma, { acceptance: '可核对。', parentId: await testParentId(prisma, team.id), description: DESCRIPTION, teamId: team.id, title: 'Run me' },
       { actorId: mia.id, actorKind: 'AGENT', surface: 'test' });
     // Commit through the real human gate (moves it to Ready), then claim.
     const admin = await prisma.user.findFirstOrThrow({ where: { actorKind: 'HUMAN' } });
@@ -224,7 +224,7 @@ describe('receipts on run_report (INV-588)', () => {
 
   it('refuses a receipt on a report that audited nothing, and does not pin it to an older audit', async () => {
     const { mia, team } = await agentAndTeam(prisma);
-    const created = await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), description: DESCRIPTION, teamId: team.id, title: 'Phase only' },
+    const created = await proposeWork(prisma, { acceptance: '可核对。', parentId: await testParentId(prisma, team.id), description: DESCRIPTION, teamId: team.id, title: 'Phase only' },
       { actorId: mia.id, actorKind: 'AGENT', surface: 'test' });
     // Commit through the real human gate (moves it to Ready), then claim.
     const admin = await prisma.user.findFirstOrThrow({ where: { actorKind: 'HUMAN' } });

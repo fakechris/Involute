@@ -325,7 +325,7 @@ describe('App issue detail editing', () => {
         data: boardQueryResult,
         loading: false,
         contractRefetch,
-        contractData: {
+        detailData: {
           issue: {
             id: 'issue-1',
             revision: 7,

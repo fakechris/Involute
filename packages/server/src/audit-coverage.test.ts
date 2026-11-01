@@ -211,7 +211,7 @@ describe('audit coverage (INV-587)', () => {
         data: { actorKind: 'AGENT', email: 'mia@agents.test.local', handle: 'mia', name: 'Mia', ownerId: admin.id },
       });
       const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
-      await proposeWork(prisma, { parentId: await testParentId(prisma, team.id), description: DESCRIPTION, teamId: team.id, title: 'Mine' },
+      await proposeWork(prisma, { acceptance: '可核对。', parentId: await testParentId(prisma, team.id), description: DESCRIPTION, teamId: team.id, title: 'Mine' },
         { actorId: mia.id, actorKind: 'AGENT', surface: 'test' });
 
       const profile = await getAgentProfile(prisma, 'mia');

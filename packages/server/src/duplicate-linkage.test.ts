@@ -83,7 +83,7 @@ describe('DUPLICATE_OF closes the duplicate and keeps its reporter informed (INV
 
   it('a person marking a candidate declines it; its proposer hears through work.rejected only', async () => {
     const original = await agentBug('Crash on save');
-    const candidate = await proposeWork(prisma, { teamId: team.id, title: 'Same idea', description: DESCRIPTION, parentId: projectId, repository: 'acme/app' }, asAgent());
+    const candidate = await proposeWork(prisma, { acceptance: '同义可判定。', teamId: team.id, title: 'Same idea', description: DESCRIPTION, parentId: projectId, repository: 'acme/app' }, asAgent());
 
     const { duplicate: outcome } = await linkWork(prisma, { actor: asHuman(), fromId: candidate.id, toId: original.id, type: 'DUPLICATE_OF' });
     expect(outcome?.closed).toBe(true);
@@ -137,7 +137,7 @@ describe('DUPLICATE_OF closes the duplicate and keeps its reporter informed (INV
   it('a proposal filed as a duplicate gets the same rule: an agent proposal stays a candidate', async () => {
     const original = await agentBug('Crash on save');
     const proposed = await proposeWork(prisma, {
-      teamId: team.id, title: 'Crash again', description: DESCRIPTION, parentId: projectId, repository: 'acme/app',
+      acceptance: '同义可判定。', teamId: team.id, title: 'Crash again', description: DESCRIPTION, parentId: projectId, repository: 'acme/app',
       relatedWorkId: original.id, relatedWorkType: 'DUPLICATE_OF',
     }, asAgent());
     expect(proposed.commitmentStatus).toBe('CANDIDATE');

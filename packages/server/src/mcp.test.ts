@@ -697,6 +697,7 @@ describe('Involute MCP', () => {
             team: DEFAULT_TEAM_KEY,
             parent_id: parentId,
             title: 'Candidate for unread_decisions piggyback test',
+            acceptance: '人工承诺后可进入执行。',
             description: '### 1. 目标与架构定位\n测试\n\n### 2. 核心功能与交付范围\n测试\n\n### 3. 验收标准与验证方案\n测试',
           },
         },

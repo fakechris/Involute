@@ -46,6 +46,7 @@ import {
   WORK_IDEMPOTENCY_CONFLICT_MESSAGE,
   WORK_IDEMPOTENCY_RESULT_UNAVAILABLE_MESSAGE,
   AGENT_DESCRIPTION_REQUIRED_MESSAGE,
+  AGENT_ACCEPTANCE_REQUIRED_MESSAGE,
   WORKFLOW_STATE_NOT_FOUND_MESSAGE,
   RESEARCH_INITIAL_DONE_ONLY_MESSAGE,
 } from './errors.js';
@@ -325,9 +326,18 @@ export async function proposeWork(
   actor: WriteActor = INTERNAL_WRITE_ACTOR,
 ): Promise<Issue> {
   assertActorCan(actor.actorKind, 'propose');
+  const proposalIsBug = (input.labels ?? []).some((label) => label.trim().toLowerCase() === 'bug');
+  const proposalIsIncident = namesIncident(input.labels);
   // An incident's description is its impact statement (INV-1123): say that, not only that the format is wrong.
-  if (namesIncident(input.labels) && !nonEmpty(input.description)) throw createValidationError(INCIDENT_IMPACT_REQUIRED_MESSAGE);
+  if (proposalIsIncident && !nonEmpty(input.description)) throw createValidationError(INCIDENT_IMPACT_REQUIRED_MESSAGE);
   validateAgentDescription(input.description, actor);
+  // INV-1449: commit refuses blank acceptance and agents cannot add it after
+  // commit (INV-869), so an acceptance-less proposal can only block the batch
+  // commit later. Bugs keep their own refusal (INV-836); incidents get the
+  // default acceptance (INV-1123); people fill the box on the card instead.
+  if (actor.actorKind === 'AGENT' && !proposalIsBug && !proposalIsIncident && !nonEmpty(input.acceptance)) {
+    throw createValidationError(AGENT_ACCEPTANCE_REQUIRED_MESSAGE);
+  }
   const { title: sanitizedTitle } = sanitizeWorkTitle(input.title);
 
   return prisma.$transaction(async (transaction) => {
@@ -431,8 +441,8 @@ export async function proposeWork(
     // Bugs an agent files (INV-751 / decision INV-787): committed at once,
     // like a human report placed in its project. Incomplete filings are
     // refused — they do not wait in Candidates.
-    const isBug = (input.labels ?? []).some((label) => label.trim().toLowerCase() === 'bug');
-    const isIncident = namesIncident(input.labels);
+    const isBug = proposalIsBug;
+    const isIncident = proposalIsIncident;
     if (isBug && isIncident) throw createValidationError(ISSUE_TYPE_EXCLUSIVE_MESSAGE);
     const incidentTimes = readIncidentTimes(input);
     if (!isIncident && Object.keys(incidentTimes).length > 0) throw createValidationError(INCIDENT_TIMES_NOT_INCIDENT_MESSAGE);
