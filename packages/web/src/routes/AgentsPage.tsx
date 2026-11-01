@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from '@apollo/client/react';
+import { AgentTrustPanel, type AgentTrustView } from '../components/AgentTrustPanel';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
@@ -30,6 +31,7 @@ interface AgentProfileData {
       runs: number;
       evidence: number;
     };
+    trust?: AgentTrustView | null;
     credentials: AgentCredentialSummary[];
     receipts: AgentReceiptEntry[];
     timeline: AgentTimelineEntry[];
@@ -250,6 +252,7 @@ function AgentProfile({ handle }: { handle: string }) {
           <ActorSuccessorControl actor={actor} onChanged={() => refetch()} />
         </>
       ) : null}
+      {profile.trust ? <AgentTrustPanel actorId={actor.id} trust={profile.trust} canManage={viewerCanManage} onChanged={() => void refetch()} /> : null}
 
       <div className="agent-directory__counts" aria-label="Activity counts">
         <span>proposed {counts.proposedWork}</span>

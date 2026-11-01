@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 
+import { ensureAgentTrustRow } from './agent-trust.js';
 import type { PrismaClient, User } from '@prisma/client';
 
 import { AGENT_EMAIL_INVALID_MESSAGE } from './errors.js';
@@ -214,6 +215,8 @@ export async function issueAgentCredential(
         subjectId: user.id,
       },
     });
+    // It observes until a person promotes it (INV-1490).
+    await ensureAgentTrustRow(prisma, user.id);
   }
   // Backfill: agents issued before INV-558 have no handle, so re-issuing a
   // credential is how they become mentionable. A no-op rename is not a clash.

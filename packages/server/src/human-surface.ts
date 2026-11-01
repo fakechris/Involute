@@ -45,6 +45,8 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   // INV-1489: Administration → Autonomy, Team settings → Autonomy, the project override (docs/autonomy-policy.md §2).
   workflowPolicySet: { kind: 'web', doc: 'WORKFLOW_POLICY_SET_MUTATION', components: ['routes/AutonomyTab.tsx'], label: 'Save autonomy', test: 'routes/AutonomyTab.test.tsx' },
   workflowPolicyClear: { kind: 'web', doc: 'WORKFLOW_POLICY_CLEAR_MUTATION', components: ['routes/AutonomyTab.tsx'], label: 'Inherit from team', test: 'routes/AutonomyTab.test.tsx' },
+  // INV-1490: Settings → Agents → agent → Trust level.
+  agentTrustSet: { kind: 'web', doc: 'AGENT_TRUST_SET_MUTATION', components: ['components/AgentTrustPanel.tsx'], label: 'Set trust level', test: 'App.agents-trust.test.tsx' },
   executorUpdate: { kind: 'web', components: ['components/ExecutorPanel.tsx'], label: 'Stop executor', test: 'components/ExecutorPanel.test.tsx' },
   deliveryChangePropose: { kind: 'web', components: ['components/DeliveryPanel.tsx'], label: 'Propose delivery change', test: 'components/DeliveryPanel.test.tsx' },
   deliveryChangeDecide: { kind: 'web', doc: 'DELIVERY_DECIDE_MUTATION', components: ['components/DeliveryPanel.tsx', 'routes/AttentionPage.tsx'], label: 'Approve delivery change', test: 'components/DeliveryPanel.test.tsx' },
