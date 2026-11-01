@@ -11,7 +11,7 @@ function routeOwnsIssueView(pathname: string): boolean {
   return pathname === '/' || pathname === '/backlog' || pathname.startsWith('/issue/') || pathname.startsWith('/issues/');
 }
 
-function isEditableTarget(target: EventTarget | null): boolean {
+export function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
 }

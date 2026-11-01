@@ -17,6 +17,8 @@ import { useMutation, useQuery } from '@apollo/client/react';
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
+import { RouteIssueDrawer } from '../components/RouteIssueDrawer';
+import { isEditableTarget } from '../components/IssueDrawerHost';
 
 import { looksLikeIql } from '../board/iql-eval';
 import {
@@ -173,6 +175,15 @@ function moveIssueToState(
   state: IssueSummary['state'],
 ): IssueSummary[] {
   return issues.map((item) => (item.id === issueId ? { ...item, state } : item));
+}
+
+/**
+ * The reference a ?issue= link carries, ready for the server: an identifier
+ * (`INV-1446`, any casing — the server stores them uppercased) or a uuid.
+ */
+function normalizeIssueRef(ref: string): string {
+  const trimmed = ref.trim();
+  return /^[A-Za-z][A-Za-z0-9]{0,9}-\d{1,9}$/.test(trimmed) ? trimmed.toUpperCase() : trimmed;
 }
 
 export function BoardPage() {
@@ -700,23 +711,71 @@ export function BoardPage() {
   }, [availableProjects, boardViewState.projectKey]);
 
   const prevUrlIssueRef = useRef<string | null>(null);
+  // A link may name an issue the board does not show: a filter can hide it, or
+  // it may sit beyond the first page. The drawer then asks the server for that
+  // one issue on its own and opens it, so a shared ?issue= link opens what it
+  // names whatever the board's filter says (INV-1469).
+  const [linkedIssueRef, setLinkedIssueRef] = useState<string | null>(null);
   useEffect(() => {
-    if (urlIssue && urlIssue !== prevUrlIssueRef.current) {
-      const match = allIssues.find(
-        (i) => i.identifier.toLowerCase() === urlIssue.toLowerCase() || i.id === urlIssue,
-      );
-      // Only remember the link once it has opened: on first render the issues
-      // have not loaded yet, and marking it handled then meant a shared
-      // ?issue= link never opened its drawer.
-      if (match) {
-        prevUrlIssueRef.current = urlIssue;
-        setFocusedIssueId(match.id);
-        setSelectedIssueId(match.id);
-      }
-    } else if (!urlIssue && prevUrlIssueRef.current) {
+    if (!urlIssue) {
       prevUrlIssueRef.current = null;
+      setLinkedIssueRef(null);
+      return;
     }
+    if (urlIssue === prevUrlIssueRef.current) {
+      return;
+    }
+    const match = allIssues.find(
+      (i) => i.identifier.toLowerCase() === urlIssue.toLowerCase() || i.id === urlIssue,
+    );
+    // The link is remembered once it has been dealt with: either the board
+    // holds the issue and opens it, or the drawer fetches that one issue.
+    prevUrlIssueRef.current = urlIssue;
+    if (match) {
+      setFocusedIssueId(match.id);
+      setSelectedIssueId(match.id);
+      setLinkedIssueRef(null);
+      return;
+    }
+    setFocusedIssueId(null);
+    setSelectedIssueId(null);
+    setLinkedIssueRef(normalizeIssueRef(urlIssue));
   }, [urlIssue, allIssues]);
+
+  // Closing the drawer a link opened takes only ?issue= away; the board's own
+  // filters and the rest of the URL stay as they are (INV-1387).
+  const closeLinkedIssue = useCallback(() => {
+    setLinkedIssueRef(null);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('issue');
+        return next;
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  }, [setSearchParams]);
+
+  // Esc closes it, the way it closes the drawer on every other route.
+  useEffect(() => {
+    if (!linkedIssueRef) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Escape' || event.defaultPrevented || isEditableTarget(event.target)) {
+        return;
+      }
+      event.preventDefault();
+      closeLinkedIssue();
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [closeLinkedIssue, linkedIssueRef]);
 
   const boardVisibleIssues = useMemo(
     () => {
@@ -3194,39 +3253,46 @@ export function BoardPage() {
       )}
 
       {closeReasonDialog}
-      <IssueDetailDrawer
-        issue={selectedIssue}
-        team={selectedTeam}
-        labels={labels}
-        users={users}
-        savingState={isSavingState}
-        errorMessage={mutationError}
-        onClose={() => {
-          setSelectedIssueId(null);
-          setSearchParams(
-            (prev) => {
-              const next = new URLSearchParams(prev);
-              next.delete('issue');
-              return next;
-            },
-            { replace: true },
-          );
-        }}
-        onStateChange={persistStateChange}
-        onTitleSave={persistTitleChange}
-        onDescriptionSave={persistDescriptionChange}
-        onContractSave={persistContractChange}
-        onLabelsChange={persistLabelsChange}
-        onStructureChange={persistStructureChange}
-        onAssigneeChange={persistAssigneeChange}
-        onCommentCreate={persistCommentCreate}
-        onCommentDelete={persistCommentDelete}
-        onIssueDelete={persistIssueDelete}
-        {...(!isBacklogView ? { previousIssue: previousBoardIssue } : {})}
-        {...(previousBoardIssue ? { onPreviousIssue: () => openIssue(previousBoardIssue) } : {})}
-        {...(!isBacklogView ? { nextIssue: nextBoardIssue } : {})}
-        {...(nextBoardIssue ? { onNextIssue: () => openIssue(nextBoardIssue) } : {})}
-      />
+      {linkedIssueRef ? (
+        // The issue a link named is not among the board's cards — a filter hid
+        // it, or it sits beyond the first page. The drawer asks for that one
+        // issue itself and opens it (INV-1469).
+        <RouteIssueDrawer key={linkedIssueRef} issueRef={linkedIssueRef} onClose={closeLinkedIssue} />
+      ) : (
+        <IssueDetailDrawer
+          issue={selectedIssue}
+          team={selectedTeam}
+          labels={labels}
+          users={users}
+          savingState={isSavingState}
+          errorMessage={mutationError}
+          onClose={() => {
+            setSelectedIssueId(null);
+            setSearchParams(
+              (prev) => {
+                const next = new URLSearchParams(prev);
+                next.delete('issue');
+                return next;
+              },
+              { replace: true },
+            );
+          }}
+          onStateChange={persistStateChange}
+          onTitleSave={persistTitleChange}
+          onDescriptionSave={persistDescriptionChange}
+          onContractSave={persistContractChange}
+          onLabelsChange={persistLabelsChange}
+          onStructureChange={persistStructureChange}
+          onAssigneeChange={persistAssigneeChange}
+          onCommentCreate={persistCommentCreate}
+          onCommentDelete={persistCommentDelete}
+          onIssueDelete={persistIssueDelete}
+          {...(!isBacklogView ? { previousIssue: previousBoardIssue } : {})}
+          {...(previousBoardIssue ? { onPreviousIssue: () => openIssue(previousBoardIssue) } : {})}
+          {...(!isBacklogView ? { nextIssue: nextBoardIssue } : {})}
+          {...(nextBoardIssue ? { onNextIssue: () => openIssue(nextBoardIssue) } : {})}
+        />
+      )}
       <BoardCreateIssueDialog
         // Open state is kept as requested (a shortcut or the graph page may ask before
         // teams load); it only shows for someone who may write in the team.
