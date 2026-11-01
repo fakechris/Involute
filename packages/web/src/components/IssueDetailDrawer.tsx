@@ -15,7 +15,7 @@ import { ClaimControl } from './ClaimControl';
 import { WorkStructureEditor, type StructureUpdate } from './WorkStructureEditor';
 import { toggleLabelId } from '../work/labels';
 import { RichTextEditor } from './RichTextEditor';
-import { AGENTS_QUERY, ISSUE_CONTRACT_QUERY } from '../board/queries';
+import { AGENTS_QUERY, ISSUE_DETAIL_QUERY } from '../board/queries';
 import { useContractAmendmentDecisions } from './ContractAmendmentPanel';
 import { Select } from './controls';
 
@@ -81,6 +81,11 @@ export function IssueDetailDrawer({
   const [selectedStateId, setSelectedStateId] = useState<string>('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  // The reader's own words in the description editor; a description that
+  // arrives late must not overwrite them (INV-1470).
+  const descriptionDirtyRef = useRef(false);
+  // Which issue the editor state belongs to: another issue starts clean.
+  const descriptionIssueRef = useRef<string | null>(null);
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [selectedAssigneeId, setSelectedAssigneeId] = useState('');
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -98,17 +103,29 @@ export function IssueDetailDrawer({
     fetchPolicy: 'cache-first',
   });
   const mentionables = agentsData?.agents ?? [];
-  // The open issue's own contract and any amendment an agent proposed to it (INV-896): the
-  // board list carries neither, and this is where people open work.
-  const { data: contractData, refetch: refetchContract } = useQuery<
-    { issue: (ContractValues & { id: string; commitmentStatus?: IssueSummary['commitmentStatus']; pendingContractAmendment?: ContractAmendmentSummary | null }) | null },
+  // The open issue's own contract, its description and any amendment an agent
+  // proposed to it (INV-896, INV-1470): the board list carries none of them,
+  // and this is where people open work.
+  const { data: detailData, loading: detailLoading, refetch: refetchContract } = useQuery<
+    { issue: (ContractValues & { id: string; description?: string | null; commitmentStatus?: IssueSummary['commitmentStatus']; pendingContractAmendment?: ContractAmendmentSummary | null }) | null },
     { id: string }
-  >(ISSUE_CONTRACT_QUERY, {
+  >(ISSUE_DETAIL_QUERY, {
     variables: { id: issue?.id ?? '' },
-    skip: !issue || !onContractSave,
+    // The description belongs to the open issue whether or not the contract
+    // editor is on screen, so the query does not wait for it (INV-1470).
+    skip: !issue,
     fetchPolicy: 'cache-and-network',
   });
   const amendmentDecisions = useContractAmendmentDecisions(() => refetchContract());
+  // The description the drawer shows: the caller's own copy when it has one
+  // (the issue page), otherwise the one the open-issue query brought. The
+  // board list does not carry descriptions (INV-1470). No issue on screen yet
+  // means no description either — the query has not answered.
+  const detailIssue = detailData?.issue ?? null;
+  const fetchedDescription =
+    detailIssue && detailIssue.id === issue?.id ? detailIssue.description ?? '' : '';
+  // The body is still on its way: nobody has it yet (INV-1470).
+  const descriptionPending = !description && issue?.description === undefined && detailLoading;
 
   useEffect(() => {
     setSelectedStateId(issue?.state.id ?? '');
@@ -120,8 +137,25 @@ export function IssueDetailDrawer({
   }, [issue?.id, issue?.title]);
 
   useEffect(() => {
-    setDescription(issue?.description ?? '');
-  }, [issue?.id, issue?.description]);
+    if (descriptionIssueRef.current !== (issue?.id ?? null)) {
+      descriptionIssueRef.current = issue?.id ?? null;
+      descriptionDirtyRef.current = false;
+    }
+    // The caller's own copy is the authority: the issue page always carries
+    // one, and the board grows one after a save. It changes when the server
+    // says so.
+    if (issue?.description !== undefined) {
+      setDescription(issue.description ?? '');
+      return;
+    }
+    // Otherwise the body arrives with the open issue's own query, and a draft
+    // in the editor outranks it (INV-1470).
+    if (descriptionDirtyRef.current) {
+      // What the reader is writing wins over a body that arrives late.
+      return;
+    }
+    setDescription(fetchedDescription);
+  }, [issue?.id, issue?.description, fetchedDescription]);
 
   useEffect(() => {
     setSelectedLabelIds(issue?.labels.nodes.map((label) => label.id) ?? []);
@@ -212,7 +246,7 @@ export function IssueDetailDrawer({
 
   const activeIssue = issue;
   // Only the contract of the issue on screen: a query still answering for the previous one is ignored.
-  const contract = contractData?.issue?.id === activeIssue.id ? contractData.issue : null;
+  const contract = detailData?.issue?.id === activeIssue.id ? detailData.issue : null;
 
   async function commitTitle() {
     if (isSavingTitleRef.current) {
@@ -236,11 +270,13 @@ export function IssueDetailDrawer({
   }
 
   async function commitDescription() {
-    if (description === (activeIssue.description ?? '')) {
+    if (description === (activeIssue.description ?? fetchedDescription)) {
+      descriptionDirtyRef.current = false;
       return;
     }
 
     await onDescriptionSave(activeIssue, description);
+    descriptionDirtyRef.current = false;
   }
 
   const parentSummary = activeIssue.parent
@@ -400,7 +436,10 @@ export function IssueDetailDrawer({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <RichTextEditor
                     value={description}
-                    onChange={setDescription}
+                    onChange={(value) => {
+                      descriptionDirtyRef.current = true;
+                      setDescription(value);
+                    }}
                     placeholder="Add a description…"
                     submitLabel="Save"
                     disabled={savingState}
@@ -415,7 +454,8 @@ export function IssueDetailDrawer({
                       type="button"
                       className="ui-action ui-action--subtle"
                       onClick={() => {
-                        setDescription(activeIssue.description ?? '');
+                        descriptionDirtyRef.current = false;
+                        setDescription(activeIssue.description ?? fetchedDescription);
                         setIsEditingDescription(false);
                       }}
                     >Cancel</button>
@@ -433,7 +473,12 @@ export function IssueDetailDrawer({
                   {description ? (
                     <MarkdownRenderer content={description} />
                   ) : (
-                    <span style={{ color: 'var(--fg-dim)', fontSize: 15 }}>Add a description…</span>
+                    <span style={{ color: 'var(--fg-dim)', fontSize: 15 }}>
+                      {/* The body is on its way: the board list does not carry it
+                          (INV-1470). Do not invite a description that may
+                          already be there. */}
+                      {descriptionPending ? 'Loading description…' : 'Add a description…'}
+                    </span>
                   )}
                 </div>
               )}

@@ -1,7 +1,7 @@
 import { gql } from '@apollo/client';
 
 export const BOARD_PAGE_QUERY = gql`
-  query BoardPage($query: String, $first: Int!, $after: String, $filter: IssueFilter, $teamFilter: TeamFilter) {
+  query BoardPage($query: String, $first: Int!, $after: String, $filter: IssueFilter, $teamFilter: TeamFilter, $withDescriptions: Boolean! = false) {
     projectSummary(teamFilter: $teamFilter) {
       totalCount
       noRepositoryCount
@@ -64,7 +64,9 @@ export const BOARD_PAGE_QUERY = gql`
         identifier
         revision
         title
-        description
+        # A hundred bodies are half the list's weight and no card renders them
+        # (INV-1470). A page that searches the bodies asks for them.
+        description @include(if: $withDescriptions)
         priority
         severity
         reproducibility
@@ -476,16 +478,20 @@ export const COMMENT_DELETE_MUTATION = gql`
 `;
 
 /**
- * The contract of the one issue open in the board drawer (INV-896). The board list does not
- * carry contracts — a hundred cards do not need them, and a pending amendment per card would be
- * a query per card — so the drawer asks for the open issue's own.
+ * What one open issue carries beyond the board list (INV-896, INV-1470): its
+ * contract, a pending amendment, and its description. The list does not carry
+ * contracts — a hundred cards do not need them, and a pending amendment per
+ * card would be a query per card — and it does not carry descriptions either:
+ * a hundred descriptions are half the board's payload, and only the one open
+ * issue is ever read (INV-1470).
  */
-export const ISSUE_CONTRACT_QUERY = gql`
-  query IssueContract($id: String!) {
+export const ISSUE_DETAIL_QUERY = gql`
+  query IssueDetail($id: String!) {
     issue(id: $id) {
       id
       revision
       commitmentStatus
+      description
       outcome
       scope
       constraints

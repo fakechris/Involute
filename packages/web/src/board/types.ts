@@ -467,6 +467,8 @@ export interface BoardPageQueryVariables {
   query?: string;
   first: number;
   after?: string;
+  /** Ask for the issues' bodies (INV-1470): the list leaves them out by default. */
+  withDescriptions?: boolean;
   teamFilter?: {
     key?: {
       eq?: string;

@@ -25,6 +25,7 @@ import {
   BOARD_PAGE_QUERY,
   COMMENT_DELETE_MUTATION,
   COMMENT_CREATE_MUTATION,
+  ISSUE_DETAIL_QUERY,
   ISSUE_DELETE_MUTATION,
   ISSUE_CREATE_MUTATION,
   ISSUE_UPDATE_MUTATION,
@@ -2670,6 +2671,17 @@ export function BoardPage() {
   }
 
   const peekIssue = peekIssueId ? boardVisibleIssues.find((issue) => issue.id === peekIssueId) ?? null : null;
+  // The peek shows the issue's opening lines, and the board list does not
+  // carry descriptions (INV-1470): it asks for the peeked one.
+  const { data: peekDetailData } = useQuery<
+    { issue: { id: string; description?: string | null } | null },
+    { id: string }
+  >(ISSUE_DETAIL_QUERY, {
+    variables: { id: peekIssueId ?? '' },
+    skip: !peekIssueId,
+  });
+  const peekDescription =
+    peekIssue?.description ?? (peekDetailData?.issue?.id === peekIssueId ? peekDetailData.issue.description ?? '' : '');
   const pickerTitles = { state: 'Change status', priority: 'Set priority', assignee: 'Assign to', label: 'Toggle label' } as const;
   const headerActions = (
     <>
@@ -3021,7 +3033,7 @@ export function BoardPage() {
           <div className="issue-peek__meta">
             {[peekIssue.state.name, peekIssue.assignee?.name ?? 'Unassigned', ['No priority', 'Urgent', 'High', 'Medium', 'Low'][peekIssue.priority] ?? '', ...peekIssue.labels.nodes.map((label) => label.name)].filter(Boolean).join(' · ')}
           </div>
-          {peekIssue.description ? <MarkdownRenderer content={peekIssue.description} clamp={12} size="sm" className="issue-peek__body" /> : null}
+          {peekDescription ? <MarkdownRenderer content={peekDescription} clamp={12} size="sm" className="issue-peek__body" /> : null}
           <div className="issue-peek__meta">Space or Esc to close · Enter to open</div>
         </aside>
       ) : null}

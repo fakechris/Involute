@@ -52,6 +52,9 @@ export function MyIssuesPage() {
   const { data, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
     variables: {
       first: 500,
+      // This page searches the bodies, so it asks for them (INV-1470); the
+      // board does not, and leaves them out of its list.
+      withDescriptions: true,
       filter: {
         ...(teamKey ? { team: { key: { eq: teamKey } } } : {}),
         assignee: { isMe: { eq: true } },
