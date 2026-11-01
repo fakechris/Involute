@@ -206,6 +206,100 @@
 }
 
 /* ============================================================== */
+/* Work references in prose (INV-1466)                            */
+/* ============================================================== */
+
+/*
+ * A reference to another work item ("depends on INV-1446"). The server
+ * decides whether the name is a work item, so a reference that names none
+ * (UTF-8) stays the word it was — only a resolved one becomes a link.
+ */
+.work-reference {
+  position: relative;
+}
+
+.work-reference__link {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  /* An identifier never wraps (docs/design-system.md §3 rule 2). */
+  white-space: nowrap;
+}
+
+.work-reference__link:hover {
+  opacity: 0.85;
+}
+
+/* The card the reference opens on hover. It is placed against the viewport
+   (the two custom properties are set when it opens) so that a clamped
+   description cannot cut it off. */
+.work-reference__popover {
+  position: fixed;
+  top: var(--work-reference-top, 0px);
+  left: var(--work-reference-left, 0px);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 320px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-md);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+  white-space: normal;
+  cursor: default;
+}
+
+.work-reference__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+
+.work-reference__id {
+  color: var(--fg);
+}
+
+.work-reference__title {
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.work-reference__excerpt {
+  color: var(--fg-dim);
+}
+
+.work-reference__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+
+.work-reference__repo {
+  color: var(--fg-dim);
+}
+
+.work-reference__kind,
+.work-reference__state,
+.work-reference__team {
+  color: var(--fg-dim);
+}
+
+/* ============================================================== */
 /* ListRow / IssueRow (components/list/ListRow.tsx)                */
 /* ============================================================== */
 

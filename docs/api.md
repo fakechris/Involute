@@ -228,6 +228,33 @@ query Issue($id: String!) {
 }
 ```
 
+### `issuePreviews(identifiers: [String!]!)`
+
+Resolves the work references a reader finds in prose (INV-1466): the small card the web app shows when a reader hovers `INV-1446` in a description, a comment or a run summary.
+
+Identifiers are given as the reader wrote them (`INV-1446`, `inv-1446`, or a project alias such as `LUM-398`, which resolves to `INV-398` and asserts the item belongs to that project). Only work the caller may read is returned — a reference to someone else's item simply does not come back, so it stays plain text on the page.
+
+```graphql
+query WorkPreviews($identifiers: [String!]!) {
+  issuePreviews(identifiers: $identifiers) {
+    id
+    reference        # the reference as it was written
+    identifier       # the item's own identifier
+    title
+    stateName
+    stateType
+    commitmentStatus
+    priority
+    kind
+    repository
+    teamKey
+    typeLabel
+    excerpt
+    updatedAt
+  }
+}
+```
+
 ### `issues(first: Int!, after: String, filter: IssueFilter)`
 
 Returns the issue connection. The server clamps `first` to a safe limit.

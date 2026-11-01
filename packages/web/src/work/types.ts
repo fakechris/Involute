@@ -533,6 +533,37 @@ export interface WorkSearchQueryData {
   search: WorkSearchHit[];
 }
 
+/**
+ * What a reference in prose points at (INV-1466): the small card a reader
+ * sees when they hover a work reference.
+ */
+export interface WorkPreview {
+  id: string;
+  /** The reference as the reader wrote it, normalized. */
+  reference: string;
+  /** The item's own identifier — the canonical form of the reference. */
+  identifier: string;
+  title: string;
+  stateName: string;
+  stateType: string;
+  commitmentStatus: CommitmentStatus;
+  priority: number;
+  kind: WorkKind;
+  repository: string | null;
+  teamKey: string;
+  typeLabel: string | null;
+  excerpt: string | null;
+  updatedAt: string;
+}
+
+export interface WorkPreviewsQueryData {
+  issuePreviews: WorkPreview[];
+}
+
+export interface WorkPreviewsQueryVariables {
+  identifiers: string[];
+}
+
 export interface SearchLabelsQueryData {
   issueLabels: { nodes: Array<{ id: string; name: string }> };
 }

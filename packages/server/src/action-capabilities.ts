@@ -78,6 +78,7 @@ export const QUERY_EXEMPTIONS: Record<string, { reason: string; decision: string
   extensionTokens: { reason: 'A person lists their own browser-extension connections.', decision: 'INV-1145' },
   attention: { reason: 'The Needs you queue of decisions only people make; an agent learns of decisions through agent_inbox.', decision: 'INV-1090' },
   attentionSummary: { reason: 'The Needs you count for people; agents read agent_inbox.', decision: 'INV-1090' },
+  issuePreviews: { reason: 'The hover card a reader sees when they hover a work reference in prose; agents read the item itself with work_get_context.', decision: 'INV-1466' },
 };
 
 /** MCP write tools with no GraphQL counterpart, and why. */

@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeAll, beforeEach, vi } from 'vitest';
 
 import { App } from '../App';
+import { WorkReferenceProvider } from '../components/WorkReference';
 import { resetStatusUndo } from '../undo/status-undo';
 import type {
   AccessPageQueryData,
@@ -29,6 +30,7 @@ import type {
   PlacementOptionsQueryData,
   WorkHygieneQueryData,
   WorkSearchQueryData,
+  WorkPreviewsQueryData,
 } from '../work/types';
 export type {
   AccessPageQueryData,
@@ -514,6 +516,8 @@ type QueryState = {
   contractRefetch?: ReturnType<typeof vi.fn>;
   /** Server search hits for the command palette (INV-925); absent, nothing matches. */
   searchData?: WorkSearchQueryData;
+  /** The hover previews behind work references in prose (INV-1466). */
+  previewsData?: WorkPreviewsQueryData;
 };
 
 export function renderApp(
@@ -541,6 +545,16 @@ export function renderApp(
     if (source.includes('query WorkSearch')) {
       return {
         data: options?.skip ? undefined : (queryState.searchData ?? { search: [] }),
+        error: undefined,
+        loading: false,
+        refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    // The hover previews behind work references in prose (INV-1466).
+    if (source.includes('query WorkPreviews')) {
+      return {
+        data: options?.skip ? undefined : (queryState.previewsData ?? { issuePreviews: [] }),
         error: undefined,
         loading: false,
         refetch: vi.fn().mockResolvedValue(undefined),
@@ -864,7 +878,9 @@ export function renderApp(
 
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <AppComponent />
+      <WorkReferenceProvider>
+        <AppComponent />
+      </WorkReferenceProvider>
     </MemoryRouter>,
   );
 }

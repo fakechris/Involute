@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 
+import { findWorkReferences } from '../work/work-reference';
 import { Btn } from './Primitives';
+import { WorkReference } from './WorkReference';
 
 interface MarkdownRendererProps {
   content: string;
@@ -15,7 +17,7 @@ interface MarkdownRendererProps {
 }
 
 interface ParsedToken {
-  type: 'text' | 'bold' | 'italic' | 'code' | 'codeblock' | 'link' | 'image' | 'br' | 'mention';
+  type: 'text' | 'bold' | 'italic' | 'code' | 'codeblock' | 'link' | 'image' | 'br' | 'mention' | 'workref';
   content?: string;
   children?: ParsedToken[];
   href?: string;
@@ -97,14 +99,29 @@ function tokenizeInline(text: string): ParsedToken[] {
     // Plain text: consume until next special character
     const nextSpecial = remaining.slice(1).search(/[`*!\[@]/);
     if (nextSpecial === -1) {
-      tokens.push({ type: 'text', content: remaining });
+      pushText(tokens, remaining);
       break;
     }
-    tokens.push({ type: 'text', content: remaining.slice(0, nextSpecial + 1) });
+    pushText(tokens, remaining.slice(0, nextSpecial + 1));
     remaining = remaining.slice(nextSpecial + 1);
   }
 
   return tokens;
+}
+
+/**
+ * Plain text, with the work references inside it (INV-1466) pulled out as
+ * tokens of their own: "see INV-1446" is a word, a reference and a word.
+ */
+function pushText(tokens: ParsedToken[], text: string): void {
+  if (!text) return;
+  let cursor = 0;
+  for (const match of findWorkReferences(text)) {
+    if (match.start > cursor) tokens.push({ type: 'text', content: text.slice(cursor, match.start) });
+    tokens.push({ type: 'workref', content: match.reference });
+    cursor = match.end;
+  }
+  if (cursor < text.length) tokens.push({ type: 'text', content: text.slice(cursor) });
 }
 
 function renderTokens(tokens: ParsedToken[], keyPrefix: string): ReactNode[] {
@@ -127,6 +144,10 @@ function renderTokens(tokens: ParsedToken[], keyPrefix: string): ReactNode[] {
             @{token.content}
           </a>
         );
+      case 'workref':
+        // A reference to another work item (INV-1466): it becomes a link once
+        // the server says it names one.
+        return <WorkReference key={key} reference={token.content ?? ''} />;
       case 'link':
         if (isVideoUrl(token.href ?? '')) {
           return (

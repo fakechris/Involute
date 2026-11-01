@@ -813,6 +813,29 @@ export const WORK_SEARCH_QUERY = gql`
   }
 `;
 
+// What the work references in prose point at (INV-1466): the card a reader
+// sees when they hover a reference, and the item a click lands on.
+export const WORK_PREVIEWS_QUERY = gql`
+  query WorkPreviews($identifiers: [String!]!) {
+    issuePreviews(identifiers: $identifiers) {
+      id
+      reference
+      identifier
+      title
+      stateName
+      stateType
+      commitmentStatus
+      priority
+      kind
+      repository
+      teamKey
+      typeLabel
+      excerpt
+      updatedAt
+    }
+  }
+`;
+
 // Label choices for the search page's filter (INV-926).
 export const SEARCH_LABELS_QUERY = gql`
   query SearchLabels {
