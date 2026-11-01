@@ -64,6 +64,9 @@ const LOCAL_CUSTOM_PROPERTIES = new Set<string>([
   // Set inline on .project-timeline__grid from the visible row window and read by its spacers.
   '--timeline-row-offset',
   '--timeline-row-offset-bottom',
+  // Set inline on .project-timeline__grid from the fact window and read by the coverage gap band.
+  '--timeline-gap-left',
+  '--timeline-gap-width',
 ]);
 
 /**

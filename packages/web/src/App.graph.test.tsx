@@ -247,6 +247,46 @@ describe('project graph page (INV-681)', () => {
     expect(container.querySelector('[data-work-id="inv-141"] .timeline-span')).toHaveAttribute('title', expect.stringContaining('1/3 done'));
   });
 
+  it('narrows the timeline to the fact window in the URL and lists the same items (INV-1446)', async () => {
+    const { container } = renderGraph('/graph?project=fakechris/lumenbox&view=timeline&scale=day&from=2026-09-03&to=2026-09-07');
+    await screen.findByRole('region', { name: 'Project timeline' });
+
+    // The items that recorded nothing inside the window are gone.
+    expect(container.querySelector('[data-work-id="inv-638"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-work-id="inv-700"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-work-id="inv-636"]')).toBeInTheDocument();
+
+    // The list holds the same items as the rows.
+    const list = screen.getByRole('region', { name: 'Items in this window' });
+    expect(within(list).getByRole('button', { name: 'Open INV-636' })).toBeInTheDocument();
+    expect(within(list).queryByRole('button', { name: 'Open INV-638' })).not.toBeInTheDocument();
+
+    // The bars are trimmed to the window: this one finished on the 8th, outside it.
+    const done = container.querySelector('[data-work-id="inv-637"]')!;
+    expect(done.querySelectorAll('.timeline-dot')).toHaveLength(0);
+    expect(done.querySelectorAll('.timeline-bar')).toHaveLength(2);
+  });
+
+  it('writes the fact window into the URL so a link can be shared (INV-1446)', async () => {
+    const { container } = renderGraph('/graph?project=fakechris/lumenbox&view=timeline&scale=day&from=2026-09-03&to=2026-09-07');
+    await screen.findByRole('region', { name: 'Project timeline' });
+    expect(screen.getByLabelText('Timeline window from')).toHaveValue('2026-09-03');
+
+    fireEvent.change(screen.getByLabelText('Timeline window from'), { target: { value: '2026-09-05' } });
+
+    // The window moved, so the item that recorded only on the 4th is gone.
+    expect(container.querySelector('[data-work-id="inv-636"]')).not.toBeInTheDocument();
+    expect(container.querySelector('[data-work-id="inv-637"]')).toBeInTheDocument();
+    expect(screen.getByLabelText('Timeline window from')).toHaveValue('2026-09-05');
+  });
+
+  it('marks the stretch of the window that predates the recorded history (INV-1446)', async () => {
+    const { container } = renderGraph('/graph?project=fakechris/lumenbox&view=timeline&scale=day&from=2026-09-01&to=2026-09-07');
+    await screen.findByRole('region', { name: 'Project timeline' });
+    expect(container.querySelector('.timeline-gap')).toBeInTheDocument();
+    expect(screen.getByText(/no recorded history before/)).toBeInTheDocument();
+  });
+
   it('reads the graph and its audit trail in one request on the timeline view (INV-1445)', async () => {
     renderGraph('/graph?project=fakechris/lumenbox&view=timeline');
     await screen.findByRole('region', { name: 'Project timeline' });

@@ -4,18 +4,30 @@ import { buildBlockerIndex, type GraphEdge, type GraphNode, type Outline, type O
 import {
   axisTicks,
   containerSpans,
+  coverageGap,
   cumulativeSeries,
+  cumulativeSeriesInWindow,
+  filterOutlineByWindow,
+  formatDay,
+  parseDay,
+  presetForWindow,
   rangeWidth,
-  spellsOf,
+  spellsForWindow,
   timeRange,
+  windowEndExclusive,
+  windowForPreset,
+  windowRange,
   xFor,
   type ContainerSpan,
+  type FactWindow,
   type TimelineEntry,
   type TimelineZoom,
+  type WindowPreset,
+  WINDOW_PRESETS,
 } from '../../work/timeline-model';
 import { StatusIcon } from '../StatusIcon';
 import { STATE_TYPE_COLOR } from './graph-colors';
-import { Select } from '../controls';
+import { Select, TextInput } from '../controls';
 
 export interface TimelineCycle {
   id: string;
@@ -33,6 +45,9 @@ interface ProjectTimelineProps {
   cycles: TimelineCycle[];
   zoom: TimelineZoom;
   onZoomChange: (zoom: TimelineZoom) => void;
+  /** The fact window the reader is looking at, or null for everything (INV-1446). */
+  window: FactWindow | null;
+  onWindowChange: (window: FactWindow | null) => void;
   onOpen: (id: string) => void;
   now?: Date;
 }
@@ -73,12 +88,17 @@ function flatten(items: OutlineItem[], collapsed: Set<string>, depth = 0, out: F
  * the outline; bars are the recorded stays in each state. There are no
  * planned dates, so open work stops at today and nothing is projected.
  */
-export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, onZoomChange, onOpen, now: nowProp }: ProjectTimelineProps) {
+export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, onZoomChange, window: factWindow, onWindowChange, onOpen, now: nowProp }: ProjectTimelineProps) {
   // One "now" per mount, so the axis does not shift under the reader on every render.
   const [now] = useState(() => nowProp ?? new Date());
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const allEntries = useMemo(() => [...entries.values()], [entries]);
-  const range = useMemo(() => timeRange(allEntries, now, zoom), [allEntries, now, zoom]);
+  const roots = useMemo(() => [...outline.roots, ...outline.unplaced], [outline]);
+  // A window is a lens: the axis covers the window, not the whole history.
+  const range = useMemo(
+    () => (factWindow ? windowRange(factWindow) : timeRange(allEntries, now, zoom)),
+    [factWindow, allEntries, now, zoom],
+  );
   const width = rangeWidth(range, zoom);
   const ticks = useMemo(() => axisTicks(range, zoom), [range, zoom]);
   // Progress counts work items, not the containers that group them.
@@ -94,14 +114,29 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
     [...outline.roots, ...outline.unplaced].forEach(visit);
     return leaves;
   }, [entries, outline]);
-  const series = useMemo(() => cumulativeSeries(leafEntries, range), [leafEntries, range]);
-  const rows = useMemo(() => flatten([...outline.roots, ...outline.unplaced], collapsed), [outline, collapsed]);
+  const series = useMemo(
+    // Inside a window the curve keeps what was already true when the window
+    // opened: the scope line does not restart at zero (INV-1446).
+    () => (factWindow ? cumulativeSeriesInWindow(leafEntries, factWindow) : cumulativeSeries(leafEntries, range)),
+    [leafEntries, factWindow, range],
+  );
+  // Rows that recorded nothing inside the window drop out of the tree (INV-1446).
+  const visibleRoots = useMemo(
+    () => (factWindow ? filterOutlineByWindow(roots, entries, factWindow) : roots),
+    [roots, entries, factWindow],
+  );
+  const rows = useMemo(() => flatten(visibleRoots, collapsed), [visibleRoots, collapsed]);
+  // The window's own list of items, read from the same filter as the rows.
+  const windowItems = useMemo(() => flatten(visibleRoots, new Set<string>()), [visibleRoots]);
+  const gap = useMemo(() => (factWindow ? coverageGap(allEntries, factWindow) : null), [allEntries, factWindow]);
   const withoutHistory = allEntries.filter((entry) => entry.history === 'NONE').length;
 
   // One pass over the edges instead of one scan per row (INV-1443).
   const blockersByNode = useMemo(() => buildBlockerIndex(edges, byId), [edges, byId]);
-  // Every container's extent in one bottom-up pass (INV-1443).
-  const spans = useMemo(() => containerSpans([...outline.roots, ...outline.unplaced], entries, now), [outline, entries, now]);
+  // Every container's extent in one bottom-up pass (INV-1443). The spans come
+  // from the whole outline, not the filtered one, so a container kept only
+  // because it recorded something itself still shows its extent (INV-1446).
+  const spans = useMemo(() => containerSpans(roots, entries, now), [roots, entries, now]);
 
   const x = useCallback((date: Date) => xFor(date, range, zoom), [range, zoom]);
   const toggle = useCallback(
@@ -114,6 +149,42 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
       }),
     [],
   );
+
+  // The window controls (INV-1446). The preset is derived from the window so
+  // a shared link reopens on the same control it was shared from.
+  const preset = presetForWindow(factWindow, now);
+  const handlePreset = useCallback(
+    (value: WindowPreset) => {
+      if (value === 'custom') {
+        onWindowChange(factWindow ?? windowForPreset('7d', now));
+        return;
+      }
+      onWindowChange(windowForPreset(value, now));
+    },
+    [factWindow, now, onWindowChange],
+  );
+  const handleFrom = useCallback(
+    (value: string) => {
+      const day = parseDay(value);
+      if (!day || !factWindow) return;
+      onWindowChange({ from: day, to: factWindow.to.getTime() < day.getTime() ? day : factWindow.to });
+    },
+    [factWindow, onWindowChange],
+  );
+  const handleTo = useCallback(
+    (value: string) => {
+      const day = parseDay(value);
+      if (!day || !factWindow) return;
+      onWindowChange({ from: factWindow.from.getTime() > day.getTime() ? day : factWindow.from, to: day });
+    },
+    [factWindow, onWindowChange],
+  );
+  // The part of the window that predates every recorded fact: nothing is
+  // drawn there, the reader is told the history does not reach that far.
+  const gapLeft = gap ? x(gap.from) : 0;
+  const gapWidth = gap ? Math.max(2, x(gap.to) - gapLeft) : 0;
+  // "Today" only belongs on the axis while the window still contains it.
+  const showToday = now.getTime() >= range.start.getTime() && now.getTime() <= range.end.getTime();
 
   // Only the rows the viewport can show are mounted (INV-1444).
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -182,6 +253,40 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
               <option value="month">Months</option>
             </Select>
           </label>
+          <label>
+            Window
+            <Select aria-label="Timeline window" value={preset} onChange={(event) => handlePreset(event.target.value as WindowPreset)}>
+              {WINDOW_PRESETS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </label>
+          {factWindow ? (
+            <>
+              <label>
+                From
+                <TextInput
+                  type="date"
+                  aria-label="Timeline window from"
+                  value={formatDay(factWindow.from)}
+                  max={formatDay(now)}
+                  onChange={(event) => handleFrom(event.target.value)}
+                />
+              </label>
+              <label>
+                To
+                <TextInput
+                  type="date"
+                  aria-label="Timeline window to"
+                  value={formatDay(factWindow.to)}
+                  max={formatDay(now)}
+                  onChange={(event) => handleTo(event.target.value)}
+                />
+              </label>
+            </>
+          ) : null}
         </div>
         <div className="dependency-graph__legend" aria-label="Timeline legend">
           <span className="dependency-graph__legend-item"><i className="timeline-swatch timeline-swatch--waiting" />Waiting</span>
@@ -209,6 +314,9 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
             // the length of the whole outline (INV-1444).
             '--timeline-row-offset': `${topOffset}px`,
             '--timeline-row-offset-bottom': `${bottomOffset}px`,
+            // The stretch of the window that predates every recorded fact.
+            '--timeline-gap-left': `${gapLeft}px`,
+            '--timeline-gap-width': `${gapWidth}px`,
           } as CSSProperties}
         >
           {/* Cumulative chart */}
@@ -225,6 +333,13 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
             </span>
           </div>
           <div className="project-timeline__lane" style={{ height: CHART_HEIGHT }}>
+            {gap ? (
+              <span
+                className="timeline-gap"
+                aria-hidden="true"
+                title={`No recorded history before ${fmt(gap.to)}`}
+              />
+            ) : null}
             <svg width={width} height={CHART_HEIGHT} aria-label="Scope, started and done over time" role="img">
               <path d={stepPath('scope')} className="timeline-series timeline-series--scope" />
               <path d={stepPath('started')} className="timeline-series timeline-series--started" />
@@ -270,6 +385,7 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
                 blockers={blockersByNode.get(node.id) ?? NO_BLOCKERS}
                 entry={entry}
                 span={isContainer ? spans.get(node.id) ?? null : null}
+                window={factWindow}
                 x={x}
                 width={width}
                 now={now}
@@ -279,8 +395,42 @@ export function ProjectTimeline({ outline, edges, byId, entries, cycles, zoom, o
 
           {bottomOffset > 0 ? <div className="project-timeline__spacer project-timeline__spacer--bottom" aria-hidden="true" /> : null}
         </div>
-        <div className="timeline-today" style={{ left: LABEL_WIDTH + x(now) }} aria-hidden="true" title={`Today, ${fmt(now)}`} />
+        {showToday ? <div className="timeline-today" style={{ left: LABEL_WIDTH + x(now) }} aria-hidden="true" title={`Today, ${fmt(now)}`} /> : null}
       </div>
+
+      {factWindow ? (
+        <section className="timeline-window" aria-label="Items in this window">
+          <div className="timeline-window__head">
+            <strong>In this window</strong>
+            <span>
+              {fmt(factWindow.from)} – {fmt(factWindow.to)}
+            </span>
+            <span>{windowItems.length} items</span>
+            {gap ? (
+              <span className="timeline-window__gap">no recorded history before {fmt(gap.to)}</span>
+            ) : null}
+          </div>
+          {windowItems.length > 0 ? (
+            <ul className="timeline-window__list">
+              {windowItems.map(({ item }) => (
+                <li key={item.node.id} className="timeline-window__item">
+                  <button
+                    type="button"
+                    className="timeline-window__open"
+                    onClick={() => onOpen(item.node.id)}
+                    aria-label={`Open ${item.node.identifier}`}
+                  >
+                    <span className="graph-outline__id">{item.node.identifier}</span>
+                    <span className="graph-outline__title">{item.node.title}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="timeline-window__empty">Nothing was recorded in this window.</p>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -295,13 +445,15 @@ interface TimelineRowProps {
   blockers: GraphNode[];
   entry: TimelineEntry | undefined;
   span: ContainerSpan | null;
+  /** The fact window, when the reader is looking at one (INV-1446). */
+  window: FactWindow | null;
   x: (date: Date) => number;
   width: number;
   now: Date;
 }
 
 /** Rows are memoized: a collapse or a scale change redraws only what changed (INV-1443). */
-const TimelineRow = memo(function TimelineRow({ node, depth, isContainer, isCollapsed, onToggle, onOpen, blockers, entry, span, x, width, now }: TimelineRowProps) {
+const TimelineRow = memo(function TimelineRow({ node, depth, isContainer, isCollapsed, onToggle, onOpen, blockers, entry, span, window: factWindow, x, width, now }: TimelineRowProps) {
   const summary = entry
     ? `${node.identifier}: started ${fmt(entry.startedAt)}, review ${fmt(entry.reviewAt)}, done ${fmt(entry.completedAt)}`
     : node.identifier;
@@ -309,14 +461,17 @@ const TimelineRow = memo(function TimelineRow({ node, depth, isContainer, isColl
   let lane: React.ReactNode = null;
   if (isContainer) {
     if (span) {
-      const left = x(span.from);
-      const right = x(span.to);
+      // Inside a window the extent is trimmed to the window (INV-1446).
+      const from = factWindow ? new Date(Math.max(span.from.getTime(), factWindow.from.getTime())) : span.from;
+      const to = factWindow ? new Date(Math.min(span.to.getTime(), windowEndExclusive(factWindow).getTime())) : span.to;
+      const left = x(from);
+      const right = x(to);
       lane = (
         <>
           <span
             className={`timeline-span${span.open ? ' timeline-span--open' : ''}`}
             style={{ left, width: Math.max(2, right - left) }}
-            title={`${fmt(span.from)} – ${span.open ? 'today' : fmt(span.to)} · ${span.done}/${span.total} done`}
+            title={`${fmt(from)} – ${fmt(to)} · ${span.done}/${span.total} done`}
           >
             <span className="timeline-span__fill" style={{ width: `${span.total ? (span.done / span.total) * 100 : 0}%` }} />
           </span>
@@ -329,9 +484,15 @@ const TimelineRow = memo(function TimelineRow({ node, depth, isContainer, isColl
   } else if (!entry || entry.history === 'NONE') {
     lane = <span className="timeline-nohistory">no recorded history · {node.stateName}</span>;
   } else {
-    lane = spellsOf(entry).map((spell) => {
-      const left = x(spell.from);
+    // Inside a window the bars are trimmed to it, and a bar that opened before
+    // the window keeps running to its end: the item was in that state for the
+    // whole period (INV-1446).
+    lane = spellsForWindow(entry, factWindow).map((spell) => {
       if (spell.stateType === 'COMPLETED' || spell.stateType === 'CANCELED') {
+        // The mark shows the moment it finished, so it only belongs to the
+        // window when that moment is inside it.
+        if (!spell.beganInWindow) return null;
+        const left = x(spell.from);
         return (
           <span
             key={`${spell.stateType}-${spell.from.getTime()}`}
@@ -341,7 +502,8 @@ const TimelineRow = memo(function TimelineRow({ node, depth, isContainer, isColl
           />
         );
       }
-      const right = x(spell.to ?? now);
+      const left = x(spell.start);
+      const right = x(spell.end ?? now);
       const waiting = spell.stateType === 'BACKLOG' || spell.stateType === 'UNSTARTED';
       return (
         <span

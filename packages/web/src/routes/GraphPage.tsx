@@ -14,7 +14,7 @@ import { Btn } from '../components/Primitives';
 import { EmptyState, LoadingState, SegmentedControl } from '../components/status';
 import { ProjectFilterCombobox, type AvailableProject } from '../components/ProjectFilterCombobox';
 import { buildOutline, type GraphNode } from '../work/graph-model';
-import { defaultZoom, type TimelineEntry, type TimelineZoom } from '../work/timeline-model';
+import { defaultZoom, formatDay, parseFactWindow, zoomForWindow, type TimelineEntry, type TimelineZoom } from '../work/timeline-model';
 import { GRAPH_PROJECTS_QUERY, PROJECT_WORK_GRAPH_QUERY, PROJECT_WORK_GRAPH_TIMELINE_QUERY } from '../work/queries';
 import type {
   GraphProjectsQueryData,
@@ -63,6 +63,13 @@ export function GraphPage() {
   const includeCandidates = searchParams.get('candidates') === '1';
   const showOtherLinks = searchParams.get('links') === 'all';
   const teamKey = readStoredTeamKey();
+  // One "now" for the page, so the window and the scale it picks stay put.
+  const now = useMemo(() => new Date(), []);
+  // The fact window the reader is looking at (INV-1446).
+  const factWindow = useMemo(
+    () => parseFactWindow(searchParams.get('from'), searchParams.get('to'), now),
+    [searchParams, now],
+  );
 
   const projectsQuery = useQuery<GraphProjectsQueryData>(GRAPH_PROJECTS_QUERY, {
     variables: teamKey ? { teamFilter: { key: { eq: teamKey } } } : {},
@@ -96,7 +103,8 @@ export function GraphPage() {
     const cycles = (data?.cycles ?? []).map((cycle) => ({ ...cycle, startsAt: new Date(cycle.startsAt), endsAt: new Date(cycle.endsAt) }));
     return { entries, cycles, loaded: Boolean(graphQuery.data) };
   }, [graphQuery.data]);
-  const scale = chosenScale ?? defaultZoom([...timeline.entries.values()], new Date());
+  // A window is a lens: the scale follows the window, not the whole history.
+  const scale = chosenScale ?? (factWindow ? zoomForWindow(factWindow) : defaultZoom([...timeline.entries.values()], now));
 
   const projects = useMemo<AvailableProject[]>(
     () =>
@@ -234,6 +242,10 @@ export function GraphPage() {
                   cycles={timeline.cycles}
                   zoom={scale}
                   onZoomChange={(value) => update({ scale: value })}
+                  window={factWindow}
+                  onWindowChange={(value) =>
+                    update({ from: value ? formatDay(value.from) : null, to: value ? formatDay(value.to) : null })
+                  }
                   onOpen={openIssue}
                 />
               )

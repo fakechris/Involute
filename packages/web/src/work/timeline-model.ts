@@ -2,6 +2,10 @@
  * Pure model for the project timeline (INV-682): what actually happened to
  * each item, placed on a time axis. No planned dates exist, so nothing here
  * extrapolates — open work runs to "now" and stops there.
+ *
+ * The fact window (INV-1446) is a lens on a period of recorded facts, never a
+ * plan: it picks the days the reader is looking at and never invents a date
+ * the audit trail does not contain.
  */
 
 import type { WorkflowStateType } from '../board/types';
@@ -248,4 +252,229 @@ export function axisTicks(range: TimeRange, zoom: TimelineZoom): Tick[] {
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return ticks;
+}
+
+// ---------------------------------------------------------------------------
+// Fact window (INV-1446)
+// ---------------------------------------------------------------------------
+
+/** The UTC days a reader is looking at, both ends inclusive. */
+export interface FactWindow {
+  from: Date;
+  to: Date;
+}
+
+/** A `YYYY-MM-DD` UTC day, or null when the text is not a day. */
+export function parseDay(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  // Rejects 2026-02-31 and friends, which Date.UTC would roll over silently.
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return date;
+}
+
+/** The `YYYY-MM-DD` form of a UTC day, for the URL. */
+export function formatDay(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * The window the URL asks for, or null when the reader wants everything.
+ * A window never reaches past today: there is no recorded fact in the future
+ * to look at, and showing one would be a plan, not a fact.
+ */
+export function parseFactWindow(from: string | null, to: string | null, now: Date): FactWindow | null {
+  const start = parseDay(from);
+  const end = parseDay(to);
+  if (!start && !end) return null;
+  const today = startOfUtcDay(now);
+  const resolvedTo = end && end.getTime() < today.getTime() ? end : today;
+  const resolvedFrom = start ?? resolvedTo;
+  if (resolvedFrom.getTime() > resolvedTo.getTime()) return null;
+  return { from: resolvedFrom, to: resolvedTo };
+}
+
+/** The axis range of a window: its first day up to the day after its last. */
+export function windowRange(window: FactWindow): TimeRange {
+  return { start: window.from, end: new Date(window.to.getTime() + DAY_MS) };
+}
+
+/** The last instant of a window, exclusive. */
+function windowEnd(window: FactWindow): number {
+  return window.to.getTime() + DAY_MS;
+}
+
+/**
+ * Every dated fact about an item: its state changes plus the milestone
+ * stamps the server derives from them. The commitment is not a state change,
+ * so it has to be asked for separately.
+ */
+export function factMoments(entry: TimelineEntry): number[] {
+  const moments = entry.transitions.map((transition) => transition.at.getTime());
+  for (const stamp of [entry.committedAt, entry.startedAt, entry.reviewAt, entry.completedAt, entry.canceledAt]) {
+    if (stamp) moments.push(stamp.getTime());
+  }
+  return moments;
+}
+
+/** True when the item recorded something inside the window. */
+export function entryInWindow(entry: TimelineEntry | undefined, window: FactWindow): boolean {
+  if (!entry) return false;
+  const start = window.from.getTime();
+  const end = windowEnd(window);
+  return factMoments(entry).some((at) => at >= start && at < end);
+}
+
+/** A spell with the part outside the window trimmed off. */
+export interface DrawnSpell extends Spell {
+  /** The left edge of the bar. */
+  start: Date;
+  /** The right edge of the bar, or null while the spell is still open. */
+  end: Date | null;
+  /** True when the moment that opened the spell falls inside the window. */
+  beganInWindow: boolean;
+}
+
+/**
+ * The spells of an item as they read inside a window: bars are trimmed to
+ * the window, and a spell that opened before it keeps running to the window's
+ * end — the item really was in that state for the whole period.
+ */
+export function spellsForWindow(entry: TimelineEntry, window: FactWindow | null): DrawnSpell[] {
+  if (!window) {
+    return spellsOf(entry).map((spell) => ({ ...spell, start: spell.from, end: spell.to, beganInWindow: true }));
+  }
+  const start = window.from.getTime();
+  const end = windowEnd(window);
+  return spellsOf(entry)
+    .map((spell) => {
+      const from = spell.from.getTime();
+      const to = spell.to ? spell.to.getTime() : end;
+      return {
+        ...spell,
+        start: new Date(Math.max(from, start)),
+        end: new Date(Math.min(to, end)),
+        beganInWindow: from >= start && from < end,
+      };
+    })
+    .filter((spell) => spell.start.getTime() < end && spell.end.getTime() > start);
+}
+
+/** The day after a window's last day, exclusive. */
+export function windowEndExclusive(window: FactWindow): Date {
+  return new Date(window.to.getTime() + DAY_MS);
+}
+
+/**
+ * The part of the window that predates every recorded fact. Nothing is drawn
+ * there: the reader is told the history does not reach that far.
+ */
+export function coverageGap(entries: TimelineEntry[], window: FactWindow): { from: Date; to: Date } | null {
+  let earliest: number | null = null;
+  for (const entry of entries) {
+    const first = entry.committedAt ?? entry.transitions[0]?.at ?? null;
+    if (!first) continue;
+    const at = first.getTime();
+    if (earliest === null || at < earliest) earliest = at;
+  }
+  // The window opens before the history does: the stretch in between has no facts.
+  if (earliest === null || earliest <= window.from.getTime()) return null;
+  return { from: window.from, to: new Date(earliest) };
+}
+
+/**
+ * The progress series inside a window. The first point carries what was
+ * already true when the window opened: a window is a lens on a project that
+ * was already running, so the scope line does not restart at zero.
+ */
+export function cumulativeSeriesInWindow(entries: TimelineEntry[], window: FactWindow): CumulativePoint[] {
+  const start = window.from.getTime();
+  const end = windowEnd(window);
+  const events: Array<{ at: number; key: 'scope' | 'started' | 'completed' }> = [];
+  for (const entry of entries) {
+    if (entry.history === 'NONE') continue;
+    const scopeAt = entry.committedAt ?? entry.transitions[0]?.at ?? null;
+    if (scopeAt) events.push({ at: scopeAt.getTime(), key: 'scope' });
+    if (entry.startedAt) events.push({ at: entry.startedAt.getTime(), key: 'started' });
+    if (entry.completedAt) events.push({ at: entry.completedAt.getTime(), key: 'completed' });
+  }
+  events.sort((left, right) => left.at - right.at);
+  const counts = { scope: 0, started: 0, completed: 0 };
+  // What was already true when the window opened.
+  for (const event of events) {
+    if (event.at >= start) break;
+    counts[event.key] += 1;
+  }
+  const points: CumulativePoint[] = [{ at: window.from, ...counts }];
+  for (const event of events) {
+    if (event.at < start) continue;
+    if (event.at >= end) break;
+    counts[event.key] += 1;
+    const last = points.at(-1)!;
+    if (last.at.getTime() === event.at) Object.assign(last, counts);
+    else points.push({ at: new Date(event.at), ...counts });
+  }
+  points.push({ at: new Date(end), ...counts });
+  return points;
+}
+
+/**
+ * The outline as it reads inside a window: an item stays when it recorded
+ * something in that window, and a container stays when one of its children
+ * does. Items with nothing in the window drop out of the tree entirely.
+ */
+export function filterOutlineByWindow(
+  items: OutlineItem[],
+  entries: Map<string, TimelineEntry>,
+  window: FactWindow,
+): OutlineItem[] {
+  const keep = (item: OutlineItem): OutlineItem | null => {
+    const children = item.children.map(keep).filter((child): child is OutlineItem => child !== null);
+    const self = entryInWindow(entries.get(item.node.id), window);
+    if (!self && children.length === 0) return null;
+    return { ...item, children };
+  };
+  return items.map(keep).filter((item): item is OutlineItem => item !== null);
+}
+
+/** The scale that fits a window, so a short window is not squeezed into month ticks. */
+export function zoomForWindow(window: FactWindow): TimelineZoom {
+  const days = (window.to.getTime() - window.from.getTime()) / DAY_MS + 1;
+  return days <= 45 ? 'day' : days <= 200 ? 'week' : 'month';
+}
+
+export type WindowPreset = 'all' | '7d' | '30d' | 'month' | 'custom';
+
+export const WINDOW_PRESETS: ReadonlyArray<{ id: WindowPreset; label: string }> = [
+  { id: 'all', label: 'All time' },
+  { id: '7d', label: 'Last 7 days' },
+  { id: '30d', label: 'Last 30 days' },
+  { id: 'month', label: 'This month' },
+  { id: 'custom', label: 'Custom' },
+];
+
+/** The window a preset stands for, or null for "all time". */
+export function windowForPreset(preset: WindowPreset, now: Date): FactWindow | null {
+  if (preset === 'all' || preset === 'custom') return null;
+  const today = startOfUtcDay(now);
+  if (preset === '7d') return { from: new Date(today.getTime() - 6 * DAY_MS), to: today };
+  if (preset === '30d') return { from: new Date(today.getTime() - 29 * DAY_MS), to: today };
+  return { from: new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)), to: today };
+}
+
+/** The preset a window matches, so a shared link reopens on the same control. */
+export function presetForWindow(window: FactWindow | null, now: Date): WindowPreset {
+  if (!window) return 'all';
+  for (const preset of ['7d', '30d', 'month'] as const) {
+    const candidate = windowForPreset(preset, now);
+    if (candidate && candidate.from.getTime() === window.from.getTime() && candidate.to.getTime() === window.to.getTime()) {
+      return preset;
+    }
+  }
+  return 'custom';
 }
