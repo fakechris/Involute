@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, resetAndSeed } from '../prisma/seed-helpers.js';
 import { loadProjectEnvironment } from '../prisma/env.js';
-import { autonomyToGraphQL, loadAutonomyFor, readActivePolicy, setWorkflowPolicy, syncAutoAcceptBugsPolicy } from './autonomy-service.js';
+import { autoAcceptBugsGates, autonomyToGraphQL, clearWorkflowPolicy, loadAutonomyFor, observeLabelFor, readActivePolicy, readAutonomySettings, setWorkflowPolicy, syncAutoAcceptBugsPolicy } from './autonomy-service.js';
 import { createIssue, updateIssue } from './issue-service.js';
 import { writeActorFromViewer } from './work-service.js';
 import { WORKSPACE_SETTINGS_ID } from './workspace-access.js';
@@ -103,5 +103,78 @@ describe('autonomy service (INV-1488)', () => {
     // Idempotent: syncing the same state again writes nothing.
     await syncAutoAcceptBugsPolicy(prisma, project.id, false, null);
     expect(await prisma.opsAudit.count({ where: { action: 'policy.changed', subject: `project:${project.id}`, createdAt: { gte: startedAt } } })).toBe(2);
+  });
+});
+
+describe('autonomy settings pages (INV-1489)', () => {
+  it('pause reads every scope as L0 with source paused, audited, and unpause restores the ceiling', async () => {
+    const { admin, team, issue, startedAt } = await fixture();
+    await setWorkflowPolicy(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID, level: 3, reason: 'open' }, admin.id);
+    await setWorkflowPolicy(prisma, { scope: 'TEAM', scopeId: team.id, level: 2, reason: 'team' }, admin.id);
+    expect((await loadAutonomyFor(prisma, issue)).level).toBe(2);
+    await setWorkflowPolicy(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID, level: 3, paused: true, reason: 'incident in progress' }, admin.id);
+    expect(await loadAutonomyFor(prisma, issue)).toMatchObject({ level: 0, source: 'paused', paused: true, ceiling: 0 });
+    const settings = await readAutonomySettings(prisma, { scope: 'TEAM', scopeId: team.id });
+    expect(settings).toMatchObject({ ceiling: 0, paused: true });
+    // Omitted fields keep the previous version's value: level only, still paused.
+    await setWorkflowPolicy(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID, level: 2, reason: 'lower' }, admin.id);
+    expect((await loadAutonomyFor(prisma, issue)).paused).toBe(true);
+    await setWorkflowPolicy(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID, level: 2, paused: false, reason: 'resume' }, admin.id);
+    expect(await loadAutonomyFor(prisma, issue)).toMatchObject({ level: 2, source: 'team', paused: false });
+    const audits = await prisma.opsAudit.findMany({ where: { action: 'policy.changed', subject: `workspace:${WORKSPACE_SETTINGS_ID}`, createdAt: { gte: startedAt } }, orderBy: { createdAt: 'asc' } });
+    expect(audits.map((audit) => (audit.details as { to: { paused: boolean } }).to.paused)).toEqual([false, true, true, false]);
+  });
+
+  it('templates and default level live on the workspace row only; built-in locks cannot be removed', async () => {
+    const { admin, team } = await fixture();
+    const fresh = await readAutonomySettings(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID });
+    expect(fresh.templates.map((template) => [template.name, template.level])).toEqual([['Low-risk pass-through', 1], ['Bugs on autopilot', 2], ['Hands-off', 3]]);
+    expect(fresh.builtInLocks.map((lock) => lock.id)).toEqual(['sev1_sev2_done', 'deploy_or_credentials', 'intermittent_bug']);
+    expect(fresh.levels.map((level) => level.name)).toEqual(['L0 Review everything', 'L1 Low-risk pass-through', 'L2 Green-light accept', 'L3 Hands-off']);
+    await setWorkflowPolicy(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID, level: 2, defaultLevel: 1, templates: [{ name: 'Only bugs', level: 2, gates: autoAcceptBugsGates() }], locked: ['contract_amendment'], reason: 'tune' }, admin.id);
+    const saved = await readAutonomySettings(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID });
+    expect(saved).toMatchObject({ ceiling: 2, defaultLevel: 1 });
+    expect(saved.templates).toEqual([{ name: 'Only bugs', level: 2, gates: autoAcceptBugsGates() }]);
+    expect(saved.active?.locked).toEqual(['contract_amendment']);
+    // Built-in locks are always reported, whatever the admin lists.
+    const { issue } = await fixture();
+    expect((await loadAutonomyFor(prisma, issue)).locked).toEqual(expect.arrayContaining(['sev1_sev2_done', 'deploy_or_credentials', 'intermittent_bug', 'contract_amendment']));
+    await expect(setWorkflowPolicy(prisma, { scope: 'TEAM', scopeId: team.id, level: 1, paused: true, reason: 'x' }, admin.id)).rejects.toThrow(/workspace policy only/);
+    await expect(setWorkflowPolicy(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID, level: 1, templates: [{ name: '', level: 1 }], reason: 'x' }, admin.id)).rejects.toThrow(/templates\[0\]\.name/);
+    await expect(setWorkflowPolicy(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID, level: 1, locked: ['nope'], reason: 'x' }, admin.id)).rejects.toThrow(/locked names a gate/);
+  });
+
+  it('clearing a project override makes it inherit again; history stays and the workspace cannot be cleared', async () => {
+    const { admin, team, project, issue } = await fixture();
+    await setWorkflowPolicy(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID, level: 2, reason: 'c' }, admin.id);
+    await setWorkflowPolicy(prisma, { scope: 'TEAM', scopeId: team.id, level: 2, reason: 't' }, admin.id);
+    await setWorkflowPolicy(prisma, { scope: 'PROJECT', scopeId: project.id, level: 0, reason: 'careful' }, admin.id);
+    expect((await loadAutonomyFor(prisma, issue)).level).toBe(0);
+    expect(await clearWorkflowPolicy(prisma, { scope: 'PROJECT', scopeId: project.id }, 'trust it now', admin.id)).toBe(true);
+    expect(await loadAutonomyFor(prisma, issue)).toMatchObject({ level: 2, source: 'team' });
+    expect(await clearWorkflowPolicy(prisma, { scope: 'PROJECT', scopeId: project.id }, 'again', admin.id)).toBe(false);
+    expect((await readAutonomySettings(prisma, { scope: 'PROJECT', scopeId: project.id })).history).toHaveLength(1);
+    await expect(clearWorkflowPolicy(prisma, { scope: 'PROJECT', scopeId: project.id }, '', admin.id)).rejects.toThrow(/reason/);
+    await expect(clearWorkflowPolicy(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID }, 'x', admin.id)).rejects.toThrow(/edited, not cleared/);
+  });
+
+  it('a Needs you row carries "Would be handled under L<n>" only while observing and only when the level would act', async () => {
+    const { admin, team, project } = await fixture();
+    const actor = writeActorFromViewer(admin, 'test');
+    const bugLabel = await prisma.issueLabel.upsert({ where: { name: 'Bug' }, create: { name: 'Bug' }, update: {} });
+    const bug = await createIssue(prisma, { teamId: team.id, title: 'A bug', kind: 'ISSUE', parentId: project.id, repository: 'test/autonomy', priority: 2, labelIds: [bugLabel.id], commitmentStatus: 'CANDIDATE', acceptance: 'Fixed and tested.', description: '### 1. 目标与架构定位\nx\n### 2. 核心功能与交付范围\nx\n### 3. 验收标准与验证方案\nx\n\n### Steps to reproduce\n1. open' }, actor);
+    const feature = await createIssue(prisma, { teamId: team.id, title: 'A feature', kind: 'ISSUE', parentId: project.id, repository: 'test/autonomy', priority: 2, commitmentStatus: 'CANDIDATE', acceptance: 'Works.' }, actor);
+    const row = { kind: 'CANDIDATE_COMMIT', subjectId: bug.id, workId: bug.id };
+    // Not observing: no label, whatever the level.
+    expect(await observeLabelFor(prisma, row)).toBeNull();
+    await setWorkflowPolicy(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID, level: 2, reason: 'c' }, admin.id);
+    await setWorkflowPolicy(prisma, { scope: 'TEAM', scopeId: team.id, level: 1, observeDays: 7, reason: 'try L1' }, admin.id);
+    expect(await observeLabelFor(prisma, row)).toMatch(/^Would be handled under L1: type bug/);
+    expect(await observeLabelFor(prisma, { kind: 'CANDIDATE_COMMIT', subjectId: feature.id, workId: feature.id })).toBeNull();
+    expect(await observeLabelFor(prisma, { kind: 'WORK_REVIEW', subjectId: bug.id, workId: bug.id })).toBeNull();
+    // Observing ends: the label goes, the decision was never taken by the policy.
+    await setWorkflowPolicy(prisma, { scope: 'TEAM', scopeId: team.id, level: 1, reason: 'turn on' }, admin.id);
+    expect(await observeLabelFor(prisma, row)).toBeNull();
+    expect(bug.commitmentStatus).toBe('CANDIDATE');
   });
 });

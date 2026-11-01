@@ -209,6 +209,17 @@ describe('Needs you (INV-1092)', () => {
     expect(list.getByText('INV-21')).toBeInTheDocument();
   });
 
+  it('shows what an observed level would have done as a grey chip, and nothing when the server sends none (INV-1489)', () => {
+    nodes = [
+      node('CANDIDATE_COMMIT', 'w-1', work('w-1', 'INV-11'), '2026-10-09T10:00:00.000Z', { wouldBeAutomatic: 'Would be handled under L1: type bug, priority 2' }),
+      node('CANDIDATE_COMMIT', 'w-2', work('w-2', 'INV-12'), '2026-10-09T11:00:00.000Z', { wouldBeAutomatic: null }),
+    ];
+    total = 2;
+    render(<MemoryRouter><AttentionPage /></MemoryRouter>);
+    expect(screen.getByText('Would be handled under L1: type bug, priority 2')).toBeInTheDocument();
+    expect(screen.getAllByText(/Would be handled/)).toHaveLength(1);
+  });
+
   it('keeps a long Needs you title inside the list row (INV-1301, INV-1312)', () => {
     const longTitle = '长任务闭环——人批准后 agent 被叫醒、持续执行到交付、退回能回到执行者、人验收到 Done';
     nodes = [node('WORK_REVIEW', 'w-long', work('w-long', 'INV-989', { title: longTitle }), ago(HOUR))];

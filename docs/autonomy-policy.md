@@ -1,6 +1,6 @@
 # Autonomy policy: who decides at each gate (design, INV-1485)
 
-Status: **design; step 1 (INV-1488) implemented** — `WorkflowPolicy` / `AgentTrust` rows, the pure resolver `autonomy-policy.ts`, `Issue.autonomy` and MCP `work_get_context.autonomy`, `workflowPolicySet` for Admins and team Owners. No gate opens yet. Behaviour today is unchanged: commit, reject,
+Status: **design; steps 1–2 implemented** — INV-1488 data layer; INV-1489 the three settings pages (Administration → Autonomy with ceiling / default / locks / templates / pause / history, Team settings → Autonomy with levels, per-step table, L3 intake rule and optional observe, Projects → Edit inherit / override), the project card badge and the Needs you observe chip. Step 1 was — `WorkflowPolicy` / `AgentTrust` rows, the pure resolver `autonomy-policy.ts`, `Issue.autonomy` and MCP `work_get_context.autonomy`, `workflowPolicySet` for Admins and team Owners. No gate opens yet. Behaviour today is unchanged: commit, reject,
 accept and contract amendments are human-only, and the only configurable gate is
 `PROJECT.autoAcceptBugs` (INV-1075). This page is the product and data design
 that turns those constants into a policy a workspace sets, a team adopts and a

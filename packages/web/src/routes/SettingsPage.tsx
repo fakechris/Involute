@@ -7,6 +7,7 @@ import { Checkbox, Field, TextInput } from '../components/controls';
 import { SettingsSectionHeader, SettingsShell } from '../components/SettingsShell';
 import { SegmentedControl } from '../components/status';
 import { AdminAgentsTab, AdminMembersTab, AdminSecurityTab, AdminTeamsTab } from './AdministrationTabs';
+import { AdminAutonomyTab } from './AutonomyTab';
 import { EmailNotificationsField, LabelsTab, ServerFeaturesTab, ServiceActorForm } from './WorkspaceSettingsTabs';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { useMutation, useQuery } from '@apollo/client/react';
@@ -15,7 +16,7 @@ import type { BoardPageQueryData, BoardPageQueryVariables, UserSummary, UserUpda
 import { readStoredTeamKey } from '../board/utils';
 import { ExtensionsTab } from './ExtensionsTab';
 
-type SettingsTab = 'profile' | 'preferences' | 'extensions' | 'members' | 'teams' | 'agents' | 'security' | 'services' | 'labels' | 'features';
+type SettingsTab = 'profile' | 'preferences' | 'extensions' | 'members' | 'teams' | 'agents' | 'security' | 'autonomy' | 'services' | 'labels' | 'features';
 
 /** Settings → Administration (docs/permissions.md §7); the server refuses everyone else. */
 const ADMIN_TABS: ReadonlyArray<{ id: SettingsTab; label: string }> = [
@@ -23,6 +24,7 @@ const ADMIN_TABS: ReadonlyArray<{ id: SettingsTab; label: string }> = [
   { id: 'teams', label: 'Teams' },
   { id: 'agents', label: 'Agents' },
   { id: 'security', label: 'Security' },
+  { id: 'autonomy', label: 'Autonomy' },
   { id: 'services', label: 'Service actors' },
   { id: 'labels', label: 'Labels' },
   { id: 'features', label: 'Server features' },
@@ -92,6 +94,7 @@ export function SettingsPage() {
       {tab === 'teams' && <AdminTeamsTab />}
       {tab === 'agents' && <AdminAgentsTab />}
       {tab === 'security' && <AdminSecurityTab />}
+      {tab === 'autonomy' && <AdminAutonomyTab />}
       {tab === 'services' && <ServiceActorForm />}
       {tab === 'features' && <ServerFeaturesTab />}
     </SettingsShell>

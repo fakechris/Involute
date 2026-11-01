@@ -575,6 +575,7 @@ export function AttentionPage() {
                                           <Badge>Waiting on {(item.waitingOn ?? []).map((blocker) => blocker.identifier).join(', ')}</Badge>
                                         ) : null}
                                         {item.overdue ? <Badge tone="danger">Overdue</Badge> : null}
+                                        {item.wouldBeAutomatic ? <Badge title={item.wouldBeAutomatic}>{item.wouldBeAutomatic}</Badge> : null}
                                       </>
                                     }
                                   />

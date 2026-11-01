@@ -33,6 +33,7 @@ import { IcoChevL, IcoMore, IcoPlus, IcoProject } from '../components/Icons';
 import { Avatar, Btn } from '../components/Primitives';
 import { DialogShell } from '../components/DialogShell';
 import { Checkbox, Field, Select, TextArea, TextInput } from '../components/controls';
+import { AutonomyBadge, ProjectAutonomyField } from './AutonomyTab';
 import { PageBody, PageHeader } from '../components/layout';
 import { EmptyState, LoadingState } from '../components/status';
 
@@ -359,22 +360,12 @@ export function ProjectsPage() {
             placeholder="https://app.example.com, http://localhost:5173"
           />
         </Field>
-        {dialogMode === 'edit' ? (
-          <Checkbox
-            aria-label="Auto-accept verified bug fixes"
-            checked={formAutoAccept}
-            // Turning it on needs a repository; turning it off never does.
-            disabled={!formRepository.trim() && !formAutoAccept}
-            onChange={(e) => setFormAutoAccept(e.target.checked)}
-            label={(
-              <>
-                Auto-accept verified bug fixes
-                <br />
-                <span className="field__hint">
-                  A bug in Review moves to Done when GitHub shows its fix merged (or on the default branch) with CI checks green. Anything else waits for you, with the reason on /in-review. You can move an auto-accepted bug back to Review.
-                </span>
-              </>
-            )}
+        {dialogMode === 'edit' && selectedProjectId ? (
+          // The lone "Auto-accept verified bug fixes" switch became the project's autonomy level (INV-1489, docs/autonomy-policy.md §2.3).
+          <ProjectAutonomyField
+            projectId={selectedProjectId}
+            autonomy={projects.find((project) => project.id === selectedProjectId)?.autonomy ?? null}
+            onChanged={() => void refetch()}
           />
         ) : null}
         {dialogMode === 'edit' && editingOriginal?.repository && formRepository.trim() !== editingOriginal.repository ? (
@@ -491,6 +482,7 @@ export function ProjectsPage() {
                         {project.alias}
                       </span>
                     )}
+                    <AutonomyBadge autonomy={project.autonomy} />
                   </div>
 
                   <ProjectProgressBar issues={childIssues} />

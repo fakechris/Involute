@@ -173,3 +173,95 @@ export const NOTIFICATION_PREFERENCES_UPDATE_MUTATION = gql`
     }
   }
 `;
+
+// Autonomy policy (INV-1489, docs/autonomy-policy.md): who decides at each
+// human gate, set on the workspace, a team or a project.
+
+export type AutonomyScope = 'WORKSPACE' | 'TEAM' | 'PROJECT';
+export type AutonomyDecider = 'human' | 'auto' | 'none';
+
+export interface WorkflowPolicyRow {
+  id: string;
+  scope: AutonomyScope;
+  scopeId: string;
+  level: number;
+  gates: Record<string, { decider: AutonomyDecider; condition?: unknown }>;
+  intake: unknown | null;
+  locked: string[];
+  version: number;
+  reason: string | null;
+  observeUntil: string | null;
+  active: boolean;
+  paused: boolean;
+  defaultLevel: number;
+  templates: unknown;
+  createdAt: string;
+}
+
+export interface AutonomyLevelInfo { level: number; name: string; descriptionEn: string; descriptionZh: string; gates: Array<{ gate: string; decider: AutonomyDecider }> }
+export interface AutonomyTemplate { name: string; level: number; gates?: unknown | null }
+
+export interface AutonomySettingsData {
+  autonomySettings: {
+    scope: AutonomyScope;
+    scopeId: string;
+    active: WorkflowPolicyRow | null;
+    history: WorkflowPolicyRow[];
+    ceiling: number;
+    paused: boolean;
+    defaultLevel: number;
+    templates: AutonomyTemplate[];
+    levels: AutonomyLevelInfo[];
+    builtInLocks: Array<{ id: string; gate: string; reason: string }>;
+    gates: string[];
+    conditionFields: string[];
+  };
+}
+
+/** The resolved autonomy of a work item, as `Issue.autonomy` returns it. */
+export interface IssueAutonomy { level: number; source: string; name: string; requested: number; requestedBy: string; observing?: boolean }
+
+export const WORKSPACE_SETTINGS_SCOPE_ID = 'workspace';
+
+const WORKFLOW_POLICY_FIELDS = `
+  id scope scopeId level gates intake locked version reason observeUntil active paused defaultLevel templates createdAt
+`;
+
+export const AUTONOMY_SETTINGS_QUERY = gql`
+  query AutonomySettings($scope: AutonomyScope!, $scopeId: String!) {
+    autonomySettings(scope: $scope, scopeId: $scopeId) {
+      scope
+      scopeId
+      active { ${WORKFLOW_POLICY_FIELDS} }
+      history { ${WORKFLOW_POLICY_FIELDS} }
+      ceiling
+      paused
+      defaultLevel
+      templates { name level gates }
+      levels { level name descriptionEn descriptionZh gates { gate decider } }
+      builtInLocks { id gate reason }
+      gates
+      conditionFields
+    }
+  }
+`;
+
+export const WORKFLOW_POLICY_SET_MUTATION = gql`
+  mutation WorkflowPolicySet($input: WorkflowPolicySetInput!) {
+    workflowPolicySet(input: $input) {
+      success
+      message
+      policy { ${WORKFLOW_POLICY_FIELDS} }
+    }
+  }
+`;
+
+export const WORKFLOW_POLICY_CLEAR_MUTATION = gql`
+  mutation WorkflowPolicyClear($input: WorkflowPolicyClearInput!) {
+    workflowPolicyClear(input: $input) {
+      success
+      message
+      cleared
+    }
+  }
+`;

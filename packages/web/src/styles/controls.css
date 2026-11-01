@@ -770,3 +770,57 @@ select.control--ghost:focus-visible {
     border-bottom: 1px solid var(--border-subtle);
   }
 }
+
+/* Autonomy settings (INV-1489): level cards, templates, history. */
+.autonomy-levels {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+.autonomy-level {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  cursor: pointer;
+}
+.autonomy-level--on {
+  border-color: var(--accent);
+}
+.autonomy-level--locked {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.autonomy-level__body {
+  display: grid;
+  gap: 2px;
+}
+.autonomy-level__text {
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+.autonomy-templates {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  display: grid;
+  gap: 4px;
+}
+.autonomy-history summary,
+.autonomy-advanced summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--fg-muted);
+}
+.autonomy-history ul {
+  font-size: 13px;
+  color: var(--fg-muted);
+  padding-left: 16px;
+}
+.autonomy-paused {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}

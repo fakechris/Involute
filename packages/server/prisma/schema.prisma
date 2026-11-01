@@ -1478,6 +1478,10 @@ model WorkflowPolicy {
   reason       String?
   observeUntil DateTime?
   active       Boolean       @default(true)
+  // WORKSPACE only (INV-1489): every scope reads as L0 while paused; the level new teams start at; named presets.
+  paused       Boolean       @default(false)
+  defaultLevel Int           @default(0)
+  templates    Json          @default("[]")
   createdById  String?       @db.Uuid
   createdAt    DateTime      @default(now())
 

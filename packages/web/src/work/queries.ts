@@ -878,6 +878,7 @@ export const ATTENTION_PAGE_QUERY = gql`
         }
         overdue
         unblocked
+        wouldBeAutomatic
         waitingOn {
           id
           identifier
