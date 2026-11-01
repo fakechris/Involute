@@ -5298,6 +5298,95 @@ kbd {
 .timeline-series--started { stroke: var(--timeline-started); }
 .timeline-series--completed { stroke: var(--timeline-completed); stroke-width: 2; }
 
+/* The stretch of a fact window that predates every recorded fact (INV-1446).
+   Nothing is drawn there — the band is what says so. */
+.timeline-gap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--timeline-gap-left);
+  width: var(--timeline-gap-width);
+  background: repeating-linear-gradient(
+    135deg,
+    var(--bg-hover),
+    var(--bg-hover) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  border-right: 1px dashed var(--border-strong);
+  pointer-events: none;
+}
+
+/* The items the window holds, listed from the same filter as the rows (INV-1446). */
+.timeline-window {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  background: var(--bg-raised);
+}
+
+.timeline-window__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--fg-muted);
+}
+
+.timeline-window__head strong {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.timeline-window__gap {
+  color: var(--warn);
+}
+
+.timeline-window__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.timeline-window__item {
+  display: flex;
+}
+
+.timeline-window__open {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--r-1);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.timeline-window__open:hover {
+  background: var(--bg-hover);
+}
+
+.timeline-window__empty {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--fg-dim);
+}
+
 .timeline-line {
   display: inline-block;
   width: 14px;

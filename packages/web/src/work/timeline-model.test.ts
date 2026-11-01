@@ -4,15 +4,26 @@ import type { WorkflowStateType } from '../board/types';
 import { buildOutline, type GraphNode } from './graph-model';
 import {
   axisTicks,
+  coverageGap,
+  cumulativeSeries,
+  cumulativeSeriesInWindow,
   defaultZoom,
   containerSpan,
   containerSpans,
-  cumulativeSeries,
+  entryInWindow,
+  filterOutlineByWindow,
+  formatDay,
+  parseDay,
+  parseFactWindow,
+  presetForWindow,
   PX_PER_DAY,
   rangeWidth,
+  spellsForWindow,
   spellsOf,
   timeRange,
+  windowForPreset,
   xFor,
+  zoomForWindow,
   type TimelineEntry,
 } from './timeline-model';
 
@@ -177,5 +188,89 @@ describe('cumulativeSeries', () => {
     // b was done on the 7th but reopened, so only a counts as completed.
     expect(at(10)).toMatchObject({ scope: 2, started: 2, completed: 1 });
     expect(series.at(-1)!.at).toEqual(day(20));
+  });
+});
+
+describe('fact window (INV-1446)', () => {
+  const window = { from: day(10), to: day(12) };
+
+  it('reads a window out of the URL and keeps it inside the recorded past', () => {
+    expect(parseFactWindow('2026-09-10', '2026-09-12', now)).toEqual({ from: day(10), to: day(12) });
+    expect(parseFactWindow(null, null, now)).toBeNull();
+    // A window never reaches past today: there is no recorded fact to look at.
+    expect(parseFactWindow('2026-09-10', '2026-12-01', now)).toEqual({ from: day(10), to: now });
+    // Backwards is not a window.
+    expect(parseFactWindow('2026-09-12', '2026-09-10', now)).toBeNull();
+    expect(parseDay('2026-02-31')).toBeNull();
+    expect(parseDay('2026-09-10')).toEqual(day(10));
+    expect(formatDay(day(10))).toBe('2026-09-10');
+  });
+
+  it('counts an item as inside the window when it recorded something in it', () => {
+    expect(entryInWindow(entry('a', [[10, 'STARTED']]), window)).toBe(true);
+    expect(entryInWindow(entry('a', [[9, 'STARTED']]), window)).toBe(false);
+    // The commitment is a fact of its own, not a state change.
+    expect(entryInWindow(entry('a', [[9, 'STARTED']], { committedAt: day(11) }), window)).toBe(true);
+  });
+
+  it('keeps the items that recorded nothing in the window out of the tree', () => {
+    const outline = buildOutline(
+      [node('m', 'MILESTONE'), node('a'), node('b')],
+      [
+        { id: '1', type: 'CONTAINS', fromId: 'm', toId: 'a' },
+        { id: '2', type: 'CONTAINS', fromId: 'm', toId: 'b' },
+      ],
+      'm',
+    );
+    const entries = new Map([
+      ['a', entry('a', [[11, 'STARTED']])],
+      ['b', entry('b', [[2, 'STARTED']])],
+    ]);
+    const kept = filterOutlineByWindow([...outline.roots, ...outline.unplaced], entries, window);
+    // The container stays for the child that made the window; the other child goes.
+    expect(kept).toHaveLength(1);
+    expect(kept[0]!.node.id).toBe('m');
+    expect(kept[0]!.children.map((child) => child.node.id)).toEqual(['a']);
+  });
+
+  it('carries what was already true when the window opened into the curve', () => {
+    const series = cumulativeSeriesInWindow(
+      [
+        entry('a', [[2, 'UNSTARTED'], [4, 'STARTED'], [9, 'COMPLETED']]),
+        entry('b', [[2, 'UNSTARTED'], [11, 'STARTED']]),
+      ],
+      window,
+    );
+    // The scope line does not restart at zero: both items were committed on the 2nd.
+    expect(series[0]).toMatchObject({ at: day(10), scope: 2, started: 1, completed: 1 });
+    expect(series.at(-1)).toMatchObject({ at: day(13), scope: 2, started: 2, completed: 1 });
+  });
+
+  it('says where the recorded history stops short of the window', () => {
+    const entries = [entry('a', [[8, 'STARTED']])];
+    expect(coverageGap(entries, { from: day(1), to: day(12) })).toEqual({ from: day(1), to: day(8) });
+    expect(coverageGap(entries, { from: day(9), to: day(12) })).toBeNull();
+  });
+
+  it('trims the bars to the window and keeps an open bar running to its end', () => {
+    const spells = spellsForWindow(entry('a', [[5, 'UNSTARTED'], [11, 'STARTED']]), window);
+    expect(
+      spells.map((spell) => [spell.stateType, spell.start.getUTCDate(), spell.end!.getUTCDate(), spell.beganInWindow]),
+    ).toEqual([
+      ['UNSTARTED', 10, 11, false],
+      ['STARTED', 11, 13, true],
+    ]);
+  });
+
+  it('picks the scale that fits the window', () => {
+    expect(zoomForWindow({ from: day(1), to: day(10) })).toBe('day');
+    expect(zoomForWindow({ from: day(1), to: day(100) })).toBe('week');
+    expect(zoomForWindow({ from: day(1), to: day(400) })).toBe('month');
+  });
+
+  it('reopens a shared link on the preset it was shared from', () => {
+    expect(presetForWindow(null, now)).toBe('all');
+    expect(presetForWindow(windowForPreset('7d', now), now)).toBe('7d');
+    expect(presetForWindow({ from: day(1), to: day(2) }, now)).toBe('custom');
   });
 });
