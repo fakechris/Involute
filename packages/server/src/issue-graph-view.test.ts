@@ -7,7 +7,7 @@ import { DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
 import { createWorkLink } from './link-service.ts';
-import { loadIssueWorkGraph } from './issue-graph-view.ts';
+import { loadIssueWorkGraph, ISSUE_GRAPH_NODE_LIMIT } from './issue-graph-view.ts';
 
 loadProjectEnvironment();
 
@@ -207,6 +207,91 @@ describe('issueGraph neighbourhood view (INV-1496)', () => {
     // And the same neighbourhood, read by someone who may see both teams.
     const wide = await loadIssueWorkGraph(prisma, { id: focus.id, depth: 1 }, undefined);
     expect(wide.nodes.map((node) => node.identifier)).toContain(foreign.identifier);
+  });
+
+  it('stops the dependency walk at work the reader may not see', async () => {
+    const otherTeam = await prisma.team.create({ data: { key: 'OTHER', name: 'Other team' } });
+    const otherReady = await prisma.workflowState.create({
+      data: { teamId: otherTeam.id, name: 'Ready', type: 'UNSTARTED', position: 0 },
+    });
+    const focus = await make('The focus');
+    const foreign = await prisma.issue.create({
+      data: {
+        identifier: 'INV-9002',
+        title: 'Someone else’s blocker',
+        teamId: otherTeam.id,
+        stateId: otherReady.id,
+        repository: 'acme/app',
+      },
+    });
+    const behind = await make('Work behind the hidden blocker');
+    // The chain is focus ← hidden ← behind. The reader may not see the middle
+    // link, so the walk must not reach past it either.
+    await prisma.workLink.create({ data: { type: 'BLOCKS', fromId: foreign.id, toId: focus.id } });
+    await prisma.workLink.create({ data: { type: 'BLOCKS', fromId: behind.id, toId: foreign.id } });
+
+    const graph = await loadIssueWorkGraph(prisma, { id: focus.id, depth: 2 }, { teamId: team.id });
+    const identifiers = graph.nodes.map((node) => node.identifier);
+    expect(identifiers).not.toContain(foreign.identifier);
+    // The item behind the hidden one is not shown either: it would be a node
+    // with no visible path to the focus.
+    expect(identifiers).not.toContain(behind.identifier);
+  });
+
+  it('leaves out a dependency path that mixes both directions', async () => {
+    const focus = await make('The focus');
+    const shared = await make('A blocker that blocks something else too');
+    const other = await make('The other thing it blocks');
+    await createWorkLink(prisma, { fromId: shared.id, toId: focus.id, type: 'BLOCKS' });
+    await createWorkLink(prisma, { fromId: shared.id, toId: other.id, type: 'BLOCKS' });
+
+    const graph = await loadIssueWorkGraph(prisma, { id: focus.id, depth: 2 });
+    const identifiers = graph.nodes.map((node) => node.identifier);
+    expect(identifiers).toContain(shared.identifier);
+    // "other" waits on the same blocker, not on the focus — it is not part of
+    // this item's dependency neighbourhood, and the graph draws it that way too.
+    expect(identifiers).not.toContain(other.identifier);
+  });
+
+  it('counts only committed work in a rollup', async () => {
+    const epic = await make('E1', { kind: 'EPIC' });
+    const committed = await make('Committed work', { stateId: done.id });
+    const candidate = await make('Not agreed to yet', { commitmentStatus: 'CANDIDATE' });
+    await createWorkLink(prisma, { fromId: epic.id, toId: committed.id, type: 'CONTAINS' });
+    await createWorkLink(prisma, { fromId: epic.id, toId: candidate.id, type: 'CONTAINS' });
+
+    const graph = await loadIssueWorkGraph(prisma, { id: committed.id, depth: 1 });
+    const rollup = graph.rollups[0];
+    expect(rollup.identifier).toBe(epic.identifier);
+    // A candidate is a proposal, not progress; it stays out of the denominator.
+    expect(rollup.total).toBe(1);
+    expect(rollup.completed).toBe(1);
+  });
+
+  it('says so when the neighbourhood is larger than one read shows', async () => {
+    const focus = await make('The focus');
+    const count = ISSUE_GRAPH_NODE_LIMIT + 1;
+    const blockers = await prisma.issue.createMany({
+      data: Array.from({ length: count }, (_, index) => ({
+        identifier: `INV-${1000 + index}`,
+        title: `Blocker ${index}`,
+        teamId: team.id,
+        stateId: ready.id,
+        repository: 'acme/app',
+      })),
+    });
+    expect(blockers.count).toBe(count);
+    const blockerRows = await prisma.issue.findMany({
+      where: { identifier: { startsWith: 'INV-1' }, teamId: team.id },
+      select: { id: true },
+    });
+    await prisma.workLink.createMany({
+      data: blockerRows.map((row) => ({ type: 'BLOCKS' as const, fromId: row.id, toId: focus.id })),
+    });
+
+    const graph = await loadIssueWorkGraph(prisma, { id: focus.id, depth: 1 });
+    expect(graph.truncated).toBe(true);
+    expect(graph.nodes.length).toBeLessThanOrEqual(ISSUE_GRAPH_NODE_LIMIT + 1);
   });
 
   it('refuses an item that does not exist', async () => {

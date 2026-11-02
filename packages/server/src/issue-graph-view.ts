@@ -109,7 +109,12 @@ export async function loadIssueWorkGraph(
   const siblings = siblingRows.slice(0, MAX_SIBLINGS);
 
   // The BLOCKS chain around the focus, both directions.
-  const dependencyIds = await loadBlockNeighbourhood(prisma, focus.id, depth);
+  const { ids: dependencyIds, truncated: dependenciesTruncated } = await loadBlockNeighbourhood(
+    prisma,
+    focus.id,
+    depth,
+    visible,
+  );
 
   const seeds = new Set<string>([focus.id]);
   for (const row of [...ancestorRows, ...children, ...siblings]) seeds.add(row.id);
@@ -156,7 +161,7 @@ export async function loadIssueWorkGraph(
     edges,
     ancestors,
     rollups,
-    truncated: childrenTruncated || siblingsTruncated || dependencyIds.length > ISSUE_GRAPH_NODE_LIMIT,
+    truncated: childrenTruncated || siblingsTruncated || dependenciesTruncated,
   };
 }
 
@@ -221,29 +226,64 @@ function childrenOf(parentId: string): Prisma.IssueWhereInput[] {
 
 /**
  * The ids the focus reaches over BLOCKS links, up to `depth` steps in either
- * direction. The walk follows the link table only — it never widens to other
- * relation types, so a "related" note cannot drag the neighbourhood along.
+ * direction.
+ *
+ * The walk has four rules, and the graph on the other side of the API depends
+ * on all of them:
+ *
+ * - **It follows the link table only.** It never widens to other relation
+ *   types, so a "related" note cannot drag the neighbourhood along.
+ * - **It stops at what the reader may not see.** The readable scope is applied
+ *   as the walk goes, the same way the ancestor chain stops at the first
+ *   ancestor the reader may not see: a dependency leading into another team
+ *   does not appear, and neither does the work behind it.
+ * - **It walks one direction at a time.** Blockers form a chain upwards and
+ *   dependents a chain downwards. A path that mixes the two — A blocks the
+ *   focus *and* A blocks B — is not a dependency of the focus, so B is left
+ *   out; this is exactly what the graph draws (`blockNeighbourhood`).
+ * - **It is bounded.** A densely linked graph stops at the node limit and says
+ *   so rather than reading the whole graph behind one item.
  */
-async function loadBlockNeighbourhood(prisma: DatabaseClient, focusId: string, depth: number): Promise<string[]> {
-  if (depth === 0) return [];
+async function loadBlockNeighbourhood(
+  prisma: DatabaseClient,
+  focusId: string,
+  depth: number,
+  visible: Prisma.IssueWhereInput,
+): Promise<{ ids: string[]; truncated: boolean }> {
+  if (depth === 0) return { ids: [], truncated: false };
   const found = new Set<string>();
-  let frontier = [focusId];
-  for (let step = 0; step < depth && frontier.length > 0; step += 1) {
-    const links = await prisma.workLink.findMany({
-      where: { type: 'BLOCKS', OR: [{ fromId: { in: frontier } }, { toId: { in: frontier } }] },
-      select: { fromId: true, toId: true },
-    });
-    const next: string[] = [];
-    for (const link of links) {
-      for (const id of [link.fromId, link.toId]) {
-        if (id === focusId || found.has(id)) continue;
-        found.add(id);
+  let truncated = false;
+
+  for (const direction of ['up', 'down'] as const) {
+    let frontier = [focusId];
+    const seen = new Set<string>([focusId]);
+    for (let step = 0; step < depth && frontier.length > 0 && !truncated; step += 1) {
+      const links = await prisma.workLink.findMany({
+        where:
+          direction === 'up'
+            ? { type: 'BLOCKS', toId: { in: frontier }, from: visible }
+            : { type: 'BLOCKS', fromId: { in: frontier }, to: visible },
+        select: { fromId: true, toId: true },
+      });
+      const next: string[] = [];
+      for (const link of links) {
+        // "up" follows the blockers of the frontier, "down" its dependents.
+        const id = direction === 'up' ? link.fromId : link.toId;
+        if (id === focusId || seen.has(id)) continue;
+        seen.add(id);
+        if (!found.has(id)) {
+          if (found.size >= ISSUE_GRAPH_NODE_LIMIT) {
+            truncated = true;
+            break;
+          }
+          found.add(id);
+        }
         next.push(id);
       }
+      frontier = next;
     }
-    frontier = next;
   }
-  return [...found];
+  return { ids: [...found], truncated };
 }
 
 /**
@@ -285,6 +325,11 @@ interface SubtreeCounts {
  * issues is three pieces of work, not four. Counting the containers as well
  * would put "4 of 8 done" on a milestone that has three done — a number
  * nobody could act on.
+ *
+ * Only committed leaves count. A candidate is a proposal nobody has agreed to
+ * yet, and letting it sit in the denominator would show a milestone as less
+ * finished than the work under it actually is. This is the same rule the
+ * project graph draws with, so the two views cannot disagree.
  */
 async function countSubtree(
   prisma: DatabaseClient,
@@ -294,6 +339,7 @@ async function countSubtree(
   const visited = new Set<string>([root.id]);
   let frontier = [root.id];
   const stateOf = new Map<string, WorkflowStateType>();
+  const committed = new Set<string>();
   // The parent each descendant hangs under, so a container can be told from
   // a piece of work once the whole subtree is known.
   const parentOf = new Map<string, string>();
@@ -309,6 +355,7 @@ async function countSubtree(
       select: {
         id: true,
         parentId: true,
+        commitmentStatus: true,
         state: { select: { type: true } },
         incomingLinks: { where: { type: 'CONTAINS' }, select: { fromId: true }, take: 1 },
       },
@@ -319,6 +366,7 @@ async function countSubtree(
       visited.add(child.id);
       next.push(child.id);
       stateOf.set(child.id, child.state.type);
+      if (child.commitmentStatus === 'COMMITTED') committed.add(child.id);
       const parent = child.parentId ?? child.incomingLinks[0]?.fromId ?? null;
       if (parent) parentOf.set(child.id, parent);
     }
@@ -330,7 +378,9 @@ async function countSubtree(
   for (const parent of parentOf.values()) {
     if (parent !== root.id && visited.has(parent)) containers.add(parent);
   }
-  const leaves = [...visited].filter((id) => id !== root.id && !containers.has(id));
+  const leaves = [...visited].filter(
+    (id) => id !== root.id && !containers.has(id) && committed.has(id),
+  );
 
   const byState: Partial<Record<WorkflowStateType, number>> = {};
   for (const leaf of leaves) {

@@ -113,7 +113,7 @@ export function NeighbourhoodRow({
       onClick={() => onOpen(node.id)}
       aria-label={`Open ${node.identifier} ${node.title}`}
     >
-      <StatusIcon stateName={node.stateName} size={11} />
+      <StatusIcon stateName={node.stateName} stateType={node.stateType} size={11} />
       <span className="mono issue-neighbourhood__id">{node.identifier}</span>
       <span className="issue-neighbourhood__title">{node.title}</span>
       {blockers.length > 0 ? (
@@ -263,7 +263,7 @@ export function IssueNeighbourhood({ issueId, issueIdentifier, onOpen }: IssueNe
                   onClick={() => onOpen(node.id)}
                   aria-label={`Open ${node.identifier} ${node.title}`}
                 >
-                  <StatusIcon stateName={node.stateName} size={11} />
+                  <StatusIcon stateName={node.stateName} stateType={node.stateType} size={11} />
                   <span className="mono issue-neighbourhood__id">{node.identifier}</span>
                   <span className="issue-neighbourhood__title">{node.title}</span>
                 </button>
@@ -281,7 +281,7 @@ export function IssueNeighbourhood({ issueId, issueIdentifier, onOpen }: IssueNe
                   onClick={() => onOpen(node.id)}
                   aria-label={`Open ${node.identifier} ${node.title}`}
                 >
-                  <StatusIcon stateName={node.stateName} size={11} />
+                  <StatusIcon stateName={node.stateName} stateType={node.stateType} size={11} />
                   <span className="mono issue-neighbourhood__id">{node.identifier}</span>
                   <span className="issue-neighbourhood__title">{node.title}</span>
                 </button>
