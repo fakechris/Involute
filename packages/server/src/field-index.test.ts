@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, resetAndSeed } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import {
-  FIELD_AUDIT, countFieldUsage, deactivateFieldDefinition, indexJobFor, indexRowsFor, isStaleDefinition, renameFieldDefinition, runFieldIndexJobs, setFieldDefinition,
+  FIELD_AUDIT, countFieldUsage, deactivateFieldDefinition, indexJobFor, indexRowsFor, isStaleDefinition, reconcileFieldIndex, renameFieldDefinition, runFieldIndexJobs, setFieldDefinition,
 } from './field-definitions.ts';
 import { startServer, type StartedServer } from './index.ts';
 import { createIssue, updateIssue } from './issue-service.ts';
@@ -150,6 +150,72 @@ describe('FieldValueIndex', () => {
     const next = await define({ key: 'story_points', label: 'Story points', searchable: true });
     expect(next.previousKey).toBeNull();
     await expect(updateIssue(prisma, work.id, { attributes: { points: 1 } }, human())).rejects.toThrow(/not defined/);
+  });
+});
+
+describe('rename and index integrity (INV-1522, INV-1523)', () => {
+  let admin: User;
+  let team: Team;
+  let projectId: string;
+  const human = () => writeActorFromViewer(admin, 'test');
+
+  beforeAll(async () => { await prisma.$connect(); });
+  afterAll(async () => { await resetAndSeed(prisma); await prisma.$disconnect(); });
+  beforeEach(async () => {
+    await resetAndSeed(prisma);
+    admin = await prisma.user.findUniqueOrThrow({ where: { email: DEFAULT_ADMIN_EMAIL } });
+    team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
+    await prisma.teamMembership.upsert({ where: { teamId_userId: { teamId: team.id, userId: admin.id } }, update: {}, create: { role: 'OWNER', teamId: team.id, userId: admin.id } });
+    projectId = (await createIssue(prisma, { teamId: team.id, title: 'P', kind: 'PROJECT', repository: 'test/integrity', commitmentStatus: 'COMMITTED' }, human())).id;
+  });
+
+  const field = (scope: 'WORKSPACE' | 'TEAM' | 'PROJECT', key: string, extra: Partial<Parameters<typeof setFieldDefinition>[1]> = {}) => setFieldDefinition(prisma, {
+    scope, scopeId: scope === 'WORKSPACE' ? WORKSPACE_SETTINGS_ID : scope === 'TEAM' ? team.id : projectId,
+    key, label: key, type: 'NUMBER', appliesTo: { kinds: ['ISSUE'] }, reason: 'r', ...extra,
+  }, admin.id);
+  const item = (title: string, attributes: Record<string, unknown>, parentId = projectId) => createIssue(prisma, { teamId: team.id, title, parentId, repository: 'test/integrity', acceptance: 'a', attributes }, human());
+  const drain = async () => { for (let pass = 0; pass < 20 && await prisma.fieldDefinition.count({ where: { indexJob: { not: null } } }); pass += 1) await runFieldIndexJobs(prisma, 2); };
+
+  it('a rename moves only the values its definition governs, and refuses a key the work already knows', async () => {
+    await field('WORKSPACE', 'tier', { type: 'TEXT' });
+    await field('TEAM', 'tier', { type: 'TEXT' });
+    const governedByTeam = await item('Team tier', { tier: 'x' });
+    await renameFieldDefinition(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID, from: 'tier', to: 'customer_tier', reason: 'clearer' }, admin.id);
+    expect((await prisma.issue.findUniqueOrThrow({ where: { id: governedByTeam.id } })).attributes).toEqual({ tier: 'x' });
+
+    await field('WORKSPACE', 'band', { type: 'TEXT' });
+    await field('TEAM', 'level', { type: 'TEXT' });
+    await item('Banded', { band: 'b' });
+    await expect(renameFieldDefinition(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID, from: 'band', to: 'level', reason: 'merge' }, admin.id)).rejects.toThrow(/already a team field/);
+  });
+
+  it('editing or renaming a field during its backfill still indexes every item', async () => {
+    await field('TEAM', 'points');
+    for (const value of [1, 2, 3, 4, 5]) await item(`I${value}`, { points: value });
+    await field('TEAM', 'points', { searchable: true });
+    await runFieldIndexJobs(prisma, 2);
+    // Edited mid-backfill: the job moves to the new version.
+    const edited = await field('TEAM', 'points', { searchable: true, label: 'Story points' });
+    expect(edited.indexJob).toBe('BACKFILL');
+    await runFieldIndexJobs(prisma, 2);
+    await renameFieldDefinition(prisma, { scope: 'TEAM', scopeId: team.id, from: 'points', to: 'story_points', reason: 'clearer' }, admin.id);
+    await drain();
+    expect(await prisma.fieldValueIndex.count({ where: { key: 'story_points' } })).toBe(5);
+    expect(await reconcileFieldIndex(prisma, team.id)).toEqual([]);
+  });
+
+  it('moving an item rebuilds its index rows and checks the new place\'s required fields', async () => {
+    await field('TEAM', 'points', { searchable: true });
+    const other = await createIssue(prisma, { teamId: team.id, title: 'Other', kind: 'PROJECT', repository: 'test/integrity', commitmentStatus: 'COMMITTED' }, human());
+    await setFieldDefinition(prisma, { scope: 'PROJECT', scopeId: other.id, key: 'points', label: 'Not indexed here', type: 'NUMBER', appliesTo: { kinds: ['ISSUE'] }, reason: 'r' }, admin.id);
+    const work = await item('Moving', { points: 3 });
+    expect(await prisma.fieldValueIndex.count({ where: { issueId: work.id } })).toBe(1);
+    const moved = await updateIssue(prisma, work.id, { parentId: other.id, repository: 'test/integrity' }, human());
+    expect(await prisma.fieldValueIndex.count({ where: { issueId: work.id } })).toBe(0);
+    expect(await reconcileFieldIndex(prisma, team.id)).toEqual([]);
+
+    await setFieldDefinition(prisma, { scope: 'PROJECT', scopeId: projectId, key: 'customer', label: 'Customer', type: 'TEXT', appliesTo: { kinds: ['ISSUE'] }, required: true, reason: 'r' }, admin.id);
+    await expect(updateIssue(prisma, work.id, { parentId: projectId, expectedRevision: moved.revision }, human())).rejects.toThrow(/Fill the required field "Customer"/);
   });
 });
 
