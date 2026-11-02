@@ -2935,6 +2935,12 @@ kbd {
   font-size: 9.5px;
   fill: var(--fg-dim);
   pointer-events: none;
+  /* A halo in the page colour: a curve that crosses a label must never make
+     the number unreadable. */
+  paint-order: stroke fill;
+  stroke: var(--bg);
+  stroke-width: 2.6px;
+  stroke-linejoin: round;
 }
 
 .issue-neighbourhood__map-node--focus .issue-neighbourhood__map-label {
