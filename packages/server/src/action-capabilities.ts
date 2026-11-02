@@ -85,6 +85,7 @@ export const QUERY_EXEMPTIONS: Record<string, { reason: string; decision: string
   attention: { reason: 'The Needs you queue of decisions only people make; an agent learns of decisions through agent_inbox.', decision: 'INV-1090' },
   attentionSummary: { reason: 'The Needs you count for people; agents read agent_inbox.', decision: 'INV-1090' },
   issuePreviews: { reason: 'The hover card a reader sees when they hover a work reference in prose; agents read the item itself with work_get_context.', decision: 'INV-1466' },
+  issueGraph: { reason: 'The neighbourhood graph a reader opens on an item to see its place in the milestone and its dependency chain; agents read relations per item (work_get_context, work_read_page).', decision: 'INV-1496' },
 };
 
 /** MCP write tools with no GraphQL counterpart, and why. */

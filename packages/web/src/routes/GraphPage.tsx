@@ -6,6 +6,7 @@ import { readStoredTeamKey } from '../board/utils';
 import { DependencyGraph, type FocusHops } from '../components/graph/DependencyGraph';
 import { openCreateIssueSurface } from '../app/shellStorage';
 import { GraphOutline } from '../components/graph/GraphOutline';
+import { IssueGraphViewPage } from './IssueGraphView';
 import { ProjectTimeline } from '../components/graph/ProjectTimeline';
 import { IcoGraph } from '../components/Icons';
 import { Checkbox } from '../components/controls';
@@ -44,11 +45,28 @@ function parseHops(value: string | null): FocusHops {
 }
 
 /**
+ * One graph page, two lenses (INV-1496): a whole project, or one item's
+ * neighbourhood. The scope is in the URL, so a link always says which one it
+ * is.
+ *
+ * The two are separate components on purpose: a component that sometimes
+ * returns early and sometimes calls its hooks would break the moment a
+ * reader moved between them.
+ */
+export function GraphPage() {
+  const [searchParams] = useSearchParams();
+  if (searchParams.get('scope') === 'issue') {
+    return <IssueGraphViewPage />;
+  }
+  return <ProjectGraphPage />;
+}
+
+/**
  * One project's work graph (INV-681). The URL carries every choice —
  * project, view, focus, hops, roll-up, candidates, other links — so a view
  * can be shared or reloaded as-is.
  */
-export function GraphPage() {
+function ProjectGraphPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const project = searchParams.get('project');

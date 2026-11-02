@@ -42,6 +42,7 @@ import { ActorBadge } from '../components/ActorBadge';
 import { ContractSection, type ContractValues } from '../components/ContractSection';
 import { useContractAmendmentDecisions } from '../components/ContractAmendmentPanel';
 import { IssueRelations } from '../components/IssueRelations';
+import { IssueNeighbourhood } from '../components/graph/IssueNeighbourhood';
 import { NeedInfoControl, NeedInfoWithdrawButton } from '../components/NeedInfoControl';
 import { AddSubIssueButton } from '../components/AddSubIssueButton';
 import { BugSlaBadge, FollowUpDeadlineBadge } from '../components/BugSlaBadge';
@@ -816,6 +817,15 @@ export function IssuePage() {
                 <FollowUpDeadlineBadge deadline={activeIssue.followUpDeadline} showMet />
               </div>
             ) : null}
+
+            {/* The neighbourhood: where this item sits, how its milestone is
+                going, and what it waits on (INV-1496). */}
+            <IssueNeighbourhood
+              key={`neighbourhood-${activeIssue.id}`}
+              issueId={activeIssue.id}
+              issueIdentifier={activeIssue.identifier}
+              onOpen={(issueId) => navigate(`/issue/${issueId}`)}
+            />
 
             {/* Parent issue */}
             {activeIssue.parent ? (
