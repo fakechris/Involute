@@ -2517,6 +2517,8 @@ const typeDefs = /* GraphQL */ `
     stateId: String
     labelIds: [String!]
     parentId: String
+    "The item that replaced this one (identifier or UUID; INV-1498); null clears."
+    supersededById: String
     title: String
     description: String
     assigneeId: String

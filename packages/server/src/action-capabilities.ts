@@ -99,7 +99,7 @@ export const RENAMED: Record<string, Record<string, string>> = {
   // Names on MCP, ids in the Report bug dialog (INV-1000).
   work_file_bug: { team: 'teamId', labels: 'labelIds' },
   work_propose: { team: 'teamId' },
-  work_update: { state: 'stateId' },
+  work_update: { superseded_by: 'supersededById', state: 'stateId' },
   work_comment: { work_id: 'issueId' },
   work_delivery_propose: { changes: 'changesJson' },
   work_executor_update: { details: 'detailsJson' },

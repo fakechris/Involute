@@ -51,12 +51,14 @@ export function isBugIssue(issue: { labels?: { nodes: Array<{ name: string }> } 
 interface PendingRequest {
   title: string;
   needsReason: boolean;
+  /** Prefilled from the item itself (INV-1498): e.g. a superseded DECISION arrives as Obsolete + "Superseded by INV-…". The person can still change both. */
+  prefill?: Partial<CloseReason> | undefined;
   resolve: (value: CloseReason | null) => void;
 }
 
 function CloseReasonDialog({ request, onDone }: { request: PendingRequest; onDone: (value: CloseReason | null) => void }) {
-  const [resolution, setResolution] = useState<WorkResolution | ''>('');
-  const [reason, setReason] = useState('');
+  const [resolution, setResolution] = useState<WorkResolution | ''>(request.prefill?.resolution ?? '');
+  const [reason, setReason] = useState(request.prefill?.reason ?? '');
   const missing = !resolution ? 'Choose why it is closed.' : request.needsReason && !reason.trim() ? 'A bug is never closed without a reason (zero-bug).' : null;
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -98,13 +100,13 @@ function CloseReasonDialog({ request, onDone }: { request: PendingRequest; onDon
  * the person keeps the work open; render `closeReasonDialog` once.
  */
 export function useCloseReason(): {
-  askCloseReason: (options: { title: string; needsReason: boolean }) => Promise<CloseReason | null>;
+  askCloseReason: (options: { title: string; needsReason: boolean; prefill?: Partial<CloseReason> | undefined }) => Promise<CloseReason | null>;
   closeReasonDialog: ReactNode;
 } {
   const [request, setRequest] = useState<PendingRequest | null>(null);
   const requestRef = useRef<PendingRequest | null>(null);
 
-  const askCloseReason = useCallback((options: { title: string; needsReason: boolean }) => new Promise<CloseReason | null>((resolve) => {
+  const askCloseReason = useCallback((options: { title: string; needsReason: boolean; prefill?: Partial<CloseReason> | undefined }) => new Promise<CloseReason | null>((resolve) => {
     // A second ask while one is open answers the first with "keep open".
     requestRef.current?.resolve(null);
     const next = { ...options, resolve };
@@ -121,5 +123,14 @@ export function useCloseReason(): {
   return {
     askCloseReason,
     closeReasonDialog: request ? <CloseReasonDialog key={request.title} request={request} onDone={finish} /> : null,
+  };
+}
+
+/** What the close dialog starts with for an item another one replaced (INV-1498). */
+export function supersededPrefill(issue: { kind?: string | null; supersededBy?: { identifier: string; title: string } | null }): Partial<CloseReason> | undefined {
+  if (!issue.supersededBy) return undefined;
+  return {
+    resolution: issue.kind === 'DECISION' ? 'OBSOLETE' : 'DUPLICATE',
+    reason: `Superseded by ${issue.supersededBy.identifier}: ${issue.supersededBy.title}`,
   };
 }

@@ -143,6 +143,8 @@ export interface IssueSummary {
   kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
   commitmentStatus?: 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
   /** Why a rejected or canceled item was closed (INV-1118). */
+  /** The item that replaced this one (INV-1498). */
+  supersededBy?: { id: string; identifier: string; title: string } | null;
   resolution?: WorkResolution | null;
   description?: string | null;
   repository?: string | null;

@@ -144,6 +144,8 @@ export interface UpdateIssueInput {
   foundInSha?: string | null;
   snoozedUntil?: Date | null;
   stateId?: string | null;
+  /** The item that replaced this one (INV-1498): identifier or UUID; null clears. Not a contract field, so an agent may set it on committed work. */
+  supersededById?: string | null;
   title?: string | null;
   verification?: string | null;
 }
@@ -322,7 +324,12 @@ export async function updateIssue(
     if (existingIssue.deliveryRootId && ['acceptance', 'scope', 'constraints', 'outcome', 'verification', 'repository', 'parentId', 'kind'].some((field) => Object.prototype.hasOwnProperty.call(input, field))) {
       throw createValidationError('Inherited execution contracts are changed through their delivery package in Candidates.');
     }
-    if (existingIssue.supersededById && input.stateId !== undefined) throw createValidationError('Change the replacement work instead of reopening a superseded item.');
+    if (existingIssue.supersededById && input.stateId !== undefined && input.stateId !== null) {
+      // A superseded item may still be closed (Canceled / Done); only reopening it is refused (INV-1498).
+      const target = await transaction.workflowState.findUnique({ where: { id: input.stateId }, select: { type: true } });
+      if (target && target.type !== 'CANCELED' && target.type !== 'COMPLETED') throw createValidationError('Change the replacement work instead of reopening a superseded item.');
+    }
+
 
     // Agents shape candidate work via propose, but the committed contract is
     // human-owned: once COMMITTED, acceptance/scope/verification/outcome/
@@ -366,6 +373,11 @@ export async function updateIssue(
     let nextParentId: string | null | undefined;
 
     const data: Prisma.IssueUpdateInput = {};
+    if ('supersededById' in input && input.supersededById !== undefined) {
+      // Who replaced this item (INV-1498); a relation on the checked input.
+      const replacementId = await resolveSupersededBy(transaction, existingIssue, input.supersededById);
+      data.supersededBy = replacementId ? { connect: { id: replacementId } } : { disconnect: true };
+    }
     // A person moving work into Done is an acceptance (INV-790): it is recorded
     // like workReview, whichever control did it (dropdown, drawer, drag, API).
     let acceptedByPerson = false;
@@ -1124,4 +1136,33 @@ export async function recordStateChangeAcceptance(
     workId: input.after.id,
     workIdentifier: input.after.identifier,
   });
+}
+
+
+export const SUPERSEDED_BY_SELF_MESSAGE = 'An item cannot be superseded by itself.';
+export const SUPERSEDED_BY_TEAM_MESSAGE = 'The replacement must be work on the same team.';
+export const SUPERSEDED_BY_CYCLE_MESSAGE = 'That replacement is itself superseded by this item; a supersession chain cannot loop.';
+
+/**
+ * Who replaced this item (INV-1498): a DECISION overturned by a newer one, or
+ * work made redundant by another. Structured, so the close dialog can prefill
+ * "Superseded by INV-…" instead of asking a person to type what the agent
+ * already knows. Same team, not itself, no loop; a rejected candidate is not a
+ * replacement.
+ */
+async function resolveSupersededBy(transaction: Prisma.TransactionClient, existing: Issue, value: string | null): Promise<string | null> {
+  if (value === null) return null;
+  const { findWorkByIdOrIdentifier } = await import('./context-service.js');
+  const replacement = await findWorkByIdOrIdentifier(transaction, value);
+  if (!replacement || replacement.commitmentStatus === 'REJECTED') throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+  if (replacement.id === existing.id) throw createValidationError(SUPERSEDED_BY_SELF_MESSAGE);
+  if (replacement.teamId !== existing.teamId) throw createValidationError(SUPERSEDED_BY_TEAM_MESSAGE);
+  // Walk the replacement's own chain: if it ends at this item, the chain would loop.
+  let cursor: string | null = replacement.supersededById;
+  for (let depth = 0; cursor && depth < 32; depth += 1) {
+    if (cursor === existing.id) throw createValidationError(SUPERSEDED_BY_CYCLE_MESSAGE);
+    const next: { supersededById: string | null } | null = await transaction.issue.findUnique({ where: { id: cursor }, select: { supersededById: true } });
+    cursor = next?.supersededById ?? null;
+  }
+  return replacement.id;
 }

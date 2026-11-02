@@ -862,3 +862,14 @@ select.control--ghost:focus-visible {
   align-items: center;
   font-size: 13px;
 }
+
+/* Superseded notice on the issue page (INV-1498). */
+.issue-panel__superseded {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-2);
+  font-size: 13px;
+  color: var(--fg-muted);
+}

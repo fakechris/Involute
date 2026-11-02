@@ -749,6 +749,7 @@ async function callMcpAction(
         updateInput.kind = kind as NonNullable<typeof updateInput.kind>;
       }
       assignOptional(updateInput, 'priority', optionalNumber(args.priority));
+      if (args.superseded_by !== undefined) updateInput.supersededById = args.superseded_by === null ? null : requiredString(args.superseded_by, 'superseded_by');
       const severity = parseSeverity(args.severity);
       if (severity !== undefined) updateInput.severity = severity;
       Object.assign(updateInput, readIncidentTimeArgs(args));
@@ -1530,6 +1531,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         id: { type: 'string' },
         expected_revision: { type: 'integer' },
         parent_id: { type: 'string', description: 'Move under this parent (identifier or UUID). Requires access to both items; same-team/repository, hierarchy and cycle rules apply. Cannot detach committed work.' },
+        superseded_by: { type: ['string', 'null'], description: 'The item that replaced this one (identifier or UUID; INV-1498) — an overturned DECISION names the decision that superseded it. Same team, not itself, no loop; null clears. Not a contract field, so allowed on committed work; a person then closes the item with the reason prefilled.' },
         title: { type: 'string' },
         label_ids: { type: 'array', items: { type: 'string' }, description: 'Replace labels with these IDs; [] clears labels. At most one Type label.' },
         kind: { type: 'string', enum: ['PROJECT', 'MILESTONE', 'EPIC', 'ISSUE', 'DECISION'] },
