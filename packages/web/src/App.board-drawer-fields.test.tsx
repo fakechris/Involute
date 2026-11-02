@@ -3,9 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { apolloMocks, boardQueryResult, renderApp } from './test/app-test-helpers';
 import { App } from './App';
+import type { FieldDefinitionSummary } from './board/types';
 
 // INV-1514: the board drawer shows the field definitions that apply and saves through issueUpdate.
-const definitions = [
+const definitions: FieldDefinitionSummary[] = [
   { key: 'risk', label: 'Risk', description: null, type: 'ENUM', required: false, searchable: true, options: [{ value: 'low', label: 'low', archived: null }, { value: 'high', label: 'high', archived: null }] },
 ];
 
