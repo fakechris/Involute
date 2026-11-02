@@ -1,7 +1,7 @@
 import { gql } from '@apollo/client';
 
 export const BOARD_PAGE_QUERY = gql`
-  query BoardPage($query: String, $first: Int!, $after: String, $filter: IssueFilter, $teamFilter: TeamFilter, $withDescriptions: Boolean! = false) {
+  query BoardPage($query: String, $first: Int!, $after: String, $filter: IssueFilter, $teamFilter: TeamFilter, $withDescriptions: Boolean! = false, $orderBy: IssueOrder) {
     projectSummary(teamFilter: $teamFilter) {
       totalCount
       noRepositoryCount
@@ -58,7 +58,9 @@ export const BOARD_PAGE_QUERY = gql`
         name
       }
     }
-    issues(first: $first, after: $after, filter: $filter, query: $query) {
+    # Per-state totals under the same filter (INV-1516), read with the list so they never drift apart.
+    issueStateCounts(filter: $filter, query: $query) { stateId count }
+    issues(first: $first, after: $after, filter: $filter, query: $query, orderBy: $orderBy) {
       nodes {
         id
         identifier
@@ -74,6 +76,7 @@ export const BOARD_PAGE_QUERY = gql`
         kind
         repository
         attributes
+        supersededBy { id identifier title }
         claim {
           id
           leaseUntil
@@ -2194,3 +2197,4 @@ export const BOARD_FIELDS_QUERY = gql`
     }
   }
 `;
+

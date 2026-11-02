@@ -39,6 +39,7 @@ describe('App team selection', () => {
       expect.objectContaining({
         variables: {
           first: 200,
+          orderBy: 'UPDATED',
           teamFilter: {
             key: {
               eq: 'SON',
@@ -67,6 +68,7 @@ describe('App team selection', () => {
       expect.objectContaining({
         variables: {
           first: 200,
+          orderBy: 'UPDATED',
           teamFilter: {
             key: {
               eq: 'SON',
@@ -145,6 +147,7 @@ describe('App team selection', () => {
       expect.objectContaining({
         variables: {
           first: 200,
+          orderBy: 'UPDATED',
           filter: {
             commitmentStatus: 'COMMITTED',
           },
@@ -162,6 +165,7 @@ describe('App team selection', () => {
         expect.objectContaining({
           variables: {
             first: 200,
+            orderBy: 'UPDATED',
             teamFilter: {
               key: {
                 eq: 'SON',

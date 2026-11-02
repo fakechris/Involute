@@ -417,6 +417,8 @@ export interface BugsPageQueryVariables {
 
 export interface BoardPageQueryData {
   projectSummary?: ProjectSummaryResult;
+  /** Per-state totals under the board filter (INV-1516). */
+  issueStateCounts?: Array<{ stateId: string; count: number }>;
   teams: {
     nodes: TeamSummary[];
   };
@@ -488,6 +490,8 @@ export interface TeamMembershipRemoveMutationVariables {
 
 export interface BoardPageQueryVariables {
   query?: string;
+  /** UPDATED: most recently changed first, so work changed today is on the first page (INV-1516). */
+  orderBy?: 'CREATED' | 'UPDATED';
   first: number;
   after?: string;
   /** Ask for the issues' bodies (INV-1470): the list leaves them out by default. */

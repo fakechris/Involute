@@ -12,6 +12,7 @@ function renderTestApp(queryState = { data: boardQueryResult, loading: false }, 
 const boardQueryOptions = expect.objectContaining({
   variables: {
     first: 200,
+    orderBy: 'UPDATED',
     teamFilter: {
       key: {
         eq: 'SON',

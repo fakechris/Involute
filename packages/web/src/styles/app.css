@@ -1687,6 +1687,32 @@ kbd {
   color: var(--fg-dim);
 }
 
+.board-column__unloaded {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--r-2);
+  color: var(--fg-dim);
+  font-size: 13px;
+}
+
+.board-column__load-more {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.board-column__load-more:disabled {
+  color: var(--fg-dim);
+  cursor: default;
+}
+
 .board-column__body {
   display: flex;
   flex: 1;

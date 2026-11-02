@@ -68,7 +68,7 @@ import { QuickPicker, type QuickPickerOption } from '../components/QuickPicker';
 import { isGotoChordPending } from '../app/goto-chord';
 import { BOARD_PICKER_EVENT } from './board-picker-event';
 import { fieldChange, type FieldUndoChange } from '../undo/field-gesture';
-import { isBugIssue, useCloseReason, type WorkResolution } from '../components/CloseReasonDialog';
+import { isBugIssue, supersededPrefill, useCloseReason, type WorkResolution } from '../components/CloseReasonDialog';
 import {
   ACTIVE_TEAM_STORAGE_KEY,
   buildCommittedIssueFilter,
@@ -262,6 +262,7 @@ export function BoardPage() {
   const boardQueryVariables = useMemo<BoardPageQueryVariables>(
     () => ({
       first: ISSUE_PAGE_SIZE,
+      orderBy: 'UPDATED' as const,
       ...(queryTeamKey ? { teamFilter: { key: { eq: queryTeamKey } } } : {}),
       ...(looksLikeIql(effectiveBoardQuery) ? { query: effectiveBoardQuery } : {}),
       filter: {
@@ -1190,6 +1191,17 @@ export function BoardPage() {
     selectedBoardIssueIndex >= 0 ? boardVisibleIssues[selectedBoardIssueIndex + 1] ?? null : null;
   const hasMoreIssues = !isTeamSwitching && (queryData?.issues.pageInfo.hasNextPage ?? false);
 
+  // A column only holds what the board has loaded (200 at a time). The board
+  // query also returns how many each state really has under the same filter,
+  // so a column never looks empty while its items are on a later page (INV-1516).
+  const unloadedByState = useMemo(() => {
+    const totals = Array.isArray(queryData?.issueStateCounts) ? queryData.issueStateCounts : [];
+    if (!totals.length) return {} as Record<string, number>;
+    const loaded: Record<string, number> = {};
+    for (const issue of queryData?.issues.nodes ?? []) loaded[issue.state.id] = (loaded[issue.state.id] ?? 0) + 1;
+    return Object.fromEntries(totals.map((row) => [row.stateId, Math.max(0, row.count - (loaded[row.stateId] ?? 0))]));
+  }, [queryData]);
+
   useEffect(() => {
     if (!selectedIssueId || isBacklogView) {
       return;
@@ -2044,6 +2056,8 @@ export function BoardPage() {
     const answer = await askCloseReason({
       title: closing.length === 1 ? `Cancel ${closing[0]!.identifier}` : `Cancel ${closing.length} items`,
       needsReason: closing.some(isBugIssue),
+      // An item replaced by other work arrives with its resolution and reason filled in (INV-1498).
+      ...(closing.length === 1 && supersededPrefill(closing[0]!) ? { prefill: supersededPrefill(closing[0]!)! } : {}),
     });
     if (!answer) return null;
     return { resolution: answer.resolution, ...(answer.reason ? { reason: answer.reason } : {}) };
@@ -3163,6 +3177,9 @@ export function BoardPage() {
                   collapsed={!!collapsedColumns[column.stateId]}
                   onToggleCollapse={() => toggleColumnCollapse(column.stateId)}
                   issues={issuesByState[column.stateId] ?? EMPTY_ISSUES}
+                  unloadedCount={hasMoreIssues ? unloadedByState[column.stateId] ?? 0 : 0}
+                  loadingMore={isLoadingMoreIssues}
+                  onLoadMore={() => void handleLoadMoreIssues()}
                   onToggleIssueSelection={toggleIssueSelection}
                   selectedIssueIds={selectedIssueIds}
                   onNativeDragStart={(payload) => {
