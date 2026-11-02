@@ -51,8 +51,8 @@ export const MCP_TOOL_GROUPS: readonly McpToolGroup[] = [
   },
   {
     name: 'agent_request',
-    description: 'A request addressed to you from agent_inbox: action "claim" leases it (returns the claim_token only the holding execution can use), "answer" posts your reply and moves its state. Exactly one execution holds a claim, even among sessions of the same actor. To ask a named person for information yourself (needinfo, INV-1119): action "needinfo" with work_id, target_id and question; "withdraw" takes it back.',
-    actions: { claim: 'agent_request_claim', answer: 'agent_request_answer', needinfo: 'agent_request_needinfo', withdraw: 'agent_request_withdraw' },
+    description: 'A request addressed to you from agent_inbox: action "claim" leases it (returns the claim_token only the holding execution can use), "answer" posts your reply and moves its state. Exactly one execution holds a claim, even among sessions of the same actor. To ask a named person for information yourself (needinfo, INV-1119): action "needinfo" with work_id, target_id and question; "withdraw" takes it back. At L3 (INV-1493) action "delegate" with work_id, target_id, body and budget_units hands part of the work to another agent, explicitly and within your chain\'s budget and hops.',
+    actions: { claim: 'agent_request_claim', answer: 'agent_request_answer', needinfo: 'agent_request_needinfo', withdraw: 'agent_request_withdraw', delegate: 'agent_request_delegate' },
   },
   {
     name: 'delivery',

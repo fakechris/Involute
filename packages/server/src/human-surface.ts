@@ -300,6 +300,8 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationSurface> = {
   'incident.declared': { kind: 'info', actionable: 'info' },
   // The Incident Lead closes it from the issue page once the postmortem is attached (INV-1126).
   'incident.closable': { kind: 'info', actionable: 'info' },
+  // INV-1493: the one comment an L3 item's filer gets when it is Done; information, not a decision.
+  'policy.completed': { kind: 'info', actionable: 'info' },
   // An incident follow-up nears or passes its deadline (INV-1127): its owner and the Incident Lead hear once each.
   'incident.follow_up_at_risk': { kind: 'info', actionable: 'info' },
   'incident.follow_up_overdue': { kind: 'info', actionable: 'info' },

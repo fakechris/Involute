@@ -64,8 +64,11 @@ export async function tryAutoCommit(prisma: PrismaClient, work: Issue, proposer:
   const { commitWork } = await import('./claim-service.js');
   const actor = { ...(await gateActor(prisma)), reason: autoDecisionReason(view, 'candidate_commit', facts) };
   try {
-    await commitWork(prisma, work.id, { assigneeId: agent.ownerId, expectedRevision: work.revision }, actor);
-    return { decided: true, reason: actor.reason! };
+    const committed = await commitWork(prisma, work.id, { assigneeId: agent.ownerId, expectedRevision: work.revision }, actor);
+    // L3 (INV-1493): the team intake rule may hand it to an agent trusted at L3 at once.
+    const { dispatchByIntake } = await import('./autonomy-delegation.js');
+    const dispatched = await dispatchByIntake(prisma, committed, view, facts).catch((error: unknown) => `; intake dispatch failed — ${error instanceof Error ? error.message : String(error)}`);
+    return { decided: true, reason: `${actor.reason!}${dispatched}` };
   } catch (error) {
     return { decided: false, reason: `Escalated: automatic commit refused — ${error instanceof Error ? error.message : String(error)}` };
   }

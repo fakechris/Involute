@@ -32,6 +32,7 @@ function settings(overrides: Partial<AutonomySettingsData['autonomySettings']> =
       paused: false,
       defaultLevel: 0,
       templates: [{ name: 'Bugs on autopilot', level: 2 }, { name: 'Hands-off', level: 3 }],
+      completionReply: null,
       levels: LEVELS,
       builtInLocks: [
         { id: 'sev1_sev2_done', gate: 'review_accept', reason: 'SEV1 / SEV2 incidents reach Done only through a person (INV-1126).' },
@@ -82,7 +83,7 @@ describe('Administration → Autonomy (INV-1489)', () => {
     fireEvent.click(save);
     await waitFor(() => expect(mockSet).toHaveBeenCalledTimes(1));
     const input = mockSet.mock.calls[0]![0].variables.input;
-    expect(input).toMatchObject({ scope: 'WORKSPACE', scopeId: 'workspace', level: 3, locked: ['contract_amendment'], reason: 'raise after 30 days' });
+    expect(input).toMatchObject({ scope: 'WORKSPACE', scopeId: 'workspace', level: 3, locked: ['contract_amendment'], reason: 'raise after 30 days', completionReply: '' });
     expect(input.templates).toEqual([{ name: 'Bugs on autopilot', level: 2 }, { name: 'Hands-off', level: 3 }]);
     expect(await screen.findByText('Autonomy settings saved.')).toBeInTheDocument();
   });
