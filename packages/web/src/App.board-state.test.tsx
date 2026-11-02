@@ -116,4 +116,32 @@ describe('App board state flows', () => {
       }),
     );
   });
+
+  it('cancelling an item another one replaced starts with the resolution and reason filled in (INV-1498, INV-1516)', async () => {
+    const mutate = vi.fn().mockResolvedValue({
+      data: { issueUpdate: { success: true, issue: { ...getIssue('issue-1'), state: { id: 'state-canceled', name: 'Canceled', type: 'CANCELED', position: 5 } } } } satisfies IssueUpdateMutationData,
+    });
+    apolloMocks.useMutation.mockReturnValue([mutate]);
+    const data = {
+      ...boardQueryResult,
+      issues: { ...boardQueryResult.issues, nodes: boardQueryResult.issues.nodes.map((issue) => (issue.id === 'issue-1' ? { ...issue, kind: 'DECISION' as const, supersededBy: { id: 'issue-9', identifier: 'INV-9', title: 'The new rule' } } : issue)) },
+    };
+    renderTestApp({ data, loading: false });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+    fireEvent.change(within(drawer).getByLabelText('Issue state'), { target: { value: 'state-canceled' } });
+    const dialog = await screen.findByRole('dialog', { name: 'Close reason' });
+    expect(within(dialog).getByLabelText('Resolution')).toHaveValue('OBSOLETE');
+    expect(within(dialog).getByLabelText('Close reason text')).toHaveValue('Superseded by INV-9: The new rule');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel work' }));
+    await waitFor(() => expect(mutate).toHaveBeenCalledWith({ variables: { id: 'issue-1', input: { expectedRevision: 1, stateId: 'state-canceled', resolution: 'OBSOLETE', reason: 'Superseded by INV-9: The new rule' } } }));
+  });
+
+  it('asks the server for the most recently changed work first (INV-1516)', async () => {
+    renderTestApp();
+    await screen.findByRole('button', { name: 'Open INV-1' });
+    const boardCall = apolloMocks.useQuery.mock.calls.find(([document]) => JSON.stringify(document).includes('BoardPage'));
+    expect(boardCall?.[1]?.variables?.orderBy).toBe('UPDATED');
+  });
 });

@@ -1,7 +1,7 @@
 import { gql } from '@apollo/client';
 
 export const BOARD_PAGE_QUERY = gql`
-  query BoardPage($query: String, $first: Int!, $after: String, $filter: IssueFilter, $teamFilter: TeamFilter, $withDescriptions: Boolean! = false) {
+  query BoardPage($query: String, $first: Int!, $after: String, $filter: IssueFilter, $teamFilter: TeamFilter, $withDescriptions: Boolean! = false, $orderBy: IssueOrder) {
     projectSummary(teamFilter: $teamFilter) {
       totalCount
       noRepositoryCount
@@ -58,7 +58,7 @@ export const BOARD_PAGE_QUERY = gql`
         name
       }
     }
-    issues(first: $first, after: $after, filter: $filter, query: $query) {
+    issues(first: $first, after: $after, filter: $filter, query: $query, orderBy: $orderBy) {
       nodes {
         id
         identifier
@@ -74,6 +74,7 @@ export const BOARD_PAGE_QUERY = gql`
         kind
         repository
         attributes
+        supersededBy { id identifier title }
         claim {
           id
           leaseUntil
@@ -2192,5 +2193,12 @@ export const BOARD_FIELDS_QUERY = gql`
       key label description type required searchable
       options { value label archived }
     }
+  }
+`;
+
+/** Per-state totals under the board's filter and query (INV-1516): a column says how many it has not loaded. */
+export const BOARD_STATE_COUNTS_QUERY = gql`
+  query BoardStateCounts($filter: IssueFilter, $query: String) {
+    issueStateCounts(filter: $filter, query: $query) { stateId count }
   }
 `;

@@ -19,6 +19,10 @@ interface ColumnProps {
   onNativeDragStart?: (payload: Html5BoardDragPayload) => void;
   onNativeDragEnd?: () => void;
   onFilterProject?: ((projectKey: string) => void) | undefined;
+  /** Items of this state the board has not loaded yet (INV-1516); counted in the header and offered below. */
+  unloadedCount?: number | undefined;
+  loadingMore?: boolean | undefined;
+  onLoadMore?: (() => void) | undefined;
 }
 
 export function Column({
@@ -35,7 +39,12 @@ export function Column({
   onNativeDragStart,
   onNativeDragEnd,
   onFilterProject,
+  unloadedCount = 0,
+  loadingMore = false,
+  onLoadMore,
 }: ColumnProps) {
+  const total = issues.length + unloadedCount;
+  const countTitle = unloadedCount > 0 ? `${issues.length} loaded, ${unloadedCount} more not loaded yet` : undefined;
   const { isOver, setNodeRef } = useDroppable({
     id: stateId,
     data: {
@@ -69,7 +78,7 @@ export function Column({
       >
         <div className="board-column__header">
           <h2>{title}</h2>
-          <span className="board-column__count">{issues.length}</span>
+          <span className="board-column__count" title={countTitle}>{total}</span>
         </div>
       </section>
     );
@@ -84,7 +93,7 @@ export function Column({
     >
       <div className="board-column__header">
         <h2>{title}</h2>
-        <span className="board-column__count">{issues.length}</span>
+        <span className="board-column__count" title={countTitle}>{total}</span>
         {onToggleCollapse ? (
           <button
             type="button"
@@ -150,9 +159,19 @@ export function Column({
                 />
               ),
             )
-          ) : (
+          ) : unloadedCount > 0 ? null : (
             <p className="board-column__empty">No issues in {title} yet.</p>
           )}
+          {unloadedCount > 0 ? (
+            <div className="board-column__unloaded" role="note" aria-label={`${title} not loaded`}>
+              <span>{unloadedCount} more not loaded</span>
+              {onLoadMore ? (
+                <button type="button" className="board-column__load-more" disabled={loadingMore} onClick={onLoadMore}>
+                  {loadingMore ? 'Loading…' : 'Load more'}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </SortableContext>
     </section>

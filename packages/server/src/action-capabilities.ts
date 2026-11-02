@@ -58,6 +58,7 @@ export const QUERY_EXEMPTIONS: Record<string, { reason: string; decision: string
   handledForYou: { reason: 'The Handled for you list on /todo for people; agents see the same decisions as audits on each item (work_get_context).', decision: 'INV-1486' },
   fieldDefinitions: { reason: 'The definitions of one scope for the settings pages; an agent reads the ones that apply on each item (work_get_context field_definitions) or a team\'s set with work_catalog(kind: fields).', decision: 'INV-1501' },
   applicableFieldDefinitions: { reason: 'Fields shown in the Report bug, create and commit dialogs; agents read the same with work_catalog(kind: fields) and the tool descriptions.', decision: 'INV-1501' },
+  issueStateCounts: { reason: 'Per-column totals for the web board while it pages its list; agents count with work_search and IQL.', decision: 'INV-1516' },
   fieldLimits: { reason: 'The governance limits shown on the Fields settings pages; agents meet them as refusals with the limit in the message.', decision: 'INV-1501' },
   autonomySettings: { reason: 'Policy pages for Admins and team Owners; an agent reads the resolved level on each item (work_get_context autonomy).', decision: 'INV-1486' },
   viewer: { reason: 'The signed-in person; an agent is its credential (work_catalog actors).', decision: 'INV-846' },

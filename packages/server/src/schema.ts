@@ -470,6 +470,8 @@ const typeDefs = /* GraphQL */ `
     fieldDefinitions(scope: AutonomyScope!, scopeId: String!, includeInactive: Boolean): [FieldDefinition!]!
     "The field governance limits (INV-1504)."
     fieldLimits: FieldLimits!
+    "How many items each workflow state holds under the same filter and query as issues(), so a board column can say how many it has not loaded yet (INV-1516)."
+    issueStateCounts(filter: IssueFilter, query: String): [IssueStateCount!]!
     "The active field definitions new work would see (INV-1505): team, optional parent (its project), Kind and lower-case Type. For the Report bug, create and propose dialogs."
     applicableFieldDefinitions(teamId: String!, parentId: String, kind: WorkKind!, type: String, "Ignore the Type filter (the board lists every field it could group by)." allTypes: Boolean): [FieldDefinition!]!
     issue(id: String!): Issue
@@ -480,7 +482,8 @@ const typeDefs = /* GraphQL */ `
     reference. Only readable items come back.
     """
     issuePreviews(identifiers: [String!]!): [IssuePreview!]!
-    issues(first: Int!, after: String, filter: IssueFilter, query: String): IssueConnection!
+    "orderBy: CREATED (newest first, the default) or UPDATED (most recently changed first; the board, INV-1516)."
+    issues(first: Int!, after: String, filter: IssueFilter, query: String, orderBy: IssueOrder): IssueConnection!
     "Archived teams are left out unless includeArchived is true."
     teams(filter: TeamFilter, includeArchived: Boolean): TeamConnection!
     issueLabels(filter: IssueLabelFilter): IssueLabelConnection!
@@ -2767,6 +2770,16 @@ const typeDefs = /* GraphQL */ `
     CLEANUP
   }
 
+  enum IssueOrder {
+    CREATED
+    UPDATED
+  }
+
+  type IssueStateCount {
+    stateId: String!
+    count: Int!
+  }
+
   "Governance limits (docs/field-definitions.md §7); raising one is a decision."
   type FieldLimits {
     activePerScope: Int!
@@ -3439,6 +3452,17 @@ const resolvers = {
       }
       return rows.map(fieldDefinitionToGraphQL);
     },
+    issueStateCounts: async (_parent: unknown, args: { filter?: IssueFilterInput | null; query?: string | null }, context: GraphQLContext) => {
+      const compiled = args.query?.trim()
+        ? await compileIqlWhere(context.prisma, parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null })
+        : { where: undefined, sort: null };
+      const where = combineIssueWhere(
+        combineIssueWhere(buildIssueWhere(args.filter, context.viewer?.id ?? null), buildReadableIssueWhere(context)),
+        compiled.where,
+      );
+      const rows = await context.prisma.issue.groupBy({ by: ['stateId'], ...(where ? { where } : {}), _count: { _all: true } });
+      return rows.map((row) => ({ stateId: row.stateId, count: row._count._all }));
+    },
     applicableFieldDefinitions: async (_parent: unknown, args: { teamId: string; parentId?: string | null; kind: WorkKind; type?: string | null; allTypes?: boolean | null }, context: GraphQLContext) => {
       requireAuthentication(context);
       await assertCanReadTeam(context.prisma, context, args.teamId);
@@ -3499,10 +3523,11 @@ const resolvers = {
     },
     issues: async (
       _parent: unknown,
-      args: { after?: string | null; filter?: IssueFilterInput | null; first: number; query?: string | null },
+      args: { after?: string | null; filter?: IssueFilterInput | null; first: number; query?: string | null; orderBy?: 'CREATED' | 'UPDATED' | null },
       context: GraphQLContext,
       info: GraphQLResolveInfo,
     ): Promise<{ nodes: IssueParent[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
+      const byUpdated = args.orderBy === 'UPDATED';
       const first = clampConnectionFirst(args.first, MAX_ISSUES_CONNECTION_FIRST);
       const compiled = args.query?.trim()
         ? await compileIqlWhere(context.prisma, parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null })
@@ -3522,7 +3547,7 @@ const resolvers = {
         const ordered = await orderIdsByAttribute(context.prisma, matches.map((row) => row.id), compiled.sort);
         sortedPage = { ids: ordered.slice(offset, offset + first), hasNextPage: ordered.length > offset + first, offset };
       }
-      const where = sortedPage ? { id: { in: sortedPage.ids } } : combineIssueWhere(baseWhere, buildIssueCursorWhere(args.after));
+      const where = sortedPage ? { id: { in: sortedPage.ids } } : combineIssueWhere(baseWhere, byUpdated ? buildUpdatedCursorWhere(args.after) : buildIssueCursorWhere(args.after));
       const requestedIssueFields = getRequestedIssueConnectionFields(info);
       const issues = await context.prisma.issue.findMany({
         ...(where ? { where } : {}),
@@ -3534,7 +3559,7 @@ const resolvers = {
             : {}),
           followUpLinks: requestedIssueFields.has('followUpDeadline'),
         }),
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        orderBy: byUpdated ? [{ updatedAt: 'desc' }, { id: 'desc' }] : [{ createdAt: 'desc' }, { id: 'desc' }],
         take: first + 1,
       });
       if (sortedPage) {
@@ -3547,7 +3572,9 @@ const resolvers = {
 
       return {
         nodes,
-        pageInfo: buildPageInfo(nodes, issues.length > first),
+        pageInfo: byUpdated
+          ? { hasNextPage: issues.length > first, endCursor: nodes.length ? encodeUpdatedCursor(nodes[nodes.length - 1]!) : null }
+          : buildPageInfo(nodes, issues.length > first),
       };
     },
     teams: async (
@@ -7206,4 +7233,18 @@ function fieldDefinitionToGraphQL(definition: FieldDefinition) {
       return isStaleDefinition(definition, first?.createdAt ?? definition.createdAt);
     },
   };
+}
+
+/** Cursor for orderBy UPDATED (INV-1516): last change time and id, prefixed so a CREATED cursor is never misread. */
+function encodeUpdatedCursor(entity: { updatedAt: Date; id: string }): string {
+  return `u:${Buffer.from(JSON.stringify({ updatedAt: entity.updatedAt.toISOString(), id: entity.id }), 'utf8').toString('base64url')}`;
+}
+
+function buildUpdatedCursorWhere(after: string | null | undefined): Prisma.IssueWhereInput | undefined {
+  if (!after) return undefined;
+  if (!after.startsWith('u:')) throw createValidationError('This cursor belongs to another ordering; start again without after.');
+  const parsed = JSON.parse(Buffer.from(after.slice(2), 'base64url').toString('utf8')) as { updatedAt?: unknown; id?: unknown };
+  if (typeof parsed.updatedAt !== 'string' || typeof parsed.id !== 'string') throw createValidationError('Invalid cursor.');
+  const updatedAt = parseDateTime(parsed.updatedAt);
+  return { OR: [{ updatedAt: { lt: updatedAt } }, { updatedAt, id: { lt: parsed.id } }] };
 }
