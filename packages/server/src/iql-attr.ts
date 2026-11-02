@@ -182,3 +182,32 @@ export async function orderIdsByAttribute(prisma: DatabaseClient, ids: string[],
     return position.get(left)! - position.get(right)!;
   });
 }
+
+/**
+ * For filters evaluated in memory (webhook subscriptions, INV-1525): rewrite
+ * each `attr.<key>` value into the form the validator stores — a work
+ * identifier becomes its id, `me` the viewer, a date its ISO time, a number
+ * or boolean its canonical text — so the in-memory match agrees with search.
+ * Unknown keys and unparseable values are left as written (they match nothing).
+ */
+export async function normalizeAttrTerms(prisma: DatabaseClient, query: IqlQuery, context: IqlCompileContext): Promise<IqlQuery> {
+  const terms: IqlTerm[] = [];
+  for (const term of query.terms) {
+    if (!isAttrField(term.field)) { terms.push(term); continue; }
+    const key = attrKey(term.field);
+    const raw = term.value.trim();
+    const definition = await prisma.fieldDefinition.findFirst({ where: { key, active: true }, orderBy: { createdAt: 'desc' } });
+    if (!definition || raw === 'none' || raw === 'any') { terms.push(term); continue; }
+    const values: string[] = [];
+    for (const entry of raw.split(',').map((part) => part.trim()).filter(Boolean)) {
+      try {
+        const normalized = await jsonValueFor(prisma, definition.type, entry, key, context);
+        values.push(String(Array.isArray(normalized) ? normalized[0] : normalized));
+      } catch {
+        values.push(entry);
+      }
+    }
+    terms.push({ ...term, value: values.join(',') });
+  }
+  return { ...query, terms };
+}
