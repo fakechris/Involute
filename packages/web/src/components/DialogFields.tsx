@@ -13,7 +13,7 @@ import { IssueFieldsPanel } from './IssueFieldsPanel';
 export const APPLICABLE_FIELDS_QUERY = gql`
   query ApplicableFields($teamId: String!, $parentId: String, $kind: WorkKind!, $type: String) {
     applicableFieldDefinitions(teamId: $teamId, parentId: $parentId, kind: $kind, type: $type) {
-      key label description type required searchable
+      key label description type required searchable defaultValue
       options { value label archived }
     }
   }
@@ -21,18 +21,30 @@ export const APPLICABLE_FIELDS_QUERY = gql`
 
 export type FieldValues = Record<string, FieldValue>;
 
-export function useApplicableFields(teamId: string | null | undefined, parentId: string | null | undefined, kind: string, type: string | null): FieldDefinitionSummary[] {
-  const { data } = useQuery<{ applicableFieldDefinitions: FieldDefinitionSummary[] }, { teamId: string; parentId: string | null; kind: string; type: string | null }>(APPLICABLE_FIELDS_QUERY, {
+/**
+ * The definitions that apply, and whether they are still loading: while new
+ * variables load, the previous answer stays and callers must not prune values
+ * against it (INV-1524).
+ */
+export function useApplicableFields(teamId: string | null | undefined, parentId: string | null | undefined, kind: string, type: string | null): { definitions: FieldDefinitionSummary[]; loading: boolean } {
+  const { data, previousData, loading } = useQuery<{ applicableFieldDefinitions: FieldDefinitionSummary[] }, { teamId: string; parentId: string | null; kind: string; type: string | null }>(APPLICABLE_FIELDS_QUERY, {
     variables: { teamId: teamId ?? '', parentId: parentId ?? null, kind, type },
     skip: !teamId,
   });
-  return Array.isArray(data?.applicableFieldDefinitions) ? data.applicableFieldDefinitions : [];
+  const current = data ?? previousData;
+  return { definitions: Array.isArray(current?.applicableFieldDefinitions) ? current.applicableFieldDefinitions : [], loading: Boolean(loading) || (!data && Boolean(teamId)) };
+}
+
+function hasDefault(definition: FieldDefinitionSummary): boolean {
+  const value = definition.defaultValue;
+  return value !== undefined && value !== null && value !== '' && !(Array.isArray(value) && value.length === 0);
 }
 
 /** Labels of required fields that are still empty. */
 export function missingRequiredFields(definitions: FieldDefinitionSummary[], values: FieldValues): string[] {
   return definitions
-    .filter((definition) => definition.required)
+    // A required field with a default is filled by the server (INV-1524).
+    .filter((definition) => definition.required && !hasDefault(definition))
     .filter((definition) => {
       const value = values[definition.key];
       return value === undefined || value === '' || (Array.isArray(value) && value.length === 0);
@@ -57,6 +69,7 @@ export function DialogFields({
 }) {
   if (!definitions.length) return null;
   const missing = missingRequiredFields(definitions, values);
+  const defaulted = definitions.filter((definition) => definition.required && hasDefault(definition) && (values[definition.key] === undefined || values[definition.key] === '')).map((definition) => definition.label);
   return (
     <div className="field">
       <span className="field__label">Fields</span>
@@ -75,6 +88,7 @@ export function DialogFields({
         }}
       />
       {missing.length ? <span className="field__hint" role="note">Required before it is committed: {missing.join(', ')}.</span> : null}
+      {defaulted.length ? <span className="field__hint">Left empty, these take their default: {defaulted.join(', ')}.</span> : null}
     </div>
   );
 }

@@ -145,6 +145,8 @@ export interface FieldDefinitionSummary {
   type: FieldDefinitionType;
   required: boolean;
   searchable?: boolean | null;
+  /** Fills the field when nobody sets it (INV-1524). */
+  defaultValue?: unknown;
   options: Array<{ value: string; label: string; archived?: boolean | null }>;
 }
 
@@ -522,6 +524,8 @@ export interface BoardPageQueryVariables {
       isNull?: boolean;
     };
     commitmentStatus?: 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
+    /** Changed at or after this time (INV-1526). */
+    updatedAt?: { gte: string };
   };
 }
 

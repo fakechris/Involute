@@ -45,7 +45,7 @@ const typeLabel = (type: FieldType) => TYPES.find((entry) => entry.type === type
 type Scope = { scope: AutonomyScope; scopeId: string };
 type SetInput = {
   scope: AutonomyScope; scopeId: string; key: string; label: string; description?: string | null; type: FieldType;
-  options?: Array<{ value: string; label: string }> | null; appliesTo: { kinds: WorkKindName[]; types?: string[] | null };
+  options?: Array<{ value: string; label: string; archived?: boolean }> | null; appliesTo: { kinds: WorkKindName[]; types?: string[] | null };
   required: boolean; defaultValue?: unknown; searchable: boolean; reason: string;
 };
 
@@ -72,7 +72,8 @@ function draftFrom(row: FieldDefinitionRow): Draft {
     label: row.label,
     description: row.description ?? '',
     type: row.type,
-    options: row.options.map((option) => (option.label && option.label !== option.value ? `${option.value} | ${option.label}` : option.value)).join('\n'),
+    // Archived options keep their flag through an edit (INV-1524).
+    options: row.options.map((option) => `${option.value} | ${option.label || option.value}${option.archived ? ' | archived' : ''}`).join('\n'),
     kinds: row.appliesTo.kinds,
     anyType,
     types: anyType ? [] : row.appliesTo.types,
@@ -82,12 +83,15 @@ function draftFrom(row: FieldDefinitionRow): Draft {
   };
 }
 
-/** `value | Label` per line; the label defaults to the value. */
-export function parseOptions(text: string): Array<{ value: string; label: string }> {
+/** `value | Label | archived` per line; the label defaults to the value, `archived` retires the option. */
+export function parseOptions(text: string): Array<{ value: string; label: string; archived?: boolean }> {
   return text.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
-    const [value, ...label] = line.split('|');
+    const parts = line.split('|');
+    const archived = parts.length >= 3 && parts.at(-1)!.trim().toLowerCase() === 'archived';
+    if (archived) parts.pop();
+    const [value, ...label] = parts;
     const trimmed = value!.trim();
-    return { value: trimmed, label: label.join('|').trim() || trimmed };
+    return { value: trimmed, label: label.join('|').trim() || trimmed, ...(archived ? { archived: true } : {}) };
   });
 }
 
@@ -298,7 +302,7 @@ function FieldForm({
           </Select>
         </Field>
         {hasOptions ? (
-          <Field label="Options" hint={`One per line, "value | Label". ${optionCount} of ${enumLimit} used.`}>
+          <Field label="Options" hint={`One per line, "value | Label"; end a line with "| archived" to retire an option without losing its values. ${optionCount} of ${enumLimit} used.`}>
             <TextArea aria-label="Field options" rows={4} value={draft.options} onChange={(event) => set({ options: event.target.value })} />
           </Field>
         ) : null}
