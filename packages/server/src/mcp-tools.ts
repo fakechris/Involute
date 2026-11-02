@@ -1,4 +1,5 @@
 import { requestNeedInfo, withdrawNeedInfo } from './need-info-service.js';
+import { delegateToAgent } from './autonomy-delegation.js';
 import { autonomyToGraphQL, loadAutonomyFor } from './autonomy-service.js';
 import { protocolInfo } from './protocol-info.js';
 import { groupForAction, hidesFromCaller, MCP_TOOL_GROUPS, resolveMcpCall, type McpToolGroup } from './mcp-tool-groups.js';
@@ -118,6 +119,7 @@ export type McpToolName =
   | 'agent_request_claim'
   | 'agent_request_answer'
   | 'agent_request_needinfo'
+  | 'agent_request_delegate'
   | 'agent_request_withdraw';
 
 // Order matches MCP_TOOL_DEFINITIONS, which is the order `listMcpTools`
@@ -164,6 +166,7 @@ export const WRITE_MCP_TOOLS: readonly McpToolName[] = [
   'agent_request_claim',
   'agent_request_answer',
   'agent_request_needinfo',
+  'agent_request_delegate',
   'agent_request_withdraw',
 ];
 
@@ -1171,6 +1174,32 @@ async function callMcpAction(
         work_id: raised.request.workId,
       };
     }
+    case 'agent_request_delegate': {
+      requireActorId(context);
+      const work = await requireWork(context.prisma, requiredString(args.work_id, 'work_id'));
+      await assertCanWriteIssue(context.prisma, context, work.id);
+      const viewer = context.viewer!;
+      const delegated = await delegateToAgent(context.prisma, {
+        by: { actorId: viewer.id, actorKind: viewer.actorKind, globalRole: viewer.globalRole },
+        workId: work.id,
+        target: requiredString(args.target_id, 'target_id'),
+        body: requiredString(args.body, 'body'),
+        budgetUnits: optionalNumber(args.budget_units) ?? 10,
+        idempotencyKey: optionalString(args.idempotency_key) ?? null,
+      });
+      return {
+        id: delegated.request.id,
+        root_request_id: delegated.rootRequestId,
+        hop_count: delegated.hopCount,
+        budget_units: delegated.budgetUnits,
+        deadline_at: delegated.request.deadlineAt.toISOString(),
+        root_comment_id: delegated.comment.id,
+        state: toWireState(delegated.request.state),
+        target_actor_id: delegated.request.targetActorId,
+        work_id: delegated.request.workId,
+        next: 'The target sees it in agent_inbox and claims it with agent_request(action: claim). Its budget came out of your chain; when it runs out, the work owner is asked.',
+      };
+    }
     case 'agent_request_withdraw': {
       requireActorId(context);
       await assertCanActOnRequest(context.prisma, context, requiredString(args.id, 'id'));
@@ -1781,6 +1810,23 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     },
   },
   {
+    name: 'agent_request_delegate',
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    description:
+      'Delegate part of committed work to another agent (L3 Hands-off, INV-1493 / decision INV-1497). Only this explicit action opens an agent→agent request; mentioning an agent in a comment never does. Allowed only where the item\'s autonomy for you is L3 (team or project policy, workspace ceiling, your trust level). Needs a root: a request addressed to you on this work, or a commit the policy made. Carries a budget deducted from your chain and a hop count under the chain limit; a cycle, an exhausted budget (the owner is then asked in Needs you) or a lower level is refused with the reason.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        work_id: { type: 'string', description: 'Work item identifier (e.g. INV-104) or UUID' },
+        target_id: { type: 'string', description: 'The agent to delegate to: actor id or @handle (work_catalog lists actors); must hold a credential on this team' },
+        body: { type: 'string', description: 'What you are delegating and what you expect back' },
+        budget_units: { type: 'number', description: 'Budget for the delegated part, 1–100000, deducted from your chain (default 10)' },
+        idempotency_key: { type: 'string' },
+      },
+      required: ['work_id', 'target_id', 'body'],
+    },
+  },
+  {
     name: 'agent_request_withdraw',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     description: 'Withdraw a needinfo you raised that is no longer needed (INV-1119). It leaves the target\'s queue and any SLA pause ends.',
@@ -2013,6 +2059,7 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   agent_request_answer: 'answer',
   // A needinfo posts the question as a comment: the same scope as work_comment.
   agent_request_needinfo: 'update',
+  agent_request_delegate: 'update',
   agent_request_withdraw: 'update',
 };
 

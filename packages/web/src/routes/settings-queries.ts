@@ -211,6 +211,7 @@ export interface AutonomySettingsData {
     paused: boolean;
     defaultLevel: number;
     templates: AutonomyTemplate[];
+    completionReply: string | null;
     levels: AutonomyLevelInfo[];
     builtInLocks: Array<{ id: string; gate: string; reason: string }>;
     gates: string[];
@@ -238,6 +239,7 @@ export const AUTONOMY_SETTINGS_QUERY = gql`
       paused
       defaultLevel
       templates { name level gates }
+      completionReply
       levels { level name descriptionEn descriptionZh gates { gate decider } }
       builtInLocks { id gate reason }
       gates

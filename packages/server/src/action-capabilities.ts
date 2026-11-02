@@ -87,6 +87,7 @@ export const QUERY_EXEMPTIONS: Record<string, { reason: string; decision: string
 export const AGENT_ONLY_TOOLS: Record<string, string> = {
   agent_request_claim: 'Agents lease a request before answering it; a person answers directly (agentRequestAnswer).',
   work_propose_amendment: 'How an agent asks for a contract edit it may not make; a person edits the contract directly (issueUpdate) or decides the proposal (contractAmendmentAccept/Reject).',
+  agent_request_delegate: 'Explicit agent→agent delegation under an L3 policy (INV-1493 / INV-1497); a person asks an agent with a comment or a needinfo and never needs a budgeted chain.',
 };
 
 /** MCP argument → GraphQL field when the names differ. */
@@ -216,6 +217,7 @@ const DETAILS: Record<string, ActionDetails> = {
   work_propose_amendment: detail(['work_get_context'], 'Propose an amendment; no direct rewrite of committed contract.', 'Records a contract snapshot; a newer proposal replaces the open proposal from the same actor.', 'Proposed amendment with source reason.', 'Read contractAmendments for the human decision before continuing.', 'candidate'),
   agent_request_claim: detail(['agent_inbox'], 'Only the addressed active agent may lease a request.', 'Request lease and claim_token on renewal.', 'Private claim token and leased request.', 'Renew before expiry or answer with input-required to hand control back.'),
   notification_mark_read: detail(['agent_inbox'], 'Only your own notifications.', 'Idempotent: already read stays read.', 'Notification id and read time.', 'Read agent_inbox again; an unknown id is not yours or does not exist.'),
+  agent_request_delegate: detail(['work_get_context', 'agent_inbox', 'work_catalog'], 'An agent with write access whose autonomy on the item is L3; the target is an agent with a credential on the team.', 'A root request or policy commit; hops under the chain limit; budget deducted from the parent; optional idempotency_key.', 'Request id, root request id, hop count, budget, deadline.', 'Read agent_inbox; a refusal says which condition failed; an exhausted budget asks the owner.'),
   agent_request_needinfo: detail(['work_get_context', 'work_catalog'], 'Write access to the work; the target must be able to write on its team; an agent may raise one to a person, not to another agent.', 'One open needinfo per target and work; optional idempotency_key.', 'Request id, root comment and deadline.', 'Read work_get_context / agent_inbox before retrying; withdraw a needinfo raised by mistake.'),
   agent_request_withdraw: detail(['agent_inbox', 'work_get_context'], 'Whoever raised it; an admin with a reason.', 'CAS on an open state; a closed needinfo is refused.', 'Withdrawn request state.', 'Raise a new needinfo if it was withdrawn by mistake.'),
   agent_request_answer: detail(['agent_inbox'], 'Claim token for agent answers; human answer through UI.', 'Request lease and claim_token.', 'Authored answer and request state.', 'Read request state after uncertain response; renew or hand back the lease.'),

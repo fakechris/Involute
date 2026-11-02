@@ -2678,6 +2678,8 @@ const typeDefs = /* GraphQL */ `
     defaultLevel: Int
     "WORKSPACE only: named presets [{ name, level, gates? }]."
     templates: Json
+    "WORKSPACE only (INV-1493): the comment an L3 item's filer gets when it is Done; placeholders {identifier} {title} {summary} {evidence} {verification} {followups}; empty restores the default."
+    completionReply: String
   }
 
   input WorkflowPolicyClearInput {
@@ -2756,6 +2758,7 @@ const typeDefs = /* GraphQL */ `
     paused: Boolean!
     defaultLevel: Int!
     templates: [AutonomyTemplate!]!
+    completionReply: String
     levels: [AutonomyLevelInfo!]!
     builtInLocks: [AutonomyLock!]!
     gates: [String!]!
@@ -2783,6 +2786,7 @@ const typeDefs = /* GraphQL */ `
     paused: Boolean!
     defaultLevel: Int!
     templates: Json!
+    completionReply: String
     createdAt: DateTime!
   }
 
@@ -5279,7 +5283,7 @@ const resolvers = {
       }, { issue: null, success: false as const }),
     workflowPolicySet: async (
       _parent: unknown,
-      args: { input: { scope: AutonomyScope; scopeId: string; level: number; gates?: unknown; intake?: unknown; locked?: string[] | null; reason: string; observeDays?: number | null } },
+      args: { input: { scope: AutonomyScope; scopeId: string; level: number; gates?: unknown; intake?: unknown; locked?: string[] | null; reason: string; observeDays?: number | null; paused?: boolean | null; defaultLevel?: number | null; templates?: unknown; completionReply?: string | null } },
       context: GraphQLContext,
     ): Promise<{ message?: string | null; success: boolean; policy: unknown }> =>
       runMutationWithReason(async () => {
