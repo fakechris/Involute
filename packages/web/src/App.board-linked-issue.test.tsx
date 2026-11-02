@@ -60,8 +60,14 @@ describe('a link to an issue the board does not list (INV-1469)', () => {
 
     const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
 
-    expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Time window filter');
-    expect(within(drawer).getByText('Linked description')).toBeInTheDocument();
+    // The linked issue is not on the board, so the drawer fetches it on its
+    // own: the dialog appears before the issue does. Wait for the data, the
+    // way the routing test does — asserting straight after the dialog opens
+    // is a race that turns the build red at random.
+    await waitFor(() =>
+      expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Time window filter'),
+    );
+    await waitFor(() => expect(within(drawer).getByText('Linked description')).toBeInTheDocument());
     expect(within(drawer).getByRole('link', { name: 'Open full page' })).toHaveAttribute(
       'href',
       '/issue/INV-1446',
@@ -80,7 +86,9 @@ describe('a link to an issue the board does not list (INV-1469)', () => {
 
     const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
 
-    expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Time window filter');
+    await waitFor(() =>
+      expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Time window filter'),
+    );
   });
 
   it('closing it takes only ?issue= away and keeps the rest of the URL', async () => {
