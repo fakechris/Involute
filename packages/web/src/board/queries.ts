@@ -556,6 +556,7 @@ export const ISSUE_PAGE_QUERY = gql`
       }
       commitmentStatus
       resolution
+      supersededBy { id identifier title }
       outcome
       scope
       constraints

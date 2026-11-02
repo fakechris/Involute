@@ -1,4 +1,4 @@
-import { isBugIssue, resolutionLabel, useCloseReason, type WorkResolution } from '../components/CloseReasonDialog';
+import { isBugIssue, resolutionLabel, supersededPrefill, useCloseReason, type WorkResolution } from '../components/CloseReasonDialog';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { DeliverySection } from '../components/DeliveryPanel';
 import { ISSUE_UNDO_APPLIED_EVENT, type IssueUndoAppliedDetail } from '../undo/FieldUndoHost';
@@ -312,7 +312,7 @@ export function IssuePage() {
     // Canceling asks why first (INV-1118): a resolution, and a reason for a bug.
     let close: { resolution?: WorkResolution; reason?: string } = {};
     if (state.type === 'CANCELED' && issue.state.type !== 'CANCELED') {
-      const answer = await askCloseReason({ title: `Cancel ${issue.identifier}`, needsReason: isBugIssue(issue) });
+      const answer = await askCloseReason({ title: `Cancel ${issue.identifier}`, needsReason: isBugIssue(issue), prefill: supersededPrefill(issue) });
       if (!answer) {
         setSelectedStateId(issue.state.id);
         return;
@@ -758,6 +758,14 @@ export function IssuePage() {
                 aria-label="Edit description"
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsEditingDescription(true); }}
               >
+                {activeIssue.supersededBy ? (
+                  <p className="issue-panel__superseded" role="note">
+                    {activeIssue.kind === 'DECISION' ? 'Overturned by' : 'Superseded by'}{' '}
+                    <a href={`/issue/${encodeURIComponent(activeIssue.supersededBy.identifier)}`}>{activeIssue.supersededBy.identifier}</a>{' '}
+                    {activeIssue.supersededBy.title}
+                    {activeIssue.state.type !== 'CANCELED' ? ' — cancel it when you agree; the reason is prefilled.' : ''}
+                  </p>
+                ) : null}
                 {description ? (
                   <MarkdownRenderer content={description} />
                 ) : (

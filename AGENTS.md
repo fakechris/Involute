@@ -296,7 +296,7 @@ query {
 - 由调研得出的决策以 `DERIVED_FROM` 指向该调研工单（§11.4）；
 - 标题即结论，禁止模糊表述：`不做：自动同步竞品定价页（依据：与人工报价流程冲突）`；
 - `description` 沿用三段式结构，其中 `### 2. 核心功能与交付范围` 改写为"决策内容与依据"，必须引用来源（竞品 matrix 行、文章 URL、讨论日期）；
-- 状态语义：`COMPLETED` = 决策生效中；决策被推翻时不得删除节点，转为 `CANCELED` 并在描述顶部追加推翻原因与新决策的 identifier。
+- 状态语义：`COMPLETED` = 决策生效中；决策被推翻时不得删除节点：agent 用 `work_update(superseded_by: 'INV-新决策')` 记下取代关系（INV-1498；同团队、非自身、不成环，不是合同字段，已承诺的 DECISION 也可写），issue 页随即显示"Overturned by INV-…"横幅，人点 Cancel 时 resolution（Obsolete）与 reason（"Superseded by INV-…: 标题"）已预填，只需确认；不再要求把推翻原因手写进描述。agent 仍不设 `CANCELED`。
 
 ### 10.3 查询方式
 IQL `kind = DECISION` 即可列出全部执行级决策；战略级取舍（跨项目资源分配、roadmap 优先级）仍归 planofplan，不在此重复记录。
