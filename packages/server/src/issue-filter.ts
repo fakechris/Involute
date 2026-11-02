@@ -64,7 +64,12 @@ export function buildIssueWhere(
   viewerId: string | null,
 ): Prisma.IssueWhereInput | undefined {
   const clauses: Prisma.IssueWhereInput[] = [];
-  if (filter?.commitmentStatus && !filter.includeSuperseded) clauses.push({ supersededById: null });
+  // Lists hide tasks merged into a delivery package (INV-941): their replacement
+  // is the package root. An item marked as replaced by other work (INV-1498,
+  // an overturned DECISION) stays listed until a person closes it (INV-1515).
+  if (filter?.commitmentStatus && !filter.includeSuperseded) {
+    clauses.push({ OR: [{ supersededById: null }, { supersededBy: { is: { deliveryPackage: { is: null } } } }] });
+  }
   const text = filter?.text?.trim();
   if (text) {
     if (/^\d+$/.test(text)) {

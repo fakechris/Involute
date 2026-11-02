@@ -4,6 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, resetAndSeed } from '../prisma/seed-helpers.js';
 import { loadProjectEnvironment } from '../prisma/env.js';
 import { createIssue, updateIssue } from './issue-service.js';
+import { buildIssueWhere } from './issue-filter.js';
 import { writeActorFromViewer } from './work-service.js';
 
 // INV-1498: "replaced by INV-…" is a field an agent may set, not prose a person retypes.
@@ -62,5 +63,22 @@ describe('superseded_by (INV-1498)', () => {
     const closed = await updateIssue(prisma, old.id, { stateId: canceled.id, resolution: 'OBSOLETE', reason: `Superseded by ${replacement.identifier}: ${replacement.title}`, expectedRevision: marked.revision }, human);
     expect(closed.resolution).toBe('OBSOLETE');
     await expect(updateIssue(prisma, old.id, { stateId: ready.id, expectedRevision: closed.revision }, human)).rejects.toThrow(/instead of reopening/);
+  });
+
+  it('lists keep an item replaced by other work until it is closed, but hide tasks merged into a delivery package (INV-1515)', async () => {
+    const { admin, team, human, agent, project, old, replacement } = await fixture();
+    await updateIssue(prisma, old.id, { supersededById: replacement.id, expectedRevision: old.revision }, agent);
+    // A task merged into a delivery package: its replacement is the package root.
+    const root = await createIssue(prisma, { teamId: team.id, title: 'Root', parentId: project.id, repository: 'test/sup', commitmentStatus: 'COMMITTED', acceptance: 'a' }, human);
+    await prisma.deliveryPackage.create({ data: { workId: root.id, policy: {}, contractDigest: 'x', approvedById: admin.id } });
+    const merged = await createIssue(prisma, { teamId: team.id, title: 'Merged', parentId: project.id, repository: 'test/sup', commitmentStatus: 'COMMITTED', acceptance: 'a' }, human);
+    await prisma.issue.update({ where: { id: merged.id }, data: { supersededById: root.id } });
+
+    const listed = await prisma.issue.findMany({ where: { AND: [buildIssueWhere({ commitmentStatus: 'COMMITTED' }, null) ?? {}, { teamId: team.id }] }, select: { identifier: true } });
+    const identifiers = listed.map((row) => row.identifier);
+    expect(identifiers).toContain(old.identifier);
+    expect(identifiers).not.toContain(merged.identifier);
+    const all = await prisma.issue.findMany({ where: { AND: [buildIssueWhere({ commitmentStatus: 'COMMITTED', includeSuperseded: true }, null) ?? {}, { teamId: team.id }] }, select: { identifier: true } });
+    expect(all.map((row) => row.identifier)).toContain(merged.identifier);
   });
 });
