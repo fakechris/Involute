@@ -29,6 +29,8 @@ describe('board drawer Fields (INV-1514)', () => {
     const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
     const risk = within(drawer).getByRole('combobox', { name: 'Risk' });
     expect(risk).toHaveValue('low');
+    // Same control style as Structure's dropdowns (bordered, normal size), not the ghost property-row style.
+    expect(risk.className).toBe(within(drawer).getByRole('combobox', { name: 'Issue severity' }).className);
     fireEvent.change(risk, { target: { value: 'high' } });
     await waitFor(() => expect(update).toHaveBeenCalledWith({ variables: { id: 'issue-2', input: { attributes: { risk: 'high' }, expectedRevision: target.revision } } }));
   });
