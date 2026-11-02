@@ -1,4 +1,5 @@
 import { executorContext, executorUpdate, type ExecutorInput } from './executor-service.js';
+import { loadHandledForYou } from './autonomy-gate.js';
 import type { AgentTrustLevel } from '@prisma/client';
 import { TRUST_LEVEL_DESCRIPTIONS, adviseTrust, allowedAt, loadAgentTrustMetrics, readAgentTrust, setAgentTrust } from './agent-trust.js';
 import { WORKSPACE_SETTINGS_ID } from './workspace-access.js';
@@ -158,6 +159,7 @@ import {
   amendmentChanges,
   isAmendmentStale,
   rejectContractAmendment,
+  reopenContractAmendment,
 } from './contract-amendment.js';
 import { requestNeedInfo, withdrawNeedInfo } from './need-info-service.js';
 import { answerAgentRequestAsHuman, replyToAgentRequest } from './agent-request-service.js';
@@ -461,6 +463,8 @@ const typeDefs = /* GraphQL */ `
     workspaceSettings: WorkspaceSettings!
     "Autonomy policy of one scope with its history and the workspace frame (INV-1489). Signed-in people only."
     autonomySettings(scope: AutonomyScope!, scopeId: String!): AutonomySettings!
+    "Handled for you (INV-1491): automatic policy decisions of the last days on work you may read, newest first."
+    handledForYou(days: Int): [HandledItem!]!
     issue(id: String!): Issue
     """
     The work items behind references in prose (INV-1466): a batch of
@@ -580,6 +584,8 @@ const typeDefs = /* GraphQL */ `
     workflowPolicySet(input: WorkflowPolicySetInput!): WorkflowPolicyPayload!
     "Remove a team or project override so it inherits again (INV-1489)."
     workflowPolicyClear(input: WorkflowPolicyClearInput!): WorkflowPolicyClearPayload!
+    "Return to me (INV-1491): take back an amendment the Autonomy Gate accepted; the contract reverts and the proposal waits for you again."
+    contractAmendmentReopen(input: ContractAmendmentReopenInput!): ContractAmendmentReopenPayload!
     "Promote or demote an agent's trust level with a reason (the actor's owner, a team Owner over it, or an Admin; INV-1490)."
     agentTrustSet(input: AgentTrustSetInput!): AgentTrustPayload!
     "A person ends an agent's claim now, with a reason (INV-789); open runs under it are closed."
@@ -2718,6 +2724,8 @@ const typeDefs = /* GraphQL */ `
     defaultLevel: Int
     "WORKSPACE only: named presets [{ name, level, gates? }]."
     templates: Json
+    "WORKSPACE only (INV-1493): the comment an L3 item's filer gets when it is Done; placeholders {identifier} {title} {summary} {evidence} {verification} {followups}; empty restores the default."
+    completionReply: String
   }
 
   input WorkflowPolicyClearInput {
@@ -2757,6 +2765,35 @@ const typeDefs = /* GraphQL */ `
     gates: Json
   }
 
+  "One automatic decision of the Autonomy Gate (INV-1491)."
+  type HandledItem {
+    id: ID!
+    "candidate_commit or contract_amendment."
+    gate: String!
+    work: Issue!
+    "The audit reason: policy scope and version, matched facts."
+    reason: String!
+    at: DateTime!
+    policyVersion: Int
+    amendmentId: ID
+    "A person already reversed it."
+    undone: Boolean!
+    "Can still be returned: no claim or run on a committed candidate; any accepted amendment."
+    reversible: Boolean!
+  }
+
+  input ContractAmendmentReopenInput {
+    amendmentId: ID!
+    reason: String!
+  }
+
+  type ContractAmendmentReopenPayload {
+    success: Boolean!
+    message: String
+    amendment: ContractAmendment
+    work: Issue
+  }
+
   type AutonomySettings {
     scope: AutonomyScope!
     scopeId: String!
@@ -2767,6 +2804,7 @@ const typeDefs = /* GraphQL */ `
     paused: Boolean!
     defaultLevel: Int!
     templates: [AutonomyTemplate!]!
+    completionReply: String
     levels: [AutonomyLevelInfo!]!
     builtInLocks: [AutonomyLock!]!
     gates: [String!]!
@@ -2794,6 +2832,7 @@ const typeDefs = /* GraphQL */ `
     paused: Boolean!
     defaultLevel: Int!
     templates: Json!
+    completionReply: String
     createdAt: DateTime!
   }
 
@@ -3270,6 +3309,11 @@ const resolvers = {
         canInvite: await canInvite(context.prisma, human ? { actorId: human.id, actorKind: human.actorKind, globalRole: human.globalRole } : null),
         isAdmin: human?.globalRole === 'ADMIN',
       };
+    },
+    handledForYou: async (_parent: unknown, args: { days?: number | null }, context: GraphQLContext) => {
+      if (!context.isTrustedSystem && context.viewer?.actorKind !== 'HUMAN') return [];
+      const items = await loadHandledForYou(context.prisma, buildReadableIssueWhere(context) ?? {}, Math.min(Math.max(args.days ?? 7, 1), 90));
+      return items.map((item) => ({ ...item, work: () => context.prisma.issue.findUniqueOrThrow({ where: { id: item.workId } }) }));
     },
     autonomySettings: async (_parent: unknown, args: { scope: AutonomyScope; scopeId: string }, context: GraphQLContext) => {
       if (!context.isTrustedSystem && context.viewer?.actorKind !== 'HUMAN') throw createValidationError('Autonomy settings are read by signed-in people; agents read Issue.autonomy (INV-1489).');
@@ -5301,7 +5345,7 @@ const resolvers = {
       }, { issue: null, success: false as const }),
     workflowPolicySet: async (
       _parent: unknown,
-      args: { input: { scope: AutonomyScope; scopeId: string; level: number; gates?: unknown; intake?: unknown; locked?: string[] | null; reason: string; observeDays?: number | null } },
+      args: { input: { scope: AutonomyScope; scopeId: string; level: number; gates?: unknown; intake?: unknown; locked?: string[] | null; reason: string; observeDays?: number | null; paused?: boolean | null; defaultLevel?: number | null; templates?: unknown; completionReply?: string | null } },
       context: GraphQLContext,
     ): Promise<{ message?: string | null; success: boolean; policy: unknown }> =>
       runMutationWithReason(async () => {
@@ -5329,6 +5373,18 @@ const resolvers = {
         await setAgentTrust(context.prisma, args.input, context.viewer?.id ?? null);
         return { success: true as const, trust: await agentTrustView(context.prisma, args.input.actorId) };
       }, { success: false as const, trust: null }),
+    contractAmendmentReopen: async (
+      _parent: unknown,
+      args: { input: { amendmentId: string; reason: string } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; amendment: unknown; work: unknown }> =>
+      runMutationWithReason(async () => {
+        const amendment = await context.prisma.contractAmendment.findUnique({ where: { id: args.input.amendmentId }, select: { workId: true } });
+        if (!amendment) throw createValidationError(CONTRACT_AMENDMENT_NOT_FOUND_MESSAGE);
+        await assertCanWriteIssue(context.prisma, context, amendment.workId);
+        const result = await reopenContractAmendment(context.prisma, args.input, writeActorFromViewer(context.viewer, 'web'));
+        return { success: true as const, ...result };
+      }, { success: false as const, amendment: null, work: null }),
     workflowPolicyClear: async (
       _parent: unknown,
       args: { input: { scope: AutonomyScope; scopeId: string; reason: string } },

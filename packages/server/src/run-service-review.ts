@@ -172,6 +172,11 @@ export async function reviewWorkInTransaction(
       type: reviewEventType,
       work,
     });
+    // Hands-off (INV-1493): an L3 item that reached Done tells its filer once, in one comment.
+    if (input.decision === 'ACCEPTED') {
+      const { postCompletionReply } = await import('./autonomy-delegation.js');
+      await postCompletionReply(transaction, updated, run ? { id: run.id, actorId: run.actorId, summary: run.summary, externalUrl: run.externalUrl, pullRequestNumber: run.pullRequestNumber } : null).catch(() => null);
+    }
     // The review it was waiting for, and any decision its run asked for, are made (INV-1093).
     const resolution = input.decision === 'ACCEPTED' ? 'accepted' : 'returned';
     await resolveAttentionNotifications(transaction, { kind: 'WORK_REVIEW', resolution, resolvedById: actorId, workId: work.id });

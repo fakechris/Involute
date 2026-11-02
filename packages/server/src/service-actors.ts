@@ -54,6 +54,10 @@ export const EXPIRY_SWEEPER_ACTOR: ServiceActorSpec = {
   surface: 'agent_request.expired',
 };
 
+// Commits candidates and accepts amendments a team's autonomy policy allows (INV-1491). Declared here, not in
+// autonomy-gate.ts, so the registry stays the one list of system writers.
+export const AUTONOMY_GATE_SURFACE = 'autonomy-gate';
+
 export const SERVICE_ACTORS: readonly ServiceActorSpec[] = [
   HOTFIX_REFLEX_ACTOR,
   GITHUB_WEBHOOK_ACTOR,

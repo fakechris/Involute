@@ -45,6 +45,8 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   // INV-1489: Administration → Autonomy, Team settings → Autonomy, the project override (docs/autonomy-policy.md §2).
   workflowPolicySet: { kind: 'web', doc: 'WORKFLOW_POLICY_SET_MUTATION', components: ['routes/AutonomyTab.tsx'], label: 'Save autonomy', test: 'routes/AutonomyTab.test.tsx' },
   workflowPolicyClear: { kind: 'web', doc: 'WORKFLOW_POLICY_CLEAR_MUTATION', components: ['routes/AutonomyTab.tsx'], label: 'Inherit from team', test: 'routes/AutonomyTab.test.tsx' },
+  // INV-1491: a person takes back an amendment the Autonomy Gate accepted, from Handled for you on /todo.
+  contractAmendmentReopen: { kind: 'web', doc: 'CONTRACT_AMENDMENT_REOPEN_MUTATION', components: ['routes/AttentionPage.tsx'], label: 'Return to me', test: 'routes/AttentionPage.test.tsx' },
   // INV-1490: Settings → Agents → agent → Trust level.
   agentTrustSet: { kind: 'web', doc: 'AGENT_TRUST_SET_MUTATION', components: ['components/AgentTrustPanel.tsx'], label: 'Set trust level', test: 'App.agents-trust.test.tsx' },
   executorUpdate: { kind: 'web', components: ['components/ExecutorPanel.tsx'], label: 'Stop executor', test: 'components/ExecutorPanel.test.tsx' },
@@ -185,6 +187,13 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
  */
 export type HumanGate = ({ text: string; mutation: string } | { text: string; tracking: string }) & {
   /**
+   * The autonomy gate a team or project policy may open instead of a person
+   * (INV-1491, docs/autonomy-policy.md §3). When it opens, the decision shows
+   * in Needs you under Handled for you with an undo; human-surface.test.ts
+   * checks that list is tested.
+   */
+  policy?: 'candidate_commit' | 'contract_amendment' | 'review_accept';
+  /**
    * Where the person who must act finds it waiting in Needs you (/todo): the
    * attention kind that lists it, or why nothing waits there, citing the item
    * that decided so (INV-1095).
@@ -193,9 +202,9 @@ export type HumanGate = ({ text: string; mutation: string } | { text: string; tr
 };
 
 export const HUMAN_GATES: HumanGate[] = [
-  { text: 'Agents cannot commit work', mutation: 'workCommit', attention: 'CANDIDATE_COMMIT' },
-  { text: 'Humans only. Requires acceptance', mutation: 'workCommit', attention: 'CANDIDATE_COMMIT' },
-  { text: 'Committed work requires a human owner', mutation: 'workCommit', attention: 'CANDIDATE_COMMIT' },
+  { text: 'Agents cannot commit work', mutation: 'workCommit', attention: 'CANDIDATE_COMMIT', policy: 'candidate_commit' },
+  { text: 'Humans only. Requires acceptance', mutation: 'workCommit', attention: 'CANDIDATE_COMMIT', policy: 'candidate_commit' },
+  { text: 'Committed work requires a human owner', mutation: 'workCommit', attention: 'CANDIDATE_COMMIT', policy: 'candidate_commit' },
   { text: 'Agents cannot reject work', mutation: 'workReject', attention: 'CANDIDATE_COMMIT' },
   { text: 'Agents cannot accept or cancel work', mutation: 'workReview', attention: 'WORK_REVIEW' },
   { text: 'Agents stop at Review except committed Research issues; Canceled remains human-only.', mutation: 'workReview', attention: 'WORK_REVIEW' },
@@ -211,7 +220,7 @@ export const HUMAN_GATES: HumanGate[] = [
   { text: 'Only a person can restore a rejected candidate', mutation: 'workRestore', attention: { none: 'Undoing a rejection is a correction, not a pending decision (INV-792).' } },
   { text: 'Only a person can return committed work to the candidate queue', mutation: 'workUncommit', attention: { none: 'Undoing a commit is a correction, not a pending decision (INV-844).' } },
   { text: 'Only a person may retract evidence', mutation: 'evidenceRetract', attention: { none: 'Retracting a wrong link is a correction, not a pending decision (INV-598).' } },
-  { text: 'Only a person may accept or reject a contract amendment', mutation: 'contractAmendmentAccept', attention: 'CONTRACT_AMENDMENT' },
+  { text: 'Only a person may accept or reject a contract amendment', mutation: 'contractAmendmentAccept', attention: 'CONTRACT_AMENDMENT', policy: 'contract_amendment' },
   { text: 'Agents cannot rewrite a committed contract; this records', mutation: 'contractAmendmentAccept', attention: 'CONTRACT_AMENDMENT' },
   { text: "Human-only. Apply an agent's proposed contract change", mutation: 'contractAmendmentAccept', attention: 'CONTRACT_AMENDMENT' },
   { text: "Human-only. Decline an agent's proposed contract change", mutation: 'contractAmendmentReject', attention: 'CONTRACT_AMENDMENT' },
@@ -291,6 +300,8 @@ export const NOTIFICATION_SURFACES: Record<string, NotificationSurface> = {
   'incident.declared': { kind: 'info', actionable: 'info' },
   // The Incident Lead closes it from the issue page once the postmortem is attached (INV-1126).
   'incident.closable': { kind: 'info', actionable: 'info' },
+  // INV-1493: the one comment an L3 item's filer gets when it is Done; information, not a decision.
+  'policy.completed': { kind: 'info', actionable: 'info' },
   // An incident follow-up nears or passes its deadline (INV-1127): its owner and the Incident Lead hear once each.
   'incident.follow_up_at_risk': { kind: 'info', actionable: 'info' },
   'incident.follow_up_overdue': { kind: 'info', actionable: 'info' },

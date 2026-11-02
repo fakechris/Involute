@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 
 import { Btn } from '../components/Primitives';
 import { SettingsSectionHeader } from '../components/SettingsShell';
-import { Checkbox, Field, Select, TextInput } from '../components/controls';
+import { Checkbox, Field, Select, TextArea, TextInput } from '../components/controls';
 import { Badge } from '../components/status';
 import {
   AUTONOMY_SETTINGS_QUERY,
@@ -49,7 +49,7 @@ const SOURCE_LABEL: Record<string, string> = {
 /** Level names when the settings query has not answered; descriptions come from the server. */
 const LEVEL_NAMES_FALLBACK: AutonomyLevelInfo[] = ['L0 Review everything', 'L1 Low-risk pass-through', 'L2 Green-light accept', 'L3 Hands-off'].map((name, level) => ({ level, name, descriptionEn: '', descriptionZh: '', gates: [] }));
 
-type SetVariables = { input: { scope: AutonomyScope; scopeId: string; level: number; reason: string; gates?: unknown; intake?: unknown; locked?: string[]; observeDays?: number; paused?: boolean; defaultLevel?: number; templates?: unknown } };
+type SetVariables = { input: { scope: AutonomyScope; scopeId: string; level: number; reason: string; gates?: unknown; intake?: unknown; locked?: string[]; observeDays?: number; paused?: boolean; defaultLevel?: number; templates?: unknown; completionReply?: string } };
 type ClearVariables = { input: { scope: AutonomyScope; scopeId: string; reason: string } };
 
 function useAutonomySettings(scope: AutonomyScope, scopeId: string) {
@@ -98,13 +98,14 @@ function WorkspaceAutonomyForm({ data, onSaved }: { data: AutonomySettingsData; 
   const [defaultLevel, setDefaultLevel] = useState(settings.defaultLevel);
   const [locked, setLocked] = useState<string[]>(settings.active?.locked ?? []);
   const [templates, setTemplates] = useState<AutonomyTemplate[]>(settings.templates);
+  const [completionReply, setCompletionReply] = useState(settings.completionReply ?? '');
   const [newTemplate, setNewTemplate] = useState<{ name: string; level: number }>({ name: '', level: 1 });
   const [reason, setReason] = useState('');
   const extraGates = settings.gates.filter((gate) => gate !== 'merge_signal' && gate !== 'spend_budget');
 
   function save(extra: Partial<SetVariables['input']> = {}) {
     void attempt(
-      () => runSet({ variables: { input: { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_SCOPE_ID, level: ceiling, defaultLevel, locked, templates: templates.map((template) => ({ name: template.name, level: template.level, ...(template.gates ? { gates: template.gates } : {}) })), reason, ...extra } } }),
+      () => runSet({ variables: { input: { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_SCOPE_ID, level: ceiling, defaultLevel, locked, templates: templates.map((template) => ({ name: template.name, level: template.level, ...(template.gates ? { gates: template.gates } : {}) })), completionReply, reason, ...extra } } }),
       (d) => d.workflowPolicySet,
       extra.paused === true ? 'All autonomy paused: every team and project reads as L0.' : extra.paused === false ? 'Autonomy resumed.' : 'Autonomy settings saved.',
       setNotice,
@@ -174,6 +175,9 @@ function WorkspaceAutonomyForm({ data, onSaved }: { data: AutonomySettingsData; 
             <Btn size="sm" onClick={() => { if (newTemplate.name.trim()) { setTemplates((current) => [...current, { name: newTemplate.name.trim(), level: newTemplate.level }]); setNewTemplate({ name: '', level: 1 }); } }}>Add template</Btn>
           </div>
         </fieldset>
+        <Field label="Completion reply (L3)" hint="The one comment an item's filer gets when a hands-off item reaches Done. Placeholders: {identifier} {title} {summary} {evidence} {verification} {followups}. Empty restores the default.">
+          <TextArea aria-label="Completion reply template" rows={4} value={completionReply} onChange={(e) => setCompletionReply(e.target.value)} placeholder="Default template" />
+        </Field>
         <Field label="Reason" hint="Required; kept in the change history." layout="aside">
           <TextInput aria-label="Reason for the autonomy change" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why this change" />
         </Field>

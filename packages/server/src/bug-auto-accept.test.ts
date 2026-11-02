@@ -206,3 +206,92 @@ describe('bug auto-accept gate (INV-1075)', () => {
     await expect(reviewWork(prisma, f.bug.id, { decision: 'ACCEPTED', expectedRevision: f.bug.revision }, writeActorFromViewer(f.agent))).rejects.toThrow();
   });
 });
+
+// INV-1492: the second door — the autonomy policy at L2 for any Type.
+describe('policy auto-accept at L2 (INV-1492)', () => {
+  async function policyFixture(level: 1 | 2, extra: { label?: string; severity?: 'SEV1' | 'SEV2' | 'SEV3'; reproducibility?: 'ALWAYS' | 'SOMETIMES'; trust?: 'OBSERVE' | 'L1' | 'L2' | 'L3'; observeDays?: number; ceiling?: 1 | 2 | 3 } = {}) {
+    const { setWorkflowPolicy } = await import('./autonomy-service.js');
+    const { WORKSPACE_SETTINGS_ID } = await import('./workspace-access.js');
+    const { setAgentTrust } = await import('./agent-trust.js');
+    const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
+    const human = await prisma.user.findUniqueOrThrow({ where: { email: DEFAULT_ADMIN_EMAIL } });
+    const review = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'REVIEW' } });
+    const project = await createIssue(prisma, { teamId: team.id, kind: 'PROJECT', title: repo, repository: repo });
+    await setWorkflowPolicy(prisma, { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID, level: extra.ceiling ?? 3, reason: 'c' }, human.id);
+    await setWorkflowPolicy(prisma, { scope: 'TEAM', scopeId: team.id, level, reason: 't', ...(extra.observeDays ? { observeDays: extra.observeDays } : {}) }, human.id);
+    const label = await prisma.issueLabel.upsert({ where: { name: extra.label ?? 'Improvement' }, create: { name: extra.label ?? 'Improvement' }, update: {} });
+    const work = await createIssue(prisma, { teamId: team.id, kind: 'ISSUE', title: 'Better thing', repository: repo, parentId: project.id, stateId: review.id, labelIds: [label.id], acceptance: 'done', assigneeId: human.id, severity: extra.severity ?? null, reproducibility: extra.reproducibility ?? null });
+    const agent = await prisma.user.create({ data: { name: 'Doer', email: `doer-${randomUUID()}@agents.test`, actorKind: 'AGENT', ownerId: human.id } });
+    await setAgentTrust(prisma, { actorId: agent.id, level: extra.trust ?? 'L2', reason: 'test' }, human.id);
+    const run = await prisma.workRun.create({ data: { workId: work.id, publicId: `RUN-${randomUUID()}`, actorId: agent.id, status: 'COMPLETED', repository: repo, commitSha: sha, pullRequestNumber: 12, startedAt: new Date(Date.now() - 60_000) } });
+    const stateOf = async () => (await prisma.issue.findUniqueOrThrow({ where: { id: work.id }, include: { state: true } })).state.type;
+    const evaluations = () => prisma.workAutoAcceptEvaluation.findMany({ where: { workId: work.id, signals: { path: ['source'], equals: BUG_GATE_SOURCE } }, orderBy: { createdAt: 'asc' } });
+    return { team, human, project, work, run, agent, review, stateOf, evaluations };
+  }
+
+  it('L1: nothing is evaluated at all; a team asking for L2 under an L1 ceiling is told the level is too low', async () => {
+    const quiet = await policyFixture(1);
+    expect(await sweepBugAutoAccept(prisma, github({}))).toEqual({ accepted: 0, skipped: 0 });
+    expect(await quiet.stateOf()).toBe('REVIEW');
+    expect(await quiet.evaluations()).toEqual([]);
+    await resetAndSeed(prisma);
+    const clamped = await policyFixture(2, { ceiling: 1 });
+    expect(await sweepBugAutoAccept(prisma, github({}))).toEqual({ accepted: 0, skipped: 1 });
+    expect(await clamped.stateOf()).toBe('REVIEW');
+    expect((await clamped.evaluations())[0]?.reasons.join(' ')).toContain('POLICY_LEVEL_TOO_LOW');
+  });
+
+  it('L2: a CLEAR improvement is accepted by the gate and the audit names the policy', async () => {
+    const f = await policyFixture(2);
+    expect(await sweepBugAutoAccept(prisma, github({}))).toEqual({ accepted: 1, skipped: 0 });
+    expect(await f.stateOf()).toBe('COMPLETED');
+    const decision = await prisma.workReviewDecision.findFirstOrThrow({ where: { workId: f.work.id }, include: { reviewer: true } });
+    expect(decision.reviewer.email).toBe(AUTO_ACCEPT_ACTOR_EMAIL);
+    expect(decision.reason).toMatch(/^policy\.auto_decision: review_accept by team policy v1 \(L2\) — matched: .*checks green; GitHub confirms PR #12 merged/);
+    const { loadHandledForYou } = await import('./autonomy-gate.js');
+    expect((await loadHandledForYou(prisma, {})).map((item) => [item.gate, item.workId, item.reversible])).toEqual([['review_accept', f.work.id, true]]);
+  });
+
+  it('L2 still waits for a person on SEV2, Sometimes, an OBSERVE agent, red checks and an observing policy, each with its reason', async () => {
+    const cases: Array<[Parameters<typeof policyFixture>[1], ReturnType<typeof github> | null, string]> = [
+      [{ severity: 'SEV2' }, null, 'LOCKED_GATE'],
+      [{ label: 'Bug', reproducibility: 'SOMETIMES' }, null, 'LOCKED_GATE'],
+      [{ trust: 'OBSERVE' }, null, 'AGENT_TRUST_TOO_LOW'],
+      [{}, github({ checks: [{ status: 'completed', conclusion: 'failure' }] }), 'CHECK_FAILED'],
+      [{ observeDays: 7 }, null, 'observing'],
+    ];
+    for (const [extra, gh, code] of cases) {
+      await resetAndSeed(prisma);
+      const f = await policyFixture(2, extra);
+      expect(await sweepBugAutoAccept(prisma, gh ?? github({})), code).toEqual({ accepted: 0, skipped: 1 });
+      expect(await f.stateOf(), code).toBe('REVIEW');
+      expect((await f.evaluations())[0]?.reasons.join(' '), code).toContain(code);
+    }
+  });
+
+  it('a migrated autoAcceptBugs override keeps accepting bugs only; an improvement in that project waits', async () => {
+    const f = await policyFixture(1);
+    // Legacy switch on the project: the migration made it an L2 / Type Bug override; the team stays L1.
+    await updateIssue(prisma, f.project.id, { autoAcceptBugs: true }, writeActorFromViewer(f.human));
+    // The override is L2 for bugs only: the improvement is looked at and left, with the condition as the reason.
+    expect(await sweepBugAutoAccept(prisma, github({}))).toEqual({ accepted: 0, skipped: 1 });
+    expect(await f.stateOf()).toBe('REVIEW');
+    expect((await f.evaluations())[0]?.reasons.join(' ')).toContain('condition not met');
+    const bug = await fixture();
+    // The improvement was checked moments ago, so it is not asked again; the bug goes through the legacy door.
+    expect(await sweepBugAutoAccept(prisma, github({}))).toEqual({ accepted: 1, skipped: 0 });
+    expect(await bug.stateOf()).toBe('COMPLETED');
+  });
+
+  it('Return to Review after a policy acceptance writes a policy.override audit', async () => {
+    const f = await policyFixture(2);
+    await sweepBugAutoAccept(prisma, github({}));
+    expect(await f.stateOf()).toBe('COMPLETED');
+    const fresh = await prisma.issue.findUniqueOrThrow({ where: { id: f.work.id } });
+    await updateIssue(prisma, f.work.id, { stateId: f.review.id, expectedRevision: fresh.revision }, writeActorFromViewer(f.human));
+    expect(await f.stateOf()).toBe('REVIEW');
+    const override = await prisma.workAudit.findFirst({ where: { workId: f.work.id, reason: { startsWith: 'policy.override' } } });
+    expect(override?.reason).toContain('returned to Review');
+    expect((await prisma.workReopen.findFirstOrThrow({ where: { workId: f.work.id } })).afterAutoAccept).toBe(true);
+  });
+});

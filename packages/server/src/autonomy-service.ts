@@ -94,6 +94,8 @@ export interface SetPolicyInput extends PolicyScopeRef {
   paused?: boolean | null;
   defaultLevel?: number | null;
   templates?: unknown;
+  /** WORKSPACE only (INV-1493): the L3 completion reply template; null keeps the previous, '' restores the default. */
+  completionReply?: string | null;
 }
 
 export interface AutonomyTemplate { name: string; level: AutonomyLevel; gates?: GateTable }
@@ -137,7 +139,8 @@ export async function setWorkflowPolicy(prisma: PrismaClient, input: SetPolicyIn
   const problems = [...validateGateTable(input.gates), ...(input.intake === undefined || input.intake === null ? [] : validatePredicate(input.intake, 'intake'))];
   if (problems.length) throw createValidationError(`Invalid policy: ${problems.join('; ')}`);
   if (input.locked && input.locked.length && input.scope !== 'WORKSPACE') throw createValidationError(POLICY_LOCKED_WORKSPACE_ONLY_MESSAGE);
-  if (input.scope !== 'WORKSPACE' && (input.paused !== undefined && input.paused !== null || input.defaultLevel !== undefined && input.defaultLevel !== null || input.templates !== undefined && input.templates !== null)) throw createValidationError(POLICY_WORKSPACE_ONLY_MESSAGE);
+  if (input.scope !== 'WORKSPACE' && (input.paused !== undefined && input.paused !== null || input.defaultLevel !== undefined && input.defaultLevel !== null || input.templates !== undefined && input.templates !== null || input.completionReply !== undefined && input.completionReply !== null)) throw createValidationError(POLICY_WORKSPACE_ONLY_MESSAGE);
+  if (typeof input.completionReply === 'string' && input.completionReply.length > 4_000) throw createValidationError('Invalid policy: completionReply is at most 4000 characters.');
   if (input.defaultLevel !== undefined && input.defaultLevel !== null && !isAutonomyLevel(input.defaultLevel)) throw createValidationError(POLICY_LEVEL_INVALID_MESSAGE);
   if (input.locked?.some((id) => !GATES.includes(id as Gate) && !BUILT_IN_LOCKS.some((lock) => lock.id === id))) throw createValidationError('Invalid policy: locked names a gate or a built-in lock id.');
   if (input.scope === 'WORKSPACE' && input.scopeId !== WORKSPACE_SETTINGS_ID) throw createValidationError(POLICY_SCOPE_INVALID_MESSAGE);
@@ -165,6 +168,7 @@ export async function setWorkflowPolicy(prisma: PrismaClient, input: SetPolicyIn
         paused: input.scope === 'WORKSPACE' ? input.paused ?? previous?.paused ?? false : false,
         defaultLevel: input.scope === 'WORKSPACE' ? input.defaultLevel ?? previous?.defaultLevel ?? 0 : 0,
         templates: (input.scope === 'WORKSPACE' ? (input.templates === undefined || input.templates === null ? (previous?.templates ?? DEFAULT_TEMPLATES) : validateTemplates(input.templates)) : []) as Prisma.InputJsonValue,
+        completionReply: input.scope === 'WORKSPACE' ? (input.completionReply === undefined || input.completionReply === null ? previous?.completionReply ?? null : (input.completionReply.trim() || null)) : null,
         createdById: byActorId,
       },
     });
@@ -255,6 +259,7 @@ export interface AutonomySettingsView {
   paused: boolean;
   defaultLevel: AutonomyLevel;
   templates: AutonomyTemplate[];
+  completionReply: string | null;
   levels: Array<{ level: AutonomyLevel; name: string; descriptionEn: string; descriptionZh: string; gates: Array<{ gate: Gate; decider: string }> }>;
   builtInLocks: Array<{ id: string; gate: Gate; reason: string }>;
   gates: Gate[];
@@ -279,6 +284,7 @@ export async function readAutonomySettings(prisma: DatabaseClient, ref: PolicySc
     paused: frame?.paused ?? false,
     defaultLevel: level(frame?.defaultLevel),
     templates: (Array.isArray(frame?.templates) ? (frame!.templates as unknown as AutonomyTemplate[]) : DEFAULT_TEMPLATES),
+    completionReply: frame?.completionReply ?? null,
     levels: ([0, 1, 2, 3] as const).map((value) => ({ level: value, name: LEVEL_DESCRIPTIONS[value].name, descriptionEn: LEVEL_DESCRIPTIONS[value].en, descriptionZh: LEVEL_DESCRIPTIONS[value].zh, gates: GATES.map((gate) => ({ gate, decider: LEVEL_PRESETS[value][gate].decider })) })),
     builtInLocks: BUILT_IN_LOCKS.map((lock) => ({ id: lock.id, gate: lock.gate, reason: lock.reason })),
     gates: [...GATES],
@@ -326,7 +332,6 @@ export async function observeLabelFor(
   const work = await prisma.issue.findUnique({ where: { id: item.workId }, include: { labels: { select: { name: true } } } });
   if (!work) return null;
   const resolved = await loadAutonomyFor(prisma, work);
-  if (!resolved.observing) return null;
   const facts = await factsForWork(prisma, work);
   if (gate === 'contract_amendment') {
     const amendment = await prisma.contractAmendment.findUnique({ where: { id: item.subjectId } });
@@ -334,7 +339,13 @@ export async function observeLabelFor(
     facts.amendment_fields = amendmentChanges(amendment).map((change) => change.field);
   }
   const decision = decide(resolved, gate, facts);
-  if (!decision.matched) return null;
-  const summary = describeFacts(resolved.gates[gate].condition, facts);
-  return `Would be handled under L${resolved.requested}${summary ? `: ${summary}` : ''}`;
+  if (resolved.observing) {
+    if (!decision.matched) return null;
+    const summary = describeFacts(resolved.gates[gate].condition, facts);
+    return `Would be handled under L${resolved.requested}${summary ? `: ${summary}` : ''}`;
+  }
+  // Live policy with an auto gate that did not act: say why it is still a person's decision (INV-1491).
+  // A matched gate that did not act (a person proposed it, or the commit was refused) says nothing here: the gate acts at proposal time and its refusal is on the timeline.
+  if (resolved.gates[gate].decider === 'auto' && !decision.matched) return decision.reason;
+  return null;
 }

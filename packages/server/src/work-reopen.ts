@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient, type WorkflowStateType } from '@prisma/client';
 
 import { AUTO_ACCEPT_ACTOR_EMAIL } from './auto-accept-gate.js';
+import { POLICY_AUDIT } from './autonomy-policy.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -30,16 +31,25 @@ export async function recordReopenIfAny(
   const to = states.find((state) => state.id === input.toStateId)?.type;
   if (!from || !to || !isReopen(from, to)) return false;
 
+  const afterAutoAccept = await enteredByAutoAcceptGate(db, input);
   await db.workReopen.create({
     data: {
       workId: input.workId,
       auditId: input.auditId,
       fromStateType: from,
       toStateType: to,
-      afterAutoAccept: await enteredByAutoAcceptGate(db, input),
+      afterAutoAccept,
     },
   });
   await db.issue.update({ where: { id: input.workId }, data: { reopenCount: { increment: 1 } } });
+  // Return to Review after a policy acceptance is an override the policy and the agent are measured by (INV-1492).
+  if (afterAutoAccept) {
+    const acceptance = await db.workReviewDecision.findFirst({ where: { workId: input.workId, decision: 'ACCEPTED' }, orderBy: { createdAt: 'desc' }, select: { reason: true } });
+    if (acceptance?.reason?.startsWith(POLICY_AUDIT.autoDecision)) {
+      const audit = await db.workAudit.findUnique({ where: { id: input.auditId }, select: { reason: true } });
+      await db.workAudit.update({ where: { id: input.auditId }, data: { reason: `${POLICY_AUDIT.override}: returned to Review${audit?.reason ? ` — ${audit.reason}` : ''} (was ${acceptance.reason})` } });
+    }
+  }
   return true;
 }
 

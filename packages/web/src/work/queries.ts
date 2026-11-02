@@ -590,6 +590,15 @@ export const WORK_COMMIT_MUTATION = gql`
   }
 `;
 
+export const CONTRACT_AMENDMENT_REOPEN_MUTATION = gql`
+  mutation ContractAmendmentReopen($input: ContractAmendmentReopenInput!) {
+    contractAmendmentReopen(input: $input) {
+      success
+      message
+    }
+  }
+`;
+
 export const WORK_UNCOMMIT_MUTATION = gql`
   mutation WorkUncommit($id: String!, $expectedRevision: Int!) {
     workUncommit(id: $id, expectedRevision: $expectedRevision) {
@@ -937,6 +946,17 @@ export const ATTENTION_PAGE_QUERY = gql`
         count
         oldestSince
       }
+    }
+    handledForYou(days: 7) {
+      id
+      gate
+      reason
+      at
+      policyVersion
+      amendmentId
+      undone
+      reversible
+      work { id identifier title revision team { id } }
     }
     attention(first: $first) {
       nodes {

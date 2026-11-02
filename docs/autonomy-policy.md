@@ -1,6 +1,6 @@
 # Autonomy policy: who decides at each gate (design, INV-1485)
 
-Status: **design; steps 1, 2 and 5 implemented** (INV-1490 agent trust: OBSERVE by default, Promote / Demote with reason and 30-day numbers on the agent page); — INV-1488 data layer; INV-1489 the three settings pages (Administration → Autonomy with ceiling / default / locks / templates / pause / history, Team settings → Autonomy with levels, per-step table, L3 intake rule and optional observe, Projects → Edit inherit / override), the project card badge and the Needs you observe chip. Step 1 was — `WorkflowPolicy` / `AgentTrust` rows, the pure resolver `autonomy-policy.ts`, `Issue.autonomy` and MCP `work_get_context.autonomy`, `workflowPolicySet` for Admins and team Owners. No gate opens yet. Behaviour today is unchanged: commit, reject,
+Status: **all six steps implemented** (INV-1493 L3: intake dispatch to an L3 agent, explicit budgeted bounded agent→agent delegation via `agent_request(action: 'delegate')`, budget exhaustion asks the owner, the completion reply; decision INV-1497 supersedes INV-571); (INV-1492 L2: the Auto-Accept Gate accepts CLEAR deliveries of any Type where the policy is L2+, with locks and agent trust honoured); (INV-1491 L1: the Autonomy Gate commits qualifying candidates and accepts verification-only amendments where the policy says so, Needs you shows Handled for you with Return to candidates / Return to me, undo is counted as an override); (INV-1490 agent trust: OBSERVE by default, Promote / Demote with reason and 30-day numbers on the agent page); — INV-1488 data layer; INV-1489 the three settings pages (Administration → Autonomy with ceiling / default / locks / templates / pause / history, Team settings → Autonomy with levels, per-step table, L3 intake rule and optional observe, Projects → Edit inherit / override), the project card badge and the Needs you observe chip. Step 1 was — `WorkflowPolicy` / `AgentTrust` rows, the pure resolver `autonomy-policy.ts`, `Issue.autonomy` and MCP `work_get_context.autonomy`, `workflowPolicySet` for Admins and team Owners. No gate opens yet. Behaviour today is unchanged: commit, reject,
 accept and contract amendments are human-only, and the only configurable gate is
 `PROJECT.autoAcceptBugs` (INV-1075). This page is the product and data design
 that turns those constants into a policy a workspace sets, a team adopts and a
@@ -209,6 +209,8 @@ The third bullet is answered by this design: Involute hosts the **ledger**
 (identity, thread, request with deadline and claim, budget, hop count), the
 runtime hosts the **behaviour**. If that answer is accepted, INV-571 is set to
 CANCELED with a pointer to the new DECISION, as its own text requires.
+
+Implemented (INV-1493): the explicit action is `agent_request(action: 'delegate')`; the root is a request addressed to the caller on the work or the policy's own commit audit; `hopCount` stays under `MAX_HANDOFF_HOPS` and `budgetUnits` is deducted from the parent request; a cycle (the target already in the chain) is refused; an exhausted budget raises a needinfo to the work owner; `deadlineAt` / `chainDeadlineAt` bound every chain in time. The DECISION is INV-1497.
 
 ## 6. Data model (for the implementing issues)
 

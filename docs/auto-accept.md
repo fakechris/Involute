@@ -94,9 +94,20 @@ Every gate pass leaves:
   summaries they attach
 - No Ops / runtime infra changes beyond schema migration + server code
 
-## Beyond bugs
+## Beyond bugs (INV-1492)
 
-Opening this gate for other Types, and the other human gates (commit,
-amendment), is designed as a workspace → team → project policy with levels
-L0–L3 in [autonomy-policy.md](autonomy-policy.md) (INV-1485). Not implemented;
-this page remains the rule until it is.
+The same gate runs through a second door: the autonomy policy
+([autonomy-policy.md](autonomy-policy.md)). For any committed ISSUE in Review
+in a team or project whose resolved level is **L2 or higher** for the agent
+that delivered it, the sweep asks GitHub the same questions as for bugs and,
+when the PR is merged with green checks, moves the item to Done as the
+Auto-Accept Gate with a `WorkReviewDecision` reason that starts with
+`policy.auto_decision: review_accept by <scope> policy v<n> (L2) — matched: …`.
+Built-in locks keep SEV1 / SEV2, deploy-bearing deliveries and Sometimes /
+Once bugs with a person at every level; an OBSERVE / L1 agent's deliveries
+wait too. The skip reasons `POLICY_LEVEL_TOO_LOW`, `AGENT_TRUST_TOO_LOW` and
+`LOCKED_GATE` join the GitHub codes on /in-review. The per-project
+"Auto-accept verified bug fixes" switch (INV-1075) still works as before, for
+bugs only. Returning an auto-accepted item to Review (issue page, or Handled
+for you on /todo) writes a `policy.override` audit that INV-1490 counts
+against the policy and the agent.

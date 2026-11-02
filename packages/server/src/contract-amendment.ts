@@ -14,6 +14,9 @@ import {
   createNotFoundError,
   createValidationError,
 } from './errors.js';
+import { tryAutoAcceptAmendment } from './autonomy-gate.js';
+import { POLICY_AUDIT } from './autonomy-policy.js';
+import { AUTONOMY_GATE_SURFACE } from './service-actors.js';
 import { enqueueWorkEvent } from './event-outbox.js';
 import { lockWorkGraph } from './graph-integrity.js';
 import { updateIssue } from './issue-service.js';
@@ -116,7 +119,7 @@ export async function proposeContractAmendment(
     throw createValidationError(WORK_COMMIT_REQUIRES_ACCEPTANCE_MESSAGE);
   }
 
-  return prisma.$transaction(async (tx) => {
+  const amendment = await prisma.$transaction(async (tx) => {
     const hint = await tx.issue.findUnique({ where: { id: input.workId }, select: { teamId: true } });
     if (!hint) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
     await lockWorkGraph(tx, hint.teamId);
@@ -177,6 +180,9 @@ export async function proposeContractAmendment(
 
     return amendment;
   });
+  // The policy may accept it at once (L1: verification only, INV-1491); a miss leaves it for the owner.
+  const outcome = await tryAutoAcceptAmendment(prisma, amendment.id).catch((error: unknown) => ({ decided: false, reason: String(error) }));
+  return outcome.decided ? prisma.contractAmendment.findUniqueOrThrow({ where: { id: amendment.id } }) : amendment;
 }
 
 async function loadPendingForDecision(
@@ -253,7 +259,9 @@ export async function acceptContractAmendment(
   actor: WriteActor,
 ): Promise<{ amendment: ContractAmendment; work: Issue }> {
   const decidedById = actor.actorId;
-  if (actor.actorKind !== 'HUMAN' || !decidedById) {
+  // A person, or the Autonomy Gate acting under a policy a person set (INV-1491).
+  const byGate = actor.actorKind === 'SERVICE' && actor.surface === AUTONOMY_GATE_SURFACE && Boolean(actor.reason?.startsWith(POLICY_AUDIT.autoDecision));
+  if ((actor.actorKind !== 'HUMAN' && !byGate) || !decidedById) {
     throw createValidationError(CONTRACT_AMENDMENT_HUMAN_ONLY_MESSAGE);
   }
   const note = normalize(input.note);
@@ -317,5 +325,42 @@ export async function rejectContractAmendment(
     });
     await settleAmendmentNotifications(tx, { amendment, decidedById, eventId: event.id, note, resolution: 'rejected', work });
     return { amendment: settled, work };
+  });
+}
+
+export const CONTRACT_AMENDMENT_REOPEN_NOT_AUTO_MESSAGE = 'Only an amendment the Autonomy Gate accepted can be returned to you; a person’s acceptance stands.';
+
+/**
+ * Return to me (INV-1491): a person takes back an amendment the Autonomy Gate
+ * accepted. The contract fields go back to their `before` values and a new
+ * PENDING copy of the proposal waits for the person; the override is audited
+ * against the policy and the proposing agent.
+ */
+export async function reopenContractAmendment(
+  prisma: PrismaClient,
+  input: { amendmentId: string; reason: string },
+  actor: WriteActor,
+): Promise<{ amendment: ContractAmendment; work: Issue }> {
+  if (actor.actorKind !== 'HUMAN' || !actor.actorId) throw createValidationError(CONTRACT_AMENDMENT_HUMAN_ONLY_MESSAGE);
+  const reason = normalize(input.reason);
+  if (!reason) throw createValidationError(CONTRACT_AMENDMENT_REJECT_NOTE_REQUIRED_MESSAGE);
+  return prisma.$transaction(async (tx) => {
+    const accepted = await tx.contractAmendment.findUnique({ where: { id: input.amendmentId }, include: { decidedBy: { select: { actorKind: true } } } });
+    if (!accepted) throw createNotFoundError(CONTRACT_AMENDMENT_NOT_FOUND_MESSAGE);
+    if (accepted.status !== 'ACCEPTED' || accepted.decidedBy?.actorKind !== 'SERVICE' || !accepted.decisionNote?.startsWith(POLICY_AUDIT.autoDecision)) {
+      throw createValidationError(CONTRACT_AMENDMENT_REOPEN_NOT_AUTO_MESSAGE);
+    }
+    await lockWorkGraph(tx, (await tx.issue.findUniqueOrThrow({ where: { id: accepted.workId }, select: { teamId: true } })).teamId);
+    const work = await tx.issue.findUniqueOrThrow({ where: { id: accepted.workId } });
+    const restored = await updateIssue(tx, work.id, storedValues(accepted.before), {
+      ...actor,
+      reason: `${POLICY_AUDIT.override}: amendment returned to a person — ${reason}`,
+      sourceMessageId: accepted.id,
+    });
+    await tx.contractAmendment.updateMany({ where: { status: 'PENDING', workId: work.id }, data: { decidedAt: new Date(), status: 'SUPERSEDED' } });
+    const reopened = await tx.contractAmendment.create({
+      data: { baseRevision: restored.revision, before: accepted.before as Prisma.InputJsonValue, changes: accepted.changes as Prisma.InputJsonValue, proposedById: accepted.proposedById, reason: accepted.reason, workId: work.id },
+    });
+    return { amendment: reopened, work: restored };
   });
 }

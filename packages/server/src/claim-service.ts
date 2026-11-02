@@ -1,4 +1,7 @@
 import { assertDeliveryExecution } from './delivery-grant.js';
+import { tryAutoCommit } from './autonomy-gate.js';
+import { POLICY_AUDIT } from './autonomy-policy.js';
+import { AUTONOMY_GATE_SURFACE } from './service-actors.js';
 import { randomUUID } from 'node:crypto';
 import { assertExecutionAuthority, assertWorkToken, hashWorkToken, mintWorkToken } from './work-execution.js';
 import type { ActorKind, Issue, Prisma, PrismaClient, User, WorkClaim, WorkResolution, WorkLinkType } from '@prisma/client';
@@ -182,12 +185,17 @@ export interface RejectWorkInput {
 // identify was therefore *more* privileged than a registered agent (INV-573).
 const HUMAN_GATED_PERMISSIONS: readonly WorkPermission[] = ['commit', 'reject', 'accept'];
 
-export function assertActorCan(actorKind: ActorKind | null | undefined, permission: WorkPermission): void {
+export function assertActorCan(actorKind: ActorKind | null | undefined, permission: WorkPermission, actor?: Pick<WriteActor, 'surface' | 'reason'> | null): void {
   if (!HUMAN_GATED_PERMISSIONS.includes(permission)) {
     return;
   }
 
   if (actorKind === 'HUMAN') {
+    return;
+  }
+  // The Autonomy Gate commits under a policy a person set (INV-1491); the
+  // reason it writes names that policy, so the audit still says who decided.
+  if (permission === 'commit' && actorKind === 'SERVICE' && actor?.surface === AUTONOMY_GATE_SURFACE && actor.reason?.startsWith(POLICY_AUDIT.autoDecision)) {
     return;
   }
 
@@ -340,7 +348,7 @@ export async function proposeWork(
   }
   const { title: sanitizedTitle } = sanitizeWorkTitle(input.title);
 
-  return prisma.$transaction(async (transaction) => {
+  const proposed = await prisma.$transaction(async (transaction) => {
     let idempotencyId: string | null = null;
     if (input.idempotencyKey) {
       const reservation = await reserveWorkIdempotency(transaction, {
@@ -598,6 +606,14 @@ export async function proposeWork(
     }
     return created;
   });
+  // After the proposal is durable: the team's autonomy policy may commit it at
+  // once (L1+, INV-1491). A miss or a refusal leaves it for a person; the
+  // proposal itself never fails because of policy.
+  if (proposed.commitmentStatus === 'CANDIDATE' && actor.actorKind === 'AGENT' && actor.actorId && '$transaction' in prisma) {
+    const outcome = await tryAutoCommit(prisma as PrismaClient, proposed, { id: actor.actorId, actorKind: 'AGENT' }).catch((error: unknown) => ({ decided: false, reason: String(error) }));
+    if (outcome.decided) return prisma.issue.findUniqueOrThrow({ where: { id: proposed.id } });
+  }
+  return proposed;
 }
 
 /**
@@ -651,7 +667,7 @@ export async function commitWork(
   input: CommitWorkInput,
   actor: WriteActor = INTERNAL_WRITE_ACTOR,
 ): Promise<Issue> {
-  assertActorCan(actor.actorKind, 'commit');
+  assertActorCan(actor.actorKind, 'commit', actor);
 
   const run = async (transaction: Prisma.TransactionClient) => {
     const existing = await requireWork(transaction, id);

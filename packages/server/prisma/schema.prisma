@@ -696,6 +696,9 @@ model AgentRequest {
   // Any comment its target writes on the work answers it, and while it waits
   // on a bug's reporter that bug's SLA clock is paused.
   needInfo           Boolean           @default(false)
+  // L3 delegation (INV-1493): the explicit budget this chain may still spend, in
+  // units the paying principal defines; null for requests outside a chain.
+  budgetUnits        Int?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 
@@ -1482,6 +1485,8 @@ model WorkflowPolicy {
   paused       Boolean       @default(false)
   defaultLevel Int           @default(0)
   templates    Json          @default("[]")
+  // WORKSPACE only (INV-1493): the one comment an L3 item's filer gets when it is Done.
+  completionReply String?
   createdById  String?       @db.Uuid
   createdAt    DateTime      @default(now())
 
