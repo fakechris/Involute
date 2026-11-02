@@ -12,7 +12,7 @@ import { listReadyWork, searchWork } from './context-service.ts';
 import {
   IMPORTED_EXTRA_KEY, ensureImportedExtraDefinition, fieldKeyFromName, mapImportedFields, runFieldIndexJobs, setFieldDefinition,
 } from './field-definitions.ts';
-import { compileIqlWhere } from './iql-attr.ts';
+import { compileIqlWhere, normalizeAttrTerms } from './iql-attr.ts';
 import { compileIqlPredicate, parseIqlOrThrow } from './iql-compile.ts';
 import { startServer, type StartedServer } from './index.ts';
 import { createIssue } from './issue-service.ts';
@@ -107,6 +107,21 @@ describe('IQL attr.<key> (INV-1505)', () => {
     expect(compileIqlPredicate(parseIqlOrThrow('attr.risk:low'), { viewerId: null })(row)).toBe(true);
     expect(compileIqlPredicate(parseIqlOrThrow('attr.risk:high'), { viewerId: null })(row)).toBe(false);
     expect(compileIqlPredicate(parseIqlOrThrow('attr.risk:none'), { viewerId: null })(row)).toBe(false);
+  });
+
+  it('webhook filters normalise work references and dates the way search does (INV-1525)', async () => {
+    await define({ key: 'blocker', label: 'Blocker', type: 'WORK_REF', options: null });
+    await define({ key: 'due', label: 'Due', type: 'DATE', options: null });
+    const target = await item('Blocking', {});
+    const work = await item('Blocked', { blocker: target.identifier, due: '2026-01-01' });
+    const row = await prisma.issue.findUniqueOrThrow({ where: { id: work.id }, include: { assignee: true, labels: true, state: true } });
+    const matches = async (iql: string) => compileIqlPredicate(await normalizeAttrTerms(prisma, parseIqlOrThrow(iql), { viewerId: null }), { viewerId: null })(row);
+    expect(await matches(`attr.blocker:${target.identifier}`)).toBe(true);
+    expect(await matches('attr.due:2026-01-01')).toBe(true);
+    expect(await matches('attr.due:>=2025-12-31')).toBe(true);
+    expect(await matches('attr.due:<2025-12-31')).toBe(false);
+    // Search agrees.
+    expect(await titlesFor(`attr.blocker:${target.identifier}`)).toEqual(['Blocked']);
   });
 });
 

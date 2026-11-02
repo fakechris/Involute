@@ -139,4 +139,20 @@ describe('parseOptions', () => {
   it('reads value | Label lines', () => {
     expect(parseOptions(' a | Alpha \n\nb\n')).toEqual([{ value: 'a', label: 'Alpha' }, { value: 'b', label: 'b' }]);
   });
+
+  it('keeps an archived option archived through an edit (INV-1524)', () => {
+    expect(parseOptions('a | Alpha\nold | Old | archived')).toEqual([{ value: 'a', label: 'Alpha' }, { value: 'old', label: 'Old', archived: true }]);
+  });
+});
+
+describe('editing a list field with an archived option (INV-1524)', () => {
+  it('saves the archived flag back unchanged', async () => {
+    fieldData = { ...fieldData, fieldDefinitions: [row({ key: 'tier', options: [{ value: 'gold', label: 'Gold', archived: null }, { value: 'old', label: 'Old', archived: true }] })] };
+    render(<AdminFieldsTab />);
+    fireEvent.change(screen.getByLabelText('Reason for the field change'), { target: { value: 'relabel' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit tier' }));
+    expect(screen.getByLabelText('Field options')).toHaveValue('gold | Gold\nold | Old | archived');
+    fireEvent.click(screen.getByRole('button', { name: 'Save field' }));
+    await waitFor(() => expect(mocks.set).toHaveBeenCalledWith({ variables: { input: expect.objectContaining({ options: [{ value: 'gold', label: 'Gold' }, { value: 'old', label: 'Old', archived: true }] }) } }));
+  });
 });

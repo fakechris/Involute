@@ -1,6 +1,8 @@
 import { createHash, createHmac } from 'node:crypto';
 
 import { compileIqlPredicate, parseIqlOrThrow } from './iql-compile.js';
+import { normalizeAttrTerms } from './iql-attr.js';
+import type { IqlQuery } from '@turnkeyai/involute-shared';
 import { emitOpsAlert } from './ops-alerts.js';
 
 import type { Issue, Prisma, PrismaClient, WorkflowStateType } from '@prisma/client';
@@ -198,6 +200,17 @@ export async function flushEventOutbox(
   // slow webhook cannot head-of-line block the others and terminal evaluation
   // stays per identity.
   const distinctTargets = [...new Map(targets.map((target) => [targetIdentity(target), target])).values()];
+  // Saved filters are parsed once per flush, with attr.<key> values normalised
+  // the way search stores them (INV-1525); a malformed filter matches nothing.
+  const preparedFilters = new Map<WebhookTarget, IqlQuery | null>();
+  for (const target of distinctTargets) {
+    if (!target.filterQuery?.trim()) continue;
+    try {
+      preparedFilters.set(target, await normalizeAttrTerms(prisma, parseIqlOrThrow(target.filterQuery), { viewerId: null }));
+    } catch {
+      preparedFilters.set(target, null);
+    }
+  }
 
   const claimCutoff = new Date(Date.now() - OUTBOX_CLAIM_LEASE_MS);
   const now = options.now ?? Date.now();
@@ -254,7 +267,7 @@ export async function flushEventOutbox(
     const eventWorkId = (event.payload as { work?: { id?: unknown } } | null)?.work?.id;
     const eventWork = typeof eventWorkId === 'string' ? workSnapshots.get(eventWorkId) ?? null : null;
     const eventTargets = distinctTargets.filter((target) =>
-      targetMatchesEvent(target, event.type, eventTeams.get(event.id) ?? null, eventWork, audiences.get(event.id)),
+      targetMatchesEvent(target, event.type, eventTeams.get(event.id) ?? null, eventWork, audiences.get(event.id), preparedFilters.get(target)),
     );
     if (eventTargets.length === 0) {
       await prisma.eventOutbox.updateMany({
@@ -391,6 +404,7 @@ function targetMatchesEvent(
   eventTeamId: string | null,
   work: WorkSnapshot | null,
   audience?: Set<string>,
+  prepared?: IqlQuery | null,
 ): boolean {
   if (!target.subscriptionId) {
     return true;
@@ -413,7 +427,8 @@ function targetMatchesEvent(
       return false;
     }
     try {
-      const predicate = compileIqlPredicate(parseIqlOrThrow(target.filterQuery), { viewerId: null });
+      if (prepared === null) return false;
+      const predicate = compileIqlPredicate(prepared ?? parseIqlOrThrow(target.filterQuery), { viewerId: null });
       if (!predicate(work)) {
         return false;
       }

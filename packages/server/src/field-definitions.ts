@@ -12,6 +12,7 @@
 import { Prisma, type AutonomyScope, type FieldDefinition, type FieldIndexJob, type FieldType, type PrismaClient, type WorkKind } from '@prisma/client';
 
 import { findProjectIdFor } from './autonomy-service.js';
+import { lockWorkGraph } from './graph-integrity.js';
 import { createValidationError } from './errors.js';
 import { isTypeLabel } from './labels.js';
 import { recordOpsAudit } from './ops-service.js';
@@ -382,7 +383,10 @@ export async function setFieldDefinition(prisma: PrismaClient, input: SetFieldDe
       if (input.type === 'WORK_REF' || input.type === 'USER_REF') throw createValidationError('Reference fields have no default value.');
       defaultValue = normaliseValue(draft, input.defaultValue) as Prisma.InputJsonValue;
     }
-    if (previous?.active) await tx.fieldDefinition.update({ where: { id: previous.id }, data: { active: false } });
+    // An unfinished backfill / cleanup moves to the new version (INV-1523); a change of searchable starts a new one.
+    const freshJob = indexJobFor(previous, input.searchable ?? false);
+    const carried = !freshJob && previous?.active && previous.indexJob ? { indexJob: previous.indexJob, indexCursor: previous.indexCursor, indexProcessed: previous.indexProcessed } : null;
+    if (previous?.active) await tx.fieldDefinition.update({ where: { id: previous.id }, data: { active: false, indexJob: null, indexCursor: null } });
     const created = await tx.fieldDefinition.create({
       data: {
         scope: input.scope,
@@ -400,7 +404,7 @@ export async function setFieldDefinition(prisma: PrismaClient, input: SetFieldDe
         reason,
         createdById: byActorId,
         lastWrittenAt: previous?.lastWrittenAt ?? null,
-        indexJob: indexJobFor(previous, input.searchable ?? false),
+        ...(carried ?? { indexJob: freshJob }),
       },
     });
     await recordOpsAudit(tx, {
@@ -560,6 +564,64 @@ function scopeFilter(definition: Pick<FieldDefinition, 'scope' | 'scopeId'>): Pr
 export const FIELD_INDEX_BATCH = 200;
 
 /**
+ * Bring one item's index rows for one key in line with its stored value and
+ * the definition that governs it now (INV-1523): rows when that definition is
+ * searchable, none otherwise. Takes the same team lock as edits and re-reads
+ * the value inside it, so a concurrent edit is never overwritten with a stale one.
+ */
+async function reindexKeyForItem(prisma: PrismaClient, issueId: string, key: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const hint = await tx.issue.findUnique({ where: { id: issueId }, select: { teamId: true } });
+    if (!hint) return;
+    await lockWorkGraph(tx, hint.teamId);
+    const item = await tx.issue.findUnique({ where: { id: issueId }, select: { id: true, teamId: true, kind: true, parentId: true, attributes: true } });
+    if (!item) return;
+    const governing = (await resolveScopedDefinitions(tx, item)).find((definition) => definition.key === key);
+    const value = readAttributes(item.attributes)[key];
+    if (governing?.searchable && value !== undefined) await writeIndexRows(tx, item.id, governing, value);
+    else await tx.fieldValueIndex.deleteMany({ where: { issueId: item.id, key } });
+  });
+}
+
+/**
+ * Rebuild every index row of one item from its stored values and the
+ * definitions that apply to it now (INV-1523): used when the item moves to
+ * another project, changes Type or Kind. Runs inside the caller's transaction.
+ */
+export async function reindexItem(prisma: DatabaseClient, issueId: string, attributes: Prisma.JsonValue, definitions: FieldDefinition[]): Promise<void> {
+  await prisma.fieldValueIndex.deleteMany({ where: { issueId } });
+  const values = readAttributes(attributes);
+  for (const definition of definitions) {
+    if (!definition.searchable || values[definition.key] === undefined) continue;
+    const rows = indexRowsFor(definition, values[definition.key]);
+    if (rows.length) await prisma.fieldValueIndex.createMany({ data: rows.map((row) => ({ issueId, ...row })) });
+  }
+}
+
+/**
+ * Items whose index rows differ from what their stored values and governing
+ * definitions call for (INV-1523). For tests and operations: 0 means the
+ * index can be trusted for ranges and sorting.
+ */
+export async function reconcileFieldIndex(prisma: DatabaseClient, teamId?: string): Promise<Array<{ issueId: string; key: string; expected: number; actual: number }>> {
+  const items = await prisma.issue.findMany({ where: { ...(teamId ? { teamId } : {}), OR: [{ NOT: { attributes: { equals: {} } } }, { fieldValueIndex: { some: {} } }] }, select: { id: true, teamId: true, kind: true, parentId: true, attributes: true } });
+  const problems: Array<{ issueId: string; key: string; expected: number; actual: number }> = [];
+  for (const item of items) {
+    const definitions = await resolveScopedDefinitions(prisma, item);
+    const values = readAttributes(item.attributes);
+    const actualRows = await prisma.fieldValueIndex.findMany({ where: { issueId: item.id }, select: { key: true } });
+    const keys = new Set([...Object.keys(values), ...actualRows.map((row) => row.key)]);
+    for (const key of keys) {
+      const governing = definitions.find((definition) => definition.key === key);
+      const expected = governing?.searchable ? indexRowsFor(governing, values[key]).length : 0;
+      const actual = actualRows.filter((row) => row.key === key).length;
+      if (expected !== actual) problems.push({ issueId: item.id, key, expected, actual });
+    }
+  }
+  return problems;
+}
+
+/**
  * One step of each pending backfill / cleanup (docs/field-definitions.md §6):
  * walks the items in the definition's scope that hold a value for its key,
  * in id order from the cursor, and writes or removes their typed rows. An
@@ -575,15 +637,7 @@ export async function runFieldIndexJobs(prisma: PrismaClient, batch = FIELD_INDE
       SELECT id, "teamId", kind, "parentId", attributes FROM "Issue"
       WHERE jsonb_exists(attributes, ${job.key}) AND ${scopeFilter(job)} ${cursor}
       ORDER BY id LIMIT ${batch}`;
-    for (const item of items) {
-      const governing = (await resolveScopedDefinitions(prisma, item)).find((definition) => definition.key === job.key);
-      const value = readAttributes(item.attributes)[job.key];
-      if (job.indexJob === 'BACKFILL') {
-        if (governing?.id === job.id && job.active && job.searchable) await writeIndexRows(prisma, item.id, job, value);
-      } else if (!governing?.searchable) {
-        await prisma.fieldValueIndex.deleteMany({ where: { issueId: item.id, key: job.key } });
-      }
-    }
+    for (const item of items) await reindexKeyForItem(prisma, item.id, job.key);
     const done = items.length < batch;
     // Only the job this pass picked up is advanced; a newer version may have replaced it meanwhile.
     await prisma.fieldDefinition.updateMany({
@@ -625,7 +679,26 @@ export async function renameFieldDefinition(prisma: PrismaClient, input: { scope
     if (await tx.fieldDefinition.findFirst({ where: { scope: input.scope, scopeId: input.scopeId, key: input.to }, select: { id: true } })) {
       throw createValidationError(`Key "${input.to}" was already used in this scope; pick another so its old values cannot mix in.`);
     }
-    await tx.fieldDefinition.update({ where: { id: active.id }, data: { active: false } });
+    // Edits take the team lock; so does the rename, for every team it can touch (INV-1522).
+    const teamIds = active.scope === 'TEAM'
+      ? [active.scopeId]
+      : active.scope === 'PROJECT'
+        ? [(await tx.issue.findUniqueOrThrow({ where: { id: active.scopeId }, select: { teamId: true } })).teamId]
+        : (await tx.team.findMany({ select: { id: true }, orderBy: { id: 'asc' } })).map((team) => team.id);
+    for (const teamId of teamIds) await lockWorkGraph(tx, teamId);
+    // Only items this definition governs move: a nearer definition of the same key keeps its own values.
+    const candidates = await tx.$queryRaw<Array<{ id: string; teamId: string; kind: WorkKind; parentId: string | null; attributes: Prisma.JsonValue }>>`
+      SELECT id, "teamId", kind, "parentId", attributes FROM "Issue" WHERE jsonb_exists(attributes, ${input.from}) AND ${scopeFilter(active)}`;
+    const governed: string[] = [];
+    for (const item of candidates) {
+      const definitions = await resolveScopedDefinitions(tx, item);
+      if (definitions.find((definition) => definition.key === input.from)?.id !== active.id) continue;
+      const clash = definitions.find((definition) => definition.key === input.to);
+      if (clash) throw createValidationError(`Key "${input.to}" is already a ${clash.scope.toLowerCase()} field for some of this work; pick another key.`);
+      if (readAttributes(item.attributes)[input.to] !== undefined) throw createValidationError(`Some work already holds a value under "${input.to}"; pick another key so it is not overwritten.`);
+      governed.push(item.id);
+    }
+    await tx.fieldDefinition.update({ where: { id: active.id }, data: { active: false, indexJob: null, indexCursor: null } });
     const { id: _id, createdAt: _createdAt, ...rest } = active;
     const created = await tx.fieldDefinition.create({
       data: {
@@ -638,21 +711,23 @@ export async function renameFieldDefinition(prisma: PrismaClient, input: { scope
         version: 1,
         reason,
         createdById: byActorId,
-        indexJob: null,
-        indexCursor: null,
-        indexProcessed: 0,
+        // A pending backfill / cleanup goes on under the new key (INV-1523).
+        indexJob: active.indexJob,
+        indexCursor: active.indexCursor,
+        indexProcessed: active.indexProcessed,
       },
     });
-    const scope = scopeFilter(active);
-    await tx.$executeRaw`UPDATE "Issue" SET attributes = (attributes - ${input.from}::text) || jsonb_build_object(${input.to}::text, attributes -> ${input.from}::text)
-      WHERE jsonb_exists(attributes, ${input.from}) AND ${scope}`;
-    await tx.$executeRaw`UPDATE "FieldValueIndex" SET key = ${input.to} WHERE key = ${input.from} AND "issueId" IN (SELECT id FROM "Issue" WHERE ${scope})`;
+    if (governed.length) {
+      const ids = Prisma.join(governed.map((id) => Prisma.sql`${id}::uuid`));
+      await tx.$executeRaw`UPDATE "Issue" SET attributes = (attributes - ${input.from}::text) || jsonb_build_object(${input.to}::text, attributes -> ${input.from}::text) WHERE id IN (${ids})`;
+      await tx.$executeRaw`UPDATE "FieldValueIndex" SET key = ${input.to} WHERE key = ${input.from} AND "issueId" IN (${ids})`;
+    }
     await recordOpsAudit(tx, {
       action: FIELD_AUDIT.changed,
       subject: `field:${input.scope.toLowerCase()}:${input.scopeId}:${input.to}`,
       byActorId,
       reason,
-      details: { renamed: { from: input.from, to: input.to }, version: created.version },
+      details: { renamed: { from: input.from, to: input.to }, version: created.version, moved: governed.length },
     });
     return created;
   });

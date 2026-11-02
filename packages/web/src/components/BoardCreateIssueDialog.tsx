@@ -70,13 +70,14 @@ export function BoardCreateIssueDialog({
 }: BoardCreateIssueDialogProps) {
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
-  const fieldDefinitions = useApplicableFields(isOpen ? selectedTeam?.id : null, placement?.parentId, createKind, null);
+  const { definitions: fieldDefinitions, loading: fieldsLoading } = useApplicableFields(isOpen ? selectedTeam?.id : null, placement?.parentId, createKind, null);
   const missingFields = missingRequiredFields(fieldDefinitions, applicableValues(fieldDefinitions, attributes));
   // A Kind or place change can drop a field: forget its value so it is not sent.
   useEffect(() => {
+    if (fieldsLoading) return; // never against definitions still on their way (INV-1524)
     const kept = applicableValues(fieldDefinitions, attributes);
     if (onAttributesChange && Object.keys(kept).length !== Object.keys(attributes).length) onAttributesChange(kept);
-  }, [fieldDefinitions, attributes, onAttributesChange]);
+  }, [fieldDefinitions, fieldsLoading, attributes, onAttributesChange]);
 
   useEffect(() => {
     if (isOpen) titleInputRef.current?.focus();
@@ -114,7 +115,7 @@ export function BoardCreateIssueDialog({
             type="submit"
             variant="accent"
             size="md"
-            disabled={isSaving || !createTitle.trim() || !selectedTeam || !placement || missingFields.length > 0}
+            disabled={isSaving || !createTitle.trim() || !selectedTeam || !placement || missingFields.length > 0 || fieldsLoading}
             title="Create issue (⌘/Ctrl + Enter)"
           >
             Create issue

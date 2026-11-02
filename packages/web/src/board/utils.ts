@@ -485,3 +485,26 @@ export function normalizeRepositoryFilterKey(
 
   return trimmed;
 }
+
+/**
+ * Merge items changed since the board loaded (INV-1526): replaces or adds them
+ * by id, keeping the list's own paging and the totals. With the list ordered
+ * by last change, an item someone edits after the first load moves above the
+ * cursor and Load more alone would never return it.
+ */
+export function mergeChangedBoardIssues(
+  previousResult: BoardPageQueryData,
+  changedResult: BoardPageQueryData | undefined,
+): BoardPageQueryData {
+  if (!changedResult) return previousResult;
+  const issueById = new Map(previousResult.issues.nodes.map((issue) => [issue.id, issue]));
+  for (const issue of changedResult.issues.nodes) issueById.set(issue.id, issue);
+  return { ...previousResult, issues: { ...previousResult.issues, nodes: [...issueById.values()] } };
+}
+
+/** The newest last-change time among loaded items, as the floor for the changed-since fetch. */
+export function newestUpdatedAt(issues: Array<{ updatedAt?: string | null }>): string | null {
+  let newest: string | null = null;
+  for (const issue of issues) if (issue.updatedAt && (!newest || issue.updatedAt > newest)) newest = issue.updatedAt;
+  return newest;
+}

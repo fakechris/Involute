@@ -1,7 +1,7 @@
 import { reserveWorkIdempotency, hashIdempotencyRequest, completeWorkIdempotency } from './idempotency.js';
 import { syncAutoAcceptBugsPolicy } from './autonomy-service.js';
 import { validProjectWebOrigins } from './web-origins.js';
-import type { BugReproducibility, Comment, Issue, IssueSeverity, Prisma, PrismaClient, WorkflowState, WorkflowStateType, WorkResolution } from '@prisma/client';
+import type { BugReproducibility, Comment, FieldDefinition, Issue, IssueSeverity, Prisma, PrismaClient, WorkflowState, WorkflowStateType, WorkResolution } from '@prisma/client';
 
 import {
   ASSIGNEE_NOT_FOUND_MESSAGE,
@@ -67,7 +67,7 @@ import { parseSeverity } from './severity.js';
 import { mergeIncidentTimes, readIncidentTimes } from './incident-timestamps.js';
 import { parseReproducibility } from './reproducibility.js';
 import { parseFoundInSha } from './found-in.js';
-import { type AttributesInput, applyAttributes, recordAttributeWrite, typeNameFromLabels, typeNameOf } from './field-definitions.js';
+import { type AttributesInput, applyAttributes, readAttributes, recordAttributeWrite, reindexItem, resolveDefinitionsFor, validateAttributes, typeNameFromLabels, typeNameOf } from './field-definitions.js';
 
 export interface CreateIssueInput {
   acceptance?: string | null;
@@ -580,6 +580,27 @@ export async function updateIssue(
       }
     }
 
+    // A move, a Type change or a Kind change can change which field definitions
+    // apply (INV-1523): required ones are checked (defaults filled) and the
+    // item's index rows are rebuilt after the update.
+    const placementChanged = input.parentId !== undefined || (input.labelIds !== undefined && input.labelIds !== null) || (input.kind !== undefined && input.kind !== null && input.kind !== existingIssue.kind);
+    let reindexDefinitions: FieldDefinition[] | null = null;
+    if (placementChanged) {
+      let typeName: string | null;
+      if (input.labelIds !== undefined && input.labelIds !== null) {
+        const labels = await transaction.issueLabel.findMany({ where: { id: { in: input.labelIds } }, select: { name: true } });
+        typeName = typeNameFromLabels(labels.map((label) => label.name));
+      } else {
+        typeName = await typeNameOf(transaction, existingIssue.id);
+      }
+      const subject = { id: existingIssue.id, teamId: existingIssue.teamId, kind: input.kind ?? existingIssue.kind, parentId: input.parentId === undefined ? existingIssue.parentId : input.parentId, typeName };
+      reindexDefinitions = await resolveDefinitionsFor(transaction, subject);
+      if (!attributeWrite) {
+        const checked = validateAttributes(reindexDefinitions, readAttributes(existingIssue.attributes), {}, existingIssue.commitmentStatus === 'COMMITTED' ? 'committed' : 'candidate');
+        if (checked.changed.length) data.attributes = checked.attributes as Prisma.InputJsonValue;
+      }
+    }
+
     // Snooze is candidate-pool governance: committed work has a human owner
     // and a delivery contract, so pausing it silently would be wrong.
     if ('snoozedUntil' in input) {
@@ -814,6 +835,7 @@ export async function updateIssue(
       await syncContainsFromParentId(transaction, id, nextParentId, actor);
     }
     if (attributeWrite) await recordAttributeWrite(transaction, id, attributeWrite);
+    if (reindexDefinitions) await reindexItem(transaction, id, updated.attributes, reindexDefinitions);
 
     await recordWorkAudit(transaction, {
       actor: researchClosedByAgent ? { ...actor, reason: RESEARCH_CLOSE_REASON } : closeReason ? { ...actor, reason: closeReason } : actor,

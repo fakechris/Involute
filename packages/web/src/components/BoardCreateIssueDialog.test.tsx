@@ -9,12 +9,13 @@ import type { FieldValues } from './DialogFields';
 // INV-1505: the create dialog shows the fields that apply to the chosen Kind and place.
 const queries: unknown[] = [];
 let definitions: FieldDefinitionSummary[] = [];
+let loading = false;
 
 vi.mock('@apollo/client/react', () => ({
   useQuery: vi.fn((document: unknown, options?: { variables?: unknown; skip?: boolean }) => {
     if (JSON.stringify(document).includes('ApplicableFields') && !options?.skip) {
       queries.push(options?.variables);
-      return { data: { applicableFieldDefinitions: definitions }, loading: false };
+      return loading ? { data: undefined, previousData: { applicableFieldDefinitions: definitions }, loading: true } : { data: { applicableFieldDefinitions: definitions }, loading: false };
     }
     return { data: undefined, loading: false };
   }),
@@ -74,5 +75,19 @@ describe('BoardCreateIssueDialog fields (INV-1505)', () => {
     render(<Harness onSubmit={vi.fn()} />);
     expect(screen.queryByText('Fields')).toBeNull();
     expect(screen.getByRole('button', { name: 'Create issue' })).toBeEnabled();
+  });
+
+  it('keeps entered values while the fields for a new place load, and a required field with a default does not block (INV-1524)', () => {
+    definitions = [{ key: 'gone', label: 'Gone', description: null, type: 'TEXT', required: true, searchable: false, options: [], defaultValue: 'n/a' }];
+    loading = true;
+    const { rerender } = render(<Harness onSubmit={vi.fn()} />);
+    // Loading: nothing pruned, Create waits for the answer.
+    expect(screen.getByRole('button', { name: 'Create issue' })).toBeDisabled();
+    loading = false;
+    rerender(<Harness onSubmit={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Create issue' })).toBeEnabled();
+    // The value typed before the reload is still there.
+    expect(screen.getByRole('textbox', { name: 'Gone' })).toHaveValue('x');
+    loading = false;
   });
 });

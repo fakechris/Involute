@@ -131,7 +131,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
 
   // Fields for Type Bug (INV-1505): a placed report is committed at once, so required ones must be set; triage may leave them.
   const [fieldValues, setFieldValues] = useState<FieldValues>({});
-  const fieldDefinitions = useApplicableFields(isOpen ? teamId : null, triage ? null : placement?.parentId, 'ISSUE', 'bug');
+  const { definitions: fieldDefinitions, loading: fieldsLoading } = useApplicableFields(isOpen ? teamId : null, triage ? null : placement?.parentId, 'ISSUE', 'bug');
 
   if (!isOpen) {
     return null;
@@ -142,7 +142,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
   const placed = triage || Boolean(placement);
   const sentFields = applicableValues(fieldDefinitions, fieldValues);
   const missingFields = triage ? [] : missingRequiredFields(fieldDefinitions, sentFields);
-  const canSubmit = Boolean(title.trim() && steps.trim() && priority > 0 && placed && foundInValid && missingFields.length === 0) && !isSaving;
+  const canSubmit = Boolean(title.trim() && steps.trim() && priority > 0 && placed && foundInValid && missingFields.length === 0) && !isSaving && !(fieldsLoading && !triage);
 
   function toggleLabel(labelId: string) {
     setSelectedLabelIds((current) =>
