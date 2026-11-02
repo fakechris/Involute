@@ -493,6 +493,8 @@ export const ISSUE_DETAIL_QUERY = gql`
       id
       revision
       commitmentStatus
+      attributes
+      fieldDefinitions { key label description type required searchable options { value label archived } }
       description
       outcome
       scope

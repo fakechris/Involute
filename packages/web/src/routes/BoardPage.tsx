@@ -2104,6 +2104,17 @@ export function BoardPage() {
     }));
   }
 
+  async function persistFieldsChange(issue: IssueSummary, attributes: Record<string, FieldValue | null>) {
+    await persistIssueUpdate(issue, { attributes }, (current) => {
+      const next: Record<string, FieldValue> = { ...(current.attributes ?? {}) };
+      for (const [key, value] of Object.entries(attributes)) {
+        if (value === null) delete next[key];
+        else next[key] = value;
+      }
+      return { ...current, attributes: next };
+    });
+  }
+
   async function persistAssigneeChange(issue: IssueSummary, assigneeId: string | null) {
     if ((issue.assignee?.id ?? null) === assigneeId) {
       return;
@@ -3310,6 +3321,7 @@ export function BoardPage() {
           onContractSave={persistContractChange}
           onLabelsChange={persistLabelsChange}
           onStructureChange={persistStructureChange}
+          onFieldsChange={persistFieldsChange}
           onAssigneeChange={persistAssigneeChange}
           onCommentCreate={persistCommentCreate}
           onCommentDelete={persistCommentDelete}
