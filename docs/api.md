@@ -255,6 +255,32 @@ query WorkPreviews($identifiers: [String!]!) {
 }
 ```
 
+### `issueGraph(id: String!, depth: Int)`
+
+One work item's neighbourhood (INV-1496): the CONTAINS chain above it, its direct children, its siblings, and the BLOCKS chain around it — the same typed work graph the project graph draws, read from a single item instead of from a whole project.
+
+`id` accepts an identifier (`INV-1496`) or a UUID. `depth` is how many BLOCKS steps the read may follow from the focus (0–4, default 1). Only work the caller may read is returned, and an edge is returned only when both of its ends are shown — a dependency that leads into another team simply does not appear, and neither does the work behind it, because the walk stops at the first item the caller may not see.
+
+The walk follows the link table only (a "related" note never drags the neighbourhood along) and it walks one direction at a time: blockers form a chain upwards, dependents a chain downwards. A path that mixes the two — A blocks the focus *and* A blocks B — is not a dependency of the focus, so B is left out; this is the same rule the graph draws with.
+
+`rollups` carries the progress of the nearest milestone and epic ancestors, nearest first. The counts are over the **leaves** of each subtree, so a milestone holding an epic with three issues reads as three pieces of work, not four. Only committed leaves count: a candidate is a proposal nobody has agreed to yet, and it stays out of the denominator.
+
+```graphql
+query IssueGraph($id: String!, $depth: Int) {
+  issueGraph(id: $id, depth: $depth) {
+    focus { id identifier title kind state { name type } }
+    nodes { id identifier title kind state { name type } assignee { name } }
+    ancestors { id identifier title kind }
+    edges { id type fromId toId }
+    rollups {
+      id identifier title kind
+      total completed inProgress blocked canceled
+    }
+    truncated
+  }
+}
+```
+
 ### `issues(first: Int!, after: String, filter: IssueFilter)`
 
 Returns the issue connection. The server clamps `first` to a safe limit.
