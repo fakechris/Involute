@@ -2290,6 +2290,22 @@ kbd {
   font-size: 14px;
 }
 
+/* The drawer rail never scrolls sideways (INV-1513): a control too wide for
+   its 244px content shrinks or wraps instead of shifting the whole column. */
+.issue-panel__rail {
+  overflow-x: hidden;
+}
+
+.issue-panel__rail .field-stack {
+  min-width: 0;
+}
+
+/* Project and Location stack in the drawer as on the full page (INV-1513). */
+.issue-panel__rail .work-structure .placement-picker {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
 .issue-panel__properties {
   display: flex;
   flex-shrink: 0;
