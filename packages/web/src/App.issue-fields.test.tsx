@@ -1,11 +1,12 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { FieldDefinitionSummary } from './board/types';
 import { apolloMocks, boardQueryResult, renderApp } from './test/app-test-helpers';
 import { App } from './App';
 
 // INV-1503: the issue page shows the field definitions that apply to the item and saves their values.
-const definitions = [
+const definitions: FieldDefinitionSummary[] = [
   { key: 'customer', label: 'Customer', description: null, type: 'TEXT', required: true, options: [] },
   { key: 'risk', label: 'Risk', description: 'Delivery risk', type: 'ENUM', required: false, options: [{ value: 'low', label: 'Low', archived: null }, { value: 'high', label: 'High', archived: null }] },
 ];
