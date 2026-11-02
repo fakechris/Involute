@@ -43,6 +43,8 @@ export interface BugReportInput {
   labelIds?: string[] | null;
   /** Browser environment from the capture extension (INV-1146); validated by parseBugCapture. */
   capture?: unknown;
+  /** Field values (INV-1503); required ones for Type Bug must be set when the report is placed. */
+  attributes?: Record<string, unknown> | null;
 }
 
 /** Type: Bug — the existing "bug" label under any casing (INV-749). */
@@ -89,6 +91,7 @@ export async function reportBug(prisma: PrismaClient, input: BugReportInput, act
     const base = {
       description: composeDescription(input.description, steps, capture),
       kind: 'ISSUE' as const,
+      ...(input.attributes ? { attributes: input.attributes } : {}),
       labelIds,
       priority: input.priority ?? null,
       severity,

@@ -28,4 +28,9 @@ export {
   type IqlField,
   type IqlQuery,
   type IqlTerm,
+  IQL_ATTR_FIELD,
+  IQL_SORT_VALUE,
+  attrKey,
+  isAttrField,
+  readIqlSort,
 } from './iql.js';

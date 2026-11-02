@@ -128,7 +128,7 @@ function buildNumberClause(op: IqlComparisonOp, value: number): Prisma.IntFilter
  * Compile one IQL term into a Prisma clause. Terms combine with AND; a
  * negated term contributes `NOT: { ... }`.
  */
-function compileTerm(term: IqlTerm, context: IqlCompileContext): Prisma.IssueWhereInput {
+export function compileTerm(term: IqlTerm, context: IqlCompileContext): Prisma.IssueWhereInput {
   const include = !term.negated;
   const clauseFor = (clause: Prisma.IssueWhereInput): Prisma.IssueWhereInput =>
     include ? clause : { NOT: clause };
@@ -303,12 +303,20 @@ function compileTerm(term: IqlTerm, context: IqlCompileContext): Prisma.IssueWhe
   }
 }
 
+/**
+ * Synchronous compiler for queries without field-definition terms. A query
+ * with `attr.<key>` or `sort:` needs the database (definitions, GIN, the typed
+ * index): use `compileIqlWhere` in iql-attr.ts (INV-1505).
+ */
 export function compileIqlToIssueWhere(
   query: IqlQuery,
   context: IqlCompileContext,
 ): Prisma.IssueWhereInput | undefined {
   if (query.terms.length === 0) {
     return undefined;
+  }
+  if (query.terms.some((term) => term.field === 'sort' || term.field?.startsWith('attr.'))) {
+    throw iqlParseGraphQLError('attr.<key> and sort terms are not supported here.');
   }
   return {
     AND: query.terms.map((term) => compileTerm(term, context)),
@@ -331,7 +339,37 @@ function matchTerm(term: IqlTerm, work: DatabaseWork, context: IqlCompileContext
   return term.negated ? !matched : matched;
 }
 
+/** In-memory `attr.<key>` (INV-1505): the stored value against the written one; ranges compare numbers or ISO strings. */
+function matchAttribute(term: IqlTerm, work: DatabaseWork): boolean {
+  const key = term.field!.slice('attr.'.length);
+  const attributes = (work.attributes && typeof work.attributes === 'object' && !Array.isArray(work.attributes) ? work.attributes : {}) as Record<string, unknown>;
+  const stored = attributes[key];
+  const present = stored !== undefined && stored !== null;
+  const value = term.value.trim();
+  if (value === 'none' || value === 'any') {
+    const matched = (value === 'any') === present;
+    return term.op === 'neq' ? !matched : matched;
+  }
+  if (!present) return term.op === 'neq';
+  const storedValues = (Array.isArray(stored) ? stored : [stored]).map((entry) => String(entry));
+  if (term.op === 'eq' || term.op === 'neq') {
+    const matched = value.split(',').map((entry) => entry.trim()).some((entry) => storedValues.includes(entry));
+    return term.op === 'neq' ? !matched : matched;
+  }
+  const left = typeof stored === 'number' ? stored : String(stored);
+  const right = typeof stored === 'number' ? Number(value) : value;
+  switch (term.op) {
+    case 'gt': return left > right;
+    case 'gte': return left >= right;
+    case 'lt': return left < right;
+    case 'lte': return left <= right;
+  }
+  return false;
+}
+
 function matchPositive(term: IqlTerm, work: DatabaseWork, context: IqlCompileContext): boolean {
+  if (term.field === 'sort') return true;
+  if (term.field?.startsWith('attr.')) return matchAttribute(term, work);
   if (term.field === null) {
     const needle = term.value.toLowerCase();
     return (

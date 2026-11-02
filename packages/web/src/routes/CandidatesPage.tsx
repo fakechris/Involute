@@ -20,6 +20,7 @@ export const COMMIT_CANDIDATE_EVENT = 'involute:commit-candidate';
 export const SNOOZE_CANDIDATE_EVENT = 'involute:snooze-candidate';
 import { PlacementPicker } from '../components/PlacementPicker';
 import type { CreatePlacement } from '../work/placement';
+import { DialogFields, missingRequiredFields, type FieldValues } from '../components/DialogFields';
 import { ResolutionSelect, type WorkResolution } from '../components/CloseReasonDialog';
 import {
   CANDIDATES_PAGE_QUERY,
@@ -401,6 +402,14 @@ export function CandidateCard({
   const isBug = isBugCandidate(candidate);
   const [priority, setPriority] = useState(candidate.priority ?? 0);
   const needsPriority = isBug && !(priority >= 1 && priority <= 4);
+  // Required fields are set before commit, like acceptance (INV-1505).
+  const fieldDefinitions = candidate.fieldDefinitions ?? [];
+  const [fieldValues, setFieldValues] = useState<FieldValues>(candidate.attributes ?? {});
+  const missingFields = missingRequiredFields(fieldDefinitions, fieldValues);
+  const changedFields = Object.fromEntries([
+    ...Object.entries(fieldValues).filter(([key, value]) => JSON.stringify(candidate.attributes?.[key]) !== JSON.stringify(value)),
+    ...Object.keys(candidate.attributes ?? {}).filter((key) => !(key in fieldValues)).map((key) => [key, null]),
+  ]);
   const needsReason = isBug && !reason.trim();
   const rejectBlockedReason = !resolution ? 'Choose a resolution first: why is it closed?' : needsReason ? 'Say why this bug will not be fixed.' : null;
   const [runCommit] = useMutation<WorkCommitMutationData, WorkCommitMutationVariables>(WORK_COMMIT_MUTATION);
@@ -524,6 +533,7 @@ export function CandidateCard({
                 .map((field) => [field, contract[field].trim()]),
             ) as Partial<typeof contract>),
             ...(targetStateId ? { stateId: targetStateId } : {}),
+            ...(Object.keys(changedFields).length ? { attributes: changedFields } : {}),
           },
         },
       });
@@ -692,6 +702,7 @@ export function CandidateCard({
         </Select>
       </label>
       <ParentField candidate={candidate} value={parentChoice} onChange={setParentChoice} />
+      <DialogFields definitions={fieldDefinitions} values={fieldValues} onChange={setFieldValues} disabled={pendingAction !== null} />
       {isBug ? (
         <label className="observation-field">
           <span>Priority (sets the SLA)</span>
@@ -748,7 +759,7 @@ export function CandidateCard({
       {error ? <InlineError>{error}</InlineError> : null}
       <div className="observation-card__actions">
         {(() => {
-          const blocked = pendingAction !== null || snoozed || (missingParent && !parentChoice) || needsPriority;
+          const blocked = pendingAction !== null || snoozed || (missingParent && !parentChoice) || needsPriority || missingFields.length > 0;
           commitRef.current = () => {
             if (!blocked) void handleCommit();
             else document.getElementById(`acceptance-${candidate.id}`)?.focus();
@@ -761,12 +772,14 @@ export function CandidateCard({
         <Btn
           variant="accent"
           icon={<IcoCheck size={12} />}
-          disabled={pendingAction !== null || snoozed || (missingParent && !parentChoice) || needsPriority}
+          disabled={pendingAction !== null || snoozed || (missingParent && !parentChoice) || needsPriority || missingFields.length > 0}
           {...(missingParent && !parentChoice
             ? { title: 'Choose a parent first: committed work must belong somewhere.' }
             : needsPriority
               ? { title: 'Choose a priority first: it sets the bug SLA.' }
-              : {})}
+              : missingFields.length
+                ? { title: `Fill the required fields first: ${missingFields.join(', ')}.` }
+                : {})}
           onClick={() => void handleCommit()}
         >
           {pendingAction === 'commit' ? 'Committing…' : 'Commit'}

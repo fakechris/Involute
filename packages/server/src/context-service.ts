@@ -27,7 +27,8 @@ import {
   createNotFoundError,
 } from './errors.js';
 import { resolveProjectScope } from './project-scope.js';
-import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
+import { parseIqlOrThrow } from './iql-compile.js';
+import { type AttrSort, compileIqlWhere, orderIdsByAttribute, refuseSort } from './iql-attr.js';
 import type { SemanticIndex } from './embeddings/semantic-index.js';
 import { searchIssues, type SearchField } from './issue-search.js';
 
@@ -200,12 +201,14 @@ export async function searchWork(
   const first = clampFirst(input.first);
   const clauses: Prisma.IssueWhereInput[] = [];
 
+  let sort: AttrSort | null = null;
   if (input.iql?.trim()) {
     const parsed = parseIqlOrThrow(input.iql);
-    const compiled = compileIqlToIssueWhere(parsed, { viewerId: input.viewerId ?? null });
-    if (compiled) {
-      clauses.push(compiled);
+    const compiled = await compileIqlWhere(prisma, parsed, { viewerId: input.viewerId ?? null });
+    if (compiled.where) {
+      clauses.push(compiled.where);
     }
+    sort = compiled.sort;
   }
 
   if (input.teamKey) {
@@ -228,6 +231,7 @@ export async function searchWork(
 
   // Free text goes through the same ranked search as the web (INV-925).
   const query = input.query?.trim();
+  if (query && sort) refuseSort({ where: undefined, sort }, 'free-text search');
   if (query) {
     const hits = await searchIssues(
       prisma,
@@ -245,6 +249,15 @@ export async function searchWork(
     clauses.push(readableWhere);
   }
 
+  if (sort) {
+    // sort:attr.<key> (INV-1505): every match, ordered by the typed index.
+    const matches = await prisma.issue.findMany({ ...(clauses.length > 0 ? { where: { AND: clauses } } : {}), select: { id: true }, orderBy: [{ updatedAt: 'desc' }, { identifier: 'asc' }] });
+    const ids = (await orderIdsByAttribute(prisma, matches.map((row) => row.id), sort)).slice(0, first);
+    const rows = await prisma.issue.findMany({ where: { id: { in: ids } } });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return ids.map((id) => byId.get(id)).filter((row): row is Issue => Boolean(row));
+  }
+
   return prisma.issue.findMany({
     ...(clauses.length > 0 ? { where: { AND: clauses } } : {}),
     orderBy: [{ updatedAt: 'desc' }, { identifier: 'asc' }],
@@ -259,7 +272,7 @@ export async function listReadyWork(
 ): Promise<{ hasNextPage: boolean; nodes: Issue[] }> {
   const first = clampFirst(input.first);
   const iqlWhere = input.iql?.trim()
-    ? compileIqlToIssueWhere(parseIqlOrThrow(input.iql), { viewerId: input.viewerId ?? null })
+    ? refuseSort(await compileIqlWhere(prisma, parseIqlOrThrow(input.iql), { viewerId: input.viewerId ?? null }), 'ready lists (they are ordered by priority)')
     : undefined;
   const scope = await resolveProjectScope(prisma, input, readableWhere);
   const baseWhere: Prisma.IssueWhereInput = {

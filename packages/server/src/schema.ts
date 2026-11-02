@@ -3,7 +3,7 @@ import { loadHandledForYou } from './autonomy-gate.js';
 import type { AgentTrustLevel } from '@prisma/client';
 import { TRUST_LEVEL_DESCRIPTIONS, adviseTrust, allowedAt, loadAgentTrustMetrics, readAgentTrust, setAgentTrust } from './agent-trust.js';
 import { WORKSPACE_SETTINGS_ID } from './workspace-access.js';
-import type { AutonomyScope } from '@prisma/client';
+import type { AutonomyScope, FieldDefinition, WorkKind } from '@prisma/client';
 import { POLICY_SCOPE_INVALID_MESSAGE, autonomyToGraphQL, clearWorkflowPolicy, loadAutonomyFor, observeLabelFor, readAutonomySettings, setWorkflowPolicy } from './autonomy-service.js';
 import type { SavedView } from '@prisma/client';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
@@ -125,7 +125,8 @@ import type {
 import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
 import { searchIssues, type IssueSearchHit } from './issue-search.js';
 import { resolveIssuePreviews, type IssuePreviewRecord } from './issue-preview.js';
-import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
+import { parseIqlOrThrow } from './iql-compile.js';
+import { compileIqlWhere, orderIdsByAttribute, refuseSort } from './iql-attr.js';
 
 import { requireAuthentication, type GraphQLContext } from './auth.js';
 import { isPlausibleEmail, issueAgentCredential, parseAgentScopeList } from './agent-credentials.js';
@@ -171,6 +172,7 @@ import {
   type AgentProfile as AgentProfileResult,
   type WorkProvenance as WorkProvenanceResult,
 } from './agent-directory.js';
+import { type SetFieldDefinitionInput, FIELD_LIMITS, FIELD_SCOPE_INVALID_MESSAGE, FIELD_STALE_DAYS, countFieldUsage, isStaleDefinition, renameFieldDefinition, deactivateFieldDefinition, fieldDefinitionView, readActiveDefinitions, readAppliesTo, readAttributes, resolveDefinitionsFor, resolveScopedDefinitions, setFieldDefinition, typeNameOf } from './field-definitions.js';
 import { createComment, createIssue, createIssueInTransaction, deleteComment, deleteIssue, mentionTexts, updateIssue } from './issue-service.js';
 import { isActionableNotification, markNotificationRead, projectWorkNotifications, resolveAttentionNotifications } from './notification-service.js';
 import { auditMergedPrTraceability } from './traceability-audit.js';
@@ -465,6 +467,14 @@ const typeDefs = /* GraphQL */ `
     autonomySettings(scope: AutonomyScope!, scopeId: String!): AutonomySettings!
     "Handled for you (INV-1491): automatic policy decisions of the last days on work you may read, newest first."
     handledForYou(days: Int): [HandledItem!]!
+    "Field definitions of one scope (INV-1503); active only unless includeInactive. Signed-in people only."
+    fieldDefinitions(scope: AutonomyScope!, scopeId: String!, includeInactive: Boolean): [FieldDefinition!]!
+    "The field governance limits (INV-1504)."
+    fieldLimits: FieldLimits!
+    "How many items each workflow state holds under the same filter and query as issues(), so a board column can say how many it has not loaded yet (INV-1516)."
+    issueStateCounts(filter: IssueFilter, query: String): [IssueStateCount!]!
+    "The active field definitions new work would see (INV-1505): team, optional parent (its project), Kind and lower-case Type. For the Report bug, create and propose dialogs."
+    applicableFieldDefinitions(teamId: String!, parentId: String, kind: WorkKind!, type: String, "Ignore the Type filter (the board lists every field it could group by)." allTypes: Boolean): [FieldDefinition!]!
     issue(id: String!): Issue
     """
     The work items behind references in prose (INV-1466): a batch of
@@ -473,7 +483,8 @@ const typeDefs = /* GraphQL */ `
     reference. Only readable items come back.
     """
     issuePreviews(identifiers: [String!]!): [IssuePreview!]!
-    issues(first: Int!, after: String, filter: IssueFilter, query: String): IssueConnection!
+    "orderBy: CREATED (newest first, the default) or UPDATED (most recently changed first; the board, INV-1516)."
+    issues(first: Int!, after: String, filter: IssueFilter, query: String, orderBy: IssueOrder): IssueConnection!
     "Archived teams are left out unless includeArchived is true."
     teams(filter: TeamFilter, includeArchived: Boolean): TeamConnection!
     issueLabels(filter: IssueLabelFilter): IssueLabelConnection!
@@ -584,6 +595,12 @@ const typeDefs = /* GraphQL */ `
     workflowPolicySet(input: WorkflowPolicySetInput!): WorkflowPolicyPayload!
     "Remove a team or project override so it inherits again (INV-1489)."
     workflowPolicyClear(input: WorkflowPolicyClearInput!): WorkflowPolicyClearPayload!
+    "Create or change a field definition (INV-1503): Admin for the workspace, team Owner for a team or project. A new version; values stay."
+    fieldDefinitionSet(input: FieldDefinitionSetInput!): FieldDefinitionPayload!
+    "Deactivate a field definition (INV-1503); values stay on items and return on reactivation."
+    fieldDefinitionDeactivate(input: FieldDefinitionDeactivateInput!): FieldDefinitionPayload!
+    "Rename a field's key with a reason (INV-1504): values move to the new key; the old key is still accepted on write for one version."
+    fieldDefinitionRename(input: FieldDefinitionRenameInput!): FieldDefinitionPayload!
     "Return to me (INV-1491): take back an amendment the Autonomy Gate accepted; the contract reverts and the proposal waits for you again."
     contractAmendmentReopen(input: ContractAmendmentReopenInput!): ContractAmendmentReopenPayload!
     "Promote or demote an agent's trust level with a reason (the actor's owner, a team Owner over it, or an Admin; INV-1490)."
@@ -1344,6 +1361,10 @@ const typeDefs = /* GraphQL */ `
     Read-only here; the same object is in MCP work_get_context.
     """
     autonomy: Autonomy!
+    "Values of the field definitions that apply to this item, { key: value } (INV-1503, docs/field-definitions.md)."
+    attributes: Json!
+    "The active field definitions that apply to this item's Kind × Type, nearest scope first resolved (project → team → workspace)."
+    fieldDefinitions: [FieldDefinition!]!
     links(type: WorkLinkType): WorkLinkConnection!
     """
     Committed work that still blocks this item: incoming BLOCKS links whose
@@ -2277,9 +2298,13 @@ const typeDefs = /* GraphQL */ `
     repository: String
     "Required unless kind is PROJECT (INV-744): id or identifier of the PROJECT (No milestone), MILESTONE, EPIC or ISSUE it goes under. The repository is inherited when omitted."
     parentId: String
+    "Field values { key: value } checked against the definitions that apply (INV-1503)."
+    attributes: Json
   }
 
   input BugReportInput {
+    "Field values { key: value } (INV-1503); required fields for Type Bug must be set when the report is placed."
+    attributes: Json
     teamId: String!
     title: String!
     description: String
@@ -2513,6 +2538,8 @@ const typeDefs = /* GraphQL */ `
   }
 
   input IssueUpdateInput {
+    "Partial field values { key: value } merged onto the stored ones; null clears a key (INV-1503)."
+    attributes: Json
     expectedRevision: Int
     stateId: String
     labelIds: [String!]
@@ -2730,6 +2757,132 @@ const typeDefs = /* GraphQL */ `
     completionReply: String
   }
 
+  enum FieldType {
+    TEXT
+    NUMBER
+    BOOLEAN
+    DATE
+    ENUM
+    MULTI_ENUM
+    WORK_REF
+    USER_REF
+    URL
+  }
+
+  type FieldOption {
+    value: String!
+    label: String!
+    archived: Boolean
+  }
+
+  type FieldAppliesTo {
+    kinds: [WorkKind!]!
+    "Lower-case Type names (bug, feature, improvement, research, incident) or ['any']."
+    types: [String!]!
+  }
+
+  "A work-item field that is configuration, not a column (INV-1503, docs/field-definitions.md)."
+  type FieldDefinition {
+    id: ID!
+    scope: AutonomyScope!
+    scopeId: String!
+    key: String!
+    label: String!
+    description: String
+    type: FieldType!
+    options: [FieldOption!]!
+    appliesTo: FieldAppliesTo!
+    required: Boolean!
+    defaultValue: Json
+    searchable: Boolean!
+    active: Boolean!
+    version: Int!
+    "The key this version replaced (INV-1504); still accepted on write until the next version."
+    previousKey: String
+    "Last time any item's value for this field changed."
+    lastWrittenAt: DateTime
+    "Items in the scope holding a value for this key."
+    usageCount: Int!
+    "Defined but not written for 90 days: the cleanup prompt (docs/field-definitions.md §7)."
+    stale: Boolean!
+    "A pending FieldValueIndex job: BACKFILL or CLEANUP; null when the index matches."
+    indexJob: FieldIndexJob
+    "Items the pending job has gone through so far."
+    indexProcessed: Int!
+  }
+
+  enum FieldIndexJob {
+    BACKFILL
+    CLEANUP
+  }
+
+  enum IssueOrder {
+    CREATED
+    UPDATED
+  }
+
+  type IssueStateCount {
+    stateId: String!
+    count: Int!
+  }
+
+  "Governance limits (docs/field-definitions.md §7); raising one is a decision."
+  type FieldLimits {
+    activePerScope: Int!
+    enumOptions: Int!
+    staleDays: Int!
+  }
+
+  input FieldDefinitionRenameInput {
+    scope: AutonomyScope!
+    scopeId: String!
+    from: String!
+    to: String!
+    reason: String!
+  }
+
+  input FieldOptionInput {
+    value: String!
+    label: String
+    archived: Boolean
+  }
+
+  input FieldAppliesToInput {
+    kinds: [WorkKind!]!
+    "Lower-case Type names, or omit for any Type."
+    types: [String!]
+  }
+
+  input FieldDefinitionSetInput {
+    scope: AutonomyScope!
+    "WORKSPACE: the workspace id; TEAM: a team id; PROJECT: a committed PROJECT work id."
+    scopeId: String!
+    "snake_case, unique among the active fields of the scope."
+    key: String!
+    label: String!
+    description: String
+    type: FieldType!
+    options: [FieldOptionInput!]
+    appliesTo: FieldAppliesToInput!
+    required: Boolean
+    defaultValue: Json
+    searchable: Boolean
+    reason: String!
+  }
+
+  input FieldDefinitionDeactivateInput {
+    scope: AutonomyScope!
+    scopeId: String!
+    key: String!
+    reason: String!
+  }
+
+  type FieldDefinitionPayload {
+    success: Boolean!
+    message: String
+    definition: FieldDefinition
+  }
+
   input WorkflowPolicyClearInput {
     scope: AutonomyScope!
     scopeId: String!
@@ -2937,6 +3090,8 @@ const typeDefs = /* GraphQL */ `
   }
 
   input WorkProposeInput {
+    "Field values { key: value } (INV-1503); a candidate may leave required ones empty, commit refuses until they are set."
+    attributes: Json
     teamId: String!
     title: String!
     description: String
@@ -2981,6 +3136,8 @@ const typeDefs = /* GraphQL */ `
   }
 
   input WorkCommitInput {
+    "Field values to fill or correct while committing (INV-1503); required ones must be set."
+    attributes: Json
     expectedRevision: Int!
     "1 (Urgent) to 4 (Low). Required to commit a bug: it sets the SLA (INV-750)."
     priority: Int
@@ -3322,6 +3479,47 @@ const resolvers = {
       if (args.scope === 'WORKSPACE' && args.scopeId !== WORKSPACE_SETTINGS_ID) throw createValidationError(POLICY_SCOPE_INVALID_MESSAGE);
       return readAutonomySettings(context.prisma, args);
     },
+    fieldDefinitions: async (_parent: unknown, args: { scope: AutonomyScope; scopeId: string; includeInactive?: boolean | null }, context: GraphQLContext) => {
+      requireAuthentication(context);
+      if (args.scope === 'TEAM') await assertCanReadTeam(context.prisma, context, args.scopeId);
+      if (args.scope === 'PROJECT') {
+        const project = await context.prisma.issue.findUnique({ where: { id: args.scopeId }, select: { teamId: true } });
+        if (!project) throw createValidationError(FIELD_SCOPE_INVALID_MESSAGE);
+        await assertCanReadTeam(context.prisma, context, project.teamId);
+      }
+      // includeInactive: the latest version of every key, so a retired field can be brought back.
+      let rows = await readActiveDefinitions(context.prisma, args.scope, args.scopeId);
+      if (args.includeInactive) {
+        const all = await context.prisma.fieldDefinition.findMany({ where: { scope: args.scope, scopeId: args.scopeId }, orderBy: [{ createdAt: 'desc' }] });
+        const renamedAway = new Set(all.map((row) => row.previousKey).filter((key): key is string => Boolean(key)));
+        const latest = new Map<string, (typeof all)[number]>();
+        for (const row of all) if (!latest.has(row.key) && !renamedAway.has(row.key)) latest.set(row.key, row);
+        rows = [...latest.values()].sort((left, right) => left.key.localeCompare(right.key));
+      }
+      return rows.map(fieldDefinitionToGraphQL);
+    },
+    issueStateCounts: async (_parent: unknown, args: { filter?: IssueFilterInput | null; query?: string | null }, context: GraphQLContext) => {
+      const compiled = args.query?.trim()
+        ? await compileIqlWhere(context.prisma, parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null })
+        : { where: undefined, sort: null };
+      const where = combineIssueWhere(
+        combineIssueWhere(buildIssueWhere(args.filter, context.viewer?.id ?? null), buildReadableIssueWhere(context)),
+        compiled.where,
+      );
+      const rows = await context.prisma.issue.groupBy({ by: ['stateId'], ...(where ? { where } : {}), _count: { _all: true } });
+      return rows.map((row) => ({ stateId: row.stateId, count: row._count._all }));
+    },
+    applicableFieldDefinitions: async (_parent: unknown, args: { teamId: string; parentId?: string | null; kind: WorkKind; type?: string | null; allTypes?: boolean | null }, context: GraphQLContext) => {
+      requireAuthentication(context);
+      await assertCanReadTeam(context.prisma, context, args.teamId);
+      const parent = args.parentId ? await findWorkByIdOrIdentifier(context.prisma, args.parentId) : null;
+      const subject = { teamId: args.teamId, kind: args.kind, parentId: parent?.teamId === args.teamId ? parent.id : null };
+      const definitions = args.allTypes
+        ? (await resolveScopedDefinitions(context.prisma, subject)).filter((definition) => readAppliesTo(definition.appliesTo).kinds.includes(args.kind))
+        : await resolveDefinitionsFor(context.prisma, { ...subject, typeName: args.type?.trim().toLowerCase() || null });
+      return definitions.map(fieldDefinitionToGraphQL);
+    },
+    fieldLimits: () => ({ activePerScope: FIELD_LIMITS.activePerScope, enumOptions: FIELD_LIMITS.enumOptions, staleDays: FIELD_STALE_DAYS }),
     workspaceSettings: async (_parent: unknown, _args: Record<string, never>, context: GraphQLContext) => {
       assertSettingsAdmin(context);
       return getWorkspaceSettings(context.prisma);
@@ -3371,24 +3569,31 @@ const resolvers = {
     },
     issues: async (
       _parent: unknown,
-      args: { after?: string | null; filter?: IssueFilterInput | null; first: number; query?: string | null },
+      args: { after?: string | null; filter?: IssueFilterInput | null; first: number; query?: string | null; orderBy?: 'CREATED' | 'UPDATED' | null },
       context: GraphQLContext,
       info: GraphQLResolveInfo,
     ): Promise<{ nodes: IssueParent[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
+      const byUpdated = args.orderBy === 'UPDATED';
       const first = clampConnectionFirst(args.first, MAX_ISSUES_CONNECTION_FIRST);
-      const iqlWhere = args.query?.trim()
-        ? compileIqlToIssueWhere(parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null })
-        : undefined;
-      const where = combineIssueWhere(
+      const compiled = args.query?.trim()
+        ? await compileIqlWhere(context.prisma, parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null })
+        : { where: undefined, sort: null };
+      const baseWhere = combineIssueWhere(
         combineIssueWhere(
-          combineIssueWhere(
-            buildIssueWhere(args.filter, context.viewer?.id ?? null),
-            buildReadableIssueWhere(context),
-          ),
-          iqlWhere,
+          buildIssueWhere(args.filter, context.viewer?.id ?? null),
+          buildReadableIssueWhere(context),
         ),
-        buildIssueCursorWhere(args.after),
+        compiled.where,
       );
+      // sort:attr.<key> (INV-1505): order every match by the typed index and page by position.
+      let sortedPage: { ids: string[]; hasNextPage: boolean; offset: number } | null = null;
+      if (compiled.sort) {
+        const offset = args.after?.startsWith('sort:') ? Number(args.after.slice(5)) || 0 : 0;
+        const matches = await context.prisma.issue.findMany({ ...(baseWhere ? { where: baseWhere } : {}), select: { id: true }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
+        const ordered = await orderIdsByAttribute(context.prisma, matches.map((row) => row.id), compiled.sort);
+        sortedPage = { ids: ordered.slice(offset, offset + first), hasNextPage: ordered.length > offset + first, offset };
+      }
+      const where = sortedPage ? { id: { in: sortedPage.ids } } : combineIssueWhere(baseWhere, byUpdated ? buildUpdatedCursorWhere(args.after) : buildIssueCursorWhere(args.after));
       const requestedIssueFields = getRequestedIssueConnectionFields(info);
       const issues = await context.prisma.issue.findMany({
         ...(where ? { where } : {}),
@@ -3400,14 +3605,22 @@ const resolvers = {
             : {}),
           followUpLinks: requestedIssueFields.has('followUpDeadline'),
         }),
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        orderBy: byUpdated ? [{ updatedAt: 'desc' }, { id: 'desc' }] : [{ createdAt: 'desc' }, { id: 'desc' }],
         take: first + 1,
       });
+      if (sortedPage) {
+        const page = sortedPage;
+        const byId = new Map(issues.map((issue) => [issue.id, issue]));
+        const nodes = page.ids.map((id) => byId.get(id)).filter((issue): issue is (typeof issues)[number] => Boolean(issue));
+        return { nodes, pageInfo: { hasNextPage: page.hasNextPage, endCursor: nodes.length ? `sort:${page.offset + nodes.length}` : null } };
+      }
       const nodes = issues.slice(0, first);
 
       return {
         nodes,
-        pageInfo: buildPageInfo(nodes, issues.length > first),
+        pageInfo: byUpdated
+          ? { hasNextPage: issues.length > first, endCursor: nodes.length ? encodeUpdatedCursor(nodes[nodes.length - 1]!) : null }
+          : buildPageInfo(nodes, issues.length > first),
       };
     },
     teams: async (
@@ -3572,7 +3785,7 @@ const resolvers = {
       requireAuthentication(context);
       const filters: Prisma.IssueWhereInput[] = [];
       if (args.iql?.trim()) {
-        const compiled = compileIqlToIssueWhere(parseIqlOrThrow(args.iql), { viewerId: context.viewer?.id ?? null });
+        const compiled = refuseSort(await compileIqlWhere(context.prisma, parseIqlOrThrow(args.iql), { viewerId: context.viewer?.id ?? null }), 'ranked search');
         if (compiled) filters.push(compiled);
       }
       if (args.repository) filters.push({ repository: args.repository });
@@ -5364,6 +5577,36 @@ const resolvers = {
         const policy = await setWorkflowPolicy(context.prisma, input, context.viewer?.id ?? null);
         return { success: true as const, policy };
       }, { success: false as const, policy: null }),
+    fieldDefinitionSet: async (
+      _parent: unknown,
+      args: { input: SetFieldDefinitionInput },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; definition: unknown }> =>
+      runMutationWithReason(async () => {
+        await assertCanManageFieldScope(context, args.input.scope, args.input.scopeId);
+        const definition = await setFieldDefinition(context.prisma, args.input, context.viewer?.id ?? null);
+        return { success: true as const, definition: fieldDefinitionToGraphQL(definition) };
+      }, { success: false as const, definition: null }),
+    fieldDefinitionDeactivate: async (
+      _parent: unknown,
+      args: { input: { scope: AutonomyScope; scopeId: string; key: string; reason: string } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; definition: unknown }> =>
+      runMutationWithReason(async () => {
+        await assertCanManageFieldScope(context, args.input.scope, args.input.scopeId);
+        const definition = await deactivateFieldDefinition(context.prisma, args.input, context.viewer?.id ?? null);
+        return { success: true as const, definition: fieldDefinitionToGraphQL(definition) };
+      }, { success: false as const, definition: null }),
+    fieldDefinitionRename: async (
+      _parent: unknown,
+      args: { input: { scope: AutonomyScope; scopeId: string; from: string; to: string; reason: string } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; definition: unknown }> =>
+      runMutationWithReason(async () => {
+        await assertCanManageFieldScope(context, args.input.scope, args.input.scopeId);
+        const definition = await renameFieldDefinition(context.prisma, args.input, context.viewer?.id ?? null);
+        return { success: true as const, definition: fieldDefinitionToGraphQL(definition) };
+      }, { success: false as const, definition: null }),
     agentTrustSet: async (
       _parent: unknown,
       args: { input: { actorId: string; level: AgentTrustLevel; reason: string } },
@@ -6150,6 +6393,18 @@ const resolvers = {
         select: { reason: true },
       });
       return audit?.reason ?? null;
+    },
+    attributes: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
+      if (parent.attributes !== undefined) return readAttributes(parent.attributes);
+      const row = await context.prisma.issue.findUnique({ where: { id: parent.id }, select: { attributes: true } });
+      return readAttributes(row?.attributes);
+    },
+    fieldDefinitions: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
+      const definitions = await resolveDefinitionsFor(context.prisma, {
+        id: parent.id, teamId: parent.teamId, kind: parent.kind, parentId: parent.parentId ?? null,
+        typeName: await typeNameOf(context.prisma, parent.id),
+      });
+      return definitions.map(fieldDefinitionToGraphQL);
     },
     autonomy: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
       const view = await loadAutonomyFor(context.prisma, { id: parent.id, teamId: parent.teamId, kind: parent.kind, parentId: parent.parentId ?? null }, context.viewer ? { id: context.viewer.id, actorKind: context.viewer.actorKind } : null);
@@ -7010,4 +7265,48 @@ async function agentTrustView(prisma: GraphQLContext['prisma'], actorId: string)
     suggestedLevel: advice.suggestedLevel,
     warning: advice.warning,
   };
+}
+
+/** Field definitions are configuration a person owns (INV-1503): Admin for the workspace, team Owner (or Admin) for a team or project. */
+async function assertCanManageFieldScope(context: GraphQLContext, scope: AutonomyScope, scopeId: string): Promise<void> {
+  if (context.authMode === 'agent-token' || context.viewer?.actorKind === 'AGENT') throw createValidationError('Field definitions are set by people (Admin or team Owner); agents write values through attributes (INV-1503).');
+  if (scope === 'WORKSPACE') {
+    assertWorkspaceAdmin(context);
+    return;
+  }
+  if (scope === 'TEAM') {
+    await assertCanManageTeam(context.prisma, context, scopeId);
+    return;
+  }
+  const project = await context.prisma.issue.findUnique({ where: { id: scopeId }, select: { teamId: true } });
+  if (!project) throw createValidationError(FIELD_SCOPE_INVALID_MESSAGE);
+  await assertCanManageTeam(context.prisma, context, project.teamId);
+}
+
+function fieldDefinitionToGraphQL(definition: FieldDefinition) {
+  const view = fieldDefinitionView(definition);
+  return {
+    ...view,
+    appliesTo: { kinds: view.appliesTo.kinds, types: view.appliesTo.types === 'any' ? ['any'] : view.appliesTo.types },
+    // Computed only when asked (settings pages): a count over the scope's items.
+    usageCount: (_args: unknown, context: GraphQLContext) => countFieldUsage(context.prisma, definition),
+    stale: async (_args: unknown, context: GraphQLContext) => {
+      const first = await context.prisma.fieldDefinition.findFirst({ where: { scope: definition.scope, scopeId: definition.scopeId, key: definition.key }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } });
+      return isStaleDefinition(definition, first?.createdAt ?? definition.createdAt);
+    },
+  };
+}
+
+/** Cursor for orderBy UPDATED (INV-1516): last change time and id, prefixed so a CREATED cursor is never misread. */
+function encodeUpdatedCursor(entity: { updatedAt: Date; id: string }): string {
+  return `u:${Buffer.from(JSON.stringify({ updatedAt: entity.updatedAt.toISOString(), id: entity.id }), 'utf8').toString('base64url')}`;
+}
+
+function buildUpdatedCursorWhere(after: string | null | undefined): Prisma.IssueWhereInput | undefined {
+  if (!after) return undefined;
+  if (!after.startsWith('u:')) throw createValidationError('This cursor belongs to another ordering; start again without after.');
+  const parsed = JSON.parse(Buffer.from(after.slice(2), 'base64url').toString('utf8')) as { updatedAt?: unknown; id?: unknown };
+  if (typeof parsed.updatedAt !== 'string' || typeof parsed.id !== 'string') throw createValidationError('Invalid cursor.');
+  const updatedAt = parseDateTime(parsed.updatedAt);
+  return { OR: [{ updatedAt: { lt: updatedAt } }, { updatedAt, id: { lt: parsed.id } }] };
 }

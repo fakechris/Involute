@@ -497,6 +497,9 @@ model Issue {
   supersededById String? @db.Uuid
   supersededBy Issue? @relation("SupersededWork", fields: [supersededById], references: [id], onDelete: Restrict)
   supersededWorks Issue[] @relation("SupersededWork")
+  // INV-1503: values of FieldDefinition rows that apply to this item; GIN (jsonb_path_ops) in the migration.
+  attributes Json @default("{}")
+  fieldValueIndex FieldValueIndex[]
   // Phase 2: GitHub webhook PR provenance tracking
   stateSourcePrId      String?
   lastAppliedEventTime DateTime?
@@ -1509,4 +1512,79 @@ model AgentTrust {
   setById   String?         @db.Uuid
   reason    String?
   updatedAt DateTime        @default(now()) @updatedAt
+}
+
+// INV-1503 / decision INV-1501: a work-item field that is configuration, not a
+// column (docs/field-definitions.md). Versioned like WorkflowPolicy: a change
+// inserts a new active row and deactivates the previous one for the same key.
+enum FieldType {
+  TEXT
+  NUMBER
+  BOOLEAN
+  DATE
+  ENUM
+  MULTI_ENUM
+  WORK_REF
+  USER_REF
+  URL
+}
+
+model FieldDefinition {
+  id           String        @id @default(uuid()) @db.Uuid
+  scope        AutonomyScope
+  // WORKSPACE: WORKSPACE_SETTINGS_ID; TEAM: Team.id; PROJECT: the PROJECT Issue.id.
+  scopeId      String
+  key          String
+  label        String
+  description  String?
+  type         FieldType
+  // [{ value, label, archived? }] for ENUM / MULTI_ENUM.
+  options      Json?
+  // { kinds: WorkKind[], types: string[] | 'any' }
+  appliesTo    Json
+  required     Boolean       @default(false)
+  defaultValue Json?
+  searchable   Boolean       @default(false)
+  active       Boolean       @default(true)
+  version      Int           @default(1)
+  reason       String?
+  createdById  String?       @db.Uuid
+  createdAt    DateTime      @default(now())
+  // INV-1504: the key this version replaced (rename); still accepted on write for one version.
+  previousKey  String?
+  // INV-1504: last time any item's value for this definition changed (copied across versions).
+  lastWrittenAt DateTime?
+  // INV-1504: a pending FieldValueIndex backfill or cleanup; null when the index matches.
+  indexJob       FieldIndexJob?
+  indexCursor    String?
+  indexProcessed Int           @default(0)
+
+  @@index([scope, scopeId, active])
+  @@index([key])
+  @@index([indexJob])
+}
+
+enum FieldIndexJob {
+  BACKFILL
+  CLEANUP
+}
+
+// INV-1504: typed rows for searchable definitions, so ranges, sorting and
+// grouping use btree indexes (docs/field-definitions.md §6). One row per value
+// (a MULTI_ENUM value has one row per option).
+model FieldValueIndex {
+  id          String    @id @default(uuid()) @db.Uuid
+  issueId     String    @db.Uuid
+  issue       Issue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  key         String
+  textValue   String?
+  numberValue Float?
+  dateValue   DateTime?
+  refId       String?   @db.Uuid
+
+  @@index([key, textValue])
+  @@index([key, numberValue])
+  @@index([key, dateValue])
+  @@index([key, refId])
+  @@index([issueId])
 }

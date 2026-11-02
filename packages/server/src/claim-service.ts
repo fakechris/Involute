@@ -67,6 +67,7 @@ import {
 import { attachDecisionReceipt, type ReceiptInput } from './decision-receipt.js';
 import { createWorkLink } from './link-service.js';
 import { isLegalContains, lockWorkGraph } from './graph-integrity.js';
+import { type AttributesInput, applyAttributes, recordAttributeWrite, typeNameOf } from './field-definitions.js';
 import { createIssueWithAudit, mentionTexts, recordStateChangeAcceptance, type CreateIssueInput } from './issue-service.js';
 import { linkMentionedWork } from './mention-links.js';
 import { findOrCreateLabelIds, isBugWork, isResearchWork, namesIncident, namesResearch } from './labels.js';
@@ -144,10 +145,14 @@ export interface ProposeWorkInput {
   teamId: string;
   title: string;
   verification?: string | null;
+  /** Field values (INV-1503); a candidate may leave required ones empty, committing refuses until filled. */
+  attributes?: AttributesInput | null;
 }
 
 export interface CommitWorkInput {
   acceptance?: string | null;
+  /** Field values to fill or correct as part of committing (INV-1503); required ones must be set. */
+  attributes?: AttributesInput | null;
   /** Place the candidate under this parent as part of committing it (INV-719). */
   parentId?: string | null;
   assigneeId?: string | null;
@@ -404,6 +409,7 @@ export async function proposeWork(
       }
     }
     if (input.acceptance !== undefined) createInput.acceptance = input.acceptance;
+    if (input.attributes !== undefined) createInput.attributes = input.attributes;
     if (input.constraints !== undefined) createInput.constraints = input.constraints;
     if (input.description !== undefined) createInput.description = input.description;
     if (input.kind !== undefined && input.kind !== null) createInput.kind = input.kind;
@@ -736,6 +742,17 @@ export async function commitWork(
 
     await placeForCommit(transaction, existing, input.parentId ?? null, actor);
 
+    // Required fields are filled before work is committed (INV-1503), like acceptance.
+    const placed = await transaction.issue.findUniqueOrThrow({ where: { id: existing.id }, select: { parentId: true } });
+    const fields = await applyAttributes(transaction, {
+      id: existing.id,
+      teamId: existing.teamId,
+      kind: existing.kind,
+      parentId: placed.parentId,
+      typeName: await typeNameOf(transaction, existing.id),
+      existing: existing.attributes,
+    }, input.attributes, 'committed');
+
     // Zero-bug (INV-748/750): a bug is committed to be fixed, with a priority
     // for its SLA, and never parked in the backlog.
     const isBug = await isBugWork(transaction, existing.id);
@@ -823,6 +840,7 @@ export async function commitWork(
       data: {
         acceptance,
         assigneeId: owner.id,
+        ...(fields.changed.length ? { attributes: fields.attributes as Prisma.InputJsonValue } : {}),
         commitmentStatus: 'COMMITTED',
         constraints: input.constraints === undefined ? existing.constraints : input.constraints,
         outcome: input.outcome === undefined ? existing.outcome : input.outcome,
@@ -834,6 +852,7 @@ export async function commitWork(
       },
     });
 
+    await recordAttributeWrite(transaction, existing.id, fields);
     await recordWorkAudit(transaction, {
       actor,
       after: selectIssueSnapshot(updated),

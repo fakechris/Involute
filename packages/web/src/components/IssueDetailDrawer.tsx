@@ -4,7 +4,8 @@ import { useQuery } from '@apollo/client/react';
 import { Badge } from './status';
 
 import { ContractSection, type ContractValues } from './ContractSection';
-import type { CommentSummary, ContractAmendmentSummary, IssueSummary, TeamSummary, UserSummary } from '../board/types';
+import type { CommentSummary, ContractAmendmentSummary, FieldDefinitionSummary, FieldValue, IssueSummary, TeamSummary, UserSummary } from '../board/types';
+import { IssueFieldsPanel } from './IssueFieldsPanel';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ActorBadge } from './ActorBadge';
 import { DeliverySection } from './DeliveryPanel';
@@ -43,6 +44,8 @@ interface IssueDetailDrawerProps {
   onLabelsChange: (issue: IssueSummary, labelIds: string[]) => Promise<void>;
   /** Placement, priority and kind (INV-791). */
   onStructureChange?: (issue: IssueSummary, update: StructureUpdate) => Promise<void>;
+  /** Field values (INV-1514): partial, null clears a key. */
+  onFieldsChange?: (issue: IssueSummary, attributes: Record<string, FieldValue | null>) => Promise<void>;
   onAssigneeChange: (issue: IssueSummary, assigneeId: string | null) => Promise<void>;
   onCommentCreate: (issue: IssueSummary, body: string) => Promise<void>;
   onCommentDelete: (issue: IssueSummary, commentId: string) => Promise<void>;
@@ -68,6 +71,7 @@ export function IssueDetailDrawer({
   onContractSave,
   onLabelsChange,
   onStructureChange,
+  onFieldsChange,
   onAssigneeChange,
   onCommentCreate,
   onCommentDelete,
@@ -108,7 +112,7 @@ export function IssueDetailDrawer({
   // proposed to it (INV-896, INV-1470): the board list carries none of them,
   // and this is where people open work.
   const { data: detailData, loading: detailLoading, refetch: refetchContract } = useQuery<
-    { issue: (ContractValues & { id: string; description?: string | null; commitmentStatus?: IssueSummary['commitmentStatus']; pendingContractAmendment?: ContractAmendmentSummary | null }) | null },
+    { issue: (ContractValues & { id: string; description?: string | null; commitmentStatus?: IssueSummary['commitmentStatus']; pendingContractAmendment?: ContractAmendmentSummary | null; attributes?: Record<string, FieldValue> | null; fieldDefinitions?: FieldDefinitionSummary[] }) | null },
     { id: string }
   >(ISSUE_DETAIL_QUERY, {
     variables: { id: issue?.id ?? '' },
@@ -718,6 +722,20 @@ export function IssueDetailDrawer({
                     work={activeIssue}
                     disabled={savingState}
                     onUpdate={(update) => void onStructureChange(activeIssue, update).catch(() => undefined)}
+                  />
+                </div>
+              ) : null}
+
+              {/* Field definitions for this Kind × Type (INV-1514); the board list carries the values, the open-issue query the definitions. */}
+              {onFieldsChange && detailIssue?.id === activeIssue.id && detailIssue.fieldDefinitions?.length ? (
+                <div className="issue-panel__property-group">
+                  <span className="issue-panel__label">Fields</span>
+                  <IssueFieldsPanel
+                    definitions={detailIssue.fieldDefinitions}
+                    attributes={activeIssue.attributes ?? detailIssue.attributes}
+                    people={users}
+                    disabled={savingState}
+                    onUpdate={(update) => void onFieldsChange(activeIssue, update.attributes).catch(() => undefined)}
                   />
                 </div>
               ) : null}

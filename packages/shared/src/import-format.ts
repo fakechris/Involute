@@ -49,6 +49,17 @@ export interface ExportedIssue {
    * agree on it, so a source that builds a hierarchy states it here.
    */
   repository?: string | undefined;
+  /**
+   * The source's own custom fields (INV-1505), by display name. The importer
+   * maps each onto a field definition of the same key (snake_case of the
+   * name); the rest are kept as text in `imported_extra`.
+   */
+  customFields?: ExportedCustomField[] | undefined;
+}
+
+export interface ExportedCustomField {
+  name: string;
+  value: string | number | boolean | string[] | null;
 }
 
 /** The work kinds an import may create. */
@@ -207,6 +218,7 @@ function parseExportedIssue(value: unknown, path: string): ExportedIssue {
     },
     title: expectString(object.title, `${path}.title`),
     updatedAt: expectString(object.updatedAt, `${path}.updatedAt`),
+    ...(object.customFields === undefined ? {} : { customFields: parseCustomFields(object.customFields, `${path}.customFields`) }),
   };
 }
 
@@ -319,4 +331,14 @@ function expectBoolean(value: unknown, path: string): boolean {
   }
 
   return value;
+}
+
+function parseCustomFields(value: unknown, path: string): ExportedCustomField[] {
+  return expectArray(value, path).map((entry, index) => {
+    const object = expectObject(entry, `${path}[${index}]`);
+    const raw = object.value;
+    const ok = raw === null || typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean' || (Array.isArray(raw) && raw.every((item) => typeof item === 'string'));
+    if (!ok) throw new Error(`${path}[${index}].value must be text, a number, true/false, a list of text or null.`);
+    return { name: expectString(object.name, `${path}[${index}].name`), value: raw as ExportedCustomField['value'] };
+  });
 }

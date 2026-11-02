@@ -161,6 +161,7 @@ describe('K6 observation UI', () => {
       expect.objectContaining({
         variables: {
           first: 200,
+          orderBy: 'UPDATED',
           filter: {
             commitmentStatus: 'COMMITTED',
           },

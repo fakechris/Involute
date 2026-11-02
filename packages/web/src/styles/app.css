@@ -1687,6 +1687,32 @@ kbd {
   color: var(--fg-dim);
 }
 
+.board-column__unloaded {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border);
+  border-radius: var(--r-2);
+  color: var(--fg-dim);
+  font-size: 13px;
+}
+
+.board-column__load-more {
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.board-column__load-more:disabled {
+  color: var(--fg-dim);
+  cursor: default;
+}
+
 .board-column__body {
   display: flex;
   flex: 1;
@@ -2290,6 +2316,22 @@ kbd {
   font-size: 14px;
 }
 
+/* The drawer rail never scrolls sideways (INV-1513): a control too wide for
+   its 244px content shrinks or wraps instead of shifting the whole column. */
+.issue-panel__rail {
+  overflow-x: hidden;
+}
+
+.issue-panel__rail .field-stack {
+  min-width: 0;
+}
+
+/* Project and Location stack in the drawer as on the full page (INV-1513). */
+.issue-panel__rail .work-structure .placement-picker {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
 .issue-panel__properties {
   display: flex;
   flex-shrink: 0;
@@ -2589,6 +2631,100 @@ kbd {
   width: 92px;
   flex-shrink: 0;
   color: var(--fg-dim);
+}
+
+/* Fields from field definitions on the issue page (INV-1503) */
+.issue-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.issue-fields {
+  gap: 8px;
+}
+
+/* Label above a full-width control, like Project / Location: the rail is
+   narrow, and a second label column beside the control squeezed it (INV-1514). */
+.issue-fields__row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.issue-fields__row select,
+.issue-fields__row input:not([type='checkbox']) {
+  width: 100%;
+  min-width: 0;
+}
+
+.issue-fields__label {
+  color: var(--fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-fields__required {
+  color: var(--fg-dim);
+}
+
+.issue-fields__required--missing {
+  color: var(--accent);
+}
+
+.issue-fields__multi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.issue-fields__ref {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Fields settings (INV-1504) */
+.fields-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 8px 0 12px;
+}
+
+.fields-table th,
+.fields-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.fields-table th {
+  color: var(--fg-dim);
+  font-weight: 500;
+}
+
+.fields-table__key {
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.fields-table__retired {
+  opacity: 0.6;
+}
+
+.fields-table__actions {
+  white-space: nowrap;
 }
 
 /* Divider */

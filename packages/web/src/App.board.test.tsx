@@ -236,6 +236,7 @@ describe('App board UI', () => {
       expect(fetchMore).toHaveBeenCalledWith({
         variables: {
           first: 200,
+          orderBy: 'UPDATED',
           after: 'cursor-2',
           teamFilter: {
             key: {

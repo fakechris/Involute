@@ -45,6 +45,9 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   // INV-1489: Administration → Autonomy, Team settings → Autonomy, the project override (docs/autonomy-policy.md §2).
   workflowPolicySet: { kind: 'web', doc: 'WORKFLOW_POLICY_SET_MUTATION', components: ['routes/AutonomyTab.tsx'], label: 'Save autonomy', test: 'routes/AutonomyTab.test.tsx' },
   workflowPolicyClear: { kind: 'web', doc: 'WORKFLOW_POLICY_CLEAR_MUTATION', components: ['routes/AutonomyTab.tsx'], label: 'Inherit from team', test: 'routes/AutonomyTab.test.tsx' },
+  fieldDefinitionSet: { kind: 'web', doc: 'FIELD_DEFINITION_SET_MUTATION', components: ['routes/FieldsTab.tsx'], label: 'Save field', test: 'routes/FieldsTab.test.tsx' },
+  fieldDefinitionDeactivate: { kind: 'web', doc: 'FIELD_DEFINITION_DEACTIVATE_MUTATION', components: ['routes/FieldsTab.tsx'], label: 'Deactivate', test: 'routes/FieldsTab.test.tsx' },
+  fieldDefinitionRename: { kind: 'web', doc: 'FIELD_DEFINITION_RENAME_MUTATION', components: ['routes/FieldsTab.tsx'], label: 'Rename key', test: 'routes/FieldsTab.test.tsx' },
   // INV-1491: a person takes back an amendment the Autonomy Gate accepted, from Handled for you on /todo.
   contractAmendmentReopen: { kind: 'web', doc: 'CONTRACT_AMENDMENT_REOPEN_MUTATION', components: ['routes/AttentionPage.tsx'], label: 'Return to me', test: 'routes/AttentionPage.test.tsx' },
   // INV-1490: Settings → Agents → agent → Trust level.

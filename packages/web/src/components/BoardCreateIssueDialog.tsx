@@ -3,6 +3,7 @@ import { useEffect, useRef, type FormEvent } from 'react';
 import type { TeamSummary } from '../board/types';
 import type { CreatePlacement, PlaceableProject, PlacementSource } from '../work/placement';
 import { Checkbox, Field, Select, TextInput } from './controls';
+import { DialogFields, applicableValues, missingRequiredFields, useApplicableFields, type FieldValues } from './DialogFields';
 import { DialogShell } from './DialogShell';
 import { PlacementPicker } from './PlacementPicker';
 import { Btn } from './Primitives';
@@ -37,6 +38,9 @@ interface BoardCreateIssueDialogProps {
   onTitleChange: (value: string) => void;
   /** Bug is a type here too, but a bug is filed with priority and steps: hand over to Report bug (INV-1132). */
   onReportBug?: () => void;
+  /** Field values for the definitions that apply (INV-1505). */
+  attributes?: FieldValues;
+  onAttributesChange?: (values: FieldValues) => void;
 }
 
 export function BoardCreateIssueDialog({
@@ -61,9 +65,18 @@ export function BoardCreateIssueDialog({
   onTeamChange,
   onTitleChange,
   onReportBug,
+  attributes = {},
+  onAttributesChange,
 }: BoardCreateIssueDialogProps) {
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const formRef = useRef<HTMLFormElement | null>(null);
+  const fieldDefinitions = useApplicableFields(isOpen ? selectedTeam?.id : null, placement?.parentId, createKind, null);
+  const missingFields = missingRequiredFields(fieldDefinitions, applicableValues(fieldDefinitions, attributes));
+  // A Kind or place change can drop a field: forget its value so it is not sent.
+  useEffect(() => {
+    const kept = applicableValues(fieldDefinitions, attributes);
+    if (onAttributesChange && Object.keys(kept).length !== Object.keys(attributes).length) onAttributesChange(kept);
+  }, [fieldDefinitions, attributes, onAttributesChange]);
 
   useEffect(() => {
     if (isOpen) titleInputRef.current?.focus();
@@ -101,7 +114,7 @@ export function BoardCreateIssueDialog({
             type="submit"
             variant="accent"
             size="md"
-            disabled={isSaving || !createTitle.trim() || !selectedTeam || !placement}
+            disabled={isSaving || !createTitle.trim() || !selectedTeam || !placement || missingFields.length > 0}
             title="Create issue (⌘/Ctrl + Enter)"
           >
             Create issue
@@ -177,6 +190,10 @@ export function BoardCreateIssueDialog({
         disabled={isSaving}
         onChange={onPlacementChange}
       />
+
+      {onAttributesChange ? (
+        <DialogFields definitions={fieldDefinitions} values={attributes} onChange={onAttributesChange} disabled={isSaving} />
+      ) : null}
 
       {errorMessage ? (
         <p className="dialog-shell__error" role="alert">

@@ -94,7 +94,8 @@ function typeMismatch(property: JsonSchemaProperty, graphqlType: GqlType): strin
     integer: ['Int', 'Float'],
     number: ['Int', 'Float'],
     boolean: ['Boolean'],
-    object: ['String', 'JSON'],
+    // `Json` is the schema's JSON scalar (attributes, INV-1503; gates / intake).
+    object: ['String', 'JSON', 'Json'],
   };
   return (family[json] ?? []).includes(named.name ?? '') ? null : `${json} vs ${String(graphqlType)}`;
 }

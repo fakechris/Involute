@@ -53,6 +53,10 @@ export function beforePatch(issue: IssueSummary, after: IssueFieldPatch): IssueF
       case 'snoozedUntil': before.snoozedUntil = (issue as { snoozedUntil?: string | null }).snoozedUntil ?? null; break;
       // Undoing a cancel reopens the work, which clears its resolution (INV-1118).
       case 'resolution': if (issue.resolution) before.resolution = issue.resolution; break;
+      // Only the keys this save touched: undo restores each one, or clears it (INV-1503).
+      case 'attributes':
+        before.attributes = Object.fromEntries(Object.keys(after.attributes ?? {}).map((field) => [field, issue.attributes?.[field] ?? null]));
+        break;
       case 'outcome': case 'scope': case 'constraints': case 'acceptance': case 'verification':
         before[key] = ((issue as unknown as Record<string, unknown>)[key] as string | null | undefined) ?? null; break;
       default: break;
@@ -87,6 +91,7 @@ function describe(patch: IssueFieldPatch, names: FieldNames): string {
       case 'snoozedUntil': parts.push(value ? 'snoozed' : 'unsnoozed'); break;
       case 'resolution': parts.push(`closed as ${resolutionLabel(String(value)) ?? String(value)}`); break;
       case 'reason': break;
+      case 'attributes': parts.push(`${Object.keys(value as Record<string, unknown>).join(', ')} updated`); break;
       default: parts.push(`${key} updated`); break;
     }
   }

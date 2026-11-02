@@ -133,6 +133,21 @@ export interface ContractAmendmentSummary {
   changes: Array<{ field: 'acceptance' | 'scope' | 'verification' | 'outcome' | 'constraints'; before: string | null; after: string | null }>;
 }
 
+/** A value of a field definition (INV-1503): text, number, boolean, ISO date, option value(s), or a work / user id. */
+export type FieldValue = string | number | boolean | string[];
+
+export type FieldDefinitionType = 'TEXT' | 'NUMBER' | 'BOOLEAN' | 'DATE' | 'ENUM' | 'MULTI_ENUM' | 'WORK_REF' | 'USER_REF' | 'URL';
+
+export interface FieldDefinitionSummary {
+  key: string;
+  label: string;
+  description?: string | null;
+  type: FieldDefinitionType;
+  required: boolean;
+  searchable?: boolean | null;
+  options: Array<{ value: string; label: string; archived?: boolean | null }>;
+}
+
 export interface IssueSummary {
   id: string;
   identifier: string;
@@ -145,6 +160,10 @@ export interface IssueSummary {
   /** Why a rejected or canceled item was closed (INV-1118). */
   /** The item that replaced this one (INV-1498). */
   supersededBy?: { id: string; identifier: string; title: string } | null;
+  /** Values of the field definitions that apply (INV-1503); the issue page asks for them. */
+  attributes?: Record<string, FieldValue> | null;
+  /** The active field definitions for this item's Kind × Type (INV-1503). */
+  fieldDefinitions?: FieldDefinitionSummary[];
   resolution?: WorkResolution | null;
   description?: string | null;
   repository?: string | null;
@@ -299,6 +318,8 @@ export interface BugReportMutationVariables {
     /** Where it belongs; omitted when unsure, which sends it to triage (INV-749). */
     parentId?: string | null;
     labelIds?: string[];
+    /** Field values for Type Bug (INV-1505). */
+    attributes?: Record<string, FieldValue>;
   };
 }
 
@@ -396,6 +417,8 @@ export interface BugsPageQueryVariables {
 
 export interface BoardPageQueryData {
   projectSummary?: ProjectSummaryResult;
+  /** Per-state totals under the board filter (INV-1516). */
+  issueStateCounts?: Array<{ stateId: string; count: number }>;
   teams: {
     nodes: TeamSummary[];
   };
@@ -467,6 +490,8 @@ export interface TeamMembershipRemoveMutationVariables {
 
 export interface BoardPageQueryVariables {
   query?: string;
+  /** UPDATED: most recently changed first, so work changed today is on the first page (INV-1516). */
+  orderBy?: 'CREATED' | 'UPDATED';
   first: number;
   after?: string;
   /** Ask for the issues' bodies (INV-1470): the list leaves them out by default. */
@@ -538,10 +563,13 @@ export interface IssueCreateMutationVariables {
     /** Required unless kind is PROJECT: id or identifier of where it goes (INV-744). */
     parentId?: string;
     repository?: string | null;
+    /** Field values (INV-1505). */
+    attributes?: Record<string, FieldValue>;
   };
 }
 
-export type BoardGroupBy = 'none' | 'project' | 'status' | 'priority' | 'assignee' | 'label';
+/** `attr:<key>` groups by a searchable field definition's value (INV-1505). */
+export type BoardGroupBy = 'none' | 'project' | 'status' | 'priority' | 'assignee' | 'label' | `attr:${string}`;
 
 export interface BoardIssueGroup {
   id: string;
@@ -569,6 +597,8 @@ export interface IssueUpdateMutationVariables {
   id: string;
   input: {
     expectedRevision?: number;
+    /** Partial field values (INV-1503); null clears a key. */
+    attributes?: Record<string, FieldValue | null>;
     assigneeId?: string | null;
     description?: string | null;
     labelIds?: string[];

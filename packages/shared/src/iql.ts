@@ -16,6 +16,11 @@
  * Fields: team, state, state-type, kind, commitment, assignee, label,
  * priority, severity, updated, link, has, project. Bare words match
  * title/description text. `severity:sev1,sev2` / `severity:none` (INV-1115).
+ *
+ * Field definitions (INV-1505, docs/field-definitions.md §6): `attr.<key>:value`
+ * (`,` for any of several, `none` / `any` for absent / present) and, for
+ * searchable fields only, `attr.<key>:>=3` style ranges and
+ * `sort:attr.<key>` / `sort:attr.<key>:desc`.
  */
 
 export class IqlParseError extends Error {
@@ -64,6 +69,27 @@ export const IQL_FIELDS = [
 ] as const;
 
 export type IqlField = (typeof IQL_FIELDS)[number];
+
+/** `attr.<key>`: a field definition's value (INV-1505). Keys are snake_case like FieldDefinition.key. */
+export const IQL_ATTR_FIELD = /^attr\.[a-z][a-z0-9_]{1,39}$/;
+/** `sort:attr.<key>` or `sort:attr.<key>:asc|desc`. */
+export const IQL_SORT_VALUE = /^attr\.[a-z][a-z0-9_]{1,39}(:(asc|desc))?$/;
+
+export function isAttrField(field: string | null): field is string {
+  return field !== null && IQL_ATTR_FIELD.test(field);
+}
+
+/** The definition key of an `attr.<key>` field. */
+export function attrKey(field: string): string {
+  return field.slice('attr.'.length);
+}
+
+/** `sort:attr.points:desc` → { key: 'points', direction: 'desc' }; null for any other term. */
+export function readIqlSort(term: IqlTerm): { key: string; direction: 'asc' | 'desc' } | null {
+  if (term.field !== 'sort') return null;
+  const [field, direction] = term.value.split(':');
+  return { key: attrKey(field!), direction: direction === 'desc' ? 'desc' : 'asc' };
+}
 
 const COMPARISON_PREFIXES = ['>=', '<=', '!=', '>', '<'] as const;
 
@@ -134,9 +160,9 @@ export function parseIql(query: string): IqlQuery {
     }
 
     const field = body.slice(0, colon).toLowerCase();
-    if (!(IQL_FIELDS as readonly string[]).includes(field)) {
+    if (!(IQL_FIELDS as readonly string[]).includes(field) && field !== 'sort' && !IQL_ATTR_FIELD.test(field)) {
       throw new IqlParseError(
-        `Unknown field "${field}". Valid fields: ${IQL_FIELDS.join(', ')}.`,
+        `Unknown field "${field}". Valid fields: ${IQL_FIELDS.join(', ')}, attr.<key>, sort.`,
         token,
         position + 1,
       );
@@ -144,6 +170,12 @@ export function parseIql(query: string): IqlQuery {
     const { op, value } = parseOpAndValue(body.slice(colon + 1));
     if (!value) {
       throw new IqlParseError(`Field "${field}" requires a value.`, token, position + 1);
+    }
+    if (field === 'sort' && (op !== 'eq' || negated || !IQL_SORT_VALUE.test(value))) {
+      throw new IqlParseError('sort takes attr.<key> or attr.<key>:desc (searchable fields only).', token, position + 1);
+    }
+    if (IQL_ATTR_FIELD.test(field) && op !== 'eq' && op !== 'neq' && value.includes(',')) {
+      throw new IqlParseError(`Field "${field}" compares with a single value, not a list.`, token, position + 1);
     }
     if ((field === 'priority' || field === 'updated') && value.includes(',')) {
       throw new IqlParseError(`Field "${field}" accepts a single value, not a list.`, token, position + 1);

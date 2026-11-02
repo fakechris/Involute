@@ -22,6 +22,7 @@ import { isEditableTarget } from '../components/IssueDrawerHost';
 
 import { looksLikeIql } from '../board/iql-eval';
 import {
+  BOARD_FIELDS_QUERY,
   BOARD_PAGE_QUERY,
   COMMENT_DELETE_MUTATION,
   COMMENT_CREATE_MUTATION,
@@ -33,6 +34,8 @@ import {
 } from '../board/queries';
 import type {
   BoardGroupBy,
+  FieldDefinitionSummary,
+  FieldValue,
   BoardIssueGroup,
   BoardPageQueryData,
   BoardPageQueryVariables,
@@ -65,7 +68,7 @@ import { QuickPicker, type QuickPickerOption } from '../components/QuickPicker';
 import { isGotoChordPending } from '../app/goto-chord';
 import { BOARD_PICKER_EVENT } from './board-picker-event';
 import { fieldChange, type FieldUndoChange } from '../undo/field-gesture';
-import { isBugIssue, useCloseReason, type WorkResolution } from '../components/CloseReasonDialog';
+import { isBugIssue, supersededPrefill, useCloseReason, type WorkResolution } from '../components/CloseReasonDialog';
 import {
   ACTIVE_TEAM_STORAGE_KEY,
   buildCommittedIssueFilter,
@@ -94,6 +97,7 @@ import {
   createSavedBoardViewId,
   getDefaultBoardViewState,
   groupIssuesBy,
+  groupableFields,
   readSavedBoardViews,
   dispatchApplyBoardView,
   readStoredBoardViewState,
@@ -258,6 +262,7 @@ export function BoardPage() {
   const boardQueryVariables = useMemo<BoardPageQueryVariables>(
     () => ({
       first: ISSUE_PAGE_SIZE,
+      orderBy: 'UPDATED' as const,
       ...(queryTeamKey ? { teamFilter: { key: { eq: queryTeamKey } } } : {}),
       ...(looksLikeIql(effectiveBoardQuery) ? { query: effectiveBoardQuery } : {}),
       filter: {
@@ -357,6 +362,7 @@ export function BoardPage() {
   const [isReportIncidentOpen, setIsReportIncidentOpen] = useState(false);
   const [reportBugPrefill, setReportBugPrefill] = useState({ description: '', title: '' });
   const [createTitle, setCreateTitle] = useState('');
+  const [createAttributes, setCreateAttributes] = useState<Record<string, FieldValue>>({});
   const [createDescription, setCreateDescription] = useState('');
   const [createPlacement, setCreatePlacement] = useState<CreatePlacement | null>(null);
   const [placementSource, setPlacementSource] = useState<PlacementSource | null>(null);
@@ -577,6 +583,7 @@ export function BoardPage() {
     });
   const openCreateDialog = (context: CreatePlacement | null = null, title = '') => {
     const initial = initialPlacement(context);
+    setCreateAttributes({});
     setCreateTitle(title);
     setCreateDescription('');
     setCreateKind('ISSUE');
@@ -1156,9 +1163,15 @@ export function BoardPage() {
 
   const columns = useMemo(() => getBoardColumns(selectedTeam, visibleIssues), [selectedTeam, visibleIssues]);
   const issuesByState = useMemo(() => groupIssuesByState(boardVisibleIssues, columns), [boardVisibleIssues, columns]);
+  // Searchable list / yes-no / person fields the board can group by (INV-1505).
+  const { data: boardFieldsData } = useQuery<{ applicableFieldDefinitions: FieldDefinitionSummary[] }, { teamId: string }>(BOARD_FIELDS_QUERY, {
+    variables: { teamId: selectedTeam?.id ?? '' },
+    skip: !selectedTeam?.id,
+  });
+  const groupFields = useMemo(() => groupableFields(boardFieldsData?.applicableFieldDefinitions ?? []), [boardFieldsData]);
   const issueGroups = useMemo(
-    () => groupIssuesBy(boardVisibleIssues, boardViewState.groupBy, selectedTeam, users, labels),
-    [boardVisibleIssues, boardViewState.groupBy, selectedTeam, users, labels],
+    () => groupIssuesBy(boardVisibleIssues, boardViewState.groupBy, selectedTeam, users, labels, groupFields),
+    [boardVisibleIssues, boardViewState.groupBy, selectedTeam, users, labels, groupFields],
   );
   const activeIssue = useMemo(
     () => visibleIssues.find((issue) => issue.id === activeIssueId) ?? null,
@@ -1177,6 +1190,17 @@ export function BoardPage() {
   const nextBoardIssue =
     selectedBoardIssueIndex >= 0 ? boardVisibleIssues[selectedBoardIssueIndex + 1] ?? null : null;
   const hasMoreIssues = !isTeamSwitching && (queryData?.issues.pageInfo.hasNextPage ?? false);
+
+  // A column only holds what the board has loaded (200 at a time). The board
+  // query also returns how many each state really has under the same filter,
+  // so a column never looks empty while its items are on a later page (INV-1516).
+  const unloadedByState = useMemo(() => {
+    const totals = Array.isArray(queryData?.issueStateCounts) ? queryData.issueStateCounts : [];
+    if (!totals.length) return {} as Record<string, number>;
+    const loaded: Record<string, number> = {};
+    for (const issue of queryData?.issues.nodes ?? []) loaded[issue.state.id] = (loaded[issue.state.id] ?? 0) + 1;
+    return Object.fromEntries(totals.map((row) => [row.stateId, Math.max(0, row.count - (loaded[row.stateId] ?? 0))]));
+  }, [queryData]);
 
   useEffect(() => {
     if (!selectedIssueId || isBacklogView) {
@@ -2032,6 +2056,8 @@ export function BoardPage() {
     const answer = await askCloseReason({
       title: closing.length === 1 ? `Cancel ${closing[0]!.identifier}` : `Cancel ${closing.length} items`,
       needsReason: closing.some(isBugIssue),
+      // An item replaced by other work arrives with its resolution and reason filled in (INV-1498).
+      ...(closing.length === 1 && supersededPrefill(closing[0]!) ? { prefill: supersededPrefill(closing[0]!)! } : {}),
     });
     if (!answer) return null;
     return { resolution: answer.resolution, ...(answer.reason ? { reason: answer.reason } : {}) };
@@ -2090,6 +2116,17 @@ export function BoardPage() {
       ...(update.foundInSha !== undefined ? { foundInSha: update.foundInSha } : {}),
       ...(update.kind ? { kind: update.kind } : {}),
     }));
+  }
+
+  async function persistFieldsChange(issue: IssueSummary, attributes: Record<string, FieldValue | null>) {
+    await persistIssueUpdate(issue, { attributes }, (current) => {
+      const next: Record<string, FieldValue> = { ...(current.attributes ?? {}) };
+      for (const [key, value] of Object.entries(attributes)) {
+        if (value === null) delete next[key];
+        else next[key] = value;
+      }
+      return { ...current, attributes: next };
+    });
   }
 
   async function persistAssigneeChange(issue: IssueSummary, assigneeId: string | null) {
@@ -2245,6 +2282,7 @@ export function BoardPage() {
             parentId: createPlacement.parentId,
             ...(createKind !== 'ISSUE' ? { kind: createKind } : {}),
             ...(trimmedDescription ? { description: trimmedDescription } : {}),
+            ...(Object.keys(createAttributes).length ? { attributes: createAttributes } : {}),
           },
         },
       });
@@ -2265,6 +2303,7 @@ export function BoardPage() {
       setFocusedIssueId(result.data.issueCreate.issue.id);
       recordDeleteGesture([{ issueId: result.data.issueCreate.issue.id, identifier: result.data.issueCreate.issue.identifier, phase: 'restored', origin: 'created' }]);
       setCreateTitle('');
+      setCreateAttributes({});
       setCreateDescription(createKind === 'DECISION' ? DECISION_TEMPLATE : '');
       if (createMore) {
         // Keep the placement for the next one, as Linear's "Create more" does.
@@ -2893,6 +2932,7 @@ export function BoardPage() {
                 { value: 'priority', label: 'Priority' },
                 { value: 'assignee', label: 'Assignee' },
                 { value: 'label', label: 'Label' },
+                ...groupFields.map((field) => ({ value: `attr:${field.key}` as BoardGroupBy, label: field.label })),
                 { value: 'none', label: 'None' },
               ],
               onChange: (groupBy: BoardGroupBy) => {
@@ -3137,6 +3177,9 @@ export function BoardPage() {
                   collapsed={!!collapsedColumns[column.stateId]}
                   onToggleCollapse={() => toggleColumnCollapse(column.stateId)}
                   issues={issuesByState[column.stateId] ?? EMPTY_ISSUES}
+                  unloadedCount={hasMoreIssues ? unloadedByState[column.stateId] ?? 0 : 0}
+                  loadingMore={isLoadingMoreIssues}
+                  onLoadMore={() => void handleLoadMoreIssues()}
                   onToggleIssueSelection={toggleIssueSelection}
                   selectedIssueIds={selectedIssueIds}
                   onNativeDragStart={(payload) => {
@@ -3295,6 +3338,7 @@ export function BoardPage() {
           onContractSave={persistContractChange}
           onLabelsChange={persistLabelsChange}
           onStructureChange={persistStructureChange}
+          onFieldsChange={persistFieldsChange}
           onAssigneeChange={persistAssigneeChange}
           onCommentCreate={persistCommentCreate}
           onCommentDelete={persistCommentDelete}
@@ -3331,6 +3375,8 @@ export function BoardPage() {
         onSubmit={(event) => void handleCreateIssueSubmit(event)}
         onTitleChange={setCreateTitle}
         onDescriptionChange={setCreateDescription}
+        attributes={createAttributes}
+        onAttributesChange={setCreateAttributes}
         onTeamChange={(teamKey) => setPendingTeamKey(teamKey === activeTeamKey ? null : teamKey)}
         onReportBug={() => {
           // Bug from the create drawer: carry what was typed over to Report bug (INV-1132).

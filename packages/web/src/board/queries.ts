@@ -1,7 +1,7 @@
 import { gql } from '@apollo/client';
 
 export const BOARD_PAGE_QUERY = gql`
-  query BoardPage($query: String, $first: Int!, $after: String, $filter: IssueFilter, $teamFilter: TeamFilter, $withDescriptions: Boolean! = false) {
+  query BoardPage($query: String, $first: Int!, $after: String, $filter: IssueFilter, $teamFilter: TeamFilter, $withDescriptions: Boolean! = false, $orderBy: IssueOrder) {
     projectSummary(teamFilter: $teamFilter) {
       totalCount
       noRepositoryCount
@@ -58,7 +58,9 @@ export const BOARD_PAGE_QUERY = gql`
         name
       }
     }
-    issues(first: $first, after: $after, filter: $filter, query: $query) {
+    # Per-state totals under the same filter (INV-1516), read with the list so they never drift apart.
+    issueStateCounts(filter: $filter, query: $query) { stateId count }
+    issues(first: $first, after: $after, filter: $filter, query: $query, orderBy: $orderBy) {
       nodes {
         id
         identifier
@@ -73,6 +75,8 @@ export const BOARD_PAGE_QUERY = gql`
         foundInSha
         kind
         repository
+        attributes
+        supersededBy { id identifier title }
         claim {
           id
           leaseUntil
@@ -202,6 +206,7 @@ export const ISSUE_UPDATE_MUTATION = gql`
         repository
         commitmentStatus
         resolution
+        attributes
         outcome
         scope
         constraints
@@ -491,6 +496,8 @@ export const ISSUE_DETAIL_QUERY = gql`
       id
       revision
       commitmentStatus
+      attributes
+      fieldDefinitions { key label description type required searchable options { value label archived } }
       description
       outcome
       scope
@@ -557,6 +564,8 @@ export const ISSUE_PAGE_QUERY = gql`
       commitmentStatus
       resolution
       supersededBy { id identifier title }
+      attributes
+      fieldDefinitions { key label description type required options { value label archived } }
       outcome
       scope
       constraints
@@ -2178,3 +2187,14 @@ export const INCIDENTS_PAGE_QUERY = gql`
     }
   }
 `;
+
+/** Field definitions a team's board can group by (INV-1505); the page keeps the searchable list / yes-no / person ones. */
+export const BOARD_FIELDS_QUERY = gql`
+  query BoardFields($teamId: String!) {
+    applicableFieldDefinitions(teamId: $teamId, kind: ISSUE, allTypes: true) {
+      key label description type required searchable
+      options { value label archived }
+    }
+  }
+`;
+

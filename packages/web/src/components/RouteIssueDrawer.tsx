@@ -25,7 +25,7 @@ import type {
 import { mergeIssueWithPreservedComments } from '../board/utils';
 import { fieldChange } from '../undo/field-gesture';
 import { recordCommentGesture, recordDeleteGesture, recordFieldGesture } from '../undo/status-undo';
-import { isBugIssue, useCloseReason, type WorkResolution } from './CloseReasonDialog';
+import { isBugIssue, supersededPrefill, useCloseReason, type WorkResolution } from './CloseReasonDialog';
 import type { ContractValues } from './ContractSection';
 import { IssueDetailDrawer } from './IssueDetailDrawer';
 
@@ -120,7 +120,8 @@ export function RouteIssueDrawer({ issueRef, onClose }: { issueRef: string; onCl
     // Canceling asks why first (INV-1118), as on the issue page.
     let close: { resolution?: WorkResolution; reason?: string } = {};
     if (state.type === 'CANCELED' && current.state.type !== 'CANCELED') {
-      const answer = await askCloseReason({ title: `Cancel ${current.identifier}`, needsReason: isBugIssue(current) });
+      const prefill = supersededPrefill(current);
+      const answer = await askCloseReason({ title: `Cancel ${current.identifier}`, needsReason: isBugIssue(current), ...(prefill ? { prefill } : {}) });
       if (!answer) return;
       close = { resolution: answer.resolution, ...(answer.reason ? { reason: answer.reason } : {}) };
     }

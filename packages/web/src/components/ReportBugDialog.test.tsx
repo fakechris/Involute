@@ -8,6 +8,7 @@ const mockRunBugReport = vi.fn();
 const mockRunFileUpload = vi.fn();
 const similarBugs = vi.fn();
 const serverBuildSha = vi.fn();
+const applicableFields = vi.fn();
 
 afterEach(() => {
   cleanup();
@@ -18,6 +19,7 @@ beforeEach(() => {
   window.localStorage.clear();
   similarBugs.mockReturnValue([]);
   serverBuildSha.mockReturnValue(null);
+  applicableFields.mockReturnValue([]);
   mockRunBugReport.mockResolvedValue({
     data: {
       bugReport: {
@@ -42,6 +44,9 @@ vi.mock('@apollo/client/react', () => ({
     if (options?.skip) return { data: undefined, loading: false };
     if (docStr.includes('SimilarBugs')) {
       return { data: { similarBugs: similarBugs(options?.variables?.title) }, loading: false };
+    }
+    if (docStr.includes('ApplicableFields')) {
+      return { data: { applicableFieldDefinitions: applicableFields(options?.variables) }, loading: false };
     }
     if (docStr.includes('ServerBuild')) {
       return { data: { serverBuild: { buildSha: serverBuildSha(), serverVersion: '0.0.0' } }, loading: false };
@@ -239,5 +244,24 @@ describe('ReportBugDialog (INV-749)', () => {
   it('renders nothing when closed', () => {
     renderDialog({ isOpen: false });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows the Type Bug fields for the chosen place and sends their values; a required one blocks a placed report (INV-1505)', async () => {
+    applicableFields.mockReturnValue([{ key: 'env', label: 'Environment', description: null, type: 'TEXT', required: true, searchable: false, options: [] }]);
+    renderDialog();
+    fillRequired();
+    fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'fakechris/Involute' } });
+    fireEvent.change(screen.getByLabelText('Location'), { target: { value: 'milestone-5' } });
+    const submit = screen.getByRole('button', { name: 'Report bug' });
+    expect(screen.getByRole('note')).toHaveTextContent('Required before it is committed: Environment');
+    expect(submit).toBeDisabled();
+    expect(applicableFields).toHaveBeenCalledWith(expect.objectContaining({ teamId: 'team-1', kind: 'ISSUE', type: 'bug', parentId: 'milestone-5' }));
+    const env = screen.getByRole('textbox', { name: 'Environment' });
+    fireEvent.change(env, { target: { value: 'Safari 18' } });
+    fireEvent.blur(env);
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    await waitFor(() => expect(mockRunBugReport).toHaveBeenCalledTimes(1));
+    expect(mockRunBugReport.mock.calls[0]![0].variables.input.attributes).toEqual({ env: 'Safari 18' });
   });
 });

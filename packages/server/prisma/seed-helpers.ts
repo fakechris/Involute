@@ -125,6 +125,7 @@ export async function resetAndSeed(prisma: PrismaClient): Promise<void> {
   await prisma.actorAudit.deleteMany();
   await prisma.workflowPolicy.deleteMany();
   await prisma.agentTrust.deleteMany();
+  await prisma.fieldDefinition.deleteMany();
   await prisma.decisionReceipt.deleteMany();
   await prisma.commentMention.deleteMany();
   await prisma.agentRequest.deleteMany();
