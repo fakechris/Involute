@@ -2616,16 +2616,28 @@ kbd {
   min-width: 0;
 }
 
+.issue-fields {
+  gap: 8px;
+}
+
+/* Label above a full-width control, like Project / Location: the rail is
+   narrow, and a second label column beside the control squeezed it (INV-1514). */
 .issue-fields__row {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
   font-size: 13px;
 }
 
+.issue-fields__row select,
+.issue-fields__row input:not([type='checkbox']) {
+  width: 100%;
+  min-width: 0;
+}
+
 .issue-fields__label {
-  width: 92px;
-  flex-shrink: 0;
   color: var(--fg-dim);
   overflow: hidden;
   text-overflow: ellipsis;
