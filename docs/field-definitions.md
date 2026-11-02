@@ -1,11 +1,14 @@
 # Field definitions: work-item fields as configuration (design, INV-1500)
 
-Status: **design, not implemented**. Today every work-item field is a Prisma
+Status: **stage 1 implemented (INV-1503)** — model, validator, GraphQL / MCP
+read and write, the GIN index, audit snapshots and the issue page Fields
+section. Settings pages and FieldValueIndex: INV-1504; IQL, board grouping,
+autonomy conditions, dialogs and import: INV-1505. Today every work-item field is a Prisma
 column; adding one means a migration, GraphQL and MCP changes, the parity and
 human-surface guards, a web form and a release. This page designs the layer
 that makes a new field a piece of configuration instead, while keeping every
 field the server reasons about as a column. Research: INV-1499 (attachment).
-Decision draft: INV-1501.
+Decision: INV-1501.
 
 ## 1. What we are choosing between
 

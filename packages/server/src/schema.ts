@@ -3,7 +3,7 @@ import { loadHandledForYou } from './autonomy-gate.js';
 import type { AgentTrustLevel } from '@prisma/client';
 import { TRUST_LEVEL_DESCRIPTIONS, adviseTrust, allowedAt, loadAgentTrustMetrics, readAgentTrust, setAgentTrust } from './agent-trust.js';
 import { WORKSPACE_SETTINGS_ID } from './workspace-access.js';
-import type { AutonomyScope } from '@prisma/client';
+import type { AutonomyScope, FieldDefinition } from '@prisma/client';
 import { POLICY_SCOPE_INVALID_MESSAGE, autonomyToGraphQL, clearWorkflowPolicy, loadAutonomyFor, observeLabelFor, readAutonomySettings, setWorkflowPolicy } from './autonomy-service.js';
 import type { SavedView } from '@prisma/client';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
@@ -171,6 +171,7 @@ import {
   type AgentProfile as AgentProfileResult,
   type WorkProvenance as WorkProvenanceResult,
 } from './agent-directory.js';
+import { type SetFieldDefinitionInput, FIELD_SCOPE_INVALID_MESSAGE, deactivateFieldDefinition, fieldDefinitionView, readActiveDefinitions, readAttributes, resolveDefinitionsFor, setFieldDefinition, typeNameOf } from './field-definitions.js';
 import { createComment, createIssue, createIssueInTransaction, deleteComment, deleteIssue, mentionTexts, updateIssue } from './issue-service.js';
 import { isActionableNotification, markNotificationRead, projectWorkNotifications, resolveAttentionNotifications } from './notification-service.js';
 import { auditMergedPrTraceability } from './traceability-audit.js';
@@ -464,6 +465,8 @@ const typeDefs = /* GraphQL */ `
     autonomySettings(scope: AutonomyScope!, scopeId: String!): AutonomySettings!
     "Handled for you (INV-1491): automatic policy decisions of the last days on work you may read, newest first."
     handledForYou(days: Int): [HandledItem!]!
+    "Field definitions of one scope (INV-1503); active only unless includeInactive. Signed-in people only."
+    fieldDefinitions(scope: AutonomyScope!, scopeId: String!, includeInactive: Boolean): [FieldDefinition!]!
     issue(id: String!): Issue
     """
     The work items behind references in prose (INV-1466): a batch of
@@ -577,6 +580,10 @@ const typeDefs = /* GraphQL */ `
     workflowPolicySet(input: WorkflowPolicySetInput!): WorkflowPolicyPayload!
     "Remove a team or project override so it inherits again (INV-1489)."
     workflowPolicyClear(input: WorkflowPolicyClearInput!): WorkflowPolicyClearPayload!
+    "Create or change a field definition (INV-1503): Admin for the workspace, team Owner for a team or project. A new version; values stay."
+    fieldDefinitionSet(input: FieldDefinitionSetInput!): FieldDefinitionPayload!
+    "Deactivate a field definition (INV-1503); values stay on items and return on reactivation."
+    fieldDefinitionDeactivate(input: FieldDefinitionDeactivateInput!): FieldDefinitionPayload!
     "Return to me (INV-1491): take back an amendment the Autonomy Gate accepted; the contract reverts and the proposal waits for you again."
     contractAmendmentReopen(input: ContractAmendmentReopenInput!): ContractAmendmentReopenPayload!
     "Promote or demote an agent's trust level with a reason (the actor's owner, a team Owner over it, or an Admin; INV-1490)."
@@ -1337,6 +1344,10 @@ const typeDefs = /* GraphQL */ `
     Read-only here; the same object is in MCP work_get_context.
     """
     autonomy: Autonomy!
+    "Values of the field definitions that apply to this item, { key: value } (INV-1503, docs/field-definitions.md)."
+    attributes: Json!
+    "The active field definitions that apply to this item's Kind × Type, nearest scope first resolved (project → team → workspace)."
+    fieldDefinitions: [FieldDefinition!]!
     links(type: WorkLinkType): WorkLinkConnection!
     """
     Committed work that still blocks this item: incoming BLOCKS links whose
@@ -2231,9 +2242,13 @@ const typeDefs = /* GraphQL */ `
     repository: String
     "Required unless kind is PROJECT (INV-744): id or identifier of the PROJECT (No milestone), MILESTONE, EPIC or ISSUE it goes under. The repository is inherited when omitted."
     parentId: String
+    "Field values { key: value } checked against the definitions that apply (INV-1503)."
+    attributes: Json
   }
 
   input BugReportInput {
+    "Field values { key: value } (INV-1503); required fields for Type Bug must be set when the report is placed."
+    attributes: Json
     teamId: String!
     title: String!
     description: String
@@ -2467,6 +2482,8 @@ const typeDefs = /* GraphQL */ `
   }
 
   input IssueUpdateInput {
+    "Partial field values { key: value } merged onto the stored ones; null clears a key (INV-1503)."
+    attributes: Json
     expectedRevision: Int
     stateId: String
     labelIds: [String!]
@@ -2684,6 +2701,90 @@ const typeDefs = /* GraphQL */ `
     completionReply: String
   }
 
+  enum FieldType {
+    TEXT
+    NUMBER
+    BOOLEAN
+    DATE
+    ENUM
+    MULTI_ENUM
+    WORK_REF
+    USER_REF
+    URL
+  }
+
+  type FieldOption {
+    value: String!
+    label: String!
+    archived: Boolean
+  }
+
+  type FieldAppliesTo {
+    kinds: [WorkKind!]!
+    "Lower-case Type names (bug, feature, improvement, research, incident) or ['any']."
+    types: [String!]!
+  }
+
+  "A work-item field that is configuration, not a column (INV-1503, docs/field-definitions.md)."
+  type FieldDefinition {
+    id: ID!
+    scope: AutonomyScope!
+    scopeId: String!
+    key: String!
+    label: String!
+    description: String
+    type: FieldType!
+    options: [FieldOption!]!
+    appliesTo: FieldAppliesTo!
+    required: Boolean!
+    defaultValue: Json
+    searchable: Boolean!
+    active: Boolean!
+    version: Int!
+  }
+
+  input FieldOptionInput {
+    value: String!
+    label: String
+    archived: Boolean
+  }
+
+  input FieldAppliesToInput {
+    kinds: [WorkKind!]!
+    "Lower-case Type names, or omit for any Type."
+    types: [String!]
+  }
+
+  input FieldDefinitionSetInput {
+    scope: AutonomyScope!
+    "WORKSPACE: the workspace id; TEAM: a team id; PROJECT: a committed PROJECT work id."
+    scopeId: String!
+    "snake_case, unique among the active fields of the scope."
+    key: String!
+    label: String!
+    description: String
+    type: FieldType!
+    options: [FieldOptionInput!]
+    appliesTo: FieldAppliesToInput!
+    required: Boolean
+    defaultValue: Json
+    searchable: Boolean
+    reason: String!
+  }
+
+  input FieldDefinitionDeactivateInput {
+    scope: AutonomyScope!
+    scopeId: String!
+    key: String!
+    reason: String!
+  }
+
+  type FieldDefinitionPayload {
+    success: Boolean!
+    message: String
+    definition: FieldDefinition
+  }
+
   input WorkflowPolicyClearInput {
     scope: AutonomyScope!
     scopeId: String!
@@ -2891,6 +2992,8 @@ const typeDefs = /* GraphQL */ `
   }
 
   input WorkProposeInput {
+    "Field values { key: value } (INV-1503); a candidate may leave required ones empty, commit refuses until they are set."
+    attributes: Json
     teamId: String!
     title: String!
     description: String
@@ -2935,6 +3038,8 @@ const typeDefs = /* GraphQL */ `
   }
 
   input WorkCommitInput {
+    "Field values to fill or correct while committing (INV-1503); required ones must be set."
+    attributes: Json
     expectedRevision: Int!
     "1 (Urgent) to 4 (Low). Required to commit a bug: it sets the SLA (INV-750)."
     priority: Int
@@ -3275,6 +3380,19 @@ const resolvers = {
       if (!context.isTrustedSystem && context.viewer?.actorKind !== 'HUMAN') throw createValidationError('Autonomy settings are read by signed-in people; agents read Issue.autonomy (INV-1489).');
       if (args.scope === 'WORKSPACE' && args.scopeId !== WORKSPACE_SETTINGS_ID) throw createValidationError(POLICY_SCOPE_INVALID_MESSAGE);
       return readAutonomySettings(context.prisma, args);
+    },
+    fieldDefinitions: async (_parent: unknown, args: { scope: AutonomyScope; scopeId: string; includeInactive?: boolean | null }, context: GraphQLContext) => {
+      requireAuthentication(context);
+      if (args.scope === 'TEAM') await assertCanReadTeam(context.prisma, context, args.scopeId);
+      if (args.scope === 'PROJECT') {
+        const project = await context.prisma.issue.findUnique({ where: { id: args.scopeId }, select: { teamId: true } });
+        if (!project) throw createValidationError(FIELD_SCOPE_INVALID_MESSAGE);
+        await assertCanReadTeam(context.prisma, context, project.teamId);
+      }
+      const rows = args.includeInactive
+        ? await context.prisma.fieldDefinition.findMany({ where: { scope: args.scope, scopeId: args.scopeId }, orderBy: [{ key: 'asc' }, { version: 'desc' }] })
+        : await readActiveDefinitions(context.prisma, args.scope, args.scopeId);
+      return rows.map(fieldDefinitionToGraphQL);
     },
     workspaceSettings: async (_parent: unknown, _args: Record<string, never>, context: GraphQLContext) => {
       assertSettingsAdmin(context);
@@ -5302,6 +5420,26 @@ const resolvers = {
         const policy = await setWorkflowPolicy(context.prisma, input, context.viewer?.id ?? null);
         return { success: true as const, policy };
       }, { success: false as const, policy: null }),
+    fieldDefinitionSet: async (
+      _parent: unknown,
+      args: { input: SetFieldDefinitionInput },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; definition: unknown }> =>
+      runMutationWithReason(async () => {
+        await assertCanManageFieldScope(context, args.input.scope, args.input.scopeId);
+        const definition = await setFieldDefinition(context.prisma, args.input, context.viewer?.id ?? null);
+        return { success: true as const, definition: fieldDefinitionToGraphQL(definition) };
+      }, { success: false as const, definition: null }),
+    fieldDefinitionDeactivate: async (
+      _parent: unknown,
+      args: { input: { scope: AutonomyScope; scopeId: string; key: string; reason: string } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; definition: unknown }> =>
+      runMutationWithReason(async () => {
+        await assertCanManageFieldScope(context, args.input.scope, args.input.scopeId);
+        const definition = await deactivateFieldDefinition(context.prisma, args.input, context.viewer?.id ?? null);
+        return { success: true as const, definition: fieldDefinitionToGraphQL(definition) };
+      }, { success: false as const, definition: null }),
     agentTrustSet: async (
       _parent: unknown,
       args: { input: { actorId: string; level: AgentTrustLevel; reason: string } },
@@ -6088,6 +6226,18 @@ const resolvers = {
         select: { reason: true },
       });
       return audit?.reason ?? null;
+    },
+    attributes: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
+      if (parent.attributes !== undefined) return readAttributes(parent.attributes);
+      const row = await context.prisma.issue.findUnique({ where: { id: parent.id }, select: { attributes: true } });
+      return readAttributes(row?.attributes);
+    },
+    fieldDefinitions: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
+      const definitions = await resolveDefinitionsFor(context.prisma, {
+        id: parent.id, teamId: parent.teamId, kind: parent.kind, parentId: parent.parentId ?? null,
+        typeName: await typeNameOf(context.prisma, parent.id),
+      });
+      return definitions.map(fieldDefinitionToGraphQL);
     },
     autonomy: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
       const view = await loadAutonomyFor(context.prisma, { id: parent.id, teamId: parent.teamId, kind: parent.kind, parentId: parent.parentId ?? null }, context.viewer ? { id: context.viewer.id, actorKind: context.viewer.actorKind } : null);
@@ -6948,4 +7098,25 @@ async function agentTrustView(prisma: GraphQLContext['prisma'], actorId: string)
     suggestedLevel: advice.suggestedLevel,
     warning: advice.warning,
   };
+}
+
+/** Field definitions are configuration a person owns (INV-1503): Admin for the workspace, team Owner (or Admin) for a team or project. */
+async function assertCanManageFieldScope(context: GraphQLContext, scope: AutonomyScope, scopeId: string): Promise<void> {
+  if (context.authMode === 'agent-token' || context.viewer?.actorKind === 'AGENT') throw createValidationError('Field definitions are set by people (Admin or team Owner); agents write values through attributes (INV-1503).');
+  if (scope === 'WORKSPACE') {
+    assertWorkspaceAdmin(context);
+    return;
+  }
+  if (scope === 'TEAM') {
+    await assertCanManageTeam(context.prisma, context, scopeId);
+    return;
+  }
+  const project = await context.prisma.issue.findUnique({ where: { id: scopeId }, select: { teamId: true } });
+  if (!project) throw createValidationError(FIELD_SCOPE_INVALID_MESSAGE);
+  await assertCanManageTeam(context.prisma, context, project.teamId);
+}
+
+function fieldDefinitionToGraphQL(definition: FieldDefinition) {
+  const view = fieldDefinitionView(definition);
+  return { ...view, appliesTo: { kinds: view.appliesTo.kinds, types: view.appliesTo.types === 'any' ? ['any'] : view.appliesTo.types } };
 }

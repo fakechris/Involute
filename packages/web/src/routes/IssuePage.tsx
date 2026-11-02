@@ -36,6 +36,7 @@ import type {
   ProjectsQueryVariables,
   CyclesQueryData,
   CyclesQueryVariables,
+  FieldValue,
 } from '../board/types';
 import { ActorBadge } from '../components/ActorBadge';
 import { ContractSection, type ContractValues } from '../components/ContractSection';
@@ -48,6 +49,7 @@ import { ClaimControl } from '../components/ClaimControl';
 import { IssueTimeline } from '../components/IssueTimeline';
 import { WorkStructureEditor } from '../components/WorkStructureEditor';
 import { IncidentTimesPanel } from '../components/IncidentTimesPanel';
+import { IssueFieldsPanel } from '../components/IssueFieldsPanel';
 import { toggleLabelId } from '../work/labels';
 import { mergeIssueWithPreservedComments } from '../board/utils';
 import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
@@ -1145,6 +1147,31 @@ export function IssuePage() {
                   disabled={isSavingState}
                   onUpdate={(update) => {
                     void persistIssueUpdate(activeIssue, update, (current) => ({ ...current, ...update })).catch(() => undefined);
+                  }}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {/* Field definitions for this Kind × Type (INV-1503) */}
+          {activeIssue.fieldDefinitions?.length ? (
+            <div className="issue-panel__prop-row issue-panel__prop-row--top">
+              <div className="issue-panel__prop-label">Fields</div>
+              <div className="issue-panel__prop-value">
+                <IssueFieldsPanel
+                  definitions={activeIssue.fieldDefinitions}
+                  attributes={activeIssue.attributes}
+                  people={allUsers}
+                  disabled={isSavingState}
+                  onUpdate={(update) => {
+                    void persistIssueUpdate(activeIssue, update, (current) => {
+                      const next: Record<string, FieldValue> = { ...(current.attributes ?? {}) };
+                      for (const [key, value] of Object.entries(update.attributes)) {
+                        if (value === null) delete next[key];
+                        else next[key] = value;
+                      }
+                      return { ...current, attributes: next };
+                    }).catch(() => undefined);
                   }}
                 />
               </div>

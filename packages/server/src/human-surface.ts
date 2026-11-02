@@ -45,6 +45,8 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   // INV-1489: Administration → Autonomy, Team settings → Autonomy, the project override (docs/autonomy-policy.md §2).
   workflowPolicySet: { kind: 'web', doc: 'WORKFLOW_POLICY_SET_MUTATION', components: ['routes/AutonomyTab.tsx'], label: 'Save autonomy', test: 'routes/AutonomyTab.test.tsx' },
   workflowPolicyClear: { kind: 'web', doc: 'WORKFLOW_POLICY_CLEAR_MUTATION', components: ['routes/AutonomyTab.tsx'], label: 'Inherit from team', test: 'routes/AutonomyTab.test.tsx' },
+  fieldDefinitionSet: { kind: 'gap', tracking: 'INV-1504', note: 'Settings → Administration → Fields and Team settings → Fields ship in stage 2; until then Admins and team Owners call the GraphQL mutation (docs/field-definitions.md §10).' },
+  fieldDefinitionDeactivate: { kind: 'gap', tracking: 'INV-1504', note: 'The deactivate control ships with the Fields settings pages in stage 2.' },
   // INV-1491: a person takes back an amendment the Autonomy Gate accepted, from Handled for you on /todo.
   contractAmendmentReopen: { kind: 'web', doc: 'CONTRACT_AMENDMENT_REOPEN_MUTATION', components: ['routes/AttentionPage.tsx'], label: 'Return to me', test: 'routes/AttentionPage.test.tsx' },
   // INV-1490: Settings → Agents → agent → Trust level.

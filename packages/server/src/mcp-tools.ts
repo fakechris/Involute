@@ -1,6 +1,7 @@
 import { requestNeedInfo, withdrawNeedInfo } from './need-info-service.js';
 import { delegateToAgent } from './autonomy-delegation.js';
 import { autonomyToGraphQL, loadAutonomyFor } from './autonomy-service.js';
+import { fieldDefinitionView, listTeamFieldDefinitions, missingRequiredFields, parseAttributesArg, readAttributes, resolveDefinitionsFor, typeNameOf } from './field-definitions.js';
 import { protocolInfo } from './protocol-info.js';
 import { groupForAction, hidesFromCaller, MCP_TOOL_GROUPS, resolveMcpCall, type McpToolGroup } from './mcp-tool-groups.js';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
@@ -455,6 +456,12 @@ async function callMcpAction(
         }),
         constraints: ['Work access, commitment, active claims and revisions are checked per mutation.', 'Agents stop at Review except committed Research issues; Canceled remains human-only.', 'Committed contracts require a proposed amendment.'],
       };
+      if (args.kind === 'fields') {
+        // Field definitions a team's work can see (INV-1503), for proposal time.
+        const teamId = await resolveTeamIdOrKey(context.prisma, requiredString(args.team_id, 'team_id'));
+        await assertCanReadTeam(context.prisma, context, teamId);
+        return listTeamFieldDefinitions(context.prisma, teamId);
+      }
       if (args.kind === 'incident_summary') {
         // The /incidents numbers (INV-1129), scoped like the web page: readable work, optionally one team.
         const teamRef = optionalString(args.team_id);
@@ -493,7 +500,8 @@ async function callMcpAction(
       bundle.blocks = bundle.blocks.filter((item) => visible.has(item.id));
       const pages = await Promise.all(WORK_SECTIONS.map((section) => readWorkPage(context.prisma, work.id, section, section === 'audits' ? 20 : 10, null, buildReadableIssueWhere(context))));
       const autonomy = autonomyToGraphQL(await loadAutonomyFor(context.prisma, { id: work.id, teamId: work.teamId, kind: work.kind, parentId: work.parentId ?? null }, context.viewer ? { id: context.viewer.id, actorKind: context.viewer.actorKind } : null));
-      return { ...bundle, autonomy, pages: Object.fromEntries(pages.map((page) => [page.section, page])), continuation: 'Call work_get_context(id, section, after=pageInfo.endCursor) while hasNextPage is true.' };
+      const fieldDefinitions = await resolveDefinitionsFor(context.prisma, { id: work.id, teamId: work.teamId, kind: work.kind, parentId: work.parentId ?? null, typeName: await typeNameOf(context.prisma, work.id) });
+      return { ...bundle, autonomy, attributes: readAttributes(work.attributes), field_definitions: fieldDefinitions.map(fieldDefinitionView), pages: Object.fromEntries(pages.map((page) => [page.section, page])), continuation: 'Call work_get_context(id, section, after=pageInfo.endCursor) while hasNextPage is true.' };
     }
     case 'work_list_ready': {
       const readyInput: Parameters<typeof listReadyWork>[1] = {};
@@ -534,6 +542,7 @@ async function callMcpAction(
       assignOptional(proposeInput, 'foundInSha', parseFoundInSha(args.found_in_sha));
       assignOptional(proposeInput, 'repository', optionalString(args.repository));
       assignOptional(proposeInput, 'verification', optionalString(args.verification));
+      assignOptional(proposeInput, 'attributes', parseAttributesArg(args.attributes));
       const kind = optionalString(args.kind);
       if (kind === 'ISSUE' || kind === 'PROJECT' || kind === 'MILESTONE' || kind === 'DECISION' || kind === 'EPIC') {
         proposeInput.kind = kind;
@@ -559,6 +568,10 @@ async function callMcpAction(
       }
       if (namesIncident(proposeInput.labels)) {
         notes.push('Incident declared (INV-1123): committed directly, In Progress (investigating); the person who owns you is the Incident Lead and the team was notified.');
+      }
+      if (created.commitmentStatus === 'CANDIDATE') {
+        const missing = await missingRequiredFields(context.prisma, created);
+        if (missing.length) notes.push(`Required fields still empty: ${missing.map((field) => `${field.key} (${field.label})`).join(', ')}. Set them with work_update(attributes) or the person fills them at commit; commit refuses without them (INV-1503).`);
       }
       if (!created.parentId && created.kind !== 'PROJECT') {
         notes.push('This candidate has no parent. Committing it requires one: pass parent_id now (work_link CONTAINS later), or the human will place it at commit.');
@@ -598,6 +611,7 @@ async function callMcpAction(
         source: optionalString(args.source) ?? 'agent',
       };
       assignOptional(proposeInput, 'verification', optionalString(args.verification));
+      assignOptional(proposeInput, 'attributes', parseAttributesArg(args.attributes));
       assignOptional(proposeInput, 'description', optionalString(args.description));
       assignOptional(proposeInput, 'severity', parseSeverity(args.severity));
       assignOptional(proposeInput, 'reproducibility', parseReproducibility(args.reproducibility));
@@ -670,6 +684,7 @@ async function callMcpAction(
       }
       assignOptional(commitInput, 'stateId', optionalString(args.state_id));
       assignOptional(commitInput, 'verification', optionalString(args.verification));
+      assignOptional(commitInput, 'attributes', parseAttributesArg(args.attributes));
       assignOptional(commitInput, 'idempotencyKey', optionalString(args.idempotency_key));
       const committed = await commitWork(
         context.prisma,
@@ -749,6 +764,7 @@ async function callMcpAction(
         updateInput.kind = kind as NonNullable<typeof updateInput.kind>;
       }
       assignOptional(updateInput, 'priority', optionalNumber(args.priority));
+      assignOptional(updateInput, 'attributes', parseAttributesArg(args.attributes));
       if (args.superseded_by !== undefined) updateInput.supersededById = args.superseded_by === null ? null : requiredString(args.superseded_by, 'superseded_by');
       const severity = parseSeverity(args.severity);
       if (severity !== undefined) updateInput.severity = severity;
@@ -1239,8 +1255,8 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_catalog',
     annotations: { readOnlyHint: true, destructiveHint: false },
-    description: 'Discover readable teams, states, labels, actors and cycles with pagination, or credential capabilities and policy constraints. kind "incident_summary" returns the /incidents numbers (INV-1129): open/resolved counts by severity and project, MTTR and MTTM as plain averages with sample counts, follow-up completion and overdue counts, and the incident list (team_id narrows to one team and accepts the team id or the team key). Human owners and agent executors are distinct. Catalog visibility uses the web API access rules.',
-    inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: [...CATALOG_KINDS, 'capabilities', 'incident_summary'] }, team_id: { type: 'string', description: 'The team to narrow to: a team id (UUID) or a team key (e.g. INV).' }, first: { type: 'integer', minimum: 1, maximum: 200 }, after: { type: 'string' } }, required: ['kind'] },
+    description: 'Discover readable teams, states, labels, actors and cycles with pagination, or credential capabilities and policy constraints. kind "fields" (needs team_id) lists the field definitions the work of a team can see — workspace, team and per-project — with type, options, Kind × Type and required (INV-1503). kind "incident_summary" returns the /incidents numbers (INV-1129): open/resolved counts by severity and project, MTTR and MTTM as plain averages with sample counts, follow-up completion and overdue counts, and the incident list (team_id narrows to one team and accepts the team id or the team key). Human owners and agent executors are distinct. Catalog visibility uses the web API access rules.',
+    inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: [...CATALOG_KINDS, 'capabilities', 'incident_summary', 'fields'] }, team_id: { type: 'string', description: 'The team to narrow to: a team id (UUID) or a team key (e.g. INV).' }, first: { type: 'integer', minimum: 1, maximum: 200 }, after: { type: 'string' } }, required: ['kind'] },
   },
   {
     name: 'work_read_page',
@@ -1318,6 +1334,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
       type: 'object',
       properties: {
         team: { type: 'string', description: 'Team key or UUID' },
+        attributes: { type: 'object', description: 'Field values { key: value } for the field definitions that apply to this Kind × Type (INV-1503; list them with work_catalog(kind: "fields", team_id)). A candidate may leave required ones empty — the result warns — but commit refuses until they are set; a bug or incident committed on filing must carry them.' },
         title: {
           type: 'string',
           description: 'Clear deliverable title. Do NOT prefix with [已交付], [待办], or status tags — status is tracked via the Involute state machine.',
@@ -1392,6 +1409,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
       type: 'object',
       properties: {
         team: { type: 'string', description: 'Team key or UUID' },
+        attributes: { type: 'object', description: 'Field values { key: value } for the field definitions that apply to Type Bug (INV-1503; work_catalog(kind: "fields", team_id)). The bug is committed on filing, so required fields must be set here.' },
         title: { type: 'string', description: 'What is broken.' },
         description: {
           type: 'string',
@@ -1455,6 +1473,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        attributes: { type: 'object', description: 'Field values to fill or correct while committing (INV-1503); required fields for the Kind × Type must be set.' },
         id: { type: 'string' },
         expected_revision: { type: 'integer' },
         parent_id: { type: 'string', description: 'Identifier (e.g. INV-12) or UUID of the PROJECT, MILESTONE, EPIC or ISSUE to place this work under while committing.' },
@@ -1531,6 +1550,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         id: { type: 'string' },
         expected_revision: { type: 'integer' },
         parent_id: { type: 'string', description: 'Move under this parent (identifier or UUID). Requires access to both items; same-team/repository, hierarchy and cycle rules apply. Cannot detach committed work.' },
+        attributes: { type: ['object', 'null'], description: 'Field values { key: value } for the field definitions that apply to this item (INV-1503; see work_get_context field_definitions or work_catalog(kind: "fields")). Merged onto stored values; a null value clears that key. Not a contract field, so allowed on committed work.' },
         superseded_by: { type: ['string', 'null'], description: 'The item that replaced this one (identifier or UUID; INV-1498) — an overturned DECISION names the decision that superseded it. Same team, not itself, no loop; null clears. Not a contract field, so allowed on committed work; a person then closes the item with the reason prefilled.' },
         title: { type: 'string' },
         label_ids: { type: 'array', items: { type: 'string' }, description: 'Replace labels with these IDs; [] clears labels. At most one Type label.' },

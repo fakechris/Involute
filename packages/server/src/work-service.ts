@@ -45,6 +45,7 @@ export async function claimIssueRevision(
 }
 
 const ISSUE_SNAPSHOT_SELECT = {
+  attributes: true,
   supersededById: true,
   deliveryRootId: true,
   deliveryUnitKey: true,
@@ -82,6 +83,7 @@ export type IssueSnapshot = Prisma.IssueGetPayload<{ select: typeof ISSUE_SNAPSH
 
 export function snapshotIssue(issue: IssueSnapshot): Prisma.InputJsonValue {
   return {
+    attributes: (issue.attributes ?? {}) as Prisma.InputJsonValue,
     supersededById: issue.supersededById,
     deliveryRootId: issue.deliveryRootId,
     deliveryUnitKey: issue.deliveryUnitKey,
@@ -165,6 +167,7 @@ export async function recordWorkAudit(
 
 export function selectIssueSnapshot(issue: Issue): IssueSnapshot {
   return {
+    attributes: issue.attributes,
     supersededById: issue.supersededById,
     deliveryRootId: issue.deliveryRootId,
     deliveryUnitKey: issue.deliveryUnitKey,

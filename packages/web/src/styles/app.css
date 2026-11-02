@@ -2591,6 +2591,53 @@ kbd {
   color: var(--fg-dim);
 }
 
+/* Fields from field definitions on the issue page (INV-1503) */
+.issue-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.issue-fields__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.issue-fields__label {
+  width: 92px;
+  flex-shrink: 0;
+  color: var(--fg-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.issue-fields__required {
+  color: var(--fg-dim);
+}
+
+.issue-fields__required--missing {
+  color: var(--accent);
+}
+
+.issue-fields__multi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.issue-fields__ref {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
 /* Divider */
 .issue-panel__divider {
   height: 1px;
