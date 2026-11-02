@@ -20,7 +20,7 @@ describe('buildIssueWhere', () => {
 
   it('filters by commitment status so the board can project committed work only', () => {
     expect(buildIssueWhere({ commitmentStatus: 'COMMITTED' }, null)).toEqual({
-      AND: [{ OR: [{ supersededById: null }, { supersededBy: { is: { deliveryPackage: { is: null } } } }] }, { commitmentStatus: 'COMMITTED' }],
+      AND: [{ OR: [{ supersededById: null }, { AND: [{ supersededBy: { is: { deliveryPackage: { is: null } } } }, { outgoingLinks: { none: { type: 'DUPLICATE_OF' } } }] }] }, { commitmentStatus: 'COMMITTED' }],
     });
     expect(buildIssueWhere({ commitmentStatus: 'COMMITTED', includeSuperseded: true }, null)).toEqual({ commitmentStatus: 'COMMITTED' });
   });
@@ -50,7 +50,7 @@ describe('buildIssueWhere', () => {
       ),
     ).toEqual({
       AND: [
-        { OR: [{ supersededById: null }, { supersededBy: { is: { deliveryPackage: { is: null } } } }] },
+        { OR: [{ supersededById: null }, { AND: [{ supersededBy: { is: { deliveryPackage: { is: null } } } }, { outgoingLinks: { none: { type: 'DUPLICATE_OF' } } }] }] },
         {
           team: {
             is: {

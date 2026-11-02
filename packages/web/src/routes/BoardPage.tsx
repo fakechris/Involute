@@ -80,6 +80,8 @@ import {
   getStoredTeamKey,
   mergeBoardIssues,
   mergeBoardPageQueryResults,
+  mergeChangedBoardIssues,
+  newestUpdatedAt,
   mergeIssueWithPreservedComments,
   readStoredTeamKey,
   reconcileCreatedIssues,
@@ -1261,6 +1263,14 @@ export function BoardPage() {
     setIsLoadingMoreIssues(true);
 
     try {
+      // Items changed after the board loaded sit above the cursor now; fetch them first (INV-1526).
+      const since = newestUpdatedAt(queryData?.issues.nodes ?? []);
+      if (since) {
+        await fetchMore({
+          variables: { ...boardQueryVariables, filter: { ...boardQueryVariables.filter, updatedAt: { gte: since } } },
+          updateQuery: (previousResult, { fetchMoreResult }) => mergeChangedBoardIssues(previousResult, fetchMoreResult),
+        });
+      }
       await fetchMore({
         variables: {
           ...boardQueryVariables,

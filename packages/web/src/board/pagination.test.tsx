@@ -52,6 +52,7 @@ it('keeps a later-page issue open after its detail query writes to the cache', a
   await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
   expect(screen.getByRole('dialog')).toBeInTheDocument();
   expect(screen.getByTestId('issue-card-later')).toBeInTheDocument();
-  expect(requests.filter((name) => name === 'BoardPage')).toHaveLength(2);
+  // First page, the changed-since fetch before Load more (INV-1526), and the next page: no refetch storm.
+  expect(requests.filter((name) => name === 'BoardPage')).toHaveLength(3);
   client.stop();
 });

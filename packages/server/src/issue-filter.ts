@@ -65,10 +65,11 @@ export function buildIssueWhere(
 ): Prisma.IssueWhereInput | undefined {
   const clauses: Prisma.IssueWhereInput[] = [];
   // Lists hide tasks merged into a delivery package (INV-941): their replacement
-  // is the package root. An item marked as replaced by other work (INV-1498,
+  // is the package root, and the merge links them DUPLICATE_OF it. An item marked as replaced by other work (INV-1498,
   // an overturned DECISION) stays listed until a person closes it (INV-1515).
   if (filter?.commitmentStatus && !filter.includeSuperseded) {
-    clauses.push({ OR: [{ supersededById: null }, { supersededBy: { is: { deliveryPackage: { is: null } } } }] });
+    // A delivery merge always records DUPLICATE_OF to its root, with or without a package (INV-1526).
+    clauses.push({ OR: [{ supersededById: null }, { AND: [{ supersededBy: { is: { deliveryPackage: { is: null } } } }, { outgoingLinks: { none: { type: 'DUPLICATE_OF' } } }] }] });
   }
   const text = filter?.text?.trim();
   if (text) {
