@@ -417,6 +417,8 @@ export interface BugsPageQueryVariables {
 
 export interface BoardPageQueryData {
   projectSummary?: ProjectSummaryResult;
+  /** Per-state totals under the board filter (INV-1516). */
+  issueStateCounts?: Array<{ stateId: string; count: number }>;
   teams: {
     nodes: TeamSummary[];
   };

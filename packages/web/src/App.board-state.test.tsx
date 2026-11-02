@@ -144,4 +144,19 @@ describe('App board state flows', () => {
     const boardCall = apolloMocks.useQuery.mock.calls.find(([document]) => JSON.stringify(document).includes('BoardPage'));
     expect(boardCall?.[1]?.variables?.orderBy).toBe('UPDATED');
   });
+
+  it('a column whose items are all on a later page says how many are not loaded (INV-1516)', async () => {
+    const team = boardQueryResult.teams.nodes[0]!;
+    const canceled = team.states.nodes.find((state) => state.type === 'CANCELED');
+    if (!canceled) return; // the fixture team has no Canceled column
+    const data = {
+      ...boardQueryResult,
+      issueStateCounts: [{ stateId: canceled.id, count: 3 }],
+      issues: { ...boardQueryResult.issues, pageInfo: { ...boardQueryResult.issues.pageInfo, hasNextPage: true, endCursor: 'cursor-2' } },
+    };
+    renderTestApp({ data, loading: false });
+    // Canceled starts collapsed: its header carries the full count instead of 0.
+    const column = await screen.findByRole('region', { name: `${canceled.name} column (collapsed)` });
+    expect(within(column).getByTitle('0 loaded, 3 more not loaded yet')).toHaveTextContent('3');
+  });
 });

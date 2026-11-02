@@ -23,7 +23,6 @@ import { isEditableTarget } from '../components/IssueDrawerHost';
 import { looksLikeIql } from '../board/iql-eval';
 import {
   BOARD_FIELDS_QUERY,
-  BOARD_STATE_COUNTS_QUERY,
   BOARD_PAGE_QUERY,
   COMMENT_DELETE_MUTATION,
   COMMENT_CREATE_MUTATION,
@@ -1192,28 +1191,16 @@ export function BoardPage() {
     selectedBoardIssueIndex >= 0 ? boardVisibleIssues[selectedBoardIssueIndex + 1] ?? null : null;
   const hasMoreIssues = !isTeamSwitching && (queryData?.issues.pageInfo.hasNextPage ?? false);
 
-  // A column only holds what the board has loaded (200 at a time). The server
-  // says how many each state really has under the same filter, so a column
-  // never looks empty while its items are on a later page (INV-1516).
-  const { data: stateCountsData, refetch: refetchStateCounts } = useQuery<
-    { issueStateCounts: Array<{ stateId: string; count: number }> },
-    { filter: BoardPageQueryVariables['filter']; query?: string }
-  >(BOARD_STATE_COUNTS_QUERY, {
-    variables: { filter: boardQueryVariables.filter, ...(boardQueryVariables.query ? { query: boardQueryVariables.query } : {}) },
-    skip: isBacklogView || isTeamSwitching,
-  });
-  useEffect(() => {
-    // The list and the totals are read together, so a refetched list refreshes the totals.
-    if (queryData && stateCountsData) void Promise.resolve(refetchStateCounts?.()).catch(() => undefined);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryData]);
+  // A column only holds what the board has loaded (200 at a time). The board
+  // query also returns how many each state really has under the same filter,
+  // so a column never looks empty while its items are on a later page (INV-1516).
   const unloadedByState = useMemo(() => {
-    const totals = Array.isArray(stateCountsData?.issueStateCounts) ? stateCountsData.issueStateCounts : [];
+    const totals = Array.isArray(queryData?.issueStateCounts) ? queryData.issueStateCounts : [];
     if (!totals.length) return {} as Record<string, number>;
     const loaded: Record<string, number> = {};
     for (const issue of queryData?.issues.nodes ?? []) loaded[issue.state.id] = (loaded[issue.state.id] ?? 0) + 1;
     return Object.fromEntries(totals.map((row) => [row.stateId, Math.max(0, row.count - (loaded[row.stateId] ?? 0))]));
-  }, [stateCountsData, queryData]);
+  }, [queryData]);
 
   useEffect(() => {
     if (!selectedIssueId || isBacklogView) {

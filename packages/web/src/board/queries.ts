@@ -58,6 +58,8 @@ export const BOARD_PAGE_QUERY = gql`
         name
       }
     }
+    # Per-state totals under the same filter (INV-1516), read with the list so they never drift apart.
+    issueStateCounts(filter: $filter, query: $query) { stateId count }
     issues(first: $first, after: $after, filter: $filter, query: $query, orderBy: $orderBy) {
       nodes {
         id
@@ -2196,9 +2198,3 @@ export const BOARD_FIELDS_QUERY = gql`
   }
 `;
 
-/** Per-state totals under the board's filter and query (INV-1516): a column says how many it has not loaded. */
-export const BOARD_STATE_COUNTS_QUERY = gql`
-  query BoardStateCounts($filter: IssueFilter, $query: String) {
-    issueStateCounts(filter: $filter, query: $query) { stateId count }
-  }
-`;
