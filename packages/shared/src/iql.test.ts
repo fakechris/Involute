@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeIql, IqlParseError, parseIql } from '../src/iql.js';
+import { describeIql, IqlParseError, parseIql, readIqlSort } from '../src/iql.js';
 
 describe('parseIql', () => {
   it('parses field terms, comparisons, and negation', () => {
@@ -54,5 +54,19 @@ describe('parseIql', () => {
 
   it('returns an empty term list for blank queries', () => {
     expect(parseIql('   ').terms).toEqual([]);
+  });
+
+  it('parses attr.<key> fields and sort (INV-1505)', () => {
+    const query = parseIql('attr.risk:low,high attr.points:>=3 -attr.customer:none sort:attr.points:desc');
+    expect(query.terms.map((term) => [term.field, term.op, term.value, term.negated])).toEqual([
+      ['attr.risk', 'eq', 'low,high', false],
+      ['attr.points', 'gte', '3', false],
+      ['attr.customer', 'eq', 'none', true],
+      ['sort', 'eq', 'attr.points:desc', false],
+    ]);
+    expect(readIqlSort(query.terms[3]!)).toEqual({ key: 'points', direction: 'desc' });
+    expect(() => parseIql('attr.9bad:1')).toThrow(/Unknown field/);
+    expect(() => parseIql('sort:priority')).toThrow(/sort takes attr/);
+    expect(() => parseIql('attr.points:>1,2')).toThrow(/single value/);
   });
 });

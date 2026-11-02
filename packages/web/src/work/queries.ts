@@ -135,6 +135,8 @@ export const IN_REVIEW_PAGE_QUERY = gql`
         acceptance
         verification
         repository
+        attributes
+        fieldDefinitions { key label description type required searchable options { value label archived } }
         pendingContractAmendment {
           id
         }

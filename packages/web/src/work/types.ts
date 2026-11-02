@@ -1,5 +1,5 @@
 import type { WorkResolution } from '../components/CloseReasonDialog';
-import type { ContractAmendmentSummary, UserSummary, WorkflowStateSummary, WorkflowStateType } from '../board/types';
+import type { ContractAmendmentSummary, FieldDefinitionSummary, FieldValue, UserSummary, WorkflowStateSummary, WorkflowStateType } from '../board/types';
 
 export type CommitmentStatus = 'CANDIDATE' | 'COMMITTED' | 'REJECTED';
 export type WorkKind = 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
@@ -27,6 +27,9 @@ export interface WorkRef {
 }
 
 export interface CandidateWork {
+  /** Field values and the definitions that apply (INV-1505); required ones must be set to commit. */
+  attributes?: Record<string, FieldValue> | null;
+  fieldDefinitions?: FieldDefinitionSummary[];
   deliveryRootId?: string | null;
   hasPendingDeliveryChange?: boolean;
   id: string;
@@ -402,6 +405,8 @@ export interface WorkCommitMutationVariables {
   id: string;
   input: {
     expectedRevision: number;
+    /** Field values to fill or correct while committing (INV-1505); null clears a key. */
+    attributes?: Record<string, FieldValue | null>;
     acceptance?: string;
     assigneeId?: string;
     parentId?: string;

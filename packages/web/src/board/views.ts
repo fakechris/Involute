@@ -1,4 +1,4 @@
-import type { BoardGroupBy, BoardIssueGroup, IssueSummary, LabelSummary, UserSummary } from './types';
+import type { BoardGroupBy, BoardIssueGroup, FieldDefinitionSummary, IssueSummary, LabelSummary, UserSummary } from './types';
 import { readLocalStorageValue } from '../lib/storage';
 import { savedViewsStorageKey } from '../lib/saved-views-account';
 
@@ -70,7 +70,8 @@ function isBoardSortDirection(value: unknown): value is BoardSortDirection {
 }
 
 function isBoardGroupBy(value: unknown): value is BoardGroupBy {
-  return value === 'none' || value === 'project' || value === 'status' || value === 'priority' || value === 'assignee' || value === 'label';
+  return value === 'none' || value === 'project' || value === 'status' || value === 'priority' || value === 'assignee' || value === 'label'
+    || (typeof value === 'string' && /^attr:[a-z][a-z0-9_]{1,39}$/.test(value));
 }
 
 function isBoardViewMode(value: unknown): value is BoardViewMode {
@@ -435,15 +436,50 @@ const PRIORITY_LABELS: Record<number, string> = {
 
 const PRIORITY_ORDER = [1, 2, 3, 4, 0];
 
+/** Field types a board can group by: a bounded set of values (INV-1505). */
+export const GROUPABLE_FIELD_TYPES = ['ENUM', 'BOOLEAN', 'USER_REF'] as const;
+
+export function groupableFields(definitions: FieldDefinitionSummary[]): FieldDefinitionSummary[] {
+  return definitions.filter((definition) => definition.searchable && (GROUPABLE_FIELD_TYPES as readonly string[]).includes(definition.type));
+}
+
+/** One group per option (list order), Yes / No, or person, then the items with no value. */
+function groupByField(issues: IssueSummary[], definition: FieldDefinitionSummary | undefined, key: string, users: UserSummary[]): BoardIssueGroup[] {
+  const valueOf = (issue: IssueSummary) => issue.attributes?.[key];
+  const buckets: Array<{ id: string; label: string; match: (value: unknown) => boolean }> = [];
+  if (definition?.type === 'ENUM') {
+    for (const option of definition.options) buckets.push({ id: option.value, label: option.label, match: (value) => value === option.value });
+  } else if (definition?.type === 'BOOLEAN') {
+    buckets.push({ id: 'true', label: 'Yes', match: (value) => value === true }, { id: 'false', label: 'No', match: (value) => value === false });
+  } else {
+    const seen = [...new Set(issues.map(valueOf).filter((value): value is string => typeof value === 'string'))];
+    for (const id of seen) {
+      const user = users.find((entry) => entry.id === id);
+      buckets.push({ id, label: user?.name ?? user?.email ?? id, match: (value) => value === id });
+    }
+  }
+  const groups = buckets.map((bucket) => ({ id: `attr-${key}-${bucket.id}`, label: bucket.label, issues: issues.filter((issue) => bucket.match(valueOf(issue))) }))
+    .filter((group) => group.issues.length > 0 || definition?.type !== 'USER_REF');
+  const unset = issues.filter((issue) => !buckets.some((bucket) => bucket.match(valueOf(issue))));
+  if (unset.length) groups.push({ id: `attr-${key}-none`, label: `No ${definition?.label ?? key}`, issues: unset });
+  return groups;
+}
+
 export function groupIssuesBy(
   issues: IssueSummary[],
   groupBy: BoardGroupBy,
   team: { states: { nodes: Array<{ id: string; name: string; type: string; position: number }> } } | null,
   users: UserSummary[],
   labels: LabelSummary[],
+  fields: FieldDefinitionSummary[] = [],
 ): BoardIssueGroup[] {
   if (groupBy === 'none') {
     return [{ id: 'all', label: 'All issues', issues }];
+  }
+
+  if (groupBy.startsWith('attr:')) {
+    const key = groupBy.slice('attr:'.length);
+    return groupByField(issues, fields.find((field) => field.key === key), key, users);
   }
 
   if (groupBy === 'project') {

@@ -25,7 +25,26 @@ export const CONDITION_FIELDS = [
   'has_steps', 'has_acceptance', 'amendment_fields', 'auto_accept_grade',
   'pr_merged', 'checks', 'delivery_actions', 'budget_remaining', 'hops',
 ] as const;
-export type ConditionField = (typeof CONDITION_FIELDS)[number];
+/**
+ * `attr.<key>` names a searchable field definition's value (INV-1505). Which
+ * keys exist is checked when a policy is saved (autonomy-service), since it
+ * depends on the scope's definitions.
+ */
+export const ATTR_CONDITION_FIELD = /^attr\.[a-z][a-z0-9_]{1,39}$/;
+export type ConditionField = (typeof CONDITION_FIELDS)[number] | `attr.${string}`;
+
+export function isConditionField(field: unknown): field is ConditionField {
+  return typeof field === 'string' && ((CONDITION_FIELDS as readonly string[]).includes(field) || ATTR_CONDITION_FIELD.test(field));
+}
+
+/** Every `attr.<key>` a predicate or gate table names. */
+export function attrFieldsIn(value: unknown): string[] {
+  if (!value || typeof value !== 'object') return [];
+  if (Array.isArray(value)) return value.flatMap(attrFieldsIn);
+  const node = value as Record<string, unknown>;
+  const own = typeof node.field === 'string' && ATTR_CONDITION_FIELD.test(node.field) ? [node.field] : [];
+  return [...own, ...Object.entries(node).filter(([key]) => key !== 'field').flatMap(([, child]) => attrFieldsIn(child))];
+}
 
 export type Scalar = string | number | boolean | null;
 
@@ -150,7 +169,7 @@ export function validatePredicate(value: unknown, path = 'condition'): string[] 
     return (node[key] as unknown[]).flatMap((child, index) => validatePredicate(child, `${path}.${key}[${index}]`));
   }
   const problems: string[] = [];
-  if (!CONDITION_FIELDS.includes(node.field as ConditionField)) problems.push(`${path}.field: unknown field ${JSON.stringify(node.field)}`);
+  if (!isConditionField(node.field)) problems.push(`${path}.field: unknown field ${JSON.stringify(node.field)}`);
   const operators = ['eq', 'in', 'not_in', 'gte', 'lte', 'subset_of'].filter((operator) => operator in node);
   if (operators.length !== 1) problems.push(`${path}: exactly one of eq / in / not_in / gte / lte / subset_of`);
   for (const operator of operators) {
@@ -194,7 +213,8 @@ export function evaluatePredicate(predicate: Predicate, facts: AutonomyFacts): b
   const value = facts[predicate.field];
   if (value === undefined) return false;
   const values = asList(value);
-  const normalise = (item: Scalar) => (typeof item === 'string' ? item.toLowerCase() : item);
+  // Compared as text, so a rule written as 3 matches a field stored as "3" and the other way round (INV-1505).
+  const normalise = (item: Scalar) => (item === null ? null : String(item).toLowerCase());
   if ('eq' in predicate) return values.length === 1 && normalise(values[0]!) === normalise(predicate.eq);
   if ('in' in predicate) return values.some((item) => predicate.in.map(normalise).includes(normalise(item)));
   if ('not_in' in predicate) return values.every((item) => !predicate.not_in.map(normalise).includes(normalise(item)));

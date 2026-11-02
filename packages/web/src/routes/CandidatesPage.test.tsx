@@ -728,4 +728,39 @@ describe('CandidatesPage', () => {
       }
     });
   });
+
+  it('shows the fields that apply on a candidate and commits only once required ones are set (INV-1505)', async () => {
+    queryDataHolder.current = {
+      issues: {
+        nodes: [{
+          ...candidateItems[0]!,
+          attributes: { risk: 'low' },
+          fieldDefinitions: [
+            { key: 'customer', label: 'Customer', description: null, type: 'TEXT', required: true, searchable: false, options: [] },
+            { key: 'risk', label: 'Risk', description: null, type: 'ENUM', required: false, searchable: true, options: [{ value: 'low', label: 'Low', archived: null }, { value: 'high', label: 'High', archived: null }] },
+          ],
+        }],
+        pageInfo: { endCursor: null, hasNextPage: false },
+      },
+      teams: { nodes: mockTeams },
+    };
+    render(
+      <MemoryRouter>
+        <CandidatesPage />
+      </MemoryRouter>,
+    );
+    const card = screen.getAllByRole('article')[0]!;
+    const commit = within(card).getByRole('button', { name: 'Commit' });
+    expect(commit).toBeDisabled();
+    expect(commit).toHaveAttribute('title', 'Fill the required fields first: Customer.');
+    expect(within(card).getByRole('note')).toHaveTextContent('Required before it is committed: Customer');
+    const customer = within(card).getByRole('textbox', { name: 'Customer' });
+    fireEvent.change(customer, { target: { value: 'Acme' } });
+    fireEvent.blur(customer);
+    expect(commit).toBeEnabled();
+    fireEvent.click(commit);
+    await waitFor(() => expect(mockRunCommit).toHaveBeenCalledTimes(1));
+    expect(mockRunCommit.mock.calls[0]![0].variables.input.attributes).toEqual({ customer: 'Acme' });
+    queryDataHolder.current = null;
+  });
 });

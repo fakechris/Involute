@@ -47,6 +47,8 @@ export interface RedmineIssue {
   subject: string;
   tracker: RedmineNamedRef;
   updated_on: string;
+  /** Redmine's custom fields as its issues JSON renders them (INV-1505). */
+  custom_fields?: Array<{ id: number; name: string; value: string | string[] | null; multiple?: boolean }>;
 }
 
 export interface RedmineJournalDetail {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyBoardViewState, getDefaultBoardViewState, groupIssuesBy } from './views';
-import type { IssueSummary, WorkflowStateSummary } from './types';
+import { applyBoardViewState, getDefaultBoardViewState, groupIssuesBy, groupableFields } from './views';
+import type { FieldDefinitionSummary, IssueSummary, WorkflowStateSummary } from './types';
 
 function makeState(id: string, name: string, type: WorkflowStateSummary['type'] = 'UNSTARTED'): WorkflowStateSummary {
   return { id, name, type, position: 0 };
@@ -154,5 +154,30 @@ describe('query by issue number (INV-608)', () => {
     // The repository is one of the fields the server searches (see
     // issue-filter.test.ts); the board does not search it again.
     expect(applyBoardViewState(issues, state, []).map((i) => i.id).sort()).toEqual(['38', '39']);
+  });
+});
+
+describe('grouping by a field (INV-1505)', () => {
+  const risk: FieldDefinitionSummary = { key: 'risk', label: 'Risk', type: 'ENUM', required: false, searchable: true, options: [{ value: 'low', label: 'Low' }, { value: 'high', label: 'High' }] };
+  const flag: FieldDefinitionSummary = { key: 'flag', label: 'Flag', type: 'BOOLEAN', required: false, searchable: true, options: [] };
+  const owner: FieldDefinitionSummary = { key: 'owner', label: 'Owner', type: 'USER_REF', required: false, searchable: true, options: [] };
+  const note: FieldDefinitionSummary = { key: 'note', label: 'Note', type: 'TEXT', required: false, searchable: true, options: [] };
+  const hidden: FieldDefinitionSummary = { ...risk, key: 'hidden', searchable: false };
+
+  it('offers only searchable list, yes / no and person fields', () => {
+    expect(groupableFields([risk, flag, owner, note, hidden]).map((field) => field.key)).toEqual(['risk', 'flag', 'owner']);
+  });
+
+  it('groups by option order, then the items without a value', () => {
+    const issues = [makeIssue('1', null, 'A', { attributes: { risk: 'high' } }), makeIssue('2', null, 'B', { attributes: { risk: 'low' } }), makeIssue('3', null, 'C')];
+    const groups = groupIssuesBy(issues, 'attr:risk', null, [], [], [risk]);
+    expect(groups.map((group) => [group.label, group.issues.map((issue) => issue.title)])).toEqual([['Low', ['B']], ['High', ['A']], ['No Risk', ['C']]]);
+  });
+
+  it('groups yes / no and people by name', () => {
+    const issues = [makeIssue('1', null, 'A', { attributes: { flag: true, owner: 'u1' } }), makeIssue('2', null, 'B', { attributes: { flag: false } })];
+    expect(groupIssuesBy(issues, 'attr:flag', null, [], [], [flag]).map((group) => [group.label, group.issues.length])).toEqual([['Yes', 1], ['No', 1]]);
+    const users = [{ id: 'u1', name: 'Ada', email: 'ada@example.com' }] as never;
+    expect(groupIssuesBy(issues, 'attr:owner', null, users, [], [owner]).map((group) => [group.label, group.issues.length])).toEqual([['Ada', 1], ['No Owner', 1]]);
   });
 });
