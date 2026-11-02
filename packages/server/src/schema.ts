@@ -171,7 +171,7 @@ import {
   type AgentProfile as AgentProfileResult,
   type WorkProvenance as WorkProvenanceResult,
 } from './agent-directory.js';
-import { type SetFieldDefinitionInput, FIELD_SCOPE_INVALID_MESSAGE, deactivateFieldDefinition, fieldDefinitionView, readActiveDefinitions, readAttributes, resolveDefinitionsFor, setFieldDefinition, typeNameOf } from './field-definitions.js';
+import { type SetFieldDefinitionInput, FIELD_LIMITS, FIELD_SCOPE_INVALID_MESSAGE, FIELD_STALE_DAYS, countFieldUsage, isStaleDefinition, renameFieldDefinition, deactivateFieldDefinition, fieldDefinitionView, readActiveDefinitions, readAttributes, resolveDefinitionsFor, setFieldDefinition, typeNameOf } from './field-definitions.js';
 import { createComment, createIssue, createIssueInTransaction, deleteComment, deleteIssue, mentionTexts, updateIssue } from './issue-service.js';
 import { isActionableNotification, markNotificationRead, projectWorkNotifications, resolveAttentionNotifications } from './notification-service.js';
 import { auditMergedPrTraceability } from './traceability-audit.js';
@@ -467,6 +467,8 @@ const typeDefs = /* GraphQL */ `
     handledForYou(days: Int): [HandledItem!]!
     "Field definitions of one scope (INV-1503); active only unless includeInactive. Signed-in people only."
     fieldDefinitions(scope: AutonomyScope!, scopeId: String!, includeInactive: Boolean): [FieldDefinition!]!
+    "The field governance limits (INV-1504)."
+    fieldLimits: FieldLimits!
     issue(id: String!): Issue
     """
     The work items behind references in prose (INV-1466): a batch of
@@ -584,6 +586,8 @@ const typeDefs = /* GraphQL */ `
     fieldDefinitionSet(input: FieldDefinitionSetInput!): FieldDefinitionPayload!
     "Deactivate a field definition (INV-1503); values stay on items and return on reactivation."
     fieldDefinitionDeactivate(input: FieldDefinitionDeactivateInput!): FieldDefinitionPayload!
+    "Rename a field's key with a reason (INV-1504): values move to the new key; the old key is still accepted on write for one version."
+    fieldDefinitionRename(input: FieldDefinitionRenameInput!): FieldDefinitionPayload!
     "Return to me (INV-1491): take back an amendment the Autonomy Gate accepted; the contract reverts and the proposal waits for you again."
     contractAmendmentReopen(input: ContractAmendmentReopenInput!): ContractAmendmentReopenPayload!
     "Promote or demote an agent's trust level with a reason (the actor's owner, a team Owner over it, or an Admin; INV-1490)."
@@ -2741,6 +2745,38 @@ const typeDefs = /* GraphQL */ `
     searchable: Boolean!
     active: Boolean!
     version: Int!
+    "The key this version replaced (INV-1504); still accepted on write until the next version."
+    previousKey: String
+    "Last time any item's value for this field changed."
+    lastWrittenAt: DateTime
+    "Items in the scope holding a value for this key."
+    usageCount: Int!
+    "Defined but not written for 90 days: the cleanup prompt (docs/field-definitions.md §7)."
+    stale: Boolean!
+    "A pending FieldValueIndex job: BACKFILL or CLEANUP; null when the index matches."
+    indexJob: FieldIndexJob
+    "Items the pending job has gone through so far."
+    indexProcessed: Int!
+  }
+
+  enum FieldIndexJob {
+    BACKFILL
+    CLEANUP
+  }
+
+  "Governance limits (docs/field-definitions.md §7); raising one is a decision."
+  type FieldLimits {
+    activePerScope: Int!
+    enumOptions: Int!
+    staleDays: Int!
+  }
+
+  input FieldDefinitionRenameInput {
+    scope: AutonomyScope!
+    scopeId: String!
+    from: String!
+    to: String!
+    reason: String!
   }
 
   input FieldOptionInput {
@@ -3389,11 +3425,18 @@ const resolvers = {
         if (!project) throw createValidationError(FIELD_SCOPE_INVALID_MESSAGE);
         await assertCanReadTeam(context.prisma, context, project.teamId);
       }
-      const rows = args.includeInactive
-        ? await context.prisma.fieldDefinition.findMany({ where: { scope: args.scope, scopeId: args.scopeId }, orderBy: [{ key: 'asc' }, { version: 'desc' }] })
-        : await readActiveDefinitions(context.prisma, args.scope, args.scopeId);
+      // includeInactive: the latest version of every key, so a retired field can be brought back.
+      let rows = await readActiveDefinitions(context.prisma, args.scope, args.scopeId);
+      if (args.includeInactive) {
+        const all = await context.prisma.fieldDefinition.findMany({ where: { scope: args.scope, scopeId: args.scopeId }, orderBy: [{ createdAt: 'desc' }] });
+        const renamedAway = new Set(all.map((row) => row.previousKey).filter((key): key is string => Boolean(key)));
+        const latest = new Map<string, (typeof all)[number]>();
+        for (const row of all) if (!latest.has(row.key) && !renamedAway.has(row.key)) latest.set(row.key, row);
+        rows = [...latest.values()].sort((left, right) => left.key.localeCompare(right.key));
+      }
       return rows.map(fieldDefinitionToGraphQL);
     },
+    fieldLimits: () => ({ activePerScope: FIELD_LIMITS.activePerScope, enumOptions: FIELD_LIMITS.enumOptions, staleDays: FIELD_STALE_DAYS }),
     workspaceSettings: async (_parent: unknown, _args: Record<string, never>, context: GraphQLContext) => {
       assertSettingsAdmin(context);
       return getWorkspaceSettings(context.prisma);
@@ -5440,6 +5483,16 @@ const resolvers = {
         const definition = await deactivateFieldDefinition(context.prisma, args.input, context.viewer?.id ?? null);
         return { success: true as const, definition: fieldDefinitionToGraphQL(definition) };
       }, { success: false as const, definition: null }),
+    fieldDefinitionRename: async (
+      _parent: unknown,
+      args: { input: { scope: AutonomyScope; scopeId: string; from: string; to: string; reason: string } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; definition: unknown }> =>
+      runMutationWithReason(async () => {
+        await assertCanManageFieldScope(context, args.input.scope, args.input.scopeId);
+        const definition = await renameFieldDefinition(context.prisma, args.input, context.viewer?.id ?? null);
+        return { success: true as const, definition: fieldDefinitionToGraphQL(definition) };
+      }, { success: false as const, definition: null }),
     agentTrustSet: async (
       _parent: unknown,
       args: { input: { actorId: string; level: AgentTrustLevel; reason: string } },
@@ -7118,5 +7171,14 @@ async function assertCanManageFieldScope(context: GraphQLContext, scope: Autonom
 
 function fieldDefinitionToGraphQL(definition: FieldDefinition) {
   const view = fieldDefinitionView(definition);
-  return { ...view, appliesTo: { kinds: view.appliesTo.kinds, types: view.appliesTo.types === 'any' ? ['any'] : view.appliesTo.types } };
+  return {
+    ...view,
+    appliesTo: { kinds: view.appliesTo.kinds, types: view.appliesTo.types === 'any' ? ['any'] : view.appliesTo.types },
+    // Computed only when asked (settings pages): a count over the scope's items.
+    usageCount: (_args: unknown, context: GraphQLContext) => countFieldUsage(context.prisma, definition),
+    stale: async (_args: unknown, context: GraphQLContext) => {
+      const first = await context.prisma.fieldDefinition.findFirst({ where: { scope: definition.scope, scopeId: definition.scopeId, key: definition.key }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } });
+      return isStaleDefinition(definition, first?.createdAt ?? definition.createdAt);
+    },
+  };
 }

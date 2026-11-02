@@ -2638,6 +2638,41 @@ kbd {
   min-width: 0;
 }
 
+/* Fields settings (INV-1504) */
+.fields-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 8px 0 12px;
+}
+
+.fields-table th,
+.fields-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.fields-table th {
+  color: var(--fg-dim);
+  font-weight: 500;
+}
+
+.fields-table__key {
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.fields-table__retired {
+  opacity: 0.6;
+}
+
+.fields-table__actions {
+  white-space: nowrap;
+}
+
 /* Divider */
 .issue-panel__divider {
   height: 1px;

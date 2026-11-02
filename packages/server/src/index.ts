@@ -3,6 +3,7 @@ import { SemanticIndex, startSemanticIndexer } from './embeddings/semantic-index
 import { startEvidenceVerifier } from './evidence-verification.js';
 import { expireOverdueAgentRequests } from './agent-request-expiry.js';
 import { sweepBugSlas } from './bug-sla.js';
+import { runFieldIndexJobs } from './field-definitions.js';
 import { sweepFollowUpDeadlines } from './follow-up-deadline.js';
 import { sendAttentionDigests } from './attention-digest.js';
 import { sweepOverdueReviews } from './review-wait.js';
@@ -460,6 +461,15 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   }, 5 * 60_000);
   staleRunTimer?.unref();
 
+  // Searchable fields (INV-1504): backfill or clean FieldValueIndex rows a batch at a time.
+  const fieldIndexTimer = setInterval(() => {
+    void runFieldIndexJobs(prisma).catch((error: unknown) => {
+      console.error('Failed to run field index jobs.');
+      console.error(error);
+    });
+  }, 30_000);
+  fieldIndexTimer.unref();
+
   // Verified bug fixes in opted-in projects close themselves (INV-1075).
   const stopBugAutoAccept = startBugAutoAccept(prisma);
 
@@ -563,6 +573,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
         clearInterval(bugSlaTimer);
       }
       clearInterval(claimExpiryTimer);
+      clearInterval(fieldIndexTimer);
       clearInterval(staleRunTimer);
       stopBugAutoAccept();
 

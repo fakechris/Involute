@@ -67,7 +67,7 @@ import { parseSeverity } from './severity.js';
 import { mergeIncidentTimes, readIncidentTimes } from './incident-timestamps.js';
 import { parseReproducibility } from './reproducibility.js';
 import { parseFoundInSha } from './found-in.js';
-import { type AttributesInput, applyAttributes, typeNameFromLabels, typeNameOf } from './field-definitions.js';
+import { type AttributesInput, applyAttributes, recordAttributeWrite, typeNameFromLabels, typeNameOf } from './field-definitions.js';
 
 export interface CreateIssueInput {
   acceptance?: string | null;
@@ -299,6 +299,7 @@ export async function createIssueWithAudit(
   }
 
   await syncContainsFromParentId(prisma, created.id, created.parentId, actor);
+  await recordAttributeWrite(prisma, created.id, fields);
   const auditId = await recordWorkAudit(prisma, {
       actor,
       after: selectIssueSnapshot(created),
@@ -389,6 +390,7 @@ export async function updateIssue(
     let nextParentId: string | null | undefined;
 
     const data: Prisma.IssueUpdateInput = {};
+    let attributeWrite: Awaited<ReturnType<typeof applyAttributes>> | null = null;
     if ('supersededById' in input && input.supersededById !== undefined) {
       // Who replaced this item (INV-1498); a relation on the checked input.
       const replacementId = await resolveSupersededBy(transaction, existingIssue, input.supersededById);
@@ -572,7 +574,10 @@ export async function updateIssue(
         typeName,
         existing: existingIssue.attributes,
       }, input.attributes, existingIssue.commitmentStatus === 'COMMITTED' ? 'committed' : 'candidate');
-      if (fields.changed.length) data.attributes = fields.attributes as Prisma.InputJsonValue;
+      if (fields.changed.length) {
+        data.attributes = fields.attributes as Prisma.InputJsonValue;
+        attributeWrite = fields;
+      }
     }
 
     // Snooze is candidate-pool governance: committed work has a human owner
@@ -808,6 +813,7 @@ export async function updateIssue(
     if (nextParentId !== undefined) {
       await syncContainsFromParentId(transaction, id, nextParentId, actor);
     }
+    if (attributeWrite) await recordAttributeWrite(transaction, id, attributeWrite);
 
     await recordWorkAudit(transaction, {
       actor: researchClosedByAgent ? { ...actor, reason: RESEARCH_CLOSE_REASON } : closeReason ? { ...actor, reason: closeReason } : actor,

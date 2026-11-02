@@ -1,8 +1,10 @@
 # Field definitions: work-item fields as configuration (design, INV-1500)
 
-Status: **stage 1 implemented (INV-1503)** — model, validator, GraphQL / MCP
-read and write, the GIN index, audit snapshots and the issue page Fields
-section. Settings pages and FieldValueIndex: INV-1504; IQL, board grouping,
+Status: **stages 1–2 implemented** — model, validator, GraphQL / MCP read and
+write, the GIN index, audit snapshots and the issue page Fields section
+(INV-1503); Settings → Administration → Fields and Team settings → Fields,
+governance limits, the 90-day cleanup prompt, key rename and FieldValueIndex
+with its background backfill / cleanup (INV-1504). IQL, board grouping,
 autonomy conditions, dialogs and import: INV-1505. Today every work-item field is a Prisma
 column; adding one means a migration, GraphQL and MCP changes, the parity and
 human-surface guards, a web form and a release. This page designs the layer
@@ -120,7 +122,12 @@ member of the team; size limits above. Every change writes the before / after
 2. **Extension tier — FieldValueIndex.** With `searchable: true` the write
    transaction also upserts the typed row; btree indexes give ranges, date
    windows, sort and group-by counts, and reverse lookup by reference. Flipping
-   `searchable` enqueues a backfill / cleanup job; no runtime `CREATE INDEX`.
+   `searchable` (or retiring / reactivating a searchable field) sets
+   `FieldDefinition.indexJob` to BACKFILL or CLEANUP; a server timer
+   (`runFieldIndexJobs`, every 30 s) walks the scope's items that hold the key
+   in id order, 200 at a time, and the settings page shows the progress. An
+   item governed by a nearer definition of the same key is left to it. No
+   runtime `CREATE INDEX`.
 
 IQL compilation of `attr.<key> <op> <value>`: indexed → join
 FieldValueIndex; else `=` / `in` → JSONB containment via GIN; else a range or
