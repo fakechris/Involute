@@ -144,6 +144,7 @@ export interface FieldDefinitionSummary {
   description?: string | null;
   type: FieldDefinitionType;
   required: boolean;
+  searchable?: boolean | null;
   options: Array<{ value: string; label: string; archived?: boolean | null }>;
 }
 
@@ -317,6 +318,8 @@ export interface BugReportMutationVariables {
     /** Where it belongs; omitted when unsure, which sends it to triage (INV-749). */
     parentId?: string | null;
     labelIds?: string[];
+    /** Field values for Type Bug (INV-1505). */
+    attributes?: Record<string, FieldValue>;
   };
 }
 
@@ -556,10 +559,13 @@ export interface IssueCreateMutationVariables {
     /** Required unless kind is PROJECT: id or identifier of where it goes (INV-744). */
     parentId?: string;
     repository?: string | null;
+    /** Field values (INV-1505). */
+    attributes?: Record<string, FieldValue>;
   };
 }
 
-export type BoardGroupBy = 'none' | 'project' | 'status' | 'priority' | 'assignee' | 'label';
+/** `attr:<key>` groups by a searchable field definition's value (INV-1505). */
+export type BoardGroupBy = 'none' | 'project' | 'status' | 'priority' | 'assignee' | 'label' | `attr:${string}`;
 
 export interface BoardIssueGroup {
   id: string;

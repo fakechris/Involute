@@ -73,6 +73,7 @@ export const BOARD_PAGE_QUERY = gql`
         foundInSha
         kind
         repository
+        attributes
         claim {
           id
           leaseUntil
@@ -2178,6 +2179,16 @@ export const INCIDENTS_PAGE_QUERY = gql`
         followUpDeclined
         followUpOverdueOpen
       }
+    }
+  }
+`;
+
+/** Field definitions a team's board can group by (INV-1505); the page keeps the searchable list / yes-no / person ones. */
+export const BOARD_FIELDS_QUERY = gql`
+  query BoardFields($teamId: String!) {
+    applicableFieldDefinitions(teamId: $teamId, kind: ISSUE, allTypes: true) {
+      key label description type required searchable
+      options { value label archived }
     }
   }
 `;

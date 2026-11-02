@@ -657,3 +657,91 @@ export async function renameFieldDefinition(prisma: PrismaClient, input: { scope
     return created;
   });
 }
+
+/**
+ * The required fields an agent of this team must set, as one sentence for
+ * MCP tool descriptions (INV-1505): workspace and team fields, and project
+ * fields named with their project. Null when there are none.
+ */
+export async function requiredFieldsSummary(prisma: DatabaseClient, teamId: string): Promise<string | null> {
+  const catalog = await listTeamFieldDefinitions(prisma, teamId);
+  const describe = (definition: ReturnType<typeof fieldDefinitionView>) => {
+    const applies = `${definition.appliesTo.kinds.join('/')}${definition.appliesTo.types === 'any' ? '' : ` of Type ${definition.appliesTo.types.join('/')}`}`;
+    const options = definition.options.length ? ` one of ${definition.options.filter((option) => !option.archived).map((option) => option.value).join('|')}` : '';
+    return `${definition.key} (${definition.type}${options}; ${applies})`;
+  };
+  // Team fields win over workspace fields of the same key.
+  const nearest = new Map([...catalog.workspace, ...catalog.team].map((definition) => [definition.key, definition]));
+  const parts = [
+    ...[...nearest.values()].filter((definition) => definition.required).map(describe),
+    ...catalog.projects.flatMap((project) => project.definitions.filter((definition) => definition.required).map((definition) => `${describe(definition)} under ${project.identifier}`)),
+  ];
+  return parts.length ? `Required fields for your team: ${parts.join('; ')}.` : null;
+}
+
+// ---------------------------------------------------------------------------
+// INV-1505: import mapping
+// ---------------------------------------------------------------------------
+
+export const IMPORTED_EXTRA_KEY = 'imported_extra';
+
+/** A source field name as a definition key: "Customer Tier" → customer_tier. */
+export function fieldKeyFromName(name: string): string {
+  const key = name.normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return /^[a-z]/.test(key) ? key.slice(0, 40) : `f_${key}`.slice(0, 40);
+}
+
+/** Coerce a source value toward a definition's type: "3" for NUMBER, "1" / "yes" for BOOLEAN, a comma list for MULTI_ENUM. */
+function coerceImported(type: FieldType, value: unknown): unknown {
+  if (type === 'NUMBER' && typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) return Number(value);
+  if (type === 'BOOLEAN' && typeof value === 'string') {
+    if (/^(1|true|yes)$/i.test(value.trim())) return true;
+    if (/^(0|false|no)$/i.test(value.trim())) return false;
+  }
+  if (type === 'MULTI_ENUM' && typeof value === 'string') return value.split(',').map((entry) => entry.trim()).filter(Boolean);
+  return value;
+}
+
+/**
+ * Map a source item's custom fields onto the definitions that apply to the
+ * new item (INV-1505): a field whose key matches and whose value passes the
+ * validator becomes an attribute; everything else is returned as text lines
+ * for `imported_extra`. References are not resolved across systems, so
+ * WORK_REF / USER_REF fields always go to the extra text.
+ */
+export function mapImportedFields(definitions: FieldDefinition[], fields: Array<{ name: string; value: unknown }>): { attributes: Attributes; extra: string | null } {
+  const attributes: Attributes = {};
+  const extra: string[] = [];
+  for (const field of fields) {
+    if (field.value === null || field.value === undefined || field.value === '' || (Array.isArray(field.value) && !field.value.length)) continue;
+    const key = fieldKeyFromName(field.name);
+    const definition = definitions.find((candidate) => candidate.key === key && candidate.key !== IMPORTED_EXTRA_KEY);
+    if (definition && definition.type !== 'WORK_REF' && definition.type !== 'USER_REF') {
+      try {
+        const { attributes: next } = validateAttributes([definition], {}, { [key]: coerceImported(definition.type, field.value) }, 'candidate');
+        attributes[key] = next[key]!;
+        continue;
+      } catch {
+        // falls through to the extra text
+      }
+    }
+    extra.push(`${field.name}: ${Array.isArray(field.value) ? field.value.join(', ') : String(field.value)}`);
+  }
+  const text = extra.join('\n');
+  return { attributes, extra: text ? text.slice(0, FIELD_LIMITS.textLength) : null };
+}
+
+/** The team's `imported_extra` TEXT definition, created once (INV-1505). Null when the team is at its field limit. */
+export async function ensureImportedExtraDefinition(prisma: PrismaClient, teamId: string): Promise<FieldDefinition | null> {
+  const existing = await prisma.fieldDefinition.findFirst({ where: { scope: 'TEAM', scopeId: teamId, key: IMPORTED_EXTRA_KEY, active: true } });
+  if (existing) return existing;
+  try {
+    return await setFieldDefinition(prisma, {
+      scope: 'TEAM', scopeId: teamId, key: IMPORTED_EXTRA_KEY, label: 'Imported fields',
+      description: 'Source custom fields with no matching field definition, kept as text by the importer.',
+      type: 'TEXT', appliesTo: { kinds: [...WORK_KINDS] }, reason: 'Created by the importer for source fields without a definition (INV-1505).',
+    }, null);
+  } catch {
+    return null;
+  }
+}

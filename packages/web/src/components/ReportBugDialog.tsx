@@ -20,6 +20,7 @@ import { readLastPlacement, rememberPlacement, resolveInitialPlacement, type Cre
 import { Checkbox, Field, Select, TextArea, TextInput } from './controls';
 import { DialogShell } from './DialogShell';
 import { PlacementPicker } from './PlacementPicker';
+import { DialogFields, applicableValues, missingRequiredFields, useApplicableFields, type FieldValues } from './DialogFields';
 import { Btn } from './Primitives';
 import { RichTextEditor } from './RichTextEditor';
 
@@ -119,6 +120,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
     setPlacementSource(initial?.source ?? null);
     setTriage(false);
     setSelectedLabelIds([]);
+    setFieldValues({});
     setErrorMessage(null);
     setReported(null);
   }, [isOpen, boardRepository, teamKey]);
@@ -127,6 +129,10 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
     if (isOpen) titleInputRef.current?.focus();
   }, [isOpen, reported]);
 
+  // Fields for Type Bug (INV-1505): a placed report is committed at once, so required ones must be set; triage may leave them.
+  const [fieldValues, setFieldValues] = useState<FieldValues>({});
+  const fieldDefinitions = useApplicableFields(isOpen ? teamId : null, triage ? null : placement?.parentId, 'ISSUE', 'bug');
+
   if (!isOpen) {
     return null;
   }
@@ -134,7 +140,9 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
   // Type is Bug by definition; the other Type labels do not apply.
   const extraLabels = labels.filter((label) => !isTypeLabel(label.name));
   const placed = triage || Boolean(placement);
-  const canSubmit = Boolean(title.trim() && steps.trim() && priority > 0 && placed && foundInValid) && !isSaving;
+  const sentFields = applicableValues(fieldDefinitions, fieldValues);
+  const missingFields = triage ? [] : missingRequiredFields(fieldDefinitions, sentFields);
+  const canSubmit = Boolean(title.trim() && steps.trim() && priority > 0 && placed && foundInValid && missingFields.length === 0) && !isSaving;
 
   function toggleLabel(labelId: string) {
     setSelectedLabelIds((current) =>
@@ -162,6 +170,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
             ...(foundIn ? { foundInSha: foundIn } : {}),
             ...(triage || !placement ? {} : { parentId: placement.parentId }),
             labelIds: selectedLabelIds,
+            ...(Object.keys(sentFields).length ? { attributes: sentFields } : {}),
           },
         },
       });
@@ -359,6 +368,8 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
               onChange={(event) => setTriage(event.target.checked)}
             />
           </div>
+
+          <DialogFields definitions={fieldDefinitions} values={fieldValues} onChange={setFieldValues} disabled={isSaving} />
 
           {extraLabels.length > 0 ? (
             <div className="field">

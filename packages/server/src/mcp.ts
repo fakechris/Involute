@@ -5,6 +5,7 @@ import type { PrismaClient } from '@prisma/client';
 import { createGraphQLContext, type GraphQLContextOptions } from './auth.js';
 import { getExposedError, NOT_AUTHENTICATED_MESSAGE } from './errors.js';
 import { callMcpTool, listMcpTools } from './mcp-tools.js';
+import { requiredFieldsSummary } from './field-definitions.js';
 
 import { MCP_PROTOCOL_VERSION, serverBuild } from './protocol-info.js';
 import { WORK_REVISION_CONFLICT_MESSAGE } from './errors.js';
@@ -131,12 +132,14 @@ async function dispatchMcpMethod(
       };
     case 'ping':
       return {};
-    case 'tools/list':
+    case 'tools/list': {
+      // An agent sees its team's required fields where it writes attributes (INV-1505).
+      const required = await requiredFieldsForCaller(context);
       return {
         tools: listMcpTools(readonly, context).map((tool) => ({
           name: tool.name,
           description: tool.description,
-          inputSchema: tool.inputSchema,
+          inputSchema: required ? withRequiredFields(tool.inputSchema, required) : tool.inputSchema,
           annotations: {
             readOnlyHint: tool.annotations.readOnlyHint,
             destructiveHint: tool.annotations.destructiveHint,
@@ -146,6 +149,7 @@ async function dispatchMcpMethod(
           },
         })),
       };
+    }
     case 'tools/call': {
       const params = (message.params ?? {}) as { arguments?: Record<string, unknown>; name?: string };
       if (!params.name) {
@@ -248,4 +252,18 @@ function readRequestBody(request: IncomingMessage): Promise<string> {
 function jsonReplacer(_key: string, value: unknown): unknown {
   if (_key === "executionTokenHash") return undefined;
   return value instanceof Date ? value.toISOString() : value;
+}
+
+async function requiredFieldsForCaller(context: Awaited<ReturnType<typeof createGraphQLContext>>): Promise<string | null> {
+  if (!context.agentCredentialId) return null;
+  const credential = await context.prisma.agentCredential.findUnique({ where: { id: context.agentCredentialId }, select: { teamId: true } });
+  return credential?.teamId ? requiredFieldsSummary(context.prisma, credential.teamId) : null;
+}
+
+/** Appends the summary to an `attributes` property's description without touching the shared schema object. */
+function withRequiredFields(schema: unknown, summary: string): unknown {
+  const typed = schema as { properties?: Record<string, { description?: string }> };
+  const attributes = typed?.properties?.attributes;
+  if (!attributes) return schema;
+  return { ...typed, properties: { ...typed.properties, attributes: { ...attributes, description: `${attributes.description ?? ''} ${summary}`.trim() } } };
 }

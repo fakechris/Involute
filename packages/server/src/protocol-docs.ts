@@ -232,6 +232,11 @@ terms, \`field:value\` with optional comparison (\`priority:>=2\`,
 \`updated:>30d\`), negation (\`-state:done\`). Fields: \`team\`, \`state\`,
 \`state-type\`, \`kind\`, \`commitment\`, \`assignee\`, \`label\`, \`priority\`,
 \`severity\` (\`sev1,sev2\` or \`none\`), \`updated\`, \`link\`, \`has\`, \`project\`.
-Bare words match title/description.
+Bare words match title/description. Field definitions (INV-1505):
+\`attr.<key>:value\` (\`attr.risk:low,high\`, \`attr.customer:none\` / \`any\`,
+\`!=\` and \`-\` negate) on any field; ranges (\`attr.points:>=3\`) and
+\`sort:attr.<key>\` / \`sort:attr.<key>:desc\` only on searchable fields —
+on others they are refused with the reason. \`sort\` works in work_search
+without free text and the issues query, and is refused in ready lists.
 `;
 }

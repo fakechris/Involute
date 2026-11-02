@@ -3,7 +3,7 @@ import { loadHandledForYou } from './autonomy-gate.js';
 import type { AgentTrustLevel } from '@prisma/client';
 import { TRUST_LEVEL_DESCRIPTIONS, adviseTrust, allowedAt, loadAgentTrustMetrics, readAgentTrust, setAgentTrust } from './agent-trust.js';
 import { WORKSPACE_SETTINGS_ID } from './workspace-access.js';
-import type { AutonomyScope, FieldDefinition } from '@prisma/client';
+import type { AutonomyScope, FieldDefinition, WorkKind } from '@prisma/client';
 import { POLICY_SCOPE_INVALID_MESSAGE, autonomyToGraphQL, clearWorkflowPolicy, loadAutonomyFor, observeLabelFor, readAutonomySettings, setWorkflowPolicy } from './autonomy-service.js';
 import type { SavedView } from '@prisma/client';
 import { deleteSavedView, listSavedViews, upsertSavedView } from './saved-views.js';
@@ -125,7 +125,8 @@ import type {
 import { buildIssueWhere, type IssueFilterInput } from './issue-filter.js';
 import { searchIssues, type IssueSearchHit } from './issue-search.js';
 import { resolveIssuePreviews, type IssuePreviewRecord } from './issue-preview.js';
-import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
+import { parseIqlOrThrow } from './iql-compile.js';
+import { compileIqlWhere, orderIdsByAttribute, refuseSort } from './iql-attr.js';
 
 import { requireAuthentication, type GraphQLContext } from './auth.js';
 import { isPlausibleEmail, issueAgentCredential, parseAgentScopeList } from './agent-credentials.js';
@@ -171,7 +172,7 @@ import {
   type AgentProfile as AgentProfileResult,
   type WorkProvenance as WorkProvenanceResult,
 } from './agent-directory.js';
-import { type SetFieldDefinitionInput, FIELD_LIMITS, FIELD_SCOPE_INVALID_MESSAGE, FIELD_STALE_DAYS, countFieldUsage, isStaleDefinition, renameFieldDefinition, deactivateFieldDefinition, fieldDefinitionView, readActiveDefinitions, readAttributes, resolveDefinitionsFor, setFieldDefinition, typeNameOf } from './field-definitions.js';
+import { type SetFieldDefinitionInput, FIELD_LIMITS, FIELD_SCOPE_INVALID_MESSAGE, FIELD_STALE_DAYS, countFieldUsage, isStaleDefinition, renameFieldDefinition, deactivateFieldDefinition, fieldDefinitionView, readActiveDefinitions, readAppliesTo, readAttributes, resolveDefinitionsFor, resolveScopedDefinitions, setFieldDefinition, typeNameOf } from './field-definitions.js';
 import { createComment, createIssue, createIssueInTransaction, deleteComment, deleteIssue, mentionTexts, updateIssue } from './issue-service.js';
 import { isActionableNotification, markNotificationRead, projectWorkNotifications, resolveAttentionNotifications } from './notification-service.js';
 import { auditMergedPrTraceability } from './traceability-audit.js';
@@ -469,6 +470,8 @@ const typeDefs = /* GraphQL */ `
     fieldDefinitions(scope: AutonomyScope!, scopeId: String!, includeInactive: Boolean): [FieldDefinition!]!
     "The field governance limits (INV-1504)."
     fieldLimits: FieldLimits!
+    "The active field definitions new work would see (INV-1505): team, optional parent (its project), Kind and lower-case Type. For the Report bug, create and propose dialogs."
+    applicableFieldDefinitions(teamId: String!, parentId: String, kind: WorkKind!, type: String, "Ignore the Type filter (the board lists every field it could group by)." allTypes: Boolean): [FieldDefinition!]!
     issue(id: String!): Issue
     """
     The work items behind references in prose (INV-1466): a batch of
@@ -3436,6 +3439,16 @@ const resolvers = {
       }
       return rows.map(fieldDefinitionToGraphQL);
     },
+    applicableFieldDefinitions: async (_parent: unknown, args: { teamId: string; parentId?: string | null; kind: WorkKind; type?: string | null; allTypes?: boolean | null }, context: GraphQLContext) => {
+      requireAuthentication(context);
+      await assertCanReadTeam(context.prisma, context, args.teamId);
+      const parent = args.parentId ? await findWorkByIdOrIdentifier(context.prisma, args.parentId) : null;
+      const subject = { teamId: args.teamId, kind: args.kind, parentId: parent?.teamId === args.teamId ? parent.id : null };
+      const definitions = args.allTypes
+        ? (await resolveScopedDefinitions(context.prisma, subject)).filter((definition) => readAppliesTo(definition.appliesTo).kinds.includes(args.kind))
+        : await resolveDefinitionsFor(context.prisma, { ...subject, typeName: args.type?.trim().toLowerCase() || null });
+      return definitions.map(fieldDefinitionToGraphQL);
+    },
     fieldLimits: () => ({ activePerScope: FIELD_LIMITS.activePerScope, enumOptions: FIELD_LIMITS.enumOptions, staleDays: FIELD_STALE_DAYS }),
     workspaceSettings: async (_parent: unknown, _args: Record<string, never>, context: GraphQLContext) => {
       assertSettingsAdmin(context);
@@ -3491,19 +3504,25 @@ const resolvers = {
       info: GraphQLResolveInfo,
     ): Promise<{ nodes: IssueParent[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
       const first = clampConnectionFirst(args.first, MAX_ISSUES_CONNECTION_FIRST);
-      const iqlWhere = args.query?.trim()
-        ? compileIqlToIssueWhere(parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null })
-        : undefined;
-      const where = combineIssueWhere(
+      const compiled = args.query?.trim()
+        ? await compileIqlWhere(context.prisma, parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null })
+        : { where: undefined, sort: null };
+      const baseWhere = combineIssueWhere(
         combineIssueWhere(
-          combineIssueWhere(
-            buildIssueWhere(args.filter, context.viewer?.id ?? null),
-            buildReadableIssueWhere(context),
-          ),
-          iqlWhere,
+          buildIssueWhere(args.filter, context.viewer?.id ?? null),
+          buildReadableIssueWhere(context),
         ),
-        buildIssueCursorWhere(args.after),
+        compiled.where,
       );
+      // sort:attr.<key> (INV-1505): order every match by the typed index and page by position.
+      let sortedPage: { ids: string[]; hasNextPage: boolean; offset: number } | null = null;
+      if (compiled.sort) {
+        const offset = args.after?.startsWith('sort:') ? Number(args.after.slice(5)) || 0 : 0;
+        const matches = await context.prisma.issue.findMany({ ...(baseWhere ? { where: baseWhere } : {}), select: { id: true }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] });
+        const ordered = await orderIdsByAttribute(context.prisma, matches.map((row) => row.id), compiled.sort);
+        sortedPage = { ids: ordered.slice(offset, offset + first), hasNextPage: ordered.length > offset + first, offset };
+      }
+      const where = sortedPage ? { id: { in: sortedPage.ids } } : combineIssueWhere(baseWhere, buildIssueCursorWhere(args.after));
       const requestedIssueFields = getRequestedIssueConnectionFields(info);
       const issues = await context.prisma.issue.findMany({
         ...(where ? { where } : {}),
@@ -3518,6 +3537,12 @@ const resolvers = {
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: first + 1,
       });
+      if (sortedPage) {
+        const page = sortedPage;
+        const byId = new Map(issues.map((issue) => [issue.id, issue]));
+        const nodes = page.ids.map((id) => byId.get(id)).filter((issue): issue is (typeof issues)[number] => Boolean(issue));
+        return { nodes, pageInfo: { hasNextPage: page.hasNextPage, endCursor: nodes.length ? `sort:${page.offset + nodes.length}` : null } };
+      }
       const nodes = issues.slice(0, first);
 
       return {
@@ -3687,7 +3712,7 @@ const resolvers = {
       requireAuthentication(context);
       const filters: Prisma.IssueWhereInput[] = [];
       if (args.iql?.trim()) {
-        const compiled = compileIqlToIssueWhere(parseIqlOrThrow(args.iql), { viewerId: context.viewer?.id ?? null });
+        const compiled = refuseSort(await compileIqlWhere(context.prisma, parseIqlOrThrow(args.iql), { viewerId: context.viewer?.id ?? null }), 'ranked search');
         if (compiled) filters.push(compiled);
       }
       if (args.repository) filters.push({ repository: args.repository });

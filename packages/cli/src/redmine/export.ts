@@ -303,6 +303,8 @@ export async function exportRedmine(options: RedmineExportOptions): Promise<Redm
       parent: project ? { id: ns.project(project.id) } : null,
       kind: 'ISSUE',
       repository: project ? repositoryFor(project) : 'redmine/unassigned',
+      // Custom fields travel by name; the importer maps them onto field definitions (INV-1505).
+      ...(issue.custom_fields?.length ? { customFields: issue.custom_fields.map((field) => ({ name: field.name, value: field.value ?? null })) } : {}),
     });
   }
 

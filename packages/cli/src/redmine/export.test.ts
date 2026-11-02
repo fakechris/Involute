@@ -45,6 +45,7 @@ const ISSUES: RedmineIssue[] = [
     assigned_to: { id: 2, name: 'Bo Wang' },
     subject: 'Fix the thing',
     description: 'the body',
+    custom_fields: [{ id: 5, name: 'Customer Tier', value: 'gold' }, { id: 6, name: '影响模块', value: ['支付', '账单'], multiple: true }],
     created_on: '2024-02-01T00:00:00.000Z',
     updated_on: '2024-02-03T00:00:00.000Z',
   },
@@ -206,5 +207,15 @@ describe('the Redmine export (INV-1288)', () => {
     });
 
     expect(summary.unmatchedUsers).toBe(1);
+  });
+
+  it('carries Redmine custom fields by name for the importer to map (INV-1505)', async () => {
+    await exportRedmine({ client: fakeClient(), outputDir, sourceUrl: 'https://redmine.91jinrong.com', teamKey: 'RD', teamName: 'Redmine 迁移' });
+    const issues = JSON.parse(await readFile(join(outputDir, 'issues.json'), 'utf8')) as Array<{ identifier: string; customFields?: unknown }>;
+    expect(issues.find((issue) => issue.identifier === 'RD-43238')?.customFields).toEqual([
+      { name: 'Customer Tier', value: 'gold' },
+      { name: '影响模块', value: ['支付', '账单'] },
+    ]);
+    expect(issues.find((issue) => issue.identifier === 'RD-43239')?.customFields).toBeUndefined();
   });
 });

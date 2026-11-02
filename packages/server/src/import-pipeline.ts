@@ -14,7 +14,7 @@
  * 10. Idempotent: re-import skips already-imported records (check mapping table)
  */
 
-import type { Prisma, PrismaClient } from '@prisma/client';
+import type { FieldDefinition, Prisma, PrismaClient, WorkKind } from '@prisma/client';
 import type {
   ExportedComment,
   ExportedIssue,
@@ -34,6 +34,7 @@ import {
 } from '@turnkeyai/involute-shared/import-format';
 import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { type Attributes, IMPORTED_EXTRA_KEY, ensureImportedExtraDefinition, mapImportedFields, recordAttributeWrite, resolveDefinitionsFor, typeNameFromLabels } from './field-definitions.js';
 import { lockWorkGraph } from './graph-integrity.js';
 import { syncContainsFromParentId } from './link-service.js';
 
@@ -460,6 +461,13 @@ async function importIssues(
       data.labels = { connect: labelConnections };
     }
 
+    // Source custom fields onto field definitions (INV-1505); the rest as imported_extra text.
+    let fieldWrite: Awaited<ReturnType<typeof importedFieldWrite>> = null;
+    if (issue.customFields?.length) {
+      fieldWrite = await importedFieldWrite(prisma, { teamId: newTeamId, kind: issue.kind ?? 'ISSUE', parentId: newParentId, labels: issue.labels.nodes.map((label) => label.name) }, issue.customFields, warnings, issue);
+      if (fieldWrite) data.attributes = fieldWrite.attributes as Prisma.InputJsonValue;
+    }
+
     const created = await prisma.$transaction(async (transaction) => {
       await lockWorkGraph(transaction, newTeamId);
       const conflictingIssue = await transaction.issue.findUnique({
@@ -478,6 +486,7 @@ async function importIssues(
       }
 
       const nextIssue = await transaction.issue.create({ data });
+      if (fieldWrite) await recordAttributeWrite(transaction, nextIssue.id, fieldWrite);
       // The parent link and its CONTAINS edge are written together: the edge
       // is what the work graph reads, and a parentId without it is a half edge.
       if (newParentId) {
@@ -830,4 +839,28 @@ export async function runImportPipeline(
       skippedRecords: [...stateResult.warnings, ...issueResult.warnings, ...commentResult.warnings, ...parentWarnings],
     },
   };
+}
+
+/** Map one source item's custom fields (INV-1505); unmatched values go to the team's imported_extra field. */
+async function importedFieldWrite(
+  prisma: PrismaClient,
+  item: { teamId: string; kind: WorkKind; parentId: string | null; labels: string[] },
+  fields: Array<{ name: string; value: unknown }>,
+  warnings: ImportWarningRecord[],
+  issue: ExportedIssue,
+): Promise<{ attributes: Attributes; changed: string[]; definitions: FieldDefinition[] } | null> {
+  const definitions = await resolveDefinitionsFor(prisma, { teamId: item.teamId, kind: item.kind, parentId: item.parentId, typeName: typeNameFromLabels(item.labels) });
+  const mapped = mapImportedFields(definitions, fields);
+  let all = definitions;
+  if (mapped.extra) {
+    const extra = await ensureImportedExtraDefinition(prisma, item.teamId);
+    if (extra) {
+      mapped.attributes[IMPORTED_EXTRA_KEY] = mapped.extra;
+      all = [...definitions.filter((definition) => definition.key !== IMPORTED_EXTRA_KEY), extra];
+    } else {
+      warnings.push({ entityType: 'issue', legacyId: issue.id, identifier: issue.identifier, reason: `custom fields without a definition were dropped (the team is at its field limit): ${mapped.extra.split('\n').join('; ')}` });
+    }
+  }
+  const changed = Object.keys(mapped.attributes);
+  return changed.length ? { attributes: mapped.attributes, changed, definitions: all } : null;
 }

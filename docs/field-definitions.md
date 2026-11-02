@@ -1,11 +1,13 @@
 # Field definitions: work-item fields as configuration (design, INV-1500)
 
-Status: **stages 1–2 implemented** — model, validator, GraphQL / MCP read and
+Status: **implemented (stages 1–3)** — model, validator, GraphQL / MCP read and
 write, the GIN index, audit snapshots and the issue page Fields section
 (INV-1503); Settings → Administration → Fields and Team settings → Fields,
 governance limits, the 90-day cleanup prompt, key rename and FieldValueIndex
-with its background backfill / cleanup (INV-1504). IQL, board grouping,
-autonomy conditions, dialogs and import: INV-1505. Today every work-item field is a Prisma
+with its background backfill / cleanup (INV-1504); IQL `attr.<key>` and
+`sort:`, board grouping, autonomy `attr.<key>` conditions, required fields
+in the create / Report bug / commit dialogs and MCP tool descriptions, and
+Redmine custom-field import mapping (INV-1505). Today every work-item field is a Prisma
 column; adding one means a migration, GraphQL and MCP changes, the parity and
 human-surface guards, a web form and a release. This page designs the layer
 that makes a new field a piece of configuration instead, while keeping every

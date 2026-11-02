@@ -12,7 +12,7 @@ import { Prisma, type AgentTrustLevel, type AutonomyScope, type PrismaClient } f
 
 import {
   type AutonomyFacts, type AutonomyLevel, type Gate, type GateTable, type PolicyRow, type ResolvedAutonomy,
-  BUILT_IN_LOCKS, CONDITION_FIELDS, GATES, LEVEL_DESCRIPTIONS, LEVEL_PRESETS, POLICY_AUDIT, decide, describeFacts, isAutonomyLevel, resolveAutonomy, validateGateTable, validatePredicate,
+  BUILT_IN_LOCKS, CONDITION_FIELDS, GATES, attrFieldsIn, LEVEL_DESCRIPTIONS, LEVEL_PRESETS, POLICY_AUDIT, decide, describeFacts, isAutonomyLevel, resolveAutonomy, validateGateTable, validatePredicate,
 } from './autonomy-policy.js';
 import { amendmentChanges } from './contract-amendment.js';
 import { isTypeLabel } from './labels.js';
@@ -138,6 +138,13 @@ export async function setWorkflowPolicy(prisma: PrismaClient, input: SetPolicyIn
   const reason = requireReason(input.reason);
   const problems = [...validateGateTable(input.gates), ...(input.intake === undefined || input.intake === null ? [] : validatePredicate(input.intake, 'intake'))];
   if (problems.length) throw createValidationError(`Invalid policy: ${problems.join('; ')}`);
+  // attr.<key> conditions name searchable fields the scope can see (INV-1505).
+  const attrFields = [...new Set([...attrFieldsIn(input.gates), ...attrFieldsIn(input.intake)])];
+  if (attrFields.length) {
+    const allowed = new Set(await searchableAttrFields(prisma, input));
+    const unknown = attrFields.filter((field) => !allowed.has(field));
+    if (unknown.length) throw createValidationError(`Invalid policy: ${unknown.join(', ')} ${unknown.length > 1 ? 'are not searchable fields' : 'is not a searchable field'} of this scope; mark the field searchable in Fields settings first.`);
+  }
   if (input.locked && input.locked.length && input.scope !== 'WORKSPACE') throw createValidationError(POLICY_LOCKED_WORKSPACE_ONLY_MESSAGE);
   if (input.scope !== 'WORKSPACE' && (input.paused !== undefined && input.paused !== null || input.defaultLevel !== undefined && input.defaultLevel !== null || input.templates !== undefined && input.templates !== null || input.completionReply !== undefined && input.completionReply !== null)) throw createValidationError(POLICY_WORKSPACE_ONLY_MESSAGE);
   if (typeof input.completionReply === 'string' && input.completionReply.length > 4_000) throw createValidationError('Invalid policy: completionReply is at most 4000 characters.');
@@ -288,11 +295,35 @@ export async function readAutonomySettings(prisma: DatabaseClient, ref: PolicySc
     levels: ([0, 1, 2, 3] as const).map((value) => ({ level: value, name: LEVEL_DESCRIPTIONS[value].name, descriptionEn: LEVEL_DESCRIPTIONS[value].en, descriptionZh: LEVEL_DESCRIPTIONS[value].zh, gates: GATES.map((gate) => ({ gate, decider: LEVEL_PRESETS[value][gate].decider })) })),
     builtInLocks: BUILT_IN_LOCKS.map((lock) => ({ id: lock.id, gate: lock.gate, reason: lock.reason })),
     gates: [...GATES],
-    conditionFields: [...CONDITION_FIELDS],
+    conditionFields: [...CONDITION_FIELDS, ...(await searchableAttrFields(prisma, ref))],
   };
 }
 
-type FactsWork = { id: string; priority: number; severity: string | null; reproducibility: string | null; source: string | null; description: string | null; acceptance: string | null; labels?: Array<{ name: string }> };
+/**
+ * The `attr.<key>` condition fields a scope's policy may name (INV-1505): keys
+ * of active searchable field definitions in the workspace, and for a team or
+ * project also in that team and its projects.
+ */
+export async function searchableAttrFields(prisma: DatabaseClient, ref: PolicyScopeRef): Promise<string[]> {
+  let teamId: string | null = null;
+  if (ref.scope === 'TEAM') teamId = ref.scopeId;
+  if (ref.scope === 'PROJECT') teamId = (await prisma.issue.findUnique({ where: { id: ref.scopeId }, select: { teamId: true } }))?.teamId ?? null;
+  const projectIds = teamId ? (await prisma.issue.findMany({ where: { teamId, kind: 'PROJECT' }, select: { id: true } })).map((row) => row.id) : [];
+  const rows = await prisma.fieldDefinition.findMany({
+    where: {
+      active: true,
+      searchable: true,
+      OR: [
+        { scope: 'WORKSPACE', scopeId: WORKSPACE_SETTINGS_ID },
+        ...(teamId ? [{ scope: 'TEAM' as const, scopeId: teamId }, { scope: 'PROJECT' as const, scopeId: { in: projectIds } }] : []),
+      ],
+    },
+    select: { key: true },
+  });
+  return [...new Set(rows.map((row) => `attr.${row.key}`))].sort();
+}
+
+type FactsWork = { id: string; priority: number; severity: string | null; reproducibility: string | null; source: string | null; description: string | null; acceptance: string | null; labels?: Array<{ name: string }>; attributes?: Prisma.JsonValue };
 
 /** The structured facts a condition may look at, read from the stored item (docs/autonomy-policy.md §3). */
 export async function factsForWork(prisma: DatabaseClient, work: FactsWork): Promise<AutonomyFacts> {
@@ -314,6 +345,14 @@ export async function factsForWork(prisma: DatabaseClient, work: FactsWork): Pro
   if (evaluation) facts.auto_accept_grade = evaluation.tier;
   if (typeof signals.merged === 'boolean') facts.pr_merged = signals.merged;
   if (typeof signals.checks === 'string') facts.checks = signals.checks;
+  // Field values as attr.<key> facts (INV-1505).
+  const attributes = work.attributes !== undefined ? work.attributes : (await prisma.issue.findUnique({ where: { id: work.id }, select: { attributes: true } }))?.attributes;
+  if (attributes && typeof attributes === 'object' && !Array.isArray(attributes)) {
+    for (const [key, value] of Object.entries(attributes as Record<string, unknown>)) {
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') facts[`attr.${key}`] = value;
+      else if (Array.isArray(value)) facts[`attr.${key}`] = value.filter((entry): entry is string => typeof entry === 'string');
+    }
+  }
   return facts;
 }
 

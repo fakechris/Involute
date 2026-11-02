@@ -22,6 +22,7 @@ import { isEditableTarget } from '../components/IssueDrawerHost';
 
 import { looksLikeIql } from '../board/iql-eval';
 import {
+  BOARD_FIELDS_QUERY,
   BOARD_PAGE_QUERY,
   COMMENT_DELETE_MUTATION,
   COMMENT_CREATE_MUTATION,
@@ -33,6 +34,8 @@ import {
 } from '../board/queries';
 import type {
   BoardGroupBy,
+  FieldDefinitionSummary,
+  FieldValue,
   BoardIssueGroup,
   BoardPageQueryData,
   BoardPageQueryVariables,
@@ -94,6 +97,7 @@ import {
   createSavedBoardViewId,
   getDefaultBoardViewState,
   groupIssuesBy,
+  groupableFields,
   readSavedBoardViews,
   dispatchApplyBoardView,
   readStoredBoardViewState,
@@ -357,6 +361,7 @@ export function BoardPage() {
   const [isReportIncidentOpen, setIsReportIncidentOpen] = useState(false);
   const [reportBugPrefill, setReportBugPrefill] = useState({ description: '', title: '' });
   const [createTitle, setCreateTitle] = useState('');
+  const [createAttributes, setCreateAttributes] = useState<Record<string, FieldValue>>({});
   const [createDescription, setCreateDescription] = useState('');
   const [createPlacement, setCreatePlacement] = useState<CreatePlacement | null>(null);
   const [placementSource, setPlacementSource] = useState<PlacementSource | null>(null);
@@ -577,6 +582,7 @@ export function BoardPage() {
     });
   const openCreateDialog = (context: CreatePlacement | null = null, title = '') => {
     const initial = initialPlacement(context);
+    setCreateAttributes({});
     setCreateTitle(title);
     setCreateDescription('');
     setCreateKind('ISSUE');
@@ -1156,9 +1162,15 @@ export function BoardPage() {
 
   const columns = useMemo(() => getBoardColumns(selectedTeam, visibleIssues), [selectedTeam, visibleIssues]);
   const issuesByState = useMemo(() => groupIssuesByState(boardVisibleIssues, columns), [boardVisibleIssues, columns]);
+  // Searchable list / yes-no / person fields the board can group by (INV-1505).
+  const { data: boardFieldsData } = useQuery<{ applicableFieldDefinitions: FieldDefinitionSummary[] }, { teamId: string }>(BOARD_FIELDS_QUERY, {
+    variables: { teamId: selectedTeam?.id ?? '' },
+    skip: !selectedTeam?.id,
+  });
+  const groupFields = useMemo(() => groupableFields(boardFieldsData?.applicableFieldDefinitions ?? []), [boardFieldsData]);
   const issueGroups = useMemo(
-    () => groupIssuesBy(boardVisibleIssues, boardViewState.groupBy, selectedTeam, users, labels),
-    [boardVisibleIssues, boardViewState.groupBy, selectedTeam, users, labels],
+    () => groupIssuesBy(boardVisibleIssues, boardViewState.groupBy, selectedTeam, users, labels, groupFields),
+    [boardVisibleIssues, boardViewState.groupBy, selectedTeam, users, labels, groupFields],
   );
   const activeIssue = useMemo(
     () => visibleIssues.find((issue) => issue.id === activeIssueId) ?? null,
@@ -2245,6 +2257,7 @@ export function BoardPage() {
             parentId: createPlacement.parentId,
             ...(createKind !== 'ISSUE' ? { kind: createKind } : {}),
             ...(trimmedDescription ? { description: trimmedDescription } : {}),
+            ...(Object.keys(createAttributes).length ? { attributes: createAttributes } : {}),
           },
         },
       });
@@ -2265,6 +2278,7 @@ export function BoardPage() {
       setFocusedIssueId(result.data.issueCreate.issue.id);
       recordDeleteGesture([{ issueId: result.data.issueCreate.issue.id, identifier: result.data.issueCreate.issue.identifier, phase: 'restored', origin: 'created' }]);
       setCreateTitle('');
+      setCreateAttributes({});
       setCreateDescription(createKind === 'DECISION' ? DECISION_TEMPLATE : '');
       if (createMore) {
         // Keep the placement for the next one, as Linear's "Create more" does.
@@ -2893,6 +2907,7 @@ export function BoardPage() {
                 { value: 'priority', label: 'Priority' },
                 { value: 'assignee', label: 'Assignee' },
                 { value: 'label', label: 'Label' },
+                ...groupFields.map((field) => ({ value: `attr:${field.key}` as BoardGroupBy, label: field.label })),
                 { value: 'none', label: 'None' },
               ],
               onChange: (groupBy: BoardGroupBy) => {
@@ -3331,6 +3346,8 @@ export function BoardPage() {
         onSubmit={(event) => void handleCreateIssueSubmit(event)}
         onTitleChange={setCreateTitle}
         onDescriptionChange={setCreateDescription}
+        attributes={createAttributes}
+        onAttributesChange={setCreateAttributes}
         onTeamChange={(teamKey) => setPendingTeamKey(teamKey === activeTeamKey ? null : teamKey)}
         onReportBug={() => {
           // Bug from the create drawer: carry what was typed over to Report bug (INV-1132).
