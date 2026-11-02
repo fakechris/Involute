@@ -67,6 +67,7 @@ import { parseSeverity } from './severity.js';
 import { mergeIncidentTimes, readIncidentTimes } from './incident-timestamps.js';
 import { parseReproducibility } from './reproducibility.js';
 import { parseFoundInSha } from './found-in.js';
+import { type AttributesInput, applyAttributes, typeNameFromLabels, typeNameOf } from './field-definitions.js';
 
 export interface CreateIssueInput {
   acceptance?: string | null;
@@ -101,9 +102,13 @@ export interface CreateIssueInput {
   teamId: string;
   title: string;
   verification?: string | null;
+  /** Values of field definitions (INV-1503); validated against the definitions that apply. */
+  attributes?: AttributesInput | null;
 }
 
 export interface UpdateIssueInput {
+  /** Partial: merged onto stored values; null clears a key (INV-1503). Not a contract field. */
+  attributes?: AttributesInput | null;
   acceptance?: string | null;
   alias?: string | null;
   /** PROJECT only (INV-1146): http(s) origins its app is served from; null or [] clears. */
@@ -204,6 +209,7 @@ export async function createIssueWithAudit(
   const state = await resolveCreateState(prisma, input.teamId, input.stateId);
 
   let labelConnect: Array<{ id: string }> | undefined;
+  let labelNames: string[] = [];
   if (input.labelIds !== undefined && input.labelIds !== null) {
     const labelIds = [...new Set(input.labelIds)];
 
@@ -224,10 +230,19 @@ export async function createIssueWithAudit(
         throw createNotFoundError(ISSUE_LABEL_NOT_FOUND_MESSAGE);
       }
       assertSingleType(labels);
+      labelNames = labels.map((label) => label.name);
     }
 
     labelConnect = labelIds.map((labelId) => ({ id: labelId }));
   }
+
+  // Field values (INV-1503): candidates may leave required fields empty; committed work may not.
+  const fields = await applyAttributes(prisma, {
+    teamId: input.teamId,
+    kind: input.kind ?? 'ISSUE',
+    parentId: input.parentId ?? null,
+    typeName: typeNameFromLabels(labelNames),
+  }, input.attributes, (input.commitmentStatus ?? 'COMMITTED') === 'CANDIDATE' ? 'candidate' : 'committed');
 
   const updatedTeam = await prisma.team.update({
       where: {
@@ -273,6 +288,7 @@ export async function createIssueWithAudit(
         teamId: input.teamId,
         title: input.title,
         verification: input.verification ?? null,
+        attributes: fields.attributes as Prisma.InputJsonValue,
         ...(labelConnect ? { labels: { connect: labelConnect } } : {}),
       },
     });
@@ -536,6 +552,27 @@ export async function updateIssue(
     const foundInSha = parseFoundInSha(input.foundInSha);
     if (foundInSha !== undefined) {
       data.foundInSha = foundInSha;
+    }
+
+    // Field values (INV-1503): checked against the definitions for the item's
+    // Kind × Type after this update; only a write that touches attributes is checked.
+    if ('attributes' in input && input.attributes !== undefined && input.attributes !== null) {
+      let typeName: string | null;
+      if (input.labelIds !== undefined && input.labelIds !== null) {
+        const labels = await transaction.issueLabel.findMany({ where: { id: { in: input.labelIds } }, select: { name: true } });
+        typeName = typeNameFromLabels(labels.map((label) => label.name));
+      } else {
+        typeName = await typeNameOf(transaction, existingIssue.id);
+      }
+      const fields = await applyAttributes(transaction, {
+        id: existingIssue.id,
+        teamId: existingIssue.teamId,
+        kind: input.kind ?? existingIssue.kind,
+        parentId: input.parentId === undefined ? existingIssue.parentId : input.parentId,
+        typeName,
+        existing: existingIssue.attributes,
+      }, input.attributes, existingIssue.commitmentStatus === 'COMMITTED' ? 'committed' : 'candidate');
+      if (fields.changed.length) data.attributes = fields.attributes as Prisma.InputJsonValue;
     }
 
     // Snooze is candidate-pool governance: committed work has a human owner

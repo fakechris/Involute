@@ -202,6 +202,7 @@ export const ISSUE_UPDATE_MUTATION = gql`
         repository
         commitmentStatus
         resolution
+        attributes
         outcome
         scope
         constraints
@@ -557,6 +558,8 @@ export const ISSUE_PAGE_QUERY = gql`
       commitmentStatus
       resolution
       supersededBy { id identifier title }
+      attributes
+      fieldDefinitions { key label description type required options { value label archived } }
       outcome
       scope
       constraints

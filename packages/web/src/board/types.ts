@@ -133,6 +133,20 @@ export interface ContractAmendmentSummary {
   changes: Array<{ field: 'acceptance' | 'scope' | 'verification' | 'outcome' | 'constraints'; before: string | null; after: string | null }>;
 }
 
+/** A value of a field definition (INV-1503): text, number, boolean, ISO date, option value(s), or a work / user id. */
+export type FieldValue = string | number | boolean | string[];
+
+export type FieldDefinitionType = 'TEXT' | 'NUMBER' | 'BOOLEAN' | 'DATE' | 'ENUM' | 'MULTI_ENUM' | 'WORK_REF' | 'USER_REF' | 'URL';
+
+export interface FieldDefinitionSummary {
+  key: string;
+  label: string;
+  description?: string | null;
+  type: FieldDefinitionType;
+  required: boolean;
+  options: Array<{ value: string; label: string; archived?: boolean | null }>;
+}
+
 export interface IssueSummary {
   id: string;
   identifier: string;
@@ -145,6 +159,10 @@ export interface IssueSummary {
   /** Why a rejected or canceled item was closed (INV-1118). */
   /** The item that replaced this one (INV-1498). */
   supersededBy?: { id: string; identifier: string; title: string } | null;
+  /** Values of the field definitions that apply (INV-1503); the issue page asks for them. */
+  attributes?: Record<string, FieldValue> | null;
+  /** The active field definitions for this item's Kind × Type (INV-1503). */
+  fieldDefinitions?: FieldDefinitionSummary[];
   resolution?: WorkResolution | null;
   description?: string | null;
   repository?: string | null;
@@ -569,6 +587,8 @@ export interface IssueUpdateMutationVariables {
   id: string;
   input: {
     expectedRevision?: number;
+    /** Partial field values (INV-1503); null clears a key. */
+    attributes?: Record<string, FieldValue | null>;
     assigneeId?: string | null;
     description?: string | null;
     labelIds?: string[];
