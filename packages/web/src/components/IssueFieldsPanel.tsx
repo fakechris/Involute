@@ -27,7 +27,6 @@ function DraftInput({
   return (
     <TextInput
       type={type}
-      size="sm"
       aria-label={label}
       className="control-grow"
       disabled={disabled}
@@ -48,7 +47,7 @@ function FieldControl({
       return <Checkbox aria-label={label} label="" checked={value === true} disabled={disabled} onChange={(event) => onSave(event.target.checked)} />;
     case 'ENUM':
       return (
-        <Select aria-label={label} variant="ghost" size="sm" value={typeof value === 'string' ? value : ''} disabled={disabled} onChange={(event) => onSave(event.target.value || null)}>
+        <Select aria-label={label} value={typeof value === 'string' ? value : ''} disabled={disabled} onChange={(event) => onSave(event.target.value || null)}>
           <option value="">—</option>
           {definition.options.filter((option) => !option.archived || option.value === value).map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
@@ -76,7 +75,7 @@ function FieldControl({
     }
     case 'USER_REF':
       return (
-        <Select aria-label={label} variant="ghost" size="sm" value={typeof value === 'string' ? value : ''} disabled={disabled} onChange={(event) => onSave(event.target.value || null)}>
+        <Select aria-label={label} value={typeof value === 'string' ? value : ''} disabled={disabled} onChange={(event) => onSave(event.target.value || null)}>
           <option value="">Nobody</option>
           {people.map((person) => <option key={person.id} value={person.id}>{person.name ?? person.email ?? person.id}</option>)}
         </Select>
@@ -85,7 +84,6 @@ function FieldControl({
       return (
         <TextInput
           type="date"
-          size="sm"
           aria-label={label}
           className="control-grow"
           disabled={disabled}
