@@ -499,6 +499,7 @@ model Issue {
   supersededWorks Issue[] @relation("SupersededWork")
   // INV-1503: values of FieldDefinition rows that apply to this item; GIN (jsonb_path_ops) in the migration.
   attributes Json @default("{}")
+  fieldValueIndex FieldValueIndex[]
   // Phase 2: GitHub webhook PR provenance tracking
   stateSourcePrId      String?
   lastAppliedEventTime DateTime?
@@ -1549,7 +1550,41 @@ model FieldDefinition {
   reason       String?
   createdById  String?       @db.Uuid
   createdAt    DateTime      @default(now())
+  // INV-1504: the key this version replaced (rename); still accepted on write for one version.
+  previousKey  String?
+  // INV-1504: last time any item's value for this definition changed (copied across versions).
+  lastWrittenAt DateTime?
+  // INV-1504: a pending FieldValueIndex backfill or cleanup; null when the index matches.
+  indexJob       FieldIndexJob?
+  indexCursor    String?
+  indexProcessed Int           @default(0)
 
   @@index([scope, scopeId, active])
   @@index([key])
+  @@index([indexJob])
+}
+
+enum FieldIndexJob {
+  BACKFILL
+  CLEANUP
+}
+
+// INV-1504: typed rows for searchable definitions, so ranges, sorting and
+// grouping use btree indexes (docs/field-definitions.md §6). One row per value
+// (a MULTI_ENUM value has one row per option).
+model FieldValueIndex {
+  id          String    @id @default(uuid()) @db.Uuid
+  issueId     String    @db.Uuid
+  issue       Issue     @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  key         String
+  textValue   String?
+  numberValue Float?
+  dateValue   DateTime?
+  refId       String?   @db.Uuid
+
+  @@index([key, textValue])
+  @@index([key, numberValue])
+  @@index([key, dateValue])
+  @@index([key, refId])
+  @@index([issueId])
 }

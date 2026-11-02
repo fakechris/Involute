@@ -67,7 +67,7 @@ import {
 import { attachDecisionReceipt, type ReceiptInput } from './decision-receipt.js';
 import { createWorkLink } from './link-service.js';
 import { isLegalContains, lockWorkGraph } from './graph-integrity.js';
-import { type AttributesInput, applyAttributes, typeNameOf } from './field-definitions.js';
+import { type AttributesInput, applyAttributes, recordAttributeWrite, typeNameOf } from './field-definitions.js';
 import { createIssueWithAudit, mentionTexts, recordStateChangeAcceptance, type CreateIssueInput } from './issue-service.js';
 import { linkMentionedWork } from './mention-links.js';
 import { findOrCreateLabelIds, isBugWork, isResearchWork, namesIncident, namesResearch } from './labels.js';
@@ -852,6 +852,7 @@ export async function commitWork(
       },
     });
 
+    await recordAttributeWrite(transaction, existing.id, fields);
     await recordWorkAudit(transaction, {
       actor,
       after: selectIssueSnapshot(updated),

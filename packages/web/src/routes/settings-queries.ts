@@ -267,3 +267,71 @@ export const WORKFLOW_POLICY_CLEAR_MUTATION = gql`
     }
   }
 `;
+
+// --- Field definitions (INV-1503 / INV-1504, docs/field-definitions.md) -------
+
+export type FieldType = 'TEXT' | 'NUMBER' | 'BOOLEAN' | 'DATE' | 'ENUM' | 'MULTI_ENUM' | 'WORK_REF' | 'USER_REF' | 'URL';
+export type WorkKindName = 'PROJECT' | 'MILESTONE' | 'EPIC' | 'ISSUE' | 'DECISION';
+
+export interface FieldDefinitionRow {
+  id: string;
+  key: string;
+  label: string;
+  description: string | null;
+  type: FieldType;
+  options: Array<{ value: string; label: string; archived: boolean | null }>;
+  appliesTo: { kinds: WorkKindName[]; types: string[] };
+  required: boolean;
+  defaultValue: unknown;
+  searchable: boolean;
+  active: boolean;
+  version: number;
+  previousKey: string | null;
+  lastWrittenAt: string | null;
+  usageCount: number;
+  stale: boolean;
+  indexJob: 'BACKFILL' | 'CLEANUP' | null;
+  indexProcessed: number;
+}
+
+export interface FieldSettingsData {
+  fieldLimits: { activePerScope: number; enumOptions: number; staleDays: number };
+  fieldDefinitions: FieldDefinitionRow[];
+}
+
+export const FIELD_SETTINGS_QUERY = gql`
+  query FieldSettings($scope: AutonomyScope!, $scopeId: String!) {
+    fieldLimits { activePerScope enumOptions staleDays }
+    fieldDefinitions(scope: $scope, scopeId: $scopeId, includeInactive: true) {
+      id key label description type required defaultValue searchable active version previousKey lastWrittenAt usageCount stale indexJob indexProcessed
+      options { value label archived }
+      appliesTo { kinds types }
+    }
+  }
+`;
+
+export const FIELD_DEFINITION_SET_MUTATION = gql`
+  mutation FieldDefinitionSet($input: FieldDefinitionSetInput!) {
+    fieldDefinitionSet(input: $input) { success message definition { id key version } }
+  }
+`;
+
+export const FIELD_DEFINITION_DEACTIVATE_MUTATION = gql`
+  mutation FieldDefinitionDeactivate($input: FieldDefinitionDeactivateInput!) {
+    fieldDefinitionDeactivate(input: $input) { success message definition { id key active } }
+  }
+`;
+
+export const FIELD_DEFINITION_RENAME_MUTATION = gql`
+  mutation FieldDefinitionRename($input: FieldDefinitionRenameInput!) {
+    fieldDefinitionRename(input: $input) { success message definition { id key previousKey } }
+  }
+`;
+
+export const FIELD_PROJECTS_QUERY = gql`
+  query FieldProjects($teamKey: String) {
+    issues(first: 100, filter: { kind: PROJECT, team: { key: { eq: $teamKey } } }) {
+      nodes { id identifier title commitmentStatus }
+    }
+  }
+`;

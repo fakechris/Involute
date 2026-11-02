@@ -9,7 +9,7 @@
  * System fields (priority, severity, the contract, incident times…) stay
  * columns; nothing here touches them.
  */
-import { Prisma, type AutonomyScope, type FieldDefinition, type FieldType, type PrismaClient, type WorkKind } from '@prisma/client';
+import { Prisma, type AutonomyScope, type FieldDefinition, type FieldIndexJob, type FieldType, type PrismaClient, type WorkKind } from '@prisma/client';
 
 import { findProjectIdFor } from './autonomy-service.js';
 import { createValidationError } from './errors.js';
@@ -89,6 +89,8 @@ export interface ValidationResult {
   changed: string[];
   /** Required fields that are still empty on a candidate (a warning, not a refusal). */
   missingRequired: string[];
+  /** The applicable definitions the write was checked against (for the index and usage). */
+  definitions: FieldDefinition[];
   /** References the caller must check against the database. */
   refs: { work: Array<{ key: string; value: string }>; user: Array<{ key: string; value: string }> };
 }
@@ -180,11 +182,14 @@ export function validateAttributes(
     throw createValidationError('attributes must be an object of { key: value }.');
   }
   const byKey = new Map(definitions.map((definition) => [definition.key, definition]));
+  // A renamed field still accepts its previous key for one version (INV-1504).
+  const byPreviousKey = new Map(definitions.filter((definition) => definition.previousKey).map((definition) => [definition.previousKey!, definition]));
   const next: Attributes = { ...existing };
   const changed: string[] = [];
   const refs: ValidationResult['refs'] = { work: [], user: [] };
-  for (const [key, value] of Object.entries(input ?? {})) {
-    const definition = byKey.get(key);
+  for (const [givenKey, value] of Object.entries(input ?? {})) {
+    const definition = byKey.get(givenKey) ?? byPreviousKey.get(givenKey);
+    const key = definition?.key ?? givenKey;
     if (!definition) throw createValidationError(`Field "${key}" is not defined for this item (see work_catalog(kind: 'fields') or Issue.fieldDefinitions).`);
     if (value === null) {
       if (key in next) { delete next[key]; changed.push(key); }
@@ -210,7 +215,7 @@ export function validateAttributes(
     const labels = missingRequired.map((key) => `"${byKey.get(key)?.label ?? key}" (${key})`).join(', ');
     throw createValidationError(`Fill the required field${missingRequired.length > 1 ? 's' : ''} ${labels} before this work is committed.`);
   }
-  return { attributes: next, changed, missingRequired, refs };
+  return { attributes: next, changed: [...new Set(changed)], missingRequired, refs, definitions };
 }
 
 // ---------------------------------------------------------------------------
@@ -394,6 +399,8 @@ export async function setFieldDefinition(prisma: PrismaClient, input: SetFieldDe
         version: (previous?.version ?? 0) + 1,
         reason,
         createdById: byActorId,
+        lastWrittenAt: previous?.lastWrittenAt ?? null,
+        indexJob: indexJobFor(previous, input.searchable ?? false),
       },
     });
     await recordOpsAudit(tx, {
@@ -413,7 +420,8 @@ export async function deactivateFieldDefinition(prisma: PrismaClient, input: { s
   return prisma.$transaction(async (tx) => {
     const active = await tx.fieldDefinition.findFirst({ where: { scope: input.scope, scopeId: input.scopeId, key: input.key, active: true } });
     if (!active) throw createValidationError(`No active field "${input.key}" in this scope.`);
-    const updated = await tx.fieldDefinition.update({ where: { id: active.id }, data: { active: false } });
+    // A searchable field leaves the index when it is retired; its values stay on the items.
+    const updated = await tx.fieldDefinition.update({ where: { id: active.id }, data: { active: false, ...(active.searchable ? { indexJob: 'CLEANUP' as const, indexCursor: null, indexProcessed: 0 } : {}) } });
     await recordOpsAudit(tx, {
       action: FIELD_AUDIT.changed,
       subject: `field:${input.scope.toLowerCase()}:${input.scopeId}:${input.key}`,
@@ -442,6 +450,10 @@ export function fieldDefinitionView(definition: FieldDefinition) {
     searchable: definition.searchable,
     active: definition.active,
     version: definition.version,
+    previousKey: definition.previousKey,
+    lastWrittenAt: definition.lastWrittenAt,
+    indexJob: definition.indexJob,
+    indexProcessed: definition.indexProcessed,
   };
 }
 
@@ -475,4 +487,173 @@ export function parseAttributesArg(value: unknown): AttributesInput | undefined 
   if (value === undefined || value === null) return undefined;
   if (typeof value !== 'object' || Array.isArray(value)) throw createValidationError('attributes must be an object of { key: value }; a null value clears that key.');
   return value as AttributesInput;
+}
+
+
+// ---------------------------------------------------------------------------
+// INV-1504: FieldValueIndex, the backfill / cleanup job, rename, usage
+// ---------------------------------------------------------------------------
+
+/**
+ * What the index needs after a new version: rows to add when the key becomes
+ * searchable (newly, or again after deactivation), rows to remove when it
+ * stops being searchable. Nothing when it stays as it was.
+ */
+export function indexJobFor(previous: Pick<FieldDefinition, 'active' | 'searchable'> | null, searchable: boolean): FieldIndexJob | null {
+  const wasIndexed = Boolean(previous?.active && previous.searchable);
+  if (searchable && !wasIndexed) return 'BACKFILL';
+  if (!searchable && wasIndexed) return 'CLEANUP';
+  return null;
+}
+
+type IndexRow = { key: string; textValue?: string | null; numberValue?: number | null; dateValue?: Date | null; refId?: string | null };
+
+/** The typed rows for one value (MULTI_ENUM: one per option). */
+export function indexRowsFor(definition: Pick<FieldDefinition, 'key' | 'type'>, value: unknown): IndexRow[] {
+  if (value === undefined || value === null || value === '') return [];
+  const key = definition.key;
+  switch (definition.type) {
+    case 'NUMBER': return typeof value === 'number' ? [{ key, numberValue: value }] : [];
+    case 'DATE': return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? [{ key, dateValue: new Date(value) }] : [];
+    case 'BOOLEAN': return typeof value === 'boolean' ? [{ key, textValue: String(value) }] : [];
+    case 'MULTI_ENUM': return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string').map((entry) => ({ key, textValue: entry })) : [];
+    case 'WORK_REF':
+    case 'USER_REF': return typeof value === 'string' && isUuid(value) ? [{ key, refId: value }] : [];
+    default: return typeof value === 'string' ? [{ key, textValue: value }] : [];
+  }
+}
+
+async function writeIndexRows(prisma: DatabaseClient, issueId: string, definition: FieldDefinition, value: unknown): Promise<number> {
+  await prisma.fieldValueIndex.deleteMany({ where: { issueId, key: definition.key } });
+  const rows = indexRowsFor(definition, value);
+  if (rows.length) await prisma.fieldValueIndex.createMany({ data: rows.map((row) => ({ issueId, ...row })) });
+  return rows.length;
+}
+
+/**
+ * After a write that changed attributes (in the same transaction): keep the
+ * index rows of searchable fields in step and stamp when each field was last
+ * written. Called by every write path that stores `ValidationResult.attributes`.
+ */
+export async function recordAttributeWrite(prisma: DatabaseClient, issueId: string, result: Pick<ValidationResult, 'attributes' | 'changed' | 'definitions'>): Promise<void> {
+  if (!result.changed.length) return;
+  const byKey = new Map(result.definitions.map((definition) => [definition.key, definition]));
+  const touched: string[] = [];
+  for (const key of result.changed) {
+    const definition = byKey.get(key);
+    if (!definition) continue;
+    touched.push(definition.id);
+    if (definition.searchable) await writeIndexRows(prisma, issueId, definition, result.attributes[key]);
+  }
+  if (touched.length) await prisma.fieldDefinition.updateMany({ where: { id: { in: touched } }, data: { lastWrittenAt: new Date() } });
+}
+
+/** SQL limiting Issue rows to those a definition's scope covers. */
+function scopeFilter(definition: Pick<FieldDefinition, 'scope' | 'scopeId'>): Prisma.Sql {
+  if (definition.scope === 'TEAM') return Prisma.sql`"teamId" = ${definition.scopeId}::uuid`;
+  if (definition.scope === 'PROJECT') {
+    return Prisma.sql`id IN (WITH RECURSIVE subtree AS (SELECT id FROM "Issue" WHERE id = ${definition.scopeId}::uuid UNION SELECT child.id FROM "Issue" child JOIN subtree ON child."parentId" = subtree.id) SELECT id FROM subtree)`;
+  }
+  return Prisma.sql`TRUE`;
+}
+
+export const FIELD_INDEX_BATCH = 200;
+
+/**
+ * One step of each pending backfill / cleanup (docs/field-definitions.md §6):
+ * walks the items in the definition's scope that hold a value for its key,
+ * in id order from the cursor, and writes or removes their typed rows. An
+ * item governed by another definition of the same key (a nearer scope) is
+ * left to that definition. Returns how many definitions finished.
+ */
+export async function runFieldIndexJobs(prisma: PrismaClient, batch = FIELD_INDEX_BATCH): Promise<number> {
+  const jobs = await prisma.fieldDefinition.findMany({ where: { indexJob: { not: null } }, orderBy: { createdAt: 'asc' } });
+  let finished = 0;
+  for (const job of jobs) {
+    const cursor = job.indexCursor ? Prisma.sql`AND id > ${job.indexCursor}::uuid` : Prisma.empty;
+    const items = await prisma.$queryRaw<Array<{ id: string; teamId: string; kind: WorkKind; parentId: string | null; attributes: Prisma.JsonValue }>>`
+      SELECT id, "teamId", kind, "parentId", attributes FROM "Issue"
+      WHERE jsonb_exists(attributes, ${job.key}) AND ${scopeFilter(job)} ${cursor}
+      ORDER BY id LIMIT ${batch}`;
+    for (const item of items) {
+      const governing = (await resolveScopedDefinitions(prisma, item)).find((definition) => definition.key === job.key);
+      const value = readAttributes(item.attributes)[job.key];
+      if (job.indexJob === 'BACKFILL') {
+        if (governing?.id === job.id && job.active && job.searchable) await writeIndexRows(prisma, item.id, job, value);
+      } else if (!governing?.searchable) {
+        await prisma.fieldValueIndex.deleteMany({ where: { issueId: item.id, key: job.key } });
+      }
+    }
+    const done = items.length < batch;
+    // Only the job this pass picked up is advanced; a newer version may have replaced it meanwhile.
+    await prisma.fieldDefinition.updateMany({
+      where: { id: job.id, indexJob: job.indexJob },
+      data: done ? { indexJob: null, indexCursor: null, indexProcessed: job.indexProcessed + items.length } : { indexCursor: items.at(-1)!.id, indexProcessed: job.indexProcessed + items.length },
+    });
+    if (done) finished += 1;
+  }
+  return finished;
+}
+
+/** Items in the definition's scope that hold a value for its key. */
+export async function countFieldUsage(prisma: DatabaseClient, definition: Pick<FieldDefinition, 'scope' | 'scopeId' | 'key'>): Promise<number> {
+  const rows = await prisma.$queryRaw<Array<{ count: bigint }>>`SELECT COUNT(*)::bigint AS count FROM "Issue" WHERE jsonb_exists(attributes, ${definition.key}) AND ${scopeFilter(definition)}`;
+  return Number(rows[0]?.count ?? 0);
+}
+
+export const FIELD_STALE_DAYS = 90;
+
+/** "Defined, never written in 90 days" (docs/field-definitions.md §7): the cleanup prompt. */
+export function isStaleDefinition(definition: Pick<FieldDefinition, 'lastWrittenAt'>, firstDefinedAt: Date, now: Date = new Date()): boolean {
+  const since = definition.lastWrittenAt ?? firstDefinedAt;
+  return now.getTime() - since.getTime() > FIELD_STALE_DAYS * 86_400_000;
+}
+
+/**
+ * Rename a key with a reason (docs/field-definitions.md §7): a new version
+ * under the new key that still accepts the old one on write until the next
+ * version; stored values and index rows in the scope move to the new key in
+ * the same transaction.
+ */
+export async function renameFieldDefinition(prisma: PrismaClient, input: { scope: AutonomyScope; scopeId: string; from: string; to: string; reason: string }, byActorId: string | null): Promise<FieldDefinition> {
+  const reason = requireReason(input.reason);
+  if (!KEY_PATTERN.test(input.to)) throw createValidationError('A field key is snake_case: a lower-case letter, then 1–39 letters, digits or underscores.');
+  if (input.from === input.to) throw createValidationError('The new key is the same as the old one.');
+  return prisma.$transaction(async (tx) => {
+    const active = await tx.fieldDefinition.findFirst({ where: { scope: input.scope, scopeId: input.scopeId, key: input.from, active: true } });
+    if (!active) throw createValidationError(`No active field "${input.from}" in this scope.`);
+    if (await tx.fieldDefinition.findFirst({ where: { scope: input.scope, scopeId: input.scopeId, key: input.to }, select: { id: true } })) {
+      throw createValidationError(`Key "${input.to}" was already used in this scope; pick another so its old values cannot mix in.`);
+    }
+    await tx.fieldDefinition.update({ where: { id: active.id }, data: { active: false } });
+    const { id: _id, createdAt: _createdAt, ...rest } = active;
+    const created = await tx.fieldDefinition.create({
+      data: {
+        ...rest,
+        options: active.options ?? Prisma.JsonNull,
+        appliesTo: active.appliesTo as Prisma.InputJsonValue,
+        defaultValue: active.defaultValue ?? Prisma.JsonNull,
+        key: input.to,
+        previousKey: input.from,
+        version: 1,
+        reason,
+        createdById: byActorId,
+        indexJob: null,
+        indexCursor: null,
+        indexProcessed: 0,
+      },
+    });
+    const scope = scopeFilter(active);
+    await tx.$executeRaw`UPDATE "Issue" SET attributes = (attributes - ${input.from}::text) || jsonb_build_object(${input.to}::text, attributes -> ${input.from}::text)
+      WHERE jsonb_exists(attributes, ${input.from}) AND ${scope}`;
+    await tx.$executeRaw`UPDATE "FieldValueIndex" SET key = ${input.to} WHERE key = ${input.from} AND "issueId" IN (SELECT id FROM "Issue" WHERE ${scope})`;
+    await recordOpsAudit(tx, {
+      action: FIELD_AUDIT.changed,
+      subject: `field:${input.scope.toLowerCase()}:${input.scopeId}:${input.to}`,
+      byActorId,
+      reason,
+      details: { renamed: { from: input.from, to: input.to }, version: created.version },
+    });
+    return created;
+  });
 }
