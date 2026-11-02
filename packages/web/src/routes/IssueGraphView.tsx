@@ -3,12 +3,13 @@ import { useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { DependencyGraph, type FocusHops } from '../components/graph/DependencyGraph';
-import { NeighbourhoodRow, RollupCard } from '../components/graph/IssueNeighbourhood';
+import { RollupCard } from '../components/graph/IssueNeighbourhood';
+import { NeighbourhoodMap } from '../components/graph/NeighbourhoodMap';
 import { IcoGraph } from '../components/Icons';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { Btn } from '../components/Primitives';
 import { EmptyState, LoadingState, SegmentedControl } from '../components/status';
-import { buildBlockerIndex, type GraphEdge, type GraphNode } from '../work/graph-model';
+import { type GraphEdge, type GraphNode } from '../work/graph-model';
 import { buildNeighbourhood, toRollupLine } from '../work/neighbourhood-model';
 import { ISSUE_GRAPH_QUERY } from '../work/queries';
 import type {
@@ -34,6 +35,11 @@ import type {
  */
 
 type IssueGraphView = 'placement' | 'dependencies';
+
+/** The map's drawing space on the page, and how many of each role fit. */
+const PAGE_MAP_WIDTH = 760;
+const PAGE_MAP_HEIGHT = 520;
+const PAGE_MAP_CAPS = { ancestor: 5, sibling: 10, child: 8, blocker: 4, dependent: 4 };
 
 function toGraphNode(record: WorkGraphNodeRecord): GraphNode {
   return {
@@ -81,7 +87,6 @@ export function IssueGraphViewPage() {
     () => (graph ? buildNeighbourhood(nodes, edges, graph.focus.id) : null),
     [edges, graph, nodes],
   );
-  const blockersByNode = useMemo(() => buildBlockerIndex(edges, byId), [edges, byId]);
   const rollups = useMemo(() => (graph?.rollups ?? []).map(toRollupLine), [graph?.rollups]);
 
   function update(changes: Record<string, string | null>) {
@@ -112,22 +117,6 @@ export function IssueGraphViewPage() {
         </PageBody>
       </div>
     );
-  }
-
-  const spine: Array<{ node: GraphNode; depth: number; isFocus: boolean }> = [];
-  if (neighbourhood) {
-    neighbourhood.ancestors.forEach((node, index) => spine.push({ node, depth: index, isFocus: false }));
-    for (const sibling of neighbourhood.siblings) {
-      spine.push({ node: sibling, depth: neighbourhood.ancestors.length, isFocus: false });
-    }
-    spine.push({
-      node: neighbourhood.focus,
-      depth: neighbourhood.ancestors.length,
-      isFocus: true,
-    });
-    for (const child of neighbourhood.children) {
-      spine.push({ node: child, depth: neighbourhood.ancestors.length + 1, isFocus: false });
-    }
   }
 
   return (
@@ -175,18 +164,22 @@ export function IssueGraphViewPage() {
             ) : null}
 
             {view === 'placement' ? (
-              <div className="issue-neighbourhood__spine issue-neighbourhood__spine--page" role="list">
-                {spine.map((row) => (
-                  <NeighbourhoodRow
-                    key={row.node.id}
-                    node={row.node}
-                    depth={row.depth}
-                    isFocus={row.isFocus}
-                    blockers={blockersByNode.get(row.node.id) ?? []}
-                    onOpen={openIssue}
-                  />
-                ))}
-              </div>
+              <NeighbourhoodMap
+                nodes={nodes}
+                edges={edges}
+                focusId={graph.focus.id}
+                width={PAGE_MAP_WIDTH}
+                height={PAGE_MAP_HEIGHT}
+                caps={PAGE_MAP_CAPS}
+                onSelect={(id) => {
+                  // Picking a node moves the lens: the neighbourhood is read
+                  // again around that item, so the URL always names what the
+                  // reader is looking at.
+                  const node = byId.get(id);
+                  if (node) update({ focus: node.identifier });
+                }}
+                onOpen={openIssue}
+              />
             ) : (
               <DependencyGraph
                 nodes={nodes}

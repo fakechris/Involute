@@ -2789,17 +2789,6 @@ kbd {
   background: var(--danger-weak);
 }
 
-.issue-neighbourhood__toggle {
-  align-self: flex-start;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  font-size: 12px;
-  color: var(--fg-dim);
-  cursor: pointer;
-}
-
-.issue-neighbourhood__spine,
 .issue-neighbourhood__group {
   display: flex;
   flex-direction: column;
@@ -2858,17 +2847,130 @@ kbd {
   white-space: nowrap;
 }
 
-/* The ladder: each rung steps in. The depth is a data attribute, not an
-   inline style, so the indent stays in the stylesheet. */
+/* The neighbourhood map: the focus in the middle, everything else in the
+   sector that says what it is. Positions are SVG attributes, so the drawing
+   follows the theme through the stylesheet alone. */
 
-.issue-neighbourhood__row[data-depth='0'] { padding-left: 8px; }
-.issue-neighbourhood__row[data-depth='1'] { padding-left: 21px; }
-.issue-neighbourhood__row[data-depth='2'] { padding-left: 34px; }
-.issue-neighbourhood__row[data-depth='3'] { padding-left: 47px; }
-.issue-neighbourhood__row[data-depth='4'] { padding-left: 60px; }
-.issue-neighbourhood__row[data-depth='5'] { padding-left: 73px; }
-.issue-neighbourhood__row[data-depth='6'] { padding-left: 86px; }
-.issue-neighbourhood__row[data-depth='7'] { padding-left: 99px; }
+.issue-neighbourhood__map-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 4px;
+}
+
+.issue-neighbourhood__map {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.issue-neighbourhood__map-edge {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.4;
+  transition: opacity var(--dur-1) var(--ease);
+}
+
+.issue-neighbourhood__map-edge--peer {
+  stroke: var(--fg-faint);
+  stroke-dasharray: 3 3;
+}
+
+.issue-neighbourhood__map-edge--open {
+  stroke: var(--warn);
+  stroke-width: 1.8;
+}
+
+.issue-neighbourhood__map-edge--violated {
+  stroke: var(--danger);
+  stroke-width: 2.2;
+}
+
+.issue-neighbourhood__map-edge--resolved {
+  stroke: var(--fg-dim);
+}
+
+.issue-neighbourhood__map-edge--faded {
+  opacity: 0.16;
+}
+
+.issue-neighbourhood__map-node {
+  cursor: pointer;
+  transition: opacity var(--dur-1) var(--ease);
+}
+
+.issue-neighbourhood__map-node--faded {
+  opacity: 0.28;
+}
+
+.issue-neighbourhood__map-node:focus {
+  outline: none;
+}
+
+.issue-neighbourhood__map-node:focus-visible .issue-neighbourhood__map-dot {
+  stroke: var(--fg);
+  stroke-width: 2.2;
+}
+
+.issue-neighbourhood__map-dot {
+  fill: var(--fg-muted);
+  stroke: var(--bg);
+  stroke-width: 1.5;
+}
+
+.issue-neighbourhood__map-dot--focus {
+  fill: var(--accent-solid);
+  stroke: var(--accent-border);
+  stroke-width: 2.2;
+}
+
+.issue-neighbourhood__map-dot--ancestor { fill: var(--accent); }
+.issue-neighbourhood__map-dot--sibling { fill: var(--fg-muted); }
+.issue-neighbourhood__map-dot--child { fill: var(--fg); }
+.issue-neighbourhood__map-dot--blocker { fill: var(--warn); }
+.issue-neighbourhood__map-dot--dependent { fill: var(--info); }
+
+.issue-neighbourhood__map-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  fill: var(--fg-dim);
+  pointer-events: none;
+}
+
+.issue-neighbourhood__map-node--focus .issue-neighbourhood__map-label {
+  fill: var(--fg);
+  font-weight: 600;
+}
+
+.issue-neighbourhood__map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.issue-neighbourhood__map-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.issue-neighbourhood__map-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fg-muted);
+}
+
+.issue-neighbourhood__map-key--ancestor .issue-neighbourhood__map-swatch { background: var(--accent); }
+.issue-neighbourhood__map-key--sibling .issue-neighbourhood__map-swatch { background: var(--fg-muted); }
+.issue-neighbourhood__map-key--child .issue-neighbourhood__map-swatch { background: var(--fg); }
+.issue-neighbourhood__map-key--blocker .issue-neighbourhood__map-swatch { background: var(--warn); }
+.issue-neighbourhood__map-key--dependent .issue-neighbourhood__map-swatch { background: var(--info); }
 
 /* The page variant reads wider than the drawer's column. */
 
@@ -2882,12 +2984,6 @@ kbd {
 .issue-neighbourhood__rollups--page .issue-neighbourhood__rollup {
   flex: 1 1 260px;
   max-width: 420px;
-}
-
-.issue-neighbourhood__spine--page .issue-neighbourhood__row {
-  height: 32px;
-  font-size: 13px;
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 /* Relations (issue detail, INV-679) */

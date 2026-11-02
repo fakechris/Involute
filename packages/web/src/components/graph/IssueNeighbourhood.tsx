@@ -1,5 +1,5 @@
 import { useQuery } from '@apollo/client/react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { ISSUE_GRAPH_QUERY } from '../../work/queries';
@@ -8,16 +8,12 @@ import type {
   IssueGraphQueryVariables,
   WorkGraphNodeRecord,
 } from '../../work/types';
-import {
-  buildBlockerIndex,
-  isOpenBlocker,
-  type GraphEdge,
-  type GraphNode,
-} from '../../work/graph-model';
+import { isOpenBlocker, type GraphEdge, type GraphNode } from '../../work/graph-model';
 import { buildNeighbourhood, toRollupLine, type RollupLine } from '../../work/neighbourhood-model';
 import { StatusIcon } from '../StatusIcon';
 import { Btn } from '../Primitives';
 import { InlineError } from '../status';
+import { NeighbourhoodMap } from './NeighbourhoodMap';
 
 /**
  * One item's neighbourhood, drawn small enough to live in the issue drawer
@@ -53,8 +49,10 @@ interface IssueNeighbourhoodProps {
   onOpen: (issueId: string) => void;
 }
 
-/** How many rungs of the ladder the stylesheet draws; deeper ones stay flat. */
-const MAX_DEPTH = 7;
+/** The map's drawing space in the drawer, and how many of each role fit. */
+const DRAWER_MAP_WIDTH = 360;
+const DRAWER_MAP_HEIGHT = 300;
+const DRAWER_MAP_CAPS = { ancestor: 3, sibling: 5, child: 4, blocker: 2, dependent: 2 };
 
 /**
  * One ancestor's progress. The counts stay apart rather than collapsing into
@@ -91,37 +89,37 @@ export function RollupCard({ rollup }: { rollup: RollupLine }) {
   );
 }
 
-/** One rung of the ladder: a work item, its state, and how many things hold it up. */
+/** One work item in a list: its state, its number, and its title. */
 export function NeighbourhoodRow({
   node,
-  depth,
-  isFocus,
   blockers,
+  blocked,
   onOpen,
 }: {
   node: GraphNode;
-  depth: number;
-  isFocus: boolean;
-  blockers: GraphNode[];
+  /** How many things hold this item up. */
+  blockers?: GraphNode[];
+  /** Whether this item is waiting on something unfinished. */
+  blocked?: boolean;
   onOpen: (id: string) => void;
 }) {
+  const held = blockers ?? [];
   return (
     <button
       type="button"
-      className={`issue-neighbourhood__row${isFocus ? ' issue-neighbourhood__row--focus' : ''}`}
-      data-depth={Math.min(depth, MAX_DEPTH)}
+      className={`issue-neighbourhood__row${blocked ? ' issue-neighbourhood__row--blocked' : ''}`}
       onClick={() => onOpen(node.id)}
       aria-label={`Open ${node.identifier} ${node.title}`}
     >
       <StatusIcon stateName={node.stateName} stateType={node.stateType} size={11} />
       <span className="mono issue-neighbourhood__id">{node.identifier}</span>
       <span className="issue-neighbourhood__title">{node.title}</span>
-      {blockers.length > 0 ? (
+      {held.length > 0 ? (
         <span
           className="issue-neighbourhood__chip issue-neighbourhood__chip--blocked"
-          title={`Blocked by ${blockers.map((blocker) => blocker.identifier).join(', ')}`}
+          title={`Blocked by ${held.map((blocker) => blocker.identifier).join(', ')}`}
         >
-          {blockers.length}
+          {held.length}
         </span>
       ) : null}
     </button>
@@ -144,7 +142,6 @@ function toGraphNode(record: WorkGraphNodeRecord): GraphNode {
 
 export function IssueNeighbourhood({ issueId, issueIdentifier, onOpen }: IssueNeighbourhoodProps) {
   const navigate = useNavigate();
-  const [expanded, setExpanded] = useState(true);
   const { data, loading, error } = useQuery<IssueGraphQueryData, IssueGraphQueryVariables>(ISSUE_GRAPH_QUERY, {
     variables: { id: issueId, depth: 1 },
     // The neighbourhood changes as the item's relations change; a stale
@@ -158,12 +155,10 @@ export function IssueNeighbourhood({ issueId, issueIdentifier, onOpen }: IssueNe
     () => (graph?.edges ?? []).map((edge) => ({ ...edge })),
     [graph?.edges],
   );
-  const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const neighbourhood = useMemo(
     () => (graph ? buildNeighbourhood(nodes, edges, graph.focus.id) : null),
     [edges, graph, nodes],
   );
-  const blockersByNode = useMemo(() => buildBlockerIndex(edges, byId), [edges, byId]);
   const rollups = useMemo(() => (graph?.rollups ?? []).map(toRollupLine), [graph?.rollups]);
 
   if (error && !graph) {
@@ -192,14 +187,7 @@ export function IssueNeighbourhood({ issueId, issueIdentifier, onOpen }: IssueNe
     );
   }
 
-  const { focus, ancestors, siblings, children, blockers, dependents } = neighbourhood;
-  const spine: Array<{ node: GraphNode; depth: number; isFocus: boolean }> = [];
-  ancestors.forEach((node, index) => spine.push({ node, depth: index, isFocus: false }));
-  // The siblings sit beside the focus, on the same rung of the ladder.
-  for (const sibling of siblings) spine.push({ node: sibling, depth: ancestors.length, isFocus: false });
-  spine.push({ node: focus, depth: ancestors.length, isFocus: true });
-  for (const child of children) spine.push({ node: child, depth: ancestors.length + 1, isFocus: false });
-
+  const { focus, blockers, dependents } = neighbourhood;
   const openBlockers = blockers.filter((node) => isOpenBlocker(node));
 
   return (
@@ -223,29 +211,15 @@ export function IssueNeighbourhood({ issueId, issueIdentifier, onOpen }: IssueNe
         </div>
       ) : null}
 
-      <button
-        type="button"
-        className="issue-neighbourhood__toggle"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-      >
-        {expanded ? '▾' : '▸'} Placement
-      </button>
-
-      {expanded ? (
-        <div className="issue-neighbourhood__spine" role="list">
-          {spine.map((row) => (
-            <NeighbourhoodRow
-              key={row.node.id}
-              node={row.node}
-              depth={row.depth}
-              isFocus={row.isFocus}
-              blockers={blockersByNode.get(row.node.id) ?? []}
-              onOpen={onOpen}
-            />
-          ))}
-        </div>
-      ) : null}
+      <NeighbourhoodMap
+        nodes={nodes}
+        edges={edges}
+        focusId={focus.id}
+        width={DRAWER_MAP_WIDTH}
+        height={DRAWER_MAP_HEIGHT}
+        caps={DRAWER_MAP_CAPS}
+        onSelect={onOpen}
+      />
 
       {blockers.length > 0 || dependents.length > 0 ? (
         <>
@@ -256,17 +230,12 @@ export function IssueNeighbourhood({ issueId, issueIdentifier, onOpen }: IssueNe
                 {openBlockers.length > 0 ? ` · ${openBlockers.length} still open` : ''}
               </span>
               {blockers.map((node) => (
-                <button
+                <NeighbourhoodRow
                   key={node.id}
-                  type="button"
-                  className={`issue-neighbourhood__row${isOpenBlocker(node) ? ' issue-neighbourhood__row--blocked' : ''}`}
-                  onClick={() => onOpen(node.id)}
-                  aria-label={`Open ${node.identifier} ${node.title}`}
-                >
-                  <StatusIcon stateName={node.stateName} stateType={node.stateType} size={11} />
-                  <span className="mono issue-neighbourhood__id">{node.identifier}</span>
-                  <span className="issue-neighbourhood__title">{node.title}</span>
-                </button>
+                  node={node}
+                  blocked={isOpenBlocker(node)}
+                  onOpen={onOpen}
+                />
               ))}
             </div>
           ) : null}
@@ -274,17 +243,7 @@ export function IssueNeighbourhood({ issueId, issueIdentifier, onOpen }: IssueNe
             <div className="issue-neighbourhood__group">
               <span className="issue-neighbourhood__group-label">Blocking · {dependents.length}</span>
               {dependents.map((node) => (
-                <button
-                  key={node.id}
-                  type="button"
-                  className="issue-neighbourhood__row"
-                  onClick={() => onOpen(node.id)}
-                  aria-label={`Open ${node.identifier} ${node.title}`}
-                >
-                  <StatusIcon stateName={node.stateName} stateType={node.stateType} size={11} />
-                  <span className="mono issue-neighbourhood__id">{node.identifier}</span>
-                  <span className="issue-neighbourhood__title">{node.title}</span>
-                </button>
+                <NeighbourhoodRow key={node.id} node={node} onOpen={onOpen} />
               ))}
             </div>
           ) : null}
