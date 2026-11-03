@@ -145,6 +145,7 @@ import { BulkActionBar, LoadingState, SegmentedControl } from '../components/sta
 import { WORK_FILTER_KEYS, WorkFilterBar, filtersToIql, hasWorkFilters, joinIql, useWorkFilters } from '../components/WorkFilterBar';
 import { isWorkIdentifier } from '../work/work-reference';
 import { RefusalNotice, nextFor, type ShownRefusal } from '../components/RefusalNotice';
+import { nextColumnLoad, readColumnLoads, useColumnIssues, withColumnIssues, writeColumnLoads, type ColumnLoads } from '../board/column-loads';
 
 const ISSUE_PAGE_SIZE = 200;
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
@@ -336,7 +337,13 @@ export function BoardPage() {
     }
     return Array.from(seen.values());
   }, [queryData?.issueLabels.nodes]);
-  const baseIssues = queryData?.issues.nodes ?? EMPTY_ISSUES;
+  // A column's own Load more (INV-1539): opened columns add their items to the board's page.
+  const [columnLoads, setColumnLoads] = useState<ColumnLoads>(readColumnLoads);
+  const columnIssues = useColumnIssues(columnLoads, boardQueryVariables, data, Boolean(data) && !(pendingTeamKey && pendingTeamKey !== activeTeamKey));
+  const baseIssues = useMemo(
+    () => withColumnIssues(queryData?.issues.nodes ?? EMPTY_ISSUES, columnIssues.issues),
+    [queryData, columnIssues.issues],
+  );
   const [createdIssues, setCreatedIssues] = useState<IssueSummary[]>([]);
   const [issueOverrides, setIssueOverrides] = useState<Record<string, IssueSummary>>({});
   const [deletedIssueIds, setDeletedIssueIds] = useState<string[]>([]);
@@ -1199,13 +1206,25 @@ export function BoardPage() {
   // A column only holds what the board has loaded (200 at a time). The board
   // query also returns how many each state really has under the same filter,
   // so a column never looks empty while its items are on a later page (INV-1516).
+  const loadedByState = useMemo(() => {
+    const loaded: Record<string, number> = {};
+    for (const issue of baseIssues) loaded[issue.state.id] = (loaded[issue.state.id] ?? 0) + 1;
+    return loaded;
+  }, [baseIssues]);
   const unloadedByState = useMemo(() => {
     const totals = Array.isArray(queryData?.issueStateCounts) ? queryData.issueStateCounts : [];
     if (!totals.length) return {} as Record<string, number>;
-    const loaded: Record<string, number> = {};
-    for (const issue of queryData?.issues.nodes ?? []) loaded[issue.state.id] = (loaded[issue.state.id] ?? 0) + 1;
-    return Object.fromEntries(totals.map((row) => [row.stateId, Math.max(0, row.count - (loaded[row.stateId] ?? 0))]));
-  }, [queryData]);
+    return Object.fromEntries(totals.map((row) => [row.stateId, Math.max(0, row.count - (loadedByState[row.stateId] ?? 0))]));
+  }, [queryData, loadedByState]);
+
+  // One click shows the rest of this column (up to a server page), and stays shown (INV-1539).
+  function loadColumn(stateId: string) {
+    setColumnLoads((current) => {
+      const next = { ...current, [stateId]: nextColumnLoad(loadedByState[stateId] ?? 0, unloadedByState[stateId] ?? 0) };
+      writeColumnLoads(next);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (!selectedIssueId || isBacklogView) {
@@ -3196,9 +3215,9 @@ export function BoardPage() {
                   collapsed={!!collapsedColumns[column.stateId]}
                   onToggleCollapse={() => toggleColumnCollapse(column.stateId)}
                   issues={issuesByState[column.stateId] ?? EMPTY_ISSUES}
-                  unloadedCount={hasMoreIssues ? unloadedByState[column.stateId] ?? 0 : 0}
-                  loadingMore={isLoadingMoreIssues}
-                  onLoadMore={() => void handleLoadMoreIssues()}
+                  unloadedCount={isTeamSwitching ? 0 : unloadedByState[column.stateId] ?? 0}
+                  loadingMore={columnIssues.loading.has(column.stateId)}
+                  onLoadMore={() => loadColumn(column.stateId)}
                   onToggleIssueSelection={toggleIssueSelection}
                   selectedIssueIds={selectedIssueIds}
                   onNativeDragStart={(payload) => {
