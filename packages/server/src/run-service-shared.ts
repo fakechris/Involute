@@ -18,6 +18,8 @@ import {
   WORK_RUN_STATUS_INVALID_MESSAGE,
 } from './errors.js';
 
+import type { RunFollowups } from './run-followups.js';
+
 export type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
 export const TERMINAL_RUN_STATUSES: WorkRunStatus[] = ['COMPLETED', 'FAILED'];
@@ -42,6 +44,8 @@ export interface ReportRunInput {
   runId?: string | null;
   status?: string | null;
   summary?: string | null;
+  /** What a completed run leaves behind, already resolved and checked (INV-1231). */
+  followups?: RunFollowups | null;
   workId: string;
 }
 

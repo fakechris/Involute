@@ -516,6 +516,7 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
         lastActivityAt
         staleNotifiedAt
         presence
+        followups { identifiers noneReason }
         repository
         commitSha
         pullRequestNumber

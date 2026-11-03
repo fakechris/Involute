@@ -14,6 +14,7 @@ Starting work, hitting a blocker, or finishing a claim.
 ## How
 
 - `work_id` + `status` (`running` | `blocked` | `completed`) + short `phase` / `summary`.
+- `completed` also says what the run leaves behind (INV-1231): `followups: { work_ids: ["INV-123"] }` for work it led to — propose or file it first; each is linked DISCOVERED_DURING — or `followups: { none_reason: "..." }`. Missing: a warning until 2026-11-17, refused after. CLI: `--followups INV-1,INV-2` or `--none-left "..."`.
 - Use `idempotency_key` for safe retries.
 - Reuse `run_id` when continuing the same run.
 - **No secrets** in summaries.

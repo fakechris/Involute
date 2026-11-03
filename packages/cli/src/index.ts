@@ -1354,8 +1354,8 @@ async function claimWorkViaCli(
 
 async function reportRunViaCli(
   workId: string,
-  input: { phase?: string; runId?: string; status?: string; summary?: string; commitSha?: string; prNumber?: string },
-): Promise<{ publicId: string; status: string; workIdentifier: string }> {
+  input: { phase?: string; runId?: string; status?: string; summary?: string; commitSha?: string; prNumber?: string; followups?: string; noneLeft?: string },
+): Promise<{ publicId: string; status: string; workIdentifier: string; warning?: string }> {
   const prNumber = input.prNumber === undefined ? undefined : Number(input.prNumber);
   if (prNumber !== undefined && (!/^[1-9][0-9]*$/.test(input.prNumber!) || !Number.isSafeInteger(prNumber))) {
     throw new CliError('Invalid --pr-number. Expected a positive integer.');
@@ -1366,12 +1366,16 @@ async function reportRunViaCli(
       issue: { identifier: string; state: { name: string } } | null;
       run: { publicId: string; status: string } | null;
       success: boolean;
+      message: string | null;
+      warning: string | null;
     };
   }>(
     /* GraphQL */ `
       mutation CliRunReport($input: RunReportInput!) {
         runReport(input: $input) {
           success
+          message
+          warning
           issue { identifier state { name } }
           run { publicId status }
         }
@@ -1386,18 +1390,25 @@ async function reportRunViaCli(
         ...(input.summary ? { summary: input.summary } : {}),
         ...(input.commitSha ? { commitSha: input.commitSha } : {}),
         ...(prNumber !== undefined ? { pullRequestNumber: prNumber } : {}),
+        // What a completed run leaves behind (INV-1231).
+        ...(input.followups
+          ? { followups: { workIds: input.followups.split(',').map((entry) => entry.trim()).filter(Boolean) } }
+          : input.noneLeft !== undefined
+            ? { followups: { noneReason: input.noneLeft } }
+            : {}),
       },
     },
   );
 
   if (!result.runReport.success || !result.runReport.run || !result.runReport.issue) {
-    throw new CliError('Run report failed.');
+    throw new CliError(result.runReport.message ?? 'Run report failed.');
   }
 
   return {
     publicId: result.runReport.run.publicId,
     status: result.runReport.run.status,
     workIdentifier: result.runReport.issue.identifier,
+    ...(result.runReport.warning ? { warning: result.runReport.warning } : {}),
   };
 }
 
@@ -2095,11 +2106,13 @@ export function createProgram(): Command {
     .option('--pr-number <number>', 'PR number in the bound repository')
     .option('--phase <phase>', 'High-level phase name')
     .option('--summary <summary>', 'Short status for humans')
+    .option('--followups <ids>', 'With --status completed: comma-separated work this run led to (INV-1231)')
+    .option('--none-left <reason>', 'With --status completed: why the run leaves nothing behind (INV-1231)')
     .option('--json', 'Output machine-readable JSON')
     .action(async function (
       this: Command,
       id: string,
-      options: JsonOption & { phase?: string; runId?: string; status?: string; summary?: string; commitSha?: string; prNumber?: string },
+      options: JsonOption & { phase?: string; runId?: string; status?: string; summary?: string; commitSha?: string; prNumber?: string; followups?: string; noneLeft?: string },
     ) {
       await runWithCliErrorHandling(async () => {
         const context = createCommandContext({ json: options.json ?? getGlobalJsonOption(this) });
