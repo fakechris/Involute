@@ -2,7 +2,7 @@ import type { Prisma, PrismaClient, SavedView } from '@prisma/client';
 
 import { assertCanReadTeam, assertCanWriteTeam, assertTeamNotArchived } from './access-control.js';
 import { requireAuthentication, type GraphQLContext } from './auth.js';
-import { createNotFoundError, createValidationError, TEAM_NOT_FOUND_MESSAGE } from './errors.js';
+import { createNotFoundError, createValidationError, SAVED_VIEW_INVALID_MESSAGE, SAVED_VIEW_NOT_FOUND_MESSAGE, TEAM_NOT_FOUND_MESSAGE } from './errors.js';
 
 /**
  * Saved board / backlog views on the server (INV-1005). Until now a view lived
@@ -16,8 +16,8 @@ export const SAVED_VIEW_VISIBILITIES = ['PRIVATE', 'TEAM'] as const;
 export type SavedViewKind = (typeof SAVED_VIEW_KINDS)[number];
 export type SavedViewVisibility = (typeof SAVED_VIEW_VISIBILITIES)[number];
 
-export const SAVED_VIEW_NOT_FOUND_MESSAGE = 'Saved view not found, or not yours to change.';
-export const SAVED_VIEW_INVALID_MESSAGE = 'A saved view needs a name (1–120 characters), kind board or backlog, visibility PRIVATE or TEAM and an object state.';
+// The messages live in errors.ts so the GraphQL layer shows them with their codes (INV-1131).
+export { SAVED_VIEW_INVALID_MESSAGE, SAVED_VIEW_NOT_FOUND_MESSAGE } from './errors.js';
 
 export interface SavedViewInput {
   id?: string | null;

@@ -430,7 +430,13 @@ export async function updateIssue(
       }
 
       if (state.type === 'COMPLETED' && state.id !== existingIssue.stateId && (existingIssue.deliveryRootId || await transaction.deliveryPackage.count({ where: { workId: existingIssue.id } }))) {
-        throw createValidationError('Accept the delivery package from In Review so every implementation unit is checked together.');
+        // Say which package and where it is accepted (INV-1534), not only that it was refused.
+        const root = existingIssue.deliveryRootId
+          ? await transaction.issue.findUnique({ where: { id: existingIssue.deliveryRootId }, select: { identifier: true } })
+          : null;
+        throw createValidationError(root
+          ? `${existingIssue.identifier} is part of delivery package ${root.identifier}: accept ${root.identifier} from In Review; that accepts every implementation unit together.`
+          : `${existingIssue.identifier} is a delivery package: accept it from In Review; that checks every implementation unit together.`);
       }
 
       if (isAcceptStateType(state.type)) {

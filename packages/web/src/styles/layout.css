@@ -593,6 +593,35 @@
   color: var(--fg-muted);
 }
 
+/* A refused save stays in view wherever the person acted, above the drawer (INV-1534). */
+.page-notice--floating {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 45;
+  max-width: min(640px, calc(100vw - 32px));
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+  box-shadow: var(--shadow-md);
+  flex-wrap: nowrap;
+}
+
+.page-notice--floating .page-notice__text {
+  color: var(--fg);
+}
+
+.page-notice__dismiss {
+  border: 0;
+  background: none;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
 /* ---------- StatTile ---------- */
 
 .stat-row {

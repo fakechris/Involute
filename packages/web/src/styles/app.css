@@ -2445,6 +2445,9 @@ kbd {
 .issue-panel__error {
   color: var(--danger);
   font-size: 14px;
+  margin: 0;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 /* Description textarea (page mode) */

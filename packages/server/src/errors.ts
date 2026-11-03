@@ -303,8 +303,14 @@ export function createScopeForbiddenError(scope: string): GraphQLError {
   });
 }
 
+// Saved views (INV-1131): defined here so they are registered with their codes.
+export const SAVED_VIEW_NOT_FOUND_MESSAGE = 'Saved view not found, or not yours to change.';
+export const SAVED_VIEW_INVALID_MESSAGE = 'A saved view needs a name (1–120 characters), kind board or backlog, visibility PRIVATE or TEAM and an object state.';
+
 const exposedErrorCodes = new Map<string, string>([
   ...DELIVERY_VALIDATION_MESSAGES.map((message): [string, string] => [message, 'BAD_USER_INPUT']),
+  [SAVED_VIEW_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
+  [SAVED_VIEW_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [NOT_AUTHENTICATED_MESSAGE, 'UNAUTHENTICATED'],
   [TEAM_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
   [ISSUE_NOT_FOUND_MESSAGE, 'NOT_FOUND'],
@@ -548,6 +554,14 @@ export function getExposedError(error: unknown): GraphQLError | null {
     return createExposedError(error.message);
   }
 
+  // A refusal written for people (createValidationError / createNotFoundError)
+  // may name the item, field or key it is about (INV-1534); it is shown as
+  // written. Anything else still masks to "Unexpected error.".
+  const marked = isPublicError(error) ? error : error instanceof GraphQLError && isPublicError(error.originalError) ? error.originalError : null;
+  if (marked) {
+    return new GraphQLError(marked.message, { extensions: { code: typeof marked.extensions?.code === 'string' ? marked.extensions.code : 'BAD_USER_INPUT' } });
+  }
+
   // IQL parse failures survive masking by message prefix: wrappers may drop
   // extensions or re-class the error across module copies, but the message
   // text is always preserved.
@@ -610,10 +624,19 @@ export function isPrismaInvalidInputError(error: unknown): boolean {
   return false;
 }
 
+/** Marks errors written for people; a registry symbol, so module copies agree and it never serialises. */
+const PUBLIC_ERROR = Symbol.for('involute.publicError');
+
+function isPublicError(error: unknown): error is GraphQLError {
+  return error instanceof GraphQLError && (error as unknown as Record<symbol, unknown>)[PUBLIC_ERROR] === true;
+}
+
 function createExposedError(message: string): GraphQLError {
-  return new GraphQLError(message, {
+  const error = new GraphQLError(message, {
     extensions: {
       code: exposedErrorCodes.get(message) ?? 'BAD_USER_INPUT',
     },
   });
+  Object.defineProperty(error, PUBLIC_ERROR, { value: true, enumerable: false });
+  return error;
 }
