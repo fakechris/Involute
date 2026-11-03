@@ -163,8 +163,8 @@ export function NeighbourhoodMap({
               viewBox="0 0 8 8"
               refX={7}
               refY={4}
-              markerWidth={7}
-              markerHeight={7}
+              markerWidth={4.5}
+              markerHeight={4.5}
               orient="auto-start-reverse"
             >
               <path d="M0,0 L8,4 L0,8 Z" className={`issue-neighbourhood__map-arrow issue-neighbourhood__map-arrow--${kind}`} />
@@ -275,7 +275,7 @@ export function NeighbourhoodMap({
             })}
           </ul>
           {layout.edges.length > 0 ? (
-            <p className="issue-neighbourhood__map-note">A → B: A contains B (parent), or A blocks B. Dashed: same parent.</p>
+            <p className="issue-neighbourhood__map-note">A → B: A contains B, or A blocks B. Dashed: same parent.</p>
           ) : null}
         </div>
       ) : null}

@@ -58,8 +58,13 @@ export interface PlacedEdge {
   kind: MapEdgeKind;
   /** An SVG path, ready to draw, from `fromId` to `toId` (the arrow points at `toId`). */
   path: string;
-  /** What the link says, written on it (INV-1546); null for the dashed same-parent hint. */
-  label: 'parent' | 'blocks' | null;
+  /**
+   * What the link says, written on it (INV-1546): a verb read along the arrow —
+   * "A contains B", "A blocks B" (INV-1549). Only one link of each group carries
+   * it, so a fan of links does not stack the same word; null otherwise and for
+   * the dashed same-parent hint.
+   */
+  label: 'contains' | 'blocks' | null;
   /** Where the label sits: the middle of the curve. */
   labelAt: { x: number; y: number };
 }
@@ -131,11 +136,17 @@ function placeRole(
       const point = degreesToPoint(cx, cy, ring, angle);
       return { node, x: point.x, y: point.y, angle };
     }
+    // Many sub-issues alternate between an inner and an outer ring inside
+    // their own sector, so neighbouring numbers are staggered instead of
+    // overlapping — widening the fan would push them into the siblings' and
+    // dependents' sectors (INV-1549).
+    const crowded = role === 'child' && items.length > 3;
     const angle =
       items.length === 1
         ? (sector.from + sector.to) / 2
         : sector.from + ((sector.to - sector.from) * index) / (items.length - 1);
-    const point = degreesToPoint(cx, cy, radius, angle);
+    const ring = crowded && index % 2 === 1 ? radius * 1.38 : radius;
+    const point = degreesToPoint(cx, cy, ring, angle);
     return { node, x: point.x, y: point.y, angle };
   });
 }
@@ -262,12 +273,17 @@ export function layoutNeighbourhood(input: {
   const hub = byId.get(focus.id)!;
   const drawn: PlacedEdge[] = [];
 
-  const push = (id: string, fromId: string, toId: string, kind: MapEdgeKind) => {
+  // One label per group of links: the first ancestor link, the first sub-issue,
+  // the first blocker, the first dependent (INV-1549).
+  const labelled = new Set<string>();
+  const push = (id: string, fromId: string, toId: string, kind: MapEdgeKind, group: string) => {
     const from = byId.get(fromId);
     const to = byId.get(toId);
     if (!from || !to) return;
     const curve = curveBetween(from, to, { x: cx, y: cy });
-    const label = kind === 'peer' ? null : kind === 'hierarchy' ? 'parent' : 'blocks';
+    const verb = kind === 'peer' ? null : kind === 'hierarchy' ? 'contains' : 'blocks';
+    const label = verb && !labelled.has(group) ? verb : null;
+    if (label) labelled.add(group);
     drawn.push({ id, fromId, toId, kind, path: curve.path, label, labelAt: curve.middle });
   };
 
@@ -276,7 +292,8 @@ export function layoutNeighbourhood(input: {
   // the direction the link actually has — a CONTAINS edge points from parent
   // to child, so the edge between the focus and its own parent points *at*
   // the focus.
-  neighbourhood.ancestors.forEach((ancestor, index) => {
+  // Nearest ancestor first, so the one labelled link is the one into the focus.
+  [...neighbourhood.ancestors.entries()].reverse().forEach(([index, ancestor]) => {
     const neighbour = neighbourhood.ancestors[index + 1] ?? focus;
     const edge = edges.find(
       (candidate) =>
@@ -285,21 +302,23 @@ export function layoutNeighbourhood(input: {
           (candidate.fromId === neighbour.id && candidate.toId === ancestor.id)),
     );
     if (edge) {
-      push(edge.id, edge.fromId, edge.toId, 'hierarchy');
+      push(edge.id, edge.fromId, edge.toId, 'hierarchy', 'ancestor');
     } else {
-      push(`contains:${ancestor.id}:${neighbour.id}`, ancestor.id, neighbour.id, 'hierarchy');
+      push(`contains:${ancestor.id}:${neighbour.id}`, ancestor.id, neighbour.id, 'hierarchy', 'ancestor');
     }
   });
-  for (const child of children) {
+  // The labelled sub-issue link is the middle one, away from the neighbouring sectors.
+  const middleFirst = [...children.slice(Math.floor(children.length / 2)), ...children.slice(0, Math.floor(children.length / 2))];
+  for (const child of middleFirst) {
     const edge = edges.find(
       (candidate) => candidate.type === 'CONTAINS' && candidate.toId === child.id && candidate.fromId === focus.id,
     );
-    push(edge?.id ?? `contains:${focus.id}:${child.id}`, focus.id, child.id, 'hierarchy');
+    push(edge?.id ?? `contains:${focus.id}:${child.id}`, focus.id, child.id, 'hierarchy', 'child');
   }
 
   // Peers: the link is a hint, not a typed edge, and is drawn dashed.
   for (const sibling of siblings) {
-    push(`peer:${focus.id}:${sibling.id}`, focus.id, sibling.id, 'peer');
+    push(`peer:${focus.id}:${sibling.id}`, focus.id, sibling.id, 'peer', 'sibling');
   }
 
   // Dependencies: real BLOCKS edges, coloured by the rule the graph uses.
@@ -307,13 +326,13 @@ export function layoutNeighbourhood(input: {
     const edge = edges.find(
       (candidate) => candidate.type === 'BLOCKS' && candidate.toId === focus.id && candidate.fromId === blocker.id,
     );
-    push(edge?.id ?? `blocks:${blocker.id}:${focus.id}`, blocker.id, focus.id, classifyBlockEdge(blocker, focus));
+    push(edge?.id ?? `blocks:${blocker.id}:${focus.id}`, blocker.id, focus.id, classifyBlockEdge(blocker, focus), 'blocker');
   }
   for (const dependent of dependents) {
     const edge = edges.find(
       (candidate) => candidate.type === 'BLOCKS' && candidate.fromId === focus.id && candidate.toId === dependent.id,
     );
-    push(edge?.id ?? `blocks:${focus.id}:${dependent.id}`, focus.id, dependent.id, classifyBlockEdge(focus, dependent));
+    push(edge?.id ?? `blocks:${focus.id}:${dependent.id}`, focus.id, dependent.id, classifyBlockEdge(focus, dependent), 'dependent');
   }
 
   return { width, height, hub: { x: cx, y: cy }, nodes: placed, edges: drawn, hidden };
