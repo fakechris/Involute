@@ -2,10 +2,37 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { WorkReferenceProvider } from '../components/WorkReference';
 import { InboxPage, groupActivity, resolutionText } from './InboxPage';
 import type { NotificationRecordItem } from '../board/types';
 
 const mockRunMarkRead = vi.fn();
+const mockPreviewClient = {
+  query: vi.fn((options: { variables: { identifiers: string[] } }) =>
+    Promise.resolve({
+      data: {
+        issuePreviews: options.variables.identifiers
+          .filter((reference) => reference === 'INV-391')
+          .map((reference) => ({
+            id: 'work-391',
+            reference,
+            identifier: reference,
+            title: 'Unrelated item',
+            stateName: 'Done',
+            stateType: 'COMPLETED',
+            commitmentStatus: 'COMMITTED',
+            priority: 0,
+            kind: 'ISSUE',
+            repository: 'fakechris/Involute',
+            teamKey: 'INV',
+            typeLabel: null,
+            excerpt: null,
+            updatedAt: '2026-10-01T00:00:00.000Z',
+          })),
+      },
+    }),
+  ),
+};
 const mockRunMarkAllRead = vi.fn();
 
 afterEach(() => {
@@ -17,6 +44,8 @@ beforeEach(() => {
 });
 
 vi.mock('@apollo/client/react', () => ({
+  // Work references in payload details ask the server (INV-1536); it knows INV-391.
+  useApolloClient: () => mockPreviewClient,
   useQuery: vi.fn(() => ({
     data: {
       notifications: {
@@ -82,10 +111,12 @@ vi.mock('@apollo/client/react', () => ({
 }));
 
 describe('InboxPage', () => {
-  it('shows the details and links of a notification with no work item (INV-794)', () => {
+  it('shows the details and links of a notification with no work item (INV-794)', async () => {
     render(
       <MemoryRouter>
-        <InboxPage />
+        <WorkReferenceProvider>
+          <InboxPage />
+        </WorkReferenceProvider>
       </MemoryRouter>,
     );
     const details = screen.getByLabelText('Notification details');
@@ -94,7 +125,7 @@ describe('InboxPage', () => {
       'href',
       'https://github.com/acme/app/pull/64',
     );
-    expect(screen.getByRole('link', { name: 'INV-391' })).toHaveAttribute('href', '/issue/INV-391');
+    expect(await screen.findByRole('link', { name: 'INV-391' })).toHaveAttribute('href', '/issue/INV-391');
     expect(screen.getByRole('link', { name: 'Open in Ops' })).toHaveAttribute('href', '/ops#traceability');
   });
 

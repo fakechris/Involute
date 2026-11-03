@@ -7,7 +7,9 @@
  *   (b) a `var(--x)` whose token is not defined in a token block (it silently
  *       falls back to a hard-coded value, often unreadable in dark mode);
  *   (c) a hex / rgb() colour literal in TSX (colours come from tokens);
- *   (d) a new inline `style={{` in TSX (layout and colour live in stylesheets).
+ *   (d) a new inline `style={{` in TSX (layout and colour live in stylesheets);
+ *   (e) a work-identifier pattern outside work/work-reference.ts (references in
+ *       text render through WorkReference / WorkReferenceText, INV-1536).
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -206,6 +208,11 @@ function classTokens(expression: string, glued: { left: boolean; right: boolean 
   return tokens.filter((token) => /^-?_*[a-zA-Z][\w-]*$/.test(token));
 }
 
+/** A regex that matches `PREFIX-123`: a letter class followed by a dash and digits. */
+function looksLikeIdentifierPattern(source: string): boolean {
+  return source.split('\n').some((line) => /\[A-Z/.test(line) && /-\\d/.test(line));
+}
+
 describe('design guard', () => {
   it('every class used in TSX is defined in a stylesheet', () => {
     const defined = definedClasses();
@@ -265,6 +272,21 @@ describe('design guard', () => {
     const total = counts.reduce((sum, [, count]) => sum + count, 0);
     const worst = counts.sort((a, b) => b[1] - a[1]).slice(0, 5).map(([file, count]) => `${file}: ${count}`);
     expect(total, `inline styles: ${total} (baseline ${INLINE_STYLE_BASELINE}); most in ${worst.join(', ')}`).toBeLessThanOrEqual(INLINE_STYLE_BASELINE);
+  });
+
+  it('parses work identifiers only in work/work-reference.ts (INV-1536)', () => {
+    const offenders = walk(SRC)
+      .filter((file) => /\.(ts|tsx)$/.test(file) && !/\.test\.tsx?$/.test(file))
+      .map((file) => relative(SRC, file))
+      .filter((file) => file !== join('work', 'work-reference.ts'))
+      .filter((file) => looksLikeIdentifierPattern(readFileSync(join(SRC, file), 'utf8')));
+    expect(offenders, 'use findWorkReferences / isWorkIdentifier / WorkReferenceText instead').toEqual([]);
+  });
+
+  it('recognises an identifier pattern', () => {
+    expect(looksLikeIdentifierPattern('const IDENTIFIER = /^[A-Z][A-Z0-9]*-\\d+$/;')).toBe(true);
+    expect(looksLikeIdentifierPattern('/^([A-Za-z]+-\\d+)\\s+/.exec(text)')).toBe(true);
+    expect(looksLikeIdentifierPattern('const ALIAS_PATTERN = /^[A-Z]{2,10}$/;')).toBe(false);
   });
 
   it('the extractor sees classes in strings, ternaries and template literals', () => {

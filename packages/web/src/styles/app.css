@@ -1903,12 +1903,14 @@ kbd {
   margin-left: auto;
 }
 
-.issue-card__repo-badge {
-  display: block;
+/* The project a piece of work belongs to (ProjectBadge, INV-1536). */
+.project-badge {
+  display: inline-block;
   flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  vertical-align: middle;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
@@ -1925,12 +1927,12 @@ kbd {
   box-sizing: border-box;
 }
 
-.issue-card__repo-badge--interactive {
+.project-badge--interactive {
   cursor: pointer;
   transition: opacity 0.15s ease, filter 0.15s ease, transform 0.15s ease;
 }
 
-.issue-card__repo-badge--interactive:hover {
+.project-badge--interactive:hover {
   filter: brightness(1.25);
   transform: translateY(-0.5px);
   text-decoration: underline;
@@ -1961,7 +1963,17 @@ kbd {
 [data-theme="dark"] .proj-color-8 { --proj-fg: #a3e635; --proj-bg: rgba(132, 204, 22, 0.16); --proj-border: rgba(132, 204, 22, 0.38); }
 [data-theme="dark"] .proj-color-9 { --proj-fg: #f472b6; --proj-bg: rgba(236, 72, 153, 0.16); --proj-border: rgba(236, 72, 153, 0.38); }
 
-.issue-card__repo-badge[class*='proj-color-'] {
+.project-badge--none {
+  border-style: dashed;
+  font-family: var(--font-sans);
+}
+
+/* On a card the badge is a block that shrinks inside the meta row. */
+.issue-card__repo-badge {
+  display: block;
+}
+
+.project-badge[class*='proj-color-'] {
   background: var(--proj-bg);
   color: var(--proj-fg);
   border-color: var(--proj-border);
@@ -2244,6 +2256,16 @@ kbd {
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.issue-panel__identifier {
+  font-size: 13px;
+  color: var(--fg-dim);
+}
+
+.issue-panel__title-row .project-badge {
+  flex: 0 1 auto;
+  font-size: 11px;
 }
 
 .issue-panel__title-row .mono {

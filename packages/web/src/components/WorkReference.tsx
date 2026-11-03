@@ -12,10 +12,12 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useInRouterContext, useLocation, useNavigate } from 'react-router-dom';
 
 import { WORK_PREVIEWS_QUERY } from '../work/queries';
 import type { WorkPreview, WorkPreviewsQueryData, WorkPreviewsQueryVariables } from '../work/types';
 import { findWorkReferences, workReferenceKey } from '../work/work-reference';
+import { routeOwnsIssueView } from './IssueDrawerHost';
 import { Badge } from './status';
 import { StatusIcon } from './StatusIcon';
 
@@ -26,7 +28,9 @@ import { StatusIcon } from './StatusIcon';
  * decision is INV-683". Until now those names were dead text: a reader had
  * to go and look the number up. This component turns them into links: the
  * reference shows what it points at when the reader hovers it, and a click
- * opens the work item in a new tab so the page they are reading stays put.
+ * opens the work item in the drawer over the page they are reading (INV-1536,
+ * the list rule of INV-1387); ⌘/Ctrl-, Shift- and middle-click are left to the
+ * browser, which opens the full page.
  *
  * Three properties make it usable everywhere rather than on one page:
  *
@@ -48,11 +52,20 @@ const BATCH_DELAY_MS = 40;
 /** The most references the server answers in one request (issue-preview.ts). */
 const MAX_PREVIEW_IDENTIFIERS = 100;
 
+/**
+ * How long an answer is trusted (INV-1536). Work moves while a page is open;
+ * after this a reference that is met or hovered again asks once more, so the
+ * card shows the state the item is in now.
+ */
+export const PREVIEW_FRESH_MS = 60_000;
+
 interface WorkReferenceStore {
   /** The references the server answered, by reference key. */
   previews: Map<string, WorkPreview>;
   /** References already asked about, so the server is asked only once. */
   asked: Set<string>;
+  /** When each answered reference was last answered. */
+  answeredAt: Map<string, number>;
   /** References a reader has met, waiting to be asked about. */
   waiting: Set<string>;
   /** Bumped on every change, so subscribers know to look again. */
@@ -68,6 +81,7 @@ function createStore(): WorkReferenceStore {
   const previews = new Map<string, WorkPreview>();
   const asked = new Set<string>();
   const waiting = new Set<string>();
+  const answeredAt = new Map<string, number>();
   const listeners = new Set<() => void>();
 
   const notify = () => {
@@ -78,10 +92,18 @@ function createStore(): WorkReferenceStore {
   const store: WorkReferenceStore = {
     previews,
     asked,
+    answeredAt,
     waiting,
     version: 0,
     request(key) {
-      if (asked.has(key) || waiting.has(key)) return;
+      if (waiting.has(key)) return;
+      if (asked.has(key)) {
+        // A word that names no work is never asked again; an answer is asked
+        // again once it is old.
+        const at = answeredAt.get(key);
+        if (at === undefined || Date.now() - at < PREVIEW_FRESH_MS) return;
+        asked.delete(key);
+      }
       waiting.add(key);
       notify();
     },
@@ -123,13 +145,29 @@ export function WorkReferenceProvider({ children }: { children: ReactNode }) {
           .query<WorkPreviewsQueryData, WorkPreviewsQueryVariables>({
             query: WORK_PREVIEWS_QUERY,
             variables: { identifiers: chunk },
+            // A reference asked again wants today's answer, not the cached one.
+            fetchPolicy: 'network-only',
           })
           .then(({ data }) => {
             if (!data) return;
+            const now = Date.now();
+            const answered = new Set<string>();
             for (const preview of data.issuePreviews) {
-              store.previews.set(workReferenceKey(preview.reference), preview);
+              const key = workReferenceKey(preview.reference);
+              answered.add(key);
+              store.previews.set(key, preview);
+              store.answeredAt.set(key, now);
             }
-            if (data.issuePreviews.length > 0) store.notify();
+            // An item that can no longer be read (deleted, access removed) goes
+            // back to being a word.
+            let removed = false;
+            for (const key of chunk) {
+              if (!answered.has(key) && store.previews.delete(key)) {
+                store.answeredAt.delete(key);
+                removed = true;
+              }
+            }
+            if (answered.size > 0 || removed) store.notify();
           })
           .catch(() => {
             // The server could not answer; the next reader to meet these asks again.
@@ -174,11 +212,47 @@ export function WorkReference({ reference }: WorkReferenceProps) {
 
   const preview = store?.previews.get(key) ?? null;
   if (!preview) return <>{reference}</>;
-  return <WorkReferenceLink preview={preview} label={reference} />;
+  return <WorkReferenceLink preview={preview} label={reference} onLook={() => store?.request(key)} />;
+}
+
+/**
+ * Where a plain click on a reference goes: the drawer over this page
+ * (`?issue=`, other params kept), or — on a route that shows an issue itself
+ * and does not read `?issue=` — the issue page.
+ */
+export function referenceClickTarget(pathname: string, search: string, identifier: string): string {
+  if (pathname !== '/' && routeOwnsIssueView(pathname)) return `/issue/${encodeURIComponent(identifier)}`;
+  const params = new URLSearchParams(search);
+  params.set('issue', identifier);
+  return `${pathname}?${params.toString()}`;
 }
 
 /** The link and the card it opens on hover. */
-function WorkReferenceLink({ preview, label }: { preview: WorkPreview; label: string }) {
+function WorkReferenceLink({ preview, label, onLook }: { preview: WorkPreview; label: string; onLook: () => void }) {
+  const inRouter = useInRouterContext();
+  if (!inRouter) return <WorkReferenceAnchor preview={preview} label={label} onLook={onLook} onOpen={null} />;
+  return <RoutedWorkReferenceAnchor preview={preview} label={label} onLook={onLook} />;
+}
+
+function RoutedWorkReferenceAnchor({ preview, label, onLook }: { preview: WorkPreview; label: string; onLook: () => void }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const onOpen = () =>
+    navigate(referenceClickTarget(location.pathname, location.search, preview.identifier), { preventScrollReset: true });
+  return <WorkReferenceAnchor preview={preview} label={label} onLook={onLook} onOpen={onOpen} />;
+}
+
+function WorkReferenceAnchor({
+  preview,
+  label,
+  onLook,
+  onOpen,
+}: {
+  preview: WorkPreview;
+  label: string;
+  onLook: () => void;
+  onOpen: (() => void) | null;
+}) {
   const [open, setOpen] = useState(false);
   const popupId = useId();
   const anchorRef = useRef<HTMLAnchorElement | null>(null);
@@ -246,18 +320,26 @@ function WorkReferenceLink({ preview, label }: { preview: WorkPreview; label: st
       <a
         ref={anchorRef}
         className="work-reference__link"
-        href={`/issue/${preview.identifier}`}
-        target="_blank"
-        rel="noopener noreferrer"
+        href={`/issue/${encodeURIComponent(preview.identifier)}`}
         aria-describedby={open ? popupId : undefined}
+        onClick={(event) => {
+          // A plain click opens the drawer; modified clicks are the browser's.
+          if (!onOpen || event.defaultPrevented || event.button !== 0) return;
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          event.preventDefault();
+          setOpen(false);
+          onOpen();
+        }}
         onMouseEnter={() => {
           cancelClose();
           setOpen(true);
+          onLook();
         }}
         onMouseLeave={scheduleClose}
         onFocus={() => {
           cancelClose();
           setOpen(true);
+          onLook();
         }}
         onBlur={() => setOpen(false)}
       >

@@ -60,4 +60,23 @@ describe('App board drawer flows', () => {
       expect(within(drawer).getByLabelText('Issue title')).toHaveValue('Backlog item'),
     );
   });
+  it('names the project in the header, or says there is none (INV-1536)', async () => {
+    const data = structuredClone(boardQueryResult);
+    data.issues.nodes = data.issues.nodes.map((issue) =>
+      issue.identifier === 'INV-2' ? { ...issue, repository: 'fakechris/Involute' } : { ...issue, repository: null },
+    );
+    renderTestApp({ data, loading: false });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-2' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+    const badge = within(drawer).getByTestId('issue-panel-project');
+    expect(badge).toHaveTextContent('Involute');
+    expect(badge).toHaveAttribute('title', 'Project: fakechris/Involute');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close issue detail drawer' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const other = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+    await waitFor(() => expect(within(other).getByLabelText('Issue title')).toHaveValue('Backlog item'));
+    expect(within(other).getByTestId('issue-panel-project')).toHaveTextContent('No project');
+  });
 });

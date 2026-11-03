@@ -128,7 +128,7 @@ import {
 import { BoardLoadMoreNotice } from '../components/BoardLoadMoreNotice';
 import { Column } from '../components/Column';
 import { InlineCreate } from '../components/InlineCreate';
-import { IssueCard, getProjectColorClass } from '../components/IssueCard';
+import { IssueCard } from '../components/IssueCard';
 import { IssueDetailDrawer } from '../components/IssueDetailDrawer';
 import { KanbanView } from '../components/KanbanView';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
@@ -143,6 +143,7 @@ import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { FilterChip, FilterMenu, FilterSearch, SavedViewControl, SortControl } from '../components/filters';
 import { BulkActionBar, LoadingState, SegmentedControl } from '../components/status';
 import { WORK_FILTER_KEYS, WorkFilterBar, filtersToIql, hasWorkFilters, joinIql, useWorkFilters } from '../components/WorkFilterBar';
+import { isWorkIdentifier } from '../work/work-reference';
 
 const ISSUE_PAGE_SIZE = 200;
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
@@ -190,7 +191,7 @@ function moveIssueToState(
  */
 function normalizeIssueRef(ref: string): string {
   const trimmed = ref.trim();
-  return /^[A-Za-z][A-Za-z0-9]{0,9}-\d{1,9}$/.test(trimmed) ? trimmed.toUpperCase() : trimmed;
+  return isWorkIdentifier(trimmed) ? trimmed.toUpperCase() : trimmed;
 }
 
 export function BoardPage() {

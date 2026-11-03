@@ -17,6 +17,7 @@ import {
 } from '../backlog/views';
 import { FilterChip, FilterMenu, FilterSearch, SavedViewControl, SortControl } from '../components/filters';
 import { PageBody, PageToolbar } from '../components/layout';
+import { ProjectBadge } from '../components/ProjectBadge';
 import { EmptyState, LoadingState } from '../components/status';
 import { WorkFilterBar, useWorkFilters } from '../components/WorkFilterBar';
 
@@ -356,9 +357,7 @@ export function BacklogPage({
                     </td>
                     <td>
                       {issue.repository ? (
-                        <span className="issue-card__repo-badge" title={issue.repository}>
-                          {issue.repository.includes('/') ? issue.repository.split('/')[1] : issue.repository}
-                        </span>
+                        <ProjectBadge repository={issue.repository} />
                       ) : (
                         <span className="backlog-table__none">—</span>
                       )}
