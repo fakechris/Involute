@@ -14,6 +14,7 @@ import { IssueNeighbourhood } from './graph/IssueNeighbourhood';
 import { AddSubIssueButton } from './AddSubIssueButton';
 import { BugSlaBadge, FollowUpDeadlineBadge } from './BugSlaBadge';
 import { ClaimControl } from './ClaimControl';
+import { ProjectBadge } from './ProjectBadge';
 import { WorkStructureEditor, type StructureUpdate } from './WorkStructureEditor';
 import { toggleLabelId } from '../work/labels';
 import { RichTextEditor } from './RichTextEditor';
@@ -322,9 +323,9 @@ export function IssueDetailDrawer({
         <div className="issue-panel__header">
           <div className="issue-panel__title-row">
             {team ? <Badge tone="accent" mono>{team.key}</Badge> : null}
-            <span className="mono" style={{ fontSize: 13, color: 'var(--fg-dim)' }}>
-              {activeIssue.identifier}
-            </span>
+            {/* Which project this is, at a glance (INV-1536). */}
+            <ProjectBadge repository={activeIssue.repository} emptyLabel="No project" data-testid="issue-panel-project" />
+            <span className="mono issue-panel__identifier">{activeIssue.identifier}</span>
             {activeIssue.provenance ? (
               <span className="issue-panel__provenance">
                 {activeIssue.provenance.actor ? (

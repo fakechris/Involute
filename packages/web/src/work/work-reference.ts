@@ -55,3 +55,18 @@ export function findWorkReferences(text: string): WorkReferenceMatch[] {
 export function workReferenceKey(reference: string): string {
   return reference.trim().toUpperCase();
 }
+
+/**
+ * Whether `text` is a work identifier and nothing else (`INV-1446`, any
+ * casing), e.g. a `?issue=` value. Parsing identifiers happens here only
+ * (INV-1536, design guard): a page that needs one asks this module.
+ */
+export function isWorkIdentifier(text: string): boolean {
+  return /^[A-Za-z]{1,10}-\d{1,9}$/.test(text);
+}
+
+/** `"INV-12 Title words"` → `{ reference: "INV-12", rest: "Title words" }`; null when it does not start with one. */
+export function splitLeadingReference(text: string): { reference: string; rest: string } | null {
+  const match = /^([A-Za-z]{1,10}-\d{1,9})\s+([\s\S]+)$/.exec(text);
+  return match ? { reference: match[1]!, rest: match[2]! } : null;
+}

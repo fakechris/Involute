@@ -20,6 +20,7 @@ import { Btn } from '../components/Primitives';
 import { ListRow } from '../components/list';
 import { PageBody, PageHeader } from '../components/layout';
 import { EmptyState, SegmentedControl } from '../components/status';
+import { WorkReferenceText } from '../components/WorkReference';
 
 type InboxFilter = 'all' | 'unread';
 
@@ -365,8 +366,6 @@ export function InboxPage() {
   );
 }
 
-const IDENTIFIER = /^[A-Z][A-Z0-9]*-\d+$/;
-
 /** Where on the ops page each ops notification is handled (INV-796). */
 const OPS_SECTION: Record<string, string> = {
   'webhook.disabled': 'webhooks',
@@ -400,10 +399,9 @@ function NotificationDetails({ payload }: { payload: Record<string, unknown> | n
                 <a href={text} target="_blank" rel="noreferrer">
                   {text}
                 </a>
-              ) : IDENTIFIER.test(text) ? (
-                <a href={`/issue/${text}`}>{text}</a>
               ) : (
-                text
+                // Work named in a payload links like any reference (INV-1536).
+                <WorkReferenceText text={text} />
               )}
             </dd>
           </div>

@@ -5,6 +5,7 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Html5BoardDragPayload, IssueSummary } from '../board/types';
 import { createHtml5BoardDragPayload } from '../board/utils';
 import { BugSlaBadge, FollowUpDeadlineBadge } from './BugSlaBadge';
+import { ProjectBadge } from './ProjectBadge';
 import { PriorityIcon } from './Primitives';
 import { StatusIcon } from './StatusIcon';
 import { severityLabel } from '../board/severity';
@@ -21,19 +22,6 @@ interface IssueCardProps {
   onNativeDragStart?: (payload: Html5BoardDragPayload) => void;
   onNativeDragEnd?: () => void;
   onFilterProject?: ((projectKey: string) => void) | undefined;
-}
-
-// Returns a stable palette class (proj-color-0..9) for a repository.
-// Actual colors live in app.css so they can adapt to light/dark themes.
-export function getProjectColorClass(repository?: string | null): string | null {
-  if (!repository) {
-    return null;
-  }
-  let hash = 0;
-  for (let i = 0; i < repository.length; i++) {
-    hash = (hash * 31 + repository.charCodeAt(i)) >>> 0;
-  }
-  return `proj-color-${hash % 10}`;
 }
 
 function getInitials(name: string | null | undefined): string {
@@ -201,31 +189,12 @@ export function IssueCard({
             ) : null}
             <BugSlaBadge sla={issue.bugSla} />
             <FollowUpDeadlineBadge deadline={issue.followUpDeadline} />
-            {issue.repository ? (
-              <span
-                role={onFilterProject ? 'button' : undefined}
-                tabIndex={onFilterProject ? 0 : undefined}
-                className={`issue-card__repo-badge${onFilterProject ? ' issue-card__repo-badge--interactive' : ''} ${getProjectColorClass(issue.repository) ?? ''}`}
-                title={`Project: ${issue.repository}`}
-                data-testid={`issue-repo-${issue.id}`}
-                onClick={(e) => {
-                  if (onFilterProject) {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    onFilterProject(issue.repository!);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (onFilterProject && (e.key === 'Enter' || e.key === ' ')) {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    onFilterProject(issue.repository!);
-                  }
-                }}
-              >
-                {issue.repository.includes('/') ? issue.repository.split('/')[1] : issue.repository}
-              </span>
-            ) : null}
+            <ProjectBadge
+              repository={issue.repository}
+              onSelect={onFilterProject}
+              className="issue-card__repo-badge"
+              data-testid={`issue-repo-${issue.id}`}
+            />
             {issue.kind && issue.kind !== 'ISSUE' ? (
               <span
                 style={{

@@ -32,6 +32,7 @@ import type {
   WorkUserSummary,
 } from '../work/types';
 import { CandidateCard, COMMIT_CANDIDATE_EVENT, SNOOZE_CANDIDATE_EVENT, commitUndoItem, humanUsers } from './CandidatesPage';
+import { splitLeadingReference } from '../work/work-reference';
 
 /** Section order: the decisions that unblock running work first. */
 const SECTIONS: Array<{ kind: AttentionKind; title: string }> = [
@@ -641,9 +642,9 @@ export function AttentionPage() {
 }
 
 function GroupLabel({ className, kind, text }: { className?: string; kind?: WorkKind | null; text: string }) {
-  const match = /^([A-Za-z]+-\d+)\s+([\s\S]+)$/.exec(text);
-  const identifier = match?.[1] ?? null;
-  const title = match?.[2] ?? text;
+  const leading = splitLeadingReference(text);
+  const identifier = leading?.reference ?? null;
+  const title = leading?.rest ?? text;
   const kindLabel = kind ? KIND_LABEL[kind] : null;
   // A group heading is a collapsible parent container header, not a body paragraph.
   // The kind is a badge; the title takes the remaining column and wraps there,

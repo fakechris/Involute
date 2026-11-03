@@ -2,7 +2,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MarkdownRenderer } from './MarkdownRenderer';
-import { WorkReference, WorkReferenceProvider, WorkReferenceText } from './WorkReference';
+import { MemoryRouter, useLocation } from 'react-router-dom';
+
+import { PREVIEW_FRESH_MS, WorkReference, WorkReferenceProvider, WorkReferenceText } from './WorkReference';
 
 const { mockUseQuery, previews } = vi.hoisted(() => ({
   mockUseQuery: vi.fn(),
@@ -65,19 +67,76 @@ function renderWithProvider(children: React.ReactNode) {
   return render(<WorkReferenceProvider>{children}</WorkReferenceProvider>);
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="location">{`${location.pathname}${location.search}`}</span>;
+}
+
+function renderInRouter(entry: string, children: React.ReactNode) {
+  return render(
+    <MemoryRouter initialEntries={[entry]}>
+      <WorkReferenceProvider>
+        {children}
+        <LocationProbe />
+      </WorkReferenceProvider>
+    </MemoryRouter>,
+  );
+}
+
 /** The calls the provider made that actually asked the server something. */
 function askedFor(): string[][] {
   return mockUseQuery.mock.calls.map(([identifiers]) => identifiers as string[]);
 }
 
 describe('work references in prose (INV-1466)', () => {
-  it('turns a reference into a link that opens the work item in a new tab', async () => {
+  it('turns a reference into a link to the work item', async () => {
     renderWithProvider(<WorkReference reference="INV-1446" />);
 
     const link = await screen.findByRole('link', { name: 'INV-1446' });
     expect(link).toHaveAttribute('href', '/issue/INV-1446');
-    expect(link).toHaveAttribute('target', '_blank');
-    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(link).not.toHaveAttribute('target');
+  });
+
+  it('opens the drawer over the current page on a plain click and leaves modified clicks to the browser (INV-1536)', async () => {
+    renderInRouter('/inbox?tab=all', <WorkReference reference="INV-1446" />);
+    const link = await screen.findByRole('link', { name: 'INV-1446' });
+
+    const modified = fireEvent.click(link, { metaKey: true });
+    expect(modified).toBe(true);
+    expect(screen.getByTestId('location')).toHaveTextContent('/inbox?tab=all');
+
+    const plain = fireEvent.click(link);
+    expect(plain).toBe(false);
+    expect(screen.getByTestId('location')).toHaveTextContent('/inbox?tab=all&issue=INV-1446');
+  });
+
+  it('opens the issue page from a page that shows an issue itself (INV-1536)', async () => {
+    renderInRouter('/issue/INV-1', <WorkReference reference="INV-1446" />);
+    fireEvent.click(await screen.findByRole('link', { name: 'INV-1446' }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/issue/INV-1446');
+  });
+
+  it('asks again about a reference whose answer is old, so the card shows the state now (INV-1536)', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    try {
+      renderWithProvider(<WorkReference reference="INV-1446" />);
+      const link = await screen.findByRole('link', { name: 'INV-1446' });
+      expect(askedFor()).toEqual([['INV-1446']]);
+
+      fireEvent.mouseEnter(link);
+      fireEvent.mouseLeave(link);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      expect(askedFor()).toHaveLength(1);
+
+      now.mockReturnValue(1_000_000 + PREVIEW_FRESH_MS + 1);
+      previews[0]!.stateName = 'Done';
+      fireEvent.mouseEnter(link);
+      await waitFor(() => expect(askedFor()).toHaveLength(2));
+      await waitFor(() => expect(screen.getByRole('tooltip')).toHaveTextContent('Done'));
+    } finally {
+      previews[0]!.stateName = 'In Progress';
+      now.mockRestore();
+    }
   });
 
   it('shows what the reference points at when the reader hovers it', async () => {

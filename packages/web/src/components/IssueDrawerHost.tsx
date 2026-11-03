@@ -7,7 +7,7 @@ import { RouteIssueDrawer } from './RouteIssueDrawer';
  * Routes that mount their own issue drawer (the board and backlog drive it
  * with prev/next and their loaded issues) or show the issue itself.
  */
-function routeOwnsIssueView(pathname: string): boolean {
+export function routeOwnsIssueView(pathname: string): boolean {
   return pathname === '/' || pathname === '/backlog' || pathname.startsWith('/issue/') || pathname.startsWith('/issues/');
 }
 

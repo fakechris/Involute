@@ -36,6 +36,7 @@ import { Checkbox, Field, Select, TextArea, TextInput } from '../components/cont
 import { AutonomyBadge, ProjectAutonomyField } from './AutonomyTab';
 import { PageBody, PageHeader } from '../components/layout';
 import { EmptyState, LoadingState } from '../components/status';
+import { ProjectBadge } from '../components/ProjectBadge';
 
 /** The project's workflow state as a pill, tinted by state type. */
 function ProjectStateBadge({ project }: { project: { state: { name: string; type: WorkflowStateType } } }) {
@@ -469,14 +470,7 @@ export function ProjectsPage() {
                   <div className="projects-card__head">
                     <span className="mono projects-identifier">{project.identifier}</span>
                     <span className="projects-card__title">{project.title}</span>
-                    {project.repository && (
-                      <span
-                        className="issue-card__repo-badge"
-                        title={`Repository: ${project.repository}`}
-                      >
-                        {project.repository.includes('/') ? project.repository.split('/')[1] : project.repository}
-                      </span>
-                    )}
+                    <ProjectBadge repository={project.repository} titlePrefix="Repository" />
                     {project.alias && (
                       <span className="mono projects-card__alias" title={`PRs may reference this project's work as ${project.alias}-123`}>
                         {project.alias}
