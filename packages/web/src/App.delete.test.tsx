@@ -19,11 +19,14 @@ const apolloMocks = vi.hoisted(() => ({
 
 vi.mock('@apollo/client/react', async () => {
   const actual = await vi.importActual<typeof import('@apollo/client/react')>('@apollo/client/react');
+  const stubClient = { query: async () => ({ data: undefined }) };
 
   return {
     ...actual,
     useMutation: apolloMocks.useMutation,
     useQuery: apolloMocks.useQuery,
+    // A column's own Load more and work references ask through the client (INV-1539).
+    useApolloClient: () => stubClient,
   };
 });
 

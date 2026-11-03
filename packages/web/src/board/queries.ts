@@ -1,67 +1,11 @@
 import { gql } from '@apollo/client';
 
-export const BOARD_PAGE_QUERY = gql`
-  query BoardPage($query: String, $first: Int!, $after: String, $filter: IssueFilter, $teamFilter: TeamFilter, $withDescriptions: Boolean! = false, $orderBy: IssueOrder) {
-    projectSummary(teamFilter: $teamFilter) {
-      totalCount
-      noRepositoryCount
-      projects {
-        repository
-        name
-        identifier
-        totalCount
-      }
-    }
-    teams {
-      nodes {
-        id
-        key
-        name
-        viewerCanWrite
-        viewerCanManage
-        issueCount
-        memberships {
-          nodes {
-            id
-            role
-            user {
-              id
-              name
-              email
-              globalRole
-              actorKind
-            }
-          }
-        }
-        states {
-          nodes {
-            id
-            name
-            type
-            position
-          }
-        }
-      }
-    }
-    users {
-      nodes {
-        id
-        name
-        email
-        actorKind
-        globalRole
-      }
-    }
-    issueLabels {
-      nodes {
-        id
-        name
-      }
-    }
-    # Per-state totals under the same filter (INV-1516), read with the list so they never drift apart.
-    issueStateCounts(filter: $filter, query: $query) { stateId count }
-    issues(first: $first, after: $after, filter: $filter, query: $query, orderBy: $orderBy) {
-      nodes {
+/**
+ * One card's worth of an issue, shared by the board page and a column's own
+ * load (INV-1539) so both fill the cache with the same shape. Plain text, not a
+ * fragment: the board's tests complete fake answers from the selection set.
+ */
+const BOARD_ISSUE_SELECTION = `
         id
         identifier
         revision
@@ -174,14 +118,93 @@ export const BOARD_PAGE_QUERY = gql`
             }
           }
         }
+`;
+
+export const BOARD_PAGE_QUERY = gql(`
+  query BoardPage($query: String, $first: Int!, $after: String, $filter: IssueFilter, $teamFilter: TeamFilter, $withDescriptions: Boolean! = false, $orderBy: IssueOrder) {
+    projectSummary(teamFilter: $teamFilter) {
+      totalCount
+      noRepositoryCount
+      projects {
+        repository
+        name
+        identifier
+        totalCount
       }
+    }
+    teams {
+      nodes {
+        id
+        key
+        name
+        viewerCanWrite
+        viewerCanManage
+        issueCount
+        memberships {
+          nodes {
+            id
+            role
+            user {
+              id
+              name
+              email
+              globalRole
+              actorKind
+            }
+          }
+        }
+        states {
+          nodes {
+            id
+            name
+            type
+            position
+          }
+        }
+      }
+    }
+    users {
+      nodes {
+        id
+        name
+        email
+        actorKind
+        globalRole
+      }
+    }
+    issueLabels {
+      nodes {
+        id
+        name
+      }
+    }
+    # Per-state totals under the same filter (INV-1516), read with the list so they never drift apart.
+    issueStateCounts(filter: $filter, query: $query) { stateId count }
+    issues(first: $first, after: $after, filter: $filter, query: $query, orderBy: $orderBy) {
+      nodes {${BOARD_ISSUE_SELECTION}      }
       pageInfo {
         hasNextPage
         endCursor
       }
     }
   }
-`;
+`);
+
+/**
+ * One column's items under the board's filters (INV-1539): a column's Load
+ * more asks for its own state, not the board's next page.
+ */
+export const BOARD_COLUMN_ISSUES_QUERY = gql(`
+  query BoardColumnIssues($query: String, $first: Int!, $after: String, $filter: IssueFilter, $withDescriptions: Boolean! = false, $orderBy: IssueOrder) {
+    issues(first: $first, after: $after, filter: $filter, query: $query, orderBy: $orderBy) {
+      nodes {${BOARD_ISSUE_SELECTION}      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
+  }
+`);
 
 export const ISSUE_UPDATE_MUTATION = gql`
   mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {

@@ -534,6 +534,8 @@ type QueryState = {
   previewsData?: WorkPreviewsQueryData;
   /** The single issue a ?issue= link names (INV-1469); absent, the board's own issue answers. */
   issuePageData?: { issue: IssueSummary | null };
+  /** What a column's own Load more gets back (INV-1539); absent, nothing more. */
+  columnData?: { issues: { nodes: IssueSummary[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } };
 };
 
 export function renderApp(
@@ -564,6 +566,15 @@ export function renderApp(
         error: undefined,
         loading: false,
         refetch: vi.fn().mockResolvedValue(undefined),
+      };
+    }
+
+    // A column's own Load more (INV-1539).
+    if (source.includes('query BoardColumnIssues')) {
+      return {
+        data: queryState.columnData ?? { issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } },
+        error: undefined,
+        loading: false,
       };
     }
 
