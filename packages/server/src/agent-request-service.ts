@@ -171,13 +171,17 @@ export async function readAgentInbox(
     states?: AgentRequestState[] | null;
     /** Only requests on this team's work — the acting credential's binding (INV-594). */
     teamId?: string | null;
+    /** Only requests on this project's work (INV-1545). */
+    repository?: string | null;
   },
 ): Promise<AgentInboxPage> {
   const take = Math.min(Math.max(input.first ?? 20, 1), MAX_INBOX_PAGE);
   const where: Prisma.AgentRequestWhereInput = {
     targetActorId: input.actorId,
     state: { in: input.states ?? ['SUBMITTED', 'WORKING', 'INPUT_REQUIRED'] },
-    ...(input.teamId ? { work: { teamId: input.teamId } } : {}),
+    ...(input.teamId || input.repository
+      ? { work: { ...(input.teamId ? { teamId: input.teamId } : {}), ...(input.repository ? { repository: input.repository } : {}) } }
+      : {}),
   };
 
   if (input.since) {

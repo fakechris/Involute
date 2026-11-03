@@ -237,8 +237,13 @@ function buildUnreadNotificationWhere(input: {
   teamId: string | null;
   userId: string;
   workWhere?: Prisma.IssueWhereInput | undefined;
+  /** Only notifications on this project's work (INV-1545). */
+  repository?: string | null | undefined;
 }): Prisma.NotificationWhereInput {
   const andClauses: Prisma.NotificationWhereInput[] = [];
+  if (input.repository) {
+    andClauses.push({ work: { repository: input.repository } });
+  }
   if (input.teamId) {
     andClauses.push({ OR: [{ teamId: input.teamId }, { teamId: null }] });
   }
@@ -260,7 +265,7 @@ function buildUnreadNotificationWhere(input: {
  */
 export async function readUnreadNotifications(
   prisma: DatabaseClient,
-  input: { first: number; since: Date | null; teamId: string | null; userId: string; workWhere?: Prisma.IssueWhereInput | undefined },
+  input: { first: number; since: Date | null; teamId: string | null; userId: string; workWhere?: Prisma.IssueWhereInput | undefined; repository?: string | null },
 ) {
   return prisma.notification.findMany({
     include: { work: { select: { commitmentStatus: true, identifier: true, title: true } } },
@@ -281,6 +286,9 @@ export type UnreadDecisionsSummary = {
     at: string;
   }>;
   hint: string;
+  /** Set when the count is one project's (INV-1545): that project, and the unread total across all. */
+  repository?: string;
+  total?: number;
 };
 
 /**
@@ -290,13 +298,16 @@ export type UnreadDecisionsSummary = {
  */
 export async function readUnreadDecisionsSummary(
   prisma: DatabaseClient,
-  input: { teamId: string | null; userId: string; workWhere?: Prisma.IssueWhereInput | undefined },
+  input: { teamId: string | null; userId: string; workWhere?: Prisma.IssueWhereInput | undefined; repository?: string | null },
 ): Promise<UnreadDecisionsSummary | null> {
   const where = buildUnreadNotificationWhere(input);
   const count = await prisma.notification.count({ where });
   if (count === 0) {
     return null;
   }
+  // A call about one project's work counts that project's; the total says how
+  // much the shared identity has elsewhere (INV-1545).
+  const total = input.repository ? await prisma.notification.count({ where: buildUnreadNotificationWhere({ ...input, repository: null }) }) : null;
   const rows = await prisma.notification.findMany({
     where,
     select: {
@@ -317,6 +328,7 @@ export async function readUnreadDecisionsSummary(
       at: row.createdAt.toISOString(),
     })),
     hint: UNREAD_DECISIONS_HINT,
+    ...(input.repository && total !== null ? { repository: input.repository, total } : {}),
   };
 }
 
