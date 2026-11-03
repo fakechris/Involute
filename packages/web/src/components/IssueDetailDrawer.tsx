@@ -400,6 +400,13 @@ export function IssueDetailDrawer({
           </div>
         </div>
 
+        {/* A refused save says why right under the header, where the person just acted (INV-1534). */}
+        {errorMessage ? (
+          <p className="issue-panel__error" role="alert">
+            {errorMessage}
+          </p>
+        ) : null}
+
         <div className="issue-panel__body">
           <div className="issue-panel__main">
             {/*
@@ -778,11 +785,6 @@ export function IssueDetailDrawer({
           </aside>
         </div>
 
-        {errorMessage ? (
-          <p className="issue-panel__error" role="alert">
-            {errorMessage}
-          </p>
-        ) : null}
       </section>
     </aside>
   );

@@ -3007,8 +3007,10 @@ export function BoardPage() {
   const notices = (
     <>
       {mutationError ? (
-        <section className="page-notice page-notice--error" role="alert">
+        // Floats in view: a refused drag may happen far down the board (INV-1534).
+        <section className="page-notice page-notice--error page-notice--floating" role="alert">
           <p className="page-notice__text">{mutationError}</p>
+          <button type="button" className="page-notice__dismiss" aria-label="Dismiss" onClick={() => setMutationError(null)}>×</button>
         </section>
       ) : null}
       <BoardLoadMoreNotice
