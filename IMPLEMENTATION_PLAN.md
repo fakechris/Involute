@@ -216,4 +216,4 @@ Design: `docs/design-system.md`（规则 §3、原语目录 §4、审计证据 �
 ## Stage 5: 收尾 — INV-1385
 **Goal**: 暗色主题逐页检查并修复可读性；最后四处离开骨架的界面（Issue 页头、Candidates 提交摘要、BootstrapErrorNotice、ClaimControl 的 Unclaimed）回到原语；`--warn-weak` / `--accent-solid` token；Incidents 隐藏无数据筛选；Search 查询框与其它列表页一致；Settings → Administration → Agents 入口；design-guard 内联 style 基线。
 **Success Criteria**: 13 个页面亮 / 暗截图无低于 WCAG AA 的文字对比度（自动对比度扫描为 0）；web typecheck / test exit 0。
-**Status**: In Progress
+**Status**: Complete — INV-1385 Done; follow-ups through INV-1544 (shared ProjectBadge / WorkReference / RefusalNotice / useWorkHoverCard, design-system rule 11) Done or In Review. Epic metrics 2026-11-03: inline `style={{` 125 (< 150), bare `<select>` 0 outside the Select primitive, design-guard green in CI.
