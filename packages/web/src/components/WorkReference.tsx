@@ -1,4 +1,4 @@
-import { useQuery } from '@apollo/client/react';
+import { useApolloClient } from '@apollo/client/react';
 import {
   createContext,
   useContext,
@@ -44,6 +44,9 @@ import { StatusIcon } from './StatusIcon';
 
 /** How long the app waits for more references before asking the server. */
 const BATCH_DELAY_MS = 40;
+
+/** The most references the server answers in one request (issue-preview.ts). */
+const MAX_PREVIEW_IDENTIFIERS = 100;
 
 interface WorkReferenceStore {
   /** The references the server answered, by reference key. */
@@ -100,7 +103,7 @@ function createStore(): WorkReferenceStore {
  */
 export function WorkReferenceProvider({ children }: { children: ReactNode }) {
   const store = useMemo(createStore, []);
-  const [requested, setRequested] = useState<string[]>([]);
+  const client = useApolloClient();
 
   // Re-render when a reference is met, so the batch below picks it up.
   useSyncExternalStore(store.subscribe, () => store.version, () => store.version);
@@ -111,37 +114,31 @@ export function WorkReferenceProvider({ children }: { children: ReactNode }) {
       const batch = [...store.waiting];
       store.waiting.clear();
       for (const key of batch) store.asked.add(key);
-      // The list grows rather than being replaced: an answer that arrives
-      // late still lands, and the server sees every reference once.
-      setRequested((previous) => [...previous, ...batch]);
+      // Only the references not asked about yet, in pieces the server answers
+      // whole: it reads the first MAX_PREVIEW_IDENTIFIERS of a request, so a
+      // growing list would leave every later reference unanswered (INV-1537).
+      for (let start = 0; start < batch.length; start += MAX_PREVIEW_IDENTIFIERS) {
+        const chunk = batch.slice(start, start + MAX_PREVIEW_IDENTIFIERS);
+        client
+          .query<WorkPreviewsQueryData, WorkPreviewsQueryVariables>({
+            query: WORK_PREVIEWS_QUERY,
+            variables: { identifiers: chunk },
+          })
+          .then(({ data }) => {
+            if (!data) return;
+            for (const preview of data.issuePreviews) {
+              store.previews.set(workReferenceKey(preview.reference), preview);
+            }
+            if (data.issuePreviews.length > 0) store.notify();
+          })
+          .catch(() => {
+            // The server could not answer; the next reader to meet these asks again.
+            for (const key of chunk) store.asked.delete(key);
+          });
+      }
     }, BATCH_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [store, store.version]);
-
-  const { data, error } = useQuery<WorkPreviewsQueryData, WorkPreviewsQueryVariables>(WORK_PREVIEWS_QUERY, {
-    variables: { identifiers: requested },
-    skip: requested.length === 0,
-  });
-
-  useEffect(() => {
-    if (!data) return;
-    // Only announce what actually changed: the same answer arriving twice must
-    // not send the page around another round.
-    let changed = false;
-    for (const preview of data.issuePreviews) {
-      const key = workReferenceKey(preview.reference);
-      if (store.previews.get(key) === preview) continue;
-      store.previews.set(key, preview);
-      changed = true;
-    }
-    if (changed) store.notify();
-  }, [data, store]);
-
-  // The server could not answer; let the references be asked about again.
-  useEffect(() => {
-    if (!error) return;
-    for (const key of requested) store.asked.delete(key);
-  }, [error, requested, store]);
+  }, [client, store, store.version]);
 
   return <WorkReferenceContext.Provider value={store}>{children}</WorkReferenceContext.Provider>;
 }
