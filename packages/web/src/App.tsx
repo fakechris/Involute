@@ -1,5 +1,5 @@
 import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { NavLink, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { NavLink, Route, Routes, useLocation, useNavigate, useSearchParams, type NavigateFunction, type NavigateOptions, type To } from 'react-router-dom';
 
 import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon, IcoCheck, IcoGraph, IcoFilter, IcoBug, IcoBell, IcoHistory, IcoKeyboard } from './components/Icons';
 import { CommandPalette, type PaletteAction } from './app/CommandPalette';
@@ -538,7 +538,16 @@ export function App() {
     }
   }, [isPaletteOpen]);
 
+  // The shortcut handler is registered once and reads navigate through a ref:
+  // navigate changes on every address change, and re-registering the handler
+  // dropped a pending g whenever a redirect or a page's URL sync landed between
+  // the two keys (INV-1541).
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+
   useEffect(() => {
+    const navigate = ((to: To | number, options?: NavigateOptions) =>
+      typeof to === 'number' ? navigateRef.current(to) : navigateRef.current(to, options)) as NavigateFunction;
     function handleGlobalKeyDown(event: KeyboardEvent) {
       const isTypingField = isTextEditingTarget(event.target);
 
@@ -665,9 +674,10 @@ export function App() {
         window.clearTimeout(gotoPrefixTimeoutRef.current);
         gotoPrefixTimeoutRef.current = null;
       }
+      setGotoChordPending(false);
       window.removeEventListener('keydown', handleGlobalKeyDown);
     };
-  }, [navigate]);
+  }, []);
 
   const paletteActions = useMemo<PaletteAction[]>(() => {
     const actions: PaletteAction[] = [
