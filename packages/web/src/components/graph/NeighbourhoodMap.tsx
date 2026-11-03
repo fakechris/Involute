@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState, type ReactNode } from 'react';
 
 import type { GraphEdge, GraphNode } from '../../work/graph-model';
 import { buildNeighbourhood } from '../../work/neighbourhood-model';
 import { useWorkHoverCard } from '../WorkReference';
-import { layoutNeighbourhood, type NeighbourhoodMapCaps, type PlacedNode } from '../../work/neighbourhood-layout';
+import { layoutNeighbourhood, type MapEdgeKind, type NeighbourhoodMapCaps, type NeighbourhoodRole, type PlacedNode } from '../../work/neighbourhood-layout';
 
 /**
  * One item's neighbourhood as a radial map (INV-1496).
@@ -38,13 +38,46 @@ interface NeighbourhoodMapProps {
   showLegend?: boolean;
 }
 
+/**
+ * What each role is called in the legend (INV-1546): the relation in words,
+ * not a colour to decode.
+ */
 const ROLE_LABEL = {
-  ancestor: { one: 'ancestor', many: 'ancestors' },
-  sibling: { one: 'sibling', many: 'siblings' },
-  child: { one: 'child', many: 'children' },
-  blocker: { one: 'blocker', many: 'blockers' },
-  dependent: { one: 'dependent', many: 'dependents' },
+  ancestor: { one: 'parent chain', many: 'parent chain' },
+  blocker: { one: 'blocks this', many: 'block this' },
+  dependent: { one: 'blocked by this', many: 'blocked by this' },
+  child: { one: 'sub-issue', many: 'sub-issues' },
+  sibling: { one: 'same parent', many: 'same parent' },
 } as const;
+
+/**
+ * A role is told apart by its shape, not only its colour (INV-1546): the
+ * parent chain is square, dependencies are diamonds, sub-issues solid dots,
+ * peers hollow rings, and the focus the big dot in the middle.
+ */
+function RoleShape({ role, x, y, r, className }: { role: NeighbourhoodRole; x: number; y: number; r: number; className: string }): ReactNode {
+  if (role === 'ancestor') {
+    const side = r * 1.7;
+    return <rect x={x - side / 2} y={y - side / 2} width={side} height={side} rx={1.5} className={className} />;
+  }
+  if (role === 'blocker' || role === 'dependent') {
+    const d = r * 1.25;
+    return <polygon points={`${x},${y - d} ${x + d},${y} ${x},${y + d} ${x - d},${y}`} className={className} />;
+  }
+  return <circle cx={x} cy={y} r={role === 'sibling' ? r * 0.8 : r} className={className} />;
+}
+
+/** The legend's small copy of a shape. */
+function LegendShape({ role }: { role: NeighbourhoodRole }) {
+  return (
+    <svg className="issue-neighbourhood__map-glyph" viewBox="0 0 16 16" aria-hidden="true">
+      <RoleShape role={role} x={8} y={8} r={5} className={`issue-neighbourhood__map-dot issue-neighbourhood__map-dot--${role}`} />
+    </svg>
+  );
+}
+
+/** Edge kinds that are real links, drawn with an arrowhead pointing at the target. */
+const ARROWED: readonly MapEdgeKind[] = ['hierarchy', 'open', 'violated', 'resolved'];
 
 /** Where a node's label sits, and how it hangs off the dot. */
 function labelSpot(
@@ -76,6 +109,8 @@ export function NeighbourhoodMap({
   showLegend = true,
 }: NeighbourhoodMapProps) {
   const [hovered, setHovered] = useState<string | null>(null);
+  // Arrowhead markers are ids in the document; two maps on a page must not share them.
+  const markerPrefix = useId().replace(/:/g, '');
   // The same work card as a reference in text (INV-1544), not a native tooltip.
   const hover = useWorkHoverCard();
 
@@ -120,21 +155,50 @@ export function NeighbourhoodMap({
         aria-label="Neighbourhood map"
         onMouseLeave={() => setHovered(null)}
       >
+        <defs>
+          {ARROWED.map((kind) => (
+            <marker
+              key={kind}
+              id={`${markerPrefix}-${kind}`}
+              viewBox="0 0 8 8"
+              refX={7}
+              refY={4}
+              markerWidth={7}
+              markerHeight={7}
+              orient="auto-start-reverse"
+            >
+              <path d="M0,0 L8,4 L0,8 Z" className={`issue-neighbourhood__map-arrow issue-neighbourhood__map-arrow--${kind}`} />
+            </marker>
+          ))}
+        </defs>
         <g>
           {layout.edges.map((edge) => {
             const faded = highlightedEdges ? !highlightedEdges.has(edge.id) : false;
             return (
-              <path
-                key={edge.id}
-                d={edge.path}
-                className={[
-                  'issue-neighbourhood__map-edge',
-                  `issue-neighbourhood__map-edge--${edge.kind}`,
-                  faded ? 'issue-neighbourhood__map-edge--faded' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-              />
+              <g key={edge.id} data-edge-kind={edge.kind} data-edge-from={edge.fromId} data-edge-to={edge.toId}>
+                <path
+                  d={edge.path}
+                  markerEnd={ARROWED.includes(edge.kind) ? `url(#${markerPrefix}-${edge.kind})` : undefined}
+                  className={[
+                    'issue-neighbourhood__map-edge',
+                    `issue-neighbourhood__map-edge--${edge.kind}`,
+                    faded ? 'issue-neighbourhood__map-edge--faded' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                />
+                {/* What the link says, on the link (INV-1546). */}
+                {edge.label ? (
+                  <text
+                    x={edge.labelAt.x}
+                    y={edge.labelAt.y}
+                    textAnchor="middle"
+                    className={['issue-neighbourhood__map-edge-label', faded ? 'issue-neighbourhood__map-edge--faded' : ''].filter(Boolean).join(' ')}
+                  >
+                    {edge.label}
+                  </text>
+                ) : null}
+              </g>
             );
           })}
         </g>
@@ -178,9 +242,10 @@ export function NeighbourhoodMap({
                   onSelect?.(node.id);
                 }}
               >
-                <circle
-                  cx={node.x}
-                  cy={node.y}
+                <RoleShape
+                  role={node.role}
+                  x={node.x}
+                  y={node.y}
                   r={node.r}
                   className={`issue-neighbourhood__map-dot issue-neighbourhood__map-dot--${node.role}`}
                 />
@@ -195,19 +260,24 @@ export function NeighbourhoodMap({
       {hover.card}
 
       {showLegend ? (
-        <ul className="issue-neighbourhood__map-legend" aria-label="Neighbourhood key">
-          {(['ancestor', 'sibling', 'child', 'blocker', 'dependent'] as const).map((role) => {
-            const hidden = layout.hidden[role];
-            if (counts[role] === 0 && hidden === 0) return null;
-            return (
-              <li key={role} className={`issue-neighbourhood__map-key issue-neighbourhood__map-key--${role}`}>
-                <span className="issue-neighbourhood__map-swatch" aria-hidden="true" />
-                {counts[role]} {counts[role] === 1 ? ROLE_LABEL[role].one : ROLE_LABEL[role].many}
-                {hidden > 0 ? ` (+${hidden})` : ''}
-              </li>
-            );
-          })}
-        </ul>
+        <div className="issue-neighbourhood__map-legend-wrap">
+          <ul className="issue-neighbourhood__map-legend" aria-label="Neighbourhood key">
+            {(['ancestor', 'blocker', 'dependent', 'child', 'sibling'] as const).map((role) => {
+              const hidden = layout.hidden[role];
+              if (counts[role] === 0 && hidden === 0) return null;
+              return (
+                <li key={role} className="issue-neighbourhood__map-key" data-role={role}>
+                  <LegendShape role={role} />
+                  {counts[role]} {counts[role] === 1 ? ROLE_LABEL[role].one : ROLE_LABEL[role].many}
+                  {hidden > 0 ? ` (+${hidden} more)` : ''}
+                </li>
+              );
+            })}
+          </ul>
+          {layout.edges.length > 0 ? (
+            <p className="issue-neighbourhood__map-note">A → B: A contains B (parent), or A blocks B. Dashed: same parent.</p>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

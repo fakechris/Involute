@@ -3070,6 +3070,24 @@ kbd {
   opacity: 0.16;
 }
 
+/* Arrowheads take the colour of the link they end (INV-1546). */
+.issue-neighbourhood__map-arrow { fill: var(--border-strong); }
+.issue-neighbourhood__map-arrow--open { fill: var(--warn); }
+.issue-neighbourhood__map-arrow--violated { fill: var(--danger); }
+.issue-neighbourhood__map-arrow--resolved { fill: var(--fg-dim); }
+
+/* "parent" / "blocks" written on the link, haloed like the node labels. */
+.issue-neighbourhood__map-edge-label {
+  font-size: 8.5px;
+  fill: var(--fg-muted);
+  pointer-events: none;
+  paint-order: stroke fill;
+  stroke: var(--bg);
+  stroke-width: 2.6px;
+  stroke-linejoin: round;
+  transition: opacity var(--dur-1) var(--ease);
+}
+
 .issue-neighbourhood__map-node {
   cursor: pointer;
   transition: opacity var(--dur-1) var(--ease);
@@ -3101,7 +3119,7 @@ kbd {
 }
 
 .issue-neighbourhood__map-dot--ancestor { fill: var(--accent); }
-.issue-neighbourhood__map-dot--sibling { fill: var(--fg-muted); }
+.issue-neighbourhood__map-dot--sibling { fill: var(--bg); stroke: var(--fg-muted); stroke-width: 1.6; }
 .issue-neighbourhood__map-dot--child { fill: var(--fg); }
 .issue-neighbourhood__map-dot--blocker { fill: var(--warn); }
 .issue-neighbourhood__map-dot--dependent { fill: var(--info); }
@@ -3141,18 +3159,24 @@ kbd {
   gap: 5px;
 }
 
-.issue-neighbourhood__map-swatch {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--fg-muted);
+.issue-neighbourhood__map-glyph {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  overflow: visible;
 }
 
-.issue-neighbourhood__map-key--ancestor .issue-neighbourhood__map-swatch { background: var(--accent); }
-.issue-neighbourhood__map-key--sibling .issue-neighbourhood__map-swatch { background: var(--fg-muted); }
-.issue-neighbourhood__map-key--child .issue-neighbourhood__map-swatch { background: var(--fg); }
-.issue-neighbourhood__map-key--blocker .issue-neighbourhood__map-swatch { background: var(--warn); }
-.issue-neighbourhood__map-key--dependent .issue-neighbourhood__map-swatch { background: var(--info); }
+.issue-neighbourhood__map-legend-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.issue-neighbourhood__map-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
 
 /* The page variant reads wider than the drawer's column. */
 
