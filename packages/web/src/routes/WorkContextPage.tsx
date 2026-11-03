@@ -23,6 +23,7 @@ import type {
   WorkContextPageQueryVariables,
   WorkRef,
 } from '../work/types';
+import { WorkReferenceText } from '../components/WorkReference';
 
 function formatWhen(value: string | null | undefined): string {
   if (!value) {
@@ -238,6 +239,16 @@ export function WorkContextPage() {
                   ) : null}
                   {run.phase ? <span>{run.phase}</span> : null}
                   {run.summary ? <MarkdownRenderer content={run.summary} size="sm" className="work-context__summary" /> : null}
+                  {/* What the run left behind (INV-1231). */}
+                  {run.followups ? (
+                    <span className="observation-card__meta" data-testid={`run-followups-${run.publicId}`}>
+                      {run.followups.noneReason != null ? (
+                        <>No follow-ups: {run.followups.noneReason}</>
+                      ) : (
+                        <>Follow-ups: <WorkReferenceText text={run.followups.identifiers.join(', ')} /></>
+                      )}
+                    </span>
+                  ) : null}
                   <span className="observation-card__meta">base rev {run.baseRevision ?? '—'}</span>
                   <span className="observation-card__meta">claim {run.claimId ?? '—'}</span>
                   <span className="observation-card__meta">actor {run.actorId ?? '—'}</span>

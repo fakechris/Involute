@@ -107,6 +107,7 @@ const workContextQuery: WorkContextPageQueryData = {
         lastActivityAt: '2026-08-31T16:20:00.000Z',
         staleNotifiedAt: null,
         presence: 'settled',
+        followups: { identifiers: ['INV-7', 'INV-8'], noneReason: null },
       },
       {
         id: 'run-2',
@@ -273,6 +274,9 @@ describe('K6 observation UI', () => {
     expect(screen.getByText('stale')).toBeInTheDocument();
     expect(screen.getByText(/last activity/)).toBeInTheDocument();
     expect(screen.getByText('Patch landed, waiting for review')).toBeInTheDocument();
+    // INV-1231: what the completed run left behind.
+    expect(screen.getByTestId('run-followups-RUN-1')).toHaveTextContent('Follow-ups: INV-7, INV-8');
+    expect(screen.queryByTestId('run-followups-RUN-2')).toBeNull();
     expect(screen.getByText('Implementation PR')).toBeInTheDocument();
     expect(screen.getByText('run completed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Issue editor' })).toBeInTheDocument();
@@ -283,6 +287,16 @@ describe('K6 observation UI', () => {
         input: { decision: 'ACCEPTED', expectedRevision: 3 },
       },
     }));
+  });
+
+  it('shows a completed run that said nothing is left, with its reason (INV-1231)', async () => {
+    const bundle = workContextQuery.workContext!;
+    const data = {
+      ...workContextQuery,
+      workContext: { ...bundle, runs: [{ ...bundle.runs[0]!, followups: { identifiers: [], noneReason: 'Nothing else came up.' } }] },
+    };
+    renderApp({ data: boardQueryResult, workContextData: data, loading: false }, ['/work/issue-2']);
+    expect(await screen.findByTestId('run-followups-RUN-1')).toHaveTextContent('No follow-ups: Nothing else came up.');
   });
 
   it('shows what each run was bound to and what the server verified, and retracts evidence (INV-790)', async () => {

@@ -188,7 +188,9 @@ for (const [reason, decision, names] of administration) for (const name of names
  * Where the same field is deliberately typed differently on the two surfaces
  * (INV-1004); anything else that differs fails the parity test.
  */
-export const FIELD_TYPE_EXCEPTIONS: Record<string, Record<string, string>> = {};
+export const FIELD_TYPE_EXCEPTIONS: Record<string, Record<string, string>> = {
+  run_report: { followups: 'The same two-way choice on both surfaces (INV-1231): MCP takes a JSON object { work_ids, none_reason }, GraphQL the typed RunFollowupsInput { workIds, noneReason }.' },
+};
 
 /** Explicit GraphQL-only inputs. No wildcard exemption: a newly added field fails coverage. */
 export const GRAPHQL_ONLY_FIELDS: Record<string, Record<string, string>> = {

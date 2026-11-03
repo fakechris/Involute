@@ -94,6 +94,8 @@ export interface WorkRunSummary {
   commitSha?: string | null;
   pullRequestNumber?: number | null;
   contractRevision?: string | null;
+  /** What the run left behind when it completed (INV-1231). */
+  followups?: { identifiers: string[]; noneReason: string | null } | null;
 }
 
 export interface EvidenceVerificationSummary {

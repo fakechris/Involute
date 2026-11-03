@@ -68,6 +68,7 @@ import { createComment, mentionTexts, updateIssue } from './issue-service.js';
 import { amendmentChanges, proposeContractAmendment } from './contract-amendment.js';
 import { dependencyHints } from './mention-links.js';
 import { RESEARCH_NO_ATTACHMENT_WARNING } from './research-closure.js';
+import { RUN_FOLLOWUPS_WARNING, resolveFollowups } from './run-followups.js';
 import { researchLacksAttachment, researchLacksDownstream } from './work-hygiene.js';
 import { linkWork } from './duplicate-linkage.js';
 import { deleteWorkLink } from './link-service.js';
@@ -921,6 +922,13 @@ async function callMcpAction(
       if (args.decision_requested === true) {
         runInput.decisionRequested = true;
       }
+      if (args.followups && typeof args.followups === 'object') {
+        const raw = args.followups as Record<string, unknown>;
+        runInput.followups = await resolveFollowups(context.prisma, {
+          workIds: Array.isArray(raw.work_ids) ? raw.work_ids.filter((entry): entry is string => typeof entry === 'string') : null,
+          noneReason: typeof raw.none_reason === 'string' ? raw.none_reason : null,
+        }, { workId: work.id, canRead: (id) => assertCanReadIssue(context.prisma, context, id).then(() => true, () => false) });
+      }
       const reported = await reportRun(context.prisma, runInput, { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null });
       // Advisory only: the report is already committed, so a failed check is skipped.
       const completed = runInput.status === 'completed';
@@ -931,8 +939,10 @@ async function callMcpAction(
           ? ['This is research with nothing derived from it yet. Propose its actionable points (DERIVED_FROM this item) and "won\'t do" conclusions as DECISIONs, or state "no actionable points" in the summary or verification.']
           : []),
         ...(lacksAttachment ? [RESEARCH_NO_ATTACHMENT_WARNING] : []),
+        ...(reported.followupsMissing ? [RUN_FOLLOWUPS_WARNING] : []),
       ];
-      return warnings.length ? { ...reported, warning: warnings.join(' ') } : reported;
+      const { followupsMissing: _followupsMissing, ...result } = reported;
+      return warnings.length ? { ...result, warning: warnings.join(' ') } : result;
     }
     case 'work_views': {
       const views = await listSavedViews(context, requiredString(args.team_key, 'team_key'));
@@ -1654,6 +1664,14 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         receipt: RECEIPT_SCHEMA,
         decision_requested: { type: 'boolean' },
         idempotency_key: { type: 'string' },
+        followups: {
+          type: 'object',
+          description: 'With status completed (INV-1231): what this run leaves behind. Either work_ids — work it led to, proposed or filed first; each is linked DISCOVERED_DURING to this item — or none_reason saying why nothing is left. Not both. Missing on a completed run: a warning until 2026-11-17, refused after.',
+          properties: {
+            work_ids: { type: 'array', items: { type: 'string' }, description: 'Identifiers (INV-123) or UUIDs you can read.' },
+            none_reason: { type: 'string' },
+          },
+        },
       },
       required: ['work_id'],
     },

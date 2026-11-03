@@ -225,6 +225,7 @@ import {
   type RejectWorkInput,
 } from './claim-service.js';
 import { attachEvidence, reportRun, reviewWork } from './run-service.js';
+import { readRunFollowups, resolveFollowups, RUN_FOLLOWUPS_WARNING } from './run-followups.js';
 import { uncommitWork } from './work-uncommit.js';
 import { createProject, updateProject, deleteProject, type CreateProjectInput, type UpdateProjectInput } from './project-service.js';
 import { createCycle, updateCycle, deleteCycle, type CreateCycleInput, type UpdateCycleInput } from './cycle-service.js';
@@ -1781,8 +1782,16 @@ const typeDefs = /* GraphQL */ `
     lastActivityAt: DateTime!
     "When the owner was told the run went quiet; null while it is live or after activity resumed."
     staleNotifiedAt: DateTime
+    "What the run left behind when it completed (INV-1231); null for runs that did not say."
+    followups: RunFollowups
     "live while the executor keeps writing, stale after RUN_STALE_AFTER_MS (default 30 min) of silence, waiting while queued or blocked, settled once ended. Derived."
     presence: String!
+  }
+
+  "What a completed run left behind (INV-1231): the work it led to, or why there is none."
+  type RunFollowups {
+    identifiers: [String!]!
+    noneReason: String
   }
 
   type EvidenceVerificationRecord {
@@ -3326,6 +3335,15 @@ const typeDefs = /* GraphQL */ `
     externalUrl: String
     decisionRequested: Boolean
     idempotencyKey: String
+    "With status completed (INV-1231): the work this run led to, or why there is none."
+    followups: RunFollowupsInput
+  }
+
+  "What a completed run leaves behind (INV-1231): workIds or noneReason, not both."
+  input RunFollowupsInput {
+    "Identifiers or ids of work this run led to; each is linked DISCOVERED_DURING to the work."
+    workIds: [String!]
+    noneReason: String
   }
 
   input EvidenceAttachInput {
@@ -3353,6 +3371,8 @@ const typeDefs = /* GraphQL */ `
     run: WorkRunRecord
     "Why the mutation was refused; null on success."
     message: String
+    "Accepted, but with something to fix next time (a completed run without followups during the transition, INV-1231)."
+    warning: String
   }
 
   type EvidenceAttachPayload {
@@ -4788,6 +4808,7 @@ const resolvers = {
           status?: string | null;
           summary?: string | null;
           workId: string;
+          followups?: { workIds?: string[] | null; noneReason?: string | null } | null;
         };
       },
       context: GraphQLContext,
@@ -4798,15 +4819,23 @@ const resolvers = {
           throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
         }
         await assertCanWriteIssue(context.prisma, context, existing.id);
+        const { followups: rawFollowups, ...input } = args.input;
+        const followups = rawFollowups
+          ? await resolveFollowups(context.prisma, rawFollowups, {
+              workId: existing.id,
+              canRead: (id) => assertCanReadIssue(context.prisma, context, id).then(() => true, () => false),
+            })
+          : null;
         const result = await reportRun(
           context.prisma,
-          args.input,
+          { ...input, followups },
           writeActorFromViewer(context.viewer),
         );
         return {
           issue: await getIssueById(context.prisma, result.work.id),
           run: result.run,
           success: true as const,
+          warning: result.followupsMissing ? RUN_FOLLOWUPS_WARNING : null,
         };
       }, {
         issue: null,
@@ -5996,6 +6025,7 @@ const resolvers = {
     actor: (parent: { actorId?: string | null }, _args: Record<string, never>, context: GraphQLContext) =>
       parent.actorId ? context.prisma.user.findUnique({ where: { id: parent.actorId } }) : null,
     presence: (parent: { status: WorkRun['status']; lastActivityAt: Date }) => runPresence(parent),
+    followups: (parent: { followups?: unknown }) => readRunFollowups(parent.followups),
   },
   Team: {
     viewerCanWrite: (parent: TeamParent, _args: Record<string, never>, context: GraphQLContext): Promise<boolean> =>

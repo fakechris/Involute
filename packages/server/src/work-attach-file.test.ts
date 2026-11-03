@@ -130,7 +130,7 @@ describe('work_attach_file (INV-1003)', () => {
     };
     const finish = async (identifier: string) => {
       const claim = await mcp('work_claim', { id: identifier });
-      const reported = await mcp('run_report', { work_id: identifier, claim_token: claim.claim_token, status: 'completed', summary: 'Read three vendors.' });
+      const reported = await mcp('run_report', { work_id: identifier, claim_token: claim.claim_token, status: 'completed', summary: 'Read three vendors.', followups: { none_reason: 'No actionable points.' } });
       const current = await prisma.issue.findUniqueOrThrow({ where: { identifier } });
       const closed = await mcp('work_update', { id: identifier, expected_revision: current.revision, state: 'DONE' });
       return { reported, closed };

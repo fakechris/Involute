@@ -993,6 +993,8 @@ model WorkRun {
   status      WorkRunStatus @default(RUNNING)
   phase       String?
   summary     String?
+  // What a completed run leaves behind (INV-1231): { workIds, identifiers } or { noneReason }.
+  followups   Json?
   externalUrl String?
   startedAt   DateTime      @default(now())
   endedAt     DateTime?

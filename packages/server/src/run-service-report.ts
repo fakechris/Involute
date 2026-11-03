@@ -30,6 +30,13 @@ import { isIncidentWork } from './labels.js';
 import { recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
 import { attachDecisionReceipt } from './decision-receipt.js';
 import {
+  followupsJson,
+  followupsRequired,
+  linkFollowups,
+  RUN_FOLLOWUPS_MISSING_MESSAGE,
+  RUN_FOLLOWUPS_NOT_COMPLETED_MESSAGE,
+} from './run-followups.js';
+import {
   ALLOWED_RUN_TRANSITIONS,
   TERMINAL_RUN_STATUSES,
   type DatabaseClient,
@@ -47,7 +54,8 @@ export async function reportRun(
   prisma: PrismaClient,
   input: ReportRunInput,
   actor: WriteActor,
-): Promise<{ run: WorkRun; work: Issue }> {
+): Promise<{ run: WorkRun; work: Issue; followupsMissing: boolean }> {
+  if (input.followups && String(input.status ?? '').toUpperCase() !== 'COMPLETED') throw createValidationError(RUN_FOLLOWUPS_NOT_COMPLETED_MESSAGE);
   if (input.commitSha != null && !SHA_PATTERN.test(input.commitSha)) throw createValidationError('commitSha must be a lowercase full 40-character Git SHA');
   if (input.pullRequestNumber != null && (!Number.isSafeInteger(input.pullRequestNumber) || input.pullRequestNumber < 1)) throw createValidationError('pullRequestNumber must be a positive integer');
   const actorId = actor.actorId;
@@ -86,12 +94,17 @@ export async function reportRun(
           if (replayed.executionRevokedAt) throw createValidationError('This execution claim has been superseded.');
         }
         const freshWork = await transaction.issue.findUniqueOrThrow({ where: { id: work.id } });
-        return { run: replayed, work: freshWork };
+        return { run: replayed, work: freshWork, followupsMissing: false };
       }
       idempotencyId = reservation.record.id;
     }
 
     const status = parseRunStatus(input.status);
+    // A completed run says what it leaves behind (INV-1231); warned until the
+    // transition date, refused after.
+    const followupsMissing = status === 'COMPLETED' && !input.followups;
+    if (followupsMissing && followupsRequired()) throw createValidationError(RUN_FOLLOWUPS_MISSING_MESSAGE);
+    const followupsData = status === 'COMPLETED' && input.followups ? { followups: followupsJson(input.followups) } : {};
     const isTerminalStatus = Boolean(status && TERMINAL_RUN_STATUSES.includes(status));
     let run = input.runId ? await findRun(transaction, input.runId, work.id) : null;
     let activeClaim: WorkClaim | null = null;
@@ -208,6 +221,7 @@ export async function reportRun(
           lastActivityAt: new Date(),
           status: status ?? 'RUNNING',
           summary: input.summary ?? null,
+          ...followupsData,
           workId: work.id,
           ...(status && TERMINAL_RUN_STATUSES.includes(status) ? { endedAt: new Date() } : {}),
         },
@@ -257,6 +271,7 @@ export async function reportRun(
           ...(input.phase !== undefined ? { phase: input.phase } : {}),
           ...(input.summary !== undefined ? { summary: input.summary } : {}),
           ...(input.externalUrl !== undefined ? { externalUrl: input.externalUrl } : {}),
+          ...followupsData,
           // Any report is the executor doing something (INV-996).
           lastActivityAt: new Date(),
           staleNotifiedAt: null,
@@ -295,6 +310,7 @@ export async function reportRun(
     if (run.status === 'RUNNING') {
       ({ auditId: transitionAuditId, work: nextWork } = await moveToInProgress(transaction, work, actor));
     } else if (run.status === 'COMPLETED') {
+      if (input.followups) await linkFollowups(transaction, input.followups, work.id, actorId);
       ({ auditId: transitionAuditId, work: nextWork } = await moveToInReview(transaction, work, actor));
       if (activeClaim) {
         await transaction.workClaim.deleteMany({ where: { id: activeClaim.id } });
@@ -331,7 +347,7 @@ export async function reportRun(
       }
       await attachDecisionReceipt(transaction, { auditId: transitionAuditId, receipt: input.receipt });
     }
-    return { run, work: freshWork };
+    return { run, work: freshWork, followupsMissing };
   });
 }
 
