@@ -212,7 +212,7 @@ export function WorkReference({ reference }: WorkReferenceProps) {
 
   const preview = store?.previews.get(key) ?? null;
   if (!preview) return <>{reference}</>;
-  return <WorkReferenceLink preview={preview} label={reference} onLook={() => store?.request(key)} />;
+  return <WorkReferenceLink preview={preview} label={reference} />;
 }
 
 /**
@@ -228,36 +228,81 @@ export function referenceClickTarget(pathname: string, search: string, identifie
 }
 
 /** The link and the card it opens on hover. */
-function WorkReferenceLink({ preview, label, onLook }: { preview: WorkPreview; label: string; onLook: () => void }) {
+function WorkReferenceLink({ preview, label }: { preview: WorkPreview; label: string }) {
   const inRouter = useInRouterContext();
-  if (!inRouter) return <WorkReferenceAnchor preview={preview} label={label} onLook={onLook} onOpen={null} />;
-  return <RoutedWorkReferenceAnchor preview={preview} label={label} onLook={onLook} />;
+  if (!inRouter) return <WorkReferenceAnchor preview={preview} label={label} onOpen={null} />;
+  return <RoutedWorkReferenceAnchor preview={preview} label={label} />;
 }
 
-function RoutedWorkReferenceAnchor({ preview, label, onLook }: { preview: WorkPreview; label: string; onLook: () => void }) {
+function RoutedWorkReferenceAnchor({ preview, label }: { preview: WorkPreview; label: string }) {
   const location = useLocation();
   const navigate = useNavigate();
   const onOpen = () =>
     navigate(referenceClickTarget(location.pathname, location.search, preview.identifier), { preventScrollReset: true });
-  return <WorkReferenceAnchor preview={preview} label={label} onLook={onLook} onOpen={onOpen} />;
+  return <WorkReferenceAnchor preview={preview} label={label} onOpen={onOpen} />;
 }
 
 function WorkReferenceAnchor({
   preview,
   label,
-  onLook,
   onOpen,
 }: {
   preview: WorkPreview;
   label: string;
-  onLook: () => void;
   onOpen: (() => void) | null;
 }) {
-  const [open, setOpen] = useState(false);
+  const hover = useWorkHoverCard();
+  return (
+    <span className="work-reference">
+      <a
+        className="work-reference__link"
+        href={`/issue/${encodeURIComponent(preview.identifier)}`}
+        aria-describedby={hover.describedBy(preview.identifier)}
+        onClick={(event) => {
+          // A plain click opens the drawer; modified clicks are the browser's.
+          if (!onOpen || event.defaultPrevented || event.button !== 0) return;
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          event.preventDefault();
+          hover.hideNow();
+          onOpen();
+        }}
+        {...hover.anchorProps(preview.identifier)}
+      >
+        {label}
+      </a>
+      {hover.card}
+    </span>
+  );
+}
+
+/**
+ * The work card for anything that names a work item (INV-1544): a reference in
+ * text, a node on a graph, a row. One per surface — a graph has one card that
+ * follows whichever node the pointer or focus is on. Spread `anchorProps(id)`
+ * on the element (HTML or SVG) and render `card` anywhere; the card is placed
+ * against the viewport next to that element.
+ */
+export function useWorkHoverCard(): {
+  anchorProps: (reference: string) => {
+    onMouseEnter: (event: { currentTarget: Element }) => void;
+    onMouseLeave: () => void;
+    onFocus: (event: { currentTarget: Element }) => void;
+    onBlur: () => void;
+  };
+  describedBy: (reference: string) => string | undefined;
+  hideNow: () => void;
+  card: ReactNode;
+} {
+  const store = useWorkReferenceStore();
   const popupId = useId();
-  const anchorRef = useRef<HTMLAnchorElement | null>(null);
-  const popupRef = useRef<HTMLDivElement | null>(null);
+  const [target, setTarget] = useState<{ key: string; anchor: Element } | null>(null);
   const closeTimer = useRef<number | null>(null);
+
+  useSyncExternalStore(
+    store ? store.subscribe : noopSubscribe,
+    store ? () => store.version : () => 0,
+    () => 0,
+  );
 
   const cancelClose = () => {
     if (closeTimer.current !== null) {
@@ -265,24 +310,73 @@ function WorkReferenceAnchor({
       closeTimer.current = null;
     }
   };
-
   const scheduleClose = () => {
     cancelClose();
-    closeTimer.current = window.setTimeout(() => setOpen(false), 120);
+    closeTimer.current = window.setTimeout(() => setTarget(null), 120);
+  };
+  const hideNow = () => {
+    cancelClose();
+    setTarget(null);
+  };
+  const show = (reference: string, anchor: Element) => {
+    cancelClose();
+    const key = workReferenceKey(reference);
+    // Ask about it (again, once its answer is old) so the card shows the state now.
+    store?.request(key);
+    setTarget({ key, anchor });
   };
 
   useEffect(() => () => cancelClose(), []);
 
-  // The card lives outside the text it belongs to, so a clamped description
-  // (a card on Candidates, Needs you or In Review) cannot cut it off. It is
-  // placed against the viewport instead, and follows the reference while the
-  // reader scrolls.
+  useEffect(() => {
+    if (!target) return;
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setTarget(null);
+    }
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [target]);
+
+  const preview = target ? store?.previews.get(target.key) ?? null : null;
+  return {
+    anchorProps: (reference) => ({
+      onMouseEnter: (event) => show(reference, event.currentTarget),
+      onMouseLeave: scheduleClose,
+      onFocus: (event) => show(reference, event.currentTarget),
+      onBlur: hideNow,
+    }),
+    describedBy: (reference) => (preview && target?.key === workReferenceKey(reference) ? popupId : undefined),
+    hideNow,
+    card:
+      preview && target ? (
+        <WorkPreviewPopover id={popupId} preview={preview} anchor={target.anchor} onEnter={cancelClose} onLeave={scheduleClose} />
+      ) : null,
+  };
+}
+
+/** The card itself, outside the text or graph it belongs to so nothing clips it. */
+function WorkPreviewPopover({
+  id,
+  preview,
+  anchor,
+  onEnter,
+  onLeave,
+}: {
+  id: string;
+  preview: WorkPreview;
+  anchor: Element;
+  onEnter: () => void;
+  onLeave: () => void;
+}) {
+  const popupRef = useRef<HTMLDivElement | null>(null);
+
+  // A clamped description (a card on Candidates, Needs you or In Review) or a
+  // scrolled graph cannot cut the card off: it is placed against the viewport
+  // and follows its anchor while the reader scrolls.
   useLayoutEffect(() => {
-    if (!open) return;
     function place() {
-      const anchor = anchorRef.current;
       const popup = popupRef.current;
-      if (!anchor || !popup) return;
+      if (!popup) return;
       const anchorRect = anchor.getBoundingClientRect();
       const popupRect = popup.getBoundingClientRect();
       const margin = 8;
@@ -304,79 +398,29 @@ function WorkReferenceAnchor({
       window.removeEventListener('scroll', place, true);
       window.removeEventListener('resize', place);
     };
-  }, [open]);
+  }, [anchor, preview]);
 
-  useEffect(() => {
-    if (!open) return;
-    function handleKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setOpen(false);
-    }
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [open]);
-
-  return (
-    <span className="work-reference">
-      <a
-        ref={anchorRef}
-        className="work-reference__link"
-        href={`/issue/${encodeURIComponent(preview.identifier)}`}
-        aria-describedby={open ? popupId : undefined}
-        onClick={(event) => {
-          // A plain click opens the drawer; modified clicks are the browser's.
-          if (!onOpen || event.defaultPrevented || event.button !== 0) return;
-          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-          event.preventDefault();
-          setOpen(false);
-          onOpen();
-        }}
-        onMouseEnter={() => {
-          cancelClose();
-          setOpen(true);
-          onLook();
-        }}
-        onMouseLeave={scheduleClose}
-        onFocus={() => {
-          cancelClose();
-          setOpen(true);
-          onLook();
-        }}
-        onBlur={() => setOpen(false)}
-      >
-        {label}
-      </a>
-      {open
-        ? createPortal(
-            <div
-              ref={popupRef}
-              className="work-reference__popover"
-              id={popupId}
-              role="tooltip"
-              onMouseEnter={cancelClose}
-              onMouseLeave={scheduleClose}
-            >
-              <div className="work-reference__head">
-                <span className="work-reference__id mono">{preview.identifier}</span>
-                <StatusIcon stateName={preview.stateName} size={12} />
-                <span className="work-reference__state">{preview.stateName}</span>
-              </div>
-              <div className="work-reference__title">{preview.title}</div>
-              {preview.excerpt ? <div className="work-reference__excerpt">{preview.excerpt}</div> : null}
-              <div className="work-reference__meta">
-                {preview.typeLabel ? (
-                  <Badge tone="neutral" mono>
-                    {preview.typeLabel}
-                  </Badge>
-                ) : null}
-                <span className="work-reference__kind">{preview.kind}</span>
-                {preview.repository ? <span className="work-reference__repo mono">{preview.repository}</span> : null}
-                <span className="work-reference__team">{preview.teamKey}</span>
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
-    </span>
+  return createPortal(
+    <div ref={popupRef} className="work-reference__popover" id={id} role="tooltip" onMouseEnter={onEnter} onMouseLeave={onLeave}>
+      <div className="work-reference__head">
+        <span className="work-reference__id mono">{preview.identifier}</span>
+        <StatusIcon stateName={preview.stateName} size={12} />
+        <span className="work-reference__state">{preview.stateName}</span>
+      </div>
+      <div className="work-reference__title">{preview.title}</div>
+      {preview.excerpt ? <div className="work-reference__excerpt">{preview.excerpt}</div> : null}
+      <div className="work-reference__meta">
+        {preview.typeLabel ? (
+          <Badge tone="neutral" mono>
+            {preview.typeLabel}
+          </Badge>
+        ) : null}
+        <span className="work-reference__kind">{preview.kind}</span>
+        {preview.repository ? <span className="work-reference__repo mono">{preview.repository}</span> : null}
+        <span className="work-reference__team">{preview.teamKey}</span>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

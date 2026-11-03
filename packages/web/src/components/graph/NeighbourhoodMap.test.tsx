@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { NeighbourhoodMap } from './NeighbourhoodMap';
+import { WorkReferenceProvider } from '../WorkReference';
 import type { GraphEdge, GraphNode } from '../../work/graph-model';
 
 function node(id: string, extra: Partial<GraphNode> = {}): GraphNode {
@@ -47,6 +48,34 @@ const edges = [
   blocks('blocker', 'focus'),
   blocks('focus', 'dependent'),
 ];
+
+// The work card behind a node (INV-1544) asks the server like a reference in text.
+vi.mock('@apollo/client/react', () => {
+  const client = {
+    query: (options: { variables: { identifiers: string[] } }) =>
+      Promise.resolve({
+        data: {
+          issuePreviews: options.variables.identifiers.map((reference) => ({
+            id: reference.toLowerCase(),
+            reference,
+            identifier: reference,
+            title: `Work ${reference.toLowerCase()}`,
+            stateName: 'In Review',
+            stateType: 'REVIEW',
+            commitmentStatus: 'COMMITTED',
+            priority: 0,
+            kind: 'ISSUE',
+            repository: 'fakechris/Involute',
+            teamKey: 'INV',
+            typeLabel: 'Feature',
+            excerpt: 'What the sibling delivers.',
+            updatedAt: '2026-11-01T00:00:00.000Z',
+          })),
+        },
+      }),
+  };
+  return { useApolloClient: () => client };
+});
 
 afterEach(cleanup);
 
@@ -99,5 +128,20 @@ describe('NeighbourhoodMap', () => {
     render(<NeighbourhoodMap nodes={[node('focus')]} edges={[]} focusId="focus" />);
     expect(screen.queryByText(/siblings/)).toBeNull();
     expect(screen.getByText('FOCUS')).toBeTruthy();
+  });
+  it('shows the same work card as a reference in text when a node is hovered, not a native tooltip (INV-1544)', async () => {
+    const { container } = render(
+      <WorkReferenceProvider>
+        <NeighbourhoodMap nodes={nodes} edges={edges} focusId="focus" />
+      </WorkReferenceProvider>,
+    );
+    expect(container.querySelector('title')).toBeNull();
+    const sibling = screen.getByRole('button', { name: 'SIBLING Work sibling' });
+    fireEvent.mouseEnter(sibling);
+    const card = await screen.findByRole('tooltip');
+    expect(card).toHaveTextContent('SIBLING');
+    expect(card).toHaveTextContent('In Review');
+    expect(card).toHaveTextContent('What the sibling delivers.');
+    expect(sibling).toHaveAttribute('aria-describedby', card.id);
   });
 });

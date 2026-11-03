@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 
 import type { GraphEdge, GraphNode } from '../../work/graph-model';
 import { buildNeighbourhood } from '../../work/neighbourhood-model';
+import { useWorkHoverCard } from '../WorkReference';
 import { layoutNeighbourhood, type NeighbourhoodMapCaps, type PlacedNode } from '../../work/neighbourhood-layout';
 
 /**
@@ -75,6 +76,8 @@ export function NeighbourhoodMap({
   showLegend = true,
 }: NeighbourhoodMapProps) {
   const [hovered, setHovered] = useState<string | null>(null);
+  // The same work card as a reference in text (INV-1544), not a native tooltip.
+  const hover = useWorkHoverCard();
 
   const neighbourhood = useMemo(() => buildNeighbourhood(nodes, edges, focusId), [nodes, edges, focusId]);
   const layout = useMemo(
@@ -153,9 +156,20 @@ export function NeighbourhoodMap({
                 ]
                   .filter(Boolean)
                   .join(' ')}
-                onMouseEnter={() => setHovered(node.id)}
-                onFocus={() => setHovered(node.id)}
-                onBlur={() => setHovered(null)}
+                onMouseEnter={(event) => {
+                  setHovered(node.id);
+                  hover.anchorProps(node.node.identifier).onMouseEnter(event);
+                }}
+                onMouseLeave={hover.anchorProps(node.node.identifier).onMouseLeave}
+                onFocus={(event) => {
+                  setHovered(node.id);
+                  hover.anchorProps(node.node.identifier).onFocus(event);
+                }}
+                onBlur={() => {
+                  setHovered(null);
+                  hover.hideNow();
+                }}
+                aria-describedby={hover.describedBy(node.node.identifier)}
                 onClick={() => onSelect?.(node.id)}
                 onDoubleClick={() => onOpen?.(node.id)}
                 onKeyDown={(event) => {
@@ -164,7 +178,6 @@ export function NeighbourhoodMap({
                   onSelect?.(node.id);
                 }}
               >
-                <title>{title}</title>
                 <circle
                   cx={node.x}
                   cy={node.y}
@@ -179,6 +192,7 @@ export function NeighbourhoodMap({
           })}
         </g>
       </svg>
+      {hover.card}
 
       {showLegend ? (
         <ul className="issue-neighbourhood__map-legend" aria-label="Neighbourhood key">

@@ -14,6 +14,7 @@ import {
   type GraphNode,
 } from '../../work/graph-model';
 import { StatusIcon } from '../StatusIcon';
+import { useWorkHoverCard } from '../WorkReference';
 import { milestoneHue, STATE_TYPE_COLOR } from './graph-colors';
 import { Select } from '../controls';
 
@@ -76,6 +77,8 @@ export function DependencyGraph({
   onOpen,
 }: DependencyGraphProps) {
   const [zoom, setZoom] = useState(1);
+  // The same work card as a reference in text (INV-1544), not a native tooltip.
+  const hover = useWorkHoverCard();
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const byId = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const milestones = useMemo(() => milestoneIndex(nodes, edges), [nodes, edges]);
@@ -301,7 +304,8 @@ export function DependencyGraph({
                     }}
                     aria-pressed={node.id === activeFocus}
                     aria-label={`Focus ${node.identifier} ${node.title}`}
-                    title={`${node.identifier} ${node.title}\n${node.stateName}${milestone && milestone.id !== node.id ? ` · ${milestone.identifier} ${milestone.title}` : ''}${node.external ? '\nOutside this project' : ''}`}
+                    aria-describedby={hover.describedBy(node.identifier)}
+                    {...hover.anchorProps(node.identifier)}
                     onClick={() => onFocus(node.id === activeFocus ? null : node.id)}
                     onDoubleClick={() => onOpen(node.id)}
                   >
@@ -319,6 +323,7 @@ export function DependencyGraph({
           </div>
         </div>
 
+        {hover.card}
         {focusNode ? (
           <FocusPanel
             node={focusNode}

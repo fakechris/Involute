@@ -180,6 +180,34 @@ describe('project graph page (INV-681)', () => {
     expect(kinds).toEqual(['resolved', 'violated', 'violated']);
   });
 
+  it('shows the work card on a node instead of a native tooltip (INV-1544)', async () => {
+    renderApp(
+      App,
+      {
+        data: boardQueryResult,
+        loading: false,
+        graphData,
+        graphProjectsData: projectsData,
+        timelineData,
+        previewsData: {
+          issuePreviews: [{
+            id: 'inv-638', reference: 'INV-638', identifier: 'INV-638', title: 'Semantic execution adapter', stateName: 'In Progress',
+            stateType: 'STARTED', commitmentStatus: 'COMMITTED', priority: 2, kind: 'ISSUE', repository: 'fakechris/lumenbox',
+            teamKey: 'INV', typeLabel: 'Feature', excerpt: 'Runs work through the adapter.', updatedAt: '2026-11-01T00:00:00.000Z',
+          }],
+        },
+      },
+      ['/graph?project=fakechris/lumenbox&view=dependencies'],
+    );
+    const graph = await screen.findByRole('region', { name: 'Dependency graph' });
+    const node = within(graph).getByRole('button', { name: 'Focus INV-638 Semantic execution adapter' });
+    expect(node).not.toHaveAttribute('title');
+    fireEvent.mouseEnter(node);
+    const card = await screen.findByRole('tooltip');
+    expect(card).toHaveTextContent('In Progress');
+    expect(card).toHaveTextContent('Runs work through the adapter.');
+  });
+
   it('focuses a node, dims the rest and lists its blockers', async () => {
     renderGraph('/graph?project=fakechris/lumenbox&view=dependencies&hops=1');
     const graph = await screen.findByRole('region', { name: 'Dependency graph' });
