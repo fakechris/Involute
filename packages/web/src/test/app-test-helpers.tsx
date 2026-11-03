@@ -166,11 +166,23 @@ beforeAll(async () => {
 
 vi.mock('@apollo/client/react', async () => {
   const actual = await vi.importActual<typeof import('@apollo/client/react')>('@apollo/client/react');
+  // Work references ask through the client (INV-1537); answer from the same
+  // mocked queries a page's hooks see. One client, as Apollo's provider gives.
+  const previewClient = {
+    query: (options: { query: unknown; variables?: Record<string, unknown> }) => {
+      const answer = (hoistedApolloMocks.useQuery as unknown as (document: unknown, options: unknown) => { data?: unknown } | undefined)(
+        options.query,
+        { variables: options.variables },
+      );
+      return Promise.resolve({ data: answer?.data });
+    },
+  };
 
   return {
     ...actual,
     useQuery: hoistedApolloMocks.useQuery,
     useMutation: hoistedApolloMocks.useMutation,
+    useApolloClient: () => previewClient,
   };
 });
 

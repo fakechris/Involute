@@ -42,17 +42,18 @@ const { mockUseQuery, previews } = vi.hoisted(() => ({
   ],
 }));
 
-vi.mock('@apollo/client/react', () => ({
-  useQuery: (document: unknown, options?: { variables?: { identifiers?: string[] }; skip?: boolean }) => {
-    mockUseQuery(document, options);
-    if (options?.skip) return { data: undefined, loading: false };
-    const requested = options?.variables?.identifiers ?? [];
-    return {
-      data: { issuePreviews: previews.filter((preview) => requested.includes(preview.reference)) },
-      loading: false,
-    };
-  },
-}));
+vi.mock('@apollo/client/react', () => {
+  const client = {
+    query: (options: { variables?: { identifiers?: string[] } }) => {
+      mockUseQuery(options.variables?.identifiers ?? []);
+      const requested = options.variables?.identifiers ?? [];
+      return Promise.resolve({
+        data: { issuePreviews: previews.filter((preview) => requested.includes(preview.reference)) },
+      });
+    },
+  };
+  return { useApolloClient: () => client };
+});
 
 beforeEach(() => {
   mockUseQuery.mockClear();
@@ -66,9 +67,7 @@ function renderWithProvider(children: React.ReactNode) {
 
 /** The calls the provider made that actually asked the server something. */
 function askedFor(): string[][] {
-  return mockUseQuery.mock.calls
-    .map(([, options]) => options?.variables?.identifiers ?? [])
-    .filter((identifiers) => identifiers.length > 0);
+  return mockUseQuery.mock.calls.map(([identifiers]) => identifiers as string[]);
 }
 
 describe('work references in prose (INV-1466)', () => {
@@ -133,5 +132,20 @@ describe('work references in prose (INV-1466)', () => {
     // One batch, each reference named once.
     expect(askedFor().at(-1)).toEqual(['INV-1446', 'INV-267']);
     expect(new Set(askedFor().map((identifiers) => identifiers.join(',')))).toEqual(new Set(['INV-1446,INV-267']));
+  });
+  it('asks only about new references, at most 100 at a time, however many the session has met (INV-1537)', async () => {
+    const many = Array.from({ length: 120 }, (_, index) => `ZZ-${index + 1}`).join(' ');
+    const { rerender } = renderWithProvider(<WorkReferenceText text={many} />);
+    await waitFor(() => expect(askedFor().flat()).toHaveLength(120));
+    expect(askedFor().every((identifiers) => identifiers.length <= 100)).toBe(true);
+
+    rerender(
+      <WorkReferenceProvider>
+        <WorkReferenceText text={many} />
+        <WorkReference reference="INV-1446" />
+      </WorkReferenceProvider>,
+    );
+    expect(await screen.findByRole('link', { name: 'INV-1446' })).toHaveAttribute('href', '/issue/INV-1446');
+    expect(askedFor().at(-1)).toEqual(['INV-1446']);
   });
 });
