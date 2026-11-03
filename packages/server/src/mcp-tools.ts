@@ -69,6 +69,7 @@ import { amendmentChanges, proposeContractAmendment } from './contract-amendment
 import { dependencyHints } from './mention-links.js';
 import { RESEARCH_NO_ATTACHMENT_WARNING } from './research-closure.js';
 import { RUN_FOLLOWUPS_WARNING, resolveFollowups } from './run-followups.js';
+import { repositoryOfCall, resolveInboxRepository } from './inbox-project.js';
 import { researchLacksAttachment, researchLacksDownstream } from './work-hygiene.js';
 import { linkWork } from './duplicate-linkage.js';
 import { deleteWorkLink } from './link-service.js';
@@ -394,6 +395,8 @@ export async function callMcpTool(
       teamId: context.authMode === 'agent-token' ? context.agentTeamId ?? null : null,
       userId: context.viewer.id,
       workWhere: buildReadableIssueWhere(context),
+      // A call about one project's work is reminded of that project's (INV-1545).
+      repository: await repositoryOfCall(context.prisma, resolved.args).catch(() => null),
     });
     if (unreadDecisions && output && typeof output === 'object') {
       output = Array.isArray(output)
@@ -1065,8 +1068,12 @@ async function callMcpAction(
       for (const id of ack) {
         if (!(await markNotificationRead(context.prisma, { id, userId: actorId }))) throw createNotFoundError(NOTIFICATION_NOT_FOUND_MESSAGE);
       }
+      // One project's inbox when the identity works in several (INV-1545).
+      const repositoryArg = optionalString(args.repository);
+      const repository = repositoryArg ? await resolveInboxRepository(context.prisma, repositoryArg) : null;
       const page = await readAgentInbox(context.prisma, {
         actorId,
+        repository,
         cursor: optionalString(args.cursor) ?? null,
         first: optionalNumber(args.first) ?? null,
         since: optionalDate(args.since),
@@ -1098,6 +1105,7 @@ async function callMcpAction(
             teamId: context.authMode === 'agent-token' ? context.agentTeamId ?? null : null,
             userId: actorId,
             workWhere: buildReadableIssueWhere(context),
+            repository,
           })
         ).map((notification) => {
           const payload = (notification.payload ?? {}) as Record<string, unknown>;
@@ -1802,6 +1810,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         since: { type: 'string', description: 'ISO-8601; only requests created after this instant' },
         cursor: { type: 'string', description: 'Opaque cursor from a previous page' },
         first: { type: 'integer', description: 'Page size, 1-50 (default 20)' },
+        repository: { type: 'string', description: 'Only this project: its repository (owner/name), reference alias or PROJECT item (INV-1545). One agent identity works in several projects; a session reads and acks its own project\'s notifications and leaves the rest for the sessions that own them.' },
       },
     },
   },
