@@ -125,7 +125,7 @@ describe('NeighbourhoodMap', () => {
     expect(screen.getByText(/1 blocks this/)).toBeTruthy();
     expect(screen.getByText(/1 blocked by this/)).toBeTruthy();
     // The key says what an arrow means, in words (INV-1546).
-    expect(screen.getByText(/A → B: A contains B \(parent\), or A blocks B/)).toBeTruthy();
+    expect(screen.getByText(/A → B: A contains B, or A blocks B/)).toBeTruthy();
   });
 
   it('says nothing about a role that is not there', () => {
@@ -161,9 +161,9 @@ describe('NeighbourhoodMap', () => {
     expect(blockEdge.querySelector('path')!.getAttribute('marker-end')).toMatch(/^url\(#/);
     expect(blockEdge).toHaveTextContent('blocks');
     expect(container.querySelector('[data-edge-from="focus"][data-edge-to="dependent"]')).toHaveTextContent('blocks');
-    // The parent points at its child, labelled "parent"; a peer is a plain dashed hint.
+    // The parent points at its child, labelled with the verb read along the arrow (INV-1549).
     const parentEdge = container.querySelector('[data-edge-from="milestone"][data-edge-to="focus"]')!;
-    expect(parentEdge).toHaveTextContent('parent');
+    expect(parentEdge).toHaveTextContent('contains');
     const peer = container.querySelector('[data-edge-kind="peer"]')!;
     expect(peer.querySelector('path')!.getAttribute('marker-end')).toBeNull();
     expect(peer.textContent).toBe('');
@@ -175,5 +175,26 @@ describe('NeighbourhoodMap', () => {
     expect(screen.getAllByRole('button', { name: /^SIBLING / })).toHaveLength(1);
     expect(screen.getByRole('button', { name: /^SIBLING / }).firstElementChild!.tagName).toBe('polygon');
     expect(screen.getByText(/2 block this/)).toBeTruthy();
+  });
+  it('labels a fan of sub-issue links once, and spreads many sub-issues so their numbers do not collide (INV-1549)', () => {
+    const kids = ['k1', 'k2', 'k3', 'k4'].map((id) => node(id));
+    const { container } = render(
+      <NeighbourhoodMap nodes={[...nodes, ...kids]} edges={[...edges, ...kids.map((kid) => contains('focus', kid.id))]} focusId="focus" />,
+    );
+    const childLinks = [...container.querySelectorAll('[data-edge-from="focus"][data-edge-kind="hierarchy"]')];
+    expect(childLinks).toHaveLength(5);
+    expect(childLinks.filter((link) => link.textContent === 'contains')).toHaveLength(1);
+    expect([...container.querySelectorAll('.issue-neighbourhood__map-edge-label')].map((label) => label.textContent)).not.toContain('parent');
+
+    const centre = (name: string) => {
+      const shape = screen.getByRole('button', { name: new RegExp(`^${name} `) }).firstElementChild!;
+      return { x: Number(shape.getAttribute('cx')), y: Number(shape.getAttribute('cy')) };
+    };
+    const spots = ['CHILD', 'K1', 'K2', 'K3', 'K4'].map(centre);
+    for (let i = 0; i < spots.length; i += 1) {
+      for (let j = i + 1; j < spots.length; j += 1) {
+        expect(Math.hypot(spots[i]!.x - spots[j]!.x, spots[i]!.y - spots[j]!.y)).toBeGreaterThan(30);
+      }
+    }
   });
 });
