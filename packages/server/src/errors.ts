@@ -541,8 +541,24 @@ export function createNotFoundError(message: string): GraphQLError {
   return createExposedError(message);
 }
 
-export function createValidationError(message: string): GraphQLError {
-  return createExposedError(message);
+/**
+ * Where a person can do what a refusal turned down (INV-1535): the app shows
+ * it as a button beside the reason, e.g. "Go to In Review".
+ */
+export interface RefusalNext {
+  label: string;
+  /** An app path, e.g. `/in-review?focus=INV-972`. */
+  path: string;
+}
+
+export function createValidationError(message: string, options: { next?: RefusalNext } = {}): GraphQLError {
+  return createExposedError(message, options.next);
+}
+
+/** The next step a refusal carries, if any. */
+export function refusalNext(error: GraphQLError | null): RefusalNext | null {
+  const next = error?.extensions?.next as RefusalNext | undefined;
+  return next && typeof next.label === 'string' && typeof next.path === 'string' ? { label: next.label, path: next.path } : null;
 }
 
 export function getExposedError(error: unknown): GraphQLError | null {
@@ -559,7 +575,13 @@ export function getExposedError(error: unknown): GraphQLError | null {
   // written. Anything else still masks to "Unexpected error.".
   const marked = isPublicError(error) ? error : error instanceof GraphQLError && isPublicError(error.originalError) ? error.originalError : null;
   if (marked) {
-    return new GraphQLError(marked.message, { extensions: { code: typeof marked.extensions?.code === 'string' ? marked.extensions.code : 'BAD_USER_INPUT' } });
+    const next = refusalNext(marked);
+    return new GraphQLError(marked.message, {
+      extensions: {
+        code: typeof marked.extensions?.code === 'string' ? marked.extensions.code : 'BAD_USER_INPUT',
+        ...(next ? { next } : {}),
+      },
+    });
   }
 
   // IQL parse failures survive masking by message prefix: wrappers may drop
@@ -631,10 +653,11 @@ function isPublicError(error: unknown): error is GraphQLError {
   return error instanceof GraphQLError && (error as unknown as Record<symbol, unknown>)[PUBLIC_ERROR] === true;
 }
 
-function createExposedError(message: string): GraphQLError {
+function createExposedError(message: string, next?: RefusalNext): GraphQLError {
   const error = new GraphQLError(message, {
     extensions: {
       code: exposedErrorCodes.get(message) ?? 'BAD_USER_INPUT',
+      ...(next ? { next } : {}),
     },
   });
   Object.defineProperty(error, PUBLIC_ERROR, { value: true, enumerable: false });

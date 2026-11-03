@@ -588,12 +588,20 @@ export interface BoardIssueGroup {
   };
 }
 
+/** Where a person can do what a refusal turned down (INV-1535). */
+export interface RefusalNext {
+  label: string;
+  path: string;
+}
+
 export interface IssueUpdateMutationData {
   issueUpdate: {
     success: boolean;
     issue: IssueSummary | null;
     /** Why the server refused the update; absent on success. */
     message?: string | null;
+    /** Where to do it instead, when the refusal names a place. */
+    next?: RefusalNext | null;
   };
 }
 

@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@apollo/client/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 
@@ -185,6 +185,19 @@ export function InReviewPage() {
     onClear: clearSelection,
     onOpen: (item) => navigate(`/issue/${item.id}`),
   });
+
+  // ?focus=INV-972 — a refusal's "Go to In Review" (INV-1535): focus and show
+  // that card once it has loaded, so the person lands on what to accept.
+  const focusReference = searchParams.get('focus');
+  const focusedFromLink = useRef<string | null>(null);
+  const { setFocusedId } = listKeys;
+  useEffect(() => {
+    if (!focusReference || focusedFromLink.current === focusReference) return;
+    const target = items.find((item) => item.identifier.toUpperCase() === focusReference.toUpperCase());
+    if (!target) return;
+    focusedFromLink.current = focusReference;
+    setFocusedId(target.id);
+  }, [focusReference, items, setFocusedId]);
 
   async function handleLoadMore() {
     if (!pageInfo?.hasNextPage || !pageInfo.endCursor) return;

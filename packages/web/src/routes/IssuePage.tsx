@@ -65,14 +65,10 @@ import { RichTextEditor } from '../components/RichTextEditor';
 import { Select } from '../components/controls';
 import { PageBody, PageHeader } from '../components/layout';
 import { EmptyState, LoadingState } from '../components/status';
+import { IssueUpdateRefused, RefusalNotice, nextFor, type ShownRefusal } from '../components/RefusalNotice';
 
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
 
-class IssueUpdateRefused extends Error {
-  constructor(readonly reason: string | null) {
-    super(reason ?? 'Mutation failed');
-  }
-}
 const CONFLICT_MESSAGE = 'The issue changed while you were editing. The latest version was reloaded; review it and retry.';
 const ISSUE_DELETE_ERROR_MESSAGE = 'We could not delete the issue. Please try again.';
 const COMMENT_DELETE_ERROR_MESSAGE = 'We could not delete the comment. Please try again.';
@@ -156,6 +152,7 @@ export function IssuePage() {
   }, [id, refetch]);
 
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [shownRefusal, setShownRefusal] = useState<ShownRefusal | null>(null);
   const [isSavingState, setIsSavingState] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const issueSnapshot = localIssue ?? data?.issue ?? null;
@@ -273,7 +270,7 @@ export function IssuePage() {
       });
 
       if (!result.data?.issueUpdate.success || !result.data.issueUpdate.issue) {
-        throw new IssueUpdateRefused(result.data?.issueUpdate.message ?? null);
+        throw new IssueUpdateRefused(result.data?.issueUpdate.message ?? null, result.data?.issueUpdate.next ?? null);
       }
 
       setLocalIssue((currentIssue) =>
@@ -292,6 +289,8 @@ export function IssuePage() {
     } catch (mutationIssue) {
       // Say why the server refused, when it said; otherwise assume a conflict.
       const reason = mutationIssue instanceof IssueUpdateRefused ? mutationIssue.reason : null;
+      const next = mutationIssue instanceof IssueUpdateRefused ? mutationIssue.next : null;
+      setShownRefusal(reason && next ? { message: reason, next } : null);
       try {
         const refreshed = await refetch();
         setLocalIssue(refreshed.data?.issue ?? previousIssue);
@@ -1262,8 +1261,14 @@ export function IssuePage() {
             <span>Delete</span>
           </button>
 
+          {/* In view wherever the person acted on this long page (INV-1534 / INV-1535). */}
           {mutationError ? (
-            <p className="issue-panel__error" role="alert">{mutationError}</p>
+            <RefusalNotice
+              placement="floating"
+              message={mutationError}
+              next={nextFor(shownRefusal, mutationError)}
+              onDismiss={() => setMutationError(null)}
+            />
           ) : null}
         </aside>
       </div>

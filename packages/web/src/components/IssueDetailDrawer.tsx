@@ -4,7 +4,7 @@ import { useQuery } from '@apollo/client/react';
 import { Badge } from './status';
 
 import { ContractSection, type ContractValues } from './ContractSection';
-import type { CommentSummary, ContractAmendmentSummary, FieldDefinitionSummary, FieldValue, IssueSummary, TeamSummary, UserSummary } from '../board/types';
+import type { CommentSummary, ContractAmendmentSummary, FieldDefinitionSummary, FieldValue, IssueSummary, RefusalNext, TeamSummary, UserSummary } from '../board/types';
 import { IssueFieldsPanel } from './IssueFieldsPanel';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ActorBadge } from './ActorBadge';
@@ -15,6 +15,7 @@ import { AddSubIssueButton } from './AddSubIssueButton';
 import { BugSlaBadge, FollowUpDeadlineBadge } from './BugSlaBadge';
 import { ClaimControl } from './ClaimControl';
 import { ProjectBadge } from './ProjectBadge';
+import { RefusalNotice } from './RefusalNotice';
 import { WorkStructureEditor, type StructureUpdate } from './WorkStructureEditor';
 import { toggleLabelId } from '../work/labels';
 import { RichTextEditor } from './RichTextEditor';
@@ -36,6 +37,8 @@ interface IssueDetailDrawerProps {
   }>;
   savingState: boolean;
   errorMessage: string | null;
+  /** Where to do a refused save instead (INV-1535). */
+  errorNext?: RefusalNext | null | undefined;
   onClose: () => void;
   onStateChange: (issue: IssueSummary, stateId: string) => Promise<void>;
   onTitleSave: (issue: IssueSummary, title: string) => Promise<void>;
@@ -65,6 +68,7 @@ export function IssueDetailDrawer({
   users,
   savingState,
   errorMessage,
+  errorNext,
   onClose,
   onStateChange,
   onTitleSave,
@@ -402,11 +406,7 @@ export function IssueDetailDrawer({
         </div>
 
         {/* A refused save says why right under the header, where the person just acted (INV-1534). */}
-        {errorMessage ? (
-          <p className="issue-panel__error" role="alert">
-            {errorMessage}
-          </p>
-        ) : null}
+        {errorMessage ? <RefusalNotice placement="panel" message={errorMessage} next={errorNext} /> : null}
 
         <div className="issue-panel__body">
           <div className="issue-panel__main">

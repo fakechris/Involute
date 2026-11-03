@@ -188,6 +188,10 @@ export const ISSUE_UPDATE_MUTATION = gql`
     issueUpdate(id: $id, input: $input) {
       success
       message
+      next {
+        label
+        path
+      }
       issue {
         id
         identifier

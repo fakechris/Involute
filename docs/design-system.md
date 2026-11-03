@@ -64,6 +64,7 @@
 10. **守卫测试**（`styles/design-guard.test.ts`）：TSX 里的每个 `className` 必须在样式表中有定义；样式与 TSX 中的每个 `var(--x)` 必须在 token 块定义；TSX 中 hex 颜色只允许在白名单文件；工单号的匹配只在 `work/work-reference.ts`（INV-1536）。新漂移在 CI 挡下。
 11. **工单号与项目各只有一种显示**（INV-1536）：
     - 文字里出现的工单号（描述、评论、通知、提示、被拒原因）一律经 `WorkReferenceText`（Markdown 里由 `MarkdownRenderer` 自动处理），单个引用用 `WorkReference`。服务端确认是工单才变链接，悬浮显示卡片；**单击在当前页打开抽屉**（`?issue=`，与 ListRow 同一规则），⌘/Ctrl/Shift/中键交给浏览器开整页；显示 issue 本身的路由（`/issue/:id`、Backlog）单击进整页。卡片内容 60 秒后再次悬浮会重新取。不要自写正则或拼 `/issue/` 链接；需要解析时用 `work/work-reference.ts` 的 `findWorkReferences` / `isWorkIdentifier` / `splitLeadingReference`。
+    - 被拒的保存一律用 `RefusalNotice`（INV-1534 / INV-1535）：看板与 issue 整页用 `placement="floating"`（固定在视口底部，可关闭），抽屉用 `placement="panel"`（标题下方）；原因经 `WorkReferenceText` 渲染，服务端给出 `next { label path }` 时显示按钮直达（如 "Go to In Review" → `/in-review?focus=INV-972`）。服务端用 `createValidationError(message, { next })` 给出去处。
     - 工单所属项目一律用 `ProjectBadge`（短名 + 稳定配色，悬浮完整仓库；`emptyLabel` 显示 "No project"；`onSelect` 让它成为筛选控件）。工单详情（抽屉与整页）标题行、看板卡片、Backlog 表格、Projects 列表都用它。
 
 ---
@@ -83,6 +84,7 @@
 | `MarkdownRenderer`（块级 + `clamp`） | `components/MarkdownRenderer.tsx` + `styles/content.css` | 裸文本；标题 / 列表 / 任务列表 / 引用 / 分割线 / 表格 / 代码块 |
 | `.card`（样式类，不是组件） | `styles/content.css` | Projects / Cycles / Views 各自的卡片外壳 |
 | `WorkReference` `WorkReferenceText`（+ `WorkReferenceProvider`，App 根部挂一次） | `components/WorkReference.tsx` + `work/work-reference.ts` + `styles/content.css` | 自写 `IDENTIFIER` 正则、手拼 `/issue/` 链接、纯文本工单号 |
+| `RefusalNotice`（`IssueUpdateRefused` / `nextFor`） | `components/RefusalNotice.tsx` + `styles/layout.css`（`.page-notice--floating`）/ `styles/app.css`（`.issue-panel__error`） | 被拒保存的纯文本错误条、页面顶部或右栏底部看不到的错误 |
 | `ProjectBadge`（`getProjectColorClass`） | `components/ProjectBadge.tsx` + `styles/app.css`（`.project-badge`、`.proj-color-*`） | `IssueCard` 内联徽章、各页复制的 `issue-card__repo-badge` |
 | 状态色 | `components/StatusIcon.tsx`（`getStatusColorVar` / `statusKindForStateType`） | `graph-colors.ts` 与时间线 CSS 里的重复 hex |
 
