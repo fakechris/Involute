@@ -56,8 +56,12 @@ export interface PlacedEdge {
   fromId: string;
   toId: string;
   kind: MapEdgeKind;
-  /** An SVG path, ready to draw. */
+  /** An SVG path, ready to draw, from `fromId` to `toId` (the arrow points at `toId`). */
   path: string;
+  /** What the link says, written on it (INV-1546); null for the dashed same-parent hint. */
+  label: 'parent' | 'blocks' | null;
+  /** Where the label sits: the middle of the curve. */
+  labelAt: { x: number; y: number };
 }
 
 export interface NeighbourhoodMapLayout {
@@ -146,7 +150,7 @@ function curveBetween(
   from: { x: number; y: number; r: number },
   to: { x: number; y: number; r: number },
   hub: { x: number; y: number },
-): string {
+): { path: string; middle: { x: number; y: number } } {
   const mx = (from.x + to.x) / 2;
   const my = (from.y + to.y) / 2;
   const dx = mx - hub.x;
@@ -158,8 +162,17 @@ function curveBetween(
 
   // Start and end on the rim of the node rather than in its middle.
   const start = pointOnRim(from, controlX, controlY);
-  const end = pointOnRim(to, controlX, controlY);
-  return `M${round(start.x)},${round(start.y)} Q${round(controlX)},${round(controlY)} ${round(end.x)},${round(end.y)}`;
+  // The arrowhead sits on the target's rim, so the curve stops a little short.
+  const end = pointOnRim({ ...to, r: to.r + 2 }, controlX, controlY);
+  // The middle of a quadratic curve: where its label goes.
+  const middle = {
+    x: round(0.25 * start.x + 0.5 * controlX + 0.25 * end.x),
+    y: round(0.25 * start.y + 0.5 * controlY + 0.25 * end.y),
+  };
+  return {
+    path: `M${round(start.x)},${round(start.y)} Q${round(controlX)},${round(controlY)} ${round(end.x)},${round(end.y)}`,
+    middle,
+  };
 }
 
 function pointOnRim(node: { x: number; y: number; r: number }, towardsX: number, towardsY: number) {
@@ -205,12 +218,26 @@ export function layoutNeighbourhood(input: {
     dependent: 0,
   };
 
+  // Each item is drawn once, in the role that says the most about it
+  // (INV-1546): a sibling that also blocks the focus is a blocker on the map.
+  const taken = new Set<string>([focus.id]);
+  const claim = (items: GraphNode[]) =>
+    items.filter((node) => {
+      if (taken.has(node.id)) return false;
+      taken.add(node.id);
+      return true;
+    });
+  const ancestors = claim(neighbourhood.ancestors);
+  const blockers = claim(neighbourhood.blockers);
+  const dependents = claim(neighbourhood.dependents);
+  const children = claim(neighbourhood.children);
+  const siblings = claim(neighbourhood.siblings);
   const roleItems: Record<Exclude<NeighbourhoodRole, 'focus'>, GraphNode[]> = {
-    ancestor: neighbourhood.ancestors,
-    sibling: neighbourhood.siblings,
-    child: neighbourhood.children,
-    blocker: neighbourhood.blockers,
-    dependent: neighbourhood.dependents,
+    ancestor: ancestors,
+    sibling: siblings,
+    child: children,
+    blocker: blockers,
+    dependent: dependents,
   };
 
   for (const role of ['ancestor', 'sibling', 'child', 'blocker', 'dependent'] as const) {
@@ -239,7 +266,9 @@ export function layoutNeighbourhood(input: {
     const from = byId.get(fromId);
     const to = byId.get(toId);
     if (!from || !to) return;
-    drawn.push({ id, fromId, toId, kind, path: curveBetween(from, to, { x: cx, y: cy }) });
+    const curve = curveBetween(from, to, { x: cx, y: cy });
+    const label = kind === 'peer' ? null : kind === 'hierarchy' ? 'parent' : 'blocks';
+    drawn.push({ id, fromId, toId, kind, path: curve.path, label, labelAt: curve.middle });
   };
 
   // The hierarchy: each ancestor hangs off the one below it, the nearest one
@@ -261,7 +290,7 @@ export function layoutNeighbourhood(input: {
       push(`contains:${ancestor.id}:${neighbour.id}`, ancestor.id, neighbour.id, 'hierarchy');
     }
   });
-  for (const child of neighbourhood.children) {
+  for (const child of children) {
     const edge = edges.find(
       (candidate) => candidate.type === 'CONTAINS' && candidate.toId === child.id && candidate.fromId === focus.id,
     );
@@ -269,18 +298,18 @@ export function layoutNeighbourhood(input: {
   }
 
   // Peers: the link is a hint, not a typed edge, and is drawn dashed.
-  for (const sibling of neighbourhood.siblings) {
+  for (const sibling of siblings) {
     push(`peer:${focus.id}:${sibling.id}`, focus.id, sibling.id, 'peer');
   }
 
   // Dependencies: real BLOCKS edges, coloured by the rule the graph uses.
-  for (const blocker of neighbourhood.blockers) {
+  for (const blocker of blockers) {
     const edge = edges.find(
       (candidate) => candidate.type === 'BLOCKS' && candidate.toId === focus.id && candidate.fromId === blocker.id,
     );
     push(edge?.id ?? `blocks:${blocker.id}:${focus.id}`, blocker.id, focus.id, classifyBlockEdge(blocker, focus));
   }
-  for (const dependent of neighbourhood.dependents) {
+  for (const dependent of dependents) {
     const edge = edges.find(
       (candidate) => candidate.type === 'BLOCKS' && candidate.fromId === focus.id && candidate.toId === dependent.id,
     );
