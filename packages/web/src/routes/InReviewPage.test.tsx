@@ -101,6 +101,12 @@ describe('InReviewPage', () => {
     expect(JSON.stringify(mockRunReview.mock.calls)).not.toContain('issue-r1');
   });
 
+  it('focuses the card a link names with ?focus= (INV-1535)', async () => {
+    render(<MemoryRouter initialEntries={['/in-review?focus=inv-102']}><InReviewPage /></MemoryRouter>);
+    await waitFor(() => expect(screen.getByRole('listitem', { name: 'INV-102 in review' })).toHaveAttribute('aria-current', 'true'));
+    expect(screen.getByRole('listitem', { name: 'INV-101 in review' })).not.toHaveAttribute('aria-current');
+  });
+
   // INV-1002
   it('shows how long each item has waited in Review and marks an overdue bug', () => {
     render(

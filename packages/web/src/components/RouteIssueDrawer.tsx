@@ -28,17 +28,13 @@ import { recordCommentGesture, recordDeleteGesture, recordFieldGesture } from '.
 import { isBugIssue, supersededPrefill, useCloseReason, type WorkResolution } from './CloseReasonDialog';
 import type { ContractValues } from './ContractSection';
 import { IssueDetailDrawer } from './IssueDetailDrawer';
+import { IssueUpdateRefused, nextFor, type ShownRefusal } from './RefusalNotice';
 
 const SAVE_ERROR = 'We could not save the issue changes. Please try again.';
 const CONFLICT_ERROR = 'The issue changed while you were editing. The latest version was reloaded; review it and retry.';
 const DELETE_ERROR = 'We could not delete the issue. Please try again.';
 const COMMENT_DELETE_ERROR = 'We could not delete the comment. Please try again.';
 
-class IssueUpdateRefused extends Error {
-  constructor(readonly reason: string | null) {
-    super(reason ?? 'Issue update refused');
-  }
-}
 
 /**
  * The issue drawer for routes that do not load issues themselves (INV-1387):
@@ -58,6 +54,7 @@ export function RouteIssueDrawer({ issueRef, onClose }: { issueRef: string; onCl
   const [localIssue, setLocalIssue] = useState<IssueSummary | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [shownRefusal, setShownRefusal] = useState<ShownRefusal | null>(null);
 
   useEffect(() => {
     setLocalIssue(data?.issue ?? null);
@@ -89,7 +86,7 @@ export function RouteIssueDrawer({ issueRef, onClose }: { issueRef: string; onCl
     try {
       const result = await runIssueUpdate({ variables: { id: current.id, input: { ...input, expectedRevision: current.revision } } });
       const saved = result.data?.issueUpdate.issue;
-      if (!result.data?.issueUpdate.success || !saved) throw new IssueUpdateRefused(result.data?.issueUpdate.message ?? null);
+      if (!result.data?.issueUpdate.success || !saved) throw new IssueUpdateRefused(result.data?.issueUpdate.message ?? null, result.data?.issueUpdate.next ?? null);
       setLocalIssue((value) => (value ? mergeIssueWithPreservedComments(value, saved) : saved));
       const change = fieldChange(current, input, saved.revision, {
         stateName: (id) => team?.states.nodes.find((state) => state.id === id)?.name,
@@ -100,6 +97,8 @@ export function RouteIssueDrawer({ issueRef, onClose }: { issueRef: string; onCl
       return true;
     } catch (failure) {
       const reason = failure instanceof IssueUpdateRefused ? failure.reason : null;
+      const next = failure instanceof IssueUpdateRefused ? failure.next : null;
+      setShownRefusal(reason && next ? { message: reason, next } : null);
       try {
         const refreshed = await refetch();
         setLocalIssue(refreshed.data?.issue ?? previous);
@@ -218,6 +217,7 @@ export function RouteIssueDrawer({ issueRef, onClose }: { issueRef: string; onCl
         users={users}
         savingState={saving}
         errorMessage={error}
+        errorNext={nextFor(shownRefusal, error)}
         onClose={onClose}
         onStateChange={persistStateChange}
         onTitleSave={async (current, title) => {

@@ -144,6 +144,7 @@ import { FilterChip, FilterMenu, FilterSearch, SavedViewControl, SortControl } f
 import { BulkActionBar, LoadingState, SegmentedControl } from '../components/status';
 import { WORK_FILTER_KEYS, WorkFilterBar, filtersToIql, hasWorkFilters, joinIql, useWorkFilters } from '../components/WorkFilterBar';
 import { isWorkIdentifier } from '../work/work-reference';
+import { RefusalNotice, nextFor, type ShownRefusal } from '../components/RefusalNotice';
 
 const ISSUE_PAGE_SIZE = 200;
 const ERROR_MESSAGE = 'We could not save the issue changes. Please try again.';
@@ -359,6 +360,7 @@ export function BoardPage() {
   const [bulkLabelId, setBulkLabelId] = useState('');
   const [bulkRemoveLabelId, setBulkRemoveLabelId] = useState('');
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [shownRefusal, setShownRefusal] = useState<ShownRefusal | null>(null);
   const [isSavingState, setIsSavingState] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isReportBugOpen, setIsReportBugOpen] = useState(false);
@@ -2000,6 +2002,8 @@ export function BoardPage() {
 
       if (!result.data?.issueUpdate.success || !result.data.issueUpdate.issue) {
         refusal = result.data?.issueUpdate.message ?? null;
+        const next = result.data?.issueUpdate.next ?? null;
+        setShownRefusal(refusal && next ? { message: refusal, next } : null);
         throw new Error(refusal ?? 'Mutation failed');
       }
 
@@ -3009,10 +3013,12 @@ export function BoardPage() {
     <>
       {mutationError ? (
         // Floats in view: a refused drag may happen far down the board (INV-1534).
-        <section className="page-notice page-notice--error page-notice--floating" role="alert">
-          <p className="page-notice__text">{mutationError}</p>
-          <button type="button" className="page-notice__dismiss" aria-label="Dismiss" onClick={() => setMutationError(null)}>×</button>
-        </section>
+        <RefusalNotice
+          placement="floating"
+          message={mutationError}
+          next={nextFor(shownRefusal, mutationError)}
+          onDismiss={() => setMutationError(null)}
+        />
       ) : null}
       <BoardLoadMoreNotice
         errorMessage={loadMoreIssuesError}
@@ -3334,6 +3340,7 @@ export function BoardPage() {
           users={users}
           savingState={isSavingState}
           errorMessage={mutationError}
+          errorNext={nextFor(shownRefusal, mutationError)}
           onClose={() => {
             setSelectedIssueId(null);
             setSearchParams(

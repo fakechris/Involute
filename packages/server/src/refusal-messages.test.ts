@@ -17,7 +17,7 @@ loadProjectEnvironment();
 const prisma: PrismaClient = new PrismaClientConstructor();
 
 const UPDATE = /* GraphQL */ `
-  mutation Update($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success message } }
+  mutation Update($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success message next { label path } } }
 `;
 
 describe('refusals people can read (INV-1534)', () => {
@@ -39,10 +39,10 @@ describe('refusals people can read (INV-1534)', () => {
   async function update(id: string, input: Record<string, unknown>) {
     const session = await createSession(prisma, human.id, 3600);
     const response = await fetch(`${server.url}/graphql`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: `involute_session=${session.token}` }, body: JSON.stringify({ query: UPDATE, variables: { id, input } }) });
-    return (await response.json() as { data: { issueUpdate: { success: boolean; message: string | null } } }).data.issueUpdate;
+    return (await response.json() as { data: { issueUpdate: { success: boolean; message: string | null; next: { label: string; path: string } | null } } }).data.issueUpdate;
   }
 
-  it('moving a delivery unit or its package to Done says which package to accept and where', async () => {
+  it('moving a delivery unit or its package to Done says which package to accept and where, with a way there (INV-1535)', async () => {
     const actor = writeActorFromViewer(human, 'test');
     const done = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'COMPLETED' } });
     const project = await createIssue(prisma, { teamId: team.id, title: 'P', kind: 'PROJECT', repository: 'test/refusal', commitmentStatus: 'COMMITTED' }, actor);
@@ -51,8 +51,12 @@ describe('refusals people can read (INV-1534)', () => {
     const unit = await createIssue(prisma, { teamId: team.id, title: 'Unit', parentId: root.id, repository: 'test/refusal', acceptance: 'a' }, actor);
     await prisma.issue.update({ where: { id: unit.id }, data: { deliveryRootId: root.id } });
 
-    expect(await update(unit.id, { stateId: done.id })).toEqual({ success: false, message: `${unit.identifier} is part of delivery package ${root.identifier}: accept ${root.identifier} from In Review; that accepts every implementation unit together.` });
-    expect(await update(root.id, { stateId: done.id })).toEqual({ success: false, message: `${root.identifier} is a delivery package: accept it from In Review; that checks every implementation unit together.` });
+    expect(await update(unit.id, { stateId: done.id })).toEqual({ success: false, message: `${unit.identifier} is part of delivery package ${root.identifier}: accept ${root.identifier} from In Review; that accepts every implementation unit together.`,
+      next: { label: 'Go to In Review', path: `/in-review?focus=${root.identifier}` },
+    });
+    expect(await update(root.id, { stateId: done.id })).toEqual({ success: false, message: `${root.identifier} is a delivery package: accept it from In Review; that checks every implementation unit together.`,
+      next: { label: 'Go to In Review', path: `/in-review?focus=${root.identifier}` },
+    });
   });
 
   it('a field refusal that names the field is shown as written, not as "Unexpected error."', async () => {
@@ -60,7 +64,7 @@ describe('refusals people can read (INV-1534)', () => {
     const project = await createIssue(prisma, { teamId: team.id, title: 'P', kind: 'PROJECT', repository: 'test/refusal', commitmentStatus: 'COMMITTED' }, actor);
     const work = await createIssue(prisma, { teamId: team.id, title: 'W', parentId: project.id, repository: 'test/refusal', acceptance: 'a' }, actor);
     await setFieldDefinition(prisma, { scope: 'TEAM', scopeId: team.id, key: 'risk', label: 'Risk', type: 'ENUM', options: [{ value: 'low', label: 'Low' }], appliesTo: { kinds: ['ISSUE'] }, reason: 'r' }, human.id);
-    expect(await update(work.id, { attributes: { risk: 'high' } })).toEqual({ success: false, message: 'Field "risk": "high" is not one of its options (low).' });
+    expect(await update(work.id, { attributes: { risk: 'high' } })).toEqual({ success: false, message: 'Field "risk": "high" is not one of its options (low).', next: null });
   });
 
   it('a refused saved view says why through GraphQL, with its code (INV-1131)', async () => {

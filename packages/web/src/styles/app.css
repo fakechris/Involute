@@ -2465,11 +2465,26 @@ kbd {
 }
 
 .issue-panel__error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   color: var(--danger);
   font-size: 14px;
   margin: 0;
   padding: 8px 20px;
   border-bottom: 1px solid var(--border-subtle);
+}
+
+.issue-panel__error .page-notice__text {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: inherit;
+}
+
+/* The way to do a refused thing instead (INV-1535). */
+.refusal-notice__next {
+  flex: 0 0 auto;
 }
 
 /* Description textarea (page mode) */

@@ -434,9 +434,14 @@ export async function updateIssue(
         const root = existingIssue.deliveryRootId
           ? await transaction.issue.findUnique({ where: { id: existingIssue.deliveryRootId }, select: { identifier: true } })
           : null;
-        throw createValidationError(root
-          ? `${existingIssue.identifier} is part of delivery package ${root.identifier}: accept ${root.identifier} from In Review; that accepts every implementation unit together.`
-          : `${existingIssue.identifier} is a delivery package: accept it from In Review; that checks every implementation unit together.`);
+        const packageIdentifier = root?.identifier ?? existingIssue.identifier;
+        throw createValidationError(
+          root
+            ? `${existingIssue.identifier} is part of delivery package ${root.identifier}: accept ${root.identifier} from In Review; that accepts every implementation unit together.`
+            : `${existingIssue.identifier} is a delivery package: accept it from In Review; that checks every implementation unit together.`,
+          // Straight to the package on In Review (INV-1535).
+          { next: { label: 'Go to In Review', path: `/in-review?focus=${encodeURIComponent(packageIdentifier)}` } },
+        );
       }
 
       if (isAcceptStateType(state.type)) {

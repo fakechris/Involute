@@ -78,6 +78,8 @@ import {
   createNotFoundError,
   createValidationError,
   getExposedError,
+  refusalNext,
+  type RefusalNext,
   isPrismaInvalidInputError,
   ISSUE_NOT_FOUND_MESSAGE,
   CONTRACT_AMENDMENT_NOT_FOUND_MESSAGE,
@@ -2670,11 +2672,21 @@ const typeDefs = /* GraphQL */ `
     issue: Issue
   }
 
+  "Where a person can do what a refusal turned down (INV-1535)."
+  type RefusalNext {
+    "Button text, e.g. Go to In Review."
+    label: String!
+    "App path, e.g. /in-review?focus=INV-972."
+    path: String!
+  }
+
   type IssueUpdatePayload {
     success: Boolean!
     issue: Issue
     "Why the update was refused (revision conflict, missing acceptance, ...); null on success."
     message: String
+    "Where to do it instead, when the refusal names a place; null otherwise."
+    next: RefusalNext
   }
 
   type IssueDeletePayload {
@@ -7086,7 +7098,7 @@ async function amendmentWorkId(prisma: DatabaseClient, amendmentId: string): Pro
 async function runMutationWithReason<TResult extends { success: true }, TFallback extends { success: false }>(
   operation: () => Promise<TResult>,
   fallback: TFallback,
-): Promise<TResult | (TFallback & { message: string | null })> {
+): Promise<TResult | (TFallback & { message: string | null; next?: RefusalNext | null })> {
   try {
     return await operation();
   } catch (error) {
@@ -7095,7 +7107,8 @@ async function runMutationWithReason<TResult extends { success: true }, TFallbac
       throw exposedError;
     }
     if (exposedError || isPrismaInvalidInputError(error)) {
-      return { ...fallback, message: exposedError?.message ?? null };
+      // The step a person can take instead, when the refusal names one (INV-1535).
+      return { ...fallback, message: exposedError?.message ?? null, next: refusalNext(exposedError) };
     }
     throw error;
   }
