@@ -121,6 +121,18 @@ describe('App command palette', () => {
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
   });
 
+  it('keeps a pending g when the address changes before the next key (INV-1541)', async () => {
+    renderApp({ data: boardQueryResult, loading: false }, ['/backlog']);
+    expect(await screen.findByRole('heading', { name: 'Backlog' })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'g' });
+    // A redirect or a page syncing its URL lands between the two keys.
+    fireEvent.click(screen.getByRole('link', { name: /Needs you/ }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Backlog' })).toBeNull());
+    fireEvent.keyDown(window, { key: 'b' });
+    expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
+  });
+
   describe('searching all work (INV-925)', () => {
     const searchData = {
       search: [
