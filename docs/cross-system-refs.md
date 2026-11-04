@@ -16,11 +16,11 @@ A conclusion about an outside project lives in an Involute research item, with t
 |---|---|---|
 | `ovp://` | `ovp://source/<sha256>` · `ovp://claim/<claim_key>` · `ovp://theme-page/<id>` — OVP's own URIs, served by its MCP `resources/read` | `ovp://source/ddd5d59fd01d1589…` |
 | `inv:` | `inv:INV-<n>`, optionally `#RUN-<n>` or `#comment-<uuid>` | `inv:INV-1289` |
-| `pop:` | `pop:<provider>:<session_id>#<message_id>@<source_revision>` — planofplan's `SourceRef` | `pop:claude:agent-ad51950ed6c1e202d` |
+| `pop:` | `pop:<session_id>#<message_id>@<source_revision>` — planofplan's `SourceRef` values, copied as is | `pop:claude:agent-ad51950ed6c1e202d` |
 
 `ovp://` is not ours to define: OVP's tools already emit these URIs and resolve them, so references use exactly that form. A claim is cited by its stable `claim_key` (`ck-…`), not its `claim_id`. A reader pack has no URI of its own; cite its `reader.md` path, which `ovp_read_note` reads.
 
-The message and revision parts of `pop:` are optional; with a revision the reference pins content, without one it points at whatever the session holds now. An OVP sha256 may be shortened to 8+ hex characters when it is unambiguous in prose; tools write the full value.
+planofplan's `session_id` already begins with its provider (`claude:agent-ad51950ed6c1e202d`), so everything between `pop:` and `#` (or `@`, or the end) is passed to `read_session` unchanged — stripping the provider gives `session not found`. `message_id` is likewise planofplan's full value. The message and revision parts of `pop:` are optional; with a revision the reference pins content, without one it points at whatever the session holds now. An OVP sha256 may be shortened to 8+ hex characters when it is unambiguous in prose; tools write the full value.
 
 ## Who resolves what
 
