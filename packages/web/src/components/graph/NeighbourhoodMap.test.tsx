@@ -125,7 +125,7 @@ describe('NeighbourhoodMap', () => {
     expect(screen.getByText(/1 blocks this/)).toBeTruthy();
     expect(screen.getByText(/1 blocked by this/)).toBeTruthy();
     // The key says what an arrow means, in words (INV-1546).
-    expect(screen.getByText(/A → B: A contains B, or A blocks B/)).toBeTruthy();
+    expect(screen.getByText('A → B: A contains B, or A blocks B.')).toBeTruthy();
   });
 
   it('says nothing about a role that is not there', () => {
@@ -161,12 +161,16 @@ describe('NeighbourhoodMap', () => {
     expect(blockEdge.querySelector('path')!.getAttribute('marker-end')).toMatch(/^url\(#/);
     expect(blockEdge).toHaveTextContent('blocks');
     expect(container.querySelector('[data-edge-from="focus"][data-edge-to="dependent"]')).toHaveTextContent('blocks');
-    // The parent points at its child, labelled with the verb read along the arrow (INV-1549).
+    // The parent points at the focus, labelled with the verb read along the arrow (INV-1549).
     const parentEdge = container.querySelector('[data-edge-from="milestone"][data-edge-to="focus"]')!;
     expect(parentEdge).toHaveTextContent('contains');
-    const peer = container.querySelector('[data-edge-kind="peer"]')!;
-    expect(peer.querySelector('path')!.getAttribute('marker-end')).toBeNull();
-    expect(peer.textContent).toBe('');
+    // A sibling is another child of that parent, so the same contains arrow reaches it.
+    const siblingEdge = container.querySelector('[data-edge-from="milestone"][data-edge-to="sibling"]')!;
+    expect(siblingEdge.getAttribute('data-edge-kind')).toBe('hierarchy');
+    expect(siblingEdge.querySelector('path')!.getAttribute('marker-end')).toMatch(/^url\(#/);
+    expect(container.querySelector('[data-edge-kind="peer"]')).toBeNull();
+    expect(container.querySelector('[data-edge-from="focus"][data-edge-to="sibling"]')).toBeNull();
+    expect(screen.queryByText(/Dashed/)).toBeNull();
   });
 
   it('draws an item once, in its strongest role: a sibling that blocks is a blocker (INV-1546)', () => {

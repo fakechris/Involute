@@ -92,14 +92,18 @@ describe('layoutNeighbourhood', () => {
     expect(new Set(seen).size).toBe(seen.length);
   });
 
-  it('draws the hierarchy, the peers and the dependencies as different edges', () => {
+  it('draws contains from the parent to the focus and to each sibling', () => {
     const layout = layoutOf(nodes, edges);
     const kindOf = (id: string) => layout.edges.find((edge) => edge.id === id)?.kind;
     expect(kindOf('c-milestone-focus')).toBe('hierarchy');
     expect(kindOf('c-project-milestone')).toBe('hierarchy');
     expect(kindOf('c-focus-child')).toBe('hierarchy');
-    // A sibling shares a parent; that link is a hint, not a typed edge.
-    expect(layout.edges.some((edge) => edge.kind === 'peer')).toBe(true);
+    const siblingEdge = layout.edges.find((edge) => edge.id === 'c-milestone-sibling');
+    expect(siblingEdge).toMatchObject({ kind: 'hierarchy', fromId: 'milestone', toId: 'sibling' });
+    expect(layout.edges.some((edge) => edge.fromId === 'focus' && edge.toId === 'sibling')).toBe(false);
+    // The parent fan (the focus and its siblings) is labelled once.
+    const containsLabels = layout.edges.filter((edge) => edge.label === 'contains');
+    expect(containsLabels.map((edge) => edge.toId).sort()).toEqual(['child', 'focus']);
     // The blocker is open work, so its edge says so.
     expect(kindOf('b-blocker-focus')).toBe('open');
     expect(kindOf('b-focus-dependent')).toBe('open');
