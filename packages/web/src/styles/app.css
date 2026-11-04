@@ -3035,9 +3035,17 @@ kbd {
 }
 
 .issue-neighbourhood__map {
+  /* The drawer drawing is laid out in a 360×300 space. Without a cap the SVG
+     grows to the issue column (~720px) and that drawing becomes about 600px
+     tall, mostly empty. 360 keeps it at the size it was drawn. */
   width: 100%;
+  max-width: 360px;
   height: auto;
   overflow: visible;
+}
+
+.issue-neighbourhood__map-wrap--page .issue-neighbourhood__map {
+  max-width: 560px;
 }
 
 .issue-neighbourhood__map-edge {
@@ -3045,11 +3053,6 @@ kbd {
   stroke: var(--border-strong);
   stroke-width: 1.4;
   transition: opacity var(--dur-1) var(--ease);
-}
-
-.issue-neighbourhood__map-edge--peer {
-  stroke: var(--fg-faint);
-  stroke-dasharray: 3 3;
 }
 
 .issue-neighbourhood__map-edge--open {

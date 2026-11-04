@@ -171,6 +171,7 @@ export function IssueGraphViewPage() {
                 width={PAGE_MAP_WIDTH}
                 height={PAGE_MAP_HEIGHT}
                 caps={PAGE_MAP_CAPS}
+                variant="page"
                 onSelect={(id) => {
                   // Picking a node moves the lens: the neighbourhood is read
                   // again around that item, so the URL always names what the

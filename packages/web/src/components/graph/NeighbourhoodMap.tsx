@@ -12,10 +12,10 @@ import { layoutNeighbourhood, type MapEdgeKind, type NeighbourhoodMapCaps, type 
  * shape is the question a person actually has: am I alone here, is the
  * milestone mostly done, is what blocks me one step away or three.
  *
- * The focus sits in the middle and everything else hangs off it in a sector
- * that says what it is — ancestors above, peers to the left, children below,
- * dependencies to the right. Hovering a node lights the edges that touch it
- * and fades the rest; clicking one picks it.
+ * The focus sits in the middle. Ancestors stack above it and the parent fans
+ * contains out to the focus and to the siblings on the left. The focus's own
+ * children sit below, dependencies to the right. Hovering a node lights the
+ * edges that touch it and fades the rest; clicking one picks it.
  *
  * The drawing is pure SVG: positions are attributes, not inline styles, so the
  * map follows the theme through the stylesheet alone.
@@ -36,6 +36,12 @@ interface NeighbourhoodMapProps {
   onOpen?: (id: string) => void;
   /** Draw the legend row under the map. */
   showLegend?: boolean;
+  /**
+   * `inline` is the copy inside an issue. `page` is the placement view, which
+   * is allowed a little more width. Both are capped: the SVG otherwise scales
+   * to the whole column and the map becomes the tallest thing on the page.
+   */
+  variant?: 'inline' | 'page';
 }
 
 /**
@@ -107,6 +113,7 @@ export function NeighbourhoodMap({
   onSelect,
   onOpen,
   showLegend = true,
+  variant = 'inline',
 }: NeighbourhoodMapProps) {
   const [hovered, setHovered] = useState<string | null>(null);
   // Arrowhead markers are ids in the document; two maps on a page must not share them.
@@ -147,7 +154,7 @@ export function NeighbourhoodMap({
   }
 
   return (
-    <div className="issue-neighbourhood__map-wrap">
+    <div className={`issue-neighbourhood__map-wrap${variant === 'page' ? ' issue-neighbourhood__map-wrap--page' : ''}`}>
       <svg
         className="issue-neighbourhood__map"
         viewBox={`0 0 ${layout.width} ${layout.height}`}
@@ -275,7 +282,7 @@ export function NeighbourhoodMap({
             })}
           </ul>
           {layout.edges.length > 0 ? (
-            <p className="issue-neighbourhood__map-note">A → B: A contains B, or A blocks B. Dashed: same parent.</p>
+            <p className="issue-neighbourhood__map-note">A → B: A contains B, or A blocks B.</p>
           ) : null}
         </div>
       ) : null}

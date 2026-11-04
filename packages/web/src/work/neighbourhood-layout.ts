@@ -21,12 +21,11 @@
  * they left it, and so the arrangement can be unit-tested instead of being
  * eyeballed. Nothing here reads the DOM or the clock.
  *
- * Every node hangs off the hub by an edge that means something:
+ * Every node hangs off an edge that means something:
  *
- * - **hierarchy** — a real CONTAINS edge (ancestors above, children below).
- * - **peer** — the siblings share a parent, so the link to the hub is a
- *   dashed "same parent" hint, not a typed edge. It is drawn differently on
- *   purpose.
+ * - **hierarchy** — a real CONTAINS edge. Ancestors stack above the focus,
+ *   the focus's own children sit below it, and each sibling is another child
+ *   of the same parent, so the parent fans out to the focus and to them.
  * - **open / violated / resolved** — a real BLOCKS edge, coloured by the same
  *   three-state rule the project graph uses.
  */
@@ -38,7 +37,7 @@ import type { Neighbourhood } from './neighbourhood-model';
 export type NeighbourhoodRole = 'focus' | 'ancestor' | 'sibling' | 'child' | 'blocker' | 'dependent';
 
 /** How an edge on the map reads. */
-export type MapEdgeKind = 'hierarchy' | 'peer' | 'open' | 'violated' | 'resolved';
+export type MapEdgeKind = 'hierarchy' | 'open' | 'violated' | 'resolved';
 
 export interface PlacedNode {
   id: string;
@@ -61,8 +60,8 @@ export interface PlacedEdge {
   /**
    * What the link says, written on it (INV-1546): a verb read along the arrow —
    * "A contains B", "A blocks B" (INV-1549). Only one link of each group carries
-   * it, so a fan of links does not stack the same word; null otherwise and for
-   * the dashed same-parent hint.
+   * it, so a fan of links does not stack the same word; null otherwise. The
+   * parent, the focus and the siblings share one contains label.
    */
   label: 'contains' | 'blocks' | null;
   /** Where the label sits: the middle of the curve. */
@@ -281,7 +280,7 @@ export function layoutNeighbourhood(input: {
     const to = byId.get(toId);
     if (!from || !to) return;
     const curve = curveBetween(from, to, { x: cx, y: cy });
-    const verb = kind === 'peer' ? null : kind === 'hierarchy' ? 'contains' : 'blocks';
+    const verb = kind === 'hierarchy' ? 'contains' : 'blocks';
     const label = verb && !labelled.has(group) ? verb : null;
     if (label) labelled.add(group);
     drawn.push({ id, fromId, toId, kind, path: curve.path, label, labelAt: curve.middle });
@@ -316,9 +315,18 @@ export function layoutNeighbourhood(input: {
     push(edge?.id ?? `contains:${focus.id}:${child.id}`, focus.id, child.id, 'hierarchy', 'child');
   }
 
-  // Peers: the link is a hint, not a typed edge, and is drawn dashed.
-  for (const sibling of siblings) {
-    push(`peer:${focus.id}:${sibling.id}`, focus.id, sibling.id, 'peer', 'sibling');
+  // Siblings are the parent's other children. The edge is the same CONTAINS
+  // the parent already has with the focus, fanned out to each of them. They
+  // share the ancestor group's one "contains" label.
+  const parent = ancestors[ancestors.length - 1];
+  if (parent) {
+    for (const sibling of siblings) {
+      const edge = edges.find(
+        (candidate) =>
+          candidate.type === 'CONTAINS' && candidate.fromId === parent.id && candidate.toId === sibling.id,
+      );
+      push(edge?.id ?? `contains:${parent.id}:${sibling.id}`, parent.id, sibling.id, 'hierarchy', 'ancestor');
+    }
   }
 
   // Dependencies: real BLOCKS edges, coloured by the rule the graph uses.
