@@ -1,3 +1,4 @@
+import { HandoffCard } from '../components/HandoffCard';
 import { DeliverySection } from '../components/DeliveryPanel';
 import { useQuery } from '@apollo/client/react';
 import { useEffect, useState } from 'react';
@@ -334,6 +335,7 @@ export function WorkContextPage() {
                     {request.failureReason ? <span>{request.failureReason}</span> : null}
                     <span className="observation-card__meta">due {formatWhen(request.deadlineAt)}</span>
                     {request.body ? <p className="observation-card__body">{request.body}</p> : null}
+                    <HandoffCard handoff={request.handoff} />
                     <AgentRequestActions request={request} viewer={viewer} />
                   </li>
                 ))}

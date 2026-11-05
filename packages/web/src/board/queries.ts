@@ -723,6 +723,7 @@ export const ISSUE_PAGE_QUERY = gql`
         presenceDetail
         deadlineAt
         hopCount
+        handoff { baseCommit inputs allowedActions acceptance exceededActions }
         rootRequestId
         handedOffFromId
         failureReason

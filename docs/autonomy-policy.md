@@ -136,6 +136,8 @@ Conditions are typed predicates over stored fields only: `type`, `labels`,
 | `contract_amendment` — an agent's amendment is applied (`contractAmendmentAccept/Reject`) | human | human | auto when `amendment_fields ⊆ {verification}` | same as L1 | auto when `amendment_fields ⊆ {verification, scope}` and the change shrinks scope |
 | `review_accept` — In Review → Done (`workReview`) | human; Auto-Accept Gate for bugs when `autoAcceptBugs` | human | human | auto when `auto_accept_grade = CLEAR ∧ pr_merged ∧ checks = green ∧ reproducibility ∉ {SOMETIMES, ONCE} ∧ severity ∉ {SEV1, SEV2}` | same as L2 |
 | `agent_delegation` — an agent opens a request to another agent (`agentRequest*`) | none (INV-571) | none | none | none | auto when the request carries a root request id, a budget with `budget_remaining > 0`, `hops ≤ max_hops`, and names a target agent (the INV-571 conditions, quoted in §5) |
+
+A delegation may carry a **hand-off card** (INV-1583): `base_commit`, `inputs`, `allowed_actions` (read / edit / push / pr / merge / release) and `acceptance`. The card does not change the gate above; it is what the delegate is told and what its run reports are measured against — a report beyond `allowed_actions` is noted on the request (`AgentRequest.handoff.exceededActions`) and warned, never refused.
 | `merge_signal` — which external merge evidence the gate may rely on | GitHub webhook / verifier | read-only: the policy names the repository and branch whose merge counts; Involute never merges | same | same | same |
 | `spend_budget` — what an item or delegation chain may spend before it escalates | not tracked | n/a | n/a | n/a | human when `budget_remaining = 0` (the chain pauses and the owner is asked) |
 

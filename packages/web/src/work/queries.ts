@@ -411,6 +411,7 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
           presence
           deadlineAt
           hopCount
+          handoff { baseCommit inputs allowedActions acceptance exceededActions }
           rootRequestId
           handedOffFromId
           failureReason

@@ -1,3 +1,4 @@
+import { HandoffCard } from '../components/HandoffCard';
 import { isBugIssue, resolutionLabel, supersededPrefill, useCloseReason, type WorkResolution } from '../components/CloseReasonDialog';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { DeliverySection } from '../components/DeliveryPanel';
@@ -923,6 +924,8 @@ export function IssuePage() {
                             {request.requestedByActor?.name ?? 'Someone'} asked: {request.body}
                           </span>
                         ) : null}
+                        {/* The hand-off card a delegation carries (INV-1583). */}
+                        <HandoffCard handoff={request.handoff} />
                         <NeedInfoWithdrawButton request={request} viewer={sessionViewer} onChanged={() => void refetch()} />
                         {sessionViewer
                           && !['completed', 'failed', 'canceled'].includes(request.state)

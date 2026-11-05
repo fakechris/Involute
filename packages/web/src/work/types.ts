@@ -181,6 +181,8 @@ export interface WorkContextRequest {
   presence: string;
   deadlineAt: string;
   hopCount: number;
+  /** The hand-off card a delegation carries (INV-1583); null when none. */
+  handoff?: { baseCommit: string | null; inputs: string[]; allowedActions: string[] | null; acceptance: string | null; exceededActions: string[] } | null;
   rootRequestId: string | null;
   handedOffFromId: string | null;
   failureReason: string | null;
