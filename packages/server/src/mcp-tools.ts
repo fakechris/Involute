@@ -921,6 +921,7 @@ async function callMcpAction(
       assignOptional(runInput, 'summary', optionalString(args.summary));
       assignOptional(runInput, 'externalUrl', optionalString(args.external_url));
       assignOptional(runInput, 'idempotencyKey', optionalString(args.idempotency_key));
+      assignOptional(runInput, 'scheduleRound', optionalNumber(args.schedule_round));
       const runReceipt = parseReceipt(args.receipt);
       if (runReceipt) runInput.receipt = runReceipt;
       if (args.decision_requested === true) {
@@ -1689,6 +1690,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         receipt: RECEIPT_SCHEMA,
         decision_requested: { type: 'boolean' },
         idempotency_key: { type: 'string' },
+        schedule_round: { type: 'integer', minimum: 1, description: 'The round of a scheduled item this run is (INV-1582): the `round` in the work.scheduled_run notification. Such a run is recorded and never moves the work to In Review.' },
         followups: {
           type: 'object',
           description: 'With status completed (INV-1231): what this run leaves behind. Either work_ids — work it led to, proposed or filed first; each is linked DISCOVERED_DURING to this item — or none_reason saying why nothing is left. Not both. Missing on a completed run: a warning until 2026-11-17, refused after.',

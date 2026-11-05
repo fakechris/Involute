@@ -46,6 +46,9 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   workflowPolicySet: { kind: 'web', doc: 'WORKFLOW_POLICY_SET_MUTATION', components: ['routes/AutonomyTab.tsx'], label: 'Save autonomy', test: 'routes/AutonomyTab.test.tsx' },
   workflowPolicyClear: { kind: 'web', doc: 'WORKFLOW_POLICY_CLEAR_MUTATION', components: ['routes/AutonomyTab.tsx'], label: 'Inherit from team', test: 'routes/AutonomyTab.test.tsx' },
   fieldDefinitionSet: { kind: 'web', doc: 'FIELD_DEFINITION_SET_MUTATION', components: ['routes/FieldsTab.tsx'], label: 'Save field', test: 'routes/FieldsTab.test.tsx' },
+  // INV-1582: the Schedule panel on the issue page.
+  workScheduleSet: { kind: 'web', doc: 'WORK_SCHEDULE_SET_MUTATION', components: ['components/WorkSchedulePanel.tsx'], label: 'Save schedule', test: 'components/WorkSchedulePanel.test.tsx' },
+  workScheduleClear: { kind: 'web', doc: 'WORK_SCHEDULE_CLEAR_MUTATION', components: ['components/WorkSchedulePanel.tsx'], label: 'Remove schedule', test: 'components/WorkSchedulePanel.test.tsx' },
   fieldDefinitionDeactivate: { kind: 'web', doc: 'FIELD_DEFINITION_DEACTIVATE_MUTATION', components: ['routes/FieldsTab.tsx'], label: 'Deactivate', test: 'routes/FieldsTab.test.tsx' },
   fieldDefinitionRename: { kind: 'web', doc: 'FIELD_DEFINITION_RENAME_MUTATION', components: ['routes/FieldsTab.tsx'], label: 'Rename key', test: 'routes/FieldsTab.test.tsx' },
   // INV-1491: a person takes back an amendment the Autonomy Gate accepted, from Handled for you on /todo.
@@ -215,6 +218,7 @@ export const HUMAN_GATES: HumanGate[] = [
   { text: 'Agents cannot rewrite committed contract fields', mutation: 'issueUpdate', attention: 'CONTRACT_AMENDMENT' },
   { text: 'Work owner must be a human assignee', mutation: 'issueUpdate', attention: { none: 'Refuses an agent owner on the edit itself; nothing is left waiting (INV-1090).' } },
   { text: 'Only a person can turn automatic acceptance of verified bug fixes on or off.', mutation: 'issueUpdate', attention: { none: 'A project setting a person changes when they choose to, not a pending decision (INV-1075).' } },
+  { text: 'Only a person sets, pauses or removes a schedule; the agent runs its rounds (INV-1582).', mutation: 'workScheduleSet', attention: { none: 'A person changes a schedule on the issue page when they choose to; missed rounds wait in Needs you as SCHEDULE_MISSED (INV-1582).' } },
   { text: 'Only a person cancels work', mutation: 'issueUpdate', attention: { none: 'Canceling is done on the issue itself with a resolution when a person decides to; nothing is left waiting (INV-1118).' } },
   { text: 'Only a person may reconcile external effects.', mutation: 'executorUpdate', attention: { none: 'Reconciling is done from the executor panel when a receipt is disputed; not a queued decision (INV-944).' } },
   { text: 'Instantiate an approved delivery unit and any predecessors', mutation: 'deliveryExecutionCreate', attention: { none: 'Follows an approval already decided under DELIVERY_CHANGE; starting it is the owner\'s choice of timing (INV-993).' } },
@@ -272,6 +276,8 @@ export type NotificationSurface = NotificationLanding & { actionable: AttentionK
 /** Every notification type written to a person's inbox. */
 export const NOTIFICATION_SURFACES: Record<string, NotificationSurface> = {
   'run.completed': { kind: 'work', action: 'Human review', component: 'components/HumanReviewSection.tsx', actionable: 'WORK_REVIEW' },
+  // A scheduled round is due; it goes to the executing agent, not a person (INV-1582).
+  'work.scheduled_run': { kind: 'info', actionable: 'info' },
   'work.accepted': { kind: 'info', actionable: 'info' },
   'work.review_rejected': { kind: 'info', actionable: 'info' },
   // The proposer hears the decision on its proposal (INV-968).

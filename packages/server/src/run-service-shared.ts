@@ -46,6 +46,8 @@ export interface ReportRunInput {
   summary?: string | null;
   /** What a completed run leaves behind, already resolved and checked (INV-1231). */
   followups?: RunFollowups | null;
+  /** Which round of a scheduled item this run is (INV-1582); such a run never moves the work's state. */
+  scheduleRound?: number | null;
   workId: string;
 }
 

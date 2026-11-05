@@ -1,4 +1,5 @@
 import { HandoffCard } from '../components/HandoffCard';
+import { WorkSchedulePanel } from '../components/WorkSchedulePanel';
 import { isBugIssue, resolutionLabel, supersededPrefill, useCloseReason, type WorkResolution } from '../components/CloseReasonDialog';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { DeliverySection } from '../components/DeliveryPanel';
@@ -1160,6 +1161,21 @@ export function IssuePage() {
                   onUpdate={(update) => {
                     void persistIssueUpdate(activeIssue, update, (current) => ({ ...current, ...update })).catch(() => undefined);
                   }}
+                />
+              </div>
+            </div>
+          ) : null}
+
+          {/* Rounds of work on a clock (INV-1582); only committed work can carry one. */}
+          {activeIssue.commitmentStatus === 'COMMITTED' ? (
+            <div className="issue-panel__prop-row issue-panel__prop-row--top">
+              <div className="issue-panel__prop-label">Schedule</div>
+              <div className="issue-panel__prop-value">
+                <WorkSchedulePanel
+                  workId={activeIssue.id}
+                  schedule={activeIssue.schedule}
+                  canEdit={Boolean(sessionViewer)}
+                  onChanged={() => void refetch()}
                 />
               </div>
             </div>

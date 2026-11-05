@@ -125,6 +125,18 @@ describe('attention: what a person is waiting to decide (INV-1091)', () => {
     expect(await kindsFor(f.member)).toEqual([]);
   });
 
+  it('a scheduled item whose rounds fire with no run waits for the owner, and goes once the schedule is paused (INV-1582)', async () => {
+    const f = await fixture();
+    const work = await committed(f, { assigneeId: f.admin.id, stateId: f.progress.id, title: 'Patrol' });
+    const schedule = await prisma.workSchedule.create({ data: { workId: work.id, cron: '0 * * * *', timezone: 'UTC', agentId: f.agent.id, round: 4, missedRounds: 3, lastFiredAt: new Date() } });
+    const [entry] = await loadAttention(prisma, f.admin, undefined);
+    expect(entry).toMatchObject({ actions: ['OPEN'], kind: 'SCHEDULE_MISSED', subjectId: schedule.id, workId: work.id });
+    expect(entry!.reason).toContain('3 scheduled rounds');
+
+    await prisma.workSchedule.update({ where: { id: schedule.id }, data: { active: false } });
+    expect(await kindsFor(f.admin)).toEqual([]);
+  });
+
   it('a decision request stays open while its run runs and nobody has answered', async () => {
     const f = await fixture();
     const work = await committed(f, { assigneeId: f.admin.id, stateId: f.progress.id, title: 'Running' });

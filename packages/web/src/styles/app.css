@@ -7558,3 +7558,52 @@ kbd {
 .handoff-card__exceeded {
   color: var(--danger);
 }
+
+/* The schedule on an item (INV-1582). */
+.work-schedule {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.work-schedule__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 10px;
+  margin: 0;
+}
+
+.work-schedule__facts dt {
+  color: var(--fg-dim);
+}
+
+.work-schedule__facts dd {
+  margin: 0;
+}
+
+.work-schedule__missed {
+  color: var(--danger);
+}
+
+.work-schedule__none {
+  margin: 0;
+  color: var(--fg-muted);
+}
+
+.work-schedule__actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.work-schedule__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.work-schedule__error {
+  margin: 0;
+  color: var(--danger);
+}

@@ -232,6 +232,7 @@ export function WorkContextPage() {
                 <li key={run.id}>
                   <strong className="mono">{run.publicId}</strong>
                   <span>{run.status.toLowerCase()}</span>
+                  {run.scheduleRound ? <span className="mono" title="A round of this item's schedule (INV-1582)">round {run.scheduleRound}</span> : null}
                   {run.presence === 'stale' ? (
                     <span className="work-context__stale" title="No run_report, evidence or comment from the executor for over the stale threshold">stale</span>
                   ) : null}

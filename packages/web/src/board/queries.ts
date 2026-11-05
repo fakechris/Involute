@@ -563,6 +563,7 @@ export const ISSUE_PAGE_QUERY = gql`
         accepted
         createdAt
       }
+      schedule { id cron timezone active nextRunAt lastFiredAt round missedRounds agent { id name handle } }
       revision
       title
       description

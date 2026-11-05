@@ -1,3 +1,4 @@
+import { missedSchedules } from './work-schedule.js';
 import type { Issue, Prisma, PrismaClient, User } from '@prisma/client';
 
 import { BUG_LABEL_NAME } from './bug-report.js';
@@ -23,6 +24,8 @@ export const ATTENTION_KINDS = [
   'AGENT_REQUEST',
   'DECISION_REQUESTED',
   'OPS',
+  // A scheduled item whose rounds keep firing with no run (INV-1582).
+  'SCHEDULE_MISSED',
 ] as const;
 export type AttentionKind = (typeof ATTENTION_KINDS)[number];
 
@@ -69,6 +72,7 @@ export const ATTENTION_OVERDUE_MS: Record<AttentionKind, number> = {
   DECISION_REQUESTED: 4 * HOUR,
   DELIVERY_CHANGE: 24 * HOUR,
   OPS: 24 * HOUR,
+  SCHEDULE_MISSED: 24 * HOUR,
   WORK_REVIEW: 72 * HOUR,
 };
 
@@ -117,8 +121,24 @@ export const ATTENTION_LOADERS: Record<AttentionKind, (prisma: DatabaseClient, s
   DECISION_REQUESTED: decisionRequests,
   DELIVERY_CHANGE: deliveryChanges,
   OPS: opsItems,
+  SCHEDULE_MISSED: scheduleMisses,
   WORK_REVIEW: reviews,
 };
+
+/** Rounds that fire with nobody running them (INV-1582): the owner pauses the schedule or gets the agent going. */
+async function scheduleMisses(prisma: DatabaseClient, scope: Scope): Promise<AttentionItem[]> {
+  const schedules = await missedSchedules(prisma, visibleWork(scope, scope.responsible, { state: { type: { notIn: ['COMPLETED', 'CANCELED'] } } }));
+  return schedules.map((schedule) =>
+    item(
+      'SCHEDULE_MISSED',
+      schedule.id,
+      schedule.workId,
+      schedule.lastFiredAt ?? schedule.updatedAt,
+      `${schedule.missedRounds} scheduled rounds of ${schedule.work.identifier} fired with no run (${schedule.cron} ${schedule.timezone}): pause the schedule or get the agent running.`,
+      ['OPEN'],
+    ),
+  );
+}
 
 export async function loadAttention(
   prisma: DatabaseClient,

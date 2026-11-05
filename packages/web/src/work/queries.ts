@@ -518,6 +518,7 @@ export const WORK_CONTEXT_PAGE_QUERY = gql`
         staleNotifiedAt
         presence
         followups { identifiers noneReason }
+        scheduleRound
         repository
         commitSha
         pullRequestNumber
@@ -1027,6 +1028,28 @@ export const ATTENTION_SUMMARY_QUERY = gql`
   query AttentionSummary {
     attentionSummary {
       total
+    }
+  }
+`;
+
+/** Set or replace the schedule on an item (INV-1582); a person's action. */
+export const WORK_SCHEDULE_SET_MUTATION = gql`
+  mutation WorkScheduleSet($input: WorkScheduleSetInput!) {
+    workScheduleSet(input: $input) {
+      success
+      message
+      schedule { id cron timezone active nextRunAt lastFiredAt round missedRounds agent { id name handle } }
+    }
+  }
+`;
+
+/** Remove the schedule from an item (INV-1582). */
+export const WORK_SCHEDULE_CLEAR_MUTATION = gql`
+  mutation WorkScheduleClear($workId: String!) {
+    workScheduleClear(workId: $workId) {
+      success
+      message
+      cleared
     }
   }
 `;

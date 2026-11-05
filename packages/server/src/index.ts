@@ -9,6 +9,7 @@ import { sendAttentionDigests } from './attention-digest.js';
 import { sweepOverdueReviews } from './review-wait.js';
 import { sweepExpiredClaims } from './claim-expiry.js';
 import { sweepStaleRuns } from './run-staleness.js';
+import { fireDueSchedules } from './work-schedule.js';
 import { sweepExpiredTombstones } from './work-tombstone.js';
 import { startBugAutoAccept } from './bug-auto-accept.js';
 import type { PrismaClient } from '@prisma/client';
@@ -452,6 +453,15 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
   }, 10 * 60_000);
   bugSlaTimer?.unref();
 
+  // Scheduled rounds (INV-1582): every minute, fire what is due and tell the agent.
+  const scheduleTimer = setInterval(() => {
+    void fireDueSchedules(prisma).catch((error: unknown) => {
+      console.error('Failed to fire scheduled rounds.');
+      console.error(error);
+    });
+  }, 60_000);
+  scheduleTimer?.unref();
+
   // Quiet runs (INV-996): the owner hears once that an execution went silent.
   const staleRunTimer = setInterval(() => {
     void sweepStaleRuns(prisma).catch((error: unknown) => {
@@ -575,6 +585,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       clearInterval(claimExpiryTimer);
       clearInterval(fieldIndexTimer);
       clearInterval(staleRunTimer);
+      clearInterval(scheduleTimer);
       stopBugAutoAccept();
 
       await new Promise<void>((resolve, reject) => {

@@ -155,6 +155,8 @@ export interface IssueSummary {
   identifier: string;
   /** Latest Auto-Accept Gate evaluation (INV-1075); only the issue page asks for it. */
   autoAccept?: { outcome: string; reasons: string[]; accepted: boolean; createdAt: string } | null;
+  /** Rounds of work on a clock (INV-1582); null when the item has no schedule. */
+  schedule?: WorkScheduleSummary | null;
   revision: number;
   title: string;
   kind?: 'ISSUE' | 'PROJECT' | 'MILESTONE' | 'DECISION' | 'EPIC';
@@ -1164,4 +1166,17 @@ export interface IncidentsPageQueryData {
 
 export interface IncidentsPageQueryVariables {
   teamFilter?: { key: { eq: string } };
+}
+
+/** A work item's schedule (INV-1582). */
+export interface WorkScheduleSummary {
+  id: string;
+  cron: string;
+  timezone: string;
+  active: boolean;
+  nextRunAt: string | null;
+  lastFiredAt: string | null;
+  round: number;
+  missedRounds: number;
+  agent: { id: string; name: string | null; handle: string | null };
 }
