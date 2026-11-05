@@ -7525,3 +7525,36 @@ kbd {
   font-size: 12px;
   color: var(--fg-dim);
 }
+
+/* The hand-off card on a delegated request (INV-1583). */
+.handoff-card {
+  flex-basis: 100%;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 10px;
+  margin: 4px 0 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-2);
+  background: var(--bg-raised);
+}
+
+.handoff-card dt {
+  color: var(--fg-dim);
+}
+
+.handoff-card dd {
+  margin: 0;
+  color: var(--fg);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.handoff-card__input {
+  display: block;
+}
+
+.handoff-card__exceeded {
+  color: var(--danger);
+}

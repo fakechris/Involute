@@ -702,6 +702,10 @@ model AgentRequest {
   // L3 delegation (INV-1493): the explicit budget this chain may still spend, in
   // units the paying principal defines; null for requests outside a chain.
   budgetUnits        Int?
+  // The hand-off card a delegation carries (INV-1583): base commit, inputs,
+  // allowed actions, acceptance — and which allowed_actions the executor's
+  // reports went beyond.
+  handoff            Json?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
 

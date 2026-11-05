@@ -226,6 +226,7 @@ import {
 } from './claim-service.js';
 import { attachEvidence, reportRun, reviewWork } from './run-service.js';
 import { readRunFollowups, resolveFollowups, RUN_FOLLOWUPS_WARNING } from './run-followups.js';
+import { noteReportBeyondHandoff, readHandoff } from './agent-request-handoff-card.js';
 import { uncommitWork } from './work-uncommit.js';
 import { createProject, updateProject, deleteProject, type CreateProjectInput, type UpdateProjectInput } from './project-service.js';
 import { createCycle, updateCycle, deleteCycle, type CreateCycleInput, type UpdateCycleInput } from './cycle-service.js';
@@ -1297,6 +1298,18 @@ const typeDefs = /* GraphQL */ `
     chainDeadlineAt: DateTime
     "A needinfo (INV-1119): raised to a named person; any comment of theirs on the work answers it."
     needInfo: Boolean!
+    "The hand-off card a delegation carries (INV-1583): where to start, what to read, how far to go, what done means — and what the executor reported beyond it."
+    handoff: AgentRequestHandoff
+  }
+
+  type AgentRequestHandoff {
+    baseCommit: String
+    inputs: [String!]!
+    "read / edit / push / pr / merge / release; null when the card sets no limit."
+    allowedActions: [String!]
+    acceptance: String
+    "Allowed actions the executor's run reports went beyond."
+    exceededActions: [String!]!
   }
 
   enum CommentOrderBy {
@@ -4831,11 +4844,15 @@ const resolvers = {
           { ...input, followups },
           writeActorFromViewer(context.viewer),
         );
+        const beyond = context.viewer
+          ? await noteReportBeyondHandoff(context.prisma, { workId: existing.id, actorId: context.viewer.id, commitSha: input.commitSha, pullRequestNumber: input.pullRequestNumber }).catch(() => null)
+          : null;
+        const warnings = [...(result.followupsMissing ? [RUN_FOLLOWUPS_WARNING] : []), ...(beyond ? [beyond] : [])];
         return {
           issue: await getIssueById(context.prisma, result.work.id),
           run: result.run,
           success: true as const,
-          warning: result.followupsMissing ? RUN_FOLLOWUPS_WARNING : null,
+          warning: warnings.length ? warnings.join(' ') : null,
         };
       }, {
         issue: null,
@@ -6660,6 +6677,7 @@ const resolvers = {
     inputs: (parent: DecisionReceipt): unknown[] => (Array.isArray(parent.inputs) ? parent.inputs : []),
   },
   AgentRequest: {
+    handoff: (parent: AgentRequestParent) => readHandoff(parent.handoff),
     state: (parent: AgentRequestParent): string => toWireState(parent.state),
     presence: (parent: AgentRequestParent): string => agentRequestPresence(parent),
     presenceDetail: (parent: AgentRequestParent): string =>

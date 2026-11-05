@@ -24,6 +24,7 @@ import { AUTONOMY_GATE_ACTOR, isAutoDecisionReason } from './autonomy-gate.js';
 import { POLICY_AUDIT, decide, evaluatePredicate, type AutonomyFacts, type Predicate } from './autonomy-policy.js';
 import { factsForWork, loadAutonomyFor, readActivePolicy, type AutonomyView } from './autonomy-service.js';
 import { createValidationError, createNotFoundError } from './errors.js';
+import { describeHandoff, handoffJson, type HandoffCard } from './agent-request-handoff-card.js';
 import { requestNeedInfo, resolveActorRef } from './need-info-service.js';
 import { ensureServiceActor } from './service-actors.js';
 import { WORKSPACE_SETTINGS_ID } from './workspace-access.js';
@@ -47,6 +48,8 @@ export interface DelegateInput {
   body: string;
   budgetUnits: number;
   idempotencyKey?: string | null;
+  /** The hand-off card (INV-1583), already parsed. */
+  handoff?: HandoffCard | null;
 }
 
 export interface DelegateResult { request: AgentRequest; comment: Comment; rootRequestId: string; hopCount: number; budgetUnits: number }
@@ -132,7 +135,8 @@ async function delegateInTransaction(prisma: PrismaClient, input: DelegateInput,
     if (spend <= 0) throw new BudgetExhausted(work, parent);
     if (parent && parent.budgetUnits !== null) await tx.agentRequest.update({ where: { id: parent.id }, data: { budgetUnits: parent.budgetUnits - spend } });
 
-    const comment = await tx.comment.create({ data: { body: `**Delegated to ${target.handle ? `@${target.handle}` : target.name}** (hop ${hopCount + 1}/${MAX_HANDOFF_HOPS}, budget ${spend}): ${body}`, issueId: work.id, userId: input.by.actorId } });
+    const card = input.handoff ? `\n\n${describeHandoff(input.handoff)}` : '';
+    const comment = await tx.comment.create({ data: { body: `**Delegated to ${target.handle ? `@${target.handle}` : target.name}** (hop ${hopCount + 1}/${MAX_HANDOFF_HOPS}, budget ${spend}): ${body}${card}`, issueId: work.id, userId: input.by.actorId } });
     const request = await createAgentRequest(tx, {
       body,
       deadlineAt: new Date(Math.min(now.getTime() + DEFAULT_REQUEST_DEADLINE_MS, chainDeadlineAt.getTime())),
@@ -143,7 +147,7 @@ async function delegateInTransaction(prisma: PrismaClient, input: DelegateInput,
       targetActorId: target.id,
       workId: work.id,
     }, now);
-    const linked = await tx.agentRequest.update({ where: { id: request.id }, data: { rootRequestId: rootRequestId ?? request.id, hopCount, chainDeadlineAt, budgetUnits: spend } });
+    const linked = await tx.agentRequest.update({ where: { id: request.id }, data: { rootRequestId: rootRequestId ?? request.id, hopCount, chainDeadlineAt, budgetUnits: spend, ...(input.handoff ? { handoff: handoffJson(input.handoff) } : {}) } });
     return { request: linked, comment, rootRequestId: rootRequestId ?? request.id, hopCount, budgetUnits: spend };
   });
 }

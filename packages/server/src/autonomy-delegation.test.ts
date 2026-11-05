@@ -7,6 +7,7 @@ import { issueAgentCredential } from './agent-credentials.js';
 import { readAgentInbox } from './agent-request-service.js';
 import { setAgentTrust } from './agent-trust.js';
 import { DEFAULT_COMPLETION_REPLY, DEFAULT_DISPATCH_BUDGET, delegateToAgent, postCompletionReply } from './autonomy-delegation.js';
+import { noteReportBeyondHandoff, parseHandoff, readHandoff } from './agent-request-handoff-card.js';
 import { AUTONOMY_GATE_ACTOR } from './autonomy-gate.js';
 import { setWorkflowPolicy } from './autonomy-service.js';
 import { proposeWork } from './claim-service.js';
@@ -94,6 +95,35 @@ describe('explicit agent→agent delegation (INV-1497)', () => {
     expect(inbox.items.map((item) => item.body)).toContain('Write the tests');
     // Cycle: the helper cannot delegate back to the holder.
     await expect(delegateToAgent(prisma, { by: { actorId: other.id, actorKind: 'AGENT' }, workId: work.id, target: `@${holder.handle}`, body: 'back to you', budgetUnits: 5 })).rejects.toThrow(/already in this delegation chain/);
+  });
+
+  it('carries a hand-off card, shows it in the inbox, and notes a report that goes beyond it (INV-1583)', async () => {
+    const { team, lead, helper, propose } = await fixture(3);
+    const work = await propose('Improve the other thing');
+    const dispatched = await prisma.agentRequest.findFirstOrThrow({ where: { workId: work.id } });
+    const holder = dispatched.targetActorId === lead.id ? lead : helper;
+    const other = holder.id === lead.id ? helper : lead;
+
+    expect(() => parseHandoff({ allowedActions: ['pr', 'deploy'] })).toThrow(/"deploy" is not one of/);
+    expect(() => parseHandoff({ baseCommit: 'xyz' })).toThrow(/Git SHA/);
+    expect(parseHandoff({})).toBeNull();
+
+    const handoff = parseHandoff({ baseCommit: 'abc1234', inputs: ['INV-12', 'https://example.test/spec'], allowedActions: ['read', 'edit', 'PR'], acceptance: 'Tests pass.' });
+    const delegated = await delegateToAgent(prisma, { by: { actorId: holder.id, actorKind: 'AGENT' }, workId: work.id, target: `@${other.handle}`, body: 'Write the tests', budgetUnits: 30, handoff });
+    expect(readHandoff(delegated.request.handoff)).toEqual({ baseCommit: 'abc1234', inputs: ['INV-12', 'https://example.test/spec'], allowedActions: ['read', 'edit', 'pr'], acceptance: 'Tests pass.', exceededActions: [] });
+    // The hand-off comment and the inbox both carry the card.
+    expect(delegated.comment.body).toContain('allowed: read, edit, pr');
+    const inbox = await readAgentInbox(prisma, { actorId: other.id, teamId: team.id });
+    expect(readHandoff(inbox.items.find((item) => item.id === delegated.request.id)!.handoff)?.acceptance).toBe('Tests pass.');
+
+    // A PR is allowed; a pushed commit without "push" is noted on the request, once.
+    expect(await noteReportBeyondHandoff(prisma, { workId: work.id, actorId: other.id, pullRequestNumber: 7 })).toBeNull();
+    const warned = await noteReportBeyondHandoff(prisma, { workId: work.id, actorId: other.id, commitSha: 'a'.repeat(40), pullRequestNumber: 7 });
+    expect(warned).toMatch(/goes beyond .* \(push\)/);
+    await noteReportBeyondHandoff(prisma, { workId: work.id, actorId: other.id, commitSha: 'b'.repeat(40) });
+    expect(readHandoff((await prisma.agentRequest.findUniqueOrThrow({ where: { id: delegated.request.id } })).handoff)?.exceededActions).toEqual(['push']);
+    // The holder's own report is not judged by the card it wrote.
+    expect(await noteReportBeyondHandoff(prisma, { workId: work.id, actorId: holder.id, commitSha: 'c'.repeat(40) })).toBeNull();
   });
 
   it('refuses without a root, below L3, for a person, with a bad budget, and when the budget is exhausted it asks the owner', async () => {

@@ -113,6 +113,8 @@ export interface AgentInboxItem {
   handOff: HandOffOrigin | null;
   /** A needinfo (INV-1119): any comment you write on the work answers it. */
   needInfo: boolean;
+  /** The hand-off card a delegation carries (INV-1583), as stored; null when none. */
+  handoff: unknown;
 }
 
 /**
@@ -215,6 +217,7 @@ export async function readAgentInbox(
       workIdentifier: request.work.identifier,
       handOff: origins.get(request.id) ?? null,
       needInfo: request.needInfo,
+      handoff: request.handoff ?? null,
     })),
   };
 }

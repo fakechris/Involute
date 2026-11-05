@@ -70,6 +70,7 @@ import { dependencyHints } from './mention-links.js';
 import { RESEARCH_NO_ATTACHMENT_WARNING } from './research-closure.js';
 import { RUN_FOLLOWUPS_WARNING, resolveFollowups } from './run-followups.js';
 import { repositoryOfCall, resolveInboxRepository } from './inbox-project.js';
+import { noteReportBeyondHandoff, parseHandoff, readHandoff } from './agent-request-handoff-card.js';
 import { researchLacksAttachment, researchLacksDownstream } from './work-hygiene.js';
 import { linkWork } from './duplicate-linkage.js';
 import { deleteWorkLink } from './link-service.js';
@@ -944,6 +945,12 @@ async function callMcpAction(
         ...(lacksAttachment ? [RESEARCH_NO_ATTACHMENT_WARNING] : []),
         ...(reported.followupsMissing ? [RUN_FOLLOWUPS_WARNING] : []),
       ];
+      // A delegated executor's report beyond its hand-off card is noted on the request (INV-1583).
+      const actorId = context.viewer?.id;
+      const beyond = actorId
+        ? await noteReportBeyondHandoff(context.prisma, { workId: work.id, actorId, commitSha: runInput.commitSha, pullRequestNumber: runInput.pullRequestNumber }).catch(() => null)
+        : null;
+      if (beyond) warnings.push(beyond);
       const { followupsMissing: _followupsMissing, ...result } = reported;
       return warnings.length ? { ...result, warning: warnings.join(' ') } : result;
     }
@@ -1094,6 +1101,8 @@ async function callMcpAction(
           work_identifier: item.workIdentifier,
           // A needinfo (INV-1119): a comment of yours on the work answers it too.
           need_info: item.needInfo,
+          // What you may do and what done means (INV-1583); null when the asker gave no card.
+          handoff: readHandoff(item.handoff),
           ...handOffFields(item.handOff),
         })),
         // Decisions on work you proposed or delivered (INV-968): committed,
@@ -1221,12 +1230,20 @@ async function callMcpAction(
         body: requiredString(args.body, 'body'),
         budgetUnits: optionalNumber(args.budget_units) ?? 10,
         idempotencyKey: optionalString(args.idempotency_key) ?? null,
+        // The hand-off card (INV-1583).
+        handoff: parseHandoff({
+          baseCommit: optionalString(args.base_commit) ?? null,
+          inputs: Array.isArray(args.inputs) ? args.inputs.filter((entry): entry is string => typeof entry === 'string') : null,
+          allowedActions: Array.isArray(args.allowed_actions) ? args.allowed_actions.filter((entry): entry is string => typeof entry === 'string') : null,
+          acceptance: optionalString(args.acceptance) ?? null,
+        }),
       });
       return {
         id: delegated.request.id,
         root_request_id: delegated.rootRequestId,
         hop_count: delegated.hopCount,
         budget_units: delegated.budgetUnits,
+        handoff: readHandoff(delegated.request.handoff),
         deadline_at: delegated.request.deadlineAt.toISOString(),
         root_comment_id: delegated.comment.id,
         state: toWireState(delegated.request.state),
@@ -1870,6 +1887,10 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         target_id: { type: 'string', description: 'The agent to delegate to: actor id or @handle (work_catalog lists actors); must hold a credential on this team' },
         body: { type: 'string', description: 'What you are delegating and what you expect back' },
         budget_units: { type: 'number', description: 'Budget for the delegated part, 1–100000, deducted from your chain (default 10)' },
+        base_commit: { type: 'string', description: 'Hand-off card (INV-1583): the commit the delegate starts from, 7–40 hex.' },
+        inputs: { type: 'array', items: { type: 'string' }, description: 'Hand-off card: what to read first — links, attachment names, INV references.' },
+        allowed_actions: { type: 'array', items: { type: 'string', enum: ['read', 'edit', 'push', 'pr', 'merge', 'release'] }, description: 'Hand-off card: how far the delegate may go. A report that goes beyond (a pushed commit without push, a PR without pr) is noted on the request and warned.' },
+        acceptance: { type: 'string', description: 'Hand-off card: what done means for the delegated part.' },
         idempotency_key: { type: 'string' },
       },
       required: ['work_id', 'target_id', 'body'],
