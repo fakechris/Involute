@@ -43,6 +43,8 @@ export const WORK_EVENT_TYPES = [
   // An incident follow-up's deadline is at risk (20% left) / has passed (INV-1127).
   'incident.follow_up_at_risk',
   'incident.follow_up_overdue',
+  // A scheduled item's round is due; the executing agent hears it (INV-1582).
+  'work.scheduled_run',
   'work.claim_released',
   // A lease ran out without renewal and the server released it (INV-991).
   'work.claim_expired',

@@ -150,6 +150,8 @@ export const AGENT_ONLY_FIELDS: Record<string, Record<string, string>> = {
  */
 export const MCP_EXEMPTIONS: Record<string, { reason: string; gate: 'administration' | 'candidate' | 'final-acceptance' | 'personal' | 'deprecated'; decision: string }> = {
   workflowPolicySet: { gate: 'administration', reason: 'A person sets how far agents may go; an agent never widens its own autonomy (docs/autonomy-policy.md).', decision: 'INV-1486' },
+  workScheduleSet: { gate: 'administration', reason: 'A person decides what repeats on a clock and which agent runs it; the agent reports rounds through run_report(schedule_round) (INV-1582).', decision: 'INV-1582' },
+  workScheduleClear: { gate: 'administration', reason: 'A person pauses or removes a schedule; the agent only runs its rounds (INV-1582).', decision: 'INV-1582' },
   fieldDefinitionSet: { gate: 'administration', reason: 'A person (Admin or team Owner) defines which fields work carries; agents write values through attributes (docs/field-definitions.md §7).', decision: 'INV-1501' },
   fieldDefinitionDeactivate: { gate: 'administration', reason: 'A person retires a field definition; the values stay.', decision: 'INV-1501' },
   fieldDefinitionRename: { gate: 'administration', reason: 'A person renames a field key with a reason; stored values move with it (docs/field-definitions.md §7).', decision: 'INV-1501' },

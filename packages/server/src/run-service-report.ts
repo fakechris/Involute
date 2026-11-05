@@ -29,6 +29,7 @@ import {
 import { isIncidentWork } from './labels.js';
 import { recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
 import { attachDecisionReceipt } from './decision-receipt.js';
+import { assertScheduleRound } from './work-schedule.js';
 import {
   followupsJson,
   followupsRequired,
@@ -105,6 +106,10 @@ export async function reportRun(
     const followupsMissing = status === 'COMPLETED' && !input.followups;
     if (followupsMissing && followupsRequired()) throw createValidationError(RUN_FOLLOWUPS_MISSING_MESSAGE);
     const followupsData = status === 'COMPLETED' && input.followups ? { followups: followupsJson(input.followups) } : {};
+    // A scheduled round (INV-1582): checked against the item's schedule, stored on the run.
+    const scheduleRound = input.scheduleRound ?? null;
+    if (scheduleRound !== null) await assertScheduleRound(transaction, work.id, scheduleRound);
+    const scheduleData = scheduleRound !== null ? { scheduleRound } : {};
     const isTerminalStatus = Boolean(status && TERMINAL_RUN_STATUSES.includes(status));
     let run = input.runId ? await findRun(transaction, input.runId, work.id) : null;
     let activeClaim: WorkClaim | null = null;
@@ -222,6 +227,7 @@ export async function reportRun(
           status: status ?? 'RUNNING',
           summary: input.summary ?? null,
           ...followupsData,
+          ...scheduleData,
           workId: work.id,
           ...(status && TERMINAL_RUN_STATUSES.includes(status) ? { endedAt: new Date() } : {}),
         },
@@ -272,6 +278,7 @@ export async function reportRun(
           ...(input.summary !== undefined ? { summary: input.summary } : {}),
           ...(input.externalUrl !== undefined ? { externalUrl: input.externalUrl } : {}),
           ...followupsData,
+          ...scheduleData,
           // Any report is the executor doing something (INV-996).
           lastActivityAt: new Date(),
           staleNotifiedAt: null,
@@ -311,7 +318,8 @@ export async function reportRun(
       ({ auditId: transitionAuditId, work: nextWork } = await moveToInProgress(transaction, work, actor));
     } else if (run.status === 'COMPLETED') {
       if (input.followups) await linkFollowups(transaction, input.followups, work.id, actorId);
-      ({ auditId: transitionAuditId, work: nextWork } = await moveToInReview(transaction, work, actor));
+      // A scheduled round ends where it began: the item stays in its state for the next round (INV-1582).
+      if (run.scheduleRound === null) ({ auditId: transitionAuditId, work: nextWork } = await moveToInReview(transaction, work, actor));
       if (activeClaim) {
         await transaction.workClaim.deleteMany({ where: { id: activeClaim.id } });
       }

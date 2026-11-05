@@ -306,6 +306,8 @@ model User {
   // provider, so a private deployment can run on DingTalk while the public one
   // stays on Google. `googleSubject` above stays the Google link.
   identities      UserIdentity[] @relation("UserIdentities")
+  scheduledWork     WorkSchedule[]   @relation("WorkScheduleAgent")
+  schedulesCreated  WorkSchedule[]   @relation("WorkScheduleCreator")
 }
 
 /// A link between a team and one node of an outside organisation.
@@ -526,6 +528,8 @@ model Issue {
   @@index([searchVector], map: "Issue_searchVector_idx", type: Gin)
   @@unique([deliveryRootId, deliveryUnitKey, deliveryGrantRevision])
 
+  // A schedule that fires rounds of work on this item (INV-1582).
+  schedule          WorkSchedule?
 }
 
 /// Semantic search vector of a work item (INV-927): one per item and model,
@@ -999,6 +1003,8 @@ model WorkRun {
   summary     String?
   // What a completed run leaves behind (INV-1231): { workIds, identifiers } or { noneReason }.
   followups   Json?
+  // Which round of a scheduled item this run is (INV-1582); null for ordinary runs.
+  scheduleRound Int?
   externalUrl String?
   startedAt   DateTime      @default(now())
   endedAt     DateTime?
@@ -1593,4 +1599,31 @@ model FieldValueIndex {
   @@index([key, dateValue])
   @@index([key, refId])
   @@index([issueId])
+}
+
+// A work item that fires rounds on a clock (INV-1582): each round tells the
+// agent, through its inbox and push channel, and is reported as one run that
+// does not move the work's state. Involute keeps time; the agent does the work.
+model WorkSchedule {
+  id            String   @id @default(uuid()) @db.Uuid
+  workId        String   @unique @db.Uuid
+  work          Issue    @relation(fields: [workId], references: [id], onDelete: Cascade)
+  // Five cron fields, read in `timezone`.
+  cron          String
+  timezone      String
+  agentId       String   @db.Uuid
+  agent         User     @relation("WorkScheduleAgent", fields: [agentId], references: [id], onDelete: Cascade)
+  active        Boolean  @default(true)
+  nextRunAt     DateTime?
+  lastFiredAt   DateTime?
+  // Rounds fired so far; the next round is round + 1.
+  round         Int      @default(0)
+  // Rounds in a row that fired without a run reported before the next one.
+  missedRounds  Int      @default(0)
+  createdById   String?  @db.Uuid
+  createdBy     User?    @relation("WorkScheduleCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([active, nextRunAt])
 }

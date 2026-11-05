@@ -227,6 +227,9 @@ import {
 import { attachEvidence, reportRun, reviewWork } from './run-service.js';
 import { readRunFollowups, resolveFollowups, RUN_FOLLOWUPS_WARNING } from './run-followups.js';
 import { noteReportBeyondHandoff, readHandoff } from './agent-request-handoff-card.js';
+import { clearWorkSchedule, setWorkSchedule } from './work-schedule.js';
+
+const WORK_SCHEDULE_HUMAN_MESSAGE = 'Only a person sets, pauses or removes a schedule; the agent runs its rounds (INV-1582).';
 import { uncommitWork } from './work-uncommit.js';
 import { createProject, updateProject, deleteProject, type CreateProjectInput, type UpdateProjectInput } from './project-service.js';
 import { createCycle, updateCycle, deleteCycle, type CreateCycleInput, type UpdateCycleInput } from './cycle-service.js';
@@ -599,6 +602,10 @@ const typeDefs = /* GraphQL */ `
     workflowPolicySet(input: WorkflowPolicySetInput!): WorkflowPolicyPayload!
     "Remove a team or project override so it inherits again (INV-1489)."
     workflowPolicyClear(input: WorkflowPolicyClearInput!): WorkflowPolicyClearPayload!
+    "Set or replace the schedule on committed work (INV-1582); a person's action."
+    workScheduleSet(input: WorkScheduleSetInput!): WorkSchedulePayload!
+    "Remove the schedule from work (INV-1582); its rounds stay as runs."
+    workScheduleClear(workId: String!): WorkScheduleClearPayload!
     "Create or change a field definition (INV-1503): Admin for the workspace, team Owner for a team or project. A new version; values stay."
     fieldDefinitionSet(input: FieldDefinitionSetInput!): FieldDefinitionPayload!
     "Deactivate a field definition (INV-1503); values stay on items and return on reactivation."
@@ -1371,6 +1378,8 @@ const typeDefs = /* GraphQL */ `
     resolvedAt: DateTime
     "Latest automatic-acceptance evaluation of this work, if any (INV-1075)."
     autoAccept: AutoAcceptEvaluation
+    "The schedule that fires rounds on this item (INV-1582); null when none."
+    schedule: WorkSchedule
     """
     Who decides at each human gate for this item: the effective level L0–L3,
     where it came from and the per-gate deciders (INV-1488, docs/autonomy-policy.md).
@@ -1659,6 +1668,7 @@ const typeDefs = /* GraphQL */ `
     AGENT_REQUEST
     DECISION_REQUESTED
     OPS
+    SCHEDULE_MISSED
   }
 
   "A decision the viewer is waiting to make (INV-1091)."
@@ -1797,6 +1807,8 @@ const typeDefs = /* GraphQL */ `
     staleNotifiedAt: DateTime
     "What the run left behind when it completed (INV-1231); null for runs that did not say."
     followups: RunFollowups
+    "Which round of a scheduled item this run is (INV-1582); null for ordinary runs."
+    scheduleRound: Int
     "live while the executor keeps writing, stale after RUN_STALE_AFTER_MS (default 30 min) of silence, waiting while queued or blocked, settled once ended. Derived."
     presence: String!
   }
@@ -2929,6 +2941,43 @@ const typeDefs = /* GraphQL */ `
     cleared: Boolean!
   }
 
+  "Rounds of work on a clock (INV-1582)."
+  type WorkSchedule {
+    id: ID!
+    "Five cron fields, read in timezone."
+    cron: String!
+    timezone: String!
+    agent: User!
+    active: Boolean!
+    nextRunAt: DateTime
+    lastFiredAt: DateTime
+    "Rounds fired so far."
+    round: Int!
+    "Rounds in a row that fired with no run reported."
+    missedRounds: Int!
+  }
+
+  input WorkScheduleSetInput {
+    workId: String!
+    cron: String!
+    timezone: String!
+    "Agent handle (@name) or actor id."
+    agent: String!
+    active: Boolean
+  }
+
+  type WorkSchedulePayload {
+    success: Boolean!
+    message: String
+    schedule: WorkSchedule
+  }
+
+  type WorkScheduleClearPayload {
+    success: Boolean!
+    message: String
+    cleared: Boolean!
+  }
+
   type AutonomyLevelInfo {
     level: Int!
     name: String!
@@ -3350,6 +3399,8 @@ const typeDefs = /* GraphQL */ `
     idempotencyKey: String
     "With status completed (INV-1231): the work this run led to, or why there is none."
     followups: RunFollowupsInput
+    "The round of a scheduled item this run is (INV-1582); such a run never moves the work's state."
+    scheduleRound: Int
   }
 
   "What a completed run leaves behind (INV-1231): workIds or noneReason, not both."
@@ -5688,6 +5739,31 @@ const resolvers = {
         const result = await reopenContractAmendment(context.prisma, args.input, writeActorFromViewer(context.viewer, 'web'));
         return { success: true as const, ...result };
       }, { success: false as const, amendment: null, work: null }),
+    workScheduleSet: async (
+      _parent: unknown,
+      args: { input: { workId: string; cron: string; timezone: string; agent: string; active?: boolean | null } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; schedule: unknown }> =>
+      runMutationWithReason(async () => {
+        const existing = await findWorkByIdOrIdentifier(context.prisma, args.input.workId);
+        if (!existing) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+        await assertCanWriteIssue(context.prisma, context, existing.id);
+        if (context.viewer?.actorKind !== 'HUMAN') throw createValidationError(WORK_SCHEDULE_HUMAN_MESSAGE);
+        const schedule = await setWorkSchedule(context.prisma, { ...args.input, workId: existing.id }, context.viewer.id);
+        return { success: true as const, schedule };
+      }, { success: false as const, schedule: null }),
+    workScheduleClear: async (
+      _parent: unknown,
+      args: { workId: string },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; cleared: boolean }> =>
+      runMutationWithReason(async () => {
+        const existing = await findWorkByIdOrIdentifier(context.prisma, args.workId);
+        if (!existing) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+        await assertCanWriteIssue(context.prisma, context, existing.id);
+        if (context.viewer?.actorKind !== 'HUMAN') throw createValidationError(WORK_SCHEDULE_HUMAN_MESSAGE);
+        return { success: true as const, cleared: await clearWorkSchedule(context.prisma, existing.id) };
+      }, { success: false as const, cleared: false }),
     workflowPolicyClear: async (
       _parent: unknown,
       args: { input: { scope: AutonomyScope; scopeId: string; reason: string } },
@@ -6037,6 +6113,10 @@ const resolvers = {
   OpsAuditRecord: {
     byActor: (parent: { byActorId: string | null }, _args: unknown, context: GraphQLContext) =>
       parent.byActorId ? context.prisma.user.findUnique({ where: { id: parent.byActorId } }) : null,
+  },
+  WorkSchedule: {
+    agent: (parent: { agentId: string }, _args: Record<string, never>, context: GraphQLContext) =>
+      context.prisma.user.findUniqueOrThrow({ where: { id: parent.agentId } }),
   },
   WorkRunRecord: {
     actor: (parent: { actorId?: string | null }, _args: Record<string, never>, context: GraphQLContext) =>
@@ -6465,6 +6545,8 @@ const resolvers = {
       });
       return definitions.map(fieldDefinitionToGraphQL);
     },
+    schedule: (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) =>
+      context.prisma.workSchedule.findUnique({ where: { workId: parent.id } }),
     autonomy: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
       const view = await loadAutonomyFor(context.prisma, { id: parent.id, teamId: parent.teamId, kind: parent.kind, parentId: parent.parentId ?? null }, context.viewer ? { id: context.viewer.id, actorKind: context.viewer.actorKind } : null);
       return autonomyToGraphQL(view);

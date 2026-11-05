@@ -96,6 +96,8 @@ export interface WorkRunSummary {
   contractRevision?: string | null;
   /** What the run left behind when it completed (INV-1231). */
   followups?: { identifiers: string[]; noneReason: string | null } | null;
+  /** Which round of a scheduled item this run is (INV-1582). */
+  scheduleRound?: number | null;
 }
 
 export interface EvidenceVerificationSummary {
