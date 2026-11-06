@@ -342,6 +342,8 @@ GitHub Actions 可以从 [`.github/workflows/deploy.yml`](.github/workflows/depl
 - `INVOLUTE_GOOGLE_OAUTH_CLIENT_ID`、`INVOLUTE_GOOGLE_OAUTH_CLIENT_SECRET`、`INVOLUTE_GOOGLE_OAUTH_REDIRECT_URI`（`REQUIRE_GOOGLE_OAUTH=true` 时）
 - 可选：`INVOLUTE_ADMIN_EMAIL_ALLOWLIST`、`INVOLUTE_IMAGE_TAG`
 
+`GITHUB_TOKEN` 不在这份 secrets 里。`involute_github_token` 留空时，Ansible 会保留服务器上已有的 `GITHUB_TOKEN`。只有本地 vault 写了新值才会换掉这一行。
+
 推荐的仓库变量：
 
 - `INVOLUTE_DEPLOY_ON_MAIN=false` 保持默认手动部署

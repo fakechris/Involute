@@ -147,6 +147,15 @@
           true. Tailscale deployments require involute_bind_address and either
           an admin allowlist, seeded default admin, or admin fallback.
 
+    - name: Reject the vault example placeholder as a GitHub token
+      ansible.builtin.assert:
+        that:
+          - (involute_github_token | default('', true) | trim) != 'replace-with-a-github-token'
+        fail_msg: >-
+          involute_github_token is still the vault example placeholder.
+          Leave it empty to keep the GITHUB_TOKEN line already on the server.
+      no_log: true
+
     - name: Ensure deploy directory exists
       ansible.builtin.file:
         path: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
@@ -168,13 +177,18 @@
       delegate_to: localhost
       become: false
 
+    # GITHUB_TOKEN is not rendered from git or from GitHub Actions. The line is
+    # copied on the server, the template rewrites every other secret from the
+    # vault, and the copy is put back only when this deploy supplied no token.
+    # The value never leaves the host.
     - name: Stash a server-side GitHub token before the env file is rewritten
       ansible.builtin.shell: |
         set -eu
+        umask 077
         env_file="{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}"
         stash="${env_file}.github-token"
         if [ -f "$env_file" ] && grep -q '^GITHUB_TOKEN=.' "$env_file"; then
-          grep '^GITHUB_TOKEN=' "$env_file" > "$stash"
+          grep '^GITHUB_TOKEN=.' "$env_file" > "$stash"
           chmod 600 "$stash"
         fi
       changed_when: false
@@ -185,10 +199,12 @@
         src: "../templates/{{ involute_env_template }}"
         dest: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}"
         mode: "0600"
+      no_log: true
 
     - name: Restore the server-side GitHub token when this deploy did not supply one
       ansible.builtin.shell: |
         set -eu
+        umask 077
         env_file="{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}"
         stash="${env_file}.github-token"
         if [ -s "$stash" ]; then
@@ -199,14 +215,14 @@
           chmod 600 "$env_file"
         fi
         rm -f "$stash"
-      when: (involute_github_token | default('') | length) == 0
+      when: (involute_github_token | default('', true) | trim | length) == 0
       no_log: true
 
     - name: Drop a stashed GitHub token after a supplied value is rendered
       ansible.builtin.file:
         path: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}.github-token"
         state: absent
-      when: (involute_github_token | default('') | length) > 0
+      when: (involute_github_token | default('', true) | trim | length) > 0
 
     - name: Check for legacy source-build compose file
       ansible.builtin.stat:

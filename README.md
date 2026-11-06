@@ -342,6 +342,8 @@ GitHub Actions can run the same deployment path from [`.github/workflows/deploy.
 - `INVOLUTE_GOOGLE_OAUTH_CLIENT_ID`, `INVOLUTE_GOOGLE_OAUTH_CLIENT_SECRET`, `INVOLUTE_GOOGLE_OAUTH_REDIRECT_URI` when `REQUIRE_GOOGLE_OAUTH=true`
 - optional: `INVOLUTE_ADMIN_EMAIL_ALLOWLIST`, `INVOLUTE_IMAGE_TAG`
 
+`GITHUB_TOKEN` is not one of these secrets. Leave `involute_github_token` empty. Ansible then keeps the `GITHUB_TOKEN` line already on the server. A value in the local vault replaces that line.
+
 Recommended repository variables:
 
 - `INVOLUTE_DEPLOY_ON_MAIN=false` to keep deploy manual by default
