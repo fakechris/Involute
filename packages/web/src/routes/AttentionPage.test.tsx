@@ -423,6 +423,20 @@ describe('Needs you by work tree (INV-1094)', () => {
   });
 });
 
+describe('Needs you lists every kind the server sends (INV-1582, INV-1677)', () => {
+  it('shows missed scheduled rounds and broken GitHub connections in their own sections', () => {
+    nodes = [
+      node('SCHEDULE_MISSED', 's-1', work('w-patrol', 'INV-50'), ago(26 * HOUR), { actions: ['OPEN'], reason: '3 scheduled rounds of INV-50 fired with no run' }),
+      node('GITHUB_DISCONNECTED', 'g-1', null, ago(2 * HOUR), { actions: ['OPEN'], reason: 'INV lost its GitHub connection to acme' }),
+    ];
+    renderPage();
+    const sections = screen.getAllByRole('region').filter((region) => region.className.includes('attention-section'));
+    expect(sections.map((section) => section.getAttribute('aria-label'))).toEqual(['Missed scheduled rounds', 'GitHub connections']);
+    fireEvent.click(within(screen.getByRole('region', { name: 'GitHub connections' })).getAllByText(/lost its GitHub connection/)[0]!);
+    expect(within(screen.getByLabelText('Decision')).getByRole('link', { name: 'Open Settings → GitHub' })).toHaveAttribute('href', '/settings?tab=github');
+  });
+});
+
 describe('Needs you in the sidebar', () => {
   it('shows the count with its label and hides it at zero', () => {
     total = 4;

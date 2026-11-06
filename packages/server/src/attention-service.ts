@@ -26,6 +26,8 @@ export const ATTENTION_KINDS = [
   'OPS',
   // A scheduled item whose rounds keep firing with no run (INV-1582).
   'SCHEDULE_MISSED',
+  // A team's GitHub connection that stopped working: token refused, App uninstalled (INV-1677).
+  'GITHUB_DISCONNECTED',
 ] as const;
 export type AttentionKind = (typeof ATTENTION_KINDS)[number];
 
@@ -73,6 +75,7 @@ export const ATTENTION_OVERDUE_MS: Record<AttentionKind, number> = {
   DELIVERY_CHANGE: 24 * HOUR,
   OPS: 24 * HOUR,
   SCHEDULE_MISSED: 24 * HOUR,
+  GITHUB_DISCONNECTED: 24 * HOUR,
   WORK_REVIEW: 72 * HOUR,
 };
 
@@ -122,6 +125,7 @@ export const ATTENTION_LOADERS: Record<AttentionKind, (prisma: DatabaseClient, s
   DELIVERY_CHANGE: deliveryChanges,
   OPS: opsItems,
   SCHEDULE_MISSED: scheduleMisses,
+  GITHUB_DISCONNECTED: githubDisconnections,
   WORK_REVIEW: reviews,
 };
 
@@ -410,6 +414,29 @@ async function decisionRequests(prisma: DatabaseClient, scope: Scope): Promise<A
     items.push(item('DECISION_REQUESTED', run.id, entry.workId, entry.notification.createdAt, `An agent asked for a decision${summary}`, ['RESPOND']));
   }
   return items;
+}
+
+/** A team's GitHub connection that stopped working waits for that team's Owners (and Admins) (INV-1677). */
+async function githubDisconnections(prisma: DatabaseClient, scope: Scope): Promise<AttentionItem[]> {
+  const admin = scope.viewer.globalRole === 'ADMIN';
+  const owned = admin ? null : (await prisma.teamMembership.findMany({ where: { userId: scope.viewer.id, role: 'OWNER' }, select: { teamId: true } })).map((row) => row.teamId);
+  if (owned && owned.length === 0) return [];
+  const connections = await prisma.gitHubConnection.findMany({
+    where: { status: 'DISCONNECTED', ...(owned ? { teamId: { in: owned } } : {}), ...(scope.teamKey ? { team: { key: scope.teamKey } } : {}) },
+    include: { team: { select: { key: true } } },
+    orderBy: { updatedAt: 'asc' },
+    take: KIND_LIMIT,
+  });
+  return connections.map((connection) =>
+    item(
+      'GITHUB_DISCONNECTED',
+      connection.id,
+      null,
+      connection.updatedAt,
+      `${connection.team.key} lost its GitHub connection to ${connection.accountLogin}${connection.lastError ? ` (${connection.lastError})` : ''}: reconnect it in Settings → GitHub, or disconnect it.`,
+      ['OPEN'],
+    ),
+  );
 }
 
 async function opsItems(prisma: DatabaseClient, scope: Scope): Promise<AttentionItem[]> {

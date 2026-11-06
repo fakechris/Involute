@@ -48,6 +48,10 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   fieldDefinitionSet: { kind: 'web', doc: 'FIELD_DEFINITION_SET_MUTATION', components: ['routes/FieldsTab.tsx'], label: 'Save field', test: 'routes/FieldsTab.test.tsx' },
   // INV-1582: the Schedule panel on the issue page.
   workScheduleSet: { kind: 'web', doc: 'WORK_SCHEDULE_SET_MUTATION', components: ['components/WorkSchedulePanel.tsx'], label: 'Save schedule', test: 'components/WorkSchedulePanel.test.tsx' },
+  githubInstallStart: { kind: 'web', doc: 'GITHUB_INSTALL_START_MUTATION', components: ['routes/GitHubSettingsTab.tsx'], label: 'Install on GitHub', test: 'routes/GitHubSettingsTab.test.tsx' },
+  githubTokenConnect: { kind: 'web', doc: 'GITHUB_TOKEN_CONNECT_MUTATION', components: ['routes/GitHubSettingsTab.tsx'], label: 'Connect with token', test: 'routes/GitHubSettingsTab.test.tsx' },
+  githubConnectionRemove: { kind: 'web', doc: 'GITHUB_CONNECTION_REMOVE_MUTATION', components: ['routes/GitHubSettingsTab.tsx'], label: 'Disconnect', test: 'routes/GitHubSettingsTab.test.tsx' },
+  githubAppManifestStart: { kind: 'web', doc: 'GITHUB_APP_MANIFEST_START_MUTATION', components: ['routes/GitHubSettingsTab.tsx'], label: 'Create GitHub App', test: 'routes/GitHubSettingsTab.test.tsx' },
   workScheduleClear: { kind: 'web', doc: 'WORK_SCHEDULE_CLEAR_MUTATION', components: ['components/WorkSchedulePanel.tsx'], label: 'Remove schedule', test: 'components/WorkSchedulePanel.test.tsx' },
   fieldDefinitionDeactivate: { kind: 'web', doc: 'FIELD_DEFINITION_DEACTIVATE_MUTATION', components: ['routes/FieldsTab.tsx'], label: 'Deactivate', test: 'routes/FieldsTab.test.tsx' },
   fieldDefinitionRename: { kind: 'web', doc: 'FIELD_DEFINITION_RENAME_MUTATION', components: ['routes/FieldsTab.tsx'], label: 'Rename key', test: 'routes/FieldsTab.test.tsx' },
@@ -218,6 +222,7 @@ export const HUMAN_GATES: HumanGate[] = [
   { text: 'Agents cannot rewrite committed contract fields', mutation: 'issueUpdate', attention: 'CONTRACT_AMENDMENT' },
   { text: 'Work owner must be a human assignee', mutation: 'issueUpdate', attention: { none: 'Refuses an agent owner on the edit itself; nothing is left waiting (INV-1090).' } },
   { text: 'Only a person can turn automatic acceptance of verified bug fixes on or off.', mutation: 'issueUpdate', attention: { none: 'A project setting a person changes when they choose to, not a pending decision (INV-1075).' } },
+  { text: 'Only a workspace Admin creates the GitHub App for this deployment (Settings → GitHub).', mutation: 'githubAppManifestStart', attention: { none: 'Creating the App is a one-time setup step an Admin starts from Settings → GitHub, not a decision that waits (INV-1677).' } },
   { text: 'Only a person sets, pauses or removes a schedule; the agent runs its rounds (INV-1582).', mutation: 'workScheduleSet', attention: { none: 'A person changes a schedule on the issue page when they choose to; missed rounds wait in Needs you as SCHEDULE_MISSED (INV-1582).' } },
   { text: 'Only a person cancels work', mutation: 'issueUpdate', attention: { none: 'Canceling is done on the issue itself with a resolution when a person decides to; nothing is left waiting (INV-1118).' } },
   { text: 'Only a person may reconcile external effects.', mutation: 'executorUpdate', attention: { none: 'Reconciling is done from the executor panel when a receipt is disputed; not a queued decision (INV-944).' } },

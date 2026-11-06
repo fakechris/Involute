@@ -54,9 +54,15 @@ export class DefaultGitHubApiClient implements GitHubApiClient {
    * A fixed token, or a resolver that picks the credential per repository
    * (INV-1677: the owning team's connection, then GITHUB_TOKEN).
    */
-  constructor(token?: string | ((repository: string) => Promise<string | undefined>)) {
+  private onRefused: ((repository: string, status: number) => Promise<void>) | undefined;
+
+  constructor(
+    token?: string | ((repository: string) => Promise<string | undefined>),
+    options: { onRefused?: (repository: string, status: number) => Promise<void> } = {},
+  ) {
     if (typeof token === 'function') this.tokenFor = token;
     else this.token = token || process.env.GITHUB_TOKEN;
+    this.onRefused = options.onRefused;
   }
 
   async fetchPullRequestsSince(
@@ -92,6 +98,7 @@ export class DefaultGitHubApiClient implements GitHubApiClient {
 
       const response = await fetch(url.toString(), { headers });
       if (!response.ok) {
+        if (response.status === 401) await this.onRefused?.(repository, response.status).catch(() => undefined);
         const errorText = await response.text();
         throw new Error(`GitHub API error ${response.status}: ${errorText}`);
       }

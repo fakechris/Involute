@@ -51,7 +51,15 @@ export async function resolveGitHubToken(prisma: DatabaseClient, repository: str
     });
     const installation = connections.find((connection) => connection.kind === 'APP_INSTALLATION' && connection.installationId);
     if (installation && options.app) {
-      return { token: await options.app.tokenFor(installation.installationId!), source: 'app', connectionId: installation.id };
+      try {
+        return { token: await options.app.tokenFor(installation.installationId!), source: 'app', connectionId: installation.id };
+      } catch (error) {
+        // The installation is gone or the App lost access: tell the team, then read with what is left.
+        await prisma.gitHubConnection.updateMany({
+          where: { id: installation.id, status: 'ACTIVE' },
+          data: { status: 'DISCONNECTED', lastError: (error instanceof Error ? error.message : 'GitHub refused an installation token.').slice(0, 300), lastCheckedAt: new Date() },
+        });
+      }
     }
     const pasted = connections.find((connection) => connection.kind === 'TOKEN' && connection.tokenEncrypted);
     if (pasted) return { token: openSecret(pasted.tokenEncrypted!, env), source: 'team-token', connectionId: pasted.id };

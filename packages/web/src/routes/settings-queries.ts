@@ -335,3 +335,142 @@ export const FIELD_PROJECTS_QUERY = gql`
     }
   }
 `;
+
+// --- GitHub (INV-1677) -----------------------------------------------------------
+
+export interface GitHubAppInfo {
+  appId: string;
+  slug: string;
+  name: string;
+  htmlUrl: string;
+  ownerLogin: string;
+  installUrl: string;
+  createdAt: string;
+}
+
+export interface GitHubSetup {
+  secretKeyConfigured: boolean;
+  webhookUrl: string;
+  envWebhookSecret: boolean;
+  envToken: boolean;
+  app: GitHubAppInfo | null;
+  lastDeliveryAt: string | null;
+  viewerCanCreateApp: boolean;
+  teams: GitHubTeamSetup[];
+}
+
+export interface GitHubConnectionInfo {
+  id: string;
+  kind: 'APP_INSTALLATION' | 'TOKEN';
+  accountLogin: string;
+  accountType: string | null;
+  repositorySelection: string | null;
+  status: 'ACTIVE' | 'DISCONNECTED';
+  lastError: string | null;
+  lastCheckedAt: string | null;
+  createdAt: string;
+}
+
+export interface GitHubRepositoryHealth {
+  repository: string;
+  project: { id: string; identifier: string };
+  syncedThrough: string | null;
+  lastSyncAt: string | null;
+  deadLetters: number;
+  credential: 'app' | 'team-token' | 'env' | 'none';
+}
+
+export interface GitHubTeamSetup {
+  team: { id: string; key: string; name: string };
+  viewerCanManage: boolean;
+  connections: GitHubConnectionInfo[];
+  repositories: GitHubRepositoryHealth[];
+}
+
+export interface GitHubRepositoryInfo {
+  fullName: string;
+  private: boolean;
+  project: { id: string; identifier: string } | null;
+}
+
+export const GITHUB_SETUP_QUERY = gql`
+  query GitHubSetup {
+    githubSetup {
+      secretKeyConfigured
+      webhookUrl
+      envWebhookSecret
+      envToken
+      app { appId slug name htmlUrl ownerLogin installUrl createdAt }
+      lastDeliveryAt
+      viewerCanCreateApp
+      teams {
+        team { id key name }
+        viewerCanManage
+        connections { id kind accountLogin accountType repositorySelection status lastError lastCheckedAt createdAt }
+        repositories { repository project { id identifier } syncedThrough lastSyncAt deadLetters credential }
+      }
+    }
+  }
+`;
+
+export const GITHUB_APP_MANIFEST_START_MUTATION = gql`
+  mutation GitHubAppManifestStart($input: GitHubAppManifestStartInput!) {
+    githubAppManifestStart(input: $input) {
+      success
+      message
+      postUrl
+      manifest
+    }
+  }
+`;
+
+export const GITHUB_INSTALL_START_MUTATION = gql`
+  mutation GitHubInstallStart($teamId: String!) {
+    githubInstallStart(teamId: $teamId) {
+      success
+      message
+      url
+    }
+  }
+`;
+
+export const GITHUB_TOKEN_CONNECT_MUTATION = gql`
+  mutation GitHubTokenConnect($input: GitHubTokenConnectInput!) {
+    githubTokenConnect(input: $input) {
+      success
+      message
+      connection { id }
+    }
+  }
+`;
+
+export const GITHUB_CONNECTION_REMOVE_MUTATION = gql`
+  mutation GitHubConnectionRemove($id: String!) {
+    githubConnectionRemove(id: $id) {
+      success
+      message
+      removed
+    }
+  }
+`;
+
+export const GITHUB_CONNECTION_REPOSITORIES_QUERY = gql`
+  query GitHubConnectionRepositories($connectionId: String!) {
+    githubConnectionRepositories(connectionId: $connectionId) {
+      fullName
+      private
+      project { id identifier }
+    }
+  }
+`;
+
+/** A PROJECT for a repository the team can read, so its PRs route to the team (INV-1677). */
+export const GITHUB_PROJECT_CREATE_MUTATION = gql`
+  mutation GitHubProjectCreate($input: IssueCreateInput!) {
+    issueCreate(input: $input) {
+      success
+      message
+      issue { id identifier }
+    }
+  }
+`;

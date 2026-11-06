@@ -60,6 +60,11 @@ describe('GitHub credentials per team (INV-1677)', () => {
     const install = await prisma.gitHubConnection.create({ data: { teamId: team.id, kind: 'APP_INSTALLATION', accountLogin: 'acme', installationId: '42' } });
     const app = { tokenFor: async (id: string) => `installation-${id}` };
     expect(await resolveGitHubToken(prisma, 'acme/app', { env, app })).toEqual({ token: 'installation-42', source: 'app', connectionId: install.id });
+    // An installation GitHub no longer mints for is marked for its Owners, and the read falls back.
+    const failing = { tokenFor: async () => { throw new Error('GitHub refused an installation token for installation 42: HTTP 404'); } };
+    expect((await resolveGitHubToken(prisma, 'acme/app', { env: { ...env, GITHUB_TOKEN: 'env-token' }, app: failing }))?.source).toBe('env');
+    expect(await prisma.gitHubConnection.findUniqueOrThrow({ where: { id: install.id } })).toMatchObject({ status: 'DISCONNECTED', lastError: expect.stringContaining('HTTP 404') });
+    await prisma.gitHubConnection.update({ where: { id: install.id }, data: { status: 'ACTIVE', lastError: null } });
     // Before the instance App exists nothing can mint for the installation; GITHUB_TOKEN still applies.
     expect((await resolveGitHubToken(prisma, 'acme/app', { env: { ...env, GITHUB_TOKEN: 'env-token' }, app: null }))?.source).toBe('env');
   });

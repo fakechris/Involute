@@ -1,3 +1,6 @@
+import { markConnectionBroken } from './github-connections.js';
+import { githubWebhookSecret, instanceAppTokenSource, loadInstanceApp, onGitHubConfigured as onGitHubAppConfigured } from './github-app.js';
+import { handleGitHubAppRoute } from './github-app-routes.js';
 import { resolveGitHubToken } from './github-credentials.js';
 import { createLocalEmbedder, readEmbeddingSettings } from './embeddings/embedder.js';
 import { SemanticIndex, startSemanticIndexer } from './embeddings/semantic-index.js';
@@ -190,6 +193,8 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     ? new TokenBucketRateLimiter(rateLimitOptions)
     : null;
 
+  // Set once the GitHub workers can start (below); the App callback calls it (INV-1677).
+  let onGitHubConfigured: () => void = () => undefined;
   const httpServer = createServer(async (request, response) => {
     if (request.method === 'GET' && getPathname(request.url) === '/health') {
       response.statusCode = 200;
@@ -259,9 +264,18 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
 
     // GitHub webhook endpoint — must be before docs/MCP routes to avoid
     // body consumption conflicts. Only active when a secret is configured.
-    const ghWebhookSecret = options.githubWebhookSecret ?? process.env.GITHUB_WEBHOOK_SECRET;
-    if (ghWebhookSecret && pathname.startsWith('/api/webhooks/github')) {
-      handleGitHubWebhook({ prisma, webhookSecret: ghWebhookSecret }, request, response)
+    // The secret is GITHUB_WEBHOOK_SECRET or the instance App's (INV-1677), read per delivery.
+    if (pathname.startsWith('/api/webhooks/github')) {
+      void (async () => {
+        const ghWebhookSecret = options.githubWebhookSecret ?? (await githubWebhookSecret(prisma));
+        if (!ghWebhookSecret) {
+          response.statusCode = 404;
+          response.setHeader('content-type', 'application/json');
+          response.end(JSON.stringify({ error: 'GitHub is not connected on this server (Settings → GitHub).' }));
+          return;
+        }
+        await handleGitHubWebhook({ prisma, webhookSecret: ghWebhookSecret }, request, response);
+      })()
         .catch((error: unknown) => {
           console.error('[github-webhook] Unhandled error in webhook handler:', error);
           if (!response.headersSent) {
@@ -296,6 +310,36 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       semanticIndex,
       viewerAssertionSecret: options.viewerAssertionSecret ?? environment.viewerAssertionSecret,
     };
+
+    if (request.method === 'GET' && pathname.startsWith('/auth/github-app/')) {
+      handleGitHubAppRoute(
+        {
+          prisma,
+          appOrigin: options.appOrigin ?? environment.appOrigin,
+          allowAdminFallback: mcpAuth.allowAdminFallback ?? false,
+          authToken: mcpAuth.authToken,
+          viewerAssertionSecret: mcpAuth.viewerAssertionSecret ?? null,
+          onAppCreated: () => onGitHubConfigured(),
+          onConnected: () => onGitHubConfigured(),
+        },
+        request,
+        response,
+      )
+        .then((handled) => {
+          if (!handled && !response.headersSent) {
+            response.statusCode = 404;
+            response.end();
+          }
+        })
+        .catch((error: unknown) => {
+          console.error('[github-app] Callback failed:', error);
+          if (!response.headersSent) {
+            response.statusCode = 500;
+            response.end('Internal server error');
+          }
+        });
+      return;
+    }
 
     if (request.method === 'GET' && pathname.startsWith('/uploads/')) {
       const filename = pathname.slice('/uploads/'.length);
@@ -515,13 +559,26 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
 
   // Phase 3: Persistent Watermark Cursor Reconciliation Sync Engine
   let stopGitHubSync: (() => void) | undefined;
-  const githubSyncEnabled =
-    options.githubSyncEnabled ??
-    (Boolean(process.env.GITHUB_TOKEN) || process.env.GITHUB_SYNC_ENABLED === 'true');
-
-  if (githubSyncEnabled) {
-    // Each repository is read with its team's credential, then GITHUB_TOKEN (INV-1677).
-    const client = new DefaultGitHubApiClient((repository) => resolveGitHubToken(prisma, repository).then((resolved) => resolved?.token));
+  const envGitHubSync = options.githubSyncEnabled ?? (Boolean(process.env.GITHUB_TOKEN) || process.env.GITHUB_SYNC_ENABLED === 'true');
+  const startSync = () => {
+    if (stopGitHubSync) return;
+    // Each repository is read with its team's credential — App installation,
+    // pasted token — then GITHUB_TOKEN (INV-1677).
+    const usedConnection = new Map<string, string | null>();
+    const client = new DefaultGitHubApiClient(
+      async (repository) => {
+        const resolved = await resolveGitHubToken(prisma, repository, { app: await instanceAppTokenSource(prisma) });
+        usedConnection.set(repository, resolved?.connectionId ?? null);
+        return resolved?.token;
+      },
+      {
+        // A team credential GitHub no longer accepts goes to that team's Needs you (INV-1677).
+        onRefused: async (repository) => {
+          const connectionId = usedConnection.get(repository);
+          if (connectionId) await markConnectionBroken(prisma, connectionId, 'GitHub refused the credential (HTTP 401).');
+        },
+      },
+    );
     stopGitHubSync = startGitHubSyncScheduler(prisma, {
       intervalMs: options.githubSyncIntervalMs,
       githubClient: client,
@@ -539,17 +596,32 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       .catch((error: unknown) => {
         console.error('[github-sync] Cold-start reconciliation failed:', error);
       });
-  }
+  };
 
-  const inboundEnabled = options.githubInboundEnabled ?? Boolean(options.githubWebhookSecret ?? process.env.GITHUB_WEBHOOK_SECRET?.trim());
   const configuredRetentionDays = Number(process.env.GITHUB_INBOUND_RETENTION_DAYS ?? 30);
   const retentionDays = Number.isInteger(configuredRetentionDays) && configuredRetentionDays > 0 ? configuredRetentionDays : 30;
-  if (inboundEnabled && retentionDays !== configuredRetentionDays) {
-    console.error('[github-inbound] Invalid retention setting; using 30 days.');
-  }
-  const stopGitHubInbound = inboundEnabled
-    ? startGitHubInboundWorker(prisma, processStoredGitHubEvent, retentionDays)
-    : null;
+  let stopGitHubInbound: (() => Promise<void>) | null = null;
+  const startInbound = () => {
+    if (stopGitHubInbound) return;
+    if (retentionDays !== configuredRetentionDays) console.error('[github-inbound] Invalid retention setting; using 30 days.');
+    stopGitHubInbound = startGitHubInboundWorker(prisma, processStoredGitHubEvent, retentionDays);
+  };
+
+  const envInbound = options.githubInboundEnabled ?? Boolean(options.githubWebhookSecret ?? process.env.GITHUB_WEBHOOK_SECRET?.trim());
+  if (envGitHubSync) startSync();
+  if (envInbound) startInbound();
+  // A GitHub App created in Settings → GitHub turns both on, now and after restarts (INV-1677).
+  // Tests that pass the options explicitly keep their choice.
+  onGitHubConfigured = () => {
+    if (options.githubSyncEnabled === undefined) startSync();
+    if (options.githubInboundEnabled === undefined) startInbound();
+  };
+  const unsubscribeGitHub = onGitHubAppConfigured(() => onGitHubConfigured());
+  void Promise.all([loadInstanceApp(prisma), prisma.gitHubConnection.count({ where: { status: 'ACTIVE' } })])
+    .then(([app, connections]) => {
+      if (app || connections > 0) onGitHubConfigured();
+    })
+    .catch(() => undefined);
 
   const stopEvidenceVerifier = process.env.EVIDENCE_VERIFIER_ENABLED === 'true' ? startEvidenceVerifier(prisma) : null;
 
@@ -568,6 +640,7 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
       if (options.semanticIndex === undefined) {
         await semanticIndex?.embedder.dispose?.();
       }
+      unsubscribeGitHub();
       if (stopGitHubSync) {
         stopGitHubSync();
       }

@@ -187,6 +187,7 @@ flowchart LR
 
 ### 8.4 水位线对账引擎与死信隔离 (Watermark Cursor Sync & Dead-Letter Quarantine)
 为了防范 Webhook 偶发丢失或网络分区，服务端部署了持久化水位线对账引擎（`github-sync.ts`）：
+- **凭据按 team（INV-1677）**：每个仓库用其 PROJECT 所属 team 的 GitHub 连接读取（实例 GitHub App 的 installation，或 team 粘贴的只读 token），最后才回退服务器的 `GITHUB_TOKEN`；连接由人在 Settings → GitHub 向导里建立，凭据用 `INVOLUTE_SECRET_KEY` 加密存库，agent 从不持有或传递 GitHub 凭据。见 docs/github-connection.md。
 - **低水位线保护（LWM Safety）**：游标推进绝不越过任何未隔离的失败更新（`earliestUnquarantinedFailureTimestamp`），从数学上根除中间项失败引发的“孤儿漏洞”（Orphan Hole）。
 - **倒序分页回溯（Direction=desc）**：始终从最新更新开始逐页抓取，遇到早于水位线的数据立即截断终止，保障每次轮询以最小开销捕获最新变更。单周期上限为 10 页（1,000 个 PR）。
 - **毒消息死信隔离（SyncDeadLetter Quarantine）**：连续重试失败达到阈值（3 次）的 PR 自动沉降至 `SyncDeadLetter`，释放低水位线游标以避免阻断全仓对账，并触发 `github_sync.dead_letter` 运维告警。
