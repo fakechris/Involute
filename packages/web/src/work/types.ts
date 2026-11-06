@@ -544,6 +544,8 @@ export interface WorkHygieneQueryData {
     researchClosable: Array<HygieneRef & { repository: string | null }>;
     researchWithoutAttachmentCount: number;
     researchWithoutAttachment: Array<HygieneRef & { repository: string | null }>;
+    reviewWithoutDeliveryLinksCount: number;
+    reviewWithoutDeliveryLinks: Array<HygieneRef & { repository: string | null }>;
     incidentsWithoutDownstreamCount: number;
     incidentsWithoutDownstream: Array<HygieneRef & { severity: string | null }>;
     incidentsWithoutPostmortemCount: number;

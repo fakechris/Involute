@@ -86,7 +86,7 @@ describe('run followups (INV-1231)', () => {
 
     const result = await complete(item.identifier, token, { followups: { work_ids: [followup.identifier.toLowerCase(), followup.id] } });
     expect(result.error).toBeUndefined();
-    expect(result.warning).toBeUndefined();
+    expect(result.warning ?? "").not.toContain(RUN_FOLLOWUPS_WARNING);
     expect(result.run.followups).toEqual({ workIds: [followup.id], identifiers: [followup.identifier] });
     expect(await prisma.workLink.count({ where: { fromId: followup.id, toId: item.id, type: 'DISCOVERED_DURING' } })).toBe(1);
 

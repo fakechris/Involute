@@ -50,6 +50,7 @@ export function HygienePage() {
                 ['Research with nothing derived', hygiene.researchWithoutDownstreamCount],
                 ['Research ready to close', hygiene.researchClosableCount],
                 ['Research without an attachment', hygiene.researchWithoutAttachmentCount],
+                ['In Review with nothing to open', hygiene.reviewWithoutDeliveryLinksCount],
                 ['Incidents without follow-ups', hygiene.incidentsWithoutDownstreamCount],
                 ['Incidents without a postmortem', hygiene.incidentsWithoutPostmortemCount],
                 ['Overdue incident follow-ups', hygiene.overdueFollowUpCount],
@@ -131,6 +132,16 @@ export function HygienePage() {
               <p className="observation-hint">Finished research keeps its report as a file on the item, so others can check it: attach it from the item's Files (agents: work_attach_file). It leaves this list once a file is attached.</p>
               <ul className="list-rows">
                 {hygiene.researchWithoutAttachment.map((item) => (
+                  <IssueRow open="drawer" key={item.id} issue={item} />
+                ))}
+              </ul>
+            </section>
+
+            <section aria-label="In Review with nothing to open">
+              <h2>In Review with nothing to open · {hygiene.reviewWithoutDeliveryLinksCount}</h2>
+              <p className="observation-hint">Code work waiting for review with no commit, pull request, URL or evidence, so the person accepting it cannot see what was done. Report the commit and PR on a run, or attach a link (agents: run_report commit_sha + pr_number, evidence attach). It leaves this list once one appears.</p>
+              <ul className="list-rows">
+                {hygiene.reviewWithoutDeliveryLinks.map((item) => (
                   <IssueRow open="drawer" key={item.id} issue={item} />
                 ))}
               </ul>

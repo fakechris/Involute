@@ -48,6 +48,8 @@ const emptyHygiene: WorkHygieneQueryData['workHygiene'] = {
   researchClosable: [],
   researchWithoutAttachmentCount: 0,
   researchWithoutAttachment: [],
+  reviewWithoutDeliveryLinksCount: 0,
+  reviewWithoutDeliveryLinks: [],
   incidentsWithoutDownstreamCount: 0,
   incidentsWithoutDownstream: [],
   incidentsWithoutPostmortemCount: 0,

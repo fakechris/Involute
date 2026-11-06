@@ -1,3 +1,4 @@
+import { deliveryLinksMissingWarning } from './delivery-links.js';
 import { executorContext, executorUpdate, type ExecutorInput } from './executor-service.js';
 import { loadHandledForYou } from './autonomy-gate.js';
 import type { AgentTrustLevel } from '@prisma/client';
@@ -1728,6 +1729,9 @@ const typeDefs = /* GraphQL */ `
     "Research in Review or Done with no file attached: its report was never uploaded (INV-1128)."
     researchWithoutAttachmentCount: Int!
     researchWithoutAttachment: [Issue!]!
+    "Code work in Review with no commit, PR, URL or evidence: nothing for the reviewer to open (INV-1673)."
+    reviewWithoutDeliveryLinksCount: Int!
+    reviewWithoutDeliveryLinks: [Issue!]!
     "Incidents in Review or Done nothing derives from and not stating 无可执行点 (INV-1126)."
     incidentsWithoutDownstreamCount: Int!
     incidentsWithoutDownstream: [Issue!]!
@@ -4898,7 +4902,8 @@ const resolvers = {
         const beyond = context.viewer
           ? await noteReportBeyondHandoff(context.prisma, { workId: existing.id, actorId: context.viewer.id, commitSha: input.commitSha, pullRequestNumber: input.pullRequestNumber }).catch(() => null)
           : null;
-        const warnings = [...(result.followupsMissing ? [RUN_FOLLOWUPS_WARNING] : []), ...(beyond ? [beyond] : [])];
+        const noLinks = input.status === 'completed' ? await deliveryLinksMissingWarning(context.prisma, existing.id).catch(() => null) : null;
+        const warnings = [...(result.followupsMissing ? [RUN_FOLLOWUPS_WARNING] : []), ...(beyond ? [beyond] : []), ...(noLinks ? [noLinks] : [])];
         return {
           issue: await getIssueById(context.prisma, result.work.id),
           run: result.run,

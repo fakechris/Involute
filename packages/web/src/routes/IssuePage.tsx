@@ -3,6 +3,7 @@ import { WorkSchedulePanel } from '../components/WorkSchedulePanel';
 import { isBugIssue, resolutionLabel, supersededPrefill, useCloseReason, type WorkResolution } from '../components/CloseReasonDialog';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { DeliverySection } from '../components/DeliveryPanel';
+import { WorkLinks } from '../components/WorkLinks';
 import { ISSUE_UNDO_APPLIED_EVENT, type IssueUndoAppliedDetail } from '../undo/FieldUndoHost';
 import { fieldChange } from '../undo/field-gesture';
 import { recordCommentGesture, recordDeleteGesture, recordFieldGesture } from '../undo/status-undo';
@@ -882,6 +883,9 @@ export function IssuePage() {
             ) : null}
 
             {/* Delivery authorization and changes awaiting approval (INV-1023): the same section as the work page. */}
+            {/* What was delivered, where a person can open it (INV-1673). */}
+            <WorkLinks key={`links-${activeIssue.id}`} workId={activeIssue.id} />
+
             <DeliverySection key={`delivery-${activeIssue.id}`} workId={activeIssue.id} compact />
 
             {/* Typed links: blockers, related, duplicates (INV-679). Same section as the board drawer. */}
