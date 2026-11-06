@@ -1,4 +1,3 @@
-import { applyInstallationEvent, installationMayRoute } from './github-connections.js';
 import { ACCEPTANCE_POLICY } from './evidence-contract.js';
 import { tryAutoAccept } from './auto-accept-gate.js';
 // packages/server/src/github-webhook-handler.ts
@@ -22,6 +21,7 @@ import { applyMonotonicForward, applyProvenanceRollback } from './github-webhook
 import { emitOpsAlert, type DeferredOpsAlert, type OpsAlert } from './ops-alerts.js';
 import { acceptGitHubDelivery, InboundRequestError, safeErrorCode } from './github-inbound.js';
 import { enqueueWorkEvent } from './event-outbox.js';
+import { applyInstallationEvent, installationMayRoute } from './github-connections.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 interface GitHubProcessingOptions { deferredAlerts?: DeferredOpsAlert[]; }

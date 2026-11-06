@@ -1,7 +1,3 @@
-import { markConnectionBroken } from './github-connections.js';
-import { githubWebhookSecret, instanceAppTokenSource, loadInstanceApp, onGitHubConfigured as onGitHubAppConfigured } from './github-app.js';
-import { handleGitHubAppRoute } from './github-app-routes.js';
-import { resolveGitHubToken } from './github-credentials.js';
 import { createLocalEmbedder, readEmbeddingSettings } from './embeddings/embedder.js';
 import { SemanticIndex, startSemanticIndexer } from './embeddings/semantic-index.js';
 import { startEvidenceVerifier } from './evidence-verification.js';
@@ -58,6 +54,10 @@ import {
   reconcileAllConfiguredRepos,
   startGitHubSyncScheduler,
 } from './github-sync.js';
+import { markConnectionBroken } from './github-connections.js';
+import { githubWebhookSecret, instanceAppTokenSource, loadInstanceApp, onGitHubConfigured as onGitHubAppConfigured } from './github-app.js';
+import { handleGitHubAppRoute } from './github-app-routes.js';
+import { resolveGitHubToken } from './github-credentials.js';
 
 loadServerEnvironment();
 

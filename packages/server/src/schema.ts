@@ -1,6 +1,3 @@
-import { APP_ADMIN_ONLY_MESSAGE, githubConfigured, githubWebhookUrl, instanceAppTokenSource, loadInstanceApp, startAppManifest } from './github-app.js';
-import { connectToken, listConnectionRepositories, startInstall } from './github-connections.js';
-import { hasSecretKey } from './secret-box.js';
 import { deliveryLinksMissingWarning } from './delivery-links.js';
 import { executorContext, executorUpdate, type ExecutorInput } from './executor-service.js';
 import { loadHandledForYou } from './autonomy-gate.js';
@@ -232,6 +229,9 @@ import { attachEvidence, reportRun, reviewWork } from './run-service.js';
 import { readRunFollowups, resolveFollowups, RUN_FOLLOWUPS_WARNING } from './run-followups.js';
 import { noteReportBeyondHandoff, readHandoff } from './agent-request-handoff-card.js';
 import { clearWorkSchedule, setWorkSchedule } from './work-schedule.js';
+import { APP_ADMIN_ONLY_MESSAGE, githubConfigured, githubWebhookUrl, instanceAppTokenSource, loadInstanceApp, startAppManifest } from './github-app.js';
+import { connectToken, listConnectionRepositories, startInstall } from './github-connections.js';
+import { hasSecretKey } from './secret-box.js';
 
 const WORK_SCHEDULE_HUMAN_MESSAGE = 'Only a person sets, pauses or removes a schedule; the agent runs its rounds (INV-1582).';
 import { uncommitWork } from './work-uncommit.js';
