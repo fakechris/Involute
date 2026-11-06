@@ -64,6 +64,7 @@ services:
       INVOLUTE_UPLOADS_DIR: /var/lib/involute/uploads
       INVOLUTE_WEBHOOK_URL: ${INVOLUTE_WEBHOOK_URL:-}
       INVOLUTE_WEBHOOK_SECRET: ${INVOLUTE_WEBHOOK_SECRET:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       VIEWER_ASSERTION_SECRET: ${VIEWER_ASSERTION_SECRET:?Set VIEWER_ASSERTION_SECRET in .env.production}
     healthcheck:
       test:

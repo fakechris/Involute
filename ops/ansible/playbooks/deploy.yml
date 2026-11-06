@@ -74,6 +74,8 @@
       - "dist"
       - ".env"
       - ".env.production"
+      - ".env.production.github-token"
+      - ".env.github-token"
       - ".backups"
       - "ops/ansible/inventory/hosts.yml"
       - ".tmp"
@@ -166,11 +168,45 @@
       delegate_to: localhost
       become: false
 
+    - name: Stash a server-side GitHub token before the env file is rewritten
+      ansible.builtin.shell: |
+        set -eu
+        env_file="{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}"
+        stash="${env_file}.github-token"
+        if [ -f "$env_file" ] && grep -q '^GITHUB_TOKEN=.' "$env_file"; then
+          grep '^GITHUB_TOKEN=' "$env_file" > "$stash"
+          chmod 600 "$stash"
+        fi
+      changed_when: false
+      no_log: true
+
     - name: Render stack environment file
       ansible.builtin.template:
         src: "../templates/{{ involute_env_template }}"
         dest: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}"
         mode: "0600"
+
+    - name: Restore the server-side GitHub token when this deploy did not supply one
+      ansible.builtin.shell: |
+        set -eu
+        env_file="{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}"
+        stash="${env_file}.github-token"
+        if [ -s "$stash" ]; then
+          tmp="${env_file}.tmp"
+          grep -v '^GITHUB_TOKEN=' "$env_file" > "$tmp" || true
+          cat "$stash" >> "$tmp"
+          mv "$tmp" "$env_file"
+          chmod 600 "$env_file"
+        fi
+        rm -f "$stash"
+      when: (involute_github_token | default('') | length) == 0
+      no_log: true
+
+    - name: Drop a stashed GitHub token after a supplied value is rendered
+      ansible.builtin.file:
+        path: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}.github-token"
+        state: absent
+      when: (involute_github_token | default('') | length) > 0
 
     - name: Check for legacy source-build compose file
       ansible.builtin.stat:

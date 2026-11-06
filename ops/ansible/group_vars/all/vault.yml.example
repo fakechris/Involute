@@ -18,3 +18,6 @@ involute_google_oauth_redirect_uri: https://involute.example.com/auth/google/cal
 # Optional; configure both values together.
 involute_webhook_url: https://automation.example.com/involute
 involute_webhook_secret: replace-with-a-webhook-signing-secret
+
+# Optional. Read access to pull requests is enough. Empty leaves reconciliation off.
+involute_github_token: replace-with-a-github-token
