@@ -344,6 +344,8 @@ GitHub Actions 可以从 [`.github/workflows/deploy.yml`](.github/workflows/depl
 
 `GITHUB_TOKEN` 不在这份 secrets 里。`involute_github_token` 留空时，Ansible 会保留服务器上已有的 `GITHUB_TOKEN`。只有本地 vault 写了新值才会换掉这一行。
 
+生产环境的 Ansible 不自己拉起容器。它先写出一份待生效的环境文件，再运行 [`scripts/deploy-prod.sh`](scripts/deploy-prod.sh)。备份、健康检查和失败回滚与在主机上直接部署是同一段脚本。
+
 推荐的仓库变量：
 
 - `INVOLUTE_DEPLOY_ON_MAIN=false` 保持默认手动部署

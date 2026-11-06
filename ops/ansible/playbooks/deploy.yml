@@ -68,12 +68,15 @@
         if (involute_stack_profile | default(involute_default_stack_profile)) == 'production'
         else false
       }}
+    involute_production_deploy: "{{ (involute_stack_profile | default(involute_default_stack_profile)) == 'production' }}"
     involute_rsync_excludes:
       - ".git"
       - "node_modules"
       - "dist"
       - ".env"
       - ".env.production"
+      - ".env.pending"
+      - ".env.production.pending"
       - ".env.production.github-token"
       - ".env.github-token"
       - ".backups"
@@ -178,9 +181,9 @@
       become: false
 
     # GITHUB_TOKEN is not rendered from git or from GitHub Actions. The line is
-    # copied on the server, the template rewrites every other secret from the
-    # vault, and the copy is put back only when this deploy supplied no token.
-    # The value never leaves the host.
+    # copied on the server into the staged env file. The live file stays as it
+    # is until scripts/deploy-prod.sh has backed it up. The value never leaves
+    # the host.
     - name: Stash a server-side GitHub token before the env file is rewritten
       ansible.builtin.shell: |
         set -eu
@@ -194,10 +197,10 @@
       changed_when: false
       no_log: true
 
-    - name: Render stack environment file
+    - name: Render staged stack environment file
       ansible.builtin.template:
         src: "../templates/{{ involute_env_template }}"
-        dest: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}"
+        dest: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}.pending"
         mode: "0600"
       no_log: true
 
@@ -205,8 +208,8 @@
       ansible.builtin.shell: |
         set -eu
         umask 077
-        env_file="{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}"
-        stash="${env_file}.github-token"
+        env_file="{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}.pending"
+        stash="{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}.github-token"
         if [ -s "$stash" ]; then
           tmp="${env_file}.tmp"
           grep -v '^GITHUB_TOKEN=' "$env_file" > "$tmp" || true
@@ -223,6 +226,99 @@
         path: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}.github-token"
         state: absent
       when: (involute_github_token | default('', true) | trim | length) > 0
+
+    - name: Deploy production with scripts/deploy-prod.sh
+      when: involute_production_deploy | bool
+      ansible.builtin.command:
+        argv:
+          - bash
+          - scripts/deploy-prod.sh
+          - "{{ involute_image_tag }}"
+      args:
+        chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+      environment:
+        INVOLUTE_DIR: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+        ENV_SOURCE: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}.pending"
+
+    - name: Check the production stack the shared script started
+      when: involute_production_deploy | bool
+      block:
+        - name: Wait for production web health check
+          ansible.builtin.shell: >
+            for attempt in $(seq 1 60); do
+              curl --connect-timeout 2 --max-time 5 -sfI {{ involute_web_health_url | quote }} >/dev/null && exit 0;
+              sleep 2;
+            done;
+            exit 1
+          args:
+            chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+
+        - name: Verify auth session reports Google OAuth configured
+          ansible.builtin.uri:
+            url: "{{ involute_smoke_base_url }}/auth/session"
+            method: GET
+            return_content: true
+            status_code:
+              - 200
+              - 401
+          register: involute_auth_session_smoke
+          failed_when: not (involute_auth_session_smoke.json.googleOAuthConfigured | default(false) | bool)
+          when: involute_expect_google_oauth | bool
+
+        - name: Verify Google OAuth start redirects to Google
+          ansible.builtin.uri:
+            url: "{{ involute_smoke_base_url }}/auth/google/start"
+            method: GET
+            follow_redirects: none
+            status_code: 302
+          register: involute_google_start_smoke
+          failed_when: "'accounts.google.com' not in (involute_google_start_smoke.location | default(''))"
+          when: involute_expect_google_oauth | bool
+
+        - name: Run authenticated production smoke including MCP
+          ansible.builtin.command:
+            argv:
+              - sh
+              - scripts/prod-smoke.sh
+              - "{{ involute_smoke_base_url }}"
+          args:
+            chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+          environment:
+            INVOLUTE_SMOKE_AUTH_TOKEN: "{{ involute_auth_token }}"
+          no_log: true
+      rescue:
+        - name: Restore the previous production env file and image tag
+          ansible.builtin.command:
+            argv:
+              - bash
+              - scripts/deploy-prod.sh
+          args:
+            chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+          environment:
+            INVOLUTE_DIR: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+            RESTORE_LAST: "1"
+
+        - name: Production checks failed after the stack was up
+          ansible.builtin.fail:
+            msg: >-
+              Production checks failed. scripts/deploy-prod.sh put back the
+              previous .env.production and started the previous image tag.
+              The database dump was kept and was not restored.
+
+    - name: Remove the staged production env file
+      when: involute_production_deploy | bool
+      ansible.builtin.file:
+        path: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}.pending"
+        state: absent
+
+    - name: Install the rendered env file for tailscale
+      when: not (involute_production_deploy | bool)
+      ansible.builtin.copy:
+        src: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}.pending"
+        dest: "{{ involute_deploy_path | default(involute_default_deploy_path) }}/{{ involute_env_target }}"
+        mode: "0600"
+        remote_src: true
+      no_log: true
 
     - name: Check for legacy source-build compose file
       ansible.builtin.stat:
@@ -262,6 +358,7 @@
         chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
       register: involute_backup
       changed_when: "'Wrote backup' in involute_backup.stdout"
+      when: not (involute_production_deploy | bool)
 
     - name: Pull immutable application images before stopping services
       ansible.builtin.shell: >
@@ -276,6 +373,7 @@
       retries: 20
       delay: 15
       until: involute_image_pull.rc == 0
+      when: not (involute_production_deploy | bool)
 
     - name: Stop legacy source-build stack if present
       ansible.builtin.shell: >
@@ -285,7 +383,7 @@
         down --remove-orphans
       args:
         chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
-      when: involute_legacy_compose.stat.exists
+      when: not (involute_production_deploy | bool) and involute_legacy_compose.stat.exists
 
     - name: Stop legacy production source-build stack if present
       ansible.builtin.shell: >
@@ -295,7 +393,7 @@
         down --remove-orphans
       args:
         chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
-      when: involute_legacy_prod_compose.stat.exists
+      when: not (involute_production_deploy | bool) and involute_legacy_prod_compose.stat.exists
 
     - name: Stop existing standardized stack
       ansible.builtin.shell: >
@@ -306,6 +404,7 @@
         down --remove-orphans
       args:
         chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+      when: not (involute_production_deploy | bool)
 
     - name: Wait for previous ports to be released
       ansible.builtin.shell: >
@@ -322,6 +421,7 @@
         done
       args:
         chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+      when: not (involute_production_deploy | bool)
 
     - name: Start stack
       ansible.builtin.shell: >
@@ -333,6 +433,7 @@
         {{ involute_compose_services | join(' ') }}
       args:
         chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+      when: not (involute_production_deploy | bool)
 
     - name: Wait for API health check
       ansible.builtin.shell: >
@@ -343,6 +444,7 @@
         exit 1
       args:
         chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
+      when: not (involute_production_deploy | bool)
 
     - name: Wait for web health check
       ansible.builtin.shell: >
@@ -353,28 +455,7 @@
         exit 1
       args:
         chdir: "{{ involute_deploy_path | default(involute_default_deploy_path) }}"
-
-    - name: Verify auth session reports Google OAuth configured
-      ansible.builtin.uri:
-        url: "{{ involute_smoke_base_url }}/auth/session"
-        method: GET
-        return_content: true
-        status_code:
-          - 200
-          - 401
-      register: involute_auth_session_smoke
-      failed_when: not (involute_auth_session_smoke.json.googleOAuthConfigured | default(false) | bool)
-      when: involute_expect_google_oauth | bool
-
-    - name: Verify Google OAuth start redirects to Google
-      ansible.builtin.uri:
-        url: "{{ involute_smoke_base_url }}/auth/google/start"
-        method: GET
-        follow_redirects: none
-        status_code: 302
-      register: involute_google_start_smoke
-      failed_when: "'accounts.google.com' not in (involute_google_start_smoke.location | default(''))"
-      when: involute_expect_google_oauth | bool
+      when: not (involute_production_deploy | bool)
 
     - name: Run authenticated production smoke including MCP
       ansible.builtin.command:
@@ -387,6 +468,7 @@
       environment:
         INVOLUTE_SMOKE_AUTH_TOKEN: "{{ involute_auth_token }}"
       no_log: true
+      when: not (involute_production_deploy | bool)
 
     - name: Show compose status
       ansible.builtin.shell: >

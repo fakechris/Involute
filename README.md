@@ -344,6 +344,8 @@ GitHub Actions can run the same deployment path from [`.github/workflows/deploy.
 
 `GITHUB_TOKEN` is not one of these secrets. Leave `involute_github_token` empty. Ansible then keeps the `GITHUB_TOKEN` line already on the server. A value in the local vault replaces that line.
 
+Production Ansible does not start the stack itself. It renders a staged env file and runs [`scripts/deploy-prod.sh`](scripts/deploy-prod.sh), the same backup, health check and rollback as a host deploy.
+
 Recommended repository variables:
 
 - `INVOLUTE_DEPLOY_ON_MAIN=false` to keep deploy manual by default

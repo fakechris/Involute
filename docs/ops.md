@@ -67,18 +67,20 @@ The script refuses to pull when `/` has less than `MIN_FREE_GB` (8) free, backs 
 `.env.production` and the database into `.backups/`, switches `INVOLUTE_IMAGE_TAG`,
 pulls, restarts, waits for `/ready` to answer `200` JSON, and then removes every
 application image except the new and the previous tag. A failed pull, restart or
-health check puts `INVOLUTE_IMAGE_TAG` back and restarts the previous images.
-Rollback is the same command with the previous tag (printed at the end). Env knobs:
-`INVOLUTE_DIR`, `MIN_FREE_GB`, `HEALTH_URL`, `HEALTH_TIMEOUT`, `KEEP_DB_BACKUPS`.
+health check puts the backed-up `.env.production` back and restarts the previous
+images. The database dump is kept and is not restored automatically. Rollback of
+a finished deploy is the same command with the previous tag (printed at the end).
+Env knobs: `INVOLUTE_DIR`, `ENV_SOURCE`, `MIN_FREE_GB`, `HEALTH_URL`,
+`HEALTH_TIMEOUT`, `KEEP_DB_BACKUPS`.
 
-The Ansible path is the alternative:
+Ansible production uses that same script:
 
 ```bash
 # from a workstation with vault access
 pnpm deploy:prod
 ```
 
-Set `involute_image_tag: sha-<12>` in the encrypted inventory. The GitHub Actions workflow derives that tag from the selected commit unless an explicit SHA tag is supplied for rollback. The playbook takes a timestamped Postgres backup before stopping either a legacy or standardized stack, preserves `.backups` during repository synchronization, and then pulls the target images.
+Set `involute_image_tag: sha-<12>` in the encrypted inventory. The GitHub Actions workflow derives that tag from the selected commit unless an explicit SHA tag is supplied for rollback. The playbook syncs the repo, renders a staged env file, and then runs `scripts/deploy-prod.sh`. The script backs up the live env file and database before installing the staged file. A failed pull, restart or `/ready` check restores that env file and the previous images. If a later smoke check fails, the playbook calls `RESTORE_LAST=1 scripts/deploy-prod.sh`, which does the same restore. `.backups/` is excluded from the sync.
 
 Or GitHub Actions `Deploy` with `profile=production`. Keep `INVOLUTE_DEPLOY_ON_MAIN=false` unless auto-deploy on main is an explicit choice.
 

@@ -10,14 +10,18 @@
 #      (2026-10-07: 94 old images filled the disk and the pull died after
 #      .env.production already pointed at the new tag);
 #   2. backs up .env.production and takes a pg_dump into .backups/;
-#   3. points INVOLUTE_IMAGE_TAG at the new tag, pulls and restarts;
+#   3. installs ENV_SOURCE over .env.production when Ansible staged one,
+#      points INVOLUTE_IMAGE_TAG at the new tag, pulls and restarts;
 #   4. waits for /ready to answer 200 with JSON;
 #   5. prunes application images other than the new and the previous tag.
-# On a pull, restart or health failure, .env.production is restored to the
-# previous tag and the previous images are started again.
+# On a pull, restart or health failure, the backed-up .env.production is put
+# back (tag and every other line) and the previous images are started again.
+# The database dump is not restored automatically.
 #
-# Env: INVOLUTE_DIR (/opt/involute), MIN_FREE_GB (8), HEALTH_URL
-# (http://127.0.0.1:4200/ready), HEALTH_TIMEOUT seconds (120), KEEP_DB_BACKUPS (10).
+# Env: INVOLUTE_DIR (/opt/involute), ENV_SOURCE (optional staged env file),
+# MIN_FREE_GB (8), HEALTH_URL (http://127.0.0.1:4200/ready), HEALTH_TIMEOUT
+# seconds (120), KEEP_DB_BACKUPS (10).
+# Ansible's production deploy is this script. It does not start the stack itself.
 set -euo pipefail
 
 TAG="${1:-}"
@@ -27,9 +31,34 @@ HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:4200/ready}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-120}"
 KEEP_DB_BACKUPS="${KEEP_DB_BACKUPS:-10}"
 ENV_FILE="$INVOLUTE_DIR/.env.production"
+ENV_SOURCE="${ENV_SOURCE:-}"
 COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$INVOLUTE_DIR/docker-compose.prod.images.yml")
 
 fail() { echo "deploy-prod: $*" >&2; exit 1; }
+
+if [[ -n "$ENV_SOURCE" ]]; then
+  [[ -f "$ENV_SOURCE" ]] || fail "ENV_SOURCE does not exist: ${ENV_SOURCE}"
+  [[ "$(readlink -f "$ENV_SOURCE")" != "$(readlink -f "$ENV_FILE")" ]] || fail "ENV_SOURCE must be a staged file, not the live env file"
+fi
+
+# Used when a later check fails after this script has already returned success.
+# Restores the env file from the last run and starts the previous image tag.
+if [[ "${RESTORE_LAST:-}" == "1" ]]; then
+  [[ -f "$ENV_FILE" ]] || fail "$ENV_FILE not found"
+  command -v docker >/dev/null || fail "docker is not installed"
+  cd "$INVOLUTE_DIR"
+  ENV_BACKUP="$(cat .backups/last-env-backup)"
+  PREVIOUS="$(cat .backups/previous-tag)"
+  [[ -f "$ENV_BACKUP" ]] || fail "env backup ${ENV_BACKUP} is missing"
+  [[ "$PREVIOUS" =~ ^sha-[0-9a-f]{12,40}$ ]] || fail "previous tag is not a sha tag"
+  cp "$ENV_BACKUP" "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
+  sed -i "s/^INVOLUTE_IMAGE_TAG=.*/INVOLUTE_IMAGE_TAG=${PREVIOUS}/" "$ENV_FILE"
+  grep -q "^INVOLUTE_IMAGE_TAG=${PREVIOUS}$" "$ENV_FILE" || fail "could not restore the previous image tag"
+  "${COMPOSE[@]}" up -d
+  echo "deploy-prod: restored ${ENV_BACKUP} and started ${PREVIOUS}"
+  exit 0
+fi
 
 [[ "$TAG" =~ ^sha-[0-9a-f]{12,40}$ ]] || fail "usage: deploy-prod.sh sha-<12-40 lowercase hex> (got '${TAG}'); production pins immutable sha tags only"
 [[ -f "$ENV_FILE" ]] || fail "$ENV_FILE not found"
@@ -52,9 +81,13 @@ if (( FREE_GB < MIN_FREE_GB )); then
 fi
 echo "deploy-prod: ${FREE_GB} GB free, previous tag ${PREVIOUS}, new tag ${TAG}"
 
-# 2. Backups.
+# 2. Backups. Taken before the live env file changes.
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-cp "$ENV_FILE" ".backups/.env.production.${STAMP}"
+ENV_BACKUP=".backups/.env.production.${STAMP}"
+cp "$ENV_FILE" "$ENV_BACKUP"
+chmod 600 "$ENV_BACKUP"
+printf '%s\n' "$ENV_BACKUP" > .backups/last-env-backup
+chmod 600 .backups/last-env-backup
 DB_CONTAINER="$("${COMPOSE[@]}" ps -q db)"
 [[ -n "$DB_CONTAINER" ]] || fail "db container is not running; refusing to deploy without a backup"
 docker exec "$DB_CONTAINER" pg_dump -U involute -d involute -Fc > "/tmp/involute-${STAMP}.dump"
@@ -64,15 +97,26 @@ echo "deploy-prod: backup .backups/involute-${STAMP}.dump ($(stat -c %s ".backup
 ls -1t .backups/involute-*.dump 2>/dev/null | tail -n +"$((KEEP_DB_BACKUPS + 1))" | xargs -r rm -f
 
 restore_previous() {
-  echo "deploy-prod: FAILED at '$1'; restoring INVOLUTE_IMAGE_TAG=${PREVIOUS}" >&2
-  sed -i "s/^INVOLUTE_IMAGE_TAG=.*/INVOLUTE_IMAGE_TAG=${PREVIOUS}/" "$ENV_FILE"
+  echo "deploy-prod: FAILED at '$1'; restoring ${ENV_BACKUP} and starting ${PREVIOUS}" >&2
+  cp "$ENV_BACKUP" "$ENV_FILE"
+  chmod 600 "$ENV_FILE"
   rm -f .backups/previous-tag
-  "${COMPOSE[@]}" up -d >/dev/null 2>&1 || echo "deploy-prod: restart on the previous tag failed too; inspect '${COMPOSE[*]} ps'" >&2
+  "${COMPOSE[@]}" up -d >/dev/null 2>&1 || echo "deploy-prod: restart on the previous env failed too; inspect '${COMPOSE[*]} ps'" >&2
   exit 1
 }
 
-# 3. Switch tag, pull, restart.
-sed -i "s/^INVOLUTE_IMAGE_TAG=.*/INVOLUTE_IMAGE_TAG=${TAG}/" "$ENV_FILE"
+apply_requested_env() {
+  if [[ -n "$ENV_SOURCE" ]]; then
+    cp "$ENV_SOURCE" "${ENV_FILE}.tmp"
+    chmod 600 "${ENV_FILE}.tmp"
+    mv "${ENV_FILE}.tmp" "$ENV_FILE"
+  fi
+  sed -i "s/^INVOLUTE_IMAGE_TAG=.*/INVOLUTE_IMAGE_TAG=${TAG}/" "$ENV_FILE"
+  grep -q "^INVOLUTE_IMAGE_TAG=${TAG}$" "$ENV_FILE"
+}
+
+# 3. Switch env, pull, restart.
+apply_requested_env || restore_previous "apply env"
 echo "$PREVIOUS" > .backups/previous-tag
 "${COMPOSE[@]}" pull -q || restore_previous "pull"
 "${COMPOSE[@]}" up -d || restore_previous "up"
