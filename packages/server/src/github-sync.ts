@@ -48,9 +48,15 @@ export interface GitHubApiClient {
  */
 export class DefaultGitHubApiClient implements GitHubApiClient {
   private token: string | undefined;
+  private tokenFor: ((repository: string) => Promise<string | undefined>) | undefined;
 
-  constructor(token?: string) {
-    this.token = token || process.env.GITHUB_TOKEN;
+  /**
+   * A fixed token, or a resolver that picks the credential per repository
+   * (INV-1677: the owning team's connection, then GITHUB_TOKEN).
+   */
+  constructor(token?: string | ((repository: string) => Promise<string | undefined>)) {
+    if (typeof token === 'function') this.tokenFor = token;
+    else this.token = token || process.env.GITHUB_TOKEN;
   }
 
   async fetchPullRequestsSince(
@@ -79,8 +85,9 @@ export class DefaultGitHubApiClient implements GitHubApiClient {
         'User-Agent': 'Involute-Sync-Engine',
       };
 
-      if (this.token) {
-        headers.Authorization = `Bearer ${this.token}`;
+      const token = this.tokenFor ? await this.tokenFor(repository) : this.token;
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
       }
 
       const response = await fetch(url.toString(), { headers });

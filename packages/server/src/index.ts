@@ -1,3 +1,4 @@
+import { resolveGitHubToken } from './github-credentials.js';
 import { createLocalEmbedder, readEmbeddingSettings } from './embeddings/embedder.js';
 import { SemanticIndex, startSemanticIndexer } from './embeddings/semantic-index.js';
 import { startEvidenceVerifier } from './evidence-verification.js';
@@ -519,7 +520,8 @@ export async function startServer(options: StartServerOptions = {}): Promise<Sta
     (Boolean(process.env.GITHUB_TOKEN) || process.env.GITHUB_SYNC_ENABLED === 'true');
 
   if (githubSyncEnabled) {
-    const client = new DefaultGitHubApiClient();
+    // Each repository is read with its team's credential, then GITHUB_TOKEN (INV-1677).
+    const client = new DefaultGitHubApiClient((repository) => resolveGitHubToken(prisma, repository).then((resolved) => resolved?.token));
     stopGitHubSync = startGitHubSyncScheduler(prisma, {
       intervalMs: options.githubSyncIntervalMs,
       githubClient: client,
