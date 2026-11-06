@@ -7607,3 +7607,22 @@ kbd {
   margin: 0;
   color: var(--danger);
 }
+
+/* Commits & links on the issue page and drawer (INV-1673). */
+.work-links__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.work-links__group {
+  margin-top: 8px;
+}
+
+.work-links__source {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-dim);
+}

@@ -1,5 +1,6 @@
 import type { Issue, Prisma, PrismaClient } from '@prisma/client';
 
+import { reviewWithoutDeliveryLinks } from './delivery-links.js';
 import { loadFollowUpDeadlines } from './follow-up-deadline.js';
 import { dependencyWordedReferences, extractTeamReferences } from './mention-links.js';
 import { incidentNeedsPostmortem } from './incident-closure.js';
@@ -31,6 +32,9 @@ export interface WorkHygiene {
   /** Research in Review or Done with no file attached: the report was never uploaded (INV-1128). */
   researchWithoutAttachment: Issue[];
   researchWithoutAttachmentCount: number;
+  /** Code work in Review with no commit, PR, URL or evidence (INV-1673). */
+  reviewWithoutDeliveryLinks: Issue[];
+  reviewWithoutDeliveryLinksCount: number;
   /** Incidents in Review or Done nothing derives from and that do not say "无可执行点" (INV-1126). */
   incidentsWithoutDownstream: Issue[];
   incidentsWithoutDownstreamCount: number;
@@ -154,6 +158,9 @@ export async function loadWorkHygiene(
   const researchAttached = await attachedIds(prisma, finishedResearch);
   const researchWithoutAttachment = finishedResearch.filter((issue) => !researchAttached.has(issue.id));
 
+  // Review work a person cannot open anything on (INV-1673).
+  const reviewWithoutLinks = await reviewWithoutDeliveryLinks(prisma, issues);
+
   // Incidents being closed or closed (INV-1126): the follow-ups and, for
   // SEV1/SEV2, the postmortem attachment the closing rule asks for.
   const closingIncidents = issues.filter((issue) => isIncident(issue) && (issue.state.type === 'REVIEW' || issue.state.type === 'COMPLETED'));
@@ -191,6 +198,8 @@ export async function loadWorkHygiene(
     researchClosableCount: researchClosable.length,
     researchWithoutAttachment: researchWithoutAttachment.slice(0, LIST_LIMIT),
     researchWithoutAttachmentCount: researchWithoutAttachment.length,
+    reviewWithoutDeliveryLinks: reviewWithoutLinks.slice(0, LIST_LIMIT),
+    reviewWithoutDeliveryLinksCount: reviewWithoutLinks.length,
     overdueFollowUps: overdueFollowUps.slice(0, LIST_LIMIT),
     overdueFollowUpCount: overdueFollowUps.length,
   };

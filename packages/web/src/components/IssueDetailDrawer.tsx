@@ -9,6 +9,7 @@ import { IssueFieldsPanel } from './IssueFieldsPanel';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ActorBadge } from './ActorBadge';
 import { DeliverySection } from './DeliveryPanel';
+import { WorkLinks } from './WorkLinks';
 import { IssueRelations } from './IssueRelations';
 import { IssueNeighbourhood } from './graph/IssueNeighbourhood';
 import { AddSubIssueButton } from './AddSubIssueButton';
@@ -511,6 +512,9 @@ export function IssueDetailDrawer({
               />
             ) : null}
             {/* Delivery authorization and changes awaiting approval (INV-1023), same as the issue and work pages. */}
+            {/* What was delivered, where a person can open it (INV-1673). */}
+            <WorkLinks key={`links-${activeIssue.id}`} workId={activeIssue.id} />
+
             <DeliverySection key={`delivery-${activeIssue.id}`} workId={activeIssue.id} compact />
             <div className="issue-panel__section" style={{ display: 'flex', gap: 6 }}>
               {onContractSave ? null : (

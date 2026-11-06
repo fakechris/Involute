@@ -774,6 +774,13 @@ export const WORK_HYGIENE_QUERY = gql`
         title
         repository
       }
+      reviewWithoutDeliveryLinksCount
+      reviewWithoutDeliveryLinks {
+        id
+        identifier
+        title
+        repository
+      }
       overdueFollowUpCount
       overdueFollowUps {
         id

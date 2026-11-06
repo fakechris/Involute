@@ -1,3 +1,4 @@
+import { deliveryLinksMissingWarning } from './delivery-links.js';
 import { requestNeedInfo, withdrawNeedInfo } from './need-info-service.js';
 import { delegateToAgent } from './autonomy-delegation.js';
 import { autonomyToGraphQL, loadAutonomyFor } from './autonomy-service.js';
@@ -952,6 +953,8 @@ async function callMcpAction(
         ? await noteReportBeyondHandoff(context.prisma, { workId: work.id, actorId, commitSha: runInput.commitSha, pullRequestNumber: runInput.pullRequestNumber }).catch(() => null)
         : null;
       if (beyond) warnings.push(beyond);
+      const noLinks = completed ? await deliveryLinksMissingWarning(context.prisma, work.id).catch(() => null) : null;
+      if (noLinks) warnings.push(noLinks);
       const { followupsMissing: _followupsMissing, ...result } = reported;
       return warnings.length ? { ...result, warning: warnings.join(' ') } : result;
     }
