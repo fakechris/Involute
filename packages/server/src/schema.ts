@@ -229,6 +229,9 @@ import { attachEvidence, reportRun, reviewWork } from './run-service.js';
 import { readRunFollowups, resolveFollowups, RUN_FOLLOWUPS_WARNING } from './run-followups.js';
 import { noteReportBeyondHandoff, readHandoff } from './agent-request-handoff-card.js';
 import { clearWorkSchedule, setWorkSchedule } from './work-schedule.js';
+import { APP_ADMIN_ONLY_MESSAGE, githubConfigured, githubWebhookUrl, instanceAppTokenSource, loadInstanceApp, startAppManifest } from './github-app.js';
+import { connectToken, listConnectionRepositories, startInstall } from './github-connections.js';
+import { hasSecretKey } from './secret-box.js';
 
 const WORK_SCHEDULE_HUMAN_MESSAGE = 'Only a person sets, pauses or removes a schedule; the agent runs its rounds (INV-1582).';
 import { uncommitWork } from './work-uncommit.js';
@@ -498,6 +501,10 @@ const typeDefs = /* GraphQL */ `
     issueLabels(filter: IssueLabelFilter): IssueLabelConnection!
     "Optional server features this deployment runs (on/off only; never URLs or secrets). Admins only."
     serverFeatures: [ServerFeature!]!
+    "How this deployment connects to GitHub (INV-1677): the instance App and what the server has."
+    githubSetup: GitHubSetup!
+    "The repositories a team connection can read, live from GitHub (INV-1677)."
+    githubConnectionRepositories(connectionId: String!): [GitHubRepository!]!
     users: UserConnection!
     projects(teamId: String!): ProjectConnection! @deprecated(reason: "Use issues query with kind: PROJECT and CONTAINS links instead.")
     project(id: String!): Project @deprecated(reason: "Use issue query with kind: PROJECT instead.")
@@ -607,6 +614,13 @@ const typeDefs = /* GraphQL */ `
     workScheduleSet(input: WorkScheduleSetInput!): WorkSchedulePayload!
     "Remove the schedule from work (INV-1582); its rounds stay as runs."
     workScheduleClear(workId: String!): WorkScheduleClearPayload!
+    "A workspace Admin starts creating the deployment's GitHub App; the browser posts the manifest to postUrl (INV-1677)."
+    githubAppManifestStart(input: GitHubAppManifestStartInput!): GitHubAppManifestPayload!
+    "A team Owner starts installing the deployment App for their team; the browser goes to url (INV-1677)."
+    githubInstallStart(teamId: String!): GitHubInstallStartPayload!
+    "A team Owner connects an owner with a read-only token instead of the App (INV-1677)."
+    githubTokenConnect(input: GitHubTokenConnectInput!): GitHubConnectionPayload!
+    githubConnectionRemove(id: String!): GitHubConnectionRemovePayload!
     "Create or change a field definition (INV-1503): Admin for the workspace, team Owner for a team or project. A new version; values stay."
     fieldDefinitionSet(input: FieldDefinitionSetInput!): FieldDefinitionPayload!
     "Deactivate a field definition (INV-1503); values stay on items and return on reactivation."
@@ -1670,6 +1684,7 @@ const typeDefs = /* GraphQL */ `
     DECISION_REQUESTED
     OPS
     SCHEDULE_MISSED
+    GITHUB_DISCONNECTED
   }
 
   "A decision the viewer is waiting to make (INV-1091)."
@@ -2982,6 +2997,112 @@ const typeDefs = /* GraphQL */ `
     cleared: Boolean!
   }
 
+  "The deployment's GitHub App (INV-1677)."
+  type GitHubAppInfo {
+    appId: String!
+    slug: String!
+    name: String!
+    htmlUrl: String!
+    ownerLogin: String!
+    "Where a team Owner installs it on their account or organisation."
+    installUrl: String!
+    createdAt: DateTime!
+  }
+
+  type GitHubSetup {
+    "INVOLUTE_SECRET_KEY is set, so GitHub secrets can be stored."
+    secretKeyConfigured: Boolean!
+    "Where GitHub delivers events."
+    webhookUrl: String!
+    "An operator set GITHUB_WEBHOOK_SECRET / GITHUB_TOKEN in the environment (older setup; still honoured)."
+    envWebhookSecret: Boolean!
+    envToken: Boolean!
+    app: GitHubAppInfo
+    "The last delivery GitHub made to this server."
+    lastDeliveryAt: DateTime
+    viewerCanCreateApp: Boolean!
+    "The teams the viewer belongs to (every team for an Admin) and their GitHub connections."
+    teams: [GitHubTeamSetup!]!
+  }
+
+  type GitHubTeamSetup {
+    team: Team!
+    viewerCanManage: Boolean!
+    connections: [GitHubConnectionInfo!]!
+    "Each repository the team's PROJECTs name: how far the sync has read it and what it gave up on."
+    repositories: [GitHubRepositoryHealth!]!
+  }
+
+  type GitHubRepositoryHealth {
+    repository: String!
+    project: Issue!
+    "The sync engine has read pull requests updated up to this time; null before its first pass."
+    syncedThrough: DateTime
+    lastSyncAt: DateTime
+    deadLetters: Int!
+    "Which credential reads it: app, team-token, env, or none."
+    credential: String!
+  }
+
+  "A team's link to one GitHub account or organisation (INV-1677). Secrets are never returned."
+  type GitHubConnectionInfo {
+    id: ID!
+    "APP_INSTALLATION or TOKEN"
+    kind: String!
+    accountLogin: String!
+    accountType: String
+    repositorySelection: String
+    "ACTIVE or DISCONNECTED"
+    status: String!
+    lastError: String
+    lastCheckedAt: DateTime
+    createdAt: DateTime!
+  }
+
+  type GitHubRepository {
+    fullName: String!
+    private: Boolean!
+    "The PROJECT that routes this repository, when there is one."
+    project: Issue
+  }
+
+  type GitHubInstallStartPayload {
+    success: Boolean!
+    message: String
+    url: String
+  }
+
+  input GitHubTokenConnectInput {
+    teamId: String!
+    accountLogin: String!
+    token: String!
+  }
+
+  type GitHubConnectionPayload {
+    success: Boolean!
+    message: String
+    connection: GitHubConnectionInfo
+  }
+
+  type GitHubConnectionRemovePayload {
+    success: Boolean!
+    message: String
+    removed: Boolean!
+  }
+
+  input GitHubAppManifestStartInput {
+    "An organisation login to own the App; empty means the Admin's own account."
+    owner: String
+    name: String
+  }
+
+  type GitHubAppManifestPayload {
+    success: Boolean!
+    message: String
+    postUrl: String
+    manifest: String
+  }
+
   type AutonomyLevelInfo {
     level: Int!
     name: String!
@@ -3552,6 +3673,34 @@ const resolvers = {
     bugsFixedBetween: async (_parent: unknown, args: { repository: string; fromSha: string; toSha: string }, context: GraphQLContext) => {
       requireAuthentication(context);
       return bugsFixedBetween(context.prisma, args, buildReadableIssueWhere(context));
+    },
+    githubSetup: async (_parent: unknown, _args: unknown, context: GraphQLContext) => {
+      if (!context.viewer) throw createValidationError('Sign in to see how this deployment connects to GitHub.');
+      const environment = getServerEnvironment();
+      const app = await loadInstanceApp(context.prisma);
+      const last = await context.prisma.inboundGitHubDelivery.findFirst({ orderBy: { receivedAt: 'desc' }, select: { receivedAt: true } });
+      return {
+        secretKeyConfigured: hasSecretKey(),
+        webhookUrl: githubWebhookUrl(environment.appOrigin),
+        envWebhookSecret: Boolean(process.env.GITHUB_WEBHOOK_SECRET?.trim()),
+        envToken: Boolean(process.env.GITHUB_TOKEN?.trim()),
+        app: app
+          ? { appId: app.appId, slug: app.slug, name: app.name, htmlUrl: app.htmlUrl, ownerLogin: app.ownerLogin, installUrl: `https://github.com/apps/${app.slug}/installations/new`, createdAt: app.createdAt }
+          : null,
+        lastDeliveryAt: last?.receivedAt ?? null,
+        viewerCanCreateApp: !app && context.viewer.globalRole === 'ADMIN' && context.viewer.actorKind === 'HUMAN',
+        teams: await githubTeamsFor(context),
+      };
+    },
+    githubConnectionRepositories: async (_parent: unknown, args: { connectionId: string }, context: GraphQLContext) => {
+      const connection = await context.prisma.gitHubConnection.findUnique({ where: { id: args.connectionId } });
+      if (!connection || !(await viewerInTeam(context, connection.teamId))) throw createNotFoundError('That GitHub connection does not exist or is not on a team you belong to.');
+      const repositories = await listConnectionRepositories(connection, { app: await instanceAppTokenSource(context.prisma) });
+      const projects = await context.prisma.issue.findMany({
+        where: { kind: 'PROJECT', teamId: connection.teamId, commitmentStatus: { not: 'REJECTED' }, repository: { in: repositories.map((repo) => repo.fullName), mode: 'insensitive' } },
+      });
+      const byRepository = new Map(projects.map((project) => [project.repository!.toLowerCase(), project]));
+      return repositories.map((repo) => ({ ...repo, project: byRepository.get(repo.fullName.toLowerCase()) ?? null }));
     },
     serverFeatures: (_parent: unknown, _args: unknown, context: GraphQLContext): ServerFeature[] => {
       assertSettingsAdmin(context);
@@ -5769,6 +5918,36 @@ const resolvers = {
         if (context.viewer?.actorKind !== 'HUMAN') throw createValidationError(WORK_SCHEDULE_HUMAN_MESSAGE);
         return { success: true as const, cleared: await clearWorkSchedule(context.prisma, existing.id) };
       }, { success: false as const, cleared: false }),
+    githubAppManifestStart: async (
+      _parent: unknown,
+      args: { input: { owner?: string | null; name?: string | null } },
+      context: GraphQLContext,
+    ): Promise<{ message?: string | null; success: boolean; postUrl: string | null; manifest: string | null }> =>
+      runMutationWithReason(async () => {
+        if (!context.viewer) throw createValidationError(APP_ADMIN_ONLY_MESSAGE);
+        const started = await startAppManifest(context.prisma, context.viewer, { ...args.input, appOrigin: getServerEnvironment().appOrigin });
+        return { success: true as const, postUrl: started.postUrl, manifest: started.manifest };
+      }, { success: false as const, postUrl: null, manifest: null }),
+    githubInstallStart: async (_parent: unknown, args: { teamId: string }, context: GraphQLContext) =>
+      runMutationWithReason(async () => {
+        await assertCanManageTeam(context.prisma, context, args.teamId);
+        return { success: true as const, url: await startInstall(context.prisma, { teamId: args.teamId, userId: context.viewer!.id }) };
+      }, { success: false as const, url: null }),
+    githubTokenConnect: async (_parent: unknown, args: { input: { teamId: string; accountLogin: string; token: string } }, context: GraphQLContext) =>
+      runMutationWithReason(async () => {
+        await assertCanManageTeam(context.prisma, context, args.input.teamId);
+        const connection = await connectToken(context.prisma, { ...args.input, userId: context.viewer!.id });
+        githubConfigured();
+        return { success: true as const, connection };
+      }, { success: false as const, connection: null }),
+    githubConnectionRemove: async (_parent: unknown, args: { id: string }, context: GraphQLContext) =>
+      runMutationWithReason(async () => {
+        const connection = await context.prisma.gitHubConnection.findUnique({ where: { id: args.id } });
+        if (!connection) return { success: true as const, removed: false };
+        await assertCanManageTeam(context.prisma, context, connection.teamId);
+        await context.prisma.gitHubConnection.delete({ where: { id: connection.id } });
+        return { success: true as const, removed: true };
+      }, { success: false as const, removed: false }),
     workflowPolicyClear: async (
       _parent: unknown,
       args: { input: { scope: AutonomyScope; scopeId: string; reason: string } },
@@ -7457,4 +7636,50 @@ function buildUpdatedCursorWhere(after: string | null | undefined): Prisma.Issue
   if (typeof parsed.updatedAt !== 'string' || typeof parsed.id !== 'string') throw createValidationError('Invalid cursor.');
   const updatedAt = parseDateTime(parsed.updatedAt);
   return { OR: [{ updatedAt: { lt: updatedAt } }, { updatedAt, id: { lt: parsed.id } }] };
+}
+
+/** The teams a viewer sees in Settings → GitHub: their own, or every active team for an Admin (INV-1677). */
+async function githubTeamsFor(context: GraphQLContext) {
+  const viewer = context.viewer!;
+  const admin = viewer.globalRole === 'ADMIN';
+  const memberships = await context.prisma.teamMembership.findMany({ where: { userId: viewer.id }, select: { teamId: true, role: true } });
+  const roles = new Map(memberships.map((membership) => [membership.teamId, membership.role]));
+  const teams = await context.prisma.team.findMany({
+    where: { archivedAt: null, ...(admin ? {} : { id: { in: [...roles.keys()] } }) },
+    orderBy: { key: 'asc' },
+    include: { githubConnections: { orderBy: { createdAt: 'asc' } } },
+  });
+  const projects = await context.prisma.issue.findMany({
+    where: { kind: 'PROJECT', teamId: { in: teams.map((team) => team.id) }, repository: { not: null }, commitmentStatus: { not: 'REJECTED' } },
+    orderBy: { repository: 'asc' },
+  });
+  const repositories = [...new Set(projects.map((project) => project.repository!))];
+  const [watermarks, deadLetters] = await Promise.all([
+    context.prisma.syncWatermark.findMany({ where: { key: { in: repositories.map((repository) => `github_sync_${repository}`) } } }),
+    context.prisma.syncDeadLetter.groupBy({ by: ['repository'], where: { repository: { in: repositories } }, _count: { _all: true } }),
+  ]);
+  const watermarkOf = new Map(watermarks.map((row) => [row.key, row]));
+  const deadOf = new Map(deadLetters.map((row) => [row.repository, row._count._all]));
+  const health = async (project: (typeof projects)[number]) => {
+    const watermark = watermarkOf.get(`github_sync_${project.repository}`);
+    // Which credential reads it, without minting a token.
+    const owner = project.repository!.split('/')[0]!;
+    const connection = await context.prisma.gitHubConnection.findFirst({ where: { teamId: project.teamId, status: 'ACTIVE', accountLogin: { equals: owner, mode: 'insensitive' } } });
+    const credential = connection ? (connection.kind === 'APP_INSTALLATION' ? 'app' : 'team-token') : process.env.GITHUB_TOKEN?.trim() ? 'env' : 'none';
+    return { repository: project.repository!, project, syncedThrough: watermark?.watermark ?? null, lastSyncAt: watermark?.updatedAt ?? null, deadLetters: deadOf.get(project.repository!) ?? 0, credential };
+  };
+  return Promise.all(
+    teams.map(async ({ githubConnections, ...team }) => ({
+      team,
+      viewerCanManage: viewer.actorKind === 'HUMAN' && (admin || roles.get(team.id) === 'OWNER'),
+      connections: githubConnections,
+      repositories: await Promise.all(projects.filter((project) => project.teamId === team.id).map(health)),
+    })),
+  );
+}
+
+async function viewerInTeam(context: GraphQLContext, teamId: string): Promise<boolean> {
+  if (!context.viewer) return false;
+  if (context.viewer.globalRole === 'ADMIN') return true;
+  return Boolean(await context.prisma.teamMembership.findUnique({ where: { teamId_userId: { teamId, userId: context.viewer.id } } }));
 }

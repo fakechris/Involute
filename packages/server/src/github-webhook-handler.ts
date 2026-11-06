@@ -21,6 +21,7 @@ import { applyMonotonicForward, applyProvenanceRollback } from './github-webhook
 import { emitOpsAlert, type DeferredOpsAlert, type OpsAlert } from './ops-alerts.js';
 import { acceptGitHubDelivery, InboundRequestError, safeErrorCode } from './github-inbound.js';
 import { enqueueWorkEvent } from './event-outbox.js';
+import { applyInstallationEvent, installationMayRoute } from './github-connections.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 interface GitHubProcessingOptions { deferredAlerts?: DeferredOpsAlert[]; }
@@ -32,6 +33,7 @@ export interface GitHubWebhookOptions {
 }
 
 interface BranchCreatePayload {
+  installation?: { id: number } | undefined;
   ref: string;
   ref_type: string;
   repository: {
@@ -44,6 +46,8 @@ interface BranchCreatePayload {
 
 export interface PullRequestPayload {
   action: string;
+  /** Present on deliveries from a GitHub App (INV-1677). */
+  installation?: { id: number } | undefined;
   pull_request: {
     id: number;
     number: number;
@@ -225,6 +229,14 @@ export async function handleGitHubWebhook(
     catch { throw new InboundRequestError(400, 'INVALID_JSON'); }
     const eventType = request.headers['x-github-event'];
     if (typeof eventType !== 'string' || !eventType) throw new InboundRequestError(400, 'MISSING_EVENT_TYPE');
+    // An App installation removed, suspended or restored changes the team's connection (INV-1677).
+    if (eventType === 'installation') {
+      await applyInstallationEvent(options.prisma, payload);
+      response.statusCode = 200;
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ ok: true }));
+      return true;
+    }
     if (eventType !== 'pull_request' && eventType !== 'create') {
       response.statusCode = 200;
       response.setHeader('content-type', 'application/json');
@@ -283,6 +295,11 @@ export async function processGitHubPrEvent(
   const route = await resolveRepoRoute(prisma, repository.full_name);
   if (!route) {
     console.log(`[github-webhook] No route configured for repository: ${repository.full_name}`);
+    return;
+  }
+  // An App delivery acts only for the team its installation is bound to (INV-1677).
+  if (!(await installationMayRoute(prisma, payload.installation?.id, route.teamKey))) {
+    console.log(`[github-webhook] Installation ${payload.installation?.id} is not connected to team ${route.teamKey}; ignoring ${repository.full_name}`);
     return;
   }
 
@@ -522,6 +539,10 @@ export async function processGitHubCreateEvent(
   const route = await resolveRepoRoute(prisma, payload.repository.full_name);
   if (!route) {
     console.log(`[github-webhook] No route configured for repository: ${payload.repository.full_name}`);
+    return;
+  }
+  if (!(await installationMayRoute(prisma, payload.installation?.id, route.teamKey))) {
+    console.log(`[github-webhook] Installation ${payload.installation?.id} is not connected to team ${route.teamKey}; ignoring ${payload.repository.full_name}`);
     return;
   }
 

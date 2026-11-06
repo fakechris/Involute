@@ -16,8 +16,9 @@ import { BOARD_PAGE_QUERY, USER_UPDATE_MUTATION, FILE_UPLOAD_MUTATION } from '..
 import type { BoardPageQueryData, BoardPageQueryVariables, UserSummary, UserUpdateMutationData, UserUpdateMutationVariables, FileUploadMutationData, FileUploadMutationVariables } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 import { ExtensionsTab } from './ExtensionsTab';
+import { GitHubSettingsTab } from './GitHubSettingsTab';
 
-type SettingsTab = 'profile' | 'preferences' | 'extensions' | 'members' | 'teams' | 'agents' | 'security' | 'autonomy' | 'fields' | 'services' | 'labels' | 'features';
+type SettingsTab = 'profile' | 'preferences' | 'extensions' | 'github' | 'members' | 'teams' | 'agents' | 'security' | 'autonomy' | 'fields' | 'services' | 'labels' | 'features';
 
 /** Settings → Administration (docs/permissions.md §7); the server refuses everyone else. */
 const ADMIN_TABS: ReadonlyArray<{ id: SettingsTab; label: string }> = [
@@ -69,6 +70,8 @@ export function SettingsPage() {
     { id: 'profile', label: 'Profile' },
     { id: 'preferences', label: 'Preferences' },
     { id: 'extensions', label: 'Extensions' },
+    // Every person sees it: Admins create the App, team Owners connect their accounts (INV-1677).
+    { id: 'github', label: 'GitHub' },
     ...(isAdmin ? ADMIN_TABS : []),
   ];
   const tab: SettingsTab = tabs.find((candidate) => candidate.id === requested)?.id ?? 'profile';
@@ -91,6 +94,7 @@ export function SettingsPage() {
       {tab === 'profile' && <ProfileTab />}
       {tab === 'preferences' && <PreferencesTab />}
       {tab === 'extensions' && <ExtensionsTab />}
+      {tab === 'github' && <GitHubSettingsTab />}
       {tab === 'labels' && <LabelsTab />}
       {tab === 'members' && <AdminMembersTab />}
       {tab === 'teams' && <AdminTeamsTab />}

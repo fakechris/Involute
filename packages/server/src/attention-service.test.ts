@@ -137,6 +137,19 @@ describe('attention: what a person is waiting to decide (INV-1091)', () => {
     expect(await kindsFor(f.admin)).toEqual([]);
   });
 
+  it('a team GitHub connection that stopped working waits for its Owners and Admins, and goes once reconnected (INV-1677)', async () => {
+    const f = await fixture();
+    const connection = await prisma.gitHubConnection.create({ data: { teamId: f.team.id, kind: 'TOKEN', accountLogin: 'acme', status: 'DISCONNECTED', lastError: 'GitHub refused the credential (HTTP 401).' } });
+    const [entry] = await loadAttention(prisma, f.admin, undefined);
+    expect(entry).toMatchObject({ actions: ['OPEN'], kind: 'GITHUB_DISCONNECTED', subjectId: connection.id, workId: null });
+    expect(entry!.reason).toContain('acme');
+    // An EDITOR does not connect the team, so it does not wait for them.
+    expect(await kindsFor(f.member)).toEqual([]);
+
+    await prisma.gitHubConnection.update({ where: { id: connection.id }, data: { status: 'ACTIVE', lastError: null } });
+    expect(await kindsFor(f.admin)).toEqual([]);
+  });
+
   it('a decision request stays open while its run runs and nobody has answered', async () => {
     const f = await fixture();
     const work = await committed(f, { assigneeId: f.admin.id, stateId: f.progress.id, title: 'Running' });

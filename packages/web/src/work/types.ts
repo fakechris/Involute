@@ -624,7 +624,9 @@ export type AttentionKind =
   | 'DELIVERY_CHANGE'
   | 'AGENT_REQUEST'
   | 'DECISION_REQUESTED'
-  | 'OPS';
+  | 'OPS'
+  | 'SCHEDULE_MISSED'
+  | 'GITHUB_DISCONNECTED';
 
 export type AttentionAction = 'ACCEPT' | 'ANSWER' | 'APPROVE' | 'COMMIT' | 'DECLINE' | 'OPEN' | 'REJECT' | 'REPLY' | 'RESPOND' | 'RETURN';
 

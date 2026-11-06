@@ -7626,3 +7626,71 @@ kbd {
   font-weight: 600;
   color: var(--fg-dim);
 }
+
+/* Settings → GitHub (INV-1677). */
+.github-setup__step {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.github-setup__step h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.github-setup__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.github-setup__facts dt {
+  color: var(--fg-dim);
+}
+
+.github-setup__facts dd {
+  margin: 0;
+}
+
+.github-setup__form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 520px;
+}
+
+.github-setup__team {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+}
+
+.github-setup__team-head,
+.github-setup__connection-head,
+.github-setup__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.github-setup__connection {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.github-setup__repos {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 13px;
+}
+
+.github-setup__bad {
+  color: var(--danger);
+}

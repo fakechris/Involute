@@ -42,6 +42,8 @@ const SECTIONS: Array<{ kind: AttentionKind; title: string }> = [
   { kind: 'DELIVERY_CHANGE', title: 'Delivery approvals' },
   { kind: 'AGENT_REQUEST', title: 'Agent questions' },
   { kind: 'DECISION_REQUESTED', title: 'Decisions requested' },
+  { kind: 'SCHEDULE_MISSED', title: 'Missed scheduled rounds' },
+  { kind: 'GITHUB_DISCONNECTED', title: 'GitHub connections' },
   { kind: 'OPS', title: 'Operations' },
 ];
 
@@ -84,6 +86,8 @@ const NOUNS: Record<AttentionKind, [string, string]> = {
   DECISION_REQUESTED: ['decision requested', 'decisions requested'],
   DELIVERY_CHANGE: ['delivery approval', 'delivery approvals'],
   OPS: ['operations item', 'operations items'],
+  SCHEDULE_MISSED: ['missed schedule', 'missed schedules'],
+  GITHUB_DISCONNECTED: ['GitHub connection to fix', 'GitHub connections to fix'],
   WORK_REVIEW: ['finished item to accept', 'finished items to accept'],
 };
 
@@ -369,7 +373,7 @@ export function AttentionPage() {
     onToggle: (item) => setSelectedIds((current) => (current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])),
     onSelectAll: () => setSelectedIds(ordered.map((item) => item.id)),
     onClear: () => setSelectedIds([]),
-    onOpen: (item) => navigate(item.work ? `/work/${item.work.id}` : '/ops'),
+    onOpen: (item) => navigate(item.work ? `/work/${item.work.id}` : item.kind === 'GITHUB_DISCONNECTED' ? '/settings?tab=github' : '/ops'),
     onPrimary: (item) => void acceptFocused(item),
     onKey: (key, item) => {
       // C is the shell's create-issue key, so A is every item's main decision.
@@ -722,6 +726,21 @@ function AttentionDecision({
           <WorkContextDecision item={item} workId={item.work.id} viewer={viewer} refresh={refresh} />
         </>
       ) : null;
+    case 'SCHEDULE_MISSED':
+      return (
+        <>
+          {header}
+          <p>{item.reason}</p>
+          {item.work ? <Link className="ui-action ui-action--accent" to={`/issue/${item.work.id}`}>Open the schedule</Link> : null}
+        </>
+      );
+    case 'GITHUB_DISCONNECTED':
+      return (
+        <>
+          <p>{item.reason}</p>
+          <Link className="ui-action ui-action--accent" to="/settings?tab=github">Open Settings → GitHub</Link>
+        </>
+      );
     case 'OPS':
       return (
         <>

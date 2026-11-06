@@ -188,6 +188,8 @@ model Team {
   triageRotation  Json?
   /// Where this team comes from in an outside organisation (INV-1288).
   externalRefs    ExternalOrganizationRef[]
+  /// GitHub accounts and organisations this team is connected to (INV-1677).
+  githubConnections GitHubConnection[]
 
   @@index([key])
   savedViews      SavedView[]
@@ -1626,4 +1628,55 @@ model WorkSchedule {
   updatedAt     DateTime @updatedAt
 
   @@index([active, nextRunAt])
+}
+
+/// A team's link to one GitHub account or organisation (INV-1677): an App
+/// installation the team Owner made, or a read-only token pasted instead.
+/// Secrets are stored encrypted with INVOLUTE_SECRET_KEY (secret-box.ts).
+model GitHubConnection {
+  id                  String    @id @default(uuid()) @db.Uuid
+  teamId              String    @db.Uuid
+  team                Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  provider            String    @default("github")
+  /// APP_INSTALLATION | TOKEN
+  kind                String
+  /// The App installation id; one installation belongs to one team.
+  installationId      String?   @unique
+  /// The GitHub account or organisation login (owner part of owner/name).
+  accountLogin        String
+  accountType         String?
+  /// all | selected (App installations)
+  repositorySelection String?
+  tokenEncrypted      String?
+  tokenExpiresAt      DateTime?
+  /// ACTIVE | DISCONNECTED
+  status              String    @default("ACTIVE")
+  lastError           String?
+  lastCheckedAt       DateTime?
+  createdById         String?   @db.Uuid
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([teamId, provider, accountLogin])
+  @@index([accountLogin])
+}
+
+/// The deployment's own GitHub App (INV-1677), created once by a workspace
+/// Admin through GitHub's manifest flow. Teams install it on their accounts
+/// (GitHubConnection). Secrets are sealed with INVOLUTE_SECRET_KEY.
+model GitHubApp {
+  id                    String   @id @default(uuid()) @db.Uuid
+  provider              String   @unique @default("github")
+  appId                 String
+  slug                  String
+  name                  String
+  htmlUrl               String
+  ownerLogin            String
+  clientId              String?
+  clientSecretEncrypted String?
+  privateKeyEncrypted   String
+  webhookSecretEncrypted String
+  createdById           String?  @db.Uuid
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
