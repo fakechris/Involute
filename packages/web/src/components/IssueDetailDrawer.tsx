@@ -10,6 +10,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { ActorBadge } from './ActorBadge';
 import { DeliverySection } from './DeliveryPanel';
 import { WorkLinks } from './WorkLinks';
+import { PullRequestList } from './PullRequestLinks';
 import { IssueRelations } from './IssueRelations';
 import { IssueNeighbourhood } from './graph/IssueNeighbourhood';
 import { AddSubIssueButton } from './AddSubIssueButton';
@@ -668,6 +669,13 @@ export function IssueDetailDrawer({
                   </Select>
                 </label>
               </div>
+
+              {activeIssue.kind === 'ISSUE' || (activeIssue.pullRequests ?? []).length > 0 ? (
+                <div className="issue-panel__property-group">
+                  <span className="issue-panel__label">Pull requests</span>
+                  <PullRequestList pullRequests={activeIssue.pullRequests} repository={activeIssue.repository} />
+                </div>
+              ) : null}
 
               <div className="issue-panel__property-group">
                 <label className="field-stack">

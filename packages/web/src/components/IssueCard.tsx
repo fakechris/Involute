@@ -5,6 +5,7 @@ import { CSS } from '@dnd-kit/utilities';
 import type { Html5BoardDragPayload, IssueSummary } from '../board/types';
 import { createHtml5BoardDragPayload } from '../board/utils';
 import { BugSlaBadge, FollowUpDeadlineBadge } from './BugSlaBadge';
+import { PullRequestBadge } from './PullRequestLinks';
 import { ProjectBadge } from './ProjectBadge';
 import { PriorityIcon } from './Primitives';
 import { StatusIcon } from './StatusIcon';
@@ -187,6 +188,7 @@ export function IssueCard({
                 Blocked{openBlockers.length > 1 ? ` · ${openBlockers.length}` : ''}
               </span>
             ) : null}
+            <PullRequestBadge pullRequests={issue.pullRequests} />
             <BugSlaBadge sla={issue.bugSla} />
             <FollowUpDeadlineBadge deadline={issue.followUpDeadline} />
             <ProjectBadge

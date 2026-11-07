@@ -1,7 +1,10 @@
 import { gql } from '@apollo/client';
 import { useQuery } from '@apollo/client/react';
 
+import type { PullRequestLink } from '../board/types';
 import type { WorkEvidenceSummary } from '../work/types';
+import { IcoCommit, IcoExternal, IcoGitHub } from './Icons';
+import { PullRequestList } from './PullRequestLinks';
 import { EvidenceVerificationStatus } from './ReviewEvidence';
 
 /**
@@ -15,7 +18,7 @@ import { EvidenceVerificationStatus } from './ReviewEvidence';
 export const WORK_LINKS_QUERY = gql`
   query WorkLinks($id: String!) {
     workContext(id: $id) {
-      work { id repository }
+      work { id repository pullRequests { repository number url title state mergeSha updatedAt } }
       runs { id publicId status repository commitSha pullRequestNumber externalUrl startedAt }
       evidence { id runId kind url summary createdAt retractedAt verifications { id status failureCode observedAt } }
     }
@@ -36,8 +39,10 @@ interface LinkRun {
 type LinkEvidence = Pick<WorkEvidenceSummary, 'id' | 'runId' | 'kind' | 'url' | 'summary' | 'createdAt' | 'retractedAt' | 'verifications'>;
 
 interface WorkLinksData {
-  workContext: { work: { id: string; repository: string | null }; runs: LinkRun[]; evidence: LinkEvidence[] } | null;
+  workContext: { work: { id: string; repository: string | null; pullRequests: PullRequestLink[] }; runs: LinkRun[]; evidence: LinkEvidence[] } | null;
 }
+
+const PR_URL = /^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/i;
 
 function hostOf(url: string): string | null {
   try {
@@ -70,26 +75,26 @@ function Href({ url, children }: { url: string; children: React.ReactNode }) {
   // file:// links only open on the machine that wrote them; show them, do not pretend they open.
   if (url.startsWith('file:')) return <span className="mono" title={url}>{children}</span>;
   return (
-    <a href={url} target="_blank" rel="noreferrer">
+    <a className="external-link" href={url} target="_blank" rel="noreferrer">
+      {isCodeHost(url) ? <IcoGitHub size={12} className="external-link__icon" /> : null}
       {children}
+      <IcoExternal size={11} className="external-link__arrow" />
     </a>
   );
 }
 
 export function WorkLinks({ workId }: { workId: string }) {
-  const { data, error } = useQuery<WorkLinksData, { id: string }>(WORK_LINKS_QUERY, { variables: { id: workId } });
+  // GitHub adds evidence while the page is open (INV-1703): read again every minute and on every visit.
+  const { data, error } = useQuery<WorkLinksData, { id: string }>(WORK_LINKS_QUERY, { variables: { id: workId }, fetchPolicy: 'cache-and-network', pollInterval: 60_000 });
   if (error) return <p role="alert">Commits and links could not be loaded: {error.message}</p>;
   const context = data?.workContext;
   if (!context) return null;
 
   const evidence = context.evidence.filter((item) => !item.retractedAt);
   const runs = [...context.runs].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-  const shownOnRuns = new Set<string>();
-  for (const run of runs) {
-    const repository = run.repository ?? context.work.repository;
-    if (repository && run.pullRequestNumber) shownOnRuns.add(`https://github.com/${repository}/pull/${run.pullRequestNumber}`);
-  }
-  const codeEvidence = evidence.filter((item) => isCodeHost(item.url) && !shownOnRuns.has(item.url.replace(/\/$/, '')));
+  // Pull requests come folded from the server, one per PR; their evidence rows are not repeated.
+  const pullRequests = context.work.pullRequests ?? [];
+  const codeEvidence = evidence.filter((item) => isCodeHost(item.url) && !PR_URL.test(item.url));
   const outside = [
     ...evidence.filter((item) => !isCodeHost(item.url)).map((item) => ({ key: item.id, url: item.url, summary: item.summary, evidence: item })),
     ...runs.filter((run) => run.externalUrl && !isCodeHost(run.externalUrl)).map((run) => ({ key: `run-${run.id}`, url: run.externalUrl!, summary: `${run.publicId} external URL`, evidence: null })),
@@ -99,8 +104,8 @@ export function WorkLinks({ workId }: { workId: string }) {
     const source = linkSource(link.url);
     groups.set(source, [...(groups.get(source) ?? []), link]);
   }
-  const linkedRuns = runs.filter((run) => run.commitSha || run.pullRequestNumber || (run.externalUrl && isCodeHost(run.externalUrl)));
-  const total = linkedRuns.length + codeEvidence.length + outside.length;
+  const linkedRuns = runs.filter((run) => run.commitSha || (run.externalUrl && isCodeHost(run.externalUrl)));
+  const total = pullRequests.length + linkedRuns.length + codeEvidence.length + outside.length;
 
   return (
     <div className="issue-panel__section" aria-label="Commits & links" role="region">
@@ -110,6 +115,7 @@ export function WorkLinks({ workId }: { workId: string }) {
           No commit, pull request or link recorded yet{context.work.repository ? ` for ${context.work.repository}` : ''}. Runs that report a commit and PR, and evidence attached to the work, show here.
         </p>
       ) : null}
+      {pullRequests.length ? <PullRequestList pullRequests={pullRequests} repository={context.work.repository} /> : null}
       {linkedRuns.length || codeEvidence.length ? (
         <ul className="issue-children" role="list" aria-label="Code">
           {linkedRuns.map((run) => {
@@ -120,20 +126,13 @@ export function WorkLinks({ workId }: { workId: string }) {
                 <span className="observation-card__meta">{run.status.toLowerCase()}</span>
                 {run.commitSha ? (
                   repository ? (
-                    <a className="mono" href={`https://github.com/${repository}/commit/${run.commitSha}`} target="_blank" rel="noreferrer" title={run.commitSha}>
+                    <a className="external-link mono" href={`https://github.com/${repository}/commit/${run.commitSha}`} target="_blank" rel="noreferrer" title={`Commit ${run.commitSha} on GitHub`}>
+                      <IcoCommit size={12} className="external-link__icon" />
                       commit {run.commitSha.slice(0, 7)}
+                      <IcoExternal size={11} className="external-link__arrow" />
                     </a>
                   ) : (
                     <span className="mono" title={run.commitSha}>commit {run.commitSha.slice(0, 7)}</span>
-                  )
-                ) : null}
-                {run.pullRequestNumber ? (
-                  repository ? (
-                    <a href={`https://github.com/${repository}/pull/${run.pullRequestNumber}`} target="_blank" rel="noreferrer">
-                      PR #{run.pullRequestNumber}
-                    </a>
-                  ) : (
-                    <span>PR #{run.pullRequestNumber}</span>
                   )
                 ) : null}
                 {run.externalUrl && isCodeHost(run.externalUrl) ? <Href url={run.externalUrl}>{run.externalUrl}</Href> : null}

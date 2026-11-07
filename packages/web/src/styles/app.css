@@ -7694,3 +7694,97 @@ kbd {
 .github-setup__bad {
   color: var(--danger);
 }
+
+/* Pull requests a work item names (INV-1703). */
+.pull-requests {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.pull-requests__row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.pull-requests__link {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pull-requests__title {
+  color: var(--fg-muted);
+}
+
+.pull-request-badge {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.pull-request-badge--merged {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.pull-request-badge--open {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+/* Links that leave Involute — GitHub, Sentry, dashboards (INV-1703): coloured,
+   an icon for what they are, an arrow for "opens elsewhere", underlined on hover. */
+.external-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  text-decoration: none;
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: -1px -4px;
+  min-width: 0;
+}
+
+.external-link:hover {
+  background: var(--bg-hover);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.external-link__icon {
+  flex: none;
+}
+
+.external-link__arrow {
+  flex: none;
+  opacity: 0.6;
+}
+
+.pull-requests__link--merged .external-link__icon {
+  color: var(--accent);
+}
+
+.pull-requests__link--open .external-link__icon {
+  color: var(--success);
+}
+
+.pull-request-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}

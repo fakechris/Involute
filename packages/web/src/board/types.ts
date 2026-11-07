@@ -194,6 +194,8 @@ export interface IssueSummary {
   foundInSha?: string | null;
   /** Committed bugs only (INV-750). */
   bugSla?: BugSlaSummary | null;
+  /** One entry per pull request the work names (INV-1703). */
+  pullRequests?: PullRequestLink[] | null;
   followUpDeadline?: FollowUpDeadlineSummary | null;
   createdAt: string;
   updatedAt: string;
@@ -1179,4 +1181,15 @@ export interface WorkScheduleSummary {
   round: number;
   missedRounds: number;
   agent: { id: string; name: string | null; handle: string | null };
+}
+
+/** A pull request a work item names (INV-1703). */
+export interface PullRequestLink {
+  repository: string;
+  number: number;
+  url: string;
+  title: string | null;
+  state: 'MERGED' | 'OPEN' | 'LINKED';
+  mergeSha: string | null;
+  updatedAt: string;
 }

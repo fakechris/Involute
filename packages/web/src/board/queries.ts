@@ -73,6 +73,7 @@ const BOARD_ISSUE_SELECTION = `
           dueAt
           budgetHours
         }
+        pullRequests { repository number url title state mergeSha updatedAt }
         followUpDeadline {
           status
           remainingMs
@@ -622,6 +623,7 @@ export const ISSUE_PAGE_QUERY = gql`
         dueAt
         budgetHours
       }
+      pullRequests { repository number url title state mergeSha updatedAt }
       followUpDeadline {
         status
         remainingMs

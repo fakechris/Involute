@@ -231,6 +231,7 @@ import { noteReportBeyondHandoff, readHandoff } from './agent-request-handoff-ca
 import { clearWorkSchedule, setWorkSchedule } from './work-schedule.js';
 import { APP_ADMIN_ONLY_MESSAGE, githubConfigured, githubWebhookUrl, instanceAppTokenSource, loadInstanceApp, startAppManifest } from './github-app.js';
 import { connectToken, listConnectionRepositories, startInstall } from './github-connections.js';
+import { pullRequestBatcher } from './pull-requests.js';
 import { hasSecretKey } from './secret-box.js';
 
 const WORK_SCHEDULE_HUMAN_MESSAGE = 'Only a person sets, pauses or removes a schedule; the agent runs its rounds (INV-1582).';
@@ -1425,6 +1426,8 @@ const typeDefs = /* GraphQL */ `
     dependencyHints: [String!]!
     "SLA for committed Type: Bug work; null otherwise (INV-750)."
     bugSla: BugSla
+    "The pull requests this work names, one per PR: open or merged from GitHub's own deliveries, linked when only a run names it (INV-1703)."
+    pullRequests: [PullRequestLink!]!
     "Deadline for a committed ISSUE derived (DERIVED_FROM) from a Type: Incident; null otherwise (INV-1127)."
     followUpDeadline: FollowUpDeadline
     "How long committed work has waited in Review; null outside Review (INV-1002). overdue is true for a bug past REVIEW_OVERDUE_MS (default 3 days)."
@@ -2989,6 +2992,17 @@ const typeDefs = /* GraphQL */ `
     success: Boolean!
     message: String
     schedule: WorkSchedule
+  }
+
+  type PullRequestLink {
+    repository: String!
+    number: Int!
+    url: String!
+    title: String
+    "MERGED, OPEN, or LINKED (a run names it; GitHub has not reported on it)."
+    state: String!
+    mergeSha: String
+    updatedAt: DateTime!
   }
 
   type WorkScheduleClearPayload {
@@ -6767,6 +6781,14 @@ const resolvers = {
         incidents: incidents.sort((a, b) => order.get(a.id)! - order.get(b.id)!),
       };
     },
+    pullRequests: (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
+      let batcher = PULL_REQUEST_BATCHERS.get(context);
+      if (!batcher) {
+        batcher = pullRequestBatcher(context.prisma);
+        PULL_REQUEST_BATCHERS.set(context, batcher);
+      }
+      return batcher({ id: parent.id, repository: parent.repository ?? null });
+    },
     bugSla: async (parent: IssueParent, _args: Record<string, never>, context: GraphQLContext) => {
       if (parent.commitmentStatus !== 'COMMITTED') return null;
       // Labels are usually loaded with the issue: skip non-bugs without a query.
@@ -7683,3 +7705,6 @@ async function viewerInTeam(context: GraphQLContext, teamId: string): Promise<bo
   if (context.viewer.globalRole === 'ADMIN') return true;
   return Boolean(await context.prisma.teamMembership.findUnique({ where: { teamId_userId: { teamId, userId: context.viewer.id } } }));
 }
+
+/** One pull-request read per GraphQL request (INV-1703). */
+const PULL_REQUEST_BATCHERS = new WeakMap<object, ReturnType<typeof pullRequestBatcher>>();
