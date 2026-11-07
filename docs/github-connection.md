@@ -60,3 +60,10 @@ that installation belongs to. An uninstall or suspension (GitHub's
 `installation` event), a refused installation token or an HTTP 401 marks the
 connection disconnected; it then waits for the team's Owners in Needs you
 (`GITHUB_DISCONNECTED`) until it is reconnected or removed.
+
+## Production record
+
+- 2026-11-07: fakechris/Involute's production created the deployment App
+  (`Involute involute.lumenopen.com`, owned by fakechris) and team INV
+  installed it on the fakechris account for all repositories. This page's
+  pull request was the first delivered through the App.
