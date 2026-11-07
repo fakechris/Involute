@@ -647,3 +647,10 @@ button.list-row__main {
 .card--interactive:hover {
   border-color: var(--border-strong);
 }
+
+/* A reference reads as a link before it is hovered (INV-1703). */
+.work-reference__icon {
+  margin-right: 2px;
+  vertical-align: -1px;
+  opacity: 0.75;
+}

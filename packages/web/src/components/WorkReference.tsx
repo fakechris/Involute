@@ -1,3 +1,4 @@
+import { IcoLink } from './Icons';
 import { useApolloClient } from '@apollo/client/react';
 import {
   createContext,
@@ -268,6 +269,7 @@ function WorkReferenceAnchor({
         }}
         {...hover.anchorProps(preview.identifier)}
       >
+        <IcoLink size={10} className="work-reference__icon" aria-hidden="true" />
         {label}
       </a>
       {hover.card}

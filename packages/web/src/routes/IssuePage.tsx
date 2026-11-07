@@ -4,6 +4,7 @@ import { isBugIssue, resolutionLabel, supersededPrefill, useCloseReason, type Wo
 import { useMutation, useQuery } from '@apollo/client/react';
 import { DeliverySection } from '../components/DeliveryPanel';
 import { WorkLinks } from '../components/WorkLinks';
+import { PullRequestList } from '../components/PullRequestLinks';
 import { ISSUE_UNDO_APPLIED_EVENT, type IssueUndoAppliedDetail } from '../undo/FieldUndoHost';
 import { fieldChange } from '../undo/field-gesture';
 import { recordCommentGesture, recordDeleteGesture, recordFieldGesture } from '../undo/status-undo';
@@ -1071,6 +1072,16 @@ export function IssuePage() {
             <div className="issue-panel__prop-row">
               <div className="issue-panel__prop-label">Resolution</div>
               <div className="issue-panel__prop-value" aria-label="Resolution">{resolutionLabel(activeIssue.resolution)}</div>
+            </div>
+          ) : null}
+
+          {/* Pull requests (INV-1703): what was delivered, one click from GitHub. */}
+          {activeIssue.kind === 'ISSUE' || (activeIssue.pullRequests ?? []).length > 0 ? (
+            <div className="issue-panel__prop-row issue-panel__prop-row--top">
+              <div className="issue-panel__prop-label">Pull requests</div>
+              <div className="issue-panel__prop-value">
+                <PullRequestList pullRequests={activeIssue.pullRequests} repository={activeIssue.repository} />
+              </div>
             </div>
           ) : null}
 
