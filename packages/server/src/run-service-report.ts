@@ -1,5 +1,6 @@
 import { assertDeliveryExecution } from './delivery-grant.js';
 import { assertExecutionAuthority, assertWorkToken } from './work-execution.js';
+import { LATE_RUN_REFUSED_MESSAGE, lateRunAllowance, lateRunReason } from './late-run.js';
 import { snapshotContract, SHA_PATTERN } from './evidence-contract.js';
 import type { Issue, PrismaClient, WorkClaim, WorkRun } from '@prisma/client';
 
@@ -113,6 +114,8 @@ export async function reportRun(
     const isTerminalStatus = Boolean(status && TERMINAL_RUN_STATUSES.includes(status));
     let run = input.runId ? await findRun(transaction, input.runId, work.id) : null;
     let activeClaim: WorkClaim | null = null;
+    // A completed run filed after the claim expired and a PR moved the work to Review (INV-1704).
+    let late: { expiredAt: Date; staleClaimId: string | null } | null = null;
 
     // Constraint 3: Cross-scope runId must hard-fail if runId actually exists on another work or actor
     if (input.runId && !run) {
@@ -191,35 +194,39 @@ export async function reportRun(
         // else is a replay (INV-595 follow-up).
         if (input.runId) {
           throw createNotFoundError(WORK_RUN_NOT_FOUND_MESSAGE);
-        } else {
-          throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
+        }
+        late = status === 'COMPLETED' ? await lateRunAllowance(transaction, work, actorId) : null;
+        if (!late) {
+          const inReview = (await transaction.workflowState.findUnique({ where: { id: work.stateId }, select: { type: true } }))?.type === 'REVIEW';
+          throw createValidationError(inReview && status === 'COMPLETED' ? LATE_RUN_REFUSED_MESSAGE : WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
         }
       }
     }
 
-    if (actor.actorKind === 'AGENT') {
+    // A late run has no live lease to prove; its holder was checked above.
+    if (actor.actorKind === 'AGENT' && !late) {
       assertWorkToken(run?.executionTokenHash ?? activeClaim?.executionTokenHash ?? null, input.claimToken);
       if (run?.executionRevokedAt) throw createValidationError('This execution claim has been superseded.');
     }
     const isNew = !run;
     if (!run) {
-      if (!activeClaim) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
+      if (!activeClaim && !late) throw createValidationError(WORK_RUN_REQUIRES_ACTIVE_CLAIM_MESSAGE);
       const publicId = await nextRunPublicId(transaction);
       const frozen = snapshotContract(work);
       run = await transaction.workRun.create({
         data: {
           actorId,
-          executionTokenHash: activeClaim.executionTokenHash,
-          executionId: activeClaim.executionId,
+          executionTokenHash: activeClaim?.executionTokenHash ?? null,
+          executionId: activeClaim?.executionId ?? null,
           baseRevision: work.revision,
           contractRevision: frozen.contractRevision,
           acceptanceDigest: frozen.acceptanceDigest,
           contractSnapshot: JSON.parse(JSON.stringify(frozen.contractSnapshot)),
-          claimSnapshotId: activeClaim.id,
+          claimSnapshotId: activeClaim?.id ?? null,
           repository: work.repository,
           commitSha: input.commitSha ?? null,
           pullRequestNumber: input.pullRequestNumber ?? null,
-          claimId: activeClaim.id,
+          claimId: activeClaim?.id ?? null,
           externalUrl: input.externalUrl ?? null,
           phase: input.phase ?? null,
           publicId,
@@ -289,6 +296,17 @@ export async function reportRun(
       if (update.count !== 1) throw createValidationError(WORK_RUN_CONFLICT_MESSAGE);
       run = await transaction.workRun.findUniqueOrThrow({ where: { id: run.id } });
       if (targetChanged) await transaction.workEvidence.updateMany({ where: { runId: run.id, verificationNextAt: { not: null } }, data: { verificationNextAt: new Date() } });
+    }
+
+    if (late) {
+      // The lease the sweep has not removed yet goes now; the audit says this run came late.
+      if (late.staleClaimId) await transaction.workClaim.deleteMany({ where: { id: late.staleClaimId } });
+      await recordWorkAudit(transaction, {
+        actor: { ...actor, reason: lateRunReason(run.publicId, late.expiredAt) },
+        after: selectIssueSnapshot(work),
+        before: selectIssueSnapshot(work),
+        workId: work.id,
+      });
     }
 
     const eventType = eventTypeForRun(isNew, run.status, input.decisionRequested);
