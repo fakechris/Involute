@@ -1548,8 +1548,28 @@ const typeDefs = /* GraphQL */ `
     readable from one row.
     """
     rollups: [WorkRollup!]!
-    """True when the neighbourhood has more items than one read returns."""
+    """True when any omitted count is above zero."""
     truncated: Boolean!
+    """
+    How many items this read left out (INV-1765, INV-1766). Kept items are
+    unfinished work first, then most recently updated. There is no MCP field
+    for these counts; agents read relations with work_get_context.
+    """
+    omitted: IssueGraphOmitted!
+  }
+
+  """Counts of what one neighbourhood read left out (INV-1766)."""
+  type IssueGraphOmitted {
+    siblings: Int!
+    children: Int!
+    """Blockers within the requested depth that were not kept."""
+    blockers: Int!
+    """Dependents within the requested depth that were not kept."""
+    dependents: Int!
+    """Readable ancestors past the 16-level cap. An unreadable gap is not counted."""
+    ancestors: Int!
+    """Milestone or epic ancestors past the three nearest rollups."""
+    rollups: Int!
   }
 
   """Progress over one item's committed descendants (INV-1496)."""
