@@ -261,6 +261,8 @@ One work item's neighbourhood (INV-1496): the CONTAINS chain above it, its direc
 
 `id` accepts an identifier (`INV-1496`) or a UUID. `depth` is how many BLOCKS steps the read may follow from the focus (0–4, default 1). Only work the caller may read is returned, and an edge is returned only when both of its ends are shown — a dependency that leads into another team simply does not appear, and neither does the work behind it, because the walk stops at the first item the caller may not see.
 
+When a cap is hit, the read keeps unfinished work first (state type other than completed or canceled), then the most recently updated, with the id breaking a tie (INV-1765). Siblings stop at 80, direct children at 120. Each BLOCKS direction is offered 200 places first; spare places move to the other direction, and the two together stop at 400. `omitted` counts what was left out in each of those groups, plus readable ancestors past 16 levels and milestone or epic ancestors past the three nearest rollups. An ancestor the caller may not see is a gap, not an omission. `truncated` is true when any of those counts is above zero. The same rows read twice return the same items.
+
 The walk follows the link table only (a "related" note never drags the neighbourhood along) and it walks one direction at a time: blockers form a chain upwards, dependents a chain downwards. A path that mixes the two — A blocks the focus *and* A blocks B — is not a dependency of the focus, so B is left out; this is the same rule the graph draws with.
 
 `rollups` carries the progress of the nearest milestone and epic ancestors, nearest first. The counts are over the **leaves** of each subtree, so a milestone holding an epic with three issues reads as three pieces of work, not four. Only committed leaves count: a candidate is a proposal nobody has agreed to yet, and it stays out of the denominator.
@@ -277,6 +279,7 @@ query IssueGraph($id: String!, $depth: Int) {
       total completed inProgress blocked canceled
     }
     truncated
+    omitted { siblings children blockers dependents ancestors rollups }
   }
 }
 ```
@@ -1431,9 +1434,11 @@ link:blocked-by:none has:contract -state:done "free text"
   sits up to three levels under that PROJECT (`project:INV-1026`).
 - `neighbourhood:<identifier>` (INV-1758) is the issue neighbourhood at depth 1:
   the focus, its ancestors, its siblings, its children, and the BLOCKS chain
-  around it — the same read as the Neighbourhood section. It is not
-  `project:` (descendants only, and not the focus). An unknown identifier is
-  an `IQL_PARSE` error. The term ANDs with the rest of the query. A webhook
+  around it — the same read as the Neighbourhood section, already trimmed by
+  the caps in INV-1765. It is not the parent's full set of descendants, and
+  it is not `project:` (descendants only, and not the focus). An unknown
+  identifier is an `IQL_PARSE` error. The term ANDs with the rest of the
+  query, so a filter cannot bring back an item the cap left out. A webhook
   filter cannot use it: create and update refuse the term, because a delivery
   has one work row and not the graph.
 - `severity:sev1,sev2` (INV-1115) matches those severities; `severity:none`
