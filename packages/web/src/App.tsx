@@ -9,6 +9,7 @@ import { NotificationsBell } from './components/NotificationsBell';
 import { NeedsYouNavLink } from './components/NeedsYouNavLink';
 import { IssueDrawerHost } from './components/IssueDrawerHost';
 import { ShellTeamsSync } from './app/ShellTeamsSync';
+import { ImageHostConfig } from './components/ImageHostConfig';
 import { useSavedViewsSync } from './app/useSavedViewsSync';
 import { Avatar } from './components/Primitives';
 import {
@@ -1444,6 +1445,7 @@ export function App() {
 
       {/* The sidebar's team list comes from the server, not only from the last board visit (INV-853). */}
       {session?.authenticated ? <ShellTeamsSync /> : null}
+      {session?.authenticated ? <ImageHostConfig /> : null}
 
       <CommandPalette
         actions={paletteActions}

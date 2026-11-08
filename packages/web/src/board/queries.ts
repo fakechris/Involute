@@ -549,6 +549,15 @@ export const ISSUE_DETAIL_QUERY = gql`
           after
         }
       }
+      attachments {
+        id
+        filename
+        mimeType
+        size
+        url
+        textContent
+        createdAt
+      }
     }
   }
 `;
@@ -690,6 +699,7 @@ export const ISSUE_PAGE_QUERY = gql`
         mimeType
         size
         url
+        textContent
         createdAt
       }
       parent {
@@ -1403,6 +1413,7 @@ export const FILE_UPLOAD_MUTATION = gql`
   mutation FileUpload($input: FileUploadInput!) {
     fileUpload(input: $input) {
       success
+      message
       attachment {
         id
         filename
@@ -2134,6 +2145,7 @@ export const SERVER_BUILD_QUERY = gql`
     serverBuild {
       buildSha
       serverVersion
+      imageHostSuffixes
     }
   }
 `;

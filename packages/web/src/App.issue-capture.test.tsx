@@ -31,7 +31,9 @@ describe('Issue page environment', () => {
     expect(within(section).getByRole('link', { name: 'Board' })).toHaveAttribute('href', 'https://app.example.com/board');
     expect(section).toHaveTextContent('1280×720 @2x');
     expect(section).toHaveTextContent('TypeError: x');
-    expect(within(section).getByRole('link', { name: 'Open screenshot' })).toHaveAttribute('href', '/uploads/shot.png');
+    const screenshot = within(section).getByRole('link', { name: 'Screenshot' });
+    expect(screenshot).toHaveAttribute('href', '/uploads/shot.png');
+    expect(within(screenshot).getByRole('img', { name: 'Screenshot' })).toBeInTheDocument();
   });
 
   it('has no Environment section without a capture', async () => {

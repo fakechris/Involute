@@ -23,11 +23,13 @@ interface RichTextEditorProps {
   /** Inside a form with its own submit (the create drawer): no Comment button (INV-1132). */
   hideSubmit?: boolean;
   id?: string;
+  /** A file that landed in the text, so the host can claim that upload. */
+  onUploaded?: (attachment: { id: string; url: string }) => void;
 }
 
 const IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
-function readFileAsBase64(file: File): Promise<string> {
+export function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -96,6 +98,7 @@ export function RichTextEditor({
   onMentionStart,
   hideSubmit = false,
   id,
+  onUploaded,
 }: RichTextEditorProps) {
   const mention = useMentionSuggest(mentionables);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -136,6 +139,7 @@ export function RichTextEditor({
           throw new Error('Upload failed');
         }
         const attachment = uploadResult.attachment;
+        if (attachment.id) onUploaded?.({ id: attachment.id, url: attachment.url });
 
         const isImage = IMAGE_MIME_TYPES.has(file.type);
         const markdownLink = isImage
@@ -162,7 +166,7 @@ export function RichTextEditor({
         setUploadingCount((c) => c - 1);
       }
     },
-    [onChange, runFileUpload],
+    [onChange, onUploaded, runFileUpload],
   );
 
   const handleFiles = useCallback(

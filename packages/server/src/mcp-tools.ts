@@ -1368,7 +1368,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_propose',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    description: 'Create candidate work. Does not enter the ready queue. Search for duplicates first; the result lists possible_duplicates (existing work close in meaning) when semantic search is on. acceptance is required (INV-1449): committing refuses blank acceptance and agents cannot add it after commit, so an acceptance-less candidate would block the batch commit; draw it from section 3 (验收标准与验证方案) of the description. A bug (labels ["bug"]) is committed directly and never enters Candidates; it requires parent_id (or an inheritable related_work_id), priority 1–4, and steps_to_reproduce — omit any and the proposal is refused.',
+    description: 'Create candidate work. Does not enter the ready queue. Search for duplicates first; the result lists possible_duplicates (existing work close in meaning) when semantic search is on. acceptance is required (INV-1449): committing refuses blank acceptance and agents cannot add it after commit, so an acceptance-less candidate would block the batch commit; draw it from section 3 (验收标准与验证方案) of the description. A bug (labels ["bug"]) is committed directly and never enters Candidates; it requires parent_id (or an inheritable related_work_id), priority 1–4, and steps_to_reproduce — omit any and the proposal is refused. Research: attach the report with work_attach_file before closing it. A bug or acceptance picture belongs on the work too — work_attach_file a png/jpeg/gif/webp and put ![](/uploads/…) in the description, or paste an https image on S3, Aliyun OSS, Qiniu or a host in INVOLUTE_IMAGE_HOSTS (a presigned URL is fine). The page renders those; the server does not fetch them.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1404,7 +1404,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         labels: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Label names, created when missing. Research or competitive analysis is an ISSUE labelled "research" (Type: Research; propose it with initial_state DONE, or move it to Done yourself once committed — INV-912); work it leads to links back with DERIVED_FROM. A bug carries "bug" (Type: Bug; at most one of bug / feature / improvement / research / incident), is committed directly, and must also pass priority 1–4, a parent, and steps_to_reproduce. An incident carries "incident" (Type: Incident, INV-1123): committed directly In Progress (investigating) with your owner as Incident Lead, and must pass severity, an impact statement in description, and a parent.',
+          description: 'Label names, created when missing. Research or competitive analysis is an ISSUE labelled "research" (Type: Research; propose it with initial_state DONE, or move it to Done yourself once committed — INV-912); work it leads to links back with DERIVED_FROM. Attach that report with work_attach_file, and put its figures in the markdown or as image attachments. A bug carries "bug" (Type: Bug; at most one of bug / feature / improvement / research / incident), is committed directly, and must also pass priority 1–4, a parent, and steps_to_reproduce. An incident carries "incident" (Type: Incident, INV-1123): committed directly In Progress (investigating) with your owner as Incident Lead, and must pass severity, an impact statement in description, and a parent.',
         },
         priority: {
           type: 'number',
@@ -1443,7 +1443,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     name: 'work_file_bug',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     description:
-      'File a Type: Bug. It is committed directly and never enters Candidates. Priority is required because it sets the SLA (1 Urgent 24h, 2 High 48h, 3 Medium / 4 Low = 7 days). Missing parent, priority, steps_to_reproduce or acceptance refuses the call. Already fixed it? Pass initial_state REVIEW with commit_sha / pr_number / evidence_url: the server records the completed run and evidence (INV-997). The result says where it was placed (placed_under) and lists possible_duplicates — existing work close in meaning — when semantic search is on (INV-1000). Prefer this over work_propose for bugs.',
+      'File a Type: Bug. It is committed directly and never enters Candidates. Priority is required because it sets the SLA (1 Urgent 24h, 2 High 48h, 3 Medium / 4 Low = 7 days). Missing parent, priority, steps_to_reproduce or acceptance refuses the call. Already fixed it? Pass initial_state REVIEW with commit_sha / pr_number / evidence_url: the server records the completed run and evidence (INV-997). Have a picture? Do not leave it only on your machine. Put ![](https://…) in the description for an image on S3, Aliyun OSS, Qiniu or a host in INVOLUTE_IMAGE_HOSTS (a presigned URL is fine), or after this returns call work_attach_file with the png/jpeg/gif/webp and add ![](/uploads/…) via work_update or work_comment. The page renders those; the server does not fetch them. The result says where it was placed (placed_under) and lists possible_duplicates — existing work close in meaning — when semantic search is on (INV-1000). Prefer this over work_propose for bugs.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1497,7 +1497,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
         },
         commit_sha: { type: 'string', description: 'With initial_state REVIEW: the fix commit (full 40-char SHA).' },
         pr_number: { type: 'integer', minimum: 1, description: 'With initial_state REVIEW: the fix PR number in the work\'s repository; attached as PR evidence.' },
-        evidence_url: { type: 'string', description: 'With initial_state REVIEW: a test run, log or artifact URL proving the fix.' },
+        evidence_url: { type: 'string', description: 'With initial_state REVIEW: a test run, log, artifact, or screenshot URL proving the fix. A screenshot may be /uploads/… from work_attach_file or an https image on S3, Aliyun OSS, Qiniu or INVOLUTE_IMAGE_HOSTS.' },
         summary: { type: 'string', description: 'With initial_state REVIEW: what was fixed and how it was checked; becomes the run summary.' },
         idempotency_key: { type: 'string' },
         source: { type: 'string' },
@@ -1674,7 +1674,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'run_report',
     annotations: { readOnlyHint: false, destructiveHint: false },
-    description: 'Report a high-level run phase, block, or completion. Completed runs may move work to In Review, never Done.',
+    description: 'Report a high-level run phase, block, or completion. Completed runs may move work to In Review, never Done. When a person should see the result (a UI change, a bug, a research figure), also attach the picture: work_attach_file, then evidence kind "screenshot", or pass an https image on S3, Aliyun OSS, Qiniu or INVOLUTE_IMAGE_HOSTS as that screenshot. A picture is not required for every completion. Code delivery still names commit_sha and pr_number.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1764,7 +1764,7 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     name: 'work_attach_file',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
     description:
-      'Attach, update, append or delete a private file on work (INV-1003, INV-1273): a research report, postmortem, export or screenshot that must stay out of git and images. Stored server-side; readers of the work open it from the issue page. Pass plain UTF-8 text (encoding: "utf-8", auto-detected for .md/.txt/.log/.json) or Base64 (encoding: "base64") up to 50 MB; for local files on disk, prefer `involute work attach-file <id> <path>` so the file is uploaded directly without LLM token round-trips. Returns the url to cite in evidence(action: "attach", kind: "artifact").',
+      'Attach, update, append or delete a private file on work (INV-1003, INV-1273). Use it for the three pictures and reports a person has to open: a research report (markdown; closing with none warns), a bug screenshot, and an acceptance screenshot. They stay out of git. Readers open them from the issue page Files; png/jpeg/gif/webp show as thumbnails and a markdown file previews. Pass plain UTF-8 (encoding: "utf-8", auto-detected for .md/.txt/.log/.json) or Base64 (encoding: "base64") up to 50 MB. For a local file prefer `involute work attach-file <id> <path>` so the bytes are not copied through LLM tokens. Returns a /uploads/… url: put ![](url) in the description or a comment, and for an acceptance picture also pass it to evidence(action: "attach", kind: "screenshot"). Use kind "artifact" for a non-image file. An image already on S3, Aliyun OSS or Qiniu (including a presigned URL) does not need this call — paste that https URL instead. The server does not fetch it.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -1793,15 +1793,15 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'evidence_attach',
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-    description: 'Attach a PR, test report, log, screenshot, or artifact to an existing run.',
+    description: 'Attach a PR, test report, log, screenshot, or artifact to an existing run. For an acceptance or bug picture use kind "screenshot": url is the /uploads/… from work_attach_file, or an https image on S3, Aliyun OSS, Qiniu or INVOLUTE_IMAGE_HOSTS (a presigned URL is fine). The page renders those; the server does not fetch them. A picture is recommended when someone has to see the result, and is not required for every run.',
     inputSchema: {
       type: 'object',
       properties: {
         claim_token: { type: 'string', description: 'Execution secret returned once by work_claim. Required for agents when renewing/reporting/attaching; never include in logs or receipts.' },
         work_id: { type: 'string' },
         run_id: { type: 'string' },
-        kind: { type: 'string', enum: ['pr', 'test', 'log', 'screenshot', 'artifact', 'decision'] },
-        url: { type: 'string' },
+        kind: { type: 'string', enum: ['pr', 'test', 'log', 'screenshot', 'artifact', 'decision'], description: 'pr, test, log, screenshot, artifact, or decision. Use screenshot for an acceptance or bug image so the page shows the picture; artifact stays a file link.' },
+        url: { type: 'string', description: 'https URL or a /uploads/… path. For kind screenshot: the url from work_attach_file, or an image on S3, Aliyun OSS, Qiniu or INVOLUTE_IMAGE_HOSTS. Presigned query strings are fine. The server does not fetch the URL.' },
         summary: { type: 'string' },
         idempotency_key: { type: 'string' },
       },

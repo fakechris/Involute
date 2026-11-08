@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode }
 
 import { findWorkReferences } from '../work/work-reference';
 import { Btn } from './Primitives';
+import { SafeImage } from './SafeImage';
 import { WorkReference } from './WorkReference';
 
 interface MarkdownRendererProps {
@@ -164,7 +165,7 @@ function renderTokens(tokens: ParsedToken[], keyPrefix: string): ReactNode[] {
           </a>
         );
       case 'image':
-        return <img key={key} src={token.href} alt={token.alt ?? ''} />;
+        return <SafeImage key={key} src={token.href ?? ''} alt={token.alt ?? ''} />;
       case 'br':
         return <br key={key} />;
       default:

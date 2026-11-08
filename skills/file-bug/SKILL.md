@@ -24,6 +24,15 @@ The defect is a Type: Bug — found by you or reported by a person in the conver
 
 Also pass the three-section Chinese `description`. Already fixed: `initial_state: 'REVIEW'`.
 
+## Screenshot
+
+If you can see the bug, do not leave the picture only in the chat.
+
+- An image already on S3, Aliyun OSS, Qiniu, or a CDN host in `INVOLUTE_IMAGE_HOSTS`: put `![](https://…)` in the description. A presigned URL is fine.
+- A local png, jpeg, gif, or webp: after `work_file_bug` returns, `work_attach_file` it (or `involute work attach-file <id> <path>`), then add `![](/uploads/…)` with `work_update` or `work_comment`.
+
+The page renders those addresses. The server does not fetch them. An acceptance picture of the fix goes on the run as `evidence(action: 'attach', kind: 'screenshot', url)`.
+
 ## Rules
 
 - A bug is **committed directly**. It does not go to Candidates.

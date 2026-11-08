@@ -189,6 +189,24 @@
   mask-image: linear-gradient(to bottom, black calc(100% - 1.5lh), transparent);
 }
 
+.markdown-content__body--clamped img {
+  max-height: calc(var(--markdown-clamp, 6) * 1lh);
+  width: auto;
+  object-fit: contain;
+}
+
+.work-files__thumb,
+.work-links__shot {
+  max-width: 240px;
+  max-height: 160px;
+  width: auto;
+  object-fit: contain;
+}
+
+.work-files__preview {
+  margin-top: 8px;
+}
+
 .markdown-content__toggle {
   margin-top: 4px;
 }

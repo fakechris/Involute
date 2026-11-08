@@ -1,11 +1,15 @@
 import { gql } from '@apollo/client';
 import { useQuery } from '@apollo/client/react';
 
+import { isRenderableImageUrl } from '@turnkeyai/involute-shared';
+
 import type { PullRequestLink } from '../board/types';
 import type { WorkEvidenceSummary } from '../work/types';
+import { extraImageHosts } from '../image-hosts';
 import { IcoCommit, IcoExternal, IcoGitHub } from './Icons';
 import { PullRequestList } from './PullRequestLinks';
 import { EvidenceVerificationStatus } from './ReviewEvidence';
+import { SafeImage } from './SafeImage';
 
 /**
  * What was delivered on a work item, where a person can open it (INV-1673):
@@ -69,6 +73,12 @@ export function linkSource(url: string): string {
   if (host.includes('figma.com')) return 'Figma';
   if (host.includes('notion.')) return 'Notion';
   return host;
+}
+
+function EvidenceShot({ url, kind }: { url: string; kind: string }) {
+  const allowExtensionless = kind === 'screenshot';
+  if (!isRenderableImageUrl(url, { allowExtensionless, extraHosts: extraImageHosts() })) return null;
+  return <SafeImage src={url} alt={kind} className="work-links__shot" allowExtensionless={allowExtensionless} />;
 }
 
 function Href({ url, children }: { url: string; children: React.ReactNode }) {
@@ -141,6 +151,7 @@ export function WorkLinks({ workId }: { workId: string }) {
           })}
           {codeEvidence.map((item) => (
             <li key={item.id} role="listitem" className="issue-children__row work-links__row">
+              <EvidenceShot url={item.url} kind={item.kind} />
               <span className="observation-card__meta">{item.kind.toLowerCase()}</span>
               <Href url={item.url}>{item.summary || item.url}</Href>
               <EvidenceVerificationStatus evidence={item as WorkEvidenceSummary} />
@@ -154,6 +165,7 @@ export function WorkLinks({ workId }: { workId: string }) {
           <ul className="issue-children" role="list" aria-label={source}>
             {links.map((link) => (
               <li key={link.key} role="listitem" className="issue-children__row work-links__row">
+                {link.evidence ? <EvidenceShot url={link.url} kind={link.evidence.kind} /> : null}
                 <Href url={link.url}>{link.summary || link.url}</Href>
                 {link.evidence ? <EvidenceVerificationStatus evidence={link.evidence as WorkEvidenceSummary} /> : null}
               </li>

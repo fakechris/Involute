@@ -224,7 +224,7 @@ export interface IssueSummary {
     };
   } | null;
   /** Private files on the work (INV-1003). */
-  attachments?: Array<{ id: string; filename: string; mimeType: string; size: number; url: string; createdAt: string }>;
+  attachments?: Array<{ id: string; filename: string; mimeType: string; size: number; url: string; textContent?: string | null; createdAt: string }>;
   children: {
     nodes: Array<{
       id: string;
@@ -718,6 +718,7 @@ export interface FileUploadInput {
   filename: string;
   mimeType: string;
   content: string;
+  issueId?: string | null;
 }
 
 export interface AttachmentSummary {
@@ -731,6 +732,7 @@ export interface AttachmentSummary {
 export interface FileUploadMutationData {
   fileUpload: {
     success: boolean;
+    message?: string | null;
     attachment: AttachmentSummary | null;
   };
 }
@@ -1098,7 +1100,7 @@ export interface BugCapture {
 
 /** The build the server runs (INV-1121); Report bug defaults found-in to it. */
 export interface ServerBuildQueryData {
-  serverBuild: { buildSha: string | null; serverVersion: string };
+  serverBuild: { buildSha: string | null; serverVersion: string; imageHostSuffixes?: string[] };
 }
 
 export interface FixedBugSummary {

@@ -35,6 +35,8 @@ describe('BugCaptureSection (INV-1146)', () => {
     expect(section).toHaveTextContent('font-size: 14px');
     expect(section).toHaveTextContent('TypeError: x');
     expect(section).toHaveTextContent('POST 500 https://app.example.com/graphql (120 ms)');
-    expect(within(section).getByRole('link', { name: 'Open screenshot' })).toHaveAttribute('href', '/uploads/shot.png');
+    const screenshot = within(section).getByRole('link', { name: 'Screenshot' });
+    expect(screenshot).toHaveAttribute('href', '/uploads/shot.png');
+    expect(within(screenshot).getByRole('img', { name: 'Screenshot' })).toBeInTheDocument();
   });
 });
