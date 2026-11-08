@@ -3051,7 +3051,10 @@ kbd {
 }
 
 .issue-neighbourhood__map-wrap--page .issue-neighbourhood__map {
-  max-width: 560px;
+  /* The page variant draws in a 760×520 space (INV-1496), about 1.7× the
+     drawer's 360px cap. 960px keeps the drawing readable without the map
+     becoming the tallest thing on the page (~660px tall at this aspect). */
+  max-width: 960px;
 }
 
 .issue-neighbourhood__map-edge {

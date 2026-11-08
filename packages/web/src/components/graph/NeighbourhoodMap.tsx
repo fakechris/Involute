@@ -38,8 +38,9 @@ interface NeighbourhoodMapProps {
   showLegend?: boolean;
   /**
    * `inline` is the copy inside an issue. `page` is the placement view, which
-   * is allowed a little more width. Both are capped: the SVG otherwise scales
-   * to the whole column and the map becomes the tallest thing on the page.
+   * renders at roughly twice the drawer's width (INV-1768). Both are capped:
+   * the SVG otherwise scales to the whole column and the map becomes the
+   * tallest thing on the page.
    */
   variant?: 'inline' | 'page';
 }
