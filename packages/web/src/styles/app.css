@@ -2872,6 +2872,12 @@ kbd {
   justify-content: space-between;
 }
 
+.issue-neighbourhood__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .issue-neighbourhood__rollups {
   display: flex;
   flex-direction: column;

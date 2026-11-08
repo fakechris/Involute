@@ -54,6 +54,11 @@ const OUTGOING_LINK_ALIASES: ReadonlySet<string> = new Set(['regressed_by']);
 export interface IqlCompileContext {
   /** Resolves `assignee:me`; null turns the term into a no-match filter. */
   viewerId: string | null;
+  /**
+   * The same readable scope `issueGraph` uses (INV-1758). `neighbourhood:`
+   * loads the graph through it so the board and the section cannot disagree.
+   */
+  readableWhere?: Prisma.IssueWhereInput | undefined;
 }
 
 /** Throws an IQL_PARSE GraphQLError that the error masker exposes verbatim. */
@@ -142,6 +147,9 @@ export function compileTerm(term: IqlTerm, context: IqlCompileContext): Prisma.I
   const listContains = (candidate: string): boolean => values.includes(candidate.toLowerCase());
 
   switch (term.field) {
+    case 'neighbourhood':
+      // Resolved in compileIqlWhere, which can read the work graph (INV-1758).
+      throw iqlParseGraphQLError('neighbourhood is resolved by the query compiler, not this synchronous path.');
     case 'project': {
       // project:<repo name | owner/repo | PROJECT identifier> (INV-1076).
       const IDENT = /^[A-Za-z]+-\d+$/;
@@ -382,6 +390,9 @@ function matchPositive(term: IqlTerm, work: DatabaseWork, context: IqlCompileCon
   const listContains = (candidate: string): boolean => values.some((value) => value.toLowerCase() === candidate.toLowerCase());
 
   switch (term.field) {
+    case 'neighbourhood':
+      // Webhook filters have the row, not the graph. Same as `link:` (INV-1758).
+      return false;
     case 'project': {
       // In memory only the repository is known; PROJECT identifiers match through the query path.
       const repo = (work.repository ?? '').toLowerCase();

@@ -45,8 +45,18 @@ interface IssueNeighbourhoodProps {
   issueId: string;
   /** Used for the "open full graph" link, which addresses items by identifier. */
   issueIdentifier: string;
+  /** Repository of the open item, so the board opens on that project. */
+  issueRepository?: string | null | undefined;
   /** Opens another item; the caller swaps the open item. */
   onOpen: (issueId: string) => void;
+}
+
+/** Board URL that filters to this item's neighbourhood (INV-1758). No `issue=`, so the drawer closes. */
+export function neighbourhoodBoardPath(identifier: string, repository?: string | null | undefined): string {
+  const params = new URLSearchParams();
+  if (repository) params.set('project', repository);
+  params.set('query', `neighbourhood:${identifier}`);
+  return `/?${params.toString()}`;
 }
 
 /** The map's drawing space in the drawer, and how many of each role fit. */
@@ -126,6 +136,25 @@ export function NeighbourhoodRow({
   );
 }
 
+export const NEIGHBOURHOOD_TRUNCATION_HINT = 'This neighbourhood is larger than one read shows.';
+
+export function NeighbourhoodTruncationHintText() {
+  return <p className="issue-panel__empty-hint">{NEIGHBOURHOOD_TRUNCATION_HINT}</p>;
+}
+
+/**
+ * The board filter uses the same depth-1 read. When that read is truncated,
+ * say so with the sentence the section already uses (INV-1758).
+ */
+export function NeighbourhoodTruncationHint({ identifier }: { identifier: string }) {
+  const { data } = useQuery<IssueGraphQueryData, IssueGraphQueryVariables>(ISSUE_GRAPH_QUERY, {
+    variables: { id: identifier, depth: 1 },
+    fetchPolicy: 'cache-and-network',
+  });
+  if (!data?.issueGraph.truncated) return null;
+  return <NeighbourhoodTruncationHintText />;
+}
+
 function toGraphNode(record: WorkGraphNodeRecord): GraphNode {
   return {
     id: record.id,
@@ -140,7 +169,7 @@ function toGraphNode(record: WorkGraphNodeRecord): GraphNode {
   };
 }
 
-export function IssueNeighbourhood({ issueId, issueIdentifier, onOpen }: IssueNeighbourhoodProps) {
+export function IssueNeighbourhood({ issueId, issueIdentifier, issueRepository, onOpen }: IssueNeighbourhoodProps) {
   const navigate = useNavigate();
   const { data, loading, error } = useQuery<IssueGraphQueryData, IssueGraphQueryVariables>(ISSUE_GRAPH_QUERY, {
     variables: { id: issueId, depth: 1 },
@@ -194,13 +223,22 @@ export function IssueNeighbourhood({ issueId, issueIdentifier, onOpen }: IssueNe
     <div className="issue-panel__section issue-neighbourhood" aria-label="Neighbourhood">
       <div className="issue-neighbourhood__header">
         <span className="issue-panel__label">Neighbourhood</span>
-        <Btn
-          variant="ghost"
-          size="sm"
-          onClick={() => navigate(`/graph?scope=issue&focus=${encodeURIComponent(issueIdentifier)}`)}
-        >
-          Open full graph
-        </Btn>
+        <div className="issue-neighbourhood__actions">
+          <Btn
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate(neighbourhoodBoardPath(issueIdentifier, issueRepository))}
+          >
+            Show on board
+          </Btn>
+          <Btn
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate(`/graph?scope=issue&focus=${encodeURIComponent(issueIdentifier)}`)}
+          >
+            Open full graph
+          </Btn>
+        </div>
       </div>
 
       {rollups.length > 0 ? (
@@ -250,9 +288,7 @@ export function IssueNeighbourhood({ issueId, issueIdentifier, onOpen }: IssueNe
         </>
       ) : null}
 
-      {graph.truncated ? (
-        <p className="issue-panel__empty-hint">This neighbourhood is larger than one read shows.</p>
-      ) : null}
+      {graph.truncated ? <NeighbourhoodTruncationHintText /> : null}
     </div>
   );
 }

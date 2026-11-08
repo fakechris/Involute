@@ -141,11 +141,47 @@ export async function compileIqlWhere(prisma: DatabaseClient, query: IqlQuery, c
       sort = await compileSort(prisma, term);
     } else if (isAttrField(term.field)) {
       clauses.push(await compileAttrTerm(prisma, term, context));
+    } else if (term.field === 'neighbourhood') {
+      clauses.push(await compileNeighbourhoodTerm(prisma, term, context));
     } else {
       clauses.push(compileTerm(term, context));
     }
   }
   return { where: clauses.length ? { AND: clauses } : undefined, sort };
+}
+
+const WORK_IDENTIFIER = /^[A-Za-z][A-Za-z0-9]{0,9}-\d{1,9}$/;
+
+/**
+ * `neighbourhood:<identifier>` (INV-1758): the same depth-1 read the issue
+ * section uses. One identifier. Unknown work is an IQL error, not an empty
+ * board. Imported lazily so the graph loader and this compiler do not cycle.
+ */
+async function compileNeighbourhoodTerm(
+  prisma: DatabaseClient,
+  term: IqlTerm,
+  context: IqlCompileContext,
+): Promise<Prisma.IssueWhereInput> {
+  if (term.op !== 'eq') throw iqlParseGraphQLError('neighbourhood matches one identifier: neighbourhood:INV-1739.');
+  const values = term.value.split(',').map((value) => value.trim()).filter(Boolean);
+  if (values.length !== 1 || !WORK_IDENTIFIER.test(values[0]!)) {
+    throw iqlParseGraphQLError('neighbourhood needs one work identifier, like neighbourhood:INV-1739.');
+  }
+  const identifier = values[0]!.toUpperCase();
+  const { findWorkByIdOrIdentifier } = await import('./context-service.js');
+  const work = await findWorkByIdOrIdentifier(prisma, identifier);
+  if (!work) throw iqlParseGraphQLError(`neighbourhood: no such work "${identifier}".`);
+  if (context.readableWhere) {
+    const visible = await prisma.issue.findFirst({
+      where: { AND: [context.readableWhere, { id: work.id }] },
+      select: { id: true },
+    });
+    if (!visible) throw iqlParseGraphQLError(`neighbourhood: no such work "${identifier}".`);
+  }
+  const { loadIssueWorkGraph } = await import('./issue-graph-view.js');
+  const graph = await loadIssueWorkGraph(prisma, { id: work.id, depth: 1 }, context.readableWhere);
+  const clause: Prisma.IssueWhereInput = { id: { in: graph.nodes.map((node) => node.id) } };
+  return term.negated ? { NOT: clause } : clause;
 }
 
 /** For callers whose order is fixed (ready lists, ranked search): sort is refused, not ignored. */

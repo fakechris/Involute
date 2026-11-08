@@ -93,6 +93,7 @@ import {
   TEAM_OWNER_REQUIRED_MESSAGE,
   UPLOAD_TOO_LARGE_MESSAGE,
   WEBHOOK_EVENT_TYPE_INVALID_MESSAGE,
+  WEBHOOK_NEIGHBOURHOOD_FILTER_MESSAGE,
   WEBHOOK_AGENT_NOT_FOUND_MESSAGE,
   WEBHOOK_NOT_FOUND_MESSAGE,
   WEBHOOK_URL_INVALID_MESSAGE,
@@ -3763,7 +3764,7 @@ const resolvers = {
     },
     issueStateCounts: async (_parent: unknown, args: { filter?: IssueFilterInput | null; query?: string | null }, context: GraphQLContext) => {
       const compiled = args.query?.trim()
-        ? await compileIqlWhere(context.prisma, parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null })
+        ? await compileIqlWhere(context.prisma, parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null, readableWhere: buildReadableIssueWhere(context) })
         : { where: undefined, sort: null };
       const where = combineIssueWhere(
         combineIssueWhere(buildIssueWhere(args.filter, context.viewer?.id ?? null), buildReadableIssueWhere(context)),
@@ -3839,7 +3840,7 @@ const resolvers = {
       const byUpdated = args.orderBy === 'UPDATED';
       const first = clampConnectionFirst(args.first, MAX_ISSUES_CONNECTION_FIRST);
       const compiled = args.query?.trim()
-        ? await compileIqlWhere(context.prisma, parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null })
+        ? await compileIqlWhere(context.prisma, parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null, readableWhere: buildReadableIssueWhere(context) })
         : { where: undefined, sort: null };
       const baseWhere = combineIssueWhere(
         combineIssueWhere(
@@ -4048,7 +4049,7 @@ const resolvers = {
       requireAuthentication(context);
       const filters: Prisma.IssueWhereInput[] = [];
       if (args.iql?.trim()) {
-        const compiled = refuseSort(await compileIqlWhere(context.prisma, parseIqlOrThrow(args.iql), { viewerId: context.viewer?.id ?? null }), 'ranked search');
+        const compiled = refuseSort(await compileIqlWhere(context.prisma, parseIqlOrThrow(args.iql), { viewerId: context.viewer?.id ?? null, readableWhere: buildReadableIssueWhere(context) }), 'ranked search');
         if (compiled) filters.push(compiled);
       }
       if (args.repository) filters.push({ repository: args.repository });
@@ -7191,7 +7192,12 @@ function normalizeWebhookFilterQuery(filterQuery: string | null): string | null 
   if (trimmed) {
     // Fail creation/update fast on malformed filters instead of silently
     // dropping every delivery later.
-    parseIqlOrThrow(trimmed);
+    const parsed = parseIqlOrThrow(trimmed);
+    // A delivery sees one work row. neighbourhood: would match nothing, and
+    // -neighbourhood: would match everything (INV-1758).
+    if (parsed.terms.some((term) => term.field === 'neighbourhood')) {
+      throw createValidationError(WEBHOOK_NEIGHBOURHOOD_FILTER_MESSAGE);
+    }
   }
   return trimmed;
 }

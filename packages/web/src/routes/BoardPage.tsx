@@ -17,10 +17,11 @@ import { useMutation, useQuery } from '@apollo/client/react';
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
+import { NeighbourhoodTruncationHint } from '../components/graph/IssueNeighbourhood';
 import { RouteIssueDrawer } from '../components/RouteIssueDrawer';
 import { isEditableTarget } from '../components/IssueDrawerHost';
 
-import { looksLikeIql } from '../board/iql-eval';
+import { looksLikeIql, neighbourhoodIdentifierOf, withoutNeighbourhoodTerm } from '../board/iql-eval';
 import {
   BOARD_FIELDS_QUERY,
   BOARD_PAGE_QUERY,
@@ -141,7 +142,7 @@ import { isSlashKey } from '../lib/keys';
 import { Select } from '../components/controls';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { FilterChip, FilterMenu, FilterSearch, SavedViewControl, SortControl } from '../components/filters';
-import { BulkActionBar, LoadingState, SegmentedControl } from '../components/status';
+import { BulkActionBar, InlineError, LoadingState, SegmentedControl } from '../components/status';
 import { WORK_FILTER_KEYS, WorkFilterBar, filtersToIql, hasWorkFilters, joinIql, useWorkFilters } from '../components/WorkFilterBar';
 import { isWorkIdentifier } from '../work/work-reference';
 import { RefusalNotice, nextFor, type ShownRefusal } from '../components/RefusalNotice';
@@ -191,6 +192,20 @@ function moveIssueToState(
  * The reference a ?issue= link carries, ready for the server: an identifier
  * (`INV-1446`, any casing — the server stores them uppercased) or a uuid.
  */
+/** The board query failed because the IQL itself is wrong, not because the API is down. */
+function iqlParseMessage(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null;
+  const record = error as {
+    message?: unknown;
+    errors?: Array<{ message?: string; extensions?: { code?: string } }>;
+    graphQLErrors?: Array<{ message?: string; extensions?: { code?: string } }>;
+  };
+  const list = record.errors ?? record.graphQLErrors ?? [];
+  const match = list.find((item) => item.extensions?.code === 'IQL_PARSE' || item.message?.startsWith('Invalid IQL query:'));
+  if (match?.message) return match.message;
+  return typeof record.message === 'string' && record.message.includes('Invalid IQL query:') ? record.message : null;
+}
+
 function normalizeIssueRef(ref: string): string {
   const trimmed = ref.trim();
   return isWorkIdentifier(trimmed) ? trimmed.toUpperCase() : trimmed;
@@ -202,6 +217,7 @@ export function BoardPage() {
   const urlTeam = searchParams.get('team');
   const urlProject = searchParams.get('project');
   const urlIssue = searchParams.get('issue');
+  const urlQuery = searchParams.get('query');
 
   const [activeTeamKey, setActiveTeamKey] = useState<string | null>(() => urlTeam ?? readStoredTeamKey());
   const [pendingTeamKey, setPendingTeamKey] = useState<string | null>(null);
@@ -237,7 +253,12 @@ export function BoardPage() {
   const [boardViewState, setBoardViewState] = useState<BoardViewState>(() => {
     const state = readStoredBoardViewState(activeTeamKey);
     const initialProject = searchParams.get('project');
-    return initialProject ? { ...state, projectKey: initialProject } : state;
+    const initialQuery = searchParams.get('query');
+    return {
+      ...state,
+      ...(initialProject ? { projectKey: initialProject } : {}),
+      ...(initialQuery !== null ? { query: initialQuery } : {}),
+    };
   });
 
   const queryTeamKey = pendingTeamKey ?? activeTeamKey;
@@ -443,6 +464,41 @@ export function BoardPage() {
     boardViewState.labelIds.length +
     WORK_FILTER_KEYS.filter((key) => workFilterState.filters[key] !== '').length;
   const [filterBarVisible, setFilterBarVisible] = useState(() => activeFilterCount > 0);
+
+  // A neighbourhood link lands as ?query=neighbourhood:INV-… (INV-1758).
+  // Apply it when the address changes. Back, which drops the param, clears
+  // the query. The first paint with no param keeps the stored board query.
+  const previousUrlQuery = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    const previous = previousUrlQuery.current;
+    previousUrlQuery.current = urlQuery;
+    if (urlQuery !== null) {
+      setBoardViewState((current) => (current.query === urlQuery ? current : { ...current, query: urlQuery }));
+      setFilterBarVisible(true);
+      return;
+    }
+    if (previous === undefined || previous === null) return;
+    setBoardViewState((current) => (current.query === '' ? current : { ...current, query: '' }));
+  }, [urlQuery]);
+
+  const replaceQueryParam = useCallback((query: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (query.trim()) next.set('query', query);
+        else next.delete('query');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
+  const writeBoardQuery = useCallback((query: string) => {
+    setBoardViewState((current) => ({ ...current, query }));
+    setActiveSavedBoardViewId('');
+    replaceQueryParam(query);
+  }, [replaceQueryParam]);
+
   const clearAllFiltersRef = useRef<() => void>(() => undefined);
   const [collapsedColumns, setCollapsedColumns] = useState<Record<string, boolean>>(() => {
     try {
@@ -522,22 +578,46 @@ export function BoardPage() {
     setLoadMoreIssuesError(null);
   }, [boardQueryVariables]);
 
+  // A neighbourhood link, and a search typed while the team is still
+  // resolving, stay in the address. Only a change from one real team to
+  // another restores that team's stored query (INV-1758).
+  const settledTeam = useRef<string | null>(null);
   useLayoutEffect(() => {
     const stored = readStoredBoardViewState(activeTeamKey);
     const targetProject = (urlProject !== null ? urlProject : stored.projectKey) ?? null;
-    setBoardViewState({ ...stored, projectKey: targetProject });
+    const previousTeam = settledTeam.current;
+    const switching = previousTeam !== null && previousTeam !== activeTeamKey;
+    if (activeTeamKey) settledTeam.current = activeTeamKey;
+    setBoardViewState({
+      ...stored,
+      projectKey: targetProject,
+      ...(!switching && urlQuery !== null ? { query: urlQuery } : {}),
+    });
     setSavedBoardViews(readSavedBoardViews(activeTeamKey));
     setActiveSavedBoardViewId('');
-    if (urlProject === null && stored.projectKey) {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.set('project', stored.projectKey!);
-          return next;
-        },
-        { replace: true },
-      );
-    }
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        let changed = false;
+        if (switching) {
+          if (stored.query.trim()) {
+            if (next.get('query') !== stored.query) {
+              next.set('query', stored.query);
+              changed = true;
+            }
+          } else if (next.has('query')) {
+            next.delete('query');
+            changed = true;
+          }
+        }
+        if (urlProject === null && stored.projectKey && next.get('project') !== stored.projectKey) {
+          next.set('project', stored.projectKey);
+          changed = true;
+        }
+        return changed ? next : prev;
+      },
+      { replace: true },
+    );
   }, [activeTeamKey]);
 
   // The signed-in account's copy, once the session says who that is (INV-1194).
@@ -562,6 +642,7 @@ export function BoardPage() {
 
       setBoardViewState(detail.state);
       setActiveSavedBoardViewId(detail.viewId ?? '');
+      replaceQueryParam(detail.state.query);
     }
 
     window.addEventListener(APPLY_BOARD_VIEW_EVENT, handleApplyBoardView as EventListener);
@@ -569,7 +650,7 @@ export function BoardPage() {
     return () => {
       window.removeEventListener(APPLY_BOARD_VIEW_EVENT, handleApplyBoardView as EventListener);
     };
-  }, []);
+  }, [replaceQueryParam]);
 
   useEffect(() => {
     writeStoredBoardViewState(activeTeamKey, boardViewState);
@@ -1116,8 +1197,7 @@ export function BoardPage() {
         event.preventDefault();
         pendingSearchFocusRef.current = true;
         setFilterBarVisible(true);
-        setBoardViewState((currentState) => ({ ...currentState, query: event.key }));
-        setActiveSavedBoardViewId('');
+        writeBoardQuery(event.key);
       }
     }
 
@@ -1126,7 +1206,7 @@ export function BoardPage() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isBacklogView]);
+  }, [isBacklogView, writeBoardQuery]);
 
   useEffect(() => {
     if (!pendingSearchFocusRef.current || !filterBarVisible) {
@@ -1866,6 +1946,7 @@ export function BoardPage() {
       (prev) => {
         const next = new URLSearchParams(prev);
         next.delete('project');
+        next.delete('query');
         for (const key of WORK_FILTER_KEYS) next.delete(key);
         return next;
       },
@@ -1880,11 +1961,7 @@ export function BoardPage() {
   }
 
   function clearBoardQuery() {
-    setBoardViewState((currentState) => ({
-      ...currentState,
-      query: '',
-    }));
-    setActiveSavedBoardViewId('');
+    writeBoardQuery('');
   }
 
   function removeBoardFilterToken(token: string) {
@@ -1966,7 +2043,9 @@ export function BoardPage() {
     setActiveSavedBoardViewId(nextViewId);
 
     if (!nextViewId) {
-      setBoardViewState(readStoredBoardViewState(activeTeamKey));
+      const stored = readStoredBoardViewState(activeTeamKey);
+      setBoardViewState(stored);
+      replaceQueryParam(stored.query);
       return;
     }
 
@@ -1974,6 +2053,7 @@ export function BoardPage() {
 
     if (nextView) {
       setBoardViewState(nextView.state);
+      replaceQueryParam(nextView.state.query);
     }
   }
 
@@ -2732,17 +2812,6 @@ export function BoardPage() {
     );
   }
 
-  if (error) {
-    const errorState = getBoardBootstrapErrorMessage(error);
-
-    return (
-      <main className="board-page board-page--state">
-        <PageHeader title="Board" />
-        <BootstrapErrorNotice state={errorState} />
-      </main>
-    );
-  }
-
   const peekIssue = peekIssueId ? boardVisibleIssues.find((issue) => issue.id === peekIssueId) ?? null : null;
   // The peek shows the issue's opening lines, and the board list does not
   // carry descriptions (INV-1470): it asks for the peeked one.
@@ -2755,6 +2824,20 @@ export function BoardPage() {
   });
   const peekDescription =
     peekIssue?.description ?? (peekDetailData?.issue?.id === peekIssueId ? peekDetailData.issue.description ?? '' : '');
+
+  // A bad neighbourhood id is an IQL error. Keep the filter bar so it can be
+  // edited or cleared, instead of replacing the board with "Board unavailable".
+  const iqlError = iqlParseMessage(error);
+  if (error && !iqlError) {
+    const errorState = getBoardBootstrapErrorMessage(error);
+
+    return (
+      <main className="board-page board-page--state">
+        <PageHeader title="Board" />
+        <BootstrapErrorNotice state={errorState} />
+      </main>
+    );
+  }
   const pickerTitles = { state: 'Change status', priority: 'Set priority', assignee: 'Assign to', label: 'Toggle label' } as const;
   const headerActions = (
     <>
@@ -2845,6 +2928,7 @@ export function BoardPage() {
     return user?.name ?? user?.email ?? userId;
   };
   const teamStates = selectedTeam?.states.nodes ?? [];
+  const neighbourhoodId = neighbourhoodIdentifierOf(boardViewState.query);
   const hasBoardFilters = Boolean(
     boardViewState.query || boardViewState.projectKey || boardViewState.assigneeIds.length > 0
     || boardViewState.stateIds.length > 0 || boardViewState.labelIds.length > 0 || hasWorkFilters(workFilterState.filters),
@@ -2852,6 +2936,7 @@ export function BoardPage() {
 
   const boardFilters = filterBarVisible ? (
     <>
+      {iqlError ? <InlineError>{iqlError}</InlineError> : null}
       <FilterSearch
         ref={boardSearchInputRef}
         aria-label="Search board issues"
@@ -2860,8 +2945,7 @@ export function BoardPage() {
         shortcut="/"
         blurOnEmptyEscape
         onChange={(query) => {
-          setBoardViewState((currentState) => ({ ...currentState, query }));
-          setActiveSavedBoardViewId('');
+          writeBoardQuery(query);
         }}
         trailing={(
           // Search across all work, including candidates outside this board.
@@ -2892,6 +2976,15 @@ export function BoardPage() {
         selected={boardViewState.assigneeIds}
         onToggle={(assigneeId) => toggleBoardFilterValue('assigneeIds', assigneeId)}
       />
+      {neighbourhoodId ? (
+        <FilterChip
+          removeLabel={`Remove Neighbourhood: ${neighbourhoodId}`}
+          onRemove={() => writeBoardQuery(withoutNeighbourhoodTerm(boardViewState.query))}
+        >
+          Neighbourhood: {neighbourhoodId}
+        </FilterChip>
+      ) : null}
+      {neighbourhoodId ? <NeighbourhoodTruncationHint identifier={neighbourhoodId} /> : null}
       {boardViewState.projectKey ? (
         <FilterChip removeLabel={`Remove Project: ${boardViewState.projectKey}`} onRemove={() => handleSelectProject(null)}>
           Project: {boardViewState.projectKey}

@@ -6,6 +6,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { startServer, type StartedServer } from './index.ts';
+import { loadIssueWorkGraph } from './issue-graph-view.ts';
+import { createWorkLink } from './link-service.ts';
 
 loadProjectEnvironment();
 
@@ -125,6 +127,52 @@ describe('IQL filtering across surfaces', () => {
     expect(await ids('project:FakeChris/Cangkuyi kind:ISSUE')).toEqual(['IQL-1']);
     expect(await ids('project:iql-9')).toEqual(['IQL-1']);
     expect(await ids('project:elsewhere')).toEqual([]);
+  });
+
+  it('filters by neighbourhood: the same depth-1 read as the issue graph (INV-1758)', async () => {
+    const reviewState = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'REVIEW' } });
+    const base = { teamId: team.id, commitmentStatus: 'COMMITTED' as const, repository: 'fakechris/Involute' };
+    const project = await prisma.issue.create({ data: { ...base, identifier: 'IQL-10', title: 'Project', kind: 'PROJECT', stateId: startedState.id } });
+    const milestone = await prisma.issue.create({ data: { ...base, identifier: 'IQL-11', title: 'Milestone', kind: 'MILESTONE', stateId: startedState.id, parentId: project.id } });
+    const focus = await prisma.issue.create({ data: { ...base, identifier: 'IQL-12', title: 'Focus', stateId: reviewState.id, parentId: milestone.id } });
+    const sibling = await prisma.issue.create({ data: { ...base, identifier: 'IQL-13', title: 'Sibling', stateId: backlogState.id, parentId: milestone.id } });
+    const child = await prisma.issue.create({ data: { ...base, identifier: 'IQL-14', title: 'Child', stateId: startedState.id, parentId: focus.id } });
+    const blocker = await prisma.issue.create({ data: { ...base, identifier: 'IQL-15', title: 'Blocker', stateId: startedState.id } });
+    const dependent = await prisma.issue.create({ data: { ...base, identifier: 'IQL-16', title: 'Dependent', stateId: backlogState.id } });
+    await prisma.issue.create({ data: { ...base, identifier: 'IQL-17', title: 'Unrelated', stateId: startedState.id } });
+    await createWorkLink(prisma, { fromId: blocker.id, toId: focus.id, type: 'BLOCKS' });
+    await createWorkLink(prisma, { fromId: focus.id, toId: dependent.id, type: 'BLOCKS' });
+
+    const graph = await loadIssueWorkGraph(prisma, { id: focus.id, depth: 1 });
+    const neighbourhood = graph.nodes.map((node) => node.identifier).sort();
+    const ids = async (q: string) => {
+      const result = await postGraphQL('query($q: String) { issues(first: 20, query: $q) { nodes { identifier } } }', { q });
+      expect(result.body.errors, JSON.stringify(result.body.errors)).toBeUndefined();
+      return result.body.data.issues.nodes.map((node: { identifier: string }) => node.identifier).sort();
+    };
+
+    expect(await ids('neighbourhood:iql-12')).toEqual(neighbourhood);
+    expect(neighbourhood).toEqual(expect.arrayContaining(['IQL-10', 'IQL-11', 'IQL-12', 'IQL-13', 'IQL-14', 'IQL-15', 'IQL-16']));
+    expect(neighbourhood).not.toContain('IQL-17');
+    const started = graph.nodes.filter((node) => node.state.type === 'STARTED').map((node) => node.identifier).sort();
+    expect(await ids('neighbourhood:IQL-12 state-type:STARTED')).toEqual(started);
+    expect(started).not.toContain('IQL-12');
+
+    const descendants = await ids('project:IQL-11');
+    expect(descendants).toEqual(['IQL-12', 'IQL-13', 'IQL-14']);
+    expect(descendants).not.toContain('IQL-15');
+
+    const unknown = await postGraphQL('query($q: String) { issues(first: 10, query: $q) { nodes { identifier } } }', { q: 'neighbourhood:NOPE-9' });
+    expect(unknown.body.errors?.[0]?.extensions?.code).toBe('IQL_PARSE');
+    expect(unknown.body.errors?.[0]?.message).toContain('NOPE-9');
+
+    const webhook = await postGraphQL(
+      'mutation($input: WebhookCreateInput!) { webhookCreate(input: $input) { success message } }',
+      { input: { team: team.key, url: 'https://hooks.example.test/neighbourhood', filterQuery: 'neighbourhood:IQL-12' } },
+    );
+    expect(webhook.body.errors, JSON.stringify(webhook.body.errors)).toBeUndefined();
+    expect(webhook.body.data.webhookCreate.success).toBe(false);
+    expect(webhook.body.data.webhookCreate.message).toContain('neighbourhood');
   });
 
   it('matches free-text terms against titles', async () => {

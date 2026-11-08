@@ -205,6 +205,8 @@ export const UPLOAD_TOO_LARGE_MESSAGE = 'Upload exceeds the 10 MB size limit.';
 export const WEBHOOK_NOT_FOUND_MESSAGE = 'Webhook subscription not found.';
 export const WEBHOOK_URL_INVALID_MESSAGE = 'Webhook URL must be a valid absolute http(s) URL.';
 export const WEBHOOK_EVENT_TYPE_INVALID_MESSAGE = 'Unknown webhook event type.';
+export const WEBHOOK_NEIGHBOURHOOD_FILTER_MESSAGE =
+  'Webhook filters cannot use neighbourhood:; a delivery has the work row, not its graph.';
 export const WEBHOOK_AGENT_NOT_FOUND_MESSAGE = 'No active agent with that handle or id; a push channel must name an agent.';
 export const AGENT_SCOPE_INVALID_MESSAGE = 'Unknown agent scope.';
 export const INVITE_FORBIDDEN_MESSAGE = "Only admins can invite people, unless an admin allows members to invite (Settings → Administration → Security).";
@@ -458,6 +460,7 @@ const exposedErrorCodes = new Map<string, string>([
   [WEBHOOK_URL_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [WEBHOOK_AGENT_NOT_FOUND_MESSAGE, 'BAD_USER_INPUT'],
   [WEBHOOK_EVENT_TYPE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
+  [WEBHOOK_NEIGHBOURHOOD_FILTER_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_SCOPE_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [AGENT_EMAIL_INVALID_MESSAGE, 'BAD_USER_INPUT'],
   [WORK_SHARE_NOT_PROJECT_MESSAGE, 'BAD_USER_INPUT'],

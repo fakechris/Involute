@@ -14,8 +14,10 @@
  *   value   := bareword | "quoted string"   (','-separated values become IN)
  *
  * Fields: team, state, state-type, kind, commitment, assignee, label,
- * priority, severity, updated, link, has, project. Bare words match
- * title/description text. `severity:sev1,sev2` / `severity:none` (INV-1115).
+ * priority, severity, updated, link, has, project, neighbourhood. Bare words
+ * match title/description text. `severity:sev1,sev2` / `severity:none`
+ * (INV-1115). `neighbourhood:<identifier>` is the issue neighbourhood
+ * (INV-1758), compiled by the server, not by this parser.
  *
  * Field definitions (INV-1505, docs/field-definitions.md §6): `attr.<key>:value`
  * (`,` for any of several, `none` / `any` for absent / present) and, for
@@ -66,6 +68,7 @@ export const IQL_FIELDS = [
   'link',
   'has',
   'project',
+  'neighbourhood',
 ] as const;
 
 export type IqlField = (typeof IQL_FIELDS)[number];

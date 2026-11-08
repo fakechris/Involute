@@ -40,7 +40,8 @@ async function gql<T>(
       ...(options.asHuman ? { 'x-involute-viewer-assertion': humanViewerAssertion() } : {}),
     },
   });
-  const body = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
+  const body = (await response.json()) as { data?: T; errors?: Array<{ message: string }>; error?: string };
+  if (!response.ok()) throw new Error(`GraphQL HTTP ${response.status()}: ${body.error ?? JSON.stringify(body)}`);
   if (body.errors?.length) throw new Error(body.errors.map((error) => error.message).join('; '));
   return body.data as T;
 }
