@@ -14,6 +14,7 @@ function assertion() {
 async function gql(request: APIRequestContext, query: string, variables: object = {}) {
   const response = await request.post(`${server}/graphql`, { headers: { authorization: `Bearer ${auth}`, 'x-involute-viewer-assertion': assertion() }, data: { query, variables } });
   const body = await response.json();
+  if (!response.ok()) throw new Error(`GraphQL HTTP ${response.status()}: ${body.error ?? JSON.stringify(body)}`);
   if (body.errors?.length) throw new Error(JSON.stringify(body.errors));
   return body.data;
 }

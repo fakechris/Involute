@@ -6,7 +6,8 @@ const authToken = process.env.E2E_AUTH_TOKEN ?? 'e2e-auth-token';
 
 async function gql<T>(request: APIRequestContext, query: string, variables: Record<string, unknown> = {}): Promise<T> {
   const response = await request.post(graphqlUrl, { data: { query, variables }, headers: { authorization: `Bearer ${authToken}` } });
-  const body = (await response.json()) as { data?: T; errors?: Array<{ message: string }> };
+  const body = (await response.json()) as { data?: T; errors?: Array<{ message: string }>; error?: string };
+  if (!response.ok()) throw new Error(`GraphQL HTTP ${response.status()}: ${body.error ?? JSON.stringify(body)}`);
   if (body.errors?.length) throw new Error(body.errors.map((error) => error.message).join('; '));
   return body.data as T;
 }

@@ -36,11 +36,17 @@ done
 DATABASE_URL="$DATABASE_URL" pnpm --filter @turnkeyai/involute-server exec prisma migrate reset --force --skip-generate --skip-seed
 DATABASE_URL="$DATABASE_URL" SEED_DEFAULT_ADMIN="true" pnpm --filter @turnkeyai/involute-server exec prisma db seed
 
+# The suite and both browser workers share one bearer. A full run is past
+# the production burst (300), and a 429 body has no GraphQL `data`, so the
+# helpers used to throw "reading 'teams'" (INV-1758). Keep the production
+# limit; give this process room for the run.
 exec env \
   APP_ORIGIN="$APP_ORIGIN" \
   DATABASE_URL="$DATABASE_URL" \
   AUTH_TOKEN="$AUTH_TOKEN" \
   ALLOW_ADMIN_FALLBACK="false" \
   VIEWER_ASSERTION_SECRET="$VIEWER_ASSERTION_SECRET" \
+  RATE_LIMIT_BURST="${E2E_RATE_LIMIT_BURST:-5000}" \
+  RATE_LIMIT_REFILL_PER_MINUTE="${E2E_RATE_LIMIT_REFILL_PER_MINUTE:-5000}" \
   PORT="$SERVER_PORT" \
   pnpm --filter @turnkeyai/involute-server exec tsx src/index.ts
