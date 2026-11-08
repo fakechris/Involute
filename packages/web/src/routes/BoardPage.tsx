@@ -578,19 +578,20 @@ export function BoardPage() {
     setLoadMoreIssuesError(null);
   }, [boardQueryVariables]);
 
-  // The address query applies on the first paint (a neighbourhood link).
-  // Switching teams restores that team's stored query instead of carrying
-  // the previous team's neighbourhood into an empty board.
-  const openedBoardTeam = useRef(false);
+  // A neighbourhood link, and a search typed while the team is still
+  // resolving, stay in the address. Only a change from one real team to
+  // another restores that team's stored query (INV-1758).
+  const settledTeam = useRef<string | null>(null);
   useLayoutEffect(() => {
     const stored = readStoredBoardViewState(activeTeamKey);
     const targetProject = (urlProject !== null ? urlProject : stored.projectKey) ?? null;
-    const opening = !openedBoardTeam.current;
-    openedBoardTeam.current = true;
+    const previousTeam = settledTeam.current;
+    const switching = previousTeam !== null && previousTeam !== activeTeamKey;
+    if (activeTeamKey) settledTeam.current = activeTeamKey;
     setBoardViewState({
       ...stored,
       projectKey: targetProject,
-      ...(opening && urlQuery !== null ? { query: urlQuery } : {}),
+      ...(!switching && urlQuery !== null ? { query: urlQuery } : {}),
     });
     setSavedBoardViews(readSavedBoardViews(activeTeamKey));
     setActiveSavedBoardViewId('');
@@ -598,7 +599,7 @@ export function BoardPage() {
       (prev) => {
         const next = new URLSearchParams(prev);
         let changed = false;
-        if (!opening) {
+        if (switching) {
           if (stored.query.trim()) {
             if (next.get('query') !== stored.query) {
               next.set('query', stored.query);
