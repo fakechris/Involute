@@ -72,6 +72,11 @@ const LOCAL_CUSTOM_PROPERTIES = new Set<string>([
   // Set when the hover card of a work reference is placed (INV-1466) and read by .work-reference__popover.
   '--work-reference-top',
   '--work-reference-left',
+  // Set on .image-viewer__img from data-zoom / data-turn, and while dragging.
+  '--image-zoom',
+  '--image-turn',
+  '--image-x',
+  '--image-y',
 ]);
 
 /**

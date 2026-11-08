@@ -9,6 +9,7 @@ import { InlineError } from './status';
 import { Btn } from './Primitives';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { readFileAsBase64 } from './RichTextEditor';
+import { ImageViewer } from './ImageViewer';
 import { SafeImage } from './SafeImage';
 
 export interface WorkFile {
@@ -40,6 +41,7 @@ function isMarkdown(file: WorkFile): boolean {
 export function WorkFiles({ workId, files, onChanged }: { workId: string; files: WorkFile[]; onChanged?: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<WorkFile | null>(null);
   const [runUpload, state] = useMutation<FileUploadMutationData, FileUploadMutationVariables>(FILE_UPLOAD_MUTATION);
 
   async function onPick(file: File) {
@@ -73,8 +75,14 @@ export function WorkFiles({ workId, files, onChanged }: { workId: string; files:
       <ul className="issue-children" role="list" aria-label="Files">
         {files.map((file) => (
           <li key={file.id} role="listitem" className="issue-children__row">
-            {showThumb(file) ? <SafeImage src={file.url} alt={file.filename} className="work-files__thumb" /> : null}
-            <a href={file.url} target="_blank" rel="noreferrer">{file.filename}</a>
+            {showThumb(file) ? (
+              <SafeImage src={file.url} alt={file.filename} className="work-files__thumb" onOpen={() => setViewing(file)} />
+            ) : null}
+            {showThumb(file) ? (
+              <button type="button" className="image-file-name" onClick={() => setViewing(file)}>{file.filename}</button>
+            ) : (
+              <a href={file.url} target="_blank" rel="noreferrer">{file.filename}</a>
+            )}
             <span className="observation-card__meta">{file.mimeType} · {Math.max(1, Math.round(file.size / 1024))} KB</span>
             {isMarkdown(file) && file.textContent ? (
               <details className="work-files__preview" open>
@@ -97,6 +105,7 @@ export function WorkFiles({ workId, files, onChanged }: { workId: string; files:
       />
       <Btn variant="ghost" disabled={state?.loading} onClick={() => inputRef.current?.click()}>Add file</Btn>
       {error ? <InlineError>{error}</InlineError> : null}
+      {viewing ? <ImageViewer src={viewing.url} alt={viewing.filename} onClose={() => setViewing(null)} /> : null}
     </div>
   );
 }

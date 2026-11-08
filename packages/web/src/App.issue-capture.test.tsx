@@ -1,11 +1,11 @@
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { boardQueryResult, renderApp } from './test/app-test-helpers';
 import { App } from './App';
 
 // INV-1146: a bug reported with the capture extension shows its environment on
-// the issue page, with the screenshot one click away.
+// the issue page, and the screenshot opens on this page.
 describe('Issue page environment', () => {
   it('shows the captured environment of a bug report', async () => {
     const capture = {
@@ -31,9 +31,10 @@ describe('Issue page environment', () => {
     expect(within(section).getByRole('link', { name: 'Board' })).toHaveAttribute('href', 'https://app.example.com/board');
     expect(section).toHaveTextContent('1280×720 @2x');
     expect(section).toHaveTextContent('TypeError: x');
-    const screenshot = within(section).getByRole('link', { name: 'Screenshot' });
-    expect(screenshot).toHaveAttribute('href', '/uploads/shot.png');
-    expect(within(screenshot).getByRole('img', { name: 'Screenshot' })).toBeInTheDocument();
+    const screenshot = within(section).getByRole('button', { name: 'Screenshot' });
+    expect(within(screenshot).getByRole('img', { name: 'Screenshot' })).toHaveAttribute('src', '/uploads/shot.png');
+    fireEvent.click(screenshot);
+    expect(screen.getByRole('dialog', { name: 'Screenshot' })).toBeInTheDocument();
   });
 
   it('has no Environment section without a capture', async () => {

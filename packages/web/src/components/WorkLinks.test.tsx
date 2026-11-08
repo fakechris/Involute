@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkLinks } from './WorkLinks';
@@ -28,6 +28,9 @@ describe('WorkLinks pictures', () => {
     render(<WorkLinks workId="work-1" />);
     expect(screen.getByRole('img', { name: 'screenshot' })).toHaveAttribute('src', 'https://img.qiniucdn.com/shot');
     expect(screen.getByRole('img', { name: 'artifact' })).toHaveAttribute('src', 'https://bucket.oss-cn-hangzhou.aliyuncs.com/board.png');
+    fireEvent.click(screen.getByRole('button', { name: 'screenshot' }));
+    expect(within(screen.getByRole('dialog', { name: 'screenshot' })).getByRole('img', { name: 'screenshot' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'screenshot' })).toBeNull();
     const notes = screen.getByRole('link', { name: 'Notes' });
     expect(notes).toHaveAttribute('href', 'https://example.com/notes');
     expect(within(notes).queryByRole('img')).toBeNull();
