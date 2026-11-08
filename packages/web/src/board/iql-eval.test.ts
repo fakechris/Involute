@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { looksLikeIql } from './iql-eval';
+import { looksLikeIql, neighbourhoodIdentifierOf, withoutNeighbourhoodTerm } from './iql-eval';
 
 // The board asks the server to filter and keeps its answer (INV-1470); this
 // only tells the two apart, so plain text goes to the server's text search and
@@ -20,5 +20,12 @@ describe('looksLikeIql', () => {
 
   it('falls back to plain text when the query does not parse', () => {
     expect(looksLikeIql('unknownfield:x')).toBe(false);
+  });
+
+  it('treats neighbourhood: as IQL and keeps the chip identifier (INV-1758)', () => {
+    expect(looksLikeIql('neighbourhood:INV-1739')).toBe(true);
+    expect(neighbourhoodIdentifierOf('neighbourhood:inv-1739 state:"In Review"')).toBe('INV-1739');
+    expect(neighbourhoodIdentifierOf('-neighbourhood:INV-1739')).toBeNull();
+    expect(withoutNeighbourhoodTerm('neighbourhood:INV-1739 state:"In Review"')).toBe('state:"In Review"');
   });
 });

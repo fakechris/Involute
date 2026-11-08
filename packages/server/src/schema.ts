@@ -3763,7 +3763,7 @@ const resolvers = {
     },
     issueStateCounts: async (_parent: unknown, args: { filter?: IssueFilterInput | null; query?: string | null }, context: GraphQLContext) => {
       const compiled = args.query?.trim()
-        ? await compileIqlWhere(context.prisma, parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null })
+        ? await compileIqlWhere(context.prisma, parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null, readableWhere: buildReadableIssueWhere(context) })
         : { where: undefined, sort: null };
       const where = combineIssueWhere(
         combineIssueWhere(buildIssueWhere(args.filter, context.viewer?.id ?? null), buildReadableIssueWhere(context)),
@@ -3839,7 +3839,7 @@ const resolvers = {
       const byUpdated = args.orderBy === 'UPDATED';
       const first = clampConnectionFirst(args.first, MAX_ISSUES_CONNECTION_FIRST);
       const compiled = args.query?.trim()
-        ? await compileIqlWhere(context.prisma, parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null })
+        ? await compileIqlWhere(context.prisma, parseIqlOrThrow(args.query), { viewerId: context.viewer?.id ?? null, readableWhere: buildReadableIssueWhere(context) })
         : { where: undefined, sort: null };
       const baseWhere = combineIssueWhere(
         combineIssueWhere(
@@ -4048,7 +4048,7 @@ const resolvers = {
       requireAuthentication(context);
       const filters: Prisma.IssueWhereInput[] = [];
       if (args.iql?.trim()) {
-        const compiled = refuseSort(await compileIqlWhere(context.prisma, parseIqlOrThrow(args.iql), { viewerId: context.viewer?.id ?? null }), 'ranked search');
+        const compiled = refuseSort(await compileIqlWhere(context.prisma, parseIqlOrThrow(args.iql), { viewerId: context.viewer?.id ?? null, readableWhere: buildReadableIssueWhere(context) }), 'ranked search');
         if (compiled) filters.push(compiled);
       }
       if (args.repository) filters.push({ repository: args.repository });

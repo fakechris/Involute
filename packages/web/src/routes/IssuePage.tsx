@@ -827,6 +827,7 @@ export function IssuePage() {
               key={`neighbourhood-${activeIssue.id}`}
               issueId={activeIssue.id}
               issueIdentifier={activeIssue.identifier}
+              issueRepository={activeIssue.repository}
               onOpen={(issueId) => navigate(`/issue/${issueId}`)}
             />
 

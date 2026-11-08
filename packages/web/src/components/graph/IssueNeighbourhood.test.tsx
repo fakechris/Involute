@@ -171,4 +171,22 @@ describe('IssueNeighbourhood', () => {
     fireEvent.click(screen.getByText('Open full graph'));
     expect(navigate).toHaveBeenCalledWith('/graph?scope=issue&focus=INV-1496');
   });
+
+  it('opens the board filtered to this neighbourhood (INV-1758)', () => {
+    render(
+      <IssueNeighbourhood
+        issueId="focus"
+        issueIdentifier="INV-1496"
+        issueRepository="fakechris/Involute"
+        onOpen={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByText('Show on board'));
+    const href = navigate.mock.calls.at(-1)?.[0] as string;
+    const url = new URL(href, 'http://local');
+    expect(url.pathname).toBe('/');
+    expect(url.searchParams.get('project')).toBe('fakechris/Involute');
+    expect(url.searchParams.get('query')).toBe('neighbourhood:INV-1496');
+    expect(url.searchParams.get('issue')).toBeNull();
+  });
 });

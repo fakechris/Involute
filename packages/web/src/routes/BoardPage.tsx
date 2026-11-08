@@ -17,10 +17,11 @@ import { useMutation, useQuery } from '@apollo/client/react';
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
+import { NeighbourhoodTruncationHint } from '../components/graph/IssueNeighbourhood';
 import { RouteIssueDrawer } from '../components/RouteIssueDrawer';
 import { isEditableTarget } from '../components/IssueDrawerHost';
 
-import { looksLikeIql } from '../board/iql-eval';
+import { looksLikeIql, neighbourhoodIdentifierOf, withoutNeighbourhoodTerm } from '../board/iql-eval';
 import {
   BOARD_FIELDS_QUERY,
   BOARD_PAGE_QUERY,
@@ -202,6 +203,7 @@ export function BoardPage() {
   const urlTeam = searchParams.get('team');
   const urlProject = searchParams.get('project');
   const urlIssue = searchParams.get('issue');
+  const urlQuery = searchParams.get('query');
 
   const [activeTeamKey, setActiveTeamKey] = useState<string | null>(() => urlTeam ?? readStoredTeamKey());
   const [pendingTeamKey, setPendingTeamKey] = useState<string | null>(null);
@@ -237,7 +239,12 @@ export function BoardPage() {
   const [boardViewState, setBoardViewState] = useState<BoardViewState>(() => {
     const state = readStoredBoardViewState(activeTeamKey);
     const initialProject = searchParams.get('project');
-    return initialProject ? { ...state, projectKey: initialProject } : state;
+    const initialQuery = searchParams.get('query');
+    return {
+      ...state,
+      ...(initialProject ? { projectKey: initialProject } : {}),
+      ...(initialQuery !== null ? { query: initialQuery } : {}),
+    };
   });
 
   const queryTeamKey = pendingTeamKey ?? activeTeamKey;
@@ -443,6 +450,33 @@ export function BoardPage() {
     boardViewState.labelIds.length +
     WORK_FILTER_KEYS.filter((key) => workFilterState.filters[key] !== '').length;
   const [filterBarVisible, setFilterBarVisible] = useState(() => activeFilterCount > 0);
+
+  // A neighbourhood link lands as ?query=neighbourhood:INV-… (INV-1758).
+  // Apply it when the address changes, and keep the filter bar open.
+  useEffect(() => {
+    if (urlQuery === null) return;
+    setBoardViewState((current) => (current.query === urlQuery ? current : { ...current, query: urlQuery }));
+    setFilterBarVisible(true);
+  }, [urlQuery]);
+
+  const replaceQueryParam = useCallback((query: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (query.trim()) next.set('query', query);
+        else next.delete('query');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
+  const writeBoardQuery = useCallback((query: string) => {
+    setBoardViewState((current) => ({ ...current, query }));
+    setActiveSavedBoardViewId('');
+    replaceQueryParam(query);
+  }, [replaceQueryParam]);
+
   const clearAllFiltersRef = useRef<() => void>(() => undefined);
   const [collapsedColumns, setCollapsedColumns] = useState<Record<string, boolean>>(() => {
     try {
@@ -525,7 +559,11 @@ export function BoardPage() {
   useLayoutEffect(() => {
     const stored = readStoredBoardViewState(activeTeamKey);
     const targetProject = (urlProject !== null ? urlProject : stored.projectKey) ?? null;
-    setBoardViewState({ ...stored, projectKey: targetProject });
+    setBoardViewState({
+      ...stored,
+      projectKey: targetProject,
+      ...(urlQuery !== null ? { query: urlQuery } : {}),
+    });
     setSavedBoardViews(readSavedBoardViews(activeTeamKey));
     setActiveSavedBoardViewId('');
     if (urlProject === null && stored.projectKey) {
@@ -562,6 +600,7 @@ export function BoardPage() {
 
       setBoardViewState(detail.state);
       setActiveSavedBoardViewId(detail.viewId ?? '');
+      replaceQueryParam(detail.state.query);
     }
 
     window.addEventListener(APPLY_BOARD_VIEW_EVENT, handleApplyBoardView as EventListener);
@@ -569,7 +608,7 @@ export function BoardPage() {
     return () => {
       window.removeEventListener(APPLY_BOARD_VIEW_EVENT, handleApplyBoardView as EventListener);
     };
-  }, []);
+  }, [replaceQueryParam]);
 
   useEffect(() => {
     writeStoredBoardViewState(activeTeamKey, boardViewState);
@@ -1116,8 +1155,7 @@ export function BoardPage() {
         event.preventDefault();
         pendingSearchFocusRef.current = true;
         setFilterBarVisible(true);
-        setBoardViewState((currentState) => ({ ...currentState, query: event.key }));
-        setActiveSavedBoardViewId('');
+        writeBoardQuery(event.key);
       }
     }
 
@@ -1126,7 +1164,7 @@ export function BoardPage() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isBacklogView]);
+  }, [isBacklogView, writeBoardQuery]);
 
   useEffect(() => {
     if (!pendingSearchFocusRef.current || !filterBarVisible) {
@@ -1866,6 +1904,7 @@ export function BoardPage() {
       (prev) => {
         const next = new URLSearchParams(prev);
         next.delete('project');
+        next.delete('query');
         for (const key of WORK_FILTER_KEYS) next.delete(key);
         return next;
       },
@@ -1880,11 +1919,7 @@ export function BoardPage() {
   }
 
   function clearBoardQuery() {
-    setBoardViewState((currentState) => ({
-      ...currentState,
-      query: '',
-    }));
-    setActiveSavedBoardViewId('');
+    writeBoardQuery('');
   }
 
   function removeBoardFilterToken(token: string) {
@@ -1966,7 +2001,9 @@ export function BoardPage() {
     setActiveSavedBoardViewId(nextViewId);
 
     if (!nextViewId) {
-      setBoardViewState(readStoredBoardViewState(activeTeamKey));
+      const stored = readStoredBoardViewState(activeTeamKey);
+      setBoardViewState(stored);
+      replaceQueryParam(stored.query);
       return;
     }
 
@@ -1974,6 +2011,7 @@ export function BoardPage() {
 
     if (nextView) {
       setBoardViewState(nextView.state);
+      replaceQueryParam(nextView.state.query);
     }
   }
 
@@ -2845,6 +2883,7 @@ export function BoardPage() {
     return user?.name ?? user?.email ?? userId;
   };
   const teamStates = selectedTeam?.states.nodes ?? [];
+  const neighbourhoodId = neighbourhoodIdentifierOf(boardViewState.query);
   const hasBoardFilters = Boolean(
     boardViewState.query || boardViewState.projectKey || boardViewState.assigneeIds.length > 0
     || boardViewState.stateIds.length > 0 || boardViewState.labelIds.length > 0 || hasWorkFilters(workFilterState.filters),
@@ -2860,8 +2899,7 @@ export function BoardPage() {
         shortcut="/"
         blurOnEmptyEscape
         onChange={(query) => {
-          setBoardViewState((currentState) => ({ ...currentState, query }));
-          setActiveSavedBoardViewId('');
+          writeBoardQuery(query);
         }}
         trailing={(
           // Search across all work, including candidates outside this board.
@@ -2892,6 +2930,15 @@ export function BoardPage() {
         selected={boardViewState.assigneeIds}
         onToggle={(assigneeId) => toggleBoardFilterValue('assigneeIds', assigneeId)}
       />
+      {neighbourhoodId ? (
+        <FilterChip
+          removeLabel={`Remove Neighbourhood: ${neighbourhoodId}`}
+          onRemove={() => writeBoardQuery(withoutNeighbourhoodTerm(boardViewState.query))}
+        >
+          Neighbourhood: {neighbourhoodId}
+        </FilterChip>
+      ) : null}
+      {neighbourhoodId ? <NeighbourhoodTruncationHint identifier={neighbourhoodId} /> : null}
       {boardViewState.projectKey ? (
         <FilterChip removeLabel={`Remove Project: ${boardViewState.projectKey}`} onRemove={() => handleSelectProject(null)}>
           Project: {boardViewState.projectKey}

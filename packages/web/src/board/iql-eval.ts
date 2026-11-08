@@ -1,5 +1,26 @@
 import { parseIql } from '@turnkeyai/involute-shared/iql';
 
+import { isWorkIdentifier } from '../work/work-reference';
+
+/** The identifier in `neighbourhood:INV-1739`, if the query has that term (INV-1758). */
+export function neighbourhoodIdentifierOf(query: string): string | null {
+  try {
+    const term = parseIql(query).terms.find((item) => item.field === 'neighbourhood' && !item.negated);
+    const value = term?.value.split(',')[0]?.trim().toUpperCase() ?? '';
+    return isWorkIdentifier(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Drop a `neighbourhood:` term, leaving the rest of the query. */
+export function withoutNeighbourhoodTerm(query: string): string {
+  return query
+    .replace(/(^|\s)-?neighbourhood:(?:"[^"]+"|'[^']+'|\S+)/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /**
  * True when the saved-view query uses IQL field syntax (any `field:value`
  * token). Plain text keeps the legacy substring behaviour.

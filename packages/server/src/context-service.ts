@@ -204,7 +204,7 @@ export async function searchWork(
   let sort: AttrSort | null = null;
   if (input.iql?.trim()) {
     const parsed = parseIqlOrThrow(input.iql);
-    const compiled = await compileIqlWhere(prisma, parsed, { viewerId: input.viewerId ?? null });
+    const compiled = await compileIqlWhere(prisma, parsed, { viewerId: input.viewerId ?? null, readableWhere });
     if (compiled.where) {
       clauses.push(compiled.where);
     }
@@ -272,7 +272,7 @@ export async function listReadyWork(
 ): Promise<{ hasNextPage: boolean; nodes: Issue[] }> {
   const first = clampFirst(input.first);
   const iqlWhere = input.iql?.trim()
-    ? refuseSort(await compileIqlWhere(prisma, parseIqlOrThrow(input.iql), { viewerId: input.viewerId ?? null }), 'ready lists (they are ordered by priority)')
+    ? refuseSort(await compileIqlWhere(prisma, parseIqlOrThrow(input.iql), { viewerId: input.viewerId ?? null, readableWhere }), 'ready lists (they are ordered by priority)')
     : undefined;
   const scope = await resolveProjectScope(prisma, input, readableWhere);
   const baseWhere: Prisma.IssueWhereInput = {
