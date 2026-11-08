@@ -142,7 +142,7 @@ import { isSlashKey } from '../lib/keys';
 import { Select } from '../components/controls';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { FilterChip, FilterMenu, FilterSearch, SavedViewControl, SortControl } from '../components/filters';
-import { BulkActionBar, LoadingState, SegmentedControl } from '../components/status';
+import { BulkActionBar, InlineError, LoadingState, SegmentedControl } from '../components/status';
 import { WORK_FILTER_KEYS, WorkFilterBar, filtersToIql, hasWorkFilters, joinIql, useWorkFilters } from '../components/WorkFilterBar';
 import { isWorkIdentifier } from '../work/work-reference';
 import { RefusalNotice, nextFor, type ShownRefusal } from '../components/RefusalNotice';
@@ -192,6 +192,20 @@ function moveIssueToState(
  * The reference a ?issue= link carries, ready for the server: an identifier
  * (`INV-1446`, any casing — the server stores them uppercased) or a uuid.
  */
+/** The board query failed because the IQL itself is wrong, not because the API is down. */
+function iqlParseMessage(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null;
+  const record = error as {
+    message?: unknown;
+    errors?: Array<{ message?: string; extensions?: { code?: string } }>;
+    graphQLErrors?: Array<{ message?: string; extensions?: { code?: string } }>;
+  };
+  const list = record.errors ?? record.graphQLErrors ?? [];
+  const match = list.find((item) => item.extensions?.code === 'IQL_PARSE' || item.message?.startsWith('Invalid IQL query:'));
+  if (match?.message) return match.message;
+  return typeof record.message === 'string' && record.message.includes('Invalid IQL query:') ? record.message : null;
+}
+
 function normalizeIssueRef(ref: string): string {
   const trimmed = ref.trim();
   return isWorkIdentifier(trimmed) ? trimmed.toUpperCase() : trimmed;
@@ -452,11 +466,19 @@ export function BoardPage() {
   const [filterBarVisible, setFilterBarVisible] = useState(() => activeFilterCount > 0);
 
   // A neighbourhood link lands as ?query=neighbourhood:INV-… (INV-1758).
-  // Apply it when the address changes, and keep the filter bar open.
+  // Apply it when the address changes. Back, which drops the param, clears
+  // the query. The first paint with no param keeps the stored board query.
+  const previousUrlQuery = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    if (urlQuery === null) return;
-    setBoardViewState((current) => (current.query === urlQuery ? current : { ...current, query: urlQuery }));
-    setFilterBarVisible(true);
+    const previous = previousUrlQuery.current;
+    previousUrlQuery.current = urlQuery;
+    if (urlQuery !== null) {
+      setBoardViewState((current) => (current.query === urlQuery ? current : { ...current, query: urlQuery }));
+      setFilterBarVisible(true);
+      return;
+    }
+    if (previous === undefined || previous === null) return;
+    setBoardViewState((current) => (current.query === '' ? current : { ...current, query: '' }));
   }, [urlQuery]);
 
   const replaceQueryParam = useCallback((query: string) => {
@@ -556,26 +578,45 @@ export function BoardPage() {
     setLoadMoreIssuesError(null);
   }, [boardQueryVariables]);
 
+  // The address query applies on the first paint (a neighbourhood link).
+  // Switching teams restores that team's stored query instead of carrying
+  // the previous team's neighbourhood into an empty board.
+  const openedBoardTeam = useRef(false);
   useLayoutEffect(() => {
     const stored = readStoredBoardViewState(activeTeamKey);
     const targetProject = (urlProject !== null ? urlProject : stored.projectKey) ?? null;
+    const opening = !openedBoardTeam.current;
+    openedBoardTeam.current = true;
     setBoardViewState({
       ...stored,
       projectKey: targetProject,
-      ...(urlQuery !== null ? { query: urlQuery } : {}),
+      ...(opening && urlQuery !== null ? { query: urlQuery } : {}),
     });
     setSavedBoardViews(readSavedBoardViews(activeTeamKey));
     setActiveSavedBoardViewId('');
-    if (urlProject === null && stored.projectKey) {
-      setSearchParams(
-        (prev) => {
-          const next = new URLSearchParams(prev);
-          next.set('project', stored.projectKey!);
-          return next;
-        },
-        { replace: true },
-      );
-    }
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        let changed = false;
+        if (!opening) {
+          if (stored.query.trim()) {
+            if (next.get('query') !== stored.query) {
+              next.set('query', stored.query);
+              changed = true;
+            }
+          } else if (next.has('query')) {
+            next.delete('query');
+            changed = true;
+          }
+        }
+        if (urlProject === null && stored.projectKey && next.get('project') !== stored.projectKey) {
+          next.set('project', stored.projectKey);
+          changed = true;
+        }
+        return changed ? next : prev;
+      },
+      { replace: true },
+    );
   }, [activeTeamKey]);
 
   // The signed-in account's copy, once the session says who that is (INV-1194).
@@ -2770,17 +2811,6 @@ export function BoardPage() {
     );
   }
 
-  if (error) {
-    const errorState = getBoardBootstrapErrorMessage(error);
-
-    return (
-      <main className="board-page board-page--state">
-        <PageHeader title="Board" />
-        <BootstrapErrorNotice state={errorState} />
-      </main>
-    );
-  }
-
   const peekIssue = peekIssueId ? boardVisibleIssues.find((issue) => issue.id === peekIssueId) ?? null : null;
   // The peek shows the issue's opening lines, and the board list does not
   // carry descriptions (INV-1470): it asks for the peeked one.
@@ -2793,6 +2823,20 @@ export function BoardPage() {
   });
   const peekDescription =
     peekIssue?.description ?? (peekDetailData?.issue?.id === peekIssueId ? peekDetailData.issue.description ?? '' : '');
+
+  // A bad neighbourhood id is an IQL error. Keep the filter bar so it can be
+  // edited or cleared, instead of replacing the board with "Board unavailable".
+  const iqlError = iqlParseMessage(error);
+  if (error && !iqlError) {
+    const errorState = getBoardBootstrapErrorMessage(error);
+
+    return (
+      <main className="board-page board-page--state">
+        <PageHeader title="Board" />
+        <BootstrapErrorNotice state={errorState} />
+      </main>
+    );
+  }
   const pickerTitles = { state: 'Change status', priority: 'Set priority', assignee: 'Assign to', label: 'Toggle label' } as const;
   const headerActions = (
     <>
@@ -2891,6 +2935,7 @@ export function BoardPage() {
 
   const boardFilters = filterBarVisible ? (
     <>
+      {iqlError ? <InlineError>{iqlError}</InlineError> : null}
       <FilterSearch
         ref={boardSearchInputRef}
         aria-label="Search board issues"

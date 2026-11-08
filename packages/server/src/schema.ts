@@ -93,6 +93,7 @@ import {
   TEAM_OWNER_REQUIRED_MESSAGE,
   UPLOAD_TOO_LARGE_MESSAGE,
   WEBHOOK_EVENT_TYPE_INVALID_MESSAGE,
+  WEBHOOK_NEIGHBOURHOOD_FILTER_MESSAGE,
   WEBHOOK_AGENT_NOT_FOUND_MESSAGE,
   WEBHOOK_NOT_FOUND_MESSAGE,
   WEBHOOK_URL_INVALID_MESSAGE,
@@ -7191,7 +7192,12 @@ function normalizeWebhookFilterQuery(filterQuery: string | null): string | null 
   if (trimmed) {
     // Fail creation/update fast on malformed filters instead of silently
     // dropping every delivery later.
-    parseIqlOrThrow(trimmed);
+    const parsed = parseIqlOrThrow(trimmed);
+    // A delivery sees one work row. neighbourhood: would match nothing, and
+    // -neighbourhood: would match everything (INV-1758).
+    if (parsed.terms.some((term) => term.field === 'neighbourhood')) {
+      throw createValidationError(WEBHOOK_NEIGHBOURHOOD_FILTER_MESSAGE);
+    }
   }
   return trimmed;
 }

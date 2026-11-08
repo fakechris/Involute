@@ -165,6 +165,14 @@ describe('IQL filtering across surfaces', () => {
     const unknown = await postGraphQL('query($q: String) { issues(first: 10, query: $q) { nodes { identifier } } }', { q: 'neighbourhood:NOPE-9' });
     expect(unknown.body.errors?.[0]?.extensions?.code).toBe('IQL_PARSE');
     expect(unknown.body.errors?.[0]?.message).toContain('NOPE-9');
+
+    const webhook = await postGraphQL(
+      'mutation($input: WebhookCreateInput!) { webhookCreate(input: $input) { success message } }',
+      { input: { team: team.key, url: 'https://hooks.example.test/neighbourhood', filterQuery: 'neighbourhood:IQL-12' } },
+    );
+    expect(webhook.body.errors, JSON.stringify(webhook.body.errors)).toBeUndefined();
+    expect(webhook.body.data.webhookCreate.success).toBe(false);
+    expect(webhook.body.data.webhookCreate.message).toContain('neighbourhood');
   });
 
   it('matches free-text terms against titles', async () => {

@@ -27,5 +27,8 @@ describe('looksLikeIql', () => {
     expect(neighbourhoodIdentifierOf('neighbourhood:inv-1739 state:"In Review"')).toBe('INV-1739');
     expect(neighbourhoodIdentifierOf('-neighbourhood:INV-1739')).toBeNull();
     expect(withoutNeighbourhoodTerm('neighbourhood:INV-1739 state:"In Review"')).toBe('state:"In Review"');
+    expect(withoutNeighbourhoodTerm('"neighbourhood:INV-1" state:Ready')).toBe('state:Ready');
+    expect(withoutNeighbourhoodTerm('neighbourhood:"INV-1739" state:"In Review"')).toBe('state:"In Review"');
+    expect(withoutNeighbourhoodTerm('-neighbourhood:INV-1 neighbourhood:INV-2')).toBe('-neighbourhood:INV-1');
   });
 });

@@ -1,4 +1,4 @@
-import { parseIql } from '@turnkeyai/involute-shared/iql';
+import { parseIql, type IqlTerm } from '@turnkeyai/involute-shared/iql';
 
 import { isWorkIdentifier } from '../work/work-reference';
 
@@ -13,12 +13,37 @@ export function neighbourhoodIdentifierOf(query: string): string | null {
   }
 }
 
-/** Drop a `neighbourhood:` term, leaving the rest of the query. */
+const OP_TEXT = { eq: '', neq: '!=', gt: '>', gte: '>=', lt: '<', lte: '<=' } as const;
+
+function quoteIqlValue(value: string): string {
+  if (value === '' || /[\s"]/.test(value)) return `"${value.replaceAll('"', '')}"`;
+  return value;
+}
+
+function formatIqlTerm(term: IqlTerm): string {
+  const neg = term.negated ? '-' : '';
+  if (term.field === null) return `${neg}${quoteIqlValue(term.value)}`;
+  return `${neg}${term.field}:${OP_TEXT[term.op]}${quoteIqlValue(term.value)}`;
+}
+
+/** Drop the neighbourhood chip's term, leaving the rest of the query. */
 export function withoutNeighbourhoodTerm(query: string): string {
-  return query
-    .replace(/(^|\s)-?neighbourhood:(?:"[^"]+"|'[^']+'|\S+)/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  try {
+    let dropped = false;
+    const kept = parseIql(query).terms.filter((term) => {
+      if (!dropped && term.field === 'neighbourhood' && !term.negated) {
+        dropped = true;
+        return false;
+      }
+      return true;
+    });
+    return kept.map(formatIqlTerm).join(' ');
+  } catch {
+    return query
+      .replace(/(^|\s)-?neighbourhood:(?:"[^"]+"|'[^']+'|\S+)/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
 }
 
 /**

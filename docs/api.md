@@ -1427,8 +1427,9 @@ link:blocked-by:none has:contract -state:done "free text"
   the focus, its ancestors, its siblings, its children, and the BLOCKS chain
   around it — the same read as the Neighbourhood section. It is not
   `project:` (descendants only, and not the focus). An unknown identifier is
-  an `IQL_PARSE` error. The term ANDs with the rest of the query. Webhook
-  filters do not expand it; they have one row, not the graph.
+  an `IQL_PARSE` error. The term ANDs with the rest of the query. A webhook
+  filter cannot use it: create and update refuse the term, because a delivery
+  has one work row and not the graph.
 - `severity:sev1,sev2` (INV-1115) matches those severities; `severity:none`
   matches work nobody has judged; `-severity:sev1` includes unjudged work.
 - `attr.<key>:<value>` (INV-1505) matches a field definition's value:
