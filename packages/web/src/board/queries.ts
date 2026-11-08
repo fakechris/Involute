@@ -527,6 +527,7 @@ export const ISSUE_DETAIL_QUERY = gql`
       attributes
       fieldDefinitions { key label description type required searchable options { value label archived } }
       description
+      parent { id identifier title }
       outcome
       scope
       constraints

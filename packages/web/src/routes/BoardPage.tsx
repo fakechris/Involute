@@ -16,7 +16,17 @@ import {
 import { useMutation, useQuery } from '@apollo/client/react';
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { MarkdownRenderer } from '../components/MarkdownRenderer';
+import {
+  closePeek,
+  emptyPeekSession,
+  followPeekRelation,
+  openPeek,
+  peekSnap,
+  returnPeek,
+  type PeekSaveRequest,
+  type PeekSession,
+} from '../board/issue-peek-edit';
+import { IssuePeek, type PeekSaveResult } from '../components/IssuePeek';
 import { NeighbourhoodTruncationHint } from '../components/graph/IssueNeighbourhood';
 import { RouteIssueDrawer } from '../components/RouteIssueDrawer';
 import { isEditableTarget } from '../components/IssueDrawerHost';
@@ -211,6 +221,10 @@ function normalizeIssueRef(ref: string): string {
   return isWorkIdentifier(trimmed) ? trimmed.toUpperCase() : trimmed;
 }
 
+function isRevisionConflict(message: string): boolean {
+  return message.includes('does not match expected_revision');
+}
+
 export function BoardPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -350,6 +364,19 @@ export function BoardPage() {
   // S / P / A / L open a picker over the selected issues, or the focused one (INV-1087).
   const [picker, setPicker] = useState<null | { kind: 'state' | 'priority' | 'assignee' | 'label'; targetIds: string[] }>(null);
   const [peekIssueId, setPeekIssueId] = useState<string | null>(null);
+  // The session ref is the source of truth. A function passed to updatePeek
+  // runs once: React strict mode would run a setState updater twice and mint
+  // two save generations for one click.
+  const peekSessionRef = useRef<PeekSession>(emptyPeekSession());
+  const [peekSession, setPeekSession] = useState<PeekSession>(emptyPeekSession);
+  const [peekAsideNote, setPeekAsideNote] = useState<string | null>(null);
+  const updatePeek = useCallback((update: PeekSession | ((current: PeekSession) => PeekSession)) => {
+    const current = peekSessionRef.current;
+    const next = typeof update === 'function' ? update(current) : update;
+    if (next === current) return;
+    peekSessionRef.current = next;
+    setPeekSession(next);
+  }, []);
 
   const labels = useMemo(() => {
     const seen = new Map<string, (typeof EMPTY_LABELS)[number]>();
@@ -2658,6 +2685,7 @@ export function BoardPage() {
       }
       if (event.key === ' ' && focusedIssueId) {
         event.preventDefault();
+        setPeekAsideNote(null);
         setPeekIssueId((current) => (current ? null : focusedIssueId));
         return;
       }
@@ -2674,6 +2702,10 @@ export function BoardPage() {
         event.preventDefault();
         const nextIssue = boardVisibleIssues[Math.min(boardVisibleIssues.length - 1, safeIndex + 1)];
         setFocusedIssueId(nextIssue?.id ?? focusedIssueId);
+        if (peekIssueId && nextIssue) {
+          setPeekAsideNote(null);
+          setPeekIssueId(nextIssue.id);
+        }
         return;
       }
 
@@ -2681,6 +2713,10 @@ export function BoardPage() {
         event.preventDefault();
         const nextIssue = boardVisibleIssues[Math.max(0, safeIndex - 1)];
         setFocusedIssueId(nextIssue?.id ?? focusedIssueId);
+        if (peekIssueId && nextIssue) {
+          setPeekAsideNote(null);
+          setPeekIssueId(nextIssue.id);
+        }
         return;
       }
 
@@ -2815,15 +2851,40 @@ export function BoardPage() {
   const peekIssue = peekIssueId ? boardVisibleIssues.find((issue) => issue.id === peekIssueId) ?? null : null;
   // The peek shows the issue's opening lines, and the board list does not
   // carry descriptions (INV-1470): it asks for the peeked one.
-  const { data: peekDetailData } = useQuery<
-    { issue: { id: string; description?: string | null } | null },
+  const { data: peekDetailData, loading: peekDetailLoading, refetch: refetchPeekDetail } = useQuery<
+    { issue: { id: string; revision: number; description?: string | null; parent?: { id: string; identifier: string; title: string } | null } | null },
     { id: string }
   >(ISSUE_DETAIL_QUERY, {
     variables: { id: peekIssueId ?? '' },
     skip: !peekIssueId,
   });
-  const peekDescription =
-    peekIssue?.description ?? (peekDetailData?.issue?.id === peekIssueId ? peekDetailData.issue.description ?? '' : '');
+  const rawPeekDetail = peekDetailData?.issue?.id === peekIssueId ? peekDetailData.issue : null;
+  const peekDetail = peekDetailLoading && rawPeekDetail?.description == null ? null : rawPeekDetail;
+  const peekIssueRef = useRef(peekIssue);
+  const peekDetailRef = useRef(peekDetail);
+  peekIssueRef.current = peekIssue;
+  peekDetailRef.current = peekDetail;
+  useEffect(() => {
+    if (!peekIssueId) {
+      updatePeek(closePeek);
+      return;
+    }
+    const issue = peekIssueRef.current;
+    if (!issue || issue.id !== peekIssueId) return;
+    const snap = peekSnap(issue, peekDetailRef.current);
+    if (!snap) return;
+    updatePeek((current) => openPeek(current, snap));
+  }, [
+    peekIssueId,
+    peekIssue?.id,
+    peekIssue?.identifier,
+    peekIssue?.description,
+    peekIssue?.revision,
+    peekDetail?.id,
+    peekDetail?.description,
+    peekDetail?.revision,
+    updatePeek,
+  ]);
 
   // A bad neighbourhood id is an IQL error. Keep the filter bar so it can be
   // edited or cleared, instead of replacing the board with "Board unavailable".
@@ -3187,6 +3248,130 @@ export function BoardPage() {
   );
 
 
+  const peekParent = peekDetail?.parent ?? peekIssue?.parent ?? null;
+  const peekReturnTo = peekSession.returnStack.at(-1) ?? null;
+
+  async function loadPeekServerCopy(issueId: string): Promise<{ description: string; revision: number } | null> {
+    try {
+      const result = await refetchPeekDetail({ id: issueId });
+      const issue = result.data?.issue;
+      if (!issue || issue.id !== issueId || typeof issue.revision !== 'number') return null;
+      return { description: issue.description ?? '', revision: issue.revision };
+    } catch {
+      return null;
+    }
+  }
+
+  // Description saves do not go through persistIssueUpdate: that helper rolls
+  // the card back on failure, which would throw away the draft the conflict
+  // panel has to keep. A late response is applied by generation, so a switch
+  // during the wait cannot land it on the issue now on screen.
+  async function savePeekDescription(request: PeekSaveRequest): Promise<PeekSaveResult> {
+    const known = issueOverrides[request.issueId] ?? baseIssues.find((item) => item.id === request.issueId) ?? null;
+    try {
+      const result = await runIssueUpdate({
+        variables: {
+          id: request.issueId,
+          input: { description: request.text, expectedRevision: request.expectedRevision },
+        },
+      });
+      const payload = result.data?.issueUpdate;
+      if (!payload?.success || !payload.issue) {
+        const message = payload?.message ?? 'Could not save.';
+        const conflict = isRevisionConflict(message);
+        return { ok: false, conflict, message, server: conflict ? await loadPeekServerCopy(request.issueId) : null };
+      }
+      const returned = payload.issue;
+      setIssueOverrides((current) => {
+        const base = current[request.issueId] ?? baseIssues.find((item) => item.id === request.issueId) ?? returned;
+        return replaceIssueOverride(current, request.issueId, mergeIssueWithPreservedComments(base, {
+          ...returned,
+          description: returned.description ?? request.text,
+        }));
+      });
+      const savedText = peekSessionRef.current.drafts[request.issueId]?.savedText;
+      if (known) {
+        const change = fieldChange(
+          { ...known, description: savedText ?? known.description ?? null },
+          { description: request.text },
+          returned.revision,
+          fieldNames,
+        );
+        if (change) recordFieldGesture([change]);
+      }
+      return { ok: true, revision: returned.revision, description: returned.description ?? request.text };
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Could not save.';
+      const conflict = isRevisionConflict(message);
+      return { ok: false, conflict, message, server: conflict ? await loadPeekServerCopy(request.issueId) : null };
+    }
+  }
+
+  async function savePeekField(patch: { stateId?: string; assigneeId?: string | null }): Promise<{ revision: number; description: string } | { message: string }> {
+    const issue = peekIssue;
+    if (!issue || !canWriteTeam) return { message: 'You cannot edit this issue.' };
+    try {
+      if (patch.stateId && patch.stateId !== issue.state.id) {
+        const state = selectedTeam?.states.nodes.find((item) => item.id === patch.stateId) ?? null;
+        if (!state) return { message: 'That status is not on this board.' };
+        if (state.type === 'CANCELED') return { message: 'Cancel from the board, where a reason is required.' };
+        const updated = await persistIssueUpdate(issue, { stateId: patch.stateId }, (current) => ({ ...current, state }));
+        if (!updated) return { message: 'Could not save the status.' };
+        return { revision: updated.revision, description: updated.description ?? peekSessionRef.current.drafts[issue.id]?.savedText ?? '' };
+      }
+      if (patch.assigneeId !== undefined && patch.assigneeId !== (issue.assignee?.id ?? null)) {
+        const assigneeId = patch.assigneeId;
+        const updated = await persistIssueUpdate(issue, { assigneeId }, (current) => ({
+          ...current,
+          assignee: assigneeId ? users.find((user) => user.id === assigneeId) ?? null : null,
+        }));
+        if (!updated) return { message: 'Could not save the assignee.' };
+        return { revision: updated.revision, description: updated.description ?? peekSessionRef.current.drafts[issue.id]?.savedText ?? '' };
+      }
+      return { revision: issue.revision, description: issue.description ?? peekSessionRef.current.drafts[issue.id]?.savedText ?? '' };
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : 'Could not save.';
+      if (isRevisionConflict(message)) {
+        const server = await loadPeekServerCopy(issue.id);
+        if (server) return server;
+      }
+      return { message };
+    }
+  }
+
+  function followPeekParent() {
+    if (!peekParent) return;
+    const onBoard = boardVisibleIssues.find((item) => item.id === peekParent.id);
+    if (!onBoard) {
+      setPeekAsideNote(`${peekParent.identifier} is not on this board.`);
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('issue', peekParent.identifier);
+        return next;
+      });
+      return;
+    }
+    setPeekAsideNote(null);
+    const snap = peekSnap(onBoard, peekDetail?.id === onBoard.id ? peekDetail : null);
+    updatePeek((current) => followPeekRelation(current, snap ?? {
+      id: onBoard.id,
+      identifier: onBoard.identifier,
+      description: onBoard.description ?? '',
+      revision: onBoard.revision,
+    }));
+    setPeekIssueId(onBoard.id);
+    setFocusedIssueId(onBoard.id);
+  }
+
+  function backFromPeek() {
+    const target = peekSessionRef.current.returnStack.at(-1);
+    if (!target) return;
+    setPeekAsideNote(null);
+    updatePeek(returnPeek);
+    setPeekIssueId(target.id);
+    setFocusedIssueId(target.id);
+  }
+
   return (
     <main className="board-page">
       {picker ? (
@@ -3198,15 +3383,24 @@ export function BoardPage() {
         />
       ) : null}
       {peekIssue ? (
-        <aside className="issue-peek" role="dialog" aria-label={`Peek ${peekIssue.identifier}`}>
-          <div className="mono issue-peek__id">{peekIssue.identifier}</div>
-          <strong>{peekIssue.title}</strong>
-          <div className="issue-peek__meta">
-            {[peekIssue.state.name, peekIssue.assignee?.name ?? 'Unassigned', ['No priority', 'Urgent', 'High', 'Medium', 'Low'][peekIssue.priority] ?? '', ...peekIssue.labels.nodes.map((label) => label.name)].filter(Boolean).join(' · ')}
-          </div>
-          {peekDescription ? <MarkdownRenderer content={peekDescription} clamp={12} size="sm" className="issue-peek__body" /> : null}
-          <div className="issue-peek__meta">Space or Esc to close · Enter to open</div>
-        </aside>
+        <IssuePeek
+          issue={peekIssue}
+          parent={peekParent}
+          session={peekSession}
+          onSession={updatePeek}
+          canWrite={canWriteTeam}
+          ready={peekSnap(peekIssue, peekDetail) != null}
+          states={selectedTeam?.states.nodes ?? []}
+          users={users}
+          returnTo={peekReturnTo}
+          asideNote={peekAsideNote}
+          saveDescription={savePeekDescription}
+          saveField={savePeekField}
+          onFollow={followPeekParent}
+          onBack={backFromPeek}
+          onOpenAside={() => openIssue(peekIssue)}
+          onClose={() => setPeekIssueId(null)}
+        />
       ) : null}
       <PageHeader
         back={(
