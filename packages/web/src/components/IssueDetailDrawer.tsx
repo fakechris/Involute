@@ -10,6 +10,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 import { ActorBadge } from './ActorBadge';
 import { DeliverySection } from './DeliveryPanel';
 import { WorkLinks } from './WorkLinks';
+import { WorkFiles } from './WorkFiles';
 import { PullRequestList } from './PullRequestLinks';
 import { IssueRelations } from './IssueRelations';
 import { IssueNeighbourhood } from './graph/IssueNeighbourhood';
@@ -119,7 +120,7 @@ export function IssueDetailDrawer({
   // proposed to it (INV-896, INV-1470): the board list carries none of them,
   // and this is where people open work.
   const { data: detailData, loading: detailLoading, refetch: refetchContract } = useQuery<
-    { issue: (ContractValues & { id: string; description?: string | null; commitmentStatus?: IssueSummary['commitmentStatus']; pendingContractAmendment?: ContractAmendmentSummary | null; attributes?: Record<string, FieldValue> | null; fieldDefinitions?: FieldDefinitionSummary[] }) | null },
+    { issue: (ContractValues & { id: string; description?: string | null; commitmentStatus?: IssueSummary['commitmentStatus']; pendingContractAmendment?: ContractAmendmentSummary | null; attributes?: Record<string, FieldValue> | null; fieldDefinitions?: FieldDefinitionSummary[]; attachments?: IssueSummary['attachments'] }) | null },
     { id: string }
   >(ISSUE_DETAIL_QUERY, {
     variables: { id: issue?.id ?? '' },
@@ -513,6 +514,12 @@ export function IssueDetailDrawer({
               />
             ) : null}
             {/* Delivery authorization and changes awaiting approval (INV-1023), same as the issue and work pages. */}
+            <WorkFiles
+              key={`files-${activeIssue.id}`}
+              workId={activeIssue.id}
+              files={(detailIssue && detailIssue.id === activeIssue.id ? detailIssue.attachments : null) ?? activeIssue.attachments ?? []}
+              onChanged={() => void refetchContract()}
+            />
             {/* What was delivered, where a person can open it (INV-1673). */}
             <WorkLinks key={`links-${activeIssue.id}`} workId={activeIssue.id} />
 

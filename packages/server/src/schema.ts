@@ -978,6 +978,8 @@ const typeDefs = /* GraphQL */ `
     "Full source SHA of the build (INVOLUTE_BUILD_SHA); null when the image was built without it."
     buildSha: String
     serverVersion: String!
+    "Extra host suffixes (INVOLUTE_IMAGE_HOSTS) whose https images may render, besides S3, Aliyun OSS and Qiniu. The server does not fetch them."
+    imageHostSuffixes: [String!]!
   }
 
   "Where a bug's fix SHA came from (INV-1121): always something GitHub reported."
@@ -2193,6 +2195,8 @@ const typeDefs = /* GraphQL */ `
     mimeType: String!
     size: Int!
     url: String!
+    "Indexed text of a markdown or plain-text file (INV-1117). Null for images and other binaries."
+    textContent: String
     createdAt: DateTime!
     uploader: User
   }
@@ -2381,6 +2385,8 @@ const typeDefs = /* GraphQL */ `
     parentId: String
     repository: String
     labelIds: [String!]
+    "Ids of this reporter's own unattached uploads pasted into the description. Someone else's file refuses the report."
+    attachmentIds: [ID!]
     """
     Optional browser environment (INV-1146): { url, title, viewport { width, height, dpr },
     userAgent, colorScheme ('light' | 'dark'), appVersion, consoleErrors [{ level, message, time }],

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import type { BugCapture } from '../board/types';
+import { SafeImage } from './SafeImage';
 
 /**
  * The browser environment a bug was reported with (INV-1146): page, viewport,
@@ -20,7 +21,7 @@ export function BugCaptureSection({ capture }: { capture: BugCapture }) {
   if (capture.colorScheme) rows.push(['Theme', capture.colorScheme]);
   if (capture.appVersion) rows.push(['Version', <span className="mono">{capture.appVersion}</span>]);
   if (capture.screenshotUrl) {
-    rows.push(['Screenshot', <a href={capture.screenshotUrl} target="_blank" rel="noopener noreferrer">Open screenshot</a>]);
+    rows.push(['Screenshot', <SafeImage src={capture.screenshotUrl} alt="Screenshot" className="work-files__thumb" />]);
   }
   const styles = Object.entries(capture.element?.styles ?? {});
 

@@ -87,6 +87,8 @@
 | `RefusalNotice`（`IssueUpdateRefused` / `nextFor`） | `components/RefusalNotice.tsx` + `styles/layout.css`（`.page-notice--floating`）/ `styles/app.css`（`.issue-panel__error`） | 被拒保存的纯文本错误条、页面顶部或右栏底部看不到的错误 |
 | `PullRequestList` / `PullRequestBadge` | `components/PullRequestLinks.tsx` + `styles/app.css`（`.pull-requests*`、`.pull-request-badge*`） | 在属性栏、卡片里各自拼 PR 链接和状态（INV-1703；数据用 `Issue.pullRequests`） |
 | `WorkLinks` | `components/WorkLinks.tsx` + `styles/app.css`（`.work-links__*`） | 在工单页 / 抽屉里各自拼 commit、PR、证据链接（INV-1673） |
+| `SafeImage` | `components/SafeImage.tsx` | 正文里的裸 `<img>`；只把本站上传和允许的对象存储地址渲染成图片 |
+| `WorkFiles` | `components/WorkFiles.tsx` + `styles/content.css`（`.work-files__*`） | 工单页只在有文件时列出文件名链接 |
 | `ProjectBadge`（`getProjectColorClass`） | `components/ProjectBadge.tsx` + `styles/app.css`（`.project-badge`、`.proj-color-*`） | `IssueCard` 内联徽章、各页复制的 `issue-card__repo-badge` |
 | 状态色 | `components/StatusIcon.tsx`（`getStatusColorVar` / `statusKindForStateType`） | `graph-colors.ts` 与时间线 CSS 里的重复 hex |
 

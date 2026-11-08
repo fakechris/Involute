@@ -45,7 +45,7 @@ export const MCP_TOOL_GROUPS: readonly McpToolGroup[] = [
   },
   {
     name: 'evidence',
-    description: 'Evidence on a run: action "attach" (default) adds a PR, test report, log, screenshot or artifact URL to an existing run; "retract" withdraws your own unaccepted evidence with a reason, keeping history. Both need the run\'s claim_token.',
+    description: 'Evidence on a run: action "attach" (default) adds a URL to an existing run; "retract" withdraws your own unaccepted evidence with a reason, keeping history. Both need the run\'s claim_token. Use kind "screenshot" for an acceptance or bug picture. The url is the /uploads/… returned by work_attach_file, or an https image on S3, Aliyun OSS, Qiniu or a host in INVOLUTE_IMAGE_HOSTS (a presigned URL is fine). The page renders those; the server does not fetch them. A research report is work_attach_file, not this tool. A picture is recommended when a person has to see the result, and is not required for every completion. Code delivery still needs the commit and the PR.',
     actions: { attach: 'evidence_attach', retract: 'evidence_retract' },
     defaultAction: 'attach',
   },

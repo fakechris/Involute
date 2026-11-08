@@ -1,3 +1,5 @@
+import { normalizeImageHostSuffixes } from '@turnkeyai/involute-shared';
+
 import type { GraphQLContext } from './auth.js';
 import { buildReadableIssueWhere } from './access-control.js';
 import { resolveProjectScope, type ProjectScopeInput } from './project-scope.js';
@@ -10,6 +12,7 @@ export function serverBuild() {
   return {
     serverVersion: process.env.INVOLUTE_SERVER_VERSION || '0.0.0',
     buildSha: sha && /^[a-f0-9]{40}$/.test(sha) ? sha : null,
+    imageHostSuffixes: normalizeImageHostSuffixes(process.env.INVOLUTE_IMAGE_HOSTS),
   };
 }
 

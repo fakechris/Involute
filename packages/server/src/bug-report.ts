@@ -18,6 +18,7 @@ import type { WriteActor } from './work-service.js';
 import { parseSeverity } from './severity.js';
 import { parseReproducibility } from './reproducibility.js';
 import { CAPTURE_MESSAGES, environmentSection, parseBugCapture, type BugCapture } from './bug-capture.js';
+import { claimOwnUnattached } from './claim-uploads.js';
 import { parseFoundInSha } from './found-in.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
@@ -41,6 +42,8 @@ export interface BugReportInput {
   parentId?: string | null;
   repository?: string | null;
   labelIds?: string[] | null;
+  /** This reporter's own unattached uploads pasted into the description. */
+  attachmentIds?: string[] | null;
   /** Browser environment from the capture extension (INV-1146); validated by parseBugCapture. */
   capture?: unknown;
   /** Field values (INV-1503); required ones for Type Bug must be set when the report is placed. */
@@ -120,10 +123,8 @@ export async function reportBug(prisma: PrismaClient, input: BugReportInput, act
         : await placeNewWork(transaction, { ...base, parentId: input.parentId!.trim(), ...(ready ? { stateId: ready.id } : {}) }),
       actor,
     );
-    if (screenshot) {
-      // The screenshot becomes the bug's file, readable by whoever reads the bug.
-      await transaction.attachment.update({ where: { id: screenshot.id }, data: { issueId: issue.id } });
-    }
+    const pasted = [...new Set([...(screenshot ? [screenshot.id] : []), ...(input.attachmentIds ?? [])])];
+    if (pasted.length > 0) await claimOwnUnattached(transaction, actor, issue.id, pasted);
     await announceBug(transaction, issue, { triage });
     return issue;
   });

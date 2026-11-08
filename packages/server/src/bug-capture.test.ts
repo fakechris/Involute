@@ -203,6 +203,35 @@ describe('bug capture (INV-1146)', () => {
       expect(reused.data.bugReport).toMatchObject({ success: false, message: CAPTURE_MESSAGES.screenshot });
     });
 
+    it('claims the reporter’s pasted uploads and refuses someone else’s', async () => {
+      const pasted = await prisma.attachment.create({ data: { filename: 'paste.png', mimeType: 'image/png', size: 1, url: '/uploads/paste.png', uploaderId: human.id } });
+      const onlyId = await prisma.attachment.create({ data: { filename: 'only.png', mimeType: 'image/png', size: 1, url: '/uploads/only.png', uploaderId: human.id } });
+      const body = await post(human, BUG_REPORT, {
+        input: {
+          teamId: team.id,
+          title: 'Pasted picture',
+          priority: 3,
+          stepsToReproduce: 'See the image.',
+          parentId: project.id,
+          description: '![paste](/uploads/paste.png)',
+          attachmentIds: [pasted.id, onlyId.id],
+        },
+      });
+      expect(body.data.bugReport.success).toBe(true);
+      expect(body.data.bugReport.issue.attachments).toEqual(expect.arrayContaining([
+        { id: pasted.id, url: '/uploads/paste.png' },
+        { id: onlyId.id, url: '/uploads/only.png' },
+      ]));
+
+      const other = await prisma.user.create({ data: { actorKind: 'HUMAN', email: 'paste-other@humans.test.local', name: 'Other' } });
+      const theirs = await prisma.attachment.create({ data: { filename: 'theirs.png', mimeType: 'image/png', size: 1, url: '/uploads/theirs.png', uploaderId: other.id } });
+      const refused = await post(human, BUG_REPORT, {
+        input: { teamId: team.id, title: 'Not mine', priority: 3, stepsToReproduce: 'See it.', parentId: project.id, attachmentIds: [theirs.id] },
+      });
+      expect(refused.data.bugReport).toMatchObject({ success: false, message: CAPTURE_MESSAGES.screenshot });
+      expect(await prisma.attachment.findUnique({ where: { id: theirs.id } })).toMatchObject({ issueId: null });
+    });
+
     it('edits a project’s web origins normalized and deduplicated, one project per origin', async () => {
       const saved = await post(human, ISSUE_UPDATE, { id: project.id, input: { webOrigins: ['https://App.Example.com/board', 'https://app.example.com', 'http://localhost:5173/'] } });
       expect(saved.data.issueUpdate).toMatchObject({ success: true, issue: { webOrigins: ['https://app.example.com', 'http://localhost:5173'] } });

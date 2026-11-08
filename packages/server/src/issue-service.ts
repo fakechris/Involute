@@ -40,6 +40,7 @@ import { assertActorCan, isAcceptStateType, sanitizeWorkTitle, validateAgentDesc
 import { assertNoWorkLinkCycle, syncContainsFromParentId } from './link-service.js';
 import { syncCommentMentions } from './mention-service.js';
 import { linkMentionedWork } from './mention-links.js';
+import { claimReferencedUploads } from './claim-uploads.js';
 import { enqueueCommentEvents } from './comment-events.js';
 import { enqueueWorkEvent } from './event-outbox.js';
 import { openAgentRequestsForMentions } from './agent-request-from-mention.js';
@@ -310,6 +311,7 @@ export async function createIssueWithAudit(
   if (options.linkMentions !== false) {
     await linkMentionedWork(prisma, { workId: created.id, teamId: created.teamId, texts: mentionTexts(created), actor });
   }
+  await claimReferencedUploads(prisma, actor, created.id, created.description);
 
   return { auditId, issue: created };
 }
@@ -863,6 +865,9 @@ export async function updateIssue(
     if (canceledWith) {
       await enqueueWorkCanceledEvent(transaction, { work: updated, before: existingIssue, actorId: actor.actorId, resolution: canceledWith, reason: closeReason });
     }
+    if ('description' in input) {
+      await claimReferencedUploads(transaction, actor, id, updated.description);
+    }
 
     return updated;
   });
@@ -999,6 +1004,7 @@ export async function createComment(
         userId,
       },
     });
+    await claimReferencedUploads(tx, { actorId: userId, actorKind: author.actorKind }, issue.id, comment.body, comment.id);
 
     const mentions = await syncCommentMentions(tx, comment.id, comment.body);
     await linkMentionedWork(tx, {

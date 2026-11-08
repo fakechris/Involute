@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { useMutation } from '@apollo/client/react';
 
+import { FILE_UPLOAD_MUTATION } from '../board/queries';
+import type { FileUploadMutationData, FileUploadMutationVariables } from '../board/types';
 import { EVIDENCE_ATTACH_MUTATION, type MutationResult } from '../ops/queries';
 import { Select } from './controls';
+import { readFileAsBase64 } from './RichTextEditor';
 import { InlineError } from './status';
 
 const KINDS = [
@@ -27,6 +30,32 @@ export function EvidenceAttachForm({ workId }: { workId: string }) {
   const [run, state] = useMutation<{ evidenceAttach: MutationResult }>(EVIDENCE_ATTACH_MUTATION, {
     refetchQueries: ['WorkContextPage'],
   });
+  const [runUpload, uploadState] = useMutation<FileUploadMutationData, FileUploadMutationVariables>(FILE_UPLOAD_MUTATION);
+
+  async function uploadScreenshot(file: File) {
+    setError(null);
+    try {
+      const content = await readFileAsBase64(file);
+      const result = await runUpload({
+        variables: {
+          input: {
+            filename: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            content,
+            issueId: workId,
+          },
+        },
+      });
+      const payload = result.data?.fileUpload;
+      if (!payload?.success || !payload.attachment?.url) {
+        setError(payload?.message ?? 'Could not upload the screenshot.');
+        return;
+      }
+      setUrl(payload.attachment.url);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Could not upload the screenshot.');
+    }
+  }
 
   async function submit() {
     setError(null);
@@ -61,9 +90,21 @@ export function EvidenceAttachForm({ workId }: { workId: string }) {
           </option>
         ))}
       </Select>
+      {kind === 'screenshot' ? (
+        <input
+          aria-label="Screenshot file"
+          type="file"
+          accept="image/png,image/jpeg,image/gif,image/webp"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (file) void uploadScreenshot(file);
+          }}
+        />
+      ) : null}
       <input aria-label="Evidence URL" placeholder="https://…" value={url} onChange={(event) => setUrl(event.target.value)} />
       <input aria-label="Evidence summary" placeholder="What it shows (optional)" value={summary} onChange={(event) => setSummary(event.target.value)} />
-      <button type="button" className="ui-action ui-action--accent" disabled={!url.trim() || state?.loading} onClick={() => void submit()}>
+      <button type="button" className="ui-action ui-action--accent" disabled={!url.trim() || state?.loading || uploadState?.loading} onClick={() => void submit()}>
         Attach
       </button>
       <button type="button" className="ui-action" onClick={() => setOpen(false)}>

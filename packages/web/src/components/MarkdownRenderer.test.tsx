@@ -124,12 +124,12 @@ describe('MarkdownRenderer blocks (INV-1315)', () => {
   });
 
   it('keeps inline tokens: bold, italic, code, links, images, video and @mentions', () => {
-    const root = renderMarkdown('**b** *i* `c` [site](https://example.com) ![shot](https://x.test/a.png) [clip](https://x.test/v.mp4) hi @Mia, not admin@involute.local');
+    const root = renderMarkdown('**b** *i* `c` [site](https://example.com) ![shot](https://bucket.oss-cn-hangzhou.aliyuncs.com/a.png) [clip](https://x.test/v.mp4) hi @Mia, not admin@involute.local');
     expect(within(root).getByText('b').tagName).toBe('STRONG');
     expect(within(root).getByText('i').tagName).toBe('EM');
     expect(within(root).getByText('c').tagName).toBe('CODE');
     expect(within(root).getByRole('link', { name: 'site' })).toHaveAttribute('href', 'https://example.com');
-    expect(within(root).getByRole('img', { name: 'shot' })).toHaveAttribute('src', 'https://x.test/a.png');
+    expect(within(root).getByRole('img', { name: 'shot' })).toHaveAttribute('src', 'https://bucket.oss-cn-hangzhou.aliyuncs.com/a.png');
     expect(root.querySelector('video')).toHaveAttribute('src', 'https://x.test/v.mp4');
     const mention = within(root).getByRole('link', { name: '@mia' });
     expect(mention).toHaveAttribute('href', '/agents/mia');
@@ -172,5 +172,28 @@ describe('MarkdownRenderer clamp', () => {
   it('shows no toggle when the text fits', () => {
     renderMarkdown('short\ntext', { clamp: 6 });
     expect(screen.queryByRole('button', { name: 'Show more' })).toBeNull();
+  });
+});
+
+describe('MarkdownRenderer images', () => {
+  it('renders an upload and an allowlisted object-storage picture, and leaves everything else a link', () => {
+    const root = renderMarkdown([
+      '![shot](/uploads/shot.png?size=1)',
+      '![board](https://bucket.oss-cn-hangzhou.aliyuncs.com/board.png?Expires=1&Signature=abc)',
+      '![web](https://example.com/a.png)',
+      '![script](javascript:alert(1))',
+      '![svg](/uploads/a.svg)',
+    ].join('\n'));
+    const images = within(root).getAllByRole('img');
+    expect(images.map((image) => image.getAttribute('src'))).toEqual([
+      '/uploads/shot.png?size=1',
+      'https://bucket.oss-cn-hangzhou.aliyuncs.com/board.png?Expires=1&Signature=abc',
+    ]);
+    expect(images[0]).toHaveAttribute('referrerpolicy', 'no-referrer');
+    const web = within(root).getByRole('link', { name: 'web' });
+    expect(web).toHaveAttribute('href', 'https://example.com/a.png');
+    expect(within(web).queryByRole('img')).toBeNull();
+    expect(root.querySelector('a[href^="javascript:"]')).toBeNull();
+    expect(within(root).getByRole('link', { name: 'svg' })).toHaveAttribute('href', '/uploads/a.svg');
   });
 });

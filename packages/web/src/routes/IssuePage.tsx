@@ -64,6 +64,7 @@ import { writeStoredShellIssue } from '../lib/app-shell-state';
 import { IcoChevL, IcoChevR, IcoCopy, IcoMore, IcoLink, IcoClose } from '../components/Icons';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import { BugCaptureSection } from '../components/BugCaptureSection';
+import { WorkFiles } from '../components/WorkFiles';
 import { Avatar, Btn, Kbd } from '../components/Primitives';
 import { RichTextEditor } from '../components/RichTextEditor';
 import { Select } from '../components/controls';
@@ -870,19 +871,7 @@ export function IssuePage() {
             </div>
 
             {/* Private files on the work (INV-1003): research reports and other material that never enters git. */}
-            {activeIssue.attachments && activeIssue.attachments.length > 0 ? (
-              <div className="issue-panel__section">
-                <h2>Files · {activeIssue.attachments.length}</h2>
-                <ul className="issue-children" role="list" aria-label="Files">
-                  {activeIssue.attachments.map((file) => (
-                    <li key={file.id} role="listitem" className="issue-children__row">
-                      <a href={file.url} target="_blank" rel="noreferrer">{file.filename}</a>
-                      <span className="observation-card__meta">{file.mimeType} · {Math.max(1, Math.round(file.size / 1024))} KB</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+            <WorkFiles workId={activeIssue.id} files={activeIssue.attachments ?? []} onChanged={() => void refetch()} />
 
             {/* Delivery authorization and changes awaiting approval (INV-1023): the same section as the work page. */}
             {/* What was delivered, where a person can open it (INV-1673). */}

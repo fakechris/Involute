@@ -67,6 +67,7 @@ function useDebounced(value: string, delayMs: number): string {
 export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boardRepository, initialTitle = '', initialDescription = '', onClose }: ReportBugDialogProps) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
   const [steps, setSteps] = useState('');
   const [priority, setPriority] = useState(0);
   const [severity, setSeverity] = useState<IssueSeverity | ''>('');
@@ -171,6 +172,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
             ...(triage || !placement ? {} : { parentId: placement.parentId }),
             labelIds: selectedLabelIds,
             ...(Object.keys(sentFields).length ? { attributes: sentFields } : {}),
+            ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
           },
         },
       });
@@ -189,6 +191,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
   function reportAnother() {
     setTitle('');
     setDescription('');
+    setAttachmentIds([]);
     setSteps('');
     setSelectedLabelIds([]);
     setErrorMessage(null);
@@ -280,6 +283,7 @@ export function ReportBugDialog({ isOpen, teamId, teamKey, projects, labels, boa
               placeholder="Expected vs actual behaviour, screenshots…"
               ariaLabel="Bug description"
               hideSubmit
+              onUploaded={(attachment) => setAttachmentIds((current) => (current.includes(attachment.id) ? current : [...current, attachment.id]))}
             />
           </div>
 

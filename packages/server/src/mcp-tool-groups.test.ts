@@ -50,6 +50,19 @@ describe('MCP tool groups', () => {
     expect(executor.annotations.readOnlyHint).toBe(true);
   });
 
+  it('tells agents to attach research reports, bug pictures and acceptance screenshots', () => {
+    const tools = listMcpTools(false, agent);
+    const text = (name: string) => tools.find((tool) => tool.name === name)?.description ?? '';
+    for (const name of ['work_attach_file', 'work_file_bug', 'work_propose', 'run_report', 'evidence']) {
+      expect(text(name), name).toMatch(/screenshot|picture/i);
+    }
+    expect(text('work_attach_file')).toMatch(/research report/i);
+    expect(text('evidence')).toMatch(/S3/);
+    expect(text('evidence')).toMatch(/does not fetch/);
+    const kind = tools.find((tool) => tool.name === 'evidence')!.inputSchema.properties.kind as { description: string };
+    expect(kind.description).toMatch(/screenshot/);
+  });
+
   it('resolves grouped calls, defaults, legacy names and folded names', () => {
     expect(resolveMcpCall('work_relate', { action: 'unlink', from_id: 'a' })).toEqual({ action: 'work_unlink', args: { from_id: 'a' }, deprecated: null });
     expect(resolveMcpCall('work_claim', { id: 'x' }).action).toBe('work_claim');

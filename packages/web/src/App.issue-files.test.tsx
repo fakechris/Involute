@@ -25,4 +25,44 @@ describe('Issue page files', () => {
     expect(link).toHaveAttribute('href', '/uploads/abc.md');
     expect(within(files).getByText('text/markdown · 20 KB')).toBeInTheDocument();
   });
+
+  it('previews markdown from the stored text and thumbnails a picture', async () => {
+    const data = {
+      ...boardQueryResult,
+      issues: {
+        ...boardQueryResult.issues,
+        nodes: boardQueryResult.issues.nodes.map((issue) =>
+          issue.id === 'issue-1'
+            ? {
+                ...issue,
+                attachments: [
+                  { id: 'att-1', filename: 'linear-study.md', mimeType: 'text/markdown', size: 20, url: '/uploads/abc.md', textContent: 'hello from the file', createdAt: '2026-10-07T00:00:00.000Z' },
+                  { id: 'att-2', filename: 'shot.png', mimeType: 'image/png', size: 100, url: '/uploads/shot.png', createdAt: '2026-10-07T00:00:00.000Z' },
+                ],
+              }
+            : issue),
+      },
+    };
+    renderApp(App, { data, loading: false }, ['/issue/issue-1']);
+
+    expect(await screen.findByText('hello from the file')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'shot.png' })).toHaveAttribute('src', '/uploads/shot.png');
+  });
+
+  it('shows the same files in the board drawer', async () => {
+    const data = {
+      ...boardQueryResult,
+      issues: {
+        ...boardQueryResult.issues,
+        nodes: boardQueryResult.issues.nodes.map((issue) =>
+          issue.id === 'issue-1'
+            ? { ...issue, attachments: [{ id: 'att-1', filename: 'linear-study.md', mimeType: 'text/markdown', size: 20_480, url: '/uploads/abc.md', createdAt: '2026-10-07T00:00:00.000Z' }] }
+            : issue),
+      },
+    };
+    renderApp(App, { data, loading: false }, ['/?issue=INV-1']);
+
+    const files = await screen.findByRole('list', { name: 'Files' });
+    expect(within(files).getByRole('link', { name: 'linear-study.md' })).toHaveAttribute('href', '/uploads/abc.md');
+  });
 });

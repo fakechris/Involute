@@ -26,6 +26,8 @@ You have a durable pointer (PR URL, CI run, artifact path) proving the run.
 
 When attaching a research report, incident postmortem, diagnostic Markdown, log, or screenshot to a work item (`work_attach_file`, then optionally citing its returned `/uploads/...` URL in `evidence(action: 'attach', kind: 'artifact')`):
 
+Acceptance and bug images are attachments. Put the picture on the work with `work_attach_file` (or the CLI), then either leave the returned `/uploads/…` URL in the description or a comment, or attach it as `evidence(action: 'attach', kind: 'screenshot', url)`. An object-storage image (S3, Aliyun OSS, Qiniu, or a CDN host the deployment allowlists) is an https URL in the description or the same screenshot evidence. The page renders allowlisted image URLs; the server never fetches them. An unsigned private object does not load, and a presigned URL stops loading when it expires.
+
 1. **Local file already on disk? Upload directly via CLI (fastest, zero LLM tokens, no truncation):**
    ```bash
    involute work attach-file <INV-xxx> /path/to/report.md [--mode overwrite|append|delete] [--filename report.md]

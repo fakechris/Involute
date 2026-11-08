@@ -104,7 +104,7 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   cycleUpdate: { kind: 'web', doc: 'CYCLE_UPDATE_MUTATION', components: ['routes/CyclesPage.tsx'], test: 'routes/CyclesPage.test.tsx' },
   evidenceAttach: { kind: 'web', doc: 'EVIDENCE_ATTACH_MUTATION', components: ['components/EvidenceAttachForm.tsx'], label: 'Attach evidence', test: 'components/EvidenceAttachForm.test.tsx' },
   evidenceRetract: { kind: 'web', doc: 'EVIDENCE_RETRACT_MUTATION', components: ['components/ReviewEvidence.tsx'], label: 'Retract evidence', test: 'App.work-observation.test.tsx' },
-  fileUpload: { kind: 'web', doc: 'FILE_UPLOAD_MUTATION', components: ['components/RichTextEditor.tsx'], test: 'components/RichTextEditor.test.tsx' },
+  fileUpload: { kind: 'web', doc: 'FILE_UPLOAD_MUTATION', components: ['components/RichTextEditor.tsx', 'components/WorkFiles.tsx', 'components/EvidenceAttachForm.tsx'], test: 'components/RichTextEditor.test.tsx' },
   issueCreate: { kind: 'web', doc: 'ISSUE_CREATE_MUTATION', components: ['routes/BoardPage.tsx'], test: 'App.issue-create.test.tsx' },
   issueDelete: { kind: 'web', doc: 'ISSUE_DELETE_MUTATION', components: ['routes/IssuePage.tsx'], label: 'Delete issue', test: 'App.issue-meta.test.tsx' },
   issueUndelete: { kind: 'web', doc: 'ISSUE_UNDELETE_MUTATION', components: ['undo/DeleteUndoHost.tsx'], label: 'Undo', test: 'App.delete-undo.test.tsx' },

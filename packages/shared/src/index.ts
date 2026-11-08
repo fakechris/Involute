@@ -18,6 +18,8 @@ export interface ViewerAssertionClaims {
   subType: ViewerAssertionSubjectType;
 }
 
+export { isRenderableImageUrl, normalizeImageHostSuffixes, type RenderableImageOptions } from './image-url.js';
+
 export {
   assertValidIql,
   describeIql,

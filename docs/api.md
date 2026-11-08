@@ -1318,6 +1318,12 @@ first and the issue page shows them under **Files**. `GET /uploads/<name>`
 serves a file only to its uploader, admins, trusted token bearers, or readers of
 the linked work. Research reports go this way, never into git or an image —
 `scripts/ci-research-guard.sh` fails CI when a `research/` path is tracked.
+The same call is how an agent attaches a bug screenshot or an acceptance
+screenshot (png, jpeg, gif, webp). Cite the returned `/uploads/…` in the
+description, or pass it to `evidence(action: 'attach', kind: 'screenshot')`.
+An image already on S3, Aliyun OSS, Qiniu, or a suffix in
+`INVOLUTE_IMAGE_HOSTS` is pasted as that https URL instead; the page renders
+allowlisted image URLs and the server does not fetch them.
 
 ### Webhook subscriptions (Linear-style, per-endpoint secrets)
 
