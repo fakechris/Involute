@@ -254,12 +254,21 @@ export const ISSUE_GRAPH_QUERY = gql`
   query IssueGraph($id: String!, $depth: Int) {
     issueGraph(id: $id, depth: $depth) {
       truncated
+      omitted {
+        siblings
+        children
+        blockers
+        dependents
+        ancestors
+        rollups
+      }
       focus {
         id
         identifier
         title
         kind
         commitmentStatus
+        updatedAt
         state {
           id
           name
@@ -276,6 +285,7 @@ export const ISSUE_GRAPH_QUERY = gql`
         title
         kind
         commitmentStatus
+        updatedAt
         state {
           id
           name
@@ -292,6 +302,7 @@ export const ISSUE_GRAPH_QUERY = gql`
         title
         kind
         commitmentStatus
+        updatedAt
         state {
           id
           name

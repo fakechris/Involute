@@ -91,6 +91,7 @@
 | `WorkFiles` | `components/WorkFiles.tsx` + `styles/content.css`（`.work-files__*`） | 工单页只在有文件时列出文件名链接 |
 | `ProjectBadge`（`getProjectColorClass`） | `components/ProjectBadge.tsx` + `styles/app.css`（`.project-badge`、`.proj-color-*`） | `IssueCard` 内联徽章、各页复制的 `issue-card__repo-badge` |
 | 状态色 | `components/StatusIcon.tsx`（`getStatusColorVar` / `statusKindForStateType`） | `graph-colors.ts` 与时间线 CSS 里的重复 hex |
+| `NeighbourhoodOmissionNote`（`neighbourhoodOmissionSentence`，看板芯片经 `NeighbourhoodTruncationHint`） | `components/graph/IssueNeighbourhood.tsx` | 工单抽屉 / 整页邻域 / 看板芯片各自写的笼统截断句（INV-1767：写明每一类少了多少，留下的是未结束且最近更新的项；无省略时不出现） |
 
 ListRow 打开规则：列表行（My Issues / Bugs / Search / Incidents / Health）用 `IssueRow open="drawer"`：单击在当前路由加 `?issue=<identifier>`，由 App 壳里的 `IssueDrawerHost` 打开抽屉（Board / Backlog 自带抽屉）；链接 href 仍是 `/issue/:identifier`，⌘/Ctrl/中键交给浏览器打开整页；关闭只去掉 `issue` 参数（INV-1387）。Needs you 与 In Review 不变；In Review 卡片的工单号仍进入 `/work/:id`（上下文页）。
 

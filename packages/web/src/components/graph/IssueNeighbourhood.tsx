@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { ISSUE_GRAPH_QUERY } from '../../work/queries';
 import type {
+  IssueGraphOmittedCounts,
   IssueGraphQueryData,
   IssueGraphQueryVariables,
   WorkGraphNodeRecord,
@@ -84,6 +85,7 @@ export function RollupCard({ rollup }: { rollup: RollupLine }) {
       />
       <div className="issue-neighbourhood__rollup-meta">
         <span>{rollup.label}</span>
+        <span>Counts committed items in the whole subtree, including ones this list does not show.</span>
         {rollup.inProgress > 0 ? (
           <span className="issue-neighbourhood__chip issue-neighbourhood__chip--progress">
             {rollup.inProgress} in flight
@@ -136,23 +138,66 @@ export function NeighbourhoodRow({
   );
 }
 
-export const NEIGHBOURHOOD_TRUNCATION_HINT = 'This neighbourhood is larger than one read shows.';
+const OMISSION_LABELS: Array<{
+  key: keyof IssueGraphOmittedCounts;
+  one: string;
+  many: string;
+}> = [
+  { key: 'siblings', one: 'sibling', many: 'siblings' },
+  { key: 'children', one: 'child', many: 'children' },
+  { key: 'blockers', one: 'blocker', many: 'blockers' },
+  { key: 'dependents', one: 'dependent', many: 'dependents' },
+  { key: 'ancestors', one: 'ancestor', many: 'ancestors' },
+  { key: 'rollups', one: 'progress count', many: 'progress counts' },
+];
 
-export function NeighbourhoodTruncationHintText() {
-  return <p className="issue-panel__empty-hint">{NEIGHBOURHOOD_TRUNCATION_HINT}</p>;
+function joinList(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? '';
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
 /**
- * The board filter uses the same depth-1 read. When that read is truncated,
- * say so with the sentence the section already uses (INV-1758).
+ * One sentence for the drawer, the full neighbourhood page and the board chip
+ * (INV-1767). Empty when the read left nothing out.
+ */
+export function neighbourhoodOmissionSentence(omitted: IssueGraphOmittedCounts | null | undefined): string | null {
+  if (!omitted) return null;
+  const parts = OMISSION_LABELS.flatMap(({ key, one, many }) => {
+    const count = omitted[key];
+    if (!count || count < 1) return [];
+    return [`${count} ${count === 1 ? one : many}`];
+  });
+  if (parts.length === 0) return null;
+  return `This read kept unfinished items updated most recently. It left out ${joinList(parts)}.`;
+}
+
+export function NeighbourhoodOmissionNote({
+  omitted,
+  className = 'issue-panel__empty-hint',
+}: {
+  omitted: IssueGraphOmittedCounts | null | undefined;
+  className?: string;
+}) {
+  const sentence = neighbourhoodOmissionSentence(omitted);
+  if (!sentence) return null;
+  return (
+    <p className={className} role="status">
+      {sentence}
+    </p>
+  );
+}
+
+/**
+ * The board filter uses the same depth-1 read. When that read leaves items
+ * out, say which kind, with the sentence the section already uses (INV-1758, INV-1767).
  */
 export function NeighbourhoodTruncationHint({ identifier }: { identifier: string }) {
   const { data } = useQuery<IssueGraphQueryData, IssueGraphQueryVariables>(ISSUE_GRAPH_QUERY, {
     variables: { id: identifier, depth: 1 },
     fetchPolicy: 'cache-and-network',
   });
-  if (!data?.issueGraph.truncated) return null;
-  return <NeighbourhoodTruncationHintText />;
+  return <NeighbourhoodOmissionNote omitted={data?.issueGraph.omitted} />;
 }
 
 function toGraphNode(record: WorkGraphNodeRecord): GraphNode {
@@ -166,6 +211,7 @@ function toGraphNode(record: WorkGraphNodeRecord): GraphNode {
     stateType: record.state.type,
     assigneeName: record.assignee?.name ?? null,
     external: false,
+    ...(record.updatedAt ? { updatedAt: record.updatedAt } : {}),
   };
 }
 
@@ -288,7 +334,7 @@ export function IssueNeighbourhood({ issueId, issueIdentifier, issueRepository, 
         </>
       ) : null}
 
-      {graph.truncated ? <NeighbourhoodTruncationHintText /> : null}
+      <NeighbourhoodOmissionNote omitted={graph.omitted} />
     </div>
   );
 }
