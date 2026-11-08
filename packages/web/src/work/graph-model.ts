@@ -18,6 +18,8 @@ export interface GraphNode {
   assigneeName: string | null;
   /** Linked from the project but belongs elsewhere. */
   external: boolean;
+  /** ISO time. The neighbourhood map uses it to decide which items fit (INV-1767). */
+  updatedAt?: string;
 }
 
 export interface GraphEdge {

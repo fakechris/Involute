@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { IssueNeighbourhood } from './IssueNeighbourhood';
+import { IssueNeighbourhood, NeighbourhoodTruncationHint, neighbourhoodOmissionSentence } from './IssueNeighbourhood';
 
 const { mockUseQuery, navigate } = vi.hoisted(() => ({
   mockUseQuery: vi.fn(),
@@ -127,10 +127,14 @@ const graph = {
       },
     ],
     truncated: false,
+    omitted: { siblings: 0, children: 0, blockers: 0, dependents: 0, ancestors: 0, rollups: 0 },
   },
 };
 
+const noOmissions = { siblings: 0, children: 0, blockers: 0, dependents: 0, ancestors: 0, rollups: 0 };
+
 afterEach(() => {
+  graph.issueGraph.omitted = { ...noOmissions };
   cleanup();
   mockUseQuery.mockClear();
   navigate.mockClear();
@@ -142,6 +146,26 @@ describe('IssueNeighbourhood', () => {
     expect(screen.getByText('3 of 8 done')).toBeTruthy();
     expect(screen.getByText('2 in flight')).toBeTruthy();
     expect(screen.getByText('1 stuck')).toBeTruthy();
+    expect(screen.getByText(/whole subtree/)).toBeTruthy();
+  });
+
+  it('names the siblings a read left out, and stays quiet when nothing was left out', () => {
+    const { unmount } = render(<IssueNeighbourhood issueId="focus" issueIdentifier="INV-1496" onOpen={() => {}} />);
+    expect(screen.queryByText(/left out/)).toBeNull();
+    unmount();
+
+    graph.issueGraph.omitted = { ...noOmissions, siblings: 4 };
+    render(<IssueNeighbourhood issueId="focus" issueIdentifier="INV-1496" onOpen={() => {}} />);
+    expect(screen.getByRole('status').textContent).toBe(
+      'This read kept unfinished items updated most recently. It left out 4 siblings.',
+    );
+  });
+
+  it('uses that same sentence on the board chip', () => {
+    graph.issueGraph.omitted = { ...noOmissions, siblings: 4, children: 1 };
+    render(<NeighbourhoodTruncationHint identifier="INV-1496" />);
+    expect(screen.getByRole('status').textContent).toBe(neighbourhoodOmissionSentence(graph.issueGraph.omitted));
+    expect(screen.getByRole('status').textContent).toContain('4 siblings and 1 child');
   });
 
   it('shows the chain above the item, its peers and what waits under it', () => {

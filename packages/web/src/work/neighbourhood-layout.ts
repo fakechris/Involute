@@ -196,6 +196,27 @@ function round(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
+const FINISHED_STATE_TYPES = new Set(['COMPLETED', 'CANCELED']);
+
+/**
+ * The same keep order as a neighbourhood read (INV-1765): unfinished items
+ * first, then most recently updated, then id. The map uses it before a cap
+ * so "+N more" hides the same items the read would have dropped.
+ */
+export function compareNeighbourhoodKeep(left: GraphNode, right: GraphNode): number {
+  const tier = (node: GraphNode) => (FINISHED_STATE_TYPES.has(node.stateType) ? 1 : 0);
+  const byTier = tier(left) - tier(right);
+  if (byTier !== 0) return byTier;
+  const leftTime = left.updatedAt ? Date.parse(left.updatedAt) : 0;
+  const rightTime = right.updatedAt ? Date.parse(right.updatedAt) : 0;
+  const leftStamp = Number.isFinite(leftTime) ? leftTime : 0;
+  const rightStamp = Number.isFinite(rightTime) ? rightTime : 0;
+  if (leftStamp !== rightStamp) return rightStamp - leftStamp;
+  if (left.id < right.id) return -1;
+  if (left.id > right.id) return 1;
+  return 0;
+}
+
 /**
  * Lays the neighbourhood out as a radial map.
  *
@@ -251,7 +272,9 @@ export function layoutNeighbourhood(input: {
   };
 
   for (const role of ['ancestor', 'sibling', 'child', 'blocker', 'dependent'] as const) {
-    const items = roleItems[role];
+    // Ancestors stay in chain order (topmost first). Sorting them by recency
+    // would detach the parent from the focus. The other roles are sets.
+    const items = role === 'ancestor' ? roleItems[role] : [...roleItems[role]].sort(compareNeighbourhoodKeep);
     const cap = caps[role] ?? items.length;
     const shown = items.slice(0, Math.max(cap, 0));
     hidden[role] = items.length - shown.length;

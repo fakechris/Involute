@@ -3,7 +3,7 @@ import { useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { DependencyGraph, type FocusHops } from '../components/graph/DependencyGraph';
-import { RollupCard } from '../components/graph/IssueNeighbourhood';
+import { NeighbourhoodOmissionNote, RollupCard } from '../components/graph/IssueNeighbourhood';
 import { NeighbourhoodMap } from '../components/graph/NeighbourhoodMap';
 import { IcoGraph } from '../components/Icons';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
@@ -52,6 +52,7 @@ function toGraphNode(record: WorkGraphNodeRecord): GraphNode {
     stateType: record.state.type,
     assigneeName: record.assignee?.name ?? null,
     external: false,
+    ...(record.updatedAt ? { updatedAt: record.updatedAt } : {}),
   };
 }
 
@@ -203,11 +204,7 @@ export function IssueGraphViewPage() {
               />
             )}
 
-            {graph.truncated ? (
-              <p className="graph-truncated" role="status">
-                This neighbourhood has more items than one read shows.
-              </p>
-            ) : null}
+            <NeighbourhoodOmissionNote omitted={graph.omitted} className="graph-truncated" />
           </>
         ) : null}
       </PageBody>

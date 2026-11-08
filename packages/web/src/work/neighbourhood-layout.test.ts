@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { GraphEdge, GraphNode } from './graph-model';
 import { buildNeighbourhood } from './neighbourhood-model';
-import { layoutNeighbourhood, type PlacedNode } from './neighbourhood-layout';
+import { compareNeighbourhoodKeep, layoutNeighbourhood, type PlacedNode } from './neighbourhood-layout';
 
 function node(id: string, extra: Partial<GraphNode> = {}): GraphNode {
   return {
@@ -136,6 +136,39 @@ describe('layoutNeighbourhood', () => {
       first.nodes.map((item) => `${item.id}:${item.x}:${item.y}`),
     );
     expect(second.edges.map((item) => item.path)).toEqual(first.edges.map((item) => item.path));
+  });
+
+  it('draws the unfinished, recently updated siblings and counts the rest as more', () => {
+    const siblings = [
+      node('s0', { stateType: 'UNSTARTED', updatedAt: '2026-01-01T00:00:00.000Z' }),
+      node('s1', { stateType: 'UNSTARTED', updatedAt: '2026-01-02T00:00:00.000Z' }),
+      node('s2', { stateType: 'UNSTARTED', updatedAt: '2026-01-03T00:00:00.000Z' }),
+      node('s3', { stateType: 'UNSTARTED', updatedAt: '2026-01-04T00:00:00.000Z' }),
+      node('s4', { stateType: 'UNSTARTED', updatedAt: '2026-01-05T00:00:00.000Z' }),
+      node('s5', { stateType: 'UNSTARTED', updatedAt: '2026-01-06T00:00:00.000Z' }),
+      node('done-new', { stateType: 'COMPLETED', updatedAt: '2026-02-01T00:00:00.000Z' }),
+      node('done-newer', { stateType: 'CANCELED', updatedAt: '2026-03-01T00:00:00.000Z' }),
+    ];
+    const layout = layoutOf(
+      [node('parent', { kind: 'MILESTONE' }), node('focus'), ...siblings],
+      [contains('parent', 'focus'), ...siblings.map((item) => contains('parent', item.id))],
+      'focus',
+      { sibling: 5 },
+    );
+    expect(layout.nodes.filter((item) => item.role === 'sibling').map((item) => item.id)).toEqual([
+      's5',
+      's4',
+      's3',
+      's2',
+      's1',
+    ]);
+    expect(layout.hidden.sibling).toBe(3);
+    expect(
+      compareNeighbourhoodKeep(
+        node('b', { updatedAt: '2026-01-01T00:00:00.000Z' }),
+        node('a', { updatedAt: '2026-01-01T00:00:00.000Z' }),
+      ),
+    ).toBeGreaterThan(0);
   });
 
   it('draws an empty neighbourhood rather than failing', () => {

@@ -354,6 +354,17 @@ export interface WorkGraphNodeRecord {
   commitmentStatus: CommitmentStatus;
   state: { id: string; name: string; type: WorkflowStateType };
   assignee: { id: string; name: string | null } | null;
+  updatedAt?: string;
+}
+
+/** How many items one neighbourhood read left out (INV-1766). */
+export interface IssueGraphOmittedCounts {
+  siblings: number;
+  children: number;
+  blockers: number;
+  dependents: number;
+  ancestors: number;
+  rollups: number;
 }
 
 export interface ProjectWorkGraphQueryData {
@@ -405,6 +416,7 @@ export interface IssueGraphQueryData {
     edges: Array<{ id: string; type: WorkLinkType; fromId: string; toId: string }>;
     rollups: WorkRollupRecord[];
     truncated: boolean;
+    omitted?: IssueGraphOmittedCounts;
   };
 }
 
