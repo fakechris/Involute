@@ -6342,6 +6342,53 @@ kbd {
 .issue-peek__body {
   color: var(--fg-muted);
 }
+.issue-peek__fields {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+.issue-peek__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  color: var(--fg-dim);
+  font-size: 12px;
+}
+.issue-peek__select,
+.issue-peek__input {
+  width: 100%;
+}
+.issue-peek__input {
+  min-height: 120px;
+  margin: 0 0 8px;
+}
+.issue-peek__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.issue-peek__note {
+  margin: 4px 0;
+  color: var(--fg-dim);
+}
+.issue-peek__label {
+  margin: 6px 0 2px;
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.issue-peek__diff {
+  margin: 0;
+  padding: 6px 8px;
+  white-space: pre-wrap;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-2);
+}
+.issue-peek__conflict {
+  margin-top: 4px;
+}
 /* The row J/K points at on /in-review and /candidates (INV-1087). */
 .observation-card--focused {
   box-shadow: inset 3px 0 0 var(--accent);
