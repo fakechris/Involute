@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { BugCaptureSection } from './BugCaptureSection';
@@ -8,7 +8,7 @@ afterEach(() => {
 });
 
 describe('BugCaptureSection (INV-1146)', () => {
-  it('lays out the captured environment with the screenshot link', () => {
+  it('lays out the captured environment and opens the screenshot on this page', () => {
     render(
       <BugCaptureSection
         capture={{
@@ -35,8 +35,10 @@ describe('BugCaptureSection (INV-1146)', () => {
     expect(section).toHaveTextContent('font-size: 14px');
     expect(section).toHaveTextContent('TypeError: x');
     expect(section).toHaveTextContent('POST 500 https://app.example.com/graphql (120 ms)');
-    const screenshot = within(section).getByRole('link', { name: 'Screenshot' });
-    expect(screenshot).toHaveAttribute('href', '/uploads/shot.png');
-    expect(within(screenshot).getByRole('img', { name: 'Screenshot' })).toBeInTheDocument();
+    const screenshot = within(section).getByRole('button', { name: 'Screenshot' });
+    expect(within(screenshot).getByRole('img', { name: 'Screenshot' })).toHaveAttribute('src', '/uploads/shot.png');
+    expect(within(section).queryByRole('link', { name: 'Screenshot' })).toBeNull();
+    fireEvent.click(screenshot);
+    expect(screen.getByRole('dialog', { name: 'Screenshot' })).toBeInTheDocument();
   });
 });

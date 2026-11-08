@@ -203,6 +203,122 @@
   object-fit: contain;
 }
 
+.safe-image {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 0;
+  cursor: zoom-in;
+  vertical-align: middle;
+}
+
+.safe-image:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.image-file-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  text-decoration: underline;
+  cursor: zoom-in;
+}
+
+.image-file-name:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.image-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+}
+
+.image-viewer__backdrop {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  background: var(--bg-overlay);
+  cursor: pointer;
+}
+
+.image-viewer__bar {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+.image-viewer__zoom {
+  min-width: 44px;
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: center;
+}
+
+.image-viewer__stage {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.image-viewer__img {
+  max-width: min(92vw, 1100px);
+  max-height: calc(100vh - 88px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  transform-origin: center;
+  transform: translate(var(--image-x, 0px), var(--image-y, 0px)) scale(var(--image-zoom, 1)) rotate(var(--image-turn, 0deg));
+  pointer-events: auto;
+  cursor: grab;
+  user-select: none;
+}
+
+.image-viewer__img[data-turn='1'],
+.image-viewer__img[data-turn='3'] {
+  max-width: calc(100vh - 88px);
+  max-height: min(92vw, 1100px);
+}
+
+.image-viewer__img[data-zoom='50'] { --image-zoom: 0.5; }
+.image-viewer__img[data-zoom='75'] { --image-zoom: 0.75; }
+.image-viewer__img[data-zoom='100'] { --image-zoom: 1; }
+.image-viewer__img[data-zoom='125'] { --image-zoom: 1.25; }
+.image-viewer__img[data-zoom='150'] { --image-zoom: 1.5; }
+.image-viewer__img[data-zoom='200'] { --image-zoom: 2; }
+.image-viewer__img[data-zoom='300'] { --image-zoom: 3; }
+.image-viewer__img[data-zoom='400'] { --image-zoom: 4; }
+
+.image-viewer__img[data-turn='0'] { --image-turn: 0deg; }
+.image-viewer__img[data-turn='1'] { --image-turn: 90deg; }
+.image-viewer__img[data-turn='2'] { --image-turn: 180deg; }
+.image-viewer__img[data-turn='3'] { --image-turn: 270deg; }
+
 .work-files__preview {
   margin-top: 8px;
 }

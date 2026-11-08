@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { boardQueryResult, renderApp } from './test/app-test-helpers';
@@ -46,7 +46,13 @@ describe('Issue page files', () => {
     renderApp(App, { data, loading: false }, ['/issue/issue-1']);
 
     expect(await screen.findByText('hello from the file')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'shot.png' })).toHaveAttribute('src', '/uploads/shot.png');
+    const files = screen.getByRole('list', { name: 'Files' });
+    expect(within(files).getByRole('img', { name: 'shot.png' })).toHaveAttribute('src', '/uploads/shot.png');
+    expect(within(files).queryByRole('link', { name: 'shot.png' })).toBeNull();
+    const openers = within(files).getAllByRole('button', { name: 'shot.png' });
+    fireEvent.click(openers[1]!);
+    const dialog = screen.getByRole('dialog', { name: 'shot.png' });
+    expect(within(dialog).getByRole('img', { name: 'shot.png' })).toHaveAttribute('src', '/uploads/shot.png');
   });
 
   it('shows the same files in the board drawer', async () => {
