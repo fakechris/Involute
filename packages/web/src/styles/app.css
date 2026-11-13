@@ -7617,12 +7617,25 @@ kbd {
   color: var(--danger);
 }
 
-/* Commits & links on the issue page and drawer (INV-1673). */
-.work-links__row {
+/* Commits & links on the issue page and drawer (INV-1673), and Files: a row
+   may hold a thumbnail or a Markdown preview, so it grows with its content
+   instead of keeping the one-line sub-issue row height. */
+.work-links__row,
+.work-files__row {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
+  height: auto;
+  min-height: 30px;
+  padding-block: 6px;
+  cursor: default;
+}
+
+.work-files__row > .work-files__preview {
+  flex-basis: 100%;
+  min-width: 0;
+  margin-top: 0;
 }
 
 .work-links__group {
