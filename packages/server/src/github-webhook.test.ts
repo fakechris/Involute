@@ -555,6 +555,29 @@ describe('GitHub Webhook & Dual-Track CAS State Machine (Phase 2)', () => {
       expect(getOutput().status).toBe(200);
       expect(JSON.parse(getOutput().body)).toEqual({ ok: true });
     });
+
+    it('clears the 404 sync skip marker when any webhook for the repo arrives (INV-1842)', async () => {
+      await prisma.syncWatermark.create({
+        data: { key: 'github_sync_skip_fakechris/Involute', watermark: new Date() },
+      });
+
+      const body = JSON.stringify({
+        zen: 'Design for failure.',
+        repository: { full_name: 'fakechris/Involute' },
+      });
+      const validSig = 'sha256=' + createHmac('sha256', testSecret).update(Buffer.from(body)).digest('hex');
+
+      const { res, getOutput } = createMockResponse();
+      const req = createMockRequest(body, {
+        'x-hub-signature-256': validSig,
+        'x-github-event': 'ping',
+      });
+
+      const handled = await handleGitHubWebhook({ prisma, webhookSecret: testSecret }, req, res);
+      expect(handled).toBe(true);
+      expect(getOutput().status).toBe(200);
+      expect(await prisma.syncWatermark.findUnique({ where: { key: 'github_sync_skip_fakechris/Involute' } })).toBeNull();
+    });
   });
 
   describe('P1 Concurrency Hardening & Isolation (Reviewer Defense Matrix)', () => {

@@ -1,14 +1,16 @@
 import { PrismaClient as PrismaClientConstructor } from '@prisma/client';
 import type { PrismaClient, Team, User } from '@prisma/client';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, seedDatabase } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import { commitWork, proposeWork } from './claim-service.ts';
 import type { GitHubApiClient, GitHubSyncPullRequest } from './github-sync.ts';
 import {
+  githubSyncSkipKey,
   reconcileAllConfiguredRepos,
   reconcileRepoPullRequests,
+  resumeGitHubRepoSync,
 } from './github-sync.ts';
 import { DEFAULT_REPO_ROUTES } from './github-repo-routes.ts';
 import { testParentId } from './test-placement.ts';
@@ -20,12 +22,14 @@ const prisma = new PrismaClientConstructor();
 class MockGitHubApiClient implements GitHubApiClient {
   public prs: GitHubSyncPullRequest[] = [];
   public fetchCalls: Array<{ repository: string; since: Date }> = [];
+  public failures: Record<string, Error> = {};
 
   async fetchPullRequestsSince(
     repository: string,
     since: Date,
   ): Promise<GitHubSyncPullRequest[]> {
     this.fetchCalls.push({ repository, since });
+    if (this.failures[repository]) throw this.failures[repository];
     const sinceMs = since.getTime();
     return this.prs.filter(
       (pr) => new Date(pr.updated_at).getTime() >= sinceMs,
@@ -497,5 +501,120 @@ describe('GitHub Reconciliation Sync Engine (Phase 3)', () => {
     const repos = results.map((r) => r.repository);
     expect(repos).toContain('fakechris/Involute');
     expect(repos).toContain('fakechris/lumenbox');
+  });
+
+  describe('404 repo skip (INV-1842)', () => {
+    async function createGhostProject(repository: string) {
+      const state = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'UNSTARTED' } });
+      return prisma.issue.create({
+        data: {
+          identifier: `GHOST-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+          title: `Ghost project ${repository}`,
+          kind: 'PROJECT',
+          teamId: team.id,
+          stateId: state.id,
+          repository,
+          commitmentStatus: 'COMMITTED',
+          acceptance: 'Ghost route for sync tests',
+        },
+      });
+    }
+
+    it('repo that 404s is marked skipped, not fetched again, and other repos keep syncing', async () => {
+      await createGhostProject('ghost/missing-repo');
+      const mockClient = new MockGitHubApiClient();
+      mockClient.failures['ghost/missing-repo'] = new Error('GitHub API error 404: {"message":"Not Found"}');
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        await reconcileAllConfiguredRepos(prisma, mockClient, {
+          forceWatermark: new Date('2026-09-09T00:00:00.000Z'),
+        });
+        expect(await prisma.syncWatermark.findUnique({ where: { key: githubSyncSkipKey('ghost/missing-repo') } })).not.toBeNull();
+        expect(mockClient.fetchCalls.map((c) => c.repository)).toContain('ghost/missing-repo');
+        expect(warnSpy.mock.calls.some((c) => String(c[0]).includes('ghost/missing-repo'))).toBe(true);
+
+        mockClient.fetchCalls = [];
+        await reconcileAllConfiguredRepos(prisma, mockClient, {
+          forceWatermark: new Date('2026-09-09T00:00:00.000Z'),
+        });
+        expect(mockClient.fetchCalls.map((c) => c.repository)).not.toContain('ghost/missing-repo');
+        expect(mockClient.fetchCalls.map((c) => c.repository)).toContain('fakechris/Involute');
+        expect(mockClient.fetchCalls.map((c) => c.repository)).toContain('fakechris/lumenbox');
+        expect(errorSpy).not.toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+        errorSpy.mockRestore();
+      }
+    });
+
+    it('resumeGitHubRepoSync clears the marker and the next cycle fetches the repo again', async () => {
+      await createGhostProject('ghost/renamed-back');
+      const mockClient = new MockGitHubApiClient();
+      mockClient.failures['ghost/renamed-back'] = new Error('GitHub API error 404: {"message":"Not Found"}');
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await reconcileAllConfiguredRepos(prisma, mockClient, {
+          forceWatermark: new Date('2026-09-09T00:00:00.000Z'),
+        });
+        expect(await prisma.syncWatermark.findUnique({ where: { key: githubSyncSkipKey('ghost/renamed-back') } })).not.toBeNull();
+
+        expect(await resumeGitHubRepoSync(prisma, 'ghost/renamed-back')).toBe(true);
+        expect(await prisma.syncWatermark.findUnique({ where: { key: githubSyncSkipKey('ghost/renamed-back') } })).toBeNull();
+
+        mockClient.fetchCalls = [];
+        await reconcileAllConfiguredRepos(prisma, mockClient, {
+          forceWatermark: new Date('2026-09-09T00:00:00.000Z'),
+        });
+        expect(mockClient.fetchCalls.map((c) => c.repository)).toContain('ghost/renamed-back');
+      } finally {
+        warnSpy.mockRestore();
+        errorSpy.mockRestore();
+      }
+    });
+
+    it('non-404 failures keep retrying every cycle and write no marker', async () => {
+      await createGhostProject('ghost/server-error');
+      const mockClient = new MockGitHubApiClient();
+      mockClient.failures['ghost/server-error'] = new Error('GitHub API error 500: {"message":"Internal Server Error"}');
+
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await reconcileAllConfiguredRepos(prisma, mockClient, {
+          forceWatermark: new Date('2026-09-09T00:00:00.000Z'),
+        });
+        expect(await prisma.syncWatermark.findUnique({ where: { key: githubSyncSkipKey('ghost/server-error') } })).toBeNull();
+
+        mockClient.fetchCalls = [];
+        await reconcileAllConfiguredRepos(prisma, mockClient, {
+          forceWatermark: new Date('2026-09-09T00:00:00.000Z'),
+        });
+        expect(mockClient.fetchCalls.map((c) => c.repository)).toContain('ghost/server-error');
+        expect(errorSpy).toHaveBeenCalled();
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
+    it('typed errors carrying a numeric status are recognised as 404 too', async () => {
+      await createGhostProject('ghost/typed-404');
+      const mockClient = new MockGitHubApiClient();
+      mockClient.failures['ghost/typed-404'] = Object.assign(new Error('request failed'), { status: 404 });
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        await reconcileAllConfiguredRepos(prisma, mockClient, {
+          forceWatermark: new Date('2026-09-09T00:00:00.000Z'),
+        });
+        expect(await prisma.syncWatermark.findUnique({ where: { key: githubSyncSkipKey('ghost/typed-404') } })).not.toBeNull();
+        expect(warnSpy).toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
   });
 });
