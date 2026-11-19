@@ -133,6 +133,29 @@ describe('incident summary (INV-1129)', () => {
     expect(summary.incidents[0].impactHours).toBe(seconds / 3600);
   });
 
+  it('groups by the nearest PROJECT ancestor, including repository-less and nested work, not repository or title', async () => {
+    const project = await createIssue(prisma, { teamId: team.id, kind: 'PROJECT', title: 'Incident E2E' });
+    const otherProject = await createIssue(prisma, { teamId: team.id, kind: 'PROJECT', title: 'Incident E2E' });
+    const parent = await createIssue(prisma, { teamId: team.id, title: 'Nested issue', parentId: project.id });
+    const direct = await incident('Direct', 'SEV3', { impactStartedAt: at(0), resolvedAt: at(1) });
+    const nested = await incident('Nested', 'SEV3', { impactStartedAt: at(0) });
+    const separate = await incident('Same project title', 'SEV3', { impactStartedAt: at(0) });
+    const orphan = await incident('No project', 'SEV3', { impactStartedAt: at(0) });
+    for (const [issue, parentId] of [[direct, project.id], [nested, parent.id], [separate, otherProject.id], [orphan, null]] as const) {
+      await prisma.issue.update({ where: { id: issue.id }, data: { parentId, repository: null } });
+      await prisma.workLink.deleteMany({ where: { toId: issue.id, type: 'CONTAINS' } });
+      if (parentId) await createWorkLink(prisma, { fromId: parentId, toId: issue.id, type: 'CONTAINS' });
+    }
+    const summary = await loadIncidentSummary(prisma, { teamId: team.id }, at(2));
+    expect(summary.byProject).toHaveLength(3);
+    expect(summary.byProject).toEqual(expect.arrayContaining([
+      { project: { id: project.id, identifier: project.identifier, title: project.title }, openCount: 1, resolvedCount: 1 },
+      { project: { id: otherProject.id, identifier: otherProject.identifier, title: otherProject.title }, openCount: 1, resolvedCount: 0 },
+      { project: null, openCount: 1, resolvedCount: 0 },
+    ]));
+    expect(summary.byRepository).toEqual([{ repository: null, openCount: 3, resolvedCount: 1 }]);
+  });
+
   it('is empty with no incidents: zero counts and null averages', async () => {
     expect(await loadIncidentSummary(prisma, {})).toEqual({
       openCount: 0,
@@ -140,6 +163,7 @@ describe('incident summary (INV-1129)', () => {
       excludedCount: 0,
       bySeverity: [],
       byRepository: [],
+      byProject: [],
       mttrHours: null,
       mttrSampleCount: 0,
       mttmHours: null,
@@ -173,6 +197,7 @@ describe('incident summary (INV-1129)', () => {
         body: JSON.stringify({
           query: `{ incidentSummary { openCount resolvedCount excludedCount mttrHours mttrSampleCount mttmHours mttmSampleCount
             bySeverity { severity openCount resolvedCount } byRepository { repository openCount resolvedCount }
+            byProject { project { id identifier title } openCount resolvedCount }
             followUps { total completed declined overdue overdueOpen completionRate }
             incidents { identifier severity ongoing impactHours postmortemRequired postmortemAttached followUpTotal followUpCompleted impactStartedAt resolvedAt } } }`,
         }),
@@ -192,6 +217,11 @@ describe('incident summary (INV-1129)', () => {
       const result = ((await mcp.json()) as any).result;
       expect(result.isError).toBeFalsy();
       const viaMcp = JSON.parse(result.content[0].text);
+      expect(viaMcp.byProject).toEqual(summary.byProject);
+      expect(summary.byProject).toEqual(expect.arrayContaining([
+        { project: expect.objectContaining({ id: projectId, title: repo }), openCount: 0, resolvedCount: 2 },
+        { project: expect.objectContaining({ id: otherProjectId, title: 'acme/other' }), openCount: 1, resolvedCount: 0 },
+      ]));
       expect(viaMcp).toMatchObject({ openCount: 1, resolvedCount: 2, excludedCount: 2, mttrHours: 3, mttrSampleCount: 2, mttmHours: 1.5, mttmSampleCount: 2 });
       expect(viaMcp.incidents.map((item: any) => item.identifier)).not.toContain('SEC-1');
     } finally {

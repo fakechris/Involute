@@ -26,6 +26,10 @@ const summary = {
     { repository: 'acme/incidents', openCount: 0, resolvedCount: 2 },
     { repository: 'acme/other', openCount: 1, resolvedCount: 0 },
   ],
+  byProject: [
+    { project: { id: 'p1', identifier: 'INV-10', title: 'Incident E2E' }, openCount: 0, resolvedCount: 2 },
+    { project: { id: 'p2', identifier: 'INV-11', title: 'Other project' }, openCount: 1, resolvedCount: 0 },
+  ],
   followUps: { total: 3, completed: 1, declined: 1, overdue: 1, overdueOpen: 1, completionRate: 0.5 },
   incidents: [
     { id: 'c', identifier: 'INV-3', title: 'Sync stalled', severity: 'SEV3', repository: 'acme/other', stateName: 'In Progress', impactStartedAt: '2026-10-01T20:00:00.000Z', resolvedAt: null, impactHours: 5.5, ongoing: true, postmortemRequired: false, postmortemAttached: false, followUpTotal: 0, followUpCompleted: 0, followUpDeclined: 0, followUpOverdueOpen: 0 },
@@ -88,7 +92,8 @@ describe('IncidentsPage (INV-1129)', () => {
     expect(followUps).toHaveTextContent('1Overdue, still open');
 
     expect(within(screen.getByLabelText('Incidents by severity')).getByText('SEV3 Minor').closest('tr')).toHaveTextContent('SEV3 Minor10');
-    expect(within(screen.getByLabelText('Incidents by project')).getByText('acme/other').closest('tr')).toHaveTextContent('acme/other10');
+    expect(within(screen.getByLabelText('Incidents by project')).getByText('Incident E2E').closest('tr')).toHaveTextContent('Incident E2E02');
+    expect(within(screen.getByLabelText('Incidents by project')).getByText('Other project').closest('tr')).toHaveTextContent('Other project10');
 
     expect(screen.getByTestId('incident-INV-3')).toHaveTextContent('Ongoing · 5h 30m');
     expect(screen.getByTestId('incident-INV-3')).toHaveTextContent('Not required');
@@ -138,6 +143,29 @@ describe('IncidentsPage (INV-1129)', () => {
     expect(within(filters).getByRole('searchbox', { name: 'Filter by text' })).toBeInTheDocument();
   });
 
+  it('counts resolved incidents in the header and names repository-less projects', () => {
+    serve({ incidentSummary: {
+      ...summary,
+      openCount: 0,
+      resolvedCount: 1,
+      byRepository: [{ repository: null, openCount: 0, resolvedCount: 1 }],
+      byProject: [{ project: { id: 'p1', identifier: 'INV-10', title: 'Incident E2E' }, openCount: 0, resolvedCount: 1 }],
+      incidents: [{ ...summary.incidents[2], repository: null }],
+    } });
+    const { container } = render(<MemoryRouter><IncidentsPage /></MemoryRouter>);
+    expect(container.querySelector('.page-header__count')).toHaveTextContent('1');
+    expect(screen.getByLabelText('Incident statistics')).toHaveTextContent('0Ongoing1Resolved');
+    const breakdown = screen.getByLabelText('Incidents by project');
+    expect(within(breakdown).getByText('Incident E2E')).toBeInTheDocument();
+    expect(within(breakdown).queryByText('No project')).not.toBeInTheDocument();
+  });
+
+  it('shows No project only for a group without a PROJECT ancestor', () => {
+    serve({ incidentSummary: { ...summary, byProject: [{ project: null, openCount: 1, resolvedCount: 2 }] } });
+    render(<MemoryRouter><IncidentsPage /></MemoryRouter>);
+    expect(within(screen.getByLabelText('Incidents by project')).getByText('No project')).toBeInTheDocument();
+  });
+
   it('shows an empty state with no incidents', () => {
     serve({
       incidentSummary: {
@@ -151,6 +179,7 @@ describe('IncidentsPage (INV-1129)', () => {
         mttmSampleCount: 0,
         bySeverity: [],
         byRepository: [],
+        byProject: [],
         followUps: { total: 0, completed: 0, declined: 0, overdue: 0, overdueOpen: 0, completionRate: null },
         incidents: [],
       },

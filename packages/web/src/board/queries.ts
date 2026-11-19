@@ -2205,6 +2205,11 @@ export const INCIDENTS_PAGE_QUERY = gql`
         openCount
         resolvedCount
       }
+      byProject {
+        project { id identifier title }
+        openCount
+        resolvedCount
+      }
       followUps {
         total
         completed
@@ -2244,4 +2249,3 @@ export const BOARD_FIELDS_QUERY = gql`
     }
   }
 `;
-
