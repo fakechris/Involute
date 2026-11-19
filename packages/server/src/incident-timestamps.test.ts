@@ -180,14 +180,14 @@ describe('incident impact timestamps (INV-1125)', () => {
     // A completed run is refused too until resolvedAt is set.
     const claim = await callTool('work_claim', { id: declared.id });
     expect(claim.error).toBeUndefined();
-    const refused = await callTool('run_report', { work_id: declared.id, claim_token: claim.claim_token, status: 'completed', summary: 'Rolled back' });
+    const refused = await callTool('run_report', { work_id: declared.id, claim_token: claim.claim_token, status: 'completed', followups: { none_reason: 'No follow-up work.' }, summary: 'Rolled back' });
     expect(refused.error).toBe(INCIDENT_REVIEW_NEEDS_RESOLVED_MESSAGE);
     const current = await prisma.issue.findUniqueOrThrow({ where: { id: declared.id }, include: { state: true } });
     expect(current.state.type).toBe('STARTED');
 
     const resolved = await callTool('work_update', { id: declared.id, expected_revision: current.revision, resolved_at: t(10).toISOString() });
     expect(resolved.error).toBeUndefined();
-    const completed = await callTool('run_report', { work_id: declared.id, claim_token: claim.claim_token, status: 'completed', summary: 'Rolled back' });
+    const completed = await callTool('run_report', { work_id: declared.id, claim_token: claim.claim_token, status: 'completed', followups: { none_reason: 'No follow-up work.' }, summary: 'Rolled back' });
     expect(completed.error).toBeUndefined();
     const reviewed = await prisma.issue.findUniqueOrThrow({ where: { id: declared.id }, include: { state: true } });
     expect(reviewed.state.type).toBe('REVIEW');

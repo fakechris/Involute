@@ -193,11 +193,11 @@ Status: planned (next priority).
 Scope:
 
 - activate dormant timestamp data in `WorkAudit` and `WorkRun` into first-class engineering metrics
-- calculate flow metrics:
-  - **Lead Time**: end-to-end duration from `CANDIDATE` propose to `COMPLETED`
-  - **Cycle Time**: active engineering execution duration from `work_claim` to `REVIEW`
-  - **Review Idle Time**: time waiting in `REVIEW` for human acceptance
-  - **Agent Execution vs Human Review**: clear breakdown of machine effort vs human gate latency
+- calculate [replayable delivery metrics](api.md#deliverylatencyteamkey-string-start-datetime-end-datetime-first-int--50-after-string):
+  - **Lead Time**: elapsed time from commitment to acceptance
+  - **Cycle Time**: elapsed time from first entry into `STARTED` to acceptance
+  - **Review Wait**: elapsed time across all `REVIEW` spells up to acceptance
+  - **Run Wall Clock**: elapsed time, reported both with and without overlaps; actual effort is unknown
 - milestone & project dynamic burndown:
   - daily committed snapshot aggregation
   - ideal burndown slope vs actual remaining effort
@@ -205,7 +205,7 @@ Scope:
 - velocity & throughput forecasting:
   - rolling average throughput (completed issues/points per week)
   - automated completion date projection
-- GraphQL surface: `projectAnalytics`, `milestoneBurndown`, `flowMetrics`
+- GraphQL surface: `deliveryLatency`; scope history and burndown are separate
 - Web UI: dedicated `/analytics` dashboard and embedded milestone progress widgets
 
 Exit criteria:

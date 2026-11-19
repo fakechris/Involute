@@ -90,7 +90,7 @@ describe('external executor authority and receipts', () => {
     const f = await fixture();
     const receipt = { version: 1, repository: 'test/executor', commitSha: sha, pullRequestNumber: 12, environment: null, deployedSha: null, health: 'unknown', behavior: 'pass', evidenceUrls: [], observedAt: new Date().toISOString() };
     await f.update('receipt', { idempotencyKey: 'stable', receipt });
-    await reportRun(prisma, { workId: f.work.id, runId: f.run.id, claimToken: f.claim.claimToken!, status: 'completed' }, f.actor);
+    await reportRun(prisma, { workId: f.work.id, runId: f.run.id, claimToken: f.claim.claimToken!, status: 'completed', followups: { noneReason: 'No follow-up work.' } }, f.actor);
     await f.update('receipt', { idempotencyKey: 'stable', receipt });
     expect(await prisma.executorDeliveryReceipt.count()).toBe(1);
     await expect(f.update('receipt', { idempotencyKey: 'stable', receipt: { ...receipt, health: 'fail' } })).rejects.toThrow(/different facts/);
@@ -183,7 +183,7 @@ describe('external executor authority and receipts', () => {
     await f.update('start_effect', { effectId: effect.id });
     const receipt = { version: 1, repository: 'test/executor', commitSha: sha, pullRequestNumber: 12, environment: 'staging', deployedSha: 'b'.repeat(40), health: 'fail', behavior: 'unknown', evidenceUrls: ['https://example.test/failure'], observedAt: new Date().toISOString() };
     await f.update('receipt', { effectId: effect.id, idempotencyKey: 'mismatch', receipt });
-    await reportRun(prisma, { workId: f.work.id, runId: f.run.id, claimToken: f.claim.claimToken!, status: 'completed' }, f.actor);
+    await reportRun(prisma, { workId: f.work.id, runId: f.run.id, claimToken: f.claim.claimToken!, status: 'completed', followups: { noneReason: 'No follow-up work.' } }, f.actor);
     const review = await prisma.workflowState.findFirstOrThrow({ where: { teamId: f.work.teamId, type: 'REVIEW' } });
     const root = await prisma.issue.update({ where: { id: f.root.id }, data: { stateId: review.id } });
     const decision = { expectedRevision: root.revision, decision: 'REJECTED' as const, reason: 'Redo failed deployment' };

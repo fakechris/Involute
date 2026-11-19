@@ -89,6 +89,7 @@ describe('run and evidence', () => {
       {
         runId: started.run.publicId,
         status: 'completed',
+        followups: { noneReason: 'No follow-up work.' },
         summary: 'parser migrated',
         workId: committed.id,
       },
@@ -411,12 +412,12 @@ describe('run and evidence', () => {
     // The completing call carries the key; that is the request a replay must match.
     const first = await reportRun(
       prisma,
-      { idempotencyKey: 'terminal-key-1', runId: started.run.id, status: 'completed', summary: 'done', workId: committed.id },
+      { idempotencyKey: 'terminal-key-1', runId: started.run.id, status: 'completed', followups: { noneReason: 'No follow-up work.' }, summary: 'done', workId: committed.id },
       actor,
     );
     const replay = await reportRun(
       prisma,
-      { idempotencyKey: 'terminal-key-1', runId: started.run.id, status: 'completed', summary: 'done', workId: committed.id },
+      { idempotencyKey: 'terminal-key-1', runId: started.run.id, status: 'completed', followups: { noneReason: 'No follow-up work.' }, summary: 'done', workId: committed.id },
       actor,
     );
     expect(replay.run.id).toBe(first.run.id);
@@ -424,14 +425,14 @@ describe('run and evidence', () => {
     // Same key, different content: a conflict, not a quiet success.
     await expect(reportRun(
       prisma,
-      { idempotencyKey: 'terminal-key-1', runId: started.run.id, status: 'completed', summary: 'done, but different', workId: committed.id },
+      { idempotencyKey: 'terminal-key-1', runId: started.run.id, status: 'completed', followups: { noneReason: 'No follow-up work.' }, summary: 'done, but different', workId: committed.id },
       actor,
     )).rejects.toThrow(WORK_IDEMPOTENCY_CONFLICT_MESSAGE);
 
     // Terminal, no key: nothing proves this is a replay. Refused.
     await expect(reportRun(
       prisma,
-      { runId: started.run.id, status: 'completed', workId: committed.id },
+      { runId: started.run.id, status: 'completed', followups: { noneReason: 'No follow-up work.' }, workId: committed.id },
       actor,
     )).rejects.toThrow(WORK_RUN_TERMINAL_REPLAY_MESSAGE);
 
@@ -440,7 +441,7 @@ describe('run and evidence', () => {
     await prisma.workClaim.deleteMany({ where: { workId: committed.id } });
     await expect(reportRun(
       prisma,
-      { idempotencyKey: 'terminal-key-3', receipt: { reasoning: 'late thoughts' }, status: 'completed', workId: committed.id },
+      { idempotencyKey: 'terminal-key-3', receipt: { reasoning: 'late thoughts' }, status: 'completed', followups: { noneReason: 'No follow-up work.' }, workId: committed.id },
       actor,
     )).rejects.toThrow();
     await expect(prisma.decisionReceipt.count()).resolves.toBe(0);
@@ -449,7 +450,7 @@ describe('run and evidence', () => {
     // Terminal, new key, new receipt: refused, and the receipt does not land.
     await expect(reportRun(
       prisma,
-      { idempotencyKey: 'terminal-key-2', receipt: { reasoning: 'late thoughts' }, runId: started.run.id, status: 'completed', workId: committed.id },
+      { idempotencyKey: 'terminal-key-2', receipt: { reasoning: 'late thoughts' }, runId: started.run.id, status: 'completed', followups: { noneReason: 'No follow-up work.' }, workId: committed.id },
       actor,
     )).rejects.toThrow(WORK_RUN_TERMINAL_REPLAY_MESSAGE);
     await expect(prisma.decisionReceipt.count()).resolves.toBe(0);
@@ -692,12 +693,12 @@ describe('run and evidence', () => {
 
     const done1 = await reportRun(
       prisma,
-      { idempotencyKey: 'done-key-1', runId: started.run.id, status: 'completed', workId: committed.id },
+      { idempotencyKey: 'done-key-1', runId: started.run.id, status: 'completed', followups: { noneReason: 'No follow-up work.' }, workId: committed.id },
       actor,
     );
     const done2 = await reportRun(
       prisma,
-      { idempotencyKey: 'done-key-1', runId: started.run.id, status: 'completed', workId: committed.id },
+      { idempotencyKey: 'done-key-1', runId: started.run.id, status: 'completed', followups: { noneReason: 'No follow-up work.' }, workId: committed.id },
       actor,
     );
     expect(done2.run.id).toBe(done1.run.id);
@@ -741,7 +742,7 @@ describe('run and evidence', () => {
       expect(step1.run.status).toBe('RUNNING');
 
       // Step 2: Agent mistakenly passes claim.id again to complete!
-      const step2 = await reportRun(prisma, { status: 'completed', workId: committed.id, runId: claim.id }, actor);
+      const step2 = await reportRun(prisma, { status: 'completed', followups: { noneReason: 'No follow-up work.' }, workId: committed.id, runId: claim.id }, actor);
       expect(step2.run.status).toBe('COMPLETED');
       expect(step2.run.id).toBe(step1.run.id);
 
@@ -772,7 +773,7 @@ describe('run and evidence', () => {
       expect(step1.run.status).toBe('RUNNING');
 
       // Step 2: Same client random UUID to complete!
-      const step2 = await reportRun(prisma, { status: 'completed', workId: committed.id, runId: clientUuid }, actor);
+      const step2 = await reportRun(prisma, { status: 'completed', followups: { noneReason: 'No follow-up work.' }, workId: committed.id, runId: clientUuid }, actor);
       expect(step2.run.status).toBe('COMPLETED');
       expect(step2.run.id).toBe(step1.run.id);
 
@@ -796,7 +797,7 @@ describe('run and evidence', () => {
       expect(step1.run.status).toBe('RUNNING');
 
       // Step 2: Omit runId again to complete
-      const step2 = await reportRun(prisma, { status: 'completed', workId: committed.id }, actor);
+      const step2 = await reportRun(prisma, { status: 'completed', followups: { noneReason: 'No follow-up work.' }, workId: committed.id }, actor);
       expect(step2.run.status).toBe('COMPLETED');
       expect(step2.run.id).toBe(step1.run.id);
 
@@ -816,7 +817,7 @@ describe('run and evidence', () => {
       const actor = { actorId: human.id, actorKind: 'HUMAN' as const, surface: 'test' };
 
       // Complete the run with a key (which deletes the claim)
-      const firstComplete = await reportRun(prisma, { idempotencyKey: 'scenario-d', status: 'completed', workId: committed.id, runId: claim.id }, actor);
+      const firstComplete = await reportRun(prisma, { idempotencyKey: 'scenario-d', status: 'completed', followups: { noneReason: 'No follow-up work.' }, workId: committed.id, runId: claim.id }, actor);
       expect(firstComplete.run.status).toBe('COMPLETED');
 
       // Verify claim is gone
@@ -824,14 +825,14 @@ describe('run and evidence', () => {
       expect(claimAfter).toBeNull();
 
       // A proven replay (same key, same content) returns the same run.
-      const retryComplete = await reportRun(prisma, { idempotencyKey: 'scenario-d', status: 'completed', workId: committed.id, runId: claim.id }, actor);
+      const retryComplete = await reportRun(prisma, { idempotencyKey: 'scenario-d', status: 'completed', followups: { noneReason: 'No follow-up work.' }, workId: committed.id, runId: claim.id }, actor);
       expect(retryComplete.run.id).toBe(firstComplete.run.id);
       expect(retryComplete.run.status).toBe('COMPLETED');
 
       // A keyless retry with the stale claim id is not a proven replay. It used
       // to be rebound to "the most recent COMPLETED run" and succeed; now it
       // is refused (INV-595 follow-up).
-      await expect(reportRun(prisma, { status: 'completed', workId: committed.id, runId: claim.id }, actor)).rejects.toThrow();
+      await expect(reportRun(prisma, { status: 'completed', followups: { noneReason: 'No follow-up work.' }, workId: committed.id, runId: claim.id }, actor)).rejects.toThrow();
 
       // Still exactly 1 run
       const runs = await prisma.workRun.findMany({ where: { workId: committed.id } });
@@ -908,7 +909,7 @@ describe('run and evidence', () => {
       expect(step1.run.status).toBe('BLOCKED');
 
       // Step 2: Later completed without specifying runId or passing claimId
-      const step2 = await reportRun(prisma, { status: 'completed', summary: 'Unblocked and finished', workId: committed.id }, actor);
+      const step2 = await reportRun(prisma, { status: 'completed', followups: { noneReason: 'No follow-up work.' }, summary: 'Unblocked and finished', workId: committed.id }, actor);
       expect(step2.run.status).toBe('COMPLETED');
       expect(step2.run.id).toBe(step1.run.id);
 

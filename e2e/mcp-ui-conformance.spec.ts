@@ -43,6 +43,47 @@ async function fixture(request: APIRequestContext) {
   return { repository, team, project, first, second, create, call, credential };
 }
 
+test('agent credential scopes stay inside their column without covering Revoke', async ({ page, request }) => {
+  const name = `Layout fixture ${Date.now()}`;
+  const scopes = ['read', 'propose', 'claim', 'report', 'update', 'link', 'answer'];
+  const { agentCredentialCreate } = await gql(
+    request,
+    'mutation($input:AgentCredentialCreateInput!){ agentCredentialCreate(input:$input){ success message credential { id } } }',
+    { input: { team: 'INV', name, scopes } },
+  );
+  expect(agentCredentialCreate.success, agentCredentialCreate.message).toBe(true);
+
+  try {
+    await page.goto('/teams/INV/settings?section=agents');
+    const row = page.getByRole('table', { name: 'Agent credentials' })
+      .getByRole('row').filter({ hasText: name });
+    const scopeText = row.getByText(scopes.join(', '), { exact: true });
+    const revoke = row.getByRole('button', { name: 'Revoke', exact: true });
+
+    for (const width of [1280, 900, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(scopeText).toBeVisible();
+      await expect.poll(() => scopeText.evaluate((element) => {
+        const cell = element.closest('[role="cell"]')!.getBoundingClientRect();
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        const lines = Array.from(range.getClientRects());
+        return lines.length > 0 && lines.every((line) => line.left >= cell.left && line.right <= cell.right);
+      }), { message: `Scopes should fit their cell at ${width}px` }).toBe(true);
+      await revoke.click({ trial: true });
+    }
+
+    page.once('dialog', (dialog) => dialog.accept());
+    await revoke.click();
+    await expect(row.getByText('revoked', { exact: true })).toBeVisible();
+  } catch (error) {
+    await gql(request, 'mutation($id:String!){ agentCredentialRevoke(id:$id){ success } }', {
+      id: agentCredentialCreate.credential.id,
+    }).catch(() => undefined);
+    throw error;
+  }
+});
+
 test('agent and human complete the same work through real MCP and UI controls', async ({ page, request }) => {
   test.setTimeout(120_000);
   const f = await fixture(request);
@@ -113,7 +154,7 @@ test('agent and human complete the same work through real MCP and UI controls', 
   await page.getByRole('button', { name: 'Confirm retract', exact: true }).click();
   await expect.poll(async () => JSON.stringify((await context()).pages.evidence)).toContain('Human correction through the web');
   await f.call('evidence_attach', { ...runArgs, kind: 'test', url: 'https://example.test/corrected-again', idempotency_key: 'corrected-again' });
-  await f.call('run_report', { ...runArgs, status: 'completed', summary: 'Public conformance evidence attached' });
+  await f.call('run_report', { ...runArgs, status: 'completed', followups: { none_reason: 'No follow-up work.' }, summary: 'Public conformance evidence attached' });
   await expect(f.call('work_update', { id: work.id, expected_revision: (await context()).work.revision, state: 'DONE' })).rejects.toThrow();
   await page.reload();
   await expect(page.getByText('Wrong fixture artifact', { exact: false }).first()).toBeVisible();
@@ -123,7 +164,7 @@ test('agent and human complete the same work through real MCP and UI controls', 
   const retry = await f.call('work_claim', { id: work.id });
   const retryRun = (await f.call('run_report', { work_id: work.id, claim_token: retry.claim_token, status: 'running' })).run;
   await f.call('evidence_attach', { work_id: work.id, run_id: retryRun.id, claim_token: retry.claim_token, kind: 'test', url: 'https://example.test/retested' });
-  await f.call('run_report', { work_id: work.id, run_id: retryRun.id, claim_token: retry.claim_token, status: 'completed' });
+  await f.call('run_report', { work_id: work.id, run_id: retryRun.id, claim_token: retry.claim_token, status: 'completed', followups: { none_reason: 'No follow-up work.' } });
   await page.reload();
   await page.getByRole('button', { name: 'Accept', exact: true }).click();
   await expect.poll(async () => (await context()).reviewDecisions[0]?.decision).toBe('ACCEPTED');
