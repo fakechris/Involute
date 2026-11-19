@@ -4,7 +4,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 
-import { DeliveryPage, type DeliveryResult } from './DeliveryPage';
+import { DELIVERY_PROJECTS_QUERY, DeliveryPage, type DeliveryResult } from './DeliveryPage';
+import { print } from 'graphql';
 import { readStoredTeamKey } from '../board/utils';
 
 vi.mock('../board/utils', () => ({ readStoredTeamKey: vi.fn(() => 'INV') }));
@@ -33,11 +34,11 @@ function SwitchProject() {
   const navigate = useNavigate();
   return <button onClick={() => navigate(`/delivery?from=${start}&to=${end}&project=acme/b`)}>Switch project</button>;
 }
-function mount(reply: Reply, sample = '') {
+function mount(reply: Reply, sample = '', projects = [{ repository: 'acme/a' }, { repository: 'acme/b' }]) {
   const requests: Record<string, unknown>[] = [];
   const client = new ApolloClient({ cache: new InMemoryCache(), link: new ApolloLink((operation) => new Observable((observer) => {
     if (operation.operationName === 'DeliveryProjects') {
-      observer.next({ data: { issues: { nodes: [{ repository: 'acme/a' }, { repository: 'acme/b' }] } } }); observer.complete(); return;
+      observer.next({ data: { projectSummary: { projects } } }); observer.complete(); return;
     }
     requests.push(operation.variables);
     void reply(operation.variables).then((data) => { observer.next({ data: { deliveryLatency: data } }); observer.complete(); }, (error) => observer.error(error));
@@ -50,6 +51,17 @@ it('shows loading without invented values', () => {
   mount(() => new Promise(() => {}));
   expect(screen.getByText('Loading delivery latency…')).toBeInTheDocument();
   expect(screen.queryByLabelText('Completed sample latency')).not.toBeInTheDocument();
+});
+it('offers projects beyond the first hundred using the unpaginated project summary', async () => {
+  const projects = Array.from({ length: 120 }, (_, index) => ({ repository: `acme/project-${index}` }));
+  const requests = mount(async () => fixture(), '', projects);
+  await screen.findByLabelText('Completed sample latency');
+  fireEvent.click(screen.getByRole('button', { name: 'Filter by project', exact: true }));
+  fireEvent.change(screen.getByPlaceholderText('Filter projects...'), { target: { value: 'project-119' } });
+  fireEvent.click(screen.getByRole('option', { name: /acme\/project-119/ }));
+  await waitFor(() => expect(requests.at(-1)?.repository).toBe('acme/project-119'));
+  expect(print(DELIVERY_PROJECTS_QUERY)).toContain('projectSummary');
+  expect(print(DELIVERY_PROJECTS_QUERY)).not.toContain('first: 100');
 });
 it('asks for a team instead of reporting empty metrics when no team is selected', () => {
   vi.mocked(readStoredTeamKey).mockReturnValue(null);

@@ -103,8 +103,8 @@ export const DELIVERY_QUERY = gql`
 
 export const DELIVERY_PROJECTS_QUERY = gql`
   query DeliveryProjects($teamKey: String!) {
-    issues(first: 100, filter: { kind: PROJECT, team: { key: { eq: $teamKey } } }) {
-      nodes {
+    projectSummary(teamFilter: { key: { eq: $teamKey } }) {
+      projects {
         repository
       }
     }
@@ -188,11 +188,11 @@ export function DeliveryPage() {
   const requestKey = JSON.stringify(variables);
   const [result, setResult] = useState<{ key: string; data?: DeliveryResult; error?: string } | null>(null);
   const [retryAttempt, setRetryAttempt] = useState(0);
-  const { data: projectData } = useQuery<{ issues: { nodes: { repository: string | null }[] } }>(DELIVERY_PROJECTS_QUERY, {
+  const { data: projectData } = useQuery<{ projectSummary: { projects: { repository: string }[] } }>(DELIVERY_PROJECTS_QUERY, {
     variables: { teamKey },
     skip: !teamKey,
   });
-  const projects = projectsFromCounts((projectData?.issues.nodes ?? []).map((row) => ({ ...row, count: 1 })));
+  const projects = projectsFromCounts((projectData?.projectSummary.projects ?? []).map((row) => ({ ...row, count: 1 })));
   useEffect(() => {
     if (!teamKey) return;
     let active = true;
