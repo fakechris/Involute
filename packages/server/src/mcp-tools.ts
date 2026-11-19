@@ -984,10 +984,42 @@ async function callMcpAction(
       return { work_id: timeline.workId, identifier: timeline.identifier, truncated: timeline.truncated, entries: timeline.entries.map(timelineEntryForMcp) };
     }
     case 'work_burndown': {
-      return loadMilestoneBurndown(context.prisma, buildReadableIssueWhere(context) ?? {}, {
-        milestoneId: requiredString(args.milestone_id, 'milestone_id'), from: requiredString(args.from, 'from'), to: requiredString(args.to, 'to'),
-        timeZone: optionalString(args.time_zone) ?? null, idealStart: optionalString(args.ideal_start) ?? null, idealEnd: optionalString(args.ideal_end) ?? null,
+      const result = await loadMilestoneBurndown(context.prisma, buildReadableIssueWhere(context) ?? {}, {
+        milestoneId: requiredString(args.milestone_id, 'milestone_id'),
+        from: requiredString(args.from, 'from'),
+        to: requiredString(args.to, 'to'),
+        timeZone: optionalString(args.time_zone) ?? null,
+        idealStart: optionalString(args.ideal_start) ?? null,
+        idealEnd: optionalString(args.ideal_end) ?? null,
       });
+      return {
+        ...result,
+        window: {
+          ...result.window,
+          start: result.window.start.toISOString(),
+          end: result.window.end.toISOString(),
+        },
+        coverage: {
+          ...result.coverage,
+          baseline: result.coverage.baseline?.toISOString() ?? null,
+          gaps: result.coverage.gaps.map(gap => ({
+            ...gap,
+            start: gap.start?.toISOString() ?? null,
+            end: gap.end?.toISOString() ?? null,
+          })),
+        },
+        ideal: result.ideal ? {
+          ...result.ideal,
+          start: result.ideal.start.toISOString(),
+          end: result.ideal.end.toISOString(),
+        } : null,
+        points: result.points.map(point => ({ ...point, at: point.at.toISOString() })),
+        events: result.events.map(event => ({
+          ...event,
+          effectiveAt: event.effectiveAt.toISOString(),
+          recordedAt: event.recordedAt.toISOString(),
+        })),
+      };
     }
     case 'work_postmortem_draft': {
       const draft = await postmortemDraftFor(context, requiredString(args.work_id, 'work_id'));
@@ -1285,11 +1317,22 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
   {
     name: 'work_burndown',
     annotations: { readOnlyHint: true, destructiveHint: false },
-    description: 'Replay milestone scope history (definition version 1). Counts committed ISSUE descendants except canceled work, with unknown daily values where audit history is missing. Inclusive calendar dates in an IANA timezone (UTC default), at most 366 days. Ideal is an optional reference, not a forecast.',
-    inputSchema: { type: 'object', properties: {
-      milestone_id: { type: 'string', description: 'Milestone UUID or identifier.' }, from: { type: 'string' }, to: { type: 'string' },
-      time_zone: { type: 'string' }, ideal_start: { type: 'string' }, ideal_end: { type: 'string' },
-    }, required: ['milestone_id', 'from', 'to'] },
+    description: 'Replay milestone scope history (definition version 1). '
+      + 'Counts committed ISSUE descendants except canceled work, with unknown daily values where audit history is missing. '
+      + 'Inclusive calendar dates in an IANA timezone (UTC default), at most 366 days. '
+      + 'Ideal is an optional reference, not a forecast.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        milestone_id: { type: 'string', description: 'Milestone UUID or identifier.' },
+        from: { type: 'string' },
+        to: { type: 'string' },
+        time_zone: { type: 'string' },
+        ideal_start: { type: 'string' },
+        ideal_end: { type: 'string' },
+      },
+      required: ['milestone_id', 'from', 'to'],
+    },
   },
   {
     name: 'work_search',
