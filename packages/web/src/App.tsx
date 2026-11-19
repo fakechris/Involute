@@ -1017,7 +1017,7 @@ export function App() {
               <span className="app-shell__link-label">Incidents</span>
             </NavLink>
             <NavLink to="/delivery" className={getNavLinkClassName} title="Go to Delivery latency">
-              <span className="app-shell__nav-icon"><IcoGraph size={14} /></span>
+              <span className="app-shell__nav-icon"><IcoCycle size={14} /></span>
               <span className="app-shell__link-label">Delivery latency</span>
             </NavLink>
             <NavLink to="/graph" className={getNavLinkClassName} title="Go to Graph · G R">

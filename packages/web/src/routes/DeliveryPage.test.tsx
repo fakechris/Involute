@@ -8,7 +8,11 @@ import { DeliveryPage, type DeliveryResult } from './DeliveryPage';
 import { readStoredTeamKey } from '../board/utils';
 
 vi.mock('../board/utils', () => ({ readStoredTeamKey: vi.fn(() => 'INV') }));
-afterEach(() => { cleanup(); vi.mocked(readStoredTeamKey).mockReturnValue('INV'); });
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.mocked(readStoredTeamKey).mockReturnValue('INV');
+});
 const start = '2026-03-01T00:00:00.000Z';
 const end = '2026-04-01T00:00:00.000Z';
 const metric = { sampleCount: 5, p50Ms: 3_600_000, p90Ms: 7_200_000, emptyReason: null, coverage: { missingCount: 0 } };
@@ -56,6 +60,32 @@ it('asks for a team instead of reporting empty metrics when no team is selected'
 it('shows a readable error', async () => {
   mount(async () => { throw new Error('Delivery API unavailable'); });
   expect(await screen.findByRole('alert')).toHaveTextContent('Delivery API unavailable');
+});
+it('retries a failed request with the same window and project', async () => {
+  const reply = vi.fn<Reply>().mockRejectedValueOnce(new Error('Delivery API unavailable')).mockResolvedValue(fixture());
+  const requests = mount(reply);
+  const alert = await screen.findByRole('alert');
+  expect(alert).toHaveTextContent('Could not load delivery latency');
+  fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+  expect(screen.getByText('Loading delivery latency…')).toBeInTheDocument();
+  expect(await screen.findByLabelText('Completed sample latency')).toHaveTextContent('n=5');
+  expect(requests).toHaveLength(2);
+  expect(requests[1]).toEqual(requests[0]);
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+it('formats the returned window in the viewer timezone while keeping ISO query parameters', async () => {
+  const formatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Los_Angeles' });
+  vi.spyOn(Date.prototype, 'toLocaleString').mockImplementation(function (this: Date) {
+    return formatter.format(this);
+  });
+  const window = { start: '2026-03-01T01:00:00.000Z', end: '2026-04-01T01:00:00.000Z' };
+  const requests = mount(async () => fixture({ window }));
+  const definition = await screen.findByText(/Definition 1/);
+  expect(definition).toHaveTextContent(`Definition 1 · ${formatter.format(new Date(window.start))} – ${formatter.format(new Date(window.end))} (end exclusive)`);
+  expect(definition).not.toHaveTextContent(window.start);
+  fireEvent.click(screen.getByRole('link', { name: /Lead time/ }));
+  await waitFor(() => expect(requests).toHaveLength(2));
+  expect(requests[1]).toMatchObject({ start, end, sample: 'LEAD_TIME' });
 });
 it('shows no samples rather than zero duration and explains missing history', async () => {
   const empty = { sampleCount: 0, p50Ms: null, p90Ms: null, emptyReason: 'INSUFFICIENT_HISTORY', coverage: { missingCount: 2 } };
