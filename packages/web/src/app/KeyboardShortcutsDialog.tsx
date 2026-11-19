@@ -33,7 +33,7 @@ export const SHORTCUT_SECTIONS: ShortcutSection[] = [
       { id: 'nav-views', label: 'Go to Views', description: 'Saved filters and custom views', keys: ['G', 'W'] },
       { id: 'nav-members', label: 'Go to Members', description: 'Team and workspace members', keys: ['G', 'E'] },
       { id: 'nav-settings', label: 'Go to Settings', description: 'Workspace configuration', keys: ['G', 'S'] },
-      { id: 'nav-access', label: 'Go to Access', description: 'Authentication & token management', keys: ['G', 'A'] },
+      { id: 'nav-access', label: 'Go to team settings', description: "Current team's settings; agent tokens are under Agents", keys: ['G', 'A'] },
     ],
   },
   {

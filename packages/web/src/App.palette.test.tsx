@@ -1,8 +1,15 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { useLocation } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
 import { boardQueryResult, mockSessionState, renderApp } from './test/app-test-helpers';
 import type { BoardPageQueryData, IssueSummary } from './board/types';
+import { App } from './App';
+
+function AppWithLocation() {
+  const location = useLocation();
+  return <><App /><output data-testid="where">{location.pathname + location.search}</output></>;
+}
 
 describe('App command palette', () => {
   it('opens the create issue dialog from the command palette action', async () => {
@@ -103,9 +110,17 @@ describe('App command palette', () => {
       },
     });
 
-    renderApp({ data: boardQueryResult, loading: false }, ['/']);
+    renderApp(AppWithLocation, { data: boardQueryResult, loading: false }, ['/']);
 
     expect(await screen.findByRole('heading', { name: 'All issues' })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
+    const palette = await screen.findByRole('dialog', { name: 'Command palette' });
+    const teamSettings = within(palette).getByRole('button', { name: /Open team settings/ });
+    expect(within(teamSettings).getByText('Open team settings')).toBeInTheDocument();
+    expect(within(teamSettings).getByText('Visibility, workflow, triage and agents of the current team; agent tokens under Agents')).toBeInTheDocument();
+    expect(within(teamSettings).getByText('G A')).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
 
     fireEvent.keyDown(window, { key: 'g' });
     fireEvent.keyDown(window, { key: 'l' });
@@ -114,7 +129,9 @@ describe('App command palette', () => {
     fireEvent.keyDown(window, { key: 'g' });
     fireEvent.keyDown(window, { key: 'a' });
     // G A opens the current team's settings (INV-850).
-    expect(await screen.findByRole('navigation', { name: 'Team settings sections' })).toBeInTheDocument();
+    const sections = await screen.findByRole('navigation', { name: 'Team settings sections' });
+    expect(within(sections).getByRole('button', { name: 'General' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('where')).toHaveTextContent(/^\/teams\/INV\/settings$/);
 
     fireEvent.keyDown(window, { key: 'g' });
     fireEvent.keyDown(window, { key: 'b' });

@@ -1,7 +1,14 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { useLocation } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 
 import { apolloMocks, boardQueryResult, mockSessionState, renderApp } from './test/app-test-helpers';
+import { App } from './App';
+
+function AppWithLocation() {
+  const location = useLocation();
+  return <><App /><output data-testid="where">{location.pathname + location.search}</output></>;
+}
 
 // INV-850: a team's roster and settings live under the team
 // (/teams/<KEY>/members, /teams/<KEY>/settings). docs/permissions.md §3, §7.
@@ -134,7 +141,13 @@ describe('old addresses', () => {
   it('send /members?team= and /settings/access to the team pages', async () => {
     mockMutations();
     signIn();
-    renderApp({ data: boardQueryResult, teamPageData: teamPage(), loading: false }, ['/members?team=INV']);
+    const members = renderApp({ data: boardQueryResult, teamPageData: teamPage(), loading: false }, ['/members?team=INV']);
     expect(await screen.findByRole('table', { name: 'Team members' })).toBeInTheDocument();
+    members.unmount();
+
+    renderApp(AppWithLocation, { data: boardQueryResult, teamPageData: teamPage(), loading: false }, ['/settings/access']);
+    const sections = await screen.findByRole('navigation', { name: 'Team settings sections' });
+    expect(within(sections).getByRole('button', { name: 'General' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByTestId('where')).toHaveTextContent(/^\/teams\/INV\/settings$/);
   });
 });
