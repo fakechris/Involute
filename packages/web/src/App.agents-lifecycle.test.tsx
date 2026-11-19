@@ -1,5 +1,6 @@
+import { CombinedGraphQLErrors } from '@apollo/client/errors';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { boardQueryResult, lifecycleMutationMocks, mockSessionState, renderApp } from './test/app-test-helpers';
 
@@ -33,6 +34,38 @@ function profile(overrides: { viewerCanManage?: boolean; deactivatedAt?: string 
     },
   };
 }
+
+describe('Agent profile recovery', () => {
+  it('offers to retry a failed request without showing the internal error', async () => {
+    const refetch = vi.fn().mockRejectedValue(new Error('Unexpected error.'));
+    renderApp({ data: boardQueryResult, agentProfileError: new Error('Unexpected error.'), refetch }, ['/agents/mia']);
+
+    expect(await screen.findByText('Could not load this agent profile. Check your connection and try again.')).toBeInTheDocument();
+    expect(screen.queryByText(/Unexpected error/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['UNAUTHENTICATED', 'Sign in to view this agent profile.'],
+    ['FORBIDDEN', 'You don’t have access to this agent profile.'],
+  ])('explains %s with no retry', async (code, reason) => {
+    const error = new CombinedGraphQLErrors({ errors: [{ message: 'Refused.', extensions: { code } }] });
+    renderApp({ data: boardQueryResult, agentProfileError: error }, ['/agents/mia']);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(reason);
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+  });
+
+  it('returns to the directory from an unavailable profile', async () => {
+    renderApp({ data: boardQueryResult }, ['/agents/mia']);
+
+    expect(await screen.findByRole('heading', { name: 'Agent not found' })).toBeInTheDocument();
+    expect(screen.getByText(/may no longer exist or you may not have access/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to agents' }));
+    expect(await screen.findByRole('heading', { name: 'Agents' })).toBeInTheDocument();
+  });
+});
 
 describe('Agent lifecycle controls (INV-605)', () => {
   it('lets a manager deactivate the actor with a reason', async () => {
