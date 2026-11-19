@@ -66,6 +66,7 @@ const BOARD_ISSUE_SELECTION = `
           id
           identifier
           title
+          kind
         }
         bugSla {
           status
@@ -946,6 +947,7 @@ export const ISSUE_CREATE_MUTATION = gql`
           id
           identifier
           title
+          kind
         }
         projectId
         cycleId
@@ -1205,7 +1207,7 @@ export const PROJECT_ISSUES_QUERY = gql`
           key
           name
         }
-        children {
+        children(commitmentStatus: COMMITTED) {
           nodes {
             id
             identifier
@@ -2244,4 +2246,3 @@ export const BOARD_FIELDS_QUERY = gql`
     }
   }
 `;
-
