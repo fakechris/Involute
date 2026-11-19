@@ -3,6 +3,7 @@ import type { ActorKind, Issue, PrismaClient, WorkLinkType, WorkShareRole } from
 
 import { createNotFoundError, createValidationError } from './errors.js';
 import { lockWorkGraph } from './graph-integrity.js';
+import { markWorkDeletionRestored } from './work-deletion.js';
 import { INTERNAL_WRITE_ACTOR, recordWorkAudit, selectIssueSnapshot, type WriteActor } from './work-service.js';
 
 /**
@@ -333,6 +334,7 @@ export async function restoreDeletedIssue(
     }
     await recordWorkAudit(tx, { actor: { ...actor, reason: actor.reason ?? 'Restored after deletion (INV-840)' }, before: null, after: selectIssueSnapshot(restored), workId: id });
 
+    await markWorkDeletionRestored(tx, id);
     await tx.workTombstone.delete({ where: { id } });
     return restored;
   });

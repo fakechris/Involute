@@ -505,6 +505,22 @@ timestamps.
   Points before baseline, inside a gap or after now have null scope/remaining.
   No candidates returns NO_MEMBERS; candidates without any audits return
   NO_HISTORY. Events include all recorded transitions before window end.
+- **Deleted work stays in history (INV-1929).** Deleting work still removes the
+  live item and its audit rows, so ordinary reads no longer list it, but first
+  records a `WorkDeletion`: the scope fields (parent, commitment, state, kind)
+  of every audit and of the final state, the parents they name, and who
+  deleted it, when and from which surface. No title, description or comment is
+  kept. Discovery follows those parents like historical audit parents, and
+  replay adds a deletion step at `deletedAt` that detaches the item, so a
+  deleted member emits REMOVE that day (`source.auditId` is the deletion record)
+  and every earlier day is unchanged. Restoring within the undo window stamps
+  `restoredAt` and replays as ADD at the restore. A deletion reaches burndown
+  only for readers of its team; a project share follows the live tree and does
+  not reveal deleted work. A deletion with no recorded audits (backfilled after
+  its trail was gone) opens a `DELETED_WITHOUT_HISTORY` gap up to its
+  deletion, and an audit placing a candidate under a parent that neither
+  exists nor left a deletion record opens one from that audit until it moves,
+  instead of silently dropping the member.
 - Ideal is only a **REFERENCE**, never a forecast. Both ideal dates must be
   supplied, start before end, with a known baseline at or before idealStart's
   local midnight. It interpolates remaining at that exclusive instant to zero

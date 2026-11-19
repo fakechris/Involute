@@ -116,6 +116,7 @@ import {
   assertCanReadTeam,
   assertCanWriteIssue,
   assertCanWriteTeam,
+  buildReadableDeletionWhere,
   buildReadableIssueWhere,
   buildReadableTeamWhere,
   buildVisibleUsersWhere,
@@ -4336,7 +4337,7 @@ const resolvers = {
     },
     milestoneBurndown: async (_parent: unknown, args: ScopeWindowInput & { milestoneId: string }, context: GraphQLContext) => {
       requireAuthentication(context);
-      return loadMilestoneBurndown(context.prisma, buildReadableIssueWhere(context) ?? {}, args);
+      return loadMilestoneBurndown(context.prisma, buildReadableIssueWhere(context) ?? {}, args, buildReadableDeletionWhere(context) ?? {});
     },
     projectForOrigin: async (
       _parent: unknown,
