@@ -921,9 +921,10 @@ export function BoardPage() {
     },
     [baseIssues, boardViewState.query, visibleIssues],
   );
+  const [backlogVisibleIssues, setBacklogVisibleIssues] = useState<IssueSummary[]>([]);
   const boardVisibleIssues = useMemo(
-    () => applyBoardViewState(serverFilteredIssues, looksLikeIql(boardViewState.query) ? { ...boardViewState, query: '' } : boardViewState, users),
-    [serverFilteredIssues, boardViewState, users],
+    () => isBacklogView ? backlogVisibleIssues : applyBoardViewState(serverFilteredIssues, looksLikeIql(boardViewState.query) ? { ...boardViewState, query: '' } : boardViewState, users),
+    [isBacklogView, backlogVisibleIssues, serverFilteredIssues, boardViewState, users],
   );
   const boardViewTokens = useMemo(
     () => buildBoardViewSummary(boardViewState, selectedTeam, users, labels),
@@ -2697,7 +2698,7 @@ export function BoardPage() {
   }
 
   useEffect(() => {
-    if (isBacklogView || boardVisibleIssues.length === 0) {
+    if (boardVisibleIssues.length === 0) {
       return;
     }
 
@@ -2709,9 +2710,9 @@ export function BoardPage() {
         tagName === 'INPUT' ||
         tagName === 'TEXTAREA' ||
         tagName === 'SELECT' ||
-        (isElementTarget && target.getAttribute('contenteditable') === 'true');
+        (isElementTarget && target.closest('[contenteditable]:not([contenteditable="false"])'));
 
-      if (isTypingField || selectedIssueId || isCreateOpen || picker) {
+      if (isTypingField || document.querySelector('[role="dialog"]:not(.issue-peek), dialog[open]') || selectedIssueId || isCreateOpen || picker) {
         return;
       }
       if (isElementTarget && target.closest('.issue-peek button') && (event.key === ' ' || event.key === 'Enter')) return;
@@ -3518,6 +3519,10 @@ export function BoardPage() {
           selectedTeam={selectedTeam}
           users={users}
           onSelectIssue={openIssue}
+          focusedIssueId={focusedIssueId}
+          selectedIds={selectedIssueIds}
+          setSelectedIds={setSelectedIssueIds}
+          onVisibleIssuesChange={setBacklogVisibleIssues}
           projectFilter={projectFilter}
           notices={notices}
           loading={loading && !queryData}
