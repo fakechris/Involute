@@ -439,6 +439,9 @@ export function BoardPage() {
   }, []);
   const [dragPreviewStateId, setDragPreviewStateId] = useState<string | null>(null);
   const [dragOriginStateId, setDragOriginStateId] = useState<string | null>(null);
+  // Capture the selection before drag-over previews can hide a card or prune
+  // its selection. These are also the authoritative pre-gesture undo states.
+  const draggedIssuesRef = useRef<IssueSummary[]>([]);
 
   useEffect(() => {
     if (urlProject !== null) {
@@ -1564,10 +1567,10 @@ export function BoardPage() {
     });
 
     const previousIssuesById = new Map(
-      issuesToUpdate.map((issue) => [issue.id, issueOverrides[issue.id] ?? issue]),
+      issuesToUpdate.map((issue) => [issue.id, issue]),
     );
     const optimisticIssuesById = new Map(
-      issuesToUpdate.map((issue) => [issue.id, { ...(issueOverrides[issue.id] ?? issue), state: targetState }]),
+      issuesToUpdate.map((issue) => [issue.id, { ...issue, state: targetState }]),
     );
 
     setMutationError(null);
@@ -2540,6 +2543,12 @@ export function BoardPage() {
     }
   }
 
+  function snapshotDragSelection(issueId: string) {
+    draggedIssuesRef.current = selectedIssueIds.includes(issueId)
+      ? boardVisibleIssues.filter((issue) => selectedIssueIds.includes(issue.id))
+      : [];
+  }
+
   async function handleDragEnd(event: DragEndEvent) {
     const issueId = String(event.active.id);
     const targetStateId = getDropTargetStateId(event);
@@ -2611,10 +2620,11 @@ export function BoardPage() {
       return;
     }
 
-    if (selectedIssueIds.includes(issueId) && selectedIssueIds.length > 1) {
-      const original = originState ? { ...issue, state: originState } : issue;
+    if (draggedIssuesRef.current.length > 1) {
+      const moving = draggedIssuesRef.current;
+      const original = moving.find((item) => item.id === issueId)!;
       setIssueOverrides((current) => replaceIssueOverride(current, issueId, original));
-      await applyBulkStateChange(targetStateId, boardVisibleIssues.filter((item) => selectedIssueIds.includes(item.id)).map((item) => item.id === issueId ? original : item));
+      await applyBulkStateChange(targetStateId, moving);
       return;
     }
 
@@ -2819,10 +2829,11 @@ export function BoardPage() {
 
     const originState =
       selectedTeam?.states.nodes.find((state) => state.id === payload.stateId) ?? null;
-    if (selectedIssueIds.includes(issue.id) && selectedIssueIds.length > 1) {
-      const original = originState ? { ...issue, state: originState } : issue;
+    if (draggedIssuesRef.current.length > 1) {
+      const moving = draggedIssuesRef.current;
+      const original = moving.find((item) => item.id === issue.id)!;
       setIssueOverrides((current) => replaceIssueOverride(current, issue.id, original));
-      await applyBulkStateChange(targetStateId, boardVisibleIssues.filter((item) => selectedIssueIds.includes(item.id)).map((item) => item.id === issue.id ? original : item));
+      await applyBulkStateChange(targetStateId, moving);
       return;
     }
     const closing = cancelingIssues(targetState, [originState ? { ...issue, state: originState } : issue]);
@@ -3507,6 +3518,7 @@ export function BoardPage() {
           onDragStart={(event) => {
             const draggedId = String(event.active.id);
             const draggedIssue = visibleIssues.find((item) => item.id === draggedId);
+            snapshotDragSelection(draggedId);
             setActiveIssueId(draggedId);
             setDragOriginStateId(draggedIssue?.state.id ?? null);
             setDragPreviewStateId(null);
@@ -3556,6 +3568,7 @@ export function BoardPage() {
                   onToggleIssueSelection={toggleIssueSelection}
                   selectedIssueIds={selectedIssueIds}
                   onNativeDragStart={(payload) => {
+                    snapshotDragSelection(payload.issueId);
                     setActiveIssueId(payload.issueId);
                     setDragOriginStateId(payload.stateId);
                     setDragPreviewStateId(payload.stateId);
@@ -3583,6 +3596,7 @@ export function BoardPage() {
               onToggleIssueSelection={toggleIssueSelection}
               onInlineCreate={(title, meta) => void handleInlineCreate(title, meta)}
               onNativeDragStart={(payload) => {
+                snapshotDragSelection(payload.issueId);
                 setActiveIssueId(payload.issueId);
                 setDragOriginStateId(payload.stateId);
                 setDragPreviewStateId(payload.stateId);
@@ -3652,6 +3666,7 @@ export function BoardPage() {
                       onToggleSelected={toggleIssueSelection}
                       onFilterProject={handleSelectProject}
                       onNativeDragStart={(payload) => {
+                        snapshotDragSelection(payload.issueId);
                         setActiveIssueId(payload.issueId);
                         setDragOriginStateId(payload.stateId);
                         setDragPreviewStateId(payload.stateId);

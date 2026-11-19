@@ -5,6 +5,7 @@ import { apolloMocks, boardQueryResult, dndMocks, getIssue, renderApp } from './
 import { App } from './App';
 import type { IssueSummary } from './board/types';
 import { getStatusUndoSnapshot } from './undo/status-undo';
+import { getDefaultBoardViewState, writeStoredBoardViewState } from './board/views';
 
 function fixture(path = '/', manual = false, conflict = false, activeClaim = false) {
   const states = boardQueryResult.teams.nodes[0]!.states.nodes;
@@ -112,7 +113,8 @@ describe('batch cancel superseded items (INV-1930)', () => {
     expect(screen.getByText(/Kept open/)).toHaveTextContent('INV-2: active claim');
   });
 
-  it('dragging selected cards to Canceled confirms the whole batch', async () => {
+  for (const filtered of [false, true]) it(`dragging selected cards closes and undoes the whole batch (state filter: ${filtered})`, async () => {
+    if (filtered) writeStoredBoardViewState('INV', { ...getDefaultBoardViewState(), stateIds: ['state-backlog'] });
     const { mutate } = fixture();
     await screen.findByRole('checkbox', { name: 'Select INV-1' });
     for (const n of [1, 2, 4]) fireEvent.click(screen.getByRole('checkbox', { name: `Select INV-${n}` }));
@@ -126,5 +128,8 @@ describe('batch cancel superseded items (INV-1930)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel work' }));
     await waitFor(() => expect(mutate).toHaveBeenCalledTimes(3));
     expect(getStatusUndoSnapshot().undo).toHaveLength(1);
+    fireEvent.keyDown(window, { key: 'z', metaKey: true });
+    await waitFor(() => expect(mutate).toHaveBeenCalledTimes(6));
+    for (const n of [1, 2, 4]) expect(mutate).toHaveBeenCalledWith({ variables: { id: `issue-${n}`, input: { expectedRevision: 2, stateId: 'state-backlog' } } });
   });
 });
