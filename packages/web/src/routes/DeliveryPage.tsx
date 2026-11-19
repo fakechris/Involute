@@ -10,7 +10,7 @@ import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { Btn } from '../components/Primitives';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
 import { Badge, EmptyState, LoadingState, SegmentedControl, StatRow, StatTile } from '../components/status';
-import { WorkReference } from '../components/WorkReference';
+import { MilestoneBurndown } from './MilestoneBurndown';
 import { NO_REPOSITORY_OPTIONS, useProjectParam } from './work-filter-match';
 
 export const DELIVERY_QUERY = gql`
@@ -428,13 +428,10 @@ export function DeliveryPage() {
                 )}
               </section>
             ) : null}
-            <section aria-label="Burndown">
-              <h2>Burndown</h2>
-              <p>
-                Waiting for <WorkReference reference="INV-268" /> scope history. No burndown chart is available yet.
-              </p>
-            </section>
           </div>
+        ) : null}
+        {teamKey ? (
+          <MilestoneBurndown key={`${teamKey}:${project}`} teamKey={teamKey} repository={project} start={start} end={end} />
         ) : null}
       </PageBody>
     </div>
