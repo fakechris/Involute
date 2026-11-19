@@ -289,15 +289,10 @@ export function replayMilestoneScope(input: ScopeHistoryInput): ScopeHistoryResu
     }
     // Under a parent deleted before deletions were recorded, membership is unknowable.
     const unknown = (id: string | null | undefined) => !!id && !!input.unknownParents?.has(id);
-    if (old?.parentId !== audit.after.parentId) {
-      if (unknown(old?.parentId)) {
-        for (const gap of gaps) {
-          if (gap.workId === audit.workId && gap.reason === 'DELETED_WITHOUT_HISTORY' && gap.end === null) gap.end = audit.createdAt;
-        }
-      }
-      if (unknown(audit.after.parentId)) {
-        gaps.push({ start: audit.createdAt, end: null, workId: audit.workId, reason: 'DELETED_WITHOUT_HISTORY' });
-      }
+    const lostParent = gaps.find(g => g.workId === audit.workId && g.reason === 'DELETED_WITHOUT_HISTORY' && g.end === null);
+    if (lostParent && !unknown(audit.after.parentId)) lostParent.end = audit.createdAt;
+    if (!lostParent && unknown(audit.after.parentId)) {
+      gaps.push({ start: audit.createdAt, end: null, workId: audit.workId, reason: 'DELETED_WITHOUT_HISTORY' });
     }
     previous.set(audit.workId, audit);
     for (const work of works) {
