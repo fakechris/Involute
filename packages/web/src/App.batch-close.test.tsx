@@ -19,6 +19,7 @@ function fixture(path = '/', manual = false, conflict = false, activeClaim = fal
   const mutate = vi.fn().mockImplementation(({ variables: { id, input } }) => {
     if (conflict && id === 'issue-2') return Promise.resolve({ data: { issueUpdate: { success: false, message: 'Revision conflict', issue: null } } });
     const issue = current.get(id)!;
+    if (input.stateId === 'state-canceled' && !input.resolution) return Promise.resolve({ data: { issueUpdate: { success: false, message: 'Choose a resolution', issue: null } } });
     const next = { ...issue, revision: issue.revision + 1, state: states.find((state) => state.id === input.stateId)! };
     current.set(id, next);
     return Promise.resolve({ data: { issueUpdate: { success: true, issue: next } } });
@@ -28,19 +29,24 @@ function fixture(path = '/', manual = false, conflict = false, activeClaim = fal
   return { mutate, originals };
 }
 
-async function selectAndClose(path: string) {
+async function selectAndClose(path: string, keyboard = false) {
   await screen.findByRole('checkbox', { name: 'Select INV-1' });
   if (path === '/') fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
   for (const n of [1, 2, 4]) fireEvent.click(screen.getByRole('checkbox', { name: `Select INV-${n}` }));
-  fireEvent.change(screen.getByLabelText('Bulk move selected issues to state'), { target: { value: 'state-canceled' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Apply to selected' }));
+  if (keyboard) {
+    fireEvent.keyDown(window, { key: 's' });
+    fireEvent.mouseDown(within(await screen.findByRole('listbox')).getByRole('option', { name: 'Canceled' }));
+  } else {
+    fireEvent.change(screen.getByLabelText('Bulk move selected issues to state'), { target: { value: 'state-canceled' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to selected' }));
+  }
   return screen.findByRole('dialog', { name: 'Close reason' });
 }
 
 function undoIdentifiers() {
   const entry = getStatusUndoSnapshot().undo[0];
-  if (!entry || !('changes' in entry)) throw new Error('Expected a status undo gesture');
-  return entry.changes.map((change) => change.identifier).sort();
+  if (!entry || !('fields' in entry)) throw new Error('Expected a field undo gesture');
+  return entry.fields.map((change) => change.identifier).sort();
 }
 
 describe('batch cancel superseded items (INV-1930)', () => {
@@ -73,6 +79,9 @@ describe('batch cancel superseded items (INV-1930)', () => {
     fireEvent.keyDown(window, { key: 'z', metaKey: true });
     await waitFor(() => expect(mutate).toHaveBeenCalledTimes(6));
     for (const n of [1, 2, 4]) expect(mutate).toHaveBeenCalledWith({ variables: { id: `issue-${n}`, input: { expectedRevision: 2, stateId: 'state-backlog' } } });
+    fireEvent.keyDown(window, { key: 'z', metaKey: true, shiftKey: true });
+    await waitFor(() => expect(mutate).toHaveBeenCalledTimes(9));
+    for (const n of [1, 2, 4]) expect(mutate).toHaveBeenCalledWith({ variables: { id: `issue-${n}`, input: { expectedRevision: 3, stateId: 'state-canceled', resolution: n === 1 ? 'OBSOLETE' : 'DUPLICATE', reason: `Superseded by INV-${n + 10}: Replacement ${n}` } } });
   });
 
   it('uses manual values only for items without a replacement', async () => {
@@ -84,6 +93,20 @@ describe('batch cancel superseded items (INV-1930)', () => {
     await waitFor(() => expect(mutate).toHaveBeenCalledTimes(3));
     expect(mutate).toHaveBeenCalledWith({ variables: { id: 'issue-4', input: { expectedRevision: 1, stateId: 'state-canceled', resolution: 'WONT_DO', reason: 'No longer needed' } } });
     expect(mutate).toHaveBeenCalledWith({ variables: { id: 'issue-1', input: { expectedRevision: 1, stateId: 'state-canceled', resolution: 'OBSOLETE', reason: 'Superseded by INV-11: Replacement 1' } } });
+  });
+
+  it('redoes a keyboard batch cancellation with each original close payload', async () => {
+    const { mutate } = fixture();
+    const dialog = await selectAndClose('/', true);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel work' }));
+    await waitFor(() => expect(mutate).toHaveBeenCalledTimes(3));
+    fireEvent.keyDown(window, { key: 'z', metaKey: true });
+    await waitFor(() => expect(mutate).toHaveBeenCalledTimes(6));
+    fireEvent.keyDown(window, { key: 'z', metaKey: true, shiftKey: true });
+    await waitFor(() => expect(mutate).toHaveBeenCalledTimes(9));
+    for (const n of [1, 2, 4]) expect(mutate).toHaveBeenCalledWith({ variables: { id: `issue-${n}`, input: { expectedRevision: 3, stateId: 'state-canceled', resolution: n === 1 ? 'OBSOLETE' : 'DUPLICATE', reason: `Superseded by INV-${n + 10}: Replacement ${n}` } } });
+    expect(getStatusUndoSnapshot().redo).toHaveLength(0);
+    expect(getStatusUndoSnapshot().undo).toHaveLength(1);
   });
 
   it('names and keeps manual items open when the shared fields are empty', async () => {

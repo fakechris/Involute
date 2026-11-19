@@ -1653,7 +1653,17 @@ export function BoardPage() {
       return nextOverrides;
     });
 
-    recordStatusGesture(undoChanges);
+    if (targetState.type === 'CANCELED') {
+      // Retain each item's close payload for redo as well as its prior state
+      // for undo. Reopening clears resolution, so a state-only redo is refused.
+      recordFieldGesture(undoChanges.flatMap((change) => {
+        const previous = previousIssuesById.get(change.issueId)!;
+        const field = fieldChange(previous, { stateId: targetStateId, ...close[change.issueId] }, change.revision, fieldNames);
+        return field ? [field] : [];
+      }));
+    } else {
+      recordStatusGesture(undoChanges);
+    }
 
     setIsSavingState(false);
     setSelectedIssueIds([]);
