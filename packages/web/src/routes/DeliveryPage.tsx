@@ -202,8 +202,9 @@ export function DeliveryPage() {
   const range = windowRange(factWindow);
   const start = range.start.toISOString();
   const end = range.end.toISOString();
+  const hasTimelineProject = Boolean(project && project !== '__none__');
   const timelineParams = new URLSearchParams({ view: 'timeline', from, to });
-  if (project && project !== '__none__') timelineParams.set('project', project);
+  if (hasTimelineProject) timelineParams.set('project', project);
   const rawSample = params.get('sample');
   const sample = ['LEAD_TIME', 'CYCLE_TIME', 'REVIEW_WAIT', 'OPEN'].includes(rawSample ?? '') ? (rawSample as Sample) : null;
   const variables = useMemo(
@@ -347,7 +348,7 @@ export function DeliveryPage() {
             <p>
               Definition {data.definitionVersion} · {from} – {to}, UTC, inclusive
             </p>
-            <Link className="ui-action ui-action--subtle" to={`/graph?${timelineParams}`}>Open in timeline</Link>
+            {hasTimelineProject ? <Link className="ui-action ui-action--subtle" to={`/graph?${timelineParams}`}>Open in timeline</Link> : null}
             <StatRow aria-label="Completed sample latency">
               {rows.map(({ key, label, sample: next, metric }) => (
                 <StatTile

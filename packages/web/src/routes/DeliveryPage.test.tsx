@@ -80,7 +80,7 @@ it.each(['', 'from=invalid&to=invalid', 'from=2026-03-01T00:00:00.000Z&to=2026-0
 it.each([7, 30, 90])('writes inclusive day params for the %s day preset', async (days) => {
   const today = new Date().toISOString().slice(0, 10);
   const from = new Date(Date.parse(today) - (days - 1) * 86_400_000).toISOString().slice(0, 10);
-  const requests = mount(async () => fixture());
+  const requests = mount(async () => fixture(), '', defaultProjects, `from=${start}&to=${end}&project=acme/a`);
   await screen.findByLabelText('Completed sample latency');
   fireEvent.click(screen.getByRole('button', { name: `${days}d` }));
   await waitFor(() => expect(requests.at(-1)).toMatchObject({ from, to: today, timeZone: 'UTC' }));
@@ -164,11 +164,10 @@ it('shows no samples rather than zero duration and explains missing history', as
   expect(stats).not.toHaveTextContent('0m');
   expect(screen.getByText('Low coverage')).toBeInTheDocument();
 });
-it('omits the no-repository sentinel from the timeline link', async () => {
-  mount(async () => fixture(), '', defaultProjects, `from=${start}&to=${end}&project=__none__`);
-  const link = await screen.findByRole('link', { name: 'Open in timeline' });
-  const url = new URL(link.getAttribute('href')!, 'http://localhost');
-  expect(Object.fromEntries(url.searchParams)).toEqual({ view: 'timeline', from: start, to: end });
+it.each(['', '__none__'])('hides the timeline link without a real repository: %s', async (project) => {
+  mount(async () => fixture(), '', defaultProjects, `from=${start}&to=${end}&project=${project}`);
+  await screen.findByLabelText('Completed sample latency');
+  expect(screen.queryByRole('link', { name: 'Open in timeline' })).not.toBeInTheDocument();
 });
 it('flags partial coverage and shows all coverage counts', async () => {
   mount(async () => fixture({ leadTime: { ...metric, sampleCount: 2, coverage: { missingCount: 1 } }, coverage: { workCount: 8, noHistoryCount: 1, openEpisodeCount: 2, closedWithoutAcceptanceCount: 3, unknownEpisodeCount: 1 } }));
