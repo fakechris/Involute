@@ -2715,7 +2715,7 @@ export function BoardPage() {
       if (isTypingField || document.querySelector('[role="dialog"]:not(.issue-peek), dialog[open]') || selectedIssueId || isCreateOpen || picker) {
         return;
       }
-      if (isElementTarget && target.closest('.issue-peek button') && (event.key === ' ' || event.key === 'Enter')) return;
+      if (isElementTarget && target.closest('button, a[href], input, select, textarea, summary, [role="button"], [role="link"], [role="checkbox"], [role="radio"], [role="switch"]') && (event.key === ' ' || event.key === 'Enter')) return;
 
       // Copy the focused issue's identifier (⌘.) or link (⌘⇧, or ⌘⇧C) (INV-1087).
       if ((event.metaKey || event.ctrlKey) && focusedIssueId) {

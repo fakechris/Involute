@@ -156,6 +156,30 @@ describe('App backlog controls', () => {
     expect(await screen.findByRole('dialog', { name: 'Peek INV-2' })).toBeInTheDocument();
   });
 
+  it('preserves Enter and Space activation on focused interactive controls', async () => {
+    renderApp({ data: boardQueryResult, loading: false }, ['/backlog']);
+    const rowButton = await screen.findByRole('button', { name: 'Backlog item' });
+    const save = screen.getByRole('button', { name: 'Save view' });
+    const link = document.createElement('a');
+    link.href = '#backlog';
+    const customButton = document.createElement('span');
+    customButton.setAttribute('role', 'button');
+    customButton.tabIndex = 0;
+    document.body.append(link, customButton);
+    for (const target of [save, rowButton, link, customButton]) {
+      target.focus();
+      for (const key of ['Enter', ' ']) {
+        expect(fireEvent.keyDown(target, { key })).toBe(true);
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Backlog' })).toBeInTheDocument();
+      }
+    }
+    fireEvent.keyDown(save, { key: 'j' });
+    expect(screen.getByRole('button', { name: 'Ready item' }).closest('tr')).toHaveClass('backlog-table__focused');
+    link.remove();
+    customButton.remove();
+  });
+
   it('ignores row shortcuts while typing, in a dialog, and with no matching rows', async () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/backlog']);
     const search = await screen.findByLabelText('Search backlog issues');
