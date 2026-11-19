@@ -25,7 +25,7 @@ export interface AgentTimelineEntry {
 }
 
 export interface AgentCredentialSummary {
-  issuedBy: { handle: string | null; name: string | null; email: string } | null;
+  issuedBy: Pick<User, 'id' | 'handle' | 'name' | 'email'> | null;
   createdAt: Date;
   expiresAt: Date | null;
   id: string;
@@ -177,7 +177,7 @@ export async function getAgentProfile(
       revokedAt: true,
       scopes: true,
       team: { select: { key: true } },
-      issuedBy: { select: { email: true, handle: true, name: true } },
+      issuedBy: { select: { id: true, email: true, handle: true, name: true } },
     },
     orderBy: { createdAt: 'desc' },
   });

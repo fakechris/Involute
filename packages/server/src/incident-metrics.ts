@@ -61,8 +61,7 @@ export interface IncidentSummaryItem {
 }
 
 const HOUR_MS = 3_600_000;
-const round1 = (value: number) => Math.round(value * 10) / 10;
-const meanHours = (values: number[]) => (values.length ? round1(values.reduce((sum, value) => sum + value, 0) / values.length / HOUR_MS) : null);
+const meanHours = (values: number[]) => (values.length ? values.reduce((sum, value) => sum + value, 0) / values.length / HOUR_MS : null);
 const SEVERITY_ORDER = (severity: IssueSeverity | null) => (severity ? SEVERITIES.indexOf(severity) : SEVERITIES.length);
 
 /** Incident metrics over the work `scope` selects (team and read access). */
@@ -136,7 +135,7 @@ export async function loadIncidentSummary(prisma: DatabaseClient, scope: Prisma.
       stateName: row.state.name,
       impactStartedAt: durations.impactStartedAt,
       resolvedAt: row.resolvedAt,
-      impactHours: round1(durations.impactMs / HOUR_MS),
+      impactHours: durations.impactMs / HOUR_MS,
       ongoing: !resolved,
       postmortemRequired: incidentNeedsPostmortem(row.severity),
       postmortemAttached: row._count.attachments > 0,

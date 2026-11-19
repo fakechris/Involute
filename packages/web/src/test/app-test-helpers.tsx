@@ -506,6 +506,7 @@ type QueryState = {
   teamPageData?: unknown;
   projectSharesData?: unknown;
   agentProfileData?: unknown;
+  agentProfileError?: Error;
   agentsData?: { agents: unknown[] };
   agentsTabCanManage?: boolean;
   candidatesData?: CandidatesPageQueryData;
@@ -774,7 +775,7 @@ export function renderApp(
     if (source.includes('query AgentProfile')) {
       return {
         data: queryState.agentProfileData ?? { agentProfile: null },
-        error: queryState.error,
+        error: queryState.agentProfileError ?? queryState.error,
         loading: queryState.loading ?? false,
         refetch: queryState.refetch ?? vi.fn().mockResolvedValue(undefined),
       };
