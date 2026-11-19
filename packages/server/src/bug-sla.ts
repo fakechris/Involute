@@ -1,6 +1,6 @@
 import type { Issue, Prisma, PrismaClient, WorkflowStateType } from '@prisma/client';
 
-import { BUG_LABEL_NAME } from './bug-report.js';
+import { BUG_LABEL_NAME } from './bug-constants.js';
 import { enqueueWorkEvent } from './event-outbox.js';
 import { currentTriager } from './bug-triage.js';
 import { loadReporterWaits } from './need-info-service.js';

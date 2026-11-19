@@ -802,3 +802,15 @@ button.list-row__main {
   vertical-align: -1px;
   opacity: 0.75;
 }
+
+.burndown-chart { display: block; width: 100%; max-height: 360px; overflow: hidden; }
+.burndown-chart text { fill: var(--fg-dim); font-size: 12px; }
+.burndown-chart__axis { fill: none; stroke: var(--border); }
+.burndown-chart__gap { fill: var(--warn-weak); }
+.burndown-chart polyline { fill: none; stroke-width: 2; }
+.burndown-chart__scope { stroke: var(--fg-dim); fill: var(--fg-dim); }
+.burndown-chart__scope polyline { stroke-dasharray: 6 4; }
+.burndown-chart__remaining { stroke: var(--accent); fill: var(--accent); }
+.burndown-legend { color: var(--fg-dim); }
+.burndown-legend__scope { border-bottom: 2px dashed var(--fg-dim); }
+.burndown-legend__remaining { border-bottom: 2px solid var(--accent); }

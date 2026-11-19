@@ -20,11 +20,11 @@ import { parseReproducibility } from './reproducibility.js';
 import { CAPTURE_MESSAGES, environmentSection, parseBugCapture, type BugCapture } from './bug-capture.js';
 import { claimOwnUnattached } from './claim-uploads.js';
 import { parseFoundInSha } from './found-in.js';
+import { BUG_LABEL_NAME, BUG_REPORT_SOURCE } from './bug-constants.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
-export const BUG_LABEL_NAME = 'Bug';
-export const BUG_REPORT_SOURCE = 'bug-report';
+export { BUG_LABEL_NAME, BUG_REPORT_SOURCE } from './bug-constants.js';
 
 export interface BugReportInput {
   teamId: string;

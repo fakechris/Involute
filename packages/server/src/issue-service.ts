@@ -52,6 +52,7 @@ import { orderWorkflowStates } from './workflow-state-order.js';
 export const AUTO_ACCEPT_BUGS_HUMAN_ONLY_MESSAGE = 'Only a person can turn automatic acceptance of verified bug fixes on or off.';
 export const AUTO_ACCEPT_BUGS_PROJECT_ONLY_MESSAGE = 'Automatic acceptance of verified bug fixes is set on a PROJECT.';
 import { writeWorkTombstone } from './work-tombstone.js';
+import { writeWorkDeletion } from './work-deletion.js';
 import { assertSingleType, isBugWork, isIncidentWork, isResearchWork } from './labels.js';
 import { assertBugCloseReason, enqueueWorkCanceledEvent, parseWorkResolution } from './work-resolution.js';
 import { assertAgentMayCloseResearch, RESEARCH_CLOSE_REASON } from './research-closure.js';
@@ -1111,6 +1112,7 @@ export async function deleteIssue(
     }
     // Snapshot first, while the children still point here (INV-840).
     await writeWorkTombstone(tx, id, actor.actorId ?? null);
+    await writeWorkDeletion(tx, id, actor);
     const children = await tx.issue.findMany({ where: { parentId: id } });
     for (const child of children) {
       const after = await tx.issue.update({ where: { id: child.id }, data: { parentId: null, revision: { increment: 1 } } });

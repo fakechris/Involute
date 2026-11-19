@@ -271,4 +271,13 @@ describe('milestone scope replay', () => {
       expect(() => scopeWindow({ from: '2026-01-01', to: '2026-01-07', ...patch })).toThrow();
     }
   });
+  it('keeps membership unknown under a parent that left no deletion record (INV-1929)', () => {
+    const lost = state('lost');
+    const result = replay([
+      audit('a1', 'a', 2, lost, lost),
+      audit('a2', 'a', 4, lost, state()),
+    ], { unknownParents: new Set(['lost']) });
+    expect(result.coverage.gaps).toContainEqual({ start: at(2), end: at(4), workId: 'a', reason: 'DELETED_WITHOUT_HISTORY' });
+    expect(values(result).slice(0, 4)).toEqual([[null, null], [null, null], [null, null], [1, 1]]);
+  });
 });
