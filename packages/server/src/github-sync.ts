@@ -21,6 +21,52 @@ import { emitOpsAlert } from './ops-alerts.js';
 import type { PullRequestPayload } from './github-webhook-handler.js';
 import { processGitHubPrEvent } from './github-webhook-handler.js';
 
+/**
+ * Persistent skip marker for repositories GitHub reports as nonexistent (or
+ * invisible to the configured credential). Sync cycles keep reconciling every
+ * routed repository (§8.4); a repo that 404s on list-Pull-Requests would
+ * otherwise log a full error stack every 10 minutes forever (INV-1842). The
+ * marker lives in SyncWatermark (key prefix below); any authenticated webhook
+ * carrying the repository clears it via resumeGitHubRepoSync.
+ */
+export const GITHUB_SYNC_SKIP_PREFIX = 'github_sync_skip_';
+
+export function githubSyncSkipKey(repository: string): string {
+  return `${GITHUB_SYNC_SKIP_PREFIX}${repository}`;
+}
+
+/**
+ * HTTP status carried by a failed GitHub API call, when determinable.
+ * DefaultGitHubApiClient throws plain Errors whose message embeds the status;
+ * the property check keeps this working for typed errors and test fakes.
+ */
+export function getGitHubApiErrorStatus(error: unknown): number | undefined {
+  if (error && typeof error === 'object' && typeof (error as { status?: unknown }).status === 'number') {
+    return (error as { status: number }).status;
+  }
+  const match = error instanceof Error ? /GitHub API error (\d{3})/.exec(error.message) : null;
+  return match ? Number(match[1]) : undefined;
+}
+
+/**
+ * Clear the 404 skip marker for a repository. Called when any authenticated
+ * GitHub webhook mentions the repo: the repo now exists (or the credential was
+ * fixed), so periodic reconciliation should resume without operator action.
+ * Failures never block webhook processing.
+ */
+export async function resumeGitHubRepoSync(prisma: PrismaClient, repository: string): Promise<boolean> {
+  try {
+    const existing = await prisma.syncWatermark.findUnique({ where: { key: githubSyncSkipKey(repository) } });
+    if (!existing) return false;
+    await prisma.syncWatermark.delete({ where: { key: githubSyncSkipKey(repository) } });
+    console.log(`[github-sync] Repo ${repository} reachable again via webhook; resumed periodic reconciliation.`);
+    return true;
+  } catch (error) {
+    console.error(`[github-sync] Failed to clear skip marker for ${repository}:`, error);
+    return false;
+  }
+}
+
 export interface GitHubSyncPullRequest {
   id: number;
   number: number;
@@ -381,7 +427,20 @@ export async function reconcileAllConfiguredRepos(
   const routes = await listAllRepoRoutes(prisma);
   const results: ReconcileResult[] = [];
 
+  const skippedRepos = new Set(
+    (
+      await prisma.syncWatermark.findMany({
+        where: { key: { startsWith: GITHUB_SYNC_SKIP_PREFIX } },
+        select: { key: true },
+      })
+    ).map((row) => row.key.slice(GITHUB_SYNC_SKIP_PREFIX.length)),
+  );
+
   for (const route of routes) {
+    if (skippedRepos.has(route.repository)) {
+      console.debug(`[github-sync] Skipping unreachable repo ${route.repository} (404 skip marker).`);
+      continue;
+    }
     try {
       const result = await reconcileRepoPullRequests({
         prisma,
@@ -391,6 +450,19 @@ export async function reconcileAllConfiguredRepos(
       });
       results.push(result);
     } catch (error) {
+      if (getGitHubApiErrorStatus(error) === 404) {
+        await prisma.syncWatermark.upsert({
+          where: { key: githubSyncSkipKey(route.repository) },
+          create: { key: githubSyncSkipKey(route.repository), watermark: new Date() },
+          update: { watermark: new Date() },
+        });
+        console.warn(
+          `[github-sync] Repo ${route.repository} not reachable (GitHub 404). Skipping future cycles. ` +
+          `Sync resumes automatically when a webhook from this repo arrives, or delete the SyncWatermark row ` +
+          `'${githubSyncSkipKey(route.repository)}' to retry sooner.`,
+        );
+        continue;
+      }
       console.error(`[github-sync] Failed to reconcile repo ${route.repository}:`, error);
     }
   }
