@@ -1051,6 +1051,15 @@ export function BoardPage() {
     const onApplied = (event: Event) => {
       const detail = (event as CustomEvent<IssueUndoAppliedDetail>).detail;
       if (!detail) return;
+      if (detail.revealStateIds?.length) {
+        setCollapsedColumns((current) => {
+          const next = { ...current };
+          for (const id of detail.revealStateIds!) next[id] = false;
+          return next;
+        });
+        setSelectedIssueIds(detail.issueIds);
+        setFocusedIssueId(detail.issueIds[0] ?? null);
+      }
       const deletedIds = detail.deletedIds ?? [];
       if (deletedIds.length > 0) {
         setDeletedIssueIds((current) => [...new Set([...current, ...deletedIds])]);
@@ -1078,8 +1087,10 @@ export function BoardPage() {
         }
         return nextOverrides;
       });
-      setSelectedIssueIds(detail.issues.map((issue) => issue.id));
-      setFocusedIssueId(detail.issues[0]?.id ?? null);
+      if (!detail.revealStateIds?.length) {
+        setSelectedIssueIds(detail.issues.map((issue) => issue.id));
+        setFocusedIssueId(detail.issues[0]?.id ?? null);
+      }
     };
     window.addEventListener(ISSUE_UNDO_APPLIED_EVENT, onApplied);
     return () => window.removeEventListener(ISSUE_UNDO_APPLIED_EVENT, onApplied);
