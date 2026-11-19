@@ -55,7 +55,7 @@ export async function relay(prisma: PrismaClient, conclusion: 'success' | 'failu
   const actor = writeActorFromViewer(agent, 'test');
   const claim = await claimWork(prisma, a.id, {}, actor);
   await reportRun(prisma, { workId: a.id, claimToken: claim.claimToken!, status: 'running', commitSha: sha, pullRequestNumber: 4 }, actor);
-  const { run } = await reportRun(prisma, { workId: a.id, claimToken: claim.claimToken!, status: 'completed', commitSha: sha, pullRequestNumber: 4, summary: 'A done' }, actor);
+  const { run } = await reportRun(prisma, { workId: a.id, claimToken: claim.claimToken!, status: 'completed', followups: { noneReason: 'No follow-up work.' }, commitSha: sha, pullRequestNumber: 4, summary: 'A done' }, actor);
   const { evidence } = await attachEvidence(prisma, { workId: a.id, runId: run.id, claimToken: claim.claimToken!, kind: 'TEST', url: `https://github.com/${repository}/actions/runs/8` }, actor);
   // Before the verifier runs, a declaration alone releases nothing.
   if (await isWorkReadyForClaim(prisma, b.id)) throw new Error('unit B was claimable on a bare evidence declaration');

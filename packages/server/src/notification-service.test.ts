@@ -119,7 +119,7 @@ describe('work notifications', () => {
     const { claimToken } = await claimWork(prisma, committed.id, {}, { actorId: agent.id, actorKind: 'AGENT', surface: 'mcp' });
     await reportRun(
       prisma,
-      { claimToken, decisionRequested: true, status: 'completed', summary: 'PR is up', workId: committed.id },
+      { claimToken, decisionRequested: true, status: 'completed', followups: { noneReason: 'No follow-up work.' }, summary: 'PR is up', workId: committed.id },
       { actorId: agent.id, actorKind: 'AGENT', surface: 'mcp' },
     );
 
@@ -171,7 +171,7 @@ describe('work notifications', () => {
     const { claimToken } = await claimWork(prisma, committed.id, {}, { actorId: agent.id, actorKind: 'AGENT', surface: 'mcp' });
     await reportRun(
       prisma,
-      { claimToken, decisionRequested: true, status: 'completed', workId: committed.id },
+      { claimToken, decisionRequested: true, status: 'completed', followups: { noneReason: 'No follow-up work.' }, workId: committed.id },
       { actorId: agent.id, actorKind: 'AGENT', surface: 'mcp' },
     );
     await reviewWork(
@@ -201,7 +201,7 @@ describe('work notifications', () => {
     const { claimToken } = await claimWork(prisma, committed.id, {}, { actorId: humanRunner.id, actorKind: 'HUMAN', surface: 'web' });
     await reportRun(
       prisma,
-      { claimToken, decisionRequested: true, status: 'completed', workId: committed.id },
+      { claimToken, decisionRequested: true, status: 'completed', followups: { noneReason: 'No follow-up work.' }, workId: committed.id },
       { actorId: humanRunner.id, actorKind: 'HUMAN', surface: 'web' },
     );
     await reviewWork(

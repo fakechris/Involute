@@ -106,7 +106,7 @@ describe('graded auto-accept gate', () => {
       if (attachFirst) await attach();
       await reportRun(
         prisma,
-        { runId: started.run.publicId, status: 'completed', claimToken: committed.claimToken, workId: committed.id },
+        { runId: started.run.publicId, status: 'completed', followups: { noneReason: 'No follow-up work.' }, claimToken: committed.claimToken, workId: committed.id },
         actor,
       );
       if (!attachFirst) await attach();
@@ -140,7 +140,7 @@ describe('graded auto-accept gate', () => {
       );
       await reportRun(
         prisma,
-        { runId: started.run.publicId, status: 'completed', claimToken: committed.claimToken, workId: committed.id },
+        { runId: started.run.publicId, status: 'completed', followups: { noneReason: 'No follow-up work.' }, claimToken: committed.claimToken, workId: committed.id },
         { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
       );
       const attached = await attachEvidence(
@@ -195,7 +195,7 @@ describe('graded auto-accept gate', () => {
     );
     const completed = await reportRun(
       prisma,
-      { runId: started.run.publicId, status: 'completed', claimToken: committed.claimToken, workId: committed.id },
+      { runId: started.run.publicId, status: 'completed', followups: { noneReason: 'No follow-up work.' }, claimToken: committed.claimToken, workId: committed.id },
       { actorId: human.id, actorKind: 'HUMAN', surface: 'test' },
     );
 

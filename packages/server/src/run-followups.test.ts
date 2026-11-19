@@ -133,6 +133,7 @@ describe('run followups (INV-1231)', () => {
   });
 
   it('warns a completed run without followups during the transition, and refuses it after', async () => {
+    setFollowupsRequiredFromForTests(new Date('9999-01-01T00:00:00.000Z'));
     const first = await claimed('First');
     const warned = await complete(first.item.identifier, first.token);
     expect(warned.error).toBeUndefined();
