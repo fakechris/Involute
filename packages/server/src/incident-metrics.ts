@@ -22,6 +22,7 @@ export interface IncidentSummary {
   excludedCount: number;
   bySeverity: Array<{ severity: IssueSeverity | null; openCount: number; resolvedCount: number }>;
   byRepository: Array<{ repository: string | null; openCount: number; resolvedCount: number }>;
+  byProject: Array<{ project: { id: string; identifier: string; title: string } | null; openCount: number; resolvedCount: number }>;
   /** Mean impact started → resolved, hours, over counted incidents with resolvedAt. */
   mttrHours: number | null;
   mttrSampleCount: number;
@@ -61,8 +62,7 @@ export interface IncidentSummaryItem {
 }
 
 const HOUR_MS = 3_600_000;
-const round1 = (value: number) => Math.round(value * 10) / 10;
-const meanHours = (values: number[]) => (values.length ? round1(values.reduce((sum, value) => sum + value, 0) / values.length / HOUR_MS) : null);
+const meanHours = (values: number[]) => (values.length ? values.reduce((sum, value) => sum + value, 0) / values.length / HOUR_MS : null);
 const SEVERITY_ORDER = (severity: IssueSeverity | null) => (severity ? SEVERITIES.indexOf(severity) : SEVERITIES.length);
 
 /** Incident metrics over the work `scope` selects (team and read access). */
@@ -81,6 +81,7 @@ export async function loadIncidentSummary(prisma: DatabaseClient, scope: Prisma.
       title: true,
       severity: true,
       repository: true,
+      parentId: true,
       commitmentStatus: true,
       resolution: true,
       createdAt: true,
@@ -98,8 +99,33 @@ export async function loadIncidentSummary(prisma: DatabaseClient, scope: Prisma.
   );
   const stats = await loadIncidentFollowUpStats(prisma, counted.map((row) => row.id), now);
 
+  const ancestors = new Map<string, { id: string; identifier: string; title: string; kind: string; parentId: string | null }>();
+  let parentIds = [...new Set(counted.flatMap((row) => row.parentId ? [row.parentId] : []))];
+  while (parentIds.length) {
+    const parents = await prisma.issue.findMany({
+      where: { id: { in: parentIds } },
+      select: { id: true, identifier: true, title: true, kind: true, parentId: true },
+    });
+    for (const parent of parents) ancestors.set(parent.id, parent);
+    parentIds = [...new Set(parents.flatMap((parent) =>
+      parent.kind !== 'PROJECT' && parent.parentId && !ancestors.has(parent.parentId) ? [parent.parentId] : [],
+    ))];
+  }
+  const projectFor = (parentId: string | null) => {
+    const visited = new Set<string>();
+    while (parentId && !visited.has(parentId)) {
+      visited.add(parentId);
+      const parent = ancestors.get(parentId);
+      if (!parent) break;
+      if (parent.kind === 'PROJECT') return { id: parent.id, identifier: parent.identifier, title: parent.title };
+      parentId = parent.parentId;
+    }
+    return null;
+  };
+
   const severities = new Map<IssueSeverity | null, { openCount: number; resolvedCount: number }>();
   const repositories = new Map<string | null, { openCount: number; resolvedCount: number }>();
+  const projects = new Map<string | null, IncidentSummary['byProject'][number]>();
   const toResolve: number[] = [];
   const toMitigate: number[] = [];
   const followUps = { total: 0, completed: 0, declined: 0, overdue: 0, overdueOpen: 0 };
@@ -119,6 +145,11 @@ export async function loadIncidentSummary(prisma: DatabaseClient, scope: Prisma.
     };
     bump(severities, row.severity);
     bump(repositories, row.repository);
+    const project = projectFor(row.parentId);
+    const projectCount = projects.get(project?.id ?? null) ?? { project, openCount: 0, resolvedCount: 0 };
+    if (resolved) projectCount.resolvedCount += 1;
+    else projectCount.openCount += 1;
+    projects.set(project?.id ?? null, projectCount);
     if (durations.timeToResolveMs !== null) toResolve.push(durations.timeToResolveMs);
     if (durations.timeToMitigateMs !== null) toMitigate.push(durations.timeToMitigateMs);
     const own = stats.get(row.id) ?? { total: 0, completed: 0, declined: 0, overdue: 0, overdueOpen: 0 };
@@ -136,7 +167,7 @@ export async function loadIncidentSummary(prisma: DatabaseClient, scope: Prisma.
       stateName: row.state.name,
       impactStartedAt: durations.impactStartedAt,
       resolvedAt: row.resolvedAt,
-      impactHours: round1(durations.impactMs / HOUR_MS),
+      impactHours: durations.impactMs / HOUR_MS,
       ongoing: !resolved,
       postmortemRequired: incidentNeedsPostmortem(row.severity),
       postmortemAttached: row._count.attachments > 0,
@@ -160,6 +191,11 @@ export async function loadIncidentSummary(prisma: DatabaseClient, scope: Prisma.
     byRepository: [...repositories.entries()]
       .sort(([leftRepo, left], [rightRepo, right]) => right.openCount + right.resolvedCount - (left.openCount + left.resolvedCount) || (leftRepo ?? '').localeCompare(rightRepo ?? ''))
       .map(([repository, counts]) => ({ repository, ...counts })),
+    byProject: [...projects.values()].sort((left, right) =>
+      right.openCount + right.resolvedCount - (left.openCount + left.resolvedCount) ||
+      (left.project?.title ?? '').localeCompare(right.project?.title ?? '') ||
+      (left.project?.id ?? '').localeCompare(right.project?.id ?? ''),
+    ),
     mttrHours: meanHours(toResolve),
     mttrSampleCount: toResolve.length,
     mttmHours: meanHours(toMitigate),

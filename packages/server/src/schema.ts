@@ -26,6 +26,7 @@ import type {
   ContractAmendment,
   DecisionReceipt,
   Comment,
+  CommitmentStatus,
   Cycle,
   Issue,
   IssueLabel,
@@ -1381,7 +1382,7 @@ const typeDefs = /* GraphQL */ `
     labels: IssueLabelConnection!
     assignee: User
     parent: Issue
-    children: IssueConnection!
+    children(commitmentStatus: CommitmentStatus): IssueConnection!
     team: Team!
     project: Project
     cycle: Cycle
@@ -2661,6 +2662,8 @@ const typeDefs = /* GraphQL */ `
     "SEV1 first, unjudged last."
     bySeverity: [IncidentSeverityCount!]!
     byRepository: [IncidentRepositoryCount!]!
+    "Counts by the nearest PROJECT ancestor; project is null only when there is no PROJECT ancestor."
+    byProject: [IncidentProjectCount!]!
     "Mean hours from impact started to resolved; a plain average, no percentiles (INV-1130). Null before any resolved incident."
     mttrHours: Float
     "How many incidents the MTTR average is over."
@@ -2683,6 +2686,18 @@ const typeDefs = /* GraphQL */ `
     repository: String
     openCount: Int!
     resolvedCount: Int!
+  }
+
+  type IncidentProjectCount {
+    project: IncidentProject
+    openCount: Int!
+    resolvedCount: Int!
+  }
+
+  type IncidentProject {
+    id: ID!
+    identifier: String!
+    title: String!
   }
 
   type IncidentFollowUpTotals {
@@ -6937,14 +6952,17 @@ const resolvers = {
     },
     children: async (
       parent: IssueParent,
-      _args: Record<string, never>,
+      args: { commitmentStatus?: CommitmentStatus | null },
       context: GraphQLContext,
     ): Promise<{ nodes: Issue[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } }> => {
       const nodes =
-        parent.children ??
+        (parent.children && (args.commitmentStatus
+          ? parent.children.filter((child) => child.commitmentStatus === args.commitmentStatus)
+          : parent.children)) ??
         (await context.prisma.issue.findMany({
           where: {
             parentId: parent.id,
+            ...(args.commitmentStatus ? { commitmentStatus: args.commitmentStatus } : {}),
           },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         }));

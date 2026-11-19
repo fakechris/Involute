@@ -335,6 +335,34 @@ describe('agent directory and profile (INV-573)', () => {
       expect(result.data.agentProfile.timeline.length).toBeGreaterThan(0);
     });
 
+    it('returns the issuer identity when opening a profile for an agent from the directory', async () => {
+      const adminId = await seededOwnerId(prisma);
+      const { credential } = await issueAgentCredential(prisma, {
+        handle: 'mia',
+        name: 'Mia',
+        ownerId: adminId,
+        issuedById: adminId,
+        teamKey: DEFAULT_TEAM_KEY,
+      });
+
+      const directory = await query('{ agents { id handle } }');
+      expect(directory.errors).toBeUndefined();
+      expect(directory.data.agents).toContainEqual({ id: credential.userId, handle: 'mia' });
+
+      const profile = await query(`{
+        agentProfile(handle: "mia") {
+          actor { id handle }
+          credentials { id issuedBy { id name handle } }
+        }
+      }`);
+
+      expect(profile.errors).toBeUndefined();
+      expect(profile.data.agentProfile.actor).toEqual({ id: credential.userId, handle: 'mia' });
+      expect(profile.data.agentProfile.credentials).toEqual([
+        { id: credential.id, issuedBy: expect.objectContaining({ id: adminId }) },
+      ]);
+    });
+
     it('serves proposedByActor on the work item', async () => {
       const team = await prisma.team.findUniqueOrThrow({ where: { key: DEFAULT_TEAM_KEY } });
       const { credential } = await issueAgentCredential(prisma, {
