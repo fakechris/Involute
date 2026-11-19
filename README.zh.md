@@ -5,18 +5,18 @@
 [![Docker Publish](https://img.shields.io/badge/Docker%20Publish-workflow-blue)](https://github.com/fakechris/Involute/actions/workflows/docker-publish.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 
-[English](README.md) | 中文
+[English](README.md) | 中文 | [用户手册（英文）](docs/manual/README.md)
 
 > **Agent 原生的项目状态与工作图内核。**
 > Involute 保存长期有效的工件身份、交付契约、类型化链接、决策与验收证据。
-> Codex、Claude Code 等 Agent 通过 MCP 直连是主入口；看板 Web 只是一个观察与治理界面。
-> 无头（headless）、可自托管、零 LLM 依赖。
+> Codex、Claude Code 等 Agent 通过 MCP 连接；用户可以在 Web 界面规划、编辑和验收工作。
+> 支持无头（headless）运行，可自托管，不依赖 LLM。
 
 **状态** M0 迁移验收完成 · M1 VPS 自托管已上线 · M2 OAuth + RBAC 完成 · 工作图内核（K0–K6）已交付 · Linear 替代线 = M5 · Apache-2.0
 
 ## 🖥️ 界面预览
 
-| 看板（观察界面 —— 只展示已 commit 的 issue） |
+| 看板（只展示已承诺的工单） |
 |---|
 | ![Involute 看板](assets/board.jpg) |
 
@@ -24,9 +24,9 @@
 
 - 🧠 **工作图内核（Work-graph kernel）** —— 每个工作项都是图上的节点：稳定身份（`SON-18`、`INV-142`）、交付契约（outcome、scope、约束、验收、验证方式）、类型化链接（`contains`、`blocks`、`derived_from`、`discovered_during`）。
 - 🤖 **MCP 原生 Agent 协议** —— `work_search` / `work_get_context` / `work_list_ready` / `work_propose` / `work_commit` / `work_claim` / `work_update` / `run_report` / `evidence_attach`，走 Streamable HTTP MCP（`/mcp`），并带只读镜像 `/mcp/readonly`。
-- 🛡️ **关键处设人类闸门** —— 模糊发现先进 *candidate*（候选），绝不直接进已承诺的 backlog；commit 与拒绝是人类动作；**run 完成不等于工作被接受** —— `Done` 永远留给人类（或显式 `accept`）决定。
+- 🛡️ **关键处设人类闸门** —— 提案通常先进入 *candidate*（候选）队列等待决策。**Run 完成不等于工作已验收**；除非符合已启用的[自治策略](docs/autonomy-policy.md)等明确规则，否则由人工决定。
 - 🧾 **Run + 证据** —— 每次执行尝试都是一条 run：阶段报告、阻塞、附带的 PR / 测试 / 产物链接；自报证据保留在 In Review，等待人工验收。
-- 🖥️ **观察型 Web，不是写入口** —— React + Vite 看板只投影已 commit 的 issue，另有候选评审（`/candidates`）、工作图视图（`/graph`）、单工作 run/证据页（`/work/:id`）和真实通知驱动的 Inbox。
+- 🖥️ **Web 工作区** —— 在看板和待办列表创建、编辑及流转已承诺的工作，在 Candidates 决定是否承诺提案，审查证据，并在 Needs you 查看待决策事项。
 - 📥 **Linear 导入闭环** —— 导出一个 Linear 团队快照，导入、校验、上看板；历史承诺一次性载入，之后由内核接管。
 - 📦 **可自托管** —— 单容器 `involute-aio`、完整 compose 栈、Docker Hub 发布镜像、Ansible playbook、GitHub Actions 部署、Postgres 备份/恢复脚本。
 - 🔐 **认证与 RBAC** —— Google OAuth 浏览器会话、带只读 scope 的 Bearer token（CLI 与 Agent 用）、签名 viewer assertion、团队 `PUBLIC`/`PRIVATE` 可见性、管理员邮箱 allowlist。
@@ -77,7 +77,7 @@ run_report + evidence_attach → In Review（人类接受 → Done）
 | Claim + Run | 这一次尝试由谁执行、是否完成 |
 | 本地 `task_plan.md` | Agent 的工作记忆；不存入 Involute |
 
-可信证据验证采用 shadow 模式：GitHub 合并与 CLEAR 观察仍需人工验收。见[核验配置](docs/evidence-verification.md)。
+在 shadow 模式下，GitHub 合并与 CLEAR 观察不会改变工作流状态。决策规则见[核验配置](docs/evidence-verification.md)和[自治策略](docs/autonomy-policy.md)。
 
 ## 🗺️ 当前状态
 
@@ -420,7 +420,7 @@ Web UI 可通过 `VITE_INVOLUTE_VIEWER_ASSERTION` 或 localStorage 键 `involute
 - 系统管理员可通过 `ADMIN_EMAIL_ALLOWLIST` 或 `pnpm --filter @turnkeyai/involute-server admin:bootstrap user@example.com` 引导。
 - 团队有 `PUBLIC` / `PRIVATE` 可见性。
 - 团队编辑按成员角色门控：`EDITOR` 或 `OWNER`。
-- 团队访问管理在 Web UI 的 `/settings/access`，以及 GraphQL mutations：`teamUpdateAccess`、`teamMembershipUpsert`、`teamMembershipRemove`。
+- 团队访问可在团队的 Members 和 Settings 页面（`/teams/<KEY>/members`、`/teams/<KEY>/settings`）管理，也可通过 GraphQL mutations：`teamUpdateAccess`、`teamMembershipUpsert`、`teamMembershipRemove`。
 
 ## 数据库迁移
 

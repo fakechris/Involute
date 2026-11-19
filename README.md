@@ -5,18 +5,18 @@
 [![Docker Publish](https://github.com/fakechris/Involute/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/fakechris/Involute/actions/workflows/docker-publish.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 
-English | [中文](README.zh.md)
+English | [中文](README.zh.md) | [User manual](docs/manual/README.md)
 
 > **Agent-native project-state and work-graph kernel.**
 > Involute stores long-lived work identity, delivery contracts, typed links, decisions, and evidence.
-> Codex, Claude Code, and other agents are the primary entrypoints over MCP; the kanban web app
-> is only an observation and governance surface. Headless, self-hostable, zero LLM dependency.
+> Codex, Claude Code, and other agents connect over MCP. People use the web app to plan,
+> edit, and review work. Headless operation is supported; no LLM is required.
 
 **Status** M0 migration done · M1 VPS self-hosting operational · M2 OAuth + RBAC done · work-graph kernel (K0–K6) shipped · Linear replacement = M5 · Apache-2.0
 
 ## 🖥️ Preview
 
-| Kanban board (observation surface — committed issues only) |
+| Kanban board (committed issues only) |
 |---|
 | ![Involute kanban board](assets/board.jpg) |
 
@@ -24,9 +24,9 @@ English | [中文](README.zh.md)
 
 - 🧠 **Work-graph kernel** — every work item is a node with a stable identity (`SON-18`, `INV-142`), a delivery contract (outcome, scope, constraints, acceptance, verification), and typed links (`contains`, `blocks`, `derived_from`, `discovered_during`).
 - 🤖 **MCP-native agent protocol** — `work_search` / `work_get_context` / `work_list_ready` / `work_propose` / `work_commit` / `work_claim` / `work_update` / `run_report` / `evidence_attach` over Streamable HTTP MCP at `/mcp`, with a read-only mirror at `/mcp/readonly`.
-- 🛡️ **Human gates where they matter** — fuzzy discoveries enter as *candidates*, never straight into the committed backlog; commit and rejection are human actions; **run complete is not work accepted** — `Done` always stays a human (or explicit `accept`) decision.
+- 🛡️ **Human gates where they matter** — proposals normally enter as *candidates* for a decision. **Run complete is not work accepted**; people decide unless an explicit rule such as an enabled [autonomy policy](docs/autonomy-policy.md) applies.
 - 🧾 **Runs + evidence** — every execution attempt is a run with phase reports, blockers, and attached PR / test / artifact URLs; self-reported evidence stays in review until a human accepts it.
-- 🖥️ **Observation web, not the write path** — React + Vite kanban that projects committed issues only, plus candidate review (`/candidates`), work-graph view (`/graph`), per-work runs/evidence pages (`/work/:id`), and an inbox backed by real notifications.
+- 🖥️ **Web workspace** — create, edit, and move committed work on Board and Backlog; decide on proposals in Candidates, review evidence, and see pending decisions in Needs you.
 - 📥 **Linear import loop** — export one Linear team snapshot, import, verify, and view it on the board; historical commitments load in once, then the kernel takes over.
 - 📦 **Self-hostable** — single `involute-aio` container, full compose stack, published Docker Hub images, Ansible playbooks, GitHub Actions deploy, and Postgres backup/restore scripts.
 - 🔐 **Auth & RBAC** — Google OAuth browser sessions, bearer tokens with read-only scopes for CLI and agents, signed viewer assertions, `PUBLIC`/`PRIVATE` teams, and an admin email allowlist.
@@ -77,7 +77,7 @@ Four state machines, deliberately not collapsed:
 | Claim + Run | who is executing this attempt, and whether that attempt finished |
 | Local `task_plan.md` | Agent working memory; not stored as Involute work |
 
-Evidence verification is shadow-only: GitHub merges and CLEAR observations still require human acceptance. See [verification setup](docs/evidence-verification.md).
+In shadow mode, GitHub merges and CLEAR observations do not change the workflow state. See [verification setup](docs/evidence-verification.md) and [autonomy policy](docs/autonomy-policy.md) for decision rules.
 
 ## 🗺️ Current status
 
@@ -420,7 +420,7 @@ The web UI can use the same signed assertion via `VITE_INVOLUTE_VIEWER_ASSERTION
 - System admins can be bootstrapped through `ADMIN_EMAIL_ALLOWLIST` or `pnpm --filter @turnkeyai/involute-server admin:bootstrap user@example.com`.
 - Teams now have `PUBLIC` / `PRIVATE` visibility.
 - Team edits are gated by membership role: `EDITOR` or `OWNER`.
-- Team access management is available in the web UI at `/settings/access` and through GraphQL mutations: `teamUpdateAccess`, `teamMembershipUpsert`, and `teamMembershipRemove`.
+- Team access is managed in the team's Members and Settings pages (`/teams/<KEY>/members` and `/teams/<KEY>/settings`) or through GraphQL mutations: `teamUpdateAccess`, `teamMembershipUpsert`, and `teamMembershipRemove`.
 
 ## Database migrations
 
