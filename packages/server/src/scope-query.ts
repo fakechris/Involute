@@ -147,11 +147,17 @@ export async function loadMilestoneBurndown(
   })));
   const live = new Set(candidates.map(row => row.id));
   const works = new Map(candidates.map(row => [row.id, { id: row.id, identifier: row.identifier, deletedAt: null as Date | null }]));
+  // Each deletion carries the whole chain so far; replay one copy of each audit.
+  const seen = new Set(audits.map(audit => audit.id));
   for (const deletion of deletions) {
     const final = snapshot(deletion.final);
     const chain = deletedAudits(deletion);
     if (!live.has(deletion.workId)) {
-      audits.push(...chain);
+      for (const audit of chain) {
+        if (seen.has(audit.id)) continue;
+        seen.add(audit.id);
+        audits.push(audit);
+      }
       works.set(deletion.workId, {
         id: deletion.workId,
         identifier: deletion.identifier,
