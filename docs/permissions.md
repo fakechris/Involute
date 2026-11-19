@@ -135,6 +135,8 @@ never hold a workspace role.
 - **Teams** — every team including private and archived: members count,
   visibility, Owners. Create, archive and unarchive; open a team's members
   or settings.
+- **Agents** — links to the Agents section of each team you can manage.
+  Issue and revoke credentials in that team's settings.
 - **Security** — approved domains, default teams for people who join by
   domain, "Members can invite", "Members can create teams".
 - **Service actors** — provision a service identity (admins only).
@@ -150,10 +152,10 @@ members leave; non-members of a public team join.
 (name, visibility, archive), Workflow states, Bug triage, Agents (credentials
 for this team).
 
-Retired: the "Members & access" and "Admins" settings tabs, the workspace
-Settings tabs for Agents, Bug triage and Workflow states (now per team),
-`/settings/access` and the workspace-level `/members` page. The old addresses
-redirect to the team pages above.
+Retired: the "Members & access" and "Admins" settings tabs, and the workspace
+Settings tabs for Bug triage and Workflow states (now per team). The legacy
+addresses `/settings/access` and `/members` redirect to the current team's
+settings and members pages respectively.
 
 ## 8. Where it is enforced
 
