@@ -388,6 +388,48 @@ Example variables:
 }
 ```
 
+### `deliveryLatency(teamKey: String!, start: DateTime!, end: DateTime!, first: Int = 50, after: String)`
+
+INV-267, definition version `1`. This signed-in, read-only query returns
+delivery metrics for the team's issues the caller may read, including
+project shares. Nodes use issue-ID keyset pagination (1–100 per page).
+The same team, `start`, and `end` must be supplied with a cursor. Summary
+statistics cover the whole readable cohort, not just the current page.
+
+- Replay `WorkAudit` by `createdAt`, then audit ID. The current issue state
+  is not a historical event; repeated state types do not start new spells.
+  Acceptance is an effective transition into the `COMPLETED` state with a
+  matching `ACCEPTED` review decision at that revision. Done on its own is
+  not evidence of acceptance.
+- Lead time goes from first commitment to the first acceptance, including
+  when that commitment was undone and later restored. Cycle time goes
+  from the first entry into `STARTED` in that episode to acceptance. Review
+  wait sums the elapsed time in every `REVIEW` spell in that episode, up to
+  acceptance. Leaving Done or Canceled for an open state starts a separate
+  episode with the reopen timestamp as its lead-time anchor; prior metrics
+  stay unchanged.
+- Replay stops before `end`. Open episodes show age from the known anchor
+  to `end`, never a completion duration. Missing history is not filled
+  from the current state: gaps or unresolvable historical states can make
+  timings unknown. A missing `STARTED` entry is not replaced with the
+  commitment timestamp.
+- P50/P90 include only episodes accepted in `[start, end)`, excluding
+  missing values for the relevant metric. Sort elapsed values ascending
+  and take the one-based rank `ceil(p × sampleCount)`: for values 1–10,
+  P50 is 5 and P90 is 9. Each distribution returns the window, sample
+  count, definition version, covered acceptance counts and null percentiles
+  with `NO_ACCEPTED_EPISODES` or `INSUFFICIENT_HISTORY` when empty.
+- Run elapsed is `WorkRun.endedAt − startedAt` in milliseconds. For runs
+  finished before `end`, `wallClockSumMs` counts each run independently
+  and `wallClockUnionMs` counts overlapping time only once, per issue.
+  Invalid and unfinished runs have null elapsed times and separate counts;
+  actual human work and agent compute time are unknown.
+
+Timestamps are UTC instants and durations are elapsed milliseconds. Pass
+explicit offsets when constructing the window (including DST changes)
+and display returned timestamps with the viewer's timezone; do not
+subtract formatted local times to compute durations.
+
 ### `teams(filter: TeamFilter)`
 
 Returns visible teams.
