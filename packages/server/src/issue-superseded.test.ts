@@ -6,6 +6,7 @@ import { loadProjectEnvironment } from '../prisma/env.js';
 import { createIssue, updateIssue } from './issue-service.js';
 import { buildIssueWhere } from './issue-filter.js';
 import { writeActorFromViewer } from './work-service.js';
+import { compileIqlToIssueWhere, parseIqlOrThrow } from './iql-compile.js';
 
 // INV-1498: "replaced by INV-…" is a field an agent may set, not prose a person retypes.
 loadProjectEnvironment();
@@ -55,14 +56,45 @@ describe('superseded_by (INV-1498)', () => {
     await expect(updateIssue(prisma, replacement.id, { supersededById: old.id, expectedRevision: fresh.revision }, agent)).rejects.toThrow(/cannot loop/);
   });
 
-  it('a superseded item can still be canceled by a person with the resolution, but not reopened', async () => {
+  it('a person can cancel and undo an ordinary superseded item; an agent still cannot cancel or reopen it', async () => {
     const { team, human, agent, old, replacement } = await fixture();
     const marked = await updateIssue(prisma, old.id, { supersededById: replacement.id, expectedRevision: old.revision }, agent);
     const canceled = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'CANCELED' } });
     const ready = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'UNSTARTED' } });
     const closed = await updateIssue(prisma, old.id, { stateId: canceled.id, resolution: 'OBSOLETE', reason: `Superseded by ${replacement.identifier}: ${replacement.title}`, expectedRevision: marked.revision }, human);
     expect(closed.resolution).toBe('OBSOLETE');
-    await expect(updateIssue(prisma, old.id, { stateId: ready.id, expectedRevision: closed.revision }, human)).rejects.toThrow(/instead of reopening/);
+    await expect(updateIssue(prisma, old.id, { stateId: ready.id, expectedRevision: closed.revision }, agent)).rejects.toThrow(/instead of reopening/);
+    const restored = await updateIssue(prisma, old.id, { stateId: ready.id, expectedRevision: closed.revision }, human);
+    expect(restored.resolution).toBeNull();
+    expect(restored.supersededById).toBe(replacement.id);
+    await expect(updateIssue(prisma, old.id, { stateId: canceled.id, resolution: 'OBSOLETE', expectedRevision: restored.revision }, agent)).rejects.toThrow();
+  });
+
+  it('refuses canceling work with a live claim', async () => {
+    const { team, human, old, admin } = await fixture();
+    await prisma.workClaim.create({ data: { workId: old.id, actorId: admin.id, leaseUntil: new Date(Date.now() + 60_000) } });
+    const canceled = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'CANCELED' } });
+    await expect(updateIssue(prisma, old.id, { stateId: canceled.id, resolution: 'OBSOLETE', expectedRevision: old.revision }, human)).rejects.toThrow(/active claim/);
+  });
+
+  it('the superseded-open query excludes closed items and both kinds of delivery merge sources', async () => {
+    const { team, human, agent, project, old, replacement, admin } = await fixture();
+    await updateIssue(prisma, old.id, { supersededById: replacement.id, expectedRevision: old.revision }, agent);
+    const root = await createIssue(prisma, { teamId: team.id, title: 'Root', parentId: project.id, repository: 'test/sup', commitmentStatus: 'COMMITTED', acceptance: 'a' }, human);
+    const merged = await createIssue(prisma, { teamId: team.id, title: 'Merged', parentId: project.id, repository: 'test/sup', commitmentStatus: 'COMMITTED', acceptance: 'a' }, human);
+    await prisma.issue.update({ where: { id: merged.id }, data: { supersededById: root.id } });
+    await prisma.workLink.create({ data: { fromId: merged.id, toId: root.id, type: 'DUPLICATE_OF' } });
+    const canceled = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'CANCELED' } });
+    const completed = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'COMPLETED' } });
+    for (const stateId of [canceled.id, completed.id]) await prisma.issue.create({ data: { teamId: team.id, identifier: `CLOSED-${stateId === canceled.id ? 1 : 2}`, title: 'Closed', stateId, commitmentStatus: 'COMMITTED', supersededById: replacement.id } });
+    const query = compileIqlToIssueWhere(parseIqlOrThrow('superseded:yes -state-type:canceled,completed'), { viewerId: admin.id });
+    const where = { AND: [buildIssueWhere({ commitmentStatus: 'COMMITTED' }, admin.id)!, query!] };
+    expect((await prisma.issue.findMany({ where })).map((item) => item.id)).toEqual([old.id]);
+    await prisma.deliveryPackage.create({ data: { workId: root.id, policy: {}, contractDigest: 'x', approvedById: admin.id } });
+    await prisma.workLink.deleteMany({ where: { fromId: merged.id } });
+    expect((await prisma.issue.findMany({ where })).map((item) => item.id)).toEqual([old.id]);
+    await prisma.issue.update({ where: { id: merged.id }, data: { stateId: canceled.id } });
+    await expect(updateIssue(prisma, merged.id, { stateId: old.stateId, expectedRevision: merged.revision }, human)).rejects.toThrow(/instead of reopening/);
   });
 
   it('lists keep an item replaced by other work until it is closed, but hide tasks merged into a delivery package (INV-1515)', async () => {

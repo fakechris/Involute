@@ -656,7 +656,7 @@ export interface IssueUpdateMutationVariables {
     /** Required when moving to a Canceled state (INV-1118). */
     resolution?: WorkResolution;
     /** Recorded on the audit; required to cancel a bug. */
-    reason?: string;
+    reason?: string | null;
   };
 }
 

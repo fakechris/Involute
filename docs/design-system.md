@@ -77,6 +77,7 @@
 | `Field` `TextInput` `TextArea` `Select` `Checkbox` | `components/controls/*.tsx` + `styles/controls.css` | 12 种字段、79 个裸 select、5 个 `inputStyle` |
 | `Btn`（重写） | `components/Primitives.tsx` | `.btn*` `.ui-action--primary` 内联按钮 |
 | `DialogShell` | `components/DialogShell.tsx` | `.issue-panel` 复用、`<dialog>` 内联 |
+| `useCloseReason` `useBatchCloseReason` | `components/CloseReasonDialog.tsx` | 单条 / 多条取消确认；每条保留自己的替代项预填（INV-1930） |
 | `DataTable` | `components/DataTable.tsx` | 设置页表格、`rowStyle` |
 | `ListRow` `IssueRow` | `components/list/ListRow.tsx`（`components/list/index.ts`）+ `styles/content.css` | 9 种行：My Issues grid、`bugs-list`、`search-result`、`hygiene-item`、`inbox-item`、`attention-row` 已迁移；保留 `IssueCard`（Board）、`.observation-card`（In Review / Candidates 的卡片）与 Backlog 表格 |
 | `StatTile` `StatRow` `EmptyState` `InlineError` `LoadingState` `SegmentedControl` `BulkActionBar` `Badge` | `components/status/Status.tsx`（`components/status/index.ts`）+ `styles/layout.css`（`Badge`：`styles/content.css`） | 见 §2.2；`Badge` 替代 `.observation-card__status`、`.views-card__kind`、`.context-chip`、`attention-row__flag` |
