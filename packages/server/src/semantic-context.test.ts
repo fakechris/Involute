@@ -152,13 +152,21 @@ describe('handoff context curation (INV-649)', () => {
     expect(s.evaluate).toHaveBeenCalledTimes(3);
   });
 
-  it('returns the full original when permission is revoked mid-evaluation', async () => {
+  it('returns no content when permission is revoked mid-evaluation, without touching the original', async () => {
     const s = setup(); s.isCurrent.mockResolvedValueOnce(true).mockResolvedValue(false);
     const original = bundle(); const before = structuredClone(original);
     const r = await curate(s, original, longComments());
-    expect(r).toMatchObject({ mode: 'full', status: 'stale', failure: 'stale' });
-    expect((r as Extract<HandoffContext, { mode: 'full' }>).context.runs).toEqual(before.runs);
+    expect(r).toEqual({ mode: 'stale', status: 'stale', failure: 'stale', observationId: expect.any(String), reread: { tool: 'work_get_context', id: 'INV-1' } });
+    expect(handoffOmissions(r, [{ section: 'runs', id: 'r-now' }]).omissionRate).toBe(1);
+    expect(coreRetention(original, r)).toBe(0);
     expect(original).toEqual(before);
+  });
+
+  it('passes the caller authorization digest unchanged and the full contract to the ranker', async () => {
+    const s = setup(); s.isCurrent.mockImplementation(async binding => (binding as { authorizationDigest: string }).authorizationDigest === 'auth-1');
+    asCurated(await curate(s, bundle()));
+    const state = s.evaluate.mock.calls[0]![0].state as { work: Record<string, unknown> };
+    expect(state.work).toMatchObject({ description: bundle().work.description, outcome: '用户可以重新登录', acceptance: bundle().work.acceptance });
   });
 
   it('falls back to the full original on timeout, cancellation, model error and malformed output', async () => {

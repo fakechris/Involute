@@ -10,7 +10,8 @@ import type { Check, Evaluation } from './semantic-advice/types.js';
  * core that is never trimmed. Only supplementary material (historical runs,
  * evidence, comments) is ranked by the semantic advice module (INV-647); what is
  * not selected stays as a reference to the original with an expand path. Any
- * advice outcome other than treatment advice returns the original full bundle.
+ * advice outcome other than treatment advice returns the original full bundle, except a
+ * stale one (permission or contract changed), which returns no content and asks for a re-read.
  */
 export const CONTEXT_SCENARIO = 'context';
 export const MAX_RANKED_MATERIALS = 32;
@@ -75,7 +76,15 @@ export interface CuratedHandoffContext {
   references: MaterialReference[];
   metrics: HandoffMetrics;
 }
-export type HandoffContext = FullHandoffContext | CuratedHandoffContext;
+/** Authorization or the contract changed mid-evaluation: nothing is returned; re-read under current access. */
+export interface StaleHandoffContext {
+  mode: 'stale';
+  status: 'stale';
+  failure: string;
+  observationId?: string;
+  reread: { tool: 'work_get_context'; id: string };
+}
+export type HandoffContext = FullHandoffContext | CuratedHandoffContext | StaleHandoffContext;
 
 type Material =
   | { section: 'runs'; item: WorkRun }
@@ -143,6 +152,8 @@ function reference(m: Material, identifier: string): MaterialReference {
   };
 }
 
+const clip = (text: string | null | undefined) => (text ? [...text].slice(0, MAX_PROVIDER_TEXT).join('') : text ?? null);
+
 function full(bundle: WorkContextBundle, comments: Comment[], status: FullHandoffContext['status'], extra: Pick<FullHandoffContext, 'failure' | 'observationId'> = {}): FullHandoffContext {
   return { mode: 'full', status, ...extra, context: { ...bundle, comments } };
 }
@@ -171,10 +182,10 @@ export async function curateHandoffContext(input: HandoffContextInput): Promise<
   const request: AdviceRequest = {
     teamId: work.teamId, repository: work.repository ?? '', scenario: CONTEXT_SCENARIO, workId: work.id,
     actorId: input.actorId, revision: binding.revision, contractDigest: binding.contractDigest,
-    authorizationDigest: hash([input.authorizationDigest, binding.inputDigest]),
+    authorizationDigest: input.authorizationDigest,
     state: {
       role: input.role,
-      work: { identifier: work.identifier, title: work.title, scope: work.scope, constraints: work.constraints, acceptance: work.acceptance, verification: work.verification },
+      work: { identifier: work.identifier, title: work.title, description: clip(work.description), outcome: clip(work.outcome), scope: work.scope, constraints: work.constraints, acceptance: work.acceptance, verification: work.verification },
       materials: Object.fromEntries(ranked.map((m, i) => [`m${i}`, { section: m.section, text: [...materialText(m)].slice(0, MAX_PROVIDER_TEXT).join('') }])),
     },
     checks, baseline,
@@ -183,6 +194,7 @@ export async function curateHandoffContext(input: HandoffContextInput): Promise<
   try { result = await input.advisor.evaluate(request, input.signal); }
   catch { return full(bundle, comments, 'error', { failure: 'provider_error' }); }
   const extra = { ...(result.failure ? { failure: result.failure } : {}), ...(result.observationId ? { observationId: result.observationId } : {}) };
+  if (result.status === 'stale') return { mode: 'stale', status: 'stale', failure: result.failure ?? 'stale', ...(result.observationId ? { observationId: result.observationId } : {}), reread: { tool: 'work_get_context', id: work.identifier } };
   if (result.status !== 'advice' || !result.visible || input.signal?.aborted) return full(bundle, comments, result.status, input.signal?.aborted ? { ...extra, failure: 'canceled' } : extra);
 
   const keep = (i: number) => {
@@ -217,6 +229,7 @@ function measure(fullFacts: string[], kept: string[], fullTokens: number, curate
 /** Retention of the never-trimmed facts of a full bundle in any curated output. */
 export function coreRetention(original: WorkContextBundle, curated: HandoffContext): number {
   const expected = criticalFacts(splitBundle(original).core);
+  if (curated.mode === 'stale') return 0;
   const view = curated.mode === 'full' ? splitBundle(curated.context).core : curated.core;
   const present = new Set(criticalFacts(view));
   return expected.length ? expected.filter(f => present.has(f)).length / expected.length : 1;
@@ -230,7 +243,9 @@ export function handoffOmissions(result: HandoffContext, needed: Array<{ section
   const key = (section: string, id: string) => `${section}:${id}`;
   const shown = new Set<string>();
   const referenced = new Set<string>();
-  if (result.mode === 'full') {
+  if (result.mode === 'stale') {
+    // Nothing shown; everything must be re-read.
+  } else if (result.mode === 'full') {
     for (const section of ['runs', 'evidence', 'comments'] as const) for (const item of result.context[section]) shown.add(key(section, item.id));
   } else {
     for (const r of result.core.activeRuns) shown.add(key('runs', r.id));
