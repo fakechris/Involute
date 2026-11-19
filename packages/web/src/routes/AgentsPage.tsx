@@ -1,3 +1,4 @@
+import { CombinedGraphQLErrors, ServerError } from '@apollo/client/errors';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { AgentTrustPanel, type AgentTrustView } from '../components/AgentTrustPanel';
 import { useMemo, useState, type ReactNode } from 'react';
@@ -207,7 +208,22 @@ function AgentProfile({ handle }: { handle: string }) {
   }
 
   if (error) {
-    return <AgentsStatePage title="Agent" back={backToAgents}><InlineError>Could not load this agent: {error.message}</InlineError></AgentsStatePage>;
+    const codes = CombinedGraphQLErrors.is(error) ? error.errors.map(({ extensions }) => extensions?.code) : [];
+    const status = ServerError.is(error) ? error.statusCode : null;
+    const signedOut = codes.includes('UNAUTHENTICATED') || status === 401;
+    const forbidden = codes.includes('FORBIDDEN') || status === 403;
+    return (
+      <AgentsStatePage title="Agent" back={backToAgents}>
+        <InlineError>
+          {signedOut ? 'Sign in to view this agent profile.'
+            : forbidden ? 'You don’t have access to this agent profile. Return to Agents to see the agents you can access.'
+              : 'Could not load this agent profile. Check your connection and try again.'}
+        </InlineError>
+        {!signedOut && !forbidden ? (
+          <Btn variant="subtle" onClick={() => void refetch().catch(() => undefined)}>Retry</Btn>
+        ) : null}
+      </AgentsStatePage>
+    );
   }
 
   const profile = data?.agentProfile;
@@ -216,7 +232,8 @@ function AgentProfile({ handle }: { handle: string }) {
     return (
       <AgentsStatePage title="Agent" back={backToAgents}>
         <EmptyState
-          title={`No agent matches “${handle}”.`}
+          title="Agent not found"
+          body={`“${handle}” may no longer exist or you may not have access. Return to Agents to see the agents you can access.`}
           action={<Btn variant="subtle" onClick={() => navigate('/agents')}>Back to agents</Btn>}
         />
       </AgentsStatePage>

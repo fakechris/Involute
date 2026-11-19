@@ -1138,6 +1138,7 @@ export interface IncidentSummaryData {
   mttmSampleCount: number;
   bySeverity: Array<{ severity: IssueSeverity | null; openCount: number; resolvedCount: number }>;
   byRepository: Array<{ repository: string | null; openCount: number; resolvedCount: number }>;
+  byProject: Array<{ project: { id: string; identifier: string; title: string } | null; openCount: number; resolvedCount: number }>;
   followUps: {
     total: number;
     completed: number;

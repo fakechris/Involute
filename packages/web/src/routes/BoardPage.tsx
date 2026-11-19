@@ -921,9 +921,10 @@ export function BoardPage() {
     },
     [baseIssues, boardViewState.query, visibleIssues],
   );
+  const [backlogVisibleIssues, setBacklogVisibleIssues] = useState<IssueSummary[]>([]);
   const boardVisibleIssues = useMemo(
-    () => applyBoardViewState(serverFilteredIssues, looksLikeIql(boardViewState.query) ? { ...boardViewState, query: '' } : boardViewState, users),
-    [serverFilteredIssues, boardViewState, users],
+    () => isBacklogView ? backlogVisibleIssues : applyBoardViewState(serverFilteredIssues, looksLikeIql(boardViewState.query) ? { ...boardViewState, query: '' } : boardViewState, users),
+    [isBacklogView, backlogVisibleIssues, serverFilteredIssues, boardViewState, users],
   );
   const boardViewTokens = useMemo(
     () => buildBoardViewSummary(boardViewState, selectedTeam, users, labels),
@@ -2698,7 +2699,7 @@ export function BoardPage() {
   }
 
   useEffect(() => {
-    if (isBacklogView || boardVisibleIssues.length === 0) {
+    if (boardVisibleIssues.length === 0) {
       return;
     }
 
@@ -2707,15 +2708,15 @@ export function BoardPage() {
       const isElementTarget = target instanceof HTMLElement;
       const tagName = isElementTarget ? target.tagName : null;
       const isTypingField =
-        tagName === 'INPUT' ||
+        (tagName === 'INPUT' && !['checkbox', 'radio'].includes((target as HTMLInputElement).type)) ||
         tagName === 'TEXTAREA' ||
         tagName === 'SELECT' ||
-        (isElementTarget && target.getAttribute('contenteditable') === 'true');
+        (isElementTarget && target.closest('[contenteditable]:not([contenteditable="false"])'));
 
-      if (isTypingField || selectedIssueId || isCreateOpen || picker) {
+      if (isTypingField || document.querySelector('[role="dialog"]:not(.issue-peek), dialog[open]') || selectedIssueId || isCreateOpen || picker) {
         return;
       }
-      if (isElementTarget && target.closest('.issue-peek button') && (event.key === ' ' || event.key === 'Enter')) return;
+      if (isElementTarget && target.closest('button, a[href], input, select, textarea, summary, [role="button"], [role="link"], [role="checkbox"], [role="radio"], [role="switch"]') && (event.key === ' ' || event.key === 'Enter')) return;
 
       // Copy the focused issue's identifier (⌘.) or link (⌘⇧, or ⌘⇧C) (INV-1087).
       if ((event.metaKey || event.ctrlKey) && focusedIssueId) {
@@ -3519,6 +3520,10 @@ export function BoardPage() {
           selectedTeam={selectedTeam}
           users={users}
           onSelectIssue={openIssue}
+          focusedIssueId={focusedIssueId}
+          selectedIds={selectedIssueIds}
+          setSelectedIds={setSelectedIssueIds}
+          onVisibleIssuesChange={setBacklogVisibleIssues}
           projectFilter={projectFilter}
           notices={notices}
           loading={loading && !queryData}

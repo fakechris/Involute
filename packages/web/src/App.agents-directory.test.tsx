@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
+import { AGENT_PROFILE_QUERY } from './board/queries';
 import { apolloMocks, boardQueryResult, mockSessionState, renderApp } from './test/app-test-helpers';
 
 const agents = [
@@ -34,13 +35,18 @@ describe('Agent directory (INV-607)', () => {
     });
   });
 
-  it('reaches a handle-less actor by id, and a handled one by handle', async () => {
+  it.each([
+    ['Antigravity', '8759ae98-0000-4000-8000-000000000001'],
+    ['Iris', 'iris'],
+  ])('looks up %s using %s', async (name, handle) => {
     signIn();
     renderApp({ data: boardQueryResult, agentsData: { agents }, loading: false }, ['/agents']);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Antigravity' }));
-    // The profile mock has no data, so the page reports what it looked up: the id, not a handle.
-    expect(await screen.findByText(/No agent matches “8759ae98-0000-4000-8000-000000000001”/)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name }));
+    await waitFor(() => expect(apolloMocks.useQuery).toHaveBeenCalledWith(
+      AGENT_PROFILE_QUERY,
+      expect.objectContaining({ variables: { handle } }),
+    ));
   });
 
   it('links credential issuing to the team settings Agents section (INV-850)', async () => {
