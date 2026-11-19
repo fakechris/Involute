@@ -722,6 +722,11 @@ select.control--ghost:focus-visible {
 }
 
 /* Team settings → Agents */
+.agents-tab__scopes {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .agents-tab__team {
   max-width: 320px;
   margin-bottom: 20px;

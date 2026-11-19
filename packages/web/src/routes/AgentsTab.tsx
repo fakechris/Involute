@@ -300,7 +300,11 @@ export function AgentsTab({ teamKey: fixedTeamKey }: { teamKey?: string } = {}) 
                 </span>
               ),
             },
-            { key: 'scopes', header: 'Scopes', width: '220px', render: (cred) => <span className="mono data-table__secondary">{cred.scopes.join(', ')}</span> },
+            {
+              key: 'scopes',
+              header: 'Scopes',
+              render: (cred) => <span className="mono data-table__secondary agents-tab__scopes">{cred.scopes.join(', ')}</span>,
+            },
             {
               key: 'actions',
               header: '',
