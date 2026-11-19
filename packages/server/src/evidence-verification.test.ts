@@ -200,7 +200,7 @@ describe('trusted evidence shadow integration', () => {
 
   it('freezes claim/semantic contract, appends observations, and never auto-accepts even CLEAR', async () => {
     const s = await setup();
-    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, status: 'completed' }, actor());
+    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, status: 'completed', followups: { noneReason: 'No follow-up work.' } }, actor());
     const run = await prisma.workRun.findUniqueOrThrow({ where: { id: s.run.id } });
     expect(run.claimId).toBeNull(); expect(run.claimSnapshotId).toBe(s.claim.id);
     const observation = await verifyEvidence(prisma, s.evidence.id, fixture().options);
@@ -237,7 +237,7 @@ describe('trusted evidence shadow integration', () => {
   it('head updates invalidate prior coverage and completed targets cannot be changed', async () => {
     const s = await setup();
     await verifyEvidence(prisma, s.evidence.id, fixture().options);
-    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, commitSha: 'b'.repeat(40), status: 'completed' }, actor());
+    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, commitSha: 'b'.repeat(40), status: 'completed', followups: { noneReason: 'No follow-up work.' } }, actor());
     expect((await tryAutoAccept(prisma, s.work.id, { runId: s.run.id }))?.grade.tier).not.toBe('CLEAR');
     // A completed run refuses a new target rather than silently ignoring it (INV-595).
     await expect(reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, commitSha: sha }, actor())).rejects.toThrow(WORK_RUN_TERMINAL_REPLAY_MESSAGE);
@@ -247,13 +247,13 @@ describe('trusted evidence shadow integration', () => {
   it('changing only the PR invalidates coverage for the previous PR at the same SHA', async () => {
     const s = await setup();
     await verifyEvidence(prisma, s.evidence.id, fixture().options);
-    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, pullRequestNumber: 5, status: 'completed' }, actor());
+    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, pullRequestNumber: 5, status: 'completed', followups: { noneReason: 'No follow-up work.' } }, actor());
     expect((await tryAutoAccept(prisma, s.work.id))?.grade.tier).not.toBe('CLEAR');
   });
 
   it('missing required criteria and unavailable refresh retain Review, preserving all observations', async () => {
     const s = await setup();
-    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, status: 'completed' }, actor());
+    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, status: 'completed', followups: { noneReason: 'No follow-up work.' } }, actor());
     const missing = fixture((path, data) => path.includes('/jobs?') ? { total_count: 0, jobs: [] } : data);
     await verifyEvidence(prisma, s.evidence.id, missing.options);
     expect((await tryAutoAccept(prisma, s.work.id))?.grade.tier).not.toBe('CLEAR');
@@ -266,7 +266,7 @@ describe('trusted evidence shadow integration', () => {
 
   it('human rejection during network verification prevents a new evaluation or acceptance', async () => {
     const s = await setup();
-    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, status: 'completed' }, actor());
+    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, status: 'completed', followups: { noneReason: 'No follow-up work.' } }, actor());
     let rejected = false;
     const f = fixture(async (_path, data) => {
       if (!rejected) {
@@ -284,7 +284,7 @@ describe('trusted evidence shadow integration', () => {
 
   it('a superseding claim invalidates the completed attempt; cross-run attachment is forbidden', async () => {
     const s = await setup();
-    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, status: 'completed' }, actor());
+    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, status: 'completed', followups: { noneReason: 'No follow-up work.' } }, actor());
     await verifyEvidence(prisma, s.evidence.id, fixture().options);
     await prisma.workClaim.create({ data: { workId: s.work.id, actorId: human.id, leaseUntil: new Date(Date.now() + 60000) } });
     expect((await tryAutoAccept(prisma, s.work.id))?.grade.tier).not.toBe('CLEAR');
@@ -316,7 +316,7 @@ describe('trusted evidence shadow integration', () => {
 
   it('rolls back the shadow evaluation and outbox with the caller transaction', async () => {
     const s = await setup();
-    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, status: 'completed' }, actor());
+    await reportRun(prisma, { claimToken: s.claimToken, workId: s.work.id, runId: s.run.id, status: 'completed', followups: { noneReason: 'No follow-up work.' } }, actor());
     await verifyEvidence(prisma, s.evidence.id, fixture().options);
     const before = await prisma.workAutoAcceptEvaluation.count();
     const events = await prisma.eventOutbox.count();

@@ -83,7 +83,7 @@ describe('work schedules (INV-1582)', () => {
     // The agent runs the round: claim, report with schedule_round; the work stays In Progress.
     const actor = writeActorFromViewer(agent, 'mcp');
     const claim = await claimWork(prisma, work.id, {}, actor);
-    await expect(reportRun(prisma, { workId: work.id, claimToken: claim.claimToken!, status: 'completed', summary: 'Checked.', scheduleRound: 2 }, actor)).rejects.toThrow(SCHEDULE_ROUND_MESSAGE);
+    await expect(reportRun(prisma, { workId: work.id, claimToken: claim.claimToken!, status: 'completed', followups: { noneReason: 'No follow-up work.' }, summary: 'Checked.', scheduleRound: 2 }, actor)).rejects.toThrow(SCHEDULE_ROUND_MESSAGE);
     const { run, work: after } = await reportRun(prisma, { workId: work.id, claimToken: claim.claimToken!, status: 'completed', summary: 'Checked 12 pages, nothing stale.', scheduleRound: 1, followups: { noneReason: 'Nothing stale.' } }, actor);
     expect(run).toMatchObject({ status: 'COMPLETED', scheduleRound: 1 });
     expect(after.stateId).toBe(work.stateId);
@@ -105,6 +105,6 @@ describe('work schedules (INV-1582)', () => {
   it('refuses a scheduled round on work without a schedule', async () => {
     const actor = writeActorFromViewer(agent, 'mcp');
     const claim = await claimWork(prisma, work.id, {}, actor);
-    await expect(reportRun(prisma, { workId: work.id, claimToken: claim.claimToken!, status: 'completed', summary: 'x', scheduleRound: 1 }, actor)).rejects.toThrow(SCHEDULE_ROUND_NO_SCHEDULE_MESSAGE);
+    await expect(reportRun(prisma, { workId: work.id, claimToken: claim.claimToken!, status: 'completed', followups: { noneReason: 'No follow-up work.' }, summary: 'x', scheduleRound: 1 }, actor)).rejects.toThrow(SCHEDULE_ROUND_NO_SCHEDULE_MESSAGE);
   });
 });

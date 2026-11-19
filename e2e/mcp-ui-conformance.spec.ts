@@ -113,7 +113,7 @@ test('agent and human complete the same work through real MCP and UI controls', 
   await page.getByRole('button', { name: 'Confirm retract', exact: true }).click();
   await expect.poll(async () => JSON.stringify((await context()).pages.evidence)).toContain('Human correction through the web');
   await f.call('evidence_attach', { ...runArgs, kind: 'test', url: 'https://example.test/corrected-again', idempotency_key: 'corrected-again' });
-  await f.call('run_report', { ...runArgs, status: 'completed', summary: 'Public conformance evidence attached' });
+  await f.call('run_report', { ...runArgs, status: 'completed', followups: { none_reason: 'No follow-up work.' }, summary: 'Public conformance evidence attached' });
   await expect(f.call('work_update', { id: work.id, expected_revision: (await context()).work.revision, state: 'DONE' })).rejects.toThrow();
   await page.reload();
   await expect(page.getByText('Wrong fixture artifact', { exact: false }).first()).toBeVisible();
@@ -123,7 +123,7 @@ test('agent and human complete the same work through real MCP and UI controls', 
   const retry = await f.call('work_claim', { id: work.id });
   const retryRun = (await f.call('run_report', { work_id: work.id, claim_token: retry.claim_token, status: 'running' })).run;
   await f.call('evidence_attach', { work_id: work.id, run_id: retryRun.id, claim_token: retry.claim_token, kind: 'test', url: 'https://example.test/retested' });
-  await f.call('run_report', { work_id: work.id, run_id: retryRun.id, claim_token: retry.claim_token, status: 'completed' });
+  await f.call('run_report', { work_id: work.id, run_id: retryRun.id, claim_token: retry.claim_token, status: 'completed', followups: { none_reason: 'No follow-up work.' } });
   await page.reload();
   await page.getByRole('button', { name: 'Accept', exact: true }).click();
   await expect.poll(async () => (await context()).reviewDecisions[0]?.decision).toBe('ACCEPTED');
