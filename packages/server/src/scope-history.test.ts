@@ -222,7 +222,11 @@ describe('milestone scope replay', () => {
       audit('a2', 'a', 5, state('m', 'missing'), state()),
     ]);
     expect(values(result)).toEqual([
-      [null, null], [null, null], [null, null], [null, null], [1, 1], [1, 1], [1, 1],
+      [1, 1], [1, 1], [null, null], [null, null], [1, 1], [1, 1], [1, 1],
+    ]);
+    expect(result.coverage.baseline).toEqual(at(1));
+    expect(result.coverage.gaps).toEqual([
+      { start: at(3), end: at(5), workId: 'a', reason: 'UNKNOWN_STATE' },
     ]);
   });
 

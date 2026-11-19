@@ -272,7 +272,7 @@ export function replayMilestoneScope(input: ScopeHistoryInput): ScopeHistoryResu
     const afterMembers = membership();
     if (!typeOf(audit.after)) {
       gaps.push({
-        start: prior?.createdAt ?? audit.createdAt,
+        start: audit.createdAt,
         end: null,
         workId: audit.workId,
         reason: 'UNKNOWN_STATE',
