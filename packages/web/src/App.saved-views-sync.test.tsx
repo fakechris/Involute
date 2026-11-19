@@ -1,6 +1,6 @@
 import type { ApolloClient } from '@apollo/client';
 import { ApolloProvider } from '@apollo/client/react';
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The helpers mock Apollo's hooks; they load before App so App sees the mocks.
@@ -87,6 +87,47 @@ describe('saved views server sync in the running app (INV-1196)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
     await waitFor(() => expect(server.views.map((view) => view.name)).toEqual(['Saved on the board']));
+  });
+
+  it('restores the same Board state filter from the saved view card and the Board dropdown', async () => {
+    const server = fakeServer();
+    const viewName = 'Ready queue';
+    vi.spyOn(window, 'prompt').mockReturnValue(viewName);
+    window.localStorage.setItem(ACTIVE_TEAM_STORAGE_KEY, 'INV');
+    signIn('user-a', 'Alice');
+    const openApp = () => renderApp(server.Device, { data: boardQueryResult, loading: false }, ['/']);
+    openApp();
+    await screen.findByRole('button', { name: 'Sign out' });
+    await waitFor(() => expect(savedViewsQueries(server.query)).toHaveLength(1));
+
+    const readyFilter = () => screen.queryByRole('button', { name: 'Remove State: Ready' });
+    const expectReadyOnly = () => {
+      expect(readyFilter()).toBeInTheDocument();
+      expect(within(screen.getByTestId('column-Ready')).getByText('Ready item')).toBeInTheDocument();
+      expect(screen.queryByTestId('issue-card-issue-1')).not.toBeInTheDocument();
+    };
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+    fireEvent.click(within(screen.getByLabelText('Board filters')).getByRole('button', { name: 'States' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Ready' }));
+    expectReadyOnly();
+    fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+    await waitFor(() => expect(server.views.map((view) => view.name)).toEqual([viewName]));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(readyFilter()).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Load saved board view'), { target: { value: server.views[0]!.id } });
+    expectReadyOnly();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(readyFilter()).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('link', { name: 'Views' }));
+    const card = await screen.findByLabelText(`View ${viewName}`);
+    fireEvent.click(within(card).getByRole('button', { name: /Ready queue/ }));
+    await waitFor(expectReadyOnly);
+
+    cleanup();
+    openApp();
+    await waitFor(expectReadyOnly);
   });
 
   it('does not sync before an account is known, and stops when the app goes away', async () => {

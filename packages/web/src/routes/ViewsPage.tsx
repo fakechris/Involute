@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { SAVED_VIEW_DELETE_MUTATION, SAVED_VIEW_UPSERT_MUTATION } from '../work/queries';
 
-import { readSavedBoardViews, writeSavedBoardViews, BOARD_SAVED_VIEWS_EVENT, dispatchApplyBoardView, type SavedBoardView } from '../board/views';
+import { readSavedBoardViews, writeSavedBoardViews, BOARD_SAVED_VIEWS_EVENT, writeStoredBoardViewState, type SavedBoardView } from '../board/views';
 import { readSavedBacklogViews, writeSavedBacklogViews, BACKLOG_SAVED_VIEWS_EVENT, dispatchApplyBacklogView, type SavedBacklogView } from '../backlog/views';
 import { readStoredTeamKey } from '../board/utils';
 import { SAVED_VIEWS_ACCOUNT_EVENT } from '../lib/saved-views-account';
@@ -135,7 +135,8 @@ export function ViewsPage() {
                   className="views-card__open"
                   onClick={() => {
                     if (v.kind === 'Board') {
-                      dispatchApplyBoardView({ state: (v.view as SavedBoardView).state, viewId: v.id });
+                      // The Board is not mounted yet; it reads the active filters from storage on entry.
+                      writeStoredBoardViewState(teamKey, (v.view as SavedBoardView).state);
                     } else {
                       dispatchApplyBacklogView({ state: (v.view as SavedBacklogView).state, viewId: v.id });
                     }
