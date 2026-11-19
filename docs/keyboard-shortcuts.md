@@ -56,7 +56,7 @@
 | <kbd>G</kbd> <kbd>W</kbd> | 视图列表 (Views) | 打开自定义保存的看板/列表视图（`/views`） |
 | <kbd>G</kbd> <kbd>E</kbd> | 成员团队 (Members) | 打开团队成员与权限管理（`/members`） |
 | <kbd>G</kbd> <kbd>S</kbd> | 系统设置 (Settings) | 打开系统与偏好设置（`/settings`） |
-| <kbd>G</kbd> <kbd>A</kbd> | 访问密钥 (Access) | 打开 Agent Token 与 API 密钥设置（`/settings/access`） |
+| <kbd>G</kbd> <kbd>A</kbd> | 团队设置 (Team settings) | 打开当前团队的设置；Agent 凭证在其中的 **Agents** 管理 |
 
 ### 3.2 全局动作（Global Actions）
 无需前缀，直接触发（聚焦在文本输入框、下拉框或组合输入时不生效）。
