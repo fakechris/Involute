@@ -1,4 +1,5 @@
 import { deliveryLinksMissingWarning } from './delivery-links.js';
+import { loadMilestoneBurndown } from './scope-query.js';
 import { requestNeedInfo, withdrawNeedInfo } from './need-info-service.js';
 import { delegateToAgent } from './autonomy-delegation.js';
 import { autonomyToGraphQL, loadAutonomyFor } from './autonomy-service.js';
@@ -88,6 +89,7 @@ import { parseFoundInSha } from './found-in.js';
 export type McpToolName =
   | 'work_search'
   | 'work_catalog'
+  | 'work_burndown'
   | 'work_read_page'
   | 'work_executor_context'
   | 'work_executor_update'
@@ -130,6 +132,7 @@ export type McpToolName =
 // Order matches MCP_TOOL_DEFINITIONS, which is the order `listMcpTools`
 // returns them in.
 export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
+  'work_burndown',
   'work_search',
   'work_catalog',
   'work_read_page',
@@ -980,6 +983,12 @@ async function callMcpAction(
       const timeline = await workTimelineFor(context, requiredString(args.work_id, 'work_id'), { starredOnly: args.starred_only === true });
       return { work_id: timeline.workId, identifier: timeline.identifier, truncated: timeline.truncated, entries: timeline.entries.map(timelineEntryForMcp) };
     }
+    case 'work_burndown': {
+      return loadMilestoneBurndown(context.prisma, buildReadableIssueWhere(context) ?? {}, {
+        milestoneId: requiredString(args.milestone_id, 'milestone_id'), from: requiredString(args.from, 'from'), to: requiredString(args.to, 'to'),
+        timeZone: optionalString(args.time_zone) ?? null, idealStart: optionalString(args.ideal_start) ?? null, idealEnd: optionalString(args.ideal_end) ?? null,
+      });
+    }
     case 'work_postmortem_draft': {
       const draft = await postmortemDraftFor(context, requiredString(args.work_id, 'work_id'));
       return {
@@ -1273,6 +1282,15 @@ async function callMcpAction(
 }
 
 const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
+  {
+    name: 'work_burndown',
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    description: 'Replay milestone scope history (definition version 1). Counts committed ISSUE descendants except canceled work, with unknown daily values where audit history is missing. Inclusive calendar dates in an IANA timezone (UTC default), at most 366 days. Ideal is an optional reference, not a forecast.',
+    inputSchema: { type: 'object', properties: {
+      milestone_id: { type: 'string', description: 'Milestone UUID or identifier.' }, from: { type: 'string' }, to: { type: 'string' },
+      time_zone: { type: 'string' }, ideal_start: { type: 'string' }, ideal_end: { type: 'string' },
+    }, required: ['milestone_id', 'from', 'to'] },
+  },
   {
     name: 'work_search',
     annotations: { readOnlyHint: true, destructiveHint: false },
@@ -2093,6 +2111,7 @@ function assignOptional<T extends object, K extends keyof T>(
 // at issuance. `work_commit` stays human-only via actorKind gates, so it maps
 // to no scope.
 const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
+  work_burndown: 'read',
   work_search: 'read',
   work_executor_context: 'read',
   work_executor_update: 'report',

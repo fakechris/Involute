@@ -442,6 +442,55 @@ explicit offsets when constructing the window (including DST changes)
 and display returned timestamps with the viewer's timezone; do not
 subtract formatted local times to compute durations.
 
+### `milestoneBurndown(milestoneId: String!, from: String!, to: String!, timeZone: String, idealStart: String, idealEnd: String)`
+
+INV-268, definition version `1`. Signed-in, read-only; `milestoneId` accepts a
+MILESTONE UUID or identifier. MCP exposes the same result as `work_burndown`
+(`milestone_id`, `from`, `to`, `time_zone`, `ideal_start`, `ideal_end`). Only
+readable work contributes; a missing or unreadable target is refused.
+
+- Scope counts **ISSUE descendants**, including nested epic issues and subissues,
+  not EPIC/MILESTONE containers. Replayed parent chains define membership;
+  moving an epic emits derived ADD/REMOVE events for its affected issues.
+  Scope is committed members excluding CANCELED; remaining excludes COMPLETED
+  as well. Cancel removes scope, reopen restores it. This is a count, not points
+  or effort, and differs from leaf-only progress rollups.
+- Candidates are current descendants (parentId or CONTAINS), plus the fixed-point
+  closure of historical before/after parent references into that set. Current
+  state is never substituted for a historical snapshot. Replay sorts all audits
+  by recorded `createdAt`, then audit ID, and assigns stable zero-based event
+  sequences, breaking derived-event ties by work ID and transition type order.
+  Candidates provably created at or after window end are excluded, so adding
+  work later does not invalidate an already observed historical window.
+- Events are ADD/REMOVE/COMMIT/UNCOMMIT/COMPLETE/CANCEL/REOPEN, with milestone,
+  work, identifier, effectiveAt, recordedAt and source audit/actor/surface/reason.
+  **effectiveAt always equals recordedAt (audit createdAt)**. Repair/import/
+  migration/backfill surfaces are flagged `backfilled`; this is evidence of a
+  recorded repair, never an invented original occurrence timestamp. Existing
+  graph repairs use `graph-migration` / `graph-migration-rollback`.
+- `from` and `to` are inclusive YYYY-MM-DD calendar dates, at most 366 days.
+  `timeZone` is an IANA timezone, default UTC. Window start is local midnight of
+  from; end is local midnight after to. Each point's `at` is the next local
+  midnight, **exclusive**: only events strictly before it count. DST days may
+  contain 23 or 25 hours. Days without a resolvable midnight are refused.
+- Coverage returns FULL/PARTIAL/NONE, baseline, gaps, candidate `memberCount`
+  (including containers), unknownWorkCount and backfilledEventCount. A candidate
+  with a creation audit is known from that audit; otherwise from its first
+  audit. Baseline is the latest of those first observations advanced past any
+  gap covering that instant, null if no common known instant exists or any
+  candidate has no history. Missing creation opens an unbounded-start gap; no audits opens
+  an unbounded gap. Disagreement between replay state and audit before on parent,
+  commitment or state opens `[previous audit, this audit)`. An unmappable state
+  opens a gap until a mapped state is observed. Null gap endpoints mean unbounded.
+  Points before baseline, inside a gap or after now have null scope/remaining.
+  No candidates returns NO_MEMBERS; candidates without any audits return
+  NO_HISTORY. Events include all recorded transitions before window end.
+- Ideal is only a **REFERENCE**, never a forecast. Both ideal dates must be
+  supplied, start before end, with a known baseline at or before idealStart's
+  local midnight. It interpolates remaining at that exclusive instant to zero
+  at idealEnd's local midnight; points outside that interval or after now are
+  null. Otherwise result `ideal` and point ideals are null.
+
 ### `teams(filter: TeamFilter)`
 
 Returns visible teams.

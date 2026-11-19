@@ -205,6 +205,8 @@ import { snapshotContract } from './evidence-contract.js';
 import { loadBugMetrics, type BugMetrics } from './bug-metrics.js';
 import { loadIncidentSummary } from './incident-metrics.js';
 import { loadDeliveryLatency } from './latency-query.js';
+import { loadMilestoneBurndown } from './scope-query.js';
+import type { ScopeWindowInput } from './scope-history.js';
 import { currentTriager, parseRotation, setTriageRotation } from './bug-triage.js';
 import { releaseClaim } from './claim-release.js';
 import { restoreWork } from './work-restore.js';
@@ -556,6 +558,7 @@ const typeDefs = /* GraphQL */ `
     incidentSummary(teamFilter: TeamFilter): IncidentSummaryResult!
     "Replay delivery latency for readable issues in a team (INV-267). Percentiles use all qualifying acceptances in [start, end); item details are paged."
     deliveryLatency(teamKey: String!, start: DateTime!, end: DateTime!, first: Int! = 50, after: String, repository: String, sample: DeliveryLatencySample): DeliveryLatencyResult!
+    milestoneBurndown(milestoneId: String!, from: String!, to: String!, timeZone: String, idealStart: String, idealEnd: String): MilestoneBurndownResult!
     "Open bugs whose titles share words with the given title, best match first (INV-749)."
     similarBugs(teamId: String!, title: String!, first: Int): [Issue!]!
     "The readable PROJECT whose webOrigins include this page origin (normalized to scheme://host[:port]); null when none (INV-1146)."
@@ -2271,6 +2274,18 @@ const typeDefs = /* GraphQL */ `
     start: DateTime!
     end: DateTime!
   }
+
+  type BurndownMilestone { id: ID!, identifier: String! }
+  type BurndownWindow { from: String!, to: String!, timeZone: String!, start: DateTime!, end: DateTime! }
+  enum ScopeCoverageStatus { FULL PARTIAL NONE }
+  enum ScopeEventType { ADD REMOVE COMMIT UNCOMMIT COMPLETE CANCEL REOPEN }
+  type ScopeGap { start: DateTime, end: DateTime, workId: ID!, reason: String! }
+  type ScopeCoverage { status: ScopeCoverageStatus!, baseline: DateTime, gaps: [ScopeGap!]!, memberCount: Int!, unknownWorkCount: Int!, backfilledEventCount: Int! }
+  type ScopeEventSource { auditId: ID!, surface: String, actorKind: String!, actorId: ID, reason: String }
+  type ScopeEvent { sequence: Int!, milestoneId: ID!, workId: ID!, identifier: String!, type: ScopeEventType!, effectiveAt: DateTime!, recordedAt: DateTime!, backfilled: Boolean!, source: ScopeEventSource! }
+  type BurndownPoint { date: String!, at: DateTime!, scope: Int, remaining: Int, ideal: Float }
+  type BurndownIdeal { kind: String!, start: DateTime!, end: DateTime! }
+  type MilestoneBurndownResult { definitionVersion: String!, milestone: BurndownMilestone!, window: BurndownWindow!, coverage: ScopeCoverage!, emptyReason: String, ideal: BurndownIdeal, points: [BurndownPoint!]!, events: [ScopeEvent!]! }
 
   type DeliveryLatencyCoverage {
     workCount: Int!
@@ -4251,6 +4266,10 @@ const resolvers = {
     ) => {
       requireAuthentication(context);
       return loadDeliveryLatency(context.prisma, buildReadableIssueWhere(context) ?? {}, args);
+    },
+    milestoneBurndown: async (_parent: unknown, args: ScopeWindowInput & { milestoneId: string }, context: GraphQLContext) => {
+      requireAuthentication(context);
+      return loadMilestoneBurndown(context.prisma, buildReadableIssueWhere(context) ?? {}, args);
     },
     projectForOrigin: async (
       _parent: unknown,

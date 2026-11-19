@@ -35,6 +35,7 @@ export const PAIRS: Record<string, string> = {
  * the parity test, as a mutation would.
  */
 export const READ_PAIRS: Record<string, string[]> = {
+  work_burndown: ['milestoneBurndown'],
   work_search: ['search', 'issues'],
   work_catalog: ['teams', 'issueLabels', 'cycles', 'users', 'agents', 'viewerCapabilities', 'incidentSummary'],
   work_read_page: ['deliveryChanges'],
