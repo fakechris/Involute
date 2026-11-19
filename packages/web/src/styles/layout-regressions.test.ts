@@ -36,4 +36,13 @@ describe('layout regressions (INV-1311)', () => {
     expect(ruleBody(css, '.page-toolbar__filters')).toMatch(/display:\s*contents/);
     expect(ruleBody(css, '.page-toolbar__view')).toMatch(/margin-left:\s*auto/);
   });
+
+  it('lets a Files or Commits & links row grow around its thumbnail and preview', () => {
+    // Both reused the 30px one-line sub-issue row: a 160px thumbnail and an open
+    // Markdown preview drew over the rows and the section below.
+    const css = readSheet('app.css');
+    const body = ruleBody(css, '.work-links__row,\n.work-files__row');
+    expect(body).toMatch(/height:\s*auto/);
+    expect(body).toMatch(/flex-wrap:\s*wrap/);
+  });
 });

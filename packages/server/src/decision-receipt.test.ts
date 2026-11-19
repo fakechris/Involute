@@ -210,6 +210,7 @@ describe('receipts on run_report (INV-588)', () => {
     const { work } = await reportRun(prisma, { claimToken,
       receipt: { reasoning: 'Tests green; moving to review.', evidence: [{ kind: 'commit', ref: 'a'.repeat(40), version: 'a'.repeat(40) }] },
       status: 'completed',
+      followups: { noneReason: 'No follow-up work.' },
       summary: 'done',
       workId: created.id,
     }, { actorId: mia.id, actorKind: 'AGENT', sessionId: 'sess-r', surface: 'test' });

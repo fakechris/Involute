@@ -74,7 +74,7 @@ export function WorkFiles({ workId, files, onChanged }: { workId: string; files:
       <h2>Files · {files.length}</h2>
       <ul className="issue-children" role="list" aria-label="Files">
         {files.map((file) => (
-          <li key={file.id} role="listitem" className="issue-children__row">
+          <li key={file.id} role="listitem" className="issue-children__row work-files__row">
             {showThumb(file) ? (
               <SafeImage src={file.url} alt={file.filename} className="work-files__thumb" onOpen={() => setViewing(file)} />
             ) : null}

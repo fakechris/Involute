@@ -81,7 +81,7 @@ describe('run activity and staleness (INV-996)', () => {
     expect(runPresence(await prisma.workRun.findUniqueOrThrow({ where: { id: run.id } }))).toBe('live');
     expect(await sweepStaleRuns(prisma)).toBe(0);
 
-    await reportRun(prisma, { workId: work.id, claimToken: claim.claimToken!, status: 'completed', summary: 'Done.' }, actor);
+    await reportRun(prisma, { workId: work.id, claimToken: claim.claimToken!, status: 'completed', followups: { noneReason: 'No follow-up work.' }, summary: 'Done.' }, actor);
     const ended = await prisma.workRun.findUniqueOrThrow({ where: { id: run.id } });
     await prisma.workRun.update({ where: { id: run.id }, data: { lastActivityAt: new Date(Date.now() - 2 * HOUR) } });
     expect(runPresence({ ...ended, lastActivityAt: new Date(0) })).toBe('settled');

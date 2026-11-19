@@ -204,6 +204,7 @@ import { loadReviewWaits } from './review-wait.js';
 import { snapshotContract } from './evidence-contract.js';
 import { loadBugMetrics, type BugMetrics } from './bug-metrics.js';
 import { loadIncidentSummary } from './incident-metrics.js';
+import { loadDeliveryLatency } from './latency-query.js';
 import { currentTriager, parseRotation, setTriageRotation } from './bug-triage.js';
 import { releaseClaim } from './claim-release.js';
 import { restoreWork } from './work-restore.js';
@@ -553,6 +554,8 @@ const typeDefs = /* GraphQL */ `
     bugSummary(teamFilter: TeamFilter): BugSummaryResult!
     "Incident counts, MTTR / MTTM averages and follow-up progress for the /incidents page (INV-1129). Readable, committed Type: Incident work only; declined and duplicate incidents are not counted."
     incidentSummary(teamFilter: TeamFilter): IncidentSummaryResult!
+    "Replay delivery latency for readable issues in a team (INV-267). Percentiles use all qualifying acceptances in [start, end); item details are paged."
+    deliveryLatency(teamKey: String!, start: DateTime!, end: DateTime!, first: Int! = 50, after: String): DeliveryLatencyResult!
     "Open bugs whose titles share words with the given title, best match first (INV-749)."
     similarBugs(teamId: String!, title: String!, first: Int): [Issue!]!
     "The readable PROJECT whose webOrigins include this page origin (normalized to scheme://host[:port]); null when none (INV-1146)."
@@ -2262,6 +2265,99 @@ const typeDefs = /* GraphQL */ `
   type PageInfo {
     hasNextPage: Boolean!
     endCursor: String
+  }
+
+  type DeliveryLatencyWindow {
+    start: DateTime!
+    end: DateTime!
+  }
+
+  type DeliveryLatencyCoverage {
+    workCount: Int!
+    noHistoryCount: Int!
+    openEpisodeCount: Int!
+    closedWithoutAcceptanceCount: Int!
+    unknownEpisodeCount: Int!
+  }
+
+  type DeliveryLatencySampleCoverage {
+    acceptedCount: Int!
+    missingCount: Int!
+  }
+
+  enum DeliveryLatencyEmptyReason {
+    NO_ACCEPTED_EPISODES
+    INSUFFICIENT_HISTORY
+  }
+
+  type DeliveryLatencyPercentiles {
+    p50Ms: Float
+    p90Ms: Float
+    sampleCount: Int!
+    emptyReason: DeliveryLatencyEmptyReason
+    coverage: DeliveryLatencySampleCoverage!
+    window: DeliveryLatencyWindow!
+    definitionVersion: String!
+  }
+
+  enum DeliveryEpisodeStart {
+    COMMITTED
+    REOPENED
+    UNKNOWN
+  }
+
+  enum DeliveryEpisodeOutcome {
+    ACCEPTED
+    OPEN
+    CLOSED
+    UNKNOWN
+  }
+
+  type DeliveryLatencyEpisode {
+    start: DeliveryEpisodeStart!
+    startedAt: DateTime
+    acceptedAt: DateTime
+    outcome: DeliveryEpisodeOutcome!
+    historyGap: Boolean!
+    leadTimeMs: Float
+    cycleTimeMs: Float
+    reviewWaitMs: Float
+    ageMs: Float
+  }
+
+  type DeliveryRunElapsed {
+    id: ID!
+    elapsedMs: Float
+  }
+
+  type DeliveryRunWallClock {
+    elapsed: [DeliveryRunElapsed!]!
+    wallClockSumMs: Float
+    wallClockUnionMs: Float
+    finishedCount: Int!
+    unfinishedCount: Int!
+    invalidCount: Int!
+    humanActualWorkMs: Float
+    agentActualComputeMs: Float
+  }
+
+  type DeliveryLatencyWork {
+    id: ID!
+    identifier: String!
+    noHistory: Boolean!
+    episodes: [DeliveryLatencyEpisode!]!
+    runs: DeliveryRunWallClock!
+  }
+
+  type DeliveryLatencyResult {
+    definitionVersion: String!
+    window: DeliveryLatencyWindow!
+    coverage: DeliveryLatencyCoverage!
+    leadTime: DeliveryLatencyPercentiles!
+    cycleTime: DeliveryLatencyPercentiles!
+    reviewWait: DeliveryLatencyPercentiles!
+    nodes: [DeliveryLatencyWork!]!
+    pageInfo: PageInfo!
   }
 
   type CandidateProjectSummary {
@@ -4115,6 +4211,14 @@ const resolvers = {
           ? { team: { is: { key: { in: teamKeyIn } } } }
           : {};
       return loadIncidentSummary(context.prisma, { ...teamClause, ...(readableWhere ?? {}) });
+    },
+    deliveryLatency: async (
+      _parent: unknown,
+      args: { teamKey: string; start: Date; end: Date; first: number; after?: string | null },
+      context: GraphQLContext,
+    ) => {
+      requireAuthentication(context);
+      return loadDeliveryLatency(context.prisma, buildReadableIssueWhere(context) ?? {}, args);
     },
     projectForOrigin: async (
       _parent: unknown,

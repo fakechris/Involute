@@ -46,23 +46,23 @@ describe('work execution ownership (INV-943)', () => {
     const second = await claimWork(prisma, work.id, { executionId: 'session-b' }, asAgent());
     expect(second.claimToken).not.toBe(first.claimToken);
     await expect(reportRun(prisma, { workId: work.id, claimToken: first.claimToken, status: 'running' }, asAgent())).rejects.toThrow(/execution|lease/i);
-    await expect(reportRun(prisma, { workId: work.id, runId: run.id, claimToken: first.claimToken, status: 'completed' }, asAgent())).rejects.toThrow();
+    await expect(reportRun(prisma, { workId: work.id, runId: run.id, claimToken: first.claimToken, status: 'completed', followups: { noneReason: 'No follow-up work.' } }, asAgent())).rejects.toThrow();
     await expect(reportRun(prisma, { workId: work.id, claimToken: second.claimToken, status: 'running' }, asAgent())).resolves.toBeTruthy();
   });
   it('rejects expired reports and evidence, then fences the old generation after recovery', async () => {
     const first = await claimWork(prisma, work.id, {}, asAgent());
     const { run } = await reportRun(prisma, { workId: work.id, claimToken: first.claimToken, status: 'running' }, asAgent());
     await prisma.workClaim.update({ where: { id: first.claim.id }, data: { leaseUntil: new Date(0) } });
-    await expect(reportRun(prisma, { workId: work.id, runId: run.id, claimToken: first.claimToken, status: 'completed' }, asAgent())).rejects.toThrow(/claim/i);
+    await expect(reportRun(prisma, { workId: work.id, runId: run.id, claimToken: first.claimToken, status: 'completed', followups: { noneReason: 'No follow-up work.' } }, asAgent())).rejects.toThrow(/claim/i);
     await expect(attachEvidence(prisma, { workId: work.id, runId: run.id, claimToken: first.claimToken, kind: 'test', url: 'https://example.com/result' }, asAgent())).rejects.toThrow(/lease/i);
     const second = await claimWork(prisma, work.id, {}, asAgent());
     expect(second.claim.id).not.toBe(first.claim.id);
-    await expect(reportRun(prisma, { workId: work.id, runId: run.id, claimToken: first.claimToken, status: 'completed' }, asAgent())).rejects.toThrow(/claim/i);
+    await expect(reportRun(prisma, { workId: work.id, runId: run.id, claimToken: first.claimToken, status: 'completed', followups: { noneReason: 'No follow-up work.' } }, asAgent())).rejects.toThrow(/claim/i);
   });
 
   it('allows correction of owned evidence before acceptance, without deleting history', async () => {
     const { claimToken } = await claimWork(prisma, work.id, {}, asAgent());
-    const { run } = await reportRun(prisma, { workId: work.id, claimToken, status: 'completed' }, asAgent());
+    const { run } = await reportRun(prisma, { workId: work.id, claimToken, status: 'completed', followups: { noneReason: 'No follow-up work.' } }, asAgent());
     const { evidence } = await attachEvidence(prisma, { workId: work.id, runId: run.id, claimToken, kind: 'test', url: 'https://example.com/wrong' }, asAgent());
     await expect(retractEvidence(prisma, { evidenceId: evidence.id, reason: 'Wrong link' }, asAgent())).rejects.toThrow(/execution/i);
     await retractEvidence(prisma, { evidenceId: evidence.id, claimToken, reason: 'Wrong link' }, asAgent());
@@ -99,7 +99,7 @@ describe('work execution ownership (INV-943)', () => {
 
   it('revokes historical evidence authority when another execution takes over', async () => {
     const { claimToken } = await claimWork(prisma, work.id, {}, asAgent());
-    const { run } = await reportRun(prisma, { workId: work.id, claimToken, status: 'completed' }, asAgent());
+    const { run } = await reportRun(prisma, { workId: work.id, claimToken, status: 'completed', followups: { noneReason: 'No follow-up work.' } }, asAgent());
     const { evidence } = await attachEvidence(prisma, { workId: work.id, runId: run.id, claimToken, kind: 'test', url: 'https://example.com/old' }, asAgent());
     const ready = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'UNSTARTED' } });
     await prisma.issue.update({ where: { id: work.id }, data: { stateId: ready.id } });
@@ -111,7 +111,7 @@ describe('work execution ownership (INV-943)', () => {
   it('allows correction of new evidence after an earlier accepted delivery is reopened', async () => {
     await prisma.workReviewDecision.create({ data: { workId: work.id, reviewerId: admin.id, decision: 'ACCEPTED', fromRevision: 1, toRevision: 2, createdAt: new Date(0) } });
     const { claimToken } = await claimWork(prisma, work.id, {}, asAgent());
-    const { run } = await reportRun(prisma, { workId: work.id, claimToken, status: 'completed' }, asAgent());
+    const { run } = await reportRun(prisma, { workId: work.id, claimToken, status: 'completed', followups: { noneReason: 'No follow-up work.' } }, asAgent());
     const { evidence } = await attachEvidence(prisma, { workId: work.id, runId: run.id, claimToken, kind: 'test', url: 'https://example.com/new' }, asAgent());
     await expect(retractEvidence(prisma, { evidenceId: evidence.id, claimToken, reason: 'Correct the new delivery' }, asAgent())).resolves.toMatchObject({ retractReason: 'Correct the new delivery' });
   });
@@ -130,7 +130,7 @@ describe('work execution ownership (INV-943)', () => {
 
   it('protects an accepted run even when its decision timestamp precedes the evidence', async () => {
     const { claimToken } = await claimWork(prisma, work.id, {}, asAgent());
-    const { run } = await reportRun(prisma, { workId: work.id, claimToken, status: 'completed' }, asAgent());
+    const { run } = await reportRun(prisma, { workId: work.id, claimToken, status: 'completed', followups: { noneReason: 'No follow-up work.' } }, asAgent());
     const { evidence } = await attachEvidence(prisma, { workId: work.id, runId: run.id, claimToken, kind: 'test', url: 'https://example.com/accepted' }, asAgent());
     await prisma.workReviewDecision.create({ data: { workId: work.id, runId: run.id, reviewerId: admin.id, decision: 'ACCEPTED', fromRevision: 1, toRevision: 2, createdAt: new Date(0) } });
     await expect(retractEvidence(prisma, { evidenceId: evidence.id, claimToken, reason: 'Must retain accepted facts' }, asAgent())).rejects.toThrow(/person/i);
