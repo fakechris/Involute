@@ -76,7 +76,7 @@ export function replayDeliveryLatency(audits: readonly LatencyAudit[], end: Date
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const episodes: DeliveryEpisode[] = [];
   const seen = new Set<string>();
-  const revisions = new Set(ordered.map(({ revision }) => revision));
+  const recordedRevisions = new Set(ordered.filter(({ revision, beforeRevision }) => revision !== beforeRevision).map(({ revision }) => revision));
   let previous: LatencyAudit | undefined;
   let episode: Episode | undefined;
   for (const row of ordered) {
@@ -90,7 +90,7 @@ export function replayDeliveryLatency(audits: readonly LatencyAudit[], end: Date
     const commit = committed && (creation || (before?.commitmentStatus != null && before.commitmentStatus !== 'COMMITTED'));
     const reopen = committed && !commit && terminal(before?.stateType ?? null) && after.stateType !== null && !terminal(after.stateType);
     const transition = creation || (before?.stateId != null && before.stateId !== after.stateId);
-    const missingPredecessor = !creation && (row.beforeRevision === null || !revisions.has(row.beforeRevision));
+    const missingPredecessor = !creation && (row.beforeRevision === null || !recordedRevisions.has(row.beforeRevision));
     if (!transition && before !== null && before.stateId === after.stateId
       && before.commitmentStatus === after.commitmentStatus && !missingPredecessor) continue;
     const gap = missingPredecessor || (previous !== undefined &&

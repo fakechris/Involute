@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import { PrismaClient, type WorkflowStateType } from '@prisma/client';
 import { afterAll, expect, it } from 'vitest';
 
 import { DEFAULT_ADMIN_EMAIL, resetAndSeed } from '../prisma/seed-helpers.js';
+import { recordRequestAudit } from './agent-request-service.js';
 import { startServer } from './index.js';
 import { createIssue, updateIssue } from './issue-service.js';
 import { createSession } from './session.js';
@@ -46,11 +48,19 @@ it('replays stored audit and run data for a shared project, with stable pages an
   const open = await work('Readable and open at cutoff', repo, 8);
   const missing = await work('No audit history', repo);
   await prisma.workAudit.deleteMany({ where: { workId: missing.id } });
+  const imported = await prisma.issue.create({
+    data: { identifier: 'LAT-1000', title: 'Imported before auditing', teamId: team.id, repository: repo, stateId: states.get('STARTED')!, createdAt: at(0) },
+  });
+  const requestAuditId = await prisma.$transaction((tx) => recordRequestAudit(tx, {
+    actor, event: 'answered', request: { id: randomUUID(), workId: imported.id },
+  }));
+  await prisma.workAudit.update({ where: { id: requestAuditId }, data: { createdAt: at(3) } });
   const hidden = await work('Unshared delivery', 'metrics/unshared', 5);
   await prisma.workRun.createMany({
     data: [
       { workId: delivered.id, publicId: 'latency-run-a', startedAt: at(1), endedAt: at(3) },
       { workId: delivered.id, publicId: 'latency-run-b', startedAt: at(2), endedAt: at(4) },
+      { workId: imported.id, publicId: 'latency-run-imported', startedAt: at(1), endedAt: at(2) },
     ],
   });
 
@@ -65,7 +75,7 @@ it('replays stored audit and run data for a shared project, with stable pages an
         leadTime { sampleCount p50Ms p90Ms emptyReason coverage { acceptedCount missingCount } }
         cycleTime { sampleCount p50Ms }
         reviewWait { sampleCount p50Ms }
-        nodes { id noHistory episodes { outcome ageMs leadTimeMs cycleTimeMs reviewWaitMs } runs { wallClockSumMs wallClockUnionMs humanActualWorkMs agentActualComputeMs } }
+        nodes { id noHistory episodes { outcome historyGap ageMs leadTimeMs cycleTimeMs reviewWaitMs } runs { wallClockSumMs wallClockUnionMs humanActualWorkMs agentActualComputeMs } }
         pageInfo { endCursor hasNextPage }
       }
     }`;
@@ -86,7 +96,7 @@ it('replays stored audit and run data for a shared project, with stable pages an
       };
     };
 
-    const expectedIds = [delivered.id, open.id, missing.id].sort();
+    const expectedIds = [delivered.id, open.id, missing.id, imported.id].sort();
     const nodes = new Map<string, unknown>();
     let after: string | undefined;
     for (const [index, id] of expectedIds.entries()) {
@@ -95,7 +105,7 @@ it('replays stored audit and run data for a shared project, with stable pages an
       const data = body.data!.deliveryLatency;
       expect(data).toMatchObject({
         definitionVersion: '1', window: { start: at(4).toISOString(), end: at(8).toISOString() },
-        coverage: { workCount: 3, noHistoryCount: 1, openEpisodeCount: 1 },
+        coverage: { workCount: 4, noHistoryCount: 1, openEpisodeCount: 2 },
         leadTime: { sampleCount: 1, p50Ms: 4 * HOUR, p90Ms: 4 * HOUR, emptyReason: null, coverage: { acceptedCount: 1, missingCount: 0 } },
         cycleTime: { sampleCount: 1, p50Ms: 3 * HOUR }, reviewWait: { sampleCount: 1, p50Ms: 2 * HOUR },
         nodes: [{ id }], pageInfo: { hasNextPage: index < expectedIds.length - 1 },
@@ -109,6 +119,10 @@ it('replays stored audit and run data for a shared project, with stable pages an
     });
     expect(nodes.get(open.id)).toMatchObject({ episodes: [{ outcome: 'OPEN', ageMs: 8 * HOUR, leadTimeMs: null }] });
     expect(nodes.get(missing.id)).toMatchObject({ noHistory: true, episodes: [] });
+    expect(nodes.get(imported.id)).toMatchObject({
+      noHistory: false, episodes: [{ outcome: 'OPEN', historyGap: true, ageMs: null, leadTimeMs: null, cycleTimeMs: null, reviewWaitMs: null }],
+      runs: { wallClockSumMs: HOUR, wallClockUnionMs: HOUR },
+    });
     expect(nodes.has(hidden.id)).toBe(false);
     expect((await request(after)).data?.deliveryLatency.nodes).toEqual([]);
     expect((await request(after, at(9))).errors?.[0]?.message).toContain('Invalid delivery latency page cursor');
