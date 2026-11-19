@@ -147,7 +147,7 @@ it('discards older milestone and window responses', async () => {
   expect(screen.queryByText(/Definition 2026-03-04/)).not.toBeInTheDocument();
   await screen.findByText(/Definition 2026-03-02/);
   resolveOld({ milestoneBurndown: fixture({ definitionVersion: 'stale' }) });
-  await waitFor(() => expect(requests).toHaveLength(4));
+  await waitFor(() => expect(requests.filter(request => request.name === 'DeliveryMilestoneBurndown')).toHaveLength(3));
   expect(screen.queryByText(/Definition stale/)).not.toBeInTheDocument();
 });
 it('retries the selected milestone with the same window rather than reverting to the first milestone', async () => {
@@ -176,6 +176,30 @@ it('keeps other milestones reachable after a selected milestone becomes unreadab
   fireEvent.change(screen.getByRole('combobox', { name: 'Burndown milestone' }), { target: { value: 'm2' } });
   await screen.findByRole('img', { name: /Milestone burndown/ });
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.getByRole('combobox')).toHaveValue('m2');
+});
+it('refreshes the milestone list on window changes while preserving a selection that still exists', async () => {
+  const requests = mount();
+  fireEvent.change(await screen.findByRole('combobox'), { target: { value: 'm2' } });
+  await screen.findByRole('img', { name: /Milestone burndown/ });
+  fireEvent.click(screen.getByText('Change window'));
+  await waitFor(() => expect(requests.filter(request => request.name === 'BurndownMilestones')).toHaveLength(2));
+  expect(await screen.findByRole('combobox')).toHaveValue('m2');
+});
+it.each(['window change', 'retry'])('drops a deleted milestone from the refreshed list after a %s', async action => {
+  let deleted = false;
+  mount(async request => {
+    if (request.name === 'BurndownMilestones' && deleted) return {
+      issues: { nodes: [milestones[1]], pageInfo: { hasNextPage: false, endCursor: null } },
+    };
+    if (request.name === 'DeliveryMilestoneBurndown' && request.variables.milestoneId === 'm1') throw new Error('Readable milestone not found.');
+    return defaultReply(request);
+  });
+  await screen.findByRole('alert');
+  deleted = true;
+  fireEvent.click(action === 'retry' ? screen.getByRole('button', { name: 'Retry burndown' }) : screen.getByText('Change window'));
+  await screen.findByRole('img', { name: /Milestone burndown/ });
+  expect(screen.queryByRole('option', { name: /First milestone/ })).not.toBeInTheDocument();
   expect(screen.getByRole('combobox')).toHaveValue('m2');
 });
 it('never shows the previous project after a project switch', async () => {

@@ -142,7 +142,6 @@ export function MilestoneBurndown({ teamKey, repository, start, end }: { teamKey
     let active = true;
     setMilestones(null);
     setListError('');
-    setSelected('');
     async function load() {
       try {
         let after: string | null = null;
@@ -160,12 +159,15 @@ export function MilestoneBurndown({ teamKey, repository, start, end }: { teamKey
           nodes.push(...page.nodes);
           after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
         } while (after);
-        if (active) { setMilestones(nodes); setSelected(nodes[0]?.id ?? ''); }
+        if (active) {
+          setMilestones(nodes);
+          setSelected(previous => nodes.some(node => node.id === previous) ? previous : nodes[0]?.id ?? '');
+        }
       } catch (error) { if (active) setListError(error instanceof Error ? error.message : 'Could not load milestones.'); }
     }
     void load();
     return () => { active = false; };
-  }, [client, teamKey, repository, listAttempt]);
+  }, [client, teamKey, repository, listAttempt, window]);
   useEffect(() => {
     if (!selected || !variables) return;
     let active = true;
@@ -179,8 +181,8 @@ export function MilestoneBurndown({ teamKey, repository, start, end }: { teamKey
   const current = result?.key === requestKey ? result : null;
   function retry() {
     setResult(null);
-    if (listError) setListAttempt(value => value + 1);
-    else setAttempt(value => value + 1);
+    setListAttempt(value => value + 1);
+    setAttempt(value => value + 1);
   }
   return (
     <section aria-label="Burndown">

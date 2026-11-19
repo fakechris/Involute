@@ -171,7 +171,7 @@ it('loads every drill-down page and reconciles episodes rather than items', asyn
   fireEvent.click(link);
   expect(list).toBeInTheDocument();
 });
-it('keeps the selected milestone mounted across latency drill-down and window reloads', async () => {
+it('keeps the selected milestone across latency drill-down and window reloads', async () => {
   mount(async () => fixture(), '', defaultProjects, [
     { id: 'm1', identifier: 'INV-10', title: 'First milestone' },
     { id: 'm2', identifier: 'INV-20', title: 'Second milestone' },
@@ -184,8 +184,7 @@ it('keeps the selected milestone mounted across latency drill-down and window re
   expect(select).toHaveValue('m2');
   fireEvent.click(screen.getByRole('button', { name: '7d' }));
   await screen.findByLabelText('Completed sample latency');
-  expect(screen.getByRole('combobox', { name: 'Burndown milestone' })).toBe(select);
-  expect(select).toHaveValue('m2');
+  expect(await screen.findByRole('combobox', { name: 'Burndown milestone' })).toHaveValue('m2');
 });
 it('sorts open items by known age descending and leaves unknown age explicit', async () => {
   mount(async () => fixture({ nodes: [work('1', 1, null), work('2', 1, 9 * 3_600_000), work('3', 1, 3_600_000)] }), 'OPEN');
