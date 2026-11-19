@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useQuery } from '@apollo/client/react';
 
 import { IncidentsPage } from './IncidentsPage';
+import { IncidentTimesPanel } from '../components/IncidentTimesPanel';
 import { expectRowOpensDrawer, renderWithDrawerHost } from '../test/drawer-host-harness';
 
 vi.mock('../components/RouteIssueDrawer', () => import('../test/route-issue-drawer-stub'));
@@ -52,6 +53,21 @@ afterEach(() => {
 });
 
 describe('IncidentsPage (INV-1129)', () => {
+  it.each([[0, '0m'], [29, '0m'], [30, '1m'], [59, '1m'], [60, '1m'], [61, '1m'], [90, '2m']])('rounds %i seconds consistently with incident detail', (seconds, expected) => {
+    const start = '2026-10-01T00:00:00.000Z';
+    const end = new Date(Date.parse(start) + Number(seconds) * 1000).toISOString();
+    serve({ incidentSummary: {
+      ...summary,
+      mttrHours: Number(seconds) / 3600, mttrSampleCount: 1,
+      mttmHours: Number(seconds) / 3600, mttmSampleCount: 1,
+      incidents: [{ ...summary.incidents[2], impactStartedAt: start, resolvedAt: end, impactHours: Number(seconds) / 3600 }],
+    } });
+    render(<MemoryRouter><IncidentsPage /><IncidentTimesPanel work={{ impactStartedAt: start, detectedAt: start, mitigatedAt: end, resolvedAt: end }} onUpdate={vi.fn()} /></MemoryRouter>);
+    expect(screen.getByText(`Impact ${expected} · mitigated after ${expected}`)).toBeInTheDocument();
+    expect(within(screen.getByTestId('incident-INV-1')).getByText(String(expected))).toBeInTheDocument();
+    expect(within(screen.getByLabelText('Incident statistics')).getAllByText(`${expected} (n=1)`)).toHaveLength(2);
+  });
+
   it('shows counts, MTTR / MTTM with sample sizes, follow-up rates and the incident list', () => {
     serve({ incidentSummary: summary });
     render(

@@ -122,6 +122,17 @@ describe('incident summary (INV-1129)', () => {
     expect(byId.get(c.id)!.impactHours).toBeCloseTo((now.getTime() - at(20).getTime()) / HOUR, 1);
   });
 
+  it.each([0, 29, 30, 59, 60, 61, 90])('preserves %i seconds for impact and single-sample averages', async (seconds) => {
+    const end = new Date(base + seconds * 1000);
+    const issue = await incident('Short incident', 'SEV3', { impactStartedAt: at(0), mitigatedAt: end, resolvedAt: end });
+    const summary = await loadIncidentSummary(prisma, { id: issue.id }, end);
+    expect(summary.mttrHours).toBe(seconds / 3600);
+    expect(summary.mttmHours).toBe(seconds / 3600);
+    expect(summary.mttrSampleCount).toBe(1);
+    expect(summary.mttmSampleCount).toBe(1);
+    expect(summary.incidents[0].impactHours).toBe(seconds / 3600);
+  });
+
   it('is empty with no incidents: zero counts and null averages', async () => {
     expect(await loadIncidentSummary(prisma, {})).toEqual({
       openCount: 0,
