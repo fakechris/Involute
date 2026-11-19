@@ -38,7 +38,7 @@ const defaultProjects = [
   { repository: 'acme/a', name: 'Project A', identifier: 'INV-100', totalCount: 7 },
   { repository: 'acme/b', name: 'Project B', identifier: 'INV-200', totalCount: 12 },
 ];
-function mount(reply: Reply, sample = '', projects = defaultProjects) {
+function mount(reply: Reply, sample = '', projects = defaultProjects, milestones: { id: string; identifier: string; title: string }[] = []) {
   const requests: Record<string, unknown>[] = [];
   const client = new ApolloClient({ cache: new InMemoryCache(), link: new ApolloLink((operation) => new Observable((observer) => {
     if (operation.operationName === 'DeliveryProjects') {
@@ -46,7 +46,15 @@ function mount(reply: Reply, sample = '', projects = defaultProjects) {
       observer.next({ data: { projectSummary: { totalCount, noRepositoryCount: 3, projects } } }); observer.complete(); return;
     }
     if (operation.operationName === 'BurndownMilestones') {
-      observer.next({ data: { issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } } }); observer.complete(); return;
+      observer.next({ data: { issues: { nodes: milestones, pageInfo: { hasNextPage: false, endCursor: null } } } }); observer.complete(); return;
+    }
+    if (operation.operationName === 'DeliveryMilestoneBurndown') {
+      observer.next({ data: { milestoneBurndown: {
+        definitionVersion: '1', milestone: { id: operation.variables.milestoneId, identifier: 'INV-10' },
+        window: { from: '2026-03-01', to: '2026-03-31', timeZone: 'UTC', start, end },
+        coverage: { status: 'FULL', baseline: start, memberCount: 0, unknownWorkCount: 0, backfilledEventCount: 0, gaps: [] },
+        emptyReason: 'NO_MEMBERS', points: [],
+      } } }); observer.complete(); return;
     }
     requests.push(operation.variables);
     void reply(operation.variables).then((data) => { observer.next({ data: { deliveryLatency: data } }); observer.complete(); }, (error) => observer.error(error));
@@ -162,6 +170,22 @@ it('loads every drill-down page and reconciles episodes rather than items', asyn
   const link = within(list).getByRole('link', { name: /INV-1 Work 1/ });
   fireEvent.click(link);
   expect(list).toBeInTheDocument();
+});
+it('keeps the selected milestone mounted across latency drill-down and window reloads', async () => {
+  mount(async () => fixture(), '', defaultProjects, [
+    { id: 'm1', identifier: 'INV-10', title: 'First milestone' },
+    { id: 'm2', identifier: 'INV-20', title: 'Second milestone' },
+  ]);
+  const select = await screen.findByRole('combobox', { name: 'Burndown milestone' });
+  fireEvent.change(select, { target: { value: 'm2' } });
+  fireEvent.click(await screen.findByRole('link', { name: /Lead time/ }));
+  await screen.findByLabelText('Delivery drill-down');
+  expect(screen.getByRole('combobox', { name: 'Burndown milestone' })).toBe(select);
+  expect(select).toHaveValue('m2');
+  fireEvent.click(screen.getByRole('button', { name: '7d' }));
+  await screen.findByLabelText('Completed sample latency');
+  expect(screen.getByRole('combobox', { name: 'Burndown milestone' })).toBe(select);
+  expect(select).toHaveValue('m2');
 });
 it('sorts open items by known age descending and leaves unknown age explicit', async () => {
   mount(async () => fixture({ nodes: [work('1', 1, null), work('2', 1, 9 * 3_600_000), work('3', 1, 3_600_000)] }), 'OPEN');

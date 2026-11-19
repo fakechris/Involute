@@ -428,8 +428,10 @@ export function DeliveryPage() {
                 )}
               </section>
             ) : null}
-            <MilestoneBurndown key={`${teamKey}:${project}`} teamKey={teamKey} repository={project} start={start} end={end} />
           </div>
+        ) : null}
+        {teamKey ? (
+          <MilestoneBurndown key={`${teamKey}:${project}`} teamKey={teamKey} repository={project} start={start} end={end} />
         ) : null}
       </PageBody>
     </div>
