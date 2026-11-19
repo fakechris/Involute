@@ -97,9 +97,10 @@ test.describe('board flow', () => {
   });
 
   test('shows the selected project without a repository on the first open (INV-1943)', async ({ page, request }) => {
-    const projectTitle = `Manual acceptance ${Date.now()}`;
+    const suffix = Date.now().toString(36);
+    const projectTitle = `Manual acceptance ${suffix}`;
     const project = await createProject(request, projectTitle);
-    const issueTitle = 'Manual first task';
+    const issueTitle = `Manual first task ${suffix}`;
 
     await page.goto('/');
     await page.getByRole('button', { name: 'Create issue' }).click();
