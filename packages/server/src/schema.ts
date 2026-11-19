@@ -2385,10 +2385,18 @@ const typeDefs = /* GraphQL */ `
     totalCount: Int!
   }
 
+  "A committed PROJECT with no GitHub repository (INV-1918); new work goes under it as No milestone."
+  type ProjectWithoutRepository {
+    identifier: String!
+    name: String!
+  }
+
   type ProjectSummaryResult {
     totalCount: Int!
     noRepositoryCount: Int!
     projects: [ProjectSummaryItem!]!
+    "Projects with no repository, which projects (grouped by repository) cannot list."
+    projectsWithoutRepository: [ProjectWithoutRepository!]!
   }
 
   input StringComparator {
@@ -4093,6 +4101,7 @@ const resolvers = {
         identifier: string | null;
         totalCount: number;
       }>;
+      projectsWithoutRepository: Array<{ identifier: string; name: string }>;
     }> => {
       const readableWhere = buildReadableIssueWhere(context);
       const teamKey = args.teamFilter?.key?.eq;
@@ -4129,6 +4138,18 @@ const resolvers = {
           title: true,
           repository: true,
         },
+      });
+
+      const unboundProjectNodes = await context.prisma.issue.findMany({
+        where: {
+          commitmentStatus: 'COMMITTED',
+          kind: 'PROJECT',
+          repository: null,
+          ...teamClause,
+          ...(readableWhere ? readableWhere : {}),
+        },
+        select: { identifier: true, title: true },
+        orderBy: { title: 'asc' },
       });
 
       const projectMap = new Map(
@@ -4168,6 +4189,10 @@ const resolvers = {
         totalCount,
         noRepositoryCount,
         projects,
+        projectsWithoutRepository: unboundProjectNodes.map((project) => ({
+          identifier: project.identifier,
+          name: project.title,
+        })),
       };
     },
     search: async (

@@ -181,6 +181,27 @@ describe('GraphQL mutations', () => {
     expect(rejected.body.data.issueCreate).toMatchObject({ success: false, message: expect.stringContaining('rejected') });
   });
 
+  it('places created work under a project with no repository, as No milestone (INV-1918)', async () => {
+    const create = (input: Record<string, unknown>) =>
+      postGraphQL({
+        query: `mutation($input: IssueCreateInput!) { issueCreate(input: $input) { success message issue { id repository parent { id } } } }`,
+        variables: { input: { teamId: fixture.team.id, ...input } },
+      });
+    const project = await createIssue(prisma, { teamId: fixture.team.id, kind: 'PROJECT', title: 'E2E Demo Project', repository: null });
+
+    const placed = await create({ title: 'Loose issue', parentId: project.identifier });
+    expect(placed.body.errors).toBeUndefined();
+    expect(placed.body.data.issueCreate).toMatchObject({ success: true, message: null, issue: { repository: null, parent: { id: project.id } } });
+    const link = await prisma.workLink.findFirst({ where: { fromId: project.id, toId: placed.body.data.issueCreate.issue.id, type: 'CONTAINS' } });
+    expect(link).not.toBeNull();
+
+    const blank = await create({ title: 'Blank repository', parentId: project.identifier, repository: '' });
+    expect(blank.body.data.issueCreate).toMatchObject({ success: true, issue: { repository: null, parent: { id: project.id } } });
+
+    const bound = await create({ title: 'Has a repository', parentId: project.identifier, repository: 'acme/app' });
+    expect(bound.body.data.issueCreate).toMatchObject({ success: false, issue: null, message: expect.stringContaining('repository') });
+  });
+
   it('says why a refused mutation was refused, not only success false (INV-795)', async () => {
     const response = await postGraphQL({
       query: `mutation { commentDelete(id: "00000000-0000-0000-0000-000000000000") { success message } }`,

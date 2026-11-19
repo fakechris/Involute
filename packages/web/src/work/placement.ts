@@ -14,8 +14,49 @@ export interface CreatePlacement {
 export type PlacementSource = 'context' | 'board' | 'last';
 
 export interface PlaceableProject {
-  repository: string;
+  /** Null for a project with no GitHub repository (INV-1918); it still takes new work. */
+  repository: string | null;
   identifier: string | null;
+}
+
+/**
+ * Every project new work may go under: those with a repository from
+ * projectSummary.projects, then those without one (INV-1918).
+ */
+export function placementProjects(
+  summary:
+    | {
+        projects?: Array<PlaceableProject & { name: string }> | null;
+        projectsWithoutRepository?: Array<{ identifier: string; name: string }> | null;
+      }
+    | null
+    | undefined,
+): Array<PlaceableProject & { name: string }> {
+  return [
+    ...(summary?.projects ?? []),
+    ...(summary?.projectsWithoutRepository ?? []).map((project) => ({
+      repository: null,
+      identifier: project.identifier,
+      name: project.name,
+    })),
+  ];
+}
+
+/** The picker's value for a project: its repository, or its identifier when it has none. */
+export function placementProjectKey(project: PlaceableProject): string {
+  return project.repository || `project:${project.identifier ?? ''}`;
+}
+
+/** The project a placement is in. Without a repository, only directly under the project is known. */
+export function findPlacementProject<T extends PlaceableProject>(projects: T[], placement: CreatePlacement | null): T | undefined {
+  if (!placement) return undefined;
+  if (placement.repository) return projects.find((project) => project.repository === placement.repository && project.identifier);
+  return projects.find((project) => !project.repository && project.identifier === placement.parentId);
+}
+
+/** Directly under the project, shown as "No milestone". */
+export function projectPlacement(project: PlaceableProject | undefined): CreatePlacement | null {
+  return project?.identifier ? { repository: project.repository ?? '', parentId: project.identifier } : null;
 }
 
 const STORAGE_PREFIX = 'involute.createPlacement.';
@@ -89,7 +130,7 @@ export function resolveInitialPlacement(input: {
     const board = noMilestonePlacement(input.projects, input.boardRepository);
     if (board) return { placement: board, source: 'board' };
   }
-  if (input.last && input.projects.some((project) => project.repository === input.last!.repository && project.identifier)) {
+  if (input.last && findPlacementProject(input.projects, input.last)) {
     return { placement: input.last, source: 'last' };
   }
   return null;

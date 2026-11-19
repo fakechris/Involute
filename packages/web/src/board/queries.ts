@@ -132,6 +132,10 @@ export const BOARD_PAGE_QUERY = gql(`
         identifier
         totalCount
       }
+      projectsWithoutRepository {
+        identifier
+        name
+      }
     }
     teams {
       nodes {
@@ -527,6 +531,7 @@ export const ISSUE_DETAIL_QUERY = gql`
       attributes
       fieldDefinitions { key label description type required searchable options { value label archived } }
       description
+      parent { id identifier title }
       outcome
       scope
       constraints

@@ -324,6 +324,50 @@ describe('App issue creation', () => {
     expect(createIssue.mock.calls[0]![0].variables.input).toMatchObject({ title: '不做：自动同步定价页', kind: 'DECISION', parentId: 'INV-79' });
   });
 
+  it('creates an issue in a project with no repository, at No milestone (INV-1918)', async () => {
+    const createIssue = mockCreate();
+    renderApp(
+      {
+        data: {
+          ...boardQueryResult,
+          projectSummary: {
+            totalCount: 0,
+            noRepositoryCount: 1,
+            projects: [],
+            projectsWithoutRepository: [{ identifier: 'INV-5', name: 'E2E Demo Project' }],
+          },
+        },
+        loading: false,
+        placementData,
+      },
+      ['/'],
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create issue' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Create issue drawer' });
+    expect(within(dialog).queryByRole('note')).not.toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText('Issue title'), { target: { value: 'Loose issue' } });
+    const project = within(dialog).getByLabelText('Project') as HTMLSelectElement;
+    expect(within(project).getByRole('option', { name: 'E2E Demo Project' })).toBeInTheDocument();
+    fireEvent.change(project, { target: { value: 'project:INV-5' } });
+
+    const location = within(dialog).getByLabelText('Location') as HTMLSelectElement;
+    expect(location).toBeEnabled();
+    expect(location.value).toBe('INV-5');
+    expect(within(location).getAllByRole('option').map((option) => option.textContent)).toEqual(['No milestone']);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create issue' }));
+
+    await waitFor(() =>
+      expect(createIssue).toHaveBeenCalledWith({
+        variables: { input: { teamId: 'team-1', title: 'Loose issue', parentId: 'INV-5' } },
+      }),
+    );
+    expect(JSON.parse(window.localStorage.getItem('involute.createPlacement.INV') ?? 'null')).toEqual({
+      repository: '',
+      parentId: 'INV-5',
+    });
+  });
+
   it('asks for a project first when the team has none', async () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
     fireEvent.click(await screen.findByRole('button', { name: 'Create issue' }));

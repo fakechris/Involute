@@ -72,7 +72,7 @@ export const WORK_COMMIT_PARENT_REJECTED_MESSAGE = 'The parent of committed work
 // Hierarchy rules (graph-integrity.ts), exposed so mutations can say why.
 export const CONTAINS_KINDS_MESSAGE =
   'CONTAINS allows PROJECT → MILESTONE/DECISION/EPIC/ISSUE, MILESTONE → EPIC/ISSUE, EPIC → ISSUE, ISSUE → ISSUE.';
-export const CONTAINS_REPOSITORY_REQUIRED_MESSAGE = 'CONTAINS requires an explicit repository on both endpoints.';
+export const CONTAINS_REPOSITORY_REQUIRED_MESSAGE = 'CONTAINS needs the same repository on both endpoints, or none on either.';
 export const CONTAINS_REPOSITORY_WHITESPACE_MESSAGE = 'CONTAINS repository values must not have surrounding whitespace.';
 export const CONTAINS_CROSS_REPOSITORY_MESSAGE = 'CONTAINS cannot cross repository boundaries.';
 export const CONTAINS_MULTIPLE_PARENTS_MESSAGE = 'CONTAINS cannot have multiple parents; use an explicit parent update.';

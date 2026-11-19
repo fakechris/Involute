@@ -12,7 +12,7 @@ import type {
 } from '../board/types';
 import { SEVERITY_OPTIONS } from '../board/severity';
 import { isTypeLabel } from '../work/labels';
-import { readLastPlacement, rememberPlacement, resolveInitialPlacement, type CreatePlacement, type PlacementSource } from '../work/placement';
+import { readLastPlacement, rememberPlacement, resolveInitialPlacement, type CreatePlacement, type PlaceableProject, type PlacementSource } from '../work/placement';
 import { Checkbox, Field, Select, TextArea, TextInput } from './controls';
 import { DialogShell } from './DialogShell';
 import { PlacementPicker } from './PlacementPicker';
@@ -24,7 +24,7 @@ interface ReportIncidentDialogProps {
   isOpen: boolean;
   teamId: string;
   teamKey: string;
-  projects: ProjectSummaryItem[];
+  projects: Array<PlaceableProject & { name: string }>;
   labels: LabelSummary[];
   /** The board's project filter, to start the report there. */
   boardRepository?: string | null;

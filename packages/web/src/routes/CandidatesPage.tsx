@@ -19,7 +19,7 @@ export const COMMIT_CANDIDATE_EVENT = 'involute:commit-candidate';
 /** H on a focused candidate in Needs you snoozes it for a week, the card's shortest Snooze (INV-1092). */
 export const SNOOZE_CANDIDATE_EVENT = 'involute:snooze-candidate';
 import { PlacementPicker } from '../components/PlacementPicker';
-import type { CreatePlacement } from '../work/placement';
+import { placementProjects, type CreatePlacement } from '../work/placement';
 import { DialogFields, missingRequiredFields, type FieldValues } from '../components/DialogFields';
 import { ResolutionSelect, type WorkResolution } from '../components/CloseReasonDialog';
 import {
@@ -336,7 +336,7 @@ function UnscopedParentField({ candidate, onChange }: { candidate: CandidateWork
     <div className="observation-field observation-parent observation-parent--missing" aria-label={`Parent for ${candidate.identifier}`}>
       <span>Parent (required to commit)</span>
       <PlacementPicker
-        projects={data?.projectSummary?.projects ?? []}
+        projects={placementProjects(data?.projectSummary)}
         value={placement}
         source={null}
         onChange={(next) => {

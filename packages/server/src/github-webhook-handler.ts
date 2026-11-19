@@ -22,6 +22,13 @@ import { emitOpsAlert, type DeferredOpsAlert, type OpsAlert } from './ops-alerts
 import { acceptGitHubDelivery, InboundRequestError, safeErrorCode } from './github-inbound.js';
 import { enqueueWorkEvent } from './event-outbox.js';
 import { applyInstallationEvent, installationMayRoute } from './github-connections.js';
+import { resumeGitHubRepoSync } from './github-sync.js';
+
+/** repository.full_name from any webhook payload shape, when present. */
+function readWebhookRepository(payload: unknown): string | null {
+  const repo = (payload as { repository?: { full_name?: unknown } } | null)?.repository;
+  return typeof repo?.full_name === 'string' && repo.full_name.trim() ? repo.full_name : null;
+}
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 interface GitHubProcessingOptions { deferredAlerts?: DeferredOpsAlert[]; }
@@ -229,6 +236,11 @@ export async function handleGitHubWebhook(
     catch { throw new InboundRequestError(400, 'INVALID_JSON'); }
     const eventType = request.headers['x-github-event'];
     if (typeof eventType !== 'string' || !eventType) throw new InboundRequestError(400, 'MISSING_EVENT_TYPE');
+    // Any authenticated webhook mentioning a repo means it exists again (or the
+    // credential now sees it): clear the 404 skip marker so periodic
+    // reconciliation resumes without operator action (INV-1842).
+    const webhookRepo = readWebhookRepository(payload);
+    if (webhookRepo) await resumeGitHubRepoSync(options.prisma, webhookRepo);
     // An App installation removed, suspended or restored changes the team's connection (INV-1677).
     if (eventType === 'installation') {
       await applyInstallationEvent(options.prisma, payload);

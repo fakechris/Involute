@@ -4,7 +4,14 @@ import { Link } from 'react-router-dom';
 
 import { PLACEMENT_OPTIONS_QUERY } from '../work/queries';
 import type { PlacementOptionsQueryData, WorkKind } from '../work/types';
-import { noMilestonePlacement, type CreatePlacement, type PlaceableProject, type PlacementSource } from '../work/placement';
+import {
+  findPlacementProject,
+  placementProjectKey,
+  projectPlacement,
+  type CreatePlacement,
+  type PlaceableProject,
+  type PlacementSource,
+} from '../work/placement';
 import { Select } from './controls';
 
 interface PlacementPickerProps {
@@ -64,7 +71,8 @@ export function PlacementPicker({
       // A labelled current parent is already listed once.
       !(value?.parentLabel && option.id === value.parentId),
   );
-  const project = placeable.find((candidate) => candidate.repository === repository);
+  // A project without a repository (INV-1918) offers No milestone only.
+  const project = findPlacementProject(placeable, value);
   // A remembered milestone may have been finished or removed since.
   const knownLocation =
     !value || value.parentLabel || value.parentId === project?.identifier || containers.some((option) => option.id === value.parentId);
@@ -90,13 +98,15 @@ export function PlacementPicker({
         </span>
         <Select
           aria-label="Project"
-          value={repository}
+          value={project ? placementProjectKey(project) : repository}
           disabled={disabled}
-          onChange={(event) => onChange(event.target.value ? noMilestonePlacement(placeable, event.target.value) : null)}
+          onChange={(event) =>
+            onChange(projectPlacement(placeable.find((candidate) => placementProjectKey(candidate) === event.target.value)))
+          }
         >
           <option value="">Choose a project</option>
           {placeable.map((candidate) => (
-            <option key={candidate.repository} value={candidate.repository}>
+            <option key={placementProjectKey(candidate)} value={placementProjectKey(candidate)}>
               {candidate.name}
             </option>
           ))}
@@ -107,10 +117,10 @@ export function PlacementPicker({
         <Select
           aria-label="Location"
           value={value?.parentId ?? ''}
-          disabled={disabled || !repository}
+          disabled={disabled || (!repository && !project)}
           onChange={(event) => onChange({ repository, parentId: event.target.value })}
         >
-          {!repository ? <option value="">Choose a project first</option> : null}
+          {!repository && !project ? <option value="">Choose a project first</option> : null}
           {value?.parentLabel ? <option value={value.parentId}>{value.parentLabel}</option> : null}
           {project?.identifier ? (
             <option value={project.identifier}>{kind === 'ISSUE' || kind === 'EPIC' ? 'No milestone' : 'Directly in the project'}</option>

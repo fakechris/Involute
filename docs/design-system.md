@@ -65,7 +65,7 @@
 11. **工单号与项目各只有一种显示**（INV-1536）：
     - 文字里出现的工单号（描述、评论、通知、提示、被拒原因）一律经 `WorkReferenceText`（Markdown 里由 `MarkdownRenderer` 自动处理），单个引用用 `WorkReference`。服务端确认是工单才变链接，悬浮显示卡片；**单击在当前页打开抽屉**（`?issue=`，与 ListRow 同一规则），⌘/Ctrl/Shift/中键交给浏览器开整页；显示 issue 本身的路由（`/issue/:id`、Backlog）单击进整页。卡片内容 60 秒后再次悬浮会重新取。任何显示某个工单的悬停（图上的节点、行、标签）都用同一张工单卡：`useWorkHoverCard()`，把 `anchorProps(identifier)` 挂到 HTML 或 SVG 元素上、在任意位置渲染 `card`（INV-1544）；不用原生 `title` / SVG `<title>` 显示工单。不要自写正则或拼 `/issue/` 链接；需要解析时用 `work/work-reference.ts` 的 `findWorkReferences` / `isWorkIdentifier` / `splitLeadingReference`。
     - 被拒的保存一律用 `RefusalNotice`（INV-1534 / INV-1535）：看板与 issue 整页用 `placement="floating"`（固定在视口底部，可关闭），抽屉用 `placement="panel"`（标题下方）；原因经 `WorkReferenceText` 渲染，服务端给出 `next { label path }` 时显示按钮直达（如 "Go to In Review" → `/in-review?focus=INV-972`）。服务端用 `createValidationError(message, { next })` 给出去处。
-    - 工单所属项目一律用 `ProjectBadge`（短名 + 稳定配色，悬浮完整仓库；`emptyLabel` 显示 "No project"；`onSelect` 让它成为筛选控件）。工单详情（抽屉与整页）标题行、看板卡片、Backlog 表格、Projects 列表都用它。
+    - 工单所属项目一律用 `ProjectBadge`（短名 + 稳定配色，悬浮完整仓库；`emptyLabel` 显示 "No project"；没有仓库的项目（INV-1918）传 `name` 显示项目标题；`onSelect` 让它成为筛选控件）。工单详情（抽屉与整页）标题行、看板卡片、Backlog 表格、Projects 列表都用它。
 
 ---
 
@@ -88,6 +88,7 @@
 | `PullRequestList` / `PullRequestBadge` | `components/PullRequestLinks.tsx` + `styles/app.css`（`.pull-requests*`、`.pull-request-badge*`） | 在属性栏、卡片里各自拼 PR 链接和状态（INV-1703；数据用 `Issue.pullRequests`） |
 | `WorkLinks` | `components/WorkLinks.tsx` + `styles/app.css`（`.work-links__*`） | 在工单页 / 抽屉里各自拼 commit、PR、证据链接（INV-1673） |
 | `SafeImage` / `ImageViewer` | `components/SafeImage.tsx` + `components/ImageViewer.tsx` + `styles/content.css`（`.safe-image`、`.image-viewer*`） | 正文里的裸 `<img>`；只把本站上传和允许的对象存储地址渲染成图片。点击后在当前页放大，可左右旋转 90 度并缩放；不允许的地址仍是链接 |
+| `IssuePeek` | `components/IssuePeek.tsx` + `board/issue-peek-edit.ts` + `styles/app.css`（`.issue-peek__*`） | 看板速览卡片。描述用显式 Save / Cancel，冲突时并列服务器正文和草稿，切换或关闭保留未保存的草稿（INV-271） |
 | `WorkFiles` | `components/WorkFiles.tsx` + `styles/content.css`（`.work-files__*`） | 工单页只在有文件时列出文件名链接 |
 | `ProjectBadge`（`getProjectColorClass`） | `components/ProjectBadge.tsx` + `styles/app.css`（`.project-badge`、`.proj-color-*`） | `IssueCard` 内联徽章、各页复制的 `issue-card__repo-badge` |
 | 状态色 | `components/StatusIcon.tsx`（`getStatusColorVar` / `statusKindForStateType`） | `graph-colors.ts` 与时间线 CSS 里的重复 hex |
