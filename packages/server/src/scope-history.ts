@@ -171,8 +171,11 @@ export interface ScopeEvent {
 
 export interface ScopeHistoryInput extends ScopeWindowInput {
   milestoneId: string;
-  works: readonly { id: string; identifier: string }[];
+  /** `deletedAt` marks deleted work whose history was never recorded (INV-1929). */
+  works: readonly { id: string; identifier: string; deletedAt?: Date | null }[];
   audits: readonly ScopeAudit[];
+  /** Parents an audit names that neither exist nor left a deletion record. */
+  unknownParents?: ReadonlySet<string>;
   states: ReadonlyMap<string, WorkflowStateType>;
   now: Date;
 }
@@ -284,6 +287,18 @@ export function replayMilestoneScope(input: ScopeHistoryInput): ScopeHistoryResu
         }
       }
     }
+    // Under a parent deleted before deletions were recorded, membership is unknowable.
+    const unknown = (id: string | null | undefined) => !!id && !!input.unknownParents?.has(id);
+    if (old?.parentId !== audit.after.parentId) {
+      if (unknown(old?.parentId)) {
+        for (const gap of gaps) {
+          if (gap.workId === audit.workId && gap.reason === 'DELETED_WITHOUT_HISTORY' && gap.end === null) gap.end = audit.createdAt;
+        }
+      }
+      if (unknown(audit.after.parentId)) {
+        gaps.push({ start: audit.createdAt, end: null, workId: audit.workId, reason: 'DELETED_WITHOUT_HISTORY' });
+      }
+    }
     previous.set(audit.workId, audit);
     for (const work of works) {
       const types: EventType[] = [];
@@ -328,7 +343,9 @@ export function replayMilestoneScope(input: ScopeHistoryInput): ScopeHistoryResu
   }
   for (const work of works) {
     if (!first.has(work.id)) {
-      gaps.push({ start: null, end: null, workId: work.id, reason: 'NO_HISTORY' });
+      gaps.push(work.deletedAt
+        ? { start: null, end: work.deletedAt, workId: work.id, reason: 'DELETED_WITHOUT_HISTORY' }
+        : { start: null, end: null, workId: work.id, reason: 'NO_HISTORY' });
     }
   }
   const unknownWorkCount = works.filter(w => !first.has(w.id) || !typeOf(current.get(w.id))).length;

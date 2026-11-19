@@ -190,6 +190,7 @@ model Team {
   externalRefs    ExternalOrganizationRef[]
   /// GitHub accounts and organisations this team is connected to (INV-1677).
   githubConnections GitHubConnection[]
+  workDeletions   WorkDeletion[]
 
   @@index([key])
   savedViews      SavedView[]
@@ -860,6 +861,37 @@ model WorkTombstone {
   deletedAt   DateTime @default(now())
 
   @@index([teamId, deletedAt])
+}
+
+/// The scope history of a deleted work item, kept after its undo tombstone
+/// expires so milestone burndown can still replay it (INV-1929). Only the
+/// scope fields of each audit are kept (parent, commitment, state, kind),
+/// never titles, descriptions or comments. Restoring the item stamps
+/// `restoredAt` and keeps the row: the deletion still happened.
+model WorkDeletion {
+  id          String     @id @default(uuid()) @db.Uuid
+  workId      String     @db.Uuid
+  teamId      String     @db.Uuid
+  team        Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  identifier  String
+  repository  String?
+  /// Every parent the audit chain or final state names, for burndown discovery.
+  parentIds   String[]   @db.Uuid
+  /// [{ id, revision, createdAt, before, after, surface, actorKind, actorId, reason }]
+  audits      Json
+  /// Scope fields at the moment of deletion.
+  final       Json
+  revision    Int
+  actorKind   ActorKind
+  actorId     String?    @db.Uuid
+  surface     String?
+  reason      String?
+  deletedAt   DateTime   @default(now())
+  restoredAt  DateTime?
+
+  @@index([workId])
+  @@index([teamId, deletedAt])
+  @@index([parentIds], type: Gin)
 }
 
 // A timeline entry marked as a key event (INV-1116). The entry itself is

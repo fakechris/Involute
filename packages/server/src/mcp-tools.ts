@@ -40,6 +40,7 @@ import {
   assertCanReadTeam,
   assertCanWriteIssue,
   assertCanWriteTeam,
+  buildReadableDeletionWhere,
   buildReadableIssueWhere,
  assertCanReadIssue,
   resolveTeamIdOrKey,
@@ -991,7 +992,7 @@ async function callMcpAction(
         timeZone: optionalString(args.time_zone) ?? null,
         idealStart: optionalString(args.ideal_start) ?? null,
         idealEnd: optionalString(args.ideal_end) ?? null,
-      });
+      }, buildReadableDeletionWhere(context) ?? {});
       return {
         ...result,
         window: {
