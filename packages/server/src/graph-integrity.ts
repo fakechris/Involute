@@ -21,8 +21,8 @@ export async function lockWorkGraph(tx: Prisma.TransactionClient, teamId: string
 
 export function assertContainsEndpoints(parent: Node, child: Node): void {
   if (parent.teamId !== child.teamId) throw createValidationError(WORK_LINK_TEAM_MISMATCH_MESSAGE);
-  const parentRepo = parent.repository?.trim() ? parent.repository : null;
-  const childRepo = child.repository?.trim() ? child.repository : null;
+  const parentRepo = parent.repository || null;
+  const childRepo = child.repository || null;
   // A tree without a GitHub repository is legal as a whole (INV-1918); one never mixes with a repository.
   if (parentRepo || childRepo) {
     if (!parentRepo || !childRepo) throw createValidationError(CONTAINS_REPOSITORY_REQUIRED_MESSAGE);

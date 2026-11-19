@@ -297,8 +297,9 @@ export async function findInheritableParent(
   }
   while (current && !seen.has(current.id)) {
     seen.add(current.id);
-    const repository = child.repository ?? current.repository;
-    if (current.repository && current.repository === repository && isLegalContains(current.kind, child.kind)) {
+    const repository = child.repository || current.repository || null;
+    // A tree without a repository (INV-1918) places related work too.
+    if ((current.repository || null) === repository && isLegalContains(current.kind, child.kind)) {
       return current;
     }
     current = current.parentId ? await prisma.issue.findUnique({ where: { id: current.parentId } }) : null;

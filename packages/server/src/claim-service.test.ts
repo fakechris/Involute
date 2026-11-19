@@ -189,6 +189,19 @@ describe('claim service', () => {
       expect(related.parentId).toBeNull();
     });
 
+    it('places work discovered in a tree without a repository under that tree (INV-1918)', async () => {
+      const project = await createIssue(prisma, { teamId: team.id, kind: 'PROJECT', title: 'Loose project', repository: null });
+      const task = await createIssue(prisma, { teamId: team.id, kind: 'ISSUE', title: 'Loose task', repository: null, parentId: project.id });
+      const found = await proposeWork(prisma, {
+        teamId: team.id, title: 'Found in loose task', relatedWorkId: task.identifier, relatedWorkType: 'DISCOVERED_DURING',
+      });
+      expect(found).toMatchObject({ parentId: project.id, repository: null });
+      const elsewhere = await proposeWork(prisma, {
+        teamId: team.id, title: 'Bound elsewhere', repository: 'acme/other', relatedWorkId: task.id, relatedWorkType: 'DISCOVERED_DURING',
+      });
+      expect(elsewhere.parentId).toBeNull();
+    });
+
     it('records both the parent and the typed link when both are given', async () => {
       const { milestone, task } = await tree();
       const both = await proposeWork(prisma, {

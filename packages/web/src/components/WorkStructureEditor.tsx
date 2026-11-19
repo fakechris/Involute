@@ -52,7 +52,9 @@ const KINDS: Array<{ value: WorkKind; label: string }> = [
 
 /** Where the work sits now, in the picker's terms: its project for "No milestone". */
 export function currentPlacement(work: StructuredWork): CreatePlacement | null {
-  if (!work.repository || !work.parent) return null;
+  if (!work.parent) return null;
+  // Work in a project without a repository (INV-1918) can only sit directly under it.
+  if (!work.repository) return work.parent.kind === 'PROJECT' ? { repository: '', parentId: work.parent.identifier } : null;
   if (work.parent.kind === 'PROJECT') return { repository: work.repository, parentId: work.parent.identifier };
   const prefix = !work.parent.kind || work.parent.kind === 'ISSUE' ? 'Sub-issue of' : 'In';
   // Labelled, so a finished milestone or a parent issue is still shown as the current place.

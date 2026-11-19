@@ -66,6 +66,9 @@ describe('hierarchy write boundary', () => {
     const bound = await node('MILESTONE');
     await expect(createWorkLink(prisma, { fromId: project.id, toId: bound.id, type: 'CONTAINS' })).rejects.toThrow('same repository on both endpoints');
     await expect(updateIssue(prisma, issue.id, { repository: repo })).rejects.toThrow();
+    const blank = await node('ISSUE', ' ');
+    await expect(createWorkLink(prisma, { fromId: project.id, toId: blank.id, type: 'CONTAINS' })).rejects.toThrow();
+    await expect(node('ISSUE', ' ', project.id)).rejects.toThrow();
   });
 
   it('rejects a sub-issue cycle', async () => {
