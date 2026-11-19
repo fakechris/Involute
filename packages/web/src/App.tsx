@@ -875,7 +875,7 @@ export function App() {
       actions.push({
         id: 'go-access',
         label: 'Open team settings',
-        description: 'Visibility, workflow, triage and agents of the current team; agent tokens under Agents',
+        description: "Current team's settings; agent tokens under Agents",
         group: 'Navigation',
         shortcut: 'G A',
         run: () => navigate('/settings/access'),

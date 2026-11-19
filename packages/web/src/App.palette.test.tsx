@@ -118,7 +118,7 @@ describe('App command palette', () => {
     const palette = await screen.findByRole('dialog', { name: 'Command palette' });
     const teamSettings = within(palette).getByRole('button', { name: /Open team settings/ });
     expect(within(teamSettings).getByText('Open team settings')).toBeInTheDocument();
-    expect(within(teamSettings).getByText('Visibility, workflow, triage and agents of the current team; agent tokens under Agents')).toBeInTheDocument();
+    expect(within(teamSettings).getByText("Current team's settings; agent tokens under Agents")).toBeInTheDocument();
     expect(within(teamSettings).getByText('G A')).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'Escape' });
 
