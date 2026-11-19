@@ -156,6 +156,28 @@ describe('App backlog controls', () => {
     expect(await screen.findByRole('dialog', { name: 'Peek INV-2' })).toBeInTheDocument();
   });
 
+  it('preserves hidden selections while bulk controls count and select only visible rows', async () => {
+    renderApp({ data: boardQueryResult, loading: false }, ['/backlog']);
+    const first = await screen.findByRole('checkbox', { name: 'Select INV-1' });
+    fireEvent.click(first);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select INV-2' }));
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+    const search = screen.getByLabelText('Search backlog issues');
+    fireEvent.change(search, { target: { value: 'Ready item' } });
+    expect(screen.getByText('1 selected')).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: 'no matching issue' } });
+    expect(screen.queryByLabelText('Bulk move selected issues to state')).not.toBeInTheDocument();
+    fireEvent.change(search, { target: { value: '' } });
+    expect(screen.getByRole('checkbox', { name: 'Select INV-1' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Select INV-2' })).toBeChecked();
+    expect(screen.getByText('2 selected')).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: 'Ready item' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Select all' }));
+    fireEvent.change(search, { target: { value: '' } });
+    expect(screen.getByRole('checkbox', { name: 'Select INV-1' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Select INV-2' })).toBeChecked();
+  });
+
   it('allows X and J/K from focused checkboxes and radios without stealing Space', async () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/backlog']);
     const checkbox = await screen.findByRole('checkbox', { name: 'Select INV-1' });
