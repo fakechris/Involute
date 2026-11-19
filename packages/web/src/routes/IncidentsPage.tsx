@@ -11,6 +11,7 @@ import { IssueRow } from '../components/list';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { Btn } from '../components/Primitives';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
+import { ProjectBadge } from '../components/ProjectBadge';
 import { EmptyState, LoadingState, StatRow, StatTile } from '../components/status';
 import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam, NO_REPOSITORY_OPTIONS } from './work-filter-match';
@@ -67,7 +68,7 @@ export function IncidentsPage() {
 
   return (
     <div className="observation-page">
-      <PageHeader icon={<IcoBell size={14} />} title="Incidents" count={summary?.openCount ?? 0} />
+      <PageHeader icon={<IcoBell size={14} />} title="Incidents" count={counted} />
       <PageToolbar
         aria-label="Incident filters"
         projects={
@@ -171,9 +172,9 @@ export function IncidentsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {summary.byRepository.map((row) => (
-                      <tr key={row.repository ?? '__none__'}>
-                        <td className="mono">{row.repository ?? 'No project'}</td>
+                    {summary.byProject.map((row) => (
+                      <tr key={row.project?.id ?? '__none__'}>
+                        <td><ProjectBadge repository={null} name={row.project?.title} emptyLabel="No project" /></td>
                         <td>{row.openCount}</td>
                         <td>{row.resolvedCount}</td>
                       </tr>

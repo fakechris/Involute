@@ -192,6 +192,26 @@ test.describe('work graph acceptance', () => {
     expect(errors).toEqual([]);
   });
 
+  test('a milestone created on the Milestones page is listed there and after a reload (INV-1937)', async ({ page }) => {
+    const { milestone } = fixture!;
+    const title = `E2E created milestone ${Date.now().toString(36)}`;
+    await page.goto('/milestones');
+    await expect(page.getByText('E2E milestone', { exact: true })).toBeVisible();
+    await expect(page.getByText(milestone.identifier, { exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'New milestone' }).first().click();
+    const dialog = page.getByRole('dialog', { name: 'New milestone' });
+    await dialog.getByPlaceholder('e.g. Release v1.0 or Core Engine').fill(title);
+    await dialog.getByLabel('Project').selectOption({ label: REPOSITORY });
+    await dialog.getByRole('button', { name: 'Create' }).click();
+    await expect(dialog).toBeHidden();
+
+    await expect(page.getByText(title, { exact: true })).toBeVisible();
+    await expect(page.getByText('No milestones configured')).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByText(title, { exact: true })).toBeVisible();
+  });
+
   test('a candidate without a parent is placed while committing it (INV-719)', async ({ page, request }) => {
     const { milestone } = fixture!;
     const teams = await gql<{ teams: { nodes: Array<{ id: string; key: string }> } }>(request, `{ teams { nodes { id key } } }`);

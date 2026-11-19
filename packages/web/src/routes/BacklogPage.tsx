@@ -32,13 +32,17 @@ interface BacklogPageProps {
   selectedTeam: TeamSummary | null;
   users: UserSummary[];
   onSelectIssue: (issue: IssueSummary) => void;
+  focusedIssueId: string | null;
+  selectedIds: string[];
+  setSelectedIds: React.Dispatch<React.SetStateAction<string[]>>;
+  onVisibleIssuesChange: (issues: IssueSummary[]) => void;
   /** The Board's project combobox, shown in the toolbar's `projects` slot. */
   projectFilter?: ReactNode | undefined;
   /** Notices from the Board (partial load, save errors), under the toolbar. */
   notices?: ReactNode | undefined;
   /** The Board's first page is still loading. */
   loading?: boolean | undefined;
-  onBulkStateChange?: (stateId: string, issues: IssueSummary[]) => Promise<void>;
+  onBulkStateChange?: (stateId: string, issues: IssueSummary[]) => Promise<string[] | undefined>;
   onSupersededFilter?: () => void;
 }
 
@@ -48,13 +52,16 @@ export function BacklogPage({
   selectedTeam,
   users,
   onSelectIssue,
+  focusedIssueId,
+  selectedIds,
+  setSelectedIds,
+  onVisibleIssuesChange,
   projectFilter,
   notices,
   loading = false,
   onBulkStateChange,
   onSupersededFilter,
 }: BacklogPageProps) {
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [targetStateId, setTargetStateId] = useState('');
   const [saving, setSaving] = useState(false);
   const workFilterState = useWorkFilters();
@@ -140,6 +147,16 @@ export function BacklogPage({
     () => applyBacklogViewState(issues, viewState, users),
     [issues, users, viewState],
   );
+
+  useLayoutEffect(() => {
+    onVisibleIssuesChange(loading ? [] : filteredIssues);
+  }, [filteredIssues, loading, onVisibleIssuesChange]);
+
+  useEffect(() => {
+    if (focusedIssueId) {
+      document.getElementById(`backlog-row-${focusedIssueId}`)?.scrollIntoView?.({ block: 'nearest' });
+    }
+  }, [focusedIssueId]);
 
   function toggleFilterValue(key: 'stateIds' | 'assigneeIds' | 'labelIds', value: string) {
     setViewState((currentState) => {
@@ -356,7 +373,7 @@ export function BacklogPage({
               </thead>
               <tbody>
                 {filteredIssues.map((issue) => (
-                  <tr key={issue.id}>
+                  <tr key={issue.id} id={`backlog-row-${issue.id}`} className={focusedIssueId === issue.id ? 'backlog-table__focused' : undefined}>
                     <td>
                       {onBulkStateChange ? (
                         <Checkbox
@@ -407,10 +424,12 @@ export function BacklogPage({
         </Select>
         {targetStateId ? <Btn variant="accent" disabled={saving} onClick={() => {
           setSaving(true);
-          void onBulkStateChange(targetStateId, filteredIssues.filter((issue) => selectedIds.includes(issue.id))).finally(() => {
+          void onBulkStateChange(targetStateId, filteredIssues.filter((issue) => selectedIds.includes(issue.id))).then((failedIds) => {
+            if (!failedIds) return;
+            setSelectedIds(failedIds);
+            if (failedIds.length === 0) setTargetStateId('');
+          }).finally(() => {
             setSaving(false);
-            setSelectedIds([]);
-            setTargetStateId('');
           });
         }}>Apply to selected</Btn> : null}
       </BulkActionBar> : null}

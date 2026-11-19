@@ -1480,6 +1480,12 @@ kbd {
   background: var(--bg-hover);
 }
 
+.backlog-table tbody tr.backlog-table__focused {
+  background: var(--bg-hover);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
 .backlog-table tbody tr:last-child td {
   border-bottom: 0;
 }
