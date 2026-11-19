@@ -42,7 +42,7 @@ interface BacklogPageProps {
   notices?: ReactNode | undefined;
   /** The Board's first page is still loading. */
   loading?: boolean | undefined;
-  onBulkStateChange?: (stateId: string, issues: IssueSummary[]) => Promise<void>;
+  onBulkStateChange?: (stateId: string, issues: IssueSummary[]) => Promise<string[] | undefined>;
   onSupersededFilter?: () => void;
 }
 
@@ -424,10 +424,12 @@ export function BacklogPage({
         </Select>
         {targetStateId ? <Btn variant="accent" disabled={saving} onClick={() => {
           setSaving(true);
-          void onBulkStateChange(targetStateId, filteredIssues.filter((issue) => selectedIds.includes(issue.id))).finally(() => {
+          void onBulkStateChange(targetStateId, filteredIssues.filter((issue) => selectedIds.includes(issue.id))).then((failedIds) => {
+            if (!failedIds) return;
+            setSelectedIds(failedIds);
+            if (failedIds.length === 0) setTargetStateId('');
+          }).finally(() => {
             setSaving(false);
-            setSelectedIds([]);
-            setTargetStateId('');
           });
         }}>Apply to selected</Btn> : null}
       </BulkActionBar> : null}
