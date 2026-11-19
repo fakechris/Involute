@@ -388,12 +388,21 @@ Example variables:
 }
 ```
 
-### `deliveryLatency(teamKey: String!, start: DateTime!, end: DateTime!, first: Int = 50, after: String, repository: String, sample: DeliveryLatencySample)`
+### `deliveryLatency(teamKey: String!, from: String, to: String, timeZone: String, start: DateTime, end: DateTime, first: Int = 50, after: String, repository: String, sample: DeliveryLatencySample)`
+
+Supply exactly one window form: inclusive `YYYY-MM-DD` `from`/`to` with
+optional IANA `timeZone` (default UTC), or legacy `start`/`end` instants.
+Calendar windows use the same resolver as `milestoneBurndown`: local midnight
+on `from` through midnight after `to`, as `[start,end)` (1–366 days).
+The timeline and Delivery page use UTC calendar days with the same inclusive
+end-day rule. Result and percentile windows echo nullable `from`, `to`,
+`timeZone` (null for legacy instants), plus resolved `start`/`end`.
+Both/neither forms and incomplete forms are validation errors.
 
 INV-267, definition version `1`. This signed-in, read-only query returns
 delivery metrics for the team's issues the caller may read, including
 project shares. Nodes use issue-ID keyset pagination (1–100 per page).
-The same team, `start`, and `end` must be supplied with a cursor. Summary
+The same team and resolved `start`/`end` must be supplied with a cursor. Summary
 statistics cover the whole readable cohort, not just the current page.
 
 INV-269: `repository` matches `Issue.repository` case-insensitively;

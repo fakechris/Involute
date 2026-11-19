@@ -14,8 +14,8 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.mocked(readStoredTeamKey).mockReturnValue('INV');
 });
-const start = '2026-03-01T00:00:00.000Z';
-const end = '2026-04-01T00:00:00.000Z';
+const start = '2026-03-01';
+const end = '2026-03-31';
 const metric = { sampleCount: 5, p50Ms: 3_600_000, p90Ms: 7_200_000, emptyReason: null, coverage: { missingCount: 0 } };
 function fixture(overrides: Partial<DeliveryResult> = {}): DeliveryResult {
   return {
@@ -38,7 +38,7 @@ const defaultProjects = [
   { repository: 'acme/a', name: 'Project A', identifier: 'INV-100', totalCount: 7 },
   { repository: 'acme/b', name: 'Project B', identifier: 'INV-200', totalCount: 12 },
 ];
-function mount(reply: Reply, sample = '', projects = defaultProjects, milestones: { id: string; identifier: string; title: string }[] = []) {
+function mount(reply: Reply, sample = '', projects = defaultProjects, windowParams = `from=${start}&to=${end}`, milestones: { id: string; identifier: string; title: string }[] = [], burndownRequests: Record<string, unknown>[] = []) {
   const requests: Record<string, unknown>[] = [];
   const client = new ApolloClient({ cache: new InMemoryCache(), link: new ApolloLink((operation) => new Observable((observer) => {
     if (operation.operationName === 'DeliveryProjects') {
@@ -49,6 +49,7 @@ function mount(reply: Reply, sample = '', projects = defaultProjects, milestones
       observer.next({ data: { issues: { nodes: milestones, pageInfo: { hasNextPage: false, endCursor: null } } } }); observer.complete(); return;
     }
     if (operation.operationName === 'DeliveryMilestoneBurndown') {
+      burndownRequests.push(operation.variables);
       observer.next({ data: { milestoneBurndown: {
         definitionVersion: '1', milestone: { id: operation.variables.milestoneId, identifier: 'INV-10' },
         window: { from: '2026-03-01', to: '2026-03-31', timeZone: 'UTC', start, end },
@@ -59,7 +60,7 @@ function mount(reply: Reply, sample = '', projects = defaultProjects, milestones
     requests.push(operation.variables);
     void reply(operation.variables).then((data) => { observer.next({ data: { deliveryLatency: data } }); observer.complete(); }, (error) => observer.error(error));
   })) });
-  render(<ApolloProvider client={client}><MemoryRouter initialEntries={[`/delivery?from=${start}&to=${end}${sample ? `&sample=${sample}` : ''}`]}><SwitchProject /><DeliveryPage /></MemoryRouter></ApolloProvider>);
+  render(<ApolloProvider client={client}><MemoryRouter initialEntries={[`/delivery?${windowParams}${sample ? `&sample=${sample}` : ''}`]}><SwitchProject /><DeliveryPage /></MemoryRouter></ApolloProvider>);
   return requests;
 }
 
@@ -67,6 +68,26 @@ it('shows loading without invented values', () => {
   mount(() => new Promise(() => {}));
   expect(screen.getByText('Loading delivery latency…')).toBeInTheDocument();
   expect(screen.queryByLabelText('Completed sample latency')).not.toBeInTheDocument();
+});
+it.each(['', 'from=invalid&to=invalid', 'from=2026-03-01T00:00:00.000Z&to=2026-04-01T00:00:00.000Z'])('defaults absent, invalid and legacy windows to 30 UTC days: %s', async (params) => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-04-15T12:34:00Z'));
+  const requests = mount(async () => fixture(), '', defaultProjects, params);
+  await screen.findByLabelText('Completed sample latency');
+  expect(requests[0]).toMatchObject({ from: '2026-03-17', to: '2026-04-15', timeZone: 'UTC' });
+  vi.useRealTimers();
+});
+it.each([7, 30, 90])('writes inclusive day params for the %s day preset', async (days) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const from = new Date(Date.parse(today) - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+  const requests = mount(async () => fixture(), '', defaultProjects, `from=${start}&to=${end}&project=acme/a`);
+  await screen.findByLabelText('Completed sample latency');
+  fireEvent.click(screen.getByRole('button', { name: `${days}d` }));
+  await waitFor(() => expect(requests.at(-1)).toMatchObject({ from, to: today, timeZone: 'UTC' }));
+  const link = await screen.findByRole('link', { name: 'Open in timeline' });
+  const params = new URL(link.getAttribute('href')!, 'http://localhost').searchParams;
+  expect(params.get('from')).toBe(from);
+  expect(params.get('to')).toBe(today);
 });
 it('offers projects beyond the first hundred using the unpaginated project summary', async () => {
   const projects = Array.from({ length: 120 }, (_, index) => ({
@@ -120,19 +141,19 @@ it('retries a failed request with the same window and project', async () => {
   expect(requests[1]).toEqual(requests[0]);
   expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
-it('formats the returned window in the viewer timezone while keeping ISO query parameters', async () => {
-  const formatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Los_Angeles' });
-  vi.spyOn(Date.prototype, 'toLocaleString').mockImplementation(function (this: Date) {
-    return formatter.format(this);
-  });
-  const window = { start: '2026-03-01T01:00:00.000Z', end: '2026-04-01T01:00:00.000Z' };
-  const requests = mount(async () => fixture({ window }));
+it('shares inclusive UTC days with the query and timeline, including the project', async () => {
+  const requests = mount(async () => fixture());
   const definition = await screen.findByText(/Definition 1/);
-  expect(definition).toHaveTextContent(`Definition 1 · ${formatter.format(new Date(window.start))} – ${formatter.format(new Date(window.end))} (end exclusive)`);
-  expect(definition).not.toHaveTextContent(window.start);
+  expect(definition).toHaveTextContent(`Definition 1 · ${start} – ${end}, UTC, inclusive`);
+  expect(requests[0]).toMatchObject({ from: start, to: end, timeZone: 'UTC' });
+  fireEvent.click(screen.getByText('Switch project'));
+  await screen.findByText(/Definition 1/);
+  const link = screen.getByRole('link', { name: 'Open in timeline' });
+  const url = new URL(link.getAttribute('href')!, 'http://localhost');
+  expect(Object.fromEntries(url.searchParams)).toEqual({ view: 'timeline', from: start, to: end, project: 'acme/b' });
   fireEvent.click(screen.getByRole('link', { name: /Lead time/ }));
-  await waitFor(() => expect(requests).toHaveLength(2));
-  expect(requests[1]).toMatchObject({ start, end, sample: 'LEAD_TIME' });
+  await waitFor(() => expect(requests.at(-1)?.sample).toBe('LEAD_TIME'));
+  expect(requests.at(-1)).toMatchObject({ from: start, to: end, sample: 'LEAD_TIME' });
 });
 it('shows no samples rather than zero duration and explains missing history', async () => {
   const empty = { sampleCount: 0, p50Ms: null, p90Ms: null, emptyReason: 'INSUFFICIENT_HISTORY', coverage: { missingCount: 2 } };
@@ -142,6 +163,11 @@ it('shows no samples rather than zero duration and explains missing history', as
   expect(stats).toHaveTextContent('Insufficient history for this metric.');
   expect(stats).not.toHaveTextContent('0m');
   expect(screen.getByText('Low coverage')).toBeInTheDocument();
+});
+it.each(['', '__none__'])('hides the timeline link without a real repository: %s', async (project) => {
+  mount(async () => fixture(), '', defaultProjects, `from=${start}&to=${end}&project=${project}`);
+  await screen.findByLabelText('Completed sample latency');
+  expect(screen.queryByRole('link', { name: 'Open in timeline' })).not.toBeInTheDocument();
 });
 it('flags partial coverage and shows all coverage counts', async () => {
   mount(async () => fixture({ leadTime: { ...metric, sampleCount: 2, coverage: { missingCount: 1 } }, coverage: { workCount: 8, noHistoryCount: 1, openEpisodeCount: 2, closedWithoutAcceptanceCount: 3, unknownEpisodeCount: 1 } }));
@@ -157,7 +183,7 @@ it('renders full metrics, text equivalent and keyboard-activatable chart buttons
   bar.focus(); expect(bar).toHaveFocus();
   fireEvent.click(bar);
   await waitFor(() => expect(requests.at(-1)?.sample).toBe('LEAD_TIME'));
-  expect(requests.at(-1)).toMatchObject({ start, end, repository: null });
+  expect(requests.at(-1)).toMatchObject({ from: start, to: end, repository: null });
   expect(await screen.findByLabelText('Delivery drill-down')).toHaveTextContent('0 items · 0 samples of 5');
   expect(await screen.findByText('No milestones in this project')).toBeInTheDocument();
 });
@@ -172,11 +198,13 @@ it('loads every drill-down page and reconciles episodes rather than items', asyn
   expect(list).toBeInTheDocument();
 });
 it('keeps the selected milestone across latency drill-down and window reloads', async () => {
-  mount(async () => fixture(), '', defaultProjects, [
+  const burndownRequests: Record<string, unknown>[] = [];
+  mount(async () => fixture(), '', defaultProjects, `from=${start}&to=${end}`, [
     { id: 'm1', identifier: 'INV-10', title: 'First milestone' },
     { id: 'm2', identifier: 'INV-20', title: 'Second milestone' },
-  ]);
+  ], burndownRequests);
   const select = await screen.findByRole('combobox', { name: 'Burndown milestone' });
+  await waitFor(() => expect(burndownRequests.at(-1)).toMatchObject({ from: start, to: end, timeZone: 'UTC' }));
   fireEvent.change(select, { target: { value: 'm2' } });
   fireEvent.click(await screen.findByRole('link', { name: /Lead time/ }));
   await screen.findByLabelText('Delivery drill-down');
@@ -185,6 +213,9 @@ it('keeps the selected milestone across latency drill-down and window reloads', 
   fireEvent.click(screen.getByRole('button', { name: '7d' }));
   await screen.findByLabelText('Completed sample latency');
   expect(await screen.findByRole('combobox', { name: 'Burndown milestone' })).toHaveValue('m2');
+  const today = new Date().toISOString().slice(0, 10);
+  const from = new Date(Date.parse(today) - 6 * 86_400_000).toISOString().slice(0, 10);
+  await waitFor(() => expect(burndownRequests.at(-1)).toEqual({ milestoneId: 'm2', from, to: today, timeZone: 'UTC' }));
 });
 it('sorts open items by known age descending and leaves unknown age explicit', async () => {
   mount(async () => fixture({ nodes: [work('1', 1, null), work('2', 1, 9 * 3_600_000), work('3', 1, 3_600_000)] }), 'OPEN');
