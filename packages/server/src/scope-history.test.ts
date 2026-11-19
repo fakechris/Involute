@@ -52,6 +52,23 @@ function replay(
 const values = (r: ReturnType<typeof replay>) => r.points.map(p => [p.scope, p.remaining]);
 
 describe('milestone scope replay', () => {
+  it('uses the first before snapshot as transition evidence without assuming prior coverage', () => {
+    const completed = state('m', 'done');
+    const titleEdit = replay([audit('a1', 'a', 3, completed, completed)]);
+    expect(titleEdit.events).toEqual([]);
+    expect(values(titleEdit)).toEqual([
+      [null, null], [null, null], [1, 0], [1, 0], [1, 0], [1, 0], [1, 0],
+    ]);
+    const reopen = replay([audit('a1', 'a', 3, completed, state())]);
+    expect(reopen.events.map(event => event.type)).toEqual(['REOPEN']);
+    expect(values(reopen)).toEqual([
+      [null, null], [null, null], [1, 1], [1, 1], [1, 1], [1, 1], [1, 1],
+    ]);
+    expect(reopen.coverage.gaps).toEqual([
+      { start: null, end: at(3), workId: 'a', reason: 'MISSING_CREATION' },
+    ]);
+  });
+
   it('replays same-transaction placement before commitment by work revision, not random audit ID', () => {
     const unplaced = state(null, 'todo', 'CANDIDATE');
     const placed = state('m', 'todo', 'CANDIDATE');

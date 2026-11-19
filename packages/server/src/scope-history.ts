@@ -253,6 +253,9 @@ export function replayMilestoneScope(input: ScopeHistoryInput): ScopeHistoryResu
     };
   };
   for (const audit of audits) {
+    if (!current.has(audit.workId) && audit.before !== null) {
+      current.set(audit.workId, audit.before);
+    }
     const old = current.get(audit.workId);
     const prior = previous.get(audit.workId);
     if (!first.has(audit.workId)) {
