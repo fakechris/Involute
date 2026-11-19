@@ -331,7 +331,12 @@ export function IssueDetailDrawer({
           <div className="issue-panel__title-row">
             {team ? <Badge tone="accent" mono>{team.key}</Badge> : null}
             {/* Which project this is, at a glance (INV-1536). */}
-            <ProjectBadge repository={activeIssue.repository} emptyLabel="No project" data-testid="issue-panel-project" />
+            <ProjectBadge
+              repository={activeIssue.repository}
+              name={!activeIssue.repository && activeIssue.parent?.kind === 'PROJECT' ? activeIssue.parent.title : null}
+              emptyLabel="No project"
+              data-testid="issue-panel-project"
+            />
             <span className="mono issue-panel__identifier">{activeIssue.identifier}</span>
             {activeIssue.provenance ? (
               <span className="issue-panel__provenance">

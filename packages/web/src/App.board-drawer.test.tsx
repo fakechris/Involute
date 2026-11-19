@@ -79,4 +79,26 @@ describe('App board drawer flows', () => {
     await waitFor(() => expect(within(other).getByLabelText('Issue title')).toHaveValue('Backlog item'));
     expect(within(other).getByTestId('issue-panel-project')).toHaveTextContent('No project');
   });
+
+  it('names a project without a repository by its title in the header (INV-1918)', async () => {
+    const data = structuredClone(boardQueryResult);
+    data.issues.nodes = data.issues.nodes.map((issue) =>
+      issue.identifier === 'INV-2'
+        ? { ...issue, repository: null, parent: { id: 'project-3', identifier: 'INV-3', title: 'E2E Local Planning', kind: 'PROJECT' as const } }
+        : { ...issue, repository: null, parent: { id: 'milestone-9', identifier: 'INV-9', title: 'Some milestone', kind: 'MILESTONE' as const } },
+    );
+    renderTestApp({ data, loading: false });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-2' }));
+    const drawer = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+    const badge = within(drawer).getByTestId('issue-panel-project');
+    expect(badge).toHaveTextContent('E2E Local Planning');
+    expect(badge).toHaveAttribute('title', 'Project: E2E Local Planning');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close issue detail drawer' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Open INV-1' }));
+    const other = await screen.findByRole('dialog', { name: 'Issue detail drawer' });
+    await waitFor(() => expect(within(other).getByLabelText('Issue title')).toHaveValue('Backlog item'));
+    expect(within(other).getByTestId('issue-panel-project')).toHaveTextContent('No project');
+  });
 });

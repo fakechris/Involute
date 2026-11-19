@@ -28,6 +28,8 @@ export function projectShortName(repository: string): string {
 
 export interface ProjectBadgeProps {
   repository: string | null | undefined;
+  /** A project without a repository (INV-1918) is named by its title instead. */
+  name?: string | null | undefined;
   /** Shown when there is no project; omit to render nothing then. */
   emptyLabel?: string | undefined;
   /** Makes the badge a control, e.g. "filter the board to this project". */
@@ -40,12 +42,20 @@ export interface ProjectBadgeProps {
 
 export function ProjectBadge({
   repository,
+  name,
   emptyLabel,
   onSelect,
   titlePrefix = 'Project',
   className,
   'data-testid': testId,
 }: ProjectBadgeProps) {
+  if (!repository && name) {
+    return (
+      <span className={['project-badge', getProjectColorClass(name), className].filter(Boolean).join(' ')} title={`${titlePrefix}: ${name}`} data-testid={testId}>
+        {name}
+      </span>
+    );
+  }
   if (!repository) {
     if (!emptyLabel) return null;
     return (
