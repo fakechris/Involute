@@ -11,7 +11,7 @@ import { Btn } from '../components/Primitives';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
 import { Badge, EmptyState, LoadingState, SegmentedControl, StatRow, StatTile } from '../components/status';
 import { WorkReference } from '../components/WorkReference';
-import { NO_REPOSITORY_OPTIONS, projectsFromCounts, useProjectParam } from './work-filter-match';
+import { NO_REPOSITORY_OPTIONS, useProjectParam } from './work-filter-match';
 
 export const DELIVERY_QUERY = gql`
   query DeliveryLatency(
@@ -104,14 +104,30 @@ export const DELIVERY_QUERY = gql`
 export const DELIVERY_PROJECTS_QUERY = gql`
   query DeliveryProjects($teamKey: String!) {
     projectSummary(teamFilter: { key: { eq: $teamKey } }) {
+      totalCount
+      noRepositoryCount
       projects {
         repository
+        name
+        identifier
+        totalCount
       }
     }
   }
 `;
 
 type Sample = 'LEAD_TIME' | 'CYCLE_TIME' | 'REVIEW_WAIT' | 'OPEN';
+interface ProjectSummary {
+  totalCount: number;
+  noRepositoryCount: number;
+  projects: {
+    repository: string;
+    name: string;
+    identifier: string | null;
+    totalCount: number;
+  }[];
+}
+
 interface Metric {
   sampleCount: number;
   p50Ms: number | null;
@@ -188,11 +204,22 @@ export function DeliveryPage() {
   const requestKey = JSON.stringify(variables);
   const [result, setResult] = useState<{ key: string; data?: DeliveryResult; error?: string } | null>(null);
   const [retryAttempt, setRetryAttempt] = useState(0);
-  const { data: projectData } = useQuery<{ projectSummary: { projects: { repository: string }[] } }>(DELIVERY_PROJECTS_QUERY, {
+  const { data: projectData } = useQuery<{ projectSummary: ProjectSummary }>(DELIVERY_PROJECTS_QUERY, {
     variables: { teamKey },
     skip: !teamKey,
   });
-  const projects = projectsFromCounts((projectData?.projectSummary.projects ?? []).map((row) => ({ ...row, count: 1 })));
+  const projects = (projectData?.projectSummary.projects ?? []).map((project) => ({
+    id: project.identifier ?? project.repository,
+    identifier: project.identifier ?? project.repository,
+    name: project.repository,
+    title: project.name || project.repository,
+    key: project.repository,
+    issueCount: project.totalCount,
+  }));
+  const noRepositoryOptions = NO_REPOSITORY_OPTIONS.map((option) => ({
+    ...option,
+    count: projectData?.projectSummary.noRepositoryCount ?? 0,
+  }));
   useEffect(() => {
     if (!teamKey) return;
     let active = true;
@@ -274,8 +301,9 @@ export function DeliveryPage() {
           <ProjectFilterCombobox
             projects={projects}
             selectedProjectKey={project || null}
+            totalCount={projectData?.projectSummary.totalCount ?? 0}
             onSelectProject={setProject}
-            extraOptions={NO_REPOSITORY_OPTIONS}
+            extraOptions={noRepositoryOptions}
             showQuickPills
           />
         }

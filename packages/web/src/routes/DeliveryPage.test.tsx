@@ -1,11 +1,11 @@
 import { ApolloClient, ApolloLink, InMemoryCache, Observable } from '@apollo/client';
 import { ApolloProvider } from '@apollo/client/react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { print } from 'graphql';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { DELIVERY_PROJECTS_QUERY, DeliveryPage, type DeliveryResult } from './DeliveryPage';
-import { print } from 'graphql';
 import { readStoredTeamKey } from '../board/utils';
 
 vi.mock('../board/utils', () => ({ readStoredTeamKey: vi.fn(() => 'INV') }));
@@ -34,11 +34,16 @@ function SwitchProject() {
   const navigate = useNavigate();
   return <button onClick={() => navigate(`/delivery?from=${start}&to=${end}&project=acme/b`)}>Switch project</button>;
 }
-function mount(reply: Reply, sample = '', projects = [{ repository: 'acme/a' }, { repository: 'acme/b' }]) {
+const defaultProjects = [
+  { repository: 'acme/a', name: 'Project A', identifier: 'INV-100', totalCount: 7 },
+  { repository: 'acme/b', name: 'Project B', identifier: 'INV-200', totalCount: 12 },
+];
+function mount(reply: Reply, sample = '', projects = defaultProjects) {
   const requests: Record<string, unknown>[] = [];
   const client = new ApolloClient({ cache: new InMemoryCache(), link: new ApolloLink((operation) => new Observable((observer) => {
     if (operation.operationName === 'DeliveryProjects') {
-      observer.next({ data: { projectSummary: { projects } } }); observer.complete(); return;
+      const totalCount = projects.reduce((sum, project) => sum + project.totalCount, 0) + 3;
+      observer.next({ data: { projectSummary: { totalCount, noRepositoryCount: 3, projects } } }); observer.complete(); return;
     }
     requests.push(operation.variables);
     void reply(operation.variables).then((data) => { observer.next({ data: { deliveryLatency: data } }); observer.complete(); }, (error) => observer.error(error));
@@ -53,15 +58,34 @@ it('shows loading without invented values', () => {
   expect(screen.queryByLabelText('Completed sample latency')).not.toBeInTheDocument();
 });
 it('offers projects beyond the first hundred using the unpaginated project summary', async () => {
-  const projects = Array.from({ length: 120 }, (_, index) => ({ repository: `acme/project-${index}` }));
+  const projects = Array.from({ length: 120 }, (_, index) => ({
+    repository: `acme/project-${index}`,
+    name: `Project ${index}`,
+    identifier: `INV-${index}`,
+    totalCount: index + 1,
+  }));
   const requests = mount(async () => fixture(), '', projects);
   await screen.findByLabelText('Completed sample latency');
-  fireEvent.click(screen.getByRole('button', { name: 'Filter by project', exact: true }));
+  fireEvent.click(screen.getByRole('button', { name: 'Filter by project' }));
   fireEvent.change(screen.getByPlaceholderText('Filter projects...'), { target: { value: 'project-119' } });
   fireEvent.click(screen.getByRole('option', { name: /acme\/project-119/ }));
   await waitFor(() => expect(requests.at(-1)?.repository).toBe('acme/project-119'));
   expect(print(DELIVERY_PROJECTS_QUERY)).toContain('projectSummary');
   expect(print(DELIVERY_PROJECTS_QUERY)).not.toContain('first: 100');
+});
+it('shows actual project, all-project and no-repository counts from the board summary', async () => {
+  mount(async () => fixture());
+  await screen.findByLabelText('Completed sample latency');
+  expect(screen.getByRole('button', { name: 'acme/a' })).toHaveTextContent('7');
+  expect(screen.getByRole('button', { name: 'acme/b' })).toHaveTextContent('12');
+  fireEvent.click(screen.getByRole('button', { name: 'Filter by project' }));
+  expect(screen.getByRole('option', { name: /All Projects/ })).toHaveTextContent('22');
+  expect(screen.getByRole('option', { name: /No repository/ })).toHaveTextContent('3');
+  const project = screen.getByRole('option', { name: /acme\/b/ });
+  expect(project).toHaveTextContent('INV-200');
+  expect(project).toHaveTextContent('12');
+  fireEvent.click(project);
+  expect(screen.getByRole('button', { name: 'Project: acme/b' })).toHaveTextContent('12');
 });
 it('asks for a team instead of reporting empty metrics when no team is selected', () => {
   vi.mocked(readStoredTeamKey).mockReturnValue(null);
