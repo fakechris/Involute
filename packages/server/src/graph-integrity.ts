@@ -21,11 +21,14 @@ export async function lockWorkGraph(tx: Prisma.TransactionClient, teamId: string
 
 export function assertContainsEndpoints(parent: Node, child: Node): void {
   if (parent.teamId !== child.teamId) throw createValidationError(WORK_LINK_TEAM_MISMATCH_MESSAGE);
-  const parentRepo = parent.repository;
-  const childRepo = child.repository;
-  if (!parentRepo?.trim() || !childRepo?.trim()) throw createValidationError(CONTAINS_REPOSITORY_REQUIRED_MESSAGE);
-  if (parentRepo !== parentRepo.trim() || childRepo !== childRepo.trim()) throw createValidationError(CONTAINS_REPOSITORY_WHITESPACE_MESSAGE);
-  if (parentRepo !== childRepo) throw createValidationError(CONTAINS_CROSS_REPOSITORY_MESSAGE);
+  const parentRepo = parent.repository?.trim() ? parent.repository : null;
+  const childRepo = child.repository?.trim() ? child.repository : null;
+  // A tree without a GitHub repository is legal as a whole (INV-1918); one never mixes with a repository.
+  if (parentRepo || childRepo) {
+    if (!parentRepo || !childRepo) throw createValidationError(CONTAINS_REPOSITORY_REQUIRED_MESSAGE);
+    if (parentRepo !== parentRepo.trim() || childRepo !== childRepo.trim()) throw createValidationError(CONTAINS_REPOSITORY_WHITESPACE_MESSAGE);
+    if (parentRepo !== childRepo) throw createValidationError(CONTAINS_CROSS_REPOSITORY_MESSAGE);
+  }
   if (!isLegalContains(parent.kind, child.kind)) throw createValidationError(CONTAINS_KINDS_MESSAGE);
 }
 

@@ -319,7 +319,7 @@ export async function placeNewWork<T extends CreateIssueInput>(prisma: Prisma.Tr
   const parent = await findWorkByIdOrIdentifier(prisma, input.parentId.trim());
   if (!parent || parent.teamId !== input.teamId) throw createNotFoundError(PARENT_ISSUE_NOT_FOUND_MESSAGE);
   if (parent.commitmentStatus === 'REJECTED') throw createValidationError(WORK_COMMIT_PARENT_REJECTED_MESSAGE);
-  return { ...input, parentId: parent.id, repository: input.repository ?? parent.repository };
+  return { ...input, parentId: parent.id, repository: input.repository || parent.repository };
 }
 
 /** The person answerable for work an actor files: a human themself, an agent's owner. */
