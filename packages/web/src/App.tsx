@@ -95,6 +95,7 @@ const CandidatesPage = lazyRoute(async () => (await import('./routes/CandidatesP
 const InReviewPage = lazyRoute(async () => (await import('./routes/InReviewPage')).InReviewPage);
 const BugsPage = lazyRoute(async () => (await import('./routes/BugsPage')).BugsPage);
 const IncidentsPage = lazyRoute(async () => (await import('./routes/IncidentsPage')).IncidentsPage);
+const DeliveryPage = lazyRoute(async () => (await import('./routes/DeliveryPage')).DeliveryPage);
 const HygienePage = lazyRoute(async () => (await import('./routes/HygienePage')).HygienePage);
 const OpsPage = lazyRoute(async () => (await import('./routes/OpsPage')).OpsPage);
 const GraphPage = lazyRoute(async () => (await import('./routes/GraphPage')).GraphPage);
@@ -1015,6 +1016,10 @@ export function App() {
               <span className="app-shell__nav-icon"><IcoBell size={14} /></span>
               <span className="app-shell__link-label">Incidents</span>
             </NavLink>
+            <NavLink to="/delivery" className={getNavLinkClassName} title="Go to Delivery latency">
+              <span className="app-shell__nav-icon"><IcoGraph size={14} /></span>
+              <span className="app-shell__link-label">Delivery latency</span>
+            </NavLink>
             <NavLink to="/graph" className={getNavLinkClassName} title="Go to Graph · G R">
               <span className="app-shell__nav-icon"><IcoGraph size={14} /></span>
               <span className="app-shell__link-label">Graph</span>
@@ -1411,6 +1416,7 @@ export function App() {
               <Route path="/in-review" element={<InReviewPage />} />
               <Route path="/bugs" element={<BugsPage />} />
               <Route path="/incidents" element={<IncidentsPage />} />
+              <Route path="/delivery" element={<DeliveryPage />} />
               <Route path="/graph" element={<GraphPage />} />
               <Route path="/search" element={<SearchPage />} />
               <Route path="/hygiene" element={<HygienePage />} />
