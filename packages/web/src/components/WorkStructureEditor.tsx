@@ -4,7 +4,7 @@ import { useQuery } from '@apollo/client/react';
 import { readStoredTeamKey } from '../board/utils';
 import { GRAPH_PROJECTS_QUERY } from '../work/queries';
 import type { GraphProjectsQueryData, WorkKind } from '../work/types';
-import type { CreatePlacement } from '../work/placement';
+import { placementProjects, type CreatePlacement } from '../work/placement';
 import type { BugReproducibility, IssueSeverity } from '../board/types';
 import { SEVERITY_OPTIONS } from '../board/severity';
 import { REPRODUCIBILITY_OPTIONS } from '../board/reproducibility';
@@ -80,7 +80,7 @@ export function WorkStructureEditor({
   const { data } = useQuery<GraphProjectsQueryData>(GRAPH_PROJECTS_QUERY, {
     variables: teamKey ? { teamFilter: { key: { eq: teamKey } } } : {},
   });
-  const projects = data?.projectSummary?.projects ?? [];
+  const projects = useMemo(() => placementProjects(data?.projectSummary), [data?.projectSummary]);
   const value = useMemo(() => currentPlacement(work), [work]);
   const kind = work.kind ?? 'ISSUE';
   // A bug, or anything already marked: how often it reproduces (INV-1122).

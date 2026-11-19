@@ -295,6 +295,8 @@ export interface ProjectSummaryResult {
   totalCount: number;
   noRepositoryCount: number;
   projects: ProjectSummaryItem[];
+  /** INV-1918: projects with no repository, which still take new work. */
+  projectsWithoutRepository?: Array<{ identifier: string; name: string }>;
 }
 
 export interface BugReportMutationData {
