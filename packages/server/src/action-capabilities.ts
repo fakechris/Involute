@@ -55,6 +55,7 @@ export const AGENT_ONLY_READ_TOOLS: Record<string, string> = {
 
 /** GraphQL queries that intentionally have no MCP tool; each names the decision it rests on. */
 export const QUERY_EXEMPTIONS: Record<string, { reason: string; decision: string }> = {
+  deliveryLatency: { reason: 'Versioned reporting data for the delivery latency view (INV-269); agents can read source events in work_get_context.', decision: 'INV-267' },
   handledForYou: { reason: 'The Handled for you list on /todo for people; agents see the same decisions as audits on each item (work_get_context).', decision: 'INV-1486' },
   fieldDefinitions: { reason: 'The definitions of one scope for the settings pages; an agent reads the ones that apply on each item (work_get_context field_definitions) or a team\'s set with work_catalog(kind: fields).', decision: 'INV-1501' },
   applicableFieldDefinitions: { reason: 'Fields shown in the Report bug, create and commit dialogs; agents read the same with work_catalog(kind: fields) and the tool descriptions.', decision: 'INV-1501' },
