@@ -182,13 +182,12 @@ export function MilestoneBurndown({ teamKey, repository, start, end }: { teamKey
     if (listError) setListAttempt(value => value + 1);
     else setAttempt(value => value + 1);
   }
-  const error = listError || current?.error;
   return (
     <section aria-label="Burndown">
       <h2>Burndown</h2>
       <p>Daily UTC snapshots cover the calendar days touched by the selected latency window; latency above uses exact instants.</p>
-      {!window ? <EmptyState size="inline" title="Choose a valid delivery window" /> : error ? (
-        <div role="alert"><EmptyState size="inline" title="Could not load burndown" body={error} action={<Btn variant="subtle" onClick={retry}>Retry burndown</Btn>} /></div>
+      {!window ? <EmptyState size="inline" title="Choose a valid delivery window" /> : listError ? (
+        <div role="alert"><EmptyState size="inline" title="Could not load burndown" body={listError} action={<Btn variant="subtle" onClick={retry}>Retry burndown</Btn>} /></div>
       ) : !milestones ? <LoadingState>Loading milestones…</LoadingState> : milestones.length === 0 ? (
         <EmptyState size="inline" title="No milestones in this project" body="Choose another project to view milestone burndown." />
       ) : (
@@ -196,7 +195,9 @@ export function MilestoneBurndown({ teamKey, repository, start, end }: { teamKey
           <Field label="Burndown milestone"><Select value={selected} onChange={event => setSelected(event.target.value)}>
             {milestones.map(milestone => <option key={milestone.id} value={milestone.id}>{milestone.identifier} · {milestone.title}</option>)}
           </Select></Field>
-          {current?.data ? <BurndownValues data={current.data} /> : <LoadingState>Loading burndown…</LoadingState>}
+          {current?.error ? (
+            <div role="alert"><EmptyState size="inline" title="Could not load burndown" body={current.error} action={<Btn variant="subtle" onClick={retry}>Retry burndown</Btn>} /></div>
+          ) : current?.data ? <BurndownValues data={current.data} /> : <LoadingState>Loading burndown…</LoadingState>}
         </>
       )}
     </section>

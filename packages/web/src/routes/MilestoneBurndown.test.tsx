@@ -167,6 +167,17 @@ it('retries the selected milestone with the same window rather than reverting to
   expect(requests.at(-1)).toEqual(failedRequest);
   expect(screen.getByRole('combobox')).toHaveValue('m2');
 });
+it('keeps other milestones reachable after a selected milestone becomes unreadable or is deleted', async () => {
+  mount(async request => {
+    if (request.name === 'DeliveryMilestoneBurndown' && request.variables.milestoneId === 'm1') throw new Error('Readable milestone not found.');
+    return defaultReply(request);
+  });
+  await screen.findByRole('alert');
+  fireEvent.change(screen.getByRole('combobox', { name: 'Burndown milestone' }), { target: { value: 'm2' } });
+  await screen.findByRole('img', { name: /Milestone burndown/ });
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  expect(screen.getByRole('combobox')).toHaveValue('m2');
+});
 it('never shows the previous project after a project switch', async () => {
   let resolveOld!: (data: Record<string, unknown>) => void;
   const pending = new Promise<Record<string, unknown>>(resolve => { resolveOld = resolve; });
