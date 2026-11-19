@@ -3,6 +3,7 @@ import { useCallback, useRef, useState, type FormEvent, type ReactNode } from 'r
 import { Field, Select, TextArea } from './controls';
 import { DialogShell } from './DialogShell';
 import { Btn } from './Primitives';
+import { WorkReference, WorkReferenceText } from './WorkReference';
 
 /** Why work was closed without being done (INV-1118); mirrors the server enum. */
 export type WorkResolution = 'COMPLETED' | 'WONT_DO' | 'INVALID' | 'DUPLICATE' | 'CANNOT_REPRODUCE' | 'OBSOLETE';
@@ -54,6 +55,80 @@ interface PendingRequest {
   /** Prefilled from the item itself (INV-1498): e.g. a superseded DECISION arrives as Obsolete + "Superseded by INV-…". The person can still change both. */
   prefill?: Partial<CloseReason> | undefined;
   resolve: (value: CloseReason | null) => void;
+}
+
+export interface BatchCloseItem {
+  id: string;
+  identifier: string;
+  kind?: string | null;
+  supersededBy?: { identifier: string; title: string } | null;
+}
+
+export type BatchCloseReasons = Record<string, CloseReason>;
+
+function BatchCloseDialog({ items, onDone }: { items: BatchCloseItem[]; onDone: (value: BatchCloseReasons | null) => void }) {
+  const [resolution, setResolution] = useState<WorkResolution | ''>('');
+  const [reason, setReason] = useState('');
+  const automatic = items.filter((item) => item.supersededBy);
+  const manual = items.filter((item) => !item.supersededBy);
+  const missing = manual.length > 0 && (!resolution || !reason.trim());
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const answers: BatchCloseReasons = {};
+    for (const item of items) {
+      const prefill = supersededPrefill(item);
+      if (prefill?.resolution) answers[item.id] = { resolution: prefill.resolution, reason: prefill.reason ?? null };
+      else if (resolution && reason.trim()) answers[item.id] = { resolution, reason: reason.trim() };
+    }
+    onDone(answers);
+  }
+  return (
+    <DialogShell
+      variant="modal"
+      title={`Cancel ${items.length} items`}
+      eyebrow="Close without doing it"
+      ariaLabel="Close reason"
+      backdropLabel="Keep it open"
+      onClose={() => onDone(null)}
+      onSubmit={submit}
+      footer={(
+        <>
+          <Btn variant="subtle" size="md" onClick={() => onDone(null)}>Keep open</Btn>
+          <Btn type="submit" variant="accent" size="md" disabled={automatic.length === 0 && missing}>Cancel work</Btn>
+        </>
+      )}
+    >
+      {automatic.length > 0 ? <ul>
+        {automatic.map((item) => {
+          const prefill = supersededPrefill(item)!;
+          return <li key={item.id}><WorkReference reference={item.identifier} /> → <WorkReferenceText text={prefill.reason ?? ''} /> ({resolutionLabel(prefill.resolution)})</li>;
+        })}
+      </ul> : null}
+      {manual.length > 0 ? <>
+        <p>For items without a replacement: <WorkReferenceText text={manual.map((item) => item.identifier).join(', ')} /></p>
+        <Field label="Resolution"><ResolutionSelect ariaLabel="Resolution" value={resolution} onChange={setResolution} /></Field>
+        <Field label="Reason"><TextArea aria-label="Close reason text" value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
+        {missing ? <p role="status">Will keep open (choose a resolution and enter a reason): <WorkReferenceText text={manual.map((item) => item.identifier).join(', ')} /></p> : null}
+      </> : null}
+    </DialogShell>
+  );
+}
+
+/** One confirmation, but independent defaults and writes for each item (INV-1930). */
+export function useBatchCloseReason() {
+  const [request, setRequest] = useState<{ items: BatchCloseItem[]; resolve: (value: BatchCloseReasons | null) => void } | null>(null);
+  const pending = useRef<typeof request>(null);
+  const askBatchCloseReason = useCallback((items: BatchCloseItem[]) => new Promise<BatchCloseReasons | null>((resolve) => {
+    pending.current?.resolve(null);
+    pending.current = { items, resolve };
+    setRequest(pending.current);
+  }), []);
+  const finish = (value: BatchCloseReasons | null) => {
+    pending.current?.resolve(value);
+    pending.current = null;
+    setRequest(null);
+  };
+  return { askBatchCloseReason, batchCloseReasonDialog: request ? <BatchCloseDialog items={request.items} onDone={finish} /> : null };
 }
 
 function CloseReasonDialog({ request, onDone }: { request: PendingRequest; onDone: (value: CloseReason | null) => void }) {

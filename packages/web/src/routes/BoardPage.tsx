@@ -79,7 +79,7 @@ import { QuickPicker, type QuickPickerOption } from '../components/QuickPicker';
 import { isGotoChordPending } from '../app/goto-chord';
 import { BOARD_PICKER_EVENT } from './board-picker-event';
 import { fieldChange, type FieldUndoChange } from '../undo/field-gesture';
-import { isBugIssue, supersededPrefill, useCloseReason, type WorkResolution } from '../components/CloseReasonDialog';
+import { isBugIssue, supersededPrefill, useCloseReason, useBatchCloseReason, type CloseReason } from '../components/CloseReasonDialog';
 import {
   ACTIVE_TEAM_STORAGE_KEY,
   buildCommittedIssueFilter,
@@ -414,6 +414,7 @@ export function BoardPage() {
   }, []);
   const [bulkTargetStateId, setBulkTargetStateId] = useState('');
   const { askCloseReason, closeReasonDialog } = useCloseReason();
+  const { askBatchCloseReason, batchCloseReasonDialog } = useBatchCloseReason();
   const [bulkAssigneeId, setBulkAssigneeId] = useState('');
   const [bulkLabelId, setBulkLabelId] = useState('');
   const [bulkRemoveLabelId, setBulkRemoveLabelId] = useState('');
@@ -1488,7 +1489,11 @@ export function BoardPage() {
         const closing = cancelingIssues(state, moving);
         const close = closing.length ? await askToCancel(closing) : {};
         if (!close) return;
-        await applyFieldToIssues(ids, (issue) => (issue.state.id === state.id ? null : { stateId: state.id, ...close }), (issue) => ({ ...issue, state }));
+        if (state.type === 'CANCELED' && ids.length > 1) {
+          await applyBulkStateChange(state.id, moving, close);
+          return;
+        }
+        await applyFieldToIssues(ids, (issue) => (issue.state.id === state.id ? null : { stateId: state.id, ...close[issue.id] }), (issue) => ({ ...issue, state }));
       })();
       return;
     }
@@ -1519,31 +1524,44 @@ export function BoardPage() {
     );
   }
 
-  async function applyBulkStateChange() {
-    if (!bulkTargetStateId) {
+  async function applyBulkStateChange(targetStateId = bulkTargetStateId, moving?: IssueSummary[], confirmed?: Record<string, CloseReason>) {
+    if (!targetStateId) {
       return;
     }
 
     const targetState =
-      selectedTeam?.states.nodes.find((state) => state.id === bulkTargetStateId) ?? null;
+      selectedTeam?.states.nodes.find((state) => state.id === targetStateId) ?? null;
 
     if (!targetState) {
       return;
     }
 
     const selectedIssueIdSet = new Set(selectedIssueIds);
-    const issuesToUpdate = boardVisibleIssues.filter(
-      (issue) => selectedIssueIdSet.has(issue.id) && issue.state.id !== bulkTargetStateId,
+    const requested = (moving ?? boardVisibleIssues.filter((issue) => selectedIssueIdSet.has(issue.id))).filter(
+      (issue) => issue.state.id !== targetStateId,
     );
 
-    if (issuesToUpdate.length === 0) {
+    if (requested.length === 0) {
       return;
     }
-    const closing = cancelingIssues(targetState, issuesToUpdate);
-    const close = closing.length ? await askToCancel(closing) : {};
+    const closing = cancelingIssues(targetState, requested);
+    const close = confirmed ?? (closing.length ? await askToCancel(closing) : {});
     if (!close) {
       return;
     }
+    const skipped: string[] = [];
+    const issuesToUpdate = requested.filter((issue) => {
+      if (targetState.type !== 'CANCELED') return true;
+      if (issue.claim && new Date(issue.claim.leaseUntil).getTime() > Date.now()) {
+        skipped.push(`${issue.identifier}: active claim`);
+        return false;
+      }
+      if (issue.state.type !== 'CANCELED' && !close[issue.id]) {
+        skipped.push(`${issue.identifier}: resolution and reason required`);
+        return false;
+      }
+      return true;
+    });
 
     const previousIssuesById = new Map(
       issuesToUpdate.map((issue) => [issue.id, issueOverrides[issue.id] ?? issue]),
@@ -1572,15 +1590,14 @@ export function BoardPage() {
             id: issue.id,
             input: {
               expectedRevision: issue.revision,
-              stateId: bulkTargetStateId,
-              ...close,
+              stateId: targetStateId,
+              ...close[issue.id],
             },
           },
         }),
       ),
     );
 
-    let hadFailure = false;
     const undoChanges: StatusUndoChange[] = [];
     const returnedById = new Map<string, IssueSummary>();
 
@@ -1605,7 +1622,7 @@ export function BoardPage() {
         });
         return;
       }
-      hadFailure = true;
+      skipped.push(`${issue.identifier}: ${result.status === 'fulfilled' ? result.value.data?.issueUpdate.message ?? 'update refused' : 'could not save'}`);
     });
 
     setIssueOverrides((currentOverrides) => {
@@ -1639,8 +1656,8 @@ export function BoardPage() {
     setSelectedIssueIds([]);
     setBulkTargetStateId('');
 
-    if (hadFailure) {
-      setMutationError('We could not update some selected issues. Please try again.');
+    if (skipped.length > 0) {
+      setMutationError(`Kept open — ${skipped.join('; ')}`);
     }
   }
 
@@ -2181,7 +2198,7 @@ export function BoardPage() {
       return;
     }
 
-    await persistIssueUpdate(issue, { stateId, ...close }, (current) => ({
+    await persistIssueUpdate(issue, { stateId, ...close[issue.id] }, (current) => ({
       ...current,
       state,
     }));
@@ -2197,7 +2214,8 @@ export function BoardPage() {
   }
 
   /** The resolution (and reason) to send, or null when the person keeps the work open. */
-  async function askToCancel(closing: IssueSummary[]): Promise<{ resolution?: WorkResolution; reason?: string } | null> {
+  async function askToCancel(closing: IssueSummary[]): Promise<Record<string, CloseReason> | null> {
+    if (closing.length > 1) return askBatchCloseReason(closing);
     const answer = await askCloseReason({
       title: closing.length === 1 ? `Cancel ${closing[0]!.identifier}` : `Cancel ${closing.length} items`,
       needsReason: closing.some(isBugIssue),
@@ -2205,7 +2223,7 @@ export function BoardPage() {
       ...(closing.length === 1 && supersededPrefill(closing[0]!) ? { prefill: supersededPrefill(closing[0]!)! } : {}),
     });
     if (!answer) return null;
-    return { resolution: answer.resolution, ...(answer.reason ? { reason: answer.reason } : {}) };
+    return { [closing[0]!.id]: answer };
   }
 
   async function persistTitleChange(issue: IssueSummary, title: string) {
@@ -2593,6 +2611,13 @@ export function BoardPage() {
       return;
     }
 
+    if (selectedIssueIds.includes(issueId) && selectedIssueIds.length > 1) {
+      const original = originState ? { ...issue, state: originState } : issue;
+      setIssueOverrides((current) => replaceIssueOverride(current, issueId, original));
+      await applyBulkStateChange(targetStateId, boardVisibleIssues.filter((item) => selectedIssueIds.includes(item.id)).map((item) => item.id === issueId ? original : item));
+      return;
+    }
+
     // The card already sits in the target column; ask from where it came.
     const closing = cancelingIssues(targetState, [originState ? { ...issue, state: originState } : issue]);
     const close = closing.length ? await askToCancel(closing) : {};
@@ -2607,7 +2632,7 @@ export function BoardPage() {
       // Call persistIssueUpdate directly instead of persistStateChange because
       // handleDragOver already updated issue.state optimistically, which would
       // cause persistStateChange to skip the mutation.
-      const updated = await persistIssueUpdate(issue, { stateId: targetStateId, ...close }, (current) => ({
+      const updated = await persistIssueUpdate(issue, { stateId: targetStateId, ...close[issue.id] }, (current) => ({
         ...current,
         state: targetState,
       }), false);
@@ -2794,6 +2819,12 @@ export function BoardPage() {
 
     const originState =
       selectedTeam?.states.nodes.find((state) => state.id === payload.stateId) ?? null;
+    if (selectedIssueIds.includes(issue.id) && selectedIssueIds.length > 1) {
+      const original = originState ? { ...issue, state: originState } : issue;
+      setIssueOverrides((current) => replaceIssueOverride(current, issue.id, original));
+      await applyBulkStateChange(targetStateId, boardVisibleIssues.filter((item) => selectedIssueIds.includes(item.id)).map((item) => item.id === issue.id ? original : item));
+      return;
+    }
     const closing = cancelingIssues(targetState, [originState ? { ...issue, state: originState } : issue]);
     const close = closing.length ? await askToCancel(closing) : {};
     if (!close) {
@@ -2801,7 +2832,7 @@ export function BoardPage() {
     }
 
     try {
-      const updated = await persistIssueUpdate(issue, { stateId: targetStateId, ...close }, (current) => ({
+      const updated = await persistIssueUpdate(issue, { stateId: targetStateId, ...close[issue.id] }, (current) => ({
         ...current,
         state: targetState,
       }), false);
@@ -3029,6 +3060,7 @@ export function BoardPage() {
         )}
       />
       <WorkFilterBar {...workFilterState} />
+      <Btn variant="subtle" size="sm" onClick={() => writeBoardQuery('superseded:yes -state-type:canceled,completed')}>Superseded, open</Btn>
       <FilterMenu
         label="States"
         options={teamStates.map((state) => ({ value: state.id, label: state.name }))}
@@ -3453,6 +3485,8 @@ export function BoardPage() {
           projectFilter={projectFilter}
           notices={notices}
           loading={loading && !queryData}
+          onBulkStateChange={(stateId, issues) => applyBulkStateChange(stateId, issues)}
+          onSupersededFilter={() => writeBoardQuery('superseded:yes -state-type:canceled,completed')}
         />
       ) : (
         <>
@@ -3647,6 +3681,7 @@ export function BoardPage() {
       )}
 
       {closeReasonDialog}
+      {batchCloseReasonDialog}
       {linkedIssueRef ? (
         // The issue a link named is not among the board's cards — a filter hid
         // it, or it sits beyond the first page. The drawer asks for that one

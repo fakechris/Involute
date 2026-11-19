@@ -1557,6 +1557,14 @@ link:blocked-by:none has:contract -state:done "free text"
   has one work row and not the graph.
 - `severity:sev1,sev2` (INV-1115) matches those severities; `severity:none`
   matches work nobody has judged; `-severity:sev1` includes unjudged work.
+- `superseded:yes` / `superseded:no` (INV-1930) matches work with / without
+  a replacement. Board and Backlog's **Superseded, open** shortcut uses
+  `superseded:yes -state-type:canceled,completed`; delivery-package merge
+  sources remain excluded by the normal list rules. Selecting several items
+  and moving to Canceled confirms each item's own replacement-derived
+  resolution and reason once. Items without a replacement share manual
+  values; missing values, live claims, and conflicts are named and left open.
+  Successful writes keep their individual audits and form one undo gesture.
 - `attr.<key>:<value>` (INV-1505) matches a field definition's value:
   `attr.risk:low,high`, `attr.tags:a` (a MULTI_ENUM containing `a`),
   `attr.customer:none` / `attr.customer:any`, `attr.owner:me` (a person

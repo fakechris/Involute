@@ -18,8 +18,10 @@ import {
 import { FilterChip, FilterMenu, FilterSearch, SavedViewControl, SortControl } from '../components/filters';
 import { PageBody, PageToolbar } from '../components/layout';
 import { ProjectBadge } from '../components/ProjectBadge';
-import { EmptyState, LoadingState } from '../components/status';
+import { BulkActionBar, EmptyState, LoadingState } from '../components/status';
 import { WorkFilterBar, useWorkFilters } from '../components/WorkFilterBar';
+import { Btn } from '../components/Primitives';
+import { Checkbox, Select } from '../components/controls';
 
 interface BacklogPageProps {
   issues: IssueSummary[];
@@ -36,6 +38,8 @@ interface BacklogPageProps {
   notices?: ReactNode | undefined;
   /** The Board's first page is still loading. */
   loading?: boolean | undefined;
+  onBulkStateChange?: (stateId: string, issues: IssueSummary[]) => Promise<void>;
+  onSupersededFilter?: () => void;
 }
 
 export function BacklogPage({
@@ -47,7 +51,12 @@ export function BacklogPage({
   projectFilter,
   notices,
   loading = false,
+  onBulkStateChange,
+  onSupersededFilter,
 }: BacklogPageProps) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [targetStateId, setTargetStateId] = useState('');
+  const [saving, setSaving] = useState(false);
   const workFilterState = useWorkFilters();
   const teamKey = selectedTeam?.key ?? null;
   const [viewState, setViewState] = useState<BacklogViewState>(() => readStoredBacklogViewState(teamKey));
@@ -56,6 +65,8 @@ export function BacklogPage({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useLayoutEffect(() => {
+    setSelectedIds([]);
+    setTargetStateId('');
     setViewState(readStoredBacklogViewState(teamKey));
     setSavedViews(readSavedBacklogViews(teamKey));
     setActiveSavedViewId('');
@@ -229,6 +240,7 @@ export function BacklogPage({
         )}
       />
       <WorkFilterBar {...workFilterState} />
+      {onSupersededFilter ? <Btn variant="subtle" size="sm" onClick={onSupersededFilter}>Superseded, open</Btn> : null}
       <FilterMenu
         label="States"
         options={teamStates.map((state) => ({ value: state.id, label: state.name }))}
@@ -345,7 +357,16 @@ export function BacklogPage({
               <tbody>
                 {filteredIssues.map((issue) => (
                   <tr key={issue.id}>
-                    <td>{issue.identifier}</td>
+                    <td>
+                      {onBulkStateChange ? (
+                        <Checkbox
+                          aria-label={`Select ${issue.identifier}`}
+                          label={issue.identifier}
+                          checked={selectedIds.includes(issue.id)}
+                          onChange={() => setSelectedIds((ids) => ids.includes(issue.id) ? ids.filter((id) => id !== issue.id) : [...ids, issue.id])}
+                        />
+                      ) : issue.identifier}
+                    </td>
                     <td>
                       <button
                         type="button"
@@ -379,6 +400,20 @@ export function BacklogPage({
           <EmptyState title="No issues match the current backlog view." />
         )}
       </PageBody>
+      {onBulkStateChange ? <BulkActionBar count={filteredIssues.filter((issue) => selectedIds.includes(issue.id)).length} onSelectAll={() => setSelectedIds(filteredIssues.map((issue) => issue.id))} onClear={() => setSelectedIds([])}>
+        <Select size="sm" aria-label="Bulk move selected issues to state" value={targetStateId} onChange={(event) => setTargetStateId(event.target.value)}>
+          <option value="">Move to…</option>
+          {teamStates.map((state) => <option key={state.id} value={state.id}>{state.name}</option>)}
+        </Select>
+        {targetStateId ? <Btn variant="accent" disabled={saving} onClick={() => {
+          setSaving(true);
+          void onBulkStateChange(targetStateId, filteredIssues.filter((issue) => selectedIds.includes(issue.id))).finally(() => {
+            setSaving(false);
+            setSelectedIds([]);
+            setTargetStateId('');
+          });
+        }}>Apply to selected</Btn> : null}
+      </BulkActionBar> : null}
     </>
   );
 }
