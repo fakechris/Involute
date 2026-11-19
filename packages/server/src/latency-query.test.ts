@@ -7,6 +7,8 @@ import { recordRequestAudit } from './agent-request-service.js';
 import { startServer } from './index.js';
 import { createIssue, updateIssue } from './issue-service.js';
 import { createSession } from './session.js';
+import { loadDeliveryLatency } from './latency-query.js';
+import { scopeWindow } from './scope-history.js';
 
 const prisma = new PrismaClient();
 const HOUR = 3_600_000;
@@ -56,6 +58,26 @@ it('replays stored audit and run data for a shared project, with stable pages an
   }));
   await prisma.workAudit.update({ where: { id: requestAuditId }, data: { createdAt: at(3) } });
   const hidden = await work('Unshared delivery', 'metrics/unshared', 5);
+  for (const timeZone of ['UTC', 'America/Los_Angeles']) {
+    const days = { from: '2026-03-07', to: '2026-03-09', timeZone };
+    const expected = scopeWindow(days);
+    const result = await loadDeliveryLatency(prisma, {}, { teamKey: 'LAT', first: 100, ...days, sample: 'LEAD_TIME' });
+    expect(result.window).toEqual(expected);
+    expect(result.leadTime.window).toEqual(expected);
+    for (const node of result.nodes) {
+      expect(node.episodes.some(episode => episode.acceptedAt !== null
+        && episode.acceptedAt >= expected.start && episode.acceptedAt < expected.end)).toBe(true);
+    }
+  }
+  for (const form of [{}, { from: '2026-03-07' }, { start: at(0) }, { from: '2026-03-07', to: '2026-03-09', start: at(0), end: at(8) }]) {
+    await expect(loadDeliveryLatency(prisma, {}, { teamKey: 'LAT', first: 100, ...form })).rejects.toThrow('Choose exactly one');
+  }
+  const empty = await loadDeliveryLatency(prisma, { id: missing.id }, { teamKey: 'LAT', first: 100, start: at(0), end: at(8) });
+  expect(empty.leadTime).toMatchObject({ p50Ms: null, p90Ms: null, emptyReason: 'NO_ACCEPTED_EPISODES' });
+  const cutoffInput = { teamKey: 'LAT', first: 100, start: at(0), end: at(7) };
+  const cutoff = await loadDeliveryLatency(prisma, { id: open.id }, cutoffInput);
+  expect(cutoff.leadTime.sampleCount).toBe(0);
+  expect(await loadDeliveryLatency(prisma, { id: open.id }, cutoffInput)).toEqual(cutoff);
   await prisma.workRun.createMany({
     data: [
       { workId: delivered.id, publicId: 'latency-run-a', startedAt: at(1), endedAt: at(3) },
@@ -63,11 +85,40 @@ it('replays stored audit and run data for a shared project, with stable pages an
       { workId: imported.id, publicId: 'latency-run-imported', startedAt: at(1), endedAt: at(2) },
     ],
   });
+  await prisma.workRun.create({ data: { workId: open.id, publicId: 'latency-run-open', startedAt: at(1), endedAt: at(7) } });
+  const currentDay = await loadDeliveryLatency(prisma, { id: open.id }, {
+    teamKey: 'LAT', first: 100, from: '2026-03-08', to: '2026-03-08', timeZone: 'UTC',
+  }, at(6));
+  expect(currentDay.window.end).toEqual(new Date('2026-03-09T00:00:00Z'));
+  expect(currentDay.nodes[0]!.episodes).toMatchObject([{ outcome: 'OPEN', ageMs: 6 * HOUR }]);
+  expect(currentDay.nodes[0]!.runs).toMatchObject({ unfinishedCount: 1, finishedCount: 0, wallClockSumMs: null, wallClockUnionMs: null });
 
   const session = await createSession(prisma, viewer.id, 3600);
   const adminSession = await createSession(prisma, admin.id, 3600);
   const server = await startServer({ allowAdminFallback: false, prisma, authToken: 'unused-static-token', port: 0 });
   try {
+    async function dayRequest(windowArgs: string) {
+      const response = await fetch(`${server.url}/graphql`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: `involute_session=${session.token}` },
+        body: JSON.stringify({ query: `{ deliveryLatency(teamKey: "LAT", ${windowArgs}) {
+          window { from to timeZone start end }
+          leadTime { window { from to timeZone start end } }
+        } }` }),
+      });
+      return await response.json();
+    }
+    for (const timeZone of ['UTC', 'America/Los_Angeles']) {
+      const days = { from: '2026-03-07', to: '2026-03-09', timeZone };
+      const resolved = scopeWindow(days);
+      const expected = { ...days, start: resolved.start.toISOString(), end: resolved.end.toISOString() };
+      const body = await dayRequest(`from: "${days.from}", to: "${days.to}", timeZone: "${timeZone}"`);
+      expect(body.errors).toBeUndefined();
+      expect(body.data.deliveryLatency).toEqual({ window: expected, leadTime: { window: expected } });
+    }
+    for (const args of ['first: 1', 'from: "2026-03-07", to: "2026-03-09", start: "2026-03-07T00:00:00Z", end: "2026-03-10T00:00:00Z"']) {
+      expect((await dayRequest(args)).errors[0].message).toContain('Choose exactly one delivery latency window');
+    }
     const query = `query ($start: DateTime!, $end: DateTime!, $after: String, $repository: String, $sample: DeliveryLatencySample, $workId: String!) {
       issue(id: $workId) { state { id name type position issueCount } }
       deliveryLatency(teamKey: "LAT", start: $start, end: $end, first: 1, after: $after, repository: $repository, sample: $sample) {
@@ -165,6 +216,18 @@ it('replays stored audit and run data for a shared project, with stable pages an
     expect((await request(undefined, at(8), adminSession.token, '__none__')).data?.deliveryLatency.nodes).toEqual([]);
     await prisma.issue.update({ where: { id: hidden.id }, data: { repository: null } });
     expect((await request(undefined, at(8), adminSession.token, '__none__', 'LEAD_TIME')).data?.deliveryLatency.nodes).toMatchObject([{ id: hidden.id, sampleEpisodeCount: 1, title: 'Unshared delivery', repository: null, state: { type: 'COMPLETED' } }]);
+    const original = await loadDeliveryLatency(prisma, { id: delivered.id }, { ...cutoffInput, end: at(10) });
+    await updateIssue(prisma, delivered.id, { stateId: states.get('STARTED') }, actor);
+    await updateIssue(prisma, delivered.id, { stateId: states.get('REVIEW') }, actor);
+    await updateIssue(prisma, delivered.id, { stateId: states.get('COMPLETED') }, actor);
+    for (const [revision, hour] of [[5, 5], [6, 6], [7, 9]]) {
+      await prisma.workAudit.updateMany({ where: { workId: delivered.id, revision }, data: { createdAt: at(hour!) } });
+    }
+    await prisma.workReviewDecision.updateMany({ where: { workId: delivered.id, toRevision: 7 }, data: { createdAt: at(9) } });
+    const reopened = await loadDeliveryLatency(prisma, { id: delivered.id }, { ...cutoffInput, end: at(10) });
+    expect(reopened.nodes[0]!.episodes).toHaveLength(2);
+    expect(reopened.nodes[0]!.episodes[0]).toEqual(original.nodes[0]!.episodes[0]);
+    expect(reopened.nodes[0]!.episodes[1]).toMatchObject({ start: 'REOPENED', outcome: 'ACCEPTED', leadTimeMs: 4 * HOUR });
   } finally {
     await server.stop();
   }
