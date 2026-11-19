@@ -156,6 +156,31 @@ describe('App backlog controls', () => {
     expect(await screen.findByRole('dialog', { name: 'Peek INV-2' })).toBeInTheDocument();
   });
 
+  it('allows X and J/K from focused checkboxes and radios without stealing Space', async () => {
+    renderApp({ data: boardQueryResult, loading: false }, ['/backlog']);
+    const checkbox = await screen.findByRole('checkbox', { name: 'Select INV-1' });
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    document.body.append(radio);
+    fireEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+    for (const target of [checkbox, radio]) {
+      target.focus();
+      fireEvent.keyDown(target, { key: 'k' });
+      fireEvent.keyDown(target, { key: 'x' });
+      expect(checkbox).not.toBeChecked();
+      fireEvent.keyDown(target, { key: 'x' });
+      expect(checkbox).toBeChecked();
+      fireEvent.keyDown(target, { key: 'j' });
+      expect(screen.getByRole('button', { name: 'Ready item' }).closest('tr')).toHaveClass('backlog-table__focused');
+      fireEvent.keyDown(target, { key: 'k' });
+      expect(screen.getByRole('button', { name: 'Backlog item' }).closest('tr')).toHaveClass('backlog-table__focused');
+      expect(fireEvent.keyDown(target, { key: ' ' })).toBe(true);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    }
+    radio.remove();
+  });
+
   it('preserves Enter and Space activation on focused interactive controls', async () => {
     renderApp({ data: boardQueryResult, loading: false }, ['/backlog']);
     const rowButton = await screen.findByRole('button', { name: 'Backlog item' });

@@ -2707,7 +2707,7 @@ export function BoardPage() {
       const isElementTarget = target instanceof HTMLElement;
       const tagName = isElementTarget ? target.tagName : null;
       const isTypingField =
-        tagName === 'INPUT' ||
+        (tagName === 'INPUT' && !['checkbox', 'radio'].includes((target as HTMLInputElement).type)) ||
         tagName === 'TEXTAREA' ||
         tagName === 'SELECT' ||
         (isElementTarget && target.closest('[contenteditable]:not([contenteditable="false"])'));
