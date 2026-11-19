@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 
-import { BUG_LABEL_NAME } from './bug-report.js';
+import { BUG_LABEL_NAME } from './bug-constants.js';
 import { enqueueWorkEvent } from './event-outbox.js';
 import { loadWorkTimelines } from './work-timeline.js';
 
