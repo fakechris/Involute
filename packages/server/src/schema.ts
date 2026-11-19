@@ -117,6 +117,7 @@ import {
   assertCanReadTeam,
   assertCanWriteIssue,
   assertCanWriteTeam,
+  buildReadableDeletionWhere,
   buildReadableIssueWhere,
   buildReadableTeamWhere,
   buildVisibleUsersWhere,
@@ -562,8 +563,8 @@ const typeDefs = /* GraphQL */ `
     bugSummary(teamFilter: TeamFilter): BugSummaryResult!
     "Incident counts, MTTR / MTTM averages and follow-up progress for the /incidents page (INV-1129). Readable, committed Type: Incident work only; declined and duplicate incidents are not counted."
     incidentSummary(teamFilter: TeamFilter): IncidentSummaryResult!
-    "Replay delivery latency for readable issues in a team (INV-267). Percentiles use all qualifying acceptances in [start, end); item details are paged."
-    deliveryLatency(teamKey: String!, start: DateTime!, end: DateTime!, first: Int! = 50, after: String, repository: String, sample: DeliveryLatencySample): DeliveryLatencyResult!
+    "Replay delivery latency for readable issues (INV-267). Supply exactly one window: inclusive YYYY-MM-DD from/to and optional IANA timeZone (UTC by default), shared with milestoneBurndown, or legacy [start,end) instants. Percentiles use all qualifying acceptances in the resolved [start,end); details are paged."
+    deliveryLatency(teamKey: String!, start: DateTime, end: DateTime, from: String, to: String, timeZone: String, first: Int! = 50, after: String, repository: String, sample: DeliveryLatencySample): DeliveryLatencyResult!
     "Replay readable milestone scope into daily timezone-aware snapshots with explicit history gaps (INV-268)."
     milestoneBurndown(
       milestoneId: String!
@@ -2285,6 +2286,9 @@ const typeDefs = /* GraphQL */ `
   }
 
   type DeliveryLatencyWindow {
+    from: String
+    to: String
+    timeZone: String
     start: DateTime!
     end: DateTime!
   }
@@ -4339,7 +4343,7 @@ const resolvers = {
     },
     milestoneBurndown: async (_parent: unknown, args: ScopeWindowInput & { milestoneId: string }, context: GraphQLContext) => {
       requireAuthentication(context);
-      return loadMilestoneBurndown(context.prisma, buildReadableIssueWhere(context) ?? {}, args);
+      return loadMilestoneBurndown(context.prisma, buildReadableIssueWhere(context) ?? {}, args, buildReadableDeletionWhere(context) ?? {});
     },
     projectForOrigin: async (
       _parent: unknown,

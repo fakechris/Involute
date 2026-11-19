@@ -106,6 +106,16 @@ export function buildReadableIssueWhere(context: GraphQLContext): Prisma.IssueWh
 }
 
 /**
+ * Deleted work is readable in burndown history by whoever reads its team
+ * (INV-1929). A project share does not reach it: the share follows the live
+ * tree, and a deleted item is no longer in it.
+ */
+export function buildReadableDeletionWhere(context: GraphQLContext): Prisma.WorkDeletionWhereInput | undefined {
+  const team = buildMemberTeamWhere(context);
+  return team ? { team } : undefined;
+}
+
+/**
  * The team-shaped part of readability alone: membership, binding or PUBLIC,
  * without the teams that are visible only because a project in them is
  * shared. Issues in those teams are readable through the share scope, not

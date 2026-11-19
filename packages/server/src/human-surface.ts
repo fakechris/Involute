@@ -111,7 +111,8 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   issueUpdate: {
     kind: 'web',
     doc: 'ISSUE_UPDATE_MUTATION',
-    components: ['routes/IssuePage.tsx'],
+    // BoardPage owns the mutation for Board and Backlog's bulk controls (INV-1930).
+    components: ['routes/IssuePage.tsx', 'routes/BoardPage.tsx'],
     label: 'Edit contract',
     labelFile: 'components/ContractSection.tsx',
     test: 'App.issue-detail-edit.test.tsx',

@@ -52,6 +52,7 @@ import { orderWorkflowStates } from './workflow-state-order.js';
 export const AUTO_ACCEPT_BUGS_HUMAN_ONLY_MESSAGE = 'Only a person can turn automatic acceptance of verified bug fixes on or off.';
 export const AUTO_ACCEPT_BUGS_PROJECT_ONLY_MESSAGE = 'Automatic acceptance of verified bug fixes is set on a PROJECT.';
 import { writeWorkTombstone } from './work-tombstone.js';
+import { writeWorkDeletion } from './work-deletion.js';
 import { assertSingleType, isBugWork, isIncidentWork, isResearchWork } from './labels.js';
 import { assertBugCloseReason, enqueueWorkCanceledEvent, parseWorkResolution } from './work-resolution.js';
 import { assertAgentMayCloseResearch, RESEARCH_CLOSE_REASON } from './research-closure.js';
@@ -344,9 +345,25 @@ export async function updateIssue(
       throw createValidationError('Inherited execution contracts are changed through their delivery package in Candidates.');
     }
     if (existingIssue.supersededById && input.stateId !== undefined && input.stateId !== null) {
-      // A superseded item may still be closed (Canceled / Done); only reopening it is refused (INV-1498).
+      // A superseded item may still be closed (INV-1498), or a person may undo
+      // its cancellation (INV-1930). Agents and delivery merges cannot reopen it.
       const target = await transaction.workflowState.findUnique({ where: { id: input.stateId }, select: { type: true } });
-      if (target && target.type !== 'CANCELED' && target.type !== 'COMPLETED') throw createValidationError('Change the replacement work instead of reopening a superseded item.');
+      if (target && target.type !== 'CANCELED' && target.type !== 'COMPLETED') {
+        // People can undo canceling an ordinary superseded item (INV-1930).
+        // Delivery merge sources and agents retain the no-reopen rule.
+        const current = await transaction.workflowState.findUnique({ where: { id: existingIssue.stateId }, select: { type: true } });
+        const mergeSource = await transaction.issue.findFirst({
+          where: {
+            id: existingIssue.id,
+            OR: [
+              { outgoingLinks: { some: { type: 'DUPLICATE_OF' } } },
+              { supersededBy: { is: { deliveryPackage: { isNot: null } } } },
+            ],
+          },
+          select: { id: true },
+        });
+        if (actor.actorKind !== 'HUMAN' || current?.type !== 'CANCELED' || mergeSource) throw createValidationError('Change the replacement work instead of reopening a superseded item.');
+      }
     }
 
 
@@ -482,6 +499,8 @@ export async function updateIssue(
       if (state.type === 'CANCELED' && state.id !== existingIssue.stateId) {
         const current = await transaction.workflowState.findUnique({ where: { id: existingIssue.stateId }, select: { type: true } });
         if (current?.type !== 'CANCELED') {
+          const claim = await transaction.workClaim.findUnique({ where: { workId: existingIssue.id } });
+          if (claim && claim.leaseUntil > new Date()) throw createValidationError('This item has an active claim; release it before canceling.');
           if (!closeResolution) throw createValidationError(WORK_CANCEL_RESOLUTION_REQUIRED_MESSAGE);
           assertBugCloseReason(await isBugWork(transaction, existingIssue.id), closeReason);
           canceledWith = closeResolution;
@@ -1093,6 +1112,7 @@ export async function deleteIssue(
     }
     // Snapshot first, while the children still point here (INV-840).
     await writeWorkTombstone(tx, id, actor.actorId ?? null);
+    await writeWorkDeletion(tx, id, actor);
     const children = await tx.issue.findMany({ where: { parentId: id } });
     for (const child of children) {
       const after = await tx.issue.update({ where: { id: child.id }, data: { parentId: null, revision: { increment: 1 } } });

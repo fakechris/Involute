@@ -388,12 +388,21 @@ Example variables:
 }
 ```
 
-### `deliveryLatency(teamKey: String!, start: DateTime!, end: DateTime!, first: Int = 50, after: String, repository: String, sample: DeliveryLatencySample)`
+### `deliveryLatency(teamKey: String!, from: String, to: String, timeZone: String, start: DateTime, end: DateTime, first: Int = 50, after: String, repository: String, sample: DeliveryLatencySample)`
+
+Supply exactly one window form: inclusive `YYYY-MM-DD` `from`/`to` with
+optional IANA `timeZone` (default UTC), or legacy `start`/`end` instants.
+Calendar windows use the same resolver as `milestoneBurndown`: local midnight
+on `from` through midnight after `to`, as `[start,end)` (1–366 days).
+The timeline and Delivery page use UTC calendar days with the same inclusive
+end-day rule. Result and percentile windows echo nullable `from`, `to`,
+`timeZone` (null for legacy instants), plus resolved `start`/`end`.
+Both/neither forms and incomplete forms are validation errors.
 
 INV-267, definition version `1`. This signed-in, read-only query returns
 delivery metrics for the team's issues the caller may read, including
 project shares. Nodes use issue-ID keyset pagination (1–100 per page).
-The same team, `start`, and `end` must be supplied with a cursor. Summary
+The same team and resolved `start`/`end` must be supplied with a cursor. Summary
 statistics cover the whole readable cohort, not just the current page.
 
 INV-269: `repository` matches `Issue.repository` case-insensitively;
@@ -496,6 +505,22 @@ timestamps.
   Points before baseline, inside a gap or after now have null scope/remaining.
   No candidates returns NO_MEMBERS; candidates without any audits return
   NO_HISTORY. Events include all recorded transitions before window end.
+- **Deleted work stays in history (INV-1929).** Deleting work still removes the
+  live item and its audit rows, so ordinary reads no longer list it, but first
+  records a `WorkDeletion`: the scope fields (parent, commitment, state, kind)
+  of every audit and of the final state, the parents they name, and who
+  deleted it, when and from which surface. No title, description or comment is
+  kept. Discovery follows those parents like historical audit parents, and
+  replay adds a deletion step at `deletedAt` that detaches the item, so a
+  deleted member emits REMOVE that day (`source.auditId` is the deletion record)
+  and every earlier day is unchanged. Restoring within the undo window stamps
+  `restoredAt` and replays as ADD at the restore. A deletion reaches burndown
+  only for readers of its team; a project share follows the live tree and does
+  not reveal deleted work. A deletion with no recorded audits (backfilled after
+  its trail was gone) opens a `DELETED_WITHOUT_HISTORY` gap up to its
+  deletion, and an audit placing a candidate under a parent that neither
+  exists nor left a deletion record opens one from that audit until it moves,
+  instead of silently dropping the member.
 - Ideal is only a **REFERENCE**, never a forecast. Both ideal dates must be
   supplied, start before end, with a known baseline at or before idealStart's
   local midnight. It interpolates remaining at that exclusive instant to zero
@@ -1557,6 +1582,14 @@ link:blocked-by:none has:contract -state:done "free text"
   has one work row and not the graph.
 - `severity:sev1,sev2` (INV-1115) matches those severities; `severity:none`
   matches work nobody has judged; `-severity:sev1` includes unjudged work.
+- `superseded:yes` / `superseded:no` (INV-1930) matches work with / without
+  a replacement. Board and Backlog's **Superseded, open** shortcut uses
+  `superseded:yes -state-type:canceled,completed`; delivery-package merge
+  sources remain excluded by the normal list rules. Selecting several items
+  and moving to Canceled confirms each item's own replacement-derived
+  resolution and reason once. Items without a replacement share manual
+  values; missing values, live claims, and conflicts are named and left open.
+  Successful writes keep their individual audits and form one undo gesture.
 - `attr.<key>:<value>` (INV-1505) matches a field definition's value:
   `attr.risk:low,high`, `attr.tags:a` (a MULTI_ENUM containing `a`),
   `attr.customer:none` / `attr.customer:any`, `attr.owner:me` (a person

@@ -36,7 +36,7 @@ describe('App routing', () => {
 
     expect(await screen.findByRole('heading', { name: 'Backlog' })).toBeInTheDocument();
     const table = screen.getByRole('table');
-    expect(within(table).getByRole('cell', { name: 'INV-1' })).toBeInTheDocument();
+    expect(within(table).getByRole('checkbox', { name: 'Select INV-1' })).toBeInTheDocument();
     expect(within(table).getAllByRole('cell', { name: 'Backlog' }).length).toBeGreaterThan(0);
     expect(within(table).getByRole('cell', { name: 'task' })).toBeInTheDocument();
 

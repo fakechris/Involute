@@ -147,6 +147,10 @@ export function compileTerm(term: IqlTerm, context: IqlCompileContext): Prisma.I
   const listContains = (candidate: string): boolean => values.includes(candidate.toLowerCase());
 
   switch (term.field) {
+    case 'superseded': {
+      if (term.op !== 'eq' || !['yes', 'no'].includes(term.value.toLowerCase())) throw iqlParseGraphQLError('superseded takes yes or no.');
+      return clauseFor({ supersededById: term.value.toLowerCase() === 'yes' ? { not: null } : null });
+    }
     case 'neighbourhood':
       // Resolved in compileIqlWhere, which can read the work graph (INV-1758).
       throw iqlParseGraphQLError('neighbourhood is resolved by the query compiler, not this synchronous path.');
@@ -390,6 +394,8 @@ function matchPositive(term: IqlTerm, work: DatabaseWork, context: IqlCompileCon
   const listContains = (candidate: string): boolean => values.some((value) => value.toLowerCase() === candidate.toLowerCase());
 
   switch (term.field) {
+    case 'superseded':
+      return term.value.toLowerCase() === 'yes' ? Boolean(work.supersededById) : !work.supersededById;
     case 'neighbourhood':
       // Webhook filters have the row, not the graph. Same as `link:` (INV-1758).
       return false;

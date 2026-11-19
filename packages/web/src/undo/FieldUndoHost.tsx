@@ -11,6 +11,8 @@ export interface IssueUndoAppliedDetail {
   /** Issues now at the version the server returned (edited back, or restored). */
   issues: IssueSummary[];
   issueIds: string[];
+  /** Keep both sides of a state gesture visible, including refused reversals. */
+  revealStateIds?: string[];
   /** Issues an undo/redo deleted again (INV-840). */
   deletedIds?: string[];
 }
@@ -41,7 +43,8 @@ export function FieldUndoHost() {
         conflicts.push(change.identifier);
       }
     }));
-    window.dispatchEvent(new CustomEvent<IssueUndoAppliedDetail>(ISSUE_UNDO_APPLIED_EVENT, { detail: { issues, issueIds: changes.map((change) => change.issueId) } }));
+    const revealStateIds = [...new Set(changes.flatMap((change) => [change.before.stateId, change.after.stateId]).filter((id): id is string => typeof id === 'string'))];
+    window.dispatchEvent(new CustomEvent<IssueUndoAppliedDetail>(ISSUE_UNDO_APPLIED_EVENT, { detail: { issues, issueIds: changes.map((change) => change.issueId), revealStateIds } }));
     return { applied, conflicts };
   };
   useEffect(() => registerFieldUndoApply((changes) => applyRef.current(changes)), []);

@@ -1,7 +1,7 @@
 import { gql } from '@apollo/client';
 import { useApolloClient, useQuery } from '@apollo/client/react';
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
 import { DataTable } from '../components/DataTable';
@@ -10,22 +10,25 @@ import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { Btn } from '../components/Primitives';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
 import { Badge, EmptyState, LoadingState, SegmentedControl, StatRow, StatTile } from '../components/status';
-import { WorkReference } from '../components/WorkReference';
+import { formatDay, parseFactWindow, windowForPreset, windowRange } from '../work/timeline-model';
+import { MilestoneBurndown } from './MilestoneBurndown';
 import { NO_REPOSITORY_OPTIONS, useProjectParam } from './work-filter-match';
 
 export const DELIVERY_QUERY = gql`
   query DeliveryLatency(
     $teamKey: String!
-    $start: DateTime!
-    $end: DateTime!
+    $from: String!
+    $to: String!
+    $timeZone: String!
     $repository: String
     $sample: DeliveryLatencySample
     $after: String
   ) {
     deliveryLatency(
       teamKey: $teamKey
-      start: $start
-      end: $end
+      from: $from
+      to: $to
+      timeZone: $timeZone
       repository: $repository
       sample: $sample
       first: 100
@@ -192,14 +195,21 @@ export function DeliveryPage() {
   const teamKey = readStoredTeamKey() ?? '';
   const [params, setParams] = useSearchParams();
   const [project, setProject] = useProjectParam();
-  const [defaultEnd] = useState(() => new Date().toISOString());
-  const end = params.get('to') ?? defaultEnd;
-  const start = params.get('from') ?? new Date(new Date(defaultEnd).getTime() - 30 * 86_400_000).toISOString();
+  const [now] = useState(() => new Date());
+  const factWindow = parseFactWindow(params.get('from'), params.get('to'), now) ?? windowForPreset('30d', now)!;
+  const from = formatDay(factWindow.from);
+  const to = formatDay(factWindow.to);
+  const range = windowRange(factWindow);
+  const start = range.start.toISOString();
+  const end = range.end.toISOString();
+  const hasTimelineProject = Boolean(project && project !== '__none__');
+  const timelineParams = new URLSearchParams({ view: 'timeline', from, to });
+  if (hasTimelineProject) timelineParams.set('project', project);
   const rawSample = params.get('sample');
   const sample = ['LEAD_TIME', 'CYCLE_TIME', 'REVIEW_WAIT', 'OPEN'].includes(rawSample ?? '') ? (rawSample as Sample) : null;
   const variables = useMemo(
-    () => ({ teamKey, start, end, repository: project || null, sample }),
-    [teamKey, start, end, project, sample],
+    () => ({ teamKey, from, to, timeZone: 'UTC', repository: project || null, sample }),
+    [teamKey, from, to, project, sample],
   );
   const requestKey = JSON.stringify(variables);
   const [result, setResult] = useState<{ key: string; data?: DeliveryResult; error?: string } | null>(null);
@@ -255,8 +265,8 @@ export function DeliveryPage() {
   const data = current?.data;
   function href(next: Sample) {
     const updated = new URLSearchParams(params);
-    updated.set('from', start);
-    updated.set('to', end);
+    updated.set('from', from);
+    updated.set('to', to);
     updated.set('sample', next);
     return `?${updated}`;
   }
@@ -269,9 +279,9 @@ export function DeliveryPage() {
 
   function changeWindow(value: string) {
     const updated = new URLSearchParams(params);
-    const now = new Date();
-    updated.set('to', now.toISOString());
-    updated.set('from', new Date(now.getTime() - Number(value) * 86_400_000).toISOString());
+    const today = windowForPreset('30d', now)!.to;
+    updated.set('to', formatDay(today));
+    updated.set('from', formatDay(new Date(today.getTime() - (Number(value) - 1) * 86_400_000)));
     setParams(updated);
   }
 
@@ -336,9 +346,9 @@ export function DeliveryPage() {
         ) : data ? (
           <div className="bugs-content">
             <p>
-              Definition {data.definitionVersion} · {new Date(data.window.start).toLocaleString()} –{' '}
-              {new Date(data.window.end).toLocaleString()} (end exclusive)
+              Definition {data.definitionVersion} · {from} – {to}, UTC, inclusive
             </p>
+            {hasTimelineProject ? <Link className="ui-action ui-action--subtle" to={`/graph?${timelineParams}`}>Open in timeline</Link> : null}
             <StatRow aria-label="Completed sample latency">
               {rows.map(({ key, label, sample: next, metric }) => (
                 <StatTile
@@ -428,13 +438,10 @@ export function DeliveryPage() {
                 )}
               </section>
             ) : null}
-            <section aria-label="Burndown">
-              <h2>Burndown</h2>
-              <p>
-                Waiting for <WorkReference reference="INV-268" /> scope history. No burndown chart is available yet.
-              </p>
-            </section>
           </div>
+        ) : null}
+        {teamKey ? (
+          <MilestoneBurndown key={`${teamKey}:${project}`} teamKey={teamKey} repository={project} start={start} end={end} />
         ) : null}
       </PageBody>
     </div>

@@ -2,14 +2,16 @@ import type { Prisma, PrismaClient, WorkflowStateType } from '@prisma/client';
 
 import { createValidationError, exposeErrorMessages } from './errors.js';
 import { LATENCY_DEFINITION_VERSION, latencyPercentiles, replayDeliveryLatency, runWallClock, type LatencySnapshot, type LatencyWindow } from './latency-metrics.js';
+import { scopeWindow } from './scope-history.js';
 
 const BATCH_SIZE = 100;
 const UUID = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i;
 const INVALID_WINDOW = 'Choose a delivery latency window with start before end.';
 const INVALID_FIRST = 'Choose first between 1 and 100.';
 const INVALID_CURSOR = 'Invalid delivery latency page cursor.';
+const INVALID_FORM = 'Choose exactly one delivery latency window: from/to with an optional timeZone, or start/end instants.';
 
-exposeErrorMessages([INVALID_WINDOW, INVALID_FIRST, INVALID_CURSOR]);
+exposeErrorMessages([INVALID_WINDOW, INVALID_FIRST, INVALID_CURSOR, INVALID_FORM]);
 
 function readSnapshot(value: Prisma.JsonValue, states: ReadonlyMap<string, WorkflowStateType>): LatencySnapshot {
   const row = value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {};
@@ -22,7 +24,12 @@ function readSnapshot(value: Prisma.JsonValue, states: ReadonlyMap<string, Workf
   };
 }
 
-export interface LatencyQuery extends LatencyWindow {
+export interface LatencyQuery {
+  start?: Date | null;
+  end?: Date | null;
+  from?: string | null;
+  to?: string | null;
+  timeZone?: string | null;
   teamKey: string;
   first: number;
   after?: string | null;
@@ -30,11 +37,29 @@ export interface LatencyQuery extends LatencyWindow {
   sample?: 'LEAD_TIME' | 'CYCLE_TIME' | 'REVIEW_WAIT' | 'OPEN' | null;
 }
 
-export async function loadDeliveryLatency(prisma: PrismaClient, readable: Prisma.IssueWhereInput, input: LatencyQuery) {
-  const { start, end, teamKey, first, after } = input;
+export async function loadDeliveryLatency(prisma: PrismaClient, readable: Prisma.IssueWhereInput, input: LatencyQuery, now = new Date()) {
+  const { teamKey, first, after } = input;
+  const dayForm = input.from != null || input.to != null || input.timeZone != null;
+  const instantForm = input.start != null || input.end != null;
+  if (dayForm === instantForm || (dayForm && (input.from == null || input.to == null))
+    || (instantForm && (input.start == null || input.end == null))) throw createValidationError(INVALID_FORM);
+  let window: LatencyWindow & { from: string | null; to: string | null; timeZone: string | null };
+  if (dayForm) {
+    try {
+      window = scopeWindow({ from: input.from!, to: input.to!, timeZone: input.timeZone ?? null });
+    } catch (error) {
+      const message = (error as Error).message;
+      exposeErrorMessages([message]);
+      throw createValidationError(message);
+    }
+  } else {
+    window = { start: input.start!, end: input.end!, from: null, to: null, timeZone: null };
+  }
+  const { start, end } = window;
   if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start >= end) {
     throw createValidationError(INVALID_WINDOW);
   }
+  const asOf = new Date(Math.min(end.getTime(), now.getTime()));
   if (!Number.isInteger(first) || first < 1 || first > 100) throw createValidationError(INVALID_FIRST);
   const repository = input.repository?.toLowerCase() ?? null;
   const sample = input.sample ?? null;
@@ -84,7 +109,7 @@ export async function loadDeliveryLatency(prisma: PrismaClient, readable: Prisma
           ...audit, before, after: readSnapshot(audit.after, states), beforeRevision: typeof beforeRevision === 'number' ? beforeRevision : null,
           accepted: typeof beforeRevision === 'number' && acceptances.has(`${beforeRevision}:${audit.revision}`),
         };
-      }), end);
+      }), asOf);
       if (!replay.noHistory && replay.episodes.length === 0) continue;
       coverage.workCount++;
       if (replay.noHistory) coverage.noHistoryCount++;
@@ -124,7 +149,6 @@ export async function loadDeliveryLatency(prisma: PrismaClient, readable: Prisma
     else runs.set(run.workId, [run]);
   }
   const last = currentPage.at(-1);
-  const window = { start, end };
   return {
     definitionVersion: LATENCY_DEFINITION_VERSION,
     window,
@@ -133,7 +157,7 @@ export async function loadDeliveryLatency(prisma: PrismaClient, readable: Prisma
     cycleTime: latencyPercentiles(cycle, acceptedCount, window),
     reviewWait: latencyPercentiles(review, acceptedCount, window),
     repository,
-    nodes: currentPage.map(({ replay, ...work }) => ({ ...work, ...replay, runs: runWallClock(runs.get(work.id) ?? [], end) })),
+    nodes: currentPage.map(({ replay, ...work }) => ({ ...work, ...replay, runs: runWallClock(runs.get(work.id) ?? [], asOf) })),
     pageInfo: {
       hasNextPage: page.length > first,
       endCursor: last ? Buffer.from(JSON.stringify({ id: last.id, scope: cursorScope })).toString('base64url') : null,

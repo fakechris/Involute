@@ -30,8 +30,8 @@ test('delivery project switch preserves window and reconciles drill-down samples
       expect(updated.issueUpdate.success, updated.issueUpdate.message ?? 'State update').toBe(true);
     }
   }
-  const from = new Date(Date.now() - 7 * 86_400_000).toISOString();
-  const to = new Date(Date.now() + 60_000).toISOString();
+  const to = new Date().toISOString().slice(0, 10);
+  const from = new Date(Date.parse(to) - 6 * 86_400_000).toISOString().slice(0, 10);
   await page.addInitScript(() => localStorage.setItem('involute.activeTeamKey', 'INV'));
   await page.goto(`/delivery?from=${from}&to=${to}&project=${repositories[0]}`);
   await expect(page.getByRole('heading', { name: 'Delivery latency', exact: true })).toBeVisible();
@@ -42,7 +42,9 @@ test('delivery project switch preserves window and reconciles drill-down samples
   const list = page.getByLabel('Delivery drill-down');
   await expect(list).toContainText('1 items · 1 samples of 1');
   await expect(list).toContainText(titles[0]!);
-  await page.getByRole('button', { name: repositories[1], exact: true }).click();
+  await page.getByRole('button', { name: `Project: ${repositories[0]}`, exact: true }).click();
+  await page.getByPlaceholder('Filter projects...').fill(repositories[1]!);
+  await page.getByRole('option').filter({ hasText: repositories[1] }).click();
   await expect(list).toContainText(titles[1]!);
   await expect(list).not.toContainText(titles[0]!);
   await expect(list).toContainText('1 items · 1 samples of 1');
