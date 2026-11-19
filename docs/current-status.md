@@ -32,7 +32,7 @@ Done:
 - global roles exist: `ADMIN`, `USER`
 - team visibility exists: `PUBLIC`, `PRIVATE`
 - team membership roles exist: `VIEWER`, `EDITOR`, `OWNER`
-- minimal team access management exists in the web UI at `/settings/access`
+- `/settings/access` redirects to the current team's settings; agent credentials are managed under **Agents**
 - admin bootstrap exists through `ADMIN_EMAIL_ALLOWLIST` and `admin:bootstrap`
 
 ### Deployment tooling foundation

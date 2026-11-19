@@ -115,6 +115,17 @@ describe('App keyboard shortcuts and help dialog', () => {
     });
   });
 
+  it('describes G A as team settings and points to Agents for tokens', async () => {
+    renderTestApp();
+    fireEvent.keyDown(window, { key: '?' });
+    const dialog = await screen.findByRole('dialog', { name: 'Keyboard shortcuts' });
+    const label = within(dialog).getByText('Go to team settings');
+    const row = label.closest('.shortcuts-dialog__item') as HTMLElement;
+    expect(within(row).getByText("Current team's settings; agent tokens are under Agents")).toBeInTheDocument();
+    expect(within(row).getAllByText(/^[GA]$/, { selector: 'kbd' }).map((key) => key.textContent)).toEqual(['G', 'A']);
+    expect(within(dialog).queryByText('Go to Access')).not.toBeInTheDocument();
+  });
+
   it('opens keyboard shortcuts dialog via Cmd+/ shortcut', async () => {
     renderTestApp();
 

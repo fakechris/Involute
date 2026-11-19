@@ -1331,8 +1331,8 @@ credential it authenticated with:
 eligibility all recognise an agent as part of a team **by binding**. The
 migration `agent_binding_not_membership` backfills any live credential
 without a `teamId` from the agent's old membership, then removes agents and
-services from the roster. `/settings/access` lists humans; agents bound to the
-team appear in their own section with owner and presence.
+services from the roster. `/settings/access` redirects to the current team's
+settings; agent credentials are managed in its **Agents** section.
 
 #### Who may manage an actor (INV-590, tightened in INV-594)
 
