@@ -1,4 +1,5 @@
 import { HandoffCard } from '../components/HandoffCard';
+import { CoverageHints } from '../components/CoverageHints';
 import { DeliverySection } from '../components/DeliveryPanel';
 import { useQuery } from '@apollo/client/react';
 import { useEffect, useState } from 'react';
@@ -270,6 +271,7 @@ export function WorkContextPage() {
         </section>
         <section className="work-context__section">
           <h2>Evidence</h2>
+          <CoverageHints key={`${bundle.work.id}:${bundle.work.contractDigest}:${bundle.evidence.map(e => `${e.id}:${e.retractedAt}`).join(',')}:${bundle.runs.map(r => `${r.id}:${r.commitSha}:${r.pullRequestNumber}`).join(',')}`} workId={bundle.work.id} />
           <EvidenceAttachForm workId={bundle.work.id} />
           {bundle.evidence.length === 0 ? (
             <EmptyState size="inline" title="No evidence" />

@@ -1,4 +1,5 @@
 import { deliveryLinksMissingWarning } from './delivery-links.js';
+import { readCoverageHints } from './semantic-coverage.js';
 import { loadMilestoneBurndown } from './scope-query.js';
 import { requestNeedInfo, withdrawNeedInfo } from './need-info-service.js';
 import { delegateToAgent } from './autonomy-delegation.js';
@@ -105,6 +106,7 @@ export type McpToolName =
   | 'work_timeline_star'
   | 'work_timeline_unstar'
   | 'work_get_context'
+  | 'work_coverage_hints'
   | 'work_list_ready'
   | 'protocol_get_guide'
   | 'work_propose'
@@ -138,6 +140,7 @@ export const READ_ONLY_MCP_TOOLS: readonly McpToolName[] = [
   'work_read_page',
   'work_executor_context',
   'work_delivery_context',
+  'work_coverage_hints',
   'work_get_context',
   'work_list_ready',
   'work_views',
@@ -490,6 +493,11 @@ async function callMcpAction(
     case 'work_delivery_context': return deliveryContext(context, requiredString(args.id, 'id'));
     case 'work_delivery_propose': return proposeDeliveryChange(context, { workId: requiredString(args.work_id, 'work_id'), expectedRevision: requiredNumber(args.expected_revision, 'expected_revision'), reason: requiredString(args.reason, 'reason'), changes: args.changes });
     case 'work_execution_create': return createDeliveryExecution(context, { workId: requiredString(args.work_id, 'work_id'), unitKey: requiredString(args.unit_key, 'unit_key'), expectedGrantRevision: requiredNumber(args.expected_grant_revision, 'expected_grant_revision') });
+    case 'work_coverage_hints': {
+      const work = await findWorkByIdOrIdentifier(context.prisma, requiredString(args.id, 'id'));
+      if (!work) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+      return readCoverageHints(context, work.id);
+    }
     case 'work_get_context': {
       const id = requiredString(args.id, 'id');
       const work = await findWorkByIdOrIdentifier(context.prisma, id);
@@ -1377,6 +1385,12 @@ const MCP_TOOL_DEFINITIONS: McpToolDefinition[] = [
     inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
   },
   {
+    name: 'work_coverage_hints',
+    annotations: { readOnlyHint: true, destructiveHint: false },
+    description: 'Read advisory per-criterion evidence gaps (not verification). INV-650.',
+    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+  },
+  {
     name: 'work_get_context',
     annotations: { readOnlyHint: true, destructiveHint: false },
     description: 'Return the full context bundle for a work id or identifier: contract, ancestors, blockers, claim, audits.',
@@ -2170,6 +2184,7 @@ const MCP_TOOL_SCOPES: Record<McpToolName, string | null> = {
   work_timeline_star: 'propose',
   work_timeline_unstar: 'propose',
   work_get_context: 'read',
+  work_coverage_hints: 'read',
   work_read_page: 'read',
   work_catalog: 'read',
   work_list_ready: 'read',

@@ -1,4 +1,5 @@
 import { deliveryLinksMissingWarning } from './delivery-links.js';
+import { readCoverageHints } from './semantic-coverage.js';
 import { executorContext, executorUpdate, type ExecutorInput } from './executor-service.js';
 import { loadHandledForYou } from './autonomy-gate.js';
 import type { AgentTrustLevel } from '@prisma/client';
@@ -471,6 +472,10 @@ const typeDefs = /* GraphQL */ `
   type DeliveryChangeConnection { nodes: [DeliveryChangeSet!]! pageInfo: DeliveryPageInfo! }
   type ExecutorMutationPayload { success: Boolean! message: String resultJson: String }
   type DeliveryMutationPayload { success: Boolean! message: String changeSet: DeliveryChangeSet issue: Issue }
+  type CoverageSource { id: String!, kind: String!, url: String!, summary: String, runId: String, referenceExists: Boolean!, origin: String! }
+  type CoverageCodeFinding { criterionId: String!, evidenceId: String!, message: String! }
+  type CoverageCriterion { id: String!, text: String!, judgment: String!, sources: [CoverageSource!]!, codeFindings: [CoverageCodeFinding!]! }
+  type CoverageHints { status: String!, criteria: [CoverageCriterion!]! }
   type Query {
     executorContextJson(id: String!): String!
     deliveryContext(id: String!): DeliveryContext!
@@ -516,6 +521,7 @@ const typeDefs = /* GraphQL */ `
     cycles(teamId: String!): CycleConnection! @deprecated(reason: "Use issues query with kind: MILESTONE and CONTAINS links instead.")
     cycle(id: String!): Cycle @deprecated(reason: "Use issue query with kind: MILESTONE instead.")
     workContext(id: String!): WorkContext
+    workCoverageHints(id: String!): CoverageHints!
     readyWork(filter: ReadyWorkFilter, query: String): IssueConnection!
     """
     One project's work graph (INV-681): the nodes the project resolves to —
@@ -4549,6 +4555,11 @@ const resolvers = {
         prisma: context.prisma,
         ...(args.days !== undefined && args.days !== null ? { days: args.days } : {}),
       });
+    },
+    workCoverageHints: async (_parent: unknown, args: { id: string }, context: GraphQLContext) => {
+      const work = await findWorkByIdOrIdentifier(context.prisma, args.id);
+      if (!work) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
+      return readCoverageHints(context, work.id);
     },
     workContext: async (
       _parent: unknown,
