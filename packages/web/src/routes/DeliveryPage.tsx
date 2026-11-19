@@ -203,7 +203,7 @@ export function DeliveryPage() {
   const start = range.start.toISOString();
   const end = range.end.toISOString();
   const timelineParams = new URLSearchParams({ view: 'timeline', from, to });
-  if (project) timelineParams.set('project', project);
+  if (project && project !== '__none__') timelineParams.set('project', project);
   const rawSample = params.get('sample');
   const sample = ['LEAD_TIME', 'CYCLE_TIME', 'REVIEW_WAIT', 'OPEN'].includes(rawSample ?? '') ? (rawSample as Sample) : null;
   const variables = useMemo(

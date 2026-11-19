@@ -152,6 +152,12 @@ it('shows no samples rather than zero duration and explains missing history', as
   expect(stats).not.toHaveTextContent('0m');
   expect(screen.getByText('Low coverage')).toBeInTheDocument();
 });
+it('omits the no-repository sentinel from the timeline link', async () => {
+  mount(async () => fixture(), '', defaultProjects, `from=${start}&to=${end}&project=__none__`);
+  const link = await screen.findByRole('link', { name: 'Open in timeline' });
+  const url = new URL(link.getAttribute('href')!, 'http://localhost');
+  expect(Object.fromEntries(url.searchParams)).toEqual({ view: 'timeline', from: start, to: end });
+});
 it('flags partial coverage and shows all coverage counts', async () => {
   mount(async () => fixture({ leadTime: { ...metric, sampleCount: 2, coverage: { missingCount: 1 } }, coverage: { workCount: 8, noHistoryCount: 1, openEpisodeCount: 2, closedWithoutAcceptanceCount: 3, unknownEpisodeCount: 1 } }));
   expect(await screen.findByText('Low coverage')).toBeInTheDocument();
