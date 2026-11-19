@@ -32,6 +32,39 @@ function searchVariables() {
 }
 
 describe('Search page (INV-926)', () => {
+  it('explains IQL-only submission and hides the hint when a keyword is entered (INV-1946)', async () => {
+    renderApp({ data: boardQueryResult, loading: false, searchData }, ['/search?project=fakechris/lumenbox']);
+    const hint = /IQL only refines a keyword search\. Add a keyword/;
+    expect(screen.queryByText(hint)).not.toBeInTheDocument();
+
+    const iqlInput = await screen.findByLabelText('IQL filter');
+    fireEvent.change(iqlInput, { target: { value: 'assignee:me priority:2' } });
+    fireEvent.keyDown(iqlInput, { key: 'Enter' });
+    fireEvent.submit(screen.getByRole('search'));
+
+    expect(await screen.findByText(hint)).toBeInTheDocument();
+    expect(screen.queryByText('Type words to search all work you can read.')).not.toBeInTheDocument();
+    expect(searchVariables()).toEqual([]);
+    const link = screen.getByRole('link', { name: /view committed work in Backlog/ });
+    const params = new URL(link.getAttribute('href')!, 'http://localhost').searchParams;
+    expect(params.get('query')).toBe('assignee:me priority:2');
+    expect(params.get('project')).toBe('fakechris/lumenbox');
+
+    fireEvent.change(screen.getByLabelText('Search all work'), { target: { value: '审批' } });
+    expect(screen.queryByText(hint)).not.toBeInTheDocument();
+    fireEvent.submit(screen.getByRole('search'));
+    await waitFor(() => expect(searchVariables().at(-1)).toEqual({
+      query: '审批', first: 100, iql: 'assignee:me priority:2', repository: 'fakechris/lumenbox',
+    }));
+    expect(screen.queryByText(hint)).not.toBeInTheDocument();
+  });
+
+  it('does not show the IQL-only hint for a keyword search with IQL', async () => {
+    renderApp({ data: boardQueryResult, loading: false, searchData }, ['/search?q=审批&iql=priority:2']);
+    expect(await screen.findByRole('list', { name: 'Search results' })).toBeInTheDocument();
+    expect(screen.queryByText(/IQL only refines a keyword search/)).not.toBeInTheDocument();
+  });
+
   it('turns kind, state and label into the IQL work_search takes', () => {
     expect(buildSearchIql({ kind: '', state: '', label: '', iql: '' })).toBe('');
     expect(buildSearchIql({ kind: 'EPIC', state: 'STARTED', label: 'Needs triage', iql: 'priority:1' }))

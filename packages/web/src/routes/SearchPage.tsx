@@ -1,6 +1,6 @@
 import { useQuery } from '@apollo/client/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { readStoredTeamKey } from '../board/utils';
 import { highlight } from '../components/highlight';
@@ -67,6 +67,9 @@ export function SearchPage() {
   }
 
   const iql = buildSearchIql(filters);
+  const showIqlHint = !draft.trim() && Boolean(filters.iql.trim());
+  const backlogParams = new URLSearchParams({ query: iql });
+  if (project) backlogParams.set('project', project);
   const results = useQuery<WorkSearchQueryData>(WORK_SEARCH_QUERY, {
     variables: {
       query,
@@ -150,6 +153,7 @@ export function SearchPage() {
               key={filters.iql}
               className="search-box__iql"
               aria-label="IQL filter"
+              aria-describedby={showIqlHint ? 'search-iql-hint' : undefined}
               placeholder="IQL, e.g. assignee:me priority:1"
               defaultValue={filters.iql}
               onKeyDown={(event) => {
@@ -157,12 +161,18 @@ export function SearchPage() {
               }}
               onBlur={(event) => update({ iql: event.target.value })}
             />
+            {showIqlHint ? (
+              <p id="search-iql-hint" className="observation-hint" role="status">
+                IQL only refines a keyword search. Add a keyword, or{' '}
+                <Link to={`/backlog?${backlogParams}`}>view committed work in Backlog with these filters</Link>.
+              </p>
+            ) : null}
           </>
         }
       />
       <PageBody>
         {!query.trim() ? (
-          <EmptyState size="inline" title="Type words to search all work you can read." />
+          showIqlHint ? null : <EmptyState size="inline" title="Type words to search all work you can read." />
         ) : results.error ? (
           <InlineError variant="block">{results.error.message}</InlineError>
         ) : results.loading && !results.data ? (

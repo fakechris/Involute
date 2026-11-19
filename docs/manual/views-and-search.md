@@ -8,7 +8,7 @@ Use **Backlog** for a table of committed work. Filter or sort the rows before re
 
 ## Search and IQL
 
-On **Search**, enter words and click **Search**. Every word must match somewhere in the work's title, description, contract, or comments. Use the project, kind, state, and label filters or add terms in **IQL filter** and press `Enter`. Search requires words; IQL alone doesn't run a search on this page. If a result is missing, remove restrictive filters and check that you can read the work.
+On **Search**, enter words and click **Search**. Every word must match somewhere in the work's title, description, contract, or comments. Use the project, kind, state, and label filters or add terms in **IQL filter** and press `Enter`. IQL only refines a keyword search on this page. If you submit IQL without words, an inline hint asks you to add a keyword or links to **Backlog** with those filters to browse committed work instead. If a result is missing, remove restrictive filters and check that you can read the work.
 
 IQL terms are combined with AND. For example, `assignee:me -state-type:completed,canceled` finds nonterminal work assigned to you; `state:"In Review"` uses quotes for a value containing spaces. The [IQL reference](../api.md#iql--unified-work-filter) covers graph terms, custom fields, and what each surface accepts.
 
