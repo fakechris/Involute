@@ -196,6 +196,15 @@ describe('claim service', () => {
         teamId: team.id, title: 'Found in loose task', relatedWorkId: task.identifier, relatedWorkType: 'DISCOVERED_DURING',
       });
       expect(found).toMatchObject({ parentId: project.id, repository: null });
+      const blankInLoose = await proposeWork(prisma, {
+        teamId: team.id, title: 'Blank in loose task', repository: '', relatedWorkId: task.id, relatedWorkType: 'DISCOVERED_DURING',
+      });
+      expect(blankInLoose).toMatchObject({ parentId: project.id, repository: null });
+      const { milestone, task: boundTask } = await tree();
+      const blankInBound = await proposeWork(prisma, {
+        teamId: team.id, title: 'Blank in bound task', repository: '', relatedWorkId: boundTask.id, relatedWorkType: 'DISCOVERED_DURING',
+      });
+      expect(blankInBound).toMatchObject({ parentId: milestone.id, repository: repo });
       const elsewhere = await proposeWork(prisma, {
         teamId: team.id, title: 'Bound elsewhere', repository: 'acme/other', relatedWorkId: task.id, relatedWorkType: 'DISCOVERED_DURING',
       });

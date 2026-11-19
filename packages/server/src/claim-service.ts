@@ -444,7 +444,7 @@ export async function proposeWork(
     if (parentWork) {
       createInput.parentId = parentWork.id;
       // A child without a repository inherits its parent's (CONTAINS needs both).
-      if (createInput.repository === undefined || createInput.repository === null) {
+      if (!createInput.repository) {
         createInput.repository = parentWork.repository;
       }
     }
