@@ -2662,6 +2662,8 @@ const typeDefs = /* GraphQL */ `
     "SEV1 first, unjudged last."
     bySeverity: [IncidentSeverityCount!]!
     byRepository: [IncidentRepositoryCount!]!
+    "Counts by the nearest PROJECT ancestor; project is null only when there is no PROJECT ancestor."
+    byProject: [IncidentProjectCount!]!
     "Mean hours from impact started to resolved; a plain average, no percentiles (INV-1130). Null before any resolved incident."
     mttrHours: Float
     "How many incidents the MTTR average is over."
@@ -2684,6 +2686,18 @@ const typeDefs = /* GraphQL */ `
     repository: String
     openCount: Int!
     resolvedCount: Int!
+  }
+
+  type IncidentProjectCount {
+    project: IncidentProject
+    openCount: Int!
+    resolvedCount: Int!
+  }
+
+  type IncidentProject {
+    id: ID!
+    identifier: String!
+    title: String!
   }
 
   type IncidentFollowUpTotals {
