@@ -339,8 +339,9 @@ export function replayMilestoneScope(input: ScopeHistoryInput): ScopeHistoryResu
     if (!covering) break;
     baseline = covering.end;
   }
-  const known = (at: Date) => baseline !== null && at >= baseline
-    && at <= input.now && !gaps.some(g => gapContains(g, at));
+  const known = (at: Date) => baseline !== null && at > baseline
+    && at <= input.now && !gaps.some(g =>
+      (g.start === null || g.start < at) && (g.end === null || at <= g.end));
   const atCounts = (at: Date) => [...frames].reverse().find(f => f.at < at) ?? { scope: 0, remaining: 0 };
   const idealStart = input.idealStart && input.idealEnd ? localDayStart(input.idealStart, window.timeZone) : null;
   const idealEnd = input.idealStart && input.idealEnd ? localDayStart(input.idealEnd, window.timeZone) : null;

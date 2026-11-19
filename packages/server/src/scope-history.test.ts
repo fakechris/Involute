@@ -52,6 +52,38 @@ function replay(
 const values = (r: ReturnType<typeof replay>) => r.points.map(p => [p.scope, p.remaining]);
 
 describe('milestone scope replay', () => {
+  it.each(['MISSING_CREATION', 'DISCONTINUITY', 'UNKNOWN_STATE'])(
+    'does not use the resolving audit at an exclusive cutoff for %s or an ideal anchor', reason => {
+      const resolveAt = { ...audit('a2', 'a', 3, state(), state()), createdAt: at(3, 0) };
+      const rows = reason === 'MISSING_CREATION' ? [resolveAt]
+        : reason === 'DISCONTINUITY' ? [
+          audit('a0', 'a', 0, null, state()),
+          { ...resolveAt, before: state(null) },
+        ] : [
+          audit('a0', 'a', 0, null, state()),
+          audit('a1', 'a', 2, state(), state('m', 'missing')),
+          { ...resolveAt, before: state('m', 'missing') },
+        ];
+      const result = replay(rows, { idealStart: '2026-01-03', idealEnd: '2026-01-05' });
+      expect(result.coverage.gaps.map(gap => gap.reason)).toContain(reason);
+      expect(result.points[1]).toMatchObject({ scope: null, remaining: null });
+      expect(result.points[2]).toMatchObject({ scope: 1, remaining: 1 });
+      expect(result.ideal).toBeNull();
+      expect(replay(rows, { idealStart: '2026-01-04', idealEnd: '2026-01-05' }).ideal)
+        .not.toBeNull();
+    },
+  );
+
+  it('keeps the known state at an exclusive cutoff that introduces an unknown state', () => {
+    const result = replay([
+      audit('a0', 'a', 0, null, state()),
+      { ...audit('a1', 'a', 3, state(), state('m', 'missing')), createdAt: at(3, 0) },
+    ]);
+    expect(values(result)).toEqual([
+      [1, 1], [1, 1], [null, null], [null, null], [null, null], [null, null], [null, null],
+    ]);
+  });
+
   it('uses the first before snapshot as transition evidence without assuming prior coverage', () => {
     const completed = state('m', 'done');
     const titleEdit = replay([audit('a1', 'a', 3, completed, completed)]);
