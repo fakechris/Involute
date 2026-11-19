@@ -13,14 +13,14 @@ async function gql<T>(request: APIRequestContext, query: string, variables: Reco
 }
 
 /** New work needs a parent (INV-744): a project for the board to create under. */
-async function createProject(request: APIRequestContext, repository: string): Promise<{ id: string }> {
+async function createProject(request: APIRequestContext, title: string, repository?: string): Promise<{ id: string; identifier: string }> {
   const teams = await gql<{ teams: { nodes: Array<{ id: string; key: string }> } }>(request, `{ teams { nodes { id key } } }`);
   const team = teams.teams.nodes.find((candidate) => candidate.key === 'INV') ?? teams.teams.nodes[0]!;
   return (
-    await gql<{ issueCreate: { issue: { id: string } } }>(
+    await gql<{ issueCreate: { issue: { id: string; identifier: string } } }>(
       request,
-      `mutation($input: IssueCreateInput!) { issueCreate(input: $input) { issue { id } } }`,
-      { input: { teamId: team.id, title: repository, kind: 'PROJECT', repository } },
+      `mutation($input: IssueCreateInput!) { issueCreate(input: $input) { issue { id identifier } } }`,
+      { input: { teamId: team.id, title, kind: 'PROJECT', repository } },
     )
   ).issueCreate.issue;
 }
@@ -28,7 +28,7 @@ async function createProject(request: APIRequestContext, repository: string): Pr
 test.describe('board flow', () => {
   test('creates, updates, comments, deletes comment, and deletes issue from the board', async ({ page, request }) => {
     const repository = `e2e/board-flow-${Date.now().toString(36)}`;
-    const project = await createProject(request, repository);
+    const project = await createProject(request, repository, repository);
     const createdTitle = 'Playwright lifecycle issue';
     const updatedTitle = 'Playwright lifecycle issue updated';
     const createdDescription = 'Created from the end-to-end acceptance suite.';
@@ -93,6 +93,41 @@ test.describe('board flow', () => {
     await expect(page.locator('[data-testid="column-Done"]').getByText(updatedTitle, { exact: true })).toHaveCount(
       0,
     );
+    await gql(request, `mutation($id: String!) { issueDelete(id: $id) { success } }`, { id: project.id }).catch(() => undefined);
+  });
+
+  test('shows the selected project without a repository on the first open (INV-1943)', async ({ page, request }) => {
+    const projectTitle = `Manual acceptance ${Date.now()}`;
+    const project = await createProject(request, projectTitle);
+    const issueTitle = 'Manual first task';
+
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Create issue' }).click();
+    const createDrawer = page.getByRole('dialog', { name: 'Create issue drawer' });
+    await createDrawer.getByLabel('Issue title').fill(issueTitle);
+    await createDrawer.getByLabel('Project', { exact: true }).selectOption({ label: projectTitle });
+    await expect(createDrawer.getByLabel('Location').locator('option:checked')).toHaveText('No milestone');
+    await createDrawer.getByRole('button', { name: 'Create issue', exact: true }).click();
+
+    const issueDrawer = page.getByRole('dialog', { name: 'Issue detail drawer' });
+    const assertPlacement = async () => {
+      await expect(issueDrawer.getByLabel('Issue title')).toHaveValue(issueTitle);
+      await expect(issueDrawer.getByTestId('issue-panel-project')).toHaveText(projectTitle);
+      await expect(issueDrawer.getByText(`${project.identifier} — ${projectTitle}`, { exact: true })).toBeVisible();
+      await expect(issueDrawer.getByLabel('Project', { exact: true })).toHaveValue(`project:${project.identifier}`);
+      const location = issueDrawer.getByLabel('Location', { exact: true });
+      await expect(location).toBeEnabled();
+      await expect(location.locator('option:checked')).toHaveText('No milestone');
+    };
+    await assertPlacement();
+
+    await page.reload();
+    await page.getByTestId('column-Backlog').getByText(issueTitle, { exact: true }).click();
+    await assertPlacement();
+
+    page.on('dialog', (dialog) => dialog.accept());
+    await issueDrawer.getByRole('button', { name: 'Delete issue' }).click();
+    await expect(issueDrawer).toHaveCount(0);
     await gql(request, `mutation($id: String!) { issueDelete(id: $id) { success } }`, { id: project.id }).catch(() => undefined);
   });
 
