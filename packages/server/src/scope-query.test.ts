@@ -106,8 +106,12 @@ it('replays real service audits through GraphQL and MCP, including a moved-out h
 
     const args = { milestone_id: milestone.id, from: '2026-01-01', to: '2026-01-04' };
     const context = { prisma, viewer: admin, authMode: 'session' as const, isTrustedSystem: false };
-    const mcp = await callMcpTool(context, 'work_burndown', args, true);
+    const groupedArgs = { action: 'burndown', ...args };
+    const mcp = await callMcpTool(context, 'work_timeline', groupedArgs, true);
     expect(mcp).toEqual(burndown);
+    expect(await callMcpTool(context, 'work_burndown', args, true)).toEqual({
+      ...burndown, deprecated: expect.stringContaining('work_timeline'),
+    });
     expect(mcp).toMatchObject({
       window: { start: '2026-01-01T00:00:00.000Z', end: '2026-01-05T00:00:00.000Z' },
       coverage: { baseline: at(1).toISOString() },
@@ -120,11 +124,11 @@ it('replays real service audits through GraphQL and MCP, including a moved-out h
     expect((await request(project.id)).errors[0].message).toBe('Burndown requires a MILESTONE.');
     expect((await request(milestone.id, session.token, 'invalid')).errors[0].message)
       .toContain('YYYY-MM-DD');
-    await expect(callMcpTool({ ...context, viewer: outsider }, 'work_burndown', args, true))
+    await expect(callMcpTool({ ...context, viewer: outsider }, 'work_timeline', groupedArgs, true))
       .rejects.toThrow('Readable milestone not found.');
     await expect(callMcpTool({
       ...context, authMode: 'agent-token', agentScopes: [],
-    }, 'work_burndown', args, true)).rejects.toThrow();
+    }, 'work_timeline', groupedArgs, true)).rejects.toThrow();
     const later = await createIssue(prisma, {
       teamId: team.id, title: 'Created after window',
       parentId: milestone.id, repository: project.repository,
@@ -136,6 +140,9 @@ it('replays real service audits through GraphQL and MCP, including a moved-out h
       parentId: project.id, repository: project.repository,
     }, actor);
     expect((await request(empty.id)).data.milestoneBurndown.emptyReason).toBe('NO_MEMBERS');
+    expect(await callMcpTool(context, 'work_timeline', {
+      ...groupedArgs, milestone_id: empty.id,
+    }, true)).toMatchObject({ emptyReason: 'NO_MEMBERS', events: [] });
   } finally {
     findIssues.mockRestore();
     await server.stop();

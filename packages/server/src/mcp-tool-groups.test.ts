@@ -11,6 +11,32 @@ const agent = { viewer: { actorKind: 'AGENT' } as never, authMode: 'agent-token'
 const human = { viewer: { actorKind: 'HUMAN' } as never, authMode: 'token' as const, isTrustedSystem: false };
 
 describe('MCP tool groups', () => {
+  it('advertises burndown in the read-only timeline family while keeping its action callable', () => {
+    for (const readonly of [false, true]) {
+      const tools = listMcpTools(readonly, agent);
+      expect(tools.map(tool => tool.name)).not.toContain('work_burndown');
+      const timeline = tools.find(tool => tool.name === 'work_timeline')!;
+      expect(timeline.actions).toContain('work_burndown');
+      const operation = timeline.inputSchema.properties.action as { enum: string[] };
+      expect(operation.enum).toContain('burndown');
+      const milestone = timeline.inputSchema.properties.milestone_id as { 'x-actions': string[] };
+      expect(milestone['x-actions']).toEqual(['burndown']);
+      if (readonly) {
+        expect(timeline.annotations.readOnlyHint).toBe(true);
+        expect(timeline.actions).not.toContain('work_timeline_star');
+      }
+    }
+    const args = { milestone_id: 'm', from: '2026-01-01', to: '2026-01-04' };
+    expect(resolveMcpCall('work_timeline', { action: 'burndown', ...args }))
+      .toEqual({ action: 'work_burndown', args, deprecated: null });
+    expect(resolveMcpCall('work_burndown', args)).toMatchObject({
+      action: 'work_burndown', args,
+      deprecated: expect.stringContaining('work_timeline'),
+    });
+    expect(() => resolveMcpCall('work_timeline', { action: 'invalid' })).toThrow(/needs action/);
+    expect(resolveMcpCall('work_timeline', {}).action).toBe('work_timeline');
+  });
+
   it('lists at most twenty-one tools for an agent credential, without the human-only ones', () => {
     const tools = listMcpTools(false, agent);
     expect(tools.length).toBeLessThanOrEqual(21);

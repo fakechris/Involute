@@ -445,8 +445,12 @@ subtract formatted local times to compute durations.
 ### `milestoneBurndown(milestoneId: String!, from: String!, to: String!, timeZone: String, idealStart: String, idealEnd: String)`
 
 INV-268, definition version `1`. Signed-in, read-only; `milestoneId` accepts a
-MILESTONE UUID or identifier. MCP exposes the same result as `work_burndown`
-(`milestone_id`, `from`, `to`, `time_zone`, `ideal_start`, `ideal_end`). Only
+MILESTONE UUID or identifier. MCP advertises this read as
+`work_timeline(action: "burndown")`, with `milestone_id`, `from`, `to`,
+`time_zone`, `ideal_start` and `ideal_end`. The underlying `work_burndown`
+action remains callable with a deprecation note pointing to the grouped tool;
+it stays in the read-only action allowlist and paired with `milestoneBurndown`.
+The read-only endpoint includes the burndown action but not timeline writes. Only
 readable work contributes; a missing or unreadable target is refused. MCP
 timestamps are ISO 8601 strings, including nested window, gap, ideal and event
 timestamps.
