@@ -913,13 +913,17 @@ export function BoardPage() {
     };
   }, [closeLinkedIssue, linkedIssueRef]);
 
-  const boardVisibleIssues = useMemo(
+  const serverFilteredIssues = useMemo(
     () => {
-      if (!looksLikeIql(boardViewState.query)) return applyBoardViewState(visibleIssues, boardViewState, users);
+      if (!looksLikeIql(boardViewState.query)) return visibleIssues;
       const matchingIds = new Set(baseIssues.map((issue) => issue.id));
-      return applyBoardViewState(visibleIssues.filter((issue) => matchingIds.has(issue.id)), { ...boardViewState, query: '' }, users);
+      return visibleIssues.filter((issue) => matchingIds.has(issue.id));
     },
-    [baseIssues, boardViewState, users, visibleIssues],
+    [baseIssues, boardViewState.query, visibleIssues],
+  );
+  const boardVisibleIssues = useMemo(
+    () => applyBoardViewState(serverFilteredIssues, looksLikeIql(boardViewState.query) ? { ...boardViewState, query: '' } : boardViewState, users),
+    [serverFilteredIssues, boardViewState, users],
   );
   const boardViewTokens = useMemo(
     () => buildBoardViewSummary(boardViewState, selectedTeam, users, labels),
@@ -3509,7 +3513,7 @@ export function BoardPage() {
 
       {isBacklogView ? (
         <BacklogPage
-          issues={visibleIssues}
+          issues={serverFilteredIssues}
           labels={labels}
           selectedTeam={selectedTeam}
           users={users}

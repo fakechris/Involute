@@ -7,7 +7,7 @@ import type { IssueSummary } from './board/types';
 import { getStatusUndoSnapshot } from './undo/status-undo';
 import { getDefaultBoardViewState, writeStoredBoardViewState } from './board/views';
 
-function fixture(path = '/', manual = false, conflict = false, activeClaim = false) {
+function fixture(path = '/', manual = false, conflict = false, activeClaim = false, serverFilter = false) {
   const states = boardQueryResult.teams.nodes[0]!.states.nodes;
   const originals: IssueSummary[] = [1, 2, 4].map((n, index) => ({
     ...getIssue('issue-1'), id: `issue-${n}`, identifier: `INV-${n}`, title: `Old work ${n}`,
@@ -22,16 +22,20 @@ function fixture(path = '/', manual = false, conflict = false, activeClaim = fal
     if (input.stateId === 'state-canceled' && !input.resolution) return Promise.resolve({ data: { issueUpdate: { success: false, message: 'Choose a resolution', issue: null } } });
     const next = { ...issue, revision: issue.revision + 1, state: states.find((state) => state.id === input.stateId)! };
     current.set(id, next);
+    // Apollo awaits the BoardPage IQL refetch before resolving issueUpdate.
+    if (serverFilter) queryState.data = { ...queryState.data, issues: { ...queryState.data.issues, nodes: [...current.values()].filter((item) => item.state.type !== 'CANCELED') } };
     return Promise.resolve({ data: { issueUpdate: { success: true, issue: next } } });
   });
   apolloMocks.useMutation.mockReturnValue([mutate]);
-  renderApp(App, { data: { ...boardQueryResult, issues: { ...boardQueryResult.issues, nodes: originals } }, loading: false }, [path]);
+  const queryState = { data: { ...boardQueryResult, issues: { ...boardQueryResult.issues, nodes: originals } }, loading: false };
+  renderApp(App, queryState, [path]);
   return { mutate, originals };
 }
 
 async function selectAndClose(path: string, keyboard = false) {
   await screen.findByRole('checkbox', { name: 'Select INV-1' });
-  if (path === '/') fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+  const filter = screen.queryByRole('button', { name: 'Filter' });
+  if (path === '/' && filter) fireEvent.click(filter);
   for (const n of [1, 2, 4]) fireEvent.click(screen.getByRole('checkbox', { name: `Select INV-${n}` }));
   if (keyboard) {
     fireEvent.keyDown(window, { key: 's' });
@@ -56,6 +60,21 @@ describe('batch cancel superseded items (INV-1930)', () => {
     if (path === '/') fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
     fireEvent.click(screen.getByRole('button', { name: 'Superseded, open' }));
     await waitFor(() => expect(apolloMocks.useQuery.mock.calls.some(([, options]) => options?.variables?.query === 'superseded:yes -state-type:canceled,completed')).toBe(true));
+  });
+
+  for (const path of ['/', '/backlog']) it(`removes canceled results from a server-filtered batch while keeping conflicts at ${path}`, async () => {
+    fixture(path, false, true, false, true);
+    await screen.findByRole('checkbox', { name: 'Select INV-1' });
+    if (path === '/') fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Superseded, open' }));
+    const dialog = await selectAndClose(path);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel work' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('checkbox', { name: 'Select INV-1' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('checkbox', { name: 'Select INV-4' })).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole('checkbox', { name: 'Select INV-2' })).not.toBeChecked();
+    expect(await screen.findByText(/Kept open.*INV-2.*Revision conflict/)).toBeInTheDocument();
   });
 
   it('does not write anything when the person keeps the batch open', async () => {
