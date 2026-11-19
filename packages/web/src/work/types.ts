@@ -428,6 +428,7 @@ export interface IssueGraphQueryVariables {
 export interface GraphProjectsQueryData {  projectSummary: {
     totalCount: number;
     projects: Array<{ repository: string; name: string; identifier: string | null; totalCount: number }>;
+    projectsWithoutRepository?: Array<{ identifier: string; name: string }>;
   };
 }
 

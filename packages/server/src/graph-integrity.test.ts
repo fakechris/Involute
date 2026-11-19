@@ -57,6 +57,20 @@ describe('hierarchy write boundary', () => {
     }
   });
 
+  it('lets a tree without a repository hold work, but never mixes it with one (INV-1918)', async () => {
+    const project = await node('PROJECT', null);
+    const issue = await node('ISSUE', null, project.id);
+    expect(await prisma.workLink.findFirst({ where: { fromId: project.id, toId: issue.id, type: 'CONTAINS' } })).not.toBeNull();
+    const milestone = await node('MILESTONE', null);
+    await createWorkLink(prisma, { fromId: project.id, toId: milestone.id, type: 'CONTAINS' });
+    const bound = await node('MILESTONE');
+    await expect(createWorkLink(prisma, { fromId: project.id, toId: bound.id, type: 'CONTAINS' })).rejects.toThrow('same repository on both endpoints');
+    await expect(updateIssue(prisma, issue.id, { repository: repo })).rejects.toThrow();
+    const blank = await node('ISSUE', ' ');
+    await expect(createWorkLink(prisma, { fromId: project.id, toId: blank.id, type: 'CONTAINS' })).rejects.toThrow();
+    await expect(node('ISSUE', ' ', project.id)).rejects.toThrow();
+  });
+
   it('rejects a sub-issue cycle', async () => {
     const a = await node('ISSUE'); const b = await node('ISSUE', repo, a.id);
     await expect(createWorkLink(prisma, { fromId: b.id, toId: a.id, type: 'CONTAINS' })).rejects.toThrow();

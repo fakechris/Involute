@@ -16,7 +16,7 @@ import {
 import { PlacementPicker } from '../components/PlacementPicker';
 import { GRAPH_PROJECTS_QUERY } from '../work/queries';
 import type { GraphProjectsQueryData } from '../work/types';
-import type { CreatePlacement } from '../work/placement';
+import { placementProjects, type CreatePlacement } from '../work/placement';
 import type {
   BoardPageQueryData,
   BoardPageQueryVariables,
@@ -108,7 +108,7 @@ export function CyclesPage() {
   const { data: milestoneProjectsData } = useQuery<GraphProjectsQueryData>(GRAPH_PROJECTS_QUERY, {
     variables: teamKey ? { teamFilter: { key: { eq: teamKey } } } : {},
   });
-  const milestoneProjects = milestoneProjectsData?.projectSummary?.projects ?? [];
+  const milestoneProjects = useMemo(() => placementProjects(milestoneProjectsData?.projectSummary), [milestoneProjectsData?.projectSummary]);
 
   const { data: boardData } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
     variables: { first: 1, ...(teamKey ? { filter: { team: { key: { eq: teamKey } } } } : {}) },

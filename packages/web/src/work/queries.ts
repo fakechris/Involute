@@ -190,6 +190,10 @@ export const GRAPH_PROJECTS_QUERY = gql`
         identifier
         totalCount
       }
+      projectsWithoutRepository {
+        identifier
+        name
+      }
     }
   }
 `;

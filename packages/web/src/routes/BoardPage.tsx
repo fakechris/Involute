@@ -123,6 +123,9 @@ import {
   readLastPlacement,
   rememberPlacement,
   resolveInitialPlacement,
+  findPlacementProject,
+  placementProjects,
+  projectPlacement,
   type CreatePlacement,
   type PlacementSource,
 } from '../work/placement';
@@ -664,7 +667,8 @@ export function BoardPage() {
   // Creating work is a write on the team; the server decides who may (INV-836).
   const canWriteTeam = selectedTeam?.viewerCanWrite ?? false;
   const isTeamSwitching = Boolean(pendingTeamKey && pendingTeamKey !== activeTeamKey);
-  const placeableProjects = queryData?.projectSummary?.projects ?? [];
+  const projectSummary = queryData?.projectSummary;
+  const placeableProjects = useMemo(() => placementProjects(projectSummary), [projectSummary]);
   // Where new work starts (INV-744): entry-point context, else the board's
   // project filter, else this person's last choice on the team.
   const initialPlacement = (context?: CreatePlacement | null) =>
@@ -2444,7 +2448,7 @@ export function BoardPage() {
     const resolved = initialPlacement(groupProject);
     const placement =
       resolved?.source === 'last'
-        ? noMilestonePlacement(placeableProjects, resolved.placement.repository)
+        ? projectPlacement(findPlacementProject(placeableProjects, resolved.placement))
         : (resolved?.placement ?? null);
     if (!placement) {
       // Nowhere to put it yet: finish in the dialog, which asks for a project.

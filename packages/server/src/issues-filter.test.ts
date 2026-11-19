@@ -651,6 +651,13 @@ describe('issues query filtering', () => {
         title: 'QuantHarvest Engine',
       },
     });
+    // INV-1918: a project with no repository still takes new work.
+    await prisma.issue.createMany({
+      data: [
+        { commitmentStatus: 'COMMITTED', identifier: 'INV-PROJ-LOOSE', kind: 'PROJECT', repository: null, stateId: readyState.id, teamId: fixture.team.id, title: 'Loose Project' },
+        { commitmentStatus: 'CANDIDATE', identifier: 'INV-PROJ-CAND', kind: 'PROJECT', repository: null, stateId: readyState.id, teamId: fixture.team.id, title: 'Candidate Project' },
+      ],
+    });
 
     await prisma.issue.createMany({
       data: [
@@ -705,6 +712,10 @@ describe('issues query filtering', () => {
               identifier
               totalCount
             }
+            projectsWithoutRepository {
+              identifier
+              name
+            }
           }
         }
       `,
@@ -732,6 +743,7 @@ describe('issues query filtering', () => {
         },
       ]),
     );
+    expect(summary.projectsWithoutRepository).toEqual([{ identifier: 'INV-PROJ-LOOSE', name: 'Loose Project' }]);
   });
 });
 

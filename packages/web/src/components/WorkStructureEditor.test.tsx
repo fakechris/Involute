@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { WorkStructureEditor } from './WorkStructureEditor';
+import { currentPlacement, WorkStructureEditor } from './WorkStructureEditor';
 
 type StructuredWork = Parameters<typeof WorkStructureEditor>[0]['work'];
 
@@ -159,5 +159,14 @@ describe('structure editing of committed work (INV-791)', () => {
     expect(location.value).toBe('m-done');
     expect(location.selectedOptions[0]?.textContent).toBe('In INV-12 — Old');
     expect(onUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('currentPlacement for a project without a repository (INV-1918)', () => {
+  it('shows work directly under such a project as No milestone, and nothing deeper', () => {
+    const base = { id: 'w1', identifier: 'INV-4', title: 'Loose issue', kind: 'ISSUE', repository: null } as unknown as Parameters<typeof currentPlacement>[0];
+    expect(currentPlacement({ ...base, parent: { id: 'p1', identifier: 'INV-3', title: 'Loose', kind: 'PROJECT' } } as typeof base)).toEqual({ repository: '', parentId: 'INV-3' });
+    expect(currentPlacement({ ...base, parent: { id: 'm1', identifier: 'INV-9', title: 'M', kind: 'MILESTONE' } } as typeof base)).toBeNull();
+    expect(currentPlacement({ ...base, parent: null } as typeof base)).toBeNull();
   });
 });

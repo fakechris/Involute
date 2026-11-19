@@ -297,8 +297,9 @@ export async function findInheritableParent(
   }
   while (current && !seen.has(current.id)) {
     seen.add(current.id);
-    const repository = child.repository ?? current.repository;
-    if (current.repository && current.repository === repository && isLegalContains(current.kind, child.kind)) {
+    const repository = child.repository || current.repository || null;
+    // A tree without a repository (INV-1918) places related work too.
+    if ((current.repository || null) === repository && isLegalContains(current.kind, child.kind)) {
       return current;
     }
     current = current.parentId ? await prisma.issue.findUnique({ where: { id: current.parentId } }) : null;
@@ -319,7 +320,7 @@ export async function placeNewWork<T extends CreateIssueInput>(prisma: Prisma.Tr
   const parent = await findWorkByIdOrIdentifier(prisma, input.parentId.trim());
   if (!parent || parent.teamId !== input.teamId) throw createNotFoundError(PARENT_ISSUE_NOT_FOUND_MESSAGE);
   if (parent.commitmentStatus === 'REJECTED') throw createValidationError(WORK_COMMIT_PARENT_REJECTED_MESSAGE);
-  return { ...input, parentId: parent.id, repository: input.repository ?? parent.repository };
+  return { ...input, parentId: parent.id, repository: input.repository || parent.repository };
 }
 
 /** The person answerable for work an actor files: a human themself, an agent's owner. */
@@ -443,7 +444,7 @@ export async function proposeWork(
     if (parentWork) {
       createInput.parentId = parentWork.id;
       // A child without a repository inherits its parent's (CONTAINS needs both).
-      if (createInput.repository === undefined || createInput.repository === null) {
+      if (!createInput.repository) {
         createInput.repository = parentWork.repository;
       }
     }

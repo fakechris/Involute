@@ -132,6 +132,10 @@ export const BOARD_PAGE_QUERY = gql(`
         identifier
         totalCount
       }
+      projectsWithoutRepository {
+        identifier
+        name
+      }
     }
     teams {
       nodes {
