@@ -85,6 +85,47 @@ describe('issues query filtering', () => {
     expect(excluded.body.data.issues.nodes).toEqual([]);
   });
 
+  it('filters children by commitment status without changing unfiltered hierarchy reads', async () => {
+    const parent = await prisma.issue.findUniqueOrThrow({ where: { id: fixture.issues.parentTask.id } });
+    await prisma.issue.update({ where: { id: parent.id }, data: { kind: 'PROJECT' } });
+    await prisma.issue.updateMany({ where: { parentId: parent.id }, data: { parentId: null } });
+    const children = await Promise.all((['COMMITTED', 'CANDIDATE', 'REJECTED'] as const).map((commitmentStatus) =>
+      prisma.issue.create({ data: {
+        identifier: `INV-CHILD-${commitmentStatus}`, title: commitmentStatus,
+        teamId: parent.teamId, stateId: parent.stateId, parentId: parent.id, commitmentStatus,
+      } }),
+    ));
+    const selection = `
+      all: children { nodes { id } }
+      committed: children(commitmentStatus: COMMITTED) { nodes { id } }
+      candidates: children(commitmentStatus: CANDIDATE) { nodes { id } }
+      rejected: children(commitmentStatus: REJECTED) { nodes { id } }
+    `;
+    const response = await postGraphQL({
+      query: `query($id: String!, $childId: String!) {
+        issue(id: $id) { ${selection} }
+        child: issue(id: $childId) { parent { ${selection} } }
+        issues(first: 100, filter: { kind: PROJECT }) { nodes { id ${selection} } }
+      }`,
+      variables: { id: parent.id, childId: children[0]!.id }, token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+    expect(response.body.errors).toBeUndefined();
+    const listed = response.body.data.issues.nodes.find((node: { id: string }) => node.id === parent.id);
+    for (const result of [response.body.data.issue, listed, response.body.data.child.parent]) {
+      expect(result.all.nodes.map((node: { id: string }) => node.id).sort()).toEqual(children.map((child) => child.id).sort());
+      expect(result.committed.nodes).toEqual([{ id: children[0]!.id }]);
+      expect(result.candidates.nodes).toEqual([{ id: children[1]!.id }]);
+      expect(result.rejected.nodes).toEqual([{ id: children[2]!.id }]);
+    }
+    await prisma.issue.update({ where: { id: children[0]!.id }, data: { commitmentStatus: 'REJECTED' } });
+    const empty = await postGraphQL({
+      query: `query($id: String!) { issue(id: $id) { children(commitmentStatus: COMMITTED) { nodes { id } } } }`,
+      variables: { id: parent.id }, token: `Bearer ${TEST_AUTH_TOKEN}`,
+    });
+    expect(empty.body.errors).toBeUndefined();
+    expect(empty.body.data.issue.children.nodes).toEqual([]);
+  });
+
   it('limits results with first and always returns children nodes arrays', async () => {
     const response = await queryIssues({
       first: 2,

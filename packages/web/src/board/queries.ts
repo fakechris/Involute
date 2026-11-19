@@ -1207,7 +1207,7 @@ export const PROJECT_ISSUES_QUERY = gql`
           key
           name
         }
-        children {
+        children(commitmentStatus: COMMITTED) {
           nodes {
             id
             identifier
