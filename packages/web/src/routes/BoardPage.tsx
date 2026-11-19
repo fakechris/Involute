@@ -1184,7 +1184,7 @@ export function BoardPage() {
   useEffect(() => {
     const visibleIssueIds = new Set(boardVisibleIssues.map((issue) => issue.id));
 
-    if (!isBacklogView) setSelectedIssueIds((currentIssueIds) =>
+    setSelectedIssueIds((currentIssueIds) =>
       {
         const nextIssueIds = currentIssueIds.filter((issueId) => visibleIssueIds.has(issueId));
 
@@ -1204,7 +1204,7 @@ export function BoardPage() {
         return currentIssueId === nextIssueId ? currentIssueId : nextIssueId;
       },
     );
-  }, [boardVisibleIssues, isBacklogView]);
+  }, [boardVisibleIssues]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
