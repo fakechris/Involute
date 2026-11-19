@@ -53,7 +53,7 @@ export async function loadDeliveryLatency(prisma: PrismaClient, readable: Prisma
   const scope: Prisma.IssueWhereInput = { AND: [readable, { team: { key: teamKey }, kind: 'ISSUE', createdAt: { lt: end }, ...(repository === null ? {} : { repository: repository === '__none__' ? null : { equals: repository, mode: 'insensitive' as const } }) }] };
   const stateRows = await prisma.workflowState.findMany({ where: { team: { key: teamKey } }, select: { id: true, type: true } });
   const states = new Map(stateRows.map(({ id, type }) => [id, type]));
-  const page: { id: string; identifier: string; title: string; repository: string | null; state: { name: string; type: WorkflowStateType }; sampleEpisodeCount: number; replay: ReturnType<typeof replayDeliveryLatency> }[] = [];
+  const page: { id: string; identifier: string; title: string; repository: string | null; state: { id: string; name: string; type: WorkflowStateType; position: number }; sampleEpisodeCount: number; replay: ReturnType<typeof replayDeliveryLatency> }[] = [];
   const coverage = { workCount: 0, noHistoryCount: 0, openEpisodeCount: 0, closedWithoutAcceptanceCount: 0, unknownEpisodeCount: 0 };
   const lead: number[] = [];
   const cycle: number[] = [];
@@ -70,7 +70,7 @@ export async function loadDeliveryLatency(prisma: PrismaClient, readable: Prisma
         identifier: true,
         title: true,
         repository: true,
-        state: { select: { name: true, type: true } },
+        state: { select: { id: true, name: true, type: true, position: true } },
         audits: { where: { createdAt: { lt: end } }, select: { id: true, revision: true, createdAt: true, before: true, after: true } },
         reviewDecisions: { where: { decision: 'ACCEPTED', createdAt: { lt: end } }, select: { fromRevision: true, toRevision: true } },
       },

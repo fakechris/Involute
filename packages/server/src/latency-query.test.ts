@@ -68,14 +68,15 @@ it('replays stored audit and run data for a shared project, with stable pages an
   const adminSession = await createSession(prisma, admin.id, 3600);
   const server = await startServer({ allowAdminFallback: false, prisma, authToken: 'unused-static-token', port: 0 });
   try {
-    const query = `query ($start: DateTime!, $end: DateTime!, $after: String, $repository: String, $sample: DeliveryLatencySample) {
+    const query = `query ($start: DateTime!, $end: DateTime!, $after: String, $repository: String, $sample: DeliveryLatencySample, $workId: String!) {
+      issue(id: $workId) { state { id name type position issueCount } }
       deliveryLatency(teamKey: "LAT", start: $start, end: $end, first: 1, after: $after, repository: $repository, sample: $sample) {
         definitionVersion window { start end }
         coverage { workCount noHistoryCount openEpisodeCount }
         leadTime { sampleCount p50Ms p90Ms emptyReason coverage { acceptedCount missingCount } }
         cycleTime { sampleCount p50Ms }
         reviewWait { sampleCount p50Ms }
-        nodes { id title repository state { name type } sampleEpisodeCount noHistory episodes { outcome historyGap ageMs leadTimeMs cycleTimeMs reviewWaitMs } runs { wallClockSumMs wallClockUnionMs humanActualWorkMs agentActualComputeMs } }
+        nodes { id title repository state { id name type position issueCount } sampleEpisodeCount noHistory episodes { outcome historyGap ageMs leadTimeMs cycleTimeMs reviewWaitMs } runs { wallClockSumMs wallClockUnionMs humanActualWorkMs agentActualComputeMs } }
         pageInfo { endCursor hasNextPage }
       }
     }`;
@@ -83,10 +84,10 @@ it('replays stored audit and run data for a shared project, with stable pages an
       const response = await fetch(`${server.url}/graphql`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...(token ? { cookie: `involute_session=${token}` } : {}) },
-        body: JSON.stringify({ query, variables: { start: at(4).toISOString(), end: end.toISOString(), after, repository, sample } }),
+        body: JSON.stringify({ query, variables: { start: at(4).toISOString(), end: end.toISOString(), after, repository, sample, workId: delivered.id } }),
       });
       return await response.json() as {
-        data?: { deliveryLatency: {
+        data?: { issue: { state: { id: string; name: string; type: string; position: number; issueCount: number } }; deliveryLatency: {
           definitionVersion: string;
           leadTime: { sampleCount: number };
           cycleTime: { sampleCount: number };
@@ -117,9 +118,13 @@ it('replays stored audit and run data for a shared project, with stable pages an
       after = data.pageInfo.endCursor;
     }
     expect(nodes.get(delivered.id)).toMatchObject({
+      state: (await request()).data!.issue.state,
       episodes: [{ outcome: 'ACCEPTED', leadTimeMs: 4 * HOUR }],
       runs: { wallClockSumMs: 4 * HOUR, wallClockUnionMs: 3 * HOUR, humanActualWorkMs: null, agentActualComputeMs: null },
     });
+    const completedCount = await prisma.issue.count({ where: { stateId: states.get('COMPLETED')! } });
+    expect(completedCount).toBeLessThan(await prisma.issue.count());
+    expect(nodes.get(delivered.id)).toMatchObject({ state: { id: states.get('COMPLETED'), issueCount: completedCount } });
     expect(nodes.get(open.id)).toMatchObject({ episodes: [{ outcome: 'OPEN', ageMs: 8 * HOUR, leadTimeMs: null }] });
     expect(nodes.get(missing.id)).toMatchObject({ noHistory: true, episodes: [] });
     expect(nodes.get(imported.id)).toMatchObject({
