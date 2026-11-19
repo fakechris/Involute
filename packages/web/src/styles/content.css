@@ -1,3 +1,17 @@
+.delivery-percentile {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--pad-y) var(--pad-x);
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  color: var(--fg);
+  background: var(--bg-raised);
+  cursor: pointer;
+}
+.delivery-percentile:hover { background: var(--bg-hover); }
+.delivery-percentile svg { display: block; width: 100%; height: 6px; }
+.delivery-percentile rect { fill: var(--accent); }
 /*
  * Content presentation (INV-1315, docs/design-system.md §3 rules 6–9):
  * rendered markdown, the one list row, and the Badge chip.

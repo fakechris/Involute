@@ -22,10 +22,12 @@ function readSnapshot(value: Prisma.JsonValue, states: ReadonlyMap<string, Workf
   };
 }
 
-interface LatencyQuery extends LatencyWindow {
+export interface LatencyQuery extends LatencyWindow {
   teamKey: string;
   first: number;
   after?: string | null;
+  repository?: string | null;
+  sample?: 'LEAD_TIME' | 'CYCLE_TIME' | 'REVIEW_WAIT' | 'OPEN' | null;
 }
 
 export async function loadDeliveryLatency(prisma: PrismaClient, readable: Prisma.IssueWhereInput, input: LatencyQuery) {
@@ -34,7 +36,9 @@ export async function loadDeliveryLatency(prisma: PrismaClient, readable: Prisma
     throw createValidationError(INVALID_WINDOW);
   }
   if (!Number.isInteger(first) || first < 1 || first > 100) throw createValidationError(INVALID_FIRST);
-  const cursorScope = JSON.stringify([teamKey, start.toISOString(), end.toISOString()]);
+  const repository = input.repository?.toLowerCase() ?? null;
+  const sample = input.sample ?? null;
+  const cursorScope = JSON.stringify([teamKey, start.toISOString(), end.toISOString(), repository, sample]);
   let pageAfter = '';
   if (after != null) {
     try {
@@ -46,10 +50,10 @@ export async function loadDeliveryLatency(prisma: PrismaClient, readable: Prisma
     }
   }
 
-  const scope: Prisma.IssueWhereInput = { AND: [readable, { team: { key: teamKey }, kind: 'ISSUE', createdAt: { lt: end } }] };
+  const scope: Prisma.IssueWhereInput = { AND: [readable, { team: { key: teamKey }, kind: 'ISSUE', createdAt: { lt: end }, ...(repository === null ? {} : { repository: repository === '__none__' ? null : { equals: repository, mode: 'insensitive' as const } }) }] };
   const stateRows = await prisma.workflowState.findMany({ where: { team: { key: teamKey } }, select: { id: true, type: true } });
   const states = new Map(stateRows.map(({ id, type }) => [id, type]));
-  const page: { id: string; identifier: string; replay: ReturnType<typeof replayDeliveryLatency> }[] = [];
+  const page: { id: string; identifier: string; title: string; repository: string | null; state: { id: string; name: string; type: WorkflowStateType; position: number }; sampleEpisodeCount: number; replay: ReturnType<typeof replayDeliveryLatency> }[] = [];
   const coverage = { workCount: 0, noHistoryCount: 0, openEpisodeCount: 0, closedWithoutAcceptanceCount: 0, unknownEpisodeCount: 0 };
   const lead: number[] = [];
   const cycle: number[] = [];
@@ -64,11 +68,14 @@ export async function loadDeliveryLatency(prisma: PrismaClient, readable: Prisma
       select: {
         id: true,
         identifier: true,
+        title: true,
+        repository: true,
+        state: { select: { id: true, name: true, type: true, position: true } },
         audits: { where: { createdAt: { lt: end } }, select: { id: true, revision: true, createdAt: true, before: true, after: true } },
         reviewDecisions: { where: { decision: 'ACCEPTED', createdAt: { lt: end } }, select: { fromRevision: true, toRevision: true } },
       },
     });
-    for (const { id, identifier, audits, reviewDecisions } of batch) {
+    for (const { id, identifier, title, repository, state, audits, reviewDecisions } of batch) {
       const acceptances = new Set(reviewDecisions.map(({ fromRevision, toRevision }) => `${fromRevision}:${toRevision}`));
       const replay = replayDeliveryLatency(audits.map((audit) => {
         const before = audit.before === null ? null : readSnapshot(audit.before, states);
@@ -91,7 +98,15 @@ export async function loadDeliveryLatency(prisma: PrismaClient, readable: Prisma
         if (episode.cycleTimeMs !== null) cycle.push(episode.cycleTimeMs);
         if (episode.reviewWaitMs !== null) review.push(episode.reviewWaitMs);
       }
-      if (id > pageAfter && page.length <= first) page.push({ id, identifier, replay });
+      const sampleEpisodeCount = replay.episodes.filter((episode) => {
+        if (sample === 'OPEN') return episode.outcome === 'OPEN';
+        if (episode.acceptedAt === null || episode.acceptedAt < start) return false;
+        if (sample === 'LEAD_TIME') return episode.leadTimeMs !== null;
+        if (sample === 'CYCLE_TIME') return episode.cycleTimeMs !== null;
+        if (sample === 'REVIEW_WAIT') return episode.reviewWaitMs !== null;
+        return true;
+      }).length;
+      if ((!sample || sampleEpisodeCount > 0) && id > pageAfter && page.length <= first) page.push({ id, identifier, title, repository, state, sampleEpisodeCount, replay });
     }
     if (batch.length < BATCH_SIZE) break;
     batchAfter = batch.at(-1)!.id;
@@ -117,7 +132,8 @@ export async function loadDeliveryLatency(prisma: PrismaClient, readable: Prisma
     leadTime: latencyPercentiles(lead, acceptedCount, window),
     cycleTime: latencyPercentiles(cycle, acceptedCount, window),
     reviewWait: latencyPercentiles(review, acceptedCount, window),
-    nodes: currentPage.map(({ id, identifier, replay }) => ({ id, identifier, ...replay, runs: runWallClock(runs.get(id) ?? [], end) })),
+    repository,
+    nodes: currentPage.map(({ replay, ...work }) => ({ ...work, ...replay, runs: runWallClock(runs.get(work.id) ?? [], end) })),
     pageInfo: {
       hasNextPage: page.length > first,
       endCursor: last ? Buffer.from(JSON.stringify({ id: last.id, scope: cursorScope })).toString('base64url') : null,

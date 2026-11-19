@@ -555,7 +555,7 @@ const typeDefs = /* GraphQL */ `
     "Incident counts, MTTR / MTTM averages and follow-up progress for the /incidents page (INV-1129). Readable, committed Type: Incident work only; declined and duplicate incidents are not counted."
     incidentSummary(teamFilter: TeamFilter): IncidentSummaryResult!
     "Replay delivery latency for readable issues in a team (INV-267). Percentiles use all qualifying acceptances in [start, end); item details are paged."
-    deliveryLatency(teamKey: String!, start: DateTime!, end: DateTime!, first: Int! = 50, after: String): DeliveryLatencyResult!
+    deliveryLatency(teamKey: String!, start: DateTime!, end: DateTime!, first: Int! = 50, after: String, repository: String, sample: DeliveryLatencySample): DeliveryLatencyResult!
     "Open bugs whose titles share words with the given title, best match first (INV-749)."
     similarBugs(teamId: String!, title: String!, first: Int): [Issue!]!
     "The readable PROJECT whose webOrigins include this page origin (normalized to scheme://host[:port]); null when none (INV-1146)."
@@ -2341,15 +2341,22 @@ const typeDefs = /* GraphQL */ `
     agentActualComputeMs: Float
   }
 
+  enum DeliveryLatencySample { LEAD_TIME CYCLE_TIME REVIEW_WAIT OPEN }
+
   type DeliveryLatencyWork {
     id: ID!
     identifier: String!
+    title: String!
+    repository: String
+    state: WorkflowState!
+    sampleEpisodeCount: Int!
     noHistory: Boolean!
     episodes: [DeliveryLatencyEpisode!]!
     runs: DeliveryRunWallClock!
   }
 
   type DeliveryLatencyResult {
+    repository: String
     definitionVersion: String!
     window: DeliveryLatencyWindow!
     coverage: DeliveryLatencyCoverage!
@@ -4239,7 +4246,7 @@ const resolvers = {
     },
     deliveryLatency: async (
       _parent: unknown,
-      args: { teamKey: string; start: Date; end: Date; first: number; after?: string | null },
+      args: import('./latency-query.js').LatencyQuery,
       context: GraphQLContext,
     ) => {
       requireAuthentication(context);

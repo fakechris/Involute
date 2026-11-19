@@ -388,13 +388,25 @@ Example variables:
 }
 ```
 
-### `deliveryLatency(teamKey: String!, start: DateTime!, end: DateTime!, first: Int = 50, after: String)`
+### `deliveryLatency(teamKey: String!, start: DateTime!, end: DateTime!, first: Int = 50, after: String, repository: String, sample: DeliveryLatencySample)`
 
 INV-267, definition version `1`. This signed-in, read-only query returns
 delivery metrics for the team's issues the caller may read, including
 project shares. Nodes use issue-ID keyset pagination (1–100 per page).
 The same team, `start`, and `end` must be supplied with a cursor. Summary
 statistics cover the whole readable cohort, not just the current page.
+
+INV-269: `repository` matches `Issue.repository` case-insensitively;
+`__none__` selects null repositories. Both repository and sample are part
+of cursor scope. `sample` only filters nodes, never summary statistics:
+`LEAD_TIME`, `CYCLE_TIME`, `REVIEW_WAIT` select works with a non-null metric
+on an episode accepted in `[start,end)`; `OPEN` selects open episodes at
+the cutoff. Each node exposes title, repository, current state and
+`sampleEpisodeCount` (the number of matching episodes, not items). Sum
+this count across all pages to reconcile with the selected metric's
+`sampleCount` (or `coverage.openEpisodeCount` for OPEN). Without a sample,
+the count is all accepted episodes in the window. Results echo the
+normalized repository. State is current, not reconstructed at cutoff.
 
 - Replay `WorkAudit` by `createdAt`, then audit ID. The current issue state
   is not a historical event; repeated state types do not start new spells.
