@@ -1542,7 +1542,7 @@ export function BoardPage() {
     );
   }
 
-  async function applyBulkStateChange(targetStateId = bulkTargetStateId, moving?: IssueSummary[], confirmed?: Record<string, CloseReason>) {
+  async function applyBulkStateChange(targetStateId = bulkTargetStateId, moving?: IssueSummary[], confirmed?: Record<string, CloseReason>): Promise<string[] | undefined> {
     if (!targetStateId) {
       return;
     }
@@ -1560,7 +1560,7 @@ export function BoardPage() {
     );
 
     if (requested.length === 0) {
-      return;
+      return [];
     }
     const closing = cancelingIssues(targetState, requested);
     const close = confirmed ?? (closing.length ? await askToCancel(closing) : {});
@@ -1687,6 +1687,7 @@ export function BoardPage() {
     if (skipped.length > 0) {
       setMutationError(`Kept open — ${skipped.join('; ')}`);
     }
+    return requested.filter((issue) => !returnedById.has(issue.id)).map((issue) => issue.id);
   }
 
   async function applyBulkAssigneeChange() {

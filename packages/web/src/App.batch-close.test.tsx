@@ -73,7 +73,8 @@ describe('batch cancel superseded items (INV-1930)', () => {
       expect(screen.queryByRole('checkbox', { name: 'Select INV-1' })).not.toBeInTheDocument();
       expect(screen.queryByRole('checkbox', { name: 'Select INV-4' })).not.toBeInTheDocument();
     });
-    expect(screen.getByRole('checkbox', { name: 'Select INV-2' })).not.toBeChecked();
+    if (path === '/backlog') expect(screen.getByRole('checkbox', { name: 'Select INV-2' })).toBeChecked();
+    else expect(screen.getByRole('checkbox', { name: 'Select INV-2' })).not.toBeChecked();
     expect(await screen.findByText(/Kept open.*INV-2.*Revision conflict/)).toBeInTheDocument();
   });
 
@@ -85,6 +86,31 @@ describe('batch cancel superseded items (INV-1930)', () => {
     expect(getStatusUndoSnapshot().undo).toHaveLength(0);
   });
 
+  it('keeps only the refused backlog issue selected with its reason and target state', async () => {
+    const { mutate } = fixture('/backlog', false, false, true);
+    await screen.findByRole('checkbox', { name: 'Select INV-1' });
+    for (const n of [1, 2]) fireEvent.click(screen.getByRole('checkbox', { name: `Select INV-${n}` }));
+    fireEvent.change(screen.getByLabelText('Bulk move selected issues to state'), { target: { value: 'state-canceled' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply to selected' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Close reason' })).getByRole('button', { name: 'Cancel work' }));
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Select INV-1' })).not.toBeChecked());
+    expect(screen.getByRole('checkbox', { name: 'Select INV-2' })).toBeChecked();
+    expect(screen.getByText(/Kept open/)).toHaveTextContent('INV-2: active claim');
+    expect(screen.getByLabelText('Bulk move selected issues to state')).toHaveValue('state-canceled');
+    expect(mutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the full backlog selection when the person chooses Keep open', async () => {
+    const { mutate } = fixture('/backlog');
+    const dialog = await selectAndClose('/backlog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Keep open' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Close reason' })).not.toBeInTheDocument());
+    for (const n of [1, 2, 4]) expect(screen.getByRole('checkbox', { name: `Select INV-${n}` })).toBeChecked();
+    expect(screen.getByLabelText('Bulk move selected issues to state')).toHaveValue('state-canceled');
+    expect(screen.getByRole('button', { name: 'Apply to selected' })).toBeEnabled();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
   for (const path of ['/', '/backlog']) it(`uses three independent defaults and undoes the batch at ${path}`, async () => {
     const { mutate } = fixture(path);
     const dialog = await selectAndClose(path);
@@ -94,6 +120,11 @@ describe('batch cancel superseded items (INV-1930)', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel work' }));
     await waitFor(() => expect(mutate).toHaveBeenCalledTimes(3));
     for (const n of [1, 2, 4]) expect(mutate).toHaveBeenCalledWith({ variables: { id: `issue-${n}`, input: { expectedRevision: 1, stateId: 'state-canceled', resolution: n === 1 ? 'OBSOLETE' : 'DUPLICATE', reason: `Superseded by INV-${n + 10}: Replacement ${n}` } } });
+    if (path === '/backlog') {
+      await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Select INV-1' })).not.toBeChecked());
+      for (const n of [2, 4]) expect(screen.getByRole('checkbox', { name: `Select INV-${n}` })).not.toBeChecked();
+      expect(screen.queryByRole('button', { name: 'Apply to selected' })).not.toBeInTheDocument();
+    }
     expect(getStatusUndoSnapshot().undo).toHaveLength(1);
     fireEvent.keyDown(window, { key: 'z', metaKey: true });
     await waitFor(() => expect(mutate).toHaveBeenCalledTimes(6));
