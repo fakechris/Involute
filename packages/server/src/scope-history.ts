@@ -15,6 +15,7 @@ export interface ScopeSnapshot {
 
 export interface ScopeAudit {
   id: string;
+  revision: number;
   workId: string;
   createdAt: Date;
   before: ScopeSnapshot | null;
@@ -180,6 +181,25 @@ function auditOrder(a: ScopeAudit, b: ScopeAudit): number {
   return a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id);
 }
 
+function orderedAudits(audits: readonly ScopeAudit[]): ScopeAudit[] {
+  const byWork = new Map<string, ScopeAudit[]>();
+  for (const audit of audits) {
+    const rows = byWork.get(audit.workId) ?? [];
+    rows.push(audit);
+    byWork.set(audit.workId, rows);
+  }
+  const queues = [...byWork.values()].map(rows => rows.sort((a, b) =>
+    a.revision - b.revision || auditOrder(a, b)));
+  const result: ScopeAudit[] = [];
+  while (queues.length > 0) {
+    queues.sort((a, b) => auditOrder(a[0]!, b[0]!));
+    const queue = queues[0]!;
+    result.push(queue.shift()!);
+    if (queue.length === 0) queues.shift();
+  }
+  return result;
+}
+
 function gapContains(gap: Gap, at: Date): boolean {
   return (gap.start === null || at >= gap.start) && (gap.end === null || at < gap.end);
 }
@@ -196,7 +216,7 @@ function idealValue(ideal: ScopeIdeal | null, at: Date, now: Date, remaining: nu
 
 export function replayMilestoneScope(input: ScopeHistoryInput): ScopeHistoryResult {
   const window = scopeWindow(input);
-  const orderedInput = [...input.audits].sort(auditOrder);
+  const orderedInput = orderedAudits(input.audits);
   const works = [...input.works].filter(work => {
     const firstAudit = orderedInput.find(a => a.workId === work.id);
     return !firstAudit || firstAudit.before !== null || firstAudit.createdAt < window.end;

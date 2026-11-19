@@ -28,7 +28,8 @@ function audit(
   surface = 'graphql',
 ): ScopeAudit {
   return {
-    id, workId, createdAt: at(day), before, after, surface,
+    id, workId, revision: Number(id.match(/\d+$/)?.[0] ?? 0) + 1,
+    createdAt: at(day), before, after, surface,
     actorKind: 'HUMAN', actorId: 'actor', reason: 'fixture',
   };
 }
@@ -51,6 +52,23 @@ function replay(
 const values = (r: ReturnType<typeof replay>) => r.points.map(p => [p.scope, p.remaining]);
 
 describe('milestone scope replay', () => {
+  it('replays same-transaction placement before commitment by work revision, not random audit ID', () => {
+    const unplaced = state(null, 'todo', 'CANDIDATE');
+    const placed = state('m', 'todo', 'CANDIDATE');
+    const rows = [
+      { ...audit('creation', 'a', 0, null, unplaced), revision: 1 },
+      { ...audit('z-placement', 'a', 2, unplaced, placed), revision: 2 },
+      { ...audit('a-commit', 'a', 2, placed, state()), revision: 3 },
+      { ...audit('other', 'b', 2, null, state()), revision: 1 },
+    ];
+    const result = replay(rows);
+    expect(values(result)).toEqual([[0, 0], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2], [2, 2]]);
+    expect(result.coverage.gaps).toEqual([]);
+    expect(result.events.filter(event => event.workId === 'a').map(event => event.type))
+      .toEqual(['ADD', 'COMMIT']);
+    expect(replay([...rows].reverse())).toEqual(result);
+  });
+
   it('keeps earlier daily values and full coverage when a member is created mid-window', () => {
     const result = replay([
       audit('a0', 'a', 0, null, state()),

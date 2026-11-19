@@ -91,6 +91,7 @@ export async function loadMilestoneBurndown(
       audits: {
         select: {
           id: true,
+          revision: true,
           workId: true,
           createdAt: true,
           before: true,
