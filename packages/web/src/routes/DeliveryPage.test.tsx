@@ -38,12 +38,24 @@ const defaultProjects = [
   { repository: 'acme/a', name: 'Project A', identifier: 'INV-100', totalCount: 7 },
   { repository: 'acme/b', name: 'Project B', identifier: 'INV-200', totalCount: 12 },
 ];
-function mount(reply: Reply, sample = '', projects = defaultProjects, windowParams = `from=${start}&to=${end}`) {
+function mount(reply: Reply, sample = '', projects = defaultProjects, windowParams = `from=${start}&to=${end}`, milestones: { id: string; identifier: string; title: string }[] = [], burndownRequests: Record<string, unknown>[] = []) {
   const requests: Record<string, unknown>[] = [];
   const client = new ApolloClient({ cache: new InMemoryCache(), link: new ApolloLink((operation) => new Observable((observer) => {
     if (operation.operationName === 'DeliveryProjects') {
       const totalCount = projects.reduce((sum, project) => sum + project.totalCount, 0) + 3;
       observer.next({ data: { projectSummary: { totalCount, noRepositoryCount: 3, projects } } }); observer.complete(); return;
+    }
+    if (operation.operationName === 'BurndownMilestones') {
+      observer.next({ data: { issues: { nodes: milestones, pageInfo: { hasNextPage: false, endCursor: null } } } }); observer.complete(); return;
+    }
+    if (operation.operationName === 'DeliveryMilestoneBurndown') {
+      burndownRequests.push(operation.variables);
+      observer.next({ data: { milestoneBurndown: {
+        definitionVersion: '1', milestone: { id: operation.variables.milestoneId, identifier: 'INV-10' },
+        window: { from: '2026-03-01', to: '2026-03-31', timeZone: 'UTC', start, end },
+        coverage: { status: 'FULL', baseline: start, memberCount: 0, unknownWorkCount: 0, backfilledEventCount: 0, gaps: [] },
+        emptyReason: 'NO_MEMBERS', points: [],
+      } } }); observer.complete(); return;
     }
     requests.push(operation.variables);
     void reply(operation.variables).then((data) => { observer.next({ data: { deliveryLatency: data } }); observer.complete(); }, (error) => observer.error(error));
@@ -174,7 +186,7 @@ it('renders full metrics, text equivalent and keyboard-activatable chart buttons
   await waitFor(() => expect(requests.at(-1)?.sample).toBe('LEAD_TIME'));
   expect(requests.at(-1)).toMatchObject({ from: start, to: end, repository: null });
   expect(await screen.findByLabelText('Delivery drill-down')).toHaveTextContent('0 items · 0 samples of 5');
-  expect(screen.getByLabelText('Burndown')).toHaveTextContent('INV-268 scope history');
+  expect(await screen.findByText('No milestones in this project')).toBeInTheDocument();
 });
 it('loads every drill-down page and reconciles episodes rather than items', async () => {
   mount(async (variables) => fixture({ nodes: variables.after ? [work('2', 3)] : [work('1', 2)], pageInfo: variables.after ? { hasNextPage: false, endCursor: null } : { hasNextPage: true, endCursor: 'page-2' } }), 'LEAD_TIME');
@@ -185,6 +197,26 @@ it('loads every drill-down page and reconciles episodes rather than items', asyn
   const link = within(list).getByRole('link', { name: /INV-1 Work 1/ });
   fireEvent.click(link);
   expect(list).toBeInTheDocument();
+});
+it('keeps the selected milestone across latency drill-down and window reloads', async () => {
+  const burndownRequests: Record<string, unknown>[] = [];
+  mount(async () => fixture(), '', defaultProjects, `from=${start}&to=${end}`, [
+    { id: 'm1', identifier: 'INV-10', title: 'First milestone' },
+    { id: 'm2', identifier: 'INV-20', title: 'Second milestone' },
+  ], burndownRequests);
+  const select = await screen.findByRole('combobox', { name: 'Burndown milestone' });
+  await waitFor(() => expect(burndownRequests.at(-1)).toMatchObject({ from: start, to: end, timeZone: 'UTC' }));
+  fireEvent.change(select, { target: { value: 'm2' } });
+  fireEvent.click(await screen.findByRole('link', { name: /Lead time/ }));
+  await screen.findByLabelText('Delivery drill-down');
+  expect(screen.getByRole('combobox', { name: 'Burndown milestone' })).toBe(select);
+  expect(select).toHaveValue('m2');
+  fireEvent.click(screen.getByRole('button', { name: '7d' }));
+  await screen.findByLabelText('Completed sample latency');
+  expect(await screen.findByRole('combobox', { name: 'Burndown milestone' })).toHaveValue('m2');
+  const today = new Date().toISOString().slice(0, 10);
+  const from = new Date(Date.parse(today) - 6 * 86_400_000).toISOString().slice(0, 10);
+  await waitFor(() => expect(burndownRequests.at(-1)).toEqual({ milestoneId: 'm2', from, to: today, timeZone: 'UTC' }));
 });
 it('sorts open items by known age descending and leaves unknown age explicit', async () => {
   mount(async () => fixture({ nodes: [work('1', 1, null), work('2', 1, 9 * 3_600_000), work('3', 1, 3_600_000)] }), 'OPEN');
