@@ -33,7 +33,7 @@ describe('work graph export and import (INV-1007)', () => {
     const work = await commitWork(prisma, candidate.id, { acceptance: 'Round trip intact.', assigneeId: human.id, expectedRevision: candidate.revision }, humanActor);
     await createComment(prisma, { issueId: work.id, body: 'Root comment' }, human.id);
     const claim = await claimWork(prisma, work.id, {}, agentActor);
-    const { run } = await reportRun(prisma, { workId: work.id, claimToken: claim.claimToken!, status: 'completed', summary: 'Exported and back.', commitSha: 'a'.repeat(40), pullRequestNumber: 7 }, agentActor);
+    const { run } = await reportRun(prisma, { workId: work.id, claimToken: claim.claimToken!, status: 'completed', followups: { noneReason: 'No follow-up work.' }, summary: 'Exported and back.', commitSha: 'a'.repeat(40), pullRequestNumber: 7 }, agentActor);
     await attachEvidence(prisma, { workId: work.id, runId: run.id, claimToken: claim.claimToken!, kind: 'PR', url: 'https://github.com/example/project/pull/7' }, agentActor);
 
     const before = await workGraphCounts(prisma);
