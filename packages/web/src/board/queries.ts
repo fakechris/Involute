@@ -1467,7 +1467,6 @@ export const MILESTONE_ISSUES_QUERY = gql`
           id
           name
           email
-          avatarUrl
         }
         team {
           id
