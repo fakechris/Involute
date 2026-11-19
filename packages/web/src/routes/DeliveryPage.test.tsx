@@ -45,6 +45,9 @@ function mount(reply: Reply, sample = '', projects = defaultProjects) {
       const totalCount = projects.reduce((sum, project) => sum + project.totalCount, 0) + 3;
       observer.next({ data: { projectSummary: { totalCount, noRepositoryCount: 3, projects } } }); observer.complete(); return;
     }
+    if (operation.operationName === 'BurndownMilestones') {
+      observer.next({ data: { issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } } }); observer.complete(); return;
+    }
     requests.push(operation.variables);
     void reply(operation.variables).then((data) => { observer.next({ data: { deliveryLatency: data } }); observer.complete(); }, (error) => observer.error(error));
   })) });
@@ -148,7 +151,7 @@ it('renders full metrics, text equivalent and keyboard-activatable chart buttons
   await waitFor(() => expect(requests.at(-1)?.sample).toBe('LEAD_TIME'));
   expect(requests.at(-1)).toMatchObject({ start, end, repository: null });
   expect(await screen.findByLabelText('Delivery drill-down')).toHaveTextContent('0 items · 0 samples of 5');
-  expect(screen.getByLabelText('Burndown')).toHaveTextContent('INV-268 scope history');
+  expect(await screen.findByText('No milestones in this project')).toBeInTheDocument();
 });
 it('loads every drill-down page and reconciles episodes rather than items', async () => {
   mount(async (variables) => fixture({ nodes: variables.after ? [work('2', 3)] : [work('1', 2)], pageInfo: variables.after ? { hasNextPage: false, endCursor: null } : { hasNextPage: true, endCursor: 'page-2' } }), 'LEAD_TIME');
