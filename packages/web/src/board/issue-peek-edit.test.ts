@@ -25,23 +25,29 @@ function editing(text: string, base: PeekSession = openPeek(emptyPeekSession(), 
 }
 
 describe('peekSnap', () => {
-  it('waits until a body exists, then keeps the newer revision', () => {
+  it('keeps the body paired with its detail revision even after a board refresh', () => {
     const issue = { id: 'a', identifier: 'INV-1', revision: 6 };
     expect(peekSnap(issue, null)).toBeNull();
     expect(peekSnap(issue, { description: 'from the server', revision: 5 })).toEqual({
       id: 'a',
       identifier: 'INV-1',
       description: 'from the server',
-      revision: 6,
+      revision: 5,
     });
     expect(peekSnap({ ...issue, description: 'on the card' }, { description: 'newer', revision: 7 })).toMatchObject({
       description: 'newer',
       revision: 7,
     });
+    expect(peekSnap({ ...issue, description: 'stale normalized body' }, null)).toBeNull();
+    expect(peekSnap({ ...issue, description: 'stale' }, { description: null, revision: 7 })).toMatchObject({ description: '', revision: 7 });
   });
 });
 
 describe('peek draft state machine', () => {
+  it('does not replace a saved copy with a late older detail response', () => {
+    const current = openPeek(emptyPeekSession(), { ...issueA, description: 'new', revision: 4 });
+    expect(openPeek(current, issueA).drafts.a).toEqual(current.drafts.a);
+  });
   it('ignores a slow save after the preview has moved to another issue', () => {
     const started = requestPeekSave(editing('from A'));
     const switched = openPeek(started.session, issueB);
@@ -82,6 +88,7 @@ describe('peek draft state machine', () => {
 
     const again = requestPeekReapply(conflict);
     expect(again.request).toEqual({ issueId: 'a', text: 'mine', expectedRevision: 8, generation: 2 });
+    expect(again.session.drafts.a?.savedText).toBe('theirs');
   });
 
   it('keeps the typed text when the network fails', () => {

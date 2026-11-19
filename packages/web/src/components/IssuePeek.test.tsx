@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { useRef, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { emptyPeekSession, openPeek, type PeekSaveRequest, type PeekSession } from '../board/issue-peek-edit';
+import { beginPeekEdit, emptyPeekSession, openPeek, type PeekSaveRequest, type PeekSession } from '../board/issue-peek-edit';
 import { IssuePeek, type PeekSaveResult } from './IssuePeek';
 
 const issue = {
@@ -28,13 +28,17 @@ function Harness({
   saveField = vi.fn(async () => ({ revision: 4, description: 'alpha' })),
   canWrite = true,
   onClose = () => {},
+  loadServerCopy,
+  initialSession,
 }: {
   saveDescription: (request: PeekSaveRequest) => Promise<PeekSaveResult>;
   saveField?: (patch: { stateId?: string; assigneeId?: string | null }) => Promise<{ revision: number; description: string } | { message: string }>;
   canWrite?: boolean;
   onClose?: () => void;
+  loadServerCopy?: (issueId: string) => Promise<{ description: string; revision: number } | null>;
+  initialSession?: PeekSession;
 }) {
-  const ref = useRef<PeekSession>(openPeek(emptyPeekSession(), { id: 'a', identifier: 'INV-1', description: 'alpha', revision: 3 }));
+  const ref = useRef<PeekSession>(initialSession ?? openPeek(emptyPeekSession(), { id: 'a', identifier: 'INV-1', description: 'alpha', revision: 3 }));
   const [session, setSession] = useState(ref.current);
   function onSession(update: PeekSession | ((current: PeekSession) => PeekSession)) {
     const next = typeof update === 'function' ? update(ref.current) : update;
@@ -56,6 +60,7 @@ function Harness({
       asideNote={null}
       saveDescription={saveDescription}
       saveField={saveField}
+      {...(loadServerCopy ? { loadServerCopy } : {})}
       onFollow={() => {}}
       onBack={() => {}}
       onOpenAside={() => {}}
@@ -67,6 +72,32 @@ function Harness({
 afterEach(() => cleanup());
 
 describe('IssuePeek', () => {
+  it('does not expose retained draft actions while another issue is active', () => {
+    const retained = beginPeekEdit(openPeek(emptyPeekSession(), issue));
+    const initialSession = openPeek(retained, { id: 'b', identifier: 'INV-2', description: 'beta', revision: 1 });
+    const saveDescription = vi.fn();
+    render(<Harness initialSession={initialSession} saveDescription={saveDescription} />);
+    expect(screen.queryByRole('textbox', { name: 'Description' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit description' })).not.toBeInTheDocument();
+    expect(saveDescription).not.toHaveBeenCalled();
+  });
+  it('retries a failed conflict copy load without losing the draft', async () => {
+    const saveDescription = vi.fn().mockResolvedValue({ ok: false, conflict: true, message: 'Conflict', server: null });
+    const loadServerCopy = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce({ description: '', revision: 8 });
+    render(<Harness saveDescription={saveDescription} loadServerCopy={loadServerCopy} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Edit description' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Description' }), { target: { value: 'mine' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry loading server copy' }));
+    await screen.findByText('The server text could not be loaded. Try again.');
+    expect(screen.getByRole('textbox', { name: 'Description' })).toHaveValue('mine');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading server copy' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Apply my draft' })).toBeEnabled());
+    expect(saveDescription).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: 'Discard my draft' }));
+    expect(screen.queryByRole('textbox', { name: 'Description' })).not.toBeInTheDocument();
+  });
   it('saves only from the Save button, and Escape closes without saving', async () => {
     const saveDescription = vi.fn(async () => ({ ok: true as const, revision: 4, description: 'edited' }));
     const onClose = vi.fn();

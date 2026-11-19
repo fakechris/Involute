@@ -75,10 +75,14 @@ describe('board peek editing (INV-271)', () => {
         },
       });
     installUpdate(update);
-    const contractRefetch = vi.fn().mockResolvedValue({
-      data: { issue: { id: 'issue-1', revision: 8, description: 'server copy', parent: null } },
+    renderApp(App, { data: boardQueryResult, loading: false }, ['/']);
+    const query = apolloMocks.useQuery.getMockImplementation() as (document: unknown, options: unknown) => any;
+    apolloMocks.useQuery.mockImplementation((document: unknown, options: any) => {
+      if (getDocumentSource(document).includes('query IssueDetail') && options?.skip === undefined) {
+        return { data: { issue: { id: 'issue-1', revision: 8, description: 'server copy', parent: null } }, loading: false, refetch: vi.fn() };
+      }
+      return query(document, options);
     });
-    renderApp(App, { data: boardQueryResult, loading: false, contractRefetch }, ['/']);
 
     await screen.findByTestId('issue-card-issue-1');
     await focusCard('issue-1');
@@ -94,6 +98,11 @@ describe('board peek editing (INV-271)', () => {
     fireEvent.click(within(peek).getByRole('button', { name: 'Apply my draft' }));
     await waitFor(() => expect(update).toHaveBeenLastCalledWith({
       variables: { id: 'issue-1', input: { description: 'from A', expectedRevision: 8 } },
+    }));
+    await within(peek).findByText('Saved');
+    press('z', { metaKey: true });
+    await waitFor(() => expect(update).toHaveBeenLastCalledWith({
+      variables: { id: 'issue-1', input: { description: 'server copy', expectedRevision: 9 } },
     }));
   });
 
@@ -114,5 +123,22 @@ describe('board peek editing (INV-271)', () => {
     expect(within(again).getByText(/Draft kept/)).toBeInTheDocument();
     fireEvent.click(within(again).getByRole('button', { name: 'Cancel' }));
     expect(within(again).getByText('Backlog description')).toBeInTheDocument();
+  });
+
+  it('leaves native Space and Enter activation on peek buttons alone', async () => {
+    renderApp(App, { data: boardQueryResult, loading: false }, ['/']);
+    await screen.findByTestId('issue-card-issue-1');
+    await focusCard('issue-1');
+    press(' ');
+    const peek = await screen.findByRole('dialog', { name: 'Peek INV-1' });
+    const button = within(peek).getByRole('button', { name: 'Edit description' });
+    for (const key of [' ', 'Enter']) {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      act(() => { button.dispatchEvent(event); });
+      expect(event.defaultPrevented).toBe(false);
+      expect(peek).toBeInTheDocument();
+    }
+    fireEvent.click(button);
+    expect(within(peek).getByRole('textbox', { name: 'Description' })).toBeInTheDocument();
   });
 });

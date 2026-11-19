@@ -54,6 +54,7 @@ export function IssuePeek({
   asideNote,
   saveDescription,
   saveField,
+  loadServerCopy,
   onFollow,
   onBack,
   onOpenAside,
@@ -83,6 +84,7 @@ export function IssuePeek({
   asideNote: string | null;
   saveDescription: (request: PeekSaveRequest) => Promise<PeekSaveResult>;
   saveField: (patch: { stateId?: string; assigneeId?: string | null }) => Promise<{ revision: number; description: string } | { message: string }>;
+  loadServerCopy?: (issueId: string) => Promise<{ description: string; revision: number } | null>;
   onFollow: () => void;
   onBack: () => void;
   onOpenAside: () => void;
@@ -106,6 +108,7 @@ export function IssuePeek({
     // not see, so the holder is read back as the full union.
     const pending: { request: PeekSaveRequest | null } = { request: null };
     onSession((current) => {
+      if (current.openIssueId !== issue.id) return current;
       const produced = produce(current);
       pending.request = produced.request;
       return produced.session;
@@ -132,6 +135,7 @@ export function IssuePeek({
   }
 
   const phase = draft?.phase ?? 'idle';
+  const active = session.openIssueId === issue.id;
   const editing = phase === 'editing' || phase === 'saving' || phase === 'error' || phase === 'conflict';
   const stateOptions = states.filter((state) => state.type !== 'CANCELED' || state.id === issue.state.id);
   const meta = [
@@ -185,15 +189,15 @@ export function IssuePeek({
       {!canWrite ? <p className="issue-peek__note">Read only</p> : null}
       {draft?.kept && phase !== 'saving' ? <p className="issue-peek__note">Draft kept from before this preview was closed or switched.</p> : null}
       {asideNote ? <p className="issue-peek__note">{asideNote}</p> : null}
-      {editing && draft ? (
+      {editing && draft && active ? (
         <>
           <TextArea
             className="issue-peek__input"
             size="sm"
             aria-label="Description"
             value={draft.text}
-            disabled={phase === 'saving'}
-            onChange={(event) => onSession((current) => changePeekText(current, event.target.value))}
+            disabled={phase === 'saving' || !active}
+            onChange={(event) => onSession((current) => current.openIssueId === issue.id ? changePeekText(current, event.target.value) : current)}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
                 event.preventDefault();
@@ -209,6 +213,10 @@ export function IssuePeek({
               <p className="issue-peek__label">Your draft</p>
               <pre className="issue-peek__diff">{draft.text}</pre>
               <div className="issue-peek__actions">
+                {draft.serverRevision == null && loadServerCopy ? <Btn variant="ghost" onClick={async () => {
+                  const server = await loadServerCopy(issue.id);
+                  onSession((current) => applyPeekSave(current, issue.id, draft.generation, { ok: false, conflict: true, message: server ? 'The server has a newer copy.' : 'The server text could not be loaded. Try again.', server }));
+                }}>Retry loading server copy</Btn> : null}
                 <Btn variant="accent" disabled={draft.serverRevision == null} onClick={() => void commit(requestPeekReapply)}>Apply my draft</Btn>
                 <Btn variant="ghost" disabled={draft.serverText == null} onClick={() => onSession(discardPeekDraft)}>Discard my draft</Btn>
               </div>
@@ -225,7 +233,7 @@ export function IssuePeek({
         <>
           {draft?.phase === 'saved' ? <p className="issue-peek__note">Saved</p> : null}
           {ready ? (body ? <MarkdownRenderer content={body} clamp={12} size="sm" className="issue-peek__body" /> : null) : <p className="issue-peek__note">Loading description…</p>}
-          {canWrite && ready ? <div className="issue-peek__actions"><Btn variant="subtle" onClick={() => onSession(beginPeekEdit)}>Edit description</Btn></div> : null}
+          {canWrite && ready && active ? <div className="issue-peek__actions"><Btn variant="subtle" onClick={() => onSession(beginPeekEdit)}>Edit description</Btn></div> : null}
         </>
       )}
       <div className="issue-peek__actions">

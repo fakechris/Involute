@@ -51,31 +51,19 @@ export function emptyPeekSession(): PeekSession {
 /**
  * The body the preview may edit. The board list often has no description yet
  * (INV-1470); a missing detail means "still loading", and an empty string means
- * the server has answered with no body. A newer revision wins. A field save can
- * move the board revision ahead of a detail response that did not change the body.
+ * the server has answered with no body. Only the uncached detail response pairs
+ * a description with its revision; normalized board fields can be stale.
  */
 export function peekSnap(
   issue: { id: string; identifier: string; description?: string | null; revision: number },
   detail: { description?: string | null; revision: number } | null,
 ): PeekIssueSnap | null {
-  const boardHasBody = issue.description != null;
-  if (!boardHasBody && !detail) return null;
-  if (detail && detail.revision >= issue.revision) {
-    return {
-      id: issue.id,
-      identifier: issue.identifier,
-      description: detail.description ?? issue.description ?? '',
-      revision: detail.revision,
-    };
-  }
-  if (boardHasBody) {
-    return { id: issue.id, identifier: issue.identifier, description: issue.description ?? '', revision: issue.revision };
-  }
+  if (!detail) return null;
   return {
     id: issue.id,
     identifier: issue.identifier,
-    description: detail?.description ?? '',
-    revision: issue.revision,
+    description: detail.description ?? '',
+    revision: detail.revision,
   };
 }
 
@@ -106,6 +94,7 @@ function fresh(issue: PeekIssueSnap): PeekDraft {
 
 /** A clean draft follows the server. A dirty one never does. */
 function adopt(draft: PeekDraft, issue: PeekIssueSnap): PeekDraft {
+  if (issue.revision < draft.baseRevision) return draft;
   if (draft.phase === 'saving' || draft.phase === 'conflict' || draft.text !== draft.savedText || draft.phase === 'error') {
     return draft;
   }
@@ -181,7 +170,7 @@ export function requestPeekReapply(session: PeekSession): { session: PeekSession
   const draft = id ? session.drafts[id] : null;
   if (!draft || draft.phase !== 'conflict' || draft.serverRevision == null) return { session, request: null };
   const generation = draft.generation + 1;
-  const next = { ...draft, phase: 'saving' as const, generation, baseRevision: draft.serverRevision, message: null };
+  const next = { ...draft, phase: 'saving' as const, generation, baseRevision: draft.serverRevision, savedText: draft.serverText ?? draft.savedText, message: null };
   return {
     session: put(session, next),
     request: { issueId: draft.issueId, text: draft.text, expectedRevision: draft.serverRevision, generation },

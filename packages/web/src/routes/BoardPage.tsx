@@ -13,7 +13,7 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import { useMutation, useQuery } from '@apollo/client/react';
+import { useApolloClient, useMutation, useQuery } from '@apollo/client/react';
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -2654,6 +2654,7 @@ export function BoardPage() {
       if (isTypingField || selectedIssueId || isCreateOpen || picker) {
         return;
       }
+      if (isElementTarget && target.closest('.issue-peek button') && (event.key === ' ' || event.key === 'Enter')) return;
 
       // Copy the focused issue's identifier (⌘.) or link (⌘⇧, or ⌘⇧C) (INV-1087).
       if ((event.metaKey || event.ctrlKey) && focusedIssueId) {
@@ -2855,12 +2856,14 @@ export function BoardPage() {
   const peekIssue = peekIssueId ? boardVisibleIssues.find((issue) => issue.id === peekIssueId) ?? null : null;
   // The peek shows the issue's opening lines, and the board list does not
   // carry descriptions (INV-1470): it asks for the peeked one.
-  const { data: peekDetailData, loading: peekDetailLoading, refetch: refetchPeekDetail } = useQuery<
+  const peekClient = useApolloClient();
+  const { data: peekDetailData, loading: peekDetailLoading } = useQuery<
     { issue: { id: string; revision: number; description?: string | null; parent?: { id: string; identifier: string; title: string } | null } | null },
     { id: string }
   >(ISSUE_DETAIL_QUERY, {
     variables: { id: peekIssueId ?? '' },
     skip: !peekIssueId,
+    fetchPolicy: 'no-cache',
   });
   const rawPeekDetail = peekDetailData?.issue?.id === peekIssueId ? peekDetailData.issue : null;
   const peekDetail = peekDetailLoading && rawPeekDetail?.description == null ? null : rawPeekDetail;
@@ -2876,7 +2879,13 @@ export function BoardPage() {
     const issue = peekIssueRef.current;
     if (!issue || issue.id !== peekIssueId) return;
     const snap = peekSnap(issue, peekDetailRef.current);
-    if (!snap) return;
+    if (!snap) {
+      updatePeek((current) => {
+        const retained = current.drafts[issue.id];
+        return retained ? openPeek(current, { id: issue.id, identifier: issue.identifier, description: retained.savedText, revision: retained.baseRevision }) : closePeek(current);
+      });
+      return;
+    }
     updatePeek((current) => openPeek(current, snap));
   }, [
     peekIssueId,
@@ -3257,7 +3266,7 @@ export function BoardPage() {
 
   async function loadPeekServerCopy(issueId: string): Promise<{ description: string; revision: number } | null> {
     try {
-      const result = await refetchPeekDetail({ id: issueId });
+      const result = await peekClient.query<{ issue: { id: string; description?: string | null; revision: number } | null }>({ query: ISSUE_DETAIL_QUERY, variables: { id: issueId }, fetchPolicy: 'no-cache' });
       const issue = result.data?.issue;
       if (!issue || issue.id !== issueId || typeof issue.revision !== 'number') return null;
       return { description: issue.description ?? '', revision: issue.revision };
@@ -3400,6 +3409,7 @@ export function BoardPage() {
           asideNote={peekAsideNote}
           saveDescription={savePeekDescription}
           saveField={savePeekField}
+          loadServerCopy={loadPeekServerCopy}
           onFollow={followPeekParent}
           onBack={backFromPeek}
           onOpenAside={() => openIssue(peekIssue)}
