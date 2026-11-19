@@ -167,11 +167,16 @@ export async function loadMilestoneBurndown(
     // A deletion with no recorded chain is reported as a gap, not replayed.
     if (chain.length === 0 && !live.has(deletion.workId)) continue;
     const removed: ScopeSnapshot = { ...final, parentId: null };
+    // The deletion follows the revision it saw, even if an audit committed
+    // under the lock carries a later timestamp than the deletion's start.
+    const lastAt = Math.max(deletion.deletedAt.getTime(), ...audits
+      .filter(a => a.workId === deletion.workId && a.revision <= deletion.revision)
+      .map(a => a.createdAt.getTime()));
     audits.push({
       id: deletion.id,
-      revision: deletion.revision,
+      revision: deletion.revision + 1,
       workId: deletion.workId,
-      createdAt: deletion.deletedAt,
+      createdAt: new Date(lastAt),
       before: final,
       after: removed,
       surface: deletion.surface,
