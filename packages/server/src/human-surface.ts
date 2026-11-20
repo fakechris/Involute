@@ -42,6 +42,8 @@ export type HumanSurface =
   | { kind: 'gap'; tracking: string; note: string };
 
 export const MUTATION_SURFACES: Record<string, HumanSurface> = {
+  triageSuggestionExposure: { kind: 'web', doc: 'TRIAGE_SUGGESTION_EXPOSURE_MUTATION', components: ['components/TriageSuggestions.tsx'], label: 'Triage suggestions', test: 'components/TriageSuggestions.test.tsx' },
+  triageSuggestionFeedback: { kind: 'web', doc: 'TRIAGE_SUGGESTION_FEEDBACK_MUTATION', components: ['components/TriageSuggestions.tsx'], label: 'Save correction', test: 'components/TriageSuggestions.test.tsx' },
   // INV-1489: Administration → Autonomy, Team settings → Autonomy, the project override (docs/autonomy-policy.md §2).
   workflowPolicySet: { kind: 'web', doc: 'WORKFLOW_POLICY_SET_MUTATION', components: ['routes/AutonomyTab.tsx'], label: 'Save autonomy', test: 'routes/AutonomyTab.test.tsx' },
   workflowPolicyClear: { kind: 'web', doc: 'WORKFLOW_POLICY_CLEAR_MUTATION', components: ['routes/AutonomyTab.tsx'], label: 'Inherit from team', test: 'routes/AutonomyTab.test.tsx' },

@@ -57,6 +57,8 @@ export const AGENT_ONLY_READ_TOOLS: Record<string, string> = {
 
 /** GraphQL queries that intentionally have no MCP tool; each names the decision it rests on. */
 export const QUERY_EXEMPTIONS: Record<string, { reason: string; decision: string }> = {
+  workTriageSuggestions: { reason: 'Human candidate and bug triage suggestions; no automated decisions (INV-648).', decision: 'INV-648' },
+  triageSuggestionStats: { reason: 'Human triage correction and handling-time report (INV-648).', decision: 'INV-648' },
   deliveryLatency: { reason: 'Versioned reporting data for the delivery latency view (INV-269); agents can read source events in work_get_context.', decision: 'INV-267' },
   handledForYou: { reason: 'The Handled for you list on /todo for people; agents see the same decisions as audits on each item (work_get_context).', decision: 'INV-1486' },
   fieldDefinitions: { reason: 'The definitions of one scope for the settings pages; an agent reads the ones that apply on each item (work_get_context field_definitions) or a team\'s set with work_catalog(kind: fields).', decision: 'INV-1501' },
@@ -154,6 +156,8 @@ export const AGENT_ONLY_FIELDS: Record<string, Record<string, string>> = {
  * rule (INV-1004) — a reason alone is not an exemption.
  */
 export const MCP_EXEMPTIONS: Record<string, { reason: string; gate: 'administration' | 'candidate' | 'final-acceptance' | 'personal' | 'deprecated'; decision: string }> = {
+  triageSuggestionExposure: { gate: 'candidate', reason: 'A person acknowledges advice actually displayed by the client (INV-648).', decision: 'INV-648' },
+  triageSuggestionFeedback: { gate: 'candidate', reason: 'A person corrects advisory triage judgments without changing work (INV-648).', decision: 'INV-648' },
   workflowPolicySet: { gate: 'administration', reason: 'A person sets how far agents may go; an agent never widens its own autonomy (docs/autonomy-policy.md).', decision: 'INV-1486' },
   workScheduleSet: { gate: 'administration', reason: 'A person decides what repeats on a clock and which agent runs it; the agent reports rounds through run_report(schedule_round) (INV-1582).', decision: 'INV-1582' },
   githubInstallStart: { gate: 'administration', reason: 'A team Owner installs the GitHub App in the browser; GitHub returns to the server, never to an agent (INV-1677).', decision: 'INV-1677' },
