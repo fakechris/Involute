@@ -39,6 +39,18 @@ function qualified(value: unknown) {
 }
 function empty(status: string, degraded = false): TriageSuggestions { return { status, degraded, observationId: null, suggestions: [] }; }
 function quote(title: string, description: string | null): string { return `${title}${description ? `\n${description.slice(0, 500)}` : ''}`; }
+function boundedDescription(description: string | null): string | null {
+  if (!description || description.length <= 3000) return description;
+  const sections = ['### Steps to reproduce', '### Environment'].flatMap(heading => {
+    const start = description.lastIndexOf(heading);
+    if (start < 0) return [];
+    const section = description.slice(start);
+    const end = section.indexOf('\n### ', heading.length);
+    return [section.slice(0, end < 0 ? 1000 : Math.min(end, 1000))];
+  });
+  const tail = sections.length ? sections.join('\n\n') : description.slice(-1000);
+  return `${description.slice(0, 3000 - tail.length - 5)}\n...\n${tail}`;
+}
 function candidateCheck(id: string): string { return `similar_${id.replace(/-/g, '')}`; }
 function titleTerms(title: string): string[] { return parseSearchQuery(title).terms.flatMap(t => t.pieces).map(t => t.toLowerCase()); }
 
@@ -137,8 +149,9 @@ export function createTriageService(prisma: PrismaClient, options: { config?: un
       return { id: issue.id, identifier: issue.identifier, title: issue.title, repository: issue.repository,
         stateType: issue.state.type, revision: issue.revision, projectId: candidateProjectId, crossProject, quote: quote(issue.title, issue.description) };
     }));
-    const projection: Projection = { work: { id: work.id, teamId: work.teamId, repository: work.repository, projectId, revision: work.revision, title: work.title, description: work.description?.slice(0, 3000) ?? null, acceptance: work.acceptance?.slice(0, 2000) ?? null, bug: work.labels.some(l => l.name.toLowerCase() === 'bug') }, contractDigest: snapshotContract(work).contractRevision, candidates };
-    const { checks, baseline } = triageChecks(projection);
+    const fullProjection: Projection = { work: { id: work.id, teamId: work.teamId, repository: work.repository, projectId, revision: work.revision, title: work.title, description: work.description, acceptance: work.acceptance, bug: work.labels.some(l => l.name.toLowerCase() === 'bug') }, contractDigest: snapshotContract(work).contractRevision, candidates };
+    const { checks, baseline } = triageChecks(fullProjection);
+    const projection: Projection = { ...fullProjection, work: { ...fullProjection.work, description: boundedDescription(work.description), acceptance: work.acceptance?.slice(0, 2000) ?? null } };
     const request: AdviceRequest = { teamId: work.teamId, repository: work.repository ?? 'none', scenario: TRIAGE_SCENARIO, workId, actorId: context.viewer!.id,
       revision: hash([projection, authorizationDigest(context)]), contractDigest: projection.contractDigest, authorizationDigest: authorizationDigest(context), state: projection, checks, baseline };
     bindings.set(request.revision, { context, projection, request });
