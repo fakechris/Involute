@@ -41,7 +41,7 @@ const bugsPageData = {
     metrics: {
       regression: {
         windowDays: 30, deliveredCount: 4, regressedCount: 1, regressionCount: 2, regressionRate: 0.25,
-        byProject: [{ id: 'p', identifier: 'INV-1', title: 'App project', deliveredCount: 4, regressedCount: 1, regressionRate: 0.25 }],
+        byProject: [{ id: 'p', identifier: 'INV-1', title: 'Regression QA project', deliveredCount: 4, regressedCount: 1, regressionRate: 0.25 }],
         byMilestone: [{ id: null, identifier: null, title: 'No milestone', deliveredCount: 4, regressedCount: 1, regressionRate: 0.25 }],
       },
       triageHoursP50: 3.5,
@@ -171,7 +171,11 @@ describe('BugsPage', () => {
   it('renders the regression rate and delivery distributions (INV-752)', () => {
     render(<MemoryRouter><BugsPage /></MemoryRouter>);
     expect(screen.getByLabelText('Triage and SLA')).toHaveTextContent('25%Regression rate (1 of 4 delivered, 30d)');
-    expect(screen.getByLabelText('Regressions by project')).toHaveTextContent('App project4125%');
+    expect(screen.getByLabelText('Regressions by project')).toHaveTextContent('Regression QA project4125%');
+    const distribution = screen.getByRole('region', { name: 'Regression distribution by project' });
+    expect(distribution).toHaveClass('bugs-table-scroll');
+    expect(distribution).toHaveAttribute('tabindex', '0');
+    expect(within(distribution).getByRole('columnheader', { name: 'Rate' })).toBeVisible();
     expect(screen.getByLabelText('Regressions by milestone')).toHaveTextContent('No milestone4125%');
   });
   it('shows triage time, SLA outcomes, breaches, sources and unplaced bugs (INV-751)', () => {

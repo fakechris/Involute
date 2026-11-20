@@ -444,6 +444,7 @@ function BugTriageMetrics({ metrics }: { metrics: BugMetricsData }) {
           <section key={key} className="bugs-panel" aria-label={`Regressions by ${key === 'byProject' ? 'project' : 'milestone'}`}>
             <h2 className="bugs-panel__title">Regressions by {key === 'byProject' ? 'project' : 'milestone'}</h2>
             {metrics.regression![key].length === 0 ? <p className="bugs-panel__empty">No delivered work in this window.</p> : (
+              <div className="bugs-table-scroll" role="region" aria-label={`Regression distribution by ${key === 'byProject' ? 'project' : 'milestone'}`} tabIndex={0}>
               <table className="bugs-table">
                 <thead><tr><th>{key === 'byProject' ? 'Project' : 'Milestone'}</th><th>Delivered</th><th>Regressed</th><th>Rate</th></tr></thead>
                 <tbody>{metrics.regression![key].map((group) => (
@@ -452,6 +453,7 @@ function BugTriageMetrics({ metrics }: { metrics: BugMetricsData }) {
                   </tr>
                 ))}</tbody>
               </table>
+              </div>
             )}
           </section>
         )) : null}
