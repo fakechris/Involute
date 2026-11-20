@@ -159,6 +159,49 @@ vi.mock('@apollo/client/react', () => ({
 }));
 
 describe('CandidatesPage', () => {
+  it.each(['/candidates', '/candidates?type=bug'])('keeps triage feedback advisory and explicit duplicate linking unchanged on %s', async path => {
+    const { useQuery, useMutation } = await import('@apollo/client/react');
+    const originalQuery = vi.mocked(useQuery).getMockImplementation()!;
+    const originalMutation = vi.mocked(useMutation).getMockImplementation()!;
+    const acknowledge = vi.fn().mockResolvedValue({ data: { triageSuggestionExposure: { success: true } } });
+    const feedback = vi.fn().mockResolvedValue({ data: { triageSuggestionFeedback: { success: true } } });
+    mockRunLink.mockResolvedValue({ data: { workLink: { success: true } } });
+    queryDataHolder.current = {
+      issues: { nodes: candidateItems.map(item => ({ ...item, labels: { nodes: [{ id: 'bug', name: 'Bug' }] } })), pageInfo: { endCursor: null, hasNextPage: false } },
+      teams: { nodes: mockTeams },
+    };
+    vi.mocked(useQuery).mockImplementation(((document: { loc?: { source?: { body?: string } } }, options: unknown) =>
+      document.loc?.source?.body?.includes('query WorkTriageSuggestions')
+        ? { data: { workTriageSuggestions: { status: 'advice', degraded: false, observationId: 'obs', suggestions: [{ checkId: 'similar_other', kind: 'similar', value: 'same_issue', quote: 'Original report', candidate: { id: 'cand-2', identifier: 'INV-21', title: 'Similar report', repository: 'fakechris/Involute', crossProject: false } }] } } }
+        : originalQuery(document as never, options as never)) as never);
+    vi.mocked(useMutation).mockImplementation(((document: { loc?: { source?: { body?: string } } }) => {
+      const body = document.loc?.source?.body ?? '';
+      if (body.includes('mutation TriageSuggestionExposure')) return [acknowledge];
+      if (body.includes('mutation TriageSuggestionFeedback')) return [feedback];
+      if (body.includes('workLink(')) return [mockRunLink, { loading: false }];
+      return originalMutation(document as never);
+    }) as never);
+    try {
+      render(<MemoryRouter initialEntries={[path]}><CandidatesPage /></MemoryRouter>);
+      const card = within(screen.getAllByRole('article')[0]!);
+      await waitFor(() => expect(card.getByRole('button', { name: 'Accept' })).toBeEnabled());
+      fireEvent.click(card.getByRole('button', { name: 'Accept' }));
+      await waitFor(() => expect(card.getByRole('status')).toHaveTextContent('Saved: Accepted — Same issue'));
+      expect(mockRunLink).not.toHaveBeenCalled();
+      expect(mockRunCommit).not.toHaveBeenCalled();
+      expect(mockRunReject).not.toHaveBeenCalled();
+      expect(card.getByRole('button', { name: 'Commit' })).toBeInTheDocument();
+      expect(card.getByRole('button', { name: 'Link duplicate' })).toBeDisabled();
+      fireEvent.change(card.getByLabelText('Mark INV-40 as duplicate of'), { target: { value: 'cand-2' } });
+      fireEvent.click(card.getByRole('button', { name: 'Link duplicate' }));
+      await waitFor(() => expect(mockRunLink).toHaveBeenCalledWith({ variables: { fromId: 'cand-1', toId: 'cand-2', type: 'DUPLICATE_OF' } }));
+    } finally {
+      queryDataHolder.current = null;
+      vi.mocked(useQuery).mockImplementation(originalQuery);
+      vi.mocked(useMutation).mockImplementation(originalMutation);
+    }
+  });
+
   it('renders project switcher tabs and filters by project', async () => {
     render(
       <MemoryRouter>

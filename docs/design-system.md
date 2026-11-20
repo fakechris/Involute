@@ -92,6 +92,7 @@
 | `IssuePeek` | `components/IssuePeek.tsx` + `board/issue-peek-edit.ts` + `styles/app.css`（`.issue-peek__*`） | 看板速览卡片。描述用显式 Save / Cancel，冲突时并列服务器正文和草稿，切换或关闭保留未保存的草稿（INV-271） |
 | `WorkFiles` | `components/WorkFiles.tsx` + `styles/content.css`（`.work-files__*`） | 工单页只在有文件时列出文件名链接 |
 | `ProjectBadge`（`getProjectColorClass`） | `components/ProjectBadge.tsx` + `styles/app.css`（`.project-badge`、`.proj-color-*`） | `IssueCard` 内联徽章、各页复制的 `issue-card__repo-badge` |
+| `TriageSuggestions` | `components/TriageSuggestions.tsx` + `styles/content.css`（`.triage-suggestions*`） | Candidates 与 Bug 分诊共用的建议、明确曝光确认与人工纠正；引用只按纯文本显示 |
 | 状态色 | `components/StatusIcon.tsx`（`getStatusColorVar` / `statusKindForStateType`） | `graph-colors.ts` 与时间线 CSS 里的重复 hex |
 | `NeighbourhoodOmissionNote`（`neighbourhoodOmissionSentence`，看板芯片经 `NeighbourhoodTruncationHint`） | `components/graph/IssueNeighbourhood.tsx` | 工单抽屉 / 整页邻域 / 看板芯片各自写的笼统截断句（INV-1767：写明每一类少了多少，留下的是未结束且最近更新的项；无省略时不出现） |
 

@@ -1,5 +1,6 @@
 import { deliveryLinksMissingWarning } from './delivery-links.js';
 import { readCoverageHints } from './semantic-coverage.js';
+import { triageService, triageSuggestionStats, type TriageFeedbackInput } from './semantic-triage.js';
 import { executorContext, executorUpdate, type ExecutorInput } from './executor-service.js';
 import { loadHandledForYou } from './autonomy-gate.js';
 import type { AgentTrustLevel } from '@prisma/client';
@@ -478,6 +479,14 @@ const typeDefs = /* GraphQL */ `
   type CoverageCodeFinding { criterionId: String!, evidenceId: String!, message: String! }
   type CoverageCriterion { id: String!, text: String!, judgment: String!, sources: [CoverageSource!]!, codeFindings: [CoverageCodeFinding!]! }
   type CoverageHints { status: String!, criteria: [CoverageCriterion!]! }
+  type TriageCandidate {
+    id: String!, identifier: String!, title: String!, repository: String, stateType: String!, revision: Int!, crossProject: Boolean!, quote: String!
+  }
+  type TriageSuggestion { checkId: String!, kind: String!, value: String!, quote: String!, candidate: TriageCandidate }
+  type TriageSuggestions { status: String!, degraded: Boolean!, observationId: String, suggestions: [TriageSuggestion!]! }
+  type TriageSuggestionStats { accepted: Int!, corrected: Int!, rejected: Int!, exposures: Int!, medianHandlingMs: Float }
+  type TriageSuggestionPayload { success: Boolean!, message: String! }
+  input TriageSuggestionFeedbackInput { observationId: String!, workId: String!, checkId: String!, verdict: String!, correctedValue: String, note: String }
   type Query {
     executorContextJson(id: String!): String!
     deliveryContext(id: String!): DeliveryContext!
@@ -524,6 +533,8 @@ const typeDefs = /* GraphQL */ `
     cycle(id: String!): Cycle @deprecated(reason: "Use issue query with kind: MILESTONE instead.")
     workContext(id: String!): WorkContext
     workCoverageHints(id: String!): CoverageHints!
+    workTriageSuggestions(workId: String!): TriageSuggestions!
+    triageSuggestionStats(teamId: String!): TriageSuggestionStats!
     readyWork(filter: ReadyWorkFilter, query: String): IssueConnection!
     """
     One project's work graph (INV-681): the nodes the project resolves to —
@@ -612,6 +623,8 @@ const typeDefs = /* GraphQL */ `
   }
 
   type Mutation {
+    triageSuggestionExposure(observationId: String!): TriageSuggestionPayload!
+    triageSuggestionFeedback(input: TriageSuggestionFeedbackInput!): TriageSuggestionPayload!
     executorUpdate(workId: String!, operation: String!, detailsJson: String): ExecutorMutationPayload!
     deliveryChangePropose(workId: String!, expectedRevision: Int!, reason: String!, changesJson: String!): DeliveryMutationPayload!
     deliveryChangeDecide(id: String!, approve: Boolean!, note: String, ownerId: String): DeliveryMutationPayload!
@@ -4580,6 +4593,11 @@ const resolvers = {
       if (!work) throw createNotFoundError(ISSUE_NOT_FOUND_MESSAGE);
       return readCoverageHints(context, work.id);
     },
+    workTriageSuggestions: async (_parent: unknown, args: { workId: string }, context: GraphQLContext) => {
+      requireAuthentication(context);
+      return triageService(context).read(context, args.workId);
+    },
+    triageSuggestionStats: async (_parent: unknown, args: { teamId: string }, context: GraphQLContext) => triageSuggestionStats(context, args.teamId),
     workContext: async (
       _parent: unknown,
       args: { id: string },
@@ -4876,6 +4894,14 @@ const resolvers = {
     },
   },
   Mutation: {
+    triageSuggestionExposure: async (_parent: unknown, args: { observationId: string }, context: GraphQLContext) => {
+      try { return await triageService(context).exposure(context, args.observationId); }
+      catch (error) { return { success: false, message: error instanceof Error ? error.message : 'Could not record triage exposure.' }; }
+    },
+    triageSuggestionFeedback: async (_parent: unknown, args: { input: TriageFeedbackInput }, context: GraphQLContext) => {
+      try { return await triageService(context).feedback(context, args.input); }
+      catch (error) { return { success: false, message: error instanceof Error ? error.message : 'Could not record triage feedback.' }; }
+    },
     executorUpdate: (_parent: unknown, args: { workId: string; operation: ExecutorInput['operation']; detailsJson?: string }, context: GraphQLContext) => runMutationWithReason(async () => {
       requireAuthentication(context);
       let details: Omit<ExecutorInput, 'workId' | 'operation'> = {};

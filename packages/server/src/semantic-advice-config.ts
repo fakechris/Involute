@@ -16,6 +16,7 @@ export interface ExperimentPolicy {
   questionVersion: string;
   calibrationVersion: string;
   policyVersion: string;
+  qualificationRecord?: string;
 }
 export interface AdviceConfig {
   enabled: boolean;
@@ -47,6 +48,7 @@ export function parseAdviceConfig(value: unknown): AdviceConfig {
       }
       if (!['off', 'shadow', 'ab', 'enabled'].includes(String(p.mode)) || !['work', 'actor', 'team'].includes(String(p.assignmentUnit))) throw new Error();
       if (!Number.isSafeInteger(p.treatmentBps) || Number(p.treatmentBps) < 0 || Number(p.treatmentBps) > 10_000) throw new Error();
+      if (p.qualificationRecord !== undefined && (typeof p.qualificationRecord !== 'string' || !p.qualificationRecord.trim() || p.qualificationRecord.length > 200)) throw new Error();
       const scope = hash([p.teamId, p.repository, p.scenario]);
       if (seen.has(scope)) throw new Error();
       seen.add(scope);
