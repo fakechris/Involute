@@ -240,7 +240,7 @@ export async function loadRegressionMetrics(prisma: DatabaseClient, scope: Prism
   const deliveredIds = new Set(completions.filter((row) => row.completedAt.getTime() >= start && row.completedAt <= now).map((row) => row.workId));
   const delivered = candidates.filter((item) => deliveredIds.has(item.id));
   const links = delivered.length ? await prisma.workLink.findMany({
-    where: { type: 'REGRESSED_BY', toId: { in: [...deliveredIds] }, from: { commitmentStatus: { not: 'REJECTED' } } },
+    where: { type: 'REGRESSED_BY', toId: { in: [...deliveredIds] }, from: { AND: [scope, { commitmentStatus: { not: 'REJECTED' } }] } },
     select: { toId: true },
   }) : [];
   const regressed = new Set(links.map((link) => link.toId));
