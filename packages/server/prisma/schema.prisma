@@ -1424,6 +1424,35 @@ model SemanticAdviceRecord {
   createdAt DateTime @default(now())
 }
 
+model SemanticTriageExposure {
+  id String @id @default(uuid()) @db.Uuid
+  workId String @db.Uuid
+  observationId String
+  actorId String @db.Uuid
+  exposedAt DateTime @default(now())
+
+  @@unique([observationId, actorId])
+  @@index([workId])
+}
+
+model SemanticTriageCorrection {
+  id String @id @default(uuid()) @db.Uuid
+  workId String @db.Uuid
+  observationId String
+  actorId String @db.Uuid
+  checkId String
+  verdict String
+  originalValue String
+  correctedValue String?
+  note String?
+  exposedAt DateTime
+  decidedAt DateTime
+  handlingMs Int
+  createdAt DateTime @default(now())
+
+  @@index([workId, actorId, checkId, decidedAt])
+}
+
 /// One reminder per bug and kind (INV-750): AT_RISK when 20% of the SLA is
 /// left, BREACHED when it is used up. The unique key makes the sweep idempotent.
 model BugSlaAlert {

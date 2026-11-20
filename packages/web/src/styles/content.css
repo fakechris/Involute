@@ -814,3 +814,10 @@ button.list-row__main {
 .burndown-legend { color: var(--fg-dim); }
 .burndown-legend__scope { border-bottom: 2px dashed var(--fg-dim); }
 .burndown-legend__remaining { border-bottom: 2px solid var(--accent); }
+
+.triage-suggestions { padding: 12px 0; border-top: 1px solid var(--border); }
+.triage-suggestions h3, .triage-suggestions h4 { margin: 8px 0; font-size: 13px; }
+.triage-suggestions__list { margin: 0; padding: 0; list-style: none; }
+.triage-suggestions__item { padding: 8px 0; }
+.triage-suggestions__quote { margin: 8px 0; padding-left: 8px; border-left: 2px solid var(--border); color: var(--fg-dim); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.triage-suggestions__actions { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; margin-top: 8px; }

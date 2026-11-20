@@ -1,5 +1,38 @@
 # Optional semantic advice module
 
+## Candidate and bug triage (INV-648)
+
+The `workTriageSuggestions(workId)` query evaluates scenario `triage`
+for candidates, including incoming bugs. Its policy requires a nonempty
+`qualificationRecord` reference (INV-655); absent qualification makes every mode
+off. This reference is an entry condition, not an automated quality attestation.
+Default configuration remains off. Controls and shadow return no suggestions;
+provider failures are degraded without suggestions, and stale advice is withheld.
+
+Retrieval returns at most five readable same-team items, including completed and
+canceled history. Other repositories are explicitly marked `crossProject` and
+cannot be classified as the same issue. Judgments cover those retrieved items,
+missing information and type, and never mutate or link work. Quotes are original
+database title/description excerpts: clients must render them as **plain text**,
+not HTML or Markdown. Null judgments are displayed as `abstained`.
+
+Only after actually displaying advice does a client call
+`triageSuggestionExposure(observationId)`. Human decisions use
+`triageSuggestionFeedback(input)` with work/observation/check identity, verdict
+`accepted`, `corrected` or `rejected`, an allowed `correctedValue` for corrections,
+and optional note. These operations require current read access and an active
+human principal; feedback also requires that actor's explicit exposure. Handles
+are worker-local and expire on restart, eviction or reconfiguration; deployments
+must route acknowledgement/feedback to the evaluating worker or refresh advice.
+Original observations are immutable and corrections append-only.
+`triageSuggestionStats(teamId)` counts readable exposures, latest decisions per
+work/actor/check, and median exposure-to-decision milliseconds, not clicks.
+`TriageSuggestions` on candidate cards (including `/candidates?type=bug`)
+acknowledges advice after rendering and offers Accept / Correct / Reject per
+check. These buttons only store feedback; Mark duplicate remains the explicit
+linking action. Only completed (Done) history is a baseline regression hint;
+canceled history remains retrievable but does not imply a regression.
+
 The server package exports `@turnkeyai/involute-server/semantic-advice`. This is the
 provider/experiment foundation for optional suggestions. It does not register a
 GraphQL/MCP mutation, change issue state, or enable suggestions in the web UI.

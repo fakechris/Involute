@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@apollo/client/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
+import { TriageSuggestions } from '../components/TriageSuggestions';
 
 import { readStoredTeamKey } from '../board/utils';
 import { recordCommitGesture, recordFieldGesture, type CommitUndoItem } from '../undo/status-undo';
@@ -637,6 +638,7 @@ export function CandidateCard({
       </header>
       <h2 className="observation-card__title">{candidate.title}</h2>
       {candidate.description ? <MarkdownRenderer content={candidate.description} clamp={6} size="sm" className="observation-card__body" /> : null}
+      <TriageSuggestions key={`${candidate.id}:${candidate.revision}`} workId={candidate.id} />
       <div className="observation-contract observation-contract--edit">
         {(
           [
