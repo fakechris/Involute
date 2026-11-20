@@ -4476,6 +4476,11 @@ kbd {
   margin: 0;
 }
 
+.bugs-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .bugs-table {
   width: 100%;
   border-collapse: collapse;

@@ -47,6 +47,7 @@ const BUG_REPORT_MUTATION = /* GraphQL */ `
 const BUG_SUMMARY_QUERY = /* GraphQL */ `
   query BugSummary($teamFilter: TeamFilter) {
     bugSummary(teamFilter: $teamFilter) {
+      metrics { regression { windowDays deliveredCount regressedCount regressionCount regressionRate byProject { id } byMilestone { id } } }
       mostDuplicated {
         identifier
         priority
@@ -517,6 +518,7 @@ describe('bug management', () => {
       const summary = body.data.bugSummary;
 
       expect(summary.oldestOpenAgeDays).toBeGreaterThanOrEqual(10);
+      expect(summary.metrics.regression).toMatchObject({ windowDays: 30, deliveredCount: 0, regressedCount: 0, regressionCount: 0, regressionRate: null, byProject: [], byMilestone: [] });
       expect(summary.oldestOpenAgeDays).toBeLessThan(10.2);
       expect(summary.avgOpenAgeDays).toBeGreaterThanOrEqual(6);
       expect(summary.avgOpenAgeDays).toBeLessThan(6.2);

@@ -24,6 +24,7 @@ import { Btn, PriorityIcon } from '../components/Primitives';
 import { Select } from '../components/controls';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
+import { ProjectBadge } from '../components/ProjectBadge';
 import { Badge, EmptyState, InlineError, LoadingState, StatRow, StatTile } from '../components/status';
 import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam, NO_REPOSITORY_OPTIONS } from './work-filter-match';
@@ -361,6 +362,13 @@ function BugTriageMetrics({ metrics }: { metrics: BugMetricsData }) {
   return (
     <>
       <StatRow aria-label="Triage and SLA">
+        {metrics.regression ? (
+          <StatTile
+            tone={metrics.regression.regressedCount ? 'alert' : 'default'}
+            value={formatRate(metrics.regression.regressionRate)}
+            label={`Regression rate (${metrics.regression.regressedCount} of ${metrics.regression.deliveredCount} delivered, ${metrics.regression.windowDays}d)`}
+          />
+        ) : null}
         <StatTile to="/candidates?type=bug" value={metrics.untriagedCount} label="Waiting in triage" />
         <StatTile
           value={`${formatHours(metrics.triageHoursP50)} / ${formatHours(metrics.triageHoursP90)}`}
@@ -432,6 +440,23 @@ function BugTriageMetrics({ metrics }: { metrics: BugMetricsData }) {
           )}
         </section>
         <BugResolutions metrics={metrics} />
+        {metrics.regression ? (['byProject', 'byMilestone'] as const).map((key) => (
+          <section key={key} className="bugs-panel" aria-label={`Regressions by ${key === 'byProject' ? 'project' : 'milestone'}`}>
+            <h2 className="bugs-panel__title">Regressions by {key === 'byProject' ? 'project' : 'milestone'}</h2>
+            {metrics.regression![key].length === 0 ? <p className="bugs-panel__empty">No delivered work in this window.</p> : (
+              <div className="bugs-table-scroll" role="region" aria-label={`Regression distribution by ${key === 'byProject' ? 'project' : 'milestone'}`} tabIndex={0}>
+              <table className="bugs-table">
+                <thead><tr><th>{key === 'byProject' ? 'Project' : 'Milestone'}</th><th>Delivered</th><th>Regressed</th><th>Rate</th></tr></thead>
+                <tbody>{metrics.regression![key].map((group) => (
+                  <tr key={group.id ?? '__none__'}>
+                    <td>{key === 'byProject' ? <ProjectBadge repository={null} name={group.title} /> : group.title}</td><td>{group.deliveredCount}</td><td>{group.regressedCount}</td><td>{formatRate(group.regressionRate)}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+              </div>
+            )}
+          </section>
+        )) : null}
       </div>
     </>
   );

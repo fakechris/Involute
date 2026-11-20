@@ -1081,6 +1081,11 @@ export const BUGS_PAGE_QUERY = gql`
         duplicateCount
       }
       metrics {
+        regression {
+          windowDays deliveredCount regressedCount regressionCount regressionRate
+          byProject { id identifier title deliveredCount regressedCount regressionRate }
+          byMilestone { id identifier title deliveredCount regressedCount regressionRate }
+        }
         triageHoursP50
         triageHoursP90
         triagedCount

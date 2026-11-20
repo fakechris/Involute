@@ -2774,6 +2774,8 @@ const typeDefs = /* GraphQL */ `
   }
 
   type BugMetrics {
+    "Delivery regression rates from REGRESSED_BY (INV-752)."
+    regression: BugRegressionMetrics!
     "Hours from report to commit or decline, for bugs that went through triage."
     triageHoursP50: Float
     triageHoursP90: Float
@@ -2803,6 +2805,27 @@ const typeDefs = /* GraphQL */ `
     reopenedAfterAutoAcceptCount: Int!
     "reopenedAfterAutoAcceptCount / autoAcceptedCount; null before any auto-acceptance."
     reopenedAfterAutoAcceptRate: Float
+  }
+
+  "Regression distribution for delivered work (INV-752)."
+  type BugRegressionGroup {
+    id: ID
+    identifier: String
+    title: String!
+    deliveredCount: Int!
+    regressedCount: Int!
+    regressionRate: Float
+  }
+
+  "Delivered ISSUE work whose latest completion is in the window (INV-752)."
+  type BugRegressionMetrics {
+    windowDays: Int!
+    deliveredCount: Int!
+    regressedCount: Int!
+    regressionCount: Int!
+    regressionRate: Float
+    byProject: [BugRegressionGroup!]!
+    byMilestone: [BugRegressionGroup!]!
   }
 
   type BugBreach {
