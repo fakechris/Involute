@@ -7,6 +7,8 @@ import { loadBugSlas } from './bug-sla.js';
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
 export interface BugMetrics {
+  /** Regressions introduced by delivered work (INV-752). */
+  regression: BugRegressionMetrics;
   /** Hours from report to commit or decline, over bugs that went through triage. */
   triageHoursP50: number | null;
   triageHoursP90: number | null;
@@ -177,6 +179,7 @@ export async function loadBugMetrics(prisma: DatabaseClient, scope: Prisma.Issue
   const p90 = percentile(triageHours, 0.9);
 
   return {
+    regression: await loadRegressionMetrics(prisma, scope, now),
     triageHoursP50: p50 === null ? null : round1(p50),
     triageHoursP90: p90 === null ? null : round1(p90),
     triagedCount: triageHours.length,
@@ -198,4 +201,77 @@ export async function loadBugMetrics(prisma: DatabaseClient, scope: Prisma.Issue
     reopenedAfterAutoAcceptCount: reopenedAfterAutoAccept.size,
     reopenedAfterAutoAcceptRate: rate(reopenedAfterAutoAccept.size, autoAccepted.size),
   };
+}
+
+export interface BugRegressionGroup {
+  id: string | null;
+  identifier: string | null;
+  title: string;
+  deliveredCount: number;
+  regressedCount: number;
+  regressionRate: number | null;
+}
+
+export interface BugRegressionMetrics {
+  windowDays: number;
+  deliveredCount: number;
+  regressedCount: number;
+  regressionCount: number;
+  regressionRate: number | null;
+  byProject: BugRegressionGroup[];
+  byMilestone: BugRegressionGroup[];
+}
+
+/** REGRESSED_BY points from the regression report to its introducer (INV-752). */
+export async function loadRegressionMetrics(prisma: DatabaseClient, scope: Prisma.IssueWhereInput, now = new Date(), windowDays = 30): Promise<BugRegressionMetrics> {
+  const candidates = await prisma.issue.findMany({
+    where: { AND: [scope, { kind: 'ISSUE', commitmentStatus: 'COMMITTED', supersededById: null, state: { type: 'COMPLETED' } }] },
+    select: { id: true, parentId: true },
+  });
+  const ids = candidates.map((item) => item.id);
+  const completions = ids.length ? await prisma.$queryRaw<Array<{ workId: string; completedAt: Date }>>(Prisma.sql`
+    SELECT a."workId", MAX(a."createdAt") AS "completedAt"
+    FROM "WorkAudit" a JOIN "WorkflowState" s ON s.id::text = a."after"->>'stateId'
+    WHERE a."workId" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+      AND a."before" IS NOT NULL AND a."before"->>'stateId' IS DISTINCT FROM a."after"->>'stateId'
+      AND s.type = 'COMPLETED'
+    GROUP BY a."workId"`) : [];
+  const start = now.getTime() - windowDays * 86_400_000;
+  const deliveredIds = new Set(completions.filter((row) => row.completedAt.getTime() >= start && row.completedAt <= now).map((row) => row.workId));
+  const delivered = candidates.filter((item) => deliveredIds.has(item.id));
+  const links = delivered.length ? await prisma.workLink.findMany({
+    where: { type: 'REGRESSED_BY', toId: { in: [...deliveredIds] }, from: { commitmentStatus: { not: 'REJECTED' } } },
+    select: { toId: true },
+  }) : [];
+  const regressed = new Set(links.map((link) => link.toId));
+  type Ancestor = { id: string; parentId: string | null; kind: string; identifier: string; title: string };
+  const ancestors = new Map<string, Ancestor>();
+  let pending = [...new Set(delivered.flatMap((item) => item.parentId ? [item.parentId] : []))];
+  while (pending.length) {
+    const rows = await prisma.issue.findMany({ where: { id: { in: pending }, AND: [scope] }, select: { id: true, parentId: true, kind: true, identifier: true, title: true } });
+    for (const row of rows) ancestors.set(row.id, row);
+    pending = [...new Set(rows.flatMap((row) => row.parentId && !ancestors.has(row.parentId) ? [row.parentId] : []))];
+  }
+  const rate = (part: number, whole: number) => whole ? Math.round(part / whole * 1000) / 1000 : null;
+  const groups = (kind: string): BugRegressionGroup[] => {
+    const result = new Map<string | null, BugRegressionGroup>();
+    for (const item of delivered) {
+      let ancestor = item.parentId ? ancestors.get(item.parentId) : undefined;
+      const seen = new Set<string>();
+      while (ancestor && ancestor.kind !== kind && !seen.has(ancestor.id)) {
+        seen.add(ancestor.id);
+        ancestor = ancestor.parentId ? ancestors.get(ancestor.parentId) : undefined;
+      }
+      if (ancestor?.kind !== kind) ancestor = undefined;
+      if (!ancestor && kind === 'PROJECT') continue;
+      const id = ancestor?.id ?? null;
+      const group = result.get(id) ?? { id, identifier: ancestor?.identifier ?? null, title: ancestor?.title ?? 'No milestone', deliveredCount: 0, regressedCount: 0, regressionRate: null };
+      group.deliveredCount++;
+      if (regressed.has(item.id)) group.regressedCount++;
+      group.regressionRate = rate(group.regressedCount, group.deliveredCount);
+      result.set(id, group);
+    }
+    return [...result.values()].sort((a, b) => b.regressedCount - a.regressedCount || b.deliveredCount - a.deliveredCount || (a.identifier ?? '').localeCompare(b.identifier ?? ''));
+  };
+  return { windowDays, deliveredCount: delivered.length, regressedCount: regressed.size, regressionCount: links.length, regressionRate: rate(regressed.size, delivered.length), byProject: groups('PROJECT'), byMilestone: groups('MILESTONE') };
 }

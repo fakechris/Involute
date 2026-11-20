@@ -384,7 +384,25 @@ export interface BugSummaryData {
   metrics?: BugMetricsData;
 }
 
+export interface BugRegressionGroupData {
+  id: string | null;
+  identifier: string | null;
+  title: string;
+  deliveredCount: number;
+  regressedCount: number;
+  regressionRate: number | null;
+}
+
 export interface BugMetricsData {
+  regression?: {
+    windowDays: number;
+    deliveredCount: number;
+    regressedCount: number;
+    regressionCount: number;
+    regressionRate: number | null;
+    byProject: BugRegressionGroupData[];
+    byMilestone: BugRegressionGroupData[];
+  };
   triageHoursP50: number | null;
   triageHoursP90: number | null;
   triagedCount: number;
