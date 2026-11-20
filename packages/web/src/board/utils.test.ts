@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildCommittedIssueFilter, getBoardColumns, normalizeRepositoryFilterKey } from './utils';
+import { buildCommittedIssueFilter, getBoardColumns, mergeIssueWithPreservedComments, normalizeRepositoryFilterKey } from './utils';
 import type { IssueSummary, TeamSummary, WorkflowStateSummary } from './types';
 
 function makeState(
@@ -38,6 +38,28 @@ function makeIssue(id: string, state: WorkflowStateSummary): IssueSummary {
     comments: { nodes: [] },
   };
 }
+
+describe('mergeIssueWithPreservedComments', () => {
+  it('preserves known team fields when an update returns only id and key', () => {
+    const state = makeState('s-ready', 'Ready', 'UNSTARTED');
+    const previous = { ...makeIssue('issue-1', state), team: makeTeam([state]) };
+    const next = { ...makeIssue('issue-1', state), acceptance: 'Saving works.' };
+
+    const merged = mergeIssueWithPreservedComments(previous, next);
+
+    expect(merged.team).toEqual(previous.team);
+    expect(merged.acceptance).toBe('Saving works.');
+    expect(merged.state).toEqual(state);
+  });
+
+  it('uses returned team fields, including an explicitly empty state list', () => {
+    const state = makeState('s-ready', 'Ready', 'UNSTARTED');
+    const previous = { ...makeIssue('issue-1', state), team: makeTeam([state]) };
+    const next = { ...previous, team: { ...previous.team, name: 'Renamed', states: { nodes: [] } } };
+
+    expect(mergeIssueWithPreservedComments(previous, next).team).toEqual(next.team);
+  });
+});
 
 describe('getBoardColumns', () => {
   it('orders columns by state group before name', () => {

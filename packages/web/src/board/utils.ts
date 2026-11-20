@@ -172,6 +172,7 @@ export function mergeIssueWithPreservedComments(
   return {
     ...previousIssue,
     ...nextIssue,
+    team: { ...previousIssue.team, ...nextIssue.team },
     repository:
       nextIssue.repository !== undefined
         ? nextIssue.repository
