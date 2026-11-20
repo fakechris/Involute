@@ -83,6 +83,32 @@ describe('candidate and bug semantic triage', () => {
     expect(result.suggestions.find(s => s.candidate?.id === candidate.id)?.value).toBe(state === 'done' ? 'possible_regression' : 'same_issue');
     expect(result.suggestions.filter(s => s.kind === 'missing_info').map(s => s.checkId)).toEqual(['acceptance', 'steps', 'expected_actual', 'environment']);
   });
+  it.each([false, true])('uses project identity for repository-less work (same project: %s)', async sameProject => {
+    const project = await similar({ kind: 'PROJECT', repository: null, title: 'First project' });
+    const otherProject = await similar({ kind: 'PROJECT', repository: null, title: 'Second project' });
+    await prisma.issue.update({ where: { id: work.id }, data: { repository: null, parentId: project.id } });
+    const candidate = await similar({ repository: null, parentId: sameProject ? project.id : otherProject.id });
+    const c = config(); c.policies[0]!.repository = 'none';
+    const s = service(c);
+    const result = await s.read(context, work.id);
+    const suggestion = result.suggestions.find(item => item.candidate?.id === candidate.id)!;
+    expect(suggestion).toMatchObject({ value: sameProject ? 'same_issue' : 'related_distinct', candidate: { crossProject: !sameProject } });
+    await s.exposure(context, result.observationId!);
+    const feedback = { observationId: result.observationId!, workId: work.id, checkId: suggestion.checkId, verdict: 'corrected', correctedValue: 'same_issue' };
+    if (sameProject) await expect(s.feedback(context, feedback)).resolves.toMatchObject({ success: true });
+    else await expect(s.feedback(context, feedback)).rejects.toThrow(/Cross-project/);
+  });
+  it('withholds cached advice when an ancestor moves to another repository-less project', async () => {
+    const project = await similar({ kind: 'PROJECT', repository: null, title: 'First project' });
+    const other = await similar({ kind: 'PROJECT', repository: null, title: 'Second project' });
+    const milestone = await similar({ kind: 'MILESTONE', repository: null, title: 'Milestone', parentId: project.id });
+    await prisma.issue.update({ where: { id: work.id }, data: { repository: null, parentId: project.id } });
+    await similar({ repository: null, parentId: milestone.id });
+    const c = config(); c.policies[0]!.repository = 'none';
+    const s = service(c); const result = await s.read(context, work.id);
+    await prisma.issue.update({ where: { id: milestone.id }, data: { parentId: other.id } });
+    await expect(s.exposure(context, result.observationId!)).rejects.toThrow(/stale/);
+  });
   it('does not invent missed candidates and caps authorized recall at five', async () => {
     const missed = await similar({ title: 'Unrelated calendar widget' });
     for (let i = 0; i < 8; i++) await similar();

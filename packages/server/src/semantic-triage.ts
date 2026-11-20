@@ -3,6 +3,7 @@ import type { GraphQLContext } from './auth.js';
 import { requireAuthentication } from './auth.js';
 import { assertCanReadIssue, buildReadableIssueWhere } from './access-control.js';
 import { resolveShareScope } from './project-sharing.js';
+import { findProjectIdFor } from './autonomy-service.js';
 import { createValidationError } from './errors.js';
 import { snapshotContract } from './evidence-contract.js';
 import { parseSearchQuery, searchIssues } from './issue-search.js';
@@ -16,7 +17,7 @@ type Verdict = 'accepted' | 'corrected' | 'rejected';
 export interface TriageFeedbackInput { observationId: string; workId: string; checkId: string; verdict: string; correctedValue?: string | null; note?: string | null }
 export interface TriageCandidate {
   id: string; identifier: string; title: string; repository: string | null; stateType: string;
-  revision: number; crossProject: boolean; quote: string;
+  revision: number; projectId: string | null; crossProject: boolean; quote: string;
 }
 export interface TriageSuggestion {
   checkId: string; kind: 'similar' | 'missing_info' | 'type'; value: string; quote: string;
@@ -24,7 +25,7 @@ export interface TriageSuggestion {
 }
 export interface TriageSuggestions { status: string; degraded: boolean; observationId: string | null; suggestions: TriageSuggestion[] }
 interface Projection {
-  work: { id: string; teamId: string; repository: string | null; revision: number; title: string; description: string | null; acceptance: string | null; bug: boolean };
+  work: { id: string; teamId: string; repository: string | null; projectId: string | null; revision: number; title: string; description: string | null; acceptance: string | null; bug: boolean };
   contractDigest: string;
   candidates: TriageCandidate[];
 }
@@ -98,10 +99,12 @@ export function createTriageService(prisma: PrismaClient, options: { config?: un
       const work = await prisma.issue.findUniqueOrThrow({ where: { id: binding.workId } });
       await assertCanReadIssue(prisma, context, work.id);
       if (work.commitmentStatus !== 'CANDIDATE' || work.revision !== saved.projection.work.revision || snapshotContract(work).contractRevision !== binding.contractDigest) return false;
+      if (await findProjectIdFor(prisma, work) !== saved.projection.work.projectId) return false;
       for (const candidate of saved.projection.candidates) {
         await assertCanReadIssue(prisma, context, candidate.id);
         const current = await prisma.issue.findUniqueOrThrow({ where: { id: candidate.id }, include: { state: true } });
         if (current.revision !== candidate.revision || current.teamId !== work.teamId || current.repository !== candidate.repository || current.state.type !== candidate.stateType || quote(current.title, current.description) !== candidate.quote) return false;
+        if (await findProjectIdFor(prisma, current) !== candidate.projectId) return false;
       }
       return true;
     } catch { return false; }
@@ -127,9 +130,14 @@ export function createTriageService(prisma: PrismaClient, options: { config?: un
       const more = await searchIssues(prisma, { query: term, first: 5, where: scope });
       for (const hit of more) if (!hits.some(h => h.issue.id === hit.issue.id) && hits.length < 5) hits.push(hit);
     }
-    const candidates = hits.slice(0, 5).map(({ issue }) => ({ id: issue.id, identifier: issue.identifier, title: issue.title, repository: issue.repository,
-      stateType: issue.state.type, revision: issue.revision, crossProject: issue.repository !== work.repository, quote: quote(issue.title, issue.description) }));
-    const projection: Projection = { work: { id: work.id, teamId: work.teamId, repository: work.repository, revision: work.revision, title: work.title, description: work.description?.slice(0, 3000) ?? null, acceptance: work.acceptance?.slice(0, 2000) ?? null, bug: work.labels.some(l => l.name.toLowerCase() === 'bug') }, contractDigest: snapshotContract(work).contractRevision, candidates };
+    const projectId = await findProjectIdFor(prisma, work);
+    const candidates = await Promise.all(hits.slice(0, 5).map(async ({ issue }) => {
+      const candidateProjectId = await findProjectIdFor(prisma, issue);
+      const crossProject = projectId && candidateProjectId ? projectId !== candidateProjectId : !work.repository || !issue.repository || issue.repository !== work.repository;
+      return { id: issue.id, identifier: issue.identifier, title: issue.title, repository: issue.repository,
+        stateType: issue.state.type, revision: issue.revision, projectId: candidateProjectId, crossProject, quote: quote(issue.title, issue.description) };
+    }));
+    const projection: Projection = { work: { id: work.id, teamId: work.teamId, repository: work.repository, projectId, revision: work.revision, title: work.title, description: work.description?.slice(0, 3000) ?? null, acceptance: work.acceptance?.slice(0, 2000) ?? null, bug: work.labels.some(l => l.name.toLowerCase() === 'bug') }, contractDigest: snapshotContract(work).contractRevision, candidates };
     const { checks, baseline } = triageChecks(projection);
     const request: AdviceRequest = { teamId: work.teamId, repository: work.repository ?? 'none', scenario: TRIAGE_SCENARIO, workId, actorId: context.viewer!.id,
       revision: hash([projection, authorizationDigest(context)]), contractDigest: projection.contractDigest, authorizationDigest: authorizationDigest(context), state: projection, checks, baseline };
