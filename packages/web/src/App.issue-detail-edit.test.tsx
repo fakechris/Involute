@@ -259,15 +259,28 @@ describe('App issue detail editing', () => {
           issueUpdate: {
             success: true,
             message: null,
-            issue: { ...getIssue('issue-1'), ...variables.input, revision: 2 },
+            issue: {
+              ...getIssue('issue-1'),
+              ...variables.input,
+              revision: 2,
+              team: { id: getIssue('issue-1').team.id, key: getIssue('issue-1').team.key },
+            },
           },
         } satisfies IssueUpdateMutationData,
       }),
     );
     apolloMocks.useMutation.mockReturnValue([mutate]);
 
-    renderTestApp({ data: boardQueryResult, loading: false }, ['/issue/issue-1']);
+    const issue = { ...getIssue('issue-1'), team: boardQueryResult.teams.nodes[0]! };
+    renderTestApp({ data: boardQueryResult, issuePageData: { issue }, loading: false }, ['/issue/issue-1']);
     const contract = await screen.findByRole('region', { name: 'Contract' });
+    const status = screen.getByRole('combobox', { name: 'Issue state' });
+    const stateId = getIssue('issue-1').state.id;
+    const options = within(status).getAllByRole('option').map((option) => ({
+      value: (option as HTMLOptionElement).value,
+      label: option.textContent,
+    }));
+    expect(status).toHaveValue(stateId);
     fireEvent.click(within(contract).getByRole('button', { name: 'Edit contract' }));
     fireEvent.change(within(contract).getByLabelText('Contract Scope'), {
       target: { value: 'Research stays local; only one line in docs/73' },
@@ -291,6 +304,11 @@ describe('App issue detail editing', () => {
     );
     expect(await within(contract).findByText('Research stays local; only one line in docs/73')).toBeInTheDocument();
     expect(within(contract).queryByRole('button', { name: 'Save contract' })).not.toBeInTheDocument();
+    expect(status).toHaveValue(stateId);
+    expect(within(status).getAllByRole('option').map((option) => ({
+      value: (option as HTMLOptionElement).value,
+      label: option.textContent,
+    }))).toEqual(options);
   });
 
   it('keeps the contract editor open and shows why the server refused', async () => {

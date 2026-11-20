@@ -54,6 +54,7 @@
     "candidates:batch-commit": "pnpm exec tsx prisma/batch-commit.ts",
     "hotfix:reflex": "pnpm exec tsx prisma/hotfix-reflex.ts",
     "repo:migrate": "pnpm exec tsx prisma/repo-migrate.ts",
+    "search:eval": "pnpm exec tsx prisma/search-eval-cli.ts",
     "search:reindex": "pnpm exec tsx prisma/search-reindex.ts",
     "workgraph:export": "pnpm exec tsx prisma/workgraph.ts export",
     "workgraph:import": "pnpm exec tsx prisma/workgraph.ts import",
@@ -84,6 +85,7 @@
     "nodemailer": "^10.0.0"
   },
   "devDependencies": {
+    "@node-rs/jieba": "2.0.4",
     "@types/node": "^24.7.2",
     "@types/nodemailer": "^8.0.1",
     "prisma": "^6.7.0",
