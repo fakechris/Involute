@@ -19,10 +19,19 @@ describe('buildIssueWhere', () => {
   });
 
   it('filters by commitment status so the board can project committed work only', () => {
+    // Only a delivery merge's own marker hides an item, never a DUPLICATE_OF link (INV-2005).
     expect(buildIssueWhere({ commitmentStatus: 'COMMITTED' }, null)).toEqual({
-      AND: [{ OR: [{ supersededById: null }, { AND: [{ supersededBy: { is: { deliveryPackage: { is: null } } } }, { outgoingLinks: { none: { type: 'DUPLICATE_OF' } } }] }] }, { commitmentStatus: 'COMMITTED' }],
+      AND: [{ OR: [{ supersededById: null }, { deliveryMergedAt: null }] }, { commitmentStatus: 'COMMITTED' }],
     });
     expect(buildIssueWhere({ commitmentStatus: 'COMMITTED', includeSuperseded: true }, null)).toEqual({ commitmentStatus: 'COMMITTED' });
+    // Looking an item up by its number finds a hidden merge source too.
+    for (const text of ['1979', 'INV-1979', 'inv-1979']) {
+      expect(JSON.stringify(buildIssueWhere({ commitmentStatus: 'COMMITTED', text }, null))).not.toContain('deliveryMergedAt');
+    }
+    expect(JSON.stringify(buildIssueWhere({ commitmentStatus: 'COMMITTED', text: 'login bug' }, null))).toContain('deliveryMergedAt');
+    // Wherever the number and the status sit in a conjunction.
+    expect(JSON.stringify(buildIssueWhere({ commitmentStatus: 'COMMITTED', and: [{ text: 'INV-1979' }] }, null))).not.toContain('deliveryMergedAt');
+    expect(JSON.stringify(buildIssueWhere({ text: '1979', and: [{ commitmentStatus: 'COMMITTED' }] }, null))).not.toContain('deliveryMergedAt');
   });
 
   it('matches free-text against the repository so a repo fragment finds the project (INV-1430)', () => {
@@ -50,7 +59,7 @@ describe('buildIssueWhere', () => {
       ),
     ).toEqual({
       AND: [
-        { OR: [{ supersededById: null }, { AND: [{ supersededBy: { is: { deliveryPackage: { is: null } } } }, { outgoingLinks: { none: { type: 'DUPLICATE_OF' } } }] }] },
+        { OR: [{ supersededById: null }, { deliveryMergedAt: null }] },
         {
           team: {
             is: {

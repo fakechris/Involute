@@ -502,6 +502,9 @@ model Issue {
   supersededById String? @db.Uuid
   supersededBy Issue? @relation("SupersededWork", fields: [supersededById], references: [id], onDelete: Restrict)
   supersededWorks Issue[] @relation("SupersededWork")
+  // INV-2005: set only when an approved delivery change merged this task into its replacement.
+  // Lists hide by this marker, never by a DUPLICATE_OF link, which people and agents also write.
+  deliveryMergedAt DateTime?
   // INV-1503: values of FieldDefinition rows that apply to this item; GIN (jsonb_path_ops) in the migration.
   attributes Json @default("{}")
   fieldValueIndex FieldValueIndex[]

@@ -59,19 +59,29 @@ export interface IssueFilterInput {
   updatedAt?: DateTimeComparatorInput | null;
 }
 
+/** `1979` or `INV-1979`: a person looking for one item by its number. */
+const IDENTIFIER_QUERY = /^(?:[A-Za-z]+-)?\d+$/;
+
+/** Whether this filter, or any filter it is ANDed with, looks an item up by its number. */
+function searchesIdentifier(filter: IssueFilterInput | null | undefined): boolean {
+  const text = filter?.text?.trim();
+  return Boolean(text && IDENTIFIER_QUERY.test(text)) || (filter?.and ?? []).some(searchesIdentifier);
+}
+
 export function buildIssueWhere(
   filter: IssueFilterInput | null | undefined,
   viewerId: string | null,
+  identifierSearch = searchesIdentifier(filter),
 ): Prisma.IssueWhereInput | undefined {
   const clauses: Prisma.IssueWhereInput[] = [];
-  // Lists hide tasks merged into a delivery package (INV-941): their replacement
-  // is the package root, and the merge links them DUPLICATE_OF it. An item marked as replaced by other work (INV-1498,
-  // an overturned DECISION) stays listed until a person closes it (INV-1515).
-  if (filter?.commitmentStatus && !filter.includeSuperseded) {
-    // A delivery merge always records DUPLICATE_OF to its root, with or without a package (INV-1526).
-    clauses.push({ OR: [{ supersededById: null }, { AND: [{ supersededBy: { is: { deliveryPackage: { is: null } } } }, { outgoingLinks: { none: { type: 'DUPLICATE_OF' } } }] }] });
-  }
   const text = filter?.text?.trim();
+  // Lists hide tasks merged into a delivery package (INV-941), and only those: the
+  // approved merge marks them (INV-2005). An item marked as replaced by other work
+  // (INV-1498), or linked DUPLICATE_OF by a person or an agent, stays listed until a
+  // person closes it (INV-1515). Searching for an item by its number finds it either way.
+  if (filter?.commitmentStatus && !filter.includeSuperseded && !identifierSearch) {
+    clauses.push({ OR: [{ supersededById: null }, { deliveryMergedAt: null }] });
+  }
   if (text) {
     if (/^\d+$/.test(text)) {
       // The numeric part starts immediately after the team prefix.
@@ -99,7 +109,7 @@ export function buildIssueWhere(
 
   if (filter?.and) {
     for (const nestedFilter of filter.and) {
-      const nestedWhere = buildIssueWhere(nestedFilter, viewerId);
+      const nestedWhere = buildIssueWhere(nestedFilter, viewerId, identifierSearch || searchesIdentifier(nestedFilter));
 
       if (nestedWhere) {
         clauses.push(nestedWhere);

@@ -228,6 +228,8 @@ export async function restoreDeletedIssue(
         deliveryUnitKey: issue.deliveryUnitKey,
         deliveryGrantRevision: issue.deliveryGrantRevision,
         supersededById,
+        // A merge source comes back hidden only with its replacement (INV-2005); older tombstones have no marker.
+        deliveryMergedAt: supersededById && issue.deliveryMergedAt ? new Date(issue.deliveryMergedAt) : null,
         stateSourcePrId: issue.stateSourcePrId,
         lastAppliedEventTime: issue.lastAppliedEventTime,
         createdAt: new Date(issue.createdAt),

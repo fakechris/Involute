@@ -1,5 +1,7 @@
 import { startServer } from './index.ts';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { buildIssueWhere, type IssueFilterInput } from './issue-filter.ts';
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { resetAndSeed, DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY } from '../prisma/seed-helpers.ts';
@@ -243,8 +245,30 @@ describe('delivery packages and candidate change sets', () => {
     const evidence = await prisma.workEvidence.create({ data: { workId: source.id, kind: 'ARTIFACT', url: 'https://example.com/retained-proof' } });
     const set = await proposeDeliveryChange(f.agentContext, { workId: f.work.id, expectedRevision: f.work.revision, reason: 'Combine duplicate scope', changes: { mergeSourceIds: [source.id] } });
     await decideDeliveryChange(f.humanContext, { id: set.id, approve: true });
-    expect((await prisma.issue.findUniqueOrThrow({ where: { id: source.id } })).supersededById).toBe(f.work.id);
+    const merged = await prisma.issue.findUniqueOrThrow({ where: { id: source.id } });
+    expect(merged.supersededById).toBe(f.work.id);
     expect(await prisma.workLink.count({ where: { fromId: f.work.id, toId: next.id, type: 'BLOCKS' } })).toBe(1);
     expect(await prisma.workEvidence.findUnique({ where: { id: evidence.id } })).toMatchObject({ workId: source.id, supersededByWorkId: f.work.id });
+
+    // INV-2005: the merge marks its source; lists hide by that marker alone, and
+    // a search for the source's number still finds it.
+    expect(merged.deliveryMergedAt).toBeInstanceOf(Date);
+    const listed = async (filter: IssueFilterInput) => (await prisma.issue.findMany({ where: { AND: [buildIssueWhere(filter, null)!, { teamId: f.team.id }] }, select: { id: true } })).map((row) => row.id);
+    expect(await listed({ commitmentStatus: 'COMMITTED' })).not.toContain(source.id);
+    expect(await listed({ commitmentStatus: 'COMMITTED', text: merged.identifier.split('-')[1]! })).toContain(source.id);
+    expect(await listed({ commitmentStatus: 'COMMITTED', text: merged.identifier })).toContain(source.id);
+
+    // The migration's backfill marks it again from the applied change set, only
+    // once, and leaves a duplicate a person marked superseded unmarked.
+    const manual = await create('Manual duplicate');
+    await createWorkLink(prisma, { fromId: manual.id, toId: next.id, type: 'DUPLICATE_OF' });
+    await prisma.issue.update({ where: { id: manual.id }, data: { supersededById: next.id } });
+    await prisma.issue.update({ where: { id: source.id }, data: { deliveryMergedAt: null } });
+    const sql = readFileSync(new URL('../prisma/migrations/20261121100000_delivery_merge_marker/migration.sql', import.meta.url), 'utf8');
+    const backfill = sql.slice(sql.indexOf('UPDATE "Issue"'));
+    expect(await prisma.$executeRawUnsafe(backfill)).toBe(1);
+    expect(await prisma.$executeRawUnsafe(backfill)).toBe(0);
+    expect((await prisma.issue.findUniqueOrThrow({ where: { id: source.id } })).deliveryMergedAt?.getTime()).toBe((await prisma.deliveryChangeSet.findUniqueOrThrow({ where: { id: set.id } })).decidedAt?.getTime());
+    expect((await prisma.issue.findUniqueOrThrow({ where: { id: manual.id } })).deliveryMergedAt).toBeNull();
   });
 });
