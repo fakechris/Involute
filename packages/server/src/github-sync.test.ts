@@ -7,6 +7,7 @@ import { loadProjectEnvironment } from '../prisma/env.ts';
 import { commitWork, proposeWork } from './claim-service.ts';
 import type { GitHubApiClient, GitHubSyncPullRequest } from './github-sync.ts';
 import {
+  GITHUB_SYNC_SKIP_RETRY_MS,
   githubSyncSkipKey,
   reconcileAllConfiguredRepos,
   reconcileRepoPullRequests,
@@ -574,6 +575,32 @@ describe('GitHub Reconciliation Sync Engine (Phase 3)', () => {
       } finally {
         warnSpy.mockRestore();
         errorSpy.mockRestore();
+      }
+    });
+
+    it('a skipped repo is tried again after a day, and a webhook in other casing clears the marker', async () => {
+      await createGhostProject('ghost/Token-Fixed');
+      const mockClient = new MockGitHubApiClient();
+      mockClient.failures['ghost/Token-Fixed'] = new Error('GitHub API error 404: {"message":"Not Found"}');
+
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        await reconcileAllConfiguredRepos(prisma, mockClient, { forceWatermark: new Date('2026-09-09T00:00:00.000Z') });
+        const key = githubSyncSkipKey('ghost/Token-Fixed');
+        expect(key).toBe(githubSyncSkipKey('Ghost/token-fixed'));
+
+        // A credential fixed in Settings sends no webhook naming the repo: the skip expires.
+        await prisma.syncWatermark.update({ where: { key }, data: { watermark: new Date(Date.now() - GITHUB_SYNC_SKIP_RETRY_MS - 1000) } });
+        delete mockClient.failures['ghost/Token-Fixed'];
+        mockClient.fetchCalls = [];
+        await reconcileAllConfiguredRepos(prisma, mockClient, { forceWatermark: new Date('2026-09-09T00:00:00.000Z') });
+        expect(mockClient.fetchCalls.map((c) => c.repository)).toContain('ghost/Token-Fixed');
+
+        await prisma.syncWatermark.update({ where: { key }, data: { watermark: new Date() } });
+        expect(await resumeGitHubRepoSync(prisma, 'GHOST/token-fixed')).toBe(true);
+        expect(await prisma.syncWatermark.findUnique({ where: { key } })).toBeNull();
+      } finally {
+        warnSpy.mockRestore();
       }
     });
 

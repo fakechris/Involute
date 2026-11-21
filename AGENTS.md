@@ -284,12 +284,12 @@ query {
 `repoErrors` 非空表示对应仓库的 GitHub API 调用失败（如限流），该仓库本轮未被扫描，其余仓库结果不受影响。
 
 ### 9.6 仓库持续 404 的跳过与恢复 (Unreachable Repo Skip, INV-1842)
-对账引擎每 10 分钟按路由表全量 reconciliation。仓库在 GitHub 不存在（或当前凭据不可见）时 list PRs 每轮都 404；引擎在首次 404 时写入持久跳过标记（`SyncWatermark` 表，key 形如 `github_sync_skip_<owner>/<repo>`），后续周期静默跳过该仓库（debug 级日志），不再每轮刷错误栈。非 404 错误（401/403/5xx/网络）不跳过，保持每轮重试。
+对账引擎每 10 分钟按路由表全量 reconciliation。仓库在 GitHub 不存在（或当前凭据不可见）时 list PRs 每轮都 404；引擎在首次 404 时写入跳过标记（`SyncWatermark` 表，key 形如 `github_sync_skip_<owner>/<repo>`，仓库名一律小写），此后 24 小时内的周期静默跳过该仓库（debug 级日志），不再每轮刷错误栈；满 24 小时重试一次，仍 404 则再跳过一天。非 404 错误（401/403/5xx/网络）不跳过，保持每轮重试。
 
-- **自动恢复**：该仓库有任何带 `repository.full_name` 的已鉴权 webhook 到达时，标记自动清除、对账即刻恢复（仓库后来创建或凭据修好，无需人工）。
+- **自动恢复**：该仓库有任何带 `repository.full_name` 的已鉴权 webhook 到达时，标记自动清除、对账即刻恢复（大小写不敏感）；凭据在 Settings → GitHub 修好但没有 webhook 到达时（粘贴 token、App 安装事件不带 `repository`），最迟一天后的重试恢复。
 - **人工强制重试**：删除对应行即可，下一轮重新尝试：
   ```sql
-  DELETE FROM "SyncWatermark" WHERE key = 'github_sync_skip_<owner>/<repo>';
+  DELETE FROM "SyncWatermark" WHERE key = 'github_sync_skip_<owner>/<repo 小写>';
   ```
 - **巡检**：`SELECT key, watermark, "updatedAt" FROM "SyncWatermark" WHERE key LIKE 'github_sync_skip_%';` 列出所有被跳过的仓库及跳过时间。
 

@@ -59,4 +59,17 @@ describe('ViewsPage saved views (INV-1005)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Share with team' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Team write access is required');
   });
+
+  it('carries a Backlog view\'s filters into the Backlog it opens (INV-1941)', () => {
+    const state = { assigneeIds: [], labelIds: [], query: 'state:ready', sortDirection: 'desc', sortField: 'updatedAt', stateIds: [] };
+    window.localStorage.setItem('involute.backlog.savedViews.user-1.INV', JSON.stringify([
+      { id: '22222222-2222-4222-8222-222222222222', name: 'Ready backlog', state, visibility: 'PRIVATE' },
+    ]));
+    renderPage();
+    const card = screen.getByLabelText('View Ready backlog');
+    fireEvent.click(within(card).getByRole('button', { name: /Ready backlog/ }));
+    // The Backlog is not mounted yet, so an apply event would be lost: it reads storage on entry.
+    expect(JSON.parse(window.localStorage.getItem('involute.backlog.viewState.INV') ?? 'null')).toEqual(state);
+  });
 });
+
