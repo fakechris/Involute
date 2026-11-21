@@ -31,8 +31,16 @@ import { processGitHubPrEvent } from './github-webhook-handler.js';
  */
 export const GITHUB_SYNC_SKIP_PREFIX = 'github_sync_skip_';
 
+/**
+ * A skipped repo is tried again after this long: a person fixing the
+ * credential (a pasted token, an App installed on the repo) sends no webhook
+ * that names the repository, so the skip must not be permanent.
+ */
+export const GITHUB_SYNC_SKIP_RETRY_MS = 24 * 60 * 60 * 1000;
+
+/** Routing compares repositories case-insensitively; so does the marker. */
 export function githubSyncSkipKey(repository: string): string {
-  return `${GITHUB_SYNC_SKIP_PREFIX}${repository}`;
+  return `${GITHUB_SYNC_SKIP_PREFIX}${repository.trim().toLowerCase()}`;
 }
 
 /**
@@ -427,17 +435,18 @@ export async function reconcileAllConfiguredRepos(
   const routes = await listAllRepoRoutes(prisma);
   const results: ReconcileResult[] = [];
 
-  const skippedRepos = new Set(
+  const retryBefore = new Date(Date.now() - GITHUB_SYNC_SKIP_RETRY_MS);
+  const skippedKeys = new Set(
     (
       await prisma.syncWatermark.findMany({
-        where: { key: { startsWith: GITHUB_SYNC_SKIP_PREFIX } },
+        where: { key: { startsWith: GITHUB_SYNC_SKIP_PREFIX }, watermark: { gt: retryBefore } },
         select: { key: true },
       })
-    ).map((row) => row.key.slice(GITHUB_SYNC_SKIP_PREFIX.length)),
+    ).map((row) => row.key),
   );
 
   for (const route of routes) {
-    if (skippedRepos.has(route.repository)) {
+    if (skippedKeys.has(githubSyncSkipKey(route.repository))) {
       console.debug(`[github-sync] Skipping unreachable repo ${route.repository} (404 skip marker).`);
       continue;
     }
@@ -457,8 +466,8 @@ export async function reconcileAllConfiguredRepos(
           update: { watermark: new Date() },
         });
         console.warn(
-          `[github-sync] Repo ${route.repository} not reachable (GitHub 404). Skipping future cycles. ` +
-          `Sync resumes automatically when a webhook from this repo arrives, or delete the SyncWatermark row ` +
+          `[github-sync] Repo ${route.repository} not reachable (GitHub 404). Skipping it for a day. ` +
+          `Sync resumes when a webhook from this repo arrives or the day is up; delete the SyncWatermark row ` +
           `'${githubSyncSkipKey(route.repository)}' to retry sooner.`,
         );
         continue;

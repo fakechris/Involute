@@ -17,6 +17,7 @@ import {
   resolveRepoRoute,
   setCustomRepoRoutes,
 } from './github-repo-routes.ts';
+import { githubSyncSkipKey } from './github-sync.ts';
 import {
   applyMonotonicForward,
   applyProvenanceRollback,
@@ -558,7 +559,7 @@ describe('GitHub Webhook & Dual-Track CAS State Machine (Phase 2)', () => {
 
     it('clears the 404 sync skip marker when any webhook for the repo arrives (INV-1842)', async () => {
       await prisma.syncWatermark.create({
-        data: { key: 'github_sync_skip_fakechris/Involute', watermark: new Date() },
+        data: { key: githubSyncSkipKey('fakechris/Involute'), watermark: new Date() },
       });
 
       const body = JSON.stringify({
@@ -576,7 +577,7 @@ describe('GitHub Webhook & Dual-Track CAS State Machine (Phase 2)', () => {
       const handled = await handleGitHubWebhook({ prisma, webhookSecret: testSecret }, req, res);
       expect(handled).toBe(true);
       expect(getOutput().status).toBe(200);
-      expect(await prisma.syncWatermark.findUnique({ where: { key: 'github_sync_skip_fakechris/Involute' } })).toBeNull();
+      expect(await prisma.syncWatermark.findUnique({ where: { key: githubSyncSkipKey('fakechris/Involute') } })).toBeNull();
     });
   });
 

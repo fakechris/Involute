@@ -224,8 +224,11 @@ export interface BugRegressionMetrics {
 
 /** REGRESSED_BY points from the regression report to its introducer (INV-752). */
 export async function loadRegressionMetrics(prisma: DatabaseClient, scope: Prisma.IssueWhereInput, now = new Date(), windowDays = 30): Promise<BugRegressionMetrics> {
+  const start = now.getTime() - windowDays * 86_400_000;
+  // Completing work bumps updatedAt, so anything completed inside the window was
+  // updated inside it: bound the scan by the window, not by all of history.
   const candidates = await prisma.issue.findMany({
-    where: { AND: [scope, { kind: 'ISSUE', commitmentStatus: 'COMMITTED', supersededById: null, state: { type: 'COMPLETED' } }] },
+    where: { AND: [scope, { kind: 'ISSUE', commitmentStatus: 'COMMITTED', supersededById: null, state: { type: 'COMPLETED' }, updatedAt: { gte: new Date(start) } }] },
     select: { id: true, parentId: true },
   });
   const ids = candidates.map((item) => item.id);
@@ -236,7 +239,6 @@ export async function loadRegressionMetrics(prisma: DatabaseClient, scope: Prism
       AND a."before" IS NOT NULL AND a."before"->>'stateId' IS DISTINCT FROM a."after"->>'stateId'
       AND s.type = 'COMPLETED'
     GROUP BY a."workId"`) : [];
-  const start = now.getTime() - windowDays * 86_400_000;
   const deliveredIds = new Set(completions.filter((row) => row.completedAt.getTime() >= start && row.completedAt <= now).map((row) => row.workId));
   const delivered = candidates.filter((item) => deliveredIds.has(item.id));
   const links = delivered.length ? await prisma.workLink.findMany({
