@@ -135,4 +135,21 @@ describe('restoreDeletedIssue', () => {
     expect(restored.parentId).toBeNull();
     expect(await prisma.workLink.count({ where: { toId: issue.id, type: 'CONTAINS' } })).toBe(0);
   });
+
+  it('brings a delivery merge source back hidden with its replacement, and listed without it (INV-2005)', async () => {
+    const root = await createIssue(prisma, { teamId, kind: 'ISSUE', title: 'Root', repository: repo });
+    const make = async (title: string) => {
+      const source = await createIssue(prisma, { teamId, kind: 'ISSUE', title, repository: repo });
+      return prisma.issue.update({ where: { id: source.id }, data: { supersededById: root.id, deliveryMergedAt: new Date() } });
+    };
+    const kept = await make('Merged, root kept');
+    const orphaned = await make('Merged, root deleted');
+    await deleteIssue(prisma, kept.id);
+    expect((await restoreDeletedIssue(prisma, kept.id)).deliveryMergedAt?.getTime()).toBe(kept.deliveryMergedAt?.getTime());
+    await deleteIssue(prisma, orphaned.id);
+    await prisma.issue.update({ where: { id: kept.id }, data: { supersededById: null } });
+    await deleteIssue(prisma, root.id);
+    const restored = await restoreDeletedIssue(prisma, orphaned.id);
+    expect(restored).toMatchObject({ supersededById: null, deliveryMergedAt: null });
+  });
 });

@@ -62,9 +62,16 @@ export interface IssueFilterInput {
 /** `1979` or `INV-1979`: a person looking for one item by its number. */
 const IDENTIFIER_QUERY = /^(?:[A-Za-z]+-)?\d+$/;
 
+/** Whether this filter, or any filter it is ANDed with, looks an item up by its number. */
+function searchesIdentifier(filter: IssueFilterInput | null | undefined): boolean {
+  const text = filter?.text?.trim();
+  return Boolean(text && IDENTIFIER_QUERY.test(text)) || (filter?.and ?? []).some(searchesIdentifier);
+}
+
 export function buildIssueWhere(
   filter: IssueFilterInput | null | undefined,
   viewerId: string | null,
+  identifierSearch = searchesIdentifier(filter),
 ): Prisma.IssueWhereInput | undefined {
   const clauses: Prisma.IssueWhereInput[] = [];
   const text = filter?.text?.trim();
@@ -72,7 +79,7 @@ export function buildIssueWhere(
   // approved merge marks them (INV-2005). An item marked as replaced by other work
   // (INV-1498), or linked DUPLICATE_OF by a person or an agent, stays listed until a
   // person closes it (INV-1515). Searching for an item by its number finds it either way.
-  if (filter?.commitmentStatus && !filter.includeSuperseded && !(text && IDENTIFIER_QUERY.test(text))) {
+  if (filter?.commitmentStatus && !filter.includeSuperseded && !identifierSearch) {
     clauses.push({ OR: [{ supersededById: null }, { deliveryMergedAt: null }] });
   }
   if (text) {
@@ -102,7 +109,7 @@ export function buildIssueWhere(
 
   if (filter?.and) {
     for (const nestedFilter of filter.and) {
-      const nestedWhere = buildIssueWhere(nestedFilter, viewerId);
+      const nestedWhere = buildIssueWhere(nestedFilter, viewerId, identifierSearch || searchesIdentifier(nestedFilter));
 
       if (nestedWhere) {
         clauses.push(nestedWhere);

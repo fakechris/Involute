@@ -29,6 +29,9 @@ describe('buildIssueWhere', () => {
       expect(JSON.stringify(buildIssueWhere({ commitmentStatus: 'COMMITTED', text }, null))).not.toContain('deliveryMergedAt');
     }
     expect(JSON.stringify(buildIssueWhere({ commitmentStatus: 'COMMITTED', text: 'login bug' }, null))).toContain('deliveryMergedAt');
+    // Wherever the number and the status sit in a conjunction.
+    expect(JSON.stringify(buildIssueWhere({ commitmentStatus: 'COMMITTED', and: [{ text: 'INV-1979' }] }, null))).not.toContain('deliveryMergedAt');
+    expect(JSON.stringify(buildIssueWhere({ text: '1979', and: [{ commitmentStatus: 'COMMITTED' }] }, null))).not.toContain('deliveryMergedAt');
   });
 
   it('matches free-text against the repository so a repo fragment finds the project (INV-1430)', () => {
