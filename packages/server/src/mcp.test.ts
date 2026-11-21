@@ -670,6 +670,8 @@ describe('Involute MCP', () => {
     const instructions = init.body.result.instructions as string;
     expect(instructions.startsWith('Involute is a project-state kernel. Work state changes without telling you:')).toBe(true);
     expect(instructions).toContain('Before stating any item\'s status, read it (agent_inbox notifications or commitmentStatus) — never from memory');
+    // A bug is committed on filing (INV-787); the short instructions must not send it to Candidates.
+    expect(instructions).toContain('except bugs: work_file_bug commits a bug on filing');
 
     const agent = await prisma.user.create({
       data: { actorKind: 'AGENT', email: 'hook-agent@agents.test.local', handle: 'hook-agent', name: 'Hook Agent', ownerId: viewer.id },
