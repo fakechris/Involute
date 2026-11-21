@@ -1585,7 +1585,11 @@ link:blocked-by:none has:contract -state:done "free text"
 - `superseded:yes` / `superseded:no` (INV-1930) matches work with / without
   a replacement. Board and Backlog's **Superseded, open** shortcut uses
   `superseded:yes -state-type:canceled,completed`; delivery-package merge
-  sources remain excluded by the normal list rules. Selecting several items
+  sources remain excluded by the normal list rules. Only an approved delivery
+  merge hides an item from lists (it sets `Issue.deliveryMergedAt`, INV-2005);
+  a DUPLICATE_OF link written by a person or an agent does not, and searching
+  for an item's number (`1979`, `INV-1979`) finds a hidden merge source too.
+  Selecting several items
   and moving to Canceled confirms each item's own replacement-derived
   resolution and reason once. Items without a replacement share manual
   values; missing values, live claims, and conflicts are named and left open.

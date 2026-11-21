@@ -156,7 +156,7 @@ export async function decideDeliveryChange(context: GraphQLContext, input: { id:
         const source = await tx.issue.findUniqueOrThrow({ where: { id } });
         await claimIssueRevision(tx, id, source.revision);
         const reviewState = await tx.workflowState.findFirstOrThrow({ where: { teamId: source.teamId, type: 'REVIEW' } });
-        const after = await tx.issue.update({ where: { id }, data: { supersededById: root.id, stateId: reviewState.id } });
+        const after = await tx.issue.update({ where: { id }, data: { supersededById: root.id, deliveryMergedAt: new Date(), stateId: reviewState.id } });
         await tx.workEvidence.updateMany({ where: { workId: id }, data: { supersededByWorkId: root.id } });
         await createWorkLink(tx, { fromId: id, toId: root.id, type: 'DUPLICATE_OF', actor });
         await recordWorkAudit(tx, { workId: id, before: selectIssueSnapshot(source), after: selectIssueSnapshot(after), actor });

@@ -82,7 +82,7 @@ describe('superseded_by (INV-1498)', () => {
     await updateIssue(prisma, old.id, { supersededById: replacement.id, expectedRevision: old.revision }, agent);
     const root = await createIssue(prisma, { teamId: team.id, title: 'Root', parentId: project.id, repository: 'test/sup', commitmentStatus: 'COMMITTED', acceptance: 'a' }, human);
     const merged = await createIssue(prisma, { teamId: team.id, title: 'Merged', parentId: project.id, repository: 'test/sup', commitmentStatus: 'COMMITTED', acceptance: 'a' }, human);
-    await prisma.issue.update({ where: { id: merged.id }, data: { supersededById: root.id } });
+    await prisma.issue.update({ where: { id: merged.id }, data: { supersededById: root.id, deliveryMergedAt: new Date() } });
     await prisma.workLink.create({ data: { fromId: merged.id, toId: root.id, type: 'DUPLICATE_OF' } });
     const canceled = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'CANCELED' } });
     const completed = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'COMPLETED' } });
@@ -104,7 +104,7 @@ describe('superseded_by (INV-1498)', () => {
     const root = await createIssue(prisma, { teamId: team.id, title: 'Root', parentId: project.id, repository: 'test/sup', commitmentStatus: 'COMMITTED', acceptance: 'a' }, human);
     await prisma.deliveryPackage.create({ data: { workId: root.id, policy: {}, contractDigest: 'x', approvedById: admin.id } });
     const merged = await createIssue(prisma, { teamId: team.id, title: 'Merged', parentId: project.id, repository: 'test/sup', commitmentStatus: 'COMMITTED', acceptance: 'a' }, human);
-    await prisma.issue.update({ where: { id: merged.id }, data: { supersededById: root.id } });
+    await prisma.issue.update({ where: { id: merged.id }, data: { supersededById: root.id, deliveryMergedAt: new Date() } });
 
     const listed = await prisma.issue.findMany({ where: { AND: [buildIssueWhere({ commitmentStatus: 'COMMITTED' }, null) ?? {}, { teamId: team.id }] }, select: { identifier: true } });
     const identifiers = listed.map((row) => row.identifier);
@@ -114,15 +114,32 @@ describe('superseded_by (INV-1498)', () => {
     expect(all.map((row) => row.identifier)).toContain(merged.identifier);
   });
 
-  it('a task merged without a delivery package stays hidden; a replaced decision stays listed (INV-1526)', async () => {
+  it('a duplicate a person or agent linked and marked superseded stays listed; only a delivery merge hides (INV-2005)', async () => {
     const { team, human, agent, project, old, replacement } = await fixture();
-    await updateIssue(prisma, old.id, { supersededById: replacement.id, expectedRevision: old.revision }, agent);
+    // INV-1979 on 2026-11-21: DUPLICATE_OF → its replacement, then superseded_by the same.
+    await prisma.workLink.create({ data: { fromId: old.id, toId: replacement.id, type: 'DUPLICATE_OF' } });
+    const marked = await updateIssue(prisma, old.id, { supersededById: replacement.id, expectedRevision: old.revision }, agent);
     const root = await createIssue(prisma, { teamId: team.id, title: 'Root', parentId: project.id, repository: 'test/sup', commitmentStatus: 'COMMITTED', acceptance: 'a' }, human);
     const merged = await createIssue(prisma, { teamId: team.id, title: 'Merged', parentId: project.id, repository: 'test/sup', commitmentStatus: 'COMMITTED', acceptance: 'a' }, human);
-    await prisma.issue.update({ where: { id: merged.id }, data: { supersededById: root.id } });
+    await prisma.issue.update({ where: { id: merged.id }, data: { supersededById: root.id, deliveryMergedAt: new Date() } });
     await prisma.workLink.create({ data: { fromId: merged.id, toId: root.id, type: 'DUPLICATE_OF' } });
-    const listed = (await prisma.issue.findMany({ where: { AND: [buildIssueWhere({ commitmentStatus: 'COMMITTED' }, null) ?? {}, { teamId: team.id }] }, select: { identifier: true } })).map((row) => row.identifier);
-    expect(listed).toContain(old.identifier);
-    expect(listed).not.toContain(merged.identifier);
+    const listed = async (text?: string) => (await prisma.issue.findMany({ where: { AND: [buildIssueWhere({ commitmentStatus: 'COMMITTED', text }, null) ?? {}, { teamId: team.id }] }, select: { identifier: true } })).map((row) => row.identifier);
+    expect(await listed()).toContain(old.identifier);
+    expect(await listed()).not.toContain(merged.identifier);
+    expect(await listed(old.identifier.split('-')[1])).toContain(old.identifier);
+    // A hidden merge source is still found by its number.
+    expect(await listed(merged.identifier.split('-')[1])).toContain(merged.identifier);
+
+    // A person closes the duplicate and may undo it; the merge source cannot be reopened.
+    const canceled = await prisma.workflowState.findFirstOrThrow({ where: { teamId: team.id, type: 'CANCELED' } });
+    const closed = await updateIssue(prisma, old.id, { stateId: canceled.id, resolution: 'DUPLICATE', reason: `Superseded by ${replacement.identifier}`, expectedRevision: marked.revision }, human);
+    await expect(updateIssue(prisma, old.id, { stateId: old.stateId, expectedRevision: closed.revision }, human)).resolves.toMatchObject({ stateId: old.stateId });
+    const mergedRow = await prisma.issue.update({ where: { id: merged.id }, data: { stateId: canceled.id } });
+    await expect(updateIssue(prisma, merged.id, { stateId: old.stateId, expectedRevision: mergedRow.revision }, human)).rejects.toThrow(/instead of reopening/);
+
+    // Pointing a merge source somewhere else by hand ends the merge: it is listed again.
+    const repointed = await updateIssue(prisma, merged.id, { supersededById: replacement.id, expectedRevision: mergedRow.revision }, human);
+    expect(repointed.deliveryMergedAt).toBeNull();
+    expect(await listed()).toContain(merged.identifier);
   });
 });

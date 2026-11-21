@@ -350,19 +350,9 @@ export async function updateIssue(
       const target = await transaction.workflowState.findUnique({ where: { id: input.stateId }, select: { type: true } });
       if (target && target.type !== 'CANCELED' && target.type !== 'COMPLETED') {
         // People can undo canceling an ordinary superseded item (INV-1930).
-        // Delivery merge sources and agents retain the no-reopen rule.
+        // Delivery merge sources (marked by the merge, INV-2005) and agents retain the no-reopen rule.
         const current = await transaction.workflowState.findUnique({ where: { id: existingIssue.stateId }, select: { type: true } });
-        const mergeSource = await transaction.issue.findFirst({
-          where: {
-            id: existingIssue.id,
-            OR: [
-              { outgoingLinks: { some: { type: 'DUPLICATE_OF' } } },
-              { supersededBy: { is: { deliveryPackage: { isNot: null } } } },
-            ],
-          },
-          select: { id: true },
-        });
-        if (actor.actorKind !== 'HUMAN' || current?.type !== 'CANCELED' || mergeSource) throw createValidationError('Change the replacement work instead of reopening a superseded item.');
+        if (actor.actorKind !== 'HUMAN' || current?.type !== 'CANCELED' || existingIssue.deliveryMergedAt) throw createValidationError('Change the replacement work instead of reopening a superseded item.');
       }
     }
 
@@ -414,6 +404,8 @@ export async function updateIssue(
       // Who replaced this item (INV-1498); a relation on the checked input.
       const replacementId = await resolveSupersededBy(transaction, existingIssue, input.supersededById);
       data.supersededBy = replacementId ? { connect: { id: replacementId } } : { disconnect: true };
+      // A replacement set by hand is not a delivery merge (INV-2005): the item is listed again.
+      if (replacementId !== existingIssue.supersededById) data.deliveryMergedAt = null;
     }
     // A person moving work into Done is an acceptance (INV-790): it is recorded
     // like workReview, whichever control did it (dropdown, drawer, drag, API).
