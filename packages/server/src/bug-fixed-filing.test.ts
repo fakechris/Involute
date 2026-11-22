@@ -83,6 +83,28 @@ describe('a bug fixed before filing (INV-997)', () => {
     expect((await prisma.eventOutbox.findMany({ select: { type: true } })).map((row) => row.type)).toEqual(expect.arrayContaining(['run.completed', 'artifact.attached', 'work.committed']));
   });
 
+  it('a retry with the same idempotency key records the run, evidence and notification once', async () => {
+    const args = { initial_state: 'REVIEW', commit_sha: 'c'.repeat(40), pr_number: 176, summary: 'Fixed.', idempotency_key: 'file-fixed-bug-1' };
+    const first = await fileBug(args);
+    const second = await fileBug(args);
+    expect(second.id).toBe(first.id);
+    expect(second.run).toEqual(first.run);
+    expect(second.evidence).toEqual(first.evidence);
+
+    const work = await prisma.issue.findUniqueOrThrow({ where: { id: first.id }, include: { runs: true, evidence: true } });
+    expect(work.runs).toHaveLength(1);
+    expect(work.evidence).toHaveLength(1);
+    expect(await prisma.notification.count({ where: { userId: human.id, type: 'run.completed', workId: work.id } })).toBe(1);
+    const events = (await prisma.eventOutbox.findMany({ select: { type: true, payload: true } }))
+      .filter((row) => (row.payload as { data?: { runId?: string } }).data?.runId === first.run.id);
+    expect(events.filter((row) => row.type === 'run.completed')).toHaveLength(1);
+    expect(events.filter((row) => row.type === 'artifact.attached')).toHaveLength(1);
+
+    // The same key with a different fix is a different request, refused as for any reused key.
+    expect((await fileBug({ ...args, commit_sha: 'd'.repeat(40) })).error).toBeTruthy();
+    expect(await prisma.workRun.count({ where: { workId: work.id } })).toBe(1);
+  });
+
   it('refuses a Review filing without evidence, and evidence without Review', async () => {
     expect((await fileBug({ initial_state: 'REVIEW' })).error).toContain('needs its evidence');
     expect((await fileBug({ commit_sha: 'b'.repeat(40) })).error).toContain('pass initial_state REVIEW');
