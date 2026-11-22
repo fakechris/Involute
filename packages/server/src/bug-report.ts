@@ -21,6 +21,7 @@ import { CAPTURE_MESSAGES, environmentSection, parseBugCapture, type BugCapture 
 import { claimOwnUnattached } from './claim-uploads.js';
 import { parseFoundInSha } from './found-in.js';
 import { BUG_LABEL_NAME, BUG_REPORT_SOURCE } from './bug-constants.js';
+import { completeWorkIdempotency, hashIdempotencyRequest, reserveWorkIdempotency } from './idempotency.js';
 
 type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 
@@ -272,12 +273,32 @@ export function validateFixedBugEvidence(input: FixedBugEvidenceInput): void {
  */
 export async function recordFixedBugRun(
   prisma: DatabaseClient,
-  input: { workId: string } & FixedBugEvidenceInput,
+  input: { workId: string; idempotencyKey?: string | null } & FixedBugEvidenceInput,
   actor: WriteActor,
 ): Promise<{ run: WorkRun; evidence: WorkEvidence[] }> {
   if (!actor.actorId) throw createValidationError('Recording a fixed bug needs an acting user.');
   validateFixedBugEvidence(input);
   const work = await prisma.issue.findUniqueOrThrow({ where: { id: input.workId } });
+  // The filing's idempotency key covers the run too: a retried work_file_bug
+  // returns the bug proposeWork already made, and must not record a second
+  // run, attach the evidence again or tell the reviewer twice. The fix's
+  // evidence is part of the request, so the same key with another fix is refused.
+  let idempotencyId: string | null = null;
+  if (input.idempotencyKey) {
+    const reservation = await reserveWorkIdempotency(prisma, {
+      actor,
+      key: input.idempotencyKey,
+      operation: 'file_bug_fixed_run',
+      requestHash: hashIdempotencyRequest({ ...input, idempotencyKey: null }),
+      teamId: work.teamId,
+    });
+    if (!reservation.created && reservation.record.resultId) {
+      const run = await prisma.workRun.findUniqueOrThrow({ where: { id: reservation.record.resultId } });
+      const evidence = await prisma.workEvidence.findMany({ where: { runId: run.id }, orderBy: { createdAt: 'asc' } });
+      return { run, evidence };
+    }
+    idempotencyId = reservation.record.id;
+  }
   const frozen = snapshotContract(work);
   const run = await prisma.workRun.create({
     data: {
@@ -327,5 +348,6 @@ export async function recordFixedBugRun(
     type: 'run.completed',
     work,
   });
+  if (idempotencyId) await completeWorkIdempotency(prisma, idempotencyId, work.id, run.id);
   return { run, evidence };
 }

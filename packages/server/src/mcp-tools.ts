@@ -657,7 +657,7 @@ async function callMcpAction(
       const bugActor = { ...writeActorFromViewer(context.viewer, 'mcp'), agentCredentialId: context.agentCredentialId ?? null };
       const created = await proposeWork(context.prisma, proposeInput, bugActor);
       const recorded = intoReview && created.commitmentStatus === 'COMMITTED'
-        ? await context.prisma.$transaction((tx) => recordFixedBugRun(tx, { workId: created.id, ...fixed }, bugActor))
+        ? await context.prisma.$transaction((tx) => recordFixedBugRun(tx, { workId: created.id, idempotencyKey: proposeInput.idempotencyKey ?? null, ...fixed }, bugActor))
         : null;
       // Where it landed and what it may duplicate, as work_propose says (INV-1000):
       // a bug is committed on filing, so the filer is the one who can still act.
