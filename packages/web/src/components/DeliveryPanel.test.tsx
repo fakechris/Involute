@@ -4,16 +4,30 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DeliveryChangeQueue, DeliveryPanel } from './DeliveryPanel';
 
 let response: Record<string, unknown>;
+let loadError: Error | undefined;
 vi.mock('@apollo/client/react', () => ({
-  useQuery: () => ({ data: response, refetch: vi.fn(), fetchMore: vi.fn(), loading: false }),
+  useQuery: () => ({ data: response, error: loadError, refetch: vi.fn(), fetchMore: vi.fn(), loading: false }),
   useMutation: () => [vi.fn(), { loading: false }],
 }));
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  loadError = undefined;
+});
 const work = { id: 'root', identifier: 'INV-1', title: 'Package', revision: 1, acceptance: 'One criterion', repository: 'test/repo' };
 function context(grant: unknown) {
   response = { deliveryContext: { work, grant, viewerCanWrite: true, authorizationValid: false, authorizationMessage: 'Pending', units: [] } };
 }
 describe('delivery approval boundaries', () => {
+  it('leaves sign-in guidance to the page but reports other queue failures', () => {
+    loadError = new Error('Not authenticated');
+    const view = render(<DeliveryChangeQueue />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    loadError = new Error('Network unavailable');
+    view.rerender(<DeliveryChangeQueue />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Delivery changes could not be loaded');
+  });
+
   it('keeps a malformed policy from crashing the work page', () => {
     context({ revision: 1, policyJson: '{' });
     render(<MemoryRouter><DeliveryPanel workId="root" /></MemoryRouter>);

@@ -353,7 +353,10 @@ export const ACTIONABLE_NOTIFICATION_KINDS = {
   'work.proposed_batch': 'CANDIDATE_COMMIT',
 } as const satisfies Record<string, AttentionKind>;
 
-export function isActionableNotification(type: string): boolean {
+export function isActionableNotification(type: string, payload?: Prisma.JsonValue): boolean {
+  if (type === 'bug.reported') {
+    return Boolean(payload && typeof payload === 'object' && !Array.isArray(payload) && payload.triage === true);
+  }
   return Object.hasOwn(ACTIONABLE_NOTIFICATION_KINDS, type);
 }
 

@@ -6,12 +6,13 @@ import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { afterEach, expect, it, vi } from 'vitest';
 
 import { DELIVERY_PROJECTS_QUERY, DeliveryPage, type DeliveryResult } from './DeliveryPage';
-import { readStoredTeamKey } from '../board/utils';
+import { readStoredTeamKey, writeStoredTeamKey } from '../board/utils';
 
-vi.mock('../board/utils', () => ({ readStoredTeamKey: vi.fn(() => 'INV') }));
+vi.mock('../board/utils', () => ({ readStoredTeamKey: vi.fn(() => 'INV'), writeStoredTeamKey: vi.fn() }));
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.clearAllMocks();
   vi.mocked(readStoredTeamKey).mockReturnValue('INV');
 });
 const start = '2026-03-01';
@@ -38,9 +39,14 @@ const defaultProjects = [
   { repository: 'acme/a', name: 'Project A', identifier: 'INV-100', totalCount: 7 },
   { repository: 'acme/b', name: 'Project B', identifier: 'INV-200', totalCount: 12 },
 ];
-function mount(reply: Reply, sample = '', projects = defaultProjects, windowParams = `from=${start}&to=${end}`, milestones: { id: string; identifier: string; title: string }[] = [], burndownRequests: Record<string, unknown>[] = []) {
+const defaultTeams = [{ id: '1', key: 'INV', name: 'Involute', issueCount: 5, viewerCanManage: true, viewerCanWrite: true }];
+const twoTeams = [...defaultTeams, { ...defaultTeams[0]!, id: '2', key: 'OPS', name: 'Operations' }];
+function mount(reply: Reply, sample = '', projects = defaultProjects, windowParams = `from=${start}&to=${end}`, milestones: { id: string; identifier: string; title: string }[] = [], burndownRequests: Record<string, unknown>[] = [], teams = defaultTeams) {
   const requests: Record<string, unknown>[] = [];
   const client = new ApolloClient({ cache: new InMemoryCache(), link: new ApolloLink((operation) => new Observable((observer) => {
+    if (operation.operationName === 'ShellTeams') {
+      observer.next({ data: { teams: { nodes: teams } } }); observer.complete(); return;
+    }
     if (operation.operationName === 'DeliveryProjects') {
       const totalCount = projects.reduce((sum, project) => sum + project.totalCount, 0) + 3;
       observer.next({ data: { projectSummary: { totalCount, noRepositoryCount: 3, projects } } }); observer.complete(); return;
@@ -64,9 +70,9 @@ function mount(reply: Reply, sample = '', projects = defaultProjects, windowPara
   return requests;
 }
 
-it('shows loading without invented values', () => {
+it('shows loading without invented values', async () => {
   mount(() => new Promise(() => {}));
-  expect(screen.getByText('Loading delivery latency…')).toBeInTheDocument();
+  expect(await screen.findByText('Loading delivery latency…')).toBeInTheDocument();
   expect(screen.queryByLabelText('Completed sample latency')).not.toBeInTheDocument();
 });
 it.each(['', 'from=invalid&to=invalid', 'from=2026-03-01T00:00:00.000Z&to=2026-04-01T00:00:00.000Z'])('defaults absent, invalid and legacy windows to 30 UTC days: %s', async (params) => {
@@ -119,10 +125,43 @@ it('shows actual project, all-project and no-repository counts from the board su
   fireEvent.click(project);
   expect(screen.getByRole('button', { name: 'Project: acme/b' })).toHaveTextContent('12');
 });
-it('asks for a team instead of reporting empty metrics when no team is selected', () => {
+it('asks for a team instead of reporting empty metrics when no team is selected', async () => {
   vi.mocked(readStoredTeamKey).mockReturnValue(null);
-  const requests = mount(async () => fixture());
-  expect(screen.getByText('Select a team')).toBeInTheDocument();
+  const requests = mount(async () => fixture(), '', defaultProjects, '', [], [], twoTeams);
+  expect(await screen.findByText('Select a team')).toBeInTheDocument();
+  expect(requests).toHaveLength(0);
+  fireEvent.change(screen.getByRole('combobox', { name: 'Delivery team' }), { target: { value: 'OPS' } });
+  await screen.findByLabelText('Completed sample latency');
+  expect(requests[0]).toMatchObject({ teamKey: 'OPS' });
+  expect(writeStoredTeamKey).toHaveBeenCalledWith('OPS');
+});
+it('loads the only accessible team on a fresh direct visit', async () => {
+  vi.mocked(readStoredTeamKey).mockReturnValue(null);
+  const requests = mount(async () => fixture(), '', defaultProjects, '');
+  await screen.findByLabelText('Completed sample latency');
+  expect(requests[0]).toMatchObject({ teamKey: 'INV' });
+});
+it('keeps the saved team if it is accessible', async () => {
+  vi.mocked(readStoredTeamKey).mockReturnValue('OPS');
+  const requests = mount(async () => fixture(), '', defaultProjects, '', [], [], twoTeams);
+  await screen.findByLabelText('Completed sample latency');
+  expect(requests[0]).toMatchObject({ teamKey: 'OPS' });
+  expect(screen.getByRole('combobox', { name: 'Delivery team' })).toHaveValue('OPS');
+});
+it('clears the previous team’s project and keeps the window and sample when switching teams', async () => {
+  const requests = mount(async () => fixture(), 'OPEN', defaultProjects, `from=${start}&to=${end}&project=acme/a`, [], [], twoTeams);
+  await screen.findByLabelText('Completed sample latency');
+  expect(requests[0]).toMatchObject({ teamKey: 'INV', repository: 'acme/a' });
+
+  fireEvent.change(screen.getByRole('combobox', { name: 'Delivery team' }), { target: { value: 'OPS' } });
+
+  await waitFor(() => expect(requests[1]).toMatchObject({ teamKey: 'OPS', repository: null, from: start, to: end, sample: 'OPEN' }));
+  expect(screen.queryByRole('button', { name: 'Project: acme/a' })).not.toBeInTheDocument();
+});
+it('offers team selection rather than querying an inaccessible saved team', async () => {
+  vi.mocked(readStoredTeamKey).mockReturnValue('OLD');
+  const requests = mount(async () => fixture(), '', defaultProjects, '', [], [], twoTeams);
+  expect(await screen.findByText('Select a team')).toBeInTheDocument();
   expect(requests).toHaveLength(0);
 });
 it('shows a readable error', async () => {

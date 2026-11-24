@@ -150,6 +150,32 @@ beforeEach(() => {
 });
 
 describe('Needs you (INV-1092)', () => {
+  it('resets only the decision pane when J/K selects another item (INV-2105)', async () => {
+    renderPage();
+    const list = screen.getByRole('region', { name: 'Waiting on your decision' });
+    const decision = screen.getByRole('region', { name: 'Decision' });
+    const next = within(list).getByText('Title of INV-20').closest('[data-list-key-id]')!;
+    const reveal = vi.fn();
+    Object.defineProperty(next, 'scrollIntoView', { value: reveal });
+    list.scrollTop = 70;
+    decision.scrollTop = 180;
+
+    press('j');
+
+    expect(within(decision).getByRole('link', { name: 'INV-20' })).toBeInTheDocument();
+    expect(reveal).toHaveBeenCalledWith({ block: 'nearest' });
+    expect(decision.scrollTop).toBe(0);
+    expect(list.scrollTop).toBe(70);
+
+    decision.scrollTop = 240;
+    press('k');
+
+    expect(within(decision).getByRole('link', { name: 'INV-30' })).toBeInTheDocument();
+    expect(decision.scrollTop).toBe(0);
+    expect(list.scrollTop).toBe(70);
+    await waitFor(() => expect(within(decision).getByText('The rule changed.')).toBeInTheDocument());
+  });
+
   it('lists decisions by kind with counts, the oldest wait and their group, and opens the first one', () => {
     renderPage();
     expect(screen.getByText('5 waiting on your decision')).toBeInTheDocument();

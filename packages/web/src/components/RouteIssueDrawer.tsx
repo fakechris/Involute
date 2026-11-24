@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type RefObject } from 'react';
 import { useMutation, useQuery } from '@apollo/client/react';
 
 import {
@@ -41,7 +41,11 @@ const COMMENT_DELETE_ERROR = 'We could not delete the comment. Please try again.
  * fetches the issue by id or identifier and saves edits the way the issue
  * page does (optimistic, expected revision, one undo entry per save).
  */
-export function RouteIssueDrawer({ issueRef, onClose }: { issueRef: string; onClose: () => void }) {
+export function RouteIssueDrawer({ issueRef, onClose, returnFocusFallback }: {
+  issueRef: string;
+  onClose: () => void;
+  returnFocusFallback?: RefObject<HTMLElement | null>;
+}) {
   const { data, refetch } = useQuery<IssuePageQueryData, IssuePageQueryVariables>(ISSUE_PAGE_QUERY, {
     variables: { id: issueRef },
   });
@@ -219,6 +223,7 @@ export function RouteIssueDrawer({ issueRef, onClose }: { issueRef: string; onCl
         errorMessage={error}
         errorNext={nextFor(shownRefusal, error)}
         onClose={onClose}
+        returnFocusFallback={returnFocusFallback}
         onStateChange={persistStateChange}
         onTitleSave={async (current, title) => {
           if (current.title !== title) await persistIssueUpdate(current, { title }, (value) => ({ ...value, title }));

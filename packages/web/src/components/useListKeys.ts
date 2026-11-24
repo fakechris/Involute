@@ -22,6 +22,7 @@ export function useListKeys<T extends { id: string }>(
     /** A page's own plain key on the focused row; return true when handled. */
     onKey?: (key: string, item: T) => boolean;
   },
+  enabled = true,
 ) {
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const ref = useRef({ items, handlers, focusedId });
@@ -46,6 +47,7 @@ export function useListKeys<T extends { id: string }>(
   }, [focusedId]);
 
   useEffect(() => {
+    if (!enabled) return;
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target;
       if (target instanceof HTMLElement && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable)) return;
@@ -69,7 +71,7 @@ export function useListKeys<T extends { id: string }>(
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [enabled]);
 
   return { focusedId, setFocusedId };
 }

@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkReferenceProvider } from '../components/WorkReference';
@@ -34,6 +34,7 @@ const mockPreviewClient = {
   ),
 };
 const mockRunMarkAllRead = vi.fn();
+let bugNotifications: NotificationRecordItem[] = [];
 
 afterEach(() => {
   cleanup();
@@ -41,6 +42,7 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  bugNotifications = [];
 });
 
 vi.mock('@apollo/client/react', () => ({
@@ -50,6 +52,7 @@ vi.mock('@apollo/client/react', () => ({
     data: {
       notifications: {
         nodes: [
+          ...bugNotifications,
           {
             id: 'notif-1',
             type: 'decision.requested',
@@ -212,6 +215,36 @@ describe('InboxPage', () => {
     );
     // decision.requested on INV-1 is actionable and still open.
     expect(screen.getByRole('link', { name: 'Waiting on you · Needs you' })).toHaveAttribute('href', '/todo');
+  });
+
+  it('shows both bug reports but links only the triage report to Needs you (INV-2113)', () => {
+    bugNotifications = [false, true].map((triage, index) => ({
+      id: `bug-${index}`,
+      type: 'bug.reported',
+      actionable: triage,
+      resolvedAt: null,
+      readAt: null,
+      payload: { triage },
+      createdAt: '2026-04-02T10:00:00.000Z',
+      work: { id: `work-${index}`, identifier: `INV-${100 + index}`, title: triage ? 'Unplaced bug' : 'Placed bug' },
+    }));
+    render(
+      <MemoryRouter initialEntries={['/inbox']}>
+        <Routes>
+          <Route path="/inbox" element={<InboxPage />} />
+          <Route path="/todo" element={<h1>Needs you queue</h1>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    const placed = screen.getByRole('button', { name: /INV-100.*Bug reported.*Placed bug/i });
+    const unplaced = screen.getByRole('button', { name: /INV-101.*Bug reported.*Unplaced bug/i });
+    expect(within(placed).queryByRole('link', { name: /Needs you/ })).not.toBeInTheDocument();
+    const triageLink = within(unplaced).getByRole('link', { name: 'Waiting on you · Needs you' });
+    expect(fireEvent.keyDown(triageLink, { key: 'Enter' })).toBe(true);
+    fireEvent.click(triageLink);
+    expect(screen.getByRole('heading', { name: 'Needs you queue' })).toBeInTheDocument();
+    expect(mockRunMarkRead).not.toHaveBeenCalled();
   });
 });
 

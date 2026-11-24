@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@apollo/client/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MarkdownRenderer } from '../components/MarkdownRenderer';
 
@@ -258,6 +258,7 @@ export function AttentionPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [armed, setArmed] = useState<Armed>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const decisionPane = useRef<HTMLDivElement>(null);
   const [batchResults, setBatchResults] = useState<Array<{ id: string; label: string; message: string | null }>>([]);
   const [batchPending, setBatchPending] = useState(false);
 
@@ -406,6 +407,7 @@ export function AttentionPage() {
   }, [focusedId, setFocusedId, ordered]);
   const focused = ordered.find((item) => item.id === listKeys.focusedId) ?? ordered[0] ?? null;
   useEffect(() => {
+    if (decisionPane.current) decisionPane.current.scrollTop = 0;
     setArmed(null);
     setNotice(null);
   }, [focused?.id]);
@@ -467,7 +469,7 @@ export function AttentionPage() {
       ) : null}
       {allItems.length > 0 ? (
         <div className="attention-layout">
-          <div className="attention-list" aria-label="Waiting on your decision">
+          <div className="attention-list" role="region" aria-label="Waiting on your decision" tabIndex={0}>
             {sections.map((section) => {
               const isSectionParent = view === 'tree';
               const isSectionCollapsed = isSectionParent && collapsedGroups.has(section.key);
@@ -598,7 +600,7 @@ export function AttentionPage() {
               );
             })}
           </div>
-          <div id="attention-decision" className="attention-decision" aria-label="Decision">
+          <div ref={decisionPane} id="attention-decision" className="attention-decision" role="region" aria-label="Decision" tabIndex={0}>
             {notice ? <p className="attention-notice" role="status">{notice}</p> : null}
             {focused ? (
               <AttentionDecision

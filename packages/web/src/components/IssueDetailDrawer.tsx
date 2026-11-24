@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@apollo/client/react';
 import { Badge } from './status';
@@ -43,6 +43,7 @@ interface IssueDetailDrawerProps {
   /** Where to do a refused save instead (INV-1535). */
   errorNext?: RefusalNext | null | undefined;
   onClose: () => void;
+  returnFocusFallback?: RefObject<HTMLElement | null> | undefined;
   onStateChange: (issue: IssueSummary, stateId: string) => Promise<void>;
   onTitleSave: (issue: IssueSummary, title: string) => Promise<void>;
   onDescriptionSave: (issue: IssueSummary, description: string) => Promise<void>;
@@ -73,6 +74,7 @@ export function IssueDetailDrawer({
   errorMessage,
   errorNext,
   onClose,
+  returnFocusFallback,
   onStateChange,
   onTitleSave,
   onDescriptionSave,
@@ -106,6 +108,22 @@ export function IssueDetailDrawer({
   const [commentBody, setCommentBody] = useState('');
   const isSavingTitleRef = useRef(false);
   const titleTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const cancelTitleRef = useRef(false);
+  const frameRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerOpen = layout === 'drawer' && Boolean(issue);
+  useLayoutEffect(() => {
+    if (!drawerOpen) return;
+    const opener = document.activeElement;
+    closeButtonRef.current?.focus();
+    return () => {
+      if (opener instanceof HTMLElement && opener !== document.body && opener.isConnected) {
+        opener.focus({ preventScroll: true });
+        if (document.activeElement === opener) return;
+      }
+      returnFocusFallback?.current?.focus({ preventScroll: true });
+    };
+  }, [drawerOpen, returnFocusFallback]);
   // The same directory the server resolves `@handle` against, so what you can
   // pick is exactly what will resolve (INV-573). Fetched only once someone
   // actually types `@` — opening an issue should not cost an extra round trip.
@@ -311,22 +329,54 @@ export function IssueDetailDrawer({
     return window.confirm('Delete this comment? You can undo this with ⌘Z until you reload the page; it comes back as a new comment.');
   }
 
+  function cancelDescription() {
+    descriptionDirtyRef.current = false;
+    setDescription(activeIssue.description ?? fetchedDescription);
+    setIsEditingDescription(false);
+  }
+
+  function handleDrawerKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.defaultPrevented || !(event.target instanceof HTMLElement) || !event.currentTarget.contains(event.target)) return;
+    const target = event.target;
+    if (event.key === 'Escape') {
+      if (target.closest('textarea, select, input:not([type="checkbox"]):not([type="radio"]), [contenteditable="true"]')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+    } else if (event.key === 'Tab' && frameRef.current) {
+      const frame = frameRef.current;
+      const tabbable = Array.from(frame.querySelectorAll<HTMLElement>(
+        'a[href], button, input:not([type="hidden"]), select, textarea, summary, [tabindex], [contenteditable="true"]',
+      )).filter((element) => (element.tabIndex >= 0 || (element.isContentEditable && !element.hasAttribute('tabindex'))) &&
+        !element.matches(':disabled') && !element.closest('[hidden], [inert]') &&
+        (element.checkVisibility?.({ visibilityProperty: true }) ?? true));
+      const first = tabbable[0];
+      const last = tabbable[tabbable.length - 1];
+      if (!tabbable.includes(target) || (event.shiftKey ? target === first : target === last)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first)?.focus();
+      }
+    }
+  }
+
   return (
     <aside
       className={`issue-panel${layout === 'page' ? ' issue-panel--page' : ''}`}
       aria-label={layout === 'page' ? 'Issue detail page' : 'Issue detail drawer'}
       aria-modal={layout === 'drawer' ? 'true' : undefined}
       role={layout === 'drawer' ? 'dialog' : undefined}
+      onKeyDown={layout === 'drawer' ? handleDrawerKeyDown : undefined}
     >
       {layout === 'drawer' ? (
         <button
           type="button"
           className="issue-panel__backdrop"
           aria-label="Close issue detail drawer"
+          tabIndex={-1}
           onClick={onClose}
         />
       ) : null}
-      <section className={`issue-panel__frame${layout === 'page' ? ' issue-panel__frame--page' : ''}`}>
+      <section ref={frameRef} className={`issue-panel__frame${layout === 'page' ? ' issue-panel__frame--page' : ''}`}>
         <div className="issue-panel__header">
           <div className="issue-panel__title-row">
             {team ? <Badge tone="accent" mono>{team.key}</Badge> : null}
@@ -407,7 +457,7 @@ export function IssueDetailDrawer({
             >
               Delete issue
             </button>
-            <button type="button" className="issue-panel__close" onClick={onClose}>
+            <button ref={closeButtonRef} type="button" className="issue-panel__close" onClick={onClose}>
               Close
             </button>
           </div>
@@ -436,10 +486,17 @@ export function IssueDetailDrawer({
               onChange={(event) => setTitle(event.target.value)}
               onBlur={() => {
                 setIsEditingTitle(false);
+                if (cancelTitleRef.current) return;
                 void commitTitle().catch(() => undefined);
               }}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
+                if (event.key === 'Escape' && layout === 'drawer') {
+                  event.preventDefault();
+                  cancelTitleRef.current = true;
+                  setTitle(activeIssue.title);
+                  closeButtonRef.current?.focus();
+                  cancelTitleRef.current = false;
+                } else if (event.key === 'Enter' && !event.shiftKey) {
                   event.preventDefault();
                   setIsEditingTitle(false);
                   void commitTitle().catch(() => undefined);
@@ -454,7 +511,12 @@ export function IssueDetailDrawer({
             <div className="issue-panel__section">
               <label className="issue-panel__label">Description</label>
               {isEditingDescription ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} onKeyDown={(event) => {
+                  if (event.key !== 'Escape' || event.defaultPrevented || layout !== 'drawer') return;
+                  event.preventDefault();
+                  cancelDescription();
+                  closeButtonRef.current?.focus();
+                }}>
                   <RichTextEditor
                     value={description}
                     onChange={(value) => {
@@ -474,11 +536,7 @@ export function IssueDetailDrawer({
                     <button
                       type="button"
                       className="ui-action ui-action--subtle"
-                      onClick={() => {
-                        descriptionDirtyRef.current = false;
-                        setDescription(activeIssue.description ?? fetchedDescription);
-                        setIsEditingDescription(false);
-                      }}
+                      onClick={cancelDescription}
                     >Cancel</button>
                   </div>
                 </div>
