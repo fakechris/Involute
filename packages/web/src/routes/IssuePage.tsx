@@ -58,7 +58,7 @@ import { IssueFieldsPanel } from '../components/IssueFieldsPanel';
 import { toggleLabelId } from '../work/labels';
 import { mergeIssueWithPreservedComments } from '../board/utils';
 import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
-import { getBoardBootstrapErrorMessage } from '../lib/apollo';
+import { getBoardBootstrapErrorMessage, isAuthenticationError } from '../lib/apollo';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { writeStoredShellIssue } from '../lib/app-shell-state';
 import { IcoChevL, IcoChevR, IcoCopy, IcoMore, IcoLink, IcoClose } from '../components/Icons';
@@ -91,12 +91,17 @@ function groupChains(requests: AgentRequestSummary[]): AgentRequestSummary[][] {
 export function IssuePage() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { data, error, loading, refetch } = useQuery<IssuePageQueryData, IssuePageQueryVariables>(ISSUE_PAGE_QUERY, {
+  const { data: liveData, previousData, error, loading, refetch } = useQuery<IssuePageQueryData, IssuePageQueryVariables>(ISSUE_PAGE_QUERY, {
     skip: !id,
     variables: {
       id: id ?? '',
     },
   });
+  // When the session ends while the page is open, keep showing what was loaded,
+  // with any draft, beside the session-ended notice (INV-2143, like the board).
+  const keptIssue = previousData?.issue ?? null;
+  const keepAfterSignOut = isAuthenticationError(error) && Boolean(keptIssue) && (keptIssue?.id === id || keptIssue?.identifier === id);
+  const data = liveData ?? (keepAfterSignOut ? previousData : undefined);
   const [runIssueUpdate] = useMutation<IssueUpdateMutationData, IssueUpdateMutationVariables>(
     ISSUE_UPDATE_MUTATION,
   );
@@ -543,7 +548,7 @@ export function IssuePage() {
 
   // --- Error / loading / not found ---
 
-  if (error) {
+  if (error && !keepAfterSignOut) {
     const errorState = getBoardBootstrapErrorMessage(error);
 
     return (

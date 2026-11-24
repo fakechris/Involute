@@ -516,6 +516,8 @@ export function IssueDetailDrawer({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }} onKeyDown={(event) => {
                   if (event.key !== 'Escape' || event.defaultPrevented || layout !== 'drawer') return;
                   event.preventDefault();
+                  // A changed description is not thrown away on one key press (INV-2144).
+                  if (descriptionDirtyRef.current && !window.confirm('Discard your changes to the description?')) return;
                   cancelDescription();
                   closeButtonRef.current?.focus();
                 }}>
