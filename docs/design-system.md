@@ -61,11 +61,44 @@
 7. **状态显示**：`StatTile` / `EmptyState`（icon / title / body / action）/ `InlineError` / `LoadingState` / `SegmentedControl` / `BulkActionBar` / `Badge`。
 8. **Markdown**：任何展示 description / acceptance / summary 的地方都走 `MarkdownRenderer`，渲染器必须支持标题、列表、引用、分割线、代码块；长文用 `clamp` + "Show more"。
 9. **颜色与数字只从 token 来**：TSX 不出现 hex / rgb（`.proj-color-*` 调色板与 Google logo 例外）；状态色 / 优先级色只在 `StatusIcon` 与 `--prio-*` 一处定义；不出现 `fontSize: 13` 一类字面量。
-10. **守卫测试**（`styles/design-guard.test.ts`）：TSX 里的每个 `className` 必须在样式表中有定义；样式与 TSX 中的每个 `var(--x)` 必须在 token 块定义；TSX 中 hex 颜色只允许在白名单文件；工单号的匹配只在 `work/work-reference.ts`（INV-1536）。新漂移在 CI 挡下。
+10. **守卫测试**（`styles/design-guard.test.ts`）：TSX 里的每个 `className` 必须在样式表中有定义；样式与 TSX 中的每个 `var(--x)` 必须在 token 块定义；TSX 中 hex 颜色只允许在白名单文件；工单号的匹配只在 `work/work-reference.ts`（INV-1536）；界面文字不出现第 12 条禁用的词（INV-2134）。新漂移在 CI 挡下。
 11. **工单号与项目各只有一种显示**（INV-1536）：
     - 文字里出现的工单号（描述、评论、通知、提示、被拒原因）一律经 `WorkReferenceText`（Markdown 里由 `MarkdownRenderer` 自动处理），单个引用用 `WorkReference`。服务端确认是工单才变链接，悬浮显示卡片；**单击在当前页打开抽屉**（`?issue=`，与 ListRow 同一规则），⌘/Ctrl/Shift/中键交给浏览器开整页；显示 issue 本身的路由（`/issue/:id`、Backlog）单击进整页。卡片内容 60 秒后再次悬浮会重新取。任何显示某个工单的悬停（图上的节点、行、标签）都用同一张工单卡：`useWorkHoverCard()`，把 `anchorProps(identifier)` 挂到 HTML 或 SVG 元素上、在任意位置渲染 `card`（INV-1544）；不用原生 `title` / SVG `<title>` 显示工单。不要自写正则或拼 `/issue/` 链接；需要解析时用 `work/work-reference.ts` 的 `findWorkReferences` / `isWorkIdentifier` / `splitLeadingReference`。
     - 被拒的保存一律用 `RefusalNotice`（INV-1534 / INV-1535）：看板与 issue 整页用 `placement="floating"`（固定在视口底部，可关闭），抽屉用 `placement="panel"`（标题下方）；原因经 `WorkReferenceText` 渲染，服务端给出 `next { label path }` 时显示按钮直达（如 "Go to In Review" → `/in-review?focus=INV-972`）。服务端用 `createValidationError(message, { next })` 给出去处。
     - 工单所属项目一律用 `ProjectBadge`（短名 + 稳定配色，悬浮完整仓库；`emptyLabel` 显示 "No project"；没有仓库的项目（INV-1918）传 `name` 显示项目标题；`onSelect` 让它成为筛选控件）。工单详情（抽屉与整页）标题行、看板卡片、Backlog 表格、Projects 列表都用它。
+
+
+12. **界面用词（INV-2134，ASD-STE100）**：界面文字遵守简化技术英语的几条规则，并只用下表的词。
+
+    **写作规则**
+    - 一个词只表示一个意思，一个意思只用一个词。表里没有的新概念，先加进表再用。
+    - 按钮说出结果：`Return to Ready`、`Move back to In Review`，不写 `Return`、`Submit`、`OK`。会改变别的东西时写出来（"The contract goes back to its earlier text."）。
+    - 指令用祈使句、主动语态：`Open the item and move it to Done.`，不写 `It can be accepted here.`
+    - 指令句不超过 20 个词，说明句不超过 25 个词；名词串不超过 3 个词。
+    - 标签说出数字真正数的是什么：取消的 bug 也算时写 `Closed within SLA`，不写 `Fixed`；任何附件都算时写 `Postmortem file`。
+    - 缩写第一次出现时展开（`Mean time to resolve (MTTR)`）。状态名按原文大小写。
+    - 界面不出现：工具 / API 名（`run_report`、`workReview`）、枚举与环境变量（`DERIVED_FROM`、`BLOCKS`、`ADMIN`、`INVOLUTE_SECRET_KEY`）、内部词（needinfo、kernel、rounds、lease、episode）、工单号（`(INV-123)` 写在代码注释里）、仓库路径（`docs/*.md`）、`IQL`（写 filter query）。`design-guard.test.ts` 在 CI 检查 JSX 文本与 `title` / `aria-label` / `placeholder` / `hint` / `label` / `body` / `alt`；现存的例外列在 `WORDING_ALLOWLIST`，由 INV-2135 清空，只能减少。
+
+    **受控词汇表**
+
+    | 概念 | 用这个词 | 不用 |
+    |---|---|---|
+    | 人对已完成工作说是 / 否 | **Accept** / **Return**（结果写全：Return to Ready） | Reject、Approve、Done（动词） |
+    | 人对候选说是 / 否 | **Commit** / **Decline** | Approve、Accept、Reject、close |
+    | 人对合同修改、交付变更说是 / 否 | **Approve** / **Decline** | Accept、Reject、authorize |
+    | 撤销系统自动做的决定 | **Undo …**（写出撤销的是什么） | Return to me |
+    | 候选队列 | **Candidates** | triage queue、candidate queue、proposals |
+    | 工作状态 | **Backlog / Ready / In Progress / In Review / Done / Canceled** | Todo、Unstarted、Started、Active、in flight、Completed、Review |
+    | 不做就关闭工作 | **Cancel**（对话框的放弃按钮写 Keep open / Back） | Close without doing it |
+    | 工作的上级 / 下级 | **Parent** / **Sub-issues** | Contains ancestors、children、tasks |
+    | agent 领走工作 | **Claim** / **Release**（只指这件事） | lease、take it back；决策记录不说 claimed，写 stated |
+    | agent 问人 | **Question** / **Ask for information** | needinfo |
+    | 通知列表 | **Activity** | Inbox |
+    | 等你决定的列表 | **Needs you** | todo、What needs you |
+    | 团队角色 EDITOR | **Editor** | Member（Member 只指工作区角色） |
+    | 自治级别 | **L0–L3**（附名称） | 信任级别不用 L1–L3 |
+    | 工作的负责人 | **Assignee** | Owner（Owner 只指团队 Owner 与 Human owner） |
+    | 工作的种类 | **Kind**（Issue / Epic / Decision …） | Type（Type 只指 Bug / Feature / Improvement / Research / Incident） |
 
 ---
 
