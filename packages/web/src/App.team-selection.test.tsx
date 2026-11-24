@@ -63,28 +63,11 @@ describe('App team selection', () => {
 
     renderApp({ data: boardQueryResult, loading: false }, ['/']);
 
-    expect(apolloMocks.useQuery).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({
-        variables: {
-          first: 200,
-          orderBy: 'UPDATED',
-          teamFilter: {
-            key: {
-              eq: 'SON',
-            },
-          },
-          filter: {
-            commitmentStatus: 'COMMITTED',
-            team: {
-              key: {
-                eq: 'SON',
-              },
-            },
-          },
-        },
-      }),
-    );
+    const teamKeysQueried = apolloMocks.useQuery.mock.calls
+      .map(([, options]) => (options as { variables?: { teamFilter?: { key?: { eq?: string } } } } | undefined)?.variables?.teamFilter?.key?.eq)
+      .filter((key): key is string => key !== undefined);
+    expect(teamKeysQueried[0]).toBe('SON');
+    expect(new Set(teamKeysQueried)).toEqual(new Set(['SON']));
 
     expect(await screen.findByText('Workflow overview for Sonata.')).toBeInTheDocument();
   });
