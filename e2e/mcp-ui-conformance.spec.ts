@@ -159,7 +159,7 @@ test('agent and human complete the same work through real MCP and UI controls', 
   await page.reload();
   await expect(page.getByText('Wrong fixture artifact', { exact: false }).first()).toBeVisible();
   await page.getByLabel('Review reason').fill('Return for a second verified attempt');
-  await page.getByRole('button', { name: 'Reject', exact: true }).click();
+  await page.getByRole('button', { name: 'Return to Ready', exact: true }).click();
   await expect.poll(async () => (await context()).reviewDecisions[0]?.decision).toBe('REJECTED');
   const retry = await f.call('work_claim', { id: work.id });
   const retryRun = (await f.call('run_report', { work_id: work.id, claim_token: retry.claim_token, status: 'running' })).run;

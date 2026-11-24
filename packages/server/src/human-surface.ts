@@ -58,7 +58,7 @@ export const MUTATION_SURFACES: Record<string, HumanSurface> = {
   fieldDefinitionDeactivate: { kind: 'web', doc: 'FIELD_DEFINITION_DEACTIVATE_MUTATION', components: ['routes/FieldsTab.tsx'], label: 'Deactivate', test: 'routes/FieldsTab.test.tsx' },
   fieldDefinitionRename: { kind: 'web', doc: 'FIELD_DEFINITION_RENAME_MUTATION', components: ['routes/FieldsTab.tsx'], label: 'Rename key', test: 'routes/FieldsTab.test.tsx' },
   // INV-1491: a person takes back an amendment the Autonomy Gate accepted, from Handled for you on /todo.
-  contractAmendmentReopen: { kind: 'web', doc: 'CONTRACT_AMENDMENT_REOPEN_MUTATION', components: ['routes/AttentionPage.tsx'], label: 'Return to me', test: 'routes/AttentionPage.test.tsx' },
+  contractAmendmentReopen: { kind: 'web', doc: 'CONTRACT_AMENDMENT_REOPEN_MUTATION', components: ['routes/AttentionPage.tsx'], label: 'Undo and decide again', test: 'routes/AttentionPage.test.tsx' },
   // INV-1490: Settings → Agents → agent → Trust level.
   agentTrustSet: { kind: 'web', doc: 'AGENT_TRUST_SET_MUTATION', components: ['components/AgentTrustPanel.tsx'], label: 'Set trust level', test: 'App.agents-trust.test.tsx' },
   executorUpdate: { kind: 'web', components: ['components/ExecutorPanel.tsx'], label: 'Stop executor', test: 'components/ExecutorPanel.test.tsx' },
