@@ -4,6 +4,7 @@ export {
   EmptyState,
   InlineError,
   LoadingState,
+  QueryErrorState,
   SegmentedControl,
   StatRow,
   StatTile,

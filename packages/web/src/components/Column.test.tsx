@@ -1,5 +1,6 @@
 import { DndContext } from '@dnd-kit/core';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Column } from './Column';
@@ -14,6 +15,31 @@ function renderColumn(props: Partial<Parameters<typeof Column>[0]> = {}) {
     </DndContext>,
   );
 }
+
+it('keeps focus on the native column toggle when collapsing and expanding (INV-2117)', () => {
+  function ToggleableColumn() {
+    const [collapsed, setCollapsed] = useState(false);
+    return <Column title="Canceled" stateId="state-canceled" issues={[]} collapsed={collapsed} onToggleCollapse={() => setCollapsed(!collapsed)} />;
+  }
+  render(<DndContext><ToggleableColumn /></DndContext>);
+
+  const toggle = screen.getByRole<HTMLButtonElement>('button', { name: 'Collapse Canceled column' });
+  expect(toggle.tagName).toBe('BUTTON');
+  expect(toggle.tabIndex).toBe(0);
+  expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  toggle.focus();
+  fireEvent.click(toggle);
+
+  expect(screen.getByRole('button', { name: 'Expand Canceled column' })).toBe(toggle);
+  expect(toggle).toHaveFocus();
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByText('No issues in Canceled yet.')).not.toBeInTheDocument();
+
+  fireEvent.click(toggle);
+  expect(screen.getByRole('button', { name: 'Collapse Canceled column' })).toHaveFocus();
+  expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByText('No issues in Canceled yet.')).toBeInTheDocument();
+});
 
 describe('Column unloaded items (INV-1516)', () => {
   it('counts unloaded items in the header and offers Load more instead of "No issues"', () => {

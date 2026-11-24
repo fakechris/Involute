@@ -428,7 +428,8 @@ export interface BugMetricsData {
 
 export interface BugsPageQueryData {
   bugSummary: BugSummaryData;
-  teams?: { nodes: Array<{ id: string; states?: { nodes: WorkflowStateSummary[] } }> };
+  issueLabels?: { nodes: LabelSummary[] };
+  teams?: { nodes: Array<Pick<TeamSummary, 'id' | 'key' | 'viewerCanWrite'> & { states?: { nodes: WorkflowStateSummary[] } }> };
   issues: {
     nodes: IssueSummary[];
     pageInfo: {

@@ -35,7 +35,7 @@ import { DialogShell } from '../components/DialogShell';
 import { Checkbox, Field, Select, TextArea, TextInput } from '../components/controls';
 import { AutonomyBadge, ProjectAutonomyField } from './AutonomyTab';
 import { PageBody, PageHeader } from '../components/layout';
-import { EmptyState, LoadingState } from '../components/status';
+import { EmptyState, LoadingState, QueryErrorState } from '../components/status';
 import { ProjectBadge } from '../components/ProjectBadge';
 
 /** The project's workflow state as a pill, tinted by state type. */
@@ -128,7 +128,7 @@ export function ProjectsPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const { data: boardData } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
+  const { data: boardData, loading: teamsLoading, error: teamsError, refetch: refetchTeams } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
     variables: { first: 1, ...(teamKey ? { filter: { team: { key: { eq: teamKey } } } } : {}) },
   });
 
@@ -141,7 +141,7 @@ export function ProjectsPage() {
   const users: UserSummary[] = boardData?.users.nodes ?? [];
 
   const { data, loading, error, refetch } = useQuery<ProjectIssuesQueryData, ProjectIssuesQueryVariables>(PROJECT_ISSUES_QUERY, {
-    skip: !currentTeamKey,
+    skip: !currentTeamKey || !boardData || Boolean(teamsError),
     variables: { teamKey: currentTeamKey },
     fetchPolicy: 'cache-and-network',
   });
@@ -151,6 +151,8 @@ export function ProjectsPage() {
   const [runDelete] = useMutation<IssueDeleteMutationData, IssueDeleteMutationVariables>(ISSUE_DELETE_MUTATION);
 
   const projects = data?.issues.nodes ?? [];
+  const isLoading = teamsLoading || loading;
+  const loadError = teamsError ?? error;
   const selectedProject = selectedProjectId ? projects.find((p) => p.id === selectedProjectId) ?? null : null;
   const cancelingProject = dialogMode === 'edit'
     && teamStates.find((state) => state.id === formStateId)?.type === 'CANCELED'
@@ -407,7 +409,7 @@ export function ProjectsPage() {
     ) : null
   );
 
-  if (selectedProject) {
+  if (selectedProject && !loadError) {
     return (
       <>
         <ProjectDetailView
@@ -428,21 +430,15 @@ export function ProjectsPage() {
       <PageHeader
         icon={<IcoProject />}
         title="Projects"
-        count={projects.length}
-        actions={canCreate ? <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={openCreateDialog}>New project</Btn> : null}
+        count={isLoading || loadError ? undefined : projects.length}
+        actions={canCreate && !loadError ? <Btn variant="subtle" icon={<IcoPlus size={12} />} size="sm" onClick={openCreateDialog}>New project</Btn> : null}
       />
 
       <PageBody width="wide">
-        {error ? (
-          <div role="alert">
-            <EmptyState
-              title="Could not load projects"
-              body={error.message}
-              action={<Btn variant="subtle" size="sm" onClick={() => void refetch()}>Retry</Btn>}
-            />
-          </div>
-        ) : loading ? (
+        {isLoading ? (
           <LoadingState>Loading projects…</LoadingState>
+        ) : loadError ? (
+          <QueryErrorState title="Could not load projects" onRetry={teamsError ? refetchTeams : refetch} />
         ) : projects.length === 0 ? (
           <EmptyState
             icon={<IcoProject size={20} />}

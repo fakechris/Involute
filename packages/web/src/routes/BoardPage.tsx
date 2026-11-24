@@ -485,6 +485,7 @@ export function BoardPage() {
   );
   const [activeSavedBoardViewId, setActiveSavedBoardViewId] = useState('');
   const boardSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const boardMainRef = useRef<HTMLElement | null>(null);
   // Set when a digit was typed on the board itself (INV-608); the search box
   // may not be mounted yet, so the focus happens once the filter bar renders.
   const pendingSearchFocusRef = useRef(false);
@@ -1160,18 +1161,6 @@ export function BoardPage() {
         replace: true,
         state: {},
       });
-    }
-
-    // Report bug from another page (the Bugs page, INV-1133).
-    if (
-      !isBacklogView &&
-      location.state &&
-      typeof location.state === 'object' &&
-      'openReportBug' in location.state &&
-      location.state.openReportBug
-    ) {
-      setIsReportBugOpen(true);
-      navigate(location.pathname, { replace: true, state: {} });
     }
 
     window.addEventListener(OPEN_CREATE_ISSUE_EVENT, handleOpenCreateIssue as EventListener);
@@ -3456,7 +3445,7 @@ export function BoardPage() {
   }
 
   return (
-    <main className="board-page">
+    <main ref={boardMainRef} className="board-page" tabIndex={-1}>
       {picker ? (
         <QuickPicker
           title={`${pickerTitles[picker.kind]}${picker.targetIds.length > 1 ? ` · ${picker.targetIds.length} issues` : ''}`}
@@ -3732,7 +3721,7 @@ export function BoardPage() {
         // The issue a link named is not among the board's cards — a filter hid
         // it, or it sits beyond the first page. The drawer asks for that one
         // issue itself and opens it (INV-1469).
-        <RouteIssueDrawer key={linkedIssueRef} issueRef={linkedIssueRef} onClose={closeLinkedIssue} />
+        <RouteIssueDrawer key={linkedIssueRef} issueRef={linkedIssueRef} onClose={closeLinkedIssue} returnFocusFallback={boardMainRef} />
       ) : (
         <IssueDetailDrawer
           issue={selectedIssue}
@@ -3742,6 +3731,7 @@ export function BoardPage() {
           savingState={isSavingState}
           errorMessage={mutationError}
           errorNext={nextFor(shownRefusal, mutationError)}
+          returnFocusFallback={boardMainRef}
           onClose={() => {
             setSelectedIssueId(null);
             setSearchParams(
@@ -3750,7 +3740,7 @@ export function BoardPage() {
                 next.delete('issue');
                 return next;
               },
-              { replace: true },
+              { replace: true, preventScrollReset: true },
             );
           }}
           onStateChange={persistStateChange}

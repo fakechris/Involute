@@ -13,7 +13,7 @@ import { AgentLifecycleActions } from '../components/AgentLifecycleActions';
 import { Btn } from '../components/Primitives';
 import { Checkbox } from '../components/controls';
 import { PageBody, PageHeader } from '../components/layout';
-import { EmptyState, InlineError, LoadingState } from '../components/status';
+import { EmptyState, InlineError, LoadingState, QueryErrorState } from '../components/status';
 
 interface AgentTimelineEntry {
   at: string;
@@ -79,7 +79,7 @@ export function AgentsPage() {
 function AgentList() {
   const navigate = useNavigate();
   const [showDeactivated, setShowDeactivated] = useState(false);
-  const { data, loading, error } = useQuery<{ agents: UserSummary[] }>(AGENTS_QUERY, {
+  const { data, loading, error, refetch } = useQuery<{ agents: UserSummary[] }>(AGENTS_QUERY, {
     variables: { teamKey: null, includeDeactivated: showDeactivated },
   });
 
@@ -94,7 +94,7 @@ function AgentList() {
   }
 
   if (error) {
-    return <AgentsStatePage title="Agents"><InlineError>Could not load agents: {error.message}</InlineError></AgentsStatePage>;
+    return <AgentsStatePage title="Agents"><QueryErrorState title="Could not load agents" onRetry={refetch} /></AgentsStatePage>;
   }
 
   return (

@@ -50,7 +50,8 @@ describe('project committed-work progress', () => {
 
   it('shows the query error instead of project progress', async () => {
     renderApp({ error: new Error('Project query failed'), loading: false }, ['/projects']);
-    expect(await screen.findByRole('alert')).toHaveTextContent('Project query failed');
+    expect(await screen.findByRole('heading', { name: 'Could not load projects' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeVisible();
     expect(screen.queryByText(/% complete/)).not.toBeInTheDocument();
   });
 });

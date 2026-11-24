@@ -1,9 +1,12 @@
+import { useQuery } from '@apollo/client/react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BugsPage } from './BugsPage';
+import { writeStoredTeamKey } from '../board/utils';
 import { expectRowOpensDrawer, renderWithDrawerHost } from '../test/drawer-host-harness';
+import { GRAPH_PROJECTS_QUERY } from '../work/queries';
 
 vi.mock('../components/RouteIssueDrawer', () => import('../test/route-issue-drawer-stub'));
 
@@ -127,6 +130,8 @@ const bugsPageData = {
   teams: {
     nodes: [{
       id: 'team-1',
+      key: 'INV',
+      viewerCanWrite: true,
       states: {
         nodes: [
           { id: 'state-backlog', name: 'Backlog', type: 'BACKLOG', position: 0 },
@@ -164,7 +169,8 @@ vi.mock('../lib/session', () => ({
 }));
 
 function LocationState() {
-  return <pre data-testid="location-state">{JSON.stringify(useLocation().state)}</pre>;
+  const { pathname, search } = useLocation();
+  return <pre data-testid="location-state">{pathname}{search}</pre>;
 }
 
 describe('BugsPage', () => {
@@ -338,17 +344,84 @@ describe('BugsPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('A committed bug cannot go to Backlog.');
   });
 
-  it('reports a bug from the page', () => {
-    render(
-      <MemoryRouter initialEntries={['/bugs']}>
-        <Routes>
-          <Route path="/bugs" element={<BugsPage />} />
-          <Route path="/" element={<LocationState />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Report bug' }));
-    expect(screen.getByTestId('location-state')).toHaveTextContent('{"openReportBug":true}');
+  it.each(['Cancel', 'Escape', 'Close', 'Close report bug drawer'])(
+    'closes Report bug via %s without resetting the Bugs view (INV-2118)',
+    async (dismiss) => {
+      const url = '/bugs?project=fakechris%2FInvolute&priority=1';
+      render(
+        <MemoryRouter initialEntries={[url]}>
+          <LocationState />
+          <Routes>
+            <Route path="/bugs" element={<BugsPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      const report = screen.getByRole('button', { name: 'Report bug' });
+      const list = screen.getByRole('list', { name: 'Open bugs list' });
+      report.focus();
+      const restoreFocus = vi.spyOn(report, 'focus');
+      fireEvent.click(report);
+      const dialog = await screen.findByRole('dialog', { name: 'Report bug drawer' });
+      expect(screen.getByTestId('location-state')).toHaveTextContent(url);
+      expect(list).toBeInTheDocument();
+
+      if (dismiss === 'Escape') {
+        fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+      } else {
+        fireEvent.click(within(dialog).getByRole('button', { name: dismiss }));
+      }
+      expect(dialog).not.toBeInTheDocument();
+      expect(screen.getByTestId('location-state')).toHaveTextContent(url);
+      expect(screen.getByRole('list', { name: 'Open bugs list' })).toBe(list);
+      expect(within(list).getByRole('link', { name: /^INV-30\b/ })).toBeInTheDocument();
+      expect(within(list).queryByRole('link', { name: /^INV-32\b/ })).not.toBeInTheDocument();
+      expect(restoreFocus).toHaveBeenCalledWith({ preventScroll: true });
+      expect(report).toHaveFocus();
+      restoreFocus.mockRestore();
+    },
+  );
+
+  it('offers only projects in the report team when no active team is stored', async () => {
+    writeStoredTeamKey(null);
+    const query = vi.mocked(useQuery);
+    const original = query.getMockImplementation()!;
+    const reportProject = { repository: 'acme/inv', name: 'Involute project', identifier: 'INV-100' };
+    const otherProject = { repository: 'acme/ops', name: 'Ops project', identifier: 'OPS-100' };
+    const ops = { ...bugsPageData.teams.nodes[0]!, id: 'team-2', key: 'OPS' };
+    query.mockImplementation((document, options) => {
+      const result = original(document, options);
+      if (document === GRAPH_PROJECTS_QUERY) {
+        expect(options).toMatchObject({ variables: { teamFilter: { key: { eq: 'INV' } } } });
+        return {
+          ...result,
+          data: {
+            projectSummary: {
+              projects: [reportProject],
+              projectsWithoutRepository: [{ identifier: 'INV-200', name: 'Internal project' }],
+            },
+          },
+        } as typeof result;
+      }
+      return {
+        ...result,
+        data: {
+          ...bugsPageData,
+          projectSummary: { projects: [reportProject, otherProject] },
+          teams: { nodes: [...bugsPageData.teams.nodes, ops] },
+        },
+      } as typeof result;
+    });
+    try {
+      render(<MemoryRouter><BugsPage /></MemoryRouter>);
+      fireEvent.click(screen.getByRole('button', { name: 'Report bug' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Report bug drawer' });
+      const project = within(dialog).getByRole('combobox', { name: 'Project' });
+      expect(within(project).getByRole('option', { name: 'Involute project' })).toBeInTheDocument();
+      expect(within(project).getByRole('option', { name: 'Internal project' })).toBeInTheDocument();
+      expect(within(project).queryByRole('option', { name: 'Ops project' })).not.toBeInTheDocument();
+    } finally {
+      query.mockImplementation(original);
+    }
   });
 
   // INV-1387

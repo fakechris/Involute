@@ -6422,9 +6422,8 @@ kbd {
   gap: 16px;
   min-width: 0;
   max-width: 100%;
-  /* A group heading is not a grid row. Without a clip, a long caption paints
-     across the sticky decision pane even when overflow-wrap is set (INV-1302). */
-  overflow: hidden;
+  /* Keep long group captions from painting across the decision pane (INV-1302). */
+  overflow: clip;
 }
 
 .attention-section {
@@ -6787,8 +6786,6 @@ kbd {
 }
 
 .attention-decision {
-  position: sticky;
-  top: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -6820,13 +6817,39 @@ kbd {
   border-radius: var(--r-3);
 }
 
+@media (width > 900px) {
+  .attention-page > .page-body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .attention-page .page-body__inner {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .attention-layout {
+    flex: 1;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .attention-list,
+  .attention-decision {
+    overflow: auto;
+    overscroll-behavior-y: contain;
+  }
+
+  .attention-layout ~ :is(.attention-handled, .attention-batch-results) {
+    max-height: 25%;
+    overflow: auto;
+  }
+}
+
 @media (max-width: 900px) {
   .attention-layout {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .attention-decision {
-    position: static;
   }
 }
 

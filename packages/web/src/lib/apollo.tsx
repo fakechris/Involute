@@ -4,9 +4,11 @@ import {
   InMemoryCache,
 } from '@apollo/client';
 import { ApolloProvider } from '@apollo/client/react';
+import { CombinedGraphQLErrors, ServerError } from '@apollo/client/errors';
 import { setContext } from '@apollo/client/link/context';
+import { ErrorLink } from '@apollo/client/link/error';
 import type { PropsWithChildren } from 'react';
-import { useMemo } from 'react';
+import { createContext, useContext, useMemo, useState } from 'react';
 import { VIEWER_ASSERTION_HEADER } from '@turnkeyai/involute-shared';
 import { readLocalStorageValue } from './storage';
 
@@ -116,7 +118,18 @@ export function getGraphqlUrlDetails(): {
   };
 }
 
-export function createApolloClient() {
+export function isAuthenticationError(error: unknown): boolean {
+  if (ServerError.is(error)) return error.statusCode === 401;
+  const missingSession = (message: string) => /^(not authenticated\.?|unauthenticated)$/i.test(message.trim());
+  if (CombinedGraphQLErrors.is(error)) {
+    return error.errors.some(({ extensions, message }) =>
+      extensions?.code === 'UNAUTHENTICATED' || (!extensions?.code && missingSession(message)),
+    );
+  }
+  return error instanceof Error && missingSession(error.message);
+}
+
+export function createApolloClient(onAuthenticationError?: () => void) {
   const httpLink = new HttpLink({
     credentials: 'include',
     uri: getGraphqlUrl(),
@@ -135,6 +148,11 @@ export function createApolloClient() {
     };
   });
 
+  const errorLink = new ErrorLink(({ error, operation }) => {
+    // A write may have an unsaved draft. Escalate failed reads, not writes.
+    if (operation.operationType === 'query' && isAuthenticationError(error)) onAuthenticationError?.();
+  });
+
   return new ApolloClient({
     cache: new InMemoryCache({
       typePolicies: {
@@ -148,7 +166,7 @@ export function createApolloClient() {
         },
       },
     }),
-    link: authLink.concat(httpLink),
+    link: errorLink.concat(authLink).concat(httpLink),
     defaultOptions: {
       // Work changes behind the reader's back (agents propose, claim and
       // report), so opening a page must not show only what was cached on the
@@ -228,10 +246,23 @@ export function getServerBaseUrl(): string {
   return graphqlUrl.origin;
 }
 
-export function AppApolloProvider({ children }: PropsWithChildren) {
-  const client = useMemo(() => createApolloClient(), []);
+const AuthenticationFailureContext = createContext(false);
 
-  return <ApolloProvider client={client}>{children}</ApolloProvider>;
+export function useAuthenticationFailure(): boolean {
+  return useContext(AuthenticationFailureContext);
+}
+
+export function AppApolloProvider({ children }: PropsWithChildren) {
+  const [authenticationFailed, setAuthenticationFailed] = useState(false);
+  const client = useMemo(() => createApolloClient(() => setAuthenticationFailed(true)), []);
+
+  return (
+    <ApolloProvider client={client}>
+      <AuthenticationFailureContext.Provider value={authenticationFailed}>
+        {children}
+      </AuthenticationFailureContext.Provider>
+    </ApolloProvider>
+  );
 }
 
 function resolveRuntimeGraphqlUrlOverride(): {

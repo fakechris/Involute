@@ -1046,6 +1046,7 @@ export const SIMILAR_BUGS_QUERY = gql`
 
 export const BUGS_PAGE_QUERY = gql`
   query BugsPage($teamFilter: TeamFilter, $issueFilter: IssueFilter) {
+    issueLabels { nodes { id name } }
     bugSummary(teamFilter: $teamFilter) {
       openCount
       closedCount
@@ -1122,6 +1123,8 @@ export const BUGS_PAGE_QUERY = gql`
     teams(filter: $teamFilter) {
       nodes {
         id
+        key
+        viewerCanWrite
         states {
           nodes {
             id
