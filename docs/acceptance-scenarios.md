@@ -10,6 +10,29 @@ pass only needs a person for what a test cannot see (layout, wording, flow).
 Write a new scenario here when an acceptance finding is a pattern that can recur on
 another screen, not a one-off defect.
 
+## Journeys walked end to end
+
+Each manual chapter's main flow, and the Playwright spec (`e2e/`) that walks it
+through the real server and browser. A gap is walked by hand in an acceptance pass.
+
+| Manual chapter | Journey | End-to-end test |
+| --- | --- | --- |
+| Getting started | New project → `C` → first issue under No milestone → found on Backlog and in Search | `manual-journeys.spec.ts` |
+| Work items | Create, edit, comment, delete a comment, delete the issue on Board | `board-flow.spec.ts` |
+| Views and search | Search by identifier | `manual-journeys.spec.ts` |
+| Views and search | Save a Backlog view and reopen it from Views | Gap: the view is not stored in token sign-in mode (INV-2157) |
+| Candidates | Commit a candidate and place it under a parent | `work-graph.spec.ts`, `mcp-ui-conformance.spec.ts` |
+| In Review | Agent claims, reports and attaches evidence; person returns, then accepts | `mcp-ui-conformance.spec.ts` |
+| Projects and delivery | Create a milestone; create work in a milestone; delivery drill-down | `work-graph.spec.ts`, `delivery.spec.ts` |
+| Bugs and incidents | Report a bug, triage it with a priority, see its SLA | `work-graph.spec.ts` |
+| Agents and settings | Agent credential scopes and Revoke on the Agents page; manage a webhook on Ops | `mcp-ui-conformance.spec.ts`, `work-graph.spec.ts` |
+| Signed-out states | Session ends with an open form | `session-ended-notice.spec.ts` |
+| Bug capture extension | Connect, record, annotate and file a bug | `capture-extension.spec.ts` |
+| Needs you and Activity | Decide an item from Needs you; read Activity | Gap: unit tests only (`AttentionPage`, `InboxPage`) |
+| Bugs and incidents | Declare and resolve an incident | Gap: unit tests only (`IncidentsPage`) |
+
+The scenarios below are the per-screen checks, each held by a unit test.
+
 ## 1. Signed-out and expired sessions
 
 | Given / When | Then | Held by |
