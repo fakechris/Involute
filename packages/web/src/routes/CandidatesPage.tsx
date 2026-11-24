@@ -382,6 +382,8 @@ export function CandidateCard({
 }) {
   const navigate = useNavigate();
   const readOnly = candidate.viewerCanWrite === false;
+  // Linking a duplicate changes both items, so only work the viewer may change is offered.
+  const duplicateTargets = otherCandidates.filter((other) => other.viewerCanWrite !== false);
   const [acceptance, setAcceptance] = useState(candidate.acceptance ?? '');
   // The whole contract can be settled at commit, not only acceptance (INV-792).
   const [contract, setContract] = useState({
@@ -819,7 +821,7 @@ export function CandidateCard({
           Open context
         </Btn>
       </div>
-      {!snoozed && !readOnly && otherCandidates.length > 0 ? (
+      {!snoozed && !readOnly && duplicateTargets.length > 0 ? (
         <label className="observation-field observation-field--inline">
           <span>Mark duplicate of</span>
           <Select
@@ -829,7 +831,7 @@ export function CandidateCard({
             onChange={(event) => setDuplicateOfId(event.target.value)}
           >
             <option value="">Select work</option>
-            {otherCandidates.map((other) => (
+            {duplicateTargets.map((other) => (
               <option key={other.id} value={other.id}>
                 {other.identifier} — {other.title}
               </option>

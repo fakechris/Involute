@@ -832,6 +832,15 @@ describe('CandidatesPage for a team Viewer', () => {
     expect(within(other).queryByRole('note')).toBeNull();
   });
 
+  it('offers only work the viewer may change as a duplicate target', () => {
+    first.viewerCanWrite = false;
+    render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
+    const other = screen.getByRole('article', { name: 'INV-21 candidate' });
+    const picker = within(other).queryByLabelText('Mark INV-21 as duplicate of');
+    const targets = picker ? within(picker).queryAllByRole('option').map((option) => option.textContent) : [];
+    expect(targets.some((text) => text?.startsWith('INV-40'))).toBe(false);
+  });
+
   it('says edit access is missing, not "check acceptance, owner and revision", when a commit is refused', async () => {
     mockRunCommit.mockRejectedValueOnce(new CombinedGraphQLErrors({ errors: [{ message: 'You do not have edit access to this team.', extensions: { code: 'FORBIDDEN' } }] }));
     render(<MemoryRouter><CandidatesPage /></MemoryRouter>);
