@@ -12,6 +12,7 @@ import {
   TEAM_UNARCHIVE_MUTATION,
   TEAM_UPDATE_MUTATION,
 } from '../board/queries';
+import { loadErrorMessage } from '../lib/apollo';
 import { writeStoredTeamKey } from '../board/utils';
 import { AgentsTab } from './AgentsTab';
 import { TeamAutonomySection } from './AutonomyTab';
@@ -112,7 +113,7 @@ export function TeamMembersPage() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<TeamRole>('EDITOR');
 
-  if (query.error) return <TeamPageState><InlineError>Could not load the team: {query.error.message}</InlineError></TeamPageState>;
+  if (query.error) return <TeamPageState><InlineError>{loadErrorMessage(query.error, `Could not load the team: ${query.error.message}`)}</InlineError></TeamPageState>;
   if (query.loading && !query.data) return <TeamPageState><LoadingState /></TeamPageState>;
   if (!team) return <NotFound teamKey={key} />;
 
@@ -279,7 +280,7 @@ export function TeamSettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const section = (SECTIONS.find((s) => s.id === searchParams.get('section'))?.id ?? 'general');
 
-  if (query.error) return <TeamPageState><InlineError>Could not load the team: {query.error.message}</InlineError></TeamPageState>;
+  if (query.error) return <TeamPageState><InlineError>{loadErrorMessage(query.error, `Could not load the team: ${query.error.message}`)}</InlineError></TeamPageState>;
   if (query.loading && !query.data) return <TeamPageState><LoadingState /></TeamPageState>;
   if (!team) return <NotFound teamKey={key} />;
   if (!team.viewerCanManage) {

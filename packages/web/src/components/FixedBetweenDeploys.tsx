@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useLazyQuery, useQuery } from '@apollo/client/react';
 import { Link } from 'react-router-dom';
 
+import { loadErrorMessage } from '../lib/apollo';
 import { BUGS_FIXED_BETWEEN_QUERY, SERVER_BUILD_QUERY } from '../board/queries';
 import type { BugsFixedBetweenQueryData, ServerBuildQueryData } from '../board/types';
 import { Select, TextInput } from './controls';
@@ -58,7 +59,7 @@ export function FixedBetweenDeploys({ repositories }: { repositories: string[] }
           List fixes
         </button>
       </form>
-      {error ? <InlineError>{error.message}</InlineError> : null}
+      {error ? <InlineError>{loadErrorMessage(error)}</InlineError> : null}
       {result && !result.known ? (
         <InlineError>
           Unknown range: {result.message ?? 'GitHub could not list the commits between these SHAs.'} ({result.failureCode})

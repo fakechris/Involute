@@ -14,7 +14,8 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { useApolloClient, useMutation, useQuery } from '@apollo/client/react';
-import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { canonicalStringify } from '@apollo/client/utilities';
+import { FormEvent, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   closePeek,
@@ -122,8 +123,9 @@ import {
   writeStoredBoardViewState,
 } from '../board/views';
 import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
+import { SessionEndedContext } from '../components/SessionEndedNotice';
 import type { ContractValues } from '../components/ContractSection';
-import { getBoardBootstrapErrorMessage } from '../lib/apollo';
+import { getBoardBootstrapErrorMessage, isAuthenticationError } from '../lib/apollo';
 import { writeStoredShellIssues, writeStoredShellTeams } from '../lib/app-shell-state';
 import { SAVED_VIEWS_ACCOUNT_EVENT } from '../lib/saved-views-account';
 import { BoardCreateIssueDialog, DECISION_TEMPLATE, type CreatableKind } from '../components/BoardCreateIssueDialog';
@@ -230,6 +232,7 @@ function isRevisionConflict(message: string): boolean {
 
 export function BoardPage() {
   const navigate = useNavigate();
+  const sessionEndedSignInUrl = useContext(SessionEndedContext);
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTeam = searchParams.get('team');
   const urlProject = searchParams.get('project');
@@ -331,7 +334,16 @@ export function BoardPage() {
       fetchPolicy: 'cache-and-network',
     },
   );
-  const queryData = data ?? previousData;
+  const boardQueryKey = canonicalStringify(boardQueryVariables);
+  const lastBoardResult = useRef<{ key: string; data: BoardPageQueryData } | null>(null);
+  useLayoutEffect(() => {
+    if (data && !error) lastBoardResult.current = { key: boardQueryKey, data };
+  }, [boardQueryKey, data, error]);
+  const authenticationError = isAuthenticationError(error);
+  const retainedBoardData = authenticationError && lastBoardResult.current?.key === boardQueryKey
+    ? lastBoardResult.current.data
+    : undefined;
+  const queryData = retainedBoardData ?? data ?? previousData;
   const inFlightUpdatesRef = useRef<Set<string>>(new Set());
   const lastHandledDropRef = useRef<{ issueId: string; targetStateId: string; timestamp: number } | null>(null);
   // IQL can depend on graph joins and viewer identity unavailable locally.
@@ -2960,13 +2972,17 @@ export function BoardPage() {
   // A bad neighbourhood id is an IQL error. Keep the filter bar so it can be
   // edited or cleared, instead of replacing the board with "Board unavailable".
   const iqlError = iqlParseMessage(error);
-  if (error && !iqlError) {
-    const errorState = getBoardBootstrapErrorMessage(error);
-
+  if (error && !iqlError && !retainedBoardData) {
     return (
       <main className="board-page board-page--state">
         <PageHeader title="Board" />
-        <BootstrapErrorNotice state={errorState} />
+        {authenticationError && sessionEndedSignInUrl !== undefined ? (
+          <InlineError variant="block" role="none">
+            {sessionEndedSignInUrl ? 'Your session ended. Sign in to load this view.' : 'Your session ended.'}
+          </InlineError>
+        ) : (
+          <BootstrapErrorNotice state={getBoardBootstrapErrorMessage(error)} />
+        )}
       </main>
     );
   }

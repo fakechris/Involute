@@ -3,16 +3,31 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkLinks } from './WorkLinks';
 
-const query = vi.hoisted(() => ({ data: null as unknown }));
-vi.mock('@apollo/client/react', () => ({ useQuery: () => ({ data: query.data, error: undefined }) }));
+const query = vi.hoisted(() => ({ data: null as unknown, error: undefined as Error | undefined }));
+vi.mock('@apollo/client/react', () => ({ useQuery: () => ({ data: query.data, error: query.error }) }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  query.data = null;
+  query.error = undefined;
+});
 
 function evidence(id: string, kind: string, url: string, summary: string) {
   return { id, runId: null, kind, url, summary, createdAt: '2026-11-08T00:00:00.000Z', retractedAt: null, verifications: [] };
 }
 
-describe('WorkLinks pictures', () => {
+describe('WorkLinks', () => {
+  it('replaces the raw auth error after session expiry without changing other load errors', () => {
+    query.error = new Error('Network unavailable');
+    const view = render(<WorkLinks workId="work-1" />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Commits and links could not be loaded: Network unavailable');
+
+    query.error = new Error('Not authenticated');
+    view.rerender(<WorkLinks workId="work-1" />);
+    expect(screen.getByRole('alert')).toHaveTextContent(/^Your session ended\.$/);
+    expect(screen.queryByText(/Not authenticated/i)).not.toBeInTheDocument();
+  });
+
   it('renders an allowlisted screenshot without an extension, and an image artifact, and leaves an ordinary link as a link', () => {
     query.data = {
       workContext: {

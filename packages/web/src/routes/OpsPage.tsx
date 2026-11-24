@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useLazyQuery, useMutation, useQuery } from '@apollo/client/react';
 import { Link, useLocation } from 'react-router-dom';
 
+import { loadErrorMessage } from '../lib/apollo';
 import { PageBody, PageHeader } from '../components/layout';
 import { Btn } from '../components/Primitives';
 import { EmptyState, InlineError, LoadingState } from '../components/status';
@@ -68,7 +69,7 @@ export function OpsPage() {
           <div role="alert">
             <EmptyState
               title="Could not load ops"
-              body={error.message}
+              body={loadErrorMessage(error)}
               action={<Btn variant="subtle" onClick={() => void refetch()}>Retry</Btn>}
             />
           </div>
@@ -439,7 +440,7 @@ function TraceabilityAudit() {
           Run audit
         </button>
       </div>
-      {error ? <InlineError>{error.message}</InlineError> : null}
+      {error ? <InlineError>{loadErrorMessage(error)}</InlineError> : null}
       {audit ? (
         <>
           <p role="status">

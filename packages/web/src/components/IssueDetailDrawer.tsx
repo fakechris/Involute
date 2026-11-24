@@ -25,6 +25,7 @@ import { RichTextEditor } from './RichTextEditor';
 import { AGENTS_QUERY, ISSUE_DETAIL_QUERY } from '../board/queries';
 import { useContractAmendmentDecisions } from './ContractAmendmentPanel';
 import { Select } from './controls';
+import { SessionEndedNotice } from './SessionEndedNotice';
 
 interface IssueDetailDrawerProps {
   issue: IssueSummary | null;
@@ -377,6 +378,7 @@ export function IssueDetailDrawer({
         />
       ) : null}
       <section ref={frameRef} className={`issue-panel__frame${layout === 'page' ? ' issue-panel__frame--page' : ''}`}>
+        {layout === 'drawer' ? <SessionEndedNotice /> : null}
         <div className="issue-panel__header">
           <div className="issue-panel__title-row">
             {team ? <Badge tone="accent" mono>{team.key}</Badge> : null}

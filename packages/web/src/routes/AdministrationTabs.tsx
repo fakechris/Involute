@@ -18,6 +18,7 @@ import {
   WORKSPACE_SECURITY_QUERY,
   WORKSPACE_SETTINGS_UPDATE_MUTATION,
 } from '../board/queries';
+import { loadErrorMessage } from '../lib/apollo';
 import { USER_SET_GLOBAL_ROLE_MUTATION, type Refusable } from './settings-queries';
 import { NoticeLine, attempt, type Notice } from './WorkspaceSettingsTabs';
 import { Checkbox, Field, Select, TextArea, TextInput } from '../components/controls';
@@ -86,7 +87,7 @@ export function AdminMembersTab() {
   const teams = data?.teams.nodes ?? [];
   const viewerId = data?.viewer?.id ?? null;
 
-  if (error) return <p role="alert">Could not load people: {error.message}</p>;
+  if (error) return <p role="alert">{loadErrorMessage(error, `Could not load people: ${error.message}`)}</p>;
   if (loading && !data) return <p role="status">Loading…</p>;
 
   const who = (user: AdminPerson) => user.name ?? user.email ?? 'this person';
@@ -366,7 +367,7 @@ export function AdminTeamsTab() {
   const [name, setName] = useState('');
   const [visibility, setVisibility] = useState<'PRIVATE' | 'PUBLIC'>('PRIVATE');
 
-  if (error) return <p role="alert">Could not load teams: {error.message}</p>;
+  if (error) return <p role="alert">{loadErrorMessage(error, `Could not load teams: ${error.message}`)}</p>;
   if (loading && !data) return <p role="status">Loading…</p>;
   const teams = data?.teams.nodes ?? [];
   const refreshOn = (ok: boolean) => { if (ok) void refetch(); };
@@ -467,7 +468,7 @@ export function AdminTeamsTab() {
  */
 export function AdminAgentsTab() {
   const { data, loading, error } = useQuery<{ teams: { nodes: TeamSummary[] } }>(SHELL_TEAMS_QUERY, { fetchPolicy: 'cache-and-network' });
-  if (error) return <InlineError>Could not load teams: {error.message}</InlineError>;
+  if (error) return <InlineError>{loadErrorMessage(error, `Could not load teams: ${error.message}`)}</InlineError>;
   if (loading && !data) return <LoadingState>Loading teams…</LoadingState>;
   const teams = (data?.teams.nodes ?? []).filter((team) => team.viewerCanManage);
 
@@ -514,7 +515,7 @@ interface SecurityData {
 
 export function AdminSecurityTab() {
   const { data, loading, error, refetch } = useQuery<SecurityData>(WORKSPACE_SECURITY_QUERY);
-  if (error) return <p role="alert">Could not load security settings: {error.message}</p>;
+  if (error) return <p role="alert">{loadErrorMessage(error, `Could not load security settings: ${error.message}`)}</p>;
   if (loading || !data) return <p role="status">Loading…</p>;
   return <SecurityForm key={JSON.stringify(data.workspaceSettings)} data={data} onSaved={() => void refetch()} />;
 }

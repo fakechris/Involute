@@ -2,6 +2,7 @@ import { gql } from '@apollo/client';
 import { useApolloClient } from '@apollo/client/react';
 import { useEffect, useMemo, useState } from 'react';
 
+import { loadErrorMessage } from '../lib/apollo';
 import { Field, Select } from '../components/controls';
 import { DataTable } from '../components/DataTable';
 import { Btn } from '../components/Primitives';
@@ -163,7 +164,7 @@ export function MilestoneBurndown({ teamKey, repository, start, end }: { teamKey
           setMilestones(nodes);
           setSelected(previous => nodes.some(node => node.id === previous) ? previous : nodes[0]?.id ?? '');
         }
-      } catch (error) { if (active) setListError(error instanceof Error ? error.message : 'Could not load milestones.'); }
+      } catch (error) { if (active) setListError(loadErrorMessage(error) ?? 'Could not load milestones.'); }
     }
     void load();
     return () => { active = false; };
@@ -175,7 +176,7 @@ export function MilestoneBurndown({ teamKey, repository, start, end }: { teamKey
       .then(response => {
         if (!response.data) throw new Error('No burndown response.');
         if (active) setResult({ key: requestKey, data: response.data.milestoneBurndown });
-      }).catch((error: unknown) => { if (active) setResult({ key: requestKey, error: error instanceof Error ? error.message : 'Could not load burndown.' }); });
+      }).catch((error: unknown) => { if (active) setResult({ key: requestKey, error: loadErrorMessage(error) ?? 'Could not load burndown.' }); });
     return () => { active = false; };
   }, [client, selected, variables, requestKey, attempt]);
   const current = result?.key === requestKey ? result : null;

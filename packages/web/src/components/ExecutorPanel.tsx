@@ -2,6 +2,7 @@ import { gql } from '@apollo/client';
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { loadErrorMessage } from '../lib/apollo';
 import { Select } from './controls';
 const CONTEXT = gql`query ExecutorPanel($id: String!) { executorContextJson(id: $id) }`;
 const UPDATE = gql`mutation ExecutorAction($workId: String!, $operation: String!, $detailsJson: String) { executorUpdate(workId: $workId, operation: $operation, detailsJson: $detailsJson) { success message resultJson } }`;
@@ -16,7 +17,7 @@ export function ExecutorPanel({ workId, canDispatch = false }: { workId: string;
   const [resolutions, setResolutions] = useState<Record<string, { outcome: string; reason: string; evidenceUrl: string; observedSha: string }>>({});
   let context: Context | null = null;
   try { if (data) context = JSON.parse(data.executorContextJson) as Context; } catch { /* explicit error below */ }
-  if (error || data && (!context || context.protocolVersion !== 1 || !Array.isArray(context.dispatches))) return <p role="alert">Executor status is unavailable or uses an unsupported protocol.</p>;
+  if (error || data && (!context || context.protocolVersion !== 1 || !Array.isArray(context.dispatches))) return <p role="alert">{loadErrorMessage(error, 'Executor status is unavailable or uses an unsupported protocol.')}</p>;
   if (!context || !context.dispatches.length && !canDispatch) return null;
   async function act(operation: string, dispatch?: Dispatch, extra: Record<string, unknown> = {}) {
     try {

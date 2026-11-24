@@ -611,6 +611,21 @@
   color: var(--fg);
 }
 
+.page-notice--session-ended {
+  max-width: min(100%, calc(100vw - 2 * var(--content-gutter)));
+  flex-wrap: wrap;
+}
+
+.page-notice--session-ended.page-notice--floating {
+  width: max-content;
+  max-width: min(640px, calc(100vw - 2 * var(--content-gutter)));
+}
+
+.page-notice--session-ended .page-notice__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .page-notice__dismiss {
   border: 0;
   background: none;

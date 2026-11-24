@@ -12,6 +12,7 @@ import { IssueDrawerHost } from './components/IssueDrawerHost';
 import { ShellTeamsSync } from './app/ShellTeamsSync';
 import { SignInPage } from './app/SignInPage';
 import { ImageHostConfig } from './components/ImageHostConfig';
+import { SessionEndedNotice, SessionEndedProvider } from './components/SessionEndedNotice';
 import { useSavedViewsSync } from './app/useSavedViewsSync';
 import { Avatar } from './components/Primitives';
 import {
@@ -304,6 +305,7 @@ export function App() {
   const [signInReturn, setSignInReturn] = useState(() => atSignInLanding ? readSignInReturn() : null);
   const [loadedSession, setSession] = useState<SessionState | null | undefined>(undefined);
   const authenticationFailed = useAuthenticationFailure();
+  const sessionExpired = authenticationFailed && loadedSession?.authenticated;
   const session = authenticationFailed && loadedSession
     ? { ...loadedSession, authMode: 'none' as const, authenticated: false, viewer: null }
     : loadedSession;
@@ -984,7 +986,12 @@ export function App() {
     theme,
   ]);
 
-  return (
+  const provider = session?.authProviders[0];
+  const expiredSessionSignInUrl = provider
+    ? getProviderLoginUrl(provider.startUrl)
+    : session?.googleOAuthConfigured ? getGoogleLoginUrl() : null;
+
+  const shell = (
     <div className={`app-shell${isMobileNavOpen ? ' app-shell--nav-open' : ''}`}>
       {isMobileNavOpen ? (
         <button
@@ -1430,7 +1437,7 @@ export function App() {
         </header>
 
         <div className="app-shell__content" data-route={location.pathname}>
-          {authenticationFailed ? <SignInPage session={session} authError={authError} /> : restoringPage ? (
+          {authenticationFailed && !sessionExpired ? <SignInPage session={session} authError={authError} /> : restoringPage ? (
             <main><PageBody><LoadingState>Restoring your page…</LoadingState></PageBody></main>
           ) : (
           <RouteErrorBoundary resetKey={location.pathname}>
@@ -1484,6 +1491,8 @@ export function App() {
         </div>
       </div>
 
+      <SessionEndedNotice floating />
+
       {/* The sidebar's team list comes from the server, not only from the last board visit (INV-853). */}
       {session?.authenticated ? <ShellTeamsSync /> : null}
       {session?.authenticated ? <ImageHostConfig /> : null}
@@ -1522,6 +1531,8 @@ export function App() {
       <CommentUndoHost />
     </div>
   );
+
+  return <SessionEndedProvider signInUrl={sessionExpired ? expiredSessionSignInUrl : undefined}>{shell}</SessionEndedProvider>;
 }
 
 export { CommandPalette } from './app/CommandPalette';

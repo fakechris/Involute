@@ -2,6 +2,7 @@ import { useLazyQuery, useMutation, useQuery } from '@apollo/client/react';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
+import { loadErrorMessage } from '../lib/apollo';
 import { Btn } from '../components/Primitives';
 import { Field, TextInput } from '../components/controls';
 import { SettingsSectionHeader } from '../components/SettingsShell';
@@ -61,7 +62,7 @@ export function GitHubSettingsTab({
   const [name, setName] = useState(defaultName);
   const [notice, setNotice] = useState<Notice>(null);
 
-  if (error) return <p role="alert">Could not load the GitHub setup: {error.message}</p>;
+  if (error) return <p role="alert">{loadErrorMessage(error, `Could not load the GitHub setup: ${error.message}`)}</p>;
   if (loading && !data) return <p role="status">Loading…</p>;
   const setup = data?.githubSetup;
   if (!setup) return null;
@@ -312,7 +313,7 @@ function ConnectionRow({ connection, canManage, teamId, onChanged }: { connectio
         <Btn size="sm" variant="subtle" onClick={() => void loadRepositories({ variables: { connectionId: connection.id } })}>Repositories</Btn>
         {canManage ? <Btn size="sm" variant="danger" onClick={() => void disconnect()} disabled={removing.loading}>Remove connection</Btn> : null}
       </div>
-      {repositories.error ? <p role="alert">{repositories.error.message}</p> : null}
+      {repositories.error ? <p role="alert">{loadErrorMessage(repositories.error)}</p> : null}
       {repositories.data ? (
         <ul className="github-setup__repos" aria-label={`${connection.accountLogin} repositories`}>
           {repositories.data.githubConnectionRepositories.map((repo) => (

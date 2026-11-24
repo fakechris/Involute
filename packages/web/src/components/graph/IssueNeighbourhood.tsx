@@ -2,6 +2,7 @@ import { useQuery } from '@apollo/client/react';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { loadErrorMessage } from '../../lib/apollo';
 import { ISSUE_GRAPH_QUERY } from '../../work/queries';
 import type {
   IssueGraphOmittedCounts,
@@ -239,7 +240,7 @@ export function IssueNeighbourhood({ issueId, issueIdentifier, issueRepository, 
   if (error && !graph) {
     return (
       <div className="issue-panel__section issue-neighbourhood">
-        <InlineError>Could not load the neighbourhood of this item.</InlineError>
+        <InlineError>{loadErrorMessage(error, 'Could not load the neighbourhood of this item.')}</InlineError>
       </div>
     );
   }
