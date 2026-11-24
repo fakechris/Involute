@@ -1,6 +1,8 @@
 import { getServerBaseUrl } from './apollo';
 
 const SIGN_IN_RETURN_KEY = 'involute.signInReturn';
+/** A sign-in takes minutes; an older saved page is from an abandoned one (INV-2147). */
+const SIGN_IN_RETURN_MAX_AGE_MS = 15 * 60_000;
 
 export interface SessionViewer {
   email: string;
@@ -70,7 +72,7 @@ export function rememberSignInReturn(): void {
     if (fromCallback) url.searchParams.delete('authError');
     const path = url.pathname + url.search + url.hash;
     if (path === '/') window.sessionStorage.removeItem(SIGN_IN_RETURN_KEY);
-    else window.sessionStorage.setItem(SIGN_IN_RETURN_KEY, path);
+    else window.sessionStorage.setItem(SIGN_IN_RETURN_KEY, JSON.stringify({ path, at: Date.now() }));
   } catch {
     // Sign-in still works if the browser blocks storage.
   }
@@ -78,7 +80,21 @@ export function rememberSignInReturn(): void {
 
 export function readSignInReturn(): string | null {
   try {
-    const path = window.sessionStorage.getItem(SIGN_IN_RETURN_KEY);
+    const saved = window.sessionStorage.getItem(SIGN_IN_RETURN_KEY);
+    if (!saved) return null;
+    let path: string | null = null;
+    try {
+      const entry = JSON.parse(saved) as { path?: unknown; at?: unknown };
+      // Only a recent sign-in returns here (INV-2147): an abandoned one would
+      // otherwise send a later, ordinary visit to the old page.
+      if (typeof entry.path === 'string' && typeof entry.at === 'number' && Date.now() - entry.at <= SIGN_IN_RETURN_MAX_AGE_MS) path = entry.path;
+    } catch {
+      // An unreadable or old-format entry is treated as stale.
+    }
+    if (!path) {
+      window.sessionStorage.removeItem(SIGN_IN_RETURN_KEY);
+      return null;
+    }
     // Only return to an app route, not a different origin.
     if (!path?.startsWith('/') || path === '/' || path.startsWith('//') || new URL(path, window.location.origin).origin !== window.location.origin) return null;
     return path;

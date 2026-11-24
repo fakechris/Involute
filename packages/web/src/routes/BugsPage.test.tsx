@@ -381,6 +381,54 @@ describe('BugsPage', () => {
     },
   );
 
+  it('reports into the first team you can write to when no team is stored and the first is read-only (INV-2148)', async () => {
+    writeStoredTeamKey(null);
+    const query = vi.mocked(useQuery);
+    const original = query.getMockImplementation()!;
+    const readOnly = { ...bugsPageData.teams.nodes[0]!, id: 'team-0', key: 'VIEW', viewerCanWrite: false };
+    const writable = { ...bugsPageData.teams.nodes[0]!, id: 'team-2', key: 'OPS', viewerCanWrite: true };
+    const projectQueries: unknown[] = [];
+    query.mockImplementation((document, options) => {
+      const result = original(document, options);
+      if (document === GRAPH_PROJECTS_QUERY) {
+        projectQueries.push(options);
+        return result;
+      }
+      return { ...result, data: { ...bugsPageData, teams: { nodes: [readOnly, writable] } } } as typeof result;
+    });
+    try {
+      render(<MemoryRouter><BugsPage /></MemoryRouter>);
+      expect(screen.getByRole('button', { name: 'Report bug' })).toBeInTheDocument();
+      expect(projectQueries.at(-1)).toMatchObject({ variables: { teamFilter: { key: { eq: 'OPS' } } } });
+    } finally {
+      query.mockImplementation(original);
+    }
+  });
+
+  it('shows Report bug disabled while the page loads, and hides it when no team can be written to (INV-2148)', () => {
+    writeStoredTeamKey(null);
+    const query = vi.mocked(useQuery);
+    const original = query.getMockImplementation()!;
+    query.mockImplementation((document, options) => {
+      const result = original(document, options);
+      return document === GRAPH_PROJECTS_QUERY ? result : ({ ...result, data: undefined, loading: true } as typeof result);
+    });
+    try {
+      const view = render(<MemoryRouter><BugsPage /></MemoryRouter>);
+      expect(screen.getByRole('button', { name: 'Report bug' })).toBeDisabled();
+      view.unmount();
+      const readOnly = { ...bugsPageData.teams.nodes[0]!, viewerCanWrite: false };
+      query.mockImplementation((document, options) => {
+        const result = original(document, options);
+        return document === GRAPH_PROJECTS_QUERY ? result : ({ ...result, data: { ...bugsPageData, teams: { nodes: [readOnly] } } } as typeof result);
+      });
+      render(<MemoryRouter><BugsPage /></MemoryRouter>);
+      expect(screen.queryByRole('button', { name: 'Report bug' })).toBeNull();
+    } finally {
+      query.mockImplementation(original);
+    }
+  });
+
   it('offers only projects in the report team when no active team is stored', async () => {
     writeStoredTeamKey(null);
     const query = vi.mocked(useQuery);

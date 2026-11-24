@@ -140,7 +140,9 @@ Take a backup before every production deploy (`deploy-prod.sh` does, into `.back
 `scripts/db-backup-daily.sh` runs daily at 19:30 UTC on the box (`involute-db-backup.timer`, `Persistent=true` so a missed run happens at boot). Each run takes a `pg_dump -Fc` into `.backups/daily/`, verifies it (`pg_restore --list` must list table data, and the dump must be at least half the size of the previous one), writes a `.sha256` beside it, and only then prunes. Retention is grandfather-father-son: the 3 newest, the oldest of this and last ISO week, the oldest of this and last month — 5–7 dumps, roughly 1, 2, 3, 7, 30 and 28–60 days old. A failed run exits non-zero and deletes nothing; a dump that shrank is kept as `.suspect-*` for inspection.
 
 ```bash
-ssh oracle_5 'sudo bash -s install' < scripts/db-backup-daily.sh   # install or update the timer
+# install or update the timer: copy the script to the box, then run it by path.
+# Not `bash -s install < …`: through stdin the script cannot find itself (INV-2152); it refuses that now.
+scp scripts/db-backup-daily.sh oracle_5:/tmp/ && ssh oracle_5 'sudo bash /tmp/db-backup-daily.sh install'
 ssh oracle_5 'sudo systemctl start involute-db-backup && sudo journalctl -u involute-db-backup -n 20'
 ssh oracle_5 'cd /opt/involute/.backups/daily && sudo sha256sum -c *.sha256'
 ```
