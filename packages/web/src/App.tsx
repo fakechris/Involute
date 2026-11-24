@@ -9,6 +9,7 @@ import { NotificationsBell } from './components/NotificationsBell';
 import { NeedsYouNavLink } from './components/NeedsYouNavLink';
 import { IssueDrawerHost } from './components/IssueDrawerHost';
 import { ShellTeamsSync } from './app/ShellTeamsSync';
+import { SignInPage } from './app/SignInPage';
 import { ImageHostConfig } from './components/ImageHostConfig';
 import { useSavedViewsSync } from './app/useSavedViewsSync';
 import { Avatar } from './components/Primitives';
@@ -53,7 +54,8 @@ import {
   type AppShellIssueSummary,
   type AppShellTeamSummary,
 } from './lib/app-shell-state';
-import { fetchSessionState, getGoogleLoginUrl, getProviderLoginUrl, logoutSession, type SessionState } from './lib/session';
+import { useAuthenticationFailure } from './lib/apollo';
+import { clearSignInReturn, fetchSessionState, getGoogleLoginUrl, getProviderLoginUrl, logoutSession, readSignInReturn, rememberSignInReturn, type SessionState } from './lib/session';
 import { SAVED_VIEWS_ACCOUNT_EVENT, setSavedViewsAccount } from './lib/saved-views-account';
 import { lazyRoute, RouteErrorBoundary } from './lib/lazy-route';
 import { CommentUndoHost } from './undo/CommentUndoHost';
@@ -294,7 +296,16 @@ function TweaksPanel({
 export function App() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [session, setSession] = useState<SessionState | null | undefined>(undefined);
+  const atSignInLanding = location.pathname === '/' && !location.search && !location.hash;
+  const [signInReturn, setSignInReturn] = useState(() => atSignInLanding ? readSignInReturn() : null);
+  const [loadedSession, setSession] = useState<SessionState | null | undefined>(undefined);
+  const authenticationFailed = useAuthenticationFailure();
+  const session = authenticationFailed && loadedSession
+    ? { ...loadedSession, authMode: 'none' as const, authenticated: false, viewer: null }
+    : loadedSession;
+  const hasCookieSession = session?.authMode === 'session' && session.authenticated;
+  // Don't mount the Board at the callback URL: its URL sync can override the return navigation.
+  const restoringPage = signInReturn && atSignInLanding && (loadedSession === undefined || hasCookieSession);
   const [isSessionLoaded, setIsSessionLoaded] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [theme, setTheme] = useState<ThemeMode>(() => getStoredTheme());
@@ -319,6 +330,7 @@ export function App() {
   const [expandedTeamKey, setExpandedTeamKey] = useState<string | null>(() => readStoredTeamKey());
   const [recentViews, setRecentViews] = useState<RecentViewEntry[]>(() => getStoredRecentViews());
   const [searchParams] = useSearchParams();
+  const authError = searchParams.get('authError');
   const urlTeam = searchParams.get('team');
   const statusUndo = useSyncExternalStore(subscribeStatusUndo, getStatusUndoSnapshot, getStatusUndoSnapshot);
 
@@ -402,6 +414,16 @@ export function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!signInReturn) return;
+    if (!atSignInLanding) {
+      setSignInReturn(null);
+    } else if (hasCookieSession) {
+      clearSignInReturn();
+      navigate(signInReturn, { replace: true });
+    }
+  }, [atSignInLanding, hasCookieSession, navigate, signInReturn]);
 
   // The saved-views server sync runs for the signed-in account and active team (INV-1196).
   // setSavedViewsAccount runs before setSession, so the sync starts with the account already set.
@@ -1350,12 +1372,13 @@ export function App() {
                   key={provider.id}
                   className="app-shell__session-action"
                   href={getProviderLoginUrl(provider.startUrl)}
+                  onClick={rememberSignInReturn}
                 >
                   {provider.label}
                 </a>
               ))
             ) : session?.googleOAuthConfigured ? (
-              <a className="app-shell__session-action" href={getGoogleLoginUrl()}>
+              <a className="app-shell__session-action" href={getGoogleLoginUrl()} onClick={rememberSignInReturn}>
                 Sign in with Google
               </a>
             ) : null}
@@ -1371,11 +1394,12 @@ export function App() {
               <a
                 className="app-shell__session-action"
                 href={getProviderLoginUrl(session.authProviders[0]!.startUrl)}
+                onClick={rememberSignInReturn}
               >
                 Sign in
               </a>
             ) : !session?.authenticated && session?.googleOAuthConfigured ? (
-              <a className="app-shell__session-action" href={getGoogleLoginUrl()}>
+              <a className="app-shell__session-action" href={getGoogleLoginUrl()} onClick={rememberSignInReturn}>
                 Sign in
               </a>
             ) : null}
@@ -1399,6 +1423,9 @@ export function App() {
         </header>
 
         <div className="app-shell__content" data-route={location.pathname}>
+          {authenticationFailed ? <SignInPage session={session} authError={authError} /> : restoringPage ? (
+            <main><PageBody><LoadingState>Restoring your page…</LoadingState></PageBody></main>
+          ) : (
           <RouteErrorBoundary resetKey={location.pathname}>
           <Suspense
             fallback={
@@ -1446,6 +1473,7 @@ export function App() {
             <IssueDrawerHost />
           </Suspense>
           </RouteErrorBoundary>
+          )}
         </div>
       </div>
 

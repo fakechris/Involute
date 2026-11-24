@@ -19,7 +19,7 @@ import { IcoCheck, IcoInbox } from '../components/Icons';
 import { Btn } from '../components/Primitives';
 import { ListRow } from '../components/list';
 import { PageBody, PageHeader } from '../components/layout';
-import { EmptyState, SegmentedControl } from '../components/status';
+import { EmptyState, LoadingState, QueryErrorState, SegmentedControl } from '../components/status';
 import { WorkReferenceText } from '../components/WorkReference';
 
 type InboxFilter = 'all' | 'unread';
@@ -244,7 +244,7 @@ export function InboxPage() {
         hint={<Link className="inbox-page__todo-link" to="/todo">What needs you</Link>}
         actions={
           <>
-            {unreadCount > 0 && (
+            {!error && unreadCount > 0 && (
               <Btn
                 variant="ghost"
                 size="sm"
@@ -269,13 +269,10 @@ export function InboxPage() {
       />
 
       <PageBody width="full" padding="none">
-        {error && notifications.length === 0 ? (
-          <EmptyState
-            title="Could not load activity"
-            body={<span role="alert">Confirm the API server is running and try again.</span>}
-          />
-        ) : loading && notifications.length === 0 ? (
-          <EmptyState title="Loading…" />
+        {loading && notifications.length === 0 ? (
+          <LoadingState>Loading activity…</LoadingState>
+        ) : error ? (
+          <QueryErrorState title="Could not load activity" onRetry={refetch} />
         ) : notifications.length === 0 ? (
           <EmptyState title={filter === 'unread' ? 'Nothing unread.' : 'No activity yet.'} />
         ) : (

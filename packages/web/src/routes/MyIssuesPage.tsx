@@ -9,7 +9,7 @@ import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { IssueRow } from '../components/list';
 import { Avatar } from '../components/Primitives';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
-import { EmptyState, LoadingState } from '../components/status';
+import { EmptyState, LoadingState, QueryErrorState } from '../components/status';
 import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
 import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam, NO_REPOSITORY_OPTIONS } from './work-filter-match';
 
@@ -49,7 +49,7 @@ export function MyIssuesPage() {
   const [project, setProject] = useProjectParam();
   const workFilters = useWorkFilters();
 
-  const { data, loading } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
+  const { data, loading, error, refetch } = useQuery<BoardPageQueryData, BoardPageQueryVariables>(BOARD_PAGE_QUERY, {
     variables: {
       first: 500,
       // This page searches the bodies, so it asks for them (INV-1470); the
@@ -113,7 +113,7 @@ export function MyIssuesPage() {
 
   return (
     <div className="observation-page">
-      <PageHeader icon={<Avatar user={viewerUser} size={20} />} title="My Issues" count={myIssues.length} />
+      <PageHeader icon={<Avatar user={viewerUser} size={20} />} title="My Issues" count={loading || error ? undefined : myIssues.length} />
       <PageToolbar
         aria-label="My issues filters"
         projects={
@@ -146,9 +146,11 @@ export function MyIssuesPage() {
         }
       />
 
-      <PageBody width="full" padding={loading || myIssues.length === 0 ? 'default' : 'none'}>
+      <PageBody width="full" padding={loading || error || myIssues.length === 0 ? 'default' : 'none'}>
         {loading ? (
           <LoadingState>Loading issues…</LoadingState>
+        ) : error ? (
+          <QueryErrorState title="Could not load your issues" onRetry={refetch} />
         ) : myIssues.length === 0 ? (
           <EmptyState title="No issues assigned to you" body="Issues assigned to your account will appear here." />
         ) : (
@@ -180,4 +182,3 @@ export function MyIssuesPage() {
     </div>
   );
 }
-

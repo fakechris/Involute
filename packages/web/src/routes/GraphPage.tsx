@@ -12,7 +12,7 @@ import { IcoGraph } from '../components/Icons';
 import { Checkbox } from '../components/controls';
 import { PageBody, PageHeader, PageToolbar } from '../components/layout';
 import { Btn } from '../components/Primitives';
-import { EmptyState, LoadingState, SegmentedControl } from '../components/status';
+import { EmptyState, LoadingState, QueryErrorState, SegmentedControl } from '../components/status';
 import { ProjectFilterCombobox, type AvailableProject } from '../components/ProjectFilterCombobox';
 import { buildOutline, type GraphNode } from '../work/graph-model';
 import { defaultZoom, formatDay, parseFactWindow, zoomForWindow, type TimelineEntry, type TimelineZoom } from '../work/timeline-model';
@@ -216,6 +216,7 @@ function ProjectGraphPage() {
             projects={projects}
             loading={projectsQuery.loading}
             failed={Boolean(projectsQuery.error)}
+            onRetry={projectsQuery.refetch}
             onChoose={(key) => update({ project: key })}
           />
         ) : graphQuery.error ? (
@@ -293,19 +294,17 @@ function ProjectChooser({
   projects,
   loading,
   failed,
+  onRetry,
   onChoose,
 }: {
   projects: AvailableProject[];
   loading: boolean;
   failed: boolean;
+  onRetry: () => Promise<unknown>;
   onChoose: (key: string) => void;
 }) {
   if (failed) {
-    return (
-      <div role="alert">
-        <EmptyState title="Could not load projects" />
-      </div>
-    );
+    return <QueryErrorState title="Could not load projects" onRetry={onRetry} />;
   }
   if (loading && projects.length === 0) return <LoadingState>Loading projects…</LoadingState>;
   if (projects.length === 0) {
