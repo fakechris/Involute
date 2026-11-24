@@ -175,7 +175,7 @@ describe('InReviewPage', () => {
     );
 
     fireEvent.click(screen.getByLabelText('Select INV-101'));
-    fireEvent.click(screen.getByRole('button', { name: 'Bulk reject / return' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Return selected' }));
 
     await waitFor(() => expect(mockRunReview).toHaveBeenCalledTimes(1));
     expect(mockRunReview).toHaveBeenCalledWith({

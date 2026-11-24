@@ -68,8 +68,8 @@ export function HumanReviewSection({
         <Btn variant="accent" disabled={reviewPending !== null} onClick={() => void handleReview('ACCEPTED')}>
           {reviewPending === 'ACCEPTED' ? 'Accepting…' : 'Accept'}
         </Btn>
-        <Btn variant="danger" disabled={reviewPending !== null} onClick={() => void handleReview('REJECTED')}>
-          {reviewPending === 'REJECTED' ? 'Rejecting…' : 'Reject'}
+        <Btn variant="subtle" disabled={reviewPending !== null} onClick={() => void handleReview('REJECTED')}>
+          {reviewPending === 'REJECTED' ? 'Returning…' : 'Return to Ready'}
         </Btn>
       </div>
     </section>

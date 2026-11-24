@@ -98,7 +98,7 @@ describe('IncidentsPage (INV-1129)', () => {
     expect(screen.getByTestId('incident-INV-3')).toHaveTextContent('Ongoing · 5h 30m');
     expect(screen.getByTestId('incident-INV-3')).toHaveTextContent('Not required');
     expect(screen.getByTestId('incident-INV-2')).toHaveTextContent('Missing');
-    expect(screen.getByTestId('incident-INV-1')).toHaveTextContent('Attached');
+    expect(screen.getByTestId('incident-INV-1')).toHaveTextContent('File attached');
     expect(screen.getByTestId('incident-INV-1')).toHaveTextContent('1 of 2 done · 1 overdue');
     expect(screen.getByText('2 declined or duplicate incidents are not counted.')).toBeInTheDocument();
 

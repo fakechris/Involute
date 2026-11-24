@@ -11,6 +11,7 @@ import { Avatar } from '../components/Primitives';
 import { ProjectFilterCombobox } from '../components/ProjectFilterCombobox';
 import { EmptyState, LoadingState } from '../components/status';
 import { useWorkFilters, WorkFilterBar } from '../components/WorkFilterBar';
+import { STATE_TYPE_LABEL } from '../components/graph/graph-colors';
 import { matchesProject, matchesWorkFilters, projectsFromCounts, useProjectParam, NO_REPOSITORY_OPTIONS } from './work-filter-match';
 
 function formatTimeAgo(date: string): string {
@@ -27,16 +28,9 @@ function formatTimeAgo(date: string): string {
   return `${Math.floor(days / 30)}mo`;
 }
 
-function classifyState(stateType: WorkflowStateType): 'progress' | 'todo' | 'backlog' | 'completed' {
-  switch (stateType) {
-    case 'STARTED': return 'progress';
-    case 'COMPLETED':
-    case 'CANCELED': return 'completed';
-    case 'BACKLOG': return 'backlog';
-    case 'UNSTARTED':
-    default: return 'todo';
-  }
-}
+// Groups follow the workflow states by type, in the order work moves (INV-2120):
+// In Review is its own group, and Canceled is not counted as Done.
+const GROUP_ORDER: WorkflowStateType[] = ['STARTED', 'REVIEW', 'UNSTARTED', 'BACKLOG', 'COMPLETED', 'CANCELED'];
 
 interface IssueGroup {
   label: string;
@@ -86,27 +80,10 @@ export function MyIssuesPage() {
     );
   }, [allIssues, filterStateType, project, workFilters.filters]);
 
-  const groups = useMemo<IssueGroup[]>(() => {
-    const progress: IssueSummary[] = [];
-    const todo: IssueSummary[] = [];
-    const backlog: IssueSummary[] = [];
-    const completed: IssueSummary[] = [];
-
-    for (const issue of myIssues) {
-      const group = classifyState(issue.state.type);
-      if (group === 'progress') progress.push(issue);
-      else if (group === 'completed') completed.push(issue);
-      else if (group === 'backlog') backlog.push(issue);
-      else todo.push(issue);
-    }
-
-    return [
-      { label: 'In progress', items: progress },
-      { label: 'Todo', items: todo },
-      { label: 'Backlog', items: backlog },
-      { label: 'Completed', items: completed },
-    ];
-  }, [myIssues]);
+  const groups = useMemo<IssueGroup[]>(
+    () => GROUP_ORDER.map((type) => ({ label: STATE_TYPE_LABEL[type], items: myIssues.filter((issue) => issue.state.type === type) })),
+    [myIssues],
+  );
 
   const firstAssignee = myIssues[0]?.assignee ?? null;
   const viewerUser = firstAssignee ? { name: firstAssignee.name ?? undefined, email: firstAssignee.email ?? undefined } : null;
@@ -136,11 +113,9 @@ export function MyIssuesPage() {
               onChange={(e) => setFilterStateType(e.target.value as WorkflowStateType | '')}
             >
               <option value="">All states</option>
-              <option value="BACKLOG">Backlog</option>
-              <option value="UNSTARTED">Unstarted</option>
-              <option value="STARTED">Started</option>
-              <option value="COMPLETED">Completed</option>
-              <option value="CANCELED">Canceled</option>
+              {GROUP_ORDER.map((type) => (
+                <option key={type} value={type}>{STATE_TYPE_LABEL[type]}</option>
+              ))}
             </Select>
           </>
         }

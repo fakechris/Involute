@@ -52,7 +52,7 @@ export function HygienePage() {
                 ['Research without an attachment', hygiene.researchWithoutAttachmentCount],
                 ['In Review with nothing to open', hygiene.reviewWithoutDeliveryLinksCount],
                 ['Incidents without follow-ups', hygiene.incidentsWithoutDownstreamCount],
-                ['Incidents without a postmortem', hygiene.incidentsWithoutPostmortemCount],
+                ['SEV1/SEV2 incidents with no file attached', hygiene.incidentsWithoutPostmortemCount],
                 ['Overdue incident follow-ups', hygiene.overdueFollowUpCount],
               ].map(([label, count]) => (
                 <StatTile key={label as string} tone={count ? 'warn' : 'success'} value={count} label={label} />
@@ -119,7 +119,7 @@ export function HygienePage() {
 
             <section aria-label="Research ready to close">
               <h2>Research ready to close · {hygiene.researchClosableCount}</h2>
-              <p className="observation-hint">Everything derived from this research is committed; nothing is left to wait for. Its proposer closes it (an agent may, for Type: Research), or accept it here.</p>
+              <p className="observation-hint">Everything derived from this research is committed; nothing is left to wait for. Its proposer closes it. An agent may close Type: Research. You can also open the item and move it to Done.</p>
               <ul className="list-rows">
                 {hygiene.researchClosable.map((item) => (
                   <IssueRow open="drawer" key={item.id} issue={item} />
@@ -167,9 +167,9 @@ export function HygienePage() {
               </ul>
             </section>
 
-            <section aria-label="Incidents without a postmortem">
-              <h2>Incidents without a postmortem · {hygiene.incidentsWithoutPostmortemCount}</h2>
-              <p className="observation-hint">A SEV1 or SEV2 incident closes with its postmortem attached (docs/postmortem.md): attach it from the incident's Files.</p>
+            <section aria-label="SEV1/SEV2 incidents with no file attached">
+              <h2>SEV1/SEV2 incidents with no file attached · {hygiene.incidentsWithoutPostmortemCount}</h2>
+              <p className="observation-hint">A SEV1 or SEV2 incident in Review or Done needs its postmortem attached. Any file counts. Attach the postmortem from the incident's Files.</p>
               <ul className="list-rows">
                 {hygiene.incidentsWithoutPostmortem.map((item) => (
                   <IssueRow open="drawer" key={item.id} issue={item} meta={<Badge mono>{item.severity}</Badge>} />

@@ -24,4 +24,11 @@ describe('Settings → Profile', () => {
     });
     apolloMocks.useMutation.mockImplementation(original);
   });
+
+  it('shows initials and offers no avatar upload it cannot save (INV-2132)', async () => {
+    mockSessionState({ authMode: 'session', authenticated: true, googleOAuthConfigured: true, viewer: { id: 'user-1', email: 'admin@example.com', name: 'Admin', globalRole: 'ADMIN' } });
+    renderApp(App, { data: boardQueryResult, loading: false }, ['/settings']);
+    expect(await screen.findByText('Your initials are shown on your issues and comments.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Change' })).toBeNull();
+  });
 });

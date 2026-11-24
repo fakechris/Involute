@@ -242,12 +242,12 @@ describe('Needs you (INV-1092)', () => {
     fireEvent.click(within(group).getByRole('button', { name: 'Return to candidates' }));
     await waitFor(() => expect(mutation('WorkUncommit')).toHaveBeenCalledWith({ variables: { id: 'w-20', expectedRevision: 3 } }));
     expect(await within(group).findByText(/counted as an override/)).toBeInTheDocument();
-    fireEvent.click(within(group).getByRole('button', { name: 'Return to me' }));
-    fireEvent.change(within(group).getByLabelText('Reason for returning INV-21'), { target: { value: 'read it first' } });
-    fireEvent.click(within(group).getByRole('button', { name: 'Confirm return' }));
+    fireEvent.click(within(group).getByRole('button', { name: 'Undo and decide again' }));
+    fireEvent.change(within(group).getByLabelText('Reason for undoing the change on INV-21'), { target: { value: 'read it first' } });
+    fireEvent.click(within(group).getByRole('button', { name: 'Undo change' }));
     await waitFor(() => expect(mutation('ContractAmendmentReopen')).toHaveBeenCalledWith({ variables: { input: { amendmentId: 'amend-9', reason: 'read it first' } } }));
     // An auto-acceptance (INV-1492) goes back to Review with the team's Review state, as the issue page does.
-    fireEvent.click(within(group).getByRole('button', { name: 'Return to Review' }));
+    fireEvent.click(within(group).getByRole('button', { name: 'Move back to In Review' }));
     await waitFor(() => expect(mutation('IssueUpdate')).toHaveBeenCalledWith({ variables: { id: 'w-23', input: { stateId: 'state-review', expectedRevision: 5 } } }));
     handled = [];
   });
@@ -289,6 +289,15 @@ describe('Needs you (INV-1092)', () => {
     press('a');
     await waitFor(() => expect(mutations.WorkReview).toHaveBeenCalledWith({ variables: { id: 'w-review', input: { decision: 'ACCEPTED', expectedRevision: 3 } } }));
     expect(mockRefetch).toHaveBeenCalled();
+  });
+
+  it('Return to Ready on finished work sends it back through the review mutation (INV-2123)', async () => {
+    renderPage();
+    press('j');
+    const review = within(screen.getByLabelText('Decision')).getByRole('region', { name: 'Human review' });
+    expect(within(review).queryByRole('button', { name: 'Reject' })).toBeNull();
+    fireEvent.click(within(review).getByRole('button', { name: 'Return to Ready' }));
+    await waitFor(() => expect(mutations.WorkReview).toHaveBeenCalledWith(expect.objectContaining({ variables: expect.objectContaining({ input: expect.objectContaining({ decision: 'REJECTED' }) }) })));
   });
 
   it('A on a candidate commits it at once through its card (commit can be undone)', async () => {

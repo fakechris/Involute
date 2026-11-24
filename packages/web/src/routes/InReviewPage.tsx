@@ -522,7 +522,7 @@ export function InReviewPage() {
             disabled={pendingAction !== null}
             onClick={() => void applyBulkReview('REJECTED')}
           >
-            {pendingAction === 'reject' ? 'Returning...' : 'Bulk reject / return'}
+            {pendingAction === 'reject' ? 'Returning…' : 'Return selected'}
           </Btn>
         </BulkActionBar>
       </PageBody>

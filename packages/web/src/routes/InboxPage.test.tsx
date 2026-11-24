@@ -93,6 +93,22 @@ vi.mock('@apollo/client/react', () => ({
             createdAt: '2026-04-02T07:00:00.000Z',
             work: null,
           },
+          {
+            id: 'notif-4',
+            type: 'work.review_rejected',
+            payload: { decision: 'REJECTED' },
+            readAt: '2026-04-01T07:00:00.000Z',
+            createdAt: '2026-04-01T07:00:00.000Z',
+            work: { id: 'issue-4', identifier: 'INV-4', title: 'Returned without a note', kind: 'ISSUE', state: { id: 'state-4', name: 'Ready', type: 'UNSTARTED' } },
+          },
+          {
+            id: 'notif-5',
+            type: 'work.review_rejected',
+            payload: { decision: 'REJECTED', reason: 'Tests are missing' },
+            readAt: '2026-04-01T06:00:00.000Z',
+            createdAt: '2026-04-01T06:00:00.000Z',
+            work: { id: 'issue-5', identifier: 'INV-5', title: 'Returned with a note', kind: 'ISSUE', state: { id: 'state-5', name: 'Ready', type: 'UNSTARTED' } },
+          },
         ],
       },
       unreadNotificationCount: 1,
@@ -144,6 +160,19 @@ describe('InboxPage', () => {
     expect(screen.getByText('Database connection pool')).toBeInTheDocument();
     expect(screen.getByText('Approval required for schema change')).toBeInTheDocument();
     expect(screen.getByText('Run completed')).toBeInTheDocument();
+  });
+
+  it('names a returned review for what happened, with the reason only when one was given (INV-2131)', () => {
+    render(
+      <MemoryRouter>
+        <InboxPage />
+      </MemoryRouter>,
+    );
+    expect(screen.getAllByText('Returned to Ready')).toHaveLength(2);
+    expect(screen.queryByText('Returned with feedback')).toBeNull();
+    expect(screen.getByText('Tests are missing')).toBeInTheDocument();
+    expect(screen.getByText('Returned, no reason given')).toBeInTheDocument();
+    expect(screen.queryByText(/Decision: REJECTED/)).toBeNull();
   });
 
   it('marks individual notification as read when clicking the mark-as-read check button', () => {

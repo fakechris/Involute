@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { shortcutsEnabled as readShortcutsEnabled, writeShortcutsEnabled } from '../lib/shortcut-setting';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { IcoPlus, IcoTeam } from '../components/Icons';
@@ -12,8 +13,8 @@ import { AdminFieldsTab } from './FieldsTab';
 import { EmailNotificationsField, LabelsTab, ServerFeaturesTab, ServiceActorForm } from './WorkspaceSettingsTabs';
 import { fetchSessionState, type SessionViewer } from '../lib/session';
 import { useMutation, useQuery } from '@apollo/client/react';
-import { BOARD_PAGE_QUERY, USER_UPDATE_MUTATION, FILE_UPLOAD_MUTATION } from '../board/queries';
-import type { BoardPageQueryData, BoardPageQueryVariables, UserSummary, UserUpdateMutationData, UserUpdateMutationVariables, FileUploadMutationData, FileUploadMutationVariables } from '../board/types';
+import { BOARD_PAGE_QUERY, USER_UPDATE_MUTATION } from '../board/queries';
+import type { BoardPageQueryData, BoardPageQueryVariables, UserSummary, UserUpdateMutationData, UserUpdateMutationVariables } from '../board/types';
 import { readStoredTeamKey } from '../board/utils';
 import { ExtensionsTab } from './ExtensionsTab';
 import { GitHubSettingsTab } from './GitHubSettingsTab';
@@ -124,10 +125,8 @@ function ProfileTab() {
   const [viewer, setViewer] = useState<SessionViewer | null>(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [runUserUpdate] = useMutation<UserUpdateMutationData, UserUpdateMutationVariables>(USER_UPDATE_MUTATION);
-  const [runFileUpload] = useMutation<FileUploadMutationData, FileUploadMutationVariables>(FILE_UPLOAD_MUTATION);
 
   useEffect(() => {
     fetchSessionState().then((session) => {
@@ -155,35 +154,15 @@ function ProfileTab() {
     await runUserUpdate({ variables: { input: { email: trimmed } } });
   }
 
-  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const base64 = (reader.result as string).split(',')[1];
-      if (!base64) return;
-      await runFileUpload({
-        variables: { input: { filename: file.name, mimeType: file.type, content: base64 } },
-      });
-    };
-    reader.readAsDataURL(file);
-  }
 
   return (
     <>
       <SectionHeading>Profile</SectionHeading>
       <SectionSub>Your personal information.</SectionSub>
-      <SettingRow label="Avatar" hint="Displayed on your issues and comments.">
+      {/* Photos are not supported yet: there is no avatar field to save to (INV-2132). */}
+      <SettingRow label="Avatar" hint="Your initials are shown on your issues and comments.">
         <div className="settings-avatar">
           <div className="settings-avatar__initials">{initials}</div>
-          <Btn variant="subtle" size="md" onClick={() => fileInputRef.current?.click()}>Change</Btn>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={handleAvatarChange}
-          />
         </div>
       </SettingRow>
       <SettingRow label="Full name">
@@ -212,7 +191,7 @@ function PreferencesTab() {
     try { return window.localStorage.getItem('involute.system-theme') === 'true'; } catch { return false; }
   });
   const [shortcutsEnabled, setShortcutsEnabled] = useState<boolean>(() => {
-    try { return window.localStorage.getItem('involute.shortcuts') !== 'false'; } catch { return true; }
+    return readShortcutsEnabled();
   });
 
   function handleThemeChange(nextTheme: ThemeMode) {
@@ -245,7 +224,7 @@ function PreferencesTab() {
 
   function handleShortcutsToggle(enabled: boolean) {
     setShortcutsEnabled(enabled);
-    try { window.localStorage.setItem('involute.shortcuts', String(enabled)); } catch { /* ignore */ }
+    writeShortcutsEnabled(enabled);
   }
 
   return (
@@ -279,7 +258,7 @@ function PreferencesTab() {
       <SettingRow label="Email notifications" hint="Also send inbox notifications to your email address.">
         <EmailNotificationsField />
       </SettingRow>
-      <SettingRow label="Keyboard shortcuts" hint="Enable single-key navigation shortcuts.">
+      <SettingRow label="Keyboard shortcuts" hint="Single-key shortcuts such as C (create) and G then B (go to Board). Off: these keys do nothing outside text fields.">
         <Checkbox
           label={shortcutsEnabled ? 'Enabled' : 'Disabled'}
           checked={shortcutsEnabled}

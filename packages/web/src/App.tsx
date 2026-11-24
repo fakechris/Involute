@@ -1,4 +1,5 @@
 import { Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { installShortcutGuard } from './lib/shortcut-setting';
 import { NavLink, Route, Routes, useLocation, useNavigate, useSearchParams, type NavigateFunction, type NavigateOptions, type To } from 'react-router-dom';
 
 import { IcoInbox, IcoIssues, IcoViews, IcoProject, IcoTeam, IcoSettings, IcoSearch, IcoChevD, IcoCycle, IcoSun, IcoMoon, IcoCheck, IcoGraph, IcoFilter, IcoBug, IcoBell, IcoHistory, IcoKeyboard } from './components/Icons';
@@ -321,6 +322,9 @@ export function App() {
   const [searchParams] = useSearchParams();
   const urlTeam = searchParams.get('team');
   const statusUndo = useSyncExternalStore(subscribeStatusUndo, getStatusUndoSnapshot, getStatusUndoSnapshot);
+
+  // Settings → Keyboard shortcuts off stops single-key shortcuts everywhere (INV-2126).
+  useEffect(() => installShortcutGuard(), []);
 
   useEffect(() => {
     if (!session?.authenticated) {

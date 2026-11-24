@@ -28,7 +28,7 @@ function formatRate(rate: number | null): string {
 }
 
 function postmortemText(item: IncidentSummaryData['incidents'][number]): string {
-  if (item.postmortemAttached) return 'Attached';
+  if (item.postmortemAttached) return 'File attached';
   return item.postmortemRequired ? 'Missing' : 'Not required';
 }
 
@@ -192,7 +192,7 @@ export function IncidentsPage() {
                     <th>Incident</th>
                     <th>Severity</th>
                     <th>Impact</th>
-                    <th>Postmortem</th>
+                    <th title="Any file attached to the incident counts. A SEV1 or SEV2 incident needs one before it moves to Done.">Postmortem file</th>
                     <th>Follow-ups</th>
                   </tr>
                 </thead>
