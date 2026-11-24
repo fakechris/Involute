@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { AppApolloProvider } from './lib/apollo';
 import { FOCUS_REFETCH_MIN_INTERVAL_MS, RevisitRefresh } from './lib/revisit-refresh';
-import { readSignInReturn } from './lib/session';
+import { readSignInReturn, type AuthProviderDescriptor } from './lib/session';
 
 vi.mock('./routes/IssuePage', async () => {
   const { useState } = await import('react');
@@ -27,14 +27,18 @@ vi.mock('./routes/IssuePage', async () => {
   };
 });
 
-function renderApp(session: 'signed-out' | 'signed-in', graphql: (operation: string, variables: { query?: string }) => Response | Promise<Response>) {
+function renderApp(
+  session: 'signed-out' | 'signed-in',
+  graphql: (operation: string, variables: { query?: string }) => Response | Promise<Response>,
+  provider: AuthProviderDescriptor = { id: 'google', startUrl: '/auth/google/start', label: 'Sign in with Google' },
+) {
   vi.stubGlobal('fetch', vi.fn(async (req: string, init?: RequestInit) => {
     if (req.endsWith('/auth/session')) return Response.json({
       authMode: session === 'signed-in' ? 'session' : 'none',
       authenticated: session === 'signed-in',
       viewer: session === 'signed-in' ? { id: 'viewer-1', email: 'viewer@example.test', name: 'Viewer', globalRole: 'USER' } : null,
-      authProviders: [{ id: 'google', startUrl: '/auth/google/start', label: 'Sign in with Google' }],
-      googleOAuthConfigured: true,
+      authProviders: [provider],
+      googleOAuthConfigured: provider.id === 'google',
     }, { status: session === 'signed-in' ? 200 : 401 });
     const { operationName, variables } = JSON.parse(String(init?.body ?? '{}'));
     return graphql(operationName ?? '', variables ?? {});
@@ -62,6 +66,7 @@ const boardResponse = () => Response.json({
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   window.history.replaceState(null, '', '/');
   window.localStorage.clear();
@@ -176,9 +181,36 @@ describe('expired session query failures', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
     fireEvent.click(screen.getByRole('button', { name: 'Superseded, open' }));
 
-    expect(await screen.findByText('Board unavailable')).toBeVisible();
+    expect(await screen.findByText('Your session ended. Sign in to load this view.')).toBeVisible();
     expect(board).toHaveBeenCalledWith('superseded:yes -state-type:canceled,completed');
     expect(screen.queryByRole('button', { name: 'Report bug' })).not.toBeInTheDocument();
+  });
+
+  it('uses the DingTalk session notice and saves the failed Board filter as the sign-in destination', async () => {
+    vi.stubEnv('DEV', false);
+    vi.stubEnv('VITE_INVOLUTE_AUTH_TOKEN', '');
+    window.history.replaceState(null, '', '/?team=INV');
+    renderApp(
+      'signed-in',
+      (operation, { query }) => operation === 'BoardPage'
+        ? query ? graphqlAuthError() : boardResponse()
+        : Response.json({ data: null }),
+      { id: 'dingtalk', label: '钉钉登录', startUrl: '/auth/dingtalk/start' },
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Filter' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Superseded, open' }));
+    expect(await screen.findByText('Your session ended. Sign in to load this view.')).toBeVisible();
+    expect(within(screen.getByRole('main')).queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Sign in with Google' })).not.toBeInTheDocument();
+
+    const signIn = within(screen.getByRole('alert')).getByRole('link', { name: 'Sign in' });
+    expect(signIn).toHaveAttribute('href', expect.stringContaining('/auth/dingtalk/start'));
+    signIn.addEventListener('click', (event) => event.preventDefault());
+    fireEvent.click(signIn);
+
+    expect(window.location.href).toContain('query=');
+    expect(readSignInReturn()).toBe(`/${window.location.search}`);
   });
 
   it('leaves a 500 as a retryable error', async () => {

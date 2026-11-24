@@ -15,7 +15,7 @@ import {
 } from '@dnd-kit/core';
 import { useApolloClient, useMutation, useQuery } from '@apollo/client/react';
 import { canonicalStringify } from '@apollo/client/utilities';
-import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   closePeek,
@@ -123,6 +123,7 @@ import {
   writeStoredBoardViewState,
 } from '../board/views';
 import { BootstrapErrorNotice } from '../components/BootstrapErrorNotice';
+import { SessionEndedContext } from '../components/SessionEndedNotice';
 import type { ContractValues } from '../components/ContractSection';
 import { getBoardBootstrapErrorMessage, isAuthenticationError } from '../lib/apollo';
 import { writeStoredShellIssues, writeStoredShellTeams } from '../lib/app-shell-state';
@@ -231,6 +232,7 @@ function isRevisionConflict(message: string): boolean {
 
 export function BoardPage() {
   const navigate = useNavigate();
+  const sessionEndedSignInUrl = useContext(SessionEndedContext);
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTeam = searchParams.get('team');
   const urlProject = searchParams.get('project');
@@ -2971,12 +2973,16 @@ export function BoardPage() {
   // edited or cleared, instead of replacing the board with "Board unavailable".
   const iqlError = iqlParseMessage(error);
   if (error && !iqlError && !retainedBoardData) {
-    const errorState = getBoardBootstrapErrorMessage(error);
-
     return (
       <main className="board-page board-page--state">
         <PageHeader title="Board" />
-        <BootstrapErrorNotice state={errorState} />
+        {authenticationError && sessionEndedSignInUrl !== undefined ? (
+          <InlineError variant="block" role="none">
+            {sessionEndedSignInUrl ? 'Your session ended. Sign in to load this view.' : 'Your session ended.'}
+          </InlineError>
+        ) : (
+          <BootstrapErrorNotice state={getBoardBootstrapErrorMessage(error)} />
+        )}
       </main>
     );
   }
