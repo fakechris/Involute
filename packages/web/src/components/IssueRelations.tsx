@@ -16,6 +16,7 @@ import type {
   WorkLinkMutationVariables,
   WorkLinkType,
 } from '../board/types';
+import { loadErrorMessage } from '../lib/apollo';
 import { Btn } from './Primitives';
 import { StatusIcon } from './StatusIcon';
 import { LINKS_CHANGED_EVENT, type LinksChangedDetail } from '../undo/LinkUndoHost';
@@ -203,7 +204,7 @@ export function IssueRelations({ issueId, disabled = false, onOpen }: IssueRelat
       </div>
 
       {loadError && links.length === 0 ? (
-        <InlineError>Could not load relations.</InlineError>
+        <InlineError>{loadErrorMessage(loadError, 'Could not load relations.')}</InlineError>
       ) : loading && !data ? (
         <p className="issue-panel__empty-hint">Loading relations…</p>
       ) : groups.length === 0 && !adding ? (

@@ -2,6 +2,7 @@ import { useQuery } from '@apollo/client/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { loadErrorMessage } from '../lib/apollo';
 import { readStoredTeamKey } from '../board/utils';
 import { highlight } from '../components/highlight';
 import { ProjectFilterCombobox, type AvailableProject } from '../components/ProjectFilterCombobox';
@@ -174,7 +175,7 @@ export function SearchPage() {
         {!query.trim() ? (
           showIqlHint ? null : <EmptyState size="inline" title="Type words to search all work you can read." />
         ) : results.error ? (
-          <InlineError variant="block">{results.error.message}</InlineError>
+          <InlineError variant="block">{loadErrorMessage(results.error)}</InlineError>
         ) : results.loading && !results.data ? (
           <LoadingState>Searching…</LoadingState>
         ) : hits.length === 0 ? (

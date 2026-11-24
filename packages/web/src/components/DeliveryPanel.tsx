@@ -5,7 +5,7 @@ import { useMutation, useQuery } from '@apollo/client/react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Select } from './controls';
-import { isAuthenticationError } from '../lib/apollo';
+import { isAuthenticationError, loadErrorMessage } from '../lib/apollo';
 
 type Work = { id: string; identifier: string; title: string; revision: number; acceptance: string | null; repository: string | null; assignee?: { id: string } | null; team?: { memberships: { nodes: Array<{ user: { id: string; name: string; actorKind: string } }> } }; supersededBy?: { id: string; identifier: string } | null };
 type Policy = { environments: string[]; units: Array<{ key: string; title: string; executorActorId?: string; maxAttempts?: number; criteria: number[]; paths: string[]; actions: string[]; dependsOn: string[]; checks: Array<{ workflowId: number; job: string }> }> };
@@ -87,7 +87,7 @@ export function DeliveryPanel({ workId, compact = false }: { workId: string; com
   const [draftPolicy, setDraftPolicy] = useState<Policy | null>(null);
   const [message, setMessage] = useState('');
   const context = data?.deliveryContext;
-  if (error) return <p role="alert">Delivery authorization could not be loaded: {error.message}</p>;
+  if (error) return <p role="alert">{loadErrorMessage(error, `Delivery authorization could not be loaded: ${error.message}`)}</p>;
   if (!context) return null;
   const policy = context.grant ? parsePolicy(context.grant.policyJson) : null;
   if (context.grant && !policy) return <p role="alert">The delivery policy could not be read. Refresh or ask an administrator to inspect the record.</p>;
@@ -146,7 +146,7 @@ function ChangeCard({ change, refresh }: { change: Change; refresh: () => Promis
 
 export function DeliveryChangeQueue({ repository, noRepository, teamKey, bugsOnly, workId, heading = 'Delivery changes' }: { repository?: string | undefined; noRepository?: boolean | undefined; teamKey?: string | null | undefined; bugsOnly?: boolean | undefined; workId?: string | undefined; heading?: string }) {
   const { data, error, refetch, fetchMore, loading } = useQuery<{ deliveryChanges: { nodes: Change[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } }>(QUEUE, { variables: { repository: repository || null, noRepository: noRepository ?? false, teamKey: teamKey ?? null, bugsOnly: bugsOnly ?? false, workId: workId ?? null }, notifyOnNetworkStatusChange: true });
-  if (error) return isAuthenticationError(error) ? null : <p role="alert">Delivery changes could not be loaded: {error.message}</p>;
+  if (error) return isAuthenticationError(error) && !workId ? null : <p role="alert">{loadErrorMessage(error, `Delivery changes could not be loaded: ${error.message}`)}</p>;
   const queue = data?.deliveryChanges;
   if (!queue?.nodes.length) return null;
   return <section className="work-context__section delivery-panel" aria-label={heading}><h2>{heading} · {queue.nodes.length}</h2><p>Approve the business contract and implementation authority together. Final acceptance remains a separate human decision.</p>

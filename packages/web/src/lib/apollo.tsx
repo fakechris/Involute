@@ -129,6 +129,11 @@ export function isAuthenticationError(error: unknown): boolean {
   return error instanceof Error && missingSession(error.message);
 }
 
+export function loadErrorMessage(error: unknown, fallback?: string): string | undefined {
+  if (isAuthenticationError(error)) return 'Your session ended.';
+  return fallback ?? (error instanceof Error ? error.message : undefined);
+}
+
 export function createApolloClient(onAuthenticationError?: () => void) {
   const httpLink = new HttpLink({
     credentials: 'include',

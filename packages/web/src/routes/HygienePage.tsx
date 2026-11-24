@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@apollo/client/react';
 
+import { loadErrorMessage } from '../lib/apollo';
 import { readStoredTeamKey } from '../board/utils';
 import { WORK_LINK_MUTATION, WORK_HYGIENE_QUERY } from '../work/queries';
 import type { WorkHygieneQueryData, HygieneRef } from '../work/types';
@@ -34,7 +35,7 @@ export function HygienePage() {
           <div role="alert">
             <EmptyState
               title="Could not load the health check"
-              body={error.message}
+              body={loadErrorMessage(error)}
               action={<Btn variant="subtle" onClick={() => void refetch()}>Retry</Btn>}
             />
           </div>

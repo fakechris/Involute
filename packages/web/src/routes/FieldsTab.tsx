@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useState } from 'react';
 
+import { loadErrorMessage } from '../lib/apollo';
 import { Btn } from '../components/Primitives';
 import { SettingsSectionHeader } from '../components/SettingsShell';
 import { Checkbox, Field, Select, TextArea, TextInput } from '../components/controls';
@@ -156,7 +157,7 @@ export function FieldsManager({ scope, scopeId, title, intro }: Scope & { title:
   const [editing, setEditing] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<{ from: string; to: string } | null>(null);
 
-  if (error) return <p role="alert">Could not load fields: {error.message}</p>;
+  if (error) return <p role="alert">{loadErrorMessage(error, `Could not load fields: ${error.message}`)}</p>;
   if (loading || !data) return <p role="status">Loading…</p>;
 
   const limits = data.fieldLimits;

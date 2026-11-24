@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@apollo/client/react';
 import { useMemo, useState } from 'react';
 
+import { loadErrorMessage } from '../lib/apollo';
 import { Btn } from '../components/Primitives';
 import { SettingsSectionHeader } from '../components/SettingsShell';
 import { Checkbox, Field, Select, TextArea, TextInput } from '../components/controls';
@@ -85,7 +86,7 @@ export function AutonomyBadge({ autonomy }: { autonomy: IssueAutonomy | null | u
 
 export function AdminAutonomyTab() {
   const { data, loading, error, refetch } = useAutonomySettings('WORKSPACE', WORKSPACE_SETTINGS_SCOPE_ID);
-  if (error) return <p role="alert">Could not load autonomy settings: {error.message}</p>;
+  if (error) return <p role="alert">{loadErrorMessage(error, `Could not load autonomy settings: ${error.message}`)}</p>;
   if (loading || !data) return <p role="status">Loading…</p>;
   return <WorkspaceAutonomyForm key={data.autonomySettings.active?.id ?? 'none'} data={data} onSaved={() => void refetch()} />;
 }
@@ -224,7 +225,7 @@ function rowsToPredicate(rows: ConditionRow[]): unknown | null {
 
 export function TeamAutonomySection({ teamId }: { teamId: string }) {
   const { data, loading, error, refetch } = useAutonomySettings('TEAM', teamId);
-  if (error) return <p role="alert">Could not load autonomy settings: {error.message}</p>;
+  if (error) return <p role="alert">{loadErrorMessage(error, `Could not load autonomy settings: ${error.message}`)}</p>;
   if (loading || !data) return <p role="status">Loading…</p>;
   return <TeamAutonomyForm key={data.autonomySettings.active?.id ?? 'none'} teamId={teamId} data={data} onSaved={() => void refetch()} />;
 }

@@ -3,6 +3,7 @@ import { useApolloClient, useQuery } from '@apollo/client/react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
+import { loadErrorMessage } from '../lib/apollo';
 import { SHELL_TEAMS_QUERY } from '../board/queries';
 import type { TeamSummary } from '../board/types';
 import { readStoredTeamKey, writeStoredTeamKey } from '../board/utils';
@@ -264,7 +265,7 @@ export function DeliveryPage() {
         if (active && combined) setResult({ key: requestKey, data: combined });
       } catch (error) {
         if (active) {
-          setResult({ key: requestKey, error: error instanceof Error ? error.message : 'Could not load delivery latency.' });
+          setResult({ key: requestKey, error: loadErrorMessage(error) ?? 'Could not load delivery latency.' });
         }
       }
     }
@@ -366,7 +367,7 @@ export function DeliveryPage() {
           <div role="alert">
             <EmptyState
               title="Could not load teams"
-              body={teamError.message}
+              body={loadErrorMessage(teamError)}
               action={<Btn variant="subtle" onClick={() => void refetchTeams()}>Retry</Btn>}
             />
           </div>

@@ -2,6 +2,7 @@ import { useQuery } from '@apollo/client/react';
 import { useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import { loadErrorMessage } from '../lib/apollo';
 import { readStoredTeamKey } from '../board/utils';
 import { DependencyGraph, type FocusHops } from '../components/graph/DependencyGraph';
 import { openCreateIssueSurface } from '../app/shellStorage';
@@ -223,7 +224,7 @@ function ProjectGraphPage() {
           <div role="alert">
             <EmptyState
               title={view === 'timeline' ? 'Could not load the timeline' : "Could not load this project's graph"}
-              body={graphQuery.error.message}
+              body={loadErrorMessage(graphQuery.error)}
               action={<Btn variant="subtle" onClick={() => void graphQuery.refetch()}>Retry</Btn>}
             />
           </div>

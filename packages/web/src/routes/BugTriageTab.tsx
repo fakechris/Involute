@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery } from '@apollo/client/react';
 
+import { loadErrorMessage } from '../lib/apollo';
 import { TEAM_TRIAGE_QUERY, TEAM_TRIAGE_ROTATION_MUTATION } from '../board/queries';
 import type {
   TeamTriageQueryData,
@@ -39,7 +40,7 @@ export function BugTriageTab({ teamKey: fixedTeamKey }: { teamKey?: string } = {
     setStartsOn(team.triageRotation ? team.triageRotation.startsAt.slice(0, 10) : new Date().toISOString().slice(0, 10));
   }, [team]);
 
-  if (error) return <p role="alert">Could not load the triage rotation: {error.message}</p>;
+  if (error) return <p role="alert">{loadErrorMessage(error, `Could not load the triage rotation: ${error.message}`)}</p>;
   if (loading && !team) return <p role="status">Loading…</p>;
   if (!team) return <p>No team selected.</p>;
 

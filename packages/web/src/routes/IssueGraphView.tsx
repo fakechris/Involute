@@ -2,6 +2,7 @@ import { useQuery } from '@apollo/client/react';
 import { useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import { loadErrorMessage } from '../lib/apollo';
 import { DependencyGraph, type FocusHops } from '../components/graph/DependencyGraph';
 import { NeighbourhoodOmissionNote, RollupCard } from '../components/graph/IssueNeighbourhood';
 import { NeighbourhoodMap } from '../components/graph/NeighbourhoodMap';
@@ -144,7 +145,7 @@ export function IssueGraphViewPage() {
           <div role="alert">
             <EmptyState
               title="Could not load this item's neighbourhood"
-              body={error.message}
+              body={loadErrorMessage(error)}
               action={
                 <Btn variant="subtle" onClick={() => void refetch()}>
                   Retry

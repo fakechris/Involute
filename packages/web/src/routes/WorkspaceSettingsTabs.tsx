@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@apollo/client/react';
 
+import { loadErrorMessage } from '../lib/apollo';
 import { readStoredTeamKey } from '../board/utils';
 import { Checkbox, Field, Select, TextInput } from '../components/controls';
 import { DataTable } from '../components/DataTable';
@@ -78,7 +79,7 @@ export function LabelsTab() {
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
 
-  if (error) return <p role="alert">Could not load labels: {error.message}</p>;
+  if (error) return <p role="alert">{loadErrorMessage(error, `Could not load labels: ${error.message}`)}</p>;
   if (loading && !data) return <p role="status">Loading…</p>;
   const labels = [...(data?.issueLabels.nodes ?? [])].sort((a, b) => a.name.localeCompare(b.name));
 
@@ -186,7 +187,7 @@ export function WorkflowStatesTab({ teamKey: fixedTeamKey }: { teamKey?: string 
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
 
-  if (error) return <p role="alert">Could not load workflow states: {error.message}</p>;
+  if (error) return <p role="alert">{loadErrorMessage(error, `Could not load workflow states: ${error.message}`)}</p>;
   if (loading && !data) return <p role="status">Loading…</p>;
   const team = data?.teams.nodes[0];
   if (!team) return <p>No team selected.</p>;
@@ -292,7 +293,7 @@ export function WorkflowStatesTab({ teamKey: fixedTeamKey }: { teamKey?: string 
 
 export function ServerFeaturesTab() {
   const { data, loading, error } = useQuery<{ serverFeatures: ServerFeature[] }>(SERVER_FEATURES_QUERY);
-  if (error) return <p role="alert">Could not load server features: {error.message}</p>;
+  if (error) return <p role="alert">{loadErrorMessage(error, `Could not load server features: ${error.message}`)}</p>;
   if (loading && !data) return <p role="status">Loading…</p>;
   return (
     <section aria-label="Server features">
