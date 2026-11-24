@@ -2,6 +2,12 @@ import { expect, test } from '@playwright/test';
 
 // Journeys from docs/manual, walked as written. See docs/acceptance-scenarios.md.
 test.describe('manual journeys', () => {
+  test.afterEach(async ({ page }, testInfo) => {
+    if (testInfo.status === testInfo.expectedStatus) return;
+    const storage = await page.evaluate(() => JSON.stringify(Object.fromEntries(Object.entries(localStorage)))).catch(() => '');
+    const text = await page.locator('body').innerText().catch(() => '');
+    console.log(`DIAG url=${page.url()}\nDIAG storage=${storage.slice(0, 1500)}\nDIAG body=${text.slice(0, 2500).replace(/\n+/g, ' | ')}`);
+  });
   test('getting started: new project, first issue with C, found on Backlog and in Search', async ({ page }) => {
     const suffix = Date.now().toString(36);
     const projectName = `E2E onboarding ${suffix}`;
