@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } f
 import { createPortal } from 'react-dom';
 
 import { Btn } from './Primitives';
+import { SessionEndedNotice } from './SessionEndedNotice';
 
 const ZOOMS = [50, 75, 100, 125, 150, 200, 300, 400] as const;
 
@@ -72,7 +73,7 @@ export function ImageViewer({ src, alt, onClose }: { src: string; alt: string; o
       if (event.key !== 'Tab') return;
       const root = dialogRef.current;
       if (!root) return;
-      const items = [...root.querySelectorAll<HTMLElement>('button:not([disabled]):not([tabindex="-1"])')];
+      const items = [...root.querySelectorAll<HTMLElement>('button:not([disabled]):not([tabindex="-1"]), a[href]:not([tabindex="-1"])')];
       if (items.length === 0) return;
       const first = items[0]!;
       const last = items[items.length - 1]!;
@@ -141,6 +142,7 @@ export function ImageViewer({ src, alt, onClose }: { src: string; alt: string; o
     <div className="image-viewer" role="dialog" aria-modal="true" aria-label={label} tabIndex={-1} ref={dialogRef}>
       <button type="button" className="image-viewer__backdrop" aria-label="Close image" tabIndex={-1} onClick={() => onCloseRef.current()} />
       <div className="image-viewer__bar">
+        <SessionEndedNotice />
         <Btn onClick={() => turnBy(-1)}>Rotate left</Btn>
         <Btn onClick={() => turnBy(1)}>Rotate right</Btn>
         <Btn disabled={zoomIndex === 0} onClick={() => stepZoom(-1)}>Zoom out</Btn>

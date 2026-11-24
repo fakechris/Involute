@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SafeImage } from './SafeImage';
+import { SessionEndedNotice, SessionEndedProvider } from './SessionEndedNotice';
 
 afterEach(() => {
   cleanup();
@@ -15,6 +16,26 @@ function openShot() {
 }
 
 describe('SafeImage viewer', () => {
+  it('moves the session notice into the viewer and includes Sign in in its Tab loop', () => {
+    render(
+      <SessionEndedProvider signInUrl="/auth/google/start">
+        <SafeImage src="/uploads/shot.png" alt="shot" />
+        <SessionEndedNotice floating />
+      </SessionEndedProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'shot' }));
+    const dialog = screen.getByRole('dialog', { name: 'shot' });
+    const close = within(dialog).getByRole('button', { name: 'Close' });
+    close.focus();
+    fireEvent.keyDown(close, { key: 'Tab' });
+    const signIn = screen.getByRole('link', { name: 'Sign in' });
+    expect(dialog).toContainElement(signIn);
+    expect(signIn).toHaveFocus();
+
+    fireEvent.click(close);
+    expect(screen.getByRole('link', { name: 'Sign in' })).toBeVisible();
+  });
+
   it('opens on this page and rotates, zooms, pans, and closes', () => {
     const dialog = openShot();
     const image = within(dialog).getByRole('img', { name: 'shot' });

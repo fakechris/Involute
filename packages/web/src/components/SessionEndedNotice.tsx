@@ -22,10 +22,10 @@ export function SessionEndedNotice({ floating = false }: { floating?: boolean })
   const sessionEnded = signInUrl !== undefined;
 
   useLayoutEffect(() => {
-    if (!sessionEnded || floating) return;
+    if (floating) return;
     setInlineNotices((notices) => [...notices, id]);
     return () => setInlineNotices((notices) => notices.filter((notice) => notice !== id));
-  }, [floating, id, sessionEnded, setInlineNotices]);
+  }, [floating, id, setInlineNotices]);
 
   const activeInlineNotice = inlineNotices.at(-1);
   if (!sessionEnded || (floating ? activeInlineNotice !== undefined : activeInlineNotice !== id)) return null;

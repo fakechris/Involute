@@ -9,15 +9,24 @@ import { readSignInReturn, type AuthProviderDescriptor } from './lib/session';
 
 vi.mock('./routes/IssuePage', async () => {
   const { useState } = await import('react');
+  const { useCloseReason } = await import('./components/CloseReasonDialog');
   const { DialogShell } = await import('./components/DialogShell');
   return {
     IssuePage() {
       const [open, setOpen] = useState(false);
+      const { askCloseReason, closeReasonDialog } = useCloseReason();
       return (
         <main>
           <button onClick={() => setOpen(true)}>Edit issue</button>
+          {closeReasonDialog}
           {open ? (
-            <DialogShell title="Edit issue" variant="modal" onClose={() => setOpen(false)} onSubmit={(event) => event.preventDefault()}>
+            <DialogShell
+              title="Edit issue"
+              variant="side"
+              eyebrow={<button type="button" onClick={() => void askCloseReason({ title: 'Cancel issue', needsReason: true })}>Cancel issue</button>}
+              onClose={() => setOpen(false)}
+              onSubmit={(event) => event.preventDefault()}
+            >
               <textarea aria-label="Description" />
             </DialogShell>
           ) : null}
@@ -173,6 +182,39 @@ describe('expired session query failures', () => {
     clock.mockReturnValue(Date.now() + FOCUS_REFETCH_MIN_INTERVAL_MS);
     fireEvent.focus(window);
     expect(board).toHaveBeenCalledTimes(initialRequests + 1);
+  });
+
+  it('puts the only session notice inside the Close reason dialog above the open drawer', async () => {
+    window.history.replaceState(null, '', '/issue/INV-1');
+    const setTimeout = globalThis.setTimeout;
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation((callback, delay, ...args) =>
+      setTimeout(callback, delay === 60_000 ? 50 : delay, ...args),
+    );
+    let expired = false;
+    renderApp('signed-in', (operation) => operation === 'UnreadNotificationCount'
+      ? expired ? codedAuthError() : Response.json({ data: { unreadNotificationCount: 0 } })
+      : Response.json({ data: null }),
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit issue' }));
+    const drawer = screen.getByRole('dialog', { name: 'Edit issue' });
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Cancel issue' }));
+    const dialog = screen.getByRole('dialog', { name: 'Close reason' });
+    const reason = within(dialog).getByRole('textbox', { name: 'Close reason text' });
+    fireEvent.change(reason, { target: { value: 'Unsaved reason' } });
+    expired = true;
+
+    const prompt = await within(dialog).findByText('Your session ended. Copy any unsaved text before you sign in.');
+    expect(screen.getAllByText(prompt.textContent!)).toEqual([prompt]);
+    expect(reason).toHaveValue('Unsaved reason');
+    const keepOpen = within(dialog).getByRole('button', { name: 'Keep open' });
+    keepOpen.focus();
+    fireEvent.keyDown(keepOpen, { key: 'Tab' });
+    expect(within(dialog).getByRole('link', { name: 'Sign in' })).toHaveFocus();
+
+    fireEvent.click(keepOpen);
+    const drawerPrompt = within(drawer).getByText(prompt.textContent!);
+    expect(screen.getAllByText(prompt.textContent!)).toEqual([drawerPrompt]);
   });
 
   it('shows the Board load error instead of the old view when a new filter gets an auth error', async () => {
