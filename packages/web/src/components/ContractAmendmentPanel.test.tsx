@@ -44,7 +44,7 @@ describe('ContractAmendmentPanel (INV-869)', () => {
     const onAccept = vi.fn().mockResolvedValue(null);
     render(<ContractAmendmentPanel amendment={amendment} onAccept={onAccept} onReject={vi.fn()} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Accept change' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Approve change' }));
     await waitFor(() => expect(onAccept).toHaveBeenCalledWith('amend-1'));
   });
 
@@ -52,8 +52,8 @@ describe('ContractAmendmentPanel (INV-869)', () => {
     const onReject = vi.fn().mockResolvedValue(null);
     render(<ContractAmendmentPanel amendment={amendment} onAccept={vi.fn()} onReject={onReject} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reject…' }));
-    const confirm = screen.getByRole('button', { name: 'Reject change' });
+    fireEvent.click(screen.getByRole('button', { name: 'Decline…' }));
+    const confirm = screen.getByRole('button', { name: 'Decline change' });
     expect(confirm).toBeDisabled();
     fireEvent.change(screen.getByLabelText('Rejection note'), { target: { value: '  the rule still holds ' } });
     fireEvent.click(confirm);
@@ -64,12 +64,12 @@ describe('ContractAmendmentPanel (INV-869)', () => {
     const onReject = vi.fn().mockResolvedValue('This amendment was already decided or replaced by a newer one.');
     render(<ContractAmendmentPanel amendment={{ ...amendment, stale: true }} onAccept={vi.fn()} onReject={onReject} />);
 
-    expect(screen.getByRole('button', { name: 'Accept change' })).toBeDisabled();
-    expect(screen.getByRole('status')).toHaveTextContent('The contract changed since this was proposed');
+    expect(screen.getByRole('button', { name: 'Approve change' })).toBeDisabled();
+    expect(screen.getByRole('status')).toHaveTextContent('The contract changed after this was proposed');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reject…' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Decline…' }));
     fireEvent.change(screen.getByLabelText('Rejection note'), { target: { value: 'outdated' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Reject change' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Decline change' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('already decided');
   });
 });

@@ -299,7 +299,7 @@ export function InReviewPage() {
       <PageHeader
         title="In Review"
         count={items.length}
-        hint="Human bulk accept or return - audited via workReview. Agents cannot silently Done."
+        hint="Accept or return finished work. Only a person can move work to Done."
       />
 
       <PageToolbar
@@ -325,7 +325,7 @@ export function InReviewPage() {
             <TextInput
               size="sm"
               className="in-review-filter__input"
-              aria-label="In Review IQL filter"
+              aria-label="In Review filter query"
               value={iqlDraft}
               onChange={(event) => setIqlDraft(event.target.value)}
               onKeyDown={(event) => {
@@ -402,7 +402,7 @@ export function InReviewPage() {
                     >
                       {item.identifier}
                     </button>
-                    <Badge tone="accent">in review</Badge>
+                    <Badge tone="accent">In Review</Badge>
                     {item.reviewWait ? (
                       <span className={`observation-card__meta${item.reviewWait.overdue ? ' observation-card__meta--overdue' : ''}`} title={`In Review since ${item.reviewWait.since}`}>
                         waiting {formatWaitDays(item.reviewWait.waitMs)}{item.reviewWait.overdue ? ' · overdue' : ''}
@@ -410,7 +410,7 @@ export function InReviewPage() {
                     ) : null}
                     {item.autoAccept && !item.autoAccept.accepted ? (
                       <span className="observation-card__meta" title={`Auto-Accept Gate, ${item.autoAccept.createdAt}`}>
-                        not auto-accepted: {item.autoAccept.reasons.join('; ')}
+                        Not accepted automatically: {item.autoAccept.reasons.join('; ')}
                       </span>
                     ) : null}
                     <Badge mono>{item.team.key}</Badge>
@@ -498,7 +498,7 @@ export function InReviewPage() {
           count={selectedIds.length}
           onClear={clearSelection}
           status={
-            bulkError ? <InlineError>{bulkError}</InlineError> : <span>Bulk actions call workReview (human-audited)</span>
+            bulkError ? <InlineError>{bulkError}</InlineError> : <span>Each decision is recorded under your name.</span>
           }
         >
           <TextInput

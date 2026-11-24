@@ -42,7 +42,7 @@ const relationLabels: Record<string, string> = { same_issue: 'Same issue', relat
 const presenceLabels: Record<string, string> = { present: 'Present', missing: 'Missing' };
 const typeLabels: Record<string, string> = { Bug: 'Bug', Feature: 'Feature', Improvement: 'Improvement', Research: 'Research' };
 const fieldLabels: Record<string, string> = { acceptance: 'Acceptance criteria', steps: 'Steps to reproduce', expected_actual: 'Expected and actual behavior', environment: 'Environment or version', description: 'Description' };
-const verdictLabels: Record<Verdict, string> = { accepted: 'Accepted', corrected: 'Corrected', rejected: 'Rejected' };
+const verdictLabels: Record<Verdict, string> = { accepted: 'Right', corrected: 'Corrected', rejected: 'Wrong' };
 function labels(suggestion: Suggestion) { return suggestion.kind === 'similar' ? relationLabels : suggestion.kind === 'type' ? typeLabels : presenceLabels; }
 function valueLabel(suggestion: Suggestion, value = suggestion.value) { return value === 'abstained' ? 'No judgment' : labels(suggestion)[value] ?? value; }
 
@@ -115,9 +115,9 @@ function SuggestionRow({ suggestion, workId, observationId, exposed }: { suggest
     {saved ? <p role="status">Saved: {verdictLabels[saved.verdict]} — {valueLabel(suggestion, saved.value)}</p> : null}
     {error ? <RefusalNotice placement="panel" message={error} /> : null}
     <div className="triage-suggestions__actions">
-      <Btn size="sm" variant="subtle" disabled={!exposed || pending} onClick={() => void decide('accepted')}>Accept</Btn>
+      <Btn size="sm" variant="subtle" disabled={!exposed || pending} onClick={() => void decide('accepted')}>Right</Btn>
       <Btn size="sm" variant="subtle" disabled={!exposed || pending} onClick={() => setCorrecting(!correcting)}>Correct</Btn>
-      <Btn size="sm" variant="ghost" disabled={!exposed || pending} onClick={() => void decide('rejected')}>Reject</Btn>
+      <Btn size="sm" variant="ghost" disabled={!exposed || pending} onClick={() => void decide('rejected')}>Wrong</Btn>
     </div>
     {correcting ? <div className="triage-suggestions__actions">
       <Field label="Correction">

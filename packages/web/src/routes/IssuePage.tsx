@@ -694,7 +694,7 @@ export function IssuePage() {
           <div className="issue-panel__content-wrap">
             {activeIssue.autoAccept?.accepted && activeIssue.state.type === 'COMPLETED' ? (
               // The Auto-Accept Gate closed this bug; a person can take it back (INV-1075).
-              <div className="issue-panel__auto-accept" role="note" aria-label="Auto-accepted">
+              <div className="issue-panel__auto-accept" role="note" aria-label="Accepted automatically">
                 <span>{activeIssue.autoAccept.reasons[0] ?? 'Accepted automatically after GitHub verified the fix.'}</span>
                 {reviewStateId ? (
                   <Btn variant="subtle" size="sm" disabled={isSavingState} onClick={() => void persistStateChange(activeIssue, reviewStateId).catch(() => undefined)}>
@@ -895,9 +895,9 @@ export function IssuePage() {
                   <div key={chain[0]!.id} className="issue-children" role="list" style={{ marginBottom: 10 }}>
                     {chain.map((request, index) => (
                       <div key={request.id} id={`request-${request.id}`} role="listitem" className="issue-children__row" style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-faint)', minWidth: 44 }}>{request.needInfo ? 'needinfo' : request.hopCount === 0 ? 'asked' : `hop ${request.hopCount}`}</span>
+                        <span className="mono" style={{ fontSize: 11, color: 'var(--fg-faint)', minWidth: 44 }}>{request.needInfo ? 'question' : request.hopCount === 0 ? 'asked' : `handed on ${request.hopCount}×`}</span>
                         {index === 0 && request.hopCount > 0 ? (
-                          <span style={{ fontSize: 12, color: 'var(--warn)' }} title="The chain's earlier requests are not in this page's result">chain incomplete</span>
+                          <span style={{ fontSize: 12, color: 'var(--warn)' }} title="Earlier requests in this chain are not shown here">earlier requests not shown</span>
                         ) : null}
                         <ActorBadge actor={request.targetActor} onSelect={(picked) => navigate(`/agents/${picked}`)} />
                         <span className="mono" style={{ fontSize: 12, color: 'var(--fg-dim)' }}>{request.state}</span>
@@ -963,7 +963,7 @@ export function IssuePage() {
                               <input
                                 value={answerOverride}
                                 onChange={(e) => setAnswerOverride(e.target.value)}
-                                placeholder="Override reason (recorded on the audit): why you are answering for them"
+                                placeholder="Why do you answer for them? This is recorded."
                                 style={{ font: 'inherit', padding: 6 }}
                               />
                             ) : null}

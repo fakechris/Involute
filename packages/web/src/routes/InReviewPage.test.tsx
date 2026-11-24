@@ -139,7 +139,7 @@ describe('InReviewPage', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'In Review' })).toBeInTheDocument();
-    expect(screen.getByLabelText('In Review IQL filter')).toHaveValue('state:"In Review"');
+    expect(screen.getByLabelText('In Review filter query')).toHaveValue('state:"In Review"');
     expect(screen.getByText('INV-101')).toBeInTheDocument();
     expect(screen.getByText('INV-102')).toBeInTheDocument();
 
@@ -233,7 +233,7 @@ describe('InReviewPage', () => {
       </MemoryRouter>,
     );
 
-    const input = screen.getByLabelText('In Review IQL filter');
+    const input = screen.getByLabelText('In Review filter query');
     fireEvent.change(input, { target: { value: 'state:"In Review" team:INV' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply filter' }));
     expect(screen.getByText('Active: state:"In Review" team:INV')).toBeInTheDocument();
@@ -276,7 +276,7 @@ describe('InReviewPage', () => {
         <InReviewPage />
       </MemoryRouter>,
     );
-    expect(screen.getByText(/not auto-accepted: the fix commit has no CI checks/)).toBeInTheDocument();
+    expect(screen.getByText(/Not accepted automatically: the fix commit has no CI checks/)).toBeInTheDocument();
     delete (reviewItems[0] as Record<string, unknown>).autoAccept;
   });
 

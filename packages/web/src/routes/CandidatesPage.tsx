@@ -103,15 +103,15 @@ function isSnoozed(candidate: CandidateWork): boolean {
 function targetStateBadge(candidate: CandidateWork): { label: string; title: string } | null {
   const type = candidate.state?.type;
   if (type === 'REVIEW') {
-    return { label: 'Target: In Review', title: 'Target state upon approval: In Review' };
+    return { label: 'Target: In Review', title: 'State after commit: In Review' };
   }
   if (type === 'STARTED') {
-    return { label: 'Target: In Progress', title: 'Target state upon approval: In Progress' };
+    return { label: 'Target: In Progress', title: 'State after commit: In Progress' };
   }
   if (type === 'BACKLOG') {
     return candidate.source?.includes('initial_state=BACKLOG')
-      ? { label: 'Target: Backlog', title: 'Target state upon approval: stays parked in Backlog' }
-      : { label: 'Target: Ready', title: 'Target state upon approval: Ready (moved out of Backlog)' };
+      ? { label: 'Target: Backlog', title: 'State after commit: stays parked in Backlog' }
+      : { label: 'Target: Ready', title: 'State after commit: Ready (moved out of Backlog)' };
   }
   return null;
 }
@@ -742,7 +742,7 @@ export function CandidateCard({
               {identifier} blocks this
             </Btn>
           ))}
-          <span className="observation-card__meta">no BLOCKS link yet — record it if the text means it</span>
+          <span className="observation-card__meta">Not linked as blocking yet. Link it if this item must wait.</span>
         </div>
       ) : null}
       <label className="observation-field">
@@ -752,7 +752,7 @@ export function CandidateCard({
       <label className="observation-field">
         <span>Reject reason</span>
         <input
-          aria-label={`Reject reason for ${candidate.identifier}`}
+          aria-label={`Decline reason for ${candidate.identifier}`}
           value={reason}
           onChange={(event) => setReason(event.target.value)}
           placeholder={isBug ? 'Required to decline a bug' : 'Optional'}
@@ -793,7 +793,7 @@ export function CandidateCard({
           {...(rejectBlockedReason ? { title: rejectBlockedReason } : {})}
           onClick={() => void handleReject()}
         >
-          {pendingAction === 'reject' ? 'Rejecting…' : 'Reject'}
+          {pendingAction === 'reject' ? 'Declining…' : 'Decline'}
         </Btn>
         {snoozed ? (
           <Btn variant="ghost" disabled={pendingAction !== null} onClick={() => void handleSnooze(null)}>
@@ -1196,7 +1196,7 @@ export function CandidatesPage() {
             input: {
               expectedRevision: candidate.revision,
               resolution: bulkResolution,
-              reason: 'Batch rejected by reviewer',
+              reason: 'Declined in a batch',
             },
           },
         });
@@ -1283,7 +1283,7 @@ export function CandidatesPage() {
               })
             }
           >
-            Rejected
+            Declined
           </Btn>
         }
       />
@@ -1471,7 +1471,7 @@ export function CandidatesPage() {
             >
               {isBulkProcessing && bulkAction === 'reject'
                 ? `Rejecting ${bulkProgress.done}/${bulkProgress.total}…`
-                : `Batch Reject (${selectedIds.length})`}
+                : `Batch Decline (${selectedIds.length})`}
             </Btn>
           </BulkActionBar>
         ) : null}

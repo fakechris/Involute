@@ -87,7 +87,7 @@ describe('Autonomy Gate at L1 (INV-1491)', () => {
     await setWorkflowPolicy(prisma, { scope: 'TEAM', scopeId: team.id, level: 1, observeDays: 7, reason: 'watch' }, admin.id);
     const work = await propose('Improve the thing');
     expect(work.commitmentStatus).toBe('CANDIDATE');
-    expect(await observeLabelFor(prisma, { kind: 'CANDIDATE_COMMIT', subjectId: work.id, workId: work.id })).toMatch(/^Would be handled under L1/);
+    expect(await observeLabelFor(prisma, { kind: 'CANDIDATE_COMMIT', subjectId: work.id, workId: work.id })).toMatch(/^Automatic at autonomy level 1/);
   });
 
   it('Return to candidates on an auto-committed item writes a policy.override audit and shows as returned', async () => {

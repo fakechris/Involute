@@ -381,7 +381,7 @@ export async function observeLabelFor(
   if (resolved.observing) {
     if (!decision.matched) return null;
     const summary = describeFacts(resolved.gates[gate].condition, facts);
-    return `Would be handled under L${resolved.requested}${summary ? `: ${summary}` : ''}`;
+    return `Automatic at autonomy level ${resolved.requested}${summary ? `: ${summary}` : ''}`;
   }
   // Live policy with an auto gate that did not act: say why it is still a person's decision (INV-1491).
   // A matched gate that did not act (a person proposed it, or the commit was refused) says nothing here: the gate acts at proposal time and its refusal is on the timeline.

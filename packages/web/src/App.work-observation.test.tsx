@@ -229,10 +229,10 @@ describe('K6 observation UI', () => {
     fireEvent.change(screen.getByLabelText('Resolution for INV-9'), {
       target: { value: 'DUPLICATE' },
     });
-    fireEvent.change(screen.getByLabelText('Reject reason for INV-9'), {
+    fireEvent.change(screen.getByLabelText('Decline reason for INV-9'), {
       target: { value: 'duplicate of INV-2' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
 
     await waitFor(() => expect(reject).toHaveBeenCalled());
     expect(reject.mock.calls[0]?.[0]).toEqual({
@@ -279,7 +279,7 @@ describe('K6 observation UI', () => {
     expect(screen.queryByTestId('run-followups-RUN-2')).toBeNull();
     expect(screen.getByText('Implementation PR')).toBeInTheDocument();
     expect(screen.getByText('run completed')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Issue editor' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open issue page' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
     await waitFor(() => expect(review).toHaveBeenCalledWith({
       variables: {

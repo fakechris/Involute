@@ -94,7 +94,7 @@ export function NeedInfoControl({
         disabled={!targetId || !question.trim() || Boolean(state?.loading)}
         onClick={() => void submit()}
       >
-        Send needinfo
+        Ask
       </button>
       {error ? (
         <InlineError>
@@ -127,7 +127,7 @@ export function NeedInfoWithdrawButton({
 
   async function withdraw() {
     setError(null);
-    const reason = mine ? null : window.prompt('Why are you withdrawing someone else\'s needinfo?')?.trim() || null;
+    const reason = mine ? null : window.prompt('Why are you withdrawing someone else\'s question?')?.trim() || null;
     if (!mine && !reason) return;
     try {
       const result = (await run({ variables: { requestId: request.id, reason } })).data?.needInfoWithdraw;
@@ -144,7 +144,7 @@ export function NeedInfoWithdrawButton({
   return (
     <>
       <button type="button" className="ui-action" disabled={Boolean(state?.loading)} onClick={() => void withdraw()}>
-        Withdraw needinfo
+        Withdraw question
       </button>
       {error ? (
         <InlineError>

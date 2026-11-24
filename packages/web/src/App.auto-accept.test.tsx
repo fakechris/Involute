@@ -33,7 +33,7 @@ describe('auto-accepted bug (INV-1075)', () => {
     apolloMocks.useMutation.mockImplementation((document: { loc?: { source: { body: string } } }) =>
       (document?.loc?.source.body ?? '').includes('mutation IssueUpdate') ? [update] : [vi.fn()]);
     renderApp(App, { data, loading: false }, ['/issue/issue-1']);
-    const note = await screen.findByRole('note', { name: 'Auto-accepted' });
+    const note = await screen.findByRole('note', { name: 'Accepted automatically' });
     expect(note).toHaveTextContent('PR #12 merged');
     fireEvent.click(screen.getByRole('button', { name: 'Move back to In Review' }));
     await waitFor(() => expect(update).toHaveBeenCalledWith({ variables: { id: 'issue-1', input: { stateId: 'state-review', expectedRevision: 1 } } }));

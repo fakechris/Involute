@@ -131,7 +131,7 @@ describe('attention: what a person is waiting to decide (INV-1091)', () => {
     const schedule = await prisma.workSchedule.create({ data: { workId: work.id, cron: '0 * * * *', timezone: 'UTC', agentId: f.agent.id, round: 4, missedRounds: 3, lastFiredAt: new Date() } });
     const [entry] = await loadAttention(prisma, f.admin, undefined);
     expect(entry).toMatchObject({ actions: ['OPEN'], kind: 'SCHEDULE_MISSED', subjectId: schedule.id, workId: work.id });
-    expect(entry!.reason).toContain('3 scheduled rounds');
+    expect(entry!.reason).toContain('3 scheduled runs');
 
     await prisma.workSchedule.update({ where: { id: schedule.id }, data: { active: false } });
     expect(await kindsFor(f.admin)).toEqual([]);

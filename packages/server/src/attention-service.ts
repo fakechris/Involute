@@ -138,7 +138,7 @@ async function scheduleMisses(prisma: DatabaseClient, scope: Scope): Promise<Att
       schedule.id,
       schedule.workId,
       schedule.lastFiredAt ?? schedule.updatedAt,
-      `${schedule.missedRounds} scheduled rounds of ${schedule.work.identifier} fired with no run (${schedule.cron} ${schedule.timezone}): pause the schedule or get the agent running.`,
+      `${schedule.missedRounds} scheduled runs of ${schedule.work.identifier} did not start. Pause the schedule or start the agent.`,
       ['OPEN'],
     ),
   );
@@ -287,7 +287,7 @@ async function candidates(prisma: DatabaseClient, scope: Scope): Promise<Attenti
   });
   return rows.map((row) => {
     const isBug = row.labels.some((label) => label.name.toLowerCase() === BUG_LABEL_NAME.toLowerCase());
-    return item('CANDIDATE_COMMIT', row.id, row.id, row.createdAt, isBug ? 'Bug waiting for triage' : 'Proposed work waiting to be committed or declined', ['COMMIT', 'REJECT']);
+    return item('CANDIDATE_COMMIT', row.id, row.id, row.createdAt, isBug ? 'Bug waiting for triage' : 'Candidate waiting to be committed or declined', ['COMMIT', 'REJECT']);
   });
 }
 
@@ -307,7 +307,7 @@ async function reviews(prisma: DatabaseClient, scope: Scope): Promise<AttentionI
   return rows.flatMap((row) => {
     const wait = waits.get(row.id);
     if (!wait) return [];
-    return [item('WORK_REVIEW', row.id, row.id, wait.since, wait.overdue ? 'Fixed bug waiting past its review clock' : 'Finished work waiting for your review', ['ACCEPT', 'RETURN'])];
+    return [item('WORK_REVIEW', row.id, row.id, wait.since, wait.overdue ? 'Fixed bug waiting too long for review' : 'Finished work waiting for your review', ['ACCEPT', 'RETURN'])];
   });
 }
 
@@ -355,7 +355,7 @@ async function agentRequests(prisma: DatabaseClient, scope: Scope): Promise<Atte
   });
   return rows.map((row) => {
     if (row.state === 'INPUT_REQUIRED') {
-      return item('AGENT_REQUEST', row.id, row.workId, row.updatedAt, row.needInfo ? 'Your needinfo was asked back: reply before it can be answered' : 'An agent needs more from you before it can answer', ['REPLY']);
+      return item('AGENT_REQUEST', row.id, row.workId, row.updatedAt, row.needInfo ? 'The agent asked your question back. Reply to it.' : 'An agent needs more from you before it can answer', ['REPLY']);
     }
     // A needinfo (INV-1119): any comment of yours on the work answers it too.
     if (row.needInfo) {
@@ -458,7 +458,7 @@ async function opsItems(prisma: DatabaseClient, scope: Scope): Promise<Attention
   ]);
   return [
     ...webhooks.map((webhook) => item('OPS', webhook.id, null, webhook.updatedAt, `Webhook ${webhook.label ?? webhook.url} was switched off after repeated delivery failures`, ['OPEN'])),
-    ...deadLetters.map((letter) => item('OPS', letter.id, null, letter.createdAt, `GitHub sync gave up on ${letter.repository} ${letter.itemRef}`, ['OPEN'])),
+    ...deadLetters.map((letter) => item('OPS', letter.id, null, letter.createdAt, `GitHub sync stopped retrying ${letter.repository} ${letter.itemRef}`, ['OPEN'])),
   ];
 }
 
