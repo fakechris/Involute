@@ -27,16 +27,18 @@ vi.mock('./routes/IssuePage', async () => {
   };
 });
 
-function renderApp(session: 'signed-out' | 'signed-in', graphql: (operation: string) => Response | Promise<Response>) {
-  vi.stubGlobal('fetch', vi.fn((req: string, init?: RequestInit) => Promise.resolve(req.endsWith('/auth/session')
-    ? Response.json({
+function renderApp(session: 'signed-out' | 'signed-in', graphql: (operation: string, variables: { query?: string }) => Response | Promise<Response>) {
+  vi.stubGlobal('fetch', vi.fn(async (req: string, init?: RequestInit) => {
+    if (req.endsWith('/auth/session')) return Response.json({
       authMode: session === 'signed-in' ? 'session' : 'none',
       authenticated: session === 'signed-in',
       viewer: session === 'signed-in' ? { id: 'viewer-1', email: 'viewer@example.test', name: 'Viewer', globalRole: 'USER' } : null,
       authProviders: [{ id: 'google', startUrl: '/auth/google/start', label: 'Sign in with Google' }],
       googleOAuthConfigured: true,
-    }, { status: session === 'signed-in' ? 200 : 401 })
-    : graphql(JSON.parse(String(init?.body ?? '{}')).operationName ?? ''))));
+    }, { status: session === 'signed-in' ? 200 : 401 });
+    const { operationName, variables } = JSON.parse(String(init?.body ?? '{}'));
+    return graphql(operationName ?? '', variables ?? {});
+  }));
 
   return render(<AppApolloProvider><BrowserRouter><RevisitRefresh /><App /></BrowserRouter></AppApolloProvider>);
 }
@@ -45,6 +47,17 @@ const graphqlAuthError = () => Response.json({ errors: [{ message: 'Not authenti
 const codedAuthError = () => Response.json({ errors: [{ message: 'Session ended', extensions: { code: 'UNAUTHENTICATED' } }] });
 const httpAuthError = () => Response.json({ error: 'Unauthorized' }, { status: 401 });
 const unavailable = () => Response.json({ error: 'Unavailable' }, { status: 500 });
+const boardResponse = () => Response.json({
+  data: {
+    teams: { nodes: [{
+      id: 'team-1', key: 'INV', name: 'Involute', viewerCanWrite: true, viewerCanManage: true, issueCount: 0,
+      memberships: { nodes: [] }, states: { nodes: [] },
+    }] },
+    projectSummary: { totalCount: 0, noRepositoryCount: 0, projects: [], projectsWithoutRepository: [] },
+    users: { nodes: [] }, issueLabels: { nodes: [] }, issueStateCounts: [],
+    issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
+  },
+});
 
 afterEach(() => {
   cleanup();
@@ -129,17 +142,7 @@ describe('expired session query failures', () => {
     window.history.replaceState(null, '', '/?team=INV');
     const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now());
     let expired = false;
-    const board = vi.fn(() => expired ? httpAuthError() : Response.json({
-      data: {
-        teams: { nodes: [{
-          id: 'team-1', key: 'INV', name: 'Involute', viewerCanWrite: true, viewerCanManage: true, issueCount: 0,
-          memberships: { nodes: [] }, states: { nodes: [] },
-        }] },
-        projectSummary: { totalCount: 0, noRepositoryCount: 0, projects: [], projectsWithoutRepository: [] },
-        users: { nodes: [] }, issueLabels: { nodes: [] }, issueStateCounts: [],
-        issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } },
-      },
-    }));
+    const board = vi.fn(() => expired ? httpAuthError() : boardResponse());
     renderApp('signed-in', (operation) => operation === 'BoardPage' ? board() : Response.json({ data: null }));
 
     fireEvent.click(await screen.findByRole('button', { name: 'Report bug' }));
@@ -160,6 +163,22 @@ describe('expired session query failures', () => {
     clock.mockReturnValue(Date.now() + FOCUS_REFETCH_MIN_INTERVAL_MS);
     fireEvent.focus(window);
     expect(board).toHaveBeenCalledTimes(initialRequests + 1);
+  });
+
+  it('shows the Board load error instead of the old view when a new filter gets an auth error', async () => {
+    window.history.replaceState(null, '', '/?team=INV');
+    const board = vi.fn((query?: string) => query ? httpAuthError() : boardResponse());
+    renderApp('signed-in', (operation, variables) =>
+      operation === 'BoardPage' ? board(variables.query) : Response.json({ data: null }),
+    );
+
+    expect(await screen.findByRole('button', { name: 'Report bug' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Filter' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Superseded, open' }));
+
+    expect(await screen.findByText('Board unavailable')).toBeVisible();
+    expect(board).toHaveBeenCalledWith('superseded:yes -state-type:canceled,completed');
+    expect(screen.queryByRole('button', { name: 'Report bug' })).not.toBeInTheDocument();
   });
 
   it('leaves a 500 as a retryable error', async () => {

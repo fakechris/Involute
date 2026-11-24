@@ -14,6 +14,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { useApolloClient, useMutation, useQuery } from '@apollo/client/react';
+import { canonicalStringify } from '@apollo/client/utilities';
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -331,7 +332,16 @@ export function BoardPage() {
       fetchPolicy: 'cache-and-network',
     },
   );
-  const queryData = data ?? previousData;
+  const boardQueryKey = canonicalStringify(boardQueryVariables);
+  const lastBoardResult = useRef<{ key: string; data: BoardPageQueryData } | null>(null);
+  useLayoutEffect(() => {
+    if (data && !error) lastBoardResult.current = { key: boardQueryKey, data };
+  }, [boardQueryKey, data, error]);
+  const authenticationError = isAuthenticationError(error);
+  const retainedBoardData = authenticationError && lastBoardResult.current?.key === boardQueryKey
+    ? lastBoardResult.current.data
+    : undefined;
+  const queryData = retainedBoardData ?? data ?? previousData;
   const inFlightUpdatesRef = useRef<Set<string>>(new Set());
   const lastHandledDropRef = useRef<{ issueId: string; targetStateId: string; timestamp: number } | null>(null);
   // IQL can depend on graph joins and viewer identity unavailable locally.
@@ -2960,7 +2970,7 @@ export function BoardPage() {
   // A bad neighbourhood id is an IQL error. Keep the filter bar so it can be
   // edited or cleared, instead of replacing the board with "Board unavailable".
   const iqlError = iqlParseMessage(error);
-  if (error && !iqlError && !(queryData && isAuthenticationError(error))) {
+  if (error && !iqlError && !retainedBoardData) {
     const errorState = getBoardBootstrapErrorMessage(error);
 
     return (
