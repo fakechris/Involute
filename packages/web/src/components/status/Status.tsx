@@ -75,6 +75,16 @@ export function EmptyState({ icon, title, body, action, size = 'block' }: EmptyS
   );
 }
 
+export function QueryErrorState({ title, onRetry }: { title: string; onRetry: () => Promise<unknown> }) {
+  return (
+    <EmptyState
+      title={title}
+      body={<span role="alert">The request failed. Try again to reload this list.</span>}
+      action={<Btn variant="subtle" onClick={() => void onRetry().catch(() => undefined)}>Retry</Btn>}
+    />
+  );
+}
+
 /** One dim line saying what is loading; announced politely. */
 export function LoadingState({ children = 'Loading…' }: { children?: ReactNode }) {
   return (

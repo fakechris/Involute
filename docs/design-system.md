@@ -81,6 +81,7 @@
 | `DataTable` | `components/DataTable.tsx` | 设置页表格、`rowStyle` |
 | `ListRow` `IssueRow` | `components/list/ListRow.tsx`（`components/list/index.ts`）+ `styles/content.css` | 9 种行：My Issues grid、`bugs-list`、`search-result`、`hygiene-item`、`inbox-item`、`attention-row` 已迁移；保留 `IssueCard`（Board）、`.observation-card`（In Review / Candidates 的卡片）与 Backlog 表格 |
 | `StatTile` `StatRow` `EmptyState` `InlineError` `LoadingState` `SegmentedControl` `BulkActionBar` `Badge` | `components/status/Status.tsx`（`components/status/index.ts`）+ `styles/layout.css`（`Badge`：`styles/content.css`） | 见 §2.2；`Badge` 替代 `.observation-card__status`、`.views-card__kind`、`.context-chip`、`attention-row__flag` |
+| `QueryErrorState` | `components/status/Status.tsx` | 列表读取失败（不是空结果），在原页重试当前查询 |
 | `FilterChip` `FilterMenu` `FilterSearch` `SortControl` `SavedViewControl` | `components/filters/Filters.tsx`（`components/filters/index.ts`）+ `styles/layout.css` | 5 种筛选区 |
 | `MarkdownRenderer`（块级 + `clamp`） | `components/MarkdownRenderer.tsx` + `styles/content.css` | 裸文本；标题 / 列表 / 任务列表 / 引用 / 分割线 / 表格 / 代码块 |
 | `.card`（样式类，不是组件） | `styles/content.css` | Projects / Cycles / Views 各自的卡片外壳 |

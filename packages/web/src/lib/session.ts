@@ -1,5 +1,7 @@
 import { getServerBaseUrl } from './apollo';
 
+const SIGN_IN_RETURN_KEY = 'involute.signInReturn';
+
 export interface SessionViewer {
   email: string;
   globalRole: 'ADMIN' | 'USER';
@@ -56,6 +58,41 @@ export function getProviderLoginUrl(startUrl: string): string {
 
 export function getGoogleLoginUrl(): string {
   return getProviderLoginUrl('/auth/google/start');
+}
+
+// The OAuth callback returns to the app root. Keep the destination in this
+// tab rather than sending private routes or filter terms to the provider.
+export function rememberSignInReturn(): void {
+  try {
+    const url = new URL(window.location.href);
+    const fromCallback = url.searchParams.has('authError');
+    if (fromCallback && window.sessionStorage.getItem(SIGN_IN_RETURN_KEY)) return;
+    if (fromCallback) url.searchParams.delete('authError');
+    const path = url.pathname + url.search + url.hash;
+    if (path === '/') window.sessionStorage.removeItem(SIGN_IN_RETURN_KEY);
+    else window.sessionStorage.setItem(SIGN_IN_RETURN_KEY, path);
+  } catch {
+    // Sign-in still works if the browser blocks storage.
+  }
+}
+
+export function readSignInReturn(): string | null {
+  try {
+    const path = window.sessionStorage.getItem(SIGN_IN_RETURN_KEY);
+    // Only return to an app route, not a different origin.
+    if (!path?.startsWith('/') || path === '/' || path.startsWith('//') || new URL(path, window.location.origin).origin !== window.location.origin) return null;
+    return path;
+  } catch {
+    return null;
+  }
+}
+
+export function clearSignInReturn(): void {
+  try {
+    window.sessionStorage.removeItem(SIGN_IN_RETURN_KEY);
+  } catch {
+    // The saved destination is optional.
+  }
 }
 
 export async function logoutSession(): Promise<boolean> {
