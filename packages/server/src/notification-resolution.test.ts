@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 
 import { PrismaClient } from '@prisma/client';
 import type { Issue, User } from '@prisma/client';
@@ -7,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_ADMIN_EMAIL, DEFAULT_TEAM_KEY, resetAndSeed } from '../prisma/seed-helpers.ts';
 import { loadProjectEnvironment } from '../prisma/env.ts';
 import type { GraphQLContext } from './auth.ts';
+import { reportBug } from './bug-report.ts';
 import { commitWork, proposeWork, rejectWork } from './claim-service.ts';
 import { acceptContractAmendment, proposeContractAmendment } from './contract-amendment.ts';
 import { decideDeliveryChange, proposeDeliveryChange } from './delivery-change-set.ts';
@@ -14,11 +16,13 @@ import { createComment, createIssue } from './issue-service.ts';
 import { processNotificationEmails } from './notification-email.ts';
 import { isActionableNotification, readUnreadNotifications } from './notification-service.ts';
 import { reviewWork } from './run-service-review.ts';
+import { createGraphQLSchema } from './schema.ts';
 import { testParentId } from './test-placement.ts';
 
 loadProjectEnvironment();
 
 const prisma = new PrismaClient();
+const { graphql } = createRequire(import.meta.url)('graphql') as typeof import('graphql');
 const REPO = 'test/placement';
 const DESCRIPTION = '### 1. 目标与架构定位\n测试。\n\n### 2. 核心功能与交付范围\n测试。\n\n### 3. 验收标准与验证方案\n测试。';
 
@@ -31,6 +35,30 @@ describe('notifications follow their decisions (INV-1093)', () => {
   beforeAll(async () => { await prisma.$connect(); });
   beforeEach(async () => { await resetAndSeed(prisma); });
   afterAll(async () => { await resetAndSeed(prisma); await prisma.$disconnect(); });
+
+  it('links Activity to triage only for bugs that actually wait in Needs you (INV-2113)', async () => {
+    const f = await fixture();
+    const report = { teamId: f.team.id, priority: 2, stepsToReproduce: 'Open the form.' };
+    const placed = await reportBug(prisma, { ...report, parentId: f.parentId, title: 'Placed bug' }, asPerson(f.admin));
+    const unplaced = await reportBug(prisma, { ...report, title: 'Unplaced bug' }, asPerson(f.admin));
+    expect(placed.commitmentStatus).toBe('COMMITTED');
+    expect(unplaced.commitmentStatus).toBe('CANDIDATE');
+
+    const result = await graphql({
+      schema: createGraphQLSchema(prisma),
+      source: `{
+        notifications { nodes { type actionable work { id } } }
+        attention(kinds: [CANDIDATE_COMMIT]) { nodes { work { id } } }
+      }`,
+      contextValue: context(f.admin),
+    });
+    expect(result.errors).toBeUndefined();
+    expect(result.data?.notifications).toEqual({ nodes: expect.arrayContaining([
+      { type: 'bug.reported', actionable: false, work: { id: placed.id } },
+      { type: 'bug.reported', actionable: true, work: { id: unplaced.id } },
+    ]) });
+    expect(result.data?.attention).toEqual({ nodes: [{ work: { id: unplaced.id } }] });
+  });
 
   it('accepting an amendment resolves every owner\'s notice and tells the proposing agent in agent_inbox', async () => {
     const f = await fixture();
